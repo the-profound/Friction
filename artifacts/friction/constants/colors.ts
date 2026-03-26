@@ -1,11 +1,11 @@
-const tintColorLight = "#2f95dc";
+import { Colors } from "./tokens";
 
 export default {
   light: {
-    text: "#000",
-    background: "#fff",
-    tint: tintColorLight,
-    tabIconDefault: "#ccc",
-    tabIconSelected: tintColorLight,
+    text: Colors.black,
+    background: Colors.white,
+    tint: Colors.tabActive,
+    tabIconDefault: Colors.tabInactive,
+    tabIconSelected: Colors.tabActive,
   },
 };
