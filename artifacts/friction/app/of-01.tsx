@@ -1,26 +1,100 @@
-import React, { useState, useCallback } from "react";
-import { View, Text, StyleSheet, FlatList, Pressable, Alert, ScrollView } from "react-native";
+import React, { useState, useCallback, useMemo } from "react";
+import { View, Text, StyleSheet, FlatList, Pressable, Alert, RefreshControl } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
-import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
+import { useUser } from "@/contexts/UserContext";
+import {
+  useListMyCollections,
+  useCreateMyCollection,
+  useDeleteMyCollection,
+} from "@workspace/api-client-react";
+import type { MyCollection } from "@workspace/api-client-react";
+import BottomSheet from "@/components/BottomSheet/BottomSheet";
+import { TextInput } from "react-native";
 
 type MiniTab = "mine" | "subscribed";
-
-const DEMO_ARTICLES = [
-  { id: "a1", title: "봄의 시작", preview: "따뜻한 바람이 불어오는 날...", author: { name: "나" }, timestamp: new Date(2026, 2, 26, 10, 0) },
-  { id: "a2", title: "겨울의 끝", preview: "마지막 눈이 녹아가고 있었다", author: { name: "나" }, timestamp: new Date(2026, 2, 20, 15, 30), isRead: true },
-];
 
 export default function PersonalCollectionListScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { userId } = useUser();
   const [activeTab, setActiveTab] = useState<MiniTab>("mine");
+  const [createSheetVisible, setCreateSheetVisible] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newDescription, setNewDescription] = useState("");
 
-  const handleArticlePress = useCallback((articleId: string) => {
-    router.push({ pathname: "/read", params: { id: articleId } });
-  }, [router]);
+  const collectionsQuery = useListMyCollections({ ownerId: userId });
+  const collections = (collectionsQuery.data ?? []) as MyCollection[];
+  const createCollection = useCreateMyCollection();
+  const deleteCollection = useDeleteMyCollection();
+
+  const activeList = activeTab === "mine" ? collections : [];
+
+  const handleCreate = useCallback(async () => {
+    if (!newName.trim()) {
+      Alert.alert("오류", "이름을 입력해주세요.");
+      return;
+    }
+    try {
+      await createCollection.mutateAsync({
+        data: { ownerId: userId, name: newName.trim(), description: newDescription.trim() },
+      });
+      setCreateSheetVisible(false);
+      setNewName("");
+      setNewDescription("");
+      collectionsQuery.refetch();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "모음 생성에 실패했습니다.";
+      Alert.alert("오류", msg);
+    }
+  }, [newName, newDescription, userId, createCollection, collectionsQuery]);
+
+  const handleDelete = useCallback(
+    (id: string, name: string) => {
+      Alert.alert("모음 삭제", `'${name}'을(를) 삭제하시겠어요?`, [
+        { text: "취소", style: "cancel" },
+        {
+          text: "삭제",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteCollection.mutateAsync({ id });
+              collectionsQuery.refetch();
+            } catch (e: unknown) {
+              const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";
+              Alert.alert("오류", msg);
+            }
+          },
+        },
+      ]);
+    },
+    [deleteCollection, collectionsQuery],
+  );
+
+  const renderItem = ({ item }: { item: MyCollection }) => (
+    <Pressable
+      style={styles.collectionItem}
+      onPress={() => router.push({ pathname: "/of-01-detail", params: { id: item.id } })}
+      onLongPress={() => handleDelete(item.id, item.name)}
+    >
+      <View style={styles.collectionIcon}>
+        <Feather name="folder" size={20} color={Colors.zinc500} />
+      </View>
+      <View style={styles.collectionInfo}>
+        <Text style={styles.collectionName} numberOfLines={1}>{item.name}</Text>
+        {item.description && (
+          <Text style={styles.collectionDesc} numberOfLines={1}>{item.description}</Text>
+        )}
+      </View>
+      <View style={styles.collectionRight}>
+        <Text style={styles.collectionCount}>{item.articleCount ?? 0}편</Text>
+        {item.isPublic && <Feather name="globe" size={12} color={Colors.zinc400} />}
+        <Feather name="chevron-right" size={16} color={Colors.zinc300} />
+      </View>
+    </Pressable>
+  );
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -29,10 +103,11 @@ export default function PersonalCollectionListScreen() {
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
         </Pressable>
         <Text style={styles.headerTitle}>개인 모음</Text>
-        <Pressable hitSlop={12} onPress={() => Alert.alert("새 모음", "새 개인 모음 만들기 기능은 준비 중입니다.")}>
+        <Pressable hitSlop={12} onPress={() => { setNewName(""); setNewDescription(""); setCreateSheetVisible(true); }}>
           <Feather name="plus" size={20} color={Colors.zinc600} />
         </Pressable>
       </View>
+
       <View style={styles.tabBar}>
         <Pressable
           style={[styles.tab, activeTab === "mine" && styles.tabActive]}
@@ -51,31 +126,93 @@ export default function PersonalCollectionListScreen() {
           </Text>
         </Pressable>
       </View>
-      {activeTab === "mine" ? (
-        <ScrollView contentContainerStyle={styles.cardGrid}>
-          {DEMO_ARTICLES.map((item) => (
-            <ArticleCardItem
-              key={item.id}
-              title={item.title}
-              preview={item.preview}
-              author={item.author}
-              timestamp={item.timestamp}
-              isRead={item.isRead}
-              onPress={() => handleArticlePress(item.id)}
-            />
-          ))}
-          <Pressable style={styles.createCard} onPress={() => Alert.alert("새 모음", "새 개인 모음 만들기 기능은 준비 중입니다.")}>
-            <Feather name="plus" size={24} color={Colors.zinc400} />
-            <Text style={styles.createCardText}>새 모음 만들기</Text>
-          </Pressable>
-        </ScrollView>
-      ) : (
+
+      {collectionsQuery.isLoading ? (
         <View style={styles.emptyContainer}>
-          <Feather name="rss" size={40} color={Colors.zinc300} />
-          <Text style={styles.emptyTitle}>구독 중인 모음이 없어요</Text>
-          <Text style={styles.emptySubtitle}>다른 사람의 공개 모음을 구독해보세요</Text>
+          <Text style={styles.loadingText}>불러오는 중...</Text>
         </View>
+      ) : collectionsQuery.isError ? (
+        <View style={styles.emptyContainer}>
+          <Feather name="alert-circle" size={40} color={Colors.zinc300} />
+          <Text style={styles.emptyTitle}>불러오기에 실패했어요</Text>
+          <Pressable style={styles.createButton} onPress={() => collectionsQuery.refetch()}>
+            <Text style={styles.createButtonText}>다시 시도</Text>
+          </Pressable>
+        </View>
+      ) : activeList.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Feather
+            name={activeTab === "mine" ? "folder" : "rss"}
+            size={40}
+            color={Colors.zinc300}
+          />
+          <Text style={styles.emptyTitle}>
+            {activeTab === "mine" ? "개인 모음이 없어요" : "구독 중인 모음이 없어요"}
+          </Text>
+          <Text style={styles.emptySubtitle}>
+            {activeTab === "mine"
+              ? "새 모음을 만들어 편지를 정리해보세요"
+              : "다른 사람의 공개 모음을 구독해보세요"}
+          </Text>
+          {activeTab === "mine" && (
+            <Pressable
+              style={styles.createButton}
+              onPress={() => { setNewName(""); setNewDescription(""); setCreateSheetVisible(true); }}
+            >
+              <Text style={styles.createButtonText}>새 모음 만들기</Text>
+            </Pressable>
+          )}
+        </View>
+      ) : (
+        <FlatList
+          data={activeList}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={collectionsQuery.isRefetching}
+              onRefresh={() => collectionsQuery.refetch()}
+              tintColor={Colors.zinc400}
+            />
+          }
+          showsVerticalScrollIndicator={false}
+        />
       )}
+
+      <BottomSheet
+        visible={createSheetVisible}
+        onClose={() => setCreateSheetVisible(false)}
+        title="새 개인 모음"
+        snapPoints={[0.45]}
+      >
+        <View style={styles.createForm}>
+          <TextInput
+            style={styles.createInput}
+            placeholder="모음 이름"
+            placeholderTextColor={Colors.zinc400}
+            value={newName}
+            onChangeText={setNewName}
+            autoFocus
+          />
+          <TextInput
+            style={[styles.createInput, styles.createInputMulti]}
+            placeholder="설명 (선택사항)"
+            placeholderTextColor={Colors.zinc400}
+            value={newDescription}
+            onChangeText={setNewDescription}
+            multiline
+            textAlignVertical="top"
+          />
+          <Pressable
+            style={[styles.confirmButton, !newName.trim() && styles.confirmDisabled]}
+            onPress={handleCreate}
+            disabled={!newName.trim()}
+          >
+            <Text style={styles.confirmButtonText}>만들기</Text>
+          </Pressable>
+        </View>
+      </BottomSheet>
     </View>
   );
 }
@@ -121,28 +258,48 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontWeight: "600",
   },
-  cardGrid: {
+  listContent: {
+    paddingBottom: 40,
+  },
+  collectionItem: {
     flexDirection: "row",
-    flexWrap: "wrap",
+    alignItems: "center",
+    paddingVertical: 14,
     paddingHorizontal: Spacing.screenPx,
-    paddingTop: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.zinc100,
     gap: 12,
   },
-  createCard: {
-    width: 140,
-    height: 180,
-    borderRadius: 16,
+  collectionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     backgroundColor: Colors.zinc50,
-    borderWidth: 1,
-    borderColor: Colors.zinc200,
-    borderStyle: "dashed",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
   },
-  createCardText: {
+  collectionInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  collectionName: {
+    ...Typography.bodySemiBold,
+    fontSize: 15,
+    color: Colors.zinc900,
+  },
+  collectionDesc: {
+    ...Typography.body,
+    fontSize: 13,
+    color: Colors.zinc500,
+  },
+  collectionRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  collectionCount: {
     ...Typography.caption,
-    fontSize: 12,
+    fontSize: 13,
     color: Colors.zinc400,
   },
   emptyContainer: {
@@ -163,5 +320,54 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.zinc500,
     textAlign: "center",
+  },
+  loadingText: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc500,
+  },
+  createButton: {
+    marginTop: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: Colors.zinc900,
+    borderRadius: 12,
+  },
+  createButtonText: {
+    ...Typography.bodySemiBold,
+    fontSize: 14,
+    color: Colors.white,
+  },
+  createForm: {
+    paddingVertical: 12,
+    gap: 12,
+  },
+  createInput: {
+    ...Typography.body,
+    fontSize: 15,
+    color: Colors.zinc900,
+    backgroundColor: Colors.zinc50,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  createInputMulti: {
+    minHeight: 80,
+    lineHeight: 22,
+  },
+  confirmButton: {
+    backgroundColor: Colors.zinc900,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    marginTop: 4,
+  },
+  confirmDisabled: {
+    backgroundColor: Colors.zinc300,
+  },
+  confirmButtonText: {
+    ...Typography.bodySemiBold,
+    fontSize: 16,
+    color: Colors.white,
   },
 });
