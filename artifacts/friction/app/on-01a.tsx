@@ -168,6 +168,9 @@ export default function DraftScreen() {
           textAlignVertical="top"
           scrollEnabled
         />
+        <View style={styles.editorFooter}>
+          <Text style={styles.charCountText}>{content.length}자</Text>
+        </View>
       </View>
     </View>
   );
@@ -229,5 +232,17 @@ const styles = StyleSheet.create({
     lineHeight: 26,
     color: Colors.zinc800,
     paddingVertical: 0,
+  },
+  editorFooter: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    paddingVertical: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.zinc100,
+  },
+  charCountText: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc400,
   },
 });

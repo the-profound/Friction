@@ -8,6 +8,7 @@ import {
   Alert,
   ActivityIndicator,
   TextInput,
+  Switch,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -49,6 +50,7 @@ export default function ClosingScreen() {
   const [bgColorKey, setBgColorKey] = useState("default");
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [titleEditing, setTitleEditing] = useState(false);
+  const [saveToCollection, setSaveToCollection] = useState(true);
   const initializedRef = useRef(false);
 
   useEffect(() => {
@@ -83,7 +85,7 @@ export default function ClosingScreen() {
         data: {
           title,
           pages,
-          style: { bgColor: bgColorKey },
+          style: { bgColor: bgColorKey, saveToCollection },
         },
       });
       await transitionStatus.mutateAsync({
@@ -98,7 +100,7 @@ export default function ClosingScreen() {
       const msg = e instanceof Error ? e.message : "내보내기에 실패했습니다.";
       Alert.alert("오류", msg);
     }
-  }, [id, title, pages, bgColorKey, updateArticle, transitionStatus, queryClient, router]);
+  }, [id, title, pages, bgColorKey, saveToCollection, updateArticle, transitionStatus, queryClient, router]);
 
   const handleBack = useCallback(async () => {
     if (!id) { router.back(); return; }
@@ -196,6 +198,24 @@ export default function ClosingScreen() {
             </Pressable>
           ))}
         </View>
+      </View>
+
+      <View style={styles.collectionSection}>
+        <View style={styles.collectionRow}>
+          <View style={styles.collectionLabelContainer}>
+            <Feather name="bookmark" size={16} color={Colors.zinc600} />
+            <Text style={styles.collectionLabel}>개인 모음에 저장</Text>
+          </View>
+          <Switch
+            value={saveToCollection}
+            onValueChange={setSaveToCollection}
+            trackColor={{ false: Colors.zinc200, true: Colors.zinc900 }}
+            thumbColor={Colors.white}
+          />
+        </View>
+        <Text style={styles.collectionHint}>
+          내보낸 편지를 보관함(OF)에 저장합니다
+        </Text>
       </View>
 
       <ScrollView style={styles.previewArea} contentContainerStyle={styles.previewInner}>
@@ -409,5 +429,32 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 14,
     color: Colors.zinc600,
+  },
+  collectionSection: {
+    paddingHorizontal: Spacing.screenPx,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.zinc100,
+  },
+  collectionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  collectionLabelContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  collectionLabel: {
+    ...Typography.bodySemiBold,
+    fontSize: 14,
+    color: Colors.zinc700,
+  },
+  collectionHint: {
+    ...Typography.caption,
+    fontSize: 11,
+    color: Colors.zinc400,
+    marginTop: 4,
   },
 });
