@@ -92,15 +92,19 @@ router.post("/inbox/:id/read", async (req, res) => {
     return;
   }
 
-  const [updated] = await db.update(inboxTable).set({ isRead: true }).where(eq(inboxTable.id, req.params.id)).returning();
+  const updated = await db.transaction(async (tx) => {
+    const [u] = await tx.update(inboxTable).set({ isRead: true }).where(eq(inboxTable.id, req.params.id)).returning();
 
-  await db.insert(userArticleReadsTable).values({
-    userId: item.recipientId,
-    articleId: item.articleId,
-    completedAt: new Date(),
-  }).onConflictDoUpdate({
-    target: [userArticleReadsTable.userId, userArticleReadsTable.articleId],
-    set: { completedAt: new Date() },
+    await tx.insert(userArticleReadsTable).values({
+      userId: item.recipientId,
+      articleId: item.articleId,
+      completedAt: new Date(),
+    }).onConflictDoUpdate({
+      target: [userArticleReadsTable.userId, userArticleReadsTable.articleId],
+      set: { completedAt: new Date() },
+    });
+
+    return u;
   });
 
   res.json(updated);

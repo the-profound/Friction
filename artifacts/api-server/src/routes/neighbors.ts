@@ -158,12 +158,16 @@ router.post("/neighbor-requests/:id/accept", async (req, res) => {
     ? [request.requesterId, request.recipientId]
     : [request.recipientId, request.requesterId];
 
-  const [neighbor] = await db.insert(neighborsTable).values({
-    userAId: aId,
-    userBId: bId,
-  }).returning();
+  const neighbor = await db.transaction(async (tx) => {
+    const [n] = await tx.insert(neighborsTable).values({
+      userAId: aId,
+      userBId: bId,
+    }).returning();
 
-  await db.delete(neighborRequestsTable).where(eq(neighborRequestsTable.id, req.params.id));
+    await tx.delete(neighborRequestsTable).where(eq(neighborRequestsTable.id, req.params.id));
+
+    return n;
+  });
 
   res.json(neighbor);
 });

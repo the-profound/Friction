@@ -111,39 +111,43 @@ router.post("/send-records", async (req, res) => {
 
   const deliverySlot = computeDeliverySlot();
 
-  const [inboxEntry] = await db.insert(inboxTable).values({
-    recipientId,
-    articleId,
-    senderId,
-    visibleAt: deliverySlot,
-  }).returning();
+  const result = await db.transaction(async (tx) => {
+    const [inboxEntry] = await tx.insert(inboxTable).values({
+      recipientId,
+      articleId,
+      senderId,
+      visibleAt: deliverySlot,
+    }).returning();
 
-  const [sendRecord] = await db.insert(sendRecordsTable).values({
-    senderId,
-    recipientId,
-    articleId,
-    inboxId: inboxEntry.id,
-    deliverySlot,
-  }).returning();
+    const [sendRecord] = await tx.insert(sendRecordsTable).values({
+      senderId,
+      recipientId,
+      articleId,
+      inboxId: inboxEntry.id,
+      deliverySlot,
+    }).returning();
 
-  const records = await db
-    .select({
-      id: sendRecordsTable.id,
-      senderId: sendRecordsTable.senderId,
-      recipientId: sendRecordsTable.recipientId,
-      articleId: sendRecordsTable.articleId,
-      inboxId: sendRecordsTable.inboxId,
-      deliverySlot: sendRecordsTable.deliverySlot,
-      sentAt: sendRecordsTable.sentAt,
-      article: articlesTable,
-      recipient: usersTable,
-    })
-    .from(sendRecordsTable)
-    .leftJoin(articlesTable, eq(sendRecordsTable.articleId, articlesTable.id))
-    .leftJoin(usersTable, eq(sendRecordsTable.recipientId, usersTable.id))
-    .where(eq(sendRecordsTable.id, sendRecord.id));
+    const records = await tx
+      .select({
+        id: sendRecordsTable.id,
+        senderId: sendRecordsTable.senderId,
+        recipientId: sendRecordsTable.recipientId,
+        articleId: sendRecordsTable.articleId,
+        inboxId: sendRecordsTable.inboxId,
+        deliverySlot: sendRecordsTable.deliverySlot,
+        sentAt: sendRecordsTable.sentAt,
+        article: articlesTable,
+        recipient: usersTable,
+      })
+      .from(sendRecordsTable)
+      .leftJoin(articlesTable, eq(sendRecordsTable.articleId, articlesTable.id))
+      .leftJoin(usersTable, eq(sendRecordsTable.recipientId, usersTable.id))
+      .where(eq(sendRecordsTable.id, sendRecord.id));
 
-  res.status(201).json(records[0]);
+    return records[0];
+  });
+
+  res.status(201).json(result);
 });
 
 export default router;
