@@ -9,11 +9,12 @@ import {
   BackHandler,
   Alert,
   ScrollView,
+  TextInput,
   AppState,
   type AppStateStatus,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter, useLocalSearchParams, useNavigation } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ProgressIndicator from "@/components/ProgressIndicator/ProgressIndicator";
@@ -35,7 +36,6 @@ function splitIntoParagraphs(text: string): string[] {
 export default function ReadScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const navigation = useNavigation();
   const { userId } = useUser();
   const params = useLocalSearchParams<{
     articleId: string;
@@ -73,6 +73,8 @@ export default function ReadScreen() {
   const [completionSheetVisible, setCompletionSheetVisible] = useState(false);
   const [sentencePopupVisible, setSentencePopupVisible] = useState(false);
   const [selectedText, setSelectedText] = useState("");
+  const [memoSheetVisible, setMemoSheetVisible] = useState(false);
+  const [memoText, setMemoText] = useState("");
   const createSentence = useCreateStoredSentence();
   const deleteInbox = useDeleteInboxItem();
   const flatListRef = useRef<FlatList>(null);
@@ -100,17 +102,6 @@ export default function ReadScreen() {
     });
     return () => sub.remove();
   }, [mode, reading.canExit]);
-
-  useEffect(() => {
-    if (mode !== "basic") return;
-    const unsubscribe = navigation.addListener("beforeRemove" as any, (e: any) => {
-      if (!reading.canExit) {
-        e.preventDefault();
-        Alert.alert("읽기 중", "완독 전까지 나갈 수 없어요.");
-      }
-    });
-    return unsubscribe;
-  }, [mode, reading.canExit, navigation]);
 
   useEffect(() => {
     if (mode !== "basic") return;
@@ -214,6 +205,28 @@ export default function ReadScreen() {
     }
   }, [selectedText, userId, articleId, reading.session.position.currentPage, createSentence]);
 
+  const handleSaveMemo = useCallback(async () => {
+    if (!memoText.trim()) return;
+    try {
+      await createSentence.mutateAsync({
+        data: {
+          userId,
+          articleId,
+          text: memoText.trim(),
+          position: {
+            page: reading.session.position.currentPage,
+            type: "memo",
+          },
+        },
+      });
+      setMemoSheetVisible(false);
+      setMemoText("");
+      Alert.alert("저장 완료", "메모가 저장되었습니다.");
+    } catch {
+      Alert.alert("오류", "메모 저장에 실패했습니다.");
+    }
+  }, [memoText, userId, articleId, reading.session.position.currentPage, createSentence]);
+
   if (!articleId) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -244,6 +257,13 @@ export default function ReadScreen() {
         <View style={styles.progressContainer}>
           <ProgressIndicator type="linear" progress={reading.progress} size="small" />
         </View>
+        <Pressable
+          onPress={() => setMemoSheetVisible(true)}
+          hitSlop={12}
+          style={styles.memoButton}
+        >
+          <Feather name="edit-3" size={18} color={Colors.zinc600} />
+        </Pressable>
         <Text style={styles.pageIndicator}>
           {totalPages > 0
             ? `${reading.session.position.currentPage + 1}/${totalPages}`
@@ -337,6 +357,41 @@ export default function ReadScreen() {
             </Pressable>
             <Pressable style={styles.sentenceButton} onPress={handleSaveSentence}>
               <Feather name="bookmark" size={16} color={Colors.white} />
+              <Text style={styles.sentenceButtonText}>저장</Text>
+            </Pressable>
+          </View>
+        </View>
+      </BottomSheet>
+
+      <BottomSheet
+        visible={memoSheetVisible}
+        onClose={() => setMemoSheetVisible(false)}
+        title="메모 작성"
+        snapPoints={[0.4]}
+      >
+        <View style={styles.memoContent}>
+          <TextInput
+            style={styles.memoInput}
+            placeholder="읽으면서 떠오른 생각을 적어보세요..."
+            placeholderTextColor={Colors.searchPlaceholder}
+            value={memoText}
+            onChangeText={setMemoText}
+            multiline
+            autoFocus
+            textAlignVertical="top"
+          />
+          <Text style={styles.memoPageInfo}>
+            {reading.session.position.currentPage + 1}페이지에서 작성 중
+          </Text>
+          <View style={styles.sentenceActions}>
+            <Pressable
+              style={[styles.sentenceButton, styles.sentenceButtonCancel]}
+              onPress={() => { setMemoSheetVisible(false); setMemoText(""); }}
+            >
+              <Text style={styles.sentenceButtonCancelText}>취소</Text>
+            </Pressable>
+            <Pressable style={styles.sentenceButton} onPress={handleSaveMemo}>
+              <Feather name="save" size={16} color={Colors.white} />
               <Text style={styles.sentenceButtonText}>저장</Text>
             </Pressable>
           </View>
@@ -542,5 +597,29 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 14,
     color: Colors.zinc600,
+  },
+  memoButton: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  memoContent: {
+    paddingVertical: 12,
+    gap: 12,
+  },
+  memoInput: {
+    ...Typography.body,
+    color: Colors.zinc800,
+    backgroundColor: Colors.zinc50,
+    borderRadius: 10,
+    padding: 14,
+    minHeight: 120,
+    lineHeight: 24,
+  },
+  memoPageInfo: {
+    ...Typography.caption,
+    color: Colors.zinc400,
+    textAlign: "right",
   },
 });

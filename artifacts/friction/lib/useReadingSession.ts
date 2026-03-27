@@ -73,6 +73,17 @@ export function useReadingSession({
     }));
   }, [savedRecord, isRestoring]);
 
+  useEffect(() => {
+    if (totalPages <= 0) return;
+    setSession((prev) => {
+      if (prev.position.totalPages === totalPages) return prev;
+      return {
+        ...prev,
+        position: { ...prev.position, totalPages },
+      };
+    });
+  }, [totalPages]);
+
   const queryClient = useQueryClient();
   const upsertReading = useUpsertReadingRecord();
   const createArticleRead = useCreateUserArticleRead();
