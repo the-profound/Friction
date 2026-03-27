@@ -36,6 +36,7 @@ export function useArticleEditor({ articleId }: UseArticleEditorOptions): Articl
   const autoSave = useAutoSave({
     debounceMs: 1200,
     maxRetries: 3,
+    storageKey: articleId,
     onSave: async (data) => {
       await updateArticle.mutateAsync({ id: articleId, data });
     },

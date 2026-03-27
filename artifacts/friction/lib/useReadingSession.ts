@@ -1,5 +1,5 @@
-import { useCallback, useRef, useState } from "react";
-import { useUpsertReadingRecord, useCreateUserArticleRead, useMarkInboxRead } from "@workspace/api-client-react";
+import { useCallback, useRef, useState, useEffect } from "react";
+import { useUpsertReadingRecord, useCreateUserArticleRead, useMarkInboxRead, useGetReadingRecord } from "@workspace/api-client-react";
 import type { ReadingMode } from "./policies";
 import {
   createInitialSession,
@@ -22,7 +22,6 @@ export interface UseReadingSessionOptions {
   mode: ReadingMode;
   totalPages: number;
   userId: string;
-  savedPosition?: { currentPage: number; scrollPosition: number };
   inboxId?: string;
 }
 
@@ -31,6 +30,7 @@ export interface ReadingSessionActions {
   progress: number;
   canExit: boolean;
   showExitUI: boolean;
+  isRestoring: boolean;
   nextPage: () => void;
   prevPage: () => void;
   onScroll: (scrollPosition: number) => void;
@@ -45,12 +45,31 @@ export function useReadingSession({
   mode,
   totalPages,
   userId,
-  savedPosition,
   inboxId,
 }: UseReadingSessionOptions): ReadingSessionActions {
-  const [session, setSession] = useState<ReadingSession>(() =>
-    createInitialSession(articleId, mode, totalPages, savedPosition),
+  const { data: savedRecord, isLoading: isRestoring } = useGetReadingRecord(
+    { userId, articleId },
   );
+
+  const [session, setSession] = useState<ReadingSession>(() =>
+    createInitialSession(articleId, mode, totalPages),
+  );
+
+  const restoredRef = useRef(false);
+  useEffect(() => {
+    if (restoredRef.current || isRestoring) return;
+    const record = savedRecord?.record;
+    if (!record) return;
+    restoredRef.current = true;
+    setSession((prev) => ({
+      ...prev,
+      position: {
+        ...prev.position,
+        currentPage: record.currentPage ?? 0,
+        scrollPosition: record.scrollPosition ?? 0,
+      },
+    }));
+  }, [savedRecord, isRestoring]);
 
   const upsertReading = useUpsertReadingRecord();
   const createArticleRead = useCreateUserArticleRead();
@@ -155,6 +174,7 @@ export function useReadingSession({
     progress,
     canExit,
     showExitUI,
+    isRestoring,
     nextPage,
     prevPage,
     onScroll,
