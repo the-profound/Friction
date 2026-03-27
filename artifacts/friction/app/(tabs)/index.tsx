@@ -1,16 +1,29 @@
 import React, { useState, useCallback } from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, FlatList } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { PageHeader } from "@/components/NavBar/PageHeader";
+import ArticleListItem from "@/components/ArticleListItem/ArticleListItem";
+
+const DEMO_LETTERS = [
+  { id: "1", title: "봄 날의 산책", preview: "오늘 공원에서 벚꽃을 보았어요...", author: { name: "이웃A" }, timestamp: new Date(2026, 2, 25, 14, 30) },
+  { id: "2", title: "어제의 일기", preview: "비가 오는 날이면 떠오르는 기억이 있어요", author: { name: "이웃B" }, timestamp: new Date(2026, 2, 24, 9, 15) },
+  { id: "3", title: "좋아하는 문장", preview: "읽다가 멈춰 서게 된 한 줄이 있었어요", author: { name: "이웃C" }, timestamp: new Date(2026, 2, 23, 18, 0), isRead: true },
+];
 
 export default function InboxScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const [searchActive, setSearchActive] = useState(false);
 
   const handleSearchPress = useCallback(() => {
     setSearchActive((prev) => !prev);
   }, []);
+
+  const handleArticlePress = useCallback((articleId: string) => {
+    router.push({ pathname: "/read", params: { id: articleId } });
+  }, [router]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -20,10 +33,21 @@ export default function InboxScreen() {
         onSearchPress={handleSearchPress}
         searchActive={searchActive}
       />
-      <View style={styles.emptyContainer}>
-        <Text style={styles.emptyTitle}>아직 받은 편지가 없어요</Text>
-        <Text style={styles.emptySubtitle}>이웃에게 편지를 받으면 여기에 표시됩니다</Text>
-      </View>
+      <FlatList
+        data={DEMO_LETTERS}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <ArticleListItem
+            title={item.title}
+            preview={item.preview}
+            author={item.author}
+            timestamp={item.timestamp}
+            isRead={item.isRead}
+            onPress={() => handleArticlePress(item.id)}
+          />
+        )}
+        contentContainerStyle={styles.listContent}
+      />
     </View>
   );
 }
@@ -33,23 +57,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.white,
   },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: Spacing.screenPx,
+  listContent: {
     paddingBottom: Spacing.navBarPaddingBottom,
-  },
-  emptyTitle: {
-    ...Typography.bodySemiBold,
-    fontSize: 18,
-    color: Colors.zinc900,
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    ...Typography.body,
-    fontSize: 14,
-    color: Colors.zinc500,
-    textAlign: "center",
   },
 });

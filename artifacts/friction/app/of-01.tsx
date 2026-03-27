@@ -1,16 +1,26 @@
-import React, { useState } from "react";
-import { View, Text, StyleSheet, FlatList, Pressable, Alert } from "react-native";
+import React, { useState, useCallback } from "react";
+import { View, Text, StyleSheet, FlatList, Pressable, Alert, ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
+import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 
 type MiniTab = "mine" | "subscribed";
+
+const DEMO_ARTICLES = [
+  { id: "a1", title: "봄의 시작", preview: "따뜻한 바람이 불어오는 날...", author: { name: "나" }, timestamp: new Date(2026, 2, 26, 10, 0) },
+  { id: "a2", title: "겨울의 끝", preview: "마지막 눈이 녹아가고 있었다", author: { name: "나" }, timestamp: new Date(2026, 2, 20, 15, 30), isRead: true },
+];
 
 export default function PersonalCollectionListScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<MiniTab>("mine");
+
+  const handleArticlePress = useCallback((articleId: string) => {
+    router.push({ pathname: "/read", params: { id: articleId } });
+  }, [router]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -42,14 +52,23 @@ export default function PersonalCollectionListScreen() {
         </Pressable>
       </View>
       {activeTab === "mine" ? (
-        <View style={styles.emptyContainer}>
-          <Feather name="folder-plus" size={40} color={Colors.zinc300} />
-          <Text style={styles.emptyTitle}>아직 모음이 없어요</Text>
-          <Text style={styles.emptySubtitle}>편지를 모아둘 모음을 만들어보세요</Text>
-          <Pressable style={styles.createButton} onPress={() => Alert.alert("새 모음", "새 개인 모음 만들기 기능은 준비 중입니다.")}>
-            <Text style={styles.createButtonText}>새 모음 만들기</Text>
+        <ScrollView contentContainerStyle={styles.cardGrid}>
+          {DEMO_ARTICLES.map((item) => (
+            <ArticleCardItem
+              key={item.id}
+              title={item.title}
+              preview={item.preview}
+              author={item.author}
+              timestamp={item.timestamp}
+              isRead={item.isRead}
+              onPress={() => handleArticlePress(item.id)}
+            />
+          ))}
+          <Pressable style={styles.createCard} onPress={() => Alert.alert("새 모음", "새 개인 모음 만들기 기능은 준비 중입니다.")}>
+            <Feather name="plus" size={24} color={Colors.zinc400} />
+            <Text style={styles.createCardText}>새 모음 만들기</Text>
           </Pressable>
-        </View>
+        </ScrollView>
       ) : (
         <View style={styles.emptyContainer}>
           <Feather name="rss" size={40} color={Colors.zinc300} />
@@ -102,6 +121,30 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontWeight: "600",
   },
+  cardGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: Spacing.screenPx,
+    paddingTop: 8,
+    gap: 12,
+  },
+  createCard: {
+    width: 140,
+    height: 180,
+    borderRadius: 16,
+    backgroundColor: Colors.zinc50,
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
+    borderStyle: "dashed",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  createCardText: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc400,
+  },
   emptyContainer: {
     flex: 1,
     justifyContent: "center",
@@ -120,17 +163,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.zinc500,
     textAlign: "center",
-  },
-  createButton: {
-    marginTop: 16,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: Colors.zinc900,
-    borderRadius: 12,
-  },
-  createButtonText: {
-    ...Typography.bodySemiBold,
-    fontSize: 14,
-    color: Colors.white,
   },
 });

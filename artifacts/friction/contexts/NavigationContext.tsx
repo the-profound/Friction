@@ -135,11 +135,15 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
   }, []);
 
   const setOfSubTab = useCallback((subTab: OfSubTabKey) => {
+    programmaticNav.current = true;
     setOfSubTabState(subTab);
+    router.setParams({ subTab });
   }, []);
 
   const setToSubTab = useCallback((subTab: ToSubTabKey) => {
+    programmaticNav.current = true;
     setToSubTabState(subTab);
+    router.setParams({ subTab });
   }, []);
 
   const setOfMiniSubTab = useCallback((ofSub: OfSubTabKey, miniTab: OfMiniSubTabKey) => {
