@@ -27,7 +27,7 @@ export function PageHeader({
   const { headerScrolled } = useNavigation();
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + Spacing.headerPt }, headerScrolled && Shadows.headerScrolled]}>
+    <View style={[styles.container, { paddingTop: 50 }, headerScrolled && Shadows.headerScrolled]}>
       <Text style={styles.title}>{title}</Text>
       <View style={styles.actions}>
         {showAdd && (
@@ -55,7 +55,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: Spacing.screenPx,
-    paddingBottom: Spacing.headerPb,
+    paddingBottom: 20,
     backgroundColor: Colors.white,
   },
   title: {
