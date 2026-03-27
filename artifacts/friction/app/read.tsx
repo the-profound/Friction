@@ -19,9 +19,11 @@ import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ProgressIndicator from "@/components/ProgressIndicator/ProgressIndicator";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
+import SelectableText from "@/components/SelectableText/SelectableText";
 import { useReadingSession } from "@/lib/useReadingSession";
 import { useGetArticle, useCreateStoredSentence, useDeleteInboxItem } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
+import { useActiveReading } from "@/contexts/ActiveReadingContext";
 import type { ReadingMode } from "@/lib/policies";
 
 const { width: SCREEN_W } = Dimensions.get("window");
@@ -37,6 +39,7 @@ export default function ReadScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { userId } = useUser();
+  const { setActiveSession, clearActiveSession } = useActiveReading();
   const params = useLocalSearchParams<{
     articleId: string;
     inboxId?: string;
@@ -80,22 +83,35 @@ export default function ReadScreen() {
   const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
+    if (mode === "basic" && articleId) {
+      setActiveSession({ articleId, inboxId, mode });
+    }
+    return () => {};
+  }, [articleId, inboxId, mode, setActiveSession]);
+
+  useEffect(() => {
     if (!reading.isRestoring && reading.session.state === "IDLE" && totalPages > 0) {
       reading.startReading();
     }
   }, [reading.isRestoring, reading.session.state, totalPages]);
 
   useEffect(() => {
-    if (reading.session.state === "COMPLETED_READY" && mode === "basic") {
+    if (reading.session.state === "COMPLETED_READY") {
       setCompletionSheetVisible(true);
     }
-  }, [reading.session.state, mode]);
+  }, [reading.session.state]);
+
+  useEffect(() => {
+    if (reading.session.state === "COMPLETED_COMMITTED") {
+      clearActiveSession();
+    }
+  }, [reading.session.state, clearActiveSession]);
 
   useEffect(() => {
     if (mode !== "basic") return;
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
       if (!reading.canExit) {
-        Alert.alert("읽기 중", "완독 전까지 나갈 수 없어요.");
+        Alert.alert("읽기 중", "완독 후 보관/삭제를 선택해주세요.");
         return true;
       }
       return false;
@@ -121,7 +137,7 @@ export default function ReadScreen() {
 
   const handleBack = useCallback(() => {
     if (mode === "basic" && !reading.canExit) {
-      Alert.alert("읽기 중", "완독 전까지 나갈 수 없어요.");
+      Alert.alert("읽기 중", "완독 후 보관/삭제를 선택해주세요.");
       return;
     }
     if (reading.session.state === "READING" || reading.session.state === "PAUSED") {
@@ -143,41 +159,51 @@ export default function ReadScreen() {
     [reading],
   );
 
+  const restoredPageRef = useRef(false);
   useEffect(() => {
-    if (flatListRef.current && reading.session.position.currentPage >= 0 && !reading.isRestoring) {
-      flatListRef.current.scrollToOffset({
-        offset: reading.session.position.currentPage * SCREEN_W,
-        animated: false,
-      });
+    if (restoredPageRef.current) return;
+    if (!reading.isRestoring && reading.session.position.currentPage > 0 && flatListRef.current) {
+      restoredPageRef.current = true;
+      setTimeout(() => {
+        flatListRef.current?.scrollToOffset({
+          offset: reading.session.position.currentPage * SCREEN_W,
+          animated: false,
+        });
+      }, 50);
     }
-  }, [reading.isRestoring]);
+  }, [reading.isRestoring, reading.session.position.currentPage]);
 
   const handleCommitAndArchive = useCallback(async () => {
     const result = await reading.commitCompletion();
     setCompletionSheetVisible(false);
     if (result.success) {
+      clearActiveSession();
       router.back();
     } else {
       Alert.alert("오류", result.error ?? "완독 처리에 실패했습니다.");
     }
-  }, [reading, router]);
+  }, [reading, router, clearActiveSession]);
 
   const handleCommitAndDelete = useCallback(async () => {
     const result = await reading.commitCompletion();
     if (result.success && inboxId) {
       try {
         await deleteInbox.mutateAsync({ id: inboxId });
-      } catch {}
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "수신함 항목 삭제에 실패했습니다.";
+        Alert.alert("알림", `완독 기록은 저장했지만 ${msg}`);
+      }
     }
     setCompletionSheetVisible(false);
     if (result.success) {
+      clearActiveSession();
       router.back();
     } else {
       Alert.alert("오류", result.error ?? "완독 처리에 실패했습니다.");
     }
-  }, [reading, router, inboxId, deleteInbox]);
+  }, [reading, router, inboxId, deleteInbox, clearActiveSession]);
 
-  const handleParagraphLongPress = useCallback((text: string) => {
+  const handleCollectSentence = useCallback((text: string) => {
     if (text.trim().length > 0) {
       setSelectedText(text.trim());
       setSentencePopupVisible(true);
@@ -200,8 +226,9 @@ export default function ReadScreen() {
       setSentencePopupVisible(false);
       setSelectedText("");
       Alert.alert("저장 완료", "문장이 저장되었습니다.");
-    } catch {
-      Alert.alert("오류", "문장 저장에 실패했습니다.");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "문장 저장에 실패했습니다.";
+      Alert.alert("오류", msg);
     }
   }, [selectedText, userId, articleId, reading.session.position.currentPage, createSentence]);
 
@@ -222,8 +249,9 @@ export default function ReadScreen() {
       setMemoSheetVisible(false);
       setMemoText("");
       Alert.alert("저장 완료", "메모가 저장되었습니다.");
-    } catch {
-      Alert.alert("오류", "메모 저장에 실패했습니다.");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "메모 저장에 실패했습니다.";
+      Alert.alert("오류", msg);
     }
   }, [memoText, userId, articleId, reading.session.position.currentPage, createSentence]);
 
@@ -296,7 +324,7 @@ export default function ReadScreen() {
             <PageView
               content={pageContent}
               pageIndex={index}
-              onParagraphLongPress={handleParagraphLongPress}
+              onCollectSentence={handleCollectSentence}
               bottomInset={insets.bottom}
             />
           )}
@@ -314,12 +342,10 @@ export default function ReadScreen() {
 
       <BottomSheet
         visible={completionSheetVisible}
-        onClose={() => {
-          if (mode !== "basic") setCompletionSheetVisible(false);
-        }}
+        onClose={() => {}}
         title="완독!"
         snapPoints={[0.35]}
-        enableDragDown={mode !== "basic"}
+        enableDragDown={false}
       >
         <View style={styles.completionContent}>
           <Feather name="check-circle" size={48} color={Colors.zinc900} style={styles.completionIcon} />
@@ -404,12 +430,12 @@ export default function ReadScreen() {
 function PageView({
   content,
   pageIndex,
-  onParagraphLongPress,
+  onCollectSentence,
   bottomInset,
 }: {
   content: string;
   pageIndex: number;
-  onParagraphLongPress: (text: string) => void;
+  onCollectSentence: (text: string) => void;
   bottomInset: number;
 }) {
   const paragraphs = useMemo(() => splitIntoParagraphs(content), [content]);
@@ -421,19 +447,9 @@ function PageView({
       showsVerticalScrollIndicator={false}
     >
       {paragraphs.map((para, idx) => (
-        <Pressable
-          key={`${pageIndex}-p-${idx}`}
-          onLongPress={() => onParagraphLongPress(para)}
-          delayLongPress={400}
-          style={({ pressed }) => [
-            styles.paragraphWrapper,
-            pressed && styles.paragraphPressed,
-          ]}
-        >
-          <Text style={styles.pageText} selectable>
-            {para}
-          </Text>
-        </Pressable>
+        <View key={`${pageIndex}-p-${idx}`} style={styles.paragraphWrapper}>
+          <SelectableText text={para} onCollect={onCollectSentence} />
+        </View>
       ))}
     </ScrollView>
   );
@@ -459,6 +475,12 @@ const styles = StyleSheet.create({
   },
   progressContainer: {
     flex: 1,
+  },
+  memoButton: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
   },
   pageIndicator: {
     ...Typography.caption,
@@ -497,10 +519,6 @@ const styles = StyleSheet.create({
   },
   paragraphWrapper: {
     marginBottom: 16,
-    borderRadius: 4,
-  },
-  paragraphPressed: {
-    backgroundColor: Colors.zinc100,
   },
   pageText: {
     ...Typography.body,
@@ -597,12 +615,6 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 14,
     color: Colors.zinc600,
-  },
-  memoButton: {
-    width: 36,
-    height: 36,
-    alignItems: "center",
-    justifyContent: "center",
   },
   memoContent: {
     paddingVertical: 12,

@@ -46,7 +46,7 @@ export function transitionSession(
 }
 
 export function shouldBlockExit(mode: ReadingMode, state: ReadingSessionState): boolean {
-  return mode === "basic" && (state === "READING" || state === "PAUSED");
+  return mode === "basic" && state !== "IDLE" && state !== "COMPLETED_COMMITTED";
 }
 
 export function shouldBlockBack(mode: ReadingMode, state: ReadingSessionState): boolean {

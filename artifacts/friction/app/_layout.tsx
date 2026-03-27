@@ -18,6 +18,7 @@ import ToastContainer from "@/components/Toast/Toast";
 import { NavigationProvider } from "@/contexts/NavigationContext";
 import { ToastProvider } from "@/contexts/ToastContext";
 import { UserProvider } from "@/contexts/UserContext";
+import { ActiveReadingProvider } from "@/contexts/ActiveReadingContext";
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -55,12 +56,14 @@ export default function RootLayout() {
           <GestureHandlerRootView>
             <KeyboardProvider>
               <UserProvider>
-                <ToastProvider>
-                  <NavigationProvider>
-                    <RootLayoutNav />
-                    <ToastContainer />
-                  </NavigationProvider>
-                </ToastProvider>
+                <ActiveReadingProvider>
+                  <ToastProvider>
+                    <NavigationProvider>
+                      <RootLayoutNav />
+                      <ToastContainer />
+                    </NavigationProvider>
+                  </ToastProvider>
+                </ActiveReadingProvider>
               </UserProvider>
             </KeyboardProvider>
           </GestureHandlerRootView>
