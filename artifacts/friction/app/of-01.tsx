@@ -171,14 +171,14 @@ export default function PersonalCollectionListScreen() {
           onPress={() => setActiveTab("public")}
         >
           <Text style={[styles.tabText, activeTab === "public" && styles.tabTextActive]}>
-            공개 모음 ({publicCollections.length})
+            구독 모음 ({publicCollections.length})
           </Text>
         </Pressable>
       </View>
 
       {activeTab === "mine"
         ? renderCollectionList(privateCollections, "folder", "내 모음이 없어요", "새 모음을 만들어 편지를 정리해보세요")
-        : renderCollectionList(publicCollections, "globe", "공개 모음이 없어요", "다른 사람과 공유할 공개 모음을 만들어보세요")}
+        : renderCollectionList(publicCollections, "globe", "구독 모음이 없어요", "공개로 설정한 모음이 여기에 표시돼요\n구독 기능은 추후 업데이트 예정이에요")}
 
       <BottomSheet
         visible={createSheetVisible}
