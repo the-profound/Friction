@@ -6,6 +6,7 @@ import {
   FlatList,
   Dimensions,
   RefreshControl,
+  ScrollView,
   TextInput,
   Pressable,
 } from "react-native";
@@ -22,7 +23,6 @@ import { useUser } from "@/contexts/UserContext";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const CARD_W = Sizing.cardSlotW;
-const CARD_H = CARD_W * Sizing.cardRatio;
 const CARD_GAP = Spacing.cardGap;
 const SNAP_INTERVAL = CARD_W + CARD_GAP;
 
@@ -221,11 +221,16 @@ export default function InboxScreen() {
           <Text style={styles.emptyText}>불러오는 중...</Text>
         </View>
       ) : groups.length === 0 ? (
-        <View style={styles.emptyContainer}>
+        <ScrollView
+          contentContainerStyle={styles.emptyContainer}
+          refreshControl={
+            <RefreshControl refreshing={isRefetching} onRefresh={refetch} />
+          }
+        >
           <Feather name="inbox" size={48} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>수신함이 비어 있어요</Text>
           <Text style={styles.emptyText}>이웃이 보낸 편지가 도착하면 여기에 표시됩니다</Text>
-        </View>
+        </ScrollView>
       ) : (
         <FlatList
           data={groups}

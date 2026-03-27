@@ -29,11 +29,9 @@ function ActiveReadingGuard({ children }: { children: React.ReactNode }) {
   const { activeSession } = useActiveReading();
   const router = useRouter();
   const pathname = usePathname();
-  const redirectedRef = React.useRef(false);
 
   useEffect(() => {
-    if (activeSession && !redirectedRef.current && pathname !== "/read") {
-      redirectedRef.current = true;
+    if (activeSession && pathname !== "/read") {
       router.push({
         pathname: "/read",
         params: {
@@ -42,9 +40,6 @@ function ActiveReadingGuard({ children }: { children: React.ReactNode }) {
           mode: activeSession.mode,
         },
       });
-    }
-    if (!activeSession) {
-      redirectedRef.current = false;
     }
   }, [activeSession, router, pathname]);
 
