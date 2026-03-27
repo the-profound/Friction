@@ -16,10 +16,12 @@ import {
   useRemoveTeamArticle,
   useAddTeamMember,
   useListArticles,
+  useListInbox,
 } from "@workspace/api-client-react";
 import type {
   TeamMemberWithUser,
   TeamCollectionArticleWithDetails,
+  InboxItem,
 } from "@workspace/api-client-react";
 import { MyArticlesPickerBottomSheet } from "@/components/MyArticlesPickerBottomSheet/MyArticlesPickerBottomSheet";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
@@ -55,6 +57,9 @@ export default function TeamCollectionDetailScreen() {
 
   const updateCollection = useUpdateTeamCollection();
   const deleteCollection = useDeleteTeamCollection();
+  const inboxQuery = useListInbox({ recipientId: userId });
+  const inboxItems = (inboxQuery.data ?? []) as InboxItem[];
+
   const addArticle = useAddTeamArticle();
   const removeArticle = useRemoveTeamArticle();
   const addMember = useAddTeamMember();
@@ -157,12 +162,22 @@ export default function TeamCollectionDetailScreen() {
 
   const handleArticlePress = useCallback(
     (item: TeamCollectionArticleWithDetails) => {
-      router.push({
-        pathname: "/read",
-        params: { articleId: item.articleId, mode: "re_read" },
-      });
+      const unreadInboxItem = inboxItems.find(
+        (inbox) => inbox.articleId === item.articleId && !inbox.isRead,
+      );
+      if (unreadInboxItem) {
+        router.push({
+          pathname: "/read",
+          params: { articleId: item.articleId, inboxId: unreadInboxItem.id, mode: "basic" },
+        });
+      } else {
+        router.push({
+          pathname: "/read",
+          params: { articleId: item.articleId, mode: "re_read" },
+        });
+      }
     },
-    [router],
+    [router, inboxItems],
   );
 
   const alreadyAddedIds = articles.map((a) => a.articleId);

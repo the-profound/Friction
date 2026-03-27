@@ -1,10 +1,11 @@
 import React, { useState, useCallback } from "react";
-import { View, Text, StyleSheet, FlatList, Pressable, Alert, RefreshControl, TextInput } from "react-native";
+import { View, Text, StyleSheet, FlatList, Pressable, Alert, RefreshControl, TextInput, Switch } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
+import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import {
   useListMyCollections,
   useCreateMyCollection,
@@ -23,6 +24,8 @@ export default function PersonalCollectionListScreen() {
   const [createSheetVisible, setCreateSheetVisible] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
+  const [newIsPublic, setNewIsPublic] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
   const collectionsQuery = useListMyCollections({ ownerId: userId });
   const collections = (collectionsQuery.data ?? []) as MyCollection[];
@@ -36,36 +39,28 @@ export default function PersonalCollectionListScreen() {
     }
     try {
       await createCollection.mutateAsync({
-        data: { ownerId: userId, name: newName.trim(), description: newDescription.trim() },
+        data: { ownerId: userId, name: newName.trim(), description: newDescription.trim(), isPublic: newIsPublic },
       });
       setCreateSheetVisible(false);
       setNewName("");
       setNewDescription("");
+      setNewIsPublic(false);
       collectionsQuery.refetch();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "모음 생성에 실패했습니다.";
       Alert.alert("오류", msg);
     }
-  }, [newName, newDescription, userId, createCollection, collectionsQuery]);
+  }, [newName, newDescription, newIsPublic, userId, createCollection, collectionsQuery]);
 
   const handleDelete = useCallback(
-    (id: string, name: string) => {
-      Alert.alert("모음 삭제", `'${name}'을(를) 삭제하시겠어요?`, [
-        { text: "취소", style: "cancel" },
-        {
-          text: "삭제",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteCollection.mutateAsync({ id });
-              collectionsQuery.refetch();
-            } catch (e: unknown) {
-              const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";
-              Alert.alert("오류", msg);
-            }
-          },
-        },
-      ]);
+    async (id: string) => {
+      try {
+        await deleteCollection.mutateAsync({ id });
+        collectionsQuery.refetch();
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";
+        Alert.alert("오류", msg);
+      }
     },
     [deleteCollection, collectionsQuery],
   );
@@ -74,7 +69,7 @@ export default function PersonalCollectionListScreen() {
     <Pressable
       style={styles.collectionItem}
       onPress={() => router.push({ pathname: "/of-01-detail", params: { id: item.id } })}
-      onLongPress={() => handleDelete(item.id, item.name)}
+      onLongPress={() => setDeleteTarget({ id: item.id, name: item.name })}
     >
       <View style={styles.collectionIcon}>
         <Feather name="folder" size={20} color={Colors.zinc500} />
@@ -120,7 +115,7 @@ export default function PersonalCollectionListScreen() {
           <Text style={styles.emptySubtitle}>새 모음을 만들어 편지를 정리해보세요</Text>
           <Pressable
             style={styles.createButton}
-            onPress={() => { setNewName(""); setNewDescription(""); setCreateSheetVisible(true); }}
+            onPress={() => { setNewName(""); setNewDescription(""); setNewIsPublic(false); setCreateSheetVisible(true); }}
           >
             <Text style={styles.createButtonText}>새 모음 만들기</Text>
           </Pressable>
@@ -164,7 +159,7 @@ export default function PersonalCollectionListScreen() {
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
         </Pressable>
         <Text style={styles.headerTitle}>개인 모음</Text>
-        <Pressable hitSlop={12} onPress={() => { setNewName(""); setNewDescription(""); setCreateSheetVisible(true); }}>
+        <Pressable hitSlop={12} onPress={() => { setNewName(""); setNewDescription(""); setNewIsPublic(false); setCreateSheetVisible(true); }}>
           <Feather name="plus" size={20} color={Colors.zinc600} />
         </Pressable>
       </View>
@@ -214,6 +209,20 @@ export default function PersonalCollectionListScreen() {
             multiline
             textAlignVertical="top"
           />
+          <View style={styles.visibilityRow}>
+            <View style={styles.visibilityLabel}>
+              <Feather name={newIsPublic ? "globe" : "lock"} size={16} color={Colors.zinc500} />
+              <Text style={styles.visibilityText}>
+                {newIsPublic ? "공개 모음" : "비공개 모음"}
+              </Text>
+            </View>
+            <Switch
+              value={newIsPublic}
+              onValueChange={setNewIsPublic}
+              trackColor={{ false: Colors.zinc200, true: Colors.zinc900 }}
+              thumbColor={Colors.white}
+            />
+          </View>
           <Pressable
             style={[styles.confirmButton, !newName.trim() && styles.confirmDisabled]}
             onPress={handleCreate}
@@ -223,6 +232,22 @@ export default function PersonalCollectionListScreen() {
           </Pressable>
         </View>
       </BottomSheet>
+
+      <ConfirmModal
+        visible={deleteTarget !== null}
+        title="모음 삭제"
+        description={`'${deleteTarget?.name ?? ""}'을(를) 삭제하시겠어요?`}
+        confirmLabel="삭제"
+        cancelLabel="취소"
+        destructive
+        onConfirm={() => {
+          if (deleteTarget) {
+            handleDelete(deleteTarget.id);
+          }
+          setDeleteTarget(null);
+        }}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </View>
   );
 }
@@ -380,5 +405,21 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 16,
     color: Colors.white,
+  },
+  visibilityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 4,
+  },
+  visibilityLabel: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  visibilityText: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc700,
   },
 });
