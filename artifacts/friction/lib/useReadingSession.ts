@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, useEffect } from "react";
-import { useUpsertReadingRecord, useCreateUserArticleRead, useMarkInboxRead, useGetReadingRecord } from "@workspace/api-client-react";
+import { useUpsertReadingRecord, useCreateUserArticleRead, useMarkInboxRead, useGetReadingRecord, useDeleteReadingRecord } from "@workspace/api-client-react";
 import type { ReadingMode } from "./policies";
 import {
   createInitialSession,
@@ -38,6 +38,7 @@ export interface ReadingSessionActions {
   pause: () => void;
   resume: () => void;
   commitCompletion: () => Promise<{ success: boolean; error?: string }>;
+  resetProgress: () => Promise<{ success: boolean; error?: string }>;
 }
 
 export function useReadingSession({
@@ -74,6 +75,7 @@ export function useReadingSession({
   const upsertReading = useUpsertReadingRecord();
   const createArticleRead = useCreateUserArticleRead();
   const markInboxReadMutation = useMarkInboxRead();
+  const deleteReading = useDeleteReadingRecord();
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inboxIdRef = useRef(inboxId);
 
@@ -165,6 +167,22 @@ export function useReadingSession({
     }
   }, [session.state, userId, articleId, createArticleRead, markInboxReadMutation]);
 
+  const resetProgress = useCallback(async () => {
+    const record = savedRecord?.record;
+    if (!record) {
+      return { success: false, error: "저장된 읽기 기록이 없습니다." };
+    }
+    try {
+      await deleteReading.mutateAsync({ id: record.id });
+      setSession(createInitialSession(articleId, mode, totalPages));
+      restoredRef.current = false;
+      return { success: true };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "읽기 기록 삭제에 실패했습니다.";
+      return { success: false, error: msg };
+    }
+  }, [savedRecord, articleId, mode, totalPages, deleteReading]);
+
   const progress = getProgress(session.position.currentPage, session.position.totalPages);
   const canExit = !shouldBlockExit(mode, session.state);
   const showExitUI = shouldShowExitUI(mode);
@@ -182,5 +200,6 @@ export function useReadingSession({
     pause,
     resume,
     commitCompletion,
+    resetProgress,
   };
 }

@@ -153,3 +153,6 @@ export function derivePages(content: string): string[] {
     .map((p) => p.content)
     .filter((c) => c.length > 0);
 }
+
+export const splitPages = splitContentToPages;
+export const mergePages = mergePagesToContent;

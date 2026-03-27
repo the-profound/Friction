@@ -152,3 +152,6 @@ export function getBackActionLabel(status: ArticleStatus): string | null {
   };
   return labels[status];
 }
+
+export const canTransition = transition;
+export { canStepBack as canGoBack };

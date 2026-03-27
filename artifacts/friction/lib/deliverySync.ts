@@ -14,14 +14,18 @@ export interface SendGuardResult {
 }
 
 export function getNextDeliverySlot(now: Date = new Date()): DeliverySlotInfo {
-  const kstOffset = 9 * 60;
-  const utcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
-  const kstMinutes = utcMinutes + kstOffset;
-  const kstHour = Math.floor(kstMinutes / 60) % 24;
-
+  const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
   const [morning, evening] = DeliveryPolicy.DELIVERY_HOURS_KST;
+
+  const kstMs = now.getTime() + KST_OFFSET_MS;
+  const kstDate = new Date(kstMs);
+  const kstHour = kstDate.getUTCHours();
+  const kstYear = kstDate.getUTCFullYear();
+  const kstMonth = kstDate.getUTCMonth();
+  const kstDay = kstDate.getUTCDate();
+
   let targetHour: DeliverySlot;
-  let daysToAdd = 0;
+  let targetDay = kstDay;
 
   if (kstHour < morning) {
     targetHour = morning as DeliverySlot;
@@ -29,12 +33,11 @@ export function getNextDeliverySlot(now: Date = new Date()): DeliverySlotInfo {
     targetHour = evening as DeliverySlot;
   } else {
     targetHour = morning as DeliverySlot;
-    daysToAdd = 1;
+    targetDay = kstDay + 1;
   }
 
-  const visibleAt = new Date(now);
-  visibleAt.setUTCDate(visibleAt.getUTCDate() + daysToAdd);
-  visibleAt.setUTCHours(targetHour - 9, 0, 0, 0);
+  const kstTarget = Date.UTC(kstYear, kstMonth, targetDay, targetHour, 0, 0, 0);
+  const visibleAt = new Date(kstTarget - KST_OFFSET_MS);
 
   return { slot: targetHour, visibleAt };
 }
