@@ -1,5 +1,5 @@
-import React, { useState, useCallback } from "react";
-import { View, Text, StyleSheet, Pressable, TextInput, Alert } from "react-native";
+import React, { useState, useCallback, useEffect, useRef } from "react";
+import { View, Text, StyleSheet, Pressable, TextInput, Alert, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -7,23 +7,54 @@ import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useAutoSave } from "@/lib/useAutoSave";
 import { canTransitionForward } from "@/lib/articleStatusCycle";
 import type { ArticleStatus } from "@/lib/policies";
+import {
+  useGetArticle,
+  useUpdateArticle,
+  useTransitionArticleStatus,
+  TransitionArticleBodyTargetStatus,
+} from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 
 export default function DraftScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { id } = useLocalSearchParams<{ id: string }>();
+
+  const articleQuery = useGetArticle(id ?? "");
+  const article = id ? articleQuery.data : undefined;
+  const articleLoading = id ? articleQuery.isLoading : false;
+
+  const updateArticle = useUpdateArticle();
+  const transitionStatus = useTransitionArticleStatus();
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const initializedRef = useRef(false);
+
+  useEffect(() => {
+    if (article && !initializedRef.current) {
+      initializedRef.current = true;
+      setTitle(article.title || "");
+      setContent(article.content || "");
+    }
+  }, [article]);
 
   const handleSave = useCallback(
     async (data: { title: string; content: string }) => {
-      // TODO: persist to local DB / API
+      if (!id) return;
+      await updateArticle.mutateAsync({
+        id,
+        data: { title: data.title, content: data.content },
+      });
     },
-    [],
+    [id, updateArticle],
   );
 
-  const { status: saveStatus, markDirty, flush } = useAutoSave({ onSave: handleSave });
+  const { status: saveStatus, markDirty, flush } = useAutoSave({
+    onSave: handleSave,
+    storageKey: id ? `draft_${id}` : undefined,
+  });
 
   const handleTitleChange = useCallback(
     (text: string) => {
@@ -42,9 +73,13 @@ export default function DraftScreen() {
   );
 
   const handleNext = useCallback(async () => {
-    await flush();
-    const status: ArticleStatus = "DRAFT";
-    const result = canTransitionForward(status, {
+    const flushResult = await flush();
+    if (!flushResult.ok) {
+      Alert.alert("저장 실패", "저장이 완료되지 않았습니다. 다시 시도해주세요.");
+      return;
+    }
+
+    const result = canTransitionForward("DRAFT" as ArticleStatus, {
       content,
       title,
       pages: [],
@@ -54,16 +89,47 @@ export default function DraftScreen() {
       Alert.alert("전환 불가", result.reason);
       return;
     }
-    router.push({ pathname: "/on-01b", params: { id } });
-  }, [content, title, flush, id, router]);
+
+    try {
+      await transitionStatus.mutateAsync({
+        id: id!,
+        data: { targetStatus: TransitionArticleBodyTargetStatus.DIVIDING },
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+      router.push({ pathname: "/on-01b", params: { id } });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "상태 전환에 실패했습니다.";
+      Alert.alert("오류", msg);
+    }
+  }, [content, title, flush, id, router, transitionStatus, queryClient]);
 
   const handleBack = useCallback(async () => {
     await flush();
+    queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
     router.back();
-  }, [flush, router]);
+  }, [flush, router, queryClient]);
 
   const saveStatusLabel =
-    saveStatus === "saving" ? "저장 중..." : saveStatus === "error" ? "저장 실패" : "";
+    saveStatus === "saving"
+      ? "저장 중..."
+      : saveStatus === "error"
+        ? "저장 실패"
+        : saveStatus === "saved"
+          ? "저장됨"
+          : "";
+
+  const saveStatusColor =
+    saveStatus === "error" ? "#ef4444" : Colors.zinc400;
+
+  if (!id || articleLoading) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.zinc400} />
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -74,7 +140,9 @@ export default function DraftScreen() {
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>작성</Text>
           {saveStatusLabel ? (
-            <Text style={styles.saveStatus}>{saveStatusLabel}</Text>
+            <Text style={[styles.saveStatus, { color: saveStatusColor }]}>
+              {saveStatusLabel}
+            </Text>
           ) : null}
         </View>
         <Pressable onPress={handleNext} hitSlop={12}>
@@ -110,6 +178,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.white,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -128,7 +201,6 @@ const styles = StyleSheet.create({
   saveStatus: {
     ...Typography.caption,
     fontSize: 11,
-    color: Colors.zinc400,
     marginTop: 2,
   },
   nextButton: {

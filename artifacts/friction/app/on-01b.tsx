@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useMemo } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView, Alert } from "react-native";
+import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { View, Text, StyleSheet, Pressable, ScrollView, Alert, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -10,17 +10,44 @@ import {
   removeDividerAtPageIndex,
   validatePages,
 } from "@/lib/pageDivision";
-import { canTransitionForward, canStepBack } from "@/lib/articleStatusCycle";
+import { canTransitionForward } from "@/lib/articleStatusCycle";
 import type { ArticleStatus } from "@/lib/policies";
+import {
+  useGetArticle,
+  useUpdateArticle,
+  useTransitionArticleStatus,
+  TransitionArticleBodyTargetStatus,
+} from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 
 const MAX_CHAR_PER_PAGE = 800;
 
 export default function DividingScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { id } = useLocalSearchParams<{ id: string }>();
 
+  const articleQuery = useGetArticle(id ?? "");
+  const article = id ? articleQuery.data : undefined;
+  const articleLoading = id ? articleQuery.isLoading : false;
+
+  const updateArticle = useUpdateArticle();
+  const transitionStatus = useTransitionArticleStatus();
+
   const [content, setContent] = useState("");
+  const initializedRef = useRef(false);
+
+  useEffect(() => {
+    if (article && !initializedRef.current) {
+      initializedRef.current = true;
+      if (article.pages && Array.isArray(article.pages) && article.pages.length > 0) {
+        setContent((article.pages as string[]).join("\n---\n"));
+      } else {
+        setContent(article.content || "");
+      }
+    }
+  }, [article]);
 
   const pages = useMemo(() => splitContentToPages(content), [content]);
   const warnings = useMemo(() => validatePages(pages, MAX_CHAR_PER_PAGE), [pages]);
@@ -40,11 +67,10 @@ export default function DividingScreen() {
     [],
   );
 
-  const handleNext = useCallback(() => {
-    const status: ArticleStatus = "DIVIDING";
-    const result = canTransitionForward(status, {
+  const handleNext = useCallback(async () => {
+    const result = canTransitionForward("DIVIDING" as ArticleStatus, {
       content,
-      title: "",
+      title: article?.title || "",
       pages: pages.map((p) => ({ pageIndex: p.pageIndex, content: p.content, charCount: p.charCount })),
       hasRedWarnings,
     });
@@ -52,17 +78,49 @@ export default function DividingScreen() {
       Alert.alert("전환 불가", result.reason);
       return;
     }
-    router.push({ pathname: "/on-01c", params: { id } });
-  }, [content, pages, hasRedWarnings, id, router]);
 
-  const handleBack = useCallback(() => {
-    const result = canStepBack("DIVIDING");
-    if (!result.allowed) {
-      Alert.alert("돌아갈 수 없음", result.reason);
-      return;
+    try {
+      const pagesJson = pages.map((p) => p.content);
+      await updateArticle.mutateAsync({
+        id: id!,
+        data: { pages: pagesJson },
+      });
+      await transitionStatus.mutateAsync({
+        id: id!,
+        data: { targetStatus: TransitionArticleBodyTargetStatus.CLOSING },
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+      router.push({ pathname: "/on-01c", params: { id } });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "상태 전환에 실패했습니다.";
+      Alert.alert("오류", msg);
     }
-    router.back();
-  }, [router]);
+  }, [content, article, pages, hasRedWarnings, id, router, updateArticle, transitionStatus, queryClient]);
+
+  const handleBack = useCallback(async () => {
+    if (!id) { router.back(); return; }
+    try {
+      await transitionStatus.mutateAsync({
+        id,
+        data: { targetStatus: TransitionArticleBodyTargetStatus.DRAFT },
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+      router.back();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "상태 되돌리기에 실패했습니다.";
+      Alert.alert("오류", msg);
+    }
+  }, [id, router, transitionStatus, queryClient]);
+
+  if (!id || articleLoading) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.zinc400} />
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -126,6 +184,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.white,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
   header: {
     flexDirection: "row",
