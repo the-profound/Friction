@@ -22,6 +22,7 @@ interface BottomSheetProps {
   title?: string;
   snapPoints?: number[];
   enableDragDown?: boolean;
+  dismissable?: boolean;
 }
 
 export default function BottomSheet({
@@ -31,6 +32,7 @@ export default function BottomSheet({
   title,
   snapPoints = [0.4, 0.8],
   enableDragDown = true,
+  dismissable = true,
 }: BottomSheetProps) {
   const translateY = useRef(new Animated.Value(SCREEN_H)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
@@ -79,8 +81,8 @@ export default function BottomSheet({
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => enableDragDown,
-      onMoveShouldSetPanResponder: (_, g) => enableDragDown && Math.abs(g.dy) > 5,
+      onStartShouldSetPanResponder: () => enableDragDown && dismissable,
+      onMoveShouldSetPanResponder: (_, g) => enableDragDown && dismissable && Math.abs(g.dy) > 5,
       onPanResponderMove: (_, g) => {
         const base = getSnapY(currentSnap.current);
         const next = Math.max(base + g.dy, getSnapY(snapPoints.length - 1));
@@ -129,7 +131,7 @@ export default function BottomSheet({
         <Animated.View
           style={[styles.overlay, { opacity: overlayOpacity }]}
         >
-          <Pressable style={StyleSheet.absoluteFill} onPress={close} />
+          <Pressable style={StyleSheet.absoluteFill} onPress={dismissable ? close : undefined} />
         </Animated.View>
         <Animated.View
           style={[styles.sheet, { transform: [{ translateY }] }]}

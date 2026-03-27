@@ -346,6 +346,7 @@ export default function ReadScreen() {
         title="완독!"
         snapPoints={[0.35]}
         enableDragDown={false}
+        dismissable={false}
       >
         <View style={styles.completionContent}>
           <Feather name="check-circle" size={48} color={Colors.zinc900} style={styles.completionIcon} />

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useMemo, useEffect } from "react";
+import React, { useState, useCallback, useRef, useMemo } from "react";
 import {
   View,
   Text,
@@ -19,7 +19,6 @@ import DotIndicator from "@/components/DotIndicator/DotIndicator";
 import { useListInbox, useMarkInboxOpened } from "@workspace/api-client-react";
 import type { InboxItem } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
-import { useActiveReading } from "@/contexts/ActiveReadingContext";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const CARD_W = Sizing.cardSlotW;
@@ -132,22 +131,8 @@ export default function InboxScreen() {
   const [searchActive, setSearchActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const { activeSession } = useActiveReading();
   const { data: inboxData, isLoading, refetch, isRefetching } = useListInbox({ recipientId: userId });
   const markOpened = useMarkInboxOpened();
-
-  useEffect(() => {
-    if (activeSession) {
-      router.push({
-        pathname: "/read",
-        params: {
-          articleId: activeSession.articleId,
-          inboxId: activeSession.inboxId,
-          mode: activeSession.mode,
-        },
-      });
-    }
-  }, [activeSession, router]);
 
   const visibleItems = useMemo(() => {
     if (!inboxData) return [];

@@ -6,7 +6,7 @@ import {
   useFonts,
 } from "@expo-google-fonts/inter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -18,18 +18,45 @@ import ToastContainer from "@/components/Toast/Toast";
 import { NavigationProvider } from "@/contexts/NavigationContext";
 import { ToastProvider } from "@/contexts/ToastContext";
 import { UserProvider } from "@/contexts/UserContext";
-import { ActiveReadingProvider } from "@/contexts/ActiveReadingContext";
+import { ActiveReadingProvider, useActiveReading } from "@/contexts/ActiveReadingContext";
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
+function ActiveReadingGuard({ children }: { children: React.ReactNode }) {
+  const { activeSession } = useActiveReading();
+  const router = useRouter();
+  const redirectedRef = React.useRef(false);
+
+  useEffect(() => {
+    if (activeSession && !redirectedRef.current) {
+      redirectedRef.current = true;
+      router.push({
+        pathname: "/read",
+        params: {
+          articleId: activeSession.articleId,
+          inboxId: activeSession.inboxId,
+          mode: activeSession.mode,
+        },
+      });
+    }
+    if (!activeSession) {
+      redirectedRef.current = false;
+    }
+  }, [activeSession, router]);
+
+  return <>{children}</>;
+}
+
 function RootLayoutNav() {
   return (
-    <Stack screenOptions={{ headerBackTitle: "Back" }}>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-    </Stack>
+    <ActiveReadingGuard>
+      <Stack screenOptions={{ headerBackTitle: "Back" }}>
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      </Stack>
+    </ActiveReadingGuard>
   );
 }
 
