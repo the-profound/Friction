@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView } from "react-native";
+import { View, Text, StyleSheet, Pressable, ScrollView, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -25,7 +25,7 @@ export default function SendScreen() {
       <ScrollView style={styles.content} contentContainerStyle={styles.contentInner}>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>편지 선택</Text>
-          <Pressable style={styles.selectButton}>
+          <Pressable style={styles.selectButton} onPress={() => Alert.alert("편지 선택", "편지 선택 기능은 준비 중입니다.")}>
             <Feather name="file-text" size={18} color={Colors.zinc500} />
             <Text style={styles.selectButtonText}>
               {selectedLetter || "보낼 편지를 선택하세요"}
@@ -35,7 +35,7 @@ export default function SendScreen() {
         </View>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>받는 사람</Text>
-          <Pressable style={styles.selectButton}>
+          <Pressable style={styles.selectButton} onPress={() => Alert.alert("받는 사람", "받는 사람 선택 기능은 준비 중입니다.")}>
             <Feather name="user" size={18} color={Colors.zinc500} />
             <Text style={styles.selectButtonText}>
               {selectedRecipient || "받는 사람을 선택하세요"}
@@ -48,6 +48,7 @@ export default function SendScreen() {
         <Pressable
           style={[styles.sendButton, !canSend && styles.sendButtonDisabled]}
           disabled={!canSend}
+          onPress={() => Alert.alert("보내기", "보내기 기능은 준비 중입니다.")}
         >
           <Feather name="send" size={16} color={canSend ? Colors.white : Colors.zinc400} />
           <Text style={[styles.sendButtonText, !canSend && styles.sendButtonTextDisabled]}>

@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, StyleSheet, FlatList, Pressable } from "react-native";
+import { View, Text, StyleSheet, FlatList, Pressable, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -16,7 +16,7 @@ export default function NeighborListScreen() {
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
         </Pressable>
         <Text style={styles.headerTitle}>이웃 목록</Text>
-        <Pressable hitSlop={12}>
+        <Pressable hitSlop={12} onPress={() => Alert.alert("이웃 추가", "이웃 추가 기능은 준비 중입니다.")}>
           <Feather name="user-plus" size={20} color={Colors.zinc600} />
         </Pressable>
       </View>

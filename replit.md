@@ -102,7 +102,7 @@ Reading/writing platform mobile app. All 37 Notion Queue DB items processed (순
 **Design system & navigation:**
 - `constants/tokens.ts` — design tokens (Colors, Typography, Spacing, etc.)
 - `types/navigation.ts` — NavBar/SubTab/MiniSubTab type definitions
-- `contexts/NavigationContext.tsx` — global navigation state (activeTab, layer, subTabs)
+- `contexts/NavigationContext.tsx` — global navigation state (activeTab, layer, subTabs), syncs with Expo Router via useSegments/usePathname
 - `components/NavBar/NavBar.tsx` — 4-tab bottom nav (IN/OF/TO/ON)
 - `components/NavBar/PageHeader.tsx` — screen header with search/add actions
 - `components/NavBar/MiniSubTabBar.tsx` — animated mini sub-tab bar for OF tab

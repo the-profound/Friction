@@ -1,20 +1,36 @@
-import React from "react";
-import { View, Text, StyleSheet, Pressable, FlatList } from "react-native";
+import React, { useCallback } from "react";
+import { View, Text, StyleSheet, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { PageHeader } from "@/components/NavBar/PageHeader";
 
 export default function OnScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+
+  const handleNewMemo = useCallback(() => {
+    router.push("/on-01a");
+  }, [router]);
+
+  const handleViewAll = useCallback(() => {
+    router.push("/on-02");
+  }, [router]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <PageHeader title="기록함" showAdd />
+      <PageHeader
+        title="기록함"
+        showAdd
+        onAddPress={handleNewMemo}
+        showSearch
+        onSearchPress={handleViewAll}
+      />
       <View style={styles.emptyContainer}>
         <Text style={styles.emptyTitle}>메모를 작성해보세요</Text>
         <Text style={styles.emptySubtitle}>떠오르는 생각을 기록하고{"\n"}편지로 완성할 수 있어요</Text>
-        <Pressable style={styles.createButton}>
+        <Pressable style={styles.createButton} onPress={handleNewMemo}>
           <Feather name="edit-3" size={16} color={Colors.white} />
           <Text style={styles.createButtonText}>새 메모</Text>
         </Pressable>

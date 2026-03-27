@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, FlatList, Pressable, Switch } from "react-native";
+import { View, Text, StyleSheet, FlatList, Pressable, Switch, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -19,7 +19,7 @@ export default function PersonalCollectionDetailScreen() {
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
         </Pressable>
         <Text style={styles.headerTitle}>개인 모음 상세</Text>
-        <Pressable hitSlop={12}>
+        <Pressable hitSlop={12} onPress={() => Alert.alert("설정", "모음 설정 기능은 준비 중입니다.")}>
           <Feather name="more-horizontal" size={20} color={Colors.zinc600} />
         </Pressable>
       </View>

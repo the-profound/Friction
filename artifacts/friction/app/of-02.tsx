@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, FlatList, Pressable } from "react-native";
+import { View, Text, StyleSheet, FlatList, Pressable, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -26,7 +26,7 @@ export default function TeamCollectionListScreen() {
             <Feather name="users" size={40} color={Colors.zinc300} />
             <Text style={styles.emptyTitle}>단체 모음이 없어요</Text>
             <Text style={styles.emptySubtitle}>함께 글을 나눌 모임을 만들어보세요</Text>
-            <Pressable style={styles.createButton}>
+            <Pressable style={styles.createButton} onPress={() => Alert.alert("새 단체 모음", "새 단체 모음 만들기 기능은 준비 중입니다.")}>
               <Text style={styles.createButtonText}>새 단체 모음 만들기</Text>
             </Pressable>
           </View>
@@ -57,7 +57,7 @@ export default function TeamCollectionListScreen() {
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
         </Pressable>
         <Text style={styles.headerTitle}>단체 모음</Text>
-        <Pressable hitSlop={12}>
+        <Pressable hitSlop={12} onPress={() => Alert.alert("새 단체 모음", "새 단체 모음 만들기 기능은 준비 중입니다.")}>
           <Feather name="plus" size={20} color={Colors.zinc600} />
         </Pressable>
       </View>

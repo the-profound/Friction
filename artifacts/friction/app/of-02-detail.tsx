@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, FlatList, Pressable } from "react-native";
+import { View, Text, StyleSheet, FlatList, Pressable, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -20,7 +20,7 @@ export default function TeamCollectionDetailScreen() {
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
         </Pressable>
         <Text style={styles.headerTitle}>단체 모음 상세</Text>
-        <Pressable hitSlop={12}>
+        <Pressable hitSlop={12} onPress={() => Alert.alert("설정", "단체 모음 설정 기능은 준비 중입니다.")}>
           <Feather name="more-horizontal" size={20} color={Colors.zinc600} />
         </Pressable>
       </View>
@@ -45,7 +45,7 @@ export default function TeamCollectionDetailScreen() {
       {activeTab === "articles" ? (
         <View style={styles.contentArea}>
           <View style={styles.articleActions}>
-            <Pressable style={styles.addButton}>
+            <Pressable style={styles.addButton} onPress={() => Alert.alert("글 추가", "글 추가 기능은 준비 중입니다.")}>
               <Feather name="plus" size={16} color={Colors.zinc600} />
               <Text style={styles.addButtonText}>내 글 추가</Text>
             </Pressable>
