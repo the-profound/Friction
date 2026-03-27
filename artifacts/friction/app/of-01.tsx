@@ -146,26 +146,14 @@ export default function PersonalCollectionListScreen() {
   };
 
   const renderSubscribedContent = () => {
-    const publicCollections = collections.filter((c) => c.isPublic);
-    if (publicCollections.length === 0) {
-      return (
-        <View style={styles.emptyContainer}>
-          <Feather name="rss" size={40} color={Colors.zinc300} />
-          <Text style={styles.emptyTitle}>구독 중인 모음이 없어요</Text>
-          <Text style={styles.emptySubtitle}>
-            다른 사람이 공개한 모음을 찾아 구독해보세요.{"\n"}구독 기능은 추후 업데이트될 예정이에요.
-          </Text>
-        </View>
-      );
-    }
     return (
-      <FlatList
-        data={publicCollections}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-      />
+      <View style={styles.emptyContainer}>
+        <Feather name="rss" size={40} color={Colors.zinc300} />
+        <Text style={styles.emptyTitle}>구독 기능 준비 중</Text>
+        <Text style={styles.emptySubtitle}>
+          다른 사람의 공개 모음을 구독하는 기능은{"\n"}추후 업데이트에서 제공될 예정이에요.
+        </Text>
+      </View>
     );
   };
 

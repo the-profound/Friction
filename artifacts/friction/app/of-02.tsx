@@ -9,6 +9,7 @@ import {
   useListTeamCollections,
   useCreateTeamCollection,
   useDeleteTeamCollection,
+  useAddTeamMember,
 } from "@workspace/api-client-react";
 import type { TeamCollectionWithRole } from "@workspace/api-client-react";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
@@ -23,11 +24,14 @@ export default function TeamCollectionListScreen() {
   const [createSheetVisible, setCreateSheetVisible] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
+  const [joinSheetVisible, setJoinSheetVisible] = useState(false);
+  const [inviteCode, setInviteCode] = useState("");
 
   const collectionsQuery = useListTeamCollections({ userId });
   const collections = (collectionsQuery.data ?? []) as TeamCollectionWithRole[];
   const createCollection = useCreateTeamCollection();
   const deleteCollection = useDeleteTeamCollection();
+  const addMember = useAddTeamMember();
 
   const tabs: { key: MiniTab; label: string }[] = [
     { key: "mine", label: "나의 단체 모음" },
@@ -82,6 +86,25 @@ export default function TeamCollectionListScreen() {
     [deleteCollection, collectionsQuery],
   );
 
+  const handleJoinByInvite = useCallback(async () => {
+    const code = inviteCode.trim();
+    if (!code) {
+      Alert.alert("오류", "초대 코드를 입력해주세요.");
+      return;
+    }
+    const teamId = code.includes("/") ? code.split("/").pop()! : code;
+    try {
+      await addMember.mutateAsync({ id: teamId, data: { userId } });
+      setJoinSheetVisible(false);
+      setInviteCode("");
+      collectionsQuery.refetch();
+      Alert.alert("완료", "단체 모음에 참여했습니다!");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "참여에 실패했습니다. 초대 코드를 확인해주세요.";
+      Alert.alert("오류", msg);
+    }
+  }, [inviteCode, userId, addMember, collectionsQuery]);
+
   const renderItem = ({ item }: { item: TeamCollectionWithRole }) => (
     <Pressable
       style={styles.collectionItem}
@@ -129,7 +152,13 @@ export default function TeamCollectionListScreen() {
           <View style={styles.emptyContainer}>
             <Feather name="user-check" size={40} color={Colors.zinc300} />
             <Text style={styles.emptyTitle}>참여 중인 모음이 없어요</Text>
-            <Text style={styles.emptySubtitle}>초대를 받거나 신청해서 참여하세요</Text>
+            <Text style={styles.emptySubtitle}>초대 코드를 입력하여 참여하세요</Text>
+            <Pressable
+              style={styles.createButton}
+              onPress={() => { setInviteCode(""); setJoinSheetVisible(true); }}
+            >
+              <Text style={styles.createButtonText}>초대 코드로 참여</Text>
+            </Pressable>
           </View>
         );
       case "subscribed":
@@ -150,12 +179,20 @@ export default function TeamCollectionListScreen() {
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
         </Pressable>
         <Text style={styles.headerTitle}>단체 모음</Text>
-        <Pressable
-          hitSlop={12}
-          onPress={() => { setNewName(""); setNewDescription(""); setCreateSheetVisible(true); }}
-        >
-          <Feather name="plus" size={20} color={Colors.zinc600} />
-        </Pressable>
+        <View style={styles.headerRight}>
+          <Pressable
+            hitSlop={12}
+            onPress={() => { setInviteCode(""); setJoinSheetVisible(true); }}
+          >
+            <Feather name="log-in" size={20} color={Colors.zinc600} />
+          </Pressable>
+          <Pressable
+            hitSlop={12}
+            onPress={() => { setNewName(""); setNewDescription(""); setCreateSheetVisible(true); }}
+          >
+            <Feather name="plus" size={20} color={Colors.zinc600} />
+          </Pressable>
+        </View>
       </View>
 
       <View style={styles.tabBar}>
@@ -236,6 +273,35 @@ export default function TeamCollectionListScreen() {
           </Pressable>
         </View>
       </BottomSheet>
+
+      <BottomSheet
+        visible={joinSheetVisible}
+        onClose={() => setJoinSheetVisible(false)}
+        title="초대 코드로 참여"
+        snapPoints={[0.3]}
+      >
+        <View style={styles.createForm}>
+          <Text style={styles.joinHint}>
+            초대받은 코드 또는 링크를 붙여넣으세요
+          </Text>
+          <TextInput
+            style={styles.createInput}
+            placeholder="초대 코드 입력"
+            placeholderTextColor={Colors.zinc400}
+            value={inviteCode}
+            onChangeText={setInviteCode}
+            autoFocus
+            autoCapitalize="none"
+          />
+          <Pressable
+            style={[styles.confirmButton, !inviteCode.trim() && styles.confirmDisabled]}
+            onPress={handleJoinByInvite}
+            disabled={!inviteCode.trim()}
+          >
+            <Text style={styles.confirmButtonText}>참여하기</Text>
+          </Pressable>
+        </View>
+      </BottomSheet>
     </View>
   );
 }
@@ -256,6 +322,11 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 17,
     color: Colors.zinc900,
+  },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
   },
   tabBar: {
     flexDirection: "row",
@@ -399,5 +470,10 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 16,
     color: Colors.white,
+  },
+  joinHint: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc500,
   },
 });

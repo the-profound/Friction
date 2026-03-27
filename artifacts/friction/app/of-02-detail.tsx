@@ -172,6 +172,14 @@ export default function TeamCollectionDetailScreen() {
 
   const handleArticlePress = useCallback(
     (item: TeamCollectionArticleWithDetails) => {
+      const isRead = item.article?.status === "LETTER";
+      if (!isRead && item.article?.status === "DRAFT") {
+        router.push({
+          pathname: "/(tabs)",
+          params: { articleId: item.articleId },
+        });
+        return;
+      }
       router.push({
         pathname: "/read",
         params: { articleId: item.articleId, mode: "re_read" },
