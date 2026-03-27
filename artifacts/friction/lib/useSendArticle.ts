@@ -29,11 +29,12 @@ export function useSendArticleFlow({ senderId }: UseSendArticleOptions) {
       }
 
       try {
-        await sendMutation.mutateAsync({
+        const result = await sendMutation.mutateAsync({
           data: { senderId, recipientId, articleId },
         });
 
-        const { visibleAt } = getNextDeliverySlot();
+        const serverSlot = (result as { deliverySlot?: string })?.deliverySlot;
+        const visibleAt = serverSlot ? new Date(serverSlot) : getNextDeliverySlot().visibleAt;
         const deliveryTime = formatDeliveryTime(visibleAt);
         return { success: true, deliveryTime };
       } catch (e: unknown) {

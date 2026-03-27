@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState, useEffect } from "react";
-import { useUpsertReadingRecord, useCreateUserArticleRead, useMarkInboxRead, useGetReadingRecord, useDeleteReadingRecord } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useUpsertReadingRecord, useCreateUserArticleRead, useMarkInboxRead, useGetReadingRecord, useDeleteReadingRecord, getGetReadingRecordQueryKey } from "@workspace/api-client-react";
 import type { ReadingMode } from "./policies";
 import {
   createInitialSession,
@@ -72,6 +73,7 @@ export function useReadingSession({
     }));
   }, [savedRecord, isRestoring]);
 
+  const queryClient = useQueryClient();
   const upsertReading = useUpsertReadingRecord();
   const createArticleRead = useCreateUserArticleRead();
   const markInboxReadMutation = useMarkInboxRead();
@@ -171,6 +173,7 @@ export function useReadingSession({
     }
     try {
       await deleteReading.mutateAsync({ id: record.id });
+      await queryClient.invalidateQueries({ queryKey: getGetReadingRecordQueryKey({ userId, articleId }) });
       setSession(createInitialSession(articleId, mode, totalPages));
       restoredRef.current = false;
       return { success: true };
@@ -178,7 +181,7 @@ export function useReadingSession({
       const msg = e instanceof Error ? e.message : "읽기 기록 삭제에 실패했습니다.";
       return { success: false, error: msg };
     }
-  }, [savedRecord, articleId, mode, totalPages, deleteReading]);
+  }, [savedRecord, articleId, mode, totalPages, userId, deleteReading, queryClient]);
 
   const progress = getProgress(session.position.currentPage, session.position.totalPages);
   const canExit = !shouldBlockExit(mode, session.state);
