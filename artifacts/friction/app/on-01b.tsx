@@ -146,6 +146,11 @@ export default function DividingScreen() {
   const handleBack = useCallback(async () => {
     if (!id) { router.back(); return; }
     try {
+      const pagesJson = pages.map((p) => p.content);
+      await updateArticle.mutateAsync({
+        id,
+        data: { content, pages: pagesJson },
+      });
       await transitionStatus.mutateAsync({
         id,
         data: { targetStatus: TransitionArticleBodyTargetStatus.DRAFT },
@@ -156,7 +161,7 @@ export default function DividingScreen() {
       const msg = e instanceof Error ? e.message : "상태 되돌리기에 실패했습니다.";
       Alert.alert("오류", msg);
     }
-  }, [id, router, transitionStatus, queryClient]);
+  }, [id, content, pages, router, updateArticle, transitionStatus, queryClient]);
 
   if (!id || articleLoading) {
     return (

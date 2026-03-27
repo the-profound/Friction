@@ -94,7 +94,7 @@ export default function ClosingScreen() {
       });
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
       Alert.alert("완성!", "편지가 완성되었습니다.", [
-        { text: "확인", onPress: () => router.back() },
+        { text: "확인", onPress: () => router.dismissAll() },
       ]);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "내보내기에 실패했습니다.";
