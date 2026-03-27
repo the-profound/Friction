@@ -14,7 +14,7 @@ import {
 import type { MyCollection } from "@workspace/api-client-react";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 
-type MiniTab = "mine" | "subscribed";
+type MiniTab = "mine" | "public";
 
 export default function PersonalCollectionListScreen() {
   const insets = useSafeAreaInsets();
@@ -29,6 +29,9 @@ export default function PersonalCollectionListScreen() {
 
   const collectionsQuery = useListMyCollections({ ownerId: userId });
   const collections = (collectionsQuery.data ?? []) as MyCollection[];
+
+  const privateCollections = collections.filter((c) => !c.isPublic);
+  const publicCollections = collections.filter((c) => c.isPublic);
   const createCollection = useCreateMyCollection();
   const deleteCollection = useDeleteMyCollection();
 
@@ -88,7 +91,7 @@ export default function PersonalCollectionListScreen() {
     </Pressable>
   );
 
-  const renderMineContent = () => {
+  const renderCollectionList = (data: MyCollection[], emptyIcon: string, emptyTitle: string, emptySubtitle: string) => {
     if (collectionsQuery.isLoading) {
       return (
         <View style={styles.emptyContainer}>
@@ -107,15 +110,15 @@ export default function PersonalCollectionListScreen() {
         </View>
       );
     }
-    if (collections.length === 0) {
+    if (data.length === 0) {
       return (
         <View style={styles.emptyContainer}>
-          <Feather name="folder" size={40} color={Colors.zinc300} />
-          <Text style={styles.emptyTitle}>개인 모음이 없어요</Text>
-          <Text style={styles.emptySubtitle}>새 모음을 만들어 편지를 정리해보세요</Text>
+          <Feather name={emptyIcon as any} size={40} color={Colors.zinc300} />
+          <Text style={styles.emptyTitle}>{emptyTitle}</Text>
+          <Text style={styles.emptySubtitle}>{emptySubtitle}</Text>
           <Pressable
             style={styles.createButton}
-            onPress={() => { setNewName(""); setNewDescription(""); setNewIsPublic(false); setCreateSheetVisible(true); }}
+            onPress={() => { setNewName(""); setNewDescription(""); setNewIsPublic(activeTab === "public"); setCreateSheetVisible(true); }}
           >
             <Text style={styles.createButtonText}>새 모음 만들기</Text>
           </Pressable>
@@ -124,7 +127,7 @@ export default function PersonalCollectionListScreen() {
     }
     return (
       <FlatList
-        data={collections}
+        data={data}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         contentContainerStyle={styles.listContent}
@@ -137,18 +140,6 @@ export default function PersonalCollectionListScreen() {
         }
         showsVerticalScrollIndicator={false}
       />
-    );
-  };
-
-  const renderSubscribedContent = () => {
-    return (
-      <View style={styles.emptyContainer}>
-        <Feather name="rss" size={40} color={Colors.zinc300} />
-        <Text style={styles.emptyTitle}>구독 기능 준비 중</Text>
-        <Text style={styles.emptySubtitle}>
-          다른 사람의 공개 모음을 구독하는 기능은{"\n"}추후 업데이트에서 제공될 예정이에요.
-        </Text>
-      </View>
     );
   };
 
@@ -170,20 +161,22 @@ export default function PersonalCollectionListScreen() {
           onPress={() => setActiveTab("mine")}
         >
           <Text style={[styles.tabText, activeTab === "mine" && styles.tabTextActive]}>
-            나의 개인 모음
+            비공개 ({privateCollections.length})
           </Text>
         </Pressable>
         <Pressable
-          style={[styles.tab, activeTab === "subscribed" && styles.tabActive]}
-          onPress={() => setActiveTab("subscribed")}
+          style={[styles.tab, activeTab === "public" && styles.tabActive]}
+          onPress={() => setActiveTab("public")}
         >
-          <Text style={[styles.tabText, activeTab === "subscribed" && styles.tabTextActive]}>
-            구독 중
+          <Text style={[styles.tabText, activeTab === "public" && styles.tabTextActive]}>
+            공개 ({publicCollections.length})
           </Text>
         </Pressable>
       </View>
 
-      {activeTab === "mine" ? renderMineContent() : renderSubscribedContent()}
+      {activeTab === "mine"
+        ? renderCollectionList(privateCollections, "lock", "비공개 모음이 없어요", "새 모음을 만들어 편지를 정리해보세요")
+        : renderCollectionList(publicCollections, "globe", "공개 모음이 없어요", "다른 사람과 공유할 모음을 만들어보세요")}
 
       <BottomSheet
         visible={createSheetVisible}

@@ -58,8 +58,10 @@ export default function OfScreen() {
 
   const filteredMyCollections = useMemo(() => {
     let list = myCollections;
-    if (activeMiniPersonal === "subscribed") {
-      list = [];
+    if (activeMiniPersonal === "my") {
+      list = myCollections.filter((c) => !c.isPublic);
+    } else if (activeMiniPersonal === "subscribed") {
+      list = myCollections.filter((c) => c.isPublic);
     }
     if (!searchQuery.trim()) return list;
     const q = searchQuery.toLowerCase();
@@ -204,18 +206,19 @@ export default function OfScreen() {
     if (activeMiniPersonal === "subscribed") {
       return (
         <View style={styles.emptyContainer}>
-          <Feather name="rss" size={40} color={Colors.zinc300} />
-          <Text style={styles.emptyTitle}>구독 기능 준비 중</Text>
-          <Text style={styles.emptySubtitle}>
-            다른 사람의 공개 모음을 구독하는 기능은{"\n"}추후 업데이트에서 제공될 예정이에요.
-          </Text>
+          <Feather name="globe" size={40} color={Colors.zinc300} />
+          <Text style={styles.emptyTitle}>공개 모음이 없어요</Text>
+          <Text style={styles.emptySubtitle}>다른 사람과 공유할 공개 모음을 만들어보세요</Text>
+          <Pressable style={styles.emptyButton} onPress={handleAdd}>
+            <Text style={styles.emptyButtonText}>새 모음 만들기</Text>
+          </Pressable>
         </View>
       );
     }
     return (
       <View style={styles.emptyContainer}>
-        <Feather name="folder" size={40} color={Colors.zinc300} />
-        <Text style={styles.emptyTitle}>개인 모음이 없어요</Text>
+        <Feather name="lock" size={40} color={Colors.zinc300} />
+        <Text style={styles.emptyTitle}>비공개 모음이 없어요</Text>
         <Text style={styles.emptySubtitle}>완성된 편지를 모아두는 나만의 공간을 만들어보세요</Text>
         <Pressable style={styles.emptyButton} onPress={handleAdd}>
           <Text style={styles.emptyButtonText}>새 모음 만들기</Text>

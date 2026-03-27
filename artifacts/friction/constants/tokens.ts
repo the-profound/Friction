@@ -246,13 +246,13 @@ export const TabConfig = {
   ],
   ofMiniSubTabs: {
     personal: [
-      { key: "my" as const, label: "나의 개인 모음" },
-      { key: "subscribed" as const, label: "구독 중" },
+      { key: "my" as const, label: "비공개" },
+      { key: "subscribed" as const, label: "공개" },
     ],
     group: [
       { key: "my" as const, label: "나의 단체 모음" },
       { key: "joined" as const, label: "참여 중" },
-      { key: "subscribed" as const, label: "구독 중" },
+      { key: "subscribed" as const, label: "기타" },
     ],
     sentence: null,
   },
