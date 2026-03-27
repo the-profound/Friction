@@ -73,6 +73,8 @@ export default function ReadScreen() {
     inboxId,
   });
 
+  const isOnLastPage = totalPages > 0 && reading.session.position.currentPage >= totalPages - 1;
+
   const [completionSheetVisible, setCompletionSheetVisible] = useState(false);
   const [sentencePopupVisible, setSentencePopupVisible] = useState(false);
   const [selectedText, setSelectedText] = useState("");
@@ -94,16 +96,6 @@ export default function ReadScreen() {
       reading.startReading();
     }
   }, [reading.isRestoring, reading.session.state, totalPages]);
-
-  useEffect(() => {
-    if (
-      reading.session.state === "READING" &&
-      totalPages === 1 &&
-      reading.session.position.currentPage === 0
-    ) {
-      reading.nextPage();
-    }
-  }, [reading.session.state, totalPages, reading.session.position.currentPage, reading]);
 
   useEffect(() => {
     if (reading.session.state === "COMPLETED_READY") {
@@ -327,29 +319,39 @@ export default function ReadScreen() {
       )}
 
       {totalPages > 0 ? (
-        <FlatList
-          ref={flatListRef}
-          data={pages}
-          keyExtractor={(_, idx) => `page-${idx}`}
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          scrollEnabled={mode === "re_read" || reading.session.state === "READING"}
-          onMomentumScrollEnd={handlePageChange}
-          renderItem={({ item: pageContent, index }) => (
-            <PageView
-              content={pageContent}
-              pageIndex={index}
-              onCollectSentence={handleCollectSentence}
-              bottomInset={insets.bottom}
-            />
+        <View style={styles.pageListContainer}>
+          <FlatList
+            ref={flatListRef}
+            data={pages}
+            keyExtractor={(_, idx) => `page-${idx}`}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            scrollEnabled={mode === "re_read" || reading.session.state === "READING"}
+            onMomentumScrollEnd={handlePageChange}
+            renderItem={({ item: pageContent, index }) => (
+              <PageView
+                content={pageContent}
+                pageIndex={index}
+                onCollectSentence={handleCollectSentence}
+                bottomInset={isOnLastPage ? insets.bottom + 56 : insets.bottom}
+              />
+            )}
+            getItemLayout={(_, index) => ({
+              length: SCREEN_W,
+              offset: SCREEN_W * index,
+              index,
+            })}
+          />
+          {isOnLastPage && reading.session.state === "READING" && (
+            <View style={[styles.completeButtonContainer, { paddingBottom: insets.bottom + 8 }]}>
+              <Pressable style={styles.completeButton} onPress={() => reading.nextPage()}>
+                <Feather name="check" size={18} color={Colors.white} />
+                <Text style={styles.completeButtonText}>읽기 완료</Text>
+              </Pressable>
+            </View>
           )}
-          getItemLayout={(_, index) => ({
-            length: SCREEN_W,
-            offset: SCREEN_W * index,
-            index,
-          })}
-        />
+        </View>
       ) : (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyTitle}>페이지가 없습니다</Text>
@@ -650,5 +652,31 @@ const styles = StyleSheet.create({
     ...Typography.caption,
     color: Colors.zinc400,
     textAlign: "right",
+  },
+  pageListContainer: {
+    flex: 1,
+  },
+  completeButtonContainer: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    paddingHorizontal: 20,
+  },
+  completeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.zinc900,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    gap: 8,
+    width: "100%",
+  },
+  completeButtonText: {
+    ...Typography.bodySemiBold,
+    color: Colors.white,
   },
 });

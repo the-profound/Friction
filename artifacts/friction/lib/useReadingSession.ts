@@ -128,12 +128,13 @@ export function useReadingSession({
       const next = advancePage(prev);
       if (next !== prev) {
         savePosition(next.position.currentPage, 0);
+        return next;
       }
-      if (isLastPage(next.position.currentPage, next.position.totalPages) && next.state === "READING") {
-        const completed = markCompletedReady(next);
+      if (isLastPage(prev.position.currentPage, prev.position.totalPages) && prev.state === "READING") {
+        const completed = markCompletedReady(prev);
         if (completed) return completed;
       }
-      return next;
+      return prev;
     });
   }, [savePosition]);
 
