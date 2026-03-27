@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useState } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -11,10 +11,15 @@ export default function ToScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { toSubTab } = useNavigation();
+  const [searchActive, setSearchActive] = useState(false);
 
   const handleAddNeighbor = useCallback(() => {
     router.push("/to-01");
   }, [router]);
+
+  const handleSearch = useCallback(() => {
+    setSearchActive((prev) => !prev);
+  }, []);
 
   const handleSend = useCallback(() => {
     router.push("/to-02");
@@ -64,6 +69,9 @@ export default function ToScreen() {
         title="발신함"
         showAdd
         onAddPress={handleAddNeighbor}
+        showSearch
+        onSearchPress={handleSearch}
+        searchActive={searchActive}
       />
       {renderContent()}
     </View>
