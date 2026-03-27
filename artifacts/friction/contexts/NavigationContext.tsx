@@ -1,4 +1,4 @@
-import { type Href, router, usePathname, useSegments } from "expo-router";
+import { type Href, router, useGlobalSearchParams, usePathname, useSegments } from "expo-router";
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import type { MainTabKey, OfSubTabKey, ToSubTabKey } from "@/constants/tokens";
@@ -40,6 +40,9 @@ const DETAIL_ROUTE_MAP: Record<string, DetailRouteInfo> = {
   "read": { tab: "IN" },
 };
 
+const OF_SUB_TABS = new Set<string>(["personal", "group", "sentence"]);
+const TO_SUB_TABS = new Set<string>(["neighbors", "history", "send"]);
+
 const DEFAULT_OF_MINI: Record<OfSubTabKey, OfMiniSubTabKey> = {
   personal: "my",
   group: "my",
@@ -57,17 +60,13 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
   const [ofMiniSubTab, setOfMiniSubTabState] = useState<Record<OfSubTabKey, OfMiniSubTabKey>>(DEFAULT_OF_MINI);
   const [headerScrolled, setHeaderScrolled] = useState(false);
 
-  const programmaticNav = useRef(false);
+  const lastSyncRef = useRef({ tab: "IN" as MainTabKey, ofSub: "personal" as OfSubTabKey, toSub: "neighbors" as ToSubTabKey });
 
   const segments = useSegments();
   const pathname = usePathname();
+  const globalParams = useGlobalSearchParams<{ subTab?: string }>();
 
   useEffect(() => {
-    if (programmaticNav.current) {
-      programmaticNav.current = false;
-      return;
-    }
-
     let detectedTab: MainTabKey | undefined;
     let detectedOfSubTab: OfSubTabKey | undefined;
     let detectedToSubTab: ToSubTabKey | undefined;
@@ -75,6 +74,13 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
     if (segments.length >= 1 && segments[0] === "(tabs)") {
       const tabSegment = segments[1] || "index";
       detectedTab = SEGMENT_TO_TAB[tabSegment];
+
+      const paramSubTab = globalParams.subTab;
+      if (detectedTab === "OF" && paramSubTab && OF_SUB_TABS.has(paramSubTab)) {
+        detectedOfSubTab = paramSubTab as OfSubTabKey;
+      } else if (detectedTab === "TO" && paramSubTab && TO_SUB_TABS.has(paramSubTab)) {
+        detectedToSubTab = paramSubTab as ToSubTabKey;
+      }
     } else if (segments.length >= 1) {
       const routeSegment = segments[0];
       const info = DETAIL_ROUTE_MAP[routeSegment];
@@ -87,37 +93,43 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
 
     if (!detectedTab) return;
 
-    const tabChanged = detectedTab !== activeTab;
-    const subTabChanged = (detectedOfSubTab && detectedOfSubTab !== ofSubTab) ||
-                          (detectedToSubTab && detectedToSubTab !== toSubTab);
+    const last = lastSyncRef.current;
+    const tabChanged = detectedTab !== last.tab;
+    const ofSubChanged = detectedOfSubTab && detectedOfSubTab !== last.ofSub;
+    const toSubChanged = detectedToSubTab && detectedToSubTab !== last.toSub;
 
-    if (tabChanged || subTabChanged) {
-      if (detectedTab === "OF" || detectedTab === "TO") {
-        setActiveTabState((prev) => {
-          if (prev !== "OF" && prev !== "TO") {
-            setPrevMainTab(prev);
-          }
-          return detectedTab;
-        });
-        setLayer("sub");
-      } else {
-        setActiveTabState(detectedTab);
-        setLayer("main");
-      }
+    if (!tabChanged && !ofSubChanged && !toSubChanged) return;
 
-      if (detectedOfSubTab) {
-        setOfSubTabState(detectedOfSubTab);
-      }
-      if (detectedToSubTab) {
-        setToSubTabState(detectedToSubTab);
-      }
-
-      setHeaderScrolled(false);
+    if (detectedTab === "OF" || detectedTab === "TO") {
+      setActiveTabState((prev) => {
+        if (prev !== "OF" && prev !== "TO") {
+          setPrevMainTab(prev);
+        }
+        return detectedTab;
+      });
+      setLayer("sub");
+    } else {
+      setActiveTabState(detectedTab);
+      setLayer("main");
     }
-  }, [segments, pathname]);
+
+    if (detectedOfSubTab) {
+      setOfSubTabState(detectedOfSubTab);
+    }
+    if (detectedToSubTab) {
+      setToSubTabState(detectedToSubTab);
+    }
+
+    lastSyncRef.current = {
+      tab: detectedTab,
+      ofSub: detectedOfSubTab || last.ofSub,
+      toSub: detectedToSubTab || last.toSub,
+    };
+
+    setHeaderScrolled(false);
+  }, [segments, pathname, globalParams.subTab]);
 
   const setActiveTab = useCallback((tab: MainTabKey) => {
-    programmaticNav.current = true;
     if (tab === "OF" || tab === "TO") {
       setActiveTabState((prev) => {
         if (prev !== "OF" && prev !== "TO") {
@@ -130,19 +142,20 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
       setActiveTabState(tab);
       setLayer("main");
     }
+    lastSyncRef.current = { ...lastSyncRef.current, tab };
     setHeaderScrolled(false);
     router.navigate(TAB_ROUTES[tab]);
   }, []);
 
   const setOfSubTab = useCallback((subTab: OfSubTabKey) => {
-    programmaticNav.current = true;
     setOfSubTabState(subTab);
+    lastSyncRef.current = { ...lastSyncRef.current, ofSub: subTab };
     router.setParams({ subTab });
   }, []);
 
   const setToSubTab = useCallback((subTab: ToSubTabKey) => {
-    programmaticNav.current = true;
     setToSubTabState(subTab);
+    lastSyncRef.current = { ...lastSyncRef.current, toSub: subTab };
     router.setParams({ subTab });
   }, []);
 
@@ -151,9 +164,9 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
   }, []);
 
   const goBackToMainLayer = useCallback(() => {
-    programmaticNav.current = true;
     setActiveTabState(prevMainTab);
     setLayer("main");
+    lastSyncRef.current = { ...lastSyncRef.current, tab: prevMainTab };
     setHeaderScrolled(false);
     router.navigate(TAB_ROUTES[prevMainTab]);
   }, [prevMainTab]);

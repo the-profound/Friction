@@ -10,6 +10,7 @@ export default function SendScreen() {
   const router = useRouter();
   const [selectedLetter, setSelectedLetter] = useState<string | null>(null);
   const [selectedRecipient, setSelectedRecipient] = useState<string | null>(null);
+  const [selectedCollection, setSelectedCollection] = useState<string | null>(null);
 
   const canSend = selectedLetter && selectedRecipient;
 
@@ -39,6 +40,16 @@ export default function SendScreen() {
             <Feather name="user" size={18} color={Colors.zinc500} />
             <Text style={styles.selectButtonText}>
               {selectedRecipient || "받는 사람을 선택하세요"}
+            </Text>
+            <Feather name="chevron-right" size={18} color={Colors.zinc400} />
+          </Pressable>
+        </View>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>모음 선택</Text>
+          <Pressable style={styles.selectButton} onPress={() => Alert.alert("모음 선택", "모음 선택 기능은 준비 중입니다.")}>
+            <Feather name="folder" size={18} color={Colors.zinc500} />
+            <Text style={styles.selectButtonText}>
+              {selectedCollection || "편지를 담을 모음을 선택하세요"}
             </Text>
             <Feather name="chevron-right" size={18} color={Colors.zinc400} />
           </Pressable>
