@@ -6,7 +6,7 @@ import {
   useFonts,
 } from "@expo-google-fonts/inter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useRouter, usePathname } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -28,10 +28,11 @@ const queryClient = new QueryClient();
 function ActiveReadingGuard({ children }: { children: React.ReactNode }) {
   const { activeSession } = useActiveReading();
   const router = useRouter();
+  const pathname = usePathname();
   const redirectedRef = React.useRef(false);
 
   useEffect(() => {
-    if (activeSession && !redirectedRef.current) {
+    if (activeSession && !redirectedRef.current && pathname !== "/read") {
       redirectedRef.current = true;
       router.push({
         pathname: "/read",
@@ -45,7 +46,7 @@ function ActiveReadingGuard({ children }: { children: React.ReactNode }) {
     if (!activeSession) {
       redirectedRef.current = false;
     }
-  }, [activeSession, router]);
+  }, [activeSession, router, pathname]);
 
   return <>{children}</>;
 }

@@ -96,6 +96,16 @@ export default function ReadScreen() {
   }, [reading.isRestoring, reading.session.state, totalPages]);
 
   useEffect(() => {
+    if (
+      reading.session.state === "READING" &&
+      totalPages === 1 &&
+      reading.session.position.currentPage === 0
+    ) {
+      reading.nextPage();
+    }
+  }, [reading.session.state, totalPages, reading.session.position.currentPage, reading]);
+
+  useEffect(() => {
     if (reading.session.state === "COMPLETED_READY") {
       setCompletionSheetVisible(true);
     }
