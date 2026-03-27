@@ -14,7 +14,7 @@ import {
   type AppStateStatus,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { useRouter, useLocalSearchParams, Stack } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ProgressIndicator from "@/components/ProgressIndicator/ProgressIndicator";
@@ -288,6 +288,12 @@ export default function ReadScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      <Stack.Screen
+        options={{
+          headerShown: false,
+          gestureEnabled: mode !== "basic" || reading.canExit,
+        }}
+      />
       <View style={styles.header}>
         <Pressable onPress={handleBack} hitSlop={12} style={styles.backButton}>
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
