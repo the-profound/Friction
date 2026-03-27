@@ -33,7 +33,7 @@ import BottomSheet from "@/components/BottomSheet/BottomSheet";
 export default function OfScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { ofSubTab } = useNavigation();
+  const { ofSubTab, ofMiniSubTab } = useNavigation();
   const { userId } = useUser();
 
   const [searchActive, setSearchActive] = useState(false);
@@ -53,17 +53,32 @@ export default function OfScreen() {
   const teamCollections = (teamCollectionsQuery.data ?? []) as TeamCollectionWithRole[];
   const sentences = (sentencesQuery.data ?? []) as StoredSentence[];
 
+  const activeMiniPersonal = ofMiniSubTab.personal;
+  const activeMiniGroup = ofMiniSubTab.group;
+
   const filteredMyCollections = useMemo(() => {
-    if (!searchQuery.trim()) return myCollections;
+    let list = myCollections;
+    if (activeMiniPersonal === "subscribed") {
+      list = [];
+    }
+    if (!searchQuery.trim()) return list;
     const q = searchQuery.toLowerCase();
-    return myCollections.filter((c) => c.name.toLowerCase().includes(q));
-  }, [myCollections, searchQuery]);
+    return list.filter((c) => c.name.toLowerCase().includes(q));
+  }, [myCollections, searchQuery, activeMiniPersonal]);
 
   const filteredTeamCollections = useMemo(() => {
-    if (!searchQuery.trim()) return teamCollections;
+    let list = teamCollections;
+    if (activeMiniGroup === "my") {
+      list = teamCollections.filter((c) => c.role === "OWNER");
+    } else if (activeMiniGroup === "joined") {
+      list = teamCollections.filter((c) => c.role === "MEMBER");
+    } else if (activeMiniGroup === "subscribed") {
+      list = teamCollections.filter((c) => c.role !== "OWNER" && c.role !== "MEMBER");
+    }
+    if (!searchQuery.trim()) return list;
     const q = searchQuery.toLowerCase();
-    return teamCollections.filter((c) => c.name.toLowerCase().includes(q));
-  }, [teamCollections, searchQuery]);
+    return list.filter((c) => c.name.toLowerCase().includes(q));
+  }, [teamCollections, searchQuery, activeMiniGroup]);
 
   const filteredSentences = useMemo(() => {
     if (!searchQuery.trim()) return sentences;
@@ -185,16 +200,29 @@ export default function OfScreen() {
     </Pressable>
   );
 
-  const renderEmptyPersonal = () => (
-    <View style={styles.emptyContainer}>
-      <Feather name="folder" size={40} color={Colors.zinc300} />
-      <Text style={styles.emptyTitle}>개인 모음이 없어요</Text>
-      <Text style={styles.emptySubtitle}>완성된 편지를 모아두는 나만의 공간을 만들어보세요</Text>
-      <Pressable style={styles.emptyButton} onPress={handleAdd}>
-        <Text style={styles.emptyButtonText}>새 모음 만들기</Text>
-      </Pressable>
-    </View>
-  );
+  const renderEmptyPersonal = () => {
+    if (activeMiniPersonal === "subscribed") {
+      return (
+        <View style={styles.emptyContainer}>
+          <Feather name="rss" size={40} color={Colors.zinc300} />
+          <Text style={styles.emptyTitle}>구독 기능 준비 중</Text>
+          <Text style={styles.emptySubtitle}>
+            다른 사람의 공개 모음을 구독하는 기능은{"\n"}추후 업데이트에서 제공될 예정이에요.
+          </Text>
+        </View>
+      );
+    }
+    return (
+      <View style={styles.emptyContainer}>
+        <Feather name="folder" size={40} color={Colors.zinc300} />
+        <Text style={styles.emptyTitle}>개인 모음이 없어요</Text>
+        <Text style={styles.emptySubtitle}>완성된 편지를 모아두는 나만의 공간을 만들어보세요</Text>
+        <Pressable style={styles.emptyButton} onPress={handleAdd}>
+          <Text style={styles.emptyButtonText}>새 모음 만들기</Text>
+        </Pressable>
+      </View>
+    );
+  };
 
   const renderEmptyTeam = () => (
     <View style={styles.emptyContainer}>
