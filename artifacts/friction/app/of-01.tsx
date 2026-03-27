@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useMemo } from "react";
-import { View, Text, StyleSheet, FlatList, Pressable, Alert, RefreshControl } from "react-native";
+import React, { useState, useCallback } from "react";
+import { View, Text, StyleSheet, FlatList, Pressable, Alert, RefreshControl, TextInput } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -12,7 +12,6 @@ import {
 } from "@workspace/api-client-react";
 import type { MyCollection } from "@workspace/api-client-react";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
-import { TextInput } from "react-native";
 
 type MiniTab = "mine" | "subscribed";
 
@@ -29,8 +28,6 @@ export default function PersonalCollectionListScreen() {
   const collections = (collectionsQuery.data ?? []) as MyCollection[];
   const createCollection = useCreateMyCollection();
   const deleteCollection = useDeleteMyCollection();
-
-  const activeList = activeTab === "mine" ? collections : [];
 
   const handleCreate = useCallback(async () => {
     if (!newName.trim()) {
@@ -96,6 +93,82 @@ export default function PersonalCollectionListScreen() {
     </Pressable>
   );
 
+  const renderMineContent = () => {
+    if (collectionsQuery.isLoading) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.loadingText}>불러오는 중...</Text>
+        </View>
+      );
+    }
+    if (collectionsQuery.isError) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Feather name="alert-circle" size={40} color={Colors.zinc300} />
+          <Text style={styles.emptyTitle}>불러오기에 실패했어요</Text>
+          <Pressable style={styles.createButton} onPress={() => collectionsQuery.refetch()}>
+            <Text style={styles.createButtonText}>다시 시도</Text>
+          </Pressable>
+        </View>
+      );
+    }
+    if (collections.length === 0) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Feather name="folder" size={40} color={Colors.zinc300} />
+          <Text style={styles.emptyTitle}>개인 모음이 없어요</Text>
+          <Text style={styles.emptySubtitle}>새 모음을 만들어 편지를 정리해보세요</Text>
+          <Pressable
+            style={styles.createButton}
+            onPress={() => { setNewName(""); setNewDescription(""); setCreateSheetVisible(true); }}
+          >
+            <Text style={styles.createButtonText}>새 모음 만들기</Text>
+          </Pressable>
+        </View>
+      );
+    }
+    return (
+      <FlatList
+        data={collections}
+        keyExtractor={(item) => item.id}
+        renderItem={renderItem}
+        contentContainerStyle={styles.listContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={collectionsQuery.isRefetching}
+            onRefresh={() => collectionsQuery.refetch()}
+            tintColor={Colors.zinc400}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      />
+    );
+  };
+
+  const renderSubscribedContent = () => {
+    const publicCollections = collections.filter((c) => c.isPublic);
+    if (publicCollections.length === 0) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Feather name="rss" size={40} color={Colors.zinc300} />
+          <Text style={styles.emptyTitle}>구독 중인 모음이 없어요</Text>
+          <Text style={styles.emptySubtitle}>
+            다른 사람이 공개한 모음을 찾아 구독해보세요.{"\n"}구독 기능은 추후 업데이트될 예정이에요.
+          </Text>
+        </View>
+      );
+    }
+    return (
+      <FlatList
+        data={publicCollections}
+        keyExtractor={(item) => item.id}
+        renderItem={renderItem}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+      />
+    );
+  };
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
@@ -127,58 +200,7 @@ export default function PersonalCollectionListScreen() {
         </Pressable>
       </View>
 
-      {collectionsQuery.isLoading ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.loadingText}>불러오는 중...</Text>
-        </View>
-      ) : collectionsQuery.isError ? (
-        <View style={styles.emptyContainer}>
-          <Feather name="alert-circle" size={40} color={Colors.zinc300} />
-          <Text style={styles.emptyTitle}>불러오기에 실패했어요</Text>
-          <Pressable style={styles.createButton} onPress={() => collectionsQuery.refetch()}>
-            <Text style={styles.createButtonText}>다시 시도</Text>
-          </Pressable>
-        </View>
-      ) : activeList.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Feather
-            name={activeTab === "mine" ? "folder" : "rss"}
-            size={40}
-            color={Colors.zinc300}
-          />
-          <Text style={styles.emptyTitle}>
-            {activeTab === "mine" ? "개인 모음이 없어요" : "구독 중인 모음이 없어요"}
-          </Text>
-          <Text style={styles.emptySubtitle}>
-            {activeTab === "mine"
-              ? "새 모음을 만들어 편지를 정리해보세요"
-              : "다른 사람의 공개 모음을 구독해보세요"}
-          </Text>
-          {activeTab === "mine" && (
-            <Pressable
-              style={styles.createButton}
-              onPress={() => { setNewName(""); setNewDescription(""); setCreateSheetVisible(true); }}
-            >
-              <Text style={styles.createButtonText}>새 모음 만들기</Text>
-            </Pressable>
-          )}
-        </View>
-      ) : (
-        <FlatList
-          data={activeList}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          contentContainerStyle={styles.listContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={collectionsQuery.isRefetching}
-              onRefresh={() => collectionsQuery.refetch()}
-              tintColor={Colors.zinc400}
-            />
-          }
-          showsVerticalScrollIndicator={false}
-        />
-      )}
+      {activeTab === "mine" ? renderMineContent() : renderSubscribedContent()}
 
       <BottomSheet
         visible={createSheetVisible}
@@ -320,6 +342,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.zinc500,
     textAlign: "center",
+    lineHeight: 22,
   },
   loadingText: {
     ...Typography.body,

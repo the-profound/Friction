@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, FlatList, Pressable, Alert, RefreshControl } fr
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
+import * as Clipboard from "expo-clipboard";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
 import {
@@ -44,6 +45,15 @@ export default function SentenceCollectionScreen() {
     [toggleFavorite, sentencesQuery],
   );
 
+  const handleCopy = useCallback(async (text: string) => {
+    try {
+      await Clipboard.setStringAsync(text);
+      Alert.alert("복사 완료", "문장이 클립보드에 복사되었습니다.");
+    } catch {
+      Alert.alert("오류", "복사에 실패했습니다.");
+    }
+  }, []);
+
   const handleDelete = useCallback(
     (id: string) => {
       Alert.alert("문장 삭제", "이 문장을 삭제하시겠어요?", [
@@ -66,39 +76,114 @@ export default function SentenceCollectionScreen() {
     [deleteSentence, sentencesQuery],
   );
 
-  const renderItem = ({ item }: { item: StoredSentence }) => (
-    <Pressable
-      style={styles.sentenceItem}
-      onLongPress={() => handleDelete(item.id)}
-    >
-      <View style={styles.sentenceContent}>
-        <Text style={styles.sentenceText}>
-          &ldquo;{item.text}&rdquo;
-        </Text>
-        <View style={styles.sentenceMeta}>
-          <Text style={styles.sentenceDate}>
-            {new Date(item.createdAt).toLocaleDateString("ko-KR")}
-          </Text>
-          {item.position && typeof item.position === "object" && "page" in item.position && (
-            <Text style={styles.sentencePage}>
-              {(item.position as { page: number }).page + 1}페이지
-            </Text>
-          )}
-        </View>
-      </View>
-      <Pressable
-        style={styles.favoriteButton}
-        onPress={() => handleToggleFavorite(item.id, item.isFavorite)}
-        hitSlop={8}
-      >
-        <Feather
-          name={item.isFavorite ? "star" : "star"}
-          size={18}
-          color={item.isFavorite ? "#F59E0B" : Colors.zinc300}
-        />
-      </Pressable>
-    </Pressable>
+  const handleSentencePress = useCallback(
+    (item: StoredSentence) => {
+      const page =
+        item.position && typeof item.position === "object" && "page" in item.position
+          ? (item.position as { page: number }).page
+          : undefined;
+
+      Alert.alert(
+        "문장 관리",
+        `"${item.text.length > 50 ? item.text.substring(0, 50) + "..." : item.text}"`,
+        [
+          {
+            text: "복사",
+            onPress: () => handleCopy(item.text),
+          },
+          ...(item.articleId
+            ? [
+                {
+                  text: page !== undefined ? `원본 보기 (${page + 1}페이지)` : "원본 보기",
+                  onPress: () =>
+                    router.push({
+                      pathname: "/read",
+                      params: { articleId: item.articleId, mode: "re_read" },
+                    }),
+                },
+              ]
+            : []),
+          {
+            text: item.isFavorite ? "즐겨찾기 해제" : "즐겨찾기 추가",
+            onPress: () => handleToggleFavorite(item.id, item.isFavorite),
+          },
+          {
+            text: "삭제",
+            style: "destructive" as const,
+            onPress: () => handleDelete(item.id),
+          },
+          { text: "닫기", style: "cancel" as const },
+        ],
+      );
+    },
+    [handleCopy, handleToggleFavorite, handleDelete, router],
   );
+
+  const renderItem = ({ item }: { item: StoredSentence }) => {
+    const page =
+      item.position && typeof item.position === "object" && "page" in item.position
+        ? (item.position as { page: number }).page
+        : undefined;
+
+    return (
+      <Pressable
+        style={styles.sentenceItem}
+        onPress={() => handleSentencePress(item)}
+        onLongPress={() => handleCopy(item.text)}
+      >
+        <View style={styles.sentenceContent}>
+          <Text style={styles.sentenceText}>
+            &ldquo;{item.text}&rdquo;
+          </Text>
+          <View style={styles.sentenceMeta}>
+            <Text style={styles.sentenceDate}>
+              {new Date(item.createdAt).toLocaleDateString("ko-KR")}
+            </Text>
+            {page !== undefined && (
+              <Text style={styles.sentencePage}>
+                {page + 1}페이지
+              </Text>
+            )}
+            {item.articleId && (
+              <Pressable
+                style={styles.sourceButton}
+                onPress={() =>
+                  router.push({
+                    pathname: "/read",
+                    params: { articleId: item.articleId, mode: "re_read" },
+                  })
+                }
+                hitSlop={4}
+              >
+                <Feather name="external-link" size={12} color={Colors.zinc400} />
+                <Text style={styles.sourceButtonText}>원본</Text>
+              </Pressable>
+            )}
+          </View>
+        </View>
+        <View style={styles.rightActions}>
+          <Pressable
+            style={styles.copyButton}
+            onPress={() => handleCopy(item.text)}
+            hitSlop={8}
+          >
+            <Feather name="copy" size={16} color={Colors.zinc400} />
+          </Pressable>
+          <Pressable
+            style={styles.favoriteButton}
+            onPress={() => handleToggleFavorite(item.id, item.isFavorite)}
+            hitSlop={8}
+          >
+            <Feather
+              name="star"
+              size={18}
+              color={item.isFavorite ? "#F59E0B" : Colors.zinc300}
+            />
+          </Pressable>
+        </View>
+      </Pressable>
+    );
+  };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -144,10 +229,7 @@ export default function SentenceCollectionScreen() {
         <View style={styles.emptyContainer}>
           <Feather name="alert-circle" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>불러오기에 실패했어요</Text>
-          <Pressable
-            style={styles.retryButton}
-            onPress={() => sentencesQuery.refetch()}
-          >
+          <Pressable style={styles.retryButton} onPress={() => sentencesQuery.refetch()}>
             <Text style={styles.retryButtonText}>다시 시도</Text>
           </Pressable>
         </View>
@@ -237,7 +319,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.screenPx,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
-    gap: 12,
+    gap: 8,
   },
   sentenceContent: {
     flex: 1,
@@ -265,8 +347,30 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.zinc400,
   },
+  sourceButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: Colors.zinc50,
+  },
+  sourceButtonText: {
+    ...Typography.caption,
+    fontSize: 11,
+    color: Colors.zinc500,
+  },
+  rightActions: {
+    gap: 8,
+    alignItems: "center",
+    paddingTop: 2,
+  },
+  copyButton: {
+    padding: 4,
+  },
   favoriteButton: {
-    paddingTop: 4,
+    padding: 4,
   },
   emptyContainer: {
     flex: 1,

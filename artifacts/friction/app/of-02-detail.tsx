@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from "react";
-import { View, Text, StyleSheet, FlatList, Pressable, Alert } from "react-native";
+import { View, Text, StyleSheet, FlatList, Pressable, Alert, Share, TextInput } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -7,11 +7,13 @@ import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
 import {
   useGetTeamCollection,
+  useUpdateTeamCollection,
   useDeleteTeamCollection,
   useListTeamMembers,
   useListTeamArticles,
   useAddTeamArticle,
   useRemoveTeamArticle,
+  useAddTeamMember,
   useListArticles,
 } from "@workspace/api-client-react";
 import type {
@@ -19,6 +21,7 @@ import type {
   TeamCollectionArticleWithDetails,
 } from "@workspace/api-client-react";
 import { MyArticlesPickerBottomSheet } from "@/components/MyArticlesPickerBottomSheet/MyArticlesPickerBottomSheet";
+import BottomSheet from "@/components/BottomSheet/BottomSheet";
 
 type DetailTab = "articles" | "members";
 
@@ -29,6 +32,11 @@ export default function TeamCollectionDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [activeTab, setActiveTab] = useState<DetailTab>("articles");
   const [showPicker, setShowPicker] = useState(false);
+  const [editSheetVisible, setEditSheetVisible] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [inviteSheetVisible, setInviteSheetVisible] = useState(false);
+  const [inviteUserId, setInviteUserId] = useState("");
 
   const collectionQuery = useGetTeamCollection(id ?? "");
   const collection = collectionQuery.data;
@@ -42,11 +50,39 @@ export default function TeamCollectionDetailScreen() {
   const myArticlesQuery = useListArticles({ authorId: userId, status: "LETTER" as const });
   const myArticles = (myArticlesQuery.data ?? []) as Array<{ id: string; title: string; status: string; content?: string }>;
 
+  const updateCollection = useUpdateTeamCollection();
   const deleteCollection = useDeleteTeamCollection();
   const addArticle = useAddTeamArticle();
   const removeArticle = useRemoveTeamArticle();
+  const addMember = useAddTeamMember();
 
   const isOwner = members.some((m) => m.userId === userId && m.role === "OWNER");
+  const isMember = members.some((m) => m.userId === userId);
+
+  const handleOpenEdit = useCallback(() => {
+    if (!collection) return;
+    setEditName(collection.name);
+    setEditDescription(collection.description ?? "");
+    setEditSheetVisible(true);
+  }, [collection]);
+
+  const handleSaveEdit = useCallback(async () => {
+    if (!id || !editName.trim()) {
+      Alert.alert("오류", "이름을 입력해주세요.");
+      return;
+    }
+    try {
+      await updateCollection.mutateAsync({
+        id,
+        data: { name: editName.trim(), description: editDescription.trim() || undefined },
+      });
+      setEditSheetVisible(false);
+      collectionQuery.refetch();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "수정에 실패했습니다.";
+      Alert.alert("오류", msg);
+    }
+  }, [id, editName, editDescription, updateCollection, collectionQuery]);
 
   const handleDeleteCollection = useCallback(() => {
     if (!id || !collection) return;
@@ -68,6 +104,33 @@ export default function TeamCollectionDetailScreen() {
     ]);
   }, [id, collection, deleteCollection, router]);
 
+  const handleShareInvite = useCallback(async () => {
+    if (!id || !collection) return;
+    try {
+      await Share.share({
+        message: `"${collection.name}" 단체 모음에 참여하세요! 초대 코드: ${id}`,
+      });
+    } catch {
+    }
+  }, [id, collection]);
+
+  const handleInviteMember = useCallback(async () => {
+    if (!id || !inviteUserId.trim()) {
+      Alert.alert("오류", "사용자 ID를 입력해주세요.");
+      return;
+    }
+    try {
+      await addMember.mutateAsync({ id, data: { userId: inviteUserId.trim() } });
+      setInviteSheetVisible(false);
+      setInviteUserId("");
+      membersQuery.refetch();
+      Alert.alert("완료", "멤버가 추가되었습니다.");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "멤버 추가에 실패했습니다.";
+      Alert.alert("오류", msg);
+    }
+  }, [id, inviteUserId, addMember, membersQuery]);
+
   const handleAddArticles = useCallback(
     async (articleIds: string[]) => {
       if (!id) return;
@@ -81,7 +144,7 @@ export default function TeamCollectionDetailScreen() {
         Alert.alert("오류", msg);
       }
     },
-    [id, addArticle, articlesQuery],
+    [id, userId, addArticle, articlesQuery],
   );
 
   const handleRemoveArticle = useCallback(
@@ -107,6 +170,16 @@ export default function TeamCollectionDetailScreen() {
     [id, removeArticle, articlesQuery],
   );
 
+  const handleArticlePress = useCallback(
+    (item: TeamCollectionArticleWithDetails) => {
+      router.push({
+        pathname: "/read",
+        params: { articleId: item.articleId, mode: "re_read" },
+      });
+    },
+    [router],
+  );
+
   const alreadyAddedIds = articles.map((a) => a.articleId);
 
   const pickerArticles = myArticles.map((a) => ({
@@ -116,32 +189,26 @@ export default function TeamCollectionDetailScreen() {
     excerpt: a.content?.substring(0, 60),
   }));
 
-  const renderArticleItem = ({ item }: { item: TeamCollectionArticleWithDetails }) => (
-    <Pressable
-      style={styles.articleItem}
-      onPress={() =>
-        router.push({
-          pathname: "/read",
-          params: { articleId: item.articleId, mode: "re_read" },
-        })
-      }
-      onLongPress={() =>
-        isOwner || item.addedBy === userId
-          ? handleRemoveArticle(item.articleId, item.article?.title ?? "제목 없음")
-          : undefined
-      }
-    >
-      <View style={styles.articleInfo}>
-        <Text style={styles.articleTitle} numberOfLines={1}>
-          {item.article?.title ?? "제목 없음"}
-        </Text>
-        <Text style={styles.articleDate}>
-          {new Date(item.addedAt).toLocaleDateString("ko-KR")}에 추가
-        </Text>
-      </View>
-      <Feather name="chevron-right" size={16} color={Colors.zinc300} />
-    </Pressable>
-  );
+  const renderArticleItem = ({ item }: { item: TeamCollectionArticleWithDetails }) => {
+    const canRemove = isOwner || item.addedBy === userId;
+    return (
+      <Pressable
+        style={styles.articleItem}
+        onPress={() => handleArticlePress(item)}
+        onLongPress={() => canRemove ? handleRemoveArticle(item.articleId, item.article?.title ?? "제목 없음") : undefined}
+      >
+        <View style={styles.articleInfo}>
+          <Text style={styles.articleTitle} numberOfLines={1}>
+            {item.article?.title ?? "제목 없음"}
+          </Text>
+          <Text style={styles.articleDate}>
+            {new Date(item.addedAt).toLocaleDateString("ko-KR")}에 추가
+          </Text>
+        </View>
+        <Feather name="chevron-right" size={16} color={Colors.zinc300} />
+      </Pressable>
+    );
+  };
 
   const renderMemberItem = ({ item }: { item: TeamMemberWithUser }) => (
     <View style={styles.memberItem}>
@@ -188,14 +255,16 @@ export default function TeamCollectionDetailScreen() {
         <Pressable
           hitSlop={12}
           onPress={() => {
+            const options: Array<{ text: string; onPress?: () => void; style?: "destructive" | "cancel" | "default" }> = [];
             if (isOwner) {
-              Alert.alert("단체 모음 관리", undefined, [
-                { text: "삭제", style: "destructive", onPress: handleDeleteCollection },
-                { text: "닫기", style: "cancel" },
-              ]);
+              options.push({ text: "이름/설명 수정", onPress: handleOpenEdit });
+              options.push({ text: "초대 링크 공유", onPress: handleShareInvite });
+              options.push({ text: "삭제", style: "destructive", onPress: handleDeleteCollection });
             } else {
-              Alert.alert("정보", `소유자: ${members.find((m) => m.role === "OWNER")?.user?.nickname ?? "알 수 없음"}`);
+              options.push({ text: "초대 링크 공유", onPress: handleShareInvite });
             }
+            options.push({ text: "닫기", style: "cancel" });
+            Alert.alert("단체 모음 관리", undefined, options);
           }}
         >
           <Feather name="more-horizontal" size={20} color={Colors.zinc600} />
@@ -229,13 +298,23 @@ export default function TeamCollectionDetailScreen() {
 
       {activeTab === "articles" ? (
         <View style={styles.contentArea}>
-          <View style={styles.articleActions}>
-            <Pressable style={styles.addButton} onPress={() => setShowPicker(true)}>
-              <Feather name="plus" size={16} color={Colors.zinc600} />
-              <Text style={styles.addButtonText}>내 글 추가</Text>
-            </Pressable>
-          </View>
-          {articles.length === 0 ? (
+          {isMember && (
+            <View style={styles.articleActions}>
+              <Pressable style={styles.addButton} onPress={() => setShowPicker(true)}>
+                <Feather name="plus" size={16} color={Colors.zinc600} />
+                <Text style={styles.addButtonText}>내 글 추가</Text>
+              </Pressable>
+            </View>
+          )}
+          {articlesQuery.isError ? (
+            <View style={styles.emptyContainer}>
+              <Feather name="alert-circle" size={36} color={Colors.zinc300} />
+              <Text style={styles.emptyTitle}>글 목록을 불러오지 못했어요</Text>
+              <Pressable style={styles.retryButton} onPress={() => articlesQuery.refetch()}>
+                <Text style={styles.retryButtonText}>다시 시도</Text>
+              </Pressable>
+            </View>
+          ) : articles.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Feather name="file-text" size={36} color={Colors.zinc300} />
               <Text style={styles.emptyTitle}>아직 추가된 글이 없어요</Text>
@@ -257,14 +336,29 @@ export default function TeamCollectionDetailScreen() {
             <View style={styles.articleActions}>
               <Pressable
                 style={styles.addButton}
-                onPress={() => Alert.alert("멤버 초대", "멤버 초대 기능은 준비 중입니다.")}
+                onPress={() => { setInviteUserId(""); setInviteSheetVisible(true); }}
               >
                 <Feather name="user-plus" size={16} color={Colors.zinc600} />
                 <Text style={styles.addButtonText}>멤버 초대</Text>
               </Pressable>
+              <Pressable
+                style={[styles.addButton, { marginLeft: 8 }]}
+                onPress={handleShareInvite}
+              >
+                <Feather name="share-2" size={16} color={Colors.zinc600} />
+                <Text style={styles.addButtonText}>초대 링크</Text>
+              </Pressable>
             </View>
           )}
-          {members.length === 0 ? (
+          {membersQuery.isError ? (
+            <View style={styles.emptyContainer}>
+              <Feather name="alert-circle" size={36} color={Colors.zinc300} />
+              <Text style={styles.emptyTitle}>멤버 목록을 불러오지 못했어요</Text>
+              <Pressable style={styles.retryButton} onPress={() => membersQuery.refetch()}>
+                <Text style={styles.retryButtonText}>다시 시도</Text>
+              </Pressable>
+            </View>
+          ) : members.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Feather name="users" size={36} color={Colors.zinc300} />
               <Text style={styles.emptyTitle}>멤버가 없어요</Text>
@@ -289,6 +383,65 @@ export default function TeamCollectionDetailScreen() {
         articles={pickerArticles}
         alreadyAdded={alreadyAddedIds}
       />
+
+      <BottomSheet
+        visible={editSheetVisible}
+        onClose={() => setEditSheetVisible(false)}
+        title="모음 수정"
+        snapPoints={[0.45]}
+      >
+        <View style={styles.formContent}>
+          <TextInput
+            style={styles.formInput}
+            placeholder="모음 이름"
+            placeholderTextColor={Colors.zinc400}
+            value={editName}
+            onChangeText={setEditName}
+            autoFocus
+          />
+          <TextInput
+            style={[styles.formInput, styles.formInputMulti]}
+            placeholder="설명 (선택사항)"
+            placeholderTextColor={Colors.zinc400}
+            value={editDescription}
+            onChangeText={setEditDescription}
+            multiline
+            textAlignVertical="top"
+          />
+          <Pressable
+            style={[styles.formButton, !editName.trim() && styles.formButtonDisabled]}
+            onPress={handleSaveEdit}
+            disabled={!editName.trim()}
+          >
+            <Text style={styles.formButtonText}>저장</Text>
+          </Pressable>
+        </View>
+      </BottomSheet>
+
+      <BottomSheet
+        visible={inviteSheetVisible}
+        onClose={() => setInviteSheetVisible(false)}
+        title="멤버 초대"
+        snapPoints={[0.35]}
+      >
+        <View style={styles.formContent}>
+          <TextInput
+            style={styles.formInput}
+            placeholder="초대할 사용자 ID"
+            placeholderTextColor={Colors.zinc400}
+            value={inviteUserId}
+            onChangeText={setInviteUserId}
+            autoFocus
+          />
+          <Pressable
+            style={[styles.formButton, !inviteUserId.trim() && styles.formButtonDisabled]}
+            onPress={handleInviteMember}
+            disabled={!inviteUserId.trim()}
+          >
+            <Text style={styles.formButtonText}>초대</Text>
+          </Pressable>
+        </View>
+      </BottomSheet>
     </View>
   );
 }
@@ -462,5 +615,49 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.zinc500,
     textAlign: "center",
+  },
+  retryButton: {
+    marginTop: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: Colors.zinc900,
+    borderRadius: 10,
+  },
+  retryButtonText: {
+    ...Typography.bodySemiBold,
+    fontSize: 14,
+    color: Colors.white,
+  },
+  formContent: {
+    paddingVertical: 12,
+    gap: 12,
+  },
+  formInput: {
+    ...Typography.body,
+    fontSize: 15,
+    color: Colors.zinc900,
+    backgroundColor: Colors.zinc50,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  formInputMulti: {
+    minHeight: 80,
+    lineHeight: 22,
+  },
+  formButton: {
+    backgroundColor: Colors.zinc900,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    marginTop: 4,
+  },
+  formButtonDisabled: {
+    backgroundColor: Colors.zinc300,
+  },
+  formButtonText: {
+    ...Typography.bodySemiBold,
+    fontSize: 16,
+    color: Colors.white,
   },
 });

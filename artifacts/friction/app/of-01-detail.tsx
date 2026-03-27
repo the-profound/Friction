@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from "react";
-import { View, Text, StyleSheet, FlatList, Pressable, Switch, Alert } from "react-native";
+import { View, Text, StyleSheet, FlatList, Pressable, Switch, Alert, TextInput } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -16,6 +16,7 @@ import {
 } from "@workspace/api-client-react";
 import type { MyCollectionArticleWithDetails } from "@workspace/api-client-react";
 import { MyArticlesPickerBottomSheet } from "@/components/MyArticlesPickerBottomSheet/MyArticlesPickerBottomSheet";
+import BottomSheet from "@/components/BottomSheet/BottomSheet";
 
 export default function PersonalCollectionDetailScreen() {
   const insets = useSafeAreaInsets();
@@ -23,6 +24,9 @@ export default function PersonalCollectionDetailScreen() {
   const { userId } = useUser();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [showPicker, setShowPicker] = useState(false);
+  const [editSheetVisible, setEditSheetVisible] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
 
   const collectionQuery = useGetMyCollection(id ?? "");
   const collection = collectionQuery.data;
@@ -42,10 +46,7 @@ export default function PersonalCollectionDetailScreen() {
     async (value: boolean) => {
       if (!id) return;
       try {
-        await updateCollection.mutateAsync({
-          id,
-          data: { isPublic: value },
-        });
+        await updateCollection.mutateAsync({ id, data: { isPublic: value } });
         collectionQuery.refetch();
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "설정 변경에 실패했습니다.";
@@ -54,6 +55,31 @@ export default function PersonalCollectionDetailScreen() {
     },
     [id, updateCollection, collectionQuery],
   );
+
+  const handleOpenEdit = useCallback(() => {
+    if (!collection) return;
+    setEditName(collection.name);
+    setEditDescription(collection.description ?? "");
+    setEditSheetVisible(true);
+  }, [collection]);
+
+  const handleSaveEdit = useCallback(async () => {
+    if (!id || !editName.trim()) {
+      Alert.alert("오류", "이름을 입력해주세요.");
+      return;
+    }
+    try {
+      await updateCollection.mutateAsync({
+        id,
+        data: { name: editName.trim(), description: editDescription.trim() || undefined },
+      });
+      setEditSheetVisible(false);
+      collectionQuery.refetch();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "수정에 실패했습니다.";
+      Alert.alert("오류", msg);
+    }
+  }, [id, editName, editDescription, updateCollection, collectionQuery]);
 
   const handleDeleteCollection = useCallback(() => {
     if (!id || !collection) return;
@@ -173,6 +199,7 @@ export default function PersonalCollectionDetailScreen() {
           hitSlop={12}
           onPress={() =>
             Alert.alert("모음 관리", undefined, [
+              { text: "이름/설명 수정", onPress: handleOpenEdit },
               { text: "삭제", style: "destructive", onPress: handleDeleteCollection },
               { text: "닫기", style: "cancel" },
             ])
@@ -214,7 +241,15 @@ export default function PersonalCollectionDetailScreen() {
         </Pressable>
       </View>
 
-      {articles.length === 0 ? (
+      {articlesQuery.isError ? (
+        <View style={styles.emptyContainer}>
+          <Feather name="alert-circle" size={36} color={Colors.zinc300} />
+          <Text style={styles.emptyTitle}>글 목록을 불러오지 못했어요</Text>
+          <Pressable style={styles.retryButton} onPress={() => articlesQuery.refetch()}>
+            <Text style={styles.retryButtonText}>다시 시도</Text>
+          </Pressable>
+        </View>
+      ) : articles.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Feather name="file-text" size={36} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>아직 추가된 글이 없어요</Text>
@@ -237,6 +272,40 @@ export default function PersonalCollectionDetailScreen() {
         articles={pickerArticles}
         alreadyAdded={alreadyAddedIds}
       />
+
+      <BottomSheet
+        visible={editSheetVisible}
+        onClose={() => setEditSheetVisible(false)}
+        title="모음 수정"
+        snapPoints={[0.45]}
+      >
+        <View style={styles.editForm}>
+          <TextInput
+            style={styles.editInput}
+            placeholder="모음 이름"
+            placeholderTextColor={Colors.zinc400}
+            value={editName}
+            onChangeText={setEditName}
+            autoFocus
+          />
+          <TextInput
+            style={[styles.editInput, styles.editInputMulti]}
+            placeholder="설명 (선택사항)"
+            placeholderTextColor={Colors.zinc400}
+            value={editDescription}
+            onChangeText={setEditDescription}
+            multiline
+            textAlignVertical="top"
+          />
+          <Pressable
+            style={[styles.editConfirmButton, !editName.trim() && styles.editConfirmDisabled]}
+            onPress={handleSaveEdit}
+            disabled={!editName.trim()}
+          >
+            <Text style={styles.editConfirmText}>저장</Text>
+          </Pressable>
+        </View>
+      </BottomSheet>
     </View>
   );
 }
@@ -363,5 +432,49 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.zinc500,
     textAlign: "center",
+  },
+  retryButton: {
+    marginTop: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: Colors.zinc900,
+    borderRadius: 10,
+  },
+  retryButtonText: {
+    ...Typography.bodySemiBold,
+    fontSize: 14,
+    color: Colors.white,
+  },
+  editForm: {
+    paddingVertical: 12,
+    gap: 12,
+  },
+  editInput: {
+    ...Typography.body,
+    fontSize: 15,
+    color: Colors.zinc900,
+    backgroundColor: Colors.zinc50,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  editInputMulti: {
+    minHeight: 80,
+    lineHeight: 22,
+  },
+  editConfirmButton: {
+    backgroundColor: Colors.zinc900,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    marginTop: 4,
+  },
+  editConfirmDisabled: {
+    backgroundColor: Colors.zinc300,
+  },
+  editConfirmText: {
+    ...Typography.bodySemiBold,
+    fontSize: 16,
+    color: Colors.white,
   },
 });
