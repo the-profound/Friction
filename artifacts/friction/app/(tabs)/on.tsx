@@ -9,7 +9,6 @@ import ArticleListItem from "@/components/ArticleListItem/ArticleListItem";
 import { useListArticles, useCreateArticle } from "@workspace/api-client-react";
 import type { Article } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
-import { getStatusLabel } from "@/lib/articleStatusCycle";
 import type { ArticleStatus } from "@/lib/policies";
 
 type FilterMode = "all" | "DRAFT" | "DIVIDING" | "CLOSING";

@@ -7,6 +7,8 @@ import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useAutoSave } from "@/lib/useAutoSave";
 import { canTransitionForward } from "@/lib/articleStatusCycle";
 import type { ArticleStatus } from "@/lib/policies";
+import WebViewMarkdownEditor from "@/components/WebViewMarkdownEditor/WebViewMarkdownEditor";
+import type { WebViewMarkdownEditorRef, OnChangePayload, OnExportMarkdownPayload } from "@/components/WebViewMarkdownEditor/types";
 import {
   useGetArticle,
   useUpdateArticle,
@@ -28,17 +30,60 @@ export default function DraftScreen() {
   const updateArticle = useUpdateArticle();
   const transitionStatus = useTransitionArticleStatus();
 
+  const editorRef = useRef<WebViewMarkdownEditorRef>(null);
   const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
+  const [charCount, setCharCount] = useState(0);
+  const [editorReady, setEditorReady] = useState(false);
+  const contentRef = useRef("");
   const initializedRef = useRef(false);
+  const pendingExportRef = useRef<{
+    resolve: (md: string) => void;
+    requestId: string;
+  } | null>(null);
 
   useEffect(() => {
     if (article && !initializedRef.current) {
       initializedRef.current = true;
       setTitle(article.title || "");
-      setContent(article.content || "");
+      contentRef.current = article.content || "";
+      setCharCount(contentRef.current.length);
     }
   }, [article]);
+
+  const getEditorContent = useCallback((): Promise<string> => {
+    return new Promise((resolve) => {
+      if (!editorRef.current) {
+        resolve(contentRef.current);
+        return;
+      }
+      const requestId = `export_${Date.now()}`;
+      pendingExportRef.current = { resolve, requestId };
+      editorRef.current.requestExportMarkdown(requestId);
+      setTimeout(() => {
+        if (pendingExportRef.current?.requestId === requestId) {
+          pendingExportRef.current = null;
+          resolve(contentRef.current);
+        }
+      }, 2000);
+    });
+  }, []);
+
+  const handleEditorChange = useCallback((payload: OnChangePayload) => {
+    if (payload.charCount !== undefined) {
+      setCharCount(payload.charCount);
+    }
+    if (payload.isDirty) {
+      markDirtyFromEditor();
+    }
+  }, []);
+
+  const handleExportMarkdown = useCallback((payload: OnExportMarkdownPayload) => {
+    contentRef.current = payload.markdown;
+    if (pendingExportRef.current?.requestId === payload.requestId) {
+      pendingExportRef.current.resolve(payload.markdown);
+      pendingExportRef.current = null;
+    }
+  }, []);
 
   const handleSave = useCallback(
     async (data: { title: string; content: string }) => {
@@ -56,23 +101,20 @@ export default function DraftScreen() {
     storageKey: id ? `draft_${id}` : undefined,
   });
 
+  const markDirtyFromEditor = useCallback(() => {
+    markDirty(title, contentRef.current);
+  }, [title, markDirty]);
+
   const handleTitleChange = useCallback(
     (text: string) => {
       setTitle(text);
-      markDirty(text, content);
+      markDirty(text, contentRef.current);
     },
-    [content, markDirty],
-  );
-
-  const handleContentChange = useCallback(
-    (text: string) => {
-      setContent(text);
-      markDirty(title, text);
-    },
-    [title, markDirty],
+    [markDirty],
   );
 
   const handleNext = useCallback(async () => {
+    const content = await getEditorContent();
     const flushResult = await flush();
     if (!flushResult.ok) {
       Alert.alert("저장 실패", "저장이 완료되지 않았습니다. 다시 시도해주세요.");
@@ -91,6 +133,10 @@ export default function DraftScreen() {
     }
 
     try {
+      await updateArticle.mutateAsync({
+        id: id!,
+        data: { title, content },
+      });
       await transitionStatus.mutateAsync({
         id: id!,
         data: { targetStatus: TransitionArticleBodyTargetStatus.DIVIDING },
@@ -101,7 +147,7 @@ export default function DraftScreen() {
       const msg = e instanceof Error ? e.message : "상태 전환에 실패했습니다.";
       Alert.alert("오류", msg);
     }
-  }, [content, title, flush, id, router, transitionStatus, queryClient]);
+  }, [title, flush, id, router, updateArticle, transitionStatus, queryClient, getEditorContent]);
 
   const handleBack = useCallback(async () => {
     await flush();
@@ -158,18 +204,19 @@ export default function DraftScreen() {
           onChangeText={handleTitleChange}
           maxLength={100}
         />
-        <TextInput
-          style={styles.contentInput}
-          placeholder="떠오르는 생각을 자유롭게 적어보세요..."
-          placeholderTextColor={Colors.zinc400}
-          value={content}
-          onChangeText={handleContentChange}
-          multiline
-          textAlignVertical="top"
-          scrollEnabled
-        />
+        <View style={styles.markdownEditorContainer}>
+          <WebViewMarkdownEditor
+            ref={editorRef}
+            initialMarkdown={contentRef.current}
+            placeholder="떠오르는 생각을 자유롭게 적어보세요..."
+            editable
+            onReady={() => setEditorReady(true)}
+            onChange={handleEditorChange}
+            onExportMarkdown={handleExportMarkdown}
+          />
+        </View>
         <View style={styles.editorFooter}>
-          <Text style={styles.charCountText}>{content.length}자</Text>
+          <Text style={styles.charCountText}>{charCount}자</Text>
         </View>
       </View>
     </View>
@@ -225,13 +272,8 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.zinc100,
     marginBottom: 12,
   },
-  contentInput: {
+  markdownEditorContainer: {
     flex: 1,
-    ...Typography.body,
-    fontSize: 16,
-    lineHeight: 26,
-    color: Colors.zinc800,
-    paddingVertical: 0,
   },
   editorFooter: {
     flexDirection: "row",
