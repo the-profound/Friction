@@ -17,6 +17,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import ToastContainer from "@/components/Toast/Toast";
 import { NavigationProvider } from "@/contexts/NavigationContext";
 import { ToastProvider } from "@/contexts/ToastContext";
+import { UserProvider } from "@/contexts/UserContext";
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -53,12 +54,14 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <GestureHandlerRootView>
             <KeyboardProvider>
-              <ToastProvider>
-                <NavigationProvider>
-                  <RootLayoutNav />
-                  <ToastContainer />
-                </NavigationProvider>
-              </ToastProvider>
+              <UserProvider>
+                <ToastProvider>
+                  <NavigationProvider>
+                    <RootLayoutNav />
+                    <ToastContainer />
+                  </NavigationProvider>
+                </ToastProvider>
+              </UserProvider>
             </KeyboardProvider>
           </GestureHandlerRootView>
         </QueryClientProvider>
