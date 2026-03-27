@@ -1,17 +1,18 @@
 import { Router, type IRouter } from "express";
 import { and, eq } from "drizzle-orm";
 import { db, storedSentencesTable } from "@workspace/db";
+import { CreateStoredSentenceBody, ToggleStoredSentenceFavoriteBody } from "@workspace/api-zod";
 
 const router: IRouter = Router();
 
 router.get("/stored-sentences", async (req, res) => {
   const { userId, favorite } = req.query;
-  if (!userId) {
+  if (!userId || typeof userId !== "string") {
     res.status(400).json({ error: "userId is required" });
     return;
   }
 
-  const conditions = [eq(storedSentencesTable.userId, userId as string)];
+  const conditions = [eq(storedSentencesTable.userId, userId)];
   if (favorite === "true") {
     conditions.push(eq(storedSentencesTable.isFavorite, true));
   }
@@ -21,11 +22,12 @@ router.get("/stored-sentences", async (req, res) => {
 });
 
 router.post("/stored-sentences", async (req, res) => {
-  const { userId, articleId, text, position } = req.body;
-  if (!userId || !articleId || !text) {
-    res.status(400).json({ error: "userId, articleId, and text are required" });
+  const parsed = CreateStoredSentenceBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
     return;
   }
+  const { userId, articleId, text, position } = parsed.data;
 
   const [sentence] = await db.insert(storedSentencesTable).values({
     userId,
@@ -34,6 +36,15 @@ router.post("/stored-sentences", async (req, res) => {
     position: position ?? null,
   }).returning();
   res.status(201).json(sentence);
+});
+
+router.get("/stored-sentences/:id", async (req, res) => {
+  const [sentence] = await db.select().from(storedSentencesTable).where(eq(storedSentencesTable.id, req.params.id));
+  if (!sentence) {
+    res.status(404).json({ error: "Sentence not found" });
+    return;
+  }
+  res.json(sentence);
 });
 
 router.delete("/stored-sentences/:id", async (req, res) => {
@@ -46,14 +57,14 @@ router.delete("/stored-sentences/:id", async (req, res) => {
 });
 
 router.patch("/stored-sentences/:id/favorite", async (req, res) => {
-  const { isFavorite } = req.body;
-  if (typeof isFavorite !== "boolean") {
-    res.status(400).json({ error: "isFavorite must be a boolean" });
+  const parsed = ToggleStoredSentenceFavoriteBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
     return;
   }
 
   const [sentence] = await db.update(storedSentencesTable)
-    .set({ isFavorite })
+    .set({ isFavorite: parsed.data.isFavorite })
     .where(eq(storedSentencesTable.id, req.params.id))
     .returning();
 

@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, sendRecordsTable, articlesTable, inboxTable, usersTable } from "@workspace/db";
+import { SendArticleBody } from "@workspace/api-zod";
 
 function computeDeliverySlot(): Date {
   const now = new Date();
@@ -31,7 +32,7 @@ const router: IRouter = Router();
 
 router.get("/send-records", async (req, res) => {
   const { senderId } = req.query;
-  if (!senderId) {
+  if (!senderId || typeof senderId !== "string") {
     res.status(400).json({ error: "senderId is required" });
     return;
   }
@@ -51,17 +52,52 @@ router.get("/send-records", async (req, res) => {
     .from(sendRecordsTable)
     .leftJoin(articlesTable, eq(sendRecordsTable.articleId, articlesTable.id))
     .leftJoin(usersTable, eq(sendRecordsTable.recipientId, usersTable.id))
-    .where(eq(sendRecordsTable.senderId, senderId as string));
+    .where(eq(sendRecordsTable.senderId, senderId));
 
   res.json(records);
 });
 
-router.post("/send-records", async (req, res) => {
-  const { senderId, recipientId, articleId } = req.body;
-  if (!senderId || !recipientId || !articleId) {
-    res.status(400).json({ error: "senderId, recipientId, and articleId are required" });
+router.get("/send-records/:id", async (req, res) => {
+  const records = await db
+    .select({
+      id: sendRecordsTable.id,
+      senderId: sendRecordsTable.senderId,
+      recipientId: sendRecordsTable.recipientId,
+      articleId: sendRecordsTable.articleId,
+      inboxId: sendRecordsTable.inboxId,
+      deliverySlot: sendRecordsTable.deliverySlot,
+      sentAt: sendRecordsTable.sentAt,
+      article: articlesTable,
+      recipient: usersTable,
+    })
+    .from(sendRecordsTable)
+    .leftJoin(articlesTable, eq(sendRecordsTable.articleId, articlesTable.id))
+    .leftJoin(usersTable, eq(sendRecordsTable.recipientId, usersTable.id))
+    .where(eq(sendRecordsTable.id, req.params.id));
+
+  if (!records[0]) {
+    res.status(404).json({ error: "Send record not found" });
     return;
   }
+  res.json(records[0]);
+});
+
+router.delete("/send-records/:id", async (req, res) => {
+  const [deleted] = await db.delete(sendRecordsTable).where(eq(sendRecordsTable.id, req.params.id)).returning();
+  if (!deleted) {
+    res.status(404).json({ error: "Send record not found" });
+    return;
+  }
+  res.status(204).send();
+});
+
+router.post("/send-records", async (req, res) => {
+  const parsed = SendArticleBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
+    return;
+  }
+  const { senderId, recipientId, articleId } = parsed.data;
 
   const [article] = await db.select().from(articlesTable).where(eq(articlesTable.id, articleId));
   if (!article) {

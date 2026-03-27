@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
+import { CreateUserBody, UpdateUserBody } from "@workspace/api-zod";
 
 const router: IRouter = Router();
 
@@ -10,15 +11,12 @@ router.get("/users", async (_req, res) => {
 });
 
 router.post("/users", async (req, res) => {
-  const { email, nickname, avatarUrl } = req.body;
-  if (!email || !nickname) {
-    res.status(400).json({ error: "email and nickname are required" });
+  const parsed = CreateUserBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
     return;
   }
-  if (nickname.length < 1 || nickname.length > 20) {
-    res.status(400).json({ error: "nickname must be 1-20 characters" });
-    return;
-  }
+  const { email, nickname, avatarUrl } = parsed.data;
   const [user] = await db.insert(usersTable).values({ email, nickname, avatarUrl: avatarUrl ?? null }).returning();
   res.status(201).json(user);
 });
@@ -33,16 +31,14 @@ router.get("/users/:id", async (req, res) => {
 });
 
 router.patch("/users/:id", async (req, res) => {
-  const { nickname, avatarUrl } = req.body;
-  const updates: Record<string, unknown> = {};
-  if (nickname !== undefined) {
-    if (nickname.length < 1 || nickname.length > 20) {
-      res.status(400).json({ error: "nickname must be 1-20 characters" });
-      return;
-    }
-    updates.nickname = nickname;
+  const parsed = UpdateUserBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
+    return;
   }
-  if (avatarUrl !== undefined) updates.avatarUrl = avatarUrl;
+  const updates: Record<string, unknown> = {};
+  if (parsed.data.nickname !== undefined) updates.nickname = parsed.data.nickname;
+  if (parsed.data.avatarUrl !== undefined) updates.avatarUrl = parsed.data.avatarUrl;
 
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No fields to update" });
@@ -55,6 +51,15 @@ router.patch("/users/:id", async (req, res) => {
     return;
   }
   res.json(user);
+});
+
+router.delete("/users/:id", async (req, res) => {
+  const [deleted] = await db.delete(usersTable).where(eq(usersTable.id, req.params.id)).returning();
+  if (!deleted) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  res.status(204).send();
 });
 
 export default router;

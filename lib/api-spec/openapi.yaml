@@ -103,6 +103,21 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteUser
+      tags: [users]
+      summary: Delete user
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     patch:
       operationId: updateUser
       tags: [users]
@@ -612,6 +627,25 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
   /stored-sentences/{id}:
+    get:
+      operationId: getStoredSentence
+      tags: [stored-sentences]
+      summary: Get a stored sentence by ID
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Sentence
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoredSentence"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     delete:
       operationId: deleteStoredSentence
       tags: [stored-sentences]
@@ -710,6 +744,23 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /reading-records/{id}:
+    delete:
+      operationId: deleteReadingRecord
+      tags: [reading]
+      summary: Delete a reading record
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /user-article-reads:
     post:
       operationId: createUserArticleRead
@@ -730,6 +781,42 @@ paths:
                 $ref: "#/components/schemas/UserArticleRead"
         "400":
           description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /user-article-reads/{id}:
+    get:
+      operationId: getUserArticleRead
+      tags: [reading]
+      summary: Get a user article read record by ID
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Read record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserArticleRead"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteUserArticleRead
+      tags: [reading]
+      summary: Delete a user article read record
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
           content:
             application/json:
               schema:
@@ -1041,6 +1128,25 @@ paths:
                   $ref: "#/components/schemas/NeighborWithUser"
 
   /neighbors/{id}:
+    get:
+      operationId: getNeighbor
+      tags: [neighbors]
+      summary: Get neighbor by ID
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Neighbor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Neighbor"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     delete:
       operationId: removeNeighbor
       tags: [neighbors]
@@ -1097,6 +1203,42 @@ paths:
                 $ref: "#/components/schemas/NeighborRequest"
         "400":
           description: Already neighbors or duplicate request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /neighbor-requests/{id}:
+    get:
+      operationId: getNeighborRequest
+      tags: [neighbors]
+      summary: Get neighbor request by ID
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Neighbor request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NeighborRequest"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteNeighborRequest
+      tags: [neighbors]
+      summary: Delete (cancel) a neighbor request
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
           content:
             application/json:
               schema:
@@ -1182,6 +1324,42 @@ paths:
                 $ref: "#/components/schemas/SendRecordWithDetails"
         "400":
           description: Article not LETTER or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /send-records/{id}:
+    get:
+      operationId: getSendRecord
+      tags: [send-records]
+      summary: Get send record by ID
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Send record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SendRecordWithDetails"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteSendRecord
+      tags: [send-records]
+      summary: Delete send record
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
           content:
             application/json:
               schema:

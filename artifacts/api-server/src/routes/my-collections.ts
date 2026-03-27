@@ -1,12 +1,13 @@
 import { Router, type IRouter } from "express";
 import { and, eq, count } from "drizzle-orm";
 import { db, myCollectionsTable, myCollectionArticlesTable, articlesTable } from "@workspace/db";
+import { CreateMyCollectionBody, UpdateMyCollectionBody, AddArticleToMyCollectionBody } from "@workspace/api-zod";
 
 const router: IRouter = Router();
 
 router.get("/my-collections", async (req, res) => {
   const { ownerId } = req.query;
-  if (!ownerId) {
+  if (!ownerId || typeof ownerId !== "string") {
     res.status(400).json({ error: "ownerId is required" });
     return;
   }
@@ -25,22 +26,19 @@ router.get("/my-collections", async (req, res) => {
     })
     .from(myCollectionsTable)
     .leftJoin(myCollectionArticlesTable, eq(myCollectionsTable.id, myCollectionArticlesTable.myCollectionId))
-    .where(eq(myCollectionsTable.ownerId, ownerId as string))
+    .where(eq(myCollectionsTable.ownerId, ownerId))
     .groupBy(myCollectionsTable.id);
 
   res.json(collections);
 });
 
 router.post("/my-collections", async (req, res) => {
-  const { ownerId, name, description, isPublic, coverImageUrl } = req.body;
-  if (!ownerId || !name) {
-    res.status(400).json({ error: "ownerId and name are required" });
+  const parsed = CreateMyCollectionBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
     return;
   }
-  if (name.length < 1 || name.length > 30) {
-    res.status(400).json({ error: "name must be 1-30 characters" });
-    return;
-  }
+  const { ownerId, name, description, isPublic, coverImageUrl } = parsed.data;
 
   const [collection] = await db.insert(myCollectionsTable).values({
     ownerId,
@@ -78,18 +76,22 @@ router.get("/my-collections/:id", async (req, res) => {
 });
 
 router.patch("/my-collections/:id", async (req, res) => {
-  const { name, description, isPublic, coverImageUrl } = req.body;
-  const updates: Record<string, unknown> = {};
-  if (name !== undefined) {
-    if (name.length < 1 || name.length > 30) {
-      res.status(400).json({ error: "name must be 1-30 characters" });
-      return;
-    }
-    updates.name = name;
+  const parsed = UpdateMyCollectionBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
+    return;
   }
-  if (description !== undefined) updates.description = description;
-  if (isPublic !== undefined) updates.isPublic = isPublic;
-  if (coverImageUrl !== undefined) updates.coverImageUrl = coverImageUrl;
+
+  const updates: Record<string, unknown> = {};
+  if (parsed.data.name !== undefined) updates.name = parsed.data.name;
+  if (parsed.data.description !== undefined) updates.description = parsed.data.description;
+  if (parsed.data.isPublic !== undefined) updates.isPublic = parsed.data.isPublic;
+  if (parsed.data.coverImageUrl !== undefined) updates.coverImageUrl = parsed.data.coverImageUrl;
+
+  if (Object.keys(updates).length === 0) {
+    res.status(400).json({ error: "No fields to update" });
+    return;
+  }
 
   const [collection] = await db.update(myCollectionsTable).set(updates).where(eq(myCollectionsTable.id, req.params.id)).returning();
   if (!collection) {
@@ -126,11 +128,12 @@ router.get("/my-collections/:id/articles", async (req, res) => {
 });
 
 router.post("/my-collections/:id/articles", async (req, res) => {
-  const { articleId } = req.body;
-  if (!articleId) {
-    res.status(400).json({ error: "articleId is required" });
+  const parsed = AddArticleToMyCollectionBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
     return;
   }
+  const { articleId } = parsed.data;
 
   const existing = await db.select().from(myCollectionArticlesTable)
     .where(and(

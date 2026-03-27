@@ -385,6 +385,90 @@ export function useGetUser<
 }
 
 /**
+ * @summary Delete user
+ */
+export const getDeleteUserUrl = (id: string) => {
+  return `/api/users/${id}`;
+};
+
+export const deleteUser = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteUserUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteUserMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteUser>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteUser>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteUser"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteUser>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteUser(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteUserMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteUser>>
+>;
+
+export type DeleteUserMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Delete user
+ */
+export const useDeleteUser = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteUser>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteUser>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteUserMutationOptions(options));
+};
+
+/**
  * @summary Update user
  */
 export const getUpdateUserUrl = (id: string) => {
@@ -2338,6 +2422,93 @@ export const useCreateStoredSentence = <
 };
 
 /**
+ * @summary Get a stored sentence by ID
+ */
+export const getGetStoredSentenceUrl = (id: string) => {
+  return `/api/stored-sentences/${id}`;
+};
+
+export const getStoredSentence = async (
+  id: string,
+  options?: RequestInit,
+): Promise<StoredSentence> => {
+  return customFetch<StoredSentence>(getGetStoredSentenceUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetStoredSentenceQueryKey = (id: string) => {
+  return [`/api/stored-sentences/${id}`] as const;
+};
+
+export const getGetStoredSentenceQueryOptions = <
+  TData = Awaited<ReturnType<typeof getStoredSentence>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getStoredSentence>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetStoredSentenceQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getStoredSentence>>
+  > = ({ signal }) => getStoredSentence(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getStoredSentence>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetStoredSentenceQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getStoredSentence>>
+>;
+export type GetStoredSentenceQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get a stored sentence by ID
+ */
+
+export function useGetStoredSentence<
+  TData = Awaited<ReturnType<typeof getStoredSentence>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getStoredSentence>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetStoredSentenceQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
  * @summary Delete a stored sentence
  */
 export const getDeleteStoredSentenceUrl = (id: string) => {
@@ -2694,6 +2865,90 @@ export const useUpsertReadingRecord = <
 };
 
 /**
+ * @summary Delete a reading record
+ */
+export const getDeleteReadingRecordUrl = (id: string) => {
+  return `/api/reading-records/${id}`;
+};
+
+export const deleteReadingRecord = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteReadingRecordUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteReadingRecordMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteReadingRecord>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteReadingRecord>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteReadingRecord"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteReadingRecord>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteReadingRecord(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteReadingRecordMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteReadingRecord>>
+>;
+
+export type DeleteReadingRecordMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Delete a reading record
+ */
+export const useDeleteReadingRecord = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteReadingRecord>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteReadingRecord>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteReadingRecordMutationOptions(options));
+};
+
+/**
  * @summary Record article completion (完독)
  */
 export const getCreateUserArticleReadUrl = () => {
@@ -2778,6 +3033,177 @@ export const useCreateUserArticleRead = <
   TContext
 > => {
   return useMutation(getCreateUserArticleReadMutationOptions(options));
+};
+
+/**
+ * @summary Get a user article read record by ID
+ */
+export const getGetUserArticleReadUrl = (id: string) => {
+  return `/api/user-article-reads/${id}`;
+};
+
+export const getUserArticleRead = async (
+  id: string,
+  options?: RequestInit,
+): Promise<UserArticleRead> => {
+  return customFetch<UserArticleRead>(getGetUserArticleReadUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetUserArticleReadQueryKey = (id: string) => {
+  return [`/api/user-article-reads/${id}`] as const;
+};
+
+export const getGetUserArticleReadQueryOptions = <
+  TData = Awaited<ReturnType<typeof getUserArticleRead>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getUserArticleRead>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetUserArticleReadQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getUserArticleRead>>
+  > = ({ signal }) => getUserArticleRead(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getUserArticleRead>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetUserArticleReadQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getUserArticleRead>>
+>;
+export type GetUserArticleReadQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get a user article read record by ID
+ */
+
+export function useGetUserArticleRead<
+  TData = Awaited<ReturnType<typeof getUserArticleRead>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getUserArticleRead>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetUserArticleReadQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Delete a user article read record
+ */
+export const getDeleteUserArticleReadUrl = (id: string) => {
+  return `/api/user-article-reads/${id}`;
+};
+
+export const deleteUserArticleRead = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteUserArticleReadUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteUserArticleReadMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteUserArticleRead>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteUserArticleRead>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteUserArticleRead"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteUserArticleRead>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteUserArticleRead(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteUserArticleReadMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteUserArticleRead>>
+>;
+
+export type DeleteUserArticleReadMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Delete a user article read record
+ */
+export const useDeleteUserArticleRead = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteUserArticleRead>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteUserArticleRead>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteUserArticleReadMutationOptions(options));
 };
 
 /**
@@ -3945,6 +4371,93 @@ export function useListNeighbors<
 }
 
 /**
+ * @summary Get neighbor by ID
+ */
+export const getGetNeighborUrl = (id: string) => {
+  return `/api/neighbors/${id}`;
+};
+
+export const getNeighbor = async (
+  id: string,
+  options?: RequestInit,
+): Promise<Neighbor> => {
+  return customFetch<Neighbor>(getGetNeighborUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetNeighborQueryKey = (id: string) => {
+  return [`/api/neighbors/${id}`] as const;
+};
+
+export const getGetNeighborQueryOptions = <
+  TData = Awaited<ReturnType<typeof getNeighbor>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getNeighbor>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetNeighborQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getNeighbor>>> = ({
+    signal,
+  }) => getNeighbor(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getNeighbor>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetNeighborQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getNeighbor>>
+>;
+export type GetNeighborQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get neighbor by ID
+ */
+
+export function useGetNeighbor<
+  TData = Awaited<ReturnType<typeof getNeighbor>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getNeighbor>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetNeighborQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
  * @summary Remove neighbor relationship
  */
 export const getRemoveNeighborUrl = (id: string) => {
@@ -4216,6 +4729,177 @@ export const useCreateNeighborRequest = <
   TContext
 > => {
   return useMutation(getCreateNeighborRequestMutationOptions(options));
+};
+
+/**
+ * @summary Get neighbor request by ID
+ */
+export const getGetNeighborRequestUrl = (id: string) => {
+  return `/api/neighbor-requests/${id}`;
+};
+
+export const getNeighborRequest = async (
+  id: string,
+  options?: RequestInit,
+): Promise<NeighborRequest> => {
+  return customFetch<NeighborRequest>(getGetNeighborRequestUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetNeighborRequestQueryKey = (id: string) => {
+  return [`/api/neighbor-requests/${id}`] as const;
+};
+
+export const getGetNeighborRequestQueryOptions = <
+  TData = Awaited<ReturnType<typeof getNeighborRequest>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getNeighborRequest>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetNeighborRequestQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getNeighborRequest>>
+  > = ({ signal }) => getNeighborRequest(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getNeighborRequest>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetNeighborRequestQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getNeighborRequest>>
+>;
+export type GetNeighborRequestQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get neighbor request by ID
+ */
+
+export function useGetNeighborRequest<
+  TData = Awaited<ReturnType<typeof getNeighborRequest>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getNeighborRequest>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetNeighborRequestQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Delete (cancel) a neighbor request
+ */
+export const getDeleteNeighborRequestUrl = (id: string) => {
+  return `/api/neighbor-requests/${id}`;
+};
+
+export const deleteNeighborRequest = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteNeighborRequestUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteNeighborRequestMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteNeighborRequest>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteNeighborRequest>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteNeighborRequest"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteNeighborRequest>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteNeighborRequest(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteNeighborRequestMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteNeighborRequest>>
+>;
+
+export type DeleteNeighborRequestMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Delete (cancel) a neighbor request
+ */
+export const useDeleteNeighborRequest = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteNeighborRequest>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteNeighborRequest>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteNeighborRequestMutationOptions(options));
 };
 
 /**
@@ -4565,4 +5249,175 @@ export const useSendArticle = <
   TContext
 > => {
   return useMutation(getSendArticleMutationOptions(options));
+};
+
+/**
+ * @summary Get send record by ID
+ */
+export const getGetSendRecordUrl = (id: string) => {
+  return `/api/send-records/${id}`;
+};
+
+export const getSendRecord = async (
+  id: string,
+  options?: RequestInit,
+): Promise<SendRecordWithDetails> => {
+  return customFetch<SendRecordWithDetails>(getGetSendRecordUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetSendRecordQueryKey = (id: string) => {
+  return [`/api/send-records/${id}`] as const;
+};
+
+export const getGetSendRecordQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSendRecord>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getSendRecord>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetSendRecordQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getSendRecord>>> = ({
+    signal,
+  }) => getSendRecord(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSendRecord>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetSendRecordQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getSendRecord>>
+>;
+export type GetSendRecordQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get send record by ID
+ */
+
+export function useGetSendRecord<
+  TData = Awaited<ReturnType<typeof getSendRecord>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getSendRecord>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetSendRecordQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Delete send record
+ */
+export const getDeleteSendRecordUrl = (id: string) => {
+  return `/api/send-records/${id}`;
+};
+
+export const deleteSendRecord = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteSendRecordUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteSendRecordMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteSendRecord>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteSendRecord>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteSendRecord"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteSendRecord>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteSendRecord(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteSendRecordMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteSendRecord>>
+>;
+
+export type DeleteSendRecordMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Delete send record
+ */
+export const useDeleteSendRecord = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteSendRecord>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteSendRecord>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteSendRecordMutationOptions(options));
 };

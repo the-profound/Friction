@@ -8,12 +8,18 @@ import {
   articlesTable,
   usersTable,
 } from "@workspace/db";
+import {
+  CreateTeamCollectionBody,
+  UpdateTeamCollectionBody,
+  AddTeamMemberBody,
+  AddTeamArticleBody,
+} from "@workspace/api-zod";
 
 const router: IRouter = Router();
 
 router.get("/team-collections", async (req, res) => {
   const { userId } = req.query;
-  if (!userId) {
+  if (!userId || typeof userId !== "string") {
     res.status(400).json({ error: "userId is required" });
     return;
   }
@@ -30,7 +36,7 @@ router.get("/team-collections", async (req, res) => {
     })
     .from(teamCollectionMembershipsTable)
     .innerJoin(teamCollectionsTable, eq(teamCollectionMembershipsTable.teamCollectionId, teamCollectionsTable.id))
-    .where(eq(teamCollectionMembershipsTable.userId, userId as string));
+    .where(eq(teamCollectionMembershipsTable.userId, userId));
 
   const results = [];
   for (const m of memberships) {
@@ -45,15 +51,12 @@ router.get("/team-collections", async (req, res) => {
 });
 
 router.post("/team-collections", async (req, res) => {
-  const { name, description, creatorId } = req.body;
-  if (!name || !creatorId) {
-    res.status(400).json({ error: "name and creatorId are required" });
+  const parsed = CreateTeamCollectionBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
     return;
   }
-  if (name.length < 1 || name.length > 30) {
-    res.status(400).json({ error: "name must be 1-30 characters" });
-    return;
-  }
+  const { name, description, creatorId } = parsed.data;
 
   const [collection] = await db.insert(teamCollectionsTable).values({
     name,
@@ -80,16 +83,20 @@ router.get("/team-collections/:id", async (req, res) => {
 });
 
 router.patch("/team-collections/:id", async (req, res) => {
-  const { name, description } = req.body;
-  const updates: Record<string, unknown> = {};
-  if (name !== undefined) {
-    if (name.length < 1 || name.length > 30) {
-      res.status(400).json({ error: "name must be 1-30 characters" });
-      return;
-    }
-    updates.name = name;
+  const parsed = UpdateTeamCollectionBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
+    return;
   }
-  if (description !== undefined) updates.description = description;
+
+  const updates: Record<string, unknown> = {};
+  if (parsed.data.name !== undefined) updates.name = parsed.data.name;
+  if (parsed.data.description !== undefined) updates.description = parsed.data.description;
+
+  if (Object.keys(updates).length === 0) {
+    res.status(400).json({ error: "No fields to update" });
+    return;
+  }
 
   const [collection] = await db.update(teamCollectionsTable).set(updates).where(eq(teamCollectionsTable.id, req.params.id)).returning();
   if (!collection) {
@@ -128,11 +135,12 @@ router.get("/team-collections/:id/members", async (req, res) => {
 });
 
 router.post("/team-collections/:id/members", async (req, res) => {
-  const { userId } = req.body;
-  if (!userId) {
-    res.status(400).json({ error: "userId is required" });
+  const parsed = AddTeamMemberBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
     return;
   }
+  const { userId } = parsed.data;
 
   const existing = await db.select().from(teamCollectionMembershipsTable)
     .where(and(
@@ -186,11 +194,12 @@ router.get("/team-collections/:id/articles", async (req, res) => {
 });
 
 router.post("/team-collections/:id/articles", async (req, res) => {
-  const { articleId, addedBy } = req.body;
-  if (!articleId || !addedBy) {
-    res.status(400).json({ error: "articleId and addedBy are required" });
+  const parsed = AddTeamArticleBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
     return;
   }
+  const { articleId, addedBy } = parsed.data;
 
   const [article] = await db.select().from(articlesTable).where(eq(articlesTable.id, articleId));
   if (!article) {

@@ -1,17 +1,16 @@
 import { Router, type IRouter } from "express";
 import { and, eq, or } from "drizzle-orm";
 import { db, neighborsTable, neighborRequestsTable, usersTable } from "@workspace/db";
+import { CreateNeighborRequestBody } from "@workspace/api-zod";
 
 const router: IRouter = Router();
 
 router.get("/neighbors", async (req, res) => {
   const { userId } = req.query;
-  if (!userId) {
+  if (!userId || typeof userId !== "string") {
     res.status(400).json({ error: "userId is required" });
     return;
   }
-
-  const uid = userId as string;
 
   const asA = await db
     .select({
@@ -21,7 +20,7 @@ router.get("/neighbors", async (req, res) => {
       acceptedAt: neighborsTable.acceptedAt,
     })
     .from(neighborsTable)
-    .where(eq(neighborsTable.userAId, uid));
+    .where(eq(neighborsTable.userAId, userId));
 
   const asB = await db
     .select({
@@ -31,7 +30,7 @@ router.get("/neighbors", async (req, res) => {
       acceptedAt: neighborsTable.acceptedAt,
     })
     .from(neighborsTable)
-    .where(eq(neighborsTable.userBId, uid));
+    .where(eq(neighborsTable.userBId, userId));
 
   const all = [...asA, ...asB];
 
@@ -42,6 +41,15 @@ router.get("/neighbors", async (req, res) => {
   }
 
   res.json(results);
+});
+
+router.get("/neighbors/:id", async (req, res) => {
+  const [neighbor] = await db.select().from(neighborsTable).where(eq(neighborsTable.id, req.params.id));
+  if (!neighbor) {
+    res.status(404).json({ error: "Neighbor not found" });
+    return;
+  }
+  res.json(neighbor);
 });
 
 router.delete("/neighbors/:id", async (req, res) => {
@@ -55,7 +63,7 @@ router.delete("/neighbors/:id", async (req, res) => {
 
 router.get("/neighbor-requests", async (req, res) => {
   const { recipientId } = req.query;
-  if (!recipientId) {
+  if (!recipientId || typeof recipientId !== "string") {
     res.status(400).json({ error: "recipientId is required" });
     return;
   }
@@ -72,19 +80,29 @@ router.get("/neighbor-requests", async (req, res) => {
     .from(neighborRequestsTable)
     .leftJoin(usersTable, eq(neighborRequestsTable.requesterId, usersTable.id))
     .where(and(
-      eq(neighborRequestsTable.recipientId, recipientId as string),
+      eq(neighborRequestsTable.recipientId, recipientId),
       eq(neighborRequestsTable.status, "PENDING"),
     ));
 
   res.json(requests);
 });
 
-router.post("/neighbor-requests", async (req, res) => {
-  const { requesterId, recipientId } = req.body;
-  if (!requesterId || !recipientId) {
-    res.status(400).json({ error: "requesterId and recipientId are required" });
+router.get("/neighbor-requests/:id", async (req, res) => {
+  const [request] = await db.select().from(neighborRequestsTable).where(eq(neighborRequestsTable.id, req.params.id));
+  if (!request) {
+    res.status(404).json({ error: "Request not found" });
     return;
   }
+  res.json(request);
+});
+
+router.post("/neighbor-requests", async (req, res) => {
+  const parsed = CreateNeighborRequestBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
+    return;
+  }
+  const { requesterId, recipientId } = parsed.data;
 
   if (requesterId === recipientId) {
     res.status(400).json({ error: "Cannot send neighbor request to yourself" });
@@ -118,6 +136,15 @@ router.post("/neighbor-requests", async (req, res) => {
   }).returning();
 
   res.status(201).json(request);
+});
+
+router.delete("/neighbor-requests/:id", async (req, res) => {
+  const [deleted] = await db.delete(neighborRequestsTable).where(eq(neighborRequestsTable.id, req.params.id)).returning();
+  if (!deleted) {
+    res.status(404).json({ error: "Request not found" });
+    return;
+  }
+  res.status(204).send();
 });
 
 router.post("/neighbor-requests/:id/accept", async (req, res) => {

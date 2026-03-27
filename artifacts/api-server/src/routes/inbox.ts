@@ -6,7 +6,7 @@ const router: IRouter = Router();
 
 router.get("/inbox", async (req, res) => {
   const { recipientId } = req.query;
-  if (!recipientId) {
+  if (!recipientId || typeof recipientId !== "string") {
     res.status(400).json({ error: "recipientId is required" });
     return;
   }
@@ -28,7 +28,7 @@ router.get("/inbox", async (req, res) => {
     .leftJoin(articlesTable, eq(inboxTable.articleId, articlesTable.id))
     .leftJoin(usersTable, eq(inboxTable.senderId, usersTable.id))
     .where(and(
-      eq(inboxTable.recipientId, recipientId as string),
+      eq(inboxTable.recipientId, recipientId),
       lte(inboxTable.visibleAt, new Date()),
     ))
     .orderBy(inboxTable.visibleAt);

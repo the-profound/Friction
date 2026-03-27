@@ -56,6 +56,13 @@ export const GetUserResponse = zod.object({
 });
 
 /**
+ * @summary Delete user
+ */
+export const DeleteUserParams = zod.object({
+  id: zod.coerce.string().uuid(),
+});
+
+/**
  * @summary Update user
  */
 export const UpdateUserParams = zod.object({
@@ -540,6 +547,23 @@ export const CreateStoredSentenceBody = zod.object({
 });
 
 /**
+ * @summary Get a stored sentence by ID
+ */
+export const GetStoredSentenceParams = zod.object({
+  id: zod.coerce.string().uuid(),
+});
+
+export const GetStoredSentenceResponse = zod.object({
+  id: zod.string().uuid(),
+  userId: zod.string().uuid(),
+  articleId: zod.string().uuid(),
+  text: zod.string(),
+  position: zod.object({}).passthrough().nullish(),
+  isFavorite: zod.boolean(),
+  createdAt: zod.date(),
+});
+
+/**
  * @summary Delete a stored sentence
  */
 export const DeleteStoredSentenceParams = zod.object({
@@ -619,11 +643,39 @@ export const UpsertReadingRecordResponse = zod.object({
 });
 
 /**
+ * @summary Delete a reading record
+ */
+export const DeleteReadingRecordParams = zod.object({
+  id: zod.coerce.string().uuid(),
+});
+
+/**
  * @summary Record article completion (完독)
  */
 export const CreateUserArticleReadBody = zod.object({
   userId: zod.string().uuid(),
   articleId: zod.string().uuid(),
+});
+
+/**
+ * @summary Get a user article read record by ID
+ */
+export const GetUserArticleReadParams = zod.object({
+  id: zod.coerce.string().uuid(),
+});
+
+export const GetUserArticleReadResponse = zod.object({
+  id: zod.string().uuid(),
+  userId: zod.string().uuid(),
+  articleId: zod.string().uuid(),
+  completedAt: zod.date(),
+});
+
+/**
+ * @summary Delete a user article read record
+ */
+export const DeleteUserArticleReadParams = zod.object({
+  id: zod.coerce.string().uuid(),
 });
 
 /**
@@ -838,6 +890,21 @@ export const ListNeighborsResponseItem = zod.object({
 export const ListNeighborsResponse = zod.array(ListNeighborsResponseItem);
 
 /**
+ * @summary Get neighbor by ID
+ */
+export const GetNeighborParams = zod.object({
+  id: zod.coerce.string().uuid(),
+});
+
+export const GetNeighborResponse = zod.object({
+  id: zod.string().uuid(),
+  userAId: zod.string().uuid(),
+  userBId: zod.string().uuid(),
+  createdAt: zod.date(),
+  acceptedAt: zod.date(),
+});
+
+/**
  * @summary Remove neighbor relationship
  */
 export const RemoveNeighborParams = zod.object({
@@ -878,6 +945,28 @@ export const ListNeighborRequestsResponse = zod.array(
 export const CreateNeighborRequestBody = zod.object({
   requesterId: zod.string().uuid(),
   recipientId: zod.string().uuid(),
+});
+
+/**
+ * @summary Get neighbor request by ID
+ */
+export const GetNeighborRequestParams = zod.object({
+  id: zod.coerce.string().uuid(),
+});
+
+export const GetNeighborRequestResponse = zod.object({
+  id: zod.string().uuid(),
+  requesterId: zod.string().uuid(),
+  recipientId: zod.string().uuid(),
+  status: zod.enum(["PENDING"]),
+  createdAt: zod.date(),
+});
+
+/**
+ * @summary Delete (cancel) a neighbor request
+ */
+export const DeleteNeighborRequestParams = zod.object({
+  id: zod.coerce.string().uuid(),
 });
 
 /**
@@ -952,4 +1041,52 @@ export const SendArticleBody = zod.object({
   senderId: zod.string().uuid(),
   recipientId: zod.string().uuid(),
   articleId: zod.string().uuid(),
+});
+
+/**
+ * @summary Get send record by ID
+ */
+export const GetSendRecordParams = zod.object({
+  id: zod.coerce.string().uuid(),
+});
+
+export const GetSendRecordResponse = zod.object({
+  id: zod.string().uuid(),
+  senderId: zod.string().uuid(),
+  recipientId: zod.string().uuid(),
+  articleId: zod.string().uuid(),
+  inboxId: zod.string().uuid(),
+  deliverySlot: zod.date(),
+  sentAt: zod.date(),
+  article: zod
+    .object({
+      id: zod.string().uuid(),
+      authorId: zod.string().uuid(),
+      title: zod.string(),
+      content: zod.string(),
+      status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
+      pages: zod.array(zod.string()).nullish(),
+      style: zod.object({}).passthrough().nullish(),
+      letterAt: zod.date().nullish(),
+      createdAt: zod.date(),
+      updatedAt: zod.date(),
+    })
+    .optional(),
+  recipient: zod
+    .object({
+      id: zod.string().uuid(),
+      email: zod.string(),
+      nickname: zod.string(),
+      avatarUrl: zod.string().nullish(),
+      createdAt: zod.date(),
+      updatedAt: zod.date(),
+    })
+    .optional(),
+});
+
+/**
+ * @summary Delete send record
+ */
+export const DeleteSendRecordParams = zod.object({
+  id: zod.coerce.string().uuid(),
 });

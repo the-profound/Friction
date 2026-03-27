@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { and, eq } from "drizzle-orm";
 import { db, articlesTable, type ArticleStatus } from "@workspace/db";
+import { CreateArticleBody, UpdateArticleBody, TransitionArticleStatusBody } from "@workspace/api-zod";
 
 const VALID_TRANSITIONS: Record<string, string> = {
   DRAFT: "DIVIDING",
@@ -23,11 +24,12 @@ router.get("/articles", async (req, res) => {
 });
 
 router.post("/articles", async (req, res) => {
-  const { authorId, title, content } = req.body;
-  if (!authorId || !title) {
-    res.status(400).json({ error: "authorId and title are required" });
+  const parsed = CreateArticleBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
     return;
   }
+  const { authorId, title, content } = parsed.data;
   const [article] = await db.insert(articlesTable).values({
     authorId,
     title,
@@ -57,12 +59,17 @@ router.patch("/articles/:id", async (req, res) => {
     return;
   }
 
-  const { title, content, pages, style } = req.body;
+  const parsed = UpdateArticleBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
+    return;
+  }
+
   const updates: Record<string, unknown> = {};
-  if (title !== undefined) updates.title = title;
-  if (content !== undefined) updates.content = content;
-  if (pages !== undefined) updates.pages = pages;
-  if (style !== undefined) updates.style = style;
+  if (parsed.data.title !== undefined) updates.title = parsed.data.title;
+  if (parsed.data.content !== undefined) updates.content = parsed.data.content;
+  if (parsed.data.pages !== undefined) updates.pages = parsed.data.pages;
+  if (parsed.data.style !== undefined) updates.style = parsed.data.style;
 
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No fields to update" });
@@ -83,11 +90,12 @@ router.delete("/articles/:id", async (req, res) => {
 });
 
 router.post("/articles/:id/transition", async (req, res) => {
-  const { targetStatus } = req.body;
-  if (!targetStatus) {
-    res.status(400).json({ error: "targetStatus is required" });
+  const parsed = TransitionArticleStatusBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
     return;
   }
+  const { targetStatus } = parsed.data;
 
   const [article] = await db.select().from(articlesTable).where(eq(articlesTable.id, req.params.id));
   if (!article) {
@@ -109,6 +117,13 @@ router.post("/articles/:id/transition", async (req, res) => {
   }
 
   const updates: Record<string, unknown> = { status: targetStatus };
+  if (targetStatus === "CLOSING") {
+    if (!article.pages || !Array.isArray(article.pages) || (article.pages as string[]).length === 0) {
+      const content = article.content || "";
+      const pageTexts = content.split("---").map((p: string) => p.trim()).filter((p: string) => p.length > 0);
+      updates.pages = pageTexts.length > 0 ? pageTexts : [content];
+    }
+  }
   if (targetStatus === "LETTER") {
     updates.letterAt = new Date();
   }
