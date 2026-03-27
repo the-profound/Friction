@@ -1,7 +1,15 @@
+import { type Href, router } from "expo-router";
 import React, { createContext, useCallback, useContext, useMemo, useState } from "react";
 
 import type { MainTabKey, OfSubTabKey, ToSubTabKey } from "@/constants/tokens";
 import type { NavContextValue, NavLayer, OfMiniSubTabKey } from "@/types/navigation";
+
+const TAB_ROUTES: Record<MainTabKey, Href> = {
+  IN: "/(tabs)" as Href,
+  ON: "/(tabs)/on" as Href,
+  OF: "/(tabs)/of" as Href,
+  TO: "/(tabs)/to" as Href,
+};
 
 const DEFAULT_OF_MINI: Record<OfSubTabKey, OfMiniSubTabKey> = {
   personal: "my",
@@ -34,6 +42,7 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
       setLayer("main");
     }
     setHeaderScrolled(false);
+    router.navigate(TAB_ROUTES[tab]);
   }, []);
 
   const setOfSubTab = useCallback((subTab: OfSubTabKey) => {
@@ -52,6 +61,7 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
     setActiveTabState(prevMainTab);
     setLayer("main");
     setHeaderScrolled(false);
+    router.navigate(TAB_ROUTES[prevMainTab]);
   }, [prevMainTab]);
 
   const value = useMemo<NavContextValue>(
