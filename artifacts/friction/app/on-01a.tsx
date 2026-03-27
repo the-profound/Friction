@@ -35,7 +35,9 @@ export default function DraftScreen() {
   const [charCount, setCharCount] = useState(0);
   const [editorReady, setEditorReady] = useState(false);
   const contentRef = useRef("");
+  const titleRef = useRef("");
   const initializedRef = useRef(false);
+  const articleContentRef = useRef("");
   const pendingExportRef = useRef<{
     resolve: (md: string) => void;
     requestId: string;
@@ -45,14 +47,22 @@ export default function DraftScreen() {
     if (article && !initializedRef.current) {
       initializedRef.current = true;
       setTitle(article.title || "");
+      titleRef.current = article.title || "";
       contentRef.current = article.content || "";
+      articleContentRef.current = article.content || "";
       setCharCount(contentRef.current.length);
     }
   }, [article]);
 
+  useEffect(() => {
+    if (editorReady && initializedRef.current && articleContentRef.current) {
+      editorRef.current?.setMarkdown(articleContentRef.current);
+    }
+  }, [editorReady]);
+
   const getEditorContent = useCallback((): Promise<string> => {
     return new Promise((resolve) => {
-      if (!editorRef.current) {
+      if (!editorRef.current || !editorReady) {
         resolve(contentRef.current);
         return;
       }
@@ -66,16 +76,7 @@ export default function DraftScreen() {
         }
       }, 2000);
     });
-  }, []);
-
-  const handleEditorChange = useCallback((payload: OnChangePayload) => {
-    if (payload.charCount !== undefined) {
-      setCharCount(payload.charCount);
-    }
-    if (payload.isDirty) {
-      markDirtyFromEditor();
-    }
-  }, []);
+  }, [editorReady]);
 
   const handleExportMarkdown = useCallback((payload: OnExportMarkdownPayload) => {
     contentRef.current = payload.markdown;
@@ -101,13 +102,27 @@ export default function DraftScreen() {
     storageKey: id ? `draft_${id}` : undefined,
   });
 
-  const markDirtyFromEditor = useCallback(() => {
-    markDirty(title, contentRef.current);
-  }, [title, markDirty]);
+  const handleEditorChange = useCallback((_payload: OnChangePayload) => {
+    if (_payload.charCount !== undefined) {
+      setCharCount(_payload.charCount);
+    }
+    if (_payload.isDirty && editorRef.current) {
+      const requestId = `autosave_${Date.now()}`;
+      pendingExportRef.current = {
+        resolve: (md: string) => {
+          contentRef.current = md;
+          markDirty(titleRef.current, md);
+        },
+        requestId,
+      };
+      editorRef.current.requestExportMarkdown(requestId);
+    }
+  }, [markDirty]);
 
   const handleTitleChange = useCallback(
     (text: string) => {
       setTitle(text);
+      titleRef.current = text;
       markDirty(text, contentRef.current);
     },
     [markDirty],
@@ -115,15 +130,17 @@ export default function DraftScreen() {
 
   const handleNext = useCallback(async () => {
     const content = await getEditorContent();
+    markDirty(titleRef.current, content);
     const flushResult = await flush();
     if (!flushResult.ok) {
       Alert.alert("저장 실패", "저장이 완료되지 않았습니다. 다시 시도해주세요.");
       return;
     }
 
+    const currentTitle = titleRef.current;
     const result = canTransitionForward("DRAFT" as ArticleStatus, {
       content,
-      title,
+      title: currentTitle,
       pages: [],
       hasRedWarnings: false,
     });
@@ -135,7 +152,7 @@ export default function DraftScreen() {
     try {
       await updateArticle.mutateAsync({
         id: id!,
-        data: { title, content },
+        data: { title: currentTitle, content },
       });
       await transitionStatus.mutateAsync({
         id: id!,
@@ -147,13 +164,15 @@ export default function DraftScreen() {
       const msg = e instanceof Error ? e.message : "상태 전환에 실패했습니다.";
       Alert.alert("오류", msg);
     }
-  }, [title, flush, id, router, updateArticle, transitionStatus, queryClient, getEditorContent]);
+  }, [flush, id, router, updateArticle, transitionStatus, queryClient, getEditorContent, markDirty]);
 
   const handleBack = useCallback(async () => {
+    const content = await getEditorContent();
+    markDirty(titleRef.current, content);
     await flush();
     queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
     router.back();
-  }, [flush, router, queryClient]);
+  }, [flush, router, queryClient, getEditorContent, markDirty]);
 
   const saveStatusLabel =
     saveStatus === "saving"
