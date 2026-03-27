@@ -94,3 +94,55 @@ Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHea
 ### `scripts` (`@workspace/scripts`)
 
 Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
+
+### `artifacts/friction` (Friction 1.0.0 — Expo/React Native)
+
+Reading/writing platform mobile app. All 37 Notion Queue DB items processed (순서 1–11).
+
+**Design system & navigation:**
+- `constants/tokens.ts` — design tokens (Colors, Typography, Spacing, etc.)
+- `types/navigation.ts` — NavBar/SubTab/MiniSubTab type definitions
+- `contexts/NavigationContext.tsx` — global navigation state (activeTab, layer, subTabs)
+- `components/NavBar/NavBar.tsx` — 4-tab bottom nav (IN/OF/TO/ON)
+- `components/NavBar/PageHeader.tsx` — screen header with search/add actions
+- `components/NavBar/MiniSubTabBar.tsx` — animated mini sub-tab bar for OF tab
+
+**Shared components:**
+- `components/BottomSheet/BottomSheet.tsx` — draggable bottom sheet with snap points
+- `components/ConfirmModal/ConfirmModal.tsx` — confirmation dialog
+- `components/ProgressIndicator/ProgressIndicator.tsx` — linear/circular progress
+- `components/ArticleCardItem/ArticleCardItem.tsx` — 5:8 carousel card (330×528)
+- `components/ArticleListItem/ArticleListItem.tsx` — list item with status badge
+- `components/MyArticlesPickerBottomSheet/MyArticlesPickerBottomSheet.tsx` — LETTER article picker
+- `components/WebViewMarkdownEditor/WebViewMarkdownEditor.tsx` — TipTap HTML editor bridge
+- `contexts/ToastContext.tsx` — toast notification system
+
+**Core logic:**
+- `lib/policies.ts` — 7 product policies (delivery hours, page limits, etc.)
+- `lib/articleStatusCycle.ts` — DRAFT→DIVIDING→CLOSING→LETTER transitions + guards
+- `lib/useAutoSave.ts` — debounce 1200ms auto-save hook
+- `lib/pageDivision.ts` — `---` based page splitting/merging/validation
+- `lib/readingPersistence.ts` — basic/re_read reading state machine
+- `lib/deliverySync.ts` — 06:00/18:00 KST delivery slots, send guards
+
+**Tab screens (app/(tabs)/):**
+- `_layout.tsx` — 4-tab layout with NavigationProvider
+- `index.tsx` (IN-00) — inbox with date carousel
+- `of.tsx` (OF-00) — archive with 3 sub-tabs (personal/group/sentence)
+- `to.tsx` (TO-00) — outbox with 3 sub-tabs (neighbors/sent/send)
+- `on.tsx` (ON-00) — notes list with add button
+
+**Detail/sub screens (app/):**
+- `read.tsx` (READ-00) — reading screen with progress bar
+- `to-01.tsx` (TO-01) — neighbor list
+- `to-02.tsx` (TO-02) — send letter screen
+- `to-03.tsx` (TO-03) — send history
+- `of-01.tsx` (OF-01) — personal collection list (mine/subscribed tabs)
+- `of-02.tsx` (OF-02) — team collection list (mine/joined/subscribed tabs)
+- `of-01-detail.tsx` (OF-01-D) — personal collection detail + visibility toggle
+- `of-02-detail.tsx` (OF-02-D) — team collection detail + members tab
+- `of-03.tsx` (OF-03) — sentence collection (all/favorites filter)
+- `on-01a.tsx` (ON-01a) — DRAFT editor with auto-save
+- `on-01b.tsx` (ON-01b) — DIVIDING page splitter with warnings
+- `on-01c.tsx` (ON-01c) — CLOSING preview + export to LETTER
+- `on-02.tsx` (ON-02) — memo collection with sort/manage mode
