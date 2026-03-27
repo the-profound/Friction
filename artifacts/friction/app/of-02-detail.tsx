@@ -58,6 +58,12 @@ export default function TeamCollectionDetailScreen() {
         </View>
       ) : (
         <View style={styles.contentArea}>
+          <View style={styles.articleActions}>
+            <Pressable style={styles.addButton} onPress={() => Alert.alert("멤버 초대", "멤버 초대 기능은 준비 중입니다.")}>
+              <Feather name="user-plus" size={16} color={Colors.zinc600} />
+              <Text style={styles.addButtonText}>멤버 초대</Text>
+            </Pressable>
+          </View>
           <View style={styles.emptyContainer}>
             <Feather name="users" size={36} color={Colors.zinc300} />
             <Text style={styles.emptyTitle}>멤버가 없어요</Text>

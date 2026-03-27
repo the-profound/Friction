@@ -1,13 +1,11 @@
 import React, { useState, useCallback } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { PageHeader } from "@/components/NavBar/PageHeader";
 
 export default function InboxScreen() {
   const insets = useSafeAreaInsets();
-  const router = useRouter();
   const [searchActive, setSearchActive] = useState(false);
 
   const handleSearchPress = useCallback(() => {

@@ -2,10 +2,8 @@ import React, { useCallback, useState } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { PageHeader } from "@/components/NavBar/PageHeader";
-import { MiniSubTabBar } from "@/components/NavBar/MiniSubTabBar";
 import { useNavigation } from "@/contexts/NavigationContext";
 
 export default function OfScreen() {

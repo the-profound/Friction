@@ -18,20 +18,26 @@ const SEGMENT_TO_TAB: Record<string, MainTabKey> = {
   to: "TO",
 };
 
-const DETAIL_ROUTE_TO_TAB: Record<string, MainTabKey> = {
-  "on-01a": "ON",
-  "on-01b": "ON",
-  "on-01c": "ON",
-  "on-02": "ON",
-  "of-01": "OF",
-  "of-01-detail": "OF",
-  "of-02": "OF",
-  "of-02-detail": "OF",
-  "of-03": "OF",
-  "to-01": "TO",
-  "to-02": "TO",
-  "to-03": "TO",
-  "read": "IN",
+interface DetailRouteInfo {
+  tab: MainTabKey;
+  ofSubTab?: OfSubTabKey;
+  toSubTab?: ToSubTabKey;
+}
+
+const DETAIL_ROUTE_MAP: Record<string, DetailRouteInfo> = {
+  "on-01a": { tab: "ON" },
+  "on-01b": { tab: "ON" },
+  "on-01c": { tab: "ON" },
+  "on-02": { tab: "ON" },
+  "of-01": { tab: "OF", ofSubTab: "personal" },
+  "of-01-detail": { tab: "OF", ofSubTab: "personal" },
+  "of-02": { tab: "OF", ofSubTab: "group" },
+  "of-02-detail": { tab: "OF", ofSubTab: "group" },
+  "of-03": { tab: "OF", ofSubTab: "sentence" },
+  "to-01": { tab: "TO", toSubTab: "neighbors" },
+  "to-02": { tab: "TO", toSubTab: "send" },
+  "to-03": { tab: "TO", toSubTab: "history" },
+  "read": { tab: "IN" },
 };
 
 const DEFAULT_OF_MINI: Record<OfSubTabKey, OfMiniSubTabKey> = {
@@ -63,16 +69,29 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
     }
 
     let detectedTab: MainTabKey | undefined;
+    let detectedOfSubTab: OfSubTabKey | undefined;
+    let detectedToSubTab: ToSubTabKey | undefined;
 
     if (segments.length >= 1 && segments[0] === "(tabs)") {
       const tabSegment = segments[1] || "index";
       detectedTab = SEGMENT_TO_TAB[tabSegment];
     } else if (segments.length >= 1) {
       const routeSegment = segments[0];
-      detectedTab = DETAIL_ROUTE_TO_TAB[routeSegment];
+      const info = DETAIL_ROUTE_MAP[routeSegment];
+      if (info) {
+        detectedTab = info.tab;
+        detectedOfSubTab = info.ofSubTab;
+        detectedToSubTab = info.toSubTab;
+      }
     }
 
-    if (detectedTab && detectedTab !== activeTab) {
+    if (!detectedTab) return;
+
+    const tabChanged = detectedTab !== activeTab;
+    const subTabChanged = (detectedOfSubTab && detectedOfSubTab !== ofSubTab) ||
+                          (detectedToSubTab && detectedToSubTab !== toSubTab);
+
+    if (tabChanged || subTabChanged) {
       if (detectedTab === "OF" || detectedTab === "TO") {
         setActiveTabState((prev) => {
           if (prev !== "OF" && prev !== "TO") {
@@ -85,6 +104,14 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
         setActiveTabState(detectedTab);
         setLayer("main");
       }
+
+      if (detectedOfSubTab) {
+        setOfSubTabState(detectedOfSubTab);
+      }
+      if (detectedToSubTab) {
+        setToSubTabState(detectedToSubTab);
+      }
+
       setHeaderScrolled(false);
     }
   }, [segments, pathname]);
