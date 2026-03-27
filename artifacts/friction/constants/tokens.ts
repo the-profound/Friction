@@ -246,8 +246,8 @@ export const TabConfig = {
   ],
   ofMiniSubTabs: {
     personal: [
-      { key: "my" as const, label: "비공개" },
-      { key: "subscribed" as const, label: "공개" },
+      { key: "my" as const, label: "내 모음" },
+      { key: "subscribed" as const, label: "공개 모음" },
     ],
     group: [
       { key: "my" as const, label: "나의 단체 모음" },

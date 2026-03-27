@@ -208,7 +208,7 @@ export default function OfScreen() {
         <View style={styles.emptyContainer}>
           <Feather name="globe" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>공개 모음이 없어요</Text>
-          <Text style={styles.emptySubtitle}>다른 사람과 공유할 공개 모음을 만들어보세요</Text>
+          <Text style={styles.emptySubtitle}>다른 사람과 공유할 공개 모음을 만들어보세요{"\n"}공개로 설정한 모음이 여기에 표시돼요</Text>
           <Pressable style={styles.emptyButton} onPress={handleAdd}>
             <Text style={styles.emptyButtonText}>새 모음 만들기</Text>
           </Pressable>
@@ -217,8 +217,8 @@ export default function OfScreen() {
     }
     return (
       <View style={styles.emptyContainer}>
-        <Feather name="lock" size={40} color={Colors.zinc300} />
-        <Text style={styles.emptyTitle}>비공개 모음이 없어요</Text>
+        <Feather name="folder" size={40} color={Colors.zinc300} />
+        <Text style={styles.emptyTitle}>내 모음이 없어요</Text>
         <Text style={styles.emptySubtitle}>완성된 편지를 모아두는 나만의 공간을 만들어보세요</Text>
         <Pressable style={styles.emptyButton} onPress={handleAdd}>
           <Text style={styles.emptyButtonText}>새 모음 만들기</Text>

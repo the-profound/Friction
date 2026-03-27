@@ -91,7 +91,9 @@ export default function PersonalCollectionListScreen() {
     </Pressable>
   );
 
-  const renderCollectionList = (data: MyCollection[], emptyIcon: string, emptyTitle: string, emptySubtitle: string) => {
+  type FeatherIconName = React.ComponentProps<typeof Feather>["name"];
+
+  const renderCollectionList = (data: MyCollection[], emptyIcon: FeatherIconName, emptyTitle: string, emptySubtitle: string) => {
     if (collectionsQuery.isLoading) {
       return (
         <View style={styles.emptyContainer}>
@@ -113,7 +115,7 @@ export default function PersonalCollectionListScreen() {
     if (data.length === 0) {
       return (
         <View style={styles.emptyContainer}>
-          <Feather name={emptyIcon as any} size={40} color={Colors.zinc300} />
+          <Feather name={emptyIcon} size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>{emptyTitle}</Text>
           <Text style={styles.emptySubtitle}>{emptySubtitle}</Text>
           <Pressable
@@ -161,7 +163,7 @@ export default function PersonalCollectionListScreen() {
           onPress={() => setActiveTab("mine")}
         >
           <Text style={[styles.tabText, activeTab === "mine" && styles.tabTextActive]}>
-            비공개 ({privateCollections.length})
+            내 모음 ({privateCollections.length})
           </Text>
         </Pressable>
         <Pressable
@@ -169,14 +171,14 @@ export default function PersonalCollectionListScreen() {
           onPress={() => setActiveTab("public")}
         >
           <Text style={[styles.tabText, activeTab === "public" && styles.tabTextActive]}>
-            공개 ({publicCollections.length})
+            공개 모음 ({publicCollections.length})
           </Text>
         </Pressable>
       </View>
 
       {activeTab === "mine"
-        ? renderCollectionList(privateCollections, "lock", "비공개 모음이 없어요", "새 모음을 만들어 편지를 정리해보세요")
-        : renderCollectionList(publicCollections, "globe", "공개 모음이 없어요", "다른 사람과 공유할 모음을 만들어보세요")}
+        ? renderCollectionList(privateCollections, "folder", "내 모음이 없어요", "새 모음을 만들어 편지를 정리해보세요")
+        : renderCollectionList(publicCollections, "globe", "공개 모음이 없어요", "다른 사람과 공유할 공개 모음을 만들어보세요")}
 
       <BottomSheet
         visible={createSheetVisible}
