@@ -236,6 +236,9 @@ export default function InboxScreen() {
           }
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          snapToInterval={Sizing.groupH}
+          snapToAlignment="start"
+          decelerationRate="fast"
         />
       )}
     </View>

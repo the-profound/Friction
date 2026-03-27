@@ -9,23 +9,33 @@ import {
   BackHandler,
   Alert,
   ScrollView,
+  AppState,
+  type AppStateStatus,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { useRouter, useLocalSearchParams, useNavigation } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ProgressIndicator from "@/components/ProgressIndicator/ProgressIndicator";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import { useReadingSession } from "@/lib/useReadingSession";
-import { useGetArticle, useCreateStoredSentence } from "@workspace/api-client-react";
+import { useGetArticle, useCreateStoredSentence, useDeleteInboxItem } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
 import type { ReadingMode } from "@/lib/policies";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 
+function splitIntoParagraphs(text: string): string[] {
+  return text
+    .split(/\n\s*\n|\n/)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
+}
+
 export default function ReadScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const navigation = useNavigation();
   const { userId } = useUser();
   const params = useLocalSearchParams<{
     articleId: string;
@@ -64,6 +74,7 @@ export default function ReadScreen() {
   const [sentencePopupVisible, setSentencePopupVisible] = useState(false);
   const [selectedText, setSelectedText] = useState("");
   const createSentence = useCreateStoredSentence();
+  const deleteInbox = useDeleteInboxItem();
   const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
@@ -90,6 +101,33 @@ export default function ReadScreen() {
     return () => sub.remove();
   }, [mode, reading.canExit]);
 
+  useEffect(() => {
+    if (mode !== "basic") return;
+    const unsubscribe = navigation.addListener("beforeRemove" as any, (e: any) => {
+      if (!reading.canExit) {
+        e.preventDefault();
+        Alert.alert("읽기 중", "완독 전까지 나갈 수 없어요.");
+      }
+    });
+    return unsubscribe;
+  }, [mode, reading.canExit, navigation]);
+
+  useEffect(() => {
+    if (mode !== "basic") return;
+    const handleAppState = (nextState: AppStateStatus) => {
+      if (nextState === "active" && !reading.canExit) {
+        if (flatListRef.current && reading.session.position.currentPage >= 0) {
+          flatListRef.current.scrollToOffset({
+            offset: reading.session.position.currentPage * SCREEN_W,
+            animated: false,
+          });
+        }
+      }
+    };
+    const sub = AppState.addEventListener("change", handleAppState);
+    return () => sub.remove();
+  }, [mode, reading.canExit, reading.session.position.currentPage]);
+
   const handleBack = useCallback(() => {
     if (mode === "basic" && !reading.canExit) {
       Alert.alert("읽기 중", "완독 전까지 나갈 수 없어요.");
@@ -115,7 +153,7 @@ export default function ReadScreen() {
   );
 
   useEffect(() => {
-    if (flatListRef.current && reading.session.position.currentPage >= 0) {
+    if (flatListRef.current && reading.session.position.currentPage >= 0 && !reading.isRestoring) {
       flatListRef.current.scrollToOffset({
         offset: reading.session.position.currentPage * SCREEN_W,
         animated: false,
@@ -135,15 +173,20 @@ export default function ReadScreen() {
 
   const handleCommitAndDelete = useCallback(async () => {
     const result = await reading.commitCompletion();
+    if (result.success && inboxId) {
+      try {
+        await deleteInbox.mutateAsync({ id: inboxId });
+      } catch {}
+    }
     setCompletionSheetVisible(false);
     if (result.success) {
       router.back();
     } else {
       Alert.alert("오류", result.error ?? "완독 처리에 실패했습니다.");
     }
-  }, [reading, router]);
+  }, [reading, router, inboxId, deleteInbox]);
 
-  const handleTextSelection = useCallback((text: string) => {
+  const handleParagraphLongPress = useCallback((text: string) => {
     if (text.trim().length > 0) {
       setSelectedText(text.trim());
       setSentencePopupVisible(true);
@@ -233,8 +276,8 @@ export default function ReadScreen() {
             <PageView
               content={pageContent}
               pageIndex={index}
-              onTextSelect={handleTextSelection}
-              insets={insets}
+              onParagraphLongPress={handleParagraphLongPress}
+              bottomInset={insets.bottom}
             />
           )}
           getItemLayout={(_, index) => ({
@@ -306,23 +349,37 @@ export default function ReadScreen() {
 function PageView({
   content,
   pageIndex,
-  onTextSelect,
-  insets,
+  onParagraphLongPress,
+  bottomInset,
 }: {
   content: string;
   pageIndex: number;
-  onTextSelect: (text: string) => void;
-  insets: { bottom: number };
+  onParagraphLongPress: (text: string) => void;
+  bottomInset: number;
 }) {
+  const paragraphs = useMemo(() => splitIntoParagraphs(content), [content]);
+
   return (
     <ScrollView
       style={[styles.pageContainer, { width: SCREEN_W }]}
-      contentContainerStyle={[styles.pageContent, { paddingBottom: insets.bottom + 40 }]}
+      contentContainerStyle={[styles.pageContent, { paddingBottom: bottomInset + 40 }]}
       showsVerticalScrollIndicator={false}
     >
-      <Text style={styles.pageText} selectable onPress={() => {}}>
-        {content}
-      </Text>
+      {paragraphs.map((para, idx) => (
+        <Pressable
+          key={`${pageIndex}-p-${idx}`}
+          onLongPress={() => onParagraphLongPress(para)}
+          delayLongPress={400}
+          style={({ pressed }) => [
+            styles.paragraphWrapper,
+            pressed && styles.paragraphPressed,
+          ]}
+        >
+          <Text style={styles.pageText} selectable>
+            {para}
+          </Text>
+        </Pressable>
+      ))}
     </ScrollView>
   );
 }
@@ -382,6 +439,13 @@ const styles = StyleSheet.create({
   pageContent: {
     paddingHorizontal: Spacing.screenPx,
     paddingTop: 16,
+  },
+  paragraphWrapper: {
+    marginBottom: 16,
+    borderRadius: 4,
+  },
+  paragraphPressed: {
+    backgroundColor: Colors.zinc100,
   },
   pageText: {
     ...Typography.body,
