@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from "react";
 import { View, Text, StyleSheet, FlatList, Pressable, Switch, Alert, TextInput } from "react-native";
+import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -27,6 +28,8 @@ export default function PersonalCollectionDetailScreen() {
   const [editSheetVisible, setEditSheetVisible] = useState(false);
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
+  const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
+  const [removeArticleTarget, setRemoveArticleTarget] = useState<{ id: string; title: string } | null>(null);
 
   const collectionQuery = useGetMyCollection(id ?? "");
   const collection = collectionQuery.data;
@@ -81,25 +84,16 @@ export default function PersonalCollectionDetailScreen() {
     }
   }, [id, editName, editDescription, updateCollection, collectionQuery]);
 
-  const handleDeleteCollection = useCallback(() => {
-    if (!id || !collection) return;
-    Alert.alert("모음 삭제", `'${collection.name}'을(를) 삭제하시겠어요?`, [
-      { text: "취소", style: "cancel" },
-      {
-        text: "삭제",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await deleteCollection.mutateAsync({ id });
-            router.back();
-          } catch (e: unknown) {
-            const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";
-            Alert.alert("오류", msg);
-          }
-        },
-      },
-    ]);
-  }, [id, collection, deleteCollection, router]);
+  const handleDeleteCollection = useCallback(async () => {
+    if (!id) return;
+    try {
+      await deleteCollection.mutateAsync({ id });
+      router.back();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";
+      Alert.alert("오류", msg);
+    }
+  }, [id, deleteCollection, router]);
 
   const handleAddArticles = useCallback(
     async (articleIds: string[]) => {
@@ -119,25 +113,16 @@ export default function PersonalCollectionDetailScreen() {
   );
 
   const handleRemoveArticle = useCallback(
-    (articleId: string, title: string) => {
+    async (articleId: string) => {
       if (!id) return;
-      Alert.alert("글 제거", `'${title}'을(를) 이 모음에서 제거하시겠어요?`, [
-        { text: "취소", style: "cancel" },
-        {
-          text: "제거",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await removeArticle.mutateAsync({ collectionId: id, articleId });
-              articlesQuery.refetch();
-              collectionQuery.refetch();
-            } catch (e: unknown) {
-              const msg = e instanceof Error ? e.message : "글 제거에 실패했습니다.";
-              Alert.alert("오류", msg);
-            }
-          },
-        },
-      ]);
+      try {
+        await removeArticle.mutateAsync({ collectionId: id, articleId });
+        articlesQuery.refetch();
+        collectionQuery.refetch();
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "글 제거에 실패했습니다.";
+        Alert.alert("오류", msg);
+      }
     },
     [id, removeArticle, articlesQuery, collectionQuery],
   );
@@ -161,7 +146,7 @@ export default function PersonalCollectionDetailScreen() {
         })
       }
       onLongPress={() =>
-        handleRemoveArticle(item.articleId, item.article?.title ?? "제목 없음")
+        setRemoveArticleTarget({ id: item.articleId, title: item.article?.title ?? "제목 없음" })
       }
     >
       <View style={styles.articleInfo}>
@@ -200,7 +185,7 @@ export default function PersonalCollectionDetailScreen() {
           onPress={() =>
             Alert.alert("모음 관리", undefined, [
               { text: "이름/설명 수정", onPress: handleOpenEdit },
-              { text: "삭제", style: "destructive", onPress: handleDeleteCollection },
+              { text: "삭제", style: "destructive", onPress: () => setDeleteConfirmVisible(true) },
               { text: "닫기", style: "cancel" },
             ])
           }
@@ -306,6 +291,36 @@ export default function PersonalCollectionDetailScreen() {
           </Pressable>
         </View>
       </BottomSheet>
+
+      <ConfirmModal
+        visible={deleteConfirmVisible}
+        title="모음 삭제"
+        description={`'${collection?.name ?? ""}'을(를) 삭제하시겠어요?`}
+        confirmLabel="삭제"
+        cancelLabel="취소"
+        destructive
+        onConfirm={() => {
+          setDeleteConfirmVisible(false);
+          handleDeleteCollection();
+        }}
+        onCancel={() => setDeleteConfirmVisible(false)}
+      />
+
+      <ConfirmModal
+        visible={removeArticleTarget !== null}
+        title="글 제거"
+        description={`'${removeArticleTarget?.title ?? ""}'을(를) 이 모음에서 제거하시겠어요?`}
+        confirmLabel="제거"
+        cancelLabel="취소"
+        destructive
+        onConfirm={() => {
+          if (removeArticleTarget) {
+            handleRemoveArticle(removeArticleTarget.id);
+          }
+          setRemoveArticleTarget(null);
+        }}
+        onCancel={() => setRemoveArticleTarget(null)}
+      />
     </View>
   );
 }

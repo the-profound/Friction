@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from "react";
 import { View, Text, StyleSheet, FlatList, Pressable, Alert, Share, TextInput } from "react-native";
+import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -37,6 +38,8 @@ export default function TeamCollectionDetailScreen() {
   const [editDescription, setEditDescription] = useState("");
   const [inviteSheetVisible, setInviteSheetVisible] = useState(false);
   const [inviteUserId, setInviteUserId] = useState("");
+  const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
+  const [removeArticleTarget, setRemoveArticleTarget] = useState<{ id: string; title: string } | null>(null);
 
   const collectionQuery = useGetTeamCollection(id ?? "");
   const collection = collectionQuery.data;
@@ -84,25 +87,16 @@ export default function TeamCollectionDetailScreen() {
     }
   }, [id, editName, editDescription, updateCollection, collectionQuery]);
 
-  const handleDeleteCollection = useCallback(() => {
-    if (!id || !collection) return;
-    Alert.alert("단체 모음 삭제", `'${collection.name}'을(를) 삭제하시겠어요?`, [
-      { text: "취소", style: "cancel" },
-      {
-        text: "삭제",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await deleteCollection.mutateAsync({ id });
-            router.back();
-          } catch (e: unknown) {
-            const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";
-            Alert.alert("오류", msg);
-          }
-        },
-      },
-    ]);
-  }, [id, collection, deleteCollection, router]);
+  const handleDeleteCollection = useCallback(async () => {
+    if (!id) return;
+    try {
+      await deleteCollection.mutateAsync({ id });
+      router.back();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";
+      Alert.alert("오류", msg);
+    }
+  }, [id, deleteCollection, router]);
 
   const handleShareInvite = useCallback(async () => {
     if (!id || !collection) return;
@@ -148,24 +142,15 @@ export default function TeamCollectionDetailScreen() {
   );
 
   const handleRemoveArticle = useCallback(
-    (articleId: string, title: string) => {
+    async (articleId: string) => {
       if (!id) return;
-      Alert.alert("글 제거", `'${title}'을(를) 이 모음에서 제거하시겠어요?`, [
-        { text: "취소", style: "cancel" },
-        {
-          text: "제거",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await removeArticle.mutateAsync({ teamId: id, articleId });
-              articlesQuery.refetch();
-            } catch (e: unknown) {
-              const msg = e instanceof Error ? e.message : "글 제거에 실패했습니다.";
-              Alert.alert("오류", msg);
-            }
-          },
-        },
-      ]);
+      try {
+        await removeArticle.mutateAsync({ teamId: id, articleId });
+        articlesQuery.refetch();
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "글 제거에 실패했습니다.";
+        Alert.alert("오류", msg);
+      }
     },
     [id, removeArticle, articlesQuery],
   );
@@ -195,7 +180,7 @@ export default function TeamCollectionDetailScreen() {
       <Pressable
         style={styles.articleItem}
         onPress={() => handleArticlePress(item)}
-        onLongPress={() => canRemove ? handleRemoveArticle(item.articleId, item.article?.title ?? "제목 없음") : undefined}
+        onLongPress={() => canRemove ? setRemoveArticleTarget({ id: item.articleId, title: item.article?.title ?? "제목 없음" }) : undefined}
       >
         <View style={styles.articleInfo}>
           <Text style={styles.articleTitle} numberOfLines={1}>
@@ -259,7 +244,7 @@ export default function TeamCollectionDetailScreen() {
             if (isOwner) {
               options.push({ text: "이름/설명 수정", onPress: handleOpenEdit });
               options.push({ text: "초대 링크 공유", onPress: handleShareInvite });
-              options.push({ text: "삭제", style: "destructive", onPress: handleDeleteCollection });
+              options.push({ text: "삭제", style: "destructive", onPress: () => setDeleteConfirmVisible(true) });
             } else {
               options.push({ text: "초대 링크 공유", onPress: handleShareInvite });
             }
@@ -442,6 +427,36 @@ export default function TeamCollectionDetailScreen() {
           </Pressable>
         </View>
       </BottomSheet>
+
+      <ConfirmModal
+        visible={deleteConfirmVisible}
+        title="단체 모음 삭제"
+        description={`'${collection?.name ?? ""}'을(를) 삭제하시겠어요?`}
+        confirmLabel="삭제"
+        cancelLabel="취소"
+        destructive
+        onConfirm={() => {
+          setDeleteConfirmVisible(false);
+          handleDeleteCollection();
+        }}
+        onCancel={() => setDeleteConfirmVisible(false)}
+      />
+
+      <ConfirmModal
+        visible={removeArticleTarget !== null}
+        title="글 제거"
+        description={`'${removeArticleTarget?.title ?? ""}'을(를) 이 모음에서 제거하시겠어요?`}
+        confirmLabel="제거"
+        cancelLabel="취소"
+        destructive
+        onConfirm={() => {
+          if (removeArticleTarget) {
+            handleRemoveArticle(removeArticleTarget.id);
+          }
+          setRemoveArticleTarget(null);
+        }}
+        onCancel={() => setRemoveArticleTarget(null)}
+      />
     </View>
   );
 }

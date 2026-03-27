@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import { View, Text, StyleSheet, FlatList, Pressable, Alert, RefreshControl } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -6,6 +6,7 @@ import { Feather } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
+import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import {
   useListStoredSentences,
   useDeleteStoredSentence,
@@ -20,6 +21,13 @@ export default function SentenceCollectionScreen() {
   const router = useRouter();
   const { userId } = useUser();
   const [filter, setFilter] = useState<FilterMode>("all");
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+
+  const allSentencesQuery = useListStoredSentences({ userId });
+  const allSentences = (allSentencesQuery.data ?? []) as StoredSentence[];
+
+  const totalCount = allSentences.length;
+  const favCount = useMemo(() => allSentences.filter((s) => s.isFavorite).length, [allSentences]);
 
   const sentencesQuery = useListStoredSentences({
     userId,
@@ -37,12 +45,13 @@ export default function SentenceCollectionScreen() {
           data: { isFavorite: !currentFav },
         });
         sentencesQuery.refetch();
+        allSentencesQuery.refetch();
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "즐겨찾기 변경에 실패했습니다.";
         Alert.alert("오류", msg);
       }
     },
-    [toggleFavorite, sentencesQuery],
+    [toggleFavorite, sentencesQuery, allSentencesQuery],
   );
 
   const handleCopy = useCallback(async (text: string) => {
@@ -55,25 +64,17 @@ export default function SentenceCollectionScreen() {
   }, []);
 
   const handleDelete = useCallback(
-    (id: string) => {
-      Alert.alert("문장 삭제", "이 문장을 삭제하시겠어요?", [
-        { text: "취소", style: "cancel" },
-        {
-          text: "삭제",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteSentence.mutateAsync({ id });
-              sentencesQuery.refetch();
-            } catch (e: unknown) {
-              const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";
-              Alert.alert("오류", msg);
-            }
-          },
-        },
-      ]);
+    async (id: string) => {
+      try {
+        await deleteSentence.mutateAsync({ id });
+        sentencesQuery.refetch();
+        allSentencesQuery.refetch();
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";
+        Alert.alert("오류", msg);
+      }
     },
-    [deleteSentence, sentencesQuery],
+    [deleteSentence, sentencesQuery, allSentencesQuery],
   );
 
   const handleSentencePress = useCallback(
@@ -110,7 +111,7 @@ export default function SentenceCollectionScreen() {
           {
             text: "삭제",
             style: "destructive" as const,
-            onPress: () => handleDelete(item.id),
+            onPress: () => setDeleteTarget(item.id),
           },
           { text: "닫기", style: "cancel" as const },
         ],
@@ -201,7 +202,7 @@ export default function SentenceCollectionScreen() {
           onPress={() => setFilter("all")}
         >
           <Text style={[styles.filterChipText, filter === "all" && styles.filterChipTextActive]}>
-            전체 ({sentences.length})
+            전체 ({totalCount})
           </Text>
         </Pressable>
         <Pressable
@@ -216,7 +217,7 @@ export default function SentenceCollectionScreen() {
           <Text
             style={[styles.filterChipText, filter === "favorites" && styles.filterChipTextActive]}
           >
-            즐겨찾기
+            즐겨찾기 ({favCount})
           </Text>
         </Pressable>
       </View>
@@ -261,6 +262,22 @@ export default function SentenceCollectionScreen() {
           showsVerticalScrollIndicator={false}
         />
       )}
+
+      <ConfirmModal
+        visible={deleteTarget !== null}
+        title="문장 삭제"
+        description="이 문장을 삭제하시겠어요?"
+        confirmLabel="삭제"
+        cancelLabel="취소"
+        destructive
+        onConfirm={() => {
+          if (deleteTarget) {
+            handleDelete(deleteTarget);
+          }
+          setDeleteTarget(null);
+        }}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </View>
   );
 }
