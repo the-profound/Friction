@@ -136,13 +136,18 @@ Reading/writing platform mobile app. All 37 Notion Queue DB items processed (순
 - `components/WebViewMarkdownEditor/WebViewMarkdownEditor.tsx` — TipTap HTML editor bridge
 - `contexts/ToastContext.tsx` — toast notification system
 
-**Core logic:**
+**Core logic (pure business rules):**
 - `lib/policies.ts` — 7 product policies (delivery hours, page limits, etc.)
-- `lib/articleStatusCycle.ts` — DRAFT→DIVIDING→CLOSING→LETTER transitions + guards
-- `lib/useAutoSave.ts` — debounce 1200ms auto-save hook
-- `lib/pageDivision.ts` — `---` based page splitting/merging/validation
-- `lib/readingPersistence.ts` — basic/re_read reading state machine
-- `lib/deliverySync.ts` — 06:00/18:00 KST delivery slots, send guards
+- `lib/articleStatusCycle.ts` — DRAFT→DIVIDING→CLOSING→LETTER state machine with forward/back transitions, guards (title/content/empty page/red warning checks), status labels
+- `lib/pageDivision.ts` — `---` based page split/merge, heading auto-split, safety zone (90%) + max char validation, empty page guard, red/yellow warning levels
+- `lib/readingPersistence.ts` — basic/re_read session state machine (IDLE→READING→PAUSED→COMPLETED_READY→COMMITTED), exit blocking, page navigation, progress calc
+- `lib/deliverySync.ts` — 06:00/18:00 KST slot computation, send guards (LETTER-only, no self-send, neighbor check), delivery time formatting
+
+**API-integrated hooks:**
+- `lib/useAutoSave.ts` — 1200ms debounce auto-save with idle/saving/saved/error states, exponential backoff retry (max 3), flush/retry controls
+- `lib/useArticleEditor.ts` — combines useAutoSave + article status transitions via API, provides transitionForward/stepBack with guard validation
+- `lib/useReadingSession.ts` — reading session with API-persisted position (debounced 2s), page navigation, completion commit via UserArticleRead API
+- `lib/useSendArticle.ts` — send flow with guards + API mutation, returns expected delivery time
 
 **Tab screens (app/(tabs)/):**
 - `_layout.tsx` — 4-tab layout with NavigationProvider

@@ -10,7 +10,7 @@ import {
   removeDividerAtPageIndex,
   validatePages,
 } from "@/lib/pageDivision";
-import { canTransitionForward, canTransitionBack } from "@/lib/articleStatusCycle";
+import { canTransitionForward, canStepBack } from "@/lib/articleStatusCycle";
 import type { ArticleStatus } from "@/lib/policies";
 
 const MAX_CHAR_PER_PAGE = 800;
@@ -56,7 +56,7 @@ export default function DividingScreen() {
   }, [content, pages, hasRedWarnings, id, router]);
 
   const handleBack = useCallback(() => {
-    const result = canTransitionBack("DIVIDING");
+    const result = canStepBack("DIVIDING");
     if (!result.allowed) {
       Alert.alert("돌아갈 수 없음", result.reason);
       return;

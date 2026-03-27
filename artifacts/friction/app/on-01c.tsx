@@ -5,7 +5,7 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { splitContentToPages } from "@/lib/pageDivision";
-import { canTransitionForward, canTransitionBack } from "@/lib/articleStatusCycle";
+import { canTransitionForward, canStepBack } from "@/lib/articleStatusCycle";
 import type { ArticleStatus } from "@/lib/policies";
 
 export default function ClosingScreen() {
@@ -49,7 +49,7 @@ export default function ClosingScreen() {
   }, [content, title, pages, router]);
 
   const handleBack = useCallback(() => {
-    const result = canTransitionBack("CLOSING");
+    const result = canStepBack("CLOSING");
     if (!result.allowed) {
       Alert.alert("돌아갈 수 없음", result.reason);
       return;

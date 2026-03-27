@@ -17,7 +17,7 @@ export default function DraftScreen() {
   const [content, setContent] = useState("");
 
   const handleSave = useCallback(
-    async (data: { title: string; content: string; requestId: number }) => {
+    async (data: { title: string; content: string }) => {
       // TODO: persist to local DB / API
     },
     [],
