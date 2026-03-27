@@ -1512,7 +1512,7 @@ components:
       properties:
         targetStatus:
           type: string
-          enum: [DIVIDING, CLOSING, LETTER]
+          enum: [DRAFT, DIVIDING, CLOSING, LETTER]
       required: [targetStatus]
 
     # ─── Inbox ──────────────────────────────────────

@@ -181,7 +181,7 @@ export const TransitionArticleStatusParams = zod.object({
 });
 
 export const TransitionArticleStatusBody = zod.object({
-  targetStatus: zod.enum(["DIVIDING", "CLOSING", "LETTER"]),
+  targetStatus: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
 });
 
 export const TransitionArticleStatusResponse = zod.object({

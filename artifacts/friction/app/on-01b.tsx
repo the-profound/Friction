@@ -24,7 +24,7 @@ export default function DividingScreen() {
 
   const pages = useMemo(() => splitContentToPages(content), [content]);
   const warnings = useMemo(() => validatePages(pages, MAX_CHAR_PER_PAGE), [pages]);
-  const hasRedWarnings = warnings.length > 0;
+  const hasRedWarnings = warnings.some((w) => w.level === "red");
 
   const handleAddDivider = useCallback(
     (paragraphIndex: number) => {

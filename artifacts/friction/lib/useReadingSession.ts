@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { useUpsertReadingRecord, useCreateUserArticleRead } from "@workspace/api-client-react";
+import { useUpsertReadingRecord, useCreateUserArticleRead, useMarkInboxRead } from "@workspace/api-client-react";
 import type { ReadingMode } from "./policies";
 import {
   createInitialSession,
@@ -46,6 +46,7 @@ export function useReadingSession({
   totalPages,
   userId,
   savedPosition,
+  inboxId,
 }: UseReadingSessionOptions): ReadingSessionActions {
   const [session, setSession] = useState<ReadingSession>(() =>
     createInitialSession(articleId, mode, totalPages, savedPosition),
@@ -53,7 +54,9 @@ export function useReadingSession({
 
   const upsertReading = useUpsertReadingRecord();
   const createArticleRead = useCreateUserArticleRead();
+  const markInboxReadMutation = useMarkInboxRead();
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inboxIdRef = useRef(inboxId);
 
   const savePosition = useCallback(
     (currentPage: number, scrollPosition: number) => {
@@ -128,13 +131,20 @@ export function useReadingSession({
         data: { userId, articleId },
       });
 
+      if (inboxIdRef.current) {
+        try {
+          await markInboxReadMutation.mutateAsync({ id: inboxIdRef.current });
+        } catch {
+        }
+      }
+
       setSession((s) => ({ ...s, state: "COMPLETED_COMMITTED" as ReadingSessionState }));
       return { success: true };
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "완독 기록에 실패했습니다.";
       return { success: false, error: msg };
     }
-  }, [session.state, userId, articleId, createArticleRead]);
+  }, [session.state, userId, articleId, createArticleRead, markInboxReadMutation]);
 
   const progress = getProgress(session.position.currentPage, session.position.totalPages);
   const canExit = !shouldBlockExit(mode, session.state);

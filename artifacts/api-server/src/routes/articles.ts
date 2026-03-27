@@ -3,10 +3,15 @@ import { and, eq } from "drizzle-orm";
 import { db, articlesTable, type ArticleStatus } from "@workspace/db";
 import { CreateArticleBody, UpdateArticleBody, TransitionArticleStatusBody } from "@workspace/api-zod";
 
-const VALID_TRANSITIONS: Record<string, string> = {
+const FORWARD_TRANSITIONS: Record<string, string> = {
   DRAFT: "DIVIDING",
   DIVIDING: "CLOSING",
   CLOSING: "LETTER",
+};
+
+const BACK_TRANSITIONS: Record<string, string> = {
+  DIVIDING: "DRAFT",
+  CLOSING: "DIVIDING",
 };
 
 const router: IRouter = Router();
@@ -103,29 +108,36 @@ router.post("/articles/:id/transition", async (req, res) => {
     return;
   }
 
-  const expectedTarget = VALID_TRANSITIONS[article.status];
-  if (!expectedTarget || expectedTarget !== targetStatus) {
+  const isForward = FORWARD_TRANSITIONS[article.status] === targetStatus;
+  const isBack = BACK_TRANSITIONS[article.status] === targetStatus;
+
+  if (!isForward && !isBack) {
     res.status(400).json({
-      error: `Invalid transition: ${article.status} → ${targetStatus}. Only forward transitions are allowed.`,
+      error: `Invalid transition: ${article.status} → ${targetStatus}. Allowed: forward or 1-step back.`,
     });
     return;
   }
 
-  if (targetStatus === "DIVIDING" && (!article.content || article.content.trim() === "")) {
+  if (isForward && targetStatus === "DIVIDING" && (!article.content || article.content.trim() === "")) {
     res.status(400).json({ error: "Cannot transition to DIVIDING: content is empty" });
     return;
   }
 
   const updates: Record<string, unknown> = { status: targetStatus };
-  if (targetStatus === "CLOSING") {
+  if (isForward && targetStatus === "CLOSING") {
     if (!article.pages || !Array.isArray(article.pages) || (article.pages as string[]).length === 0) {
       const content = article.content || "";
       const pageTexts = content.split("---").map((p: string) => p.trim()).filter((p: string) => p.length > 0);
       updates.pages = pageTexts.length > 0 ? pageTexts : [content];
     }
   }
-  if (targetStatus === "LETTER") {
+  if (isForward && targetStatus === "LETTER") {
     updates.letterAt = new Date();
+  }
+  if (isBack) {
+    if (targetStatus === "DRAFT") {
+      updates.pages = null;
+    }
   }
 
   const [updated] = await db.update(articlesTable).set(updates).where(eq(articlesTable.id, req.params.id)).returning();
