@@ -3,13 +3,32 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Friction MVP 1.0.0 API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: users
+    description: User operations
+  - name: articles
+    description: Article (memo/letter) operations
+  - name: inbox
+    description: Inbox operations
+  - name: my-collections
+    description: Personal collection operations
+  - name: stored-sentences
+    description: Stored sentence operations
+  - name: reading
+    description: Reading record and progress operations
+  - name: team-collections
+    description: Team collection operations
+  - name: neighbors
+    description: Neighbor relationship operations
+  - name: send-records
+    description: Send record operations
+
 paths:
   /healthz:
     get:
@@ -24,8 +43,1169 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ─── Users ────────────────────────────────────────
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: List users
+      responses:
+        "200":
+          description: User list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+    post:
+      operationId: createUser
+      tags: [users]
+      summary: Create a user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserBody"
+      responses:
+        "201":
+          description: Created user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /users/{id}:
+    get:
+      operationId: getUser
+      tags: [users]
+      summary: Get user by ID
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: User
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateUser
+      tags: [users]
+      summary: Update user
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserBody"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ─── Articles ─────────────────────────────────────
+  /articles:
+    get:
+      operationId: listArticles
+      tags: [articles]
+      summary: List articles
+      parameters:
+        - name: authorId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [DRAFT, DIVIDING, CLOSING, LETTER]
+      responses:
+        "200":
+          description: Article list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Article"
+    post:
+      operationId: createArticle
+      tags: [articles]
+      summary: Create a new article (DRAFT)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateArticleBody"
+      responses:
+        "201":
+          description: Created article
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Article"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /articles/{id}:
+    get:
+      operationId: getArticle
+      tags: [articles]
+      summary: Get article by ID
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Article
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Article"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateArticle
+      tags: [articles]
+      summary: Update article content/title
+      description: Only allowed when status is not LETTER
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateArticleBody"
+      responses:
+        "200":
+          description: Updated article
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Article"
+        "400":
+          description: Validation error or LETTER immutability violation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteArticle
+      tags: [articles]
+      summary: Delete article
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /articles/{id}/transition:
+    post:
+      operationId: transitionArticleStatus
+      tags: [articles]
+      summary: Transition article status
+      description: "Forward only: DRAFT→DIVIDING→CLOSING→LETTER. LETTER transition sets letter_at and makes article immutable."
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransitionArticleBody"
+      responses:
+        "200":
+          description: Transitioned article
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Article"
+        "400":
+          description: Invalid transition
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ─── Inbox ────────────────────────────────────────
+  /inbox:
+    get:
+      operationId: listInbox
+      tags: [inbox]
+      summary: List inbox items for a user
+      description: Only returns items where visible_at <= now
+      parameters:
+        - name: recipientId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Inbox items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InboxItem"
+
+  /inbox/{id}:
+    get:
+      operationId: getInboxItem
+      tags: [inbox]
+      summary: Get inbox item
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Inbox item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxItem"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteInboxItem
+      tags: [inbox]
+      summary: Delete inbox item
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /inbox/{id}/open:
+    post:
+      operationId: markInboxOpened
+      tags: [inbox]
+      summary: Mark inbox item as opened (sets opened_at)
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Updated inbox item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxItem"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /inbox/{id}/read:
+    post:
+      operationId: markInboxRead
+      tags: [inbox]
+      summary: Mark inbox item as read (完독)
+      description: Sets is_read=true and creates UserArticleRead record
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Updated inbox item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxItem"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ─── MyCollections ────────────────────────────────
+  /my-collections:
+    get:
+      operationId: listMyCollections
+      tags: [my-collections]
+      summary: List personal collections for a user
+      parameters:
+        - name: ownerId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Collections
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MyCollection"
+    post:
+      operationId: createMyCollection
+      tags: [my-collections]
+      summary: Create a personal collection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMyCollectionBody"
+      responses:
+        "201":
+          description: Created collection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MyCollection"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /my-collections/{id}:
+    get:
+      operationId: getMyCollection
+      tags: [my-collections]
+      summary: Get personal collection
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Collection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MyCollection"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateMyCollection
+      tags: [my-collections]
+      summary: Update personal collection
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMyCollectionBody"
+      responses:
+        "200":
+          description: Updated collection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MyCollection"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteMyCollection
+      tags: [my-collections]
+      summary: Delete personal collection
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /my-collections/{id}/articles:
+    get:
+      operationId: listMyCollectionArticles
+      tags: [my-collections]
+      summary: List articles in a personal collection
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Articles in collection
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MyCollectionArticleWithDetails"
+    post:
+      operationId: addArticleToMyCollection
+      tags: [my-collections]
+      summary: Add article to personal collection
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddArticleBody"
+      responses:
+        "201":
+          description: Added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MyCollectionArticle"
+        "400":
+          description: Duplicate or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /my-collections/{collectionId}/articles/{articleId}:
+    delete:
+      operationId: removeArticleFromMyCollection
+      tags: [my-collections]
+      summary: Remove article from personal collection
+      parameters:
+        - name: collectionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: articleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Removed
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ─── StoredSentences ──────────────────────────────
+  /stored-sentences:
+    get:
+      operationId: listStoredSentences
+      tags: [stored-sentences]
+      summary: List stored sentences for a user
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: favorite
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Sentences
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StoredSentence"
+    post:
+      operationId: createStoredSentence
+      tags: [stored-sentences]
+      summary: Store a sentence from an article
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStoredSentenceBody"
+      responses:
+        "201":
+          description: Created sentence
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoredSentence"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /stored-sentences/{id}:
+    delete:
+      operationId: deleteStoredSentence
+      tags: [stored-sentences]
+      summary: Delete a stored sentence
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /stored-sentences/{id}/favorite:
+    patch:
+      operationId: toggleStoredSentenceFavorite
+      tags: [stored-sentences]
+      summary: Toggle favorite status
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                isFavorite:
+                  type: boolean
+              required:
+                - isFavorite
+      responses:
+        "200":
+          description: Updated sentence
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoredSentence"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ─── Reading ──────────────────────────────────────
+  /reading-records:
+    get:
+      operationId: getReadingRecord
+      tags: [reading]
+      summary: Get reading progress for a user+article
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: articleId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Reading record (or null if none)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadingRecordNullable"
+    put:
+      operationId: upsertReadingRecord
+      tags: [reading]
+      summary: Create or update reading progress
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertReadingRecordBody"
+      responses:
+        "200":
+          description: Upserted reading record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadingRecord"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /user-article-reads:
+    post:
+      operationId: createUserArticleRead
+      tags: [reading]
+      summary: Record article completion (完독)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserArticleReadBody"
+      responses:
+        "201":
+          description: Created read record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserArticleRead"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /user-article-reads/check:
+    get:
+      operationId: checkArticleRead
+      tags: [reading]
+      summary: Check if user has completed reading an article
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: articleId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Read status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  isRead:
+                    type: boolean
+                  completedAt:
+                    type: string
+                    format: date-time
+                    nullable: true
+                required:
+                  - isRead
+
+  # ─── TeamCollections ──────────────────────────────
+  /team-collections:
+    get:
+      operationId: listTeamCollections
+      tags: [team-collections]
+      summary: List team collections for a user
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Team collections
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TeamCollectionWithRole"
+    post:
+      operationId: createTeamCollection
+      tags: [team-collections]
+      summary: Create a team collection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTeamCollectionBody"
+      responses:
+        "201":
+          description: Created team collection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamCollection"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /team-collections/{id}:
+    get:
+      operationId: getTeamCollection
+      tags: [team-collections]
+      summary: Get team collection
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Team collection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamCollection"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateTeamCollection
+      tags: [team-collections]
+      summary: Update team collection
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTeamCollectionBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamCollection"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteTeamCollection
+      tags: [team-collections]
+      summary: Delete team collection (OWNER only)
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /team-collections/{id}/members:
+    get:
+      operationId: listTeamMembers
+      tags: [team-collections]
+      summary: List team collection members
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TeamMemberWithUser"
+    post:
+      operationId: addTeamMember
+      tags: [team-collections]
+      summary: Add member to team collection
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddTeamMemberBody"
+      responses:
+        "201":
+          description: Added member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamCollectionMembership"
+        "400":
+          description: Already a member or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /team-collections/{teamId}/members/{userId}:
+    delete:
+      operationId: removeTeamMember
+      tags: [team-collections]
+      summary: Remove member from team collection
+      parameters:
+        - name: teamId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Removed
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /team-collections/{id}/articles:
+    get:
+      operationId: listTeamArticles
+      tags: [team-collections]
+      summary: List articles in team collection
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Articles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TeamCollectionArticleWithDetails"
+    post:
+      operationId: addTeamArticle
+      tags: [team-collections]
+      summary: Add article to team collection (own articles only)
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddTeamArticleBody"
+      responses:
+        "201":
+          description: Added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamCollectionArticle"
+        "400":
+          description: Not own article or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /team-collections/{teamId}/articles/{articleId}:
+    delete:
+      operationId: removeTeamArticle
+      tags: [team-collections]
+      summary: Remove article from team collection
+      parameters:
+        - name: teamId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: articleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Removed
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ─── Neighbors ────────────────────────────────────
+  /neighbors:
+    get:
+      operationId: listNeighbors
+      tags: [neighbors]
+      summary: List neighbors for a user
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Neighbors
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/NeighborWithUser"
+
+  /neighbors/{id}:
+    delete:
+      operationId: removeNeighbor
+      tags: [neighbors]
+      summary: Remove neighbor relationship
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "204":
+          description: Removed
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /neighbor-requests:
+    get:
+      operationId: listNeighborRequests
+      tags: [neighbors]
+      summary: List pending neighbor requests for a user
+      parameters:
+        - name: recipientId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Neighbor requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/NeighborRequestWithUser"
+    post:
+      operationId: createNeighborRequest
+      tags: [neighbors]
+      summary: Send a neighbor request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateNeighborRequestBody"
+      responses:
+        "201":
+          description: Created request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NeighborRequest"
+        "400":
+          description: Already neighbors or duplicate request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /neighbor-requests/{id}/accept:
+    post:
+      operationId: acceptNeighborRequest
+      tags: [neighbors]
+      summary: Accept neighbor request (creates Neighbor, deletes request)
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Created neighbor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Neighbor"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /neighbor-requests/{id}/reject:
+    post:
+      operationId: rejectNeighborRequest
+      tags: [neighbors]
+      summary: Reject neighbor request (deletes request)
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "204":
+          description: Rejected
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ─── SendRecords ──────────────────────────────────
+  /send-records:
+    get:
+      operationId: listSendRecords
+      tags: [send-records]
+      summary: List send records for a user
+      parameters:
+        - name: senderId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Send records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SendRecordWithDetails"
+    post:
+      operationId: sendArticle
+      tags: [send-records]
+      summary: Send an article to a recipient
+      description: "Creates SendRecord + Inbox entry. Auto-assigns 06:00 or 18:00 KST delivery slot. Article must be LETTER status."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendArticleBody"
+      responses:
+        "201":
+          description: Send record created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SendRecordWithDetails"
+        "400":
+          description: Article not LETTER or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
+  parameters:
+    IdPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
   schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
     HealthStatus:
       type: object
       properties:
@@ -34,3 +1214,732 @@ components:
       required:
         - status
 
+    # ─── User ───────────────────────────────────────
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        nickname:
+          type: string
+        avatarUrl:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, email, nickname, createdAt, updatedAt]
+
+    CreateUserBody:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        nickname:
+          type: string
+          minLength: 1
+          maxLength: 20
+        avatarUrl:
+          type: string
+          nullable: true
+      required: [email, nickname]
+
+    UpdateUserBody:
+      type: object
+      properties:
+        nickname:
+          type: string
+          minLength: 1
+          maxLength: 20
+        avatarUrl:
+          type: string
+          nullable: true
+
+    # ─── Article ────────────────────────────────────
+    Article:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        authorId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        content:
+          type: string
+        status:
+          type: string
+          enum: [DRAFT, DIVIDING, CLOSING, LETTER]
+        pages:
+          type: array
+          items:
+            type: string
+          nullable: true
+        style:
+          type: object
+          nullable: true
+        letterAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, authorId, title, content, status, createdAt, updatedAt]
+
+    CreateArticleBody:
+      type: object
+      properties:
+        authorId:
+          type: string
+          format: uuid
+        title:
+          type: string
+          minLength: 1
+        content:
+          type: string
+      required: [authorId, title]
+
+    UpdateArticleBody:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+        content:
+          type: string
+        pages:
+          type: array
+          items:
+            type: string
+          nullable: true
+        style:
+          type: object
+          nullable: true
+
+    TransitionArticleBody:
+      type: object
+      properties:
+        targetStatus:
+          type: string
+          enum: [DIVIDING, CLOSING, LETTER]
+      required: [targetStatus]
+
+    # ─── Inbox ──────────────────────────────────────
+    InboxItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        recipientId:
+          type: string
+          format: uuid
+        articleId:
+          type: string
+          format: uuid
+        senderId:
+          type: string
+          format: uuid
+        visibleAt:
+          type: string
+          format: date-time
+        openedAt:
+          type: string
+          format: date-time
+          nullable: true
+        isRead:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        article:
+          $ref: "#/components/schemas/Article"
+        sender:
+          $ref: "#/components/schemas/User"
+      required: [id, recipientId, articleId, senderId, visibleAt, isRead, createdAt]
+
+    # ─── MyCollection ───────────────────────────────
+    MyCollection:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        ownerId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        isPublic:
+          type: boolean
+        coverImageUrl:
+          type: string
+          nullable: true
+        articleCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, ownerId, name, isPublic, createdAt, updatedAt]
+
+    CreateMyCollectionBody:
+      type: object
+      properties:
+        ownerId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 30
+        description:
+          type: string
+          nullable: true
+        isPublic:
+          type: boolean
+        coverImageUrl:
+          type: string
+          nullable: true
+      required: [ownerId, name]
+
+    UpdateMyCollectionBody:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 30
+        description:
+          type: string
+          nullable: true
+        isPublic:
+          type: boolean
+        coverImageUrl:
+          type: string
+          nullable: true
+
+    MyCollectionArticle:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        myCollectionId:
+          type: string
+          format: uuid
+        articleId:
+          type: string
+          format: uuid
+        addedAt:
+          type: string
+          format: date-time
+      required: [id, myCollectionId, articleId, addedAt]
+
+    MyCollectionArticleWithDetails:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        myCollectionId:
+          type: string
+          format: uuid
+        articleId:
+          type: string
+          format: uuid
+        addedAt:
+          type: string
+          format: date-time
+        article:
+          $ref: "#/components/schemas/Article"
+      required: [id, myCollectionId, articleId, addedAt]
+
+    AddArticleBody:
+      type: object
+      properties:
+        articleId:
+          type: string
+          format: uuid
+      required: [articleId]
+
+    # ─── StoredSentence ─────────────────────────────
+    StoredSentence:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        articleId:
+          type: string
+          format: uuid
+        text:
+          type: string
+        position:
+          type: object
+          nullable: true
+        isFavorite:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, userId, articleId, text, isFavorite, createdAt]
+
+    CreateStoredSentenceBody:
+      type: object
+      properties:
+        userId:
+          type: string
+          format: uuid
+        articleId:
+          type: string
+          format: uuid
+        text:
+          type: string
+          minLength: 1
+        position:
+          type: object
+          nullable: true
+      required: [userId, articleId, text]
+
+    # ─── Reading ────────────────────────────────────
+    ReadingRecord:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        articleId:
+          type: string
+          format: uuid
+        currentPage:
+          type: integer
+        scrollPosition:
+          type: number
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, userId, articleId, currentPage, scrollPosition, updatedAt]
+
+    ReadingRecordNullable:
+      type: object
+      properties:
+        record:
+          nullable: true
+          oneOf:
+            - $ref: "#/components/schemas/ReadingRecord"
+            - type: "null"
+      required: [record]
+
+    UpsertReadingRecordBody:
+      type: object
+      properties:
+        userId:
+          type: string
+          format: uuid
+        articleId:
+          type: string
+          format: uuid
+        currentPage:
+          type: integer
+          minimum: 0
+        scrollPosition:
+          type: number
+          minimum: 0
+          maximum: 1
+      required: [userId, articleId, currentPage, scrollPosition]
+
+    UserArticleRead:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        articleId:
+          type: string
+          format: uuid
+        completedAt:
+          type: string
+          format: date-time
+      required: [id, userId, articleId, completedAt]
+
+    CreateUserArticleReadBody:
+      type: object
+      properties:
+        userId:
+          type: string
+          format: uuid
+        articleId:
+          type: string
+          format: uuid
+      required: [userId, articleId]
+
+    # ─── TeamCollection ─────────────────────────────
+    TeamCollection:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        creatorId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, name, creatorId, createdAt, updatedAt]
+
+    TeamCollectionWithRole:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        creatorId:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [OWNER, MEMBER]
+        memberCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, name, creatorId, role, createdAt, updatedAt]
+
+    CreateTeamCollectionBody:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 30
+        description:
+          type: string
+          nullable: true
+        creatorId:
+          type: string
+          format: uuid
+      required: [name, creatorId]
+
+    UpdateTeamCollectionBody:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 30
+        description:
+          type: string
+          nullable: true
+
+    TeamCollectionMembership:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        teamCollectionId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [OWNER, MEMBER]
+        joinedAt:
+          type: string
+          format: date-time
+      required: [id, teamCollectionId, userId, role, joinedAt]
+
+    TeamMemberWithUser:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        teamCollectionId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [OWNER, MEMBER]
+        joinedAt:
+          type: string
+          format: date-time
+        user:
+          $ref: "#/components/schemas/User"
+      required: [id, teamCollectionId, userId, role, joinedAt]
+
+    TeamCollectionArticle:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        teamCollectionId:
+          type: string
+          format: uuid
+        articleId:
+          type: string
+          format: uuid
+        addedBy:
+          type: string
+          format: uuid
+        addedAt:
+          type: string
+          format: date-time
+      required: [id, teamCollectionId, articleId, addedBy, addedAt]
+
+    TeamCollectionArticleWithDetails:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        teamCollectionId:
+          type: string
+          format: uuid
+        articleId:
+          type: string
+          format: uuid
+        addedBy:
+          type: string
+          format: uuid
+        addedAt:
+          type: string
+          format: date-time
+        article:
+          $ref: "#/components/schemas/Article"
+      required: [id, teamCollectionId, articleId, addedBy, addedAt]
+
+    AddTeamMemberBody:
+      type: object
+      properties:
+        userId:
+          type: string
+          format: uuid
+      required: [userId]
+
+    AddTeamArticleBody:
+      type: object
+      properties:
+        articleId:
+          type: string
+          format: uuid
+        addedBy:
+          type: string
+          format: uuid
+      required: [articleId, addedBy]
+
+    # ─── Neighbor ───────────────────────────────────
+    Neighbor:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userAId:
+          type: string
+          format: uuid
+        userBId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        acceptedAt:
+          type: string
+          format: date-time
+      required: [id, userAId, userBId, createdAt, acceptedAt]
+
+    NeighborWithUser:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        neighborUserId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        acceptedAt:
+          type: string
+          format: date-time
+        user:
+          $ref: "#/components/schemas/User"
+      required: [id, neighborUserId, createdAt, acceptedAt]
+
+    NeighborRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        requesterId:
+          type: string
+          format: uuid
+        recipientId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [PENDING]
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, requesterId, recipientId, status, createdAt]
+
+    NeighborRequestWithUser:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        requesterId:
+          type: string
+          format: uuid
+        recipientId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [PENDING]
+        createdAt:
+          type: string
+          format: date-time
+        requester:
+          $ref: "#/components/schemas/User"
+      required: [id, requesterId, recipientId, status, createdAt]
+
+    CreateNeighborRequestBody:
+      type: object
+      properties:
+        requesterId:
+          type: string
+          format: uuid
+        recipientId:
+          type: string
+          format: uuid
+      required: [requesterId, recipientId]
+
+    # ─── SendRecord ─────────────────────────────────
+    SendRecord:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        senderId:
+          type: string
+          format: uuid
+        recipientId:
+          type: string
+          format: uuid
+        articleId:
+          type: string
+          format: uuid
+        inboxId:
+          type: string
+          format: uuid
+        deliverySlot:
+          type: string
+          format: date-time
+        sentAt:
+          type: string
+          format: date-time
+      required: [id, senderId, recipientId, articleId, inboxId, deliverySlot, sentAt]
+
+    SendRecordWithDetails:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        senderId:
+          type: string
+          format: uuid
+        recipientId:
+          type: string
+          format: uuid
+        articleId:
+          type: string
+          format: uuid
+        inboxId:
+          type: string
+          format: uuid
+        deliverySlot:
+          type: string
+          format: date-time
+        sentAt:
+          type: string
+          format: date-time
+        article:
+          $ref: "#/components/schemas/Article"
+        recipient:
+          $ref: "#/components/schemas/User"
+      required: [id, senderId, recipientId, articleId, inboxId, deliverySlot, sentAt]
+
+    SendArticleBody:
+      type: object
+      properties:
+        senderId:
+          type: string
+          format: uuid
+        recipientId:
+          type: string
+          format: uuid
+        articleId:
+          type: string
+          format: uuid
+      required: [senderId, recipientId, articleId]

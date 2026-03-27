@@ -12,6 +12,7 @@ export const sendRecordsTable = pgTable("send_records", {
   recipientId: uuid("recipient_id").notNull().references(() => usersTable.id),
   articleId: uuid("article_id").notNull().references(() => articlesTable.id),
   inboxId: uuid("inbox_id").notNull().references(() => inboxTable.id),
+  deliverySlot: timestamp("delivery_slot", { withTimezone: true }).notNull(),
   sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

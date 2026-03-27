@@ -1,4 +1,4 @@
-import { jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -11,6 +11,7 @@ export const storedSentencesTable = pgTable("stored_sentences", {
   articleId: uuid("article_id").notNull().references(() => articlesTable.id),
   text: text("text").notNull(),
   position: jsonb("position"),
+  isFavorite: boolean("is_favorite").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

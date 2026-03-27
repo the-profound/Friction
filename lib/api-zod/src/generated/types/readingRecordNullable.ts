@@ -5,7 +5,8 @@
  * Friction MVP 1.0.0 API
  * OpenAPI spec version: 0.1.0
  */
+import type { ReadingRecord } from "./readingRecord";
 
-export interface HealthStatus {
-  status: string;
+export interface ReadingRecordNullable {
+  record: ReadingRecord | null;
 }

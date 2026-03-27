@@ -56,7 +56,17 @@ Express 5 API server. Routes live in `src/routes/` and use `@workspace/api-zod` 
 
 - Entry: `src/index.ts` — reads `PORT`, starts Express
 - App setup: `src/app.ts` — mounts CORS, JSON/urlencoded parsing, routes at `/api`
-- Routes: `src/routes/index.ts` mounts sub-routers; `src/routes/health.ts` exposes `GET /health` (full path: `/api/health`)
+- Routes: `src/routes/index.ts` mounts sub-routers for all entities:
+  - `health.ts` — `GET /api/healthz`
+  - `users.ts` — CRUD for users
+  - `articles.ts` — CRUD + status transitions (DRAFT→DIVIDING→CLOSING→LETTER), LETTER immutability guard
+  - `inbox.ts` — List (filtered by visible_at <= now), open, mark read (creates UserArticleRead)
+  - `my-collections.ts` — CRUD + article management (add/remove)
+  - `stored-sentences.ts` — CRUD + favorite toggle
+  - `reading.ts` — Upsert reading progress, create/check article completion records
+  - `team-collections.ts` — CRUD + member management + article management (own articles only)
+  - `neighbors.ts` — List, request/accept/reject workflow (userA < userB normalization)
+  - `send-records.ts` — Send LETTER articles (auto-assigns 06:00/18:00 KST delivery slot, creates Inbox entry)
 - Depends on: `@workspace/db`, `@workspace/api-zod`
 - `pnpm --filter @workspace/api-server run dev` — run the dev server
 - `pnpm --filter @workspace/api-server run build` — production esbuild bundle (`dist/index.cjs`)
@@ -68,7 +78,16 @@ Database layer using Drizzle ORM with PostgreSQL. Exports a Drizzle client insta
 
 - `src/index.ts` — creates a `Pool` + Drizzle instance, exports schema
 - `src/schema/index.ts` — barrel re-export of all models
-- `src/schema/<modelname>.ts` — table definitions with `drizzle-zod` insert schemas (no models definitions exist right now)
+- `src/schema/<modelname>.ts` — table definitions with `drizzle-zod` insert schemas. 14 entities defined:
+  - `users.ts` — users (id, email, nickname, avatarUrl, timestamps)
+  - `articles.ts` — articles with status enum (DRAFT/DIVIDING/CLOSING/LETTER), pages JSON, style JSON, letterAt
+  - `inbox.ts` — inbox items with visibleAt delivery gating, openedAt, isRead
+  - `my-collections.ts` — personal collections + myCollectionArticles junction table
+  - `stored-sentences.ts` — stored sentences with isFavorite, position JSON
+  - `reading.ts` — readingRecords (progress) + userArticleReads (completion), both with (userId,articleId) unique constraints
+  - `team-collections.ts` — team collections + memberships (OWNER/MEMBER) + teamCollectionArticles junction
+  - `neighbors.ts` — neighbors (userAId < userBId normalization) + neighborRequests (PENDING status)
+  - `send-records.ts` — send records with deliverySlot (06:00/18:00 KST)
 - `drizzle.config.ts` — Drizzle Kit config (requires `DATABASE_URL`, automatically provided by Replit)
 - Exports: `.` (pool, db, schema), `./schema` (schema only)
 
