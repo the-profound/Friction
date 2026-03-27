@@ -153,10 +153,7 @@ export function useReadingSession({
       });
 
       if (inboxIdRef.current) {
-        try {
-          await markInboxReadMutation.mutateAsync({ id: inboxIdRef.current });
-        } catch {
-        }
+        await markInboxReadMutation.mutateAsync({ id: inboxIdRef.current });
       }
 
       setSession((s) => ({ ...s, state: "COMPLETED_COMMITTED" as ReadingSessionState }));

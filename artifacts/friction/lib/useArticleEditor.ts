@@ -16,7 +16,7 @@ export interface ArticleEditorState {
   saveStatus: AutoSaveStatus;
   isDirty: boolean;
   markDirty: (title: string, content: string) => void;
-  flush: () => Promise<void>;
+  flush: () => Promise<{ ok: boolean }>;
   retry: () => Promise<void>;
   transitionForward: (input: TransitionGuardInput) => Promise<{ success: boolean; error?: string }>;
   stepBack: () => Promise<{ success: boolean; error?: string }>;
@@ -50,7 +50,10 @@ export function useArticleEditor({ articleId }: UseArticleEditorOptions): Articl
       }
 
       try {
-        await autoSave.flush();
+        const flushResult = await autoSave.flush();
+        if (!flushResult.ok) {
+          return { success: false, error: "저장되지 않은 변경사항이 있습니다. 네트워크를 확인해주세요." };
+        }
         await transitionStatus.mutateAsync({
           id: articleId,
           data: { targetStatus: check.target as TransitionArticleBody["targetStatus"] },

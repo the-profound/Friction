@@ -119,7 +119,7 @@ export function useAutoSave({
     [debounceMs, doSave],
   );
 
-  const flush = useCallback(async () => {
+  const flush = useCallback(async (): Promise<{ ok: boolean }> => {
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = null;
@@ -132,6 +132,7 @@ export function useAutoSave({
     if (isDirty || status === "error") {
       await doSave();
     }
+    return { ok: savingRef.current === false && retryCountRef.current === 0 };
   }, [isDirty, status, doSave]);
 
   const retry = useCallback(async () => {
