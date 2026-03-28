@@ -47,11 +47,12 @@ export default function SendScreen() {
   const handleSend = useCallback(async () => {
     if (!selectedArticle || !selectedRecipient) return;
 
+    const isNeighbor = neighbors.some((n) => n.neighborUserId === selectedRecipient.neighborUserId);
     const guard = canSendToNeighbor(
       selectedArticle.status as ArticleStatus,
       userId,
       selectedRecipient.neighborUserId,
-      true,
+      isNeighbor,
     );
     if (!guard.allowed) {
       Alert.alert("보낼 수 없음", guard.reason ?? "");

@@ -15,16 +15,19 @@ interface DateSection {
 }
 
 function formatSectionDate(dateStr: string): string {
-  const d = new Date(dateStr);
+  const parts = dateStr.split("-");
+  const year = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10) - 1;
+  const day = parseInt(parts[2], 10);
+  const target = new Date(year, month, day);
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const target = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const diffDays = Math.round((today.getTime() - target.getTime()) / (1000 * 60 * 60 * 24));
 
   if (diffDays === 0) return "오늘";
   if (diffDays === 1) return "어제";
   if (diffDays < 7) return `${diffDays}일 전`;
-  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
+  return `${year}.${String(month + 1).padStart(2, "0")}.${String(day).padStart(2, "0")}`;
 }
 
 export default function SendHistoryScreen() {
