@@ -21,6 +21,22 @@ import type {
 
 type Tab = "neighbors" | "requests";
 
+interface ProfileTarget {
+  nickname: string;
+  email: string;
+  id: string;
+  joinedAt?: string;
+}
+
+function extractUserIdFromInput(input: string): string {
+  const trimmed = input.trim();
+  const linkMatch = trimmed.match(/(?:friction:\/\/|https?:\/\/[^/]+\/)invite\/([a-zA-Z0-9_-]+)/);
+  if (linkMatch) return linkMatch[1];
+  const uuidMatch = trimmed.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+  if (uuidMatch) return trimmed;
+  return trimmed;
+}
+
 export default function NeighborListScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -29,6 +45,7 @@ export default function NeighborListScreen() {
   const [addSheetVisible, setAddSheetVisible] = useState(false);
   const [addRecipientId, setAddRecipientId] = useState("");
   const [rejectTarget, setRejectTarget] = useState<{ id: string; name: string } | null>(null);
+  const [profileTarget, setProfileTarget] = useState<ProfileTarget | null>(null);
 
   const neighborsQuery = useListNeighbors({ userId });
   const neighbors = (neighborsQuery.data ?? []) as NeighborWithUser[];
@@ -67,12 +84,17 @@ export default function NeighborListScreen() {
 
   const handleSendRequest = useCallback(async () => {
     if (!addRecipientId.trim()) {
-      Alert.alert("오류", "이웃의 ID를 입력해주세요.");
+      Alert.alert("오류", "이웃의 ID 또는 초대 링크를 입력해주세요.");
+      return;
+    }
+    const recipientId = extractUserIdFromInput(addRecipientId);
+    if (!recipientId) {
+      Alert.alert("오류", "유효하지 않은 ID 또는 링크입니다.");
       return;
     }
     try {
       await createRequest.mutateAsync({
-        data: { requesterId: userId, recipientId: addRecipientId.trim() },
+        data: { requesterId: userId, recipientId },
       });
       setAddSheetVisible(false);
       setAddRecipientId("");
@@ -83,8 +105,17 @@ export default function NeighborListScreen() {
     }
   }, [addRecipientId, userId, createRequest]);
 
+  const handleNeighborPress = useCallback((item: NeighborWithUser) => {
+    setProfileTarget({
+      nickname: item.user?.nickname ?? "이름 없음",
+      email: item.user?.email ?? "",
+      id: item.neighborUserId,
+      joinedAt: item.acceptedAt ? new Date(item.acceptedAt).toLocaleDateString("ko-KR") : undefined,
+    });
+  }, []);
+
   const renderNeighborItem = ({ item }: { item: NeighborWithUser }) => (
-    <View style={styles.neighborItem}>
+    <Pressable style={styles.neighborItem} onPress={() => handleNeighborPress(item)}>
       <View style={styles.avatarCircle}>
         <Text style={styles.avatarText}>{(item.user?.nickname ?? "?")[0]}</Text>
       </View>
@@ -92,7 +123,8 @@ export default function NeighborListScreen() {
         <Text style={styles.neighborName}>{item.user?.nickname ?? "이름 없음"}</Text>
         <Text style={styles.neighborSub}>{item.user?.email ?? ""}</Text>
       </View>
-    </View>
+      <Feather name="chevron-right" size={16} color={Colors.zinc300} />
+    </Pressable>
   );
 
   const renderRequestItem = ({ item }: { item: NeighborRequestWithUser }) => (
@@ -236,7 +268,7 @@ export default function NeighborListScreen() {
         <View style={styles.formContent}>
           <TextInput
             style={styles.formInput}
-            placeholder="이웃의 사용자 ID를 입력하세요"
+            placeholder="사용자 ID 또는 초대 링크를 입력하세요"
             placeholderTextColor={Colors.zinc400}
             value={addRecipientId}
             onChangeText={setAddRecipientId}
@@ -268,6 +300,30 @@ export default function NeighborListScreen() {
         }}
         onCancel={() => setRejectTarget(null)}
       />
+
+      <BottomSheet
+        visible={profileTarget !== null}
+        onClose={() => setProfileTarget(null)}
+        title="이웃 프로필"
+        snapPoints={[0.4]}
+      >
+        {profileTarget && (
+          <View style={styles.profileContent}>
+            <View style={styles.profileAvatarLarge}>
+              <Text style={styles.profileAvatarLargeText}>{profileTarget.nickname[0]}</Text>
+            </View>
+            <Text style={styles.profileName}>{profileTarget.nickname}</Text>
+            <Text style={styles.profileEmail}>{profileTarget.email}</Text>
+            {profileTarget.joinedAt && (
+              <Text style={styles.profileJoined}>이웃이 된 날: {profileTarget.joinedAt}</Text>
+            )}
+            <View style={styles.profileIdRow}>
+              <Text style={styles.profileIdLabel}>ID</Text>
+              <Text style={styles.profileIdValue} selectable>{profileTarget.id}</Text>
+            </View>
+          </View>
+        )}
+      </BottomSheet>
     </View>
   );
 }
@@ -452,5 +508,60 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.5,
+  },
+  profileContent: {
+    alignItems: "center",
+    paddingVertical: 16,
+    gap: 8,
+  },
+  profileAvatarLarge: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: Colors.zinc100,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  profileAvatarLargeText: {
+    ...Typography.bodySemiBold,
+    fontSize: 24,
+    color: Colors.zinc600,
+  },
+  profileName: {
+    ...Typography.bodySemiBold,
+    fontSize: 18,
+    color: Colors.zinc900,
+  },
+  profileEmail: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc500,
+  },
+  profileJoined: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc400,
+    marginTop: 4,
+  },
+  profileIdRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: Colors.zinc50,
+    borderRadius: 10,
+  },
+  profileIdLabel: {
+    ...Typography.bodySemiBold,
+    fontSize: 12,
+    color: Colors.zinc500,
+  },
+  profileIdValue: {
+    ...Typography.body,
+    fontSize: 12,
+    color: Colors.zinc600,
   },
 });
