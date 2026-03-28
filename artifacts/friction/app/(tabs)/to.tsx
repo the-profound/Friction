@@ -242,7 +242,7 @@ export default function ToScreen() {
       <PageHeader
         title="발신함"
         showAdd
-        onAddPress={toSubTab === "send" ? handleSend : handleAddNeighbor}
+        onAddPress={toSubTab === "send" ? handleSend : toSubTab === "history" ? handleViewHistory : handleAddNeighbor}
         showSearch={false}
       />
       {renderContent()}

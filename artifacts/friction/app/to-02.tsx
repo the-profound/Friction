@@ -40,7 +40,7 @@ export default function SendScreen() {
   const neighbors = (neighborsQuery.data ?? []) as NeighborWithUser[];
   const sendArticle = useSendArticle();
 
-  const deliveryInfo = useMemo(() => getNextDeliverySlot(), []);
+  const deliveryInfo = useMemo(() => getNextDeliverySlot(), [confirmVisible]);
 
   const canSend = selectedArticle && selectedRecipient;
 
@@ -143,7 +143,19 @@ export default function SendScreen() {
         title="편지 선택"
         snapPoints={[0.5]}
       >
-        {articles.length === 0 ? (
+        {articlesQuery.isLoading ? (
+          <View style={styles.pickerEmpty}>
+            <Text style={styles.pickerEmptySub}>불러오는 중...</Text>
+          </View>
+        ) : articlesQuery.isError ? (
+          <View style={styles.pickerEmpty}>
+            <Feather name="alert-circle" size={32} color={Colors.zinc300} />
+            <Text style={styles.pickerEmptyTitle}>불러오기 실패</Text>
+            <Pressable onPress={() => articlesQuery.refetch()}>
+              <Text style={[styles.pickerEmptySub, { color: Colors.zinc900 }]}>다시 시도</Text>
+            </Pressable>
+          </View>
+        ) : articles.length === 0 ? (
           <View style={styles.pickerEmpty}>
             <Feather name="file-text" size={32} color={Colors.zinc300} />
             <Text style={styles.pickerEmptyTitle}>완성된 편지가 없어요</Text>
@@ -176,7 +188,19 @@ export default function SendScreen() {
         title="받는 사람 선택"
         snapPoints={[0.5]}
       >
-        {neighbors.length === 0 ? (
+        {neighborsQuery.isLoading ? (
+          <View style={styles.pickerEmpty}>
+            <Text style={styles.pickerEmptySub}>불러오는 중...</Text>
+          </View>
+        ) : neighborsQuery.isError ? (
+          <View style={styles.pickerEmpty}>
+            <Feather name="alert-circle" size={32} color={Colors.zinc300} />
+            <Text style={styles.pickerEmptyTitle}>불러오기 실패</Text>
+            <Pressable onPress={() => neighborsQuery.refetch()}>
+              <Text style={[styles.pickerEmptySub, { color: Colors.zinc900 }]}>다시 시도</Text>
+            </Pressable>
+          </View>
+        ) : neighbors.length === 0 ? (
           <View style={styles.pickerEmpty}>
             <Feather name="users" size={32} color={Colors.zinc300} />
             <Text style={styles.pickerEmptyTitle}>이웃이 없어요</Text>
