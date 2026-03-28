@@ -95,6 +95,15 @@ export default function SendHistoryScreen() {
         <View style={styles.emptyContainer}>
           <Text style={styles.loadingText}>불러오는 중...</Text>
         </View>
+      ) : sendRecordsQuery.isError ? (
+        <View style={styles.emptyContainer}>
+          <Feather name="alert-circle" size={40} color={Colors.zinc300} />
+          <Text style={styles.emptyTitle}>불러오기 실패</Text>
+          <Text style={styles.emptySubtitle}>네트워크를 확인하고 다시 시도해주세요</Text>
+          <Pressable style={styles.retryButton} onPress={() => sendRecordsQuery.refetch()}>
+            <Text style={styles.retryButtonText}>다시 시도</Text>
+          </Pressable>
+        </View>
       ) : sendRecords.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Feather name="send" size={40} color={Colors.zinc300} />
@@ -199,5 +208,17 @@ const styles = StyleSheet.create({
     ...Typography.body,
     fontSize: 13,
     color: Colors.zinc500,
+  },
+  retryButton: {
+    marginTop: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: Colors.zinc900,
+    borderRadius: 12,
+  },
+  retryButtonText: {
+    ...Typography.bodySemiBold,
+    fontSize: 14,
+    color: Colors.white,
   },
 });

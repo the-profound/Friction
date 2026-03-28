@@ -91,6 +91,20 @@ export default function ToScreen() {
       );
     }
 
+    if (neighborsQuery.isError) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Feather name="alert-circle" size={40} color={Colors.zinc300} />
+          <Text style={styles.emptyTitle}>불러오기 실패</Text>
+          <Text style={styles.emptySubtitle}>네트워크를 확인하고 다시 시도해주세요</Text>
+          <Pressable style={styles.actionButton} onPress={() => { neighborsQuery.refetch(); requestsQuery.refetch(); }}>
+            <Feather name="refresh-cw" size={16} color={Colors.white} />
+            <Text style={styles.actionButtonText}>다시 시도</Text>
+          </Pressable>
+        </View>
+      );
+    }
+
     return (
       <View style={styles.tabContent}>
         {pendingRequests.length > 0 && (
@@ -146,6 +160,20 @@ export default function ToScreen() {
       return (
         <View style={styles.emptyContainer}>
           <Text style={styles.loadingText}>불러오는 중...</Text>
+        </View>
+      );
+    }
+
+    if (sendRecordsQuery.isError) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Feather name="alert-circle" size={40} color={Colors.zinc300} />
+          <Text style={styles.emptyTitle}>불러오기 실패</Text>
+          <Text style={styles.emptySubtitle}>네트워크를 확인하고 다시 시도해주세요</Text>
+          <Pressable style={styles.actionButton} onPress={() => sendRecordsQuery.refetch()}>
+            <Feather name="refresh-cw" size={16} color={Colors.white} />
+            <Text style={styles.actionButtonText}>다시 시도</Text>
+          </Pressable>
         </View>
       );
     }

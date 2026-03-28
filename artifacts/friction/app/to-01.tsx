@@ -106,14 +106,16 @@ export default function NeighborListScreen() {
       </View>
       <View style={styles.requestActions}>
         <Pressable
-          style={styles.acceptButton}
+          style={[styles.acceptButton, acceptRequest.isPending && styles.buttonDisabled]}
           onPress={() => handleAccept(item.id)}
+          disabled={acceptRequest.isPending || rejectRequest.isPending}
         >
-          <Text style={styles.acceptText}>수락</Text>
+          <Text style={styles.acceptText}>{acceptRequest.isPending ? "처리 중..." : "수락"}</Text>
         </Pressable>
         <Pressable
-          style={styles.rejectButton}
+          style={[styles.rejectButton, rejectRequest.isPending && styles.buttonDisabled]}
           onPress={() => setRejectTarget({ id: item.id, name: item.requester?.nickname ?? "알 수 없음" })}
+          disabled={acceptRequest.isPending || rejectRequest.isPending}
         >
           <Text style={styles.rejectText}>거절</Text>
         </Pressable>
@@ -157,6 +159,14 @@ export default function NeighborListScreen() {
           <View style={styles.emptyContainer}>
             <Text style={styles.loadingText}>불러오는 중...</Text>
           </View>
+        ) : neighborsQuery.isError ? (
+          <View style={styles.emptyContainer}>
+            <Feather name="alert-circle" size={40} color={Colors.zinc300} />
+            <Text style={styles.emptyTitle}>불러오기 실패</Text>
+            <Pressable style={styles.addButton} onPress={() => neighborsQuery.refetch()}>
+              <Text style={styles.addButtonText}>다시 시도</Text>
+            </Pressable>
+          </View>
         ) : neighbors.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Feather name="users" size={40} color={Colors.zinc300} />
@@ -185,6 +195,14 @@ export default function NeighborListScreen() {
       ) : requestsQuery.isLoading ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.loadingText}>불러오는 중...</Text>
+        </View>
+      ) : requestsQuery.isError ? (
+        <View style={styles.emptyContainer}>
+          <Feather name="alert-circle" size={40} color={Colors.zinc300} />
+          <Text style={styles.emptyTitle}>불러오기 실패</Text>
+          <Pressable style={styles.addButton} onPress={() => requestsQuery.refetch()}>
+            <Text style={styles.addButtonText}>다시 시도</Text>
+          </Pressable>
         </View>
       ) : pendingRequests.length === 0 ? (
         <View style={styles.emptyContainer}>
@@ -431,5 +449,8 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 16,
     color: Colors.white,
+  },
+  buttonDisabled: {
+    opacity: 0.5,
   },
 });

@@ -59,7 +59,7 @@ export default function SendScreen() {
     }
 
     try {
-      await sendArticle.mutateAsync({
+      const result = await sendArticle.mutateAsync({
         data: {
           senderId: userId,
           recipientId: selectedRecipient.neighborUserId,
@@ -67,9 +67,12 @@ export default function SendScreen() {
         },
       });
       setConfirmVisible(false);
+      const arrivalTime = result?.deliverySlot
+        ? formatDeliveryTime(new Date(result.deliverySlot))
+        : formatDeliveryTime(deliveryInfo.visibleAt);
       Alert.alert(
         "발송 완료",
-        `'${selectedArticle.title}'이(가) ${selectedRecipient.user?.nickname ?? "이웃"}에게 발송되었어요.\n${formatDeliveryTime(deliveryInfo.visibleAt)}에 도착 예정`,
+        `'${selectedArticle.title}'이(가) ${selectedRecipient.user?.nickname ?? "이웃"}에게 발송되었어요.\n${arrivalTime}에 도착 예정`,
         [{ text: "확인", onPress: () => router.back() }],
       );
     } catch (e: unknown) {
@@ -122,13 +125,13 @@ export default function SendScreen() {
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
         <Pressable
-          style={[styles.sendButton, !canSend && styles.sendButtonDisabled]}
-          disabled={!canSend}
+          style={[styles.sendButton, (!canSend || sendArticle.isPending) && styles.sendButtonDisabled]}
+          disabled={!canSend || sendArticle.isPending}
           onPress={() => setConfirmVisible(true)}
         >
-          <Feather name="send" size={16} color={canSend ? Colors.white : Colors.zinc400} />
-          <Text style={[styles.sendButtonText, !canSend && styles.sendButtonTextDisabled]}>
-            보내기
+          <Feather name="send" size={16} color={canSend && !sendArticle.isPending ? Colors.white : Colors.zinc400} />
+          <Text style={[styles.sendButtonText, (!canSend || sendArticle.isPending) && styles.sendButtonTextDisabled]}>
+            {sendArticle.isPending ? "보내는 중..." : "보내기"}
           </Text>
         </Pressable>
       </View>
