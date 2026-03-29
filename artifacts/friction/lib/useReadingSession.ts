@@ -32,6 +32,7 @@ export interface ReadingSessionActions {
   canExit: boolean;
   showExitUI: boolean;
   isRestoring: boolean;
+  isSessionHydrated: boolean;
   nextPage: () => void;
   prevPage: () => void;
   onScroll: (scrollPosition: number) => void;
@@ -57,20 +58,25 @@ export function useReadingSession({
     createInitialSession(articleId, mode, totalPages),
   );
 
+  const [isSessionHydrated, setIsSessionHydrated] = useState(false);
+
   const restoredRef = useRef(false);
   useEffect(() => {
     if (restoredRef.current || isRestoring) return;
-    const record = savedRecord?.record;
-    if (!record) return;
     restoredRef.current = true;
-    setSession((prev) => ({
-      ...prev,
-      position: {
-        ...prev.position,
-        currentPage: record.currentPage ?? 0,
-        scrollPosition: record.scrollPosition ?? 0,
-      },
-    }));
+    const record = savedRecord?.record;
+    if (record) {
+      const restoredPage = Math.max(0, record.currentPage ?? 0);
+      setSession((prev) => ({
+        ...prev,
+        position: {
+          ...prev.position,
+          currentPage: restoredPage,
+          scrollPosition: record.scrollPosition ?? 0,
+        },
+      }));
+    }
+    setIsSessionHydrated(true);
   }, [savedRecord, isRestoring]);
 
   useEffect(() => {
@@ -205,6 +211,7 @@ export function useReadingSession({
     canExit,
     showExitUI,
     isRestoring,
+    isSessionHydrated,
     nextPage,
     prevPage,
     onScroll,

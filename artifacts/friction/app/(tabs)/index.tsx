@@ -138,7 +138,7 @@ export default function InboxScreen() {
     if (!inboxData) return [];
     const now = new Date();
     return (inboxData as InboxItem[]).filter(
-      (item) => new Date(item.visibleAt) <= now,
+      (item) => new Date(item.visibleAt) <= now && item.isRead !== true,
     );
   }, [inboxData]);
 

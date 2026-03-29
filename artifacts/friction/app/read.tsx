@@ -12,6 +12,7 @@ import {
   TextInput,
   AppState,
   type AppStateStatus,
+  type LayoutChangeEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams, Stack } from "expo-router";
@@ -87,6 +88,10 @@ export default function ReadScreen() {
   const [selectedText, setSelectedText] = useState("");
   const [memoSheetVisible, setMemoSheetVisible] = useState(false);
   const [memoText, setMemoText] = useState("");
+  const [pageListHeight, setPageListHeight] = useState(0);
+  const handlePageListLayout = useCallback((e: LayoutChangeEvent) => {
+    setPageListHeight(e.nativeEvent.layout.height);
+  }, []);
   const createSentence = useCreateStoredSentence();
   const deleteInbox = useDeleteInboxItem();
   const flatListRef = useRef<FlatList>(null);
@@ -99,10 +104,10 @@ export default function ReadScreen() {
   }, [articleId, inboxId, mode, setActiveSession]);
 
   useEffect(() => {
-    if (!reading.isRestoring && reading.session.state === "IDLE" && totalPages > 0) {
+    if (!reading.isRestoring && reading.isSessionHydrated && reading.session.state === "IDLE" && totalPages > 0) {
       reading.startReading();
     }
-  }, [reading.isRestoring, reading.session.state, totalPages]);
+  }, [reading.isRestoring, reading.isSessionHydrated, reading.session.state, totalPages]);
 
   useEffect(() => {
     if (reading.session.state === "COMPLETED_READY") {
@@ -168,19 +173,10 @@ export default function ReadScreen() {
     [reading],
   );
 
-  const restoredPageRef = useRef(false);
-  useEffect(() => {
-    if (restoredPageRef.current) return;
-    if (!reading.isRestoring && reading.session.position.currentPage > 0 && flatListRef.current) {
-      restoredPageRef.current = true;
-      setTimeout(() => {
-        flatListRef.current?.scrollToOffset({
-          offset: reading.session.position.currentPage * SCREEN_W,
-          animated: false,
-        });
-      }, 50);
-    }
-  }, [reading.isRestoring, reading.session.position.currentPage]);
+  const restoredPage = reading.session.position.currentPage;
+  const initialScrollIndex = restoredPage > 0 && totalPages > 0
+    ? Math.min(restoredPage, totalPages - 1)
+    : undefined;
 
   const handleCommitAndArchive = useCallback(async () => {
     const result = await reading.commitCompletion();
@@ -274,7 +270,7 @@ export default function ReadScreen() {
     );
   }
 
-  if (articleLoading || reading.isRestoring) {
+  if (articleLoading || reading.isRestoring || !reading.isSessionHydrated) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.emptyContainer}>
@@ -318,7 +314,7 @@ export default function ReadScreen() {
       )}
 
       {totalPages > 0 ? (
-        <View style={styles.pageListContainer}>
+        <View style={styles.pageListContainer} onLayout={handlePageListLayout}>
           <FlatList
             ref={flatListRef}
             data={pages}
@@ -328,12 +324,14 @@ export default function ReadScreen() {
             showsHorizontalScrollIndicator={false}
             scrollEnabled={mode === "re_read" || reading.session.state === "READING"}
             onMomentumScrollEnd={handlePageChange}
+            initialScrollIndex={initialScrollIndex}
             renderItem={({ item: pageContent, index }) => (
               <PageView
                 content={pageContent}
                 pageIndex={index}
                 onCollectSentence={handleCollectSentence}
                 bottomInset={isOnLastPage ? insets.bottom + 56 : insets.bottom}
+                availableHeight={pageListHeight}
               />
             )}
             getItemLayout={(_, index) => ({
@@ -458,31 +456,41 @@ export default function ReadScreen() {
   );
 }
 
+const PAGE_CARD_RATIO = 8 / 5;
+
 function PageView({
   content,
   pageIndex,
   onCollectSentence,
   bottomInset,
+  availableHeight,
 }: {
   content: string;
   pageIndex: number;
   onCollectSentence: (text: string) => void;
   bottomInset: number;
+  availableHeight: number;
 }) {
   const paragraphs = useMemo(() => splitIntoParagraphs(content), [content]);
 
+  const cardHeight = availableHeight > 0
+    ? Math.min(SCREEN_W * PAGE_CARD_RATIO, availableHeight)
+    : SCREEN_W * PAGE_CARD_RATIO;
+
   return (
-    <ScrollView
-      style={[styles.pageContainer, { width: SCREEN_W }]}
-      contentContainerStyle={[styles.pageContent, { paddingBottom: bottomInset + 40 }]}
-      showsVerticalScrollIndicator={false}
-    >
-      {paragraphs.map((para, idx) => (
-        <View key={`${pageIndex}-p-${idx}`} style={styles.paragraphWrapper}>
-          <SelectableText text={para} onCollect={onCollectSentence} />
-        </View>
-      ))}
-    </ScrollView>
+    <View style={[styles.pageContainer, { width: SCREEN_W, height: cardHeight }]}>
+      <ScrollView
+        contentContainerStyle={[styles.pageContent, { paddingBottom: bottomInset + 40 }]}
+        showsVerticalScrollIndicator={false}
+        style={styles.pageScrollView}
+      >
+        {paragraphs.map((para, idx) => (
+          <View key={`${pageIndex}-p-${idx}`} style={styles.paragraphWrapper}>
+            <SelectableText text={para} onCollect={onCollectSentence} />
+          </View>
+        ))}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -533,6 +541,9 @@ const styles = StyleSheet.create({
     color: Colors.zinc500,
   },
   pageContainer: {
+    overflow: "hidden",
+  },
+  pageScrollView: {
     flex: 1,
   },
   pageContent: {
