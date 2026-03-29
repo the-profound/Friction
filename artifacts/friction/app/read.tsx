@@ -294,19 +294,11 @@ export default function ReadScreen() {
         }}
       />
       <View style={styles.header}>
-        <Pressable onPress={handleBack} hitSlop={12} style={styles.backButton}>
-          <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-        </Pressable>
-        <View style={styles.progressContainer}>
-          <ProgressIndicator type="linear" progress={reading.progress} size="small" />
-        </View>
-        <Pressable
-          onPress={() => setMemoSheetVisible(true)}
-          hitSlop={12}
-          style={styles.memoButton}
-        >
-          <Feather name="edit-3" size={18} color={Colors.zinc600} />
-        </Pressable>
+        {mode === "re_read" && (
+          <Pressable onPress={handleBack} hitSlop={12} style={styles.backButton}>
+            <Feather name="arrow-left" size={20} color={Colors.zinc600} />
+          </Pressable>
+        )}
         <Text style={styles.pageIndicator}>
           {totalPages > 0
             ? `${reading.session.position.currentPage + 1}/${totalPages}`
@@ -364,6 +356,19 @@ export default function ReadScreen() {
           <Text style={styles.emptyTitle}>페이지가 없습니다</Text>
         </View>
       )}
+
+      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
+        <View style={styles.bottomProgressContainer}>
+          <ProgressIndicator type="linear" progress={reading.progress} size="small" />
+        </View>
+        <Pressable
+          onPress={() => setMemoSheetVisible(true)}
+          hitSlop={16}
+          style={styles.bottomMemoButton}
+        >
+          <Feather name="edit-3" size={20} color={Colors.zinc600} />
+        </Pressable>
+      </View>
 
       <BottomSheet
         visible={completionSheetVisible}
@@ -499,19 +504,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  progressContainer: {
-    flex: 1,
-  },
-  memoButton: {
-    width: 36,
-    height: 36,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   pageIndicator: {
     ...Typography.caption,
     color: Colors.zinc400,
-    minWidth: 32,
+    flex: 1,
     textAlign: "right",
   },
   titleBar: {
@@ -662,6 +658,23 @@ const styles = StyleSheet.create({
   },
   pageListContainer: {
     flex: 1,
+  },
+  bottomBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: Spacing.screenPx,
+    paddingTop: 14,
+    gap: 14,
+    backgroundColor: Colors.white,
+  },
+  bottomProgressContainer: {
+    flex: 1,
+  },
+  bottomMemoButton: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
   },
   completeButtonContainer: {
     position: "absolute",
