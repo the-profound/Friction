@@ -35,6 +35,7 @@ export interface ReadingSessionActions {
   isSessionHydrated: boolean;
   nextPage: () => void;
   prevPage: () => void;
+  jumpToPage: (targetPage: number) => void;
   onScroll: (scrollPosition: number) => void;
   startReading: () => void;
   pause: () => void;
@@ -154,6 +155,19 @@ export function useReadingSession({
     });
   }, [savePosition]);
 
+  const jumpToPage = useCallback((targetPage: number) => {
+    setSession((prev) => {
+      const clamped = Math.max(0, Math.min(targetPage, prev.position.totalPages - 1));
+      if (clamped === prev.position.currentPage) return prev;
+      const next: ReadingSession = {
+        ...prev,
+        position: { ...prev.position, currentPage: clamped, scrollPosition: 0 },
+      };
+      savePosition(clamped, 0);
+      return next;
+    });
+  }, [savePosition]);
+
   const onScroll = useCallback(
     (scrollPosition: number) => {
       setSession((prev) => updateScrollPosition(prev, scrollPosition));
@@ -214,6 +228,7 @@ export function useReadingSession({
     isSessionHydrated,
     nextPage,
     prevPage,
+    jumpToPage,
     onScroll,
     startReading,
     pause,

@@ -163,12 +163,7 @@ export default function ReadScreen() {
   const handlePageChange = useCallback(
     (event: { nativeEvent: { contentOffset: { x: number } } }) => {
       const idx = Math.round(event.nativeEvent.contentOffset.x / SCREEN_W);
-      const currentPage = reading.session.position.currentPage;
-      if (idx > currentPage) {
-        reading.nextPage();
-      } else if (idx < currentPage) {
-        reading.prevPage();
-      }
+      reading.jumpToPage(idx);
     },
     [reading],
   );
