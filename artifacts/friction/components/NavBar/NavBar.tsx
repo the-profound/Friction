@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import React, { useEffect, useRef } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -12,6 +13,7 @@ type FeatherIconName = React.ComponentProps<typeof Feather>["name"];
 export function NavBar() {
   const insets = useSafeAreaInsets();
   const nav = useNavigation();
+  const router = useRouter();
   const layerAnim = useRef(new Animated.Value(nav.layer === "main" ? 0 : 1)).current;
 
   useEffect(() => {
@@ -50,6 +52,15 @@ export function NavBar() {
               onPress={() => nav.setActiveTab(tab.key)}
             />
           ))}
+          <Pressable
+            style={styles.settingsButton}
+            onPress={() => router.push("/settings" as never)}
+            accessibilityRole="button"
+            accessibilityLabel="설정"
+            hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+          >
+            <Feather name="settings" size={Sizing.tabIconSize} color={Colors.tabInactive} />
+          </Pressable>
         </Animated.View>
 
         <Animated.View
@@ -160,5 +171,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.backButtonBg,
     alignItems: "center",
     justifyContent: "center",
+  },
+  settingsButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: Sizing.touchTargetMin,
+    paddingHorizontal: 4,
   },
 });

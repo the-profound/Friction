@@ -122,7 +122,7 @@ Reading/writing platform mobile app. All 37 Notion Queue DB items processed (순
 - `constants/tokens.ts` — design tokens (Colors, Typography, Spacing, etc.)
 - `types/navigation.ts` — NavBar/SubTab/MiniSubTab type definitions
 - `contexts/NavigationContext.tsx` — global navigation state (activeTab, layer, subTabs), syncs with Expo Router via useSegments/usePathname
-- `components/NavBar/NavBar.tsx` — 4-tab bottom nav (IN/OF/TO/ON)
+- `components/NavBar/NavBar.tsx` — 4-tab bottom nav (IN/OF/TO/ON) + settings gear icon (→ /settings)
 - `components/NavBar/PageHeader.tsx` — screen header with search/add actions
 - `components/NavBar/MiniSubTabBar.tsx` — animated mini sub-tab bar for OF tab
 
@@ -157,6 +157,7 @@ Reading/writing platform mobile app. All 37 Notion Queue DB items processed (순
 - `on.tsx` (ON-00) — notes list with add button
 
 **Detail/sub screens (app/):**
+- `settings.tsx` (ST-01) — settings screen: 4 sections (Account/My Info/Policy/App Info), logout/delete account, user info via getUser API, policy links via Linking.openURL, app version from expo-constants
 - `read.tsx` (READ-00) — reading screen with progress bar
 - `to-01.tsx` (TO-01) — neighbor list
 - `to-02.tsx` (TO-02) — send letter screen
