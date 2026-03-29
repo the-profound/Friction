@@ -54,6 +54,13 @@ export default function ReadScreen() {
   const article = articleId ? articleQuery.data : undefined;
   const articleLoading = articleId ? articleQuery.isLoading : false;
 
+  useEffect(() => {
+    if (articleId && articleQuery.isError) {
+      clearActiveSession();
+      router.back();
+    }
+  }, [articleId, articleQuery.isError, clearActiveSession, router]);
+
   const pages: string[] = useMemo(() => {
     if (!article) return [];
     if (article.pages && Array.isArray(article.pages) && article.pages.length > 0) {
