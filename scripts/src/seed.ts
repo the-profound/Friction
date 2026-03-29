@@ -49,7 +49,7 @@ async function seed() {
     const [minji, hayun, seojun, jia, doyun] = await tx
       .insert(usersTable)
       .values([
-        { email: "minji@test.com", nickname: "민지" },
+        { id: "00000000-0000-4000-a000-000000000001", email: "minji@test.com", nickname: "민지" },
         { email: "hayun@test.com", nickname: "하윤" },
         { email: "seojun@test.com", nickname: "서준" },
         { email: "jia@test.com", nickname: "지아" },

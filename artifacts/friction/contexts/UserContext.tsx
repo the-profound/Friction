@@ -8,7 +8,7 @@ interface UserContextValue {
 function resolveUserId(): string {
   const envId = Constants.expoConfig?.extra?.userId;
   if (typeof envId === "string" && envId.length > 0) return envId;
-  return "demo-user-001";
+  return "00000000-0000-4000-a000-000000000001";
 }
 
 const defaultUserId = resolveUserId();
