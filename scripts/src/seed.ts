@@ -18,6 +18,11 @@ import {
 } from "@workspace/db/schema";
 
 async function seed() {
+  if (process.env.NODE_ENV === "production" && !process.env.ALLOW_DESTRUCTIVE_SEED) {
+    console.error("❌ Refusing to run seed in production. Set ALLOW_DESTRUCTIVE_SEED=true to override.");
+    process.exit(1);
+  }
+
   console.log("🌱 Seeding database...\n");
 
   await db.transaction(async (tx) => {
@@ -477,10 +482,12 @@ async function seed() {
 }
 
 seed()
-  .then(() => {
+  .then(async () => {
+    await pool.end();
     process.exit(0);
   })
-  .catch((err) => {
+  .catch(async (err) => {
     console.error("❌ Seed failed:", err);
+    await pool.end();
     process.exit(1);
   });
