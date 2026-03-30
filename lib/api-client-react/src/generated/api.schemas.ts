@@ -52,6 +52,37 @@ export const ArticleStatus = {
 
 export type ArticleStyle = { [key: string]: unknown } | null;
 
+export type ArticleCoverType =
+  (typeof ArticleCoverType)[keyof typeof ArticleCoverType];
+
+export const ArticleCoverType = {
+  image: "image",
+  color: "color",
+  default: "default",
+} as const;
+
+export type ArticleCoverAlign =
+  (typeof ArticleCoverAlign)[keyof typeof ArticleCoverAlign];
+
+export const ArticleCoverAlign = {
+  left: "left",
+  center: "center",
+} as const;
+
+/**
+ * Article cover display settings. null means default cover.
+ */
+export interface ArticleCover {
+  type: ArticleCoverType;
+  /** Cover image URL (used when type=image) */
+  imageUrl?: string;
+  /** Background color hex (used when type=color) */
+  bgColor?: string;
+  /** Text color hex for title overlay */
+  textColor: string;
+  align: ArticleCoverAlign;
+}
+
 export interface Article {
   id: string;
   authorId: string;
@@ -60,6 +91,7 @@ export interface Article {
   status: ArticleStatus;
   pages?: string[] | null;
   style?: ArticleStyle;
+  cover?: ArticleCover | null;
   letterAt?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -80,6 +112,7 @@ export interface UpdateArticleBody {
   content?: string;
   pages?: string[] | null;
   style?: UpdateArticleBodyStyle;
+  cover?: ArticleCover | null;
 }
 
 export type TransitionArticleBodyTargetStatus =

@@ -14,6 +14,7 @@ export const articlesTable = pgTable("articles", {
   status: articleStatusEnum("status").notNull().default("DRAFT"),
   pages: jsonb("pages"),
   style: jsonb("style"),
+  cover: jsonb("cover"),
   letterAt: timestamp("letter_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

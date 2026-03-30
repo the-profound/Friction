@@ -75,6 +75,7 @@ router.patch("/articles/:id", async (req, res) => {
   if (parsed.data.content !== undefined) updates.content = parsed.data.content;
   if (parsed.data.pages !== undefined) updates.pages = parsed.data.pages;
   if (parsed.data.style !== undefined) updates.style = parsed.data.style;
+  if (parsed.data.cover !== undefined) updates.cover = parsed.data.cover;
 
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No fields to update" });

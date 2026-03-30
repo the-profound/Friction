@@ -1465,6 +1465,9 @@ components:
         style:
           type: object
           nullable: true
+        cover:
+          $ref: "#/components/schemas/ArticleCover"
+          nullable: true
         letterAt:
           type: string
           format: date-time
@@ -1506,6 +1509,31 @@ components:
         style:
           type: object
           nullable: true
+        cover:
+          $ref: "#/components/schemas/ArticleCover"
+          nullable: true
+
+    ArticleCover:
+      type: object
+      description: Article cover display settings. null means default cover.
+      properties:
+        type:
+          type: string
+          enum: [image, color, default]
+        imageUrl:
+          type: string
+          format: uri
+          description: Cover image URL (used when type=image)
+        bgColor:
+          type: string
+          description: Background color hex (used when type=color)
+        textColor:
+          type: string
+          description: Text color hex for title overlay
+        align:
+          type: string
+          enum: [left, center]
+      required: [type, textColor, align]
 
     TransitionArticleBody:
       type: object

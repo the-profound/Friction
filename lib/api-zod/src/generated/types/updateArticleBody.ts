@@ -5,6 +5,7 @@
  * Friction MVP 1.0.0 API
  * OpenAPI spec version: 0.1.0
  */
+import type { ArticleCover } from "./articleCover";
 import type { UpdateArticleBodyStyle } from "./updateArticleBodyStyle";
 
 export interface UpdateArticleBody {
@@ -13,4 +14,5 @@ export interface UpdateArticleBody {
   content?: string;
   pages?: string[] | null;
   style?: UpdateArticleBodyStyle;
+  cover?: ArticleCover | null;
 }

@@ -5,6 +5,7 @@
  * Friction MVP 1.0.0 API
  * OpenAPI spec version: 0.1.0
  */
+import type { ArticleCover } from "./articleCover";
 import type { ArticleStatus } from "./articleStatus";
 import type { ArticleStyle } from "./articleStyle";
 
@@ -16,6 +17,7 @@ export interface Article {
   status: ArticleStatus;
   pages?: string[] | null;
   style?: ArticleStyle;
+  cover?: ArticleCover | null;
   letterAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
