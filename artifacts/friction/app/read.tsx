@@ -272,11 +272,6 @@ export default function ReadScreen() {
             <Feather name="arrow-left" size={20} color={Colors.zinc600} />
           </Pressable>
         )}
-        <Text style={styles.pageIndicator}>
-          {totalPages > 0
-            ? `${currentPage + 1}/${totalPages}`
-            : ""}
-        </Text>
       </View>
 
       {article && (
