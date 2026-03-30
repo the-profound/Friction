@@ -261,3 +261,78 @@ export const TabConfig = {
 export type MainTabKey = (typeof TabConfig.mainTabs)[number]["key"];
 export type OfSubTabKey = (typeof TabConfig.ofSubTabs)[number]["key"];
 export type ToSubTabKey = (typeof TabConfig.toSubTabs)[number]["key"];
+
+export const ReaderTokens = {
+  aspectRatio: 5 / 8,
+
+  safeArea: {
+    widthCqi: 90,
+    heightCqi: 120,
+  },
+
+  padding: {
+    xCqi: 6,
+    yCqi: 10,
+  },
+
+  fontFamily: {
+    serif: Platform.select({
+      ios: "NotoSerifKR_400Regular",
+      default: "NotoSerifKR_400Regular",
+    }),
+    serifBold: Platform.select({
+      ios: "NotoSerifKR_700Bold",
+      default: "NotoSerifKR_700Bold",
+    }),
+    sans: Platform.select({
+      ios: "NotoSansKR_400Regular",
+      default: "NotoSansKR_400Regular",
+    }),
+    sansMedium: Platform.select({
+      ios: "NotoSansKR_500Medium",
+      default: "NotoSansKR_500Medium",
+    }),
+    sansSemiBold: Platform.select({
+      ios: "NotoSansKR_600SemiBold",
+      default: "NotoSansKR_600SemiBold",
+    }),
+    sansBold: Platform.select({
+      ios: "NotoSansKR_700Bold",
+      default: "NotoSansKR_700Bold",
+    }),
+  },
+
+  typeScale: {
+    bodyCqi: 4.0,
+    captionCqi: 3.4,
+    metadataCqi: 2.8,
+  },
+
+  lineHeight: {
+    relaxed: 1.8,
+    tight: 1.2,
+  },
+
+  letterSpacing: {
+    relaxedEm: 0.05,
+    tightEm: -0.02,
+  },
+} as const;
+
+export function cqiToPx(cqi: number, containerWidth: number): number {
+  return (cqi / 100) * containerWidth;
+}
+
+export function readerFontSize(
+  scaleCqi: number,
+  containerWidth: number,
+): number {
+  return cqiToPx(scaleCqi, containerWidth);
+}
+
+export function readerLetterSpacing(
+  em: number,
+  fontSize: number,
+): number {
+  return em * fontSize;
+}

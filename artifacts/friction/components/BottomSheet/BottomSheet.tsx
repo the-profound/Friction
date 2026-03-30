@@ -9,6 +9,7 @@ import {
   PanResponder,
   Dimensions,
   type ViewStyle,
+  type TextStyle,
 } from "react-native";
 import { Colors, Typography, ZIndex, Spacing } from "../../constants/tokens";
 
@@ -20,6 +21,7 @@ interface BottomSheetProps {
   onClose: () => void;
   children: React.ReactNode;
   title?: string;
+  titleStyle?: TextStyle;
   snapPoints?: number[];
   enableDragDown?: boolean;
   dismissable?: boolean;
@@ -30,6 +32,7 @@ export default function BottomSheet({
   onClose,
   children,
   title,
+  titleStyle,
   snapPoints = [0.4, 0.8],
   enableDragDown = true,
   dismissable = true,
@@ -138,7 +141,7 @@ export default function BottomSheet({
         >
           <View {...panResponder.panHandlers} style={styles.handleArea}>
             <View style={styles.handle} />
-            {title && <Text style={styles.title}>{title}</Text>}
+            {title && <Text style={[styles.title, titleStyle]}>{title}</Text>}
           </View>
           <View style={styles.content}>{children}</View>
         </Animated.View>

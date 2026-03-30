@@ -119,7 +119,7 @@ Utility scripts package. Each script is a `.ts` file in `src/` with a correspond
 Reading/writing platform mobile app. All 37 Notion Queue DB items processed (순서 1–11).
 
 **Design system & navigation:**
-- `constants/tokens.ts` — design tokens (Colors, Typography, Spacing, etc.)
+- `constants/tokens.ts` — design tokens (Colors, Typography, Spacing, ReaderTokens with 5:8 ratio, cqi type scale, serif/sans fonts, cqiToPx/readerFontSize/readerLetterSpacing utils)
 - `types/navigation.ts` — NavBar/SubTab/MiniSubTab type definitions
 - `contexts/NavigationContext.tsx` — global navigation state (activeTab, layer, subTabs), syncs with Expo Router via useSegments/usePathname
 - `components/NavBar/NavBar.tsx` — 4-tab bottom nav (IN/OF/TO/ON) + settings gear icon (→ /settings)
@@ -158,7 +158,7 @@ Reading/writing platform mobile app. All 37 Notion Queue DB items processed (순
 
 **Detail/sub screens (app/):**
 - `settings.tsx` (ST-01) — settings screen: 4 sections (Account/My Info/Policy/App Info), logout/delete account, user info via getUser API, policy links via Linking.openURL, app version from expo-constants
-- `read.tsx` (READ-00) — reading screen with progress bar
+- `read.tsx` (READ-00) — reading screen with 5:8 aspect ratio container, cqi-based dynamic typography (body 4.0cqi, caption 3.4cqi, metadata 2.8cqi), serif (Noto Serif KR) body text, sans (Noto Sans KR) UI text, line-height 1.8, letter-spacing 0.05em
 - `to-01.tsx` (TO-01) — neighbor list
 - `to-02.tsx` (TO-02) — send letter screen
 - `to-03.tsx` (TO-03) — send history

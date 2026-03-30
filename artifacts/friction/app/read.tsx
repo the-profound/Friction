@@ -8,12 +8,21 @@ import {
   Alert,
   ScrollView,
   TextInput,
+  Platform,
+  useWindowDimensions,
   type LayoutChangeEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams, Stack } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import { Colors, Typography, Spacing } from "@/constants/tokens";
+import {
+  Colors,
+  Spacing,
+  ReaderTokens,
+  cqiToPx,
+  readerFontSize,
+  readerLetterSpacing,
+} from "@/constants/tokens";
 import ProgressIndicator from "@/components/ProgressIndicator/ProgressIndicator";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import SelectableText from "@/components/SelectableText/SelectableText";
@@ -31,9 +40,73 @@ function splitIntoParagraphs(text: string): string[] {
     .filter((p) => p.length > 0);
 }
 
+function computeReaderLayout(availableWidth: number, availableHeight: number): ReaderLayout {
+  const widthFromHeight = availableHeight * ReaderTokens.aspectRatio;
+  const heightFromWidth = availableWidth / ReaderTokens.aspectRatio;
+
+  const containerWidth =
+    widthFromHeight <= availableWidth ? widthFromHeight : availableWidth;
+  const containerHeight =
+    heightFromWidth <= availableHeight ? heightFromWidth : availableHeight;
+
+  const paddingX = cqiToPx(ReaderTokens.padding.xCqi, containerWidth);
+  const paddingY = cqiToPx(ReaderTokens.padding.yCqi, containerWidth);
+
+  const safeAreaWidth = cqiToPx(
+    ReaderTokens.safeArea.widthCqi,
+    containerWidth,
+  );
+  const safeAreaHeight = cqiToPx(
+    ReaderTokens.safeArea.heightCqi,
+    containerWidth,
+  );
+
+  const bodyFontSize = readerFontSize(
+    ReaderTokens.typeScale.bodyCqi,
+    containerWidth,
+  );
+  const captionFontSize = readerFontSize(
+    ReaderTokens.typeScale.captionCqi,
+    containerWidth,
+  );
+  const metadataFontSize = readerFontSize(
+    ReaderTokens.typeScale.metadataCqi,
+    containerWidth,
+  );
+
+  const bodyLineHeight = bodyFontSize * ReaderTokens.lineHeight.relaxed;
+  const bodyLetterSpacing = readerLetterSpacing(
+    ReaderTokens.letterSpacing.relaxedEm,
+    bodyFontSize,
+  );
+
+  const titleLineHeight = bodyFontSize * ReaderTokens.lineHeight.tight;
+  const titleLetterSpacing = readerLetterSpacing(
+    ReaderTokens.letterSpacing.tightEm,
+    bodyFontSize,
+  );
+
+  return {
+    containerWidth,
+    containerHeight,
+    paddingX,
+    paddingY,
+    safeAreaWidth,
+    safeAreaHeight,
+    bodyFontSize,
+    captionFontSize,
+    metadataFontSize,
+    bodyLineHeight,
+    bodyLetterSpacing,
+    titleLineHeight,
+    titleLetterSpacing,
+  };
+}
+
 export default function ReadScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { width: screenWidth } = useWindowDimensions();
   const queryClient = useQueryClient();
   const { userId } = useUser();
   const { setActiveSession, clearActiveSession } = useActiveReading();
@@ -87,10 +160,22 @@ export default function ReadScreen() {
   const [selectedText, setSelectedText] = useState("");
   const [memoSheetVisible, setMemoSheetVisible] = useState(false);
   const [memoText, setMemoText] = useState("");
-  const [pageListHeight, setPageListHeight] = useState(0);
+  const [pageListSize, setPageListSize] = useState({ width: 0, height: 0 });
   const handlePageListLayout = useCallback((e: LayoutChangeEvent) => {
-    setPageListHeight(e.nativeEvent.layout.height);
+    const { width, height } = e.nativeEvent.layout;
+    setPageListSize((prev) =>
+      prev.width === width && prev.height === height ? prev : { width, height },
+    );
   }, []);
+
+  const layout = useMemo(
+    () =>
+      computeReaderLayout(
+        pageListSize.width > 0 ? pageListSize.width : screenWidth,
+        pageListSize.height > 0 ? pageListSize.height : screenWidth / ReaderTokens.aspectRatio,
+      ),
+    [pageListSize.width, pageListSize.height, screenWidth],
+  );
   const createSentence = useCreateStoredSentence();
   const deleteInbox = useDeleteInboxItem();
 
@@ -241,6 +326,91 @@ export default function ReadScreen() {
     }
   }, [memoText, userId, articleId, currentPage, createSentence, queryClient]);
 
+  const dynamicStyles = useMemo(
+    () =>
+      StyleSheet.create({
+        articleTitle: {
+          fontSize: layout.captionFontSize,
+          fontFamily: ReaderTokens.fontFamily.sans,
+          letterSpacing: layout.titleLetterSpacing,
+          color: Colors.zinc400,
+          textAlign: "center" as const,
+        },
+        modeBadgeText: {
+          fontSize: layout.metadataFontSize,
+          fontFamily: ReaderTokens.fontFamily.sans,
+          color: Colors.zinc500,
+        },
+        completionText: {
+          fontSize: layout.bodyFontSize * 1.125,
+          fontWeight: "600" as const,
+          fontFamily: ReaderTokens.fontFamily.sansSemiBold,
+          color: Colors.zinc900,
+          marginBottom: 8,
+        },
+        completionButtonText: {
+          fontSize: layout.bodyFontSize,
+          fontWeight: "600" as const,
+          fontFamily: ReaderTokens.fontFamily.sansSemiBold,
+          color: Colors.white,
+        },
+        completionButtonSecondaryText: {
+          fontSize: layout.bodyFontSize,
+          fontWeight: "600" as const,
+          fontFamily: ReaderTokens.fontFamily.sansSemiBold,
+          color: Colors.zinc600,
+        },
+        sentencePreview: {
+          fontSize: layout.bodyFontSize,
+          fontFamily: ReaderTokens.fontFamily.serif,
+          color: Colors.zinc700,
+          fontStyle: "italic" as const,
+          lineHeight: layout.bodyLineHeight,
+        },
+        sentenceButtonText: {
+          fontSize: layout.captionFontSize,
+          fontWeight: "600" as const,
+          fontFamily: ReaderTokens.fontFamily.sansSemiBold,
+          color: Colors.white,
+        },
+        sentenceButtonCancelText: {
+          fontSize: layout.captionFontSize,
+          fontWeight: "600" as const,
+          fontFamily: ReaderTokens.fontFamily.sansSemiBold,
+          color: Colors.zinc600,
+        },
+        memoInput: {
+          fontSize: layout.bodyFontSize,
+          fontFamily: ReaderTokens.fontFamily.sans,
+          color: Colors.zinc800,
+          backgroundColor: Colors.zinc50,
+          borderRadius: 10,
+          padding: 14,
+          minHeight: 120,
+          lineHeight: layout.bodyLineHeight,
+        },
+        memoPageInfo: {
+          fontSize: layout.captionFontSize,
+          fontFamily: ReaderTokens.fontFamily.sans,
+          color: Colors.zinc400,
+          textAlign: "right" as const,
+        },
+        completeButtonText: {
+          fontSize: layout.bodyFontSize,
+          fontWeight: "600" as const,
+          fontFamily: ReaderTokens.fontFamily.sansSemiBold,
+          color: Colors.white,
+        },
+        sheetTitle: {
+          fontSize: layout.bodyFontSize,
+          fontWeight: "600" as const,
+          fontFamily: ReaderTokens.fontFamily.sansSemiBold,
+          color: Colors.zinc900,
+        },
+      }),
+    [layout],
+  );
+
   if (!articleId) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -272,34 +442,44 @@ export default function ReadScreen() {
           gestureEnabled: mode !== "basic" || reading.canExit,
         }}
       />
-      <View style={styles.header}>
-        {mode === "re_read" && (
+      {mode === "re_read" && (
+        <View style={styles.header}>
           <Pressable onPress={handleBack} hitSlop={12} style={styles.backButton}>
             <Feather name="arrow-left" size={20} color={Colors.zinc600} />
           </Pressable>
-        )}
-      </View>
-
-      {article && (
-        <View style={styles.titleBar}>
-          <Text style={styles.articleTitle} numberOfLines={1}>{article.title}</Text>
-          {mode === "re_read" && (
-            <View style={styles.modeBadge}>
-              <Text style={styles.modeBadgeText}>다시읽기</Text>
-            </View>
-          )}
         </View>
       )}
 
       {totalPages > 0 ? (
         <View style={styles.pageListContainer} onLayout={handlePageListLayout}>
-          <PageView
-            content={currentPageContent}
-            pageIndex={currentPage}
-            onCollectSentence={handleCollectSentence}
-            bottomInset={isOnLastPage ? insets.bottom + 56 : insets.bottom}
-            availableHeight={pageListHeight}
-          />
+          <View
+            style={[
+              styles.readerFrame,
+              {
+                width: layout.containerWidth,
+                height: layout.containerHeight,
+              },
+            ]}
+          >
+            <PageView
+              content={currentPageContent}
+              pageIndex={currentPage}
+              onCollectSentence={handleCollectSentence}
+              bottomInset={isOnLastPage ? insets.bottom + 56 : insets.bottom}
+              layout={layout}
+            />
+
+            {article && (
+              <View style={styles.titleBar}>
+                <Text style={dynamicStyles.articleTitle} numberOfLines={1}>{article.title}</Text>
+                {mode === "re_read" && (
+                  <View style={styles.modeBadge}>
+                    <Text style={dynamicStyles.modeBadgeText}>다시읽기</Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
 
           {canNavigate && totalPages > 1 && (
             <>
@@ -318,7 +498,7 @@ export default function ReadScreen() {
             <View style={[styles.completeButtonContainer, { paddingBottom: insets.bottom + 8 }]}>
               <Pressable style={styles.completeButton} onPress={() => reading.nextPage()}>
                 <Feather name="check" size={18} color={Colors.white} />
-                <Text style={styles.completeButtonText}>읽기 완료</Text>
+                <Text style={dynamicStyles.completeButtonText}>읽기 완료</Text>
               </Pressable>
             </View>
           )}
@@ -346,23 +526,24 @@ export default function ReadScreen() {
         visible={completionSheetVisible}
         onClose={() => {}}
         title="완독!"
+        titleStyle={dynamicStyles.sheetTitle}
         snapPoints={[0.35]}
         enableDragDown={false}
         dismissable={false}
       >
         <View style={styles.completionContent}>
           <Feather name="check-circle" size={48} color={Colors.zinc900} style={styles.completionIcon} />
-          <Text style={styles.completionText}>읽기를 완료했어요</Text>
+          <Text style={dynamicStyles.completionText}>읽기를 완료했어요</Text>
           <Pressable style={styles.completionButton} onPress={handleCommitAndArchive}>
             <Feather name="archive" size={18} color={Colors.white} />
-            <Text style={styles.completionButtonText}>보관하기</Text>
+            <Text style={dynamicStyles.completionButtonText}>보관하기</Text>
           </Pressable>
           <Pressable
             style={[styles.completionButton, styles.completionButtonSecondary]}
             onPress={handleCommitAndDelete}
           >
             <Feather name="trash-2" size={18} color={Colors.zinc600} />
-            <Text style={styles.completionButtonSecondaryText}>삭제하기</Text>
+            <Text style={dynamicStyles.completionButtonSecondaryText}>삭제하기</Text>
           </Pressable>
         </View>
       </BottomSheet>
@@ -371,10 +552,11 @@ export default function ReadScreen() {
         visible={sentencePopupVisible}
         onClose={() => setSentencePopupVisible(false)}
         title="문장 저장"
+        titleStyle={dynamicStyles.sheetTitle}
         snapPoints={[0.3]}
       >
         <View style={styles.sentenceContent}>
-          <Text style={styles.sentencePreview} numberOfLines={3}>
+          <Text style={dynamicStyles.sentencePreview} numberOfLines={3}>
             &ldquo;{selectedText}&rdquo;
           </Text>
           <View style={styles.sentenceActions}>
@@ -382,11 +564,11 @@ export default function ReadScreen() {
               style={[styles.sentenceButton, styles.sentenceButtonCancel]}
               onPress={() => setSentencePopupVisible(false)}
             >
-              <Text style={styles.sentenceButtonCancelText}>취소</Text>
+              <Text style={dynamicStyles.sentenceButtonCancelText}>취소</Text>
             </Pressable>
             <Pressable style={styles.sentenceButton} onPress={handleSaveSentence}>
               <Feather name="bookmark" size={16} color={Colors.white} />
-              <Text style={styles.sentenceButtonText}>저장</Text>
+              <Text style={dynamicStyles.sentenceButtonText}>저장</Text>
             </Pressable>
           </View>
         </View>
@@ -396,11 +578,12 @@ export default function ReadScreen() {
         visible={memoSheetVisible}
         onClose={() => setMemoSheetVisible(false)}
         title="메모 작성"
+        titleStyle={dynamicStyles.sheetTitle}
         snapPoints={[0.4]}
       >
         <View style={styles.memoContent}>
           <TextInput
-            style={styles.memoInput}
+            style={dynamicStyles.memoInput}
             placeholder="읽으면서 떠오른 생각을 적어보세요..."
             placeholderTextColor={Colors.searchPlaceholder}
             value={memoText}
@@ -409,7 +592,7 @@ export default function ReadScreen() {
             autoFocus
             textAlignVertical="top"
           />
-          <Text style={styles.memoPageInfo}>
+          <Text style={dynamicStyles.memoPageInfo}>
             {currentPage + 1}페이지에서 작성 중
           </Text>
           <View style={styles.sentenceActions}>
@@ -417,11 +600,11 @@ export default function ReadScreen() {
               style={[styles.sentenceButton, styles.sentenceButtonCancel]}
               onPress={() => { setMemoSheetVisible(false); setMemoText(""); }}
             >
-              <Text style={styles.sentenceButtonCancelText}>취소</Text>
+              <Text style={dynamicStyles.sentenceButtonCancelText}>취소</Text>
             </Pressable>
             <Pressable style={styles.sentenceButton} onPress={handleSaveMemo}>
               <Feather name="save" size={16} color={Colors.white} />
-              <Text style={styles.sentenceButtonText}>저장</Text>
+              <Text style={dynamicStyles.sentenceButtonText}>저장</Text>
             </Pressable>
           </View>
         </View>
@@ -430,36 +613,80 @@ export default function ReadScreen() {
   );
 }
 
+interface ReaderLayout {
+  containerWidth: number;
+  containerHeight: number;
+  paddingX: number;
+  paddingY: number;
+  safeAreaWidth: number;
+  safeAreaHeight: number;
+  bodyFontSize: number;
+  captionFontSize: number;
+  metadataFontSize: number;
+  bodyLineHeight: number;
+  bodyLetterSpacing: number;
+  titleLineHeight: number;
+  titleLetterSpacing: number;
+}
+
 function PageView({
   content,
   pageIndex,
   onCollectSentence,
   bottomInset,
-  availableHeight,
+  layout,
 }: {
   content: string;
   pageIndex: number;
   onCollectSentence: (text: string) => void;
   bottomInset: number;
-  availableHeight: number;
+  layout: ReaderLayout;
 }) {
   const paragraphs = useMemo(() => splitIntoParagraphs(content), [content]);
 
-  const cardHeight = availableHeight > 0 ? availableHeight : undefined;
+  const dynamicPageStyles = useMemo(
+    () =>
+      StyleSheet.create({
+        safeAreaBox: {
+          width: layout.safeAreaWidth,
+          maxHeight: layout.safeAreaHeight,
+          alignSelf: "center",
+        },
+        pageContent: {
+          flexGrow: 1,
+          justifyContent: "center" as const,
+          paddingHorizontal: layout.paddingX,
+          paddingTop: layout.paddingY,
+          paddingBottom: bottomInset + layout.paddingY,
+        },
+        paragraphWrapper: {
+          marginBottom: layout.paddingY,
+        },
+      }),
+    [layout.safeAreaWidth, layout.safeAreaHeight, layout.paddingX, layout.paddingY, bottomInset],
+  );
 
   return (
-    <View style={[styles.pageContainer, cardHeight ? { height: cardHeight } : { flex: 1 }]}>
-      <ScrollView
-        contentContainerStyle={[styles.pageContent, { paddingBottom: bottomInset + 40 }]}
-        showsVerticalScrollIndicator={false}
-        style={styles.pageScrollView}
-      >
-        {paragraphs.map((para, idx) => (
-          <View key={`${pageIndex}-p-${idx}`} style={styles.paragraphWrapper}>
-            <SelectableText text={para} onCollect={onCollectSentence} />
-          </View>
-        ))}
-      </ScrollView>
+    <View style={[styles.pageContainer, { flex: 1 }]}>
+      <View style={[dynamicPageStyles.safeAreaBox, { flex: 1 }]}>
+        <ScrollView
+          contentContainerStyle={dynamicPageStyles.pageContent}
+          showsVerticalScrollIndicator={false}
+          style={styles.pageScrollView}
+        >
+          {paragraphs.map((para, idx) => (
+            <View key={`${pageIndex}-p-${idx}`} style={dynamicPageStyles.paragraphWrapper}>
+              <SelectableText
+                text={para}
+                onCollect={onCollectSentence}
+                fontSize={layout.bodyFontSize}
+                lineHeight={layout.bodyLineHeight}
+                letterSpacing={layout.bodyLetterSpacing}
+              />
+            </View>
+          ))}
+        </ScrollView>
+      </View>
     </View>
   );
 }
@@ -484,23 +711,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  pageIndicator: {
-    ...Typography.caption,
-    color: Colors.zinc400,
-    flex: 1,
-    textAlign: "right",
-  },
   titleBar: {
-    flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: Spacing.screenPx,
     paddingBottom: 12,
-    gap: 8,
-  },
-  articleTitle: {
-    ...Typography.bodySemiBold,
-    color: Colors.zinc900,
-    flex: 1,
+    paddingTop: 8,
+    width: "100%",
   },
   modeBadge: {
     backgroundColor: Colors.zinc100,
@@ -508,27 +724,12 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 6,
   },
-  modeBadgeText: {
-    ...Typography.caption,
-    color: Colors.zinc500,
-  },
   pageContainer: {
     overflow: "hidden",
+    justifyContent: "center",
   },
   pageScrollView: {
     flex: 1,
-  },
-  pageContent: {
-    paddingHorizontal: Spacing.screenPx,
-    paddingTop: 16,
-  },
-  paragraphWrapper: {
-    marginBottom: 16,
-  },
-  pageText: {
-    ...Typography.body,
-    color: Colors.zinc800,
-    lineHeight: 28,
   },
   emptyContainer: {
     flex: 1,
@@ -538,13 +739,14 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   emptyTitle: {
-    ...Typography.bodySemiBold,
     fontSize: 18,
+    fontWeight: "600" as const,
+    fontFamily: ReaderTokens.fontFamily.sansSemiBold,
     color: Colors.zinc900,
   },
   loadingText: {
-    ...Typography.body,
     fontSize: 14,
+    fontFamily: ReaderTokens.fontFamily.sans,
     color: Colors.zinc500,
     marginTop: 8,
   },
@@ -555,12 +757,6 @@ const styles = StyleSheet.create({
   },
   completionIcon: {
     marginBottom: 4,
-  },
-  completionText: {
-    ...Typography.bodySemiBold,
-    fontSize: 18,
-    color: Colors.zinc900,
-    marginBottom: 8,
   },
   completionButton: {
     flexDirection: "row",
@@ -573,26 +769,12 @@ const styles = StyleSheet.create({
     gap: 8,
     width: "100%",
   },
-  completionButtonText: {
-    ...Typography.bodySemiBold,
-    color: Colors.white,
-  },
   completionButtonSecondary: {
     backgroundColor: Colors.zinc100,
-  },
-  completionButtonSecondaryText: {
-    ...Typography.bodySemiBold,
-    color: Colors.zinc600,
   },
   sentenceContent: {
     paddingVertical: 12,
     gap: 16,
-  },
-  sentencePreview: {
-    ...Typography.body,
-    color: Colors.zinc700,
-    fontStyle: "italic",
-    lineHeight: 24,
   },
   sentenceActions: {
     flexDirection: "row",
@@ -608,39 +790,34 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     gap: 6,
   },
-  sentenceButtonText: {
-    ...Typography.bodySemiBold,
-    fontSize: 14,
-    color: Colors.white,
-  },
   sentenceButtonCancel: {
     backgroundColor: Colors.zinc100,
-  },
-  sentenceButtonCancelText: {
-    ...Typography.bodySemiBold,
-    fontSize: 14,
-    color: Colors.zinc600,
   },
   memoContent: {
     paddingVertical: 12,
     gap: 12,
   },
-  memoInput: {
-    ...Typography.body,
-    color: Colors.zinc800,
-    backgroundColor: Colors.zinc50,
-    borderRadius: 10,
-    padding: 14,
-    minHeight: 120,
-    lineHeight: 24,
-  },
-  memoPageInfo: {
-    ...Typography.caption,
-    color: Colors.zinc400,
-    textAlign: "right",
-  },
   pageListContainer: {
     flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  readerFrame: {
+    alignSelf: "center",
+    overflow: "visible",
+    backgroundColor: Colors.white,
+    ...Platform.select({
+      web: {
+        boxShadow: "0 -6px 18px rgba(0,0,0,0.045), 0 6px 18px rgba(0,0,0,0.045)",
+      },
+      default: {
+        elevation: 4,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.06,
+        shadowRadius: 18,
+      },
+    }),
   },
   bottomBar: {
     flexDirection: "row",
@@ -677,10 +854,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     gap: 8,
     width: "100%",
-  },
-  completeButtonText: {
-    ...Typography.bodySemiBold,
-    color: Colors.white,
   },
   tapZoneLeft: {
     position: "absolute",

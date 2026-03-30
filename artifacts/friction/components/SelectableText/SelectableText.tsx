@@ -1,14 +1,17 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import { View, TextInput, StyleSheet, Pressable, Text, Platform, type NativeSyntheticEvent, type TextInputSelectionChangeEventData } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { Colors, Typography } from "../../constants/tokens";
+import { Colors, ReaderTokens } from "../../constants/tokens";
 
 interface SelectableTextProps {
   text: string;
   onCollect: (selectedText: string) => void;
+  fontSize?: number;
+  lineHeight?: number;
+  letterSpacing?: number;
 }
 
-function SelectableTextWeb({ text, onCollect }: SelectableTextProps) {
+function SelectableTextWeb({ text, onCollect, fontSize, lineHeight, letterSpacing }: SelectableTextProps) {
   const [selectedText, setSelectedText] = useState("");
   const [showCollectButton, setShowCollectButton] = useState(false);
   const textBodyRef = useRef<Text>(null);
@@ -50,9 +53,17 @@ function SelectableTextWeb({ text, onCollect }: SelectableTextProps) {
     }
   }, [selectedText, onCollect]);
 
+  const textStyle = [
+    styles.textBody,
+    fontSize != null && { fontSize },
+    lineHeight != null && { lineHeight },
+    letterSpacing != null && { letterSpacing },
+    { wordBreak: "break-word" as any, overflowWrap: "anywhere" as any },
+  ];
+
   return (
     <View style={styles.container}>
-      <Text selectable style={styles.textBody} ref={textBodyRef}>
+      <Text selectable style={textStyle} ref={textBodyRef}>
         {text}
       </Text>
       {showCollectButton && (
@@ -71,7 +82,7 @@ function SelectableTextWeb({ text, onCollect }: SelectableTextProps) {
   );
 }
 
-function SelectableTextNative({ text, onCollect }: SelectableTextProps) {
+function SelectableTextNative({ text, onCollect, fontSize, lineHeight, letterSpacing }: SelectableTextProps) {
   const [selection, setSelection] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
   const [showCollectButton, setShowCollectButton] = useState(false);
   const textRef = useRef(text);
@@ -94,10 +105,17 @@ function SelectableTextNative({ text, onCollect }: SelectableTextProps) {
     }
   }, [selection, onCollect]);
 
+  const inputStyle = [
+    styles.textInput,
+    fontSize != null && { fontSize },
+    lineHeight != null && { lineHeight },
+    letterSpacing != null && { letterSpacing },
+  ];
+
   return (
     <View style={styles.container}>
       <TextInput
-        style={styles.textInput}
+        style={inputStyle}
         value={text}
         multiline
         editable={false}
@@ -134,14 +152,20 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   textBody: {
-    ...Typography.body,
+    fontSize: 16,
+    fontFamily: ReaderTokens.fontFamily.serif,
     color: Colors.zinc800,
     lineHeight: 28,
+    letterSpacing: 0.8,
+    textAlign: "justify" as const,
   },
   textInput: {
-    ...Typography.body,
+    fontSize: 16,
+    fontFamily: ReaderTokens.fontFamily.serif,
     color: Colors.zinc800,
     lineHeight: 28,
+    letterSpacing: 0.8,
+    textAlign: "justify" as const,
     padding: 0,
     margin: 0,
   },
@@ -156,7 +180,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   collectHint: {
-    ...Typography.caption,
+    fontSize: 12,
+    fontFamily: ReaderTokens.fontFamily.sans,
     color: Colors.zinc300,
     flex: 1,
     fontStyle: "italic",
@@ -171,7 +196,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   collectButtonText: {
-    ...Typography.caption,
+    fontSize: 12,
+    fontFamily: ReaderTokens.fontFamily.sansSemiBold,
     color: Colors.white,
     fontWeight: "600",
   },
