@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useRef } from "react";
-import { View, TextInput, StyleSheet, Pressable, Text, type NativeSyntheticEvent, type TextInputSelectionChangeEventData } from "react-native";
+import React, { useState, useCallback, useRef, useEffect } from "react";
+import { View, TextInput, StyleSheet, Pressable, Text, Platform, type NativeSyntheticEvent, type TextInputSelectionChangeEventData } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography } from "../../constants/tokens";
 
@@ -8,7 +8,70 @@ interface SelectableTextProps {
   onCollect: (selectedText: string) => void;
 }
 
-export default function SelectableText({ text, onCollect }: SelectableTextProps) {
+function SelectableTextWeb({ text, onCollect }: SelectableTextProps) {
+  const [selectedText, setSelectedText] = useState("");
+  const [showCollectButton, setShowCollectButton] = useState(false);
+  const textBodyRef = useRef<Text>(null);
+
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+
+    const handleSelectionChange = () => {
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0 || sel.toString().trim().length === 0) {
+        setShowCollectButton(false);
+        setSelectedText("");
+        return;
+      }
+      const range = sel.getRangeAt(0);
+      const textNode = (textBodyRef.current as unknown as HTMLElement);
+      if (textNode && textNode.contains(range.commonAncestorContainer)) {
+        const selected = sel.toString().trim();
+        setSelectedText(selected);
+        setShowCollectButton(true);
+        return;
+      }
+      setShowCollectButton(false);
+      setSelectedText("");
+    };
+
+    document.addEventListener("selectionchange", handleSelectionChange);
+    return () => {
+      document.removeEventListener("selectionchange", handleSelectionChange);
+    };
+  }, []);
+
+  const handleCollect = useCallback(() => {
+    if (selectedText.length > 0) {
+      onCollect(selectedText);
+      setShowCollectButton(false);
+      setSelectedText("");
+      window.getSelection()?.removeAllRanges();
+    }
+  }, [selectedText, onCollect]);
+
+  return (
+    <View style={styles.container}>
+      <Text selectable style={styles.textBody} ref={textBodyRef}>
+        {text}
+      </Text>
+      {showCollectButton && (
+        <View style={styles.collectBar}>
+          <Text style={styles.collectHint} numberOfLines={1}>
+            &ldquo;{selectedText.substring(0, 40)}
+            {selectedText.length > 40 ? "..." : ""}&rdquo;
+          </Text>
+          <Pressable style={styles.collectButton} onPress={handleCollect}>
+            <Feather name="bookmark" size={14} color={Colors.white} />
+            <Text style={styles.collectButtonText}>수집</Text>
+          </Pressable>
+        </View>
+      )}
+    </View>
+  );
+}
+
+function SelectableTextNative({ text, onCollect }: SelectableTextProps) {
   const [selection, setSelection] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
   const [showCollectButton, setShowCollectButton] = useState(false);
   const textRef = useRef(text);
@@ -59,9 +122,21 @@ export default function SelectableText({ text, onCollect }: SelectableTextProps)
   );
 }
 
+export default function SelectableText(props: SelectableTextProps) {
+  if (Platform.OS === "web") {
+    return <SelectableTextWeb {...props} />;
+  }
+  return <SelectableTextNative {...props} />;
+}
+
 const styles = StyleSheet.create({
   container: {
     position: "relative",
+  },
+  textBody: {
+    ...Typography.body,
+    color: Colors.zinc800,
+    lineHeight: 28,
   },
   textInput: {
     ...Typography.body,
