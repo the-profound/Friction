@@ -160,9 +160,13 @@ export default function ReadScreen() {
     router.back();
   }, [mode, reading, router]);
 
+  const lastHandledOffsetRef = useRef<number | null>(null);
   const handlePageChange = useCallback(
     (event: { nativeEvent: { contentOffset: { x: number } } }) => {
-      const idx = Math.round(event.nativeEvent.contentOffset.x / SCREEN_W);
+      const offsetX = event.nativeEvent.contentOffset.x;
+      if (lastHandledOffsetRef.current === offsetX) return;
+      lastHandledOffsetRef.current = offsetX;
+      const idx = Math.round(offsetX / SCREEN_W);
       reading.jumpToPage(idx);
     },
     [reading],
@@ -316,9 +320,11 @@ export default function ReadScreen() {
             keyExtractor={(_, idx) => `page-${idx}`}
             horizontal
             pagingEnabled
+            style={{ flex: 1 }}
             showsHorizontalScrollIndicator={false}
             scrollEnabled={mode === "re_read" || reading.session.state === "READING"}
             onMomentumScrollEnd={handlePageChange}
+            onScrollEndDrag={handlePageChange}
             initialScrollIndex={initialScrollIndex}
             renderItem={({ item: pageContent, index }) => (
               <PageView
