@@ -6,6 +6,7 @@ import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { PageHeader } from "@/components/NavBar/PageHeader";
 import ArticleListItem from "@/components/ArticleListItem/ArticleListItem";
+import { useQueryClient } from "@tanstack/react-query";
 import { useListArticles, useCreateArticle } from "@workspace/api-client-react";
 import type { Article } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
@@ -50,6 +51,7 @@ function formatRelativeDate(dateStr: string): string {
 export default function OnScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { userId } = useUser();
   const [filter, setFilter] = useState<FilterMode>("all");
 
@@ -77,12 +79,13 @@ export default function OnScreen() {
       const article = await createArticle.mutateAsync({
         data: { authorId: userId, title: "새 메모" },
       });
+      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
       router.push({ pathname: "/on-01a", params: { id: article.id } });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "메모 생성에 실패했습니다.";
       Alert.alert("오류", msg);
     }
-  }, [createArticle, userId, router]);
+  }, [createArticle, userId, router, queryClient]);
 
   const handleViewAll = useCallback(() => {
     router.push("/on-02");

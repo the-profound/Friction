@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, FlatList, Pressable, Switch, Alert, TextInput }
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
@@ -22,6 +23,7 @@ import BottomSheet from "@/components/BottomSheet/BottomSheet";
 export default function PersonalCollectionDetailScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { userId } = useUser();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [showPicker, setShowPicker] = useState(false);
@@ -88,12 +90,13 @@ export default function PersonalCollectionDetailScreen() {
     if (!id) return;
     try {
       await deleteCollection.mutateAsync({ id });
+      queryClient.invalidateQueries({ queryKey: ["/api/my-collections"] });
       router.back();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";
       Alert.alert("오류", msg);
     }
-  }, [id, deleteCollection, router]);
+  }, [id, deleteCollection, router, queryClient]);
 
   const handleAddArticles = useCallback(
     async (articleIds: string[]) => {

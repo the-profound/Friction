@@ -18,6 +18,7 @@ import ProgressIndicator from "@/components/ProgressIndicator/ProgressIndicator"
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import SelectableText from "@/components/SelectableText/SelectableText";
 import { useReadingSession } from "@/lib/useReadingSession";
+import { useQueryClient } from "@tanstack/react-query";
 import { useGetArticle, useCreateStoredSentence, useDeleteInboxItem } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
 import { useActiveReading } from "@/contexts/ActiveReadingContext";
@@ -33,6 +34,7 @@ function splitIntoParagraphs(text: string): string[] {
 export default function ReadScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { userId } = useUser();
   const { setActiveSession, clearActiveSession } = useActiveReading();
   const params = useLocalSearchParams<{
@@ -157,12 +159,13 @@ export default function ReadScreen() {
     const result = await reading.commitCompletion();
     setCompletionSheetVisible(false);
     if (result.success) {
+      queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
       clearActiveSession();
       router.back();
     } else {
       Alert.alert("오류", result.error ?? "완독 처리에 실패했습니다.");
     }
-  }, [reading, router, clearActiveSession]);
+  }, [reading, router, clearActiveSession, queryClient]);
 
   const handleCommitAndDelete = useCallback(async () => {
     const result = await reading.commitCompletion();
@@ -176,12 +179,13 @@ export default function ReadScreen() {
     }
     setCompletionSheetVisible(false);
     if (result.success) {
+      queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
       clearActiveSession();
       router.back();
     } else {
       Alert.alert("오류", result.error ?? "완독 처리에 실패했습니다.");
     }
-  }, [reading, router, inboxId, deleteInbox, clearActiveSession]);
+  }, [reading, router, inboxId, deleteInbox, clearActiveSession, queryClient]);
 
   const handleCollectSentence = useCallback((text: string) => {
     if (text.trim().length > 0) {
@@ -203,6 +207,7 @@ export default function ReadScreen() {
           },
         },
       });
+      queryClient.invalidateQueries({ queryKey: ["/api/stored-sentences"] });
       setSentencePopupVisible(false);
       setSelectedText("");
       Alert.alert("저장 완료", "문장이 저장되었습니다.");
@@ -210,7 +215,7 @@ export default function ReadScreen() {
       const msg = e instanceof Error ? e.message : "문장 저장에 실패했습니다.";
       Alert.alert("오류", msg);
     }
-  }, [selectedText, userId, articleId, currentPage, createSentence]);
+  }, [selectedText, userId, articleId, currentPage, createSentence, queryClient]);
 
   const handleSaveMemo = useCallback(async () => {
     if (!memoText.trim()) return;
@@ -226,6 +231,7 @@ export default function ReadScreen() {
           },
         },
       });
+      queryClient.invalidateQueries({ queryKey: ["/api/stored-sentences"] });
       setMemoSheetVisible(false);
       setMemoText("");
       Alert.alert("저장 완료", "메모가 저장되었습니다.");
@@ -233,7 +239,7 @@ export default function ReadScreen() {
       const msg = e instanceof Error ? e.message : "메모 저장에 실패했습니다.";
       Alert.alert("오류", msg);
     }
-  }, [memoText, userId, articleId, currentPage, createSentence]);
+  }, [memoText, userId, articleId, currentPage, createSentence, queryClient]);
 
   if (!articleId) {
     return (

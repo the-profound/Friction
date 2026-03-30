@@ -188,6 +188,7 @@ export function useReadingSession({
 
       if (inboxIdRef.current) {
         await markInboxReadMutation.mutateAsync({ id: inboxIdRef.current });
+        queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
       }
 
       setSession((s) => ({ ...s, state: "COMPLETED_COMMITTED" as ReadingSessionState }));
@@ -196,7 +197,7 @@ export function useReadingSession({
       const msg = e instanceof Error ? e.message : "완독 기록에 실패했습니다.";
       return { success: false, error: msg };
     }
-  }, [session.state, userId, articleId, createArticleRead, markInboxReadMutation]);
+  }, [session.state, userId, articleId, createArticleRead, markInboxReadMutation, queryClient]);
 
   const resetProgress = useCallback(async () => {
     const record = savedRecord?.record;

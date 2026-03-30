@@ -17,6 +17,7 @@ import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
 import { PageHeader } from "@/components/NavBar/PageHeader";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import DotIndicator from "@/components/DotIndicator/DotIndicator";
+import { useQueryClient } from "@tanstack/react-query";
 import { useListInbox, useMarkInboxOpened } from "@workspace/api-client-react";
 import type { InboxItem } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
@@ -127,6 +128,7 @@ function CarouselGroup({
 export default function InboxScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { userId } = useUser();
   const [searchActive, setSearchActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -166,6 +168,7 @@ export default function InboxScreen() {
       if (!item.openedAt) {
         try {
           await markOpened.mutateAsync({ id: item.id });
+          queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
         } catch (e: unknown) {
           console.warn("Failed to mark inbox opened:", e instanceof Error ? e.message : e);
         }
@@ -180,7 +183,7 @@ export default function InboxScreen() {
         },
       });
     },
-    [markOpened, router],
+    [markOpened, router, queryClient],
   );
 
   const handleRefresh = useCallback(() => {
