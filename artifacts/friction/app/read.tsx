@@ -320,7 +320,6 @@ export default function ReadScreen() {
             keyExtractor={(_, idx) => `page-${idx}`}
             horizontal
             pagingEnabled
-            style={{ flex: 1 }}
             showsHorizontalScrollIndicator={false}
             scrollEnabled={mode === "re_read" || reading.session.state === "READING"}
             onMomentumScrollEnd={handlePageChange}
