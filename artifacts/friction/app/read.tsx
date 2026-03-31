@@ -25,6 +25,8 @@ import {
 } from "@/constants/tokens";
 import ProgressIndicator from "@/components/ProgressIndicator/ProgressIndicator";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
+import CoverPreview from "@/components/CoverPreview/CoverPreview";
+import { resolveArticleCover } from "@/utils/articleCover";
 import SelectableText from "@/components/SelectableText/SelectableText";
 import { useReadingSession } from "@/lib/useReadingSession";
 import { useQueryClient } from "@tanstack/react-query";
@@ -154,6 +156,12 @@ export default function ReadScreen() {
     ? Math.min(reading.session.position.currentPage, totalPages - 1)
     : reading.session.position.currentPage;
   const isOnLastPage = totalPages > 0 && currentPage >= totalPages - 1;
+
+  const [coverDismissed, setCoverDismissed] = useState(false);
+
+  useEffect(() => {
+    setCoverDismissed(false);
+  }, [articleId]);
 
   const [completionSheetVisible, setCompletionSheetVisible] = useState(false);
   const [sentencePopupVisible, setSentencePopupVisible] = useState(false);
@@ -411,6 +419,17 @@ export default function ReadScreen() {
     [layout],
   );
 
+  const articleCover = useMemo(
+    () => (article?.cover ? resolveArticleCover(article.cover) : null),
+    [article?.cover],
+  );
+  const hasCover = articleCover !== null && articleCover.type !== "default";
+  const showingCover = hasCover && !coverDismissed && currentPage === 0;
+  const coverBgColor =
+    hasCover && articleCover.type === "color" && articleCover.bgColor
+      ? articleCover.bgColor
+      : undefined;
+
   if (!articleId) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -458,18 +477,29 @@ export default function ReadScreen() {
               {
                 width: layout.containerWidth,
                 height: layout.containerHeight,
+                backgroundColor: coverBgColor || Colors.white,
               },
             ]}
           >
-            <PageView
-              content={currentPageContent}
-              pageIndex={currentPage}
-              onCollectSentence={handleCollectSentence}
-              bottomInset={isOnLastPage ? insets.bottom + 56 : insets.bottom}
-              layout={layout}
-            />
+            {showingCover ? (
+              <View style={styles.coverPageContainer}>
+                <CoverPreview
+                  cover={articleCover}
+                  title={article?.title || ""}
+                  author={article?.authorId}
+                />
+              </View>
+            ) : (
+              <PageView
+                content={currentPageContent}
+                pageIndex={currentPage}
+                onCollectSentence={handleCollectSentence}
+                bottomInset={isOnLastPage ? insets.bottom + 56 : insets.bottom}
+                layout={layout}
+              />
+            )}
 
-            {article && (
+            {article && !showingCover && (
               <View style={styles.titleBar}>
                 <Text style={dynamicStyles.articleTitle} numberOfLines={1}>{article.title}</Text>
                 {mode === "re_read" && (
@@ -481,15 +511,28 @@ export default function ReadScreen() {
             )}
           </View>
 
-          {canNavigate && totalPages > 1 && (
+          {canNavigate && (totalPages > 1 || hasCover) && (
             <>
               <Pressable
                 style={styles.tapZoneLeft}
-                onPress={handleTapLeft}
+                onPress={() => {
+                  if (showingCover) return;
+                  if (currentPage === 0 && hasCover) {
+                    setCoverDismissed(false);
+                    return;
+                  }
+                  handleTapLeft();
+                }}
               />
               <Pressable
                 style={styles.tapZoneRight}
-                onPress={handleTapRight}
+                onPress={() => {
+                  if (showingCover) {
+                    setCoverDismissed(true);
+                    return;
+                  }
+                  handleTapRight();
+                }}
               />
             </>
           )}
@@ -796,6 +839,11 @@ const styles = StyleSheet.create({
   memoContent: {
     paddingVertical: 12,
     gap: 12,
+  },
+  coverPageContainer: {
+    flex: 1,
+    justifyContent: "flex-end",
+    padding: 16,
   },
   pageListContainer: {
     flex: 1,

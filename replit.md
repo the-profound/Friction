@@ -132,6 +132,9 @@ Reading/writing platform mobile app. All 37 Notion Queue DB items processed (순
 - `components/ProgressIndicator/ProgressIndicator.tsx` — linear/circular progress
 - `components/ArticleCardItem/ArticleCardItem.tsx` — 5:8 cover-style carousel card (330×528) with image/color/default background, title & author overlay
 - `components/ArticleListItem/ArticleListItem.tsx` — list item with status badge
+- `components/CoverPreview/CoverPreview.tsx` — cover preview using ArticleCover API type (image/color/default), renders title/author overlay with alignment and text color
+- `components/CoverEditor/CoverEditor.tsx` — bottom sheet for cover editing (type, align, text color, bg color selection) with live preview, uses ArticleCover from @workspace/api-client-react
+- `utils/articleCover.ts` — getDefaultCover() and resolveArticleCover() helpers for Article.cover field
 - `components/MyArticlesPickerBottomSheet/MyArticlesPickerBottomSheet.tsx` — LETTER article picker
 - `components/WebViewMarkdownEditor/WebViewMarkdownEditor.tsx` — TipTap HTML editor bridge
 - `contexts/ToastContext.tsx` — toast notification system
@@ -169,5 +172,5 @@ Reading/writing platform mobile app. All 37 Notion Queue DB items processed (순
 - `of-03.tsx` (OF-03) — sentence collection (all/favorites filter)
 - `on-01a.tsx` (ON-01a) — DRAFT editor with auto-save
 - `on-01b.tsx` (ON-01b) — DIVIDING page splitter with warnings
-- `on-01c.tsx` (ON-01c) — CLOSING preview + export to LETTER
+- `on-01c.tsx` (ON-01c) — CLOSING preview + export to LETTER, cover editor (type/align/text color/bg color), cover saved to Article.cover via API, virtual page 0 = cover preview
 - `on-02.tsx` (ON-02) — memo collection with sort/manage mode

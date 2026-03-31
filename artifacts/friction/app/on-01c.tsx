@@ -15,21 +15,17 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
+import CoverPreview from "@/components/CoverPreview/CoverPreview";
+import CoverEditor from "@/components/CoverEditor/CoverEditor";
+import { resolveArticleCover, getDefaultCover } from "@/utils/articleCover";
 import {
   useGetArticle,
   useUpdateArticle,
   useTransitionArticleStatus,
   TransitionArticleBodyTargetStatus,
 } from "@workspace/api-client-react";
+import type { ArticleCover } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-
-const BACKGROUND_COLORS = [
-  { key: "default", label: "기본", color: Colors.zinc50 },
-  { key: "warm", label: "따뜻한", color: "#FEF3C7" },
-  { key: "cool", label: "시원한", color: "#DBEAFE" },
-  { key: "nature", label: "자연", color: "#D1FAE5" },
-  { key: "soft", label: "부드러운", color: "#FCE7F3" },
-];
 
 export default function ClosingScreen() {
   const insets = useSafeAreaInsets();
@@ -47,23 +43,72 @@ export default function ClosingScreen() {
   const [title, setTitle] = useState("");
   const [pages, setPages] = useState<string[]>([]);
   const [previewPage, setPreviewPage] = useState(0);
-  const [bgColorKey, setBgColorKey] = useState("default");
+  const [cover, setCover] = useState<ArticleCover>(getDefaultCover());
+  const [coverEditorVisible, setCoverEditorVisible] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [titleEditing, setTitleEditing] = useState(false);
   const [saveToCollection, setSaveToCollection] = useState(true);
   const initializedRef = useRef(false);
+  const saveCoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (article && !initializedRef.current) {
       initializedRef.current = true;
       setTitle(article.title || "");
       setPages(article.pages || []);
-      const styleKey = (article.style as Record<string, unknown>)?.bgColor;
-      if (typeof styleKey === "string") setBgColorKey(styleKey);
+      setCover(resolveArticleCover(article.cover));
     }
   }, [article]);
 
-  const selectedBg = BACKGROUND_COLORS.find((b) => b.key === bgColorKey) || BACKGROUND_COLORS[0];
+  const pendingCoverRef = useRef<ArticleCover | null>(null);
+
+  const flushCoverSave = useCallback(async () => {
+    if (saveCoverTimerRef.current) {
+      clearTimeout(saveCoverTimerRef.current);
+      saveCoverTimerRef.current = null;
+    }
+    const pending = pendingCoverRef.current;
+    if (!pending || !id) return;
+    pendingCoverRef.current = null;
+    try {
+      await updateArticle.mutateAsync({
+        id,
+        data: { cover: pending },
+      });
+    } catch (e: unknown) {
+      console.warn("Failed to save cover:", e instanceof Error ? e.message : e);
+    }
+  }, [id, updateArticle]);
+
+  const handleCoverChange = useCallback(
+    (next: ArticleCover) => {
+      setCover(next);
+      pendingCoverRef.current = next;
+      if (!id) return;
+      if (saveCoverTimerRef.current) clearTimeout(saveCoverTimerRef.current);
+      saveCoverTimerRef.current = setTimeout(async () => {
+        saveCoverTimerRef.current = null;
+        const toSave = pendingCoverRef.current;
+        if (!toSave) return;
+        pendingCoverRef.current = null;
+        try {
+          await updateArticle.mutateAsync({
+            id,
+            data: { cover: toSave },
+          });
+        } catch (e: unknown) {
+          console.warn("Failed to save cover:", e instanceof Error ? e.message : e);
+        }
+      }, 500);
+    },
+    [id, updateArticle],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (saveCoverTimerRef.current) clearTimeout(saveCoverTimerRef.current);
+    };
+  }, []);
 
   const handleExport = useCallback(() => {
     if (!title.trim()) {
@@ -79,13 +124,19 @@ export default function ClosingScreen() {
 
   const handleConfirmExport = useCallback(async () => {
     setConfirmVisible(false);
+    if (saveCoverTimerRef.current) {
+      clearTimeout(saveCoverTimerRef.current);
+      saveCoverTimerRef.current = null;
+    }
+    pendingCoverRef.current = null;
     try {
       await updateArticle.mutateAsync({
         id: id!,
         data: {
           title,
           pages,
-          style: { bgColor: bgColorKey, saveToCollection },
+          cover,
+          style: { saveToCollection },
         },
       });
       await transitionStatus.mutateAsync({
@@ -100,10 +151,11 @@ export default function ClosingScreen() {
       const msg = e instanceof Error ? e.message : "내보내기에 실패했습니다.";
       Alert.alert("오류", msg);
     }
-  }, [id, title, pages, bgColorKey, saveToCollection, updateArticle, transitionStatus, queryClient, router]);
+  }, [id, title, pages, cover, saveToCollection, updateArticle, transitionStatus, queryClient, router]);
 
   const handleBack = useCallback(async () => {
     if (!id) { router.back(); return; }
+    await flushCoverSave();
     try {
       await transitionStatus.mutateAsync({
         id,
@@ -115,7 +167,7 @@ export default function ClosingScreen() {
       const msg = e instanceof Error ? e.message : "상태 되돌리기에 실패했습니다.";
       Alert.alert("오류", msg);
     }
-  }, [id, router, transitionStatus, queryClient]);
+  }, [id, router, transitionStatus, queryClient, flushCoverSave]);
 
   const handleSaveTitle = useCallback(async () => {
     setTitleEditing(false);
@@ -127,7 +179,17 @@ export default function ClosingScreen() {
     }
   }, [id, title, updateArticle]);
 
-  const currentPage = pages[previewPage] ?? null;
+  const hasCoverPage = cover.type !== "default";
+  const totalVirtualPages = pages.length > 0
+    ? (hasCoverPage ? pages.length + 1 : pages.length)
+    : 0;
+
+  const clampedPreviewPage = totalVirtualPages > 0
+    ? Math.min(previewPage, totalVirtualPages - 1)
+    : 0;
+  const isCoverPage = hasCoverPage && clampedPreviewPage === 0;
+  const contentPageIndex = hasCoverPage ? clampedPreviewPage - 1 : clampedPreviewPage;
+  const currentPage = isCoverPage ? null : (pages[contentPageIndex] ?? null);
 
   if (!id || articleLoading) {
     return (
@@ -147,9 +209,9 @@ export default function ClosingScreen() {
         </Pressable>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>마감</Text>
-          {pages.length > 0 && (
+          {totalVirtualPages > 0 && (
             <Text style={styles.pageIndicator}>
-              {previewPage + 1} / {pages.length}
+              {isCoverPage ? "표지" : `${Math.max(0, contentPageIndex) + 1} / ${pages.length}`}
             </Text>
           )}
         </View>
@@ -179,25 +241,17 @@ export default function ClosingScreen() {
         )}
       </View>
 
-      <View style={styles.bgColorSection}>
-        <Text style={styles.sectionLabel}>배경 색상</Text>
-        <View style={styles.bgColorRow}>
-          {BACKGROUND_COLORS.map((bg) => (
-            <Pressable
-              key={bg.key}
-              style={[
-                styles.bgColorChip,
-                { backgroundColor: bg.color },
-                bgColorKey === bg.key && styles.bgColorChipActive,
-              ]}
-              onPress={() => setBgColorKey(bg.key)}
-            >
-              {bgColorKey === bg.key && (
-                <Feather name="check" size={14} color={Colors.zinc700} />
-              )}
-            </Pressable>
-          ))}
-        </View>
+      <View style={styles.coverActionSection}>
+        <Pressable
+          style={styles.coverActionButton}
+          onPress={() => setCoverEditorVisible(true)}
+        >
+          <Feather name="image" size={16} color={Colors.zinc600} />
+          <Text style={styles.coverActionLabel}>
+            {cover.type === "default" ? "표지 만들기" : "표지 수정"}
+          </Text>
+          <Feather name="chevron-right" size={16} color={Colors.zinc400} />
+        </Pressable>
       </View>
 
       <View style={styles.collectionSection}>
@@ -219,51 +273,72 @@ export default function ClosingScreen() {
       </View>
 
       <ScrollView style={styles.previewArea} contentContainerStyle={styles.previewInner}>
-        {pages.length === 0 ? (
+        {totalVirtualPages === 0 ? (
           <View style={styles.emptyContainer}>
             <Feather name="eye" size={36} color={Colors.zinc300} />
             <Text style={styles.emptyTitle}>미리보기할 내용이 없어요</Text>
           </View>
+        ) : isCoverPage ? (
+          <View style={styles.coverPreviewWrapper}>
+            <CoverPreview cover={cover} title={title} author={article?.authorId} />
+          </View>
         ) : (
-          <View style={[styles.previewCard, { backgroundColor: selectedBg.color }]}>
+          <View
+            style={[
+              styles.previewCard,
+              {
+                backgroundColor:
+                  cover.type === "color" && cover.bgColor ? cover.bgColor : Colors.zinc50,
+              },
+            ]}
+          >
             <Text style={styles.previewTitle}>{title || "제목 없음"}</Text>
             <Text style={styles.previewContent}>{currentPage}</Text>
           </View>
         )}
       </ScrollView>
 
-      {pages.length > 1 && (
+      {totalVirtualPages > 1 && (
         <View style={[styles.pageNav, { paddingBottom: insets.bottom + 16 }]}>
           <Pressable
-            style={[styles.pageNavButton, previewPage === 0 && styles.pageNavButtonDisabled]}
+            style={[styles.pageNavButton, clampedPreviewPage === 0 && styles.pageNavButtonDisabled]}
             onPress={() => setPreviewPage((p) => Math.max(0, p - 1))}
-            disabled={previewPage === 0}
+            disabled={clampedPreviewPage === 0}
           >
             <Feather
               name="chevron-left"
               size={20}
-              color={previewPage === 0 ? Colors.zinc300 : Colors.zinc600}
+              color={clampedPreviewPage === 0 ? Colors.zinc300 : Colors.zinc600}
             />
           </Pressable>
           <Text style={styles.pageNavText}>
-            {previewPage + 1} / {pages.length}
+            {isCoverPage ? "표지" : `${Math.max(0, contentPageIndex) + 1} / ${pages.length}`}
           </Text>
           <Pressable
             style={[
               styles.pageNavButton,
-              previewPage >= pages.length - 1 && styles.pageNavButtonDisabled,
+              clampedPreviewPage >= totalVirtualPages - 1 && styles.pageNavButtonDisabled,
             ]}
-            onPress={() => setPreviewPage((p) => Math.min(pages.length - 1, p + 1))}
-            disabled={previewPage >= pages.length - 1}
+            onPress={() => setPreviewPage((p) => Math.min(totalVirtualPages - 1, p + 1))}
+            disabled={clampedPreviewPage >= totalVirtualPages - 1}
           >
             <Feather
               name="chevron-right"
               size={20}
-              color={previewPage >= pages.length - 1 ? Colors.zinc300 : Colors.zinc600}
+              color={clampedPreviewPage >= totalVirtualPages - 1 ? Colors.zinc300 : Colors.zinc600}
             />
           </Pressable>
         </View>
       )}
+
+      <CoverEditor
+        visible={coverEditorVisible}
+        onClose={() => setCoverEditorVisible(false)}
+        cover={cover}
+        onChange={handleCoverChange}
+        title={title}
+        author={article?.authorId}
+      />
 
       <ConfirmModal
         visible={confirmVisible}
@@ -340,32 +415,50 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.zinc300,
   },
-  bgColorSection: {
+  coverActionSection: {
     paddingHorizontal: Spacing.screenPx,
-    paddingVertical: 12,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.zinc100,
   },
-  sectionLabel: {
-    ...Typography.caption,
-    fontSize: 12,
-    color: Colors.zinc500,
-    marginBottom: 8,
-  },
-  bgColorRow: {
+  coverActionButton: {
     flexDirection: "row",
-    gap: 10,
-  },
-  bgColorChip: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
     alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: Colors.zinc200,
+    gap: 8,
+    paddingVertical: 6,
   },
-  bgColorChipActive: {
-    borderWidth: 2,
-    borderColor: Colors.zinc700,
+  coverActionLabel: {
+    ...Typography.bodySemiBold,
+    fontSize: 14,
+    color: Colors.zinc700,
+    flex: 1,
+  },
+  collectionSection: {
+    paddingHorizontal: Spacing.screenPx,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.zinc100,
+  },
+  collectionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  collectionLabelContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  collectionLabel: {
+    ...Typography.bodySemiBold,
+    fontSize: 14,
+    color: Colors.zinc700,
+  },
+  collectionHint: {
+    ...Typography.caption,
+    fontSize: 11,
+    color: Colors.zinc400,
+    marginTop: 4,
   },
   previewArea: {
     flex: 1,
@@ -374,6 +467,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.screenPx,
     paddingTop: 16,
     paddingBottom: 40,
+  },
+  coverPreviewWrapper: {
+    alignItems: "center",
   },
   previewCard: {
     borderRadius: 16,
@@ -429,32 +525,5 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 14,
     color: Colors.zinc600,
-  },
-  collectionSection: {
-    paddingHorizontal: Spacing.screenPx,
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.zinc100,
-  },
-  collectionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  collectionLabelContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  collectionLabel: {
-    ...Typography.bodySemiBold,
-    fontSize: 14,
-    color: Colors.zinc700,
-  },
-  collectionHint: {
-    ...Typography.caption,
-    fontSize: 11,
-    color: Colors.zinc400,
-    marginTop: 4,
   },
 });
