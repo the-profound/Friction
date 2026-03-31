@@ -28,9 +28,11 @@ import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import CoverPreview from "@/components/CoverPreview/CoverPreview";
 import { resolveArticleCover } from "@/utils/articleCover";
 import SelectableText from "@/components/SelectableText/SelectableText";
+import CoverPage from "@/components/CoverPage/CoverPage";
 import { useReadingSession } from "@/lib/useReadingSession";
+import { resolveArticleCover } from "@/utils/articleCover";
 import { useQueryClient } from "@tanstack/react-query";
-import { useGetArticle, useCreateStoredSentence, useDeleteInboxItem } from "@workspace/api-client-react";
+import { useGetArticle, useGetUser, useCreateStoredSentence, useDeleteInboxItem } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
 import { useActiveReading } from "@/contexts/ActiveReadingContext";
 import type { ReadingMode } from "@/lib/policies";
@@ -126,6 +128,15 @@ export default function ReadScreen() {
   const article = articleId ? articleQuery.data : undefined;
   const articleLoading = articleId ? articleQuery.isLoading : false;
 
+  const authorId = article?.authorId ?? "";
+  const authorQuery = useGetUser(authorId);
+  const authorName = authorId ? (authorQuery.data?.nickname ?? authorQuery.data?.email ?? undefined) : undefined;
+
+  const cover = useMemo(
+    () => resolveArticleCover(article?.cover),
+    [article?.cover],
+  );
+
   useEffect(() => {
     if (articleId && articleQuery.isError) {
       clearActiveSession();
@@ -133,7 +144,7 @@ export default function ReadScreen() {
     }
   }, [articleId, articleQuery.isError, clearActiveSession, router]);
 
-  const pages: string[] = useMemo(() => {
+  const contentPages: string[] = useMemo(() => {
     if (!article) return [];
     if (article.pages && Array.isArray(article.pages) && article.pages.length > 0) {
       return article.pages;
@@ -142,7 +153,7 @@ export default function ReadScreen() {
     return [];
   }, [article]);
 
-  const totalPages = pages.length;
+  const totalPages = article ? 1 + contentPages.length : 0;
 
   const reading = useReadingSession({
     articleId,
@@ -155,6 +166,8 @@ export default function ReadScreen() {
   const currentPage = totalPages > 0
     ? Math.min(reading.session.position.currentPage, totalPages - 1)
     : reading.session.position.currentPage;
+  const isOnCoverPage = currentPage === 0;
+  const contentPageIndex = Math.max(0, currentPage - 1);
   const isOnLastPage = totalPages > 0 && currentPage >= totalPages - 1;
 
   const [coverDismissed, setCoverDismissed] = useState(false);
@@ -296,7 +309,7 @@ export default function ReadScreen() {
           articleId,
           text: selectedText,
           position: {
-            page: currentPage,
+            page: contentPageIndex,
           },
         },
       });
@@ -308,7 +321,7 @@ export default function ReadScreen() {
       const msg = e instanceof Error ? e.message : "문장 저장에 실패했습니다.";
       Alert.alert("오류", msg);
     }
-  }, [selectedText, userId, articleId, currentPage, createSentence, queryClient]);
+  }, [selectedText, userId, articleId, contentPageIndex, createSentence, queryClient]);
 
   const handleSaveMemo = useCallback(async () => {
     if (!memoText.trim()) return;
@@ -319,7 +332,7 @@ export default function ReadScreen() {
           articleId,
           text: memoText.trim(),
           position: {
-            page: currentPage,
+            page: contentPageIndex,
             type: "memo",
           },
         },
@@ -332,7 +345,7 @@ export default function ReadScreen() {
       const msg = e instanceof Error ? e.message : "메모 저장에 실패했습니다.";
       Alert.alert("오류", msg);
     }
-  }, [memoText, userId, articleId, currentPage, createSentence, queryClient]);
+  }, [memoText, userId, articleId, contentPageIndex, createSentence, queryClient]);
 
   const dynamicStyles = useMemo(
     () =>
@@ -451,7 +464,9 @@ export default function ReadScreen() {
     );
   }
 
-  const currentPageContent = totalPages > 0 ? pages[Math.min(currentPage, totalPages - 1)] : "";
+  const currentPageContent = !isOnCoverPage && contentPages.length > 0
+    ? contentPages[Math.min(contentPageIndex, contentPages.length - 1)]
+    : "";
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -481,25 +496,25 @@ export default function ReadScreen() {
               },
             ]}
           >
-            {showingCover ? (
-              <View style={styles.coverPageContainer}>
-                <CoverPreview
-                  cover={articleCover}
-                  title={article?.title || ""}
-                  author={article?.authorId}
-                />
-              </View>
+            {isOnCoverPage ? (
+              <CoverPage
+                cover={cover}
+                title={article?.title ?? ""}
+                authorName={authorName}
+                containerWidth={layout.containerWidth}
+                containerHeight={layout.containerHeight}
+              />
             ) : (
               <PageView
                 content={currentPageContent}
-                pageIndex={currentPage}
+                pageIndex={contentPageIndex}
                 onCollectSentence={handleCollectSentence}
                 bottomInset={isOnLastPage ? insets.bottom + 56 : insets.bottom}
                 layout={layout}
               />
             )}
 
-            {article && !showingCover && (
+            {!isOnCoverPage && article && (
               <View style={styles.titleBar}>
                 <Text style={dynamicStyles.articleTitle} numberOfLines={1}>{article.title}</Text>
                 {mode === "re_read" && (
@@ -636,7 +651,7 @@ export default function ReadScreen() {
             textAlignVertical="top"
           />
           <Text style={dynamicStyles.memoPageInfo}>
-            {currentPage + 1}페이지에서 작성 중
+            {isOnCoverPage ? "표지" : `${contentPageIndex + 1}페이지`}에서 작성 중
           </Text>
           <View style={styles.sentenceActions}>
             <Pressable
