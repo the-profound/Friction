@@ -455,6 +455,7 @@ export default function ReadScreen() {
   if (articleLoading || reading.isRestoring || !reading.isSessionHydrated) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
+        <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.emptyContainer}>
           <ProgressIndicator type="spinner" size="large" />
           <Text style={styles.loadingText}>불러오는 중...</Text>

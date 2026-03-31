@@ -59,11 +59,11 @@ function ActiveReadingGuard({ children }: { children: React.ReactNode }) {
 function RootLayoutNav() {
   return (
     <ActiveReadingGuard>
-      <Stack screenOptions={{ headerBackTitle: "Back" }}>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="settings" options={{ headerShown: false, presentation: "card" }} />
-        <Stack.Screen name="terms" options={{ headerShown: false, presentation: "card" }} />
-        <Stack.Screen name="login" options={{ headerShown: false, presentation: "card" }} />
+      <Stack screenOptions={{ headerShown: false, headerBackTitle: "Back" }}>
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="settings" options={{ presentation: "card" }} />
+        <Stack.Screen name="terms" options={{ presentation: "card" }} />
+        <Stack.Screen name="login" options={{ presentation: "card" }} />
       </Stack>
     </ActiveReadingGuard>
   );
