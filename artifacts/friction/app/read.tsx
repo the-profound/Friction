@@ -30,7 +30,6 @@ import { resolveArticleCover } from "@/utils/articleCover";
 import SelectableText from "@/components/SelectableText/SelectableText";
 import CoverPage from "@/components/CoverPage/CoverPage";
 import { useReadingSession } from "@/lib/useReadingSession";
-import { resolveArticleCover } from "@/utils/articleCover";
 import { useQueryClient } from "@tanstack/react-query";
 import { useGetArticle, useGetUser, useCreateStoredSentence, useDeleteInboxItem } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
