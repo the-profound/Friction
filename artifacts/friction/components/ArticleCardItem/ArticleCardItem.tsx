@@ -1,31 +1,62 @@
 import React from "react";
-import { View, Text, StyleSheet, Pressable } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  ImageBackground,
+} from "react-native";
 import { Colors, Typography, Sizing } from "../../constants/tokens";
-
-interface Author {
-  name: string;
-  avatarUrl?: string;
-}
+import type { ArticleCover } from "@workspace/api-client-react";
 
 interface ArticleCardItemProps {
   title: string;
+  authorName?: string;
   onPress: () => void;
-  preview?: string;
-  author?: Author;
-  timestamp?: Date;
+  cover?: ArticleCover | null;
   isRead?: boolean;
   isActive?: boolean;
 }
 
+const DEFAULT_BG = Colors.zinc50;
+const DEFAULT_TEXT = Colors.zinc900;
+const READ_TEXT = Colors.zinc400;
+
 export default function ArticleCardItem({
   title,
+  authorName,
   onPress,
-  preview,
-  author,
-  timestamp,
+  cover,
   isRead = false,
   isActive = true,
 }: ArticleCardItemProps) {
+  const textColor = isRead
+    ? READ_TEXT
+    : cover?.textColor ?? DEFAULT_TEXT;
+
+  const textAlign = cover?.align === "center" ? ("center" as const) : ("left" as const);
+
+  const content = (
+    <View style={styles.inner}>
+      {authorName ? (
+        <Text
+          style={[styles.author, { color: textColor, textAlign }]}
+          numberOfLines={1}
+        >
+          {authorName}
+        </Text>
+      ) : null}
+      <Text
+        style={[styles.title, { color: textColor, textAlign }]}
+        numberOfLines={2}
+      >
+        {title}
+      </Text>
+    </View>
+  );
+
+  const coverType = cover?.type ?? "default";
+
   return (
     <Pressable
       onPress={onPress}
@@ -35,34 +66,32 @@ export default function ArticleCardItem({
         pressed && styles.pressed,
       ]}
     >
-      <View style={styles.inner}>
-        {author && (
-          <Text style={[styles.author, isRead && styles.readText]} numberOfLines={1}>
-            {author.name}
-          </Text>
-        )}
-        <Text style={[styles.title, isRead && styles.readText]} numberOfLines={1}>
-          {title}
-        </Text>
-        {preview && (
-          <Text style={[styles.preview, isRead && styles.readText]} numberOfLines={2}>
-            {preview}
-          </Text>
-        )}
-        {timestamp && (
-          <Text style={styles.timestamp}>
-            {formatTime(timestamp)}
-          </Text>
-        )}
-      </View>
+      {coverType === "image" && cover?.imageUrl ? (
+        <ImageBackground
+          source={{ uri: cover.imageUrl }}
+          style={styles.backgroundImage}
+          resizeMode="cover"
+        >
+          <View style={styles.imageOverlay} />
+          {content}
+        </ImageBackground>
+      ) : (
+        <View
+          style={[
+            styles.solidBackground,
+            {
+              backgroundColor:
+                coverType === "color" && cover?.bgColor
+                  ? cover.bgColor
+                  : DEFAULT_BG,
+            },
+          ]}
+        >
+          {content}
+        </View>
+      )}
     </Pressable>
   );
-}
-
-function formatTime(date: Date): string {
-  const h = date.getHours().toString().padStart(2, "0");
-  const m = date.getMinutes().toString().padStart(2, "0");
-  return `${h}:${m}`;
 }
 
 const CARD_W = Sizing.cardSlotW;
@@ -73,7 +102,6 @@ const styles = StyleSheet.create({
     width: CARD_W,
     height: CARD_H,
     borderRadius: 16,
-    backgroundColor: Colors.zinc50,
     overflow: "hidden",
   },
   inactive: {
@@ -83,6 +111,16 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.85,
   },
+  backgroundImage: {
+    flex: 1,
+  },
+  imageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.25)",
+  },
+  solidBackground: {
+    flex: 1,
+  },
   inner: {
     flex: 1,
     padding: 24,
@@ -90,27 +128,10 @@ const styles = StyleSheet.create({
   },
   author: {
     ...Typography.caption,
-    color: Colors.zinc500,
     marginBottom: 6,
   },
   title: {
     ...Typography.bodySemiBold,
     fontSize: 20,
-    color: Colors.zinc900,
-    marginBottom: 8,
-  },
-  preview: {
-    ...Typography.body,
-    fontSize: 14,
-    color: Colors.zinc600,
-    lineHeight: 20,
-    marginBottom: 12,
-  },
-  timestamp: {
-    ...Typography.caption,
-    color: Colors.zinc400,
-  },
-  readText: {
-    color: Colors.zinc400,
   },
 });

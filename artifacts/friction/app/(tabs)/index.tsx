@@ -110,9 +110,8 @@ function CarouselGroup({
             <ArticleCardItem
               title={item.article?.title ?? "제목 없음"}
               onPress={() => onCardPress(item)}
-              preview={item.article?.content?.substring(0, 80)}
-              author={item.sender ? { name: item.sender.nickname ?? item.sender.id } : undefined}
-              timestamp={new Date(item.visibleAt)}
+              authorName={item.sender?.nickname ?? item.sender?.id}
+              cover={item.article?.cover}
               isRead={item.isRead}
               isActive={index === activeIndex}
             />

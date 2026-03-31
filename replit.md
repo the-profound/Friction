@@ -130,7 +130,7 @@ Reading/writing platform mobile app. All 37 Notion Queue DB items processed (순
 - `components/BottomSheet/BottomSheet.tsx` — draggable bottom sheet with snap points
 - `components/ConfirmModal/ConfirmModal.tsx` — confirmation dialog
 - `components/ProgressIndicator/ProgressIndicator.tsx` — linear/circular progress
-- `components/ArticleCardItem/ArticleCardItem.tsx` — 5:8 carousel card (330×528)
+- `components/ArticleCardItem/ArticleCardItem.tsx` — 5:8 cover-style carousel card (330×528) with image/color/default background, title & author overlay
 - `components/ArticleListItem/ArticleListItem.tsx` — list item with status badge
 - `components/MyArticlesPickerBottomSheet/MyArticlesPickerBottomSheet.tsx` — LETTER article picker
 - `components/WebViewMarkdownEditor/WebViewMarkdownEditor.tsx` — TipTap HTML editor bridge
