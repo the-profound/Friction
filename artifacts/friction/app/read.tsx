@@ -509,7 +509,7 @@ export default function ReadScreen() {
                 content={currentPageContent}
                 pageIndex={contentPageIndex}
                 onCollectSentence={handleCollectSentence}
-                bottomInset={isOnLastPage ? insets.bottom + 56 : insets.bottom}
+                bottomInset={insets.bottom}
                 layout={layout}
               />
             )}
@@ -552,14 +552,6 @@ export default function ReadScreen() {
             </>
           )}
 
-          {isOnLastPage && reading.session.state === "READING" && (
-            <View style={[styles.completeButtonContainer, { paddingBottom: insets.bottom + 8 }]}>
-              <Pressable style={styles.completeButton} onPress={() => reading.nextPage()}>
-                <Feather name="check" size={18} color={Colors.white} />
-                <Text style={dynamicStyles.completeButtonText}>읽기 완료</Text>
-              </Pressable>
-            </View>
-          )}
         </View>
       ) : (
         <View style={styles.emptyContainer}>
@@ -583,18 +575,25 @@ export default function ReadScreen() {
       <BottomSheet
         visible={completionSheetVisible}
         onClose={() => {}}
-        title="완독!"
-        titleStyle={dynamicStyles.sheetTitle}
         snapPoints={[0.35]}
         enableDragDown={false}
         dismissable={false}
       >
         <View style={styles.completionContent}>
-          <Feather name="check-circle" size={48} color={Colors.zinc900} style={styles.completionIcon} />
-          <Text style={dynamicStyles.completionText}>읽기를 완료했어요</Text>
+          <Text style={dynamicStyles.completionText}>글을 끝까지 다 읽었습니다.</Text>
           <Pressable style={styles.completionButton} onPress={handleCommitAndArchive}>
             <Feather name="archive" size={18} color={Colors.white} />
             <Text style={dynamicStyles.completionButtonText}>보관하기</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.completionButton, styles.completionButtonSecondary]}
+            onPress={() => {
+              setCompletionSheetVisible(false);
+              reading.restartReading();
+            }}
+          >
+            <Feather name="refresh-cw" size={18} color={Colors.zinc600} />
+            <Text style={dynamicStyles.completionButtonSecondaryText}>다시 읽기</Text>
           </Pressable>
           <Pressable
             style={[styles.completionButton, styles.completionButtonSecondary]}

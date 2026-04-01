@@ -9,6 +9,7 @@ import {
   updateScrollPosition,
   markCompletedReady,
   canTransitionSession,
+  transitionSession,
   isLastPage,
   getProgress,
   shouldBlockExit,
@@ -41,6 +42,7 @@ export interface ReadingSessionActions {
   pause: () => void;
   resume: () => void;
   commitCompletion: () => Promise<{ success: boolean; error?: string }>;
+  restartReading: () => void;
   resetProgress: () => Promise<{ success: boolean; error?: string }>;
 }
 
@@ -199,6 +201,18 @@ export function useReadingSession({
     }
   }, [session.state, userId, articleId, createArticleRead, markInboxReadMutation, queryClient]);
 
+  const restartReading = useCallback(() => {
+    if (session.state !== "COMPLETED_READY") return;
+    const result = transitionSession(session.state, "READING");
+    if (!result.allowed) return;
+    setSession((prev) => ({
+      ...prev,
+      state: result.state,
+      position: { ...prev.position, currentPage: 0, scrollPosition: 0 },
+    }));
+    savePosition(0, 0);
+  }, [session.state, savePosition]);
+
   const resetProgress = useCallback(async () => {
     const record = savedRecord?.record;
     if (!record) {
@@ -235,6 +249,7 @@ export function useReadingSession({
     pause,
     resume,
     commitCompletion,
+    restartReading,
     resetProgress,
   };
 }
