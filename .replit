@@ -41,6 +41,7 @@ waitForPort = 3000
 [agent]
 stack = "PNPM_WORKSPACE"
 expertMode = true
+integrations = ["notion:1.0.0"]
 
 [postMerge]
 path = "scripts/post-merge.sh"
