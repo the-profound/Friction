@@ -317,6 +317,9 @@ export const ReaderTokens = {
     relaxedEm: 0.05,
     tightEm: -0.02,
   },
+
+  bodyBg: "#F5F5F5",
+  bodyText: "#1A1A1A",
 } as const;
 
 export function cqiToPx(cqi: number, containerWidth: number): number {

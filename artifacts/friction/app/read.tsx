@@ -540,7 +540,7 @@ export default function ReadScreen() {
               {
                 width: layout.containerWidth,
                 height: layout.containerHeight,
-                backgroundColor: coverBgColor || Colors.white,
+                backgroundColor: coverBgColor || ReaderTokens.bodyBg,
               },
             ]}
           >
@@ -805,7 +805,7 @@ const TAP_ZONE_WIDTH_PERCENT = 25;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.white,
+    backgroundColor: ReaderTokens.bodyBg,
   },
   header: {
     flexDirection: "row",
@@ -922,7 +922,7 @@ const styles = StyleSheet.create({
   readerFrame: {
     alignSelf: "center",
     overflow: "visible",
-    backgroundColor: Colors.white,
+    backgroundColor: ReaderTokens.bodyBg,
     ...Platform.select({
       web: {
         boxShadow: "0 -6px 18px rgba(0,0,0,0.045), 0 6px 18px rgba(0,0,0,0.045)",
@@ -942,7 +942,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.screenPx,
     paddingTop: 14,
     gap: 14,
-    backgroundColor: Colors.white,
+    backgroundColor: ReaderTokens.bodyBg,
   },
   bottomProgressContainer: {
     flex: 1,

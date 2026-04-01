@@ -154,7 +154,7 @@ const styles = StyleSheet.create({
   textBody: {
     fontSize: 16,
     fontFamily: ReaderTokens.fontFamily.serif,
-    color: Colors.zinc800,
+    color: ReaderTokens.bodyText,
     lineHeight: 28,
     letterSpacing: 0.8,
     textAlign: "justify" as const,
@@ -162,7 +162,7 @@ const styles = StyleSheet.create({
   textInput: {
     fontSize: 16,
     fontFamily: ReaderTokens.fontFamily.serif,
-    color: Colors.zinc800,
+    color: ReaderTokens.bodyText,
     lineHeight: 28,
     letterSpacing: 0.8,
     textAlign: "justify" as const,
