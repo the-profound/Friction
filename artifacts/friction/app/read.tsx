@@ -485,11 +485,6 @@ export default function ReadScreen() {
   );
   const hasCover = articleCover !== null && articleCover.type !== "default";
   const showingCover = hasCover && !coverDismissed && currentPage === 0;
-  const coverBgColor =
-    hasCover && articleCover.type === "color" && articleCover.bgColor
-      ? articleCover.bgColor
-      : undefined;
-
   if (!articleId) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -540,7 +535,7 @@ export default function ReadScreen() {
               {
                 width: layout.containerWidth,
                 height: layout.containerHeight,
-                backgroundColor: coverBgColor || ReaderTokens.bodyBg,
+                backgroundColor: ReaderTokens.bodyBg,
               },
             ]}
           >
