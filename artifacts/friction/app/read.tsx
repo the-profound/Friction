@@ -31,7 +31,14 @@ import SelectableText from "@/components/SelectableText/SelectableText";
 import CoverPage from "@/components/CoverPage/CoverPage";
 import { useReadingSession } from "@/lib/useReadingSession";
 import { useQueryClient } from "@tanstack/react-query";
-import { useGetArticle, useGetUser, useCreateStoredSentence, useDeleteInboxItem } from "@workspace/api-client-react";
+import {
+  useGetArticle,
+  useGetUser,
+  useCreateStoredSentence,
+  useListMyCollections,
+  useAddArticleToMyCollection,
+  useCreateMyCollection,
+} from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
 import { useActiveReading } from "@/contexts/ActiveReadingContext";
 import type { ReadingMode } from "@/lib/policies";
@@ -197,7 +204,10 @@ export default function ReadScreen() {
     [pageListSize.width, pageListSize.height, screenWidth],
   );
   const createSentence = useCreateStoredSentence();
-  const deleteInbox = useDeleteInboxItem();
+  const collectionsQuery = useListMyCollections({ ownerId: userId });
+  const addToCollection = useAddArticleToMyCollection();
+  const createCollection = useCreateMyCollection();
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (mode === "basic" && articleId) {
@@ -260,37 +270,75 @@ export default function ReadScreen() {
     reading.nextPage();
   }, [canNavigate, reading]);
 
-  const handleCommitAndArchive = useCallback(async () => {
-    const result = await reading.commitCompletion();
-    setCompletionSheetVisible(false);
-    if (result.success) {
-      queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
-      clearActiveSession();
-      router.back();
-    } else {
-      Alert.alert("오류", result.error ?? "완독 처리에 실패했습니다.");
-    }
-  }, [reading, router, clearActiveSession, queryClient]);
+  const isCollectionsReady = !collectionsQuery.isLoading && !collectionsQuery.isError;
 
-  const handleCommitAndDelete = useCallback(async () => {
-    const result = await reading.commitCompletion();
-    if (result.success && inboxId) {
-      try {
-        await deleteInbox.mutateAsync({ id: inboxId });
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "수신함 항목 삭제에 실패했습니다.";
-        Alert.alert("알림", `완독 기록은 저장했지만 ${msg}`);
-      }
+  const handleCommitAndSave = useCallback(async () => {
+    if (isSaving) return;
+    if (!isCollectionsReady) {
+      Alert.alert("알림", "보관함 정보를 불러오는 중입니다. 잠시 후 다시 시도해주세요.");
+      return;
     }
-    setCompletionSheetVisible(false);
-    if (result.success) {
+    setIsSaving(true);
+    try {
+      const result = await reading.commitCompletion();
+      if (!result.success) {
+        Alert.alert("오류", result.error ?? "완독 처리에 실패했습니다.");
+        return;
+      }
+
+      let targetCollectionId: string | undefined;
+      const collections = collectionsQuery.data;
+      if (collections && collections.length > 0) {
+        targetCollectionId = collections[0].id;
+      } else {
+        try {
+          const newCol = await createCollection.mutateAsync({
+            data: { ownerId: userId, name: "보관함" },
+          });
+          targetCollectionId = newCol.id;
+        } catch {
+          Alert.alert("알림", "완독 기록은 저장했지만 보관함 생성에 실패했습니다.");
+        }
+      }
+
+      if (targetCollectionId && articleId) {
+        try {
+          await addToCollection.mutateAsync({
+            id: targetCollectionId,
+            data: { articleId },
+          });
+          queryClient.invalidateQueries({ queryKey: ["/api/my-collections"] });
+        } catch {
+          Alert.alert("알림", "완독 기록은 저장했지만 보관함 추가에 실패했습니다.");
+        }
+      }
+
+      setCompletionSheetVisible(false);
       queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
       clearActiveSession();
       router.back();
-    } else {
-      Alert.alert("오류", result.error ?? "완독 처리에 실패했습니다.");
+    } finally {
+      setIsSaving(false);
     }
-  }, [reading, router, inboxId, deleteInbox, clearActiveSession, queryClient]);
+  }, [isSaving, isCollectionsReady, reading, collectionsQuery.data, articleId, userId, createCollection, addToCollection, queryClient, clearActiveSession, router]);
+
+  const handleCommitAndSkip = useCallback(async () => {
+    if (isSaving) return;
+    setIsSaving(true);
+    try {
+      const result = await reading.commitCompletion();
+      setCompletionSheetVisible(false);
+      if (result.success) {
+        queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+        clearActiveSession();
+        router.back();
+      } else {
+        Alert.alert("오류", result.error ?? "완독 처리에 실패했습니다.");
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  }, [isSaving, reading, router, clearActiveSession, queryClient]);
 
   const handleCollectSentence = useCallback((text: string) => {
     if (text.trim().length > 0) {
@@ -581,9 +629,14 @@ export default function ReadScreen() {
       >
         <View style={styles.completionContent}>
           <Text style={dynamicStyles.completionText}>글을 끝까지 다 읽었습니다.</Text>
-          <Pressable style={styles.completionButton} onPress={handleCommitAndArchive}>
-            <Feather name="archive" size={18} color={Colors.white} />
-            <Text style={dynamicStyles.completionButtonText}>보관하기</Text>
+          <Pressable
+            style={[styles.completionButton, (isSaving || !isCollectionsReady) && styles.completionButtonDisabled]}
+            onPress={handleCommitAndSave}
+            disabled={isSaving}
+          >
+            <Text style={dynamicStyles.completionButtonText}>
+              {isSaving ? "저장 중..." : !isCollectionsReady ? "보관함 불러오는 중..." : "개인 보관함에 저장"}
+            </Text>
           </Pressable>
           <Pressable
             style={[styles.completionButton, styles.completionButtonSecondary]}
@@ -592,15 +645,14 @@ export default function ReadScreen() {
               reading.restartReading();
             }}
           >
-            <Feather name="refresh-cw" size={18} color={Colors.zinc600} />
             <Text style={dynamicStyles.completionButtonSecondaryText}>다시 읽기</Text>
           </Pressable>
           <Pressable
             style={[styles.completionButton, styles.completionButtonSecondary]}
-            onPress={handleCommitAndDelete}
+            onPress={handleCommitAndSkip}
+            disabled={isSaving}
           >
-            <Feather name="trash-2" size={18} color={Colors.zinc600} />
-            <Text style={dynamicStyles.completionButtonSecondaryText}>삭제하기</Text>
+            <Text style={dynamicStyles.completionButtonSecondaryText}>저장하지 않기</Text>
           </Pressable>
         </View>
       </BottomSheet>
@@ -828,6 +880,9 @@ const styles = StyleSheet.create({
   },
   completionButtonSecondary: {
     backgroundColor: Colors.zinc100,
+  },
+  completionButtonDisabled: {
+    opacity: 0.6,
   },
   sentenceContent: {
     paddingVertical: 12,
