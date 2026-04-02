@@ -123,41 +123,41 @@ export const Sizing = {
 export const Typography = {
   headerTitle: {
     fontSize: 28,
-    fontWeight: "700" as const,
-    fontFamily: Platform.select({ ios: "Inter_700Bold", default: "Inter_700Bold" }),
+    fontWeight: "900" as const,
+    fontFamily: Platform.select({ ios: "Pretendard-Black", default: "Pretendard-Black" }),
     letterSpacing: -0.5,
   },
   tabLabel: {
     fontSize: 10,
-    fontWeight: "500" as const,
-    fontFamily: Platform.select({ ios: "Inter_500Medium", default: "Inter_500Medium" }),
+    fontWeight: "200" as const,
+    fontFamily: Platform.select({ ios: "Pretendard-ExtraLight", default: "Pretendard-ExtraLight" }),
   },
   dateHeader: {
     fontSize: 13,
     fontWeight: "600" as const,
-    fontFamily: Platform.select({ ios: "Inter_600SemiBold", default: "Inter_600SemiBold" }),
+    fontFamily: Platform.select({ ios: "Pretendard-SemiBold", default: "Pretendard-SemiBold" }),
   },
   searchInput: {
     fontSize: 14,
-    fontFamily: Platform.select({ ios: "Inter_400Regular", default: "Inter_400Regular" }),
+    fontFamily: Platform.select({ ios: "Pretendard-ExtraLight", default: "Pretendard-ExtraLight" }),
   },
   body: {
     fontSize: 16,
-    fontFamily: Platform.select({ ios: "Inter_400Regular", default: "Inter_400Regular" }),
+    fontFamily: Platform.select({ ios: "Pretendard-ExtraLight", default: "Pretendard-ExtraLight" }),
   },
   bodyMedium: {
     fontSize: 16,
-    fontWeight: "500" as const,
-    fontFamily: Platform.select({ ios: "Inter_500Medium", default: "Inter_500Medium" }),
+    fontWeight: "600" as const,
+    fontFamily: Platform.select({ ios: "Pretendard-SemiBold", default: "Pretendard-SemiBold" }),
   },
   bodySemiBold: {
     fontSize: 16,
     fontWeight: "600" as const,
-    fontFamily: Platform.select({ ios: "Inter_600SemiBold", default: "Inter_600SemiBold" }),
+    fontFamily: Platform.select({ ios: "Pretendard-SemiBold", default: "Pretendard-SemiBold" }),
   },
   caption: {
     fontSize: 12,
-    fontFamily: Platform.select({ ios: "Inter_400Regular", default: "Inter_400Regular" }),
+    fontFamily: Platform.select({ ios: "Pretendard-ExtraLight", default: "Pretendard-ExtraLight" }),
   },
 } as const;
 
@@ -277,28 +277,28 @@ export const ReaderTokens = {
 
   fontFamily: {
     serif: Platform.select({
-      ios: "NotoSerifKR_400Regular",
-      default: "NotoSerifKR_400Regular",
+      ios: "Eulyoo1945-Regular",
+      default: "Eulyoo1945-Regular",
     }),
     serifBold: Platform.select({
-      ios: "NotoSerifKR_700Bold",
-      default: "NotoSerifKR_700Bold",
+      ios: "Eulyoo1945-SemiBold",
+      default: "Eulyoo1945-SemiBold",
     }),
     sans: Platform.select({
-      ios: "NotoSansKR_400Regular",
-      default: "NotoSansKR_400Regular",
+      ios: "Pretendard-ExtraLight",
+      default: "Pretendard-ExtraLight",
     }),
     sansMedium: Platform.select({
-      ios: "NotoSansKR_500Medium",
-      default: "NotoSansKR_500Medium",
+      ios: "Pretendard-ExtraLight",
+      default: "Pretendard-ExtraLight",
     }),
     sansSemiBold: Platform.select({
-      ios: "NotoSansKR_600SemiBold",
-      default: "NotoSansKR_600SemiBold",
+      ios: "Pretendard-SemiBold",
+      default: "Pretendard-SemiBold",
     }),
     sansBold: Platform.select({
-      ios: "NotoSansKR_700Bold",
-      default: "NotoSansKR_700Bold",
+      ios: "Pretendard-Black",
+      default: "Pretendard-Black",
     }),
   },
 

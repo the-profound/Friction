@@ -1,20 +1,4 @@
-import {
-  Inter_400Regular,
-  Inter_500Medium,
-  Inter_600SemiBold,
-  Inter_700Bold,
-  useFonts,
-} from "@expo-google-fonts/inter";
-import {
-  NotoSerifKR_400Regular,
-  NotoSerifKR_700Bold,
-} from "@expo-google-fonts/noto-serif-kr";
-import {
-  NotoSansKR_400Regular,
-  NotoSansKR_500Medium,
-  NotoSansKR_600SemiBold,
-  NotoSansKR_700Bold,
-} from "@expo-google-fonts/noto-sans-kr";
+import { useFonts } from "expo-font";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter, usePathname } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -71,16 +55,11 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
-    Inter_400Regular,
-    Inter_500Medium,
-    Inter_600SemiBold,
-    Inter_700Bold,
-    NotoSerifKR_400Regular,
-    NotoSerifKR_700Bold,
-    NotoSansKR_400Regular,
-    NotoSansKR_500Medium,
-    NotoSansKR_600SemiBold,
-    NotoSansKR_700Bold,
+    "Pretendard-ExtraLight": require("../assets/fonts/Pretendard-ExtraLight.otf"),
+    "Pretendard-SemiBold": require("../assets/fonts/Pretendard-SemiBold.otf"),
+    "Pretendard-Black": require("../assets/fonts/Pretendard-Black.otf"),
+    "Eulyoo1945-Regular": require("../assets/fonts/Eulyoo1945-Regular.otf"),
+    "Eulyoo1945-SemiBold": require("../assets/fonts/Eulyoo1945-SemiBold.otf"),
   });
 
   useEffect(() => {
