@@ -7,6 +7,7 @@ interface SelectableTextProps {
   text: string;
   onCollect: (selectedText: string) => void;
   onMemo?: (selectedText: string) => void;
+  onSelectionStateChange?: (isSelecting: boolean) => void;
   fontSize?: number;
   lineHeight?: number;
   letterSpacing?: number;
@@ -95,17 +96,25 @@ function SelectableTextWeb({ text, onCollect, onMemo, fontSize, lineHeight, lett
   );
 }
 
-function SelectableTextNative({ text, onCollect, onMemo, fontSize, lineHeight, letterSpacing, children }: SelectableTextProps) {
+function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange, fontSize, lineHeight, letterSpacing, children }: SelectableTextProps) {
   const [selection, setSelection] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
   const [showCollectButton, setShowCollectButton] = useState(false);
   const textRef = useRef(text);
   textRef.current = text;
+  const isSelectingRef = useRef(false);
+  const onSelectionStateChangeRef = useRef(onSelectionStateChange);
+  onSelectionStateChangeRef.current = onSelectionStateChange;
 
   const handleSelectionChange = useCallback(
     (e: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => {
       const { start, end } = e.nativeEvent.selection;
       setSelection({ start, end });
-      setShowCollectButton(start !== end);
+      const nowSelecting = start !== end;
+      setShowCollectButton(nowSelecting);
+      if (nowSelecting !== isSelectingRef.current) {
+        isSelectingRef.current = nowSelecting;
+        onSelectionStateChangeRef.current?.(nowSelecting);
+      }
     },
     [],
   );
@@ -115,6 +124,10 @@ function SelectableTextNative({ text, onCollect, onMemo, fontSize, lineHeight, l
     if (selected.trim().length > 0) {
       onCollect(selected.trim());
       setShowCollectButton(false);
+      if (isSelectingRef.current) {
+        isSelectingRef.current = false;
+        onSelectionStateChangeRef.current?.(false);
+      }
     }
   }, [selection, onCollect]);
 
@@ -123,6 +136,10 @@ function SelectableTextNative({ text, onCollect, onMemo, fontSize, lineHeight, l
     if (selected.trim().length > 0) {
       onMemo?.(selected.trim());
       setShowCollectButton(false);
+      if (isSelectingRef.current) {
+        isSelectingRef.current = false;
+        onSelectionStateChangeRef.current?.(false);
+      }
     }
   }, [selection, onMemo]);
 

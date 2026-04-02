@@ -316,14 +316,18 @@ export default function ReadScreen() {
   useEffect(() => { handleSwipeLeftRef.current = handleSwipeLeft; }, [handleSwipeLeft]);
   useEffect(() => { handleSwipeRightRef.current = handleSwipeRight; }, [handleSwipeRight]);
 
+  const isTextSelectingRef = useRef(false);
+
   const swipePanResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, g) => {
+        if (isTextSelectingRef.current) return false;
         const absDx = Math.abs(g.dx);
         const absDy = Math.abs(g.dy);
         return absDx > absDy * SWIPE_MIN_RATIO && absDx > SWIPE_MIN_DISTANCE / 2;
       },
       onMoveShouldSetPanResponderCapture: (_, g) => {
+        if (isTextSelectingRef.current) return false;
         const absDx = Math.abs(g.dx);
         const absDy = Math.abs(g.dy);
         return absDx > absDy * SWIPE_MIN_RATIO && absDx > SWIPE_MIN_DISTANCE / 2;
@@ -617,6 +621,7 @@ export default function ReadScreen() {
                 pageIndex={contentPageIndex}
                 onCollectSentence={handleCollectSentence}
                 onMemoSentence={handleMemoSentence}
+                onSelectionStateChange={(isSelecting) => { isTextSelectingRef.current = isSelecting; }}
                 bottomInset={insets.bottom}
                 layout={layout}
               />
@@ -799,6 +804,7 @@ function PageView({
   pageIndex,
   onCollectSentence,
   onMemoSentence,
+  onSelectionStateChange,
   bottomInset,
   layout,
 }: {
@@ -806,6 +812,7 @@ function PageView({
   pageIndex: number;
   onCollectSentence: (text: string) => void;
   onMemoSentence: (text: string) => void;
+  onSelectionStateChange?: (isSelecting: boolean) => void;
   bottomInset: number;
   layout: ReaderLayout;
 }) {
@@ -847,6 +854,7 @@ function PageView({
                 block={block}
                 onCollect={onCollectSentence}
                 onMemo={onMemoSentence}
+                onSelectionStateChange={onSelectionStateChange}
                 fontSize={layout.bodyFontSize}
                 lineHeight={layout.bodyLineHeight}
                 letterSpacing={layout.bodyLetterSpacing}

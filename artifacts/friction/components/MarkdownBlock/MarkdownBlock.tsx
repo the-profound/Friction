@@ -8,6 +8,7 @@ interface MarkdownBlockProps {
   block: MarkdownBlockType;
   onCollect: (text: string) => void;
   onMemo?: (text: string) => void;
+  onSelectionStateChange?: (isSelecting: boolean) => void;
   fontSize: number;
   lineHeight: number;
   letterSpacing: number;
@@ -48,6 +49,7 @@ export default function MarkdownBlock({
   block,
   onCollect,
   onMemo,
+  onSelectionStateChange,
   fontSize,
   lineHeight,
   letterSpacing,
@@ -62,6 +64,7 @@ export default function MarkdownBlock({
           text={plainText}
           onCollect={onCollect}
           onMemo={onMemo}
+          onSelectionStateChange={onSelectionStateChange}
           fontSize={fontSize}
           lineHeight={lineHeight}
           letterSpacing={letterSpacing}
@@ -73,6 +76,7 @@ export default function MarkdownBlock({
         text={plainText}
         onCollect={onCollect}
         onMemo={onMemo}
+        onSelectionStateChange={onSelectionStateChange}
         fontSize={fontSize}
         lineHeight={lineHeight}
         letterSpacing={letterSpacing}
@@ -91,6 +95,7 @@ export default function MarkdownBlock({
         text={plainText}
         onCollect={onCollect}
         onMemo={onMemo}
+        onSelectionStateChange={onSelectionStateChange}
         fontSize={sz}
         lineHeight={sz * 1.25}
         letterSpacing={letterSpacing * 0.5}
@@ -109,6 +114,7 @@ export default function MarkdownBlock({
         text={plainText}
         onCollect={onCollect}
         onMemo={onMemo}
+        onSelectionStateChange={onSelectionStateChange}
         fontSize={sz}
         lineHeight={sz * 1.3}
         letterSpacing={letterSpacing * 0.5}
@@ -127,6 +133,7 @@ export default function MarkdownBlock({
         text={plainText}
         onCollect={onCollect}
         onMemo={onMemo}
+        onSelectionStateChange={onSelectionStateChange}
         fontSize={sz}
         lineHeight={sz * 1.35}
         letterSpacing={letterSpacing * 0.5}
@@ -147,6 +154,7 @@ export default function MarkdownBlock({
             text={plainText}
             onCollect={onCollect}
             onMemo={onMemo}
+            onSelectionStateChange={onSelectionStateChange}
             fontSize={fontSize}
             lineHeight={lineHeight}
             letterSpacing={letterSpacing}
@@ -169,6 +177,7 @@ export default function MarkdownBlock({
             text={plainText}
             onCollect={onCollect}
             onMemo={onMemo}
+            onSelectionStateChange={onSelectionStateChange}
             fontSize={fontSize}
             lineHeight={lineHeight}
             letterSpacing={letterSpacing}
@@ -193,6 +202,7 @@ export default function MarkdownBlock({
             text={plainText}
             onCollect={onCollect}
             onMemo={onMemo}
+            onSelectionStateChange={onSelectionStateChange}
             fontSize={fontSize}
             lineHeight={lineHeight}
             letterSpacing={letterSpacing}
