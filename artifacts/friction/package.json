@@ -59,6 +59,7 @@
   },
   "dependencies": {
     "expo-clipboard": "~8.0.8",
+    "marked": "^17.0.5",
     "react-native-webview": "^13.16.1"
   }
 }

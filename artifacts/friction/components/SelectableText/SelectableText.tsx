@@ -9,9 +9,10 @@ interface SelectableTextProps {
   fontSize?: number;
   lineHeight?: number;
   letterSpacing?: number;
+  children?: React.ReactNode;
 }
 
-function SelectableTextWeb({ text, onCollect, fontSize, lineHeight, letterSpacing }: SelectableTextProps) {
+function SelectableTextWeb({ text, onCollect, fontSize, lineHeight, letterSpacing, children }: SelectableTextProps) {
   const [selectedText, setSelectedText] = useState("");
   const [showCollectButton, setShowCollectButton] = useState(false);
   const textBodyRef = useRef<Text>(null);
@@ -64,7 +65,7 @@ function SelectableTextWeb({ text, onCollect, fontSize, lineHeight, letterSpacin
   return (
     <View style={styles.container}>
       <Text selectable style={textStyle} ref={textBodyRef}>
-        {text}
+        {children ?? text}
       </Text>
       {showCollectButton && (
         <View style={styles.collectBar}>
@@ -82,7 +83,7 @@ function SelectableTextWeb({ text, onCollect, fontSize, lineHeight, letterSpacin
   );
 }
 
-function SelectableTextNative({ text, onCollect, fontSize, lineHeight, letterSpacing }: SelectableTextProps) {
+function SelectableTextNative({ text, onCollect, fontSize, lineHeight, letterSpacing, children }: SelectableTextProps) {
   const [selection, setSelection] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
   const [showCollectButton, setShowCollectButton] = useState(false);
   const textRef = useRef(text);
@@ -111,6 +112,38 @@ function SelectableTextNative({ text, onCollect, fontSize, lineHeight, letterSpa
     lineHeight != null && { lineHeight },
     letterSpacing != null && { letterSpacing },
   ];
+
+  if (children) {
+    return (
+      <View style={styles.container}>
+        <View>
+          {children}
+          <TextInput
+            style={[inputStyle, styles.overlayInput]}
+            value={text}
+            multiline
+            editable={false}
+            scrollEnabled={false}
+            onSelectionChange={handleSelectionChange}
+            selection={undefined}
+            selectTextOnFocus={false}
+          />
+        </View>
+        {showCollectButton && (
+          <View style={styles.collectBar}>
+            <Text style={styles.collectHint} numberOfLines={1}>
+              &ldquo;{text.substring(selection.start, Math.min(selection.end, selection.start + 40))}
+              {selection.end - selection.start > 40 ? "..." : ""}&rdquo;
+            </Text>
+            <Pressable style={styles.collectButton} onPress={handleCollect}>
+              <Feather name="bookmark" size={14} color={Colors.white} />
+              <Text style={styles.collectButtonText}>수집</Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -168,6 +201,15 @@ const styles = StyleSheet.create({
     textAlign: "justify" as const,
     padding: 0,
     margin: 0,
+  },
+  overlayInput: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    color: "transparent",
+    backgroundColor: "transparent",
   },
   collectBar: {
     flexDirection: "row",

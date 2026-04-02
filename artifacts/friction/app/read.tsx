@@ -27,8 +27,9 @@ import ProgressIndicator from "@/components/ProgressIndicator/ProgressIndicator"
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import CoverPreview from "@/components/CoverPreview/CoverPreview";
 import { resolveArticleCover } from "@/utils/articleCover";
-import SelectableText from "@/components/SelectableText/SelectableText";
 import CoverPage from "@/components/CoverPage/CoverPage";
+import MarkdownBlock from "@/components/MarkdownBlock/MarkdownBlock";
+import { parseMarkdownBlocks } from "@/utils/markdownParser";
 import { useReadingSession } from "@/lib/useReadingSession";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -42,13 +43,6 @@ import {
 import { useUser } from "@/contexts/UserContext";
 import { useActiveReading } from "@/contexts/ActiveReadingContext";
 import type { ReadingMode } from "@/lib/policies";
-
-function splitIntoParagraphs(text: string): string[] {
-  return text
-    .split(/\n\s*\n|\n/)
-    .map((p) => p.trim())
-    .filter((p) => p.length > 0);
-}
 
 function computeReaderLayout(availableWidth: number, availableHeight: number): ReaderLayout {
   const widthFromHeight = availableHeight * ReaderTokens.aspectRatio;
@@ -749,7 +743,7 @@ function PageView({
   bottomInset: number;
   layout: ReaderLayout;
 }) {
-  const paragraphs = useMemo(() => splitIntoParagraphs(content), [content]);
+  const blocks = useMemo(() => parseMarkdownBlocks(content), [content]);
 
   const dynamicPageStyles = useMemo(
     () =>
@@ -766,11 +760,11 @@ function PageView({
           paddingTop: layout.paddingY,
           paddingBottom: bottomInset + layout.paddingY,
         },
-        paragraphWrapper: {
-          marginBottom: layout.paddingY,
+        blockWrapper: {
+          marginBottom: layout.bodyLineHeight * 0.6,
         },
       }),
-    [layout.safeAreaWidth, layout.safeAreaHeight, layout.paddingX, layout.paddingY, bottomInset],
+    [layout.safeAreaWidth, layout.safeAreaHeight, layout.paddingX, layout.paddingY, layout.bodyLineHeight, bottomInset],
   );
 
   return (
@@ -781,10 +775,10 @@ function PageView({
           showsVerticalScrollIndicator={false}
           style={styles.pageScrollView}
         >
-          {paragraphs.map((para, idx) => (
-            <View key={`${pageIndex}-p-${idx}`} style={dynamicPageStyles.paragraphWrapper}>
-              <SelectableText
-                text={para}
+          {blocks.map((block, idx) => (
+            <View key={`${pageIndex}-b-${idx}`} style={dynamicPageStyles.blockWrapper}>
+              <MarkdownBlock
+                block={block}
                 onCollect={onCollectSentence}
                 fontSize={layout.bodyFontSize}
                 lineHeight={layout.bodyLineHeight}
