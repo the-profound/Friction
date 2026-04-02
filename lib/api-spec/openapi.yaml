@@ -144,6 +144,52 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /users/{id}/recent-collection:
+    get:
+      operationId: getUserRecentCollection
+      tags: [users]
+      summary: Get user's recent saved collection ID
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Recent saved collection info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecentSavedCollectionResponse"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateUserRecentCollection
+      tags: [users]
+      summary: Update user's recent saved collection ID
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateRecentCollectionBody"
+      responses:
+        "200":
+          description: Updated recent saved collection info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecentSavedCollectionResponse"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   # ─── Articles ─────────────────────────────────────
   /articles:
     get:
@@ -189,6 +235,45 @@ paths:
                 $ref: "#/components/schemas/Article"
         "400":
           description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /articles/reading-memo:
+    get:
+      operationId: getOrCreateReadingMemo
+      tags: [articles]
+      summary: Get or create a ReadingMemo for a source article
+      description: "Returns the unique memo article for the given user and source article (1글1메모 원칙). Creates a new DRAFT memo if none exists; if a memo already exists, returns it regardless of its current status. Note: this GET is intentionally side-effecting (creates a row on first access). Avoid caching via intermediary proxies."
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: sourceArticleId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: ReadingMemo article (existing or newly created)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Article"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Source article not found
           content:
             application/json:
               schema:
@@ -1406,6 +1491,10 @@ components:
         avatarUrl:
           type: string
           nullable: true
+        recentSavedCollectionId:
+          type: string
+          format: uuid
+          nullable: true
         createdAt:
           type: string
           format: date-time
@@ -1440,6 +1529,24 @@ components:
           type: string
           nullable: true
 
+    RecentSavedCollectionResponse:
+      type: object
+      properties:
+        recentSavedCollectionId:
+          type: string
+          format: uuid
+          nullable: true
+      required: [recentSavedCollectionId]
+
+    UpdateRecentCollectionBody:
+      type: object
+      properties:
+        collectionId:
+          type: string
+          format: uuid
+          nullable: true
+      required: [collectionId]
+
     # ─── Article ────────────────────────────────────
     Article:
       type: object
@@ -1471,6 +1578,10 @@ components:
         letterAt:
           type: string
           format: date-time
+          nullable: true
+        sourceArticleId:
+          type: string
+          format: uuid
           nullable: true
         createdAt:
           type: string

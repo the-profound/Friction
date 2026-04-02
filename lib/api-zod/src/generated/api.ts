@@ -23,6 +23,7 @@ export const ListUsersResponseItem = zod.object({
   email: zod.string(),
   nickname: zod.string(),
   avatarUrl: zod.string().nullish(),
+  recentSavedCollectionId: zod.string().uuid().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -51,6 +52,7 @@ export const GetUserResponse = zod.object({
   email: zod.string(),
   nickname: zod.string(),
   avatarUrl: zod.string().nullish(),
+  recentSavedCollectionId: zod.string().uuid().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -81,8 +83,35 @@ export const UpdateUserResponse = zod.object({
   email: zod.string(),
   nickname: zod.string(),
   avatarUrl: zod.string().nullish(),
+  recentSavedCollectionId: zod.string().uuid().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
+});
+
+/**
+ * @summary Get user's recent saved collection ID
+ */
+export const GetUserRecentCollectionParams = zod.object({
+  id: zod.coerce.string().uuid(),
+});
+
+export const GetUserRecentCollectionResponse = zod.object({
+  recentSavedCollectionId: zod.string().uuid().nullable(),
+});
+
+/**
+ * @summary Update user's recent saved collection ID
+ */
+export const UpdateUserRecentCollectionParams = zod.object({
+  id: zod.coerce.string().uuid(),
+});
+
+export const UpdateUserRecentCollectionBody = zod.object({
+  collectionId: zod.string().uuid().nullable(),
+});
+
+export const UpdateUserRecentCollectionResponse = zod.object({
+  recentSavedCollectionId: zod.string().uuid().nullable(),
 });
 
 /**
@@ -119,6 +148,7 @@ export const ListArticlesResponseItem = zod.object({
     .nullish()
     .describe("Article cover display settings. null means default cover."),
   letterAt: zod.date().nullish(),
+  sourceArticleId: zod.string().uuid().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -132,6 +162,46 @@ export const CreateArticleBody = zod.object({
   authorId: zod.string().uuid(),
   title: zod.string().min(1),
   content: zod.string().optional(),
+});
+
+/**
+ * Returns the existing ReadingMemo (DRAFT, sourceArticleId set) for the given user and source article, or creates a new one (1글1메모 원칙).
+ * @summary Get or create a ReadingMemo for a source article
+ */
+export const GetOrCreateReadingMemoQueryParams = zod.object({
+  userId: zod.coerce.string().uuid(),
+  sourceArticleId: zod.coerce.string().uuid(),
+});
+
+export const GetOrCreateReadingMemoResponse = zod.object({
+  id: zod.string().uuid(),
+  authorId: zod.string().uuid(),
+  title: zod.string(),
+  content: zod.string(),
+  status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
+  pages: zod.array(zod.string()).nullish(),
+  style: zod.object({}).passthrough().nullish(),
+  cover: zod
+    .object({
+      type: zod.enum(["image", "color", "default"]),
+      imageUrl: zod
+        .string()
+        .url()
+        .optional()
+        .describe("Cover image URL (used when type=image)"),
+      bgColor: zod
+        .string()
+        .optional()
+        .describe("Background color hex (used when type=color)"),
+      textColor: zod.string().describe("Text color hex for title overlay"),
+      align: zod.enum(["left", "center"]),
+    })
+    .nullish()
+    .describe("Article cover display settings. null means default cover."),
+  letterAt: zod.date().nullish(),
+  sourceArticleId: zod.string().uuid().nullish(),
+  createdAt: zod.date(),
+  updatedAt: zod.date(),
 });
 
 /**
@@ -167,6 +237,7 @@ export const GetArticleResponse = zod.object({
     .nullish()
     .describe("Article cover display settings. null means default cover."),
   letterAt: zod.date().nullish(),
+  sourceArticleId: zod.string().uuid().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -229,6 +300,7 @@ export const UpdateArticleResponse = zod.object({
     .nullish()
     .describe("Article cover display settings. null means default cover."),
   letterAt: zod.date().nullish(),
+  sourceArticleId: zod.string().uuid().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -278,6 +350,7 @@ export const TransitionArticleStatusResponse = zod.object({
     .nullish()
     .describe("Article cover display settings. null means default cover."),
   letterAt: zod.date().nullish(),
+  sourceArticleId: zod.string().uuid().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -326,6 +399,7 @@ export const ListInboxResponseItem = zod.object({
         .nullish()
         .describe("Article cover display settings. null means default cover."),
       letterAt: zod.date().nullish(),
+      sourceArticleId: zod.string().uuid().nullish(),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     })
@@ -336,6 +410,7 @@ export const ListInboxResponseItem = zod.object({
       email: zod.string(),
       nickname: zod.string(),
       avatarUrl: zod.string().nullish(),
+      recentSavedCollectionId: zod.string().uuid().nullish(),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     })
@@ -386,6 +461,7 @@ export const GetInboxItemResponse = zod.object({
         .nullish()
         .describe("Article cover display settings. null means default cover."),
       letterAt: zod.date().nullish(),
+      sourceArticleId: zod.string().uuid().nullish(),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     })
@@ -396,6 +472,7 @@ export const GetInboxItemResponse = zod.object({
       email: zod.string(),
       nickname: zod.string(),
       avatarUrl: zod.string().nullish(),
+      recentSavedCollectionId: zod.string().uuid().nullish(),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     })
@@ -452,6 +529,7 @@ export const MarkInboxOpenedResponse = zod.object({
         .nullish()
         .describe("Article cover display settings. null means default cover."),
       letterAt: zod.date().nullish(),
+      sourceArticleId: zod.string().uuid().nullish(),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     })
@@ -462,6 +540,7 @@ export const MarkInboxOpenedResponse = zod.object({
       email: zod.string(),
       nickname: zod.string(),
       avatarUrl: zod.string().nullish(),
+      recentSavedCollectionId: zod.string().uuid().nullish(),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     })
@@ -512,6 +591,7 @@ export const MarkInboxReadResponse = zod.object({
         .nullish()
         .describe("Article cover display settings. null means default cover."),
       letterAt: zod.date().nullish(),
+      sourceArticleId: zod.string().uuid().nullish(),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     })
@@ -522,6 +602,7 @@ export const MarkInboxReadResponse = zod.object({
       email: zod.string(),
       nickname: zod.string(),
       avatarUrl: zod.string().nullish(),
+      recentSavedCollectionId: zod.string().uuid().nullish(),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     })
@@ -656,6 +737,7 @@ export const ListMyCollectionArticlesResponseItem = zod.object({
         .nullish()
         .describe("Article cover display settings. null means default cover."),
       letterAt: zod.date().nullish(),
+      sourceArticleId: zod.string().uuid().nullish(),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     })
@@ -958,6 +1040,7 @@ export const ListTeamMembersResponseItem = zod.object({
       email: zod.string(),
       nickname: zod.string(),
       avatarUrl: zod.string().nullish(),
+      recentSavedCollectionId: zod.string().uuid().nullish(),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     })
@@ -1024,6 +1107,7 @@ export const ListTeamArticlesResponseItem = zod.object({
         .nullish()
         .describe("Article cover display settings. null means default cover."),
       letterAt: zod.date().nullish(),
+      sourceArticleId: zod.string().uuid().nullish(),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     })
@@ -1069,6 +1153,7 @@ export const ListNeighborsResponseItem = zod.object({
       email: zod.string(),
       nickname: zod.string(),
       avatarUrl: zod.string().nullish(),
+      recentSavedCollectionId: zod.string().uuid().nullish(),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     })
@@ -1117,6 +1202,7 @@ export const ListNeighborRequestsResponseItem = zod.object({
       email: zod.string(),
       nickname: zod.string(),
       avatarUrl: zod.string().nullish(),
+      recentSavedCollectionId: zod.string().uuid().nullish(),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     })
@@ -1220,6 +1306,7 @@ export const ListSendRecordsResponseItem = zod.object({
         .nullish()
         .describe("Article cover display settings. null means default cover."),
       letterAt: zod.date().nullish(),
+      sourceArticleId: zod.string().uuid().nullish(),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     })
@@ -1230,6 +1317,7 @@ export const ListSendRecordsResponseItem = zod.object({
       email: zod.string(),
       nickname: zod.string(),
       avatarUrl: zod.string().nullish(),
+      recentSavedCollectionId: zod.string().uuid().nullish(),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     })
@@ -1289,6 +1377,7 @@ export const GetSendRecordResponse = zod.object({
         .nullish()
         .describe("Article cover display settings. null means default cover."),
       letterAt: zod.date().nullish(),
+      sourceArticleId: zod.string().uuid().nullish(),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     })
@@ -1299,6 +1388,7 @@ export const GetSendRecordResponse = zod.object({
       email: zod.string(),
       nickname: zod.string(),
       avatarUrl: zod.string().nullish(),
+      recentSavedCollectionId: zod.string().uuid().nullish(),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     })

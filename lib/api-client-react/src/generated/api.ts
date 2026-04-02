@@ -31,6 +31,7 @@ import type {
   CreateUserArticleReadBody,
   CreateUserBody,
   ErrorResponse,
+  GetOrCreateReadingMemoParams,
   GetReadingRecordParams,
   HealthStatus,
   InboxItem,
@@ -51,6 +52,7 @@ import type {
   NeighborWithUser,
   ReadingRecord,
   ReadingRecordNullable,
+  RecentSavedCollectionResponse,
   SendArticleBody,
   SendRecordWithDetails,
   StoredSentence,
@@ -64,6 +66,7 @@ import type {
   TransitionArticleBody,
   UpdateArticleBody,
   UpdateMyCollectionBody,
+  UpdateRecentCollectionBody,
   UpdateTeamCollectionBody,
   UpdateUserBody,
   UpsertReadingRecordBody,
@@ -556,6 +559,189 @@ export const useUpdateUser = <
 };
 
 /**
+ * @summary Get user's recent saved collection ID
+ */
+export const getGetUserRecentCollectionUrl = (id: string) => {
+  return `/api/users/${id}/recent-collection`;
+};
+
+export const getUserRecentCollection = async (
+  id: string,
+  options?: RequestInit,
+): Promise<RecentSavedCollectionResponse> => {
+  return customFetch<RecentSavedCollectionResponse>(
+    getGetUserRecentCollectionUrl(id),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetUserRecentCollectionQueryKey = (id: string) => {
+  return [`/api/users/${id}/recent-collection`] as const;
+};
+
+export const getGetUserRecentCollectionQueryOptions = <
+  TData = Awaited<ReturnType<typeof getUserRecentCollection>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getUserRecentCollection>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetUserRecentCollectionQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getUserRecentCollection>>
+  > = ({ signal }) =>
+    getUserRecentCollection(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getUserRecentCollection>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetUserRecentCollectionQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getUserRecentCollection>>
+>;
+export type GetUserRecentCollectionQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get user's recent saved collection ID
+ */
+
+export function useGetUserRecentCollection<
+  TData = Awaited<ReturnType<typeof getUserRecentCollection>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getUserRecentCollection>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetUserRecentCollectionQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Update user's recent saved collection ID
+ */
+export const getUpdateUserRecentCollectionUrl = (id: string) => {
+  return `/api/users/${id}/recent-collection`;
+};
+
+export const updateUserRecentCollection = async (
+  id: string,
+  updateRecentCollectionBody: UpdateRecentCollectionBody,
+  options?: RequestInit,
+): Promise<RecentSavedCollectionResponse> => {
+  return customFetch<RecentSavedCollectionResponse>(
+    getUpdateUserRecentCollectionUrl(id),
+    {
+      ...options,
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(updateRecentCollectionBody),
+    },
+  );
+};
+
+export const getUpdateUserRecentCollectionMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateUserRecentCollection>>,
+    TError,
+    { id: string; data: BodyType<UpdateRecentCollectionBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateUserRecentCollection>>,
+  TError,
+  { id: string; data: BodyType<UpdateRecentCollectionBody> },
+  TContext
+> => {
+  const mutationKey = ["updateUserRecentCollection"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateUserRecentCollection>>,
+    { id: string; data: BodyType<UpdateRecentCollectionBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateUserRecentCollection(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateUserRecentCollectionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateUserRecentCollection>>
+>;
+export type UpdateUserRecentCollectionMutationBody =
+  BodyType<UpdateRecentCollectionBody>;
+export type UpdateUserRecentCollectionMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Update user's recent saved collection ID
+ */
+export const useUpdateUserRecentCollection = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateUserRecentCollection>>,
+    TError,
+    { id: string; data: BodyType<UpdateRecentCollectionBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateUserRecentCollection>>,
+  TError,
+  { id: string; data: BodyType<UpdateRecentCollectionBody> },
+  TContext
+> => {
+  return useMutation(getUpdateUserRecentCollectionMutationOptions(options));
+};
+
+/**
  * @summary List articles
  */
 export const getListArticlesUrl = (params?: ListArticlesParams) => {
@@ -734,6 +920,107 @@ export const useCreateArticle = <
 > => {
   return useMutation(getCreateArticleMutationOptions(options));
 };
+
+/**
+ * Returns the existing ReadingMemo (DRAFT, sourceArticleId set) for the given user and source article, or creates a new one (1글1메모 원칙).
+ * @summary Get or create a ReadingMemo for a source article
+ */
+export const getGetOrCreateReadingMemoUrl = (
+  params: GetOrCreateReadingMemoParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/articles/reading-memo?${stringifiedParams}`
+    : `/api/articles/reading-memo`;
+};
+
+export const getOrCreateReadingMemo = async (
+  params: GetOrCreateReadingMemoParams,
+  options?: RequestInit,
+): Promise<Article> => {
+  return customFetch<Article>(getGetOrCreateReadingMemoUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetOrCreateReadingMemoQueryKey = (
+  params?: GetOrCreateReadingMemoParams,
+) => {
+  return [`/api/articles/reading-memo`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetOrCreateReadingMemoQueryOptions = <
+  TData = Awaited<ReturnType<typeof getOrCreateReadingMemo>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params: GetOrCreateReadingMemoParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getOrCreateReadingMemo>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetOrCreateReadingMemoQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getOrCreateReadingMemo>>
+  > = ({ signal }) =>
+    getOrCreateReadingMemo(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getOrCreateReadingMemo>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetOrCreateReadingMemoQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getOrCreateReadingMemo>>
+>;
+export type GetOrCreateReadingMemoQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get or create a ReadingMemo for a source article
+ */
+
+export function useGetOrCreateReadingMemo<
+  TData = Awaited<ReturnType<typeof getOrCreateReadingMemo>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params: GetOrCreateReadingMemoParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getOrCreateReadingMemo>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetOrCreateReadingMemoQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Get article by ID

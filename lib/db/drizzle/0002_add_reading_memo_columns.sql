@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "articles_author_source_unique_idx" ON "articles" USING btree ("author_id","source_article_id") WHERE "articles"."source_article_id" IS NOT NULL;

@@ -7,7 +7,6 @@ import {
   BackHandler,
   Alert,
   ScrollView,
-  TextInput,
   Platform,
   useWindowDimensions,
   type LayoutChangeEvent,
@@ -31,6 +30,7 @@ import CoverPage from "@/components/CoverPage/CoverPage";
 import MarkdownBlock from "@/components/MarkdownBlock/MarkdownBlock";
 import { parseMarkdownBlocks } from "@/utils/markdownParser";
 import { useReadingSession } from "@/lib/useReadingSession";
+import { useReadingMemo } from "@/lib/useReadingMemo";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetArticle,
@@ -39,10 +39,16 @@ import {
   useListMyCollections,
   useAddArticleToMyCollection,
   useCreateMyCollection,
+  useGetUserRecentCollection,
+  useUpdateUserRecentCollection,
+  getGetUserRecentCollectionQueryKey,
 } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
 import { useActiveReading } from "@/contexts/ActiveReadingContext";
 import type { ReadingMode } from "@/lib/policies";
+import MemoBottomSheet from "@/components/MemoBottomSheet/MemoBottomSheet";
+import MyCollectionsModal from "@/components/MyCollectionsModal/MyCollectionsModal";
+import type { CollectionItem } from "@/components/MyCollectionsModal/MyCollectionsModal";
 
 function computeReaderLayout(availableWidth: number, availableHeight: number): ReaderLayout {
   const widthFromHeight = availableHeight * ReaderTokens.aspectRatio;
@@ -180,7 +186,9 @@ export default function ReadScreen() {
   const [sentencePopupVisible, setSentencePopupVisible] = useState(false);
   const [selectedText, setSelectedText] = useState("");
   const [memoSheetVisible, setMemoSheetVisible] = useState(false);
-  const [memoText, setMemoText] = useState("");
+  const [myCollectionsModalVisible, setMyCollectionsModalVisible] = useState(false);
+
+  const [selectedCollectionId, setSelectedCollectionId] = useState<string | undefined>(undefined);
   const [pageListSize, setPageListSize] = useState({ width: 0, height: 0 });
   const handlePageListLayout = useCallback((e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -201,7 +209,20 @@ export default function ReadScreen() {
   const collectionsQuery = useListMyCollections({ ownerId: userId });
   const addToCollection = useAddArticleToMyCollection();
   const createCollection = useCreateMyCollection();
+  const recentCollectionQuery = useGetUserRecentCollection(userId, {
+    query: {
+      queryKey: getGetUserRecentCollectionQueryKey(userId),
+      enabled: !!userId,
+    },
+  });
+  const updateRecentCollection = useUpdateUserRecentCollection();
   const [isSaving, setIsSaving] = useState(false);
+
+  const readingMemo = useReadingMemo({
+    userId,
+    sourceArticleId: articleId,
+    enabled: mode === "basic" && !!userId && !!articleId,
+  });
 
   useEffect(() => {
     if (mode === "basic" && articleId) {
@@ -218,9 +239,18 @@ export default function ReadScreen() {
 
   useEffect(() => {
     if (reading.session.state === "COMPLETED_READY") {
+      const recentId = recentCollectionQuery.data?.recentSavedCollectionId;
+      const collections = collectionsQuery.data;
+      if (recentId && collections?.some((c: { id: string }) => c.id === recentId)) {
+        setSelectedCollectionId(recentId);
+      } else if (collections && collections.length > 0) {
+        setSelectedCollectionId(collections[0].id);
+      } else {
+        setSelectedCollectionId(undefined);
+      }
       setCompletionSheetVisible(true);
     }
-  }, [reading.session.state]);
+  }, [reading.session.state, recentCollectionQuery.data, collectionsQuery.data]);
 
   useEffect(() => {
     if (reading.session.state === "COMPLETED_COMMITTED") {
@@ -280,18 +310,20 @@ export default function ReadScreen() {
         return;
       }
 
-      let targetCollectionId: string | undefined;
-      const collections = collectionsQuery.data;
-      if (collections && collections.length > 0) {
-        targetCollectionId = collections[0].id;
-      } else {
-        try {
-          const newCol = await createCollection.mutateAsync({
-            data: { ownerId: userId, name: "보관함" },
-          });
-          targetCollectionId = newCol.id;
-        } catch {
-          Alert.alert("알림", "완독 기록은 저장했지만 보관함 생성에 실패했습니다.");
+      let targetCollectionId: string | undefined = selectedCollectionId;
+      if (!targetCollectionId) {
+        const collections = collectionsQuery.data;
+        if (collections && collections.length > 0) {
+          targetCollectionId = collections[0].id;
+        } else {
+          try {
+            const newCol = await createCollection.mutateAsync({
+              data: { ownerId: userId, name: "보관함" },
+            });
+            targetCollectionId = newCol.id;
+          } catch {
+            Alert.alert("알림", "완독 기록은 저장했지만 보관함 생성에 실패했습니다.");
+          }
         }
       }
 
@@ -302,6 +334,17 @@ export default function ReadScreen() {
             data: { articleId },
           });
           queryClient.invalidateQueries({ queryKey: ["/api/my-collections"] });
+          try {
+            await updateRecentCollection.mutateAsync({
+              id: userId,
+              data: { collectionId: targetCollectionId },
+            });
+            queryClient.invalidateQueries({
+              queryKey: getGetUserRecentCollectionQueryKey(userId),
+            });
+          } catch (e) {
+            console.warn("[handleCommitAndSave] recent collection update failed (non-fatal):", e);
+          }
         } catch {
           Alert.alert("알림", "완독 기록은 저장했지만 보관함 추가에 실패했습니다.");
         }
@@ -314,7 +357,7 @@ export default function ReadScreen() {
     } finally {
       setIsSaving(false);
     }
-  }, [isSaving, isCollectionsReady, reading, collectionsQuery.data, articleId, userId, createCollection, addToCollection, queryClient, clearActiveSession, router]);
+  }, [isSaving, isCollectionsReady, reading, selectedCollectionId, collectionsQuery.data, articleId, userId, createCollection, addToCollection, updateRecentCollection, queryClient, clearActiveSession, router]);
 
   const handleCommitAndSkip = useCallback(async () => {
     if (isSaving) return;
@@ -364,29 +407,6 @@ export default function ReadScreen() {
     }
   }, [selectedText, userId, articleId, contentPageIndex, createSentence, queryClient]);
 
-  const handleSaveMemo = useCallback(async () => {
-    if (!memoText.trim()) return;
-    try {
-      await createSentence.mutateAsync({
-        data: {
-          userId,
-          articleId,
-          text: memoText.trim(),
-          position: {
-            page: contentPageIndex,
-            type: "memo",
-          },
-        },
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/stored-sentences"] });
-      setMemoSheetVisible(false);
-      setMemoText("");
-      Alert.alert("저장 완료", "메모가 저장되었습니다.");
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "메모 저장에 실패했습니다.";
-      Alert.alert("오류", msg);
-    }
-  }, [memoText, userId, articleId, contentPageIndex, createSentence, queryClient]);
 
   const dynamicStyles = useMemo(
     () =>
@@ -615,37 +635,53 @@ export default function ReadScreen() {
           reading.continueReading();
           setCompletionSheetVisible(false);
         }}
-        snapPoints={[0.35]}
+        snapPoints={[0.42]}
         enableDragDown={false}
         dismissable={true}
       >
         <View style={styles.completionContent}>
           <Text style={dynamicStyles.completionText}>글을 끝까지 다 읽었습니다.</Text>
+
+          <Pressable
+            style={styles.collectionSelector}
+            onPress={() => setMyCollectionsModalVisible(true)}
+            disabled={isSaving}
+          >
+            <Feather name="folder" size={16} color={Colors.zinc500} />
+            <Text style={styles.collectionSelectorText} numberOfLines={1}>
+              {(collectionsQuery.data ?? []).find((c: { id: string; name: string }) => c.id === selectedCollectionId)?.name ?? "보관함"}
+            </Text>
+            <Feather name="chevron-right" size={16} color={Colors.zinc400} />
+          </Pressable>
+
           <Pressable
             style={[styles.completionButton, (isSaving || !isCollectionsReady) && styles.completionButtonDisabled]}
             onPress={handleCommitAndSave}
             disabled={isSaving}
           >
             <Text style={dynamicStyles.completionButtonText}>
-              {isSaving ? "저장 중..." : !isCollectionsReady ? "보관함 불러오는 중..." : "개인 보관함에 저장"}
+              {isSaving ? "저장 중..." : !isCollectionsReady ? "불러오는 중..." : "보관하기"}
             </Text>
           </Pressable>
-          <Pressable
-            style={[styles.completionButton, styles.completionButtonSecondary]}
-            onPress={() => {
-              setCompletionSheetVisible(false);
-              reading.restartReading();
-            }}
-          >
-            <Text style={dynamicStyles.completionButtonSecondaryText}>다시 읽기</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.completionButton, styles.completionButtonSecondary]}
-            onPress={handleCommitAndSkip}
-            disabled={isSaving}
-          >
-            <Text style={dynamicStyles.completionButtonSecondaryText}>저장하지 않기</Text>
-          </Pressable>
+
+          <View style={styles.completionSecondaryRow}>
+            <Pressable
+              style={[styles.completionButton, styles.completionButtonSecondary, styles.completionButtonReread]}
+              onPress={() => {
+                setCompletionSheetVisible(false);
+                reading.restartReading();
+              }}
+            >
+              <Text style={dynamicStyles.completionButtonSecondaryText}>다시 읽기</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.completionButton, styles.completionButtonSecondary, styles.completionButtonDelete]}
+              onPress={handleCommitAndSkip}
+              disabled={isSaving}
+            >
+              <Text style={dynamicStyles.completionButtonSecondaryText}>삭제하기</Text>
+            </Pressable>
+          </View>
         </View>
       </BottomSheet>
 
@@ -675,41 +711,42 @@ export default function ReadScreen() {
         </View>
       </BottomSheet>
 
-      <BottomSheet
+      <MemoBottomSheet
+        key={readingMemo.memoArticleId ?? "memo-loading"}
         visible={memoSheetVisible}
-        onClose={() => setMemoSheetVisible(false)}
-        title="메모 작성"
-        titleStyle={dynamicStyles.sheetTitle}
-        snapPoints={[0.4]}
-      >
-        <View style={styles.memoContent}>
-          <TextInput
-            style={dynamicStyles.memoInput}
-            placeholder="읽으면서 떠오른 생각을 적어보세요..."
-            placeholderTextColor={Colors.searchPlaceholder}
-            value={memoText}
-            onChangeText={setMemoText}
-            multiline
-            autoFocus
-            textAlignVertical="top"
-          />
-          <Text style={dynamicStyles.memoPageInfo}>
-            {isOnCoverPage ? "표지" : `${contentPageIndex + 1}페이지`}에서 작성 중
-          </Text>
-          <View style={styles.sentenceActions}>
-            <Pressable
-              style={[styles.sentenceButton, styles.sentenceButtonCancel]}
-              onPress={() => { setMemoSheetVisible(false); setMemoText(""); }}
-            >
-              <Text style={dynamicStyles.sentenceButtonCancelText}>취소</Text>
-            </Pressable>
-            <Pressable style={styles.sentenceButton} onPress={handleSaveMemo}>
-              <Feather name="save" size={16} color={Colors.white} />
-              <Text style={dynamicStyles.sentenceButtonText}>저장</Text>
-            </Pressable>
-          </View>
-        </View>
-      </BottomSheet>
+        onClose={async () => {
+          await readingMemo.flushSave();
+          setMemoSheetVisible(false);
+        }}
+        articleTitle={article?.title ?? ""}
+        initialContent={readingMemo.memoContent}
+        saveState={readingMemo.saveState}
+        onContentChange={readingMemo.updateMemoContent}
+      />
+
+      <MyCollectionsModal
+        visible={myCollectionsModalVisible}
+        onClose={() => setMyCollectionsModalVisible(false)}
+        collections={
+          (collectionsQuery.data ?? []).map((c: { id: string; name: string; articleCount?: number }) => ({
+            id: c.id,
+            name: c.name,
+            articleCount: c.articleCount,
+          })) as CollectionItem[]
+        }
+        selectedCollectionId={selectedCollectionId}
+        onSelect={(collection) => {
+          setSelectedCollectionId(collection.id);
+          updateRecentCollection.mutate(
+            { id: userId, data: { collectionId: collection.id } },
+            {
+              onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetUserRecentCollectionQueryKey(userId) }),
+              onError: (e) => console.warn("[MyCollectionsModal] recent collection update failed (non-fatal):", e),
+            },
+          );
+        }}
+        isLoading={collectionsQuery.isLoading}
+      />
     </View>
   );
 }
@@ -900,6 +937,35 @@ const styles = StyleSheet.create({
   memoContent: {
     paddingVertical: 12,
     gap: 12,
+  },
+  collectionSelector: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
+    backgroundColor: Colors.zinc50,
+    marginBottom: 4,
+  },
+  collectionSelectorText: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: "Pretendard",
+    color: Colors.zinc700,
+  },
+  completionSecondaryRow: {
+    flexDirection: "row",
+    gap: 8,
+    width: "100%",
+  },
+  completionButtonReread: {
+    flex: 7,
+  },
+  completionButtonDelete: {
+    flex: 3,
   },
   coverPageContainer: {
     flex: 1,

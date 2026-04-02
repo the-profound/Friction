@@ -8,6 +8,20 @@
       "when": 1774854040532,
       "tag": "0000_add-article-cover",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1775094725803,
+      "tag": "0001_add_reading_memo_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1775094945794,
+      "tag": "0002_add_reading_memo_columns",
+      "breakpoints": true
     }
   ]
 }

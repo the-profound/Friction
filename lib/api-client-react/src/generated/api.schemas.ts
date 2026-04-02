@@ -18,6 +18,7 @@ export interface User {
   email: string;
   nickname: string;
   avatarUrl?: string | null;
+  recentSavedCollectionId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -39,6 +40,14 @@ export interface UpdateUserBody {
    */
   nickname?: string;
   avatarUrl?: string | null;
+}
+
+export interface RecentSavedCollectionResponse {
+  recentSavedCollectionId: string | null;
+}
+
+export interface UpdateRecentCollectionBody {
+  collectionId: string | null;
 }
 
 export type ArticleStatus = (typeof ArticleStatus)[keyof typeof ArticleStatus];
@@ -93,6 +102,7 @@ export interface Article {
   style?: ArticleStyle;
   cover?: ArticleCover | null;
   letterAt?: string | null;
+  sourceArticleId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -457,6 +467,11 @@ export const ListArticlesStatus = {
   CLOSING: "CLOSING",
   LETTER: "LETTER",
 } as const;
+
+export type GetOrCreateReadingMemoParams = {
+  userId: string;
+  sourceArticleId: string;
+};
 
 export type ListInboxParams = {
   recipientId: string;

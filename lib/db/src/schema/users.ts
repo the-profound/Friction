@@ -7,6 +7,7 @@ export const usersTable = pgTable("users", {
   email: varchar("email", { length: 255 }).notNull().unique(),
   nickname: varchar("nickname", { length: 20 }).notNull(),
   avatarUrl: text("avatar_url"),
+  recentSavedCollectionId: uuid("recent_saved_collection_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

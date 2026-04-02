@@ -19,6 +19,7 @@ export interface Article {
   style?: ArticleStyle;
   cover?: ArticleCover | null;
   letterAt?: Date | null;
+  sourceArticleId?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

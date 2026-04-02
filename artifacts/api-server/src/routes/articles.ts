@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { and, eq } from "drizzle-orm";
 import { db, articlesTable, type ArticleStatus } from "@workspace/db";
-import { CreateArticleBody, UpdateArticleBody, TransitionArticleStatusBody } from "@workspace/api-zod";
+import { CreateArticleBody, UpdateArticleBody, TransitionArticleStatusBody, GetOrCreateReadingMemoQueryParams } from "@workspace/api-zod";
 
 const FORWARD_TRANSITIONS: Record<string, string> = {
   DRAFT: "DIVIDING",
@@ -15,6 +15,62 @@ const BACK_TRANSITIONS: Record<string, string> = {
 };
 
 const router: IRouter = Router();
+
+router.get("/articles/reading-memo", async (req, res) => {
+  const parsed = GetOrCreateReadingMemoQueryParams.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
+    return;
+  }
+  const { userId, sourceArticleId } = parsed.data;
+
+  const [sourceArticle] = await db.select().from(articlesTable).where(eq(articlesTable.id, sourceArticleId));
+  if (!sourceArticle) {
+    res.status(404).json({ error: "Source article not found" });
+    return;
+  }
+
+  const memoTitle = `읽기 메모 — ${sourceArticle.title}`;
+
+  const draftMemoCondition = and(
+    eq(articlesTable.authorId, userId),
+    eq(articlesTable.sourceArticleId, sourceArticleId),
+    eq(articlesTable.status, "DRAFT"),
+  );
+  const anyMemoCondition = and(
+    eq(articlesTable.authorId, userId),
+    eq(articlesTable.sourceArticleId, sourceArticleId),
+  );
+
+  const memo = await db.transaction(async (tx) => {
+    const [existingDraft] = await tx.select().from(articlesTable).where(draftMemoCondition);
+
+    if (existingDraft) return existingDraft;
+
+    const [created] = await tx
+      .insert(articlesTable)
+      .values({
+        authorId: userId,
+        title: memoTitle,
+        content: "",
+        status: "DRAFT",
+        sourceArticleId,
+      })
+      .onConflictDoNothing()
+      .returning();
+
+    if (created) return created;
+
+    const [afterConflict] = await tx.select().from(articlesTable).where(anyMemoCondition);
+    return afterConflict;
+  });
+
+  if (!memo) {
+    res.status(500).json({ error: "Failed to get or create reading memo" });
+    return;
+  }
+  res.json(memo);
+});
 
 router.get("/articles", async (req, res) => {
   const { authorId, status } = req.query;

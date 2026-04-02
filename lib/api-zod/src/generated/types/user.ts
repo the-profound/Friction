@@ -11,6 +11,7 @@ export interface User {
   email: string;
   nickname: string;
   avatarUrl?: string | null;
+  recentSavedCollectionId?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

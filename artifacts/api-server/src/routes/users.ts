@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
-import { db, usersTable } from "@workspace/db";
-import { CreateUserBody, UpdateUserBody } from "@workspace/api-zod";
+import { and, eq } from "drizzle-orm";
+import { db, usersTable, myCollectionsTable } from "@workspace/db";
+import { CreateUserBody, UpdateUserBody, UpdateUserRecentCollectionBody } from "@workspace/api-zod";
 
 const router: IRouter = Router();
 
@@ -60,6 +60,46 @@ router.delete("/users/:id", async (req, res) => {
     return;
   }
   res.status(204).send();
+});
+
+router.get("/users/:id/recent-collection", async (req, res) => {
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.params.id));
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  res.json({ recentSavedCollectionId: user.recentSavedCollectionId ?? null });
+});
+
+router.put("/users/:id/recent-collection", async (req, res) => {
+  const parsed = UpdateUserRecentCollectionBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
+    return;
+  }
+  const { collectionId } = parsed.data;
+
+  if (collectionId != null) {
+    const [collection] = await db
+      .select()
+      .from(myCollectionsTable)
+      .where(and(eq(myCollectionsTable.id, collectionId), eq(myCollectionsTable.ownerId, req.params.id)));
+    if (!collection) {
+      res.status(404).json({ error: "Collection not found or does not belong to user" });
+      return;
+    }
+  }
+
+  const [user] = await db
+    .update(usersTable)
+    .set({ recentSavedCollectionId: collectionId ?? null })
+    .where(eq(usersTable.id, req.params.id))
+    .returning();
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  res.json({ recentSavedCollectionId: user.recentSavedCollectionId ?? null });
 });
 
 export default router;
