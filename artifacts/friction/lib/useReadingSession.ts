@@ -43,6 +43,7 @@ export interface ReadingSessionActions {
   resume: () => void;
   commitCompletion: () => Promise<{ success: boolean; error?: string }>;
   restartReading: () => void;
+  continueReading: () => void;
   resetProgress: () => Promise<{ success: boolean; error?: string }>;
 }
 
@@ -213,6 +214,13 @@ export function useReadingSession({
     savePosition(0, 0);
   }, [session.state, savePosition]);
 
+  const continueReading = useCallback(() => {
+    if (session.state !== "COMPLETED_READY") return;
+    const result = transitionSession(session.state, "READING");
+    if (!result.allowed) return;
+    setSession((prev) => ({ ...prev, state: result.state }));
+  }, [session.state]);
+
   const resetProgress = useCallback(async () => {
     const record = savedRecord?.record;
     if (!record) {
@@ -250,6 +258,7 @@ export function useReadingSession({
     resume,
     commitCompletion,
     restartReading,
+    continueReading,
     resetProgress,
   };
 }

@@ -617,10 +617,13 @@ export default function ReadScreen() {
 
       <BottomSheet
         visible={completionSheetVisible}
-        onClose={() => {}}
+        onClose={() => {
+          reading.continueReading();
+          setCompletionSheetVisible(false);
+        }}
         snapPoints={[0.35]}
         enableDragDown={false}
-        dismissable={false}
+        dismissable={true}
       >
         <View style={styles.completionContent}>
           <Text style={dynamicStyles.completionText}>글을 끝까지 다 읽었습니다.</Text>
