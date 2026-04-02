@@ -1,7 +1,7 @@
 import React, { useRef, useCallback, useEffect, useState } from "react";
 import { View, Text, StyleSheet, Pressable, ActivityIndicator } from "react-native";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
-import WebViewMarkdownEditor from "@/components/WebViewMarkdownEditor/WebViewMarkdownEditor";
+import WebViewMarkdownEditor from "@/components/WebViewMarkdownEditor/WebViewMarkdownEditorCompat";
 import type {
   WebViewMarkdownEditorRef,
   OnChangePayload,
