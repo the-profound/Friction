@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from "react";
+import React, { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   Alert,
   ScrollView,
   Platform,
+  PanResponder,
   useWindowDimensions,
   type LayoutChangeEvent,
 } from "react-native";
@@ -284,15 +285,59 @@ export default function ReadScreen() {
 
   const canNavigate = mode === "re_read" || reading.session.state === "READING";
 
-  const handleTapLeft = useCallback(() => {
-    if (!canNavigate) return;
-    reading.prevPage();
-  }, [canNavigate, reading]);
+  const articleCover = useMemo(
+    () => (article?.cover ? resolveArticleCover(article.cover) : null),
+    [article?.cover],
+  );
+  const hasCover = articleCover !== null && articleCover.type !== "default";
+  const showingCover = hasCover && !coverDismissed && currentPage === 0;
 
-  const handleTapRight = useCallback(() => {
+  const handleSwipeLeft = useCallback(() => {
     if (!canNavigate) return;
+    if (showingCover) {
+      setCoverDismissed(true);
+      return;
+    }
     reading.nextPage();
-  }, [canNavigate, reading]);
+  }, [canNavigate, showingCover, reading]);
+
+  const handleSwipeRight = useCallback(() => {
+    if (!canNavigate) return;
+    if (showingCover) return;
+    reading.prevPage();
+  }, [canNavigate, showingCover, reading]);
+
+  const SWIPE_MIN_DISTANCE = 40;
+  const SWIPE_MIN_RATIO = 1.5;
+
+  const handleSwipeLeftRef = useRef(handleSwipeLeft);
+  const handleSwipeRightRef = useRef(handleSwipeRight);
+  useEffect(() => { handleSwipeLeftRef.current = handleSwipeLeft; }, [handleSwipeLeft]);
+  useEffect(() => { handleSwipeRightRef.current = handleSwipeRight; }, [handleSwipeRight]);
+
+  const swipePanResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => {
+        const absDx = Math.abs(g.dx);
+        const absDy = Math.abs(g.dy);
+        return absDx > absDy * SWIPE_MIN_RATIO && absDx > SWIPE_MIN_DISTANCE / 2;
+      },
+      onMoveShouldSetPanResponderCapture: (_, g) => {
+        const absDx = Math.abs(g.dx);
+        const absDy = Math.abs(g.dy);
+        return absDx > absDy * SWIPE_MIN_RATIO && absDx > SWIPE_MIN_DISTANCE / 2;
+      },
+      onPanResponderRelease: (_, g) => {
+        if (Math.abs(g.dx) < SWIPE_MIN_DISTANCE) return;
+        if (g.dx < 0) {
+          handleSwipeLeftRef.current();
+        } else {
+          handleSwipeRightRef.current();
+        }
+      },
+      onPanResponderTerminationRequest: () => false,
+    }),
+  ).current;
 
   const isCollectionsReady = !collectionsQuery.isLoading && !collectionsQuery.isError;
 
@@ -493,12 +538,6 @@ export default function ReadScreen() {
     [layout],
   );
 
-  const articleCover = useMemo(
-    () => (article?.cover ? resolveArticleCover(article.cover) : null),
-    [article?.cover],
-  );
-  const hasCover = articleCover !== null && articleCover.type !== "default";
-  const showingCover = hasCover && !coverDismissed && currentPage === 0;
   if (!articleId) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -542,7 +581,7 @@ export default function ReadScreen() {
       )}
 
       {totalPages > 0 ? (
-        <View style={styles.pageListContainer} onLayout={handlePageListLayout}>
+        <View style={styles.pageListContainer} onLayout={handlePageListLayout} {...swipePanResponder.panHandlers}>
           <View
             style={[
               styles.readerFrame,
@@ -582,32 +621,6 @@ export default function ReadScreen() {
               </View>
             )}
           </View>
-
-          {canNavigate && (totalPages > 1 || hasCover) && (
-            <>
-              <Pressable
-                style={styles.tapZoneLeft}
-                onPress={() => {
-                  if (showingCover) return;
-                  if (currentPage === 0 && hasCover) {
-                    setCoverDismissed(false);
-                    return;
-                  }
-                  handleTapLeft();
-                }}
-              />
-              <Pressable
-                style={styles.tapZoneRight}
-                onPress={() => {
-                  if (showingCover) {
-                    setCoverDismissed(true);
-                    return;
-                  }
-                  handleTapRight();
-                }}
-              />
-            </>
-          )}
 
         </View>
       ) : (
@@ -829,8 +842,6 @@ function PageView({
   );
 }
 
-const TAP_ZONE_WIDTH_PERCENT = 25;
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -1029,19 +1040,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     gap: 8,
     width: "100%",
-  },
-  tapZoneLeft: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    bottom: 0,
-    width: `${TAP_ZONE_WIDTH_PERCENT}%`,
-  },
-  tapZoneRight: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    width: `${TAP_ZONE_WIDTH_PERCENT}%`,
   },
 });
