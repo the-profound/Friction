@@ -187,6 +187,7 @@ export default function ReadScreen() {
   const [sentencePopupVisible, setSentencePopupVisible] = useState(false);
   const [selectedText, setSelectedText] = useState("");
   const [memoSheetVisible, setMemoSheetVisible] = useState(false);
+  const [memoAppendContent, setMemoAppendContent] = useState<string | undefined>(undefined);
   const [myCollectionsModalVisible, setMyCollectionsModalVisible] = useState(false);
 
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | undefined>(undefined);
@@ -429,6 +430,16 @@ export default function ReadScreen() {
     }
   }, []);
 
+  const handleMemoSentence = useCallback((text: string) => {
+    if (text.trim().length === 0) return;
+    const pageNum = currentPage;
+    const author = authorName ?? "";
+    const title = article?.title ?? "";
+    const quoteBlock = `> ${text.trim()}\n>\n> ${author}, <${title}>, ${pageNum}면`;
+    setMemoAppendContent(quoteBlock);
+    setMemoSheetVisible(true);
+  }, [currentPage, authorName, article?.title]);
+
   const handleSaveSentence = useCallback(async () => {
     if (!selectedText) return;
     try {
@@ -605,6 +616,7 @@ export default function ReadScreen() {
                 content={currentPageContent}
                 pageIndex={contentPageIndex}
                 onCollectSentence={handleCollectSentence}
+                onMemoSentence={handleMemoSentence}
                 bottomInset={insets.bottom}
                 layout={layout}
               />
@@ -730,9 +742,11 @@ export default function ReadScreen() {
         onClose={async () => {
           await readingMemo.flushSave();
           setMemoSheetVisible(false);
+          setMemoAppendContent(undefined);
         }}
         articleTitle={article?.title ?? ""}
         initialContent={readingMemo.memoContent}
+        appendContent={memoAppendContent}
         saveState={readingMemo.saveState}
         onContentChange={readingMemo.updateMemoContent}
       />
@@ -784,12 +798,14 @@ function PageView({
   content,
   pageIndex,
   onCollectSentence,
+  onMemoSentence,
   bottomInset,
   layout,
 }: {
   content: string;
   pageIndex: number;
   onCollectSentence: (text: string) => void;
+  onMemoSentence: (text: string) => void;
   bottomInset: number;
   layout: ReaderLayout;
 }) {
@@ -830,6 +846,7 @@ function PageView({
               <MarkdownBlock
                 block={block}
                 onCollect={onCollectSentence}
+                onMemo={onMemoSentence}
                 fontSize={layout.bodyFontSize}
                 lineHeight={layout.bodyLineHeight}
                 letterSpacing={layout.bodyLetterSpacing}

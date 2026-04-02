@@ -6,13 +6,14 @@ import { Colors, ReaderTokens } from "../../constants/tokens";
 interface SelectableTextProps {
   text: string;
   onCollect: (selectedText: string) => void;
+  onMemo?: (selectedText: string) => void;
   fontSize?: number;
   lineHeight?: number;
   letterSpacing?: number;
   children?: React.ReactNode;
 }
 
-function SelectableTextWeb({ text, onCollect, fontSize, lineHeight, letterSpacing, children }: SelectableTextProps) {
+function SelectableTextWeb({ text, onCollect, onMemo, fontSize, lineHeight, letterSpacing, children }: SelectableTextProps) {
   const [selectedText, setSelectedText] = useState("");
   const [showCollectButton, setShowCollectButton] = useState(false);
   const textBodyRef = useRef<Text>(null);
@@ -54,6 +55,15 @@ function SelectableTextWeb({ text, onCollect, fontSize, lineHeight, letterSpacin
     }
   }, [selectedText, onCollect]);
 
+  const handleMemo = useCallback(() => {
+    if (selectedText.length > 0) {
+      onMemo?.(selectedText);
+      setShowCollectButton(false);
+      setSelectedText("");
+      window.getSelection()?.removeAllRanges();
+    }
+  }, [selectedText, onMemo]);
+
   const textStyle = [
     styles.textBody,
     fontSize != null && { fontSize },
@@ -69,21 +79,23 @@ function SelectableTextWeb({ text, onCollect, fontSize, lineHeight, letterSpacin
       </Text>
       {showCollectButton && (
         <View style={styles.collectBar}>
-          <Text style={styles.collectHint} numberOfLines={1}>
-            &ldquo;{selectedText.substring(0, 40)}
-            {selectedText.length > 40 ? "..." : ""}&rdquo;
-          </Text>
           <Pressable style={styles.collectButton} onPress={handleCollect}>
             <Feather name="bookmark" size={14} color={Colors.white} />
             <Text style={styles.collectButtonText}>수집</Text>
           </Pressable>
+          {onMemo && (
+            <Pressable style={styles.collectButton} onPress={handleMemo}>
+              <Feather name="edit-3" size={14} color={Colors.white} />
+              <Text style={styles.collectButtonText}>메모</Text>
+            </Pressable>
+          )}
         </View>
       )}
     </View>
   );
 }
 
-function SelectableTextNative({ text, onCollect, fontSize, lineHeight, letterSpacing, children }: SelectableTextProps) {
+function SelectableTextNative({ text, onCollect, onMemo, fontSize, lineHeight, letterSpacing, children }: SelectableTextProps) {
   const [selection, setSelection] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
   const [showCollectButton, setShowCollectButton] = useState(false);
   const textRef = useRef(text);
@@ -106,12 +118,35 @@ function SelectableTextNative({ text, onCollect, fontSize, lineHeight, letterSpa
     }
   }, [selection, onCollect]);
 
+  const handleMemo = useCallback(() => {
+    const selected = textRef.current.substring(selection.start, selection.end);
+    if (selected.trim().length > 0) {
+      onMemo?.(selected.trim());
+      setShowCollectButton(false);
+    }
+  }, [selection, onMemo]);
+
   const inputStyle = [
     styles.textInput,
     fontSize != null && { fontSize },
     lineHeight != null && { lineHeight },
     letterSpacing != null && { letterSpacing },
   ];
+
+  const collectBar = (
+    <View style={styles.collectBar}>
+      <Pressable style={styles.collectButton} onPress={handleCollect}>
+        <Feather name="bookmark" size={14} color={Colors.white} />
+        <Text style={styles.collectButtonText}>수집</Text>
+      </Pressable>
+      {onMemo && (
+        <Pressable style={styles.collectButton} onPress={handleMemo}>
+          <Feather name="edit-3" size={14} color={Colors.white} />
+          <Text style={styles.collectButtonText}>메모</Text>
+        </Pressable>
+      )}
+    </View>
+  );
 
   if (children) {
     return (
@@ -129,18 +164,7 @@ function SelectableTextNative({ text, onCollect, fontSize, lineHeight, letterSpa
             selectTextOnFocus={false}
           />
         </View>
-        {showCollectButton && (
-          <View style={styles.collectBar}>
-            <Text style={styles.collectHint} numberOfLines={1}>
-              &ldquo;{text.substring(selection.start, Math.min(selection.end, selection.start + 40))}
-              {selection.end - selection.start > 40 ? "..." : ""}&rdquo;
-            </Text>
-            <Pressable style={styles.collectButton} onPress={handleCollect}>
-              <Feather name="bookmark" size={14} color={Colors.white} />
-              <Text style={styles.collectButtonText}>수집</Text>
-            </Pressable>
-          </View>
-        )}
+        {showCollectButton && collectBar}
       </View>
     );
   }
@@ -157,18 +181,7 @@ function SelectableTextNative({ text, onCollect, fontSize, lineHeight, letterSpa
         selection={undefined}
         selectTextOnFocus={false}
       />
-      {showCollectButton && (
-        <View style={styles.collectBar}>
-          <Text style={styles.collectHint} numberOfLines={1}>
-            &ldquo;{text.substring(selection.start, Math.min(selection.end, selection.start + 40))}
-            {selection.end - selection.start > 40 ? "..." : ""}&rdquo;
-          </Text>
-          <Pressable style={styles.collectButton} onPress={handleCollect}>
-            <Feather name="bookmark" size={14} color={Colors.white} />
-            <Text style={styles.collectButtonText}>수집</Text>
-          </Pressable>
-        </View>
-      )}
+      {showCollectButton && collectBar}
     </View>
   );
 }
@@ -220,13 +233,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     marginTop: 8,
     gap: 8,
-  },
-  collectHint: {
-    fontSize: 12,
-    fontFamily: ReaderTokens.fontFamily.sans,
-    color: Colors.zinc300,
-    flex: 1,
-    fontStyle: "italic",
   },
   collectButton: {
     flexDirection: "row",

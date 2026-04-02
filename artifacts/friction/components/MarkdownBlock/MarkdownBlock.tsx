@@ -7,6 +7,7 @@ import type { MarkdownBlockType, InlineToken } from "../../utils/markdownParser"
 interface MarkdownBlockProps {
   block: MarkdownBlockType;
   onCollect: (text: string) => void;
+  onMemo?: (text: string) => void;
   fontSize: number;
   lineHeight: number;
   letterSpacing: number;
@@ -46,6 +47,7 @@ function hasFormatting(tokens: InlineToken[]): boolean {
 export default function MarkdownBlock({
   block,
   onCollect,
+  onMemo,
   fontSize,
   lineHeight,
   letterSpacing,
@@ -59,6 +61,7 @@ export default function MarkdownBlock({
         <SelectableText
           text={plainText}
           onCollect={onCollect}
+          onMemo={onMemo}
           fontSize={fontSize}
           lineHeight={lineHeight}
           letterSpacing={letterSpacing}
@@ -69,6 +72,7 @@ export default function MarkdownBlock({
       <SelectableText
         text={plainText}
         onCollect={onCollect}
+        onMemo={onMemo}
         fontSize={fontSize}
         lineHeight={lineHeight}
         letterSpacing={letterSpacing}
@@ -86,6 +90,7 @@ export default function MarkdownBlock({
       <SelectableText
         text={plainText}
         onCollect={onCollect}
+        onMemo={onMemo}
         fontSize={sz}
         lineHeight={sz * 1.25}
         letterSpacing={letterSpacing * 0.5}
@@ -103,6 +108,7 @@ export default function MarkdownBlock({
       <SelectableText
         text={plainText}
         onCollect={onCollect}
+        onMemo={onMemo}
         fontSize={sz}
         lineHeight={sz * 1.3}
         letterSpacing={letterSpacing * 0.5}
@@ -120,6 +126,7 @@ export default function MarkdownBlock({
       <SelectableText
         text={plainText}
         onCollect={onCollect}
+        onMemo={onMemo}
         fontSize={sz}
         lineHeight={sz * 1.35}
         letterSpacing={letterSpacing * 0.5}
@@ -139,6 +146,7 @@ export default function MarkdownBlock({
           <SelectableText
             text={plainText}
             onCollect={onCollect}
+            onMemo={onMemo}
             fontSize={fontSize}
             lineHeight={lineHeight}
             letterSpacing={letterSpacing}
@@ -160,6 +168,7 @@ export default function MarkdownBlock({
           <SelectableText
             text={plainText}
             onCollect={onCollect}
+            onMemo={onMemo}
             fontSize={fontSize}
             lineHeight={lineHeight}
             letterSpacing={letterSpacing}
@@ -183,6 +192,7 @@ export default function MarkdownBlock({
           <SelectableText
             text={plainText}
             onCollect={onCollect}
+            onMemo={onMemo}
             fontSize={fontSize}
             lineHeight={lineHeight}
             letterSpacing={letterSpacing}

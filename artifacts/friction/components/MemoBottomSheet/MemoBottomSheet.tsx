@@ -14,6 +14,7 @@ interface MemoBottomSheetProps {
   onClose: () => void;
   articleTitle: string;
   initialContent?: string;
+  appendContent?: string;
   saveState?: "idle" | "saving" | "saved" | "error";
   onSaveStateChange?: (state: "saved" | "saving" | "error") => void;
   onContentChange?: (markdown: string) => void;
@@ -24,6 +25,7 @@ export default function MemoBottomSheet({
   onClose,
   articleTitle,
   initialContent = "",
+  appendContent,
   saveState: externalSaveState,
   onSaveStateChange,
   onContentChange,
@@ -33,15 +35,24 @@ export default function MemoBottomSheet({
   const [localSaveState, setLocalSaveState] = useState<"saved" | "saving" | "error" | "idle">("idle");
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const exportRequestIdRef = useRef(0);
-
+  const appendInjectedRef = useRef(false);
   const saveState = externalSaveState ?? localSaveState;
 
   useEffect(() => {
     if (!visible) {
       setEditorReady(false);
       setLocalSaveState("idle");
+      appendInjectedRef.current = false;
     }
   }, [visible]);
+
+  useEffect(() => {
+    if (editorReady && appendContent && !appendInjectedRef.current) {
+      appendInjectedRef.current = true;
+      const base = initialContent ? `${initialContent}\n\n${appendContent}\n` : `${appendContent}\n`;
+      editorRef.current?.setMarkdown(base);
+    }
+  }, [editorReady, appendContent, initialContent]);
 
   const handleSaveStateUpdate = useCallback(
     (state: "saved" | "saving" | "error") => {
