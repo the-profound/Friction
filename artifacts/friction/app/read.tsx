@@ -360,7 +360,12 @@ export default function ReadScreen() {
         const width = containerWidthRef.current || 300;
         const swipeDir = dx < 0 ? -1 : 1; // -1 = left swipe (next), +1 = right swipe (prev)
 
-        if (!canNavigateRef.current || Math.abs(dx) < SWIPE_MIN_DISTANCE) {
+        const swipingBack = swipeDir === 1;
+        const isAtBoundary = swipingBack
+          ? (showingCoverRef.current || currentPageRef.current === 0)
+          : false;
+
+        if (!canNavigateRef.current || Math.abs(dx) < SWIPE_MIN_DISTANCE || isAtBoundary) {
           Animated.spring(outX, {
             toValue: 0,
             tension: 120,
