@@ -9,6 +9,7 @@ import {
   ScrollView,
   Platform,
   PanResponder,
+  Animated,
   useWindowDimensions,
   type LayoutChangeEvent,
 } from "react-native";
@@ -318,27 +319,72 @@ export default function ReadScreen() {
 
   const isTextSelectingRef = useRef(false);
 
+  const slideX = useRef(new Animated.Value(0)).current;
+  const isAnimatingRef = useRef(false);
+  const containerWidthRef = useRef(layout.containerWidth);
+  useEffect(() => { containerWidthRef.current = layout.containerWidth; }, [layout.containerWidth]);
+  const canNavigateRef = useRef(canNavigate);
+  useEffect(() => { canNavigateRef.current = canNavigate; }, [canNavigate]);
+
   const swipePanResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, g) => {
         if (isTextSelectingRef.current) return false;
+        if (isAnimatingRef.current) return false;
         const absDx = Math.abs(g.dx);
         const absDy = Math.abs(g.dy);
         return absDx > absDy * SWIPE_MIN_RATIO && absDx > SWIPE_MIN_DISTANCE / 2;
       },
       onMoveShouldSetPanResponderCapture: (_, g) => {
         if (isTextSelectingRef.current) return false;
+        if (isAnimatingRef.current) return false;
         const absDx = Math.abs(g.dx);
         const absDy = Math.abs(g.dy);
         return absDx > absDy * SWIPE_MIN_RATIO && absDx > SWIPE_MIN_DISTANCE / 2;
       },
-      onPanResponderRelease: (_, g) => {
-        if (Math.abs(g.dx) < SWIPE_MIN_DISTANCE) return;
-        if (g.dx < 0) {
-          handleSwipeLeftRef.current();
-        } else {
-          handleSwipeRightRef.current();
+      onPanResponderMove: (_, g) => {
+        if (!isAnimatingRef.current) {
+          slideX.setValue(g.dx);
         }
+      },
+      onPanResponderRelease: (_, g) => {
+        if (isAnimatingRef.current) return;
+        const dx = g.dx;
+        const width = containerWidthRef.current || 300;
+
+        if (!canNavigateRef.current || Math.abs(dx) < SWIPE_MIN_DISTANCE) {
+          Animated.spring(slideX, {
+            toValue: 0,
+            tension: 120,
+            friction: 14,
+            useNativeDriver: true,
+          }).start();
+          return;
+        }
+
+        isAnimatingRef.current = true;
+        const exitDirection = dx < 0 ? -1 : 1;
+
+        Animated.timing(slideX, {
+          toValue: exitDirection * -width,
+          duration: 220,
+          useNativeDriver: true,
+        }).start(() => {
+          if (exitDirection === -1) {
+            handleSwipeLeftRef.current();
+          } else {
+            handleSwipeRightRef.current();
+          }
+          slideX.setValue(exitDirection * width);
+          Animated.spring(slideX, {
+            toValue: 0,
+            tension: 110,
+            friction: 16,
+            useNativeDriver: true,
+          }).start(() => {
+            isAnimatingRef.current = false;
+          });
+        });
       },
       onPanResponderTerminationRequest: () => false,
     }),
@@ -607,36 +653,38 @@ export default function ReadScreen() {
               },
             ]}
           >
-            {isOnCoverPage ? (
-              <CoverPage
-                cover={cover}
-                title={article?.title ?? ""}
-                authorName={authorName}
-                containerWidth={layout.containerWidth}
-                containerHeight={layout.containerHeight}
-              />
-            ) : (
-              <PageView
-                content={currentPageContent}
-                pageIndex={contentPageIndex}
-                onCollectSentence={handleCollectSentence}
-                onMemoSentence={handleMemoSentence}
-                onSelectionStateChange={(isSelecting) => { isTextSelectingRef.current = isSelecting; }}
-                bottomInset={insets.bottom}
-                layout={layout}
-              />
-            )}
+            <Animated.View style={{ flex: 1, transform: [{ translateX: slideX }] }}>
+              {isOnCoverPage ? (
+                <CoverPage
+                  cover={cover}
+                  title={article?.title ?? ""}
+                  authorName={authorName}
+                  containerWidth={layout.containerWidth}
+                  containerHeight={layout.containerHeight}
+                />
+              ) : (
+                <PageView
+                  content={currentPageContent}
+                  pageIndex={contentPageIndex}
+                  onCollectSentence={handleCollectSentence}
+                  onMemoSentence={handleMemoSentence}
+                  onSelectionStateChange={(isSelecting) => { isTextSelectingRef.current = isSelecting; }}
+                  bottomInset={insets.bottom}
+                  layout={layout}
+                />
+              )}
 
-            {!isOnCoverPage && article && (
-              <View style={styles.titleBar}>
-                <Text style={dynamicStyles.articleTitle} numberOfLines={1}>{article.title}</Text>
-                {mode === "re_read" && (
-                  <View style={styles.modeBadge}>
-                    <Text style={dynamicStyles.modeBadgeText}>다시읽기</Text>
-                  </View>
-                )}
-              </View>
-            )}
+              {!isOnCoverPage && article && (
+                <View style={styles.titleBar}>
+                  <Text style={dynamicStyles.articleTitle} numberOfLines={1}>{article.title}</Text>
+                  {mode === "re_read" && (
+                    <View style={styles.modeBadge}>
+                      <Text style={dynamicStyles.modeBadgeText}>다시읽기</Text>
+                    </View>
+                  )}
+                </View>
+              )}
+            </Animated.View>
           </View>
 
         </View>
@@ -1015,7 +1063,7 @@ const styles = StyleSheet.create({
   },
   readerFrame: {
     alignSelf: "center",
-    overflow: "visible",
+    overflow: "hidden",
     backgroundColor: ReaderTokens.bodyBg,
     ...Platform.select({
       web: {
