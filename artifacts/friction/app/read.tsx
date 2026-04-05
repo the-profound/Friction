@@ -320,6 +320,8 @@ export default function ReadScreen() {
   useEffect(() => { handleSwipeLeftRef.current = handleSwipeLeft; }, [handleSwipeLeft]);
   useEffect(() => { handleSwipeRightRef.current = handleSwipeRight; }, [handleSwipeRight]);
 
+  const setMemoSheetVisibleRef = useRef(setMemoSheetVisible);
+
   const isTextSelectingRef = useRef(false);
 
   const outX = useRef(new Animated.Value(0)).current;
@@ -345,14 +347,18 @@ export default function ReadScreen() {
         if (isCommittingRef.current) return false;
         const absDx = Math.abs(g.dx);
         const absDy = Math.abs(g.dy);
-        return absDx > absDy * SWIPE_MIN_RATIO && absDx > SWIPE_MIN_DISTANCE / 2;
+        const isHorizontalSwipe = absDx > absDy * SWIPE_MIN_RATIO && absDx > SWIPE_MIN_DISTANCE / 2;
+        const isUpwardSwipe = g.dy < -20 && absDy > absDx;
+        return isHorizontalSwipe || isUpwardSwipe;
       },
       onMoveShouldSetPanResponderCapture: (_, g) => {
         if (isTextSelectingRef.current) return false;
         if (isCommittingRef.current) return false;
         const absDx = Math.abs(g.dx);
         const absDy = Math.abs(g.dy);
-        return absDx > absDy * SWIPE_MIN_RATIO && absDx > SWIPE_MIN_DISTANCE / 2;
+        const isHorizontalSwipe = absDx > absDy * SWIPE_MIN_RATIO && absDx > SWIPE_MIN_DISTANCE / 2;
+        const isUpwardSwipe = g.dy < -20 && absDy > absDx;
+        return isHorizontalSwipe || isUpwardSwipe;
       },
       onPanResponderMove: (_, g) => {
         if (!isCommittingRef.current) {
@@ -365,6 +371,16 @@ export default function ReadScreen() {
       onPanResponderRelease: (_, g) => {
         if (isCommittingRef.current) return;
         const dx = g.dx;
+        const dy = g.dy;
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dy);
+
+        // 위로 스와이프: 수직 우세, dy < -40 → 메모 바텀시트 열기
+        if (dy < -40 && absDy > absDx) {
+          setMemoSheetVisibleRef.current(true);
+          return;
+        }
+
         const width = containerWidthRef.current || 300;
         const swipeDir = dx < 0 ? -1 : 1; // -1 = left swipe (next), +1 = right swipe (prev)
 
@@ -373,7 +389,7 @@ export default function ReadScreen() {
           ? (showingCoverRef.current || currentPageRef.current === 0)
           : false;
 
-        if (!canNavigateRef.current || Math.abs(dx) < SWIPE_MIN_DISTANCE || isAtBoundary) {
+        if (!canNavigateRef.current || absDx < SWIPE_MIN_DISTANCE || isAtBoundary) {
           Animated.spring(outX, {
             toValue: 0,
             tension: 120,
