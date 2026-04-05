@@ -334,6 +334,8 @@ export default function ReadScreen() {
   useEffect(() => { showingCoverRef.current = showingCover; }, [showingCover]);
   const currentPageRef = useRef(currentPage);
   useEffect(() => { currentPageRef.current = currentPage; }, [currentPage]);
+  const isOnLastPageRef = useRef(isOnLastPage);
+  useEffect(() => { isOnLastPageRef.current = isOnLastPage; }, [isOnLastPage]);
   const outgoingPageRef = useRef<{ page: number; showingCover: boolean }>({ page: 0, showingCover: false });
 
   const swipePanResponder = useRef(
@@ -354,7 +356,10 @@ export default function ReadScreen() {
       },
       onPanResponderMove: (_, g) => {
         if (!isCommittingRef.current) {
-          outX.setValue(g.dx);
+          const swipingLeftOnLastPage = isOnLastPageRef.current && g.dx < 0;
+          if (!swipingLeftOnLastPage) {
+            outX.setValue(g.dx);
+          }
         }
       },
       onPanResponderRelease: (_, g) => {
@@ -375,6 +380,12 @@ export default function ReadScreen() {
             friction: 14,
             useNativeDriver: true,
           }).start();
+          return;
+        }
+
+        // 마지막 페이지에서 왼쪽 스와이프: 슬라이드 애니메이션 없이 바텀시트만 표시
+        if (isOnLastPageRef.current && swipeDir === -1) {
+          handleSwipeLeftRef.current();
           return;
         }
 
