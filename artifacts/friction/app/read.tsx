@@ -274,7 +274,7 @@ export default function ReadScreen() {
   }, [mode, reading.canExit]);
 
 
-  const handleBack = useCallback(() => {
+  const handleBack = useCallback(async () => {
     if (mode === "basic" && !reading.canExit) {
       Alert.alert("읽기 중", "완독 후 보관/삭제를 선택해주세요.");
       return;
@@ -282,8 +282,11 @@ export default function ReadScreen() {
     if (reading.session.state === "READING" || reading.session.state === "PAUSED") {
       reading.pause();
     }
+    if (mode === "basic") {
+      await readingMemo.cleanup();
+    }
     router.back();
-  }, [mode, reading, router]);
+  }, [mode, reading, router, readingMemo]);
 
   const canNavigate = mode === "re_read" || reading.session.state === "READING";
 
@@ -468,11 +471,12 @@ export default function ReadScreen() {
       setCompletionSheetVisible(false);
       queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
       clearActiveSession();
+      await readingMemo.cleanup();
       router.back();
     } finally {
       setIsSaving(false);
     }
-  }, [isSaving, isCollectionsReady, reading, selectedCollectionId, collectionsQuery.data, articleId, userId, createCollection, addToCollection, updateRecentCollection, queryClient, clearActiveSession, router]);
+  }, [isSaving, isCollectionsReady, reading, selectedCollectionId, collectionsQuery.data, articleId, userId, createCollection, addToCollection, updateRecentCollection, queryClient, clearActiveSession, router, readingMemo]);
 
   const handleCommitAndSkip = useCallback(async () => {
     if (isSaving) return;
@@ -483,6 +487,7 @@ export default function ReadScreen() {
       if (result.success) {
         queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
         clearActiveSession();
+        await readingMemo.cleanup();
         router.back();
       } else {
         Alert.alert("오류", result.error ?? "완독 처리에 실패했습니다.");
@@ -490,7 +495,7 @@ export default function ReadScreen() {
     } finally {
       setIsSaving(false);
     }
-  }, [isSaving, reading, router, clearActiveSession, queryClient]);
+  }, [isSaving, reading, router, clearActiveSession, queryClient, readingMemo]);
 
   const handleCollectSentence = useCallback((text: string) => {
     if (text.trim().length > 0) {

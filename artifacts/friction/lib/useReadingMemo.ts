@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetOrCreateReadingMemo,
   useUpdateArticle,
+  useDeleteArticle,
   getGetOrCreateReadingMemoQueryKey,
 } from "@workspace/api-client-react";
 
@@ -19,6 +20,7 @@ interface UseReadingMemoReturn {
   isMemoError: boolean;
   updateMemoContent: (markdown: string) => void;
   flushSave: () => Promise<void>;
+  cleanup: () => Promise<void>;
   saveState: "idle" | "saving" | "saved" | "error";
 }
 
@@ -33,6 +35,7 @@ export function useReadingMemo({
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const pendingContentRef = useRef<string | null>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestContentRef = useRef<string>("");
 
   const memoQuery = useGetOrCreateReadingMemo(
     { userId, sourceArticleId },
@@ -45,7 +48,12 @@ export function useReadingMemo({
   );
 
   const updateArticle = useUpdateArticle();
+  const deleteArticle = useDeleteArticle();
   const memoArticleId = memoQuery.data?.id;
+
+  useEffect(() => {
+    latestContentRef.current = memoQuery.data?.content ?? "";
+  }, [memoQuery.data?.content]);
 
   const saveContent = useCallback(
     async (markdown: string) => {
@@ -87,6 +95,7 @@ export function useReadingMemo({
 
   const updateMemoContent = useCallback(
     (markdown: string) => {
+      latestContentRef.current = markdown;
       pendingContentRef.current = markdown;
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
@@ -115,6 +124,32 @@ export function useReadingMemo({
     }
   }, [saveContent]);
 
+  const cleanup = useCallback(async () => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+
+    if (!memoArticleId) return;
+
+    const currentContent = latestContentRef.current;
+    if (currentContent.trim() === "") {
+      pendingContentRef.current = null;
+      try {
+        await deleteArticle.mutateAsync({ id: memoArticleId });
+        queryClient.invalidateQueries({
+          queryKey: getGetOrCreateReadingMemoQueryKey({ userId, sourceArticleId }),
+        });
+      } catch (err) {
+        console.warn("[useReadingMemo] cleanup delete failed:", err);
+      }
+    } else if (pendingContentRef.current !== null) {
+      const content = pendingContentRef.current;
+      pendingContentRef.current = null;
+      await saveContent(content);
+    }
+  }, [memoArticleId, deleteArticle, queryClient, userId, sourceArticleId, saveContent]);
+
   return {
     memoArticleId,
     memoContent: memoQuery.data?.content ?? "",
@@ -122,6 +157,7 @@ export function useReadingMemo({
     isMemoError: memoQuery.isError,
     updateMemoContent,
     flushSave,
+    cleanup,
     saveState,
   };
 }
