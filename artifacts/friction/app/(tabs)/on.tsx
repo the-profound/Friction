@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { View, Text, StyleSheet, FlatList, Pressable, RefreshControl, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -6,8 +6,10 @@ import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { PageHeader } from "@/components/NavBar/PageHeader";
 import ArticleListItem from "@/components/ArticleListItem/ArticleListItem";
+import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
+import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import { useQueryClient } from "@tanstack/react-query";
-import { useListArticles, useCreateArticle } from "@workspace/api-client-react";
+import { useListArticles, useCreateArticle, useDeleteArticle } from "@workspace/api-client-react";
 import type { Article } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
 import type { ArticleStatus } from "@/lib/policies";
@@ -54,12 +56,17 @@ export default function OnScreen() {
   const queryClient = useQueryClient();
   const { userId } = useUser();
   const [filter, setFilter] = useState<FilterMode>("all");
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+
+  const openRowRef = useRef<SwipeableRowHandle | null>(null);
+  const rowRefs = useRef<Map<string, SwipeableRowHandle>>(new Map());
 
   const { data: articles, isLoading, refetch, isRefetching } = useListArticles({
     authorId: userId,
   });
 
   const createArticle = useCreateArticle();
+  const deleteArticle = useDeleteArticle();
 
   const filteredArticles = useMemo(() => {
     if (!articles) return [];
@@ -74,7 +81,15 @@ export default function OnScreen() {
     );
   }, [filteredArticles]);
 
+  const closeOpenRow = useCallback(() => {
+    if (openRowRef.current) {
+      openRowRef.current.close();
+      openRowRef.current = null;
+    }
+  }, []);
+
   const handleNewMemo = useCallback(async () => {
+    closeOpenRow();
     try {
       const article = await createArticle.mutateAsync({
         data: { authorId: userId, title: "새 메모" },
@@ -85,32 +100,83 @@ export default function OnScreen() {
       const msg = e instanceof Error ? e.message : "메모 생성에 실패했습니다.";
       Alert.alert("오류", msg);
     }
-  }, [createArticle, userId, router, queryClient]);
+  }, [createArticle, userId, router, queryClient, closeOpenRow]);
 
   const handleViewAll = useCallback(() => {
+    closeOpenRow();
     router.push("/on-02");
-  }, [router]);
+  }, [router, closeOpenRow]);
 
   const handleArticlePress = useCallback(
     (article: Article) => {
+      closeOpenRow();
       const screen = getScreenForStatus(article.status as ArticleStatus);
       router.push({ pathname: screen as never, params: { id: article.id } });
     },
-    [router],
+    [router, closeOpenRow],
   );
+
+  const handleDeletePress = useCallback((articleId: string) => {
+    setDeleteTargetId(articleId);
+  }, []);
+
+  const handleDeleteCancel = useCallback(() => {
+    setDeleteTargetId(null);
+    closeOpenRow();
+  }, [closeOpenRow]);
+
+  const handleDeleteConfirm = useCallback(async () => {
+    if (!deleteTargetId) return;
+    const id = deleteTargetId;
+    setDeleteTargetId(null);
+    closeOpenRow();
+    try {
+      await deleteArticle.mutateAsync({ id });
+      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";
+      Alert.alert("오류", msg);
+    }
+  }, [deleteTargetId, deleteArticle, queryClient, closeOpenRow]);
+
+  const handleSwipeOpen = useCallback((articleId: string) => {
+    const currentOpen = openRowRef.current;
+    const newRef = rowRefs.current.get(articleId) ?? null;
+    if (currentOpen && currentOpen !== newRef) {
+      currentOpen.close();
+    }
+    openRowRef.current = newRef;
+  }, []);
 
   const renderItem = useCallback(
     ({ item }: { item: Article }) => (
-      <ArticleListItem
-        title={item.title || "제목 없음"}
-        preview={item.content?.substring(0, 60) || ""}
-        statusBadge={item.status as ArticleStatus}
-        timestamp={new Date(item.updatedAt)}
-        rightMeta={formatRelativeDate(item.updatedAt)}
-        onPress={() => handleArticlePress(item)}
-      />
+      <SwipeableRow
+        ref={(r) => {
+          if (r) {
+            rowRefs.current.set(item.id, r);
+          } else {
+            rowRefs.current.delete(item.id);
+          }
+        }}
+        onDeletePress={() => handleDeletePress(item.id)}
+        onSwipeOpen={() => handleSwipeOpen(item.id)}
+      >
+        <ArticleListItem
+          title={item.title || "제목 없음"}
+          preview={item.content?.substring(0, 60) || ""}
+          statusBadge={item.status as ArticleStatus}
+          timestamp={new Date(item.updatedAt)}
+          rightMeta={formatRelativeDate(item.updatedAt)}
+          onPress={() => handleArticlePress(item)}
+        />
+      </SwipeableRow>
     ),
-    [handleArticlePress],
+    [handleArticlePress, handleDeletePress, handleSwipeOpen],
+  );
+
+  const listFooter = useCallback(
+    () => <Pressable style={styles.listFooterTouchArea} onPress={closeOpenRow} />,
+    [closeOpenRow],
   );
 
   return (
@@ -127,7 +193,10 @@ export default function OnScreen() {
           <Pressable
             key={opt.key}
             style={[styles.filterChip, filter === opt.key && styles.filterChipActive]}
-            onPress={() => setFilter(opt.key)}
+            onPress={() => {
+              closeOpenRow();
+              setFilter(opt.key);
+            }}
           >
             <Text style={[styles.filterChipText, filter === opt.key && styles.filterChipTextActive]}>
               {opt.label}
@@ -161,8 +230,21 @@ export default function OnScreen() {
             <RefreshControl refreshing={isRefetching} onRefresh={refetch} />
           }
           contentContainerStyle={styles.listContent}
+          onScrollBeginDrag={closeOpenRow}
+          ListFooterComponent={listFooter}
         />
       )}
+
+      <ConfirmModal
+        visible={deleteTargetId !== null}
+        title="삭제하시겠습니까?"
+        description="이 메모는 영구적으로 삭제됩니다."
+        confirmLabel="삭제"
+        cancelLabel="취소"
+        destructive
+        onConfirm={handleDeleteConfirm}
+        onCancel={handleDeleteCancel}
+      />
     </View>
   );
 }
@@ -197,7 +279,10 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   listContent: {
-    paddingBottom: 40,
+    paddingBottom: 0,
+  },
+  listFooterTouchArea: {
+    height: 200,
   },
   emptyContainer: {
     flex: 1,
