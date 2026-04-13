@@ -301,6 +301,7 @@ export default function ReadScreen() {
     if (!canNavigate) return;
     if (showingCover) {
       setCoverDismissed(true);
+      reading.nextPage();
       return;
     }
     reading.nextPage();
