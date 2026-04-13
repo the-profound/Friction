@@ -151,17 +151,13 @@ export default function DividingScreen() {
         id,
         data: { content, pages: pagesJson },
       });
-      await transitionStatus.mutateAsync({
-        id,
-        data: { targetStatus: TransitionArticleBodyTargetStatus.DRAFT },
-      });
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
       router.back();
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "상태 되돌리기에 실패했습니다.";
+      const msg = e instanceof Error ? e.message : "저장에 실패했습니다.";
       Alert.alert("오류", msg);
     }
-  }, [id, content, pages, router, updateArticle, transitionStatus, queryClient]);
+  }, [id, content, pages, router, updateArticle, queryClient]);
 
   if (!id || articleLoading) {
     return (
