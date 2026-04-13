@@ -154,6 +154,10 @@ export default function DraftScreen() {
         id: id!,
         data: { title: currentTitle, content },
       });
+      queryClient.setQueryData([`/api/articles/${id}`], (old: unknown) => {
+        if (!old || typeof old !== "object") return old;
+        return { ...old, title: currentTitle, content };
+      });
       await transitionStatus.mutateAsync({
         id: id!,
         data: { targetStatus: TransitionArticleBodyTargetStatus.DIVIDING },
