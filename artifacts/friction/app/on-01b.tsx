@@ -147,10 +147,11 @@ export default function DividingScreen() {
     if (!id) { router.back(); return; }
     try {
       const pagesJson = pages.map((p) => p.content);
-      await updateArticle.mutateAsync({
+      const updatedArticle = await updateArticle.mutateAsync({
         id,
         data: { content, pages: pagesJson },
       });
+      queryClient.setQueryData([`/api/articles/${id}`], updatedArticle);
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
       router.back();
     } catch (e: unknown) {
