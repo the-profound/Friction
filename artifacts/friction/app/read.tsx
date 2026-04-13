@@ -297,6 +297,12 @@ export default function ReadScreen() {
   const hasCover = articleCover !== null && articleCover.type !== "default";
   const showingCover = hasCover && !coverDismissed && currentPage === 0;
 
+  useEffect(() => {
+    if (currentPage === 0 && hasCover) {
+      setCoverDismissed(false);
+    }
+  }, [currentPage, hasCover]);
+
   const handleSwipeLeft = useCallback(() => {
     if (!canNavigate) return;
     if (showingCover) {
