@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -8,7 +8,6 @@ import {
   Alert,
   ActivityIndicator,
   TextInput,
-  Switch,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -17,11 +16,15 @@ import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import CoverPreview from "@/components/CoverPreview/CoverPreview";
 import CoverEditor from "@/components/CoverEditor/CoverEditor";
+import MyCollectionsModal from "@/components/MyCollectionsModal/MyCollectionsModal";
 import { resolveArticleCover, getDefaultCover } from "@/utils/articleCover";
+import { useUser } from "@/contexts/UserContext";
 import {
   useGetArticle,
   useUpdateArticle,
   useTransitionArticleStatus,
+  useListMyCollections,
+  useAddArticleToMyCollection,
   TransitionArticleBodyTargetStatus,
 } from "@workspace/api-client-react";
 import type { ArticleCover } from "@workspace/api-client-react";
@@ -32,6 +35,7 @@ export default function ClosingScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { userId } = useUser();
 
   const articleQuery = useGetArticle(id ?? "");
   const article = id ? articleQuery.data : undefined;
@@ -39,6 +43,14 @@ export default function ClosingScreen() {
 
   const updateArticle = useUpdateArticle();
   const transitionStatus = useTransitionArticleStatus();
+  const addArticleToMyCollection = useAddArticleToMyCollection();
+
+  const myCollectionsQuery = useListMyCollections({ ownerId: userId });
+  const myCollections = (myCollectionsQuery.data ?? []).map((c) => ({
+    id: c.id,
+    name: c.name,
+    articleCount: (c as { articleCount?: number }).articleCount,
+  }));
 
   const [title, setTitle] = useState("");
   const [pages, setPages] = useState<string[]>([]);
@@ -46,8 +58,10 @@ export default function ClosingScreen() {
   const [cover, setCover] = useState<ArticleCover>(getDefaultCover());
   const [coverEditorVisible, setCoverEditorVisible] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
+  const [collectionPickerVisible, setCollectionPickerVisible] = useState(false);
   const [titleEditing, setTitleEditing] = useState(false);
-  const [saveToCollection, setSaveToCollection] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
+  const exportedArticleIdRef = useRef<string | null>(null);
   const initializedRef = useRef(false);
   const saveCoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -129,45 +143,54 @@ export default function ClosingScreen() {
       saveCoverTimerRef.current = null;
     }
     pendingCoverRef.current = null;
+    setIsExporting(true);
     try {
       await updateArticle.mutateAsync({
         id: id!,
-        data: {
-          title,
-          pages,
-          cover,
-          style: { saveToCollection },
-        },
+        data: { title, pages, cover },
       });
-      await transitionStatus.mutateAsync({
+      const updated = await transitionStatus.mutateAsync({
         id: id!,
         data: { targetStatus: TransitionArticleBodyTargetStatus.LETTER },
       });
+      queryClient.setQueryData([`/api/articles/${id}`], updated);
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
-      Alert.alert("완성!", "편지가 완성되었습니다.", [
-        { text: "확인", onPress: () => router.dismissAll() },
-      ]);
+      exportedArticleIdRef.current = id!;
+      setCollectionPickerVisible(true);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "내보내기에 실패했습니다.";
-      Alert.alert("오류", msg);
+      Alert.alert("내보내기 실패", msg);
+    } finally {
+      setIsExporting(false);
     }
-  }, [id, title, pages, cover, saveToCollection, updateArticle, transitionStatus, queryClient, router]);
+  }, [id, title, pages, cover, updateArticle, transitionStatus, queryClient]);
+
+  const handleCollectionSelect = useCallback(
+    async (collection: { id: string; name: string }) => {
+      setCollectionPickerVisible(false);
+      const articleId = exportedArticleIdRef.current;
+      if (!articleId) return;
+      try {
+        await addArticleToMyCollection.mutateAsync({
+          id: collection.id,
+          data: { articleId },
+        });
+        queryClient.invalidateQueries({ queryKey: ["/api/my-collections"] });
+        router.dismissAll();
+        router.push({ pathname: "/of-01" });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "모음 저장에 실패했습니다.";
+        Alert.alert("저장 실패", msg);
+      }
+    },
+    [addArticleToMyCollection, queryClient, router],
+  );
 
   const handleBack = useCallback(async () => {
-    if (!id) { router.back(); return; }
     await flushCoverSave();
-    try {
-      await transitionStatus.mutateAsync({
-        id,
-        data: { targetStatus: TransitionArticleBodyTargetStatus.DIVIDING },
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
-      router.back();
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "상태 되돌리기에 실패했습니다.";
-      Alert.alert("오류", msg);
-    }
-  }, [id, router, transitionStatus, queryClient, flushCoverSave]);
+    queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+    router.back();
+  }, [router, queryClient, flushCoverSave]);
 
   const handleSaveTitle = useCallback(async () => {
     setTitleEditing(false);
@@ -215,8 +238,12 @@ export default function ClosingScreen() {
             </Text>
           )}
         </View>
-        <Pressable onPress={handleExport} hitSlop={12}>
-          <Text style={styles.exportButton}>내보내기</Text>
+        <Pressable onPress={handleExport} hitSlop={12} disabled={isExporting}>
+          {isExporting ? (
+            <ActivityIndicator size="small" color={Colors.zinc400} />
+          ) : (
+            <Text style={styles.exportButton}>내보내기</Text>
+          )}
         </Pressable>
       </View>
 
@@ -252,24 +279,6 @@ export default function ClosingScreen() {
           </Text>
           <Feather name="chevron-right" size={16} color={Colors.zinc400} />
         </Pressable>
-      </View>
-
-      <View style={styles.collectionSection}>
-        <View style={styles.collectionRow}>
-          <View style={styles.collectionLabelContainer}>
-            <Feather name="bookmark" size={16} color={Colors.zinc600} />
-            <Text style={styles.collectionLabel}>개인 모음에 저장</Text>
-          </View>
-          <Switch
-            value={saveToCollection}
-            onValueChange={setSaveToCollection}
-            trackColor={{ false: Colors.zinc200, true: Colors.zinc900 }}
-            thumbColor={Colors.white}
-          />
-        </View>
-        <Text style={styles.collectionHint}>
-          내보낸 편지를 보관함(OF)에 저장합니다
-        </Text>
       </View>
 
       <ScrollView style={styles.previewArea} contentContainerStyle={styles.previewInner}>
@@ -349,6 +358,14 @@ export default function ClosingScreen() {
         destructive
         onConfirm={handleConfirmExport}
         onCancel={() => setConfirmVisible(false)}
+      />
+
+      <MyCollectionsModal
+        visible={collectionPickerVisible}
+        onClose={() => setCollectionPickerVisible(false)}
+        collections={myCollections}
+        onSelect={handleCollectionSelect}
+        isLoading={myCollectionsQuery.isLoading}
       />
     </View>
   );
@@ -432,33 +449,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.zinc700,
     flex: 1,
-  },
-  collectionSection: {
-    paddingHorizontal: Spacing.screenPx,
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.zinc100,
-  },
-  collectionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  collectionLabelContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  collectionLabel: {
-    ...Typography.bodySemiBold,
-    fontSize: 14,
-    color: Colors.zinc700,
-  },
-  collectionHint: {
-    ...Typography.caption,
-    fontSize: 11,
-    color: Colors.zinc400,
-    marginTop: 4,
   },
   previewArea: {
     flex: 1,
