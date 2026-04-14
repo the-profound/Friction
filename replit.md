@@ -4,6 +4,19 @@
 
 pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
 
+## 에이전트 작업 절차
+
+요청이 들어오면 작업을 시작하기 전에 아래 순서를 따른다.
+
+1. **사용자 제공 스킬 확인** — `.agents/skills/` 아래 등록된 스킬 목록을 훑고, 이번 요청과 관련된 스킬이 있는지 판단한다.
+2. **관련 스킬 읽기** — 관련 스킬이 있으면 해당 `SKILL.md`를 읽고 절차를 숙지한 뒤 작업을 시작한다.
+3. **절차 준수** — 스킬에 명시된 단계·규칙·형식을 작업 전 과정에 걸쳐 지킨다.
+
+현재 등록된 사용자 스킬 (`.agents/skills/`):
+- **Notion2Replit** — Notion Queue DB 항목을 선택해 구현하고 결과를 Notion에 writeback
+- **Replit2Notion** — 채팅 요청으로 개발을 완료한 뒤 결과를 Notion Queue DB에 역기록
+- **expo-web-compat** — 화면·컴포넌트 신규 작성·수정 시 Web/iOS/Android 플랫폼 호환성 체크
+
 ## Stack
 
 - **Monorepo tool**: pnpm workspaces
