@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   Modal,
+  Platform,
   Pressable,
   Animated,
   PanResponder,
@@ -143,7 +144,14 @@ export default function BottomSheet({
             <View style={styles.handle} />
             {title && <Text style={[styles.title, titleStyle]}>{title}</Text>}
           </View>
-          <View style={styles.content}>{children}</View>
+          <View
+            style={[
+              styles.content,
+              { maxHeight: SCREEN_H * Math.max(...snapPoints) - HANDLE_HEIGHT },
+            ]}
+          >
+            {children}
+          </View>
         </Animated.View>
       </View>
     </Modal>
@@ -168,7 +176,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
-    overflow: "hidden",
+    overflow: Platform.OS === "web" ? "visible" : "hidden",
   },
   handleArea: {
     alignItems: "center",

@@ -162,7 +162,7 @@ export default function SendScreen() {
             <Text style={styles.pickerEmptySub}>LETTER 상태의 글만 보낼 수 있어요</Text>
           </View>
         ) : (
-          <ScrollView showsVerticalScrollIndicator={false}>
+          <ScrollView nestedScrollEnabled style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 24 }}>
             {articles.map((article) => (
               <Pressable
                 key={article.id}
@@ -207,7 +207,7 @@ export default function SendScreen() {
             <Text style={styles.pickerEmptySub}>먼저 이웃을 추가해주세요</Text>
           </View>
         ) : (
-          <ScrollView showsVerticalScrollIndicator={false}>
+          <ScrollView nestedScrollEnabled style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 24 }}>
             {neighbors.map((neighbor) => (
               <Pressable
                 key={neighbor.id}
