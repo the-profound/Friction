@@ -45,6 +45,19 @@ function RootLayoutNav() {
     <ActiveReadingGuard>
       <Stack screenOptions={{ headerShown: false, headerBackTitle: "Back" }}>
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="read" />
+        <Stack.Screen name="of-01" />
+        <Stack.Screen name="of-01-detail" />
+        <Stack.Screen name="of-02" />
+        <Stack.Screen name="of-02-detail" />
+        <Stack.Screen name="of-03" />
+        <Stack.Screen name="on-01a" />
+        <Stack.Screen name="on-01b" />
+        <Stack.Screen name="on-01c" />
+        <Stack.Screen name="on-02" />
+        <Stack.Screen name="to-01" />
+        <Stack.Screen name="to-02" />
+        <Stack.Screen name="to-03" />
         <Stack.Screen name="settings" options={{ presentation: "card" }} />
         <Stack.Screen name="terms" options={{ presentation: "card" }} />
         <Stack.Screen name="login" options={{ presentation: "card" }} />

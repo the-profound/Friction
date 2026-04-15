@@ -1,12 +1,22 @@
 import React, { useState, useCallback, useMemo } from "react";
-import { View, Text, StyleSheet, FlatList, Pressable, Alert, RefreshControl } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  Platform,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
+import { useToast } from "@/contexts/ToastContext";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
+import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import {
   useListStoredSentences,
   useDeleteStoredSentence,
@@ -16,52 +26,79 @@ import type { StoredSentence } from "@workspace/api-client-react";
 
 type FilterMode = "all" | "favorites";
 
+function getSentencePage(item: StoredSentence): number | undefined {
+  if (item.position && typeof item.position === "object" && "page" in item.position) {
+    return (item.position as { page: number }).page;
+  }
+  return undefined;
+}
+
 export default function SentenceCollectionScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { userId } = useUser();
+  const { showToast } = useToast();
+
   const [filter, setFilter] = useState<FilterMode>("all");
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [selectedSentence, setSelectedSentence] = useState<StoredSentence | null>(null);
 
   const allSentencesQuery = useListStoredSentences({ userId });
   const allSentences = (allSentencesQuery.data ?? []) as StoredSentence[];
 
   const totalCount = allSentences.length;
-  const favCount = useMemo(() => allSentences.filter((s) => s.isFavorite).length, [allSentences]);
+  const favCount = useMemo(
+    () => allSentences.filter((s) => s.isFavorite).length,
+    [allSentences],
+  );
 
   const sentencesQuery = useListStoredSentences({
     userId,
     ...(filter === "favorites" ? { favorite: true } : {}),
   });
   const sentences = (sentencesQuery.data ?? []) as StoredSentence[];
+
   const deleteSentence = useDeleteStoredSentence();
   const toggleFavorite = useToggleStoredSentenceFavorite();
 
   const handleToggleFavorite = useCallback(
     async (id: string, currentFav: boolean) => {
       try {
-        await toggleFavorite.mutateAsync({
-          id,
-          data: { isFavorite: !currentFav },
-        });
+        await toggleFavorite.mutateAsync({ id, data: { isFavorite: !currentFav } });
         sentencesQuery.refetch();
         allSentencesQuery.refetch();
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "즐겨찾기 변경에 실패했습니다.";
-        Alert.alert("오류", msg);
+        if (selectedSentence?.id === id) {
+          setSelectedSentence((prev) =>
+            prev ? { ...prev, isFavorite: !currentFav } : null,
+          );
+        }
+        showToast({
+          message: currentFav ? "즐겨찾기를 해제했어요" : "즐겨찾기에 추가했어요",
+          type: "success",
+        });
+      } catch {
+        showToast({ message: "즐겨찾기 변경에 실패했어요", type: "error" });
       }
     },
-    [toggleFavorite, sentencesQuery, allSentencesQuery],
+    [toggleFavorite, sentencesQuery, allSentencesQuery, selectedSentence, showToast],
   );
 
-  const handleCopy = useCallback(async (text: string) => {
-    try {
-      await Clipboard.setStringAsync(text);
-      Alert.alert("복사 완료", "문장이 클립보드에 복사되었습니다.");
-    } catch {
-      Alert.alert("오류", "복사에 실패했습니다.");
-    }
-  }, []);
+  const handleCopy = useCallback(
+    async (text: string) => {
+      try {
+        if (Platform.OS === "web") {
+          await navigator.clipboard.writeText(text);
+        } else {
+          await Clipboard.setStringAsync(text);
+        }
+        showToast({ message: "문장을 복사했어요", type: "success" });
+        setSelectedSentence(null);
+      } catch {
+        showToast({ message: "복사에 실패했어요", type: "error" });
+      }
+    },
+    [showToast],
+  );
 
   const handleDelete = useCallback(
     async (id: string) => {
@@ -69,71 +106,25 @@ export default function SentenceCollectionScreen() {
         await deleteSentence.mutateAsync({ id });
         sentencesQuery.refetch();
         allSentencesQuery.refetch();
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";
-        Alert.alert("오류", msg);
+        setSelectedSentence(null);
+        showToast({ message: "문장을 삭제했어요", type: "success" });
+      } catch {
+        showToast({ message: "삭제에 실패했어요", type: "error" });
       }
     },
-    [deleteSentence, sentencesQuery, allSentencesQuery],
-  );
-
-  const handleSentencePress = useCallback(
-    (item: StoredSentence) => {
-      const page =
-        item.position && typeof item.position === "object" && "page" in item.position
-          ? (item.position as { page: number }).page
-          : undefined;
-
-      Alert.alert(
-        "문장 관리",
-        `"${item.text.length > 50 ? item.text.substring(0, 50) + "..." : item.text}"`,
-        [
-          {
-            text: "복사",
-            onPress: () => handleCopy(item.text),
-          },
-          ...(item.articleId
-            ? [
-                {
-                  text: page !== undefined ? `원본 보기 (${page + 1}페이지)` : "원본 보기",
-                  onPress: () =>
-                    router.push({
-                      pathname: "/read",
-                      params: { articleId: item.articleId, mode: "re_read" },
-                    }),
-                },
-              ]
-            : []),
-          {
-            text: item.isFavorite ? "즐겨찾기 해제" : "즐겨찾기 추가",
-            onPress: () => handleToggleFavorite(item.id, item.isFavorite),
-          },
-          {
-            text: "삭제",
-            style: "destructive" as const,
-            onPress: () => setDeleteTarget(item.id),
-          },
-          { text: "닫기", style: "cancel" as const },
-        ],
-      );
-    },
-    [handleCopy, handleToggleFavorite, handleDelete, router],
+    [deleteSentence, sentencesQuery, allSentencesQuery, showToast],
   );
 
   const renderItem = ({ item }: { item: StoredSentence }) => {
-    const page =
-      item.position && typeof item.position === "object" && "page" in item.position
-        ? (item.position as { page: number }).page
-        : undefined;
-
+    const page = getSentencePage(item);
     return (
       <Pressable
         style={styles.sentenceItem}
-        onPress={() => handleSentencePress(item)}
+        onPress={() => setSelectedSentence(item)}
         onLongPress={() => handleCopy(item.text)}
       >
         <View style={styles.sentenceContent}>
-          <Text style={styles.sentenceText}>
+          <Text style={styles.sentenceText} numberOfLines={3}>
             &ldquo;{item.text}&rdquo;
           </Text>
           <View style={styles.sentenceMeta}>
@@ -141,37 +132,20 @@ export default function SentenceCollectionScreen() {
               {new Date(item.createdAt).toLocaleDateString("ko-KR")}
             </Text>
             {page !== undefined && (
-              <Text style={styles.sentencePage}>
-                {page + 1}페이지
-              </Text>
-            )}
-            {item.articleId && (
-              <Pressable
-                style={styles.sourceButton}
-                onPress={() =>
-                  router.push({
-                    pathname: "/read",
-                    params: { articleId: item.articleId, mode: "re_read" },
-                  })
-                }
-                hitSlop={4}
-              >
-                <Feather name="external-link" size={12} color={Colors.zinc400} />
-                <Text style={styles.sourceButtonText}>원본</Text>
-              </Pressable>
+              <Text style={styles.sentencePage}>{page + 1}페이지</Text>
             )}
           </View>
         </View>
         <View style={styles.rightActions}>
           <Pressable
-            style={styles.copyButton}
+            style={styles.actionBtn}
             onPress={() => handleCopy(item.text)}
             hitSlop={8}
           >
             <Feather name="copy" size={16} color={Colors.zinc400} />
           </Pressable>
           <Pressable
-            style={styles.favoriteButton}
+            style={styles.actionBtn}
             onPress={() => handleToggleFavorite(item.id, item.isFavorite)}
             hitSlop={8}
           >
@@ -201,7 +175,12 @@ export default function SentenceCollectionScreen() {
           style={[styles.filterChip, filter === "all" && styles.filterChipActive]}
           onPress={() => setFilter("all")}
         >
-          <Text style={[styles.filterChipText, filter === "all" && styles.filterChipTextActive]}>
+          <Text
+            style={[
+              styles.filterChipText,
+              filter === "all" && styles.filterChipTextActive,
+            ]}
+          >
             전체 ({totalCount})
           </Text>
         </Pressable>
@@ -215,7 +194,10 @@ export default function SentenceCollectionScreen() {
             color={filter === "favorites" ? Colors.white : Colors.zinc500}
           />
           <Text
-            style={[styles.filterChipText, filter === "favorites" && styles.filterChipTextActive]}
+            style={[
+              styles.filterChipText,
+              filter === "favorites" && styles.filterChipTextActive,
+            ]}
           >
             즐겨찾기 ({favCount})
           </Text>
@@ -223,19 +205,22 @@ export default function SentenceCollectionScreen() {
       </View>
 
       {sentencesQuery.isLoading ? (
-        <View style={styles.emptyContainer}>
+        <View style={styles.centerContainer}>
           <Text style={styles.loadingText}>불러오는 중...</Text>
         </View>
       ) : sentencesQuery.isError ? (
-        <View style={styles.emptyContainer}>
+        <View style={styles.centerContainer}>
           <Feather name="alert-circle" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>불러오기에 실패했어요</Text>
-          <Pressable style={styles.retryButton} onPress={() => sentencesQuery.refetch()}>
+          <Pressable
+            style={styles.retryButton}
+            onPress={() => sentencesQuery.refetch()}
+          >
             <Text style={styles.retryButtonText}>다시 시도</Text>
           </Pressable>
         </View>
       ) : sentences.length === 0 ? (
-        <View style={styles.emptyContainer}>
+        <View style={styles.centerContainer}>
           <Feather name="bookmark" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>
             {filter === "favorites" ? "즐겨찾기한 문장이 없어요" : "수집한 문장이 없어요"}
@@ -271,13 +256,112 @@ export default function SentenceCollectionScreen() {
         cancelLabel="취소"
         destructive
         onConfirm={() => {
-          if (deleteTarget) {
-            handleDelete(deleteTarget);
-          }
+          if (deleteTarget) handleDelete(deleteTarget);
           setDeleteTarget(null);
         }}
         onCancel={() => setDeleteTarget(null)}
       />
+
+      <BottomSheet
+        visible={selectedSentence !== null}
+        onClose={() => setSelectedSentence(null)}
+        snapPoints={[0.55]}
+      >
+        {selectedSentence && (
+          <SentenceDetailSheet
+            sentence={selectedSentence}
+            onCopy={() => handleCopy(selectedSentence.text)}
+            onToggleFavorite={() =>
+              handleToggleFavorite(selectedSentence.id, selectedSentence.isFavorite)
+            }
+            onDelete={() => {
+              setDeleteTarget(selectedSentence.id);
+              setSelectedSentence(null);
+            }}
+            onGoToSource={() => {
+              setSelectedSentence(null);
+              router.push({
+                pathname: "/read",
+                params: { articleId: selectedSentence.articleId, mode: "re_read" },
+              });
+            }}
+            onClose={() => setSelectedSentence(null)}
+          />
+        )}
+      </BottomSheet>
+    </View>
+  );
+}
+
+interface SentenceDetailSheetProps {
+  sentence: StoredSentence;
+  onCopy: () => void;
+  onToggleFavorite: () => void;
+  onDelete: () => void;
+  onGoToSource: () => void;
+  onClose: () => void;
+}
+
+function SentenceDetailSheet({
+  sentence,
+  onCopy,
+  onToggleFavorite,
+  onDelete,
+  onGoToSource,
+  onClose,
+}: SentenceDetailSheetProps) {
+  const page = getSentencePage(sentence);
+
+  return (
+    <View style={sheet.container}>
+      <Text style={sheet.quoteText}>&ldquo;{sentence.text}&rdquo;</Text>
+
+      <View style={sheet.metaRow}>
+        <Text style={sheet.metaDate}>
+          {new Date(sentence.createdAt).toLocaleDateString("ko-KR")}
+        </Text>
+        {page !== undefined && (
+          <Text style={sheet.metaPage}>{page + 1}페이지</Text>
+        )}
+      </View>
+
+      <View style={sheet.divider} />
+
+      <View style={sheet.actions}>
+        <Pressable style={sheet.actionRow} onPress={onCopy}>
+          <Feather name="copy" size={18} color={Colors.zinc700} />
+          <Text style={sheet.actionLabel}>복사하기</Text>
+        </Pressable>
+
+        <Pressable style={sheet.actionRow} onPress={onToggleFavorite}>
+          <Feather
+            name="star"
+            size={18}
+            color={sentence.isFavorite ? "#F59E0B" : Colors.zinc700}
+          />
+          <Text style={[sheet.actionLabel, sentence.isFavorite && { color: "#F59E0B" }]}>
+            {sentence.isFavorite ? "즐겨찾기 해제" : "즐겨찾기 추가"}
+          </Text>
+        </Pressable>
+
+        {sentence.articleId && (
+          <Pressable style={sheet.actionRow} onPress={onGoToSource}>
+            <Feather name="external-link" size={18} color={Colors.zinc700} />
+            <Text style={sheet.actionLabel}>
+              {page !== undefined ? `원본으로 이동 (${page + 1}페이지)` : "원본으로 이동"}
+            </Text>
+          </Pressable>
+        )}
+
+        <Pressable style={sheet.actionRow} onPress={onDelete}>
+          <Feather name="trash-2" size={18} color="#DC2626" />
+          <Text style={[sheet.actionLabel, { color: "#DC2626" }]}>삭제</Text>
+        </Pressable>
+
+        <Pressable style={[sheet.actionRow, sheet.cancelRow]} onPress={onClose}>
+          <Text style={sheet.cancelLabel}>닫기</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -364,32 +448,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.zinc400,
   },
-  sourceButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    backgroundColor: Colors.zinc50,
-  },
-  sourceButtonText: {
-    ...Typography.caption,
-    fontSize: 11,
-    color: Colors.zinc500,
-  },
   rightActions: {
     gap: 8,
     alignItems: "center",
     paddingTop: 2,
   },
-  copyButton: {
+  actionBtn: {
     padding: 4,
   },
-  favoriteButton: {
-    padding: 4,
-  },
-  emptyContainer: {
+  centerContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
@@ -425,5 +492,68 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 14,
     color: Colors.white,
+  },
+});
+
+const sheet = StyleSheet.create({
+  container: {
+    paddingTop: 4,
+    paddingBottom: 16,
+  },
+  quoteText: {
+    ...Typography.body,
+    fontSize: 16,
+    color: Colors.zinc800,
+    fontStyle: "italic",
+    lineHeight: 26,
+    paddingHorizontal: Spacing.screenPx,
+    marginBottom: 10,
+  },
+  metaRow: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: Spacing.screenPx,
+    marginBottom: 12,
+  },
+  metaDate: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc400,
+  },
+  metaPage: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc400,
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: Colors.zinc100,
+    marginBottom: 8,
+  },
+  actions: {
+    gap: 0,
+  },
+  actionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    paddingHorizontal: Spacing.screenPx,
+    paddingVertical: 14,
+  },
+  actionLabel: {
+    ...Typography.body,
+    fontSize: 16,
+    color: Colors.zinc800,
+  },
+  cancelRow: {
+    justifyContent: "center",
+    marginTop: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.zinc100,
+  },
+  cancelLabel: {
+    ...Typography.body,
+    fontSize: 15,
+    color: Colors.zinc500,
   },
 });
