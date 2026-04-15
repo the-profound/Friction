@@ -36,6 +36,8 @@ export function useReadingMemo({
   const pendingContentRef = useRef<string | null>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestContentRef = useRef<string>("");
+  const cleanupCalledRef = useRef(false);
+  const memoArticleIdRef = useRef<string | undefined>(undefined);
 
   const memoQuery = useGetOrCreateReadingMemo(
     { userId, sourceArticleId },
@@ -50,6 +52,15 @@ export function useReadingMemo({
   const updateArticle = useUpdateArticle();
   const deleteArticle = useDeleteArticle();
   const memoArticleId = memoQuery.data?.id;
+
+  const deleteArticleRef = useRef(deleteArticle);
+  const updateArticleRef = useRef(updateArticle);
+  useEffect(() => { deleteArticleRef.current = deleteArticle; }, [deleteArticle]);
+  useEffect(() => { updateArticleRef.current = updateArticle; }, [updateArticle]);
+
+  useEffect(() => {
+    memoArticleIdRef.current = memoArticleId;
+  }, [memoArticleId]);
 
   useEffect(() => {
     latestContentRef.current = memoQuery.data?.content ?? "";
@@ -96,6 +107,27 @@ export function useReadingMemo({
     };
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (cleanupCalledRef.current) return;
+      const id = memoArticleIdRef.current;
+      if (!id) return;
+      cleanupCalledRef.current = true;
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+      const content = latestContentRef.current;
+      if (content.trim() === "") {
+        deleteArticleRef.current.mutate({ id });
+      } else if (pendingContentRef.current !== null) {
+        const pending = pendingContentRef.current;
+        pendingContentRef.current = null;
+        updateArticleRef.current.mutate({ id, data: { content: pending } });
+      }
+    };
+  }, []);
+
   const updateMemoContent = useCallback(
     (markdown: string) => {
       latestContentRef.current = markdown;
@@ -128,12 +160,15 @@ export function useReadingMemo({
   }, [saveContent]);
 
   const cleanup = useCallback(async () => {
+    if (cleanupCalledRef.current) return;
+
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = null;
     }
 
     if (!memoArticleId) return;
+    cleanupCalledRef.current = true;
 
     const currentContent = latestContentRef.current;
     if (currentContent.trim() === "") {
