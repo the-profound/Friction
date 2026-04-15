@@ -57,7 +57,10 @@ export function useReadingMemo({
 
   const saveContent = useCallback(
     async (markdown: string) => {
-      if (!memoArticleId) return;
+      if (!memoArticleId) {
+        pendingContentRef.current = markdown;
+        return;
+      }
       setSaveState("saving");
       try {
         await updateArticle.mutateAsync({

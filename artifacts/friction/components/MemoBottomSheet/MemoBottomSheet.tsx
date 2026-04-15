@@ -89,6 +89,7 @@ export default function MemoBottomSheet({
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
     }
+    editorRef.current?.requestExportMarkdown("close");
     onClose();
   }, [onClose]);
 
