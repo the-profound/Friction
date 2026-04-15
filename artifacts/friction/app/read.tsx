@@ -224,7 +224,7 @@ export default function ReadScreen() {
   const readingMemo = useReadingMemo({
     userId,
     sourceArticleId: articleId,
-    enabled: mode === "basic" && !!userId && !!articleId,
+    enabled: !!userId && !!articleId,
   });
 
   useEffect(() => {
@@ -282,9 +282,7 @@ export default function ReadScreen() {
     if (reading.session.state === "READING" || reading.session.state === "PAUSED") {
       reading.pause();
     }
-    if (mode === "basic") {
-      await readingMemo.cleanup();
-    }
+    await readingMemo.cleanup();
     router.back();
   }, [mode, reading, router, readingMemo]);
 
