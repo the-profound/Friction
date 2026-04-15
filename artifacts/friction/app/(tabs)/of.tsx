@@ -330,6 +330,7 @@ export default function OfScreen() {
           renderEmptyPersonal()
         ) : (
           <FlatList
+            key="of-personal-grid"
             data={filteredMyCollections}
             keyExtractor={(item) => item.id}
             renderItem={renderPersonalItem}
@@ -345,6 +346,7 @@ export default function OfScreen() {
           renderEmptyTeam()
         ) : (
           <FlatList
+            key="of-group-grid"
             data={filteredTeamCollections}
             keyExtractor={(item) => item.id}
             renderItem={renderTeamItem}
@@ -360,6 +362,7 @@ export default function OfScreen() {
           renderEmptySentence()
         ) : (
           <FlatList
+            key="of-sentence-list"
             data={filteredSentences}
             keyExtractor={(item) => item.id}
             renderItem={renderSentenceItem}
