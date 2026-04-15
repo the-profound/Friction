@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   Modal,
-  Platform,
   Pressable,
   Animated,
   PanResponder,
@@ -176,7 +175,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
-    overflow: Platform.OS === "web" ? "visible" : "hidden",
+    overflow: "hidden",
   },
   handleArea: {
     alignItems: "center",
@@ -197,6 +196,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+    overflow: "hidden",
     paddingHorizontal: Spacing.screenPx,
   },
 });
