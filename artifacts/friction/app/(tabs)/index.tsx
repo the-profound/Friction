@@ -9,6 +9,7 @@ import {
   ScrollView,
   TextInput,
   Pressable,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -105,6 +106,8 @@ function CarouselGroup({
         contentContainerStyle={styles.carouselContent}
         onScroll={handleScroll}
         scrollEventThrottle={16}
+        nestedScrollEnabled
+        style={Platform.OS === "web" ? { touchAction: "pan-x" } as object : undefined}
         renderItem={({ item, index }) => (
           <View style={[styles.cardSlot, index < group.items.length - 1 && { marginRight: CARD_GAP }]}>
             <ArticleCardItem
@@ -248,6 +251,7 @@ export default function InboxScreen() {
           snapToInterval={Sizing.groupH}
           snapToAlignment="start"
           decelerationRate="fast"
+          style={Platform.OS === "web" ? { touchAction: "pan-y" } as object : undefined}
         />
       )}
     </View>
