@@ -18,6 +18,8 @@ function SelectableTextWeb({ text, onCollect, onMemo, fontSize, lineHeight, lett
   const [selectedText, setSelectedText] = useState("");
   const [showCollectButton, setShowCollectButton] = useState(false);
   const textBodyRef = useRef<Text>(null);
+  // Saves the selected text on pressIn (mousedown), BEFORE selectionchange clears it
+  const pendingTextRef = useRef("");
 
   useEffect(() => {
     if (Platform.OS !== "web") return;
@@ -47,23 +49,36 @@ function SelectableTextWeb({ text, onCollect, onMemo, fontSize, lineHeight, lett
     };
   }, []);
 
+  // onPressIn fires on mousedown — BEFORE selectionchange clears selectedText
+  const handleCollectPressIn = useCallback(() => {
+    pendingTextRef.current = selectedText;
+  }, [selectedText]);
+
+  const handleMemoPressIn = useCallback(() => {
+    pendingTextRef.current = selectedText;
+  }, [selectedText]);
+
   const handleCollect = useCallback(() => {
-    if (selectedText.length > 0) {
-      onCollect(selectedText);
+    const text = pendingTextRef.current;
+    pendingTextRef.current = "";
+    if (text.length > 0) {
+      onCollect(text);
       setShowCollectButton(false);
       setSelectedText("");
       window.getSelection()?.removeAllRanges();
     }
-  }, [selectedText, onCollect]);
+  }, [onCollect]);
 
   const handleMemo = useCallback(() => {
-    if (selectedText.length > 0) {
-      onMemo?.(selectedText);
+    const text = pendingTextRef.current;
+    pendingTextRef.current = "";
+    if (text.length > 0) {
+      onMemo?.(text);
       setShowCollectButton(false);
       setSelectedText("");
       window.getSelection()?.removeAllRanges();
     }
-  }, [selectedText, onMemo]);
+  }, [onMemo]);
 
   const textStyle = [
     styles.textBody,
@@ -80,12 +95,12 @@ function SelectableTextWeb({ text, onCollect, onMemo, fontSize, lineHeight, lett
       </Text>
       {showCollectButton && (
         <View style={styles.collectBar}>
-          <Pressable style={styles.collectButton} onPress={handleCollect}>
+          <Pressable style={styles.collectButton} onPressIn={handleCollectPressIn} onPress={handleCollect}>
             <Feather name="bookmark" size={14} color={Colors.white} />
             <Text style={styles.collectButtonText}>수집</Text>
           </Pressable>
           {onMemo && (
-            <Pressable style={styles.collectButton} onPress={handleMemo}>
+            <Pressable style={styles.collectButton} onPressIn={handleMemoPressIn} onPress={handleMemo}>
               <Feather name="edit-3" size={14} color={Colors.white} />
               <Text style={styles.collectButtonText}>메모</Text>
             </Pressable>
