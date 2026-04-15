@@ -700,7 +700,11 @@ export default function ReadScreen() {
       )}
 
       {totalPages > 0 ? (
-        <View style={styles.pageListContainer} onLayout={handlePageListLayout} {...swipePanResponder.panHandlers}>
+        <View
+          style={[styles.pageListContainer, Platform.OS === "web" ? { touchAction: "none" } as object : undefined]}
+          onLayout={handlePageListLayout}
+          {...swipePanResponder.panHandlers}
+        >
           <View
             style={[
               styles.readerFrame,
