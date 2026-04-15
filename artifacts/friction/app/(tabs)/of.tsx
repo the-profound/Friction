@@ -378,7 +378,7 @@ export default function OfScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <PageHeader
         title="보관함"
-        showAdd
+        showAdd={ofSubTab !== "sentence"}
         onAddPress={handleAdd}
         showSearch
         onSearchPress={handleSearch}
