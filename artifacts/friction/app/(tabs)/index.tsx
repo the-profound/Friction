@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useMemo } from "react";
+import React, { useState, useRef, useMemo, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,8 @@ import {
   TextInput,
   Pressable,
   Platform,
+  Animated,
+  PanResponder,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -25,8 +27,17 @@ import { useUser } from "@/contexts/UserContext";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const CARD_W = Sizing.cardSlotW;
+const CARD_H = Sizing.cardH;
 const CARD_GAP = Spacing.cardGap;
+const CARD_PEEK = Spacing.cardPeek;
 const SNAP_INTERVAL = CARD_W + CARD_GAP;
+const SNAP_THRESHOLD = 48;
+const FLING_VELOCITY = 0.5;
+
+/** baseX(idx) = -(idx * SNAP_INTERVAL) + CARD_PEEK */
+function getBaseX(idx: number) {
+  return -(idx * SNAP_INTERVAL) + CARD_PEEK;
+}
 
 interface DateGroup {
   dateKey: string;
@@ -74,17 +85,75 @@ function CarouselGroup({
   group: DateGroup;
   onCardPress: (item: InboxItem) => void;
 }) {
+  const itemCount = group.items.length;
   const [activeIndex, setActiveIndex] = useState(0);
-  const scrollRef = useRef<FlatList>(null);
 
-  const handleScroll = useCallback(
-    (event: { nativeEvent: { contentOffset: { x: number } } }) => {
-      const x = event.nativeEvent.contentOffset.x;
-      const idx = Math.round(x / SNAP_INTERVAL);
-      setActiveIndex(Math.max(0, Math.min(idx, group.items.length - 1)));
-    },
-    [group.items.length],
-  );
+  const activeIndexRef = useRef(0);
+  const itemCountRef = useRef(itemCount);
+  const translateX = useRef(new Animated.Value(getBaseX(0))).current;
+
+  useEffect(() => {
+    itemCountRef.current = itemCount;
+  }, [itemCount]);
+
+  // Always keep snapToRef current so PanResponder (created once) uses latest closure
+  const snapToRef = useRef((_idx: number) => {});
+  snapToRef.current = (idx: number) => {
+    const clamped = Math.max(0, Math.min(idx, itemCountRef.current - 1));
+    activeIndexRef.current = clamped;
+    setActiveIndex(clamped);
+    Animated.spring(translateX, {
+      toValue: getBaseX(clamped),
+      useNativeDriver: true,
+      overshootClamping: true,
+      tension: 100,
+      friction: 20,
+    }).start();
+  };
+
+  const panResponder = useRef(
+    PanResponder.create({
+      // Only intercept horizontal movement, let taps pass through to children
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, g) =>
+        itemCountRef.current > 1 &&
+        Math.abs(g.dx) > Math.abs(g.dy) &&
+        Math.abs(g.dx) > 5,
+      onPanResponderGrant: () => {
+        // Snap to current index immediately to cancel any in-progress spring
+        translateX.setValue(getBaseX(activeIndexRef.current));
+      },
+      onPanResponderMove: (_, g) => {
+        const baseX = getBaseX(activeIndexRef.current);
+        const raw = baseX + g.dx;
+        const maxX = getBaseX(0);
+        const minX = getBaseX(itemCountRef.current - 1);
+        // Rubber-band at edges
+        const rubber =
+          raw > maxX
+            ? maxX + (raw - maxX) * 0.3
+            : raw < minX
+              ? minX + (raw - minX) * 0.3
+              : raw;
+        translateX.setValue(rubber);
+      },
+      onPanResponderRelease: (_, g) => {
+        const { dx, vx } = g;
+        const current = activeIndexRef.current;
+        let next = current;
+        if (Math.abs(vx) > FLING_VELOCITY) {
+          // Fling: 1 card in fling direction regardless of distance
+          next = vx < 0 ? current + 1 : current - 1;
+        } else if (Math.abs(dx) >= SNAP_THRESHOLD) {
+          next = dx < 0 ? current + 1 : current - 1;
+        }
+        snapToRef.current(next);
+      },
+      onPanResponderTerminate: () => {
+        snapToRef.current(activeIndexRef.current);
+      },
+    }),
+  ).current;
 
   return (
     <View style={styles.groupContainer}>
@@ -93,34 +162,30 @@ function CarouselGroup({
         <Text style={styles.dateHeaderCount}>{group.items.length}편</Text>
       </View>
 
-      <FlatList
-        ref={scrollRef}
-        data={group.items}
-        keyExtractor={(item) => item.id}
-        horizontal
-        pagingEnabled={false}
-        snapToInterval={SNAP_INTERVAL}
-        snapToAlignment="start"
-        decelerationRate="fast"
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.carouselContent}
-        onScroll={handleScroll}
-        scrollEventThrottle={16}
-        nestedScrollEnabled
-        style={Platform.OS === "web" ? { touchAction: "pan-x" } as object : undefined}
-        renderItem={({ item, index }) => (
-          <View style={[styles.cardSlot, index < group.items.length - 1 && { marginRight: CARD_GAP }]}>
-            <ArticleCardItem
-              title={item.article?.title ?? "제목 없음"}
-              onPress={() => onCardPress(item)}
-              authorName={item.sender?.nickname ?? item.sender?.id}
-              cover={item.article?.cover}
-              isRead={item.isRead}
-              isActive={index === activeIndex}
-            />
-          </View>
-        )}
-      />
+      <View style={styles.carouselWindow} {...panResponder.panHandlers}>
+        <Animated.View
+          style={[styles.carouselTrack, { transform: [{ translateX }] }]}
+        >
+          {group.items.map((item, index) => (
+            <View
+              key={item.id}
+              style={[
+                styles.cardSlot,
+                index < group.items.length - 1 && { marginRight: CARD_GAP },
+              ]}
+            >
+              <ArticleCardItem
+                title={item.article?.title ?? "제목 없음"}
+                onPress={() => onCardPress(item)}
+                authorName={item.sender?.nickname ?? item.sender?.id}
+                cover={item.article?.cover}
+                isRead={item.isRead}
+                isActive={index === activeIndex}
+              />
+            </View>
+          ))}
+        </Animated.View>
+      </View>
 
       <DotIndicator total={group.items.length} activeIndex={activeIndex} />
     </View>
@@ -303,8 +368,14 @@ const styles = StyleSheet.create({
     ...Typography.caption,
     color: Colors.zinc400,
   },
-  carouselContent: {
-    paddingHorizontal: (SCREEN_W - CARD_W) / 2,
+  carouselWindow: {
+    width: SCREEN_W,
+    height: CARD_H,
+    overflow: "hidden",
+  },
+  carouselTrack: {
+    flexDirection: "row",
+    height: CARD_H,
   },
   cardSlot: {
     width: CARD_W,
