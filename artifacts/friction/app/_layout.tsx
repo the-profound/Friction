@@ -13,6 +13,19 @@ import { NavigationProvider } from "@/contexts/NavigationContext";
 import { ToastProvider } from "@/contexts/ToastContext";
 import { UserProvider } from "@/contexts/UserContext";
 import { ActiveReadingProvider, useActiveReading } from "@/contexts/ActiveReadingContext";
+import { setBaseUrl } from "@workspace/api-client-react";
+
+// Configure API base URL so that relative /api/... paths resolve to the API
+// server domain (EXPO_PUBLIC_DOMAIN) rather than the Expo bundle domain.
+// Accepts either a bare hostname ("pike.replit.dev") or a full URL
+// ("https://pike.replit.dev") to avoid producing an invalid double-scheme URL.
+if (process.env.EXPO_PUBLIC_DOMAIN) {
+  const domain = process.env.EXPO_PUBLIC_DOMAIN;
+  const baseUrl = domain.startsWith("http://") || domain.startsWith("https://")
+    ? domain
+    : `https://${domain}`;
+  setBaseUrl(baseUrl);
+}
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
