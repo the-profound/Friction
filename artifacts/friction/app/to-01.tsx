@@ -162,9 +162,7 @@ export default function NeighborListScreen() {
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
         </Pressable>
         <Text style={styles.headerTitle}>이웃 관리</Text>
-        <Pressable hitSlop={12} onPress={() => { setAddRecipientId(""); setAddSheetVisible(true); }}>
-          <Feather name="user-plus" size={20} color={Colors.zinc600} />
-        </Pressable>
+        <View style={{ width: 20 }} />
       </View>
 
       <View style={styles.tabBar}>

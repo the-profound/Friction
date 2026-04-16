@@ -241,8 +241,6 @@ export default function ToScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <PageHeader
         title="발신함"
-        showAdd
-        onAddPress={toSubTab === "send" ? handleSend : toSubTab === "history" ? handleViewHistory : handleAddNeighbor}
         showSearch={false}
       />
       {renderContent()}
