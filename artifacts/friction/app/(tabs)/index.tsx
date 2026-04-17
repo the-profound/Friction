@@ -104,7 +104,7 @@ function CarouselGroup({
     setActiveIndex(clamped);
     Animated.spring(translateX, {
       toValue: getBaseX(clamped),
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== "web",
       overshootClamping: true,
       tension: 100,
       friction: 20,
