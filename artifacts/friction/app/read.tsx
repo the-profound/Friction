@@ -46,6 +46,7 @@ import {
   getGetUserRecentCollectionQueryKey,
 } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
+import { useToast } from "@/contexts/ToastContext";
 import { useActiveReading } from "@/contexts/ActiveReadingContext";
 import type { ReadingMode } from "@/lib/policies";
 import MemoBottomSheet from "@/components/MemoBottomSheet/MemoBottomSheet";
@@ -121,6 +122,7 @@ export default function ReadScreen() {
   const { width: screenWidth } = useWindowDimensions();
   const queryClient = useQueryClient();
   const { userId } = useUser();
+  const { showToast } = useToast();
   const { setActiveSession, clearActiveSession } = useActiveReading();
   const params = useLocalSearchParams<{
     articleId: string;
@@ -506,10 +508,11 @@ export default function ReadScreen() {
       clearActiveSession();
       await readingMemo.cleanup();
       router.back();
+      showToast({ message: "보관함에 저장됐어요", type: "success", duration: 3000, position: "bottom" });
     } finally {
       setIsSaving(false);
     }
-  }, [isSaving, isCollectionsReady, reading, selectedCollectionId, collectionsQuery.data, articleId, userId, createCollection, addToCollection, updateRecentCollection, queryClient, clearActiveSession, router, readingMemo]);
+  }, [isSaving, isCollectionsReady, reading, selectedCollectionId, collectionsQuery.data, articleId, userId, createCollection, addToCollection, updateRecentCollection, queryClient, clearActiveSession, router, readingMemo, showToast]);
 
   const handleCommitAndSkip = useCallback(async () => {
     if (isDeleting) return;
@@ -522,13 +525,14 @@ export default function ReadScreen() {
         clearActiveSession();
         await readingMemo.cleanup();
         router.back();
+        showToast({ message: "편지를 삭제했어요", type: "success", duration: 3000, position: "bottom" });
       } else {
         Alert.alert("오류", result.error ?? "완독 처리에 실패했습니다.");
       }
     } finally {
       setIsDeleting(false);
     }
-  }, [isDeleting, reading, router, clearActiveSession, queryClient, readingMemo]);
+  }, [isDeleting, reading, router, clearActiveSession, queryClient, readingMemo, showToast]);
 
   const handleCollectSentence = useCallback((text: string) => {
     if (text.trim().length > 0) {
