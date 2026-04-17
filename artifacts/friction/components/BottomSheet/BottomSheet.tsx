@@ -196,7 +196,6 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    overflow: "hidden",
     paddingHorizontal: Spacing.screenPx,
   },
 });

@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from "react";
-import { View, Text, StyleSheet, FlatList, Pressable } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
@@ -14,7 +14,7 @@ interface ArticleStub {
 interface MyArticlesPickerBottomSheetProps {
   visible: boolean;
   onClose: () => void;
-  onSelect: (articleIds: string[]) => void;
+  onSelect: (articleIds: string[]) => void | Promise<void>;
   articles: ArticleStub[];
   alreadyAdded?: string[];
   multiSelect?: boolean;
@@ -47,47 +47,17 @@ export function MyArticlesPickerBottomSheet({
     [multiSelect],
   );
 
-  const handleConfirm = useCallback(() => {
-    onSelect(Array.from(selected));
+  const handleConfirm = useCallback(async () => {
+    const ids = Array.from(selected);
+    await onSelect(ids);
     setSelected(new Set());
     onClose();
   }, [selected, onSelect, onClose]);
 
   const letterArticles = articles.filter((a) => a.status === "LETTER");
 
-  const renderItem = ({ item }: { item: ArticleStub }) => {
-    const isAdded = alreadyAdded.includes(item.id);
-    const isSelected = selected.has(item.id);
-
-    return (
-      <Pressable
-        style={[styles.item, isSelected && styles.itemSelected]}
-        onPress={() => !isAdded && toggleSelect(item.id)}
-        disabled={isAdded}
-      >
-        <View style={styles.itemContent}>
-          <Text style={[styles.itemTitle, isAdded && styles.itemDisabled]} numberOfLines={1}>
-            {item.title || "제목 없음"}
-          </Text>
-          {item.excerpt && (
-            <Text style={styles.itemExcerpt} numberOfLines={1}>
-              {item.excerpt}
-            </Text>
-          )}
-        </View>
-        {isAdded ? (
-          <Text style={styles.addedLabel}>추가됨</Text>
-        ) : (
-          <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
-            {isSelected && <Feather name="check" size={14} color={Colors.white} />}
-          </View>
-        )}
-      </Pressable>
-    );
-  };
-
   return (
-    <BottomSheet visible={visible} onClose={onClose} title="내 글 선택" snapPoints={[0.6, 0.85]}>
+    <BottomSheet visible={visible} onClose={onClose} title="내 글 선택" snapPoints={[0.65]}>
       {letterArticles.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Feather name="file-text" size={32} color={Colors.zinc300} />
@@ -95,13 +65,43 @@ export function MyArticlesPickerBottomSheet({
           <Text style={styles.emptySubtitle}>LETTER 상태의 글만 추가할 수 있어요</Text>
         </View>
       ) : (
-        <FlatList
-          data={letterArticles}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
+        <ScrollView
+          nestedScrollEnabled
+          style={styles.scrollView}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
-        />
+        >
+          {letterArticles.map((item) => {
+            const isAdded = alreadyAdded.includes(item.id);
+            const isSelected = selected.has(item.id);
+            return (
+              <Pressable
+                key={item.id}
+                style={[styles.item, isSelected && styles.itemSelected]}
+                onPress={() => !isAdded && toggleSelect(item.id)}
+                disabled={isAdded}
+              >
+                <View style={styles.itemContent}>
+                  <Text style={[styles.itemTitle, isAdded && styles.itemDisabled]} numberOfLines={1}>
+                    {item.title || "제목 없음"}
+                  </Text>
+                  {item.excerpt && (
+                    <Text style={styles.itemExcerpt} numberOfLines={1}>
+                      {item.excerpt}
+                    </Text>
+                  )}
+                </View>
+                {isAdded ? (
+                  <Text style={styles.addedLabel}>추가됨</Text>
+                ) : (
+                  <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+                    {isSelected && <Feather name="check" size={14} color={Colors.white} />}
+                  </View>
+                )}
+              </Pressable>
+            );
+          })}
+        </ScrollView>
       )}
       {selected.size > 0 && (
         <Pressable style={styles.confirmButton} onPress={handleConfirm}>
@@ -116,8 +116,11 @@ export function MyArticlesPickerBottomSheet({
 export default MyArticlesPickerBottomSheet;
 
 const styles = StyleSheet.create({
+  scrollView: {
+    flex: 1,
+  },
   list: {
-    paddingBottom: 80,
+    paddingBottom: 16,
   },
   item: {
     flexDirection: "row",
@@ -168,11 +171,9 @@ const styles = StyleSheet.create({
     borderColor: Colors.zinc900,
   },
   confirmButton: {
-    position: "absolute",
-    bottom: 20,
-    left: 0,
-    right: 0,
-    marginHorizontal: Spacing.screenPx,
+    marginTop: 12,
+    marginBottom: 20,
+    marginHorizontal: 0,
     paddingVertical: 16,
     backgroundColor: Colors.zinc900,
     borderRadius: 12,

@@ -15,6 +15,8 @@ import {
   useAddArticleToMyCollection,
   useRemoveArticleFromMyCollection,
   useListArticles,
+  getListMyCollectionArticlesQueryKey,
+  getGetMyCollectionQueryKey,
 } from "@workspace/api-client-react";
 import type { MyCollectionArticleWithDetails } from "@workspace/api-client-react";
 import { MyArticlesPickerBottomSheet } from "@/components/MyArticlesPickerBottomSheet/MyArticlesPickerBottomSheet";
@@ -100,19 +102,19 @@ export default function PersonalCollectionDetailScreen() {
 
   const handleAddArticles = useCallback(
     async (articleIds: string[]) => {
-      if (!id) return;
+      if (!id || articleIds.length === 0) return;
       try {
         for (const articleId of articleIds) {
           await addArticle.mutateAsync({ id, data: { articleId } });
         }
-        articlesQuery.refetch();
-        collectionQuery.refetch();
+        await queryClient.invalidateQueries({ queryKey: getListMyCollectionArticlesQueryKey(id) });
+        await queryClient.invalidateQueries({ queryKey: getGetMyCollectionQueryKey(id) });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "글 추가에 실패했습니다.";
         Alert.alert("오류", msg);
       }
     },
-    [id, addArticle, articlesQuery, collectionQuery],
+    [id, addArticle, queryClient],
   );
 
   const handleRemoveArticle = useCallback(

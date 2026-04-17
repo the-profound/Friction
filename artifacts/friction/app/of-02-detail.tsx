@@ -18,6 +18,8 @@ import {
   useAddTeamMember,
   useListArticles,
   useListInbox,
+  getListTeamArticlesQueryKey,
+  getGetTeamCollectionQueryKey,
 } from "@workspace/api-client-react";
 import type {
   TeamMemberWithUser,
@@ -135,18 +137,19 @@ export default function TeamCollectionDetailScreen() {
 
   const handleAddArticles = useCallback(
     async (articleIds: string[]) => {
-      if (!id) return;
+      if (!id || articleIds.length === 0) return;
       try {
         for (const articleId of articleIds) {
           await addArticle.mutateAsync({ id, data: { articleId, addedBy: userId } });
         }
-        articlesQuery.refetch();
+        await queryClient.invalidateQueries({ queryKey: getListTeamArticlesQueryKey(id) });
+        await queryClient.invalidateQueries({ queryKey: getGetTeamCollectionQueryKey(id) });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "글 추가에 실패했습니다.";
         Alert.alert("오류", msg);
       }
     },
-    [id, userId, addArticle, articlesQuery],
+    [id, userId, addArticle, queryClient],
   );
 
   const handleRemoveArticle = useCallback(
