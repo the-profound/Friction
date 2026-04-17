@@ -220,6 +220,7 @@ export default function ReadScreen() {
   });
   const updateRecentCollection = useUpdateUserRecentCollection();
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const readingMemo = useReadingMemo({
     userId,
@@ -511,8 +512,8 @@ export default function ReadScreen() {
   }, [isSaving, isCollectionsReady, reading, selectedCollectionId, collectionsQuery.data, articleId, userId, createCollection, addToCollection, updateRecentCollection, queryClient, clearActiveSession, router, readingMemo]);
 
   const handleCommitAndSkip = useCallback(async () => {
-    if (isSaving) return;
-    setIsSaving(true);
+    if (isDeleting) return;
+    setIsDeleting(true);
     try {
       const result = await reading.commitCompletion();
       setCompletionSheetVisible(false);
@@ -525,9 +526,9 @@ export default function ReadScreen() {
         Alert.alert("오류", result.error ?? "완독 처리에 실패했습니다.");
       }
     } finally {
-      setIsSaving(false);
+      setIsDeleting(false);
     }
-  }, [isSaving, reading, router, clearActiveSession, queryClient, readingMemo]);
+  }, [isDeleting, reading, router, clearActiveSession, queryClient, readingMemo]);
 
   const handleCollectSentence = useCallback((text: string) => {
     if (text.trim().length > 0) {
@@ -885,11 +886,11 @@ export default function ReadScreen() {
               <Text style={dynamicStyles.completionButtonSecondaryText}>다시 읽기</Text>
             </Pressable>
             <Pressable
-              style={[styles.completionButton, styles.completionButtonSecondary, styles.completionButtonDelete]}
+              style={[styles.completionButton, styles.completionButtonSecondary, styles.completionButtonDelete, isDeleting && styles.completionButtonDisabled]}
               onPress={handleCommitAndSkip}
-              disabled={isSaving}
+              disabled={isDeleting}
             >
-              <Text style={dynamicStyles.completionButtonSecondaryText}>삭제하기</Text>
+              <Text style={dynamicStyles.completionButtonSecondaryText}>{isDeleting ? "삭제 중..." : "삭제하기"}</Text>
             </Pressable>
           </View>
         </View>
