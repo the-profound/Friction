@@ -12,6 +12,8 @@ import {
   Platform,
   Animated,
   PanResponder,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -34,7 +36,6 @@ const SNAP_INTERVAL = CARD_W + CARD_GAP;
 const SNAP_THRESHOLD = 48;
 const FLING_VELOCITY = 0.5;
 
-/** baseX(idx) = -(idx * SNAP_INTERVAL) + CARD_PEEK */
 function getBaseX(idx: number) {
   return -(idx * SNAP_INTERVAL) + CARD_PEEK;
 }
@@ -78,6 +79,10 @@ function groupByDate(items: InboxItem[]): DateGroup[] {
   }));
 }
 
+/**
+ * Web: PanResponder + Animated (mouse drag works via RN Web's mouse→touch mapping)
+ * Native: horizontal ScrollView with snap (native touch scroll, no gesture conflict)
+ */
 function CarouselGroup({
   group,
   onCardPress,
@@ -88,15 +93,24 @@ function CarouselGroup({
   const itemCount = group.items.length;
   const [activeIndex, setActiveIndex] = useState(0);
 
+  // ── Web: PanResponder state ─────────────────────────────────────────────
   const activeIndexRef = useRef(0);
   const itemCountRef = useRef(itemCount);
   const translateX = useRef(new Animated.Value(getBaseX(0))).current;
+  // Tracks whether the current gesture was a drag — blocks onPress if true.
+  // Reset on every new touch start so plain taps always work.
+  const swipedRef = useRef(false);
 
   useEffect(() => {
     itemCountRef.current = itemCount;
-  }, [itemCount]);
+    const clamped = Math.min(activeIndexRef.current, itemCount - 1);
+    if (clamped !== activeIndexRef.current) {
+      activeIndexRef.current = clamped;
+      setActiveIndex(clamped);
+      translateX.setValue(getBaseX(clamped));
+    }
+  }, [itemCount, translateX]);
 
-  // Always keep snapToRef current so PanResponder (created once) uses latest closure
   const snapToRef = useRef((_idx: number) => {});
   snapToRef.current = (idx: number) => {
     const clamped = Math.max(0, Math.min(idx, itemCountRef.current - 1));
@@ -104,7 +118,7 @@ function CarouselGroup({
     setActiveIndex(clamped);
     Animated.spring(translateX, {
       toValue: getBaseX(clamped),
-      useNativeDriver: Platform.OS !== "web",
+      useNativeDriver: false,
       overshootClamping: true,
       tension: 100,
       friction: 20,
@@ -113,14 +127,16 @@ function CarouselGroup({
 
   const panResponder = useRef(
     PanResponder.create({
-      // Only intercept horizontal movement, let taps pass through to children
-      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponder: () => {
+        swipedRef.current = false;
+        return false;
+      },
       onMoveShouldSetPanResponder: (_, g) =>
         itemCountRef.current > 1 &&
         Math.abs(g.dx) > Math.abs(g.dy) &&
         Math.abs(g.dx) > 5,
       onPanResponderGrant: () => {
-        // Snap to current index immediately to cancel any in-progress spring
+        swipedRef.current = true;
         translateX.setValue(getBaseX(activeIndexRef.current));
       },
       onPanResponderMove: (_, g) => {
@@ -128,7 +144,6 @@ function CarouselGroup({
         const raw = baseX + g.dx;
         const maxX = getBaseX(0);
         const minX = getBaseX(itemCountRef.current - 1);
-        // Rubber-band at edges
         const rubber =
           raw > maxX
             ? maxX + (raw - maxX) * 0.3
@@ -142,18 +157,59 @@ function CarouselGroup({
         const current = activeIndexRef.current;
         let next = current;
         if (Math.abs(vx) > FLING_VELOCITY) {
-          // Fling: 1 card in fling direction regardless of distance
           next = vx < 0 ? current + 1 : current - 1;
         } else if (Math.abs(dx) >= SNAP_THRESHOLD) {
           next = dx < 0 ? current + 1 : current - 1;
         }
         snapToRef.current(next);
       },
-      onPanResponderTerminate: () => {
-        snapToRef.current(activeIndexRef.current);
+      onPanResponderTerminate: (_, g) => {
+        const { dx, vx } = g;
+        const current = activeIndexRef.current;
+        let next = current;
+        if (Math.abs(vx) > FLING_VELOCITY) {
+          next = vx < 0 ? current + 1 : current - 1;
+        } else if (Math.abs(dx) >= SNAP_THRESHOLD) {
+          next = dx < 0 ? current + 1 : current - 1;
+        }
+        snapToRef.current(next);
       },
     }),
   ).current;
+
+  // ── Native: ScrollView onScroll ─────────────────────────────────────────
+  const handleScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const offsetX = e.nativeEvent.contentOffset.x;
+      const index = Math.round(offsetX / SNAP_INTERVAL);
+      setActiveIndex(Math.max(0, Math.min(index, itemCount - 1)));
+    },
+    [itemCount],
+  );
+
+  // ── Shared card list ────────────────────────────────────────────────────
+  const cards = group.items.map((item, index) => (
+    <View
+      key={item.id}
+      style={[
+        styles.cardSlot,
+        index < group.items.length - 1 && { marginRight: CARD_GAP },
+      ]}
+    >
+      <ArticleCardItem
+        title={item.article?.title ?? "제목 없음"}
+        onPress={() => {
+          // On web: block the click that fires after a mouse drag swipe
+          if (Platform.OS === "web" && swipedRef.current) return;
+          onCardPress(item);
+        }}
+        authorName={item.sender?.nickname ?? item.sender?.id}
+        cover={item.article?.cover}
+        isRead={item.isRead}
+        isActive={index === activeIndex}
+      />
+    </View>
+  ));
 
   return (
     <View style={styles.groupContainer}>
@@ -162,30 +218,39 @@ function CarouselGroup({
         <Text style={styles.dateHeaderCount}>{group.items.length}편</Text>
       </View>
 
-      <View style={styles.carouselWindow} {...panResponder.panHandlers}>
-        <Animated.View
-          style={[styles.carouselTrack, { transform: [{ translateX }] }]}
+      {Platform.OS === "web" ? (
+        // Web: PanResponder captures mouse drag events (RN Web maps mouse→touch)
+        <View
+          style={[
+            styles.carouselWindow,
+            // Prevent text-selection and browser native drag from firing
+            // pointercancel mid-gesture (web-only CSS props)
+            { userSelect: "none", cursor: "grab" } as object,
+          ]}
+          {...panResponder.panHandlers}
         >
-          {group.items.map((item, index) => (
-            <View
-              key={item.id}
-              style={[
-                styles.cardSlot,
-                index < group.items.length - 1 && { marginRight: CARD_GAP },
-              ]}
-            >
-              <ArticleCardItem
-                title={item.article?.title ?? "제목 없음"}
-                onPress={() => onCardPress(item)}
-                authorName={item.sender?.nickname ?? item.sender?.id}
-                cover={item.article?.cover}
-                isRead={item.isRead}
-                isActive={index === activeIndex}
-              />
-            </View>
-          ))}
-        </Animated.View>
-      </View>
+          <Animated.View
+            style={[styles.carouselTrack, { transform: [{ translateX }] }]}
+          >
+            {cards}
+          </Animated.View>
+        </View>
+      ) : (
+        // Native: horizontal ScrollView with snap — proper touch gesture handling
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          snapToInterval={SNAP_INTERVAL}
+          snapToAlignment="start"
+          decelerationRate="fast"
+          scrollEventThrottle={16}
+          onScroll={handleScroll}
+          contentContainerStyle={styles.carouselContent}
+          style={styles.carouselScroll}
+        >
+          {cards}
+        </ScrollView>
+      )}
 
       <DotIndicator total={group.items.length} activeIndex={activeIndex} />
     </View>
@@ -316,7 +381,6 @@ export default function InboxScreen() {
           snapToInterval={Sizing.groupH}
           snapToAlignment="start"
           decelerationRate="fast"
-          style={Platform.OS === "web" ? { touchAction: "pan-y" } as object : undefined}
         />
       )}
     </View>
@@ -368,6 +432,7 @@ const styles = StyleSheet.create({
     ...Typography.caption,
     color: Colors.zinc400,
   },
+  // Web carousel (PanResponder + Animated)
   carouselWindow: {
     width: SCREEN_W,
     height: CARD_H,
@@ -376,6 +441,14 @@ const styles = StyleSheet.create({
   carouselTrack: {
     flexDirection: "row",
     height: CARD_H,
+  },
+  // Native carousel (horizontal ScrollView)
+  carouselScroll: {
+    height: CARD_H,
+  },
+  carouselContent: {
+    paddingLeft: CARD_PEEK,
+    paddingRight: CARD_PEEK,
   },
   cardSlot: {
     width: CARD_W,
