@@ -6,7 +6,6 @@ import {
   Pressable,
   BackHandler,
   Alert,
-  ScrollView,
   Platform,
   PanResponder,
   Animated,
@@ -1035,7 +1034,6 @@ function PageView({
       StyleSheet.create({
         safeAreaBox: {
           width: layout.safeAreaWidth,
-          maxHeight: layout.safeAreaHeight,
           alignSelf: "center",
         },
         pageContent: {
@@ -1049,17 +1047,13 @@ function PageView({
           marginBottom: layout.bodyLineHeight * 0.6,
         },
       }),
-    [layout.safeAreaWidth, layout.safeAreaHeight, layout.paddingX, layout.paddingY, layout.bodyLineHeight, bottomInset],
+    [layout.safeAreaWidth, layout.paddingX, layout.paddingY, layout.bodyLineHeight, bottomInset],
   );
 
   return (
     <View style={[styles.pageContainer, { flex: 1 }]}>
       <View style={[dynamicPageStyles.safeAreaBox, { flex: 1 }]}>
-        <ScrollView
-          contentContainerStyle={dynamicPageStyles.pageContent}
-          showsVerticalScrollIndicator={false}
-          style={styles.pageScrollView}
-        >
+        <View style={[dynamicPageStyles.pageContent, { flex: 1 }]}>
           {blocks.map((block, idx) => (
             <View key={`${pageIndex}-b-${idx}`} style={dynamicPageStyles.blockWrapper}>
               <MarkdownBlock
@@ -1073,7 +1067,7 @@ function PageView({
               />
             </View>
           ))}
-        </ScrollView>
+        </View>
       </View>
     </View>
   );
@@ -1113,9 +1107,6 @@ const styles = StyleSheet.create({
   pageContainer: {
     overflow: "hidden",
     justifyContent: "center",
-  },
-  pageScrollView: {
-    flex: 1,
   },
   emptyContainer: {
     flex: 1,

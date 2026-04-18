@@ -3,7 +3,6 @@ import { MarkdownPolicy } from "./policies";
 const PAGE_DIVIDER = MarkdownPolicy.PAGE_DIVIDER;
 const HEADING_REGEX = /^#{1,6}\s+/;
 const DEFAULT_MAX_CHARS_PER_PAGE = 2000;
-const SAFETY_ZONE_RATIO = 0.9;
 
 export interface PageBlock {
   pageIndex: number;
@@ -88,7 +87,6 @@ export function validateDivision(
   maxCharPerPage: number = DEFAULT_MAX_CHARS_PER_PAGE,
 ): DivisionValidation {
   const warnings: DivisionWarning[] = [];
-  const safetyLimit = Math.floor(maxCharPerPage * SAFETY_ZONE_RATIO);
 
   for (const page of pages) {
     if (!page.content.trim()) {
@@ -98,35 +96,6 @@ export function validateDivision(
         level: "red",
         reason: "빈 페이지입니다. 내용을 채우거나 삭제해주세요.",
       });
-      continue;
-    }
-
-    if (page.charCount > maxCharPerPage) {
-      warnings.push({
-        pageIndex: page.pageIndex,
-        paragraphIndex: -1,
-        level: "red",
-        reason: "페이지가 최대 글자 수를 초과합니다. 페이지를 나눠주세요.",
-      });
-    } else if (page.charCount > safetyLimit) {
-      warnings.push({
-        pageIndex: page.pageIndex,
-        paragraphIndex: -1,
-        level: "yellow",
-        reason: "페이지가 안전 영역을 초과하고 있습니다.",
-      });
-    }
-
-    const paragraphs = page.content.split("\n\n");
-    for (let pi = 0; pi < paragraphs.length; pi++) {
-      if (paragraphs[pi].length > maxCharPerPage) {
-        warnings.push({
-          pageIndex: page.pageIndex,
-          paragraphIndex: pi,
-          level: "red",
-          reason: "단일 문단이 페이지 최대 크기를 초과합니다. 문단을 나눠주세요.",
-        });
-      }
     }
   }
 

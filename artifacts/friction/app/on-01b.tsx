@@ -8,15 +8,17 @@ import {
   Alert,
   ActivityIndicator,
   TextInput,
+  useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import { Colors, Typography, Spacing } from "@/constants/tokens";
+import { Colors, Typography, Spacing, ReaderTokens, cqiToPx, readerFontSize, readerLetterSpacing } from "@/constants/tokens";
 import {
   splitContentToPages,
   validatePages,
 } from "@/lib/pageDivision";
+import type { DivisionWarning } from "@/lib/pageDivision";
 import { canTransitionForward } from "@/lib/articleStatusCycle";
 import type { ArticleStatus } from "@/lib/policies";
 import { MarkdownPolicy } from "@/lib/policies";
@@ -27,15 +29,33 @@ import {
   TransitionArticleBodyTargetStatus,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { parseMarkdownBlocks } from "@/utils/markdownParser";
+import MarkdownBlock from "@/components/MarkdownBlock/MarkdownBlock";
 
 const MAX_CHAR_PER_PAGE = 800;
 const PAGE_DIVIDER = MarkdownPolicy.PAGE_DIVIDER;
+
+function useReaderLayout(screenWidth: number, screenHeight: number) {
+  return useMemo(() => {
+    const widthFromHeight = screenHeight * ReaderTokens.aspectRatio;
+    const containerWidth = widthFromHeight <= screenWidth ? widthFromHeight : screenWidth;
+    const safeAreaWidth = cqiToPx(ReaderTokens.safeArea.widthCqi, containerWidth);
+    const safeAreaHeight = cqiToPx(ReaderTokens.safeArea.heightCqi, containerWidth);
+    const paddingX = cqiToPx(ReaderTokens.padding.xCqi, containerWidth);
+    const paddingY = cqiToPx(ReaderTokens.padding.yCqi, containerWidth);
+    const bodyFontSize = readerFontSize(ReaderTokens.typeScale.bodyCqi, containerWidth);
+    const bodyLineHeight = bodyFontSize * ReaderTokens.lineHeight.relaxed;
+    const bodyLetterSpacing = readerLetterSpacing(ReaderTokens.letterSpacing.relaxedEm, bodyFontSize);
+    return { safeAreaWidth, safeAreaHeight, paddingX, paddingY, bodyFontSize, bodyLineHeight, bodyLetterSpacing };
+  }, [screenWidth, screenHeight]);
+}
 
 export default function DividingScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
 
   const articleQuery = useGetArticle(id ?? "");
   const article = id ? articleQuery.data : undefined;
@@ -59,8 +79,45 @@ export default function DividingScreen() {
     }
   }, [article]);
 
+  const [debouncedContent, setDebouncedContent] = useState(content);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedContent(content), 600);
+    return () => clearTimeout(timer);
+  }, [content]);
+
   const pages = useMemo(() => splitContentToPages(content), [content]);
-  const warnings = useMemo(() => validatePages(pages, MAX_CHAR_PER_PAGE), [pages]);
+  const measurePages = useMemo(() => splitContentToPages(debouncedContent), [debouncedContent]);
+
+  const baseWarnings = useMemo(() => validatePages(pages), [pages]);
+
+  const readerLayout = useReaderLayout(screenWidth, screenHeight);
+  const { safeAreaWidth, safeAreaHeight, paddingX, paddingY, bodyFontSize, bodyLineHeight, bodyLetterSpacing } = readerLayout;
+
+  const pageContentHeight = safeAreaHeight;
+
+  const [pageHeights, setPageHeights] = useState<Record<number, number>>({});
+  const handleMeasureHeight = useCallback((idx: number, height: number) => {
+    setPageHeights((prev) => {
+      if (prev[idx] === height) return prev;
+      return { ...prev, [idx]: height };
+    });
+  }, []);
+
+  const heightWarnings = useMemo<DivisionWarning[]>(() => {
+    return measurePages
+      .filter((page) => {
+        const h = pageHeights[page.pageIndex];
+        return h !== undefined && h > pageContentHeight;
+      })
+      .map((page) => ({
+        pageIndex: page.pageIndex,
+        paragraphIndex: -1,
+        level: "red" as const,
+        reason: "이 페이지는 읽기 화면에서 스크롤이 필요할 수 있습니다",
+      }));
+  }, [measurePages, pageHeights, pageContentHeight]);
+
+  const warnings = useMemo(() => [...baseWarnings, ...heightWarnings], [baseWarnings, heightWarnings]);
   const hasRedWarnings = warnings.some((w) => w.level === "red");
 
   const handleInsertDivider = useCallback((afterPageIndex: number) => {
@@ -207,6 +264,37 @@ export default function DividingScreen() {
         </Pressable>
       </View>
 
+      {measurePages.map((page, idx) => {
+        const blocks = parseMarkdownBlocks(page.content);
+        return (
+          <View
+            key={`measure-${idx}`}
+            pointerEvents="none"
+            style={{
+              position: "absolute",
+              opacity: 0,
+              width: safeAreaWidth,
+              paddingHorizontal: paddingX,
+              paddingTop: paddingY,
+              paddingBottom: insets.bottom + paddingY,
+            }}
+            onLayout={(e) => handleMeasureHeight(idx, e.nativeEvent.layout.height)}
+          >
+            {blocks.map((block, bi) => (
+              <View key={bi} style={{ marginBottom: bodyLineHeight * 0.6 }}>
+                <MarkdownBlock
+                  block={block}
+                  onCollect={() => {}}
+                  fontSize={bodyFontSize}
+                  lineHeight={bodyLineHeight}
+                  letterSpacing={bodyLetterSpacing}
+                />
+              </View>
+            ))}
+          </View>
+        );
+      })}
+
       {mode === "edit" ? (
         <View style={styles.editContainer}>
           <Text style={styles.editHint}>
@@ -234,6 +322,7 @@ export default function DividingScreen() {
           ) : (
             pages.map((page, idx) => {
               const pageWarnings = warnings.filter((w) => w.pageIndex === idx);
+              const isHeightOverflow = pageHeights[idx] !== undefined && pageHeights[idx] > pageContentHeight;
               return (
                 <View key={idx}>
                   <View style={[styles.pageCard, pageWarnings.length > 0 && styles.pageCardWarning]}>
@@ -249,7 +338,7 @@ export default function DividingScreen() {
                         {w.reason}
                       </Text>
                     ))}
-                    {page.charCount > MAX_CHAR_PER_PAGE && (
+                    {isHeightOverflow && (
                       <Pressable
                         style={styles.splitPageButton}
                         onPress={() => handleInsertDivider(idx)}
