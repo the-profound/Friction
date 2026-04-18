@@ -32,7 +32,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { parseMarkdownBlocks } from "@/utils/markdownParser";
 import MarkdownBlock from "@/components/MarkdownBlock/MarkdownBlock";
 
-const MAX_CHAR_PER_PAGE = 800;
 const PAGE_DIVIDER = MarkdownPolicy.PAGE_DIVIDER;
 
 function useReaderLayout(screenWidth: number, screenHeight: number) {
@@ -103,6 +102,9 @@ export default function DividingScreen() {
     });
   }, []);
 
+  const [pendingAutoSplitParas, setPendingAutoSplitParas] = useState<string[] | null>(null);
+  const [pendingParaHeights, setPendingParaHeights] = useState<Record<number, number>>({});
+
   const heightWarnings = useMemo<DivisionWarning[]>(() => {
     return measurePages
       .filter((page) => {
@@ -151,24 +153,41 @@ export default function DividingScreen() {
       Alert.alert("자동 분할 불가", "단락이 부족하여 자동 분할할 수 없습니다.");
       return;
     }
-    let currentPage: string[] = [];
-    let currentLen = 0;
+    setPendingAutoSplitParas(paragraphs);
+    setPendingParaHeights({});
+  }, [content]);
+
+  useEffect(() => {
+    if (!pendingAutoSplitParas) return;
+    const total = pendingAutoSplitParas.length;
+    const allMeasured = pendingAutoSplitParas.every((_, i) => pendingParaHeights[i] !== undefined);
+    if (!allMeasured) return;
+    const availableHeight = safeAreaHeight - paddingY - (insets.bottom + paddingY);
     const resultPages: string[] = [];
-    for (const para of paragraphs) {
-      if (currentLen + para.length > MAX_CHAR_PER_PAGE && currentPage.length > 0) {
-        resultPages.push(currentPage.join("\n\n"));
-        currentPage = [para];
-        currentLen = para.length;
+    for (let i = 0; i < total; i++) {
+      const para = pendingAutoSplitParas[i];
+      const paraHeight = pendingParaHeights[i];
+      if (paraHeight <= availableHeight) {
+        resultPages.push(para);
       } else {
-        currentPage.push(para);
-        currentLen += para.length;
+        const fitRatio = availableHeight / paraHeight;
+        let splitChar = Math.floor(fitRatio * para.length);
+        const newlineIdx = para.lastIndexOf('\n', splitChar);
+        const spaceIdx = para.lastIndexOf(' ', splitChar);
+        const threshold = Math.floor(splitChar * 0.5);
+        const breakAt = newlineIdx >= threshold ? newlineIdx
+          : spaceIdx >= threshold ? spaceIdx
+          : splitChar;
+        const before = para.slice(0, breakAt).trim();
+        const after = para.slice(breakAt).trim();
+        if (before) resultPages.push(before);
+        if (after) resultPages.push(after);
       }
     }
-    if (currentPage.length > 0) {
-      resultPages.push(currentPage.join("\n\n"));
-    }
     setContent(resultPages.join(`\n${PAGE_DIVIDER}\n`));
-  }, [content]);
+    setPendingAutoSplitParas(null);
+    setPendingParaHeights({});
+  }, [pendingAutoSplitParas, pendingParaHeights, safeAreaHeight, paddingY, insets.bottom]);
 
   const handleNext = useCallback(async () => {
     const result = canTransitionForward("DIVIDING" as ArticleStatus, {
@@ -279,6 +298,41 @@ export default function DividingScreen() {
               paddingBottom: insets.bottom + paddingY,
             }}
             onLayout={(e) => handleMeasureHeight(idx, e.nativeEvent.layout.height)}
+          >
+            {blocks.map((block, bi) => (
+              <View key={bi} style={{ marginBottom: bodyLineHeight * 0.6 }}>
+                <MarkdownBlock
+                  block={block}
+                  onCollect={() => {}}
+                  fontSize={bodyFontSize}
+                  lineHeight={bodyLineHeight}
+                  letterSpacing={bodyLetterSpacing}
+                />
+              </View>
+            ))}
+          </View>
+        );
+      })}
+
+      {pendingAutoSplitParas && pendingAutoSplitParas.map((para, i) => {
+        const blocks = parseMarkdownBlocks(para);
+        return (
+          <View
+            key={`para-measure-${i}`}
+            pointerEvents="none"
+            style={{
+              position: "absolute",
+              opacity: 0,
+              width: safeAreaWidth,
+              paddingHorizontal: paddingX,
+            }}
+            onLayout={(e) => {
+              const h = e.nativeEvent.layout.height;
+              setPendingParaHeights((prev) => {
+                if (prev[i] === h) return prev;
+                return { ...prev, [i]: h };
+              });
+            }}
           >
             {blocks.map((block, bi) => (
               <View key={bi} style={{ marginBottom: bodyLineHeight * 0.6 }}>
