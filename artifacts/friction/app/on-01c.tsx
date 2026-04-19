@@ -41,6 +41,13 @@ export default function ClosingScreen() {
   const article = id ? articleQuery.data : undefined;
   const articleLoading = id ? articleQuery.isLoading : false;
 
+  const { refetch: refetchArticle } = articleQuery;
+  useEffect(() => {
+    if (id) refetchArticle();
+  // Run once on mount to ensure fresh data when navigating here without going home first
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const updateArticle = useUpdateArticle();
   const transitionStatus = useTransitionArticleStatus();
   const addArticleToMyCollection = useAddArticleToMyCollection();
@@ -158,11 +165,15 @@ export default function ClosingScreen() {
         id: id!,
         data: { title, pages, cover },
       });
-      const updated = await transitionStatus.mutateAsync({
-        id: id!,
-        data: { targetStatus: TransitionArticleBodyTargetStatus.LETTER },
-      });
-      queryClient.setQueryData([`/api/articles/${id}`], updated);
+      const { data: freshArticle } = await refetchArticle();
+      const currentStatus = freshArticle?.status ?? article?.status;
+      if (currentStatus !== "LETTER") {
+        const updated = await transitionStatus.mutateAsync({
+          id: id!,
+          data: { targetStatus: TransitionArticleBodyTargetStatus.LETTER },
+        });
+        queryClient.setQueryData([`/api/articles/${id}`], updated);
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
       exportedArticleIdRef.current = id!;
       setCollectionPickerVisible(true);
@@ -172,7 +183,7 @@ export default function ClosingScreen() {
     } finally {
       setIsExporting(false);
     }
-  }, [id, title, pages, cover, updateArticle, transitionStatus, queryClient]);
+  }, [id, title, pages, cover, article, refetchArticle, updateArticle, transitionStatus, queryClient]);
 
   const handleCollectionSelect = useCallback(
     async (collection: { id: string; name: string }) => {
@@ -198,7 +209,7 @@ export default function ClosingScreen() {
   const handleBack = useCallback(async () => {
     await flushCoverSave();
     queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
-    router.back();
+    router.replace("/(tabs)/on");
   }, [router, queryClient, flushCoverSave]);
 
   const handleSaveTitle = useCallback(async () => {

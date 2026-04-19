@@ -34,7 +34,7 @@ import MarkdownBlock from "@/components/MarkdownBlock/MarkdownBlock";
 
 const PAGE_DIVIDER = MarkdownPolicy.PAGE_DIVIDER;
 
-const SECTION_BOUNDARY_RE = /^(#{1,3}\s|-\s)/;
+const SECTION_BOUNDARY_RE = /^(#{1,3}\s)/;
 
 // ─── 그리디 분할 엔진 타입 ────────────────────────────────────────────────────
 type BSJob = {
@@ -73,7 +73,7 @@ type SplitEngineState =
 /**
  * Greedy 분할 알고리즘 (순수 함수)
  *
- * 규칙 1: 소제목(###/-) → 무조건 앞에서 페이지 분할
+ * 규칙 1: 소제목(###) → 무조건 앞에서 페이지 분할
  * 규칙 2: 소제목 페이지에 본문 결합 — 소제목만 남기지 않는다.
  *   currentParas가 소제목만 있고 다음 문단이 넘칠 경우 BS로 소제목 뒤를 채움.
  * 규칙 3: 일반 문단 — 넘칠 때 이전 \n\n에서 자름 (Case A).
@@ -101,6 +101,7 @@ function runGreedy(
   const applyBSSplit = (para: string, paraH: number, paraIdx: number) => {
     const results = splitResults[paraIdx];
     const allWords = para.split(/ +/).filter((w) => w);
+    const isListItem = /^-\s/.test(para);
 
     if (!results || results.length === 0) {
       // BS 결과 없음 → 단락 전체를 현재 페이지에 올리고 flush
@@ -114,12 +115,13 @@ function runGreedy(
     for (let ri = 0; ri < results.length; ri++) {
       const { wordOffset, wordCount } = results[ri];
       // wordOffset은 항상 offset과 같아야 하지만 방어적으로 사용
-      const chunk = allWords.slice(wordOffset, wordOffset + wordCount).join(' ');
+      const rawChunk = allWords.slice(wordOffset, wordOffset + wordCount).join(' ');
+      const chunk = ri > 0 && isListItem && rawChunk ? '\u3000' + rawChunk : rawChunk;
       offset = wordOffset + wordCount;
 
       if (ri === 0) {
         // 첫 청크: 현재 페이지(소제목 등)에 이어 붙임
-        if (chunk) currentParas.push(chunk);
+        if (rawChunk) currentParas.push(rawChunk);
         pages.push(currentParas.join('\n\n'));
         currentParas = [];
         currentH = 0;
@@ -131,7 +133,8 @@ function runGreedy(
 
     // 마지막 남은 단어 → 다음 페이지의 첫 요소로
     if (offset < allWords.length) {
-      const remaining = allWords.slice(offset).join(' ');
+      const rawRemaining = allWords.slice(offset).join(' ');
+      const remaining = isListItem ? '\u3000' + rawRemaining : rawRemaining;
       currentParas = [remaining];
       currentH = paraH * (allWords.length - offset) / allWords.length;
     }
@@ -553,7 +556,7 @@ export default function DividingScreen() {
   }, [content, article, pages, hasRedWarnings, id, router, updateArticle, transitionStatus, queryClient]);
 
   const handleBack = useCallback(async () => {
-    if (!id) { router.back(); return; }
+    if (!id) { router.replace("/(tabs)/on"); return; }
     try {
       const pagesJson = pages.map((p) => p.content);
       const updatedArticle = await updateArticle.mutateAsync({
@@ -562,7 +565,7 @@ export default function DividingScreen() {
       });
       queryClient.setQueryData([`/api/articles/${id}`], updatedArticle);
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
-      router.back();
+      router.replace("/(tabs)/on");
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "저장에 실패했습니다.";
       Alert.alert("오류", msg);

@@ -23,7 +23,6 @@ const STATUS_SORT_ORDER: Record<string, number> = {
   DRAFT: 0,
   DIVIDING: 1,
   CLOSING: 2,
-  LETTER: 3,
 };
 
 function getScreenForStatus(status: string): string {
@@ -57,7 +56,7 @@ export default function MemoCollectionScreen() {
 
   const sortedArticles = useMemo(() => {
     if (!articles) return [];
-    const list = [...articles];
+    const list = articles.filter((a) => a.status !== "LETTER");
     switch (sortMode) {
       case "latest":
         return list.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
