@@ -1,0 +1,1 @@
+ALTER TABLE "my_collections" ADD COLUMN "is_archive" boolean DEFAULT false NOT NULL;

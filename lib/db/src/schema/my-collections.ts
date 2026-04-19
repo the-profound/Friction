@@ -1,4 +1,5 @@
-import { boolean, pgTable, text, timestamp, unique, uuid, varchar } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { boolean, pgTable, text, timestamp, unique, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -11,11 +12,13 @@ export const myCollectionsTable = pgTable("my_collections", {
   name: varchar("name", { length: 30 }).notNull(),
   description: text("description"),
   isPublic: boolean("is_public").notNull().default(false),
+  isArchive: boolean("is_archive").notNull().default(false),
   coverImageUrl: text("cover_image_url"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (t) => [
   unique("my_collections_owner_name_unique").on(t.ownerId, t.name),
+  uniqueIndex("my_collections_owner_archive_unique").on(t.ownerId).where(sql`${t.isArchive} = true`),
 ]);
 
 export const insertMyCollectionSchema = createInsertSchema(myCollectionsTable).omit({ id: true, createdAt: true, updatedAt: true });

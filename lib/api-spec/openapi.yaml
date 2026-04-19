@@ -1705,6 +1705,8 @@ components:
           nullable: true
         isPublic:
           type: boolean
+        isArchive:
+          type: boolean
         coverImageUrl:
           type: string
           nullable: true
@@ -1716,7 +1718,7 @@ components:
         updatedAt:
           type: string
           format: date-time
-      required: [id, ownerId, name, isPublic, createdAt, updatedAt]
+      required: [id, ownerId, name, isPublic, isArchive, createdAt, updatedAt]
 
     CreateMyCollectionBody:
       type: object

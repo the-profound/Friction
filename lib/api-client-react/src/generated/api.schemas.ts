@@ -158,6 +158,7 @@ export interface MyCollection {
   name: string;
   description?: string | null;
   isPublic: boolean;
+  isArchive: boolean;
   coverImageUrl?: string | null;
   articleCount?: number;
   createdAt: string;

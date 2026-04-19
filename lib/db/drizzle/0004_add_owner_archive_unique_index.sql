@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "my_collections_owner_archive_unique" ON "my_collections" USING btree ("owner_id") WHERE "my_collections"."is_archive" = true;

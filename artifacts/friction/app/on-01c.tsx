@@ -53,11 +53,13 @@ export default function ClosingScreen() {
   const addArticleToMyCollection = useAddArticleToMyCollection();
 
   const myCollectionsQuery = useListMyCollections({ ownerId: userId });
-  const myCollections = (myCollectionsQuery.data ?? []).map((c) => ({
-    id: c.id,
-    name: c.name,
-    articleCount: (c as { articleCount?: number }).articleCount,
-  }));
+  const myCollections = (myCollectionsQuery.data ?? [])
+    .filter((c) => !c.isArchive)
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      articleCount: (c as { articleCount?: number }).articleCount,
+    }));
 
   const [title, setTitle] = useState("");
   const [pages, setPages] = useState<string[]>([]);
@@ -205,6 +207,13 @@ export default function ClosingScreen() {
     },
     [addArticleToMyCollection, queryClient, router],
   );
+
+  const handleArchiveOnly = useCallback(() => {
+    setCollectionPickerVisible(false);
+    queryClient.invalidateQueries({ queryKey: ["/api/my-collections"] });
+    router.dismissAll();
+    router.push({ pathname: "/(tabs)/of" });
+  }, [queryClient, router]);
 
   const handleBack = useCallback(async () => {
     await flushCoverSave();
@@ -385,6 +394,7 @@ export default function ClosingScreen() {
         onClose={() => setCollectionPickerVisible(false)}
         collections={myCollections}
         onSelect={handleCollectionSelect}
+        onArchiveOnly={handleArchiveOnly}
         isLoading={myCollectionsQuery.isLoading}
       />
     </View>

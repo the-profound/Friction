@@ -185,6 +185,8 @@ export default function PersonalCollectionDetailScreen() {
     );
   }
 
+  const isArchive = collection?.isArchive ?? false;
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
@@ -194,18 +196,22 @@ export default function PersonalCollectionDetailScreen() {
         <Text style={styles.headerTitle} numberOfLines={1}>
           {collection?.name ?? "개인 모음"}
         </Text>
-        <Pressable
-          hitSlop={12}
-          onPress={() =>
-            Alert.alert("모음 관리", undefined, [
-              { text: "이름/설명 수정", onPress: handleOpenEdit },
-              { text: "삭제", style: "destructive", onPress: () => setDeleteConfirmVisible(true) },
-              { text: "닫기", style: "cancel" },
-            ])
-          }
-        >
-          <Feather name="more-horizontal" size={20} color={Colors.zinc600} />
-        </Pressable>
+        {isArchive ? (
+          <View style={{ width: 32 }} />
+        ) : (
+          <Pressable
+            hitSlop={12}
+            onPress={() =>
+              Alert.alert("모음 관리", undefined, [
+                { text: "이름/설명 수정", onPress: handleOpenEdit },
+                { text: "삭제", style: "destructive", onPress: () => setDeleteConfirmVisible(true) },
+                { text: "닫기", style: "cancel" },
+              ])
+            }
+          >
+            <Feather name="more-horizontal" size={20} color={Colors.zinc600} />
+          </Pressable>
+        )}
       </View>
 
       {collection?.description ? (
@@ -214,30 +220,34 @@ export default function PersonalCollectionDetailScreen() {
         </View>
       ) : null}
 
-      <View style={styles.metaSection}>
-        <View style={styles.visibilityRow}>
-          <Text style={styles.visibilityLabel}>공개 설정</Text>
-          <Switch
-            value={collection?.isPublic ?? false}
-            onValueChange={handleTogglePublic}
-            trackColor={{ false: Colors.zinc200, true: Colors.zinc900 }}
-          />
+      {!isArchive && (
+        <View style={styles.metaSection}>
+          <View style={styles.visibilityRow}>
+            <Text style={styles.visibilityLabel}>공개 설정</Text>
+            <Switch
+              value={collection?.isPublic ?? false}
+              onValueChange={handleTogglePublic}
+              trackColor={{ false: Colors.zinc200, true: Colors.zinc900 }}
+            />
+          </View>
+          <Text style={styles.visibilityHint}>
+            {collection?.isPublic
+              ? "다른 사람이 이 모음을 구독할 수 있어요"
+              : "나만 볼 수 있는 모음이에요"}
+          </Text>
         </View>
-        <Text style={styles.visibilityHint}>
-          {collection?.isPublic
-            ? "다른 사람이 이 모음을 구독할 수 있어요"
-            : "나만 볼 수 있는 모음이에요"}
-        </Text>
-      </View>
+      )}
 
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>
           글 목록 ({articles.length})
         </Text>
-        <Pressable style={styles.addArticleButton} onPress={() => setShowPicker(true)}>
-          <Feather name="plus" size={16} color={Colors.zinc600} />
-          <Text style={styles.addArticleText}>글 추가</Text>
-        </Pressable>
+        {!isArchive && (
+          <Pressable style={styles.addArticleButton} onPress={() => setShowPicker(true)}>
+            <Feather name="plus" size={16} color={Colors.zinc600} />
+            <Text style={styles.addArticleText}>글 추가</Text>
+          </Pressable>
+        )}
       </View>
 
       {articlesQuery.isError ? (
@@ -329,7 +339,7 @@ export default function PersonalCollectionDetailScreen() {
           label: "읽기",
           onPress: handleArticleActionRead,
         }}
-        deleteButton={{
+        deleteButton={isArchive ? undefined : {
           onPress: handleArticleActionDelete,
         }}
       />

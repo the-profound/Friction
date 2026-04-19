@@ -971,11 +971,13 @@ export default function ReadScreen() {
         visible={myCollectionsModalVisible}
         onClose={() => setMyCollectionsModalVisible(false)}
         collections={
-          (collectionsQuery.data ?? []).map((c: { id: string; name: string; articleCount?: number }) => ({
-            id: c.id,
-            name: c.name,
-            articleCount: c.articleCount,
-          })) as CollectionItem[]
+          (collectionsQuery.data ?? [])
+            .filter((c: { id: string; name: string; articleCount?: number; isArchive?: boolean }) => !c.isArchive)
+            .map((c: { id: string; name: string; articleCount?: number }) => ({
+              id: c.id,
+              name: c.name,
+              articleCount: c.articleCount,
+            })) as CollectionItem[]
         }
         selectedCollectionId={selectedCollectionId}
         onSelect={(collection) => {

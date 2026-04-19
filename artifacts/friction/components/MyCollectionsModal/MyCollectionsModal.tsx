@@ -16,6 +16,7 @@ interface MyCollectionsModalProps {
   collections: CollectionItem[];
   selectedCollectionId?: string;
   onSelect: (collection: CollectionItem) => void;
+  onArchiveOnly?: () => void;
   isLoading?: boolean;
 }
 
@@ -25,6 +26,7 @@ export default function MyCollectionsModal({
   collections,
   selectedCollectionId,
   onSelect,
+  onArchiveOnly,
   isLoading = false,
 }: MyCollectionsModalProps) {
   const handleSelect = useCallback(
@@ -75,6 +77,18 @@ export default function MyCollectionsModal({
       snapPoints={[0.5]}
     >
       <View style={styles.container}>
+        {onArchiveOnly && (
+          <>
+            <Pressable style={styles.archiveOnlyButton} onPress={onArchiveOnly}>
+              <View style={styles.archiveOnlyIcon}>
+                <Feather name="archive" size={16} color="#7C5CBF" />
+              </View>
+              <Text style={styles.archiveOnlyText}>내 글 모음에만 저장</Text>
+            </Pressable>
+            <View style={styles.separator} />
+          </>
+        )}
+
         {isLoading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="small" color={Colors.zinc400} />
@@ -165,5 +179,25 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     color: Colors.zinc400,
+  },
+  archiveOnlyButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+  },
+  archiveOnlyIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: "#E9E4F7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  archiveOnlyText: {
+    ...Typography.body,
+    fontSize: 15,
+    color: "#7C5CBF",
   },
 });

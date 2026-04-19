@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { and, eq } from "drizzle-orm";
-import { db, articlesTable, type ArticleStatus } from "@workspace/db";
+import { db, articlesTable, myCollectionsTable, myCollectionArticlesTable, type ArticleStatus } from "@workspace/db";
 import { CreateArticleBody, UpdateArticleBody, TransitionArticleStatusBody, GetOrCreateReadingMemoQueryParams } from "@workspace/api-zod";
 
 const FORWARD_TRANSITIONS: Record<string, string> = {
@@ -195,6 +195,48 @@ router.post("/articles/:id/transition", async (req, res) => {
     if (targetStatus === "DRAFT") {
       updates.pages = null;
     }
+  }
+
+  if (isForward && targetStatus === "LETTER") {
+    const updated = await db.transaction(async (tx) => {
+      const [updatedArticle] = await tx
+        .update(articlesTable)
+        .set(updates)
+        .where(eq(articlesTable.id, req.params.id))
+        .returning();
+
+      const authorId = updatedArticle.authorId;
+
+      const [existingArchive] = await tx
+        .select({ id: myCollectionsTable.id })
+        .from(myCollectionsTable)
+        .where(and(eq(myCollectionsTable.ownerId, authorId), eq(myCollectionsTable.isArchive, true)));
+
+      let archiveCollectionId: string;
+      if (existingArchive) {
+        archiveCollectionId = existingArchive.id;
+      } else {
+        const [newArchive] = await tx
+          .insert(myCollectionsTable)
+          .values({ ownerId: authorId, name: "내 글 모음", isArchive: true })
+          .onConflictDoUpdate({
+            target: [myCollectionsTable.ownerId, myCollectionsTable.name],
+            set: { isArchive: true },
+          })
+          .returning({ id: myCollectionsTable.id });
+        archiveCollectionId = newArchive.id;
+      }
+
+      await tx
+        .insert(myCollectionArticlesTable)
+        .values({ myCollectionId: archiveCollectionId, articleId: updatedArticle.id })
+        .onConflictDoNothing();
+
+      return updatedArticle;
+    });
+
+    res.json(updated);
+    return;
   }
 
   const [updated] = await db.update(articlesTable).set(updates).where(eq(articlesTable.id, req.params.id)).returning();

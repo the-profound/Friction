@@ -11,6 +11,7 @@ import {
   type ViewStyle,
   type TextStyle,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors, Typography, ZIndex, Spacing } from "../../constants/tokens";
 
 const { height: SCREEN_H } = Dimensions.get("window");
@@ -37,6 +38,7 @@ export default function BottomSheet({
   enableDragDown = true,
   dismissable = true,
 }: BottomSheetProps) {
+  const insets = useSafeAreaInsets();
   const translateY = useRef(new Animated.Value(SCREEN_H)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
   const currentSnap = useRef(0);
@@ -146,7 +148,10 @@ export default function BottomSheet({
           <View
             style={[
               styles.content,
-              { maxHeight: SCREEN_H * Math.max(...snapPoints) - HANDLE_HEIGHT },
+              {
+                maxHeight: SCREEN_H * Math.max(...snapPoints) - HANDLE_HEIGHT,
+                paddingBottom: Math.max(insets.bottom, 16),
+              },
             ]}
           >
             {children}

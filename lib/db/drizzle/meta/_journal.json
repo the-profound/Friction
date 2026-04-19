@@ -22,6 +22,20 @@
       "when": 1775094945794,
       "tag": "0002_add_reading_memo_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1776582689360,
+      "tag": "0003_add_is_archive_to_my_collections",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1776583209649,
+      "tag": "0004_add_owner_archive_unique_index",
+      "breakpoints": true
     }
   ]
 }

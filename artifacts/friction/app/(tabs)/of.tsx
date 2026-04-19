@@ -73,9 +73,15 @@ export default function OfScreen() {
     } else if (activeMiniPersonal === "subscribed") {
       list = myCollections.filter((c) => c.isPublic);
     }
-    if (!searchQuery.trim()) return list;
-    const q = searchQuery.toLowerCase();
-    return list.filter((c) => c.name.toLowerCase().includes(q));
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter((c) => c.name.toLowerCase().includes(q));
+    }
+    return [...list].sort((a, b) => {
+      if (a.isArchive && !b.isArchive) return -1;
+      if (!a.isArchive && b.isArchive) return 1;
+      return 0;
+    });
   }, [myCollections, searchQuery, activeMiniPersonal]);
 
   const filteredTeamCollections = useMemo(() => {
@@ -209,13 +215,13 @@ export default function OfScreen() {
       style={styles.collectionCard}
       onPress={() => router.push({ pathname: "/of-01-detail", params: { id: item.id } })}
     >
-      <View style={styles.collectionIcon}>
-        <Feather name="folder" size={20} color={Colors.zinc500} />
+      <View style={[styles.collectionIcon, item.isArchive && { backgroundColor: "#E9E4F7" }]}>
+        <Feather name={item.isArchive ? "archive" : "folder"} size={20} color={item.isArchive ? "#7C5CBF" : Colors.zinc500} />
       </View>
       <Text style={styles.collectionName} numberOfLines={1}>{item.name}</Text>
       <View style={styles.collectionMeta}>
         <Text style={styles.collectionCount}>{item.articleCount ?? 0}편</Text>
-        {item.isPublic && <Feather name="globe" size={12} color={Colors.zinc400} />}
+        {item.isPublic && !item.isArchive && <Feather name="globe" size={12} color={Colors.zinc400} />}
       </View>
     </Pressable>
   );
