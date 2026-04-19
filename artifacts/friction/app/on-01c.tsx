@@ -66,10 +66,19 @@ export default function ClosingScreen() {
   const saveCoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (article && !initializedRef.current) {
+    if (!article) return;
+    // pages는 이 화면에서 편집하지 않으므로 항상 서버 데이터로 동기화
+    const incoming = article.pages || [];
+    setPages((prev) => {
+      // 실제로 변경된 경우에만 previewPage 초기화 + 상태 업데이트
+      if (JSON.stringify(prev) === JSON.stringify(incoming)) return prev;
+      setPreviewPage(0);
+      return incoming;
+    });
+    // title·cover는 이 화면에서 편집하므로 최초 1회만 초기화
+    if (!initializedRef.current) {
       initializedRef.current = true;
       setTitle(article.title || "");
-      setPages(article.pages || []);
       setCover(resolveArticleCover(article.cover));
     }
   }, [article]);

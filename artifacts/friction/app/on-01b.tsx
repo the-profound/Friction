@@ -34,6 +34,174 @@ import MarkdownBlock from "@/components/MarkdownBlock/MarkdownBlock";
 
 const PAGE_DIVIDER = MarkdownPolicy.PAGE_DIVIDER;
 
+const SECTION_BOUNDARY_RE = /^(#{1,3}\s|-\s)/;
+
+// ─── 그리디 분할 엔진 타입 ────────────────────────────────────────────────────
+type BSJob = {
+  paraIdx: number;
+  allWords: string[];    // 원본 단락의 전체 단어 배열
+  wordOffset: number;    // 이 job이 탐색을 시작하는 단어 인덱스
+  lo: number;
+  hi: number;
+  best: number;
+  targetH: number;       // 이 job의 목표 높이 (소제목 잔여 또는 전체 threshold)
+};
+
+// 분할 결과: 단락 인덱스 → [{단어 시작 오프셋, 단어 수}]
+type BSResult = { wordOffset: number; wordCount: number };
+
+type SplitEngineState =
+  | {
+      phase: 'para';
+      paragraphs: string[];
+      scope: 'all' | { pageIndex: number };
+      threshold: number;
+      paraKey: number;
+    }
+  | {
+      phase: 'bs';
+      paragraphs: string[];
+      scope: 'all' | { pageIndex: number };
+      threshold: number;
+      paraHeights: Record<number, number>;
+      bsJobs: BSJob[];
+      currentJobIdx: number;
+      bsKey: number;
+      splitResults: Record<number, BSResult[]>; // 완료된 분할 결과 누적
+    };
+
+/**
+ * Greedy 분할 알고리즘 (순수 함수)
+ *
+ * 규칙 1: 소제목(###/-) → 무조건 앞에서 페이지 분할
+ * 규칙 2: 소제목 페이지에 본문 결합 — 소제목만 남기지 않는다.
+ *   currentParas가 소제목만 있고 다음 문단이 넘칠 경우 BS로 소제목 뒤를 채움.
+ * 규칙 3: 일반 문단 — 넘칠 때 이전 \n\n에서 자름 (Case A).
+ *   페이지 첫 문단이라 이전 \n\n이 없으면 BS 단어 단위로 자름 (Case B).
+ *
+ * splitResults: 각 단락의 다단(多段) 분할 정보. 한 문단이 3~4페이지가 되더라도
+ * 결과 배열의 각 entry를 순서대로 적용해 모두 별도 페이지로 분리한다.
+ */
+function runGreedy(
+  paragraphs: string[],
+  paraHeights: Record<number, number>,
+  splitResults: Record<number, BSResult[]>,
+  threshold: number,
+): string[] {
+  const pages: string[] = [];
+  let currentParas: string[] = [];
+  let currentH = 0;
+
+  /**
+   * BS 분할 적용: splitResults[paraIdx]의 청크들을 순서대로 페이지에 올린다.
+   * - 첫 번째 청크: 현재 페이지(currentParas)에 이어 붙인 뒤 flush
+   * - 이후 청크: 각각 독립 페이지
+   * - 마지막 남은 단어: 다음 페이지의 시작(currentParas)에 넣음
+   */
+  const applyBSSplit = (para: string, paraH: number, paraIdx: number) => {
+    const results = splitResults[paraIdx];
+    const allWords = para.split(/ +/).filter((w) => w);
+
+    if (!results || results.length === 0) {
+      // BS 결과 없음 → 단락 전체를 현재 페이지에 올리고 flush
+      pages.push([...currentParas, para].join('\n\n'));
+      currentParas = [];
+      currentH = 0;
+      return;
+    }
+
+    let offset = 0;
+    for (let ri = 0; ri < results.length; ri++) {
+      const { wordOffset, wordCount } = results[ri];
+      // wordOffset은 항상 offset과 같아야 하지만 방어적으로 사용
+      const chunk = allWords.slice(wordOffset, wordOffset + wordCount).join(' ');
+      offset = wordOffset + wordCount;
+
+      if (ri === 0) {
+        // 첫 청크: 현재 페이지(소제목 등)에 이어 붙임
+        if (chunk) currentParas.push(chunk);
+        pages.push(currentParas.join('\n\n'));
+        currentParas = [];
+        currentH = 0;
+      } else {
+        // 이후 청크: 각각 독립 페이지
+        if (chunk) pages.push(chunk);
+      }
+    }
+
+    // 마지막 남은 단어 → 다음 페이지의 첫 요소로
+    if (offset < allWords.length) {
+      const remaining = allWords.slice(offset).join(' ');
+      currentParas = [remaining];
+      currentH = paraH * (allWords.length - offset) / allWords.length;
+    }
+  };
+
+  for (let i = 0; i < paragraphs.length; i++) {
+    const para = paragraphs[i];
+    const paraH = paraHeights[i] ?? 0;
+    const firstLine = para.split('\n')[0] ?? '';
+    const isHeading = SECTION_BOUNDARY_RE.test(firstLine);
+
+    // 규칙 1: 소제목 → 무조건 앞에서 페이지 분할
+    if (isHeading && currentParas.length > 0) {
+      pages.push(currentParas.join('\n\n'));
+      currentParas = [];
+      currentH = 0;
+    }
+
+    if (currentH + paraH <= threshold) {
+      // 제한 이내: 계속 추가
+      currentParas.push(para);
+      currentH += paraH;
+    } else if (currentParas.length > 0) {
+      const isHeadingOnlyPage = currentParas.every(
+        (p) => SECTION_BOUNDARY_RE.test(p.split('\n')[0] ?? ''),
+      );
+      if (isHeadingOnlyPage) {
+        // 규칙 2: 소제목만 있는 페이지 → BS 결과로 잔여 공간 채움
+        applyBSSplit(para, paraH, i);
+      } else {
+        // 규칙 3 Case A: 이전 \n\n에서 자름
+        pages.push(currentParas.join('\n\n'));
+        currentParas = [];
+        currentH = 0;
+        // 이동된 단락 자체가 threshold 초과이고 BS 결과가 있으면 분할 적용
+        if (paraH > threshold && splitResults[i]?.length) {
+          applyBSSplit(para, paraH, i);
+        } else {
+          currentParas = [para];
+          currentH = paraH;
+        }
+      }
+    } else {
+      // 규칙 3 Case B: 페이지 첫 문단 초과 → BS 단어 단위 분할
+      applyBSSplit(para, paraH, i);
+    }
+  }
+
+  if (currentParas.length > 0) pages.push(currentParas.join('\n\n'));
+  return pages.filter((p) => p.trim());
+}
+
+function splitAtSectionBoundaries(para: string): string[] {
+  const lines = para.split('\n');
+  const result: string[] = [];
+  let current: string[] = [];
+  for (const line of lines) {
+    if (SECTION_BOUNDARY_RE.test(line) && current.some((l) => l.trim())) {
+      result.push(current.join('\n').trim());
+      current = [line];
+    } else {
+      current.push(line);
+    }
+  }
+  if (current.some((l) => l.trim())) {
+    result.push(current.join('\n').trim());
+  }
+  return result.filter((c) => c.trim());
+}
+
 function useReaderLayout(screenWidth: number, screenHeight: number) {
   return useMemo(() => {
     const widthFromHeight = screenHeight * ReaderTokens.aspectRatio;
@@ -102,14 +270,23 @@ export default function DividingScreen() {
     });
   }, []);
 
-  const [pendingAutoSplitParas, setPendingAutoSplitParas] = useState<string[] | null>(null);
-  const [pendingParaHeights, setPendingParaHeights] = useState<Record<number, number>>({});
+  // ─── 그리디 분할 엔진 상태 ───────────────────────────────────────────────────
+  const [splitEngine, setSplitEngine] = useState<SplitEngineState | null>(null);
+  const [splitParaHeights, setSplitParaHeights] = useState<Record<number, number>>({});
+  const [bsMeasuredH, setBsMeasuredH] = useState<number | null>(null);
+  const splitKeyRef = useRef(0);
+
+  // 분할 임계값: 자동분할과 이 페이지 나누기 동일하게 사용
+  const splitThreshold = useMemo(() => {
+    const netH = safeAreaHeight - 2 * paddingY - insets.bottom;
+    return (netH + bodyLineHeight) * 0.92;
+  }, [safeAreaHeight, paddingY, insets.bottom, bodyLineHeight]);
 
   const heightWarnings = useMemo<DivisionWarning[]>(() => {
     return measurePages
       .filter((page) => {
         const h = pageHeights[page.pageIndex];
-        return h !== undefined && h > pageContentHeight;
+        return h !== undefined && h > pageContentHeight + bodyLineHeight;
       })
       .map((page) => ({
         pageIndex: page.pageIndex,
@@ -126,17 +303,22 @@ export default function DividingScreen() {
     const rawPages = content.split(new RegExp(`\n?${PAGE_DIVIDER}\n?`, "m"));
     if (afterPageIndex < 0 || afterPageIndex >= rawPages.length) return;
     const pageContent = rawPages[afterPageIndex];
-    const paragraphs = pageContent.split("\n\n");
+    const rawParas = pageContent.split("\n\n").filter((p) => p.trim());
+    const paragraphs = rawParas.flatMap(splitAtSectionBoundaries);
     if (paragraphs.length < 2) {
       Alert.alert("분할 불가", "이 페이지에는 나눌 수 있는 단락이 부족합니다.");
       return;
     }
-    const midpoint = Math.floor(paragraphs.length / 2);
-    const before = paragraphs.slice(0, midpoint).join("\n\n");
-    const after = paragraphs.slice(midpoint).join("\n\n");
-    rawPages[afterPageIndex] = `${before}\n${PAGE_DIVIDER}\n${after}`;
-    setContent(rawPages.join(`\n${PAGE_DIVIDER}\n`));
-  }, [content]);
+    setSplitParaHeights({});
+    setBsMeasuredH(null);
+    setSplitEngine({
+      phase: 'para',
+      paragraphs,
+      scope: { pageIndex: afterPageIndex },
+      threshold: splitThreshold,
+      paraKey: ++splitKeyRef.current,
+    });
+  }, [content, splitThreshold]);
 
   const handleRemoveDivider = useCallback((pageBreakIndex: number) => {
     const parts = content.split(new RegExp(`\n?${PAGE_DIVIDER}\n?`, "m"));
@@ -148,46 +330,195 @@ export default function DividingScreen() {
 
   const handleAutoSplit = useCallback(() => {
     const plain = content.replace(new RegExp(`\n?${PAGE_DIVIDER}\n?`, "gm"), "\n\n");
-    const paragraphs = plain.split("\n\n").filter((p) => p.trim());
+    const rawParagraphs = plain.split("\n\n").filter((p) => p.trim());
+    const paragraphs = rawParagraphs.flatMap(splitAtSectionBoundaries);
     if (paragraphs.length < 2) {
       Alert.alert("자동 분할 불가", "단락이 부족하여 자동 분할할 수 없습니다.");
       return;
     }
-    setPendingAutoSplitParas(paragraphs);
-    setPendingParaHeights({});
-  }, [content]);
+    setSplitParaHeights({});
+    setBsMeasuredH(null);
+    setSplitEngine({
+      phase: 'para',
+      paragraphs,
+      scope: 'all',
+      threshold: splitThreshold,
+      paraKey: ++splitKeyRef.current,
+    });
+  }, [content, splitThreshold]);
 
+  // ─── 그리디 엔진: 단락 측정 완료 후 처리 ────────────────────────────────────
   useEffect(() => {
-    if (!pendingAutoSplitParas) return;
-    const total = pendingAutoSplitParas.length;
-    const allMeasured = pendingAutoSplitParas.every((_, i) => pendingParaHeights[i] !== undefined);
+    if (!splitEngine || splitEngine.phase !== 'para') return;
+    const allMeasured = splitEngine.paragraphs.every((_, i) => splitParaHeights[i] !== undefined);
     if (!allMeasured) return;
-    const availableHeight = safeAreaHeight - paddingY - (insets.bottom + paddingY);
-    const resultPages: string[] = [];
-    for (let i = 0; i < total; i++) {
-      const para = pendingAutoSplitParas[i];
-      const paraHeight = pendingParaHeights[i];
-      if (paraHeight <= availableHeight) {
-        resultPages.push(para);
+
+    // 그리디 시뮬레이션: 어떤 단락이 BS가 필요한지, targetH는 얼마인지 파악
+    const { paragraphs, threshold } = splitEngine;
+    const bsJobs: BSJob[] = [];
+    let simParaIdxs: number[] = [];
+    let simH = 0;
+
+    for (let i = 0; i < paragraphs.length; i++) {
+      const para = paragraphs[i];
+      const paraH = splitParaHeights[i] ?? 0;
+      const isHeading = SECTION_BOUNDARY_RE.test(para.split('\n')[0] ?? '');
+
+      if (isHeading && simParaIdxs.length > 0) {
+        simParaIdxs = [];
+        simH = 0;
+      }
+
+      if (simH + paraH <= threshold) {
+        simParaIdxs.push(i);
+        simH += paraH;
+      } else if (simParaIdxs.length > 0) {
+        const isHeadingOnlyPage = simParaIdxs.every(
+          (pi) => SECTION_BOUNDARY_RE.test(paragraphs[pi].split('\n')[0] ?? ''),
+        );
+        if (isHeadingOnlyPage) {
+          // 규칙 2: 소제목 페이지 잔여 공간 채우기 (targetH = 소제목 높이 제외한 나머지)
+          const remainingH = Math.max(0, threshold - simH);
+          const allWords = para.split(/ +/).filter((w) => w);
+          if (allWords.length > 1 && remainingH > 0) {
+            bsJobs.push({ paraIdx: i, allWords, wordOffset: 0, lo: 1, hi: allWords.length, best: 1, targetH: remainingH });
+          }
+          simParaIdxs = [i];
+          simH = paraH * 0.5;
+        } else {
+          // 규칙 3 Case A: 이전 \n\n에서 자름, 현재 단락 다음 페이지
+          simParaIdxs = [i];
+          simH = paraH;
+          // 이동된 단락 자체가 threshold를 초과하면 BSJob 추가 (마지막 단락 분할 누락 방지)
+          if (paraH > threshold) {
+            const allWords = para.split(/ +/).filter((w) => w);
+            if (allWords.length > 1) {
+              bsJobs.push({ paraIdx: i, allWords, wordOffset: 0, lo: 1, hi: allWords.length, best: 1, targetH: threshold });
+              simH = paraH * 0.5;
+            }
+          }
+        }
       } else {
-        const fitRatio = availableHeight / paraHeight;
-        let splitChar = Math.floor(fitRatio * para.length);
-        const newlineIdx = para.lastIndexOf('\n', splitChar);
-        const spaceIdx = para.lastIndexOf(' ', splitChar);
-        const threshold = Math.floor(splitChar * 0.5);
-        const breakAt = newlineIdx >= threshold ? newlineIdx
-          : spaceIdx >= threshold ? spaceIdx
-          : splitChar;
-        const before = para.slice(0, breakAt).trim();
-        const after = para.slice(breakAt).trim();
-        if (before) resultPages.push(before);
-        if (after) resultPages.push(after);
+        // 규칙 3 Case B: 페이지 첫 단락 초과 → 전체 threshold 기준 BS
+        const allWords = para.split(/ +/).filter((w) => w);
+        if (allWords.length > 1) {
+          bsJobs.push({ paraIdx: i, allWords, wordOffset: 0, lo: 1, hi: allWords.length, best: 1, targetH: threshold });
+        }
+        simParaIdxs = [i];
+        simH = paraH * 0.5;
       }
     }
-    setContent(resultPages.join(`\n${PAGE_DIVIDER}\n`));
-    setPendingAutoSplitParas(null);
-    setPendingParaHeights({});
-  }, [pendingAutoSplitParas, pendingParaHeights, safeAreaHeight, paddingY, insets.bottom]);
+
+    if (bsJobs.length > 0) {
+      setSplitEngine({
+        phase: 'bs',
+        paragraphs: splitEngine.paragraphs,
+        scope: splitEngine.scope,
+        threshold: splitEngine.threshold,
+        paraHeights: { ...splitParaHeights },
+        bsJobs,
+        currentJobIdx: 0,
+        bsKey: ++splitKeyRef.current,
+        splitResults: {},
+      });
+    } else {
+      const resultPages = runGreedy(splitEngine.paragraphs, splitParaHeights, {}, splitEngine.threshold);
+      const { scope } = splitEngine;
+      if (scope === 'all') {
+        const joined = resultPages.join(`\n${PAGE_DIVIDER}\n`);
+        setContent(joined);
+        setDebouncedContent(joined);
+      } else {
+        const rawPages = content.split(new RegExp(`\n?${PAGE_DIVIDER}\n?`, "m"));
+        rawPages.splice(scope.pageIndex, 1, ...resultPages);
+        const joined = rawPages.join(`\n${PAGE_DIVIDER}\n`);
+        setContent(joined);
+        setDebouncedContent(joined);
+      }
+      setPageHeights({});
+      setSplitEngine(null);
+      setSplitParaHeights({});
+    }
+  }, [splitEngine, splitParaHeights, content]);
+
+  // ─── 그리디 엔진: binary search 측정 스텝 처리 ───────────────────────────────
+  // 한 문단이 여러 페이지에 걸칠 경우, job 완료 후 남은 단어가 있으면
+  // 자동으로 다음 BSJob을 큐에 추가하여 끝까지 분할한다.
+  useEffect(() => {
+    if (!splitEngine || splitEngine.phase !== 'bs') return;
+    if (bsMeasuredH === null) return;
+
+    const { bsJobs, currentJobIdx, threshold, splitResults } = splitEngine;
+    const job = { ...bsJobs[currentJobIdx] };
+    const mid = Math.floor((job.lo + job.hi) / 2);
+
+    if (bsMeasuredH <= job.targetH) {
+      job.best = mid;
+      job.lo = mid + 1;
+    } else {
+      job.hi = mid - 1;
+    }
+
+    const newBsJobs = [...bsJobs];
+    newBsJobs[currentJobIdx] = job;
+    setBsMeasuredH(null);
+
+    if (job.lo > job.hi) {
+      // ── 이 job 완료: 결과를 splitResults에 기록 ──
+      const newSplitResults: Record<number, BSResult[]> = { ...splitResults };
+      const entry: BSResult = { wordOffset: job.wordOffset, wordCount: job.best };
+      newSplitResults[job.paraIdx] = [...(newSplitResults[job.paraIdx] ?? []), entry];
+
+      // ── 남은 단어 확인: 있으면 새 BSJob 추가 (연속 분할 루프) ──
+      const nextWordOffset = job.wordOffset + job.best;
+      if (nextWordOffset < job.allWords.length) {
+        const remainingWords = job.allWords.slice(nextWordOffset);
+        const nextJob: BSJob = {
+          paraIdx: job.paraIdx,
+          allWords: job.allWords,
+          wordOffset: nextWordOffset,
+          lo: 1,
+          hi: remainingWords.length, // 모든 남은 단어가 맞으면 best = length (분할 없음)
+          best: Math.min(1, remainingWords.length),
+          targetH: threshold, // 다음 페이지는 항상 전체 threshold
+        };
+        // 현재 job 다음에 삽입
+        newBsJobs.splice(currentJobIdx + 1, 0, nextJob);
+      }
+
+      const nextJobIdx = currentJobIdx + 1;
+      if (nextJobIdx < newBsJobs.length) {
+        // 다음 job으로 이동
+        setSplitEngine({
+          ...splitEngine,
+          bsJobs: newBsJobs,
+          currentJobIdx: nextJobIdx,
+          bsKey: ++splitKeyRef.current,
+          splitResults: newSplitResults,
+        });
+      } else {
+        // 모든 job 완료 → runGreedy 실행
+        const resultPages = runGreedy(splitEngine.paragraphs, splitEngine.paraHeights, newSplitResults, threshold);
+        const { scope } = splitEngine;
+        if (scope === 'all') {
+          const joined = resultPages.join(`\n${PAGE_DIVIDER}\n`);
+          setContent(joined);
+          setDebouncedContent(joined);
+        } else {
+          const rawPages = content.split(new RegExp(`\n?${PAGE_DIVIDER}\n?`, "m"));
+          rawPages.splice(scope.pageIndex, 1, ...resultPages);
+          const joined = rawPages.join(`\n${PAGE_DIVIDER}\n`);
+          setContent(joined);
+          setDebouncedContent(joined);
+        }
+        setPageHeights({});
+        setSplitEngine(null);
+        setSplitParaHeights({});
+      }
+    } else {
+      setSplitEngine({ ...splitEngine, bsJobs: newBsJobs, bsKey: ++splitKeyRef.current });
+    }
+  }, [bsMeasuredH, splitEngine, content]);
 
   const handleNext = useCallback(async () => {
     const result = canTransitionForward("DIVIDING" as ArticleStatus, {
@@ -203,10 +534,12 @@ export default function DividingScreen() {
 
     try {
       const pagesJson = pages.map((p) => p.content);
-      await updateArticle.mutateAsync({
+      const updatedArticle = await updateArticle.mutateAsync({
         id: id!,
-        data: { pages: pagesJson },
+        data: { content, pages: pagesJson },
       });
+      // 캐시를 즉시 갱신하여 on-01c가 최신 pages를 받도록 함
+      queryClient.setQueryData([`/api/articles/${id}`], updatedArticle);
       await transitionStatus.mutateAsync({
         id: id!,
         data: { targetStatus: TransitionArticleBodyTargetStatus.CLOSING },
@@ -283,6 +616,7 @@ export default function DividingScreen() {
         </Pressable>
       </View>
 
+      {/* 경고 표시용: 현재 페이지들의 전체 높이 측정 (패딩 포함) */}
       {measurePages.map((page, idx) => {
         const blocks = parseMarkdownBlocks(page.content);
         return (
@@ -301,34 +635,24 @@ export default function DividingScreen() {
           >
             {blocks.map((block, bi) => (
               <View key={bi} style={{ marginBottom: bodyLineHeight * 0.6 }}>
-                <MarkdownBlock
-                  block={block}
-                  onCollect={() => {}}
-                  fontSize={bodyFontSize}
-                  lineHeight={bodyLineHeight}
-                  letterSpacing={bodyLetterSpacing}
-                />
+                <MarkdownBlock block={block} onCollect={() => {}} fontSize={bodyFontSize} lineHeight={bodyLineHeight} letterSpacing={bodyLetterSpacing} />
               </View>
             ))}
           </View>
         );
       })}
 
-      {pendingAutoSplitParas && pendingAutoSplitParas.map((para, i) => {
+      {/* 그리디 엔진: 단락별 높이 측정 (패딩 없음 → netHeight와 직접 비교) */}
+      {splitEngine?.phase === 'para' && splitEngine.paragraphs.map((para, i) => {
         const blocks = parseMarkdownBlocks(para);
         return (
           <View
-            key={`para-measure-${i}`}
+            key={`split-para-${splitEngine.paraKey}-${i}`}
             pointerEvents="none"
-            style={{
-              position: "absolute",
-              opacity: 0,
-              width: safeAreaWidth,
-              paddingHorizontal: paddingX,
-            }}
+            style={{ position: "absolute", opacity: 0, width: safeAreaWidth, paddingHorizontal: paddingX }}
             onLayout={(e) => {
               const h = e.nativeEvent.layout.height;
-              setPendingParaHeights((prev) => {
+              setSplitParaHeights((prev) => {
                 if (prev[i] === h) return prev;
                 return { ...prev, [i]: h };
               });
@@ -336,18 +660,37 @@ export default function DividingScreen() {
           >
             {blocks.map((block, bi) => (
               <View key={bi} style={{ marginBottom: bodyLineHeight * 0.6 }}>
-                <MarkdownBlock
-                  block={block}
-                  onCollect={() => {}}
-                  fontSize={bodyFontSize}
-                  lineHeight={bodyLineHeight}
-                  letterSpacing={bodyLetterSpacing}
-                />
+                <MarkdownBlock block={block} onCollect={() => {}} fontSize={bodyFontSize} lineHeight={bodyLineHeight} letterSpacing={bodyLetterSpacing} />
               </View>
             ))}
           </View>
         );
       })}
+
+      {/* 그리디 엔진: binary search 후보 텍스트 측정 (1개씩) */}
+      {(() => {
+        if (!splitEngine || splitEngine.phase !== 'bs') return null;
+        const job = splitEngine.bsJobs[splitEngine.currentJobIdx];
+        if (!job || job.lo > job.hi) return null;
+        const mid = Math.floor((job.lo + job.hi) / 2);
+        // wordOffset 이후 mid개의 단어만 측정 (allWords 기반)
+        const candidateText = job.allWords.slice(job.wordOffset, job.wordOffset + mid).join(' ');
+        const blocks = parseMarkdownBlocks(candidateText);
+        return (
+          <View
+            key={`split-bs-${splitEngine.bsKey}`}
+            pointerEvents="none"
+            style={{ position: "absolute", opacity: 0, width: safeAreaWidth, paddingHorizontal: paddingX }}
+            onLayout={(e) => setBsMeasuredH(e.nativeEvent.layout.height)}
+          >
+            {blocks.map((block, bi) => (
+              <View key={bi} style={{ marginBottom: bodyLineHeight * 0.6 }}>
+                <MarkdownBlock block={block} onCollect={() => {}} fontSize={bodyFontSize} lineHeight={bodyLineHeight} letterSpacing={bodyLetterSpacing} />
+              </View>
+            ))}
+          </View>
+        );
+      })()}
 
       {mode === "edit" ? (
         <View style={styles.editContainer}>
@@ -376,7 +719,7 @@ export default function DividingScreen() {
           ) : (
             pages.map((page, idx) => {
               const pageWarnings = warnings.filter((w) => w.pageIndex === idx);
-              const isHeightOverflow = pageHeights[idx] !== undefined && pageHeights[idx] > pageContentHeight;
+              const isHeightOverflow = pageHeights[idx] !== undefined && pageHeights[idx] > pageContentHeight + bodyLineHeight;
               return (
                 <View key={idx}>
                   <View style={[styles.pageCard, pageWarnings.length > 0 && styles.pageCardWarning]}>
