@@ -11,12 +11,14 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useQueryClient } from "@tanstack/react-query";
 
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import ProgressIndicator from "@/components/ProgressIndicator/ProgressIndicator";
 import { Colors, Spacing, Typography } from "@/constants/tokens";
 import { useToast } from "@/contexts/ToastContext";
 import { useUser } from "@/contexts/UserContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useGetUser, useDeleteUser } from "@workspace/api-client-react";
 
 const PRIVACY_URL = "https://friction.app/privacy";
@@ -35,6 +37,8 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { showToast } = useToast();
   const { userId } = useUser();
+  const { signOut } = useAuth();
+  const queryClient = useQueryClient();
 
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -48,22 +52,10 @@ export default function SettingsScreen() {
 
   const deleteUserMutation = useDeleteUser();
 
-  function clearLocalSession() {
-    // No persistent auth session in this version (auth is out-of-scope per task).
-    // If a token store is added in the future, clear it here before routing.
-  }
-
-  function navigateToLogin() {
-    // dismissAll clears the entire navigation stack before replacing with login,
-    // so hardware-back/swipe cannot return to authenticated screens.
-    router.dismissAll();
-    router.replace("/login" as never);
-  }
-
-  function handleLogout() {
+  async function handleLogout() {
     try {
-      clearLocalSession();
-      navigateToLogin();
+      await signOut();
+      queryClient.clear();
     } catch {
       showToast({ message: "로그아웃에 실패했습니다.", type: "error" });
     }
@@ -73,9 +65,9 @@ export default function SettingsScreen() {
     setIsDeleting(true);
     try {
       await deleteUserMutation.mutateAsync({ id: userId });
-      clearLocalSession();
+      await signOut();
+      queryClient.clear();
       setDeleteModalVisible(false);
-      navigateToLogin();
     } catch {
       showToast({ message: "탈퇴 처리에 실패했습니다. 다시 시도해주세요.", type: "error" });
       setDeleteModalVisible(false);

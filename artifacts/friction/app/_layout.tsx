@@ -1,8 +1,9 @@
 import { useFonts } from "expo-font";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack, useRouter, usePathname } from "expo-router";
+import { Stack, useRouter, usePathname, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -13,12 +14,10 @@ import { NavigationProvider } from "@/contexts/NavigationContext";
 import { ToastProvider } from "@/contexts/ToastContext";
 import { UserProvider } from "@/contexts/UserContext";
 import { ActiveReadingProvider, useActiveReading } from "@/contexts/ActiveReadingContext";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { setBaseUrl } from "@workspace/api-client-react";
+import { Colors } from "@/constants/tokens";
 
-// Configure API base URL so that relative /api/... paths resolve to the API
-// server domain (EXPO_PUBLIC_DOMAIN) rather than the Expo bundle domain.
-// Accepts either a bare hostname ("pike.replit.dev") or a full URL
-// ("https://pike.replit.dev") to avoid producing an invalid double-scheme URL.
 if (process.env.EXPO_PUBLIC_DOMAIN) {
   const domain = process.env.EXPO_PUBLIC_DOMAIN;
   const baseUrl = domain.startsWith("http://") || domain.startsWith("https://")
@@ -27,7 +26,6 @@ if (process.env.EXPO_PUBLIC_DOMAIN) {
   setBaseUrl(baseUrl);
 }
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
@@ -53,31 +51,83 @@ function ActiveReadingGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+const AUTH_BYPASS_ROUTES = new Set(["login", "login-callback"]);
+
+function AuthGuard({ children }: { children: React.ReactNode }) {
+  const { session, isLoading } = useAuth();
+  const router = useRouter();
+  const segments = useSegments();
+
+  const inBypassRoute = segments[0] != null && AUTH_BYPASS_ROUTES.has(segments[0] as string);
+
+  useEffect(() => {
+    if (isLoading) return;
+
+    if (!session && !inBypassRoute) {
+      router.replace("/login");
+    } else if (session && segments[0] === "login") {
+      router.replace("/(tabs)");
+    }
+  }, [session, isLoading, inBypassRoute, segments, router]);
+
+  // Block rendering while auth state is resolving
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={Colors.zinc400} />
+      </View>
+    );
+  }
+
+  // Block rendering protected routes while redirecting to login
+  if (!session && !inBypassRoute) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={Colors.zinc400} />
+      </View>
+    );
+  }
+
+  return <>{children}</>;
+}
+
 function RootLayoutNav() {
   return (
-    <ActiveReadingGuard>
-      <Stack screenOptions={{ headerShown: false, headerBackTitle: "Back" }}>
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="read" />
-        <Stack.Screen name="of-01" />
-        <Stack.Screen name="of-01-detail" />
-        <Stack.Screen name="of-02" />
-        <Stack.Screen name="of-02-detail" />
-        <Stack.Screen name="of-03" />
-        <Stack.Screen name="on-01a" />
-        <Stack.Screen name="on-01b" />
-        <Stack.Screen name="on-01c" />
-        <Stack.Screen name="on-02" />
-        <Stack.Screen name="to-01" />
-        <Stack.Screen name="to-02" />
-        <Stack.Screen name="to-03" />
-        <Stack.Screen name="settings" options={{ presentation: "card" }} />
-        <Stack.Screen name="terms" options={{ presentation: "card" }} />
-        <Stack.Screen name="login" options={{ presentation: "card" }} />
-      </Stack>
-    </ActiveReadingGuard>
+    <AuthGuard>
+      <ActiveReadingGuard>
+        <Stack screenOptions={{ headerShown: false, headerBackTitle: "Back" }}>
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="read" />
+          <Stack.Screen name="of-01" />
+          <Stack.Screen name="of-01-detail" />
+          <Stack.Screen name="of-02" />
+          <Stack.Screen name="of-02-detail" />
+          <Stack.Screen name="of-03" />
+          <Stack.Screen name="on-01a" />
+          <Stack.Screen name="on-01b" />
+          <Stack.Screen name="on-01c" />
+          <Stack.Screen name="on-02" />
+          <Stack.Screen name="to-01" />
+          <Stack.Screen name="to-02" />
+          <Stack.Screen name="to-03" />
+          <Stack.Screen name="settings" options={{ presentation: "card" }} />
+          <Stack.Screen name="terms" options={{ presentation: "card" }} />
+          <Stack.Screen name="login" options={{ headerShown: false }} />
+          <Stack.Screen name="login-callback" options={{ headerShown: false }} />
+        </Stack>
+      </ActiveReadingGuard>
+    </AuthGuard>
   );
 }
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: Colors.white,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
@@ -102,16 +152,18 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <GestureHandlerRootView>
             <KeyboardProvider>
-              <UserProvider>
-                <ActiveReadingProvider>
-                  <ToastProvider>
-                    <NavigationProvider>
-                      <RootLayoutNav />
-                      <ToastContainer />
-                    </NavigationProvider>
-                  </ToastProvider>
-                </ActiveReadingProvider>
-              </UserProvider>
+              <AuthProvider>
+                <UserProvider>
+                  <ActiveReadingProvider>
+                    <ToastProvider>
+                      <NavigationProvider>
+                        <RootLayoutNav />
+                        <ToastContainer />
+                      </NavigationProvider>
+                    </ToastProvider>
+                  </ActiveReadingProvider>
+                </UserProvider>
+              </AuthProvider>
             </KeyboardProvider>
           </GestureHandlerRootView>
         </QueryClientProvider>
