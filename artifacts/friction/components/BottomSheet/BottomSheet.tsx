@@ -7,14 +7,13 @@ import {
   Pressable,
   Animated,
   PanResponder,
-  Dimensions,
+  useWindowDimensions,
   type ViewStyle,
   type TextStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors, Typography, ZIndex, Spacing } from "../../constants/tokens";
 
-const { height: SCREEN_H } = Dimensions.get("window");
 const HANDLE_HEIGHT = 28;
 
 interface BottomSheetProps {
@@ -39,13 +38,14 @@ export default function BottomSheet({
   dismissable = true,
 }: BottomSheetProps) {
   const insets = useSafeAreaInsets();
+  const { height: SCREEN_H } = useWindowDimensions();
   const translateY = useRef(new Animated.Value(SCREEN_H)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
   const currentSnap = useRef(0);
 
   const getSnapY = useCallback(
     (idx: number) => SCREEN_H * (1 - snapPoints[Math.min(idx, snapPoints.length - 1)]),
-    [snapPoints],
+    [SCREEN_H, snapPoints],
   );
 
   useEffect(() => {
@@ -139,7 +139,7 @@ export default function BottomSheet({
           <Pressable style={StyleSheet.absoluteFill} onPress={dismissable ? close : undefined} />
         </Animated.View>
         <Animated.View
-          style={[styles.sheet, { transform: [{ translateY }] }]}
+          style={[styles.sheet, { height: SCREEN_H, transform: [{ translateY }] }]}
         >
           <View {...panResponder.panHandlers} style={styles.handleArea}>
             <View style={styles.handle} />
@@ -176,7 +176,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     top: 0,
-    height: SCREEN_H,
     backgroundColor: Colors.white,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
