@@ -47,7 +47,8 @@ export function MiniSubTabBar() {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [shouldShow, nav.ofSubTab, visibleAnim]);
+  // ofSubTabTapKey: 같은 서브탭을 재탭할 때도 미니 서브탭바를 다시 표시하기 위해 의존성에 포함
+  }, [shouldShow, nav.ofSubTab, nav.ofSubTabTapKey, visibleAnim]);
 
   if (!miniTabs) return null;
 

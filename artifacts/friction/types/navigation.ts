@@ -12,6 +12,7 @@ export interface NavState {
   toSubTab: ToSubTabKey;
   ofMiniSubTab: Record<OfSubTabKey, OfMiniSubTabKey>;
   headerScrolled: boolean;
+  ofSubTabTapKey: number;
 }
 
 export interface NavActions {

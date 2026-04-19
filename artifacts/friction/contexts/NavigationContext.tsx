@@ -59,6 +59,7 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
   const [toSubTab, setToSubTabState] = useState<ToSubTabKey>("neighbors");
   const [ofMiniSubTab, setOfMiniSubTabState] = useState<Record<OfSubTabKey, OfMiniSubTabKey>>(DEFAULT_OF_MINI);
   const [headerScrolled, setHeaderScrolled] = useState(false);
+  const [ofSubTabTapKey, setOfSubTabTapKey] = useState(0);
 
   const lastSyncRef = useRef({ tab: "IN" as MainTabKey, ofSub: "personal" as OfSubTabKey, toSub: "neighbors" as ToSubTabKey });
 
@@ -149,6 +150,7 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
 
   const setOfSubTab = useCallback((subTab: OfSubTabKey) => {
     setOfSubTabState(subTab);
+    setOfSubTabTapKey((k) => k + 1);
     lastSyncRef.current = { ...lastSyncRef.current, ofSub: subTab };
     router.setParams({ subTab });
   }, []);
@@ -180,6 +182,7 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
       toSubTab,
       ofMiniSubTab,
       headerScrolled,
+      ofSubTabTapKey,
       setActiveTab,
       setOfSubTab,
       setToSubTab,
@@ -195,6 +198,7 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
       toSubTab,
       ofMiniSubTab,
       headerScrolled,
+      ofSubTabTapKey,
       setActiveTab,
       setOfSubTab,
       setToSubTab,
