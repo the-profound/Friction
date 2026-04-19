@@ -17,6 +17,10 @@ import { ActiveReadingProvider, useActiveReading } from "@/contexts/ActiveReadin
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { setBaseUrl } from "@workspace/api-client-react";
 import { Colors } from "@/constants/tokens";
+import { Platform } from "react-native";
+
+// 웹 개발 환경에서는 로그인 없이 시뮬레이션 (minji UUID fallback 사용)
+const DEV_WEB_BYPASS = __DEV__ && Platform.OS === "web";
 
 if (process.env.EXPO_PUBLIC_DOMAIN) {
   const domain = process.env.EXPO_PUBLIC_DOMAIN;
@@ -59,19 +63,20 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   const segments = useSegments();
 
   const inBypassRoute = segments[0] != null && AUTH_BYPASS_ROUTES.has(segments[0] as string);
+  const isAuthed = DEV_WEB_BYPASS || !!session;
 
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading && !DEV_WEB_BYPASS) return;
 
-    if (!session && !inBypassRoute) {
+    if (!isAuthed && !inBypassRoute) {
       router.replace("/login");
-    } else if (session && segments[0] === "login") {
+    } else if (isAuthed && segments[0] === "login") {
       router.replace("/(tabs)");
     }
-  }, [session, isLoading, inBypassRoute, segments, router]);
+  }, [isAuthed, isLoading, inBypassRoute, segments, router]);
 
-  // Block rendering while auth state is resolving
-  if (isLoading) {
+  // Block rendering while auth state is resolving (개발 바이패스 시 스킵)
+  if (isLoading && !DEV_WEB_BYPASS) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={Colors.zinc400} />
@@ -80,7 +85,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   }
 
   // Block rendering protected routes while redirecting to login
-  if (!session && !inBypassRoute) {
+  if (!isAuthed && !inBypassRoute) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={Colors.zinc400} />
