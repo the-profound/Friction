@@ -15,11 +15,14 @@ import {
   useListTeamArticles,
   useAddTeamArticle,
   useRemoveTeamArticle,
+  useRemoveTeamMember,
   useAddTeamMember,
   useListArticles,
   useListInbox,
+  useCreateNeighborRequest,
   getListTeamArticlesQueryKey,
   getGetTeamCollectionQueryKey,
+  getListTeamMembersQueryKey,
 } from "@workspace/api-client-react";
 import type {
   TeamMemberWithUser,
@@ -45,7 +48,10 @@ export default function TeamCollectionDetailScreen() {
   const [inviteSheetVisible, setInviteSheetVisible] = useState(false);
   const [inviteUserId, setInviteUserId] = useState("");
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
-  const [removeArticleTarget, setRemoveArticleTarget] = useState<{ id: string; title: string } | null>(null);
+  const [articleActionTarget, setArticleActionTarget] = useState<TeamCollectionArticleWithDetails | null>(null);
+  const [showDeleteHint, setShowDeleteHint] = useState(false);
+  const [memberTarget, setMemberTarget] = useState<{ id: string; nickname: string } | null>(null);
+  const [kickTarget, setKickTarget] = useState<{ id: string; nickname: string } | null>(null);
 
   const collectionQuery = useGetTeamCollection(id ?? "");
   const collection = collectionQuery.data;
@@ -66,10 +72,47 @@ export default function TeamCollectionDetailScreen() {
 
   const addArticle = useAddTeamArticle();
   const removeArticle = useRemoveTeamArticle();
+  const removeMember = useRemoveTeamMember();
   const addMember = useAddTeamMember();
+  const createNeighborRequest = useCreateNeighborRequest();
 
   const isOwner = members.some((m) => m.userId === userId && m.role === "OWNER");
   const isMember = members.some((m) => m.userId === userId);
+
+  const handleMemberPress = useCallback((item: TeamMemberWithUser) => {
+    if (item.userId === userId) return;
+    setMemberTarget({
+      id: item.userId,
+      nickname: item.user?.nickname ?? "이름 없음",
+    });
+  }, [userId]);
+
+  const handleSendNeighborRequest = useCallback(async () => {
+    if (!memberTarget) return;
+    try {
+      await createNeighborRequest.mutateAsync({
+        data: { requesterId: userId, recipientId: memberTarget.id },
+      });
+      setMemberTarget(null);
+      Alert.alert("완료", "이웃 요청을 보냈어요!");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "요청에 실패했습니다.";
+      Alert.alert("오류", msg);
+    }
+  }, [memberTarget, userId, createNeighborRequest]);
+
+  const handleKickConfirm = useCallback(async () => {
+    if (!id || !kickTarget) return;
+    const target = kickTarget;
+    setKickTarget(null);
+    try {
+      await removeMember.mutateAsync({ teamId: id, userId: target.id });
+      await queryClient.invalidateQueries({ queryKey: getListTeamMembersQueryKey(id) });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "추방에 실패했습니다.";
+      Alert.alert("오류", msg);
+    }
+  }, [id, kickTarget, removeMember, queryClient]);
 
   const handleOpenEdit = useCallback(() => {
     if (!collection) return;
@@ -166,25 +209,41 @@ export default function TeamCollectionDetailScreen() {
     [id, removeArticle, articlesQuery],
   );
 
-  const handleArticlePress = useCallback(
-    (item: TeamCollectionArticleWithDetails) => {
-      const unreadInboxItem = inboxItems.find(
-        (inbox) => inbox.articleId === item.articleId && !inbox.isRead,
-      );
-      if (unreadInboxItem) {
-        router.push({
-          pathname: "/read",
-          params: { articleId: item.articleId, inboxId: unreadInboxItem.id, mode: "basic" },
-        });
-      } else {
-        router.push({
-          pathname: "/read",
-          params: { articleId: item.articleId, mode: "re_read" },
-        });
-      }
-    },
-    [router, inboxItems],
-  );
+  const handleArticleActionRead = useCallback(() => {
+    if (!articleActionTarget) return;
+    const item = articleActionTarget;
+    setArticleActionTarget(null);
+    const unreadInboxItem = inboxItems.find(
+      (inbox) => inbox.articleId === item.articleId && !inbox.isRead,
+    );
+    if (unreadInboxItem) {
+      router.push({
+        pathname: "/read",
+        params: { articleId: item.articleId, inboxId: unreadInboxItem.id, mode: "basic" },
+      });
+    } else {
+      router.push({
+        pathname: "/read",
+        params: { articleId: item.articleId, mode: "re_read" },
+      });
+    }
+  }, [articleActionTarget, router, inboxItems]);
+
+  const canDeleteTarget = articleActionTarget
+    ? isOwner || articleActionTarget.article?.authorId === userId
+    : false;
+
+  const handleArticleActionDelete = useCallback(async () => {
+    if (!articleActionTarget) return;
+    if (!canDeleteTarget) {
+      setShowDeleteHint(true);
+      return;
+    }
+    const item = articleActionTarget;
+    setArticleActionTarget(null);
+    setShowDeleteHint(false);
+    await handleRemoveArticle(item.articleId);
+  }, [articleActionTarget, canDeleteTarget, handleRemoveArticle]);
 
   const alreadyAddedIds = articles.map((a) => a.articleId);
 
@@ -196,12 +255,10 @@ export default function TeamCollectionDetailScreen() {
   }));
 
   const renderArticleItem = ({ item }: { item: TeamCollectionArticleWithDetails }) => {
-    const canRemove = isOwner || item.addedBy === userId;
     return (
       <Pressable
         style={styles.articleItem}
-        onPress={() => handleArticlePress(item)}
-        onLongPress={() => canRemove ? setRemoveArticleTarget({ id: item.articleId, title: item.article?.title ?? "제목 없음" }) : undefined}
+        onPress={() => { setArticleActionTarget(item); setShowDeleteHint(false); }}
       >
         <View style={styles.articleInfo}>
           <Text style={styles.articleTitle} numberOfLines={1}>
@@ -216,28 +273,37 @@ export default function TeamCollectionDetailScreen() {
     );
   };
 
-  const renderMemberItem = ({ item }: { item: TeamMemberWithUser }) => (
-    <View style={styles.memberItem}>
-      <View style={styles.memberAvatar}>
-        <Text style={styles.memberAvatarText}>
-          {(item.user?.nickname ?? item.userId).charAt(0).toUpperCase()}
-        </Text>
-      </View>
-      <View style={styles.memberInfo}>
-        <Text style={styles.memberName} numberOfLines={1}>
-          {item.user?.nickname ?? item.userId}
-        </Text>
-        <Text style={styles.memberDate}>
-          {new Date(item.joinedAt).toLocaleDateString("ko-KR")}에 참여
-        </Text>
-      </View>
-      <View style={styles.roleBadge}>
-        <Text style={styles.roleBadgeText}>
-          {item.role === "OWNER" ? "소유자" : "멤버"}
-        </Text>
-      </View>
-    </View>
-  );
+  const renderMemberItem = ({ item }: { item: TeamMemberWithUser }) => {
+    const isSelf = item.userId === userId;
+    return (
+      <Pressable
+        style={styles.memberItem}
+        onPress={() => handleMemberPress(item)}
+        disabled={isSelf}
+      >
+        <View style={styles.memberAvatar}>
+          <Text style={styles.memberAvatarText}>
+            {(item.user?.nickname ?? item.userId).charAt(0).toUpperCase()}
+          </Text>
+        </View>
+        <View style={styles.memberInfo}>
+          <Text style={styles.memberName} numberOfLines={1}>
+            {item.user?.nickname ?? item.userId}
+            {isSelf ? "  (나)" : ""}
+          </Text>
+          <Text style={styles.memberDate}>
+            {new Date(item.joinedAt).toLocaleDateString("ko-KR")}에 참여
+          </Text>
+        </View>
+        <View style={styles.roleBadge}>
+          <Text style={styles.roleBadgeText}>
+            {item.role === "OWNER" ? "소유자" : "멤버"}
+          </Text>
+        </View>
+        {!isSelf && <Feather name="chevron-right" size={16} color={Colors.zinc300} />}
+      </Pressable>
+    );
+  };
 
   if (!id) {
     return (
@@ -464,19 +530,72 @@ export default function TeamCollectionDetailScreen() {
       />
 
       <ConfirmModal
-        visible={removeArticleTarget !== null}
-        title="글 제거"
-        description={`'${removeArticleTarget?.title ?? ""}'을(를) 이 모음에서 제거하시겠어요?`}
-        confirmLabel="제거"
+        visible={articleActionTarget !== null}
+        title={articleActionTarget?.article?.title ?? "제목 없음"}
+        onCancel={() => { setArticleActionTarget(null); setShowDeleteHint(false); }}
+        actionButton={{
+          emoji: "📖",
+          label: "읽기",
+          onPress: handleArticleActionRead,
+        }}
+        deleteButton={{
+          onPress: handleArticleActionDelete,
+          disabled: !canDeleteTarget,
+        }}
+        hint={showDeleteHint ? "모음장과 작성자만 글을 삭제할 수 있습니다" : undefined}
+      />
+
+      <BottomSheet
+        visible={memberTarget !== null}
+        onClose={() => setMemberTarget(null)}
+        title="멤버 프로필"
+        snapPoints={[isOwner ? 0.46 : 0.38]}
+      >
+        {memberTarget && (
+          <View style={styles.profileContent}>
+            <View style={styles.profileAvatar}>
+              <Text style={styles.profileAvatarText}>
+                {memberTarget.nickname.charAt(0).toUpperCase()}
+              </Text>
+            </View>
+            <Text style={styles.profileName}>{memberTarget.nickname}</Text>
+
+            <View style={styles.profileActions}>
+              <Pressable
+                style={styles.profileActionButton}
+                onPress={handleSendNeighborRequest}
+                disabled={createNeighborRequest.isPending}
+              >
+                <Feather name="user-plus" size={16} color={Colors.zinc700} />
+                <Text style={styles.profileActionText}>이웃 신청하기</Text>
+              </Pressable>
+
+              {isOwner && (
+                <Pressable
+                  style={[styles.profileActionButton, styles.profileKickButton]}
+                  onPress={() => {
+                    setMemberTarget(null);
+                    setKickTarget({ id: memberTarget.id, nickname: memberTarget.nickname });
+                  }}
+                >
+                  <Feather name="user-x" size={16} color="#DC2626" />
+                  <Text style={[styles.profileActionText, styles.profileKickText]}>추방하기</Text>
+                </Pressable>
+              )}
+            </View>
+          </View>
+        )}
+      </BottomSheet>
+
+      <ConfirmModal
+        visible={kickTarget !== null}
+        title={`'${kickTarget?.nickname ?? ""}'을(를) 추방하시겠어요?`}
+        description="추방된 멤버는 이 모음에서 제거됩니다."
+        confirmLabel="추방"
         cancelLabel="취소"
         destructive
-        onConfirm={() => {
-          if (removeArticleTarget) {
-            handleRemoveArticle(removeArticleTarget.id);
-          }
-          setRemoveArticleTarget(null);
-        }}
-        onCancel={() => setRemoveArticleTarget(null)}
+        onConfirm={handleKickConfirm}
+        onCancel={() => setKickTarget(null)}
       />
     </View>
   );
@@ -695,5 +814,59 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 16,
     color: Colors.white,
+  },
+  profileContent: {
+    alignItems: "center",
+    paddingVertical: 8,
+    gap: 6,
+  },
+  profileAvatar: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: Colors.zinc100,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  profileAvatarText: {
+    ...Typography.bodySemiBold,
+    fontSize: 24,
+    color: Colors.zinc600,
+  },
+  profileName: {
+    ...Typography.bodySemiBold,
+    fontSize: 18,
+    color: Colors.zinc900,
+  },
+  profileEmail: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc500,
+  },
+  profileActions: {
+    width: "100%",
+    marginTop: 16,
+    gap: 10,
+  },
+  profileActionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: Colors.zinc100,
+  },
+  profileActionText: {
+    ...Typography.bodySemiBold,
+    fontSize: 15,
+    color: Colors.zinc700,
+  },
+  profileKickButton: {
+    backgroundColor: "#FEE2E2",
+  },
+  profileKickText: {
+    color: "#DC2626",
   },
 });

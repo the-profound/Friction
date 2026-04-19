@@ -13,6 +13,7 @@ import {
   useAcceptNeighborRequest,
   useRejectNeighborRequest,
   useCreateNeighborRequest,
+  useRemoveNeighbor,
 } from "@workspace/api-client-react";
 import type {
   NeighborWithUser,
@@ -45,6 +46,7 @@ export default function NeighborListScreen() {
   const [addSheetVisible, setAddSheetVisible] = useState(false);
   const [addRecipientId, setAddRecipientId] = useState("");
   const [rejectTarget, setRejectTarget] = useState<{ id: string; name: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [profileTarget, setProfileTarget] = useState<ProfileTarget | null>(null);
 
   const neighborsQuery = useListNeighbors({ userId });
@@ -54,6 +56,7 @@ export default function NeighborListScreen() {
   const acceptRequest = useAcceptNeighborRequest();
   const rejectRequest = useRejectNeighborRequest();
   const createRequest = useCreateNeighborRequest();
+  const removeNeighbor = useRemoveNeighbor();
 
   const handleAccept = useCallback(
     async (requestId: string) => {
@@ -114,6 +117,19 @@ export default function NeighborListScreen() {
     });
   }, []);
 
+  const handleDeleteNeighborConfirm = useCallback(async () => {
+    if (!deleteTarget) return;
+    try {
+      await removeNeighbor.mutateAsync({ id: deleteTarget.id });
+      neighborsQuery.refetch();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";
+      Alert.alert("오류", msg);
+    } finally {
+      setDeleteTarget(null);
+    }
+  }, [deleteTarget, removeNeighbor, neighborsQuery]);
+
   const renderNeighborItem = ({ item }: { item: NeighborWithUser }) => (
     <Pressable style={styles.neighborItem} onPress={() => handleNeighborPress(item)}>
       <View style={styles.avatarCircle}>
@@ -123,7 +139,16 @@ export default function NeighborListScreen() {
         <Text style={styles.neighborName}>{item.user?.nickname ?? "이름 없음"}</Text>
         <Text style={styles.neighborSub}>{item.user?.email ?? ""}</Text>
       </View>
-      <Feather name="chevron-right" size={16} color={Colors.zinc300} />
+      <Pressable
+        style={styles.deleteButton}
+        onPress={(e) => {
+          e.stopPropagation?.();
+          setDeleteTarget({ id: item.id, name: item.user?.nickname ?? "이름 없음" });
+        }}
+        hitSlop={8}
+      >
+        <Feather name="trash-2" size={16} color="#ef4444" />
+      </Pressable>
     </Pressable>
   );
 
@@ -284,6 +309,17 @@ export default function NeighborListScreen() {
       </BottomSheet>
 
       <ConfirmModal
+        visible={deleteTarget !== null}
+        title="이웃 삭제"
+        description={`'${deleteTarget?.name ?? ""}'님을 이웃 목록에서 삭제할까요?`}
+        confirmLabel="삭제"
+        cancelLabel="취소"
+        destructive
+        onConfirm={handleDeleteNeighborConfirm}
+        onCancel={() => setDeleteTarget(null)}
+      />
+
+      <ConfirmModal
         visible={rejectTarget !== null}
         title="이웃 요청 거절"
         description={`'${rejectTarget?.name ?? ""}'님의 이웃 요청을 거절하시겠어요?`}
@@ -402,6 +438,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
     gap: 12,
+  },
+  deleteButton: {
+    padding: 4,
+    marginLeft: 2,
   },
   avatarCircle: {
     width: 40,

@@ -22,10 +22,12 @@ import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
 import { PageHeader } from "@/components/NavBar/PageHeader";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import DotIndicator from "@/components/DotIndicator/DotIndicator";
+import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import { useQueryClient } from "@tanstack/react-query";
-import { useListInbox, useMarkInboxOpened } from "@workspace/api-client-react";
+import { useListInbox, useMarkInboxOpened, useDeleteInboxItem } from "@workspace/api-client-react";
 import type { InboxItem } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
+import { useToast } from "@/contexts/ToastContext";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const CARD_W = Sizing.cardSlotW;
@@ -136,10 +138,15 @@ function CarouselGroup({
         Math.abs(g.dx) > Math.abs(g.dy) &&
         Math.abs(g.dx) > 5,
       onPanResponderGrant: () => {
-        swipedRef.current = true;
         translateX.setValue(getBaseX(activeIndexRef.current));
       },
       onPanResponderMove: (_, g) => {
+        // Only treat as a deliberate swipe once the user has dragged >15px,
+        // avoiding false-positives from slight trackpad/mouse micro-movements
+        // that would block subsequent taps.
+        if (Math.abs(g.dx) > 15) {
+          swipedRef.current = true;
+        }
         const baseX = getBaseX(activeIndexRef.current);
         const raw = baseX + g.dx;
         const maxX = getBaseX(0);
@@ -162,6 +169,10 @@ function CarouselGroup({
           next = dx < 0 ? current + 1 : current - 1;
         }
         snapToRef.current(next);
+        // Reset after any spurious same-gesture click event has fired (web).
+        // onStartShouldSetPanResponder is not reliably called for subsequent
+        // mouse clicks once the responder has been granted, so we reset here.
+        setTimeout(() => { swipedRef.current = false; }, 100);
       },
       onPanResponderTerminate: (_, g) => {
         const { dx, vx } = g;
@@ -173,6 +184,7 @@ function CarouselGroup({
           next = dx < 0 ? current + 1 : current - 1;
         }
         snapToRef.current(next);
+        setTimeout(() => { swipedRef.current = false; }, 100);
       },
     }),
   ).current;
@@ -262,11 +274,14 @@ export default function InboxScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { userId } = useUser();
+  const { showToast } = useToast();
   const [searchActive, setSearchActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [tapItem, setTapItem] = useState<InboxItem | null>(null);
 
   const { data: inboxData, isLoading, refetch, isRefetching } = useListInbox({ recipientId: userId });
   const markOpened = useMarkInboxOpened();
+  const deleteInboxItem = useDeleteInboxItem();
 
   const visibleItems = useMemo(() => {
     if (!inboxData) return [];
@@ -295,28 +310,50 @@ export default function InboxScreen() {
     });
   }, []);
 
-  const handleCardPress = useCallback(
-    async (item: InboxItem) => {
-      if (!item.openedAt) {
-        try {
-          await markOpened.mutateAsync({ id: item.id });
-          queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
-        } catch (e: unknown) {
-          console.warn("Failed to mark inbox opened:", e instanceof Error ? e.message : e);
-        }
+  const handleCardPress = useCallback((item: InboxItem) => {
+    setTapItem(item);
+  }, []);
+
+  const handleModalClose = useCallback(() => {
+    setTapItem(null);
+  }, []);
+
+  const handleRead = useCallback(async () => {
+    if (!tapItem) return;
+    const item = tapItem;
+    setTapItem(null);
+    if (!item.openedAt) {
+      try {
+        await markOpened.mutateAsync({ id: item.id });
+        queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+      } catch (e: unknown) {
+        console.warn("Failed to mark inbox opened:", e instanceof Error ? e.message : e);
       }
-      const mode = item.isRead ? "re_read" : "basic";
-      router.push({
-        pathname: "/read",
-        params: {
-          articleId: item.articleId,
-          inboxId: item.id,
-          mode,
-        },
-      });
-    },
-    [markOpened, router, queryClient],
-  );
+    }
+    const mode = item.isRead ? "re_read" : "basic";
+    router.push({
+      pathname: "/read",
+      params: {
+        articleId: item.articleId,
+        inboxId: item.id,
+        mode,
+      },
+    });
+  }, [tapItem, markOpened, router, queryClient]);
+
+  const handleDelete = useCallback(async () => {
+    if (!tapItem) return;
+    const item = tapItem;
+    setTapItem(null);
+    try {
+      await deleteInboxItem.mutateAsync({ id: item.id });
+      queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+      showToast({ message: "수신함에서 삭제되었습니다.", type: "success", position: "bottom" });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";
+      showToast({ message: msg, type: "error", position: "bottom" });
+    }
+  }, [tapItem, deleteInboxItem, queryClient, showToast]);
 
   const handleRefresh = useCallback(() => {
     refetch();
@@ -383,6 +420,21 @@ export default function InboxScreen() {
           decelerationRate="fast"
         />
       )}
+
+      <ConfirmModal
+        visible={tapItem !== null}
+        title={tapItem?.article?.title ?? "제목 없음"}
+        description={tapItem?.sender?.nickname ?? tapItem?.sender?.id ?? ""}
+        onCancel={handleModalClose}
+        actionButton={{
+          emoji: "📖",
+          label: "읽기",
+          onPress: handleRead,
+        }}
+        deleteButton={{
+          onPress: handleDelete,
+        }}
+      />
     </View>
   );
 }

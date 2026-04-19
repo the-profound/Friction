@@ -7,6 +7,7 @@ import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { PageHeader } from "@/components/NavBar/PageHeader";
 import { useNavigation } from "@/contexts/NavigationContext";
 import { useUser } from "@/contexts/UserContext";
+import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import {
   useListNeighbors,
   useListNeighborRequests,
@@ -19,11 +20,19 @@ import type {
 } from "@workspace/api-client-react";
 import { formatDeliveryTime } from "@/lib/deliverySync";
 
+interface NeighborProfileTarget {
+  nickname: string;
+  email: string;
+  id: string;
+  joinedAt?: string;
+}
+
 export default function ToScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { toSubTab } = useNavigation();
   const { userId } = useUser();
+  const [profileTarget, setProfileTarget] = useState<NeighborProfileTarget | null>(null);
 
   const neighborsQuery = useListNeighbors({ userId });
   const neighbors = (neighborsQuery.data ?? []) as NeighborWithUser[];
@@ -56,8 +65,17 @@ export default function ToScreen() {
     [router],
   );
 
+  const handleNeighborPress = useCallback((item: NeighborWithUser) => {
+    setProfileTarget({
+      nickname: item.user?.nickname ?? "이름 없음",
+      email: item.user?.email ?? "",
+      id: item.neighborUserId,
+      joinedAt: item.acceptedAt ? new Date(item.acceptedAt).toLocaleDateString("ko-KR") : undefined,
+    });
+  }, []);
+
   const renderNeighborItem = ({ item }: { item: NeighborWithUser }) => (
-    <Pressable style={styles.listItem}>
+    <Pressable style={styles.listItem} onPress={() => handleNeighborPress(item)}>
       <View style={styles.avatarCircle}>
         <Text style={styles.avatarText}>{(item.user?.nickname ?? "?")[0]}</Text>
       </View>
@@ -65,6 +83,7 @@ export default function ToScreen() {
         <Text style={styles.listItemTitle}>{item.user?.nickname ?? "이름 없음"}</Text>
         <Text style={styles.listItemSub}>{item.user?.email ?? ""}</Text>
       </View>
+      <Feather name="chevron-right" size={16} color={Colors.zinc300} />
     </Pressable>
   );
 
@@ -244,6 +263,30 @@ export default function ToScreen() {
         showSearch={false}
       />
       {renderContent()}
+
+      <BottomSheet
+        visible={profileTarget !== null}
+        onClose={() => setProfileTarget(null)}
+        title="이웃 프로필"
+        snapPoints={[0.42]}
+      >
+        {profileTarget && (
+          <View style={styles.profileContent}>
+            <View style={styles.profileAvatarLarge}>
+              <Text style={styles.profileAvatarLargeText}>{profileTarget.nickname[0]}</Text>
+            </View>
+            <Text style={styles.profileName}>{profileTarget.nickname}</Text>
+            <Text style={styles.profileEmail}>{profileTarget.email}</Text>
+            {profileTarget.joinedAt && (
+              <Text style={styles.profileJoined}>이웃이 된 날: {profileTarget.joinedAt}</Text>
+            )}
+            <View style={styles.profileIdRow}>
+              <Text style={styles.profileIdLabel}>ID</Text>
+              <Text style={styles.profileIdValue} selectable>{profileTarget.id}</Text>
+            </View>
+          </View>
+        )}
+      </BottomSheet>
     </View>
   );
 }
@@ -367,6 +410,60 @@ const styles = StyleSheet.create({
   listItemSub: {
     ...Typography.body,
     fontSize: 13,
+    color: Colors.zinc500,
+  },
+  profileContent: {
+    alignItems: "center",
+    paddingTop: 8,
+    paddingBottom: 16,
+    paddingHorizontal: 20,
+    gap: 4,
+  },
+  profileAvatarLarge: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: Colors.zinc100,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
+  },
+  profileAvatarLargeText: {
+    ...Typography.bodySemiBold,
+    fontSize: 26,
+    color: Colors.zinc500,
+  },
+  profileName: {
+    ...Typography.bodySemiBold,
+    fontSize: 18,
+    color: Colors.zinc900,
+  },
+  profileEmail: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc500,
+    marginBottom: 4,
+  },
+  profileJoined: {
+    ...Typography.body,
+    fontSize: 13,
+    color: Colors.zinc400,
+    marginTop: 4,
+  },
+  profileIdRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 4,
+  },
+  profileIdLabel: {
+    ...Typography.bodySemiBold,
+    fontSize: 12,
+    color: Colors.zinc400,
+  },
+  profileIdValue: {
+    ...Typography.body,
+    fontSize: 12,
     color: Colors.zinc500,
   },
 });

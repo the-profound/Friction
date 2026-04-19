@@ -1,13 +1,32 @@
-import React from "react";
+import React, { useRef } from "react";
 import { View, Text, StyleSheet, Modal, Pressable } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, ZIndex, Spacing } from "../../constants/tokens";
+
+interface ActionButton {
+  emoji: string;
+  label: string;
+  onPress: () => void;
+}
+
+interface DeleteButton {
+  onPress: () => void;
+  /**
+   * Visual-only: reduces button opacity to indicate restricted access.
+   * The onPress handler still fires so callers can show an explanatory message.
+   */
+  disabled?: boolean;
+}
 
 interface ConfirmModalProps {
   visible: boolean;
   title: string;
-  onConfirm: () => void;
   onCancel: () => void;
   description?: string;
+  actionButton?: ActionButton;
+  deleteButton?: DeleteButton;
+  hint?: string;
+  onConfirm?: () => void;
   confirmLabel?: string;
   cancelLabel?: string;
   destructive?: boolean;
@@ -16,36 +35,100 @@ interface ConfirmModalProps {
 export default function ConfirmModal({
   visible,
   title,
-  onConfirm,
   onCancel,
   description,
+  actionButton,
+  deleteButton,
+  hint,
+  onConfirm,
   confirmLabel = "확인",
   cancelLabel = "취소",
   destructive = false,
 }: ConfirmModalProps) {
+  // Freeze content while the modal is fading out so the last real values
+  // remain visible instead of flashing the empty/fallback state.
+  const frozenTitle = useRef(title);
+  const frozenDescription = useRef(description);
+  const frozenActionButton = useRef(actionButton);
+  const frozenDeleteButton = useRef(deleteButton);
+  const frozenHint = useRef(hint);
+  const frozenConfirmLabel = useRef(confirmLabel);
+  const frozenCancelLabel = useRef(cancelLabel);
+  const frozenDestructive = useRef(destructive);
+
+  if (visible) {
+    frozenTitle.current = title;
+    frozenDescription.current = description;
+    frozenActionButton.current = actionButton;
+    frozenDeleteButton.current = deleteButton;
+    frozenHint.current = hint;
+    frozenConfirmLabel.current = confirmLabel;
+    frozenCancelLabel.current = cancelLabel;
+    frozenDestructive.current = destructive;
+  }
+
+  const displayTitle = frozenTitle.current;
+  const displayDescription = frozenDescription.current;
+  const displayActionButton = frozenActionButton.current;
+  const displayDeleteButton = frozenDeleteButton.current;
+  const displayHint = frozenHint.current;
+  const displayConfirmLabel = frozenConfirmLabel.current;
+  const displayCancelLabel = frozenCancelLabel.current;
+  const displayDestructive = frozenDestructive.current;
+
+  const isNewLayout = !!displayActionButton;
+
   return (
     <Modal transparent visible={visible} animationType="fade" statusBarTranslucent>
       <Pressable style={styles.overlay} onPress={onCancel}>
-        <Pressable style={styles.card} onPress={(e) => e.stopPropagation()}>
-          <Text style={styles.title}>{title}</Text>
-          {description && <Text style={styles.description}>{description}</Text>}
-          <View style={styles.buttons}>
-            <Pressable
-              style={[styles.button, styles.cancelButton]}
-              onPress={onCancel}
-            >
-              <Text style={styles.cancelText}>{cancelLabel}</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.button, destructive ? styles.destructiveButton : styles.confirmButton]}
-              onPress={onConfirm}
-            >
-              <Text style={[styles.confirmText, destructive && styles.destructiveText]}>
-                {confirmLabel}
-              </Text>
-            </Pressable>
-          </View>
-        </Pressable>
+        <View style={styles.contentWrapper}>
+          <Pressable style={styles.card} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.title}>{displayTitle}</Text>
+            {displayDescription && <Text style={styles.description}>{displayDescription}</Text>}
+
+            {isNewLayout ? (
+              <View style={styles.actionRow}>
+                <Pressable style={styles.actionButton} onPress={displayActionButton.onPress}>
+                  <Text style={styles.actionButtonEmoji}>{displayActionButton.emoji}</Text>
+                  <Text style={styles.actionButtonLabel}>{displayActionButton.label}</Text>
+                </Pressable>
+
+                {displayDeleteButton && (
+                  <Pressable
+                    style={[
+                      styles.deleteButton,
+                      displayDeleteButton.disabled && styles.deleteButtonDisabled,
+                    ]}
+                    onPress={displayDeleteButton.onPress}
+                  >
+                    <Feather name="trash-2" size={20} color={Colors.white} />
+                  </Pressable>
+                )}
+              </View>
+            ) : (
+              <View style={styles.buttons}>
+                <Pressable
+                  style={[styles.button, styles.cancelButton]}
+                  onPress={onCancel}
+                >
+                  <Text style={styles.cancelText}>{displayCancelLabel}</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.button, displayDestructive ? styles.destructiveButton : styles.confirmButton]}
+                  onPress={onConfirm}
+                >
+                  <Text style={[styles.confirmText, displayDestructive && styles.destructiveText]}>
+                    {displayConfirmLabel}
+                  </Text>
+                </Pressable>
+              </View>
+            )}
+          </Pressable>
+
+          {displayHint && (
+            <Text style={styles.hint}>{displayHint}</Text>
+          )}
+        </View>
       </Pressable>
     </Modal>
   );
@@ -59,6 +142,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     zIndex: ZIndex.modal,
     paddingHorizontal: 40,
+  },
+  contentWrapper: {
+    width: "100%",
+    alignItems: "center",
+  },
+  hint: {
+    marginTop: 14,
+    fontSize: 13,
+    color: "rgba(255,255,255,0.85)",
+    textAlign: "center",
+    lineHeight: 18,
   },
   card: {
     width: "100%",
@@ -81,6 +175,41 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 8,
     lineHeight: 20,
+  },
+  actionRow: {
+    flexDirection: "row",
+    marginTop: 20,
+    gap: 10,
+    alignItems: "center",
+  },
+  actionButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: Colors.zinc100,
+  },
+  actionButtonEmoji: {
+    fontSize: 18,
+  },
+  actionButtonLabel: {
+    ...Typography.bodySemiBold,
+    fontSize: 15,
+    color: Colors.zinc700,
+  },
+  deleteButton: {
+    width: 52,
+    height: 52,
+    borderRadius: 12,
+    backgroundColor: "#DC2626",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  deleteButtonDisabled: {
+    opacity: 0.35,
   },
   buttons: {
     flexDirection: "row",

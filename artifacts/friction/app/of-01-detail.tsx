@@ -33,7 +33,7 @@ export default function PersonalCollectionDetailScreen() {
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
-  const [removeArticleTarget, setRemoveArticleTarget] = useState<{ id: string; title: string } | null>(null);
+  const [articleActionTarget, setArticleActionTarget] = useState<MyCollectionArticleWithDetails | null>(null);
 
   const collectionQuery = useGetMyCollection(id ?? "");
   const collection = collectionQuery.data;
@@ -132,6 +132,23 @@ export default function PersonalCollectionDetailScreen() {
     [id, removeArticle, articlesQuery, collectionQuery],
   );
 
+  const handleArticleActionRead = useCallback(() => {
+    if (!articleActionTarget) return;
+    const item = articleActionTarget;
+    setArticleActionTarget(null);
+    router.push({
+      pathname: "/read",
+      params: { articleId: item.articleId, mode: "re_read" },
+    });
+  }, [articleActionTarget, router]);
+
+  const handleArticleActionDelete = useCallback(async () => {
+    if (!articleActionTarget) return;
+    const item = articleActionTarget;
+    setArticleActionTarget(null);
+    await handleRemoveArticle(item.articleId);
+  }, [articleActionTarget, handleRemoveArticle]);
+
   const alreadyAddedIds = articles.map((a) => a.articleId);
 
   const pickerArticles = myArticles.map((a) => ({
@@ -144,15 +161,7 @@ export default function PersonalCollectionDetailScreen() {
   const renderArticleItem = ({ item }: { item: MyCollectionArticleWithDetails }) => (
     <Pressable
       style={styles.articleItem}
-      onPress={() =>
-        router.push({
-          pathname: "/read",
-          params: { articleId: item.articleId, mode: "re_read" },
-        })
-      }
-      onLongPress={() =>
-        setRemoveArticleTarget({ id: item.articleId, title: item.article?.title ?? "제목 없음" })
-      }
+      onPress={() => setArticleActionTarget(item)}
     >
       <View style={styles.articleInfo}>
         <Text style={styles.articleTitle} numberOfLines={1}>
@@ -312,19 +321,17 @@ export default function PersonalCollectionDetailScreen() {
       />
 
       <ConfirmModal
-        visible={removeArticleTarget !== null}
-        title="글 제거"
-        description={`'${removeArticleTarget?.title ?? ""}'을(를) 이 모음에서 제거하시겠어요?`}
-        confirmLabel="제거"
-        cancelLabel="취소"
-        destructive
-        onConfirm={() => {
-          if (removeArticleTarget) {
-            handleRemoveArticle(removeArticleTarget.id);
-          }
-          setRemoveArticleTarget(null);
+        visible={articleActionTarget !== null}
+        title={articleActionTarget?.article?.title ?? "제목 없음"}
+        onCancel={() => setArticleActionTarget(null)}
+        actionButton={{
+          emoji: "📖",
+          label: "읽기",
+          onPress: handleArticleActionRead,
         }}
-        onCancel={() => setRemoveArticleTarget(null)}
+        deleteButton={{
+          onPress: handleArticleActionDelete,
+        }}
       />
     </View>
   );

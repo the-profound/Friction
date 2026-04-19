@@ -57,6 +57,7 @@ export default function OnScreen() {
   const { userId } = useUser();
   const [filter, setFilter] = useState<FilterMode>("all");
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [tapArticle, setTapArticle] = useState<Article | null>(null);
 
   const openRowRef = useRef<SwipeableRowHandle | null>(null);
   const rowRefs = useRef<Map<string, SwipeableRowHandle>>(new Map());
@@ -110,11 +111,35 @@ export default function OnScreen() {
   const handleArticlePress = useCallback(
     (article: Article) => {
       closeOpenRow();
-      const screen = getScreenForStatus(article.status as ArticleStatus);
-      router.push({ pathname: screen as never, params: { id: article.id } });
+      setTapArticle(article);
     },
-    [router, closeOpenRow],
+    [closeOpenRow],
   );
+
+  const handleTapModalClose = useCallback(() => {
+    setTapArticle(null);
+  }, []);
+
+  const handleTapWrite = useCallback(() => {
+    if (!tapArticle) return;
+    const article = tapArticle;
+    setTapArticle(null);
+    const screen = getScreenForStatus(article.status as ArticleStatus);
+    router.push({ pathname: screen as never, params: { id: article.id } });
+  }, [tapArticle, router]);
+
+  const handleTapDelete = useCallback(async () => {
+    if (!tapArticle) return;
+    const id = tapArticle.id;
+    setTapArticle(null);
+    try {
+      await deleteArticle.mutateAsync({ id });
+      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";
+      Alert.alert("오류", msg);
+    }
+  }, [tapArticle, deleteArticle, queryClient]);
 
   const handleDeletePress = useCallback((articleId: string) => {
     setDeleteTargetId(articleId);
@@ -234,6 +259,21 @@ export default function OnScreen() {
           ListFooterComponent={listFooter}
         />
       )}
+
+      <ConfirmModal
+        visible={tapArticle !== null}
+        title={tapArticle?.title || "제목 없음"}
+        description={tapArticle?.content?.substring(0, 60) || ""}
+        onCancel={handleTapModalClose}
+        actionButton={{
+          emoji: "✏️",
+          label: "쓰기",
+          onPress: handleTapWrite,
+        }}
+        deleteButton={{
+          onPress: handleTapDelete,
+        }}
+      />
 
       <ConfirmModal
         visible={deleteTargetId !== null}
