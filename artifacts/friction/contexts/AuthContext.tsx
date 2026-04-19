@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { Session, AuthError } from "@supabase/supabase-js";
 import * as Linking from "expo-linking";
+import { Platform } from "react-native";
 import { supabase } from "@/lib/supabase";
 
 interface AuthContextValue {
@@ -84,11 +85,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   async function signInWithOtp(email: string) {
+    const redirectTo =
+      Platform.OS === "web" && typeof window !== "undefined"
+        ? `${window.location.origin}/login-callback`
+        : "friction://login-callback";
+
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
         shouldCreateUser: true,
-        emailRedirectTo: "friction://login-callback",
+        emailRedirectTo: redirectTo,
       },
     });
     return { error };
