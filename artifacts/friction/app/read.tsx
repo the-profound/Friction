@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import React, { useState, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -243,6 +243,13 @@ export default function ReadScreen() {
   }, [reading.isRestoring, reading.isSessionHydrated, reading.session.state, totalPages]);
 
   useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
+  useEffect(() => {
     if (reading.session.state === "COMPLETED_READY") {
       const recentId = recentCollectionQuery.data?.recentSavedCollectionId;
       const collections = collectionsQuery.data;
@@ -294,7 +301,14 @@ export default function ReadScreen() {
     () => (article?.cover ? resolveArticleCover(article.cover) : null),
     [article?.cover],
   );
-  const hasCover = articleCover !== null && articleCover.type !== "default";
+  const hasCover =
+    articleCover !== null &&
+    articleCover.type !== "default" &&
+    !(
+      articleCover.type === "color" &&
+      !articleCover.bgColor &&
+      (!articleCover.textColor || articleCover.textColor === Colors.zinc900)
+    );
   const showingCover = hasCover && !coverDismissed && currentPage === 0;
 
   useEffect(() => {
@@ -302,6 +316,12 @@ export default function ReadScreen() {
       setCoverDismissed(false);
     }
   }, [currentPage, hasCover]);
+
+  useLayoutEffect(() => {
+    if (!hasCover && currentPage === 0 && reading.isSessionHydrated && !reading.isRestoring && totalPages > 1) {
+      reading.jumpToPage(1);
+    }
+  }, [hasCover, currentPage, reading.isSessionHydrated, reading.isRestoring, totalPages, reading.jumpToPage]);
 
   const handleSwipeLeft = useCallback(() => {
     if (!canNavigate) return;
@@ -316,8 +336,10 @@ export default function ReadScreen() {
   const handleSwipeRight = useCallback(() => {
     if (!canNavigate) return;
     if (showingCover) return;
+    // When there is no cover, page 0 is an empty slot — block navigation back to it
+    if (!hasCover && currentPage <= 1) return;
     reading.prevPage();
-  }, [canNavigate, showingCover, reading]);
+  }, [canNavigate, showingCover, hasCover, currentPage, reading]);
 
   const SWIPE_MIN_DISTANCE = 40;
   const SWIPE_MIN_RATIO = 1.5;
@@ -345,6 +367,8 @@ export default function ReadScreen() {
   useEffect(() => { currentPageRef.current = currentPage; }, [currentPage]);
   const isOnLastPageRef = useRef(isOnLastPage);
   useEffect(() => { isOnLastPageRef.current = isOnLastPage; }, [isOnLastPage]);
+  const hasCoverRef = useRef(hasCover);
+  useEffect(() => { hasCoverRef.current = hasCover; }, [hasCover]);
   const outgoingPageRef = useRef<{ page: number; showingCover: boolean }>({ page: 0, showingCover: false });
 
   const swipePanResponder = useRef(
@@ -370,7 +394,8 @@ export default function ReadScreen() {
       onPanResponderMove: (_, g) => {
         if (!isCommittingRef.current) {
           const swipingLeftOnLastPage = isOnLastPageRef.current && g.dx < 0;
-          if (!swipingLeftOnLastPage) {
+          const swipingRightAtNoCoverStart = !hasCoverRef.current && currentPageRef.current <= 1 && g.dx > 0;
+          if (!swipingLeftOnLastPage && !swipingRightAtNoCoverStart) {
             outX.setValue(g.dx);
           }
         }
@@ -393,7 +418,7 @@ export default function ReadScreen() {
 
         const swipingBack = swipeDir === 1;
         const isAtBoundary = swipingBack
-          ? (showingCoverRef.current || currentPageRef.current === 0)
+          ? (showingCoverRef.current || currentPageRef.current === 0 || (!hasCoverRef.current && currentPageRef.current <= 1))
           : false;
 
         if (!canNavigateRef.current || absDx < SWIPE_MIN_DISTANCE || isAtBoundary) {
@@ -872,11 +897,14 @@ export default function ReadScreen() {
                 <Text style={dynamicStyles.completionButtonSecondaryText}>다시 읽기</Text>
               </Pressable>
               <Pressable
-                style={[styles.completionButton, styles.completionButtonSecondary, isDeleting && styles.completionButtonDisabled]}
-                onPress={handleCommitAndSkip}
-                disabled={isDeleting}
+                style={[styles.completionButton, styles.completionButtonSecondary]}
+                onPress={async () => {
+                  setCompletionSheetVisible(false);
+                  await readingMemo.cleanup();
+                  router.back();
+                }}
               >
-                <Text style={dynamicStyles.completionButtonSecondaryText}>{isDeleting ? "삭제 중..." : "삭제하기"}</Text>
+                <Text style={dynamicStyles.completionButtonSecondaryText}>나가기</Text>
               </Pressable>
             </>
           ) : (
@@ -1079,6 +1107,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: ReaderTokens.bodyBg,
+    overflow: "hidden",
   },
   header: {
     flexDirection: "row",

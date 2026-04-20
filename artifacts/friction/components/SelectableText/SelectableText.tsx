@@ -14,29 +14,96 @@ interface SelectableTextProps {
   children?: React.ReactNode;
 }
 
-function SelectableTextWeb({ text, onCollect, onMemo, fontSize, lineHeight, letterSpacing, children }: SelectableTextProps) {
+interface CaretPositionResult {
+  offsetNode: Node;
+  offset: number;
+}
+
+interface DocumentWithCaretAPIs extends Document {
+  caretPositionFromPoint?: (x: number, y: number) => CaretPositionResult | null;
+  caretRangeFromPoint?: (x: number, y: number) => Range | null;
+}
+
+function selectWordAtPoint(x: number, y: number): boolean {
+  let range: Range | null = null;
+  const doc = document as DocumentWithCaretAPIs;
+  if (typeof doc.caretPositionFromPoint === "function") {
+    const pos = doc.caretPositionFromPoint(x, y);
+    if (pos) {
+      range = document.createRange();
+      range.setStart(pos.offsetNode, pos.offset);
+      range.collapse(true);
+    }
+  } else if (typeof doc.caretRangeFromPoint === "function") {
+    range = doc.caretRangeFromPoint(x, y);
+  }
+  if (!range) return false;
+  const node = range.startContainer;
+  if (node.nodeType !== Node.TEXT_NODE) return false;
+  const txt = node.textContent ?? "";
+  let s = range.startOffset;
+  let e = s;
+  while (s > 0 && /\S/.test(txt[s - 1])) s--;
+  while (e < txt.length && /\S/.test(txt[e])) e++;
+  if (s === e) return false;
+  range.setStart(node, s);
+  range.setEnd(node, e);
+  const sel = window.getSelection();
+  sel?.removeAllRanges();
+  sel?.addRange(range);
+  return true;
+}
+
+function SelectableTextWeb({ text, onCollect, onMemo, onSelectionStateChange, fontSize, lineHeight, letterSpacing, children }: SelectableTextProps) {
   const [selectedText, setSelectedText] = useState("");
   const [showCollectButton, setShowCollectButton] = useState(false);
+  const [isSelectMode, setIsSelectMode] = useState(false);
   const textBodyRef = useRef<Text>(null);
-  // Saves the selected text on pressIn (mousedown), BEFORE selectionchange clears it
   const pendingTextRef = useRef("");
+  const isSelectModeRef = useRef(false);
+  const isDraggingSelectionRef = useRef(false);
+  const onSelectionStateChangeRef = useRef(onSelectionStateChange);
+  onSelectionStateChangeRef.current = onSelectionStateChange;
+
+  const exitSelectMode = useCallback(() => {
+    if (!isSelectModeRef.current) return;
+    isSelectModeRef.current = false;
+    setIsSelectMode(false);
+    setShowCollectButton(false);
+    setSelectedText("");
+    window.getSelection()?.removeAllRanges();
+    onSelectionStateChangeRef.current?.(false);
+  }, []);
 
   useEffect(() => {
     if (Platform.OS !== "web") return;
 
     const handleSelectionChange = () => {
       const sel = window.getSelection();
+      const el = textBodyRef.current as unknown as HTMLElement | null;
       if (!sel || sel.rangeCount === 0 || sel.toString().trim().length === 0) {
+        // While the user is dragging a new selection the range is momentarily
+        // empty between mousedown and the first mousemove — do not exit.
+        if (isDraggingSelectionRef.current) return;
+        if (isSelectModeRef.current) {
+          isSelectModeRef.current = false;
+          setIsSelectMode(false);
+          onSelectionStateChangeRef.current?.(false);
+        }
         setShowCollectButton(false);
         setSelectedText("");
         return;
       }
       const range = sel.getRangeAt(0);
-      const textNode = (textBodyRef.current as unknown as HTMLElement);
-      if (textNode && textNode.contains(range.commonAncestorContainer)) {
+      if (el && el.contains(range.commonAncestorContainer)) {
         const selected = sel.toString().trim();
         setSelectedText(selected);
         setShowCollectButton(true);
+        if (!isSelectModeRef.current) {
+          isSelectModeRef.current = true;
+          setIsSelectMode(true);
+          onSelectionStateChangeRef.current?.(true);
+        }
         return;
       }
       setShowCollectButton(false);
@@ -49,7 +116,80 @@ function SelectableTextWeb({ text, onCollect, onMemo, fontSize, lineHeight, lett
     };
   }, []);
 
-  // onPressIn fires on mousedown — BEFORE selectionchange clears selectedText
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const el = textBodyRef.current as unknown as HTMLElement | null;
+    if (!el) return;
+
+    const handleDblClick = (e: MouseEvent) => {
+      e.stopPropagation();
+      // Apply user-select:text directly on the DOM element before creating the
+      // programmatic selection so mobile browsers show native teardrop handles.
+      el.style.userSelect = "text";
+      const selected = selectWordAtPoint(e.clientX, e.clientY);
+      if (selected) {
+        isSelectModeRef.current = true;
+        setIsSelectMode(true);
+        onSelectionStateChangeRef.current?.(true);
+      } else {
+        el.style.userSelect = "none";
+      }
+    };
+
+    el.addEventListener("dblclick", handleDblClick);
+    return () => el.removeEventListener("dblclick", handleDblClick);
+  }, []);
+
+  // When the collect bar is showing (select mode), let the browser handle
+  // drag selection naturally (starting a completely fresh selection from the
+  // mousedown point). We only need to:
+  //   1. Flag that a drag is in progress so handleSelectionChange does not
+  //      exit select mode while the range is momentarily empty between
+  //      mousedown and the first mousemove.
+  //   2. On mouseup, if the drag ended with no text selected (plain click),
+  //      explicitly exit select mode.
+  // The PanResponder in read.tsx is already blocked because isTextSelectingRef
+  // is true while the collect bar is visible.
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const el = textBodyRef.current as unknown as HTMLElement | null;
+    if (!el) return;
+
+    const handleMouseDown = (e: MouseEvent) => {
+      if (!isSelectModeRef.current) return;
+      // e.detail === 2: part of a double-click — let the dblclick handler win.
+      if (e.detail === 2) return;
+      // Mark drag active; handleSelectionChange will skip the exit check.
+      isDraggingSelectionRef.current = true;
+      // Do NOT preventDefault: the browser starts a fresh selection from here.
+    };
+
+    const handleMouseUp = () => {
+      if (!isDraggingSelectionRef.current) return;
+      isDraggingSelectionRef.current = false;
+      // If the mouse was released with nothing selected (plain click outside
+      // the text, or click without drag), exit select mode now because
+      // handleSelectionChange already suppressed the earlier empty-range event.
+      const sel = window.getSelection();
+      if (!sel || sel.toString().trim().length === 0) {
+        isSelectModeRef.current = false;
+        setIsSelectMode(false);
+        setShowCollectButton(false);
+        setSelectedText("");
+        window.getSelection()?.removeAllRanges();
+        onSelectionStateChangeRef.current?.(false);
+      }
+    };
+
+    el.addEventListener("mousedown", handleMouseDown);
+    document.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      el.removeEventListener("mousedown", handleMouseDown);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, []);
+
   const handleCollectPressIn = useCallback(() => {
     pendingTextRef.current = selectedText;
   }, [selectedText]);
@@ -59,52 +199,54 @@ function SelectableTextWeb({ text, onCollect, onMemo, fontSize, lineHeight, lett
   }, [selectedText]);
 
   const handleCollect = useCallback(() => {
-    const text = pendingTextRef.current;
+    const t = pendingTextRef.current;
     pendingTextRef.current = "";
-    if (text.length > 0) {
-      onCollect(text);
-      setShowCollectButton(false);
-      setSelectedText("");
-      window.getSelection()?.removeAllRanges();
+    if (t.length > 0) {
+      onCollect(t);
+      exitSelectMode();
     }
-  }, [onCollect]);
+  }, [onCollect, exitSelectMode]);
 
   const handleMemo = useCallback(() => {
-    const text = pendingTextRef.current;
+    const t = pendingTextRef.current;
     pendingTextRef.current = "";
-    if (text.length > 0) {
-      onMemo?.(text);
-      setShowCollectButton(false);
-      setSelectedText("");
-      window.getSelection()?.removeAllRanges();
+    if (t.length > 0) {
+      onMemo?.(t);
+      exitSelectMode();
     }
-  }, [onMemo]);
+  }, [onMemo, exitSelectMode]);
 
   const textStyle = [
     styles.textBody,
     fontSize != null && { fontSize },
     lineHeight != null && { lineHeight },
     letterSpacing != null && { letterSpacing },
-    { wordBreak: "break-word" as any, overflowWrap: "anywhere" as any },
+    {
+      wordBreak: "break-word" as any,
+      overflowWrap: "anywhere" as any,
+      userSelect: isSelectMode ? ("text" as const) : ("none" as const),
+    },
   ];
 
   return (
     <View style={styles.container}>
-      <Text selectable style={textStyle} ref={textBodyRef}>
+      <Text style={textStyle} ref={textBodyRef}>
         {children ?? text}
       </Text>
       {showCollectButton && (
-        <View style={styles.collectBar}>
-          <Pressable style={styles.collectButton} onPressIn={handleCollectPressIn} onPress={handleCollect}>
-            <Feather name="bookmark" size={14} color={Colors.white} />
-            <Text style={styles.collectButtonText}>수집</Text>
-          </Pressable>
-          {onMemo && (
-            <Pressable style={styles.collectButton} onPressIn={handleMemoPressIn} onPress={handleMemo}>
-              <Feather name="edit-3" size={14} color={Colors.white} />
-              <Text style={styles.collectButtonText}>메모</Text>
+        <View style={styles.collectBarAbsoluteWrap}>
+          <View style={styles.collectBarPill}>
+            <Pressable style={styles.collectButton} onPressIn={handleCollectPressIn} onPress={handleCollect}>
+              <Feather name="bookmark" size={14} color={Colors.white} />
+              <Text style={styles.collectButtonText}>수집</Text>
             </Pressable>
-          )}
+            {onMemo && (
+              <Pressable style={styles.collectButton} onPressIn={handleMemoPressIn} onPress={handleMemo}>
+                <Feather name="edit-3" size={14} color={Colors.white} />
+                <Text style={styles.collectButtonText}>메모</Text>
+              </Pressable>
+            )}
+          </View>
         </View>
       )}
     </View>
@@ -256,6 +398,28 @@ const styles = StyleSheet.create({
     color: "transparent",
     backgroundColor: "transparent",
   },
+  // Used by SelectableTextWeb: absolutely positioned just below the text block.
+  // top:'100%' is a web CSS percentage; cast to satisfy RN number types.
+  collectBarAbsoluteWrap: {
+    position: "absolute",
+    top: "100%" as unknown as number,
+    left: 0,
+    right: 0,
+    marginTop: 6,
+    zIndex: 9999,
+    flexDirection: "row",
+    justifyContent: "center",
+  },
+  collectBarPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.zinc900,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  // Used by SelectableTextNative
   collectBar: {
     flexDirection: "row",
     alignItems: "center",
@@ -272,8 +436,8 @@ const styles = StyleSheet.create({
     gap: 4,
     backgroundColor: Colors.zinc700,
     borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
   collectButtonText: {
     fontSize: 12,

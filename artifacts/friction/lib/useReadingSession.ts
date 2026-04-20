@@ -69,7 +69,7 @@ export function useReadingSession({
     if (restoredRef.current || isRestoring) return;
     restoredRef.current = true;
     const record = savedRecord?.record;
-    if (record) {
+    if (record && mode !== "re_read") {
       const restoredPage = Math.max(0, record.currentPage ?? 0);
       setSession((prev) => ({
         ...prev,
@@ -81,7 +81,7 @@ export function useReadingSession({
       }));
     }
     setIsSessionHydrated(true);
-  }, [savedRecord, isRestoring]);
+  }, [savedRecord, isRestoring, mode]);
 
   useEffect(() => {
     if (totalPages <= 0) return;

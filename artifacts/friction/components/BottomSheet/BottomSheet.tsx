@@ -166,6 +166,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     zIndex: ZIndex.modal,
+    overflow: "hidden",
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
