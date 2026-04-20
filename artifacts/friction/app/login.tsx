@@ -68,8 +68,8 @@ export default function LoginScreen() {
 
   async function handleVerifyOtp() {
     const code = otp.trim();
-    if (code.length !== 6) {
-      setErrorMessage("6자리 코드를 입력해주세요.");
+    if (code.length !== 8) {
+      setErrorMessage("8자리 코드를 입력해주세요.");
       return;
     }
 
@@ -92,10 +92,10 @@ export default function LoginScreen() {
   }
 
   function handleOtpChange(text: string) {
-    const digits = text.replace(/[^0-9]/g, "").slice(0, 6);
+    const digits = text.replace(/[^0-9]/g, "").slice(0, 8);
     setOtp(digits);
     if (errorMessage) setErrorMessage(null);
-    if (digits.length === 6) {
+    if (digits.length === 8) {
       setTimeout(() => handleVerifyOtpWithCode(digits), 100);
     }
   }
@@ -182,7 +182,7 @@ export default function LoginScreen() {
                 )}
               </Pressable>
               <Text style={styles.hint}>
-                이메일로 6자리 인증 코드가 발송됩니다. 비밀번호가 필요 없어요.
+                이메일로 8자리 인증 코드가 발송됩니다. 비밀번호가 필요 없어요.
               </Text>
             </View>
           ) : (
@@ -193,16 +193,16 @@ export default function LoginScreen() {
               <Text style={styles.sentTitle}>코드를 입력해주세요</Text>
               <Text style={styles.sentDescription}>
                 <Text style={styles.sentEmail}>{email.trim()}</Text>
-                {"\n"}으로 6자리 인증 코드를 보냈어요.{"\n"}이메일을 확인하고 코드를 입력하세요.
+                {"\n"}으로 8자리 인증 코드를 보냈어요.{"\n"}이메일을 확인하고 코드를 입력하세요.
               </Text>
 
               <TextInput
                 ref={otpInputRef}
                 style={styles.otpInput}
-                placeholder="000000"
+                placeholder="00000000"
                 placeholderTextColor={Colors.zinc300}
                 keyboardType="number-pad"
-                maxLength={6}
+                maxLength={8}
                 value={otp}
                 onChangeText={handleOtpChange}
                 editable={!isLoading}
@@ -223,11 +223,11 @@ export default function LoginScreen() {
               <Pressable
                 style={({ pressed }) => [
                   styles.button,
-                  (isLoading || otp.length !== 6) && styles.buttonDisabled,
+                  (isLoading || otp.length !== 8) && styles.buttonDisabled,
                   pressed && styles.buttonPressed,
                 ]}
                 onPress={handleVerifyOtp}
-                disabled={isLoading || otp.length !== 6}
+                disabled={isLoading || otp.length !== 8}
                 accessibilityRole="button"
                 accessibilityLabel="로그인"
               >
