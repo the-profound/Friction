@@ -171,11 +171,7 @@ export default function MemoCollectionScreen() {
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
         </Pressable>
         <Text style={styles.headerTitle}>메모 모음</Text>
-        <Pressable onPress={handleToggleManage} hitSlop={12}>
-          <Text style={styles.manageButton}>
-            {isManageMode ? "완료" : "관리"}
-          </Text>
-        </Pressable>
+        <View style={{ width: 20 }} />
       </View>
       <View style={styles.sortBar}>
         {SORT_OPTIONS.map((opt) => (
