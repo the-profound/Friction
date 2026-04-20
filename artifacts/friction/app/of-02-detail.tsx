@@ -14,15 +14,12 @@ import {
   useDeleteTeamCollection,
   useListTeamMembers,
   useListTeamArticles,
-  useAddTeamArticle,
   useRemoveTeamArticle,
   useRemoveTeamMember,
   useAddTeamMember,
-  useListArticles,
   useListInbox,
   useCreateNeighborRequest,
   getListTeamArticlesQueryKey,
-  getGetTeamCollectionQueryKey,
   getListTeamMembersQueryKey,
 } from "@workspace/api-client-react";
 import type {
@@ -30,7 +27,6 @@ import type {
   TeamCollectionArticleWithDetails,
   InboxItem,
 } from "@workspace/api-client-react";
-import { MyArticlesPickerBottomSheet } from "@/components/MyArticlesPickerBottomSheet/MyArticlesPickerBottomSheet";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 
 type DetailTab = "articles" | "members";
@@ -43,7 +39,6 @@ export default function TeamCollectionDetailScreen() {
   const { showToast } = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [activeTab, setActiveTab] = useState<DetailTab>("articles");
-  const [showPicker, setShowPicker] = useState(false);
   const [editSheetVisible, setEditSheetVisible] = useState(false);
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
@@ -64,15 +59,11 @@ export default function TeamCollectionDetailScreen() {
   const articlesQuery = useListTeamArticles(id ?? "");
   const articles = (articlesQuery.data ?? []) as TeamCollectionArticleWithDetails[];
 
-  const myArticlesQuery = useListArticles({ authorId: userId, status: "LETTER" as const });
-  const myArticles = (myArticlesQuery.data ?? []) as Array<{ id: string; title: string; status: string; content?: string }>;
-
   const updateCollection = useUpdateTeamCollection();
   const deleteCollection = useDeleteTeamCollection();
   const inboxQuery = useListInbox({ recipientId: userId });
   const inboxItems = (inboxQuery.data ?? []) as InboxItem[];
 
-  const addArticle = useAddTeamArticle();
   const removeArticle = useRemoveTeamArticle();
   const removeMember = useRemoveTeamMember();
   const addMember = useAddTeamMember();
@@ -180,23 +171,6 @@ export default function TeamCollectionDetailScreen() {
     }
   }, [id, inviteUserId, addMember, membersQuery]);
 
-  const handleAddArticles = useCallback(
-    async (articleIds: string[]) => {
-      if (!id || articleIds.length === 0) return;
-      try {
-        for (const articleId of articleIds) {
-          await addArticle.mutateAsync({ id, data: { articleId, addedBy: userId } });
-        }
-        await queryClient.invalidateQueries({ queryKey: getListTeamArticlesQueryKey(id) });
-        await queryClient.invalidateQueries({ queryKey: getGetTeamCollectionQueryKey(id) });
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "글 추가에 실패했습니다.";
-        Alert.alert("오류", msg);
-      }
-    },
-    [id, userId, addArticle, queryClient],
-  );
-
   const handleRemoveArticle = useCallback(
     async (articleId: string) => {
       if (!id) return;
@@ -246,15 +220,6 @@ export default function TeamCollectionDetailScreen() {
     setShowDeleteHint(false);
     await handleRemoveArticle(item.articleId);
   }, [articleActionTarget, canDeleteTarget, handleRemoveArticle]);
-
-  const alreadyAddedIds = articles.map((a) => a.articleId);
-
-  const pickerArticles = myArticles.map((a) => ({
-    id: a.id,
-    title: a.title ?? "제목 없음",
-    status: a.status,
-    excerpt: a.content?.substring(0, 60),
-  }));
 
   const renderArticleItem = ({ item }: { item: TeamCollectionArticleWithDetails }) => {
     return (
@@ -374,7 +339,19 @@ export default function TeamCollectionDetailScreen() {
         <View style={styles.contentArea}>
           {isMember && (
             <View style={styles.articleActions}>
-              <Pressable style={styles.addButton} onPress={() => setShowPicker(true)}>
+              <Pressable
+                style={styles.addButton}
+                onPress={() =>
+                  router.push({
+                    pathname: "/to-02",
+                    params: {
+                      targetGroup: id,
+                      targetGroupName: collection?.name ?? "",
+                      returnToId: id,
+                    },
+                  })
+                }
+              >
                 <Feather name="plus" size={16} color={Colors.zinc600} />
                 <Text style={styles.addButtonText}>내 글 추가</Text>
               </Pressable>
@@ -449,14 +426,6 @@ export default function TeamCollectionDetailScreen() {
           )}
         </View>
       )}
-
-      <MyArticlesPickerBottomSheet
-        visible={showPicker}
-        onClose={() => setShowPicker(false)}
-        onSelect={handleAddArticles}
-        articles={pickerArticles}
-        alreadyAdded={alreadyAddedIds}
-      />
 
       <BottomSheet
         visible={editSheetVisible}

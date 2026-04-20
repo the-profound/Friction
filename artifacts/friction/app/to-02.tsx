@@ -1,7 +1,7 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
 import { View, Text, StyleSheet, Pressable, ScrollView, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
@@ -12,8 +12,10 @@ import {
   useListArticles,
   useListNeighbors,
   useSendArticle,
+  useListTeamCollections,
+  useAddTeamArticle,
 } from "@workspace/api-client-react";
-import type { NeighborWithUser } from "@workspace/api-client-react";
+import type { NeighborWithUser, TeamCollectionWithRole } from "@workspace/api-client-react";
 import { getNextDeliverySlot, formatDeliveryTime, canSendToNeighbor } from "@/lib/deliverySync";
 import type { ArticleStatus } from "@/lib/policies";
 
@@ -24,73 +26,188 @@ interface LetterArticle {
   content?: string;
 }
 
+type RecipientNeighbor = {
+  type: "neighbor";
+  data: NeighborWithUser;
+};
+
+type RecipientCollection = {
+  type: "collection";
+  data: TeamCollectionWithRole;
+};
+
+type Recipient = RecipientNeighbor | RecipientCollection | null;
+
+type SegmentTab = "neighbor" | "collection";
+
 export default function SendScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { userId } = useUser();
   const { showToast } = useToast();
+  const { targetGroup, targetGroupName, returnToId } = useLocalSearchParams<{
+    targetGroup?: string;
+    targetGroupName?: string;
+    returnToId?: string;
+  }>();
 
   const [selectedArticle, setSelectedArticle] = useState<LetterArticle | null>(null);
-  const [selectedRecipient, setSelectedRecipient] = useState<NeighborWithUser | null>(null);
+  const [selectedRecipient, setSelectedRecipient] = useState<Recipient>(null);
   const [letterPickerVisible, setLetterPickerVisible] = useState(false);
   const [recipientPickerVisible, setRecipientPickerVisible] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
+
+  const [segmentTab, setSegmentTab] = useState<SegmentTab>("neighbor");
+  const [pendingRecipient, setPendingRecipient] = useState<Recipient>(null);
 
   const articlesQuery = useListArticles({ authorId: userId, status: "LETTER" as const });
   const articles = (articlesQuery.data ?? []) as LetterArticle[];
   const neighborsQuery = useListNeighbors({ userId });
   const neighbors = (neighborsQuery.data ?? []) as NeighborWithUser[];
+  const teamCollectionsQuery = useListTeamCollections({ userId });
+  const teamCollections = (teamCollectionsQuery.data ?? []) as TeamCollectionWithRole[];
+
   const sendArticle = useSendArticle();
+  const addToTeamCollection = useAddTeamArticle();
 
   const deliveryInfo = useMemo(() => getNextDeliverySlot(), [confirmVisible]);
 
+  useEffect(() => {
+    if (!targetGroup) return;
+    const resolvedName =
+      targetGroupName ||
+      teamCollections.find((c) => c.id === targetGroup)?.name ||
+      "모음";
+    const preselected: RecipientCollection = {
+      type: "collection",
+      data: {
+        id: targetGroup,
+        name: resolvedName,
+        creatorId: "",
+        role: "MEMBER",
+        createdAt: "",
+        updatedAt: "",
+      } as TeamCollectionWithRole,
+    };
+    setSelectedRecipient(preselected);
+  }, [targetGroup, targetGroupName, teamCollections]);
+
+  const navigateBack = useCallback(() => {
+    if (returnToId) {
+      router.replace({ pathname: "/of-02-detail", params: { id: returnToId } });
+    } else {
+      router.back();
+    }
+  }, [returnToId, router]);
+
   const canSend = selectedArticle && selectedRecipient;
+
+  const recipientDisplayName = useMemo(() => {
+    if (!selectedRecipient) return null;
+    if (selectedRecipient.type === "neighbor") {
+      return selectedRecipient.data.user?.nickname ?? "이웃";
+    }
+    return selectedRecipient.data.name;
+  }, [selectedRecipient]);
 
   const handleSend = useCallback(async () => {
     if (!selectedArticle || !selectedRecipient) return;
 
-    const isNeighbor = neighbors.some((n) => n.neighborUserId === selectedRecipient.neighborUserId);
-    const guard = canSendToNeighbor(
-      selectedArticle.status as ArticleStatus,
-      userId,
-      selectedRecipient.neighborUserId,
-      isNeighbor,
-    );
-    if (!guard.allowed) {
-      Alert.alert("보낼 수 없음", guard.reason ?? "");
-      return;
-    }
-
     try {
-      const result = await sendArticle.mutateAsync({
-        data: {
-          senderId: userId,
-          recipientId: selectedRecipient.neighborUserId,
-          articleId: selectedArticle.id,
-        },
-      });
-      setConfirmVisible(false);
-      const arrivalTime = result?.deliverySlot
-        ? formatDeliveryTime(new Date(result.deliverySlot))
-        : formatDeliveryTime(deliveryInfo.visibleAt);
-      router.back();
-      showToast({
-        message: `${selectedRecipient.user?.nickname ?? "이웃"}에게 발송됐어요 · ${arrivalTime} 도착 예정`,
-        type: "success",
-        duration: 4000,
-        position: "bottom",
-      });
+      if (selectedRecipient.type === "neighbor") {
+        const neighbor = selectedRecipient.data;
+        const isNeighbor = neighbors.some((n) => n.neighborUserId === neighbor.neighborUserId);
+        const guard = canSendToNeighbor(
+          selectedArticle.status as ArticleStatus,
+          userId,
+          neighbor.neighborUserId,
+          isNeighbor,
+        );
+        if (!guard.allowed) {
+          Alert.alert("보낼 수 없음", guard.reason ?? "");
+          return;
+        }
+        const result = await sendArticle.mutateAsync({
+          data: {
+            senderId: userId,
+            recipientId: neighbor.neighborUserId,
+            articleId: selectedArticle.id,
+          },
+        });
+        setConfirmVisible(false);
+        const arrivalTime = result?.deliverySlot
+          ? formatDeliveryTime(new Date(result.deliverySlot))
+          : formatDeliveryTime(deliveryInfo.visibleAt);
+        navigateBack();
+        showToast({
+          message: `${neighbor.user?.nickname ?? "이웃"}에게 발송됐어요 · ${arrivalTime} 도착 예정`,
+          type: "success",
+          duration: 4000,
+          position: "bottom",
+        });
+      } else {
+        const collection = selectedRecipient.data;
+        await addToTeamCollection.mutateAsync({
+          id: collection.id,
+          data: { articleId: selectedArticle.id, addedBy: userId },
+        });
+        setConfirmVisible(false);
+        const arrivalTime = formatDeliveryTime(deliveryInfo.visibleAt);
+        navigateBack();
+        showToast({
+          message: `'${collection.name}' 모음에 발송됐어요 · ${arrivalTime} 도착 예정`,
+          type: "success",
+          duration: 4000,
+          position: "bottom",
+        });
+      }
     } catch (e: unknown) {
       setConfirmVisible(false);
-      const msg = e instanceof Error ? e.message : "발송에 실패했습니다.";
+      const msg = e instanceof Error ? e.message : "실패했습니다.";
       Alert.alert("오류", msg);
     }
-  }, [selectedArticle, selectedRecipient, userId, sendArticle, deliveryInfo, router]);
+  }, [
+    selectedArticle,
+    selectedRecipient,
+    userId,
+    neighbors,
+    sendArticle,
+    addToTeamCollection,
+    deliveryInfo,
+    navigateBack,
+    showToast,
+  ]);
+
+  const isPending = sendArticle.isPending || addToTeamCollection.isPending;
+
+  const openRecipientPicker = useCallback(() => {
+    setPendingRecipient(selectedRecipient);
+    if (selectedRecipient?.type === "collection") {
+      setSegmentTab("collection");
+    } else {
+      setSegmentTab("neighbor");
+    }
+    setRecipientPickerVisible(true);
+  }, [selectedRecipient]);
+
+  const handleConfirmRecipient = useCallback(() => {
+    setSelectedRecipient(pendingRecipient);
+    setRecipientPickerVisible(false);
+  }, [pendingRecipient]);
+
+  const confirmDescription = useMemo(() => {
+    if (!selectedArticle || !selectedRecipient) return "";
+    const arrivalLine = `\n\n${formatDeliveryTime(deliveryInfo.visibleAt)}에 도착 예정`;
+    if (selectedRecipient.type === "neighbor") {
+      return `'${selectedArticle.title ?? ""}'을(를)\n${selectedRecipient.data.user?.nickname ?? ""}에게 보내시겠어요?${arrivalLine}`;
+    }
+    return `'${selectedArticle.title ?? ""}'을(를)\n'${selectedRecipient.data.name}' 모음에 보내시겠어요?${arrivalLine}`;
+  }, [selectedArticle, selectedRecipient, deliveryInfo]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
+        <Pressable onPress={navigateBack} hitSlop={12}>
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
         </Pressable>
         <Text style={styles.headerTitle}>보내기</Text>
@@ -110,11 +227,15 @@ export default function SendScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>받는 사람</Text>
-          <Pressable style={styles.selectButton} onPress={() => setRecipientPickerVisible(true)}>
-            <Feather name="user" size={18} color={selectedRecipient ? Colors.zinc900 : Colors.zinc500} />
+          <Text style={styles.sectionTitle}>받는 사람/모음</Text>
+          <Pressable style={styles.selectButton} onPress={openRecipientPicker}>
+            <Feather
+              name={selectedRecipient?.type === "collection" ? "users" : "user"}
+              size={18}
+              color={selectedRecipient ? Colors.zinc900 : Colors.zinc500}
+            />
             <Text style={[styles.selectButtonText, selectedRecipient && styles.selectButtonTextActive]}>
-              {selectedRecipient?.user?.nickname ?? "받는 사람을 선택하세요"}
+              {recipientDisplayName ?? "받는 사람/모음을 선택하세요"}
             </Text>
             <Feather name="chevron-right" size={18} color={Colors.zinc400} />
           </Pressable>
@@ -130,13 +251,13 @@ export default function SendScreen() {
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
         <Pressable
-          style={[styles.sendButton, (!canSend || sendArticle.isPending) && styles.sendButtonDisabled]}
-          disabled={!canSend || sendArticle.isPending}
+          style={[styles.sendButton, (!canSend || isPending) && styles.sendButtonDisabled]}
+          disabled={!canSend || isPending}
           onPress={() => setConfirmVisible(true)}
         >
-          <Feather name="send" size={16} color={canSend && !sendArticle.isPending ? Colors.white : Colors.zinc400} />
-          <Text style={[styles.sendButtonText, (!canSend || sendArticle.isPending) && styles.sendButtonTextDisabled]}>
-            {sendArticle.isPending ? "보내는 중..." : "보내기"}
+          <Feather name="send" size={16} color={canSend && !isPending ? Colors.white : Colors.zinc400} />
+          <Text style={[styles.sendButtonText, (!canSend || isPending) && styles.sendButtonTextDisabled]}>
+            {isPending ? "처리 중..." : "보내기"}
           </Text>
         </Pressable>
       </View>
@@ -145,7 +266,7 @@ export default function SendScreen() {
         visible={letterPickerVisible}
         onClose={() => setLetterPickerVisible(false)}
         title="편지 선택"
-        snapPoints={[0.5]}
+        snapPoints={[0.85]}
       >
         {articlesQuery.isLoading ? (
           <View style={styles.pickerEmpty}>
@@ -189,57 +310,152 @@ export default function SendScreen() {
       <BottomSheet
         visible={recipientPickerVisible}
         onClose={() => setRecipientPickerVisible(false)}
-        title="받는 사람 선택"
-        snapPoints={[0.5]}
+        title="받는 사람/모음 선택"
+        snapPoints={[0.85]}
       >
-        {neighborsQuery.isLoading ? (
-          <View style={styles.pickerEmpty}>
-            <Text style={styles.pickerEmptySub}>불러오는 중...</Text>
-          </View>
-        ) : neighborsQuery.isError ? (
-          <View style={styles.pickerEmpty}>
-            <Feather name="alert-circle" size={32} color={Colors.zinc300} />
-            <Text style={styles.pickerEmptyTitle}>불러오기 실패</Text>
-            <Pressable onPress={() => neighborsQuery.refetch()}>
-              <Text style={[styles.pickerEmptySub, { color: Colors.zinc900 }]}>다시 시도</Text>
-            </Pressable>
-          </View>
-        ) : neighbors.length === 0 ? (
-          <View style={styles.pickerEmpty}>
-            <Feather name="users" size={32} color={Colors.zinc300} />
-            <Text style={styles.pickerEmptyTitle}>이웃이 없어요</Text>
-            <Text style={styles.pickerEmptySub}>먼저 이웃을 추가해주세요</Text>
-          </View>
-        ) : (
-          <ScrollView nestedScrollEnabled style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 24 }}>
-            {neighbors.map((neighbor) => (
-              <Pressable
-                key={neighbor.id}
-                style={[styles.pickerItem, selectedRecipient?.id === neighbor.id && styles.pickerItemSelected]}
-                onPress={() => {
-                  setSelectedRecipient(neighbor);
-                  setRecipientPickerVisible(false);
-                }}
-              >
-                <View style={styles.pickerNeighborRow}>
-                  <View style={styles.pickerAvatar}>
-                    <Text style={styles.pickerAvatarText}>{(neighbor.user?.nickname ?? "?")[0]}</Text>
-                  </View>
-                  <View style={styles.pickerNeighborInfo}>
-                    <Text style={styles.pickerItemTitle}>{neighbor.user?.nickname ?? "이름 없음"}</Text>
-                    <Text style={styles.pickerItemSub}>{neighbor.user?.email ?? ""}</Text>
-                  </View>
-                </View>
-              </Pressable>
-            ))}
-          </ScrollView>
-        )}
+        <View style={styles.segmentRow}>
+          <Pressable
+            style={[styles.segmentButton, segmentTab === "neighbor" && styles.segmentButtonActive]}
+            onPress={() => setSegmentTab("neighbor")}
+          >
+            <Text style={[styles.segmentButtonText, segmentTab === "neighbor" && styles.segmentButtonTextActive]}>
+              이웃
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.segmentButton, segmentTab === "collection" && styles.segmentButtonActive]}
+            onPress={() => setSegmentTab("collection")}
+          >
+            <Text style={[styles.segmentButtonText, segmentTab === "collection" && styles.segmentButtonTextActive]}>
+              모음
+            </Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.recipientListArea}>
+          {segmentTab === "neighbor" ? (
+            neighborsQuery.isLoading ? (
+              <View style={styles.pickerEmpty}>
+                <Text style={styles.pickerEmptySub}>불러오는 중...</Text>
+              </View>
+            ) : neighborsQuery.isError ? (
+              <View style={styles.pickerEmpty}>
+                <Feather name="alert-circle" size={32} color={Colors.zinc300} />
+                <Text style={styles.pickerEmptyTitle}>불러오기 실패</Text>
+                <Pressable onPress={() => neighborsQuery.refetch()}>
+                  <Text style={[styles.pickerEmptySub, { color: Colors.zinc900 }]}>다시 시도</Text>
+                </Pressable>
+              </View>
+            ) : neighbors.length === 0 ? (
+              <View style={styles.pickerEmpty}>
+                <Feather name="users" size={32} color={Colors.zinc300} />
+                <Text style={styles.pickerEmptyTitle}>이웃이 없어요</Text>
+                <Text style={styles.pickerEmptySub}>먼저 이웃을 추가해주세요</Text>
+              </View>
+            ) : (
+              <ScrollView nestedScrollEnabled style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 8 }}>
+                {neighbors.map((neighbor) => {
+                  const isSelected =
+                    pendingRecipient?.type === "neighbor" &&
+                    pendingRecipient.data.id === neighbor.id;
+                  return (
+                    <Pressable
+                      key={neighbor.id}
+                      style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
+                      onPress={() =>
+                        setPendingRecipient({ type: "neighbor", data: neighbor })
+                      }
+                    >
+                      <View style={styles.pickerNeighborRow}>
+                        <View style={styles.pickerAvatar}>
+                          <Text style={styles.pickerAvatarText}>{(neighbor.user?.nickname ?? "?")[0]}</Text>
+                        </View>
+                        <View style={styles.pickerNeighborInfo}>
+                          <Text style={styles.pickerItemTitle}>{neighbor.user?.nickname ?? "이름 없음"}</Text>
+                          <Text style={styles.pickerItemSub}>{neighbor.user?.email ?? ""}</Text>
+                        </View>
+                        {isSelected && (
+                          <Feather name="check" size={18} color={Colors.zinc900} />
+                        )}
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            )
+          ) : (
+            teamCollectionsQuery.isLoading ? (
+              <View style={styles.pickerEmpty}>
+                <Text style={styles.pickerEmptySub}>불러오는 중...</Text>
+              </View>
+            ) : teamCollectionsQuery.isError ? (
+              <View style={styles.pickerEmpty}>
+                <Feather name="alert-circle" size={32} color={Colors.zinc300} />
+                <Text style={styles.pickerEmptyTitle}>불러오기 실패</Text>
+                <Pressable onPress={() => teamCollectionsQuery.refetch()}>
+                  <Text style={[styles.pickerEmptySub, { color: Colors.zinc900 }]}>다시 시도</Text>
+                </Pressable>
+              </View>
+            ) : teamCollections.length === 0 ? (
+              <View style={styles.pickerEmpty}>
+                <Feather name="users" size={32} color={Colors.zinc300} />
+                <Text style={styles.pickerEmptyTitle}>단체 모음이 없어요</Text>
+                <Text style={styles.pickerEmptySub}>단체 모음을 먼저 만들어주세요</Text>
+              </View>
+            ) : (
+              <ScrollView nestedScrollEnabled style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 8 }}>
+                {teamCollections.map((col) => {
+                  const isSelected =
+                    pendingRecipient?.type === "collection" &&
+                    pendingRecipient.data.id === col.id;
+                  return (
+                    <Pressable
+                      key={col.id}
+                      style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
+                      onPress={() =>
+                        setPendingRecipient({
+                          type: "collection",
+                          data: col,
+                        })
+                      }
+                    >
+                      <View style={styles.collectionRow}>
+                        <View style={styles.collectionIcon}>
+                          <Feather name="users" size={16} color={Colors.zinc500} />
+                        </View>
+                        <View style={styles.collectionInfo}>
+                          <Text style={styles.pickerItemTitle} numberOfLines={1}>{col.name}</Text>
+                          {col.description ? (
+                            <Text style={styles.pickerItemSub} numberOfLines={1}>{col.description}</Text>
+                          ) : null}
+                        </View>
+                        {isSelected && (
+                          <Feather name="check" size={18} color={Colors.zinc900} />
+                        )}
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            )
+          )}
+        </View>
+
+        <Pressable
+          style={[styles.confirmPickerButton, !pendingRecipient && styles.confirmPickerButtonDisabled]}
+          disabled={!pendingRecipient}
+          onPress={handleConfirmRecipient}
+        >
+          <Text style={[styles.confirmPickerButtonText, !pendingRecipient && styles.confirmPickerButtonTextDisabled]}>
+            선택 완료
+          </Text>
+        </Pressable>
       </BottomSheet>
 
       <ConfirmModal
         visible={confirmVisible}
-        title="편지 보내기"
-        description={`'${selectedArticle?.title ?? ""}'을(를)\n${selectedRecipient?.user?.nickname ?? ""}에게 보내시겠어요?\n\n${formatDeliveryTime(deliveryInfo.visibleAt)}에 도착 예정`}
+        title="보내기"
+        description={confirmDescription}
         confirmLabel="보내기"
         cancelLabel="취소"
         onConfirm={handleSend}
@@ -339,6 +555,79 @@ const styles = StyleSheet.create({
     color: Colors.white,
   },
   sendButtonTextDisabled: {
+    color: Colors.zinc400,
+  },
+  segmentRow: {
+    flexDirection: "row",
+    backgroundColor: Colors.zinc100,
+    borderRadius: 10,
+    padding: 3,
+    marginBottom: 12,
+  },
+  segmentButton: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  segmentButtonActive: {
+    backgroundColor: Colors.white,
+  },
+  segmentButtonText: {
+    ...Typography.bodySemiBold,
+    fontSize: 14,
+    color: Colors.zinc500,
+  },
+  segmentButtonTextActive: {
+    color: Colors.zinc900,
+  },
+  recipientListArea: {
+    flex: 1,
+  },
+  collectionGroupLabel: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc400,
+    fontWeight: "600",
+    letterSpacing: 0.5,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    textTransform: "uppercase",
+  },
+  collectionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  collectionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: Colors.zinc100,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  collectionInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  confirmPickerButton: {
+    marginTop: 12,
+    marginBottom: 16,
+    paddingVertical: 16,
+    backgroundColor: Colors.zinc900,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  confirmPickerButtonDisabled: {
+    backgroundColor: Colors.zinc100,
+  },
+  confirmPickerButtonText: {
+    ...Typography.bodySemiBold,
+    fontSize: 16,
+    color: Colors.white,
+  },
+  confirmPickerButtonTextDisabled: {
     color: Colors.zinc400,
   },
   pickerEmpty: {
