@@ -305,7 +305,7 @@ export default function OnScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {selectionMode ? (
         <PageHeader
-          title={selectedCount > 0 ? `${selectedCount}개 선택됨` : "선택 모드"}
+          title={selectedCount > 0 ? `${selectedCount}개 선택됨` : ""}
           rightText="취소"
           onRightTextPress={exitSelectionMode}
         />
