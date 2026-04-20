@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "peiDdWeyRMdwwKTUJYJ91"
+uri = "file://screenshots/friction_inbox_nobg.png"
+type = "image"
+title = "Friction 앱 스크린샷 (배경 제거)"
