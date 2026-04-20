@@ -53,5 +53,5 @@ channel = "stable-25_05"
 [userenv]
 
 [userenv.shared]
-EXPO_PUBLIC_SUPABASE_URL = "https://hajgjpzxboxecsyyoizw.supabase.co"
-EXPO_PUBLIC_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhhamdqcHp4Ym94ZWNzeXlvaXp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY1ODI3NTYsImV4cCI6MjA5MjE1ODc1Nn0._rn_fM37TrOEcqZM-GkR6xAatcH2iH2-JLRI6p17pl0"
+EXPO_PUBLIC_SUPABASE_URL = "https://jrmdgjfcytbbmphaefbf.supabase.co"
+EXPO_PUBLIC_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpybWRnamZjeXRiYm1waGFlZmJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY2NjQ1MDksImV4cCI6MjA5MjI0MDUwOX0.T2-iS0S76Uw5gv1gzfZ7DeMMlmiIg4ittF5u7g_GSi8"
