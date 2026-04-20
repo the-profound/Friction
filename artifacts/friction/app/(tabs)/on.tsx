@@ -1,5 +1,12 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { View, Text, StyleSheet, FlatList, Pressable, RefreshControl, Alert } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  Pressable,
+  RefreshControl,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -12,6 +19,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useListArticles, useCreateArticle, useDeleteArticle } from "@workspace/api-client-react";
 import type { Article } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
+import { useToast } from "@/contexts/ToastContext";
 import type { ArticleStatus } from "@/lib/policies";
 
 type FilterMode = "all" | "DRAFT" | "DIVIDING" | "CLOSING";
@@ -55,9 +63,16 @@ export default function OnScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { userId } = useUser();
+  const { showToast } = useToast();
+
   const [filter, setFilter] = useState<FilterMode>("all");
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [tapArticle, setTapArticle] = useState<Article | null>(null);
+
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   const openRowRef = useRef<SwipeableRowHandle | null>(null);
   const rowRefs = useRef<Map<string, SwipeableRowHandle>>(new Map());
@@ -89,6 +104,29 @@ export default function OnScreen() {
     }
   }, []);
 
+  const enterSelectionMode = useCallback(() => {
+    closeOpenRow();
+    setSelectedIds(new Set());
+    setSelectionMode(true);
+  }, [closeOpenRow]);
+
+  const exitSelectionMode = useCallback(() => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  }, []);
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
   const handleNewMemo = useCallback(async () => {
     closeOpenRow();
     try {
@@ -97,11 +135,10 @@ export default function OnScreen() {
       });
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
       router.push({ pathname: "/on-01a", params: { id: article.id } });
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "메모 생성에 실패했습니다.";
-      Alert.alert("오류", msg);
+    } catch {
+      showToast({ message: "메모 생성에 실패했습니다.", type: "error" });
     }
-  }, [createArticle, userId, router, queryClient, closeOpenRow]);
+  }, [createArticle, userId, router, queryClient, closeOpenRow, showToast]);
 
   const handleViewAll = useCallback(() => {
     closeOpenRow();
@@ -135,11 +172,10 @@ export default function OnScreen() {
     try {
       await deleteArticle.mutateAsync({ id });
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";
-      Alert.alert("오류", msg);
+    } catch {
+      showToast({ message: "삭제에 실패했습니다.", type: "error" });
     }
-  }, [tapArticle, deleteArticle, queryClient]);
+  }, [tapArticle, deleteArticle, queryClient, showToast]);
 
   const handleDeletePress = useCallback((articleId: string) => {
     setDeleteTargetId(articleId);
@@ -158,11 +194,10 @@ export default function OnScreen() {
     try {
       await deleteArticle.mutateAsync({ id });
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";
-      Alert.alert("오류", msg);
+    } catch {
+      showToast({ message: "삭제에 실패했습니다.", type: "error" });
     }
-  }, [deleteTargetId, deleteArticle, queryClient, closeOpenRow]);
+  }, [deleteTargetId, deleteArticle, queryClient, closeOpenRow, showToast]);
 
   const handleSwipeOpen = useCallback((articleId: string) => {
     const currentOpen = openRowRef.current;
@@ -173,7 +208,40 @@ export default function OnScreen() {
     openRowRef.current = newRef;
   }, []);
 
-  const renderItem = useCallback(
+  const handleBulkDeletePress = useCallback(() => {
+    if (selectedIds.size === 0) return;
+    setShowBulkDeleteConfirm(true);
+  }, [selectedIds]);
+
+  const handleBulkDeleteConfirm = useCallback(async () => {
+    setShowBulkDeleteConfirm(false);
+    setIsBulkDeleting(true);
+    const ids = Array.from(selectedIds);
+    let failCount = 0;
+    for (const id of ids) {
+      try {
+        await deleteArticle.mutateAsync({ id });
+      } catch {
+        failCount++;
+      }
+    }
+    await queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+    setIsBulkDeleting(false);
+    exitSelectionMode();
+    if (failCount === 0) {
+      showToast({ message: "삭제했어요.", type: "success" });
+    } else if (failCount < ids.length) {
+      showToast({ message: `일부 삭제에 실패했습니다. (${failCount}개)`, type: "error" });
+    } else {
+      showToast({ message: "삭제에 실패했습니다.", type: "error" });
+    }
+  }, [selectedIds, deleteArticle, queryClient, exitSelectionMode, showToast]);
+
+  const handleBulkDeleteCancel = useCallback(() => {
+    setShowBulkDeleteConfirm(false);
+  }, []);
+
+  const renderNormalItem = useCallback(
     ({ item }: { item: Article }) => (
       <SwipeableRow
         ref={(r) => {
@@ -199,36 +267,78 @@ export default function OnScreen() {
     [handleArticlePress, handleDeletePress, handleSwipeOpen],
   );
 
+  const renderSelectionItem = useCallback(
+    ({ item }: { item: Article }) => {
+      const isSelected = selectedIds.has(item.id);
+      return (
+        <Pressable
+          style={styles.selectionRow}
+          onPress={() => toggleSelect(item.id)}
+        >
+          <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+            {isSelected && <Feather name="check" size={14} color={Colors.white} />}
+          </View>
+          <View style={styles.selectionItemContent}>
+            <ArticleListItem
+              title={item.title || "제목 없음"}
+              preview={item.content?.substring(0, 60) || ""}
+              statusBadge={item.status as ArticleStatus}
+              timestamp={new Date(item.updatedAt)}
+              rightMeta={formatRelativeDate(item.updatedAt)}
+              onPress={() => toggleSelect(item.id)}
+            />
+          </View>
+        </Pressable>
+      );
+    },
+    [selectedIds, toggleSelect],
+  );
+
   const listFooter = useCallback(
     () => <Pressable style={styles.listFooterTouchArea} onPress={closeOpenRow} />,
     [closeOpenRow],
   );
 
+  const selectedCount = selectedIds.size;
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <PageHeader
-        title="기록함"
-        showAdd
-        onAddPress={handleNewMemo}
-        showSearch
-        onSearchPress={handleViewAll}
-      />
-      <View style={styles.filterBar}>
-        {FILTER_OPTIONS.map((opt) => (
-          <Pressable
-            key={opt.key}
-            style={[styles.filterChip, filter === opt.key && styles.filterChipActive]}
-            onPress={() => {
-              closeOpenRow();
-              setFilter(opt.key);
-            }}
-          >
-            <Text style={[styles.filterChipText, filter === opt.key && styles.filterChipTextActive]}>
-              {opt.label}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
+      {selectionMode ? (
+        <PageHeader
+          title={selectedCount > 0 ? `${selectedCount}개 선택됨` : "선택 모드"}
+          rightText="취소"
+          onRightTextPress={exitSelectionMode}
+        />
+      ) : (
+        <PageHeader
+          title="기록함"
+          showAdd
+          onAddPress={handleNewMemo}
+          showSearch
+          onSearchPress={handleViewAll}
+          showKebab
+          onKebabPress={enterSelectionMode}
+        />
+      )}
+
+      {!selectionMode && (
+        <View style={styles.filterBar}>
+          {FILTER_OPTIONS.map((opt) => (
+            <Pressable
+              key={opt.key}
+              style={[styles.filterChip, filter === opt.key && styles.filterChipActive]}
+              onPress={() => {
+                closeOpenRow();
+                setFilter(opt.key);
+              }}
+            >
+              <Text style={[styles.filterChipText, filter === opt.key && styles.filterChipTextActive]}>
+                {opt.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
 
       {isLoading ? (
         <View style={styles.emptyContainer}>
@@ -250,14 +360,34 @@ export default function OnScreen() {
         <FlatList
           data={sortedArticles}
           keyExtractor={(item) => item.id}
-          renderItem={renderItem}
+          renderItem={selectionMode ? renderSelectionItem : renderNormalItem}
           refreshControl={
-            <RefreshControl refreshing={isRefetching} onRefresh={refetch} />
+            !selectionMode ? (
+              <RefreshControl refreshing={isRefetching} onRefresh={refetch} />
+            ) : undefined
           }
           contentContainerStyle={styles.listContent}
-          onScrollBeginDrag={closeOpenRow}
-          ListFooterComponent={listFooter}
+          onScrollBeginDrag={selectionMode ? undefined : closeOpenRow}
+          ListFooterComponent={selectionMode ? undefined : listFooter}
         />
+      )}
+
+      {selectionMode && (
+        <View style={[styles.selectionBar, { paddingBottom: insets.bottom + 8 }]}>
+          <Pressable
+            style={[styles.bulkDeleteButton, selectedCount === 0 && styles.bulkDeleteButtonDisabled]}
+            onPress={handleBulkDeletePress}
+            disabled={selectedCount === 0 || isBulkDeleting}
+          >
+            {isBulkDeleting ? (
+              <Text style={styles.bulkDeleteText}>삭제 중...</Text>
+            ) : (
+              <Text style={styles.bulkDeleteText}>
+                {selectedCount > 0 ? `${selectedCount}개 선택 삭제` : "선택 삭제"}
+              </Text>
+            )}
+          </Pressable>
+        </View>
       )}
 
       <ConfirmModal
@@ -284,6 +414,17 @@ export default function OnScreen() {
         destructive
         onConfirm={handleDeleteConfirm}
         onCancel={handleDeleteCancel}
+      />
+
+      <ConfirmModal
+        visible={showBulkDeleteConfirm}
+        title={`${selectedCount}개를 삭제할까요?`}
+        description="선택한 메모가 영구적으로 삭제됩니다."
+        confirmLabel="삭제"
+        cancelLabel="취소"
+        destructive
+        onConfirm={handleBulkDeleteConfirm}
+        onCancel={handleBulkDeleteCancel}
       />
     </View>
   );
@@ -358,6 +499,52 @@ const styles = StyleSheet.create({
   createButtonText: {
     ...Typography.bodySemiBold,
     fontSize: 15,
+    color: Colors.white,
+  },
+  selectionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingLeft: Spacing.screenPx,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: Colors.zinc300,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.white,
+    marginRight: 12,
+    flexShrink: 0,
+  },
+  checkboxSelected: {
+    backgroundColor: Colors.zinc900,
+    borderColor: Colors.zinc900,
+  },
+  selectionItemContent: {
+    flex: 1,
+  },
+  selectionBar: {
+    paddingHorizontal: Spacing.screenPx,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: Colors.zinc100,
+    backgroundColor: Colors.white,
+  },
+  bulkDeleteButton: {
+    height: 52,
+    backgroundColor: "#DC2626",
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bulkDeleteButtonDisabled: {
+    backgroundColor: Colors.zinc200,
+  },
+  bulkDeleteText: {
+    ...Typography.bodySemiBold,
+    fontSize: 16,
     color: Colors.white,
   },
 });
