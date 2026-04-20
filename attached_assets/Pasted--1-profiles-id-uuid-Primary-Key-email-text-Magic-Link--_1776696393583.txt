@@ -1,0 +1,100 @@
+### 1.  `profiles` (유저 프로필)
+
+- **id**: uuid (Primary Key)
+- **email**: text (필수, Magic Link용)
+- **display_name**: text (앱 내 이름)
+- **created_at**: timestamp
+- **avatar_url**: 프로필 사진 주소(추후 구현)
+- **current_reading_post_id**: (Nullable) 유저가 현재 읽고 있는 글의 ID
+- **current_page_index**: (Nullable) 현재 몇 번째 페이지(구분자 기준)를 읽고 있는지 나타내는 숫자
+
+### 2.  `posts` (글 관리)
+
+- **id**: uuid (기본키)
+- **author_id**: uuid (작성자 ID)
+- **title**: text (글 제목)
+- **content**: text (글 본문)
+- **status**: text (작성 중 / 분할 중 / 마감 중 / 완성됨)
+- **text_color**: text (표지 글자색)
+- **background_color**: text (단색 표지 배경색, 선택 사항)
+- **cover_image_url**: text (표지 이미지 URL, 선택 사항)
+- **title_alignment**: text (`left` 또는 `center` )
+
+### 3.  `collections` (모음 - 개인/단체 공용)
+
+단체 모음과 개인 모음을 하나의 테이블에서 관리하되, 타입으로 구분합니다.
+
+- **id**: 모음 고유 식별자
+- **owner_id**: 만든 사람 ID
+- **title**: 모음 이름
+- **is_group**: Boolean (True면 단체 모음, False면 개인 모음)
+- **is_public**: Boolean (공개 여부)
+
+### 4.  `collection_members` (모음 멤버)
+
+어떤 유저가 어떤 단체 모음에 속해 있는지 기록합니다.
+
+- **collection_id**: 모음 ID
+- **user_id**: 유저 ID
+- **role**: 'admin' 또는 'member'
+
+### 5.  `transmissions` (글 전송 기록)
+
+**가장 중요한 테이블**입니다. 글이 언제 전송될지, 누가 읽었는지 관리합니다.
+
+- **id**: 전송 고유 식별자
+- **post_id**: 전송할 글 ID
+- **sender_id**: 보낸 사람 ID
+- **receiver_id**: (Nullable) 받는 이웃 ID
+- **target_collection_id**: (Nullable) 받는 단체 모음 ID
+- **scheduled_at**: **실제 수신함에 노출될 시간 (당일 18시 또는 내일 06시)**
+
+### 6. `inbox_items` (개인별 수신함)
+
+"각 개인의 수신함에 들어온 글 상태"를 관리합니다. **모음에 보낸 글이라도 각 멤버의 수신함에 하나씩 레코드가 생깁니다.**
+
+- **id**: uuid
+- **transmission_id**: uuid (`transmissions` 테이블 참조)
+- **user_id**: uuid (**글을 받는 개별 사용자 ID**)
+- **is_read**: boolean (해당 유저가 읽었는지 여부)
+- **read_at**: timestamp (읽은 시간)
+
+### 7.  `neighbors` (이웃 관계)
+
+- **user_id_1**: uuid (유저 1의 ID)
+- **user_id_2**: uuid (유저 2의 ID)
+- **connected_at**: timestamp (**추가**: 이웃이 된 정확한 시간)
+
+### 8.  `neighbor_requests` (이웃 신청 기록 테이블)
+
+- **id**: uuid (신청 기록 고유 번호)
+- **requester_id**: 신청한 유저 ID
+- **receiver_id**: 신청받은 유저 ID
+- **status**: 'pending'(대기), 'accepted'(수락), 'rejected'(거절), ‘canceled’(취소)
+- **created_at**: timestamp (신청 보낸 시간)
+- **cancelled_at** : timestamp (신청 취소한 시간)
+- **handled_at**: timestamp (수락하거나 거절한 시간)
+
+### 9.  `group_invitations` (초대 기록 테이블)
+
+초대장 하나하나의 생애주기를 관리합니다.
+
+- **id**: uuid (초대장 고유 번호)
+- **collection_id**: uuid (어느 모음으로 초대했는가)
+- **inviter_id**: uuid (초대를 보낸 사람)
+- **invitee_id**: uuid (초대받은 사람 - 이메일이나 유저 ID)
+- **status**: text (대기 `pending`, 수락 `accepted`, 거절 `rejected`)
+- **created_at**: timestamp (초대 보낸 시간)
+- **handled_at**: timestamp (수락하거나 거절한 시간
+
+### 10.  `activity_logs` (활동 로그 테이블)
+
+떠나기, 추방과 같은 민감한 액션을 기록합니다. 이 테이블은 수정이나 삭제가 발생하지 않고 오직 추가(Insert)만 되는 기록 저장소입니다.
+
+- **id**: uuid
+- **actor_id**: uuid (행위를 한 사람 - 예: 방장)
+- **target_id**: uuid (대상자 - 예: 추방당한 사람)
+- **collection_id**: uuid (어느 모음에서 발생했는가)
+- **action_type**: text (행위 종류: `kick`, `leave`, `role_change` 등)
+- **reason**: text (추방 사유 - 필요시 작성)
+- **created_at**: timestamp (사건 발생 시간)
