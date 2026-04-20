@@ -1,15 +1,17 @@
 import React, { useState, useCallback, useMemo } from "react";
-import { View, Text, StyleSheet, FlatList, Pressable, RefreshControl, Alert } from "react-native";
+import { View, Text, StyleSheet, FlatList, Pressable, RefreshControl } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ArticleListItem from "@/components/ArticleListItem/ArticleListItem";
+import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import { useListArticles, useDeleteArticle, useCreateArticle } from "@workspace/api-client-react";
 import type { Article } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
 import type { ArticleStatus } from "@/lib/policies";
 import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/contexts/ToastContext";
 
 type SortMode = "latest" | "oldest" | "status";
 
@@ -43,9 +45,11 @@ export default function MemoCollectionScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { userId } = useUser();
+  const { showToast } = useToast();
   const [isManageMode, setIsManageMode] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>("latest");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const { data: articles, isLoading, refetch, isRefetching } = useListArticles({
     authorId: userId,
@@ -81,34 +85,35 @@ export default function MemoCollectionScreen() {
     });
   }, []);
 
-  const handleDeleteSelected = useCallback(async () => {
+  const handleDeleteSelected = useCallback(() => {
     if (selectedIds.size === 0) return;
-    Alert.alert(
-      "삭제 확인",
-      `${selectedIds.size}개의 메모를 삭제할까요?`,
-      [
-        { text: "취소", style: "cancel" },
-        {
-          text: "삭제",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              const promises = Array.from(selectedIds).map((articleId) =>
-                deleteArticle.mutateAsync({ id: articleId }),
-              );
-              await Promise.all(promises);
-              setSelectedIds(new Set());
-              setIsManageMode(false);
-              queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
-            } catch (e: unknown) {
-              const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";
-              Alert.alert("오류", msg);
-            }
-          },
-        },
-      ],
-    );
-  }, [selectedIds, deleteArticle, queryClient]);
+    setShowDeleteConfirm(true);
+  }, [selectedIds]);
+
+  const handleDeleteConfirm = useCallback(async () => {
+    setShowDeleteConfirm(false);
+    const ids = Array.from(selectedIds);
+    let failCount = 0;
+    for (const id of ids) {
+      try {
+        await deleteArticle.mutateAsync({ id });
+      } catch {
+        failCount++;
+      }
+    }
+    await queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+    setSelectedIds(new Set());
+    setIsManageMode(false);
+    if (failCount === 0) {
+      showToast({ message: "삭제했어요.", type: "success" });
+    } else {
+      showToast({ message: "삭제에 실패했습니다.", type: "error" });
+    }
+  }, [selectedIds, deleteArticle, queryClient, showToast]);
+
+  const handleDeleteCancel = useCallback(() => {
+    setShowDeleteConfirm(false);
+  }, []);
 
   const handleToggleManage = useCallback(() => {
     if (isManageMode) {
@@ -205,9 +210,8 @@ export default function MemoCollectionScreen() {
                   data: { authorId: userId, title: "새 메모" },
                 });
                 router.push({ pathname: "/on-01a", params: { id: article.id } });
-              } catch (e: unknown) {
-                const msg = e instanceof Error ? e.message : "메모 생성에 실패했습니다.";
-                Alert.alert("오류", msg);
+              } catch {
+                showToast({ message: "메모 생성에 실패했습니다.", type: "error" });
               }
             }}
           >
@@ -237,6 +241,17 @@ export default function MemoCollectionScreen() {
           </Pressable>
         </View>
       )}
+
+      <ConfirmModal
+        visible={showDeleteConfirm}
+        title={`${selectedIds.size}개를 삭제할까요?`}
+        description="선택한 메모가 영구적으로 삭제됩니다."
+        confirmLabel="삭제"
+        cancelLabel="취소"
+        destructive
+        onConfirm={handleDeleteConfirm}
+        onCancel={handleDeleteCancel}
+      />
     </View>
   );
 }
