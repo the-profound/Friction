@@ -7,6 +7,7 @@ interface AuthContextValue {
   session: Session | null;
   isLoading: boolean;
   signInWithOtp: (email: string) => Promise<{ error: AuthError | null }>;
+  verifyEmailOtp: (email: string, token: string) => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -14,6 +15,7 @@ const AuthContext = createContext<AuthContextValue>({
   session: null,
   isLoading: true,
   signInWithOtp: async () => ({ error: null }),
+  verifyEmailOtp: async () => ({ error: null }),
   signOut: async () => {},
 });
 
@@ -53,13 +55,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Restore existing session on mount
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setIsLoading(false);
     });
 
-    // Subscribe to auth state changes (covers session set via deep link)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         setSession(session);
@@ -67,12 +67,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     );
 
-    // Handle magic link on cold start (app launched via URL)
     Linking.getInitialURL().then((url) => {
       if (url) handleDeepLinkUrl(url);
     });
 
-    // Handle magic link on warm start (app already running, URL opened)
     const linkingSub = Linking.addEventListener("url", ({ url }) => {
       handleDeepLinkUrl(url);
     });
@@ -88,8 +86,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email,
       options: {
         shouldCreateUser: true,
-        emailRedirectTo: "friction://login-callback",
       },
+    });
+    return { error };
+  }
+
+  async function verifyEmailOtp(email: string, token: string) {
+    const { error } = await supabase.auth.verifyOtp({
+      email,
+      token,
+      type: "email",
     });
     return { error };
   }
@@ -100,7 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ session, isLoading, signInWithOtp, signOut }}>
+    <AuthContext.Provider value={{ session, isLoading, signInWithOtp, verifyEmailOtp, signOut }}>
       {children}
     </AuthContext.Provider>
   );
