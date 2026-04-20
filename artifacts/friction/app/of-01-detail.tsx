@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from "react";
 import { View, Text, StyleSheet, FlatList, Pressable, Switch, Alert, TextInput } from "react-native";
+import { useToast } from "@/contexts/ToastContext";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -27,6 +28,7 @@ export default function PersonalCollectionDetailScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { userId } = useUser();
+  const { showToast } = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [showPicker, setShowPicker] = useState(false);
   const [editSheetVisible, setEditSheetVisible] = useState(false);
@@ -124,12 +126,12 @@ export default function PersonalCollectionDetailScreen() {
         await removeArticle.mutateAsync({ collectionId: id, articleId });
         articlesQuery.refetch();
         collectionQuery.refetch();
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "글 제거에 실패했습니다.";
-        Alert.alert("오류", msg);
+        showToast({ message: "글을 제거했어요.", type: "success" });
+      } catch {
+        showToast({ message: "글 제거에 실패했습니다.", type: "error" });
       }
     },
-    [id, removeArticle, articlesQuery, collectionQuery],
+    [id, removeArticle, articlesQuery, collectionQuery, showToast],
   );
 
   const handleArticleActionRead = useCallback(() => {
