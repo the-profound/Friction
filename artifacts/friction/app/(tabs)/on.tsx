@@ -172,6 +172,7 @@ export default function OnScreen() {
     try {
       await deleteArticle.mutateAsync({ id });
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+      showToast({ message: "삭제했어요.", type: "success" });
     } catch {
       showToast({ message: "삭제에 실패했습니다.", type: "error" });
     }
@@ -194,6 +195,7 @@ export default function OnScreen() {
     try {
       await deleteArticle.mutateAsync({ id });
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+      showToast({ message: "삭제했어요.", type: "success" });
     } catch {
       showToast({ message: "삭제에 실패했습니다.", type: "error" });
     }
