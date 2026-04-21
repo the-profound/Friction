@@ -4,12 +4,16 @@ import * as schema from "./schema";
 
 const { Pool } = pg;
 
-const dbUrl = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
+let dbUrl = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
 
 if (!dbUrl) {
   throw new Error(
     "SUPABASE_DB_URL or DATABASE_URL must be set. Did you forget to provision a database?",
   );
+}
+
+if (!dbUrl.startsWith("postgresql://") && !dbUrl.startsWith("postgres://")) {
+  dbUrl = "postgresql://" + dbUrl;
 }
 
 export const pool = new Pool({ connectionString: dbUrl });
