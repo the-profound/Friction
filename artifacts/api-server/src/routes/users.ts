@@ -5,6 +5,26 @@ import { CreateUserBody, UpdateUserBody, UpdateUserRecentCollectionBody } from "
 
 const router: IRouter = Router();
 
+router.post("/users/sync", async (req, res) => {
+  const { id, email } = req.body ?? {};
+  if (!id || typeof id !== "string" || !email || typeof email !== "string") {
+    res.status(400).json({ error: "id and email are required" });
+    return;
+  }
+  const defaultNickname = email.split("@")[0]?.slice(0, 20) ?? "사용자";
+
+  const [user] = await db
+    .insert(usersTable)
+    .values({ id, email, nickname: defaultNickname })
+    .onConflictDoUpdate({
+      target: usersTable.id,
+      set: { email, updatedAt: new Date() },
+    })
+    .returning();
+
+  res.json(user);
+});
+
 router.get("/users", async (_req, res) => {
   const users = await db.select().from(usersTable);
   res.json(users);
