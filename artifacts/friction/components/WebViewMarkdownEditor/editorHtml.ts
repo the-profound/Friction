@@ -100,7 +100,7 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
     }
   }
 
-  function handleCommand(cmd) {
+  window.handleCommand = function handleCommand(cmd) {
     try {
       switch(cmd.type) {
         case 'init':

@@ -7,6 +7,8 @@ import {
   Pressable,
   Animated,
   PanResponder,
+  KeyboardAvoidingView,
+  Platform,
   useWindowDimensions,
   type ViewStyle,
   type TextStyle,
@@ -25,6 +27,7 @@ interface BottomSheetProps {
   snapPoints?: number[];
   enableDragDown?: boolean;
   dismissable?: boolean;
+  keyboardAware?: boolean;
 }
 
 export default function BottomSheet({
@@ -36,6 +39,7 @@ export default function BottomSheet({
   snapPoints = [0.4, 0.8],
   enableDragDown = true,
   dismissable = true,
+  keyboardAware = false,
 }: BottomSheetProps) {
   const insets = useSafeAreaInsets();
   const { height: SCREEN_H } = useWindowDimensions();
@@ -145,17 +149,32 @@ export default function BottomSheet({
             <View style={styles.handle} />
             {title && <Text style={[styles.title, titleStyle]}>{title}</Text>}
           </View>
-          <View
-            style={[
-              styles.content,
-              {
-                maxHeight: SCREEN_H * Math.max(...snapPoints) - HANDLE_HEIGHT,
-                paddingBottom: Math.max(insets.bottom, 16),
-              },
-            ]}
-          >
-            {children}
-          </View>
+          {keyboardAware ? (
+            <KeyboardAvoidingView
+              behavior={Platform.OS === "ios" ? "padding" : "height"}
+              style={[
+                styles.content,
+                {
+                  maxHeight: SCREEN_H * Math.max(...snapPoints) - HANDLE_HEIGHT,
+                  paddingBottom: Math.max(insets.bottom, 16),
+                },
+              ]}
+            >
+              {children}
+            </KeyboardAvoidingView>
+          ) : (
+            <View
+              style={[
+                styles.content,
+                {
+                  maxHeight: SCREEN_H * Math.max(...snapPoints) - HANDLE_HEIGHT,
+                  paddingBottom: Math.max(insets.bottom, 16),
+                },
+              ]}
+            >
+              {children}
+            </View>
+          )}
         </Animated.View>
       </View>
     </Modal>
