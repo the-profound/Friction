@@ -61,11 +61,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
           const data: WebViewToRNEvent = JSON.parse(event.nativeEvent.data);
           switch (data.type) {
             case "onReady":
-              readyRef.current = true;
-              sendCommand({
-                type: "init",
-                payload: { initialMarkdown, editorConfigVersion, placeholder },
-              });
+              flushQueue();
               onReady?.();
               break;
             case "onChange":

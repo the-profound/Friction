@@ -423,7 +423,7 @@ export default function OfScreen() {
         visible={createSheetVisible}
         onClose={() => setCreateSheetVisible(false)}
         title={ofSubTab === "personal" ? "새 개인 모음" : "새 단체 모음"}
-        snapPoints={[0.55]}
+        snapPoints={[0.55, 0.95]}
         keyboardAware
       >
         <View style={styles.createForm}>
