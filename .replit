@@ -55,3 +55,19 @@ channel = "stable-25_05"
 [userenv.shared]
 EXPO_PUBLIC_SUPABASE_URL = "https://jrmdgjfcytbbmphaefbf.supabase.co"
 EXPO_PUBLIC_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpybWRnamZjeXRiYm1waGFlZmJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY2NjQ1MDksImV4cCI6MjA5MjI0MDUwOX0.T2-iS0S76Uw5gv1gzfZ7DeMMlmiIg4ittF5u7g_GSi8"
+
+[[ports]]
+localPort = 3000
+externalPort = 3001
+
+[[ports]]
+localPort = 8080
+externalPort = 8080
+
+[[ports]]
+localPort = 8081
+externalPort = 80
+
+[[ports]]
+localPort = 21672
+externalPort = 3000
