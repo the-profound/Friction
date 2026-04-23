@@ -5,6 +5,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -15,23 +16,38 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors, Spacing, Typography } from "@/constants/tokens";
 import { useAuth } from "@/contexts/AuthContext";
 
+type Mode = "login" | "signup";
+
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
-  const { signInWithPassword } = useAuth();
+  const { signInWithPassword, signUp } = useAuth();
 
+  const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [signupDone, setSignupDone] = useState(false);
+
+  function switchMode(next: Mode) {
+    setMode(next);
+    setErrorMessage(null);
+    setPassword("");
+    setPasswordConfirm("");
+    setShowPassword(false);
+    setShowPasswordConfirm(false);
+    setSignupDone(false);
+  }
 
   async function handleLogin() {
-    const trimmedEmail = email.trim();
-    if (!isValidEmail(trimmedEmail)) {
+    if (!isValidEmail(email)) {
       setErrorMessage("올바른 이메일 주소를 입력해주세요.");
       return;
     }
@@ -39,17 +55,16 @@ export default function LoginScreen() {
       setErrorMessage("비밀번호를 입력해주세요.");
       return;
     }
-
     setErrorMessage(null);
     setIsLoading(true);
     try {
-      const { error } = await signInWithPassword(trimmedEmail, password);
+      const { error } = await signInWithPassword(email.trim(), password);
       if (error) {
         const msg = error.message.toLowerCase();
-        if (msg.includes("invalid login credentials") || msg.includes("invalid credentials") || msg.includes("wrong")) {
+        if (msg.includes("invalid login credentials") || msg.includes("invalid credentials")) {
           setErrorMessage("이메일 또는 비밀번호가 올바르지 않아요.");
         } else if (msg.includes("email not confirmed")) {
-          setErrorMessage("이메일 인증이 완료되지 않은 계정이에요.");
+          setErrorMessage("이메일 인증이 완료되지 않은 계정이에요. 메일함을 확인해주세요.");
         } else if (msg.includes("network") || msg.includes("fetch")) {
           setErrorMessage("네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.");
         } else {
@@ -63,27 +78,98 @@ export default function LoginScreen() {
     }
   }
 
-  const canSubmit = email.trim().length > 0 && password.length > 0 && !isLoading;
+  async function handleSignUp() {
+    if (!isValidEmail(email)) {
+      setErrorMessage("올바른 이메일 주소를 입력해주세요.");
+      return;
+    }
+    if (password.length < 6) {
+      setErrorMessage("비밀번호는 6자 이상이어야 합니다.");
+      return;
+    }
+    if (password !== passwordConfirm) {
+      setErrorMessage("비밀번호가 일치하지 않아요.");
+      return;
+    }
+    setErrorMessage(null);
+    setIsLoading(true);
+    try {
+      const { error, needsConfirmation } = await signUp(email.trim(), password);
+      if (error) {
+        const msg = error.message.toLowerCase();
+        if (msg.includes("already registered") || msg.includes("already exists") || msg.includes("user already")) {
+          setErrorMessage("이미 가입된 이메일입니다. 로그인해주세요.");
+        } else if (msg.includes("network") || msg.includes("fetch")) {
+          setErrorMessage("네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.");
+        } else if (msg.includes("password")) {
+          setErrorMessage("비밀번호는 6자 이상이어야 합니다.");
+        } else {
+          setErrorMessage("회원가입에 실패했습니다. 다시 시도해주세요.");
+        }
+      } else if (needsConfirmation) {
+        setSignupDone(true);
+      }
+    } catch {
+      setErrorMessage("네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  const canSubmitLogin = email.trim().length > 0 && password.length > 0 && !isLoading;
+  const canSubmitSignup = email.trim().length > 0 && password.length > 0 && passwordConfirm.length > 0 && !isLoading;
 
   return (
     <KeyboardAvoidingView
       style={styles.flex}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
-      <View
-        style={[
+      <ScrollView
+        contentContainerStyle={[
           styles.container,
-          { paddingTop: insets.top, paddingBottom: insets.bottom },
+          { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 },
         ]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        <View style={styles.content}>
+        <View style={styles.header}>
           <Feather name="book-open" size={56} color={Colors.zinc300} />
           <Text style={styles.title}>Friction</Text>
           <Text style={styles.subtitle}>읽고, 나누고, 연결하세요</Text>
+        </View>
 
+        <View style={styles.tabRow}>
+          <Pressable
+            style={[styles.tab, mode === "login" && styles.tabActive]}
+            onPress={() => switchMode("login")}
+          >
+            <Text style={[styles.tabText, mode === "login" && styles.tabTextActive]}>로그인</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.tab, mode === "signup" && styles.tabActive]}
+            onPress={() => switchMode("signup")}
+          >
+            <Text style={[styles.tabText, mode === "signup" && styles.tabTextActive]}>회원가입</Text>
+          </Pressable>
+        </View>
+
+        {signupDone ? (
+          <View style={styles.confirmBox}>
+            <Feather name="mail" size={36} color={Colors.zinc900} />
+            <Text style={styles.confirmTitle}>이메일을 확인해주세요</Text>
+            <Text style={styles.confirmDesc}>
+              <Text style={styles.confirmEmail}>{email.trim()}</Text>
+              {"\n"}으로 인증 메일을 보냈어요.{"\n"}메일 내 링크를 클릭하면 가입이 완료됩니다.
+            </Text>
+            <Pressable
+              style={styles.button}
+              onPress={() => switchMode("login")}
+            >
+              <Text style={styles.buttonText}>로그인 화면으로</Text>
+            </Pressable>
+          </View>
+        ) : (
           <View style={styles.formContainer}>
-            <Text style={styles.formLabel}>로그인</Text>
-
             <TextInput
               style={styles.input}
               placeholder="이메일 주소"
@@ -109,14 +195,14 @@ export default function LoginScreen() {
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
                 autoCorrect={false}
-                autoComplete="password"
+                autoComplete={mode === "login" ? "password" : "new-password"}
                 value={password}
                 onChangeText={(text) => {
                   setPassword(text);
                   if (errorMessage) setErrorMessage(null);
                 }}
-                onSubmitEditing={handleLogin}
-                returnKeyType="done"
+                onSubmitEditing={mode === "login" ? handleLogin : undefined}
+                returnKeyType={mode === "login" ? "done" : "next"}
                 editable={!isLoading}
               />
               <Pressable
@@ -125,13 +211,43 @@ export default function LoginScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={showPassword ? "비밀번호 숨기기" : "비밀번호 보기"}
               >
-                <Feather
-                  name={showPassword ? "eye-off" : "eye"}
-                  size={20}
-                  color={Colors.zinc400}
-                />
+                <Feather name={showPassword ? "eye-off" : "eye"} size={20} color={Colors.zinc400} />
               </Pressable>
             </View>
+
+            {mode === "signup" && (
+              <View style={styles.passwordContainer}>
+                <TextInput
+                  style={styles.passwordInput}
+                  placeholder="비밀번호 확인"
+                  placeholderTextColor={Colors.zinc400}
+                  secureTextEntry={!showPasswordConfirm}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete="new-password"
+                  value={passwordConfirm}
+                  onChangeText={(text) => {
+                    setPasswordConfirm(text);
+                    if (errorMessage) setErrorMessage(null);
+                  }}
+                  onSubmitEditing={handleSignUp}
+                  returnKeyType="done"
+                  editable={!isLoading}
+                />
+                <Pressable
+                  style={styles.eyeButton}
+                  onPress={() => setShowPasswordConfirm((v) => !v)}
+                  accessibilityRole="button"
+                  accessibilityLabel={showPasswordConfirm ? "비밀번호 숨기기" : "비밀번호 보기"}
+                >
+                  <Feather name={showPasswordConfirm ? "eye-off" : "eye"} size={20} color={Colors.zinc400} />
+                </Pressable>
+              </View>
+            )}
+
+            {mode === "signup" && (
+              <Text style={styles.hint}>비밀번호는 6자 이상이어야 합니다.</Text>
+            )}
 
             {errorMessage ? (
               <Text style={styles.errorText}>{errorMessage}</Text>
@@ -140,23 +256,23 @@ export default function LoginScreen() {
             <Pressable
               style={({ pressed }) => [
                 styles.button,
-                !canSubmit && styles.buttonDisabled,
+                !(mode === "login" ? canSubmitLogin : canSubmitSignup) && styles.buttonDisabled,
                 pressed && styles.buttonPressed,
               ]}
-              onPress={handleLogin}
-              disabled={!canSubmit}
+              onPress={mode === "login" ? handleLogin : handleSignUp}
+              disabled={!(mode === "login" ? canSubmitLogin : canSubmitSignup)}
               accessibilityRole="button"
-              accessibilityLabel="로그인"
+              accessibilityLabel={mode === "login" ? "로그인" : "회원가입"}
             >
               {isLoading ? (
                 <ActivityIndicator size="small" color={Colors.white} />
               ) : (
-                <Text style={styles.buttonText}>로그인</Text>
+                <Text style={styles.buttonText}>{mode === "login" ? "로그인" : "회원가입"}</Text>
               )}
             </Pressable>
           </View>
-        </View>
-      </View>
+        )}
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -167,21 +283,22 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
   },
   container: {
-    flex: 1,
-    backgroundColor: Colors.white,
-  },
-  content: {
-    flex: 1,
+    flexGrow: 1,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: Spacing.screenPx,
+    gap: 0,
+  },
+  header: {
+    alignItems: "center",
     gap: 12,
+    marginBottom: 36,
   },
   title: {
     ...Typography.headerTitle,
     fontSize: 36,
     color: Colors.zinc900,
-    marginTop: 16,
+    marginTop: 4,
   },
   subtitle: {
     ...Typography.body,
@@ -189,17 +306,41 @@ const styles = StyleSheet.create({
     color: Colors.zinc500,
     textAlign: "center",
   },
+  tabRow: {
+    flexDirection: "row",
+    width: "100%",
+    borderRadius: 14,
+    backgroundColor: Colors.zinc100,
+    padding: 4,
+    marginBottom: 20,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: "center",
+    borderRadius: 11,
+  },
+  tabActive: {
+    backgroundColor: Colors.white,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  tabText: {
+    ...Typography.body,
+    fontSize: 15,
+    color: Colors.zinc400,
+  },
+  tabTextActive: {
+    ...Typography.bodySemiBold,
+    color: Colors.zinc900,
+  },
   formContainer: {
     width: "100%",
-    marginTop: 32,
     gap: 12,
     alignItems: "center",
-  },
-  formLabel: {
-    ...Typography.bodySemiBold,
-    fontSize: 15,
-    color: Colors.zinc700,
-    alignSelf: "flex-start",
   },
   input: {
     width: "100%",
@@ -237,6 +378,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  hint: {
+    ...Typography.caption,
+    fontSize: 13,
+    color: Colors.zinc400,
+    alignSelf: "flex-start",
+  },
   errorText: {
     ...Typography.caption,
     fontSize: 13,
@@ -262,5 +409,28 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 16,
     color: Colors.white,
+  },
+  confirmBox: {
+    width: "100%",
+    alignItems: "center",
+    gap: 16,
+    paddingTop: 8,
+  },
+  confirmTitle: {
+    ...Typography.bodySemiBold,
+    fontSize: 20,
+    color: Colors.zinc900,
+    textAlign: "center",
+  },
+  confirmDesc: {
+    ...Typography.body,
+    fontSize: 15,
+    color: Colors.zinc500,
+    textAlign: "center",
+    lineHeight: 22,
+  },
+  confirmEmail: {
+    ...Typography.bodySemiBold,
+    color: Colors.zinc700,
   },
 });
