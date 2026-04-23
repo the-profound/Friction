@@ -99,6 +99,10 @@ async function upsertUsersTable(ids: Ids) {
   console.log("👤 Upserting users table rows...");
   await db.transaction(async (tx) => {
     for (const acc of TEST_ACCOUNTS) {
+      // 동일 이메일에 다른 id가 잔존할 경우(레거시 데이터) 먼저 정리해 unique 충돌을 방지한다.
+      await tx.execute(sql`
+        DELETE FROM users WHERE email = ${acc.email} AND id <> ${ids[acc.key]}::uuid
+      `);
       await tx.execute(sql`
         INSERT INTO users (id, email, nickname)
         VALUES (${ids[acc.key]}::uuid, ${acc.email}, ${acc.nickname})
@@ -108,6 +112,36 @@ async function upsertUsersTable(ids: Ids) {
       `);
     }
   });
+}
+
+interface CountRow extends Record<string, unknown> {
+  minji_articles: number;
+  minji_inbox: number;
+  minji_neighbors: number;
+  minji_pending: number;
+  minji_collections: number;
+  minji_archive_items: number;
+  minji_team_members: number;
+}
+
+async function printPostSeedSummary(ids: Ids) {
+  console.log("\n🔍 Post-seed counts for minji:");
+  const res = await db.execute<CountRow>(sql`
+    SELECT
+      (SELECT COUNT(*)::int FROM articles WHERE author_id = ${ids.minji}::uuid) AS minji_articles,
+      (SELECT COUNT(*)::int FROM inbox WHERE recipient_id = ${ids.minji}::uuid) AS minji_inbox,
+      (SELECT COUNT(*)::int FROM neighbors WHERE user_a_id = ${ids.minji}::uuid OR user_b_id = ${ids.minji}::uuid) AS minji_neighbors,
+      (SELECT COUNT(*)::int FROM neighbor_requests WHERE recipient_id = ${ids.minji}::uuid) AS minji_pending,
+      (SELECT COUNT(*)::int FROM my_collections WHERE owner_id = ${ids.minji}::uuid) AS minji_collections,
+      (SELECT COUNT(*)::int FROM my_collection_articles mca
+         JOIN my_collections mc ON mc.id = mca.my_collection_id
+         WHERE mc.owner_id = ${ids.minji}::uuid AND mc.is_archive = true) AS minji_archive_items,
+      (SELECT COUNT(*)::int FROM team_collection_memberships tcm
+         JOIN team_collections tc ON tc.id = tcm.team_collection_id
+         WHERE tc.creator_id = ${ids.minji}::uuid) AS minji_team_members
+  `);
+  const row = (res.rows ?? [])[0];
+  if (row) console.log("  ", row);
 }
 
 async function seedRelationalData(ids: Ids) {
@@ -391,6 +425,7 @@ async function main() {
     const ids = await ensureAllAuthAccounts();
     await upsertUsersTable(ids);
     await seedRelationalData(ids);
+    await printPostSeedSummary(ids);
 
     console.log("\n✅ Done.\n");
     console.log("=== Test Account UUIDs ===");
