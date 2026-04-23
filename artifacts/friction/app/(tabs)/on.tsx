@@ -10,7 +10,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import { Colors, Typography, Spacing } from "@/constants/tokens";
+import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
 import { PageHeader } from "@/components/NavBar/PageHeader";
 import ArticleListItem from "@/components/ArticleListItem/ArticleListItem";
 import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
@@ -128,6 +128,7 @@ export default function OnScreen() {
   }, []);
 
   const handleNewMemo = useCallback(async () => {
+    if (createArticle.isPending) return;
     closeOpenRow();
     try {
       const article = await createArticle.mutateAsync({
@@ -316,6 +317,7 @@ export default function OnScreen() {
           title="기록함"
           showAdd
           onAddPress={handleNewMemo}
+          addDisabled={createArticle.isPending}
           showSearch
           onSearchPress={handleViewAll}
           showKebab
@@ -368,14 +370,17 @@ export default function OnScreen() {
               <RefreshControl refreshing={isRefetching} onRefresh={refetch} />
             ) : undefined
           }
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[
+            styles.listContent,
+            selectionMode && { paddingBottom: insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + 80 },
+          ]}
           onScrollBeginDrag={selectionMode ? undefined : closeOpenRow}
           ListFooterComponent={selectionMode ? undefined : listFooter}
         />
       )}
 
       {selectionMode && (
-        <View style={[styles.selectionBar, { paddingBottom: insets.bottom + 8 }]}>
+        <View style={[styles.selectionBar, { paddingBottom: insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + 12 }]}>
           <Pressable
             style={[styles.bulkDeleteButton, selectedCount === 0 && styles.bulkDeleteButtonDisabled]}
             onPress={handleBulkDeletePress}

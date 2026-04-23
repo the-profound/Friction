@@ -286,7 +286,8 @@ export default function NeighborListScreen() {
         visible={addSheetVisible}
         onClose={() => setAddSheetVisible(false)}
         title="이웃 추가"
-        snapPoints={[0.35]}
+        snapPoints={[0.5]}
+        keyboardAware
       >
         <View style={styles.formContent}>
           <TextInput

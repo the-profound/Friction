@@ -15,6 +15,7 @@ interface PageHeaderProps {
   onAddPress?: () => void;
   onKebabPress?: () => void;
   searchActive?: boolean;
+  addDisabled?: boolean;
   rightText?: string;
   onRightTextPress?: () => void;
 }
@@ -28,6 +29,7 @@ export function PageHeader({
   onAddPress,
   onKebabPress,
   searchActive = false,
+  addDisabled = false,
   rightText,
   onRightTextPress,
 }: PageHeaderProps) {
@@ -44,8 +46,8 @@ export function PageHeader({
           </Pressable>
         )}
         {showAdd && (
-          <Pressable style={styles.actionButton} onPress={onAddPress} hitSlop={8}>
-            <Feather name="plus" size={Sizing.plusIconSize} color={Colors.zinc700} />
+          <Pressable style={[styles.actionButton, addDisabled && styles.actionButtonDisabled]} onPress={addDisabled ? undefined : onAddPress} hitSlop={8}>
+            <Feather name="plus" size={Sizing.plusIconSize} color={addDisabled ? Colors.zinc300 : Colors.zinc700} />
           </Pressable>
         )}
         {showSearch && (
@@ -94,6 +96,9 @@ const styles = StyleSheet.create({
   },
   actionButtonActive: {
     backgroundColor: Colors.searchBgActive,
+  },
+  actionButtonDisabled: {
+    opacity: 0.5,
   },
   rightTextButton: {
     paddingHorizontal: 4,

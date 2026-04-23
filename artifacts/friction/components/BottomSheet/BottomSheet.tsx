@@ -182,6 +182,7 @@ export default function BottomSheet({
         </Animated.View>
         <Animated.View
           style={[styles.sheet, { height: SCREEN_H, transform: [{ translateY }] }]}
+          pointerEvents="box-none"
         >
           <View {...panResponder.panHandlers} style={styles.handleArea}>
             <View style={styles.handle} />
