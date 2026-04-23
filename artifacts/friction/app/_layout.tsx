@@ -1,3 +1,4 @@
+import "react-native-url-polyfill/auto";
 import { useFonts } from "expo-font";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter, usePathname, useSegments } from "expo-router";
