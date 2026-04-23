@@ -22,6 +22,21 @@ const TEST_ACCOUNTS = [
 type AccountKey = typeof TEST_ACCOUNTS[number]["key"];
 type Ids = Record<AccountKey, string>;
 
+interface SupabaseAuthResponse {
+  user?: { id?: string };
+  msg?: string;
+  error?: string;
+  error_description?: string;
+}
+
+async function readJson(res: Response): Promise<SupabaseAuthResponse> {
+  try {
+    return (await res.json()) as SupabaseAuthResponse;
+  } catch {
+    return {};
+  }
+}
+
 async function ensureSupabaseUser(email: string, password: string): Promise<string> {
   const signup = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
     method: "POST",
@@ -31,14 +46,14 @@ async function ensureSupabaseUser(email: string, password: string): Promise<stri
     },
     body: JSON.stringify({ email, password }),
   });
-  const signupJson: any = await signup.json().catch(() => ({}));
+  const signupJson = await readJson(signup);
 
-  if (signup.ok && signupJson?.user?.id) {
+  if (signup.ok && signupJson.user?.id) {
     console.log(`  ✓ signup ok: ${email} → ${signupJson.user.id}`);
     return signupJson.user.id;
   }
 
-  const msg = (signupJson?.msg || signupJson?.error_description || signupJson?.error || "").toString().toLowerCase();
+  const msg = (signupJson.msg ?? signupJson.error_description ?? signupJson.error ?? "").toLowerCase();
   const alreadyExists =
     signup.status === 422 ||
     signup.status === 400 ||
@@ -58,9 +73,9 @@ async function ensureSupabaseUser(email: string, password: string): Promise<stri
     },
     body: JSON.stringify({ email, password }),
   });
-  const tokenJson: any = await tokenRes.json().catch(() => ({}));
+  const tokenJson = await readJson(tokenRes);
 
-  if (!tokenRes.ok || !tokenJson?.user?.id) {
+  if (!tokenRes.ok || !tokenJson.user?.id) {
     throw new Error(
       `signin fallback failed for ${email}: ${tokenRes.status} ${JSON.stringify(tokenJson)}.\n` +
       `이미 등록된 계정의 비밀번호가 '${PASSWORD}'가 아닐 수 있습니다. Supabase 대시보드에서 비밀번호를 재설정하거나 사용자를 삭제 후 재실행하세요.`
@@ -101,9 +116,34 @@ async function seedRelationalData(ids: Ids) {
   const daysAgo = (d: number) => new Date(now.getTime() - d * 86400000);
   const hoursAgo = (h: number) => new Date(now.getTime() - h * 3600000);
 
+  type ArticleCover =
+    | { type: "color"; bgColor: string; textColor: string; align: "left" | "center" | "right" }
+    | { type: "image"; imageUrl: string; textColor: string; align: "left" | "center" | "right" }
+    | { type: "default"; textColor: string; align: "left" | "center" | "right" };
+
+  type ArticleStatus = "DRAFT" | "DIVIDING" | "CLOSING" | "LETTER";
+
+  interface ArticleRow {
+    author: string;
+    title: string;
+    content: string;
+    status: ArticleStatus;
+    cover?: ArticleCover;
+    letterAt?: Date | null;
+  }
+
+  type IdRow = { id: string } & Record<string, unknown>;
+
+  const firstId = (result: { rows?: IdRow[] } | IdRow[]): string => {
+    const rows = Array.isArray(result) ? result : (result.rows ?? []);
+    const row = rows[0];
+    if (!row) throw new Error("expected at least one row from RETURNING/SELECT");
+    return row.id;
+  };
+
   await db.transaction(async (tx) => {
     // ── neighbors (pair-normalized: userA < userB) ──
-    const pair = (a: string, b: string) => (a < b ? [a, b] : [b, a]);
+    const pair = (a: string, b: string): [string, string] => (a < b ? [a, b] : [b, a]);
     const [a1, b1] = pair(ids.minji, ids.hayun);
     const [a2, b2] = pair(ids.minji, ids.seojun);
     await tx.execute(sql`
@@ -118,16 +158,6 @@ async function seedRelationalData(ids: Ids) {
       VALUES (${ids.jia}::uuid, ${ids.minji}::uuid, 'PENDING')
       ON CONFLICT ON CONSTRAINT neighbor_requests_unique DO NOTHING
     `);
-
-    // ── articles for minji (varied statuses) ──
-    type ArticleRow = {
-      author: string;
-      title: string;
-      content: string;
-      status: "DRAFT" | "DIVIDING" | "CLOSING" | "LETTER";
-      cover?: any;
-      letterAt?: Date | null;
-    };
 
     const minjiArticles: ArticleRow[] = [
       {
@@ -219,7 +249,7 @@ async function seedRelationalData(ids: Ids) {
     const articleIdByKey: Record<string, string> = {};
 
     for (const a of allArticles) {
-      const res: any = await tx.execute(sql`
+      const res = await tx.execute<IdRow>(sql`
         WITH ins AS (
           INSERT INTO articles (author_id, title, content, status, cover, letter_at)
           SELECT ${a.author}::uuid, ${a.title}, ${a.content}, ${a.status}::article_status,
@@ -235,8 +265,7 @@ async function seedRelationalData(ids: Ids) {
         SELECT id FROM articles WHERE author_id = ${a.author}::uuid AND title = ${a.title}
         LIMIT 1
       `);
-      const row = res.rows?.[0] ?? res[0];
-      articleIdByKey[`${a.author}::${a.title}`] = row.id;
+      articleIdByKey[`${a.author}::${a.title}`] = firstId(res);
     }
 
     // ── inbox: deliver other LETTERs to minji (visible_at = letter_at) ──
@@ -254,7 +283,7 @@ async function seedRelationalData(ids: Ids) {
     }
 
     // ── my_collections: minji 기록함 (archive) + 일반 모음 ──
-    const archiveRes: any = await tx.execute(sql`
+    const archiveRes = await tx.execute<IdRow>(sql`
       WITH ins AS (
         INSERT INTO my_collections (owner_id, name, is_archive, is_public)
         SELECT ${ids.minji}::uuid, '기록함', true, false
@@ -268,9 +297,9 @@ async function seedRelationalData(ids: Ids) {
       SELECT id FROM my_collections WHERE owner_id = ${ids.minji}::uuid AND is_archive = true
       LIMIT 1
     `);
-    const archiveId = (archiveRes.rows?.[0] ?? archiveRes[0]).id;
+    const archiveId = firstId(archiveRes);
 
-    const collRes: any = await tx.execute(sql`
+    const collRes = await tx.execute<IdRow>(sql`
       WITH ins AS (
         INSERT INTO my_collections (owner_id, name, description, is_public)
         SELECT ${ids.minji}::uuid, '좋아하는 편지들', '오래 두고 읽고 싶은 편지', false
@@ -284,7 +313,7 @@ async function seedRelationalData(ids: Ids) {
       SELECT id FROM my_collections WHERE owner_id = ${ids.minji}::uuid AND name = '좋아하는 편지들'
       LIMIT 1
     `);
-    const favCollId = (collRes.rows?.[0] ?? collRes[0]).id;
+    const favCollId = firstId(collRes);
 
     // 기록함에는 minji 본인의 LETTER + 받은 일부 편지
     const archiveTargets = [
@@ -311,7 +340,7 @@ async function seedRelationalData(ids: Ids) {
     }
 
     // ── team_collections: minji가 만든 단체 모음 ──
-    const teamRes: any = await tx.execute(sql`
+    const teamRes = await tx.execute<IdRow>(sql`
       WITH ins AS (
         INSERT INTO team_collections (name, description, creator_id)
         SELECT '편지 모임', '함께 편지를 모으는 곳', ${ids.minji}::uuid
@@ -325,7 +354,7 @@ async function seedRelationalData(ids: Ids) {
       SELECT id FROM team_collections WHERE name = '편지 모임' AND creator_id = ${ids.minji}::uuid
       LIMIT 1
     `);
-    const teamId = (teamRes.rows?.[0] ?? teamRes[0]).id;
+    const teamId = firstId(teamRes);
 
     // memberships: minji=OWNER, hayun=MEMBER, seojun=MEMBER
     const members: Array<[string, "OWNER" | "MEMBER"]> = [
