@@ -127,6 +127,18 @@ Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHea
 
 Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
 
+**Test accounts (Supabase Auth):** `pnpm --filter @workspace/scripts run seed-test-accounts` — 멱등하게 5명의 테스트 계정과 시드 데이터를 Supabase에 추가한다(기존 가입자는 보존, TRUNCATE 없음). 사전 조건: Supabase 대시보드 → Authentication → Providers → Email에서 **Confirm email 옵션을 OFF**로 설정해야 즉시 로그인 가능. 모든 비밀번호: `00000000`.
+
+| 닉네임 | 이메일 | UUID |
+|---|---|---|
+| 민지 | minji@test.com | `92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f` |
+| 하윤 | hayun@test.com | `5cd8e2ca-4463-47fa-a662-089884b2364d` |
+| 서준 | seojun@test.com | `dfe2b6ed-31d8-46f9-b85f-7f7205e29fb7` |
+| 지아 | jia@test.com | `934d1aa5-17d7-4afa-8d83-0181eae126d6` |
+| 도윤 | doyun@test.com | `61c6386f-3aa8-4e72-acc1-69ab724e5f85` |
+
+`UserContext.tsx`의 `FALLBACK_USER_ID`는 minji UUID로 설정되어 있어 웹 시뮬레이션(`DEV_WEB_BYPASS`)에서 minji 계정으로 동작한다. 기존 `seed.ts`는 TRUNCATE 기반이므로 운영 데이터가 있는 Supabase에는 실행 금지(로컬 헬륨 PG에서만 사용).
+
 ### `artifacts/friction` (Friction 1.0.0 — Expo/React Native)
 
 Reading/writing platform mobile app. All 37 Notion Queue DB items processed (순서 1–11).

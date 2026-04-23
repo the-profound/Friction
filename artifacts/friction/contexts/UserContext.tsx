@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useMemo, useRef } from "re
 import { useAuth } from "@/contexts/AuthContext";
 import { customFetch } from "@workspace/api-client-react";
 
-const FALLBACK_USER_ID = "00000000-0000-4000-a000-000000000001";
+const FALLBACK_USER_ID = "92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f";
 
 interface UserContextValue {
   userId: string;
