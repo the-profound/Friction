@@ -1,5 +1,5 @@
-import React, { useState, useCallback } from "react";
-import { View, Text, StyleSheet, FlatList, Pressable, Alert, RefreshControl, TextInput } from "react-native";
+import React, { useState, useCallback, useEffect, useRef } from "react";
+import { View, Text, StyleSheet, FlatList, Pressable, Alert, RefreshControl, TextInput, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -14,10 +14,12 @@ import {
   useRejectNeighborRequest,
   useCreateNeighborRequest,
   useRemoveNeighbor,
+  useSearchUsersByNickname,
 } from "@workspace/api-client-react";
 import type {
   NeighborWithUser,
   NeighborRequestWithUser,
+  UserSearchResult,
 } from "@workspace/api-client-react";
 
 type Tab = "neighbors" | "requests";
@@ -29,25 +31,30 @@ interface ProfileTarget {
   joinedAt?: string;
 }
 
-function extractUserIdFromInput(input: string): string {
-  const trimmed = input.trim();
-  const linkMatch = trimmed.match(/(?:friction:\/\/|https?:\/\/[^/]+\/)invite\/([a-zA-Z0-9_-]+)/);
-  if (linkMatch) return linkMatch[1];
-  const uuidMatch = trimmed.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
-  if (uuidMatch) return trimmed;
-  return trimmed;
-}
-
 export default function NeighborListScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { userId } = useUser();
   const [activeTab, setActiveTab] = useState<Tab>("neighbors");
   const [addSheetVisible, setAddSheetVisible] = useState(false);
-  const [addRecipientId, setAddRecipientId] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [rejectTarget, setRejectTarget] = useState<{ id: string; name: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [profileTarget, setProfileTarget] = useState<ProfileTarget | null>(null);
+  const [sendingToUserId, setSendingToUserId] = useState<string | null>(null);
+
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => {
+      setDebouncedQuery(searchQuery);
+    }, 300);
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    };
+  }, [searchQuery]);
 
   const neighborsQuery = useListNeighbors({ userId });
   const neighbors = (neighborsQuery.data ?? []) as NeighborWithUser[];
@@ -57,6 +64,8 @@ export default function NeighborListScreen() {
   const rejectRequest = useRejectNeighborRequest();
   const createRequest = useCreateNeighborRequest();
   const removeNeighbor = useRemoveNeighbor();
+
+  const searchResults = useSearchUsersByNickname(debouncedQuery, userId);
 
   const handleAccept = useCallback(
     async (requestId: string) => {
@@ -85,28 +94,25 @@ export default function NeighborListScreen() {
     [rejectRequest, requestsQuery],
   );
 
-  const handleSendRequest = useCallback(async () => {
-    if (!addRecipientId.trim()) {
-      Alert.alert("오류", "이웃의 ID 또는 초대 링크를 입력해주세요.");
-      return;
-    }
-    const recipientId = extractUserIdFromInput(addRecipientId);
-    if (!recipientId) {
-      Alert.alert("오류", "유효하지 않은 ID 또는 링크입니다.");
-      return;
-    }
-    try {
-      await createRequest.mutateAsync({
-        data: { requesterId: userId, recipientId },
-      });
-      setAddSheetVisible(false);
-      setAddRecipientId("");
-      Alert.alert("완료", "이웃 요청을 보냈어요!");
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "요청에 실패했습니다.";
-      Alert.alert("오류", msg);
-    }
-  }, [addRecipientId, userId, createRequest]);
+  const handleSendRequestToUser = useCallback(
+    async (targetUser: UserSearchResult) => {
+      if (targetUser.status !== "none") return;
+      setSendingToUserId(targetUser.id);
+      try {
+        await createRequest.mutateAsync({
+          data: { requesterId: userId, recipientId: targetUser.id },
+        });
+        searchResults.refetch();
+        Alert.alert("완료", `${targetUser.nickname}님께 이웃 요청을 보냈어요!`);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "요청에 실패했습니다.";
+        Alert.alert("오류", msg);
+      } finally {
+        setSendingToUserId(null);
+      }
+    },
+    [userId, createRequest, searchResults],
+  );
 
   const handleNeighborPress = useCallback((item: NeighborWithUser) => {
     setProfileTarget({
@@ -129,6 +135,12 @@ export default function NeighborListScreen() {
       setDeleteTarget(null);
     }
   }, [deleteTarget, removeNeighbor, neighborsQuery]);
+
+  const handleAddSheetClose = useCallback(() => {
+    setAddSheetVisible(false);
+    setSearchQuery("");
+    setDebouncedQuery("");
+  }, []);
 
   const renderNeighborItem = ({ item }: { item: NeighborWithUser }) => (
     <Pressable style={styles.neighborItem} onPress={() => handleNeighborPress(item)}>
@@ -180,6 +192,39 @@ export default function NeighborListScreen() {
     </View>
   );
 
+  const renderSearchResultItem = ({ item }: { item: UserSearchResult }) => {
+    const isSending = sendingToUserId === item.id;
+    const isDisabled = item.status !== "none" || isSending;
+    return (
+      <Pressable
+        style={[styles.searchResultItem, isDisabled && styles.searchResultDisabled]}
+        onPress={() => handleSendRequestToUser(item)}
+        disabled={isDisabled}
+      >
+        <View style={styles.avatarCircle}>
+          <Text style={styles.avatarText}>{item.nickname[0]}</Text>
+        </View>
+        <View style={styles.neighborInfo}>
+          <Text style={[styles.neighborName, isDisabled && styles.textMuted]}>{item.nickname}</Text>
+          <Text style={styles.neighborSub}>{item.email}</Text>
+        </View>
+        {isSending ? (
+          <ActivityIndicator size="small" color={Colors.zinc400} />
+        ) : item.status === "neighbor" ? (
+          <View style={styles.statusBadge}>
+            <Text style={styles.statusBadgeText}>이웃</Text>
+          </View>
+        ) : item.status === "pending" ? (
+          <View style={[styles.statusBadge, styles.statusBadgePending]}>
+            <Text style={[styles.statusBadgeText, styles.statusBadgePendingText]}>요청 중</Text>
+          </View>
+        ) : (
+          <Feather name="user-plus" size={18} color={Colors.zinc400} />
+        )}
+      </Pressable>
+    );
+  };
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
@@ -226,8 +271,8 @@ export default function NeighborListScreen() {
           <View style={styles.emptyContainer}>
             <Feather name="users" size={40} color={Colors.zinc300} />
             <Text style={styles.emptyTitle}>아직 이웃이 없어요</Text>
-            <Text style={styles.emptySubtitle}>고유 ID로 이웃을 추가해보세요</Text>
-            <Pressable style={styles.addButton} onPress={() => { setAddRecipientId(""); setAddSheetVisible(true); }}>
+            <Text style={styles.emptySubtitle}>닉네임으로 이웃을 찾아보세요</Text>
+            <Pressable style={styles.addButton} onPress={() => setAddSheetVisible(true)}>
               <Text style={styles.addButtonText}>이웃 추가</Text>
             </Pressable>
           </View>
@@ -284,28 +329,56 @@ export default function NeighborListScreen() {
 
       <BottomSheet
         visible={addSheetVisible}
-        onClose={() => setAddSheetVisible(false)}
+        onClose={handleAddSheetClose}
         title="이웃 추가"
-        snapPoints={[0.5]}
+        snapPoints={[0.6]}
         keyboardAware
       >
-        <View style={styles.formContent}>
-          <TextInput
-            style={styles.formInput}
-            placeholder="사용자 ID 또는 초대 링크를 입력하세요"
-            placeholderTextColor={Colors.zinc400}
-            value={addRecipientId}
-            onChangeText={setAddRecipientId}
-            autoFocus
-            autoCapitalize="none"
-          />
-          <Pressable
-            style={[styles.formButton, !addRecipientId.trim() && styles.formButtonDisabled]}
-            onPress={handleSendRequest}
-            disabled={!addRecipientId.trim()}
-          >
-            <Text style={styles.formButtonText}>요청 보내기</Text>
-          </Pressable>
+        <View style={styles.searchContent}>
+          <View style={styles.searchInputRow}>
+            <Feather name="search" size={16} color={Colors.zinc400} style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="닉네임으로 검색"
+              placeholderTextColor={Colors.zinc400}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoFocus
+              autoCapitalize="none"
+              returnKeyType="search"
+            />
+            {searchQuery.length > 0 && (
+              <Pressable onPress={() => setSearchQuery("")} hitSlop={8}>
+                <Feather name="x" size={16} color={Colors.zinc400} />
+              </Pressable>
+            )}
+          </View>
+
+          {debouncedQuery.trim().length === 0 ? (
+            <View style={styles.searchPlaceholder}>
+              <Text style={styles.searchPlaceholderText}>닉네임을 입력하면 사용자가 검색됩니다</Text>
+            </View>
+          ) : searchResults.isLoading ? (
+            <View style={styles.searchPlaceholder}>
+              <ActivityIndicator size="small" color={Colors.zinc400} />
+            </View>
+          ) : searchResults.isError ? (
+            <View style={styles.searchPlaceholder}>
+              <Text style={styles.searchPlaceholderText}>검색 중 오류가 발생했어요</Text>
+            </View>
+          ) : (searchResults.data ?? []).length === 0 ? (
+            <View style={styles.searchPlaceholder}>
+              <Text style={styles.searchPlaceholderText}>검색 결과가 없어요</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={searchResults.data}
+              keyExtractor={(item) => item.id}
+              renderItem={renderSearchResultItem}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            />
+          )}
         </View>
       </BottomSheet>
 
@@ -359,6 +432,13 @@ export default function NeighborListScreen() {
           </View>
         )}
       </BottomSheet>
+
+      <Pressable
+        style={[styles.fab, { bottom: insets.bottom + 20 }]}
+        onPress={() => setAddSheetVisible(true)}
+      >
+        <Feather name="user-plus" size={20} color={Colors.white} />
+      </Pressable>
     </View>
   );
 }
@@ -429,7 +509,7 @@ const styles = StyleSheet.create({
     color: Colors.zinc500,
   },
   listContent: {
-    paddingBottom: 40,
+    paddingBottom: 100,
   },
   neighborItem: {
     flexDirection: "row",
@@ -518,35 +598,90 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.white,
   },
-  formContent: {
-    paddingVertical: 12,
-    gap: 12,
-  },
-  formInput: {
-    ...Typography.body,
-    fontSize: 15,
-    color: Colors.zinc900,
-    backgroundColor: Colors.zinc50,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  formButton: {
-    backgroundColor: Colors.zinc900,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  formButtonDisabled: {
-    backgroundColor: Colors.zinc300,
-  },
-  formButtonText: {
-    ...Typography.bodySemiBold,
-    fontSize: 16,
-    color: Colors.white,
-  },
   buttonDisabled: {
     opacity: 0.5,
+  },
+  fab: {
+    position: "absolute",
+    right: Spacing.screenPx,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: Colors.zinc900,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  searchContent: {
+    flex: 1,
+    paddingTop: 4,
+  },
+  searchInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.zinc50,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+    gap: 8,
+  },
+  searchIcon: {
+    flexShrink: 0,
+  },
+  searchInput: {
+    ...Typography.body,
+    flex: 1,
+    fontSize: 15,
+    color: Colors.zinc900,
+    padding: 0,
+  },
+  searchPlaceholder: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 40,
+  },
+  searchPlaceholderText: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc400,
+    textAlign: "center",
+  },
+  searchResultItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    gap: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.zinc100,
+  },
+  searchResultDisabled: {
+    opacity: 0.6,
+  },
+  textMuted: {
+    color: Colors.zinc500,
+  },
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: Colors.zinc900,
+    borderRadius: 12,
+  },
+  statusBadgeText: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.white,
+  },
+  statusBadgePending: {
+    backgroundColor: Colors.zinc100,
+  },
+  statusBadgePendingText: {
+    color: Colors.zinc500,
   },
   profileContent: {
     alignItems: "center",

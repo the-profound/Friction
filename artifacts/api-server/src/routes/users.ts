@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
-import { and, eq } from "drizzle-orm";
-import { db, usersTable, myCollectionsTable } from "@workspace/db";
+import { and, eq, ilike, inArray, ne, or } from "drizzle-orm";
+import { db, usersTable, myCollectionsTable, neighborsTable, neighborRequestsTable } from "@workspace/db";
+import type { Neighbor, NeighborRequest } from "@workspace/db";
 import { CreateUserBody, UpdateUserBody, UpdateUserRecentCollectionBody } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -23,6 +24,73 @@ router.post("/users/sync", async (req, res) => {
     .returning();
 
   res.json(user);
+});
+
+router.get("/users/search", async (req, res) => {
+  const { nickname, userId } = req.query;
+  if (!nickname || typeof nickname !== "string" || nickname.trim() === "") {
+    res.status(400).json({ error: "nickname query param is required" });
+    return;
+  }
+  if (!userId || typeof userId !== "string") {
+    res.status(400).json({ error: "userId query param is required" });
+    return;
+  }
+
+  const matchingUsers = await db
+    .select()
+    .from(usersTable)
+    .where(and(ilike(usersTable.nickname, `%${nickname.trim()}%`), ne(usersTable.id, userId)))
+    .limit(20);
+
+  if (matchingUsers.length === 0) {
+    res.json([]);
+    return;
+  }
+
+  const candidateIds = matchingUsers.map((u) => u.id);
+
+  const neighborRows = await db
+    .select()
+    .from(neighborsTable)
+    .where(
+      or(
+        and(eq(neighborsTable.userAId, userId), inArray(neighborsTable.userBId, candidateIds)),
+        and(eq(neighborsTable.userBId, userId), inArray(neighborsTable.userAId, candidateIds)),
+      ),
+    );
+
+  const neighborUserIds = new Set(
+    neighborRows.map((n: Neighbor) => (n.userAId === userId ? n.userBId : n.userAId)),
+  );
+
+  const pendingRows = await db
+    .select()
+    .from(neighborRequestsTable)
+    .where(
+      or(
+        and(eq(neighborRequestsTable.requesterId, userId), inArray(neighborRequestsTable.recipientId, candidateIds)),
+        and(eq(neighborRequestsTable.recipientId, userId), inArray(neighborRequestsTable.requesterId, candidateIds)),
+      ),
+    );
+
+  const pendingUserIds = new Set(
+    pendingRows.map((r: NeighborRequest) => (r.requesterId === userId ? r.recipientId : r.requesterId)),
+  );
+
+  const results = matchingUsers.map((u: typeof matchingUsers[0]) => ({
+    id: u.id,
+    nickname: u.nickname,
+    email: u.email,
+    avatarUrl: u.avatarUrl,
+    status: neighborUserIds.has(u.id)
+      ? "neighbor"
+      : pendingUserIds.has(u.id)
+        ? "pending"
+        : "none",
+  }));
+
+  res.json(results);
 });
 
 router.get("/users", async (_req, res) => {
