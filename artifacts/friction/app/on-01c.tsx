@@ -25,6 +25,7 @@ import {
   useTransitionArticleStatus,
   useListMyCollections,
   useAddArticleToMyCollection,
+  useCreateMyCollection,
   TransitionArticleBodyTargetStatus,
 } from "@workspace/api-client-react";
 import type { ArticleCover } from "@workspace/api-client-react";
@@ -51,15 +52,14 @@ export default function ClosingScreen() {
   const updateArticle = useUpdateArticle();
   const transitionStatus = useTransitionArticleStatus();
   const addArticleToMyCollection = useAddArticleToMyCollection();
+  const createMyCollection = useCreateMyCollection();
 
   const myCollectionsQuery = useListMyCollections({ ownerId: userId });
-  const myCollections = (myCollectionsQuery.data ?? [])
-    .filter((c) => !c.isArchive)
-    .map((c) => ({
-      id: c.id,
-      name: c.name,
-      articleCount: (c as { articleCount?: number }).articleCount,
-    }));
+  const myCollections = (myCollectionsQuery.data ?? []).map((c) => ({
+    id: c.id,
+    name: c.name,
+    articleCount: (c as { articleCount?: number }).articleCount,
+  }));
 
   const [title, setTitle] = useState("");
   const [pages, setPages] = useState<string[]>([]);
@@ -167,16 +167,6 @@ export default function ClosingScreen() {
         id: id!,
         data: { title, pages, cover },
       });
-      const { data: freshArticle } = await refetchArticle();
-      const currentStatus = freshArticle?.status ?? article?.status;
-      if (currentStatus !== "LETTER") {
-        const updated = await transitionStatus.mutateAsync({
-          id: id!,
-          data: { targetStatus: TransitionArticleBodyTargetStatus.LETTER },
-        });
-        queryClient.setQueryData([`/api/articles/${id}`], updated);
-      }
-      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
       exportedArticleIdRef.current = id!;
       setCollectionPickerVisible(true);
     } catch (e: unknown) {
@@ -185,35 +175,68 @@ export default function ClosingScreen() {
     } finally {
       setIsExporting(false);
     }
-  }, [id, title, pages, cover, article, refetchArticle, updateArticle, transitionStatus, queryClient]);
+  }, [id, title, pages, cover, updateArticle]);
+
+  const finalizeExport = useCallback(
+    async (collectionId: string) => {
+      const articleId = exportedArticleIdRef.current;
+      if (!articleId) return;
+      const { data: freshArticle } = await refetchArticle();
+      const currentStatus = freshArticle?.status ?? article?.status;
+      if (currentStatus !== "LETTER") {
+        const updated = await transitionStatus.mutateAsync({
+          id: articleId,
+          data: { targetStatus: TransitionArticleBodyTargetStatus.LETTER },
+        });
+        queryClient.setQueryData([`/api/articles/${articleId}`], updated);
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+      await addArticleToMyCollection.mutateAsync({
+        id: collectionId,
+        data: { articleId },
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/my-collections"] });
+      router.dismissAll();
+      router.push({ pathname: "/of-01" });
+    },
+    [article, refetchArticle, transitionStatus, addArticleToMyCollection, queryClient, router],
+  );
 
   const handleCollectionSelect = useCallback(
     async (collection: { id: string; name: string }) => {
       setCollectionPickerVisible(false);
-      const articleId = exportedArticleIdRef.current;
-      if (!articleId) return;
       try {
-        await addArticleToMyCollection.mutateAsync({
-          id: collection.id,
-          data: { articleId },
-        });
-        queryClient.invalidateQueries({ queryKey: ["/api/my-collections"] });
-        router.dismissAll();
-        router.push({ pathname: "/of-01" });
+        await finalizeExport(collection.id);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "모음 저장에 실패했습니다.";
         Alert.alert("저장 실패", msg);
       }
     },
-    [addArticleToMyCollection, queryClient, router],
+    [finalizeExport],
   );
 
-  const handleArchiveOnly = useCallback(() => {
-    setCollectionPickerVisible(false);
-    queryClient.invalidateQueries({ queryKey: ["/api/my-collections"] });
-    router.dismissAll();
-    router.push({ pathname: "/(tabs)/of" });
-  }, [queryClient, router]);
+  const handleCreateAndSelect = useCallback(
+    async (name: string, description: string) => {
+      let created: { id: string };
+      try {
+        created = await createMyCollection.mutateAsync({
+          data: { ownerId: userId, name, description, isPublic: false },
+        });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "모음 생성에 실패했습니다.";
+        Alert.alert("생성 실패", msg);
+        return;
+      }
+      setCollectionPickerVisible(false);
+      try {
+        await finalizeExport(created.id);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "모음 저장에 실패했습니다.";
+        Alert.alert("저장 실패", msg);
+      }
+    },
+    [userId, createMyCollection, finalizeExport],
+  );
 
   const handleBack = useCallback(async () => {
     await flushCoverSave();
@@ -394,7 +417,7 @@ export default function ClosingScreen() {
         onClose={() => setCollectionPickerVisible(false)}
         collections={myCollections}
         onSelect={handleCollectionSelect}
-        onArchiveOnly={handleArchiveOnly}
+        onCreateAndSelect={handleCreateAndSelect}
         isLoading={myCollectionsQuery.isLoading}
       />
     </View>

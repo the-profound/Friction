@@ -1,5 +1,13 @@
-import React, { useCallback } from "react";
-import { View, Text, StyleSheet, Pressable, FlatList, ActivityIndicator } from "react-native";
+import React, { useCallback, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  FlatList,
+  ActivityIndicator,
+  TextInput,
+} from "react-native";
 import { Feather } from "@expo/vector-icons";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
@@ -10,13 +18,15 @@ export interface CollectionItem {
   articleCount?: number;
 }
 
+type ModalTab = "list" | "create";
+
 interface MyCollectionsModalProps {
   visible: boolean;
   onClose: () => void;
   collections: CollectionItem[];
   selectedCollectionId?: string;
   onSelect: (collection: CollectionItem) => void;
-  onArchiveOnly?: () => void;
+  onCreateAndSelect?: (name: string, description: string) => Promise<void>;
   isLoading?: boolean;
 }
 
@@ -26,16 +36,43 @@ export default function MyCollectionsModal({
   collections,
   selectedCollectionId,
   onSelect,
-  onArchiveOnly,
+  onCreateAndSelect,
   isLoading = false,
 }: MyCollectionsModalProps) {
+  const [activeTab, setActiveTab] = useState<ModalTab>("list");
+  const [newName, setNewName] = useState("");
+  const [newDescription, setNewDescription] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
+
+  const resetForm = useCallback(() => {
+    setNewName("");
+    setNewDescription("");
+    setActiveTab("list");
+  }, []);
+
+  const handleClose = useCallback(() => {
+    resetForm();
+    onClose();
+  }, [onClose, resetForm]);
+
   const handleSelect = useCallback(
     (item: CollectionItem) => {
+      resetForm();
       onSelect(item);
-      onClose();
     },
-    [onSelect, onClose],
+    [onSelect, resetForm],
   );
+
+  const handleCreate = useCallback(async () => {
+    if (!newName.trim() || !onCreateAndSelect) return;
+    setIsCreating(true);
+    try {
+      await onCreateAndSelect(newName.trim(), newDescription.trim());
+      resetForm();
+    } finally {
+      setIsCreating(false);
+    }
+  }, [newName, newDescription, onCreateAndSelect, resetForm]);
 
   const renderItem = useCallback(
     ({ item }: { item: CollectionItem }) => {
@@ -72,41 +109,84 @@ export default function MyCollectionsModal({
   return (
     <BottomSheet
       visible={visible}
-      onClose={onClose}
+      onClose={handleClose}
       title="보관할 모음 선택"
-      snapPoints={[0.5]}
+      snapPoints={[0.55]}
     >
       <View style={styles.container}>
-        {onArchiveOnly && (
-          <>
-            <Pressable style={styles.archiveOnlyButton} onPress={onArchiveOnly}>
-              <View style={styles.archiveOnlyIcon}>
-                <Feather name="archive" size={16} color="#7C5CBF" />
-              </View>
-              <Text style={styles.archiveOnlyText}>내 글 모음에만 저장</Text>
+        {onCreateAndSelect && (
+          <View style={styles.tabBar}>
+            <Pressable
+              style={[styles.tab, activeTab === "list" && styles.tabActive]}
+              onPress={() => setActiveTab("list")}
+            >
+              <Text style={[styles.tabText, activeTab === "list" && styles.tabTextActive]}>
+                내 모음
+              </Text>
             </Pressable>
-            <View style={styles.separator} />
-          </>
+            <Pressable
+              style={[styles.tab, activeTab === "create" && styles.tabActive]}
+              onPress={() => setActiveTab("create")}
+            >
+              <Text style={[styles.tabText, activeTab === "create" && styles.tabTextActive]}>
+                새 모음에 추가
+              </Text>
+            </Pressable>
+          </View>
         )}
 
-        {isLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color={Colors.zinc400} />
-            <Text style={styles.loadingText}>모음 불러오는 중...</Text>
-          </View>
-        ) : collections.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>보관할 모음이 없습니다</Text>
-          </View>
+        {activeTab === "list" ? (
+          isLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color={Colors.zinc400} />
+              <Text style={styles.loadingText}>모음 불러오는 중...</Text>
+            </View>
+          ) : collections.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>보관할 모음이 없어요</Text>
+              <Text style={styles.emptySubtext}>새 모음에 추가 탭에서 만들어보세요</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={collections}
+              keyExtractor={(item) => item.id}
+              renderItem={renderItem}
+              ItemSeparatorComponent={() => <View style={styles.separator} />}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.listContent}
+            />
+          )
         ) : (
-          <FlatList
-            data={collections}
-            keyExtractor={(item) => item.id}
-            renderItem={renderItem}
-            ItemSeparatorComponent={() => <View style={styles.separator} />}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.listContent}
-          />
+          <View style={styles.createForm}>
+            <TextInput
+              style={styles.createInput}
+              placeholder="모음 이름"
+              placeholderTextColor={Colors.zinc400}
+              value={newName}
+              onChangeText={setNewName}
+              autoFocus
+            />
+            <TextInput
+              style={[styles.createInput, styles.createInputMulti]}
+              placeholder="설명 (선택사항)"
+              placeholderTextColor={Colors.zinc400}
+              value={newDescription}
+              onChangeText={setNewDescription}
+              multiline
+              textAlignVertical="top"
+            />
+            <Pressable
+              style={[styles.confirmButton, (!newName.trim() || isCreating) && styles.confirmDisabled]}
+              onPress={handleCreate}
+              disabled={!newName.trim() || isCreating}
+            >
+              {isCreating ? (
+                <ActivityIndicator size="small" color={Colors.white} />
+              ) : (
+                <Text style={styles.confirmButtonText}>만들기</Text>
+              )}
+            </Pressable>
+          </View>
         )}
       </View>
     </BottomSheet>
@@ -117,8 +197,31 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  listContent: {
+  tabBar: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 12,
+  },
+  tab: {
+    paddingHorizontal: 14,
     paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: Colors.zinc50,
+  },
+  tabActive: {
+    backgroundColor: Colors.zinc900,
+  },
+  tabText: {
+    ...Typography.caption,
+    fontSize: 13,
+    color: Colors.zinc500,
+  },
+  tabTextActive: {
+    color: Colors.white,
+    fontWeight: "600",
+  },
+  listContent: {
+    paddingVertical: 4,
   },
   item: {
     flexDirection: "row",
@@ -175,29 +278,46 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 40,
+    gap: 6,
   },
   emptyText: {
     fontSize: 14,
+    color: Colors.zinc500,
+  },
+  emptySubtext: {
+    fontSize: 13,
     color: Colors.zinc400,
   },
-  archiveOnlyButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingVertical: 14,
-    paddingHorizontal: 4,
+  createForm: {
+    paddingTop: 4,
+    gap: 12,
   },
-  archiveOnlyIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: "#E9E4F7",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  archiveOnlyText: {
+  createInput: {
     ...Typography.body,
     fontSize: 15,
-    color: "#7C5CBF",
+    color: Colors.zinc900,
+    backgroundColor: Colors.zinc50,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  createInputMulti: {
+    minHeight: 72,
+    lineHeight: 22,
+  },
+  confirmButton: {
+    backgroundColor: Colors.zinc900,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    marginTop: 4,
+  },
+  confirmDisabled: {
+    backgroundColor: Colors.zinc300,
+  },
+  confirmButtonText: {
+    ...Typography.bodySemiBold,
+    fontSize: 16,
+    color: Colors.white,
   },
 });

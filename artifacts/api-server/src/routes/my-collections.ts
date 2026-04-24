@@ -12,21 +12,6 @@ router.get("/my-collections", async (req, res) => {
     return;
   }
 
-  const [existingArchive] = await db
-    .select({ id: myCollectionsTable.id })
-    .from(myCollectionsTable)
-    .where(and(eq(myCollectionsTable.ownerId, ownerId), eq(myCollectionsTable.isArchive, true)));
-
-  if (!existingArchive) {
-    await db
-      .insert(myCollectionsTable)
-      .values({ ownerId, name: "내 글 모음", isArchive: true })
-      .onConflictDoUpdate({
-        target: [myCollectionsTable.ownerId, myCollectionsTable.name],
-        set: { isArchive: true },
-      });
-  }
-
   const collections = await db
     .select({
       id: myCollectionsTable.id,
