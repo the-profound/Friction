@@ -10,6 +10,7 @@ export interface UserSearchResult {
   email: string;
   avatarUrl?: string | null;
   status: UserSearchStatus;
+  requestId?: string;
 }
 
 export const searchUsersByNicknameUrl = (nickname: string, userId: string) =>

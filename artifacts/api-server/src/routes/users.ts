@@ -74,21 +74,27 @@ router.get("/users/search", async (req, res) => {
       ),
     );
 
-  const pendingUserIds = new Set(
-    pendingRows.map((r: NeighborRequest) => (r.requesterId === userId ? r.recipientId : r.requesterId)),
-  );
+  const pendingByUserId = new Map<string, string>();
+  for (const r of pendingRows as NeighborRequest[]) {
+    const otherUserId = r.requesterId === userId ? r.recipientId : r.requesterId;
+    pendingByUserId.set(otherUserId, r.id);
+  }
 
-  const results = matchingUsers.map((u: typeof matchingUsers[0]) => ({
-    id: u.id,
-    nickname: u.nickname,
-    email: u.email,
-    avatarUrl: u.avatarUrl,
-    status: neighborUserIds.has(u.id)
-      ? "neighbor"
-      : pendingUserIds.has(u.id)
-        ? "pending"
-        : "none",
-  }));
+  const results = matchingUsers.map((u: typeof matchingUsers[0]) => {
+    const isPending = pendingByUserId.has(u.id);
+    return {
+      id: u.id,
+      nickname: u.nickname,
+      email: u.email,
+      avatarUrl: u.avatarUrl,
+      status: neighborUserIds.has(u.id)
+        ? "neighbor"
+        : isPending
+          ? "pending"
+          : "none",
+      requestId: isPending ? pendingByUserId.get(u.id) : undefined,
+    };
+  });
 
   res.json(results);
 });

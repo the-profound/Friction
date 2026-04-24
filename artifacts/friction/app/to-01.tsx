@@ -15,6 +15,7 @@ import {
   useCreateNeighborRequest,
   useRemoveNeighbor,
   useSearchUsersByNickname,
+  useDeleteNeighborRequest,
 } from "@workspace/api-client-react";
 import type {
   NeighborWithUser,
@@ -43,6 +44,7 @@ export default function NeighborListScreen() {
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [profileTarget, setProfileTarget] = useState<ProfileTarget | null>(null);
   const [sendingToUserId, setSendingToUserId] = useState<string | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<{ id: string; name: string } | null>(null);
 
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -64,6 +66,7 @@ export default function NeighborListScreen() {
   const rejectRequest = useRejectNeighborRequest();
   const createRequest = useCreateNeighborRequest();
   const removeNeighbor = useRemoveNeighbor();
+  const deleteNeighborRequest = useDeleteNeighborRequest();
 
   const searchResults = useSearchUsersByNickname(debouncedQuery, userId);
 
@@ -112,6 +115,21 @@ export default function NeighborListScreen() {
       }
     },
     [userId, createRequest, searchResults],
+  );
+
+  const handleCancelRequest = useCallback(
+    async (requestId: string) => {
+      try {
+        await deleteNeighborRequest.mutateAsync({ id: requestId });
+        searchResults.refetch();
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "요청 취소에 실패했습니다.";
+        Alert.alert("오류", msg);
+      } finally {
+        setCancelTarget(null);
+      }
+    },
+    [deleteNeighborRequest, searchResults],
   );
 
   const handleNeighborPress = useCallback((item: NeighborWithUser) => {
@@ -194,11 +212,23 @@ export default function NeighborListScreen() {
 
   const renderSearchResultItem = ({ item }: { item: UserSearchResult }) => {
     const isSending = sendingToUserId === item.id;
-    const isDisabled = item.status !== "none" || isSending;
+    const isPending = item.status === "pending";
+    const isNeighbor = item.status === "neighbor";
+    const isDisabled = isNeighbor || isSending;
+
+    const handlePress = () => {
+      if (isPending && item.requestId) {
+        setCancelTarget({ id: item.requestId, name: item.nickname });
+      } else if (item.status === "none") {
+        handleSendRequestToUser(item);
+      }
+    };
+
     return (
       <Pressable
         style={[styles.searchResultItem, isDisabled && styles.searchResultDisabled]}
-        onPress={() => handleSendRequestToUser(item)}
+        onPress={handlePress}
+        onLongPress={isPending && item.requestId ? () => setCancelTarget({ id: item.requestId!, name: item.nickname }) : undefined}
         disabled={isDisabled}
       >
         <View style={styles.avatarCircle}>
@@ -407,6 +437,21 @@ export default function NeighborListScreen() {
           setRejectTarget(null);
         }}
         onCancel={() => setRejectTarget(null)}
+      />
+
+      <ConfirmModal
+        visible={cancelTarget !== null}
+        title="이웃 요청 취소"
+        description={`'${cancelTarget?.name ?? ""}'님께 보낸 이웃 요청을 취소할까요?`}
+        confirmLabel="취소하기"
+        cancelLabel="아니요"
+        destructive
+        onConfirm={() => {
+          if (cancelTarget) {
+            handleCancelRequest(cancelTarget.id);
+          }
+        }}
+        onCancel={() => setCancelTarget(null)}
       />
 
       <BottomSheet
