@@ -11,6 +11,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 1. **사용자 제공 스킬 확인** — `.agents/skills/` 아래 등록된 스킬 목록을 훑고, 이번 요청과 관련된 스킬이 있는지 판단한다.
 2. **관련 스킬 읽기** — 관련 스킬이 있으면 해당 `SKILL.md`를 읽고 절차를 숙지한 뒤 작업을 시작한다.
 3. **절차 준수** — 스킬에 명시된 단계·규칙·형식을 작업 전 과정에 걸쳐 지킨다.
+4. **DB 규칙 준수** — Replit 내장 DB(database skill, Replit PostgreSQL)는 절대 사용하지 않는다. 모든 DB 작업은 `SUPABASE_DB_URL` 환경변수를 통해 Supabase에만 연결한다.
 
 현재 등록된 사용자 스킬 (`.agents/skills/`):
 - **Notion2Replit** — Notion Queue DB 항목을 선택해 구현하고 결과를 Notion에 writeback
@@ -101,10 +102,10 @@ Database layer using Drizzle ORM with PostgreSQL. Exports a Drizzle client insta
   - `team-collections.ts` — team collections + memberships (OWNER/MEMBER) + teamCollectionArticles junction
   - `neighbors.ts` — neighbors (userAId < userBId normalization) + neighborRequests (PENDING status)
   - `send-records.ts` — send records with deliverySlot (06:00/18:00 KST)
-- `drizzle.config.ts` — Drizzle Kit config (requires `DATABASE_URL`, automatically provided by Replit)
+- `drizzle.config.ts` — Drizzle Kit config (requires `SUPABASE_DB_URL` environment variable pointing to Supabase PostgreSQL)
 - Exports: `.` (pool, db, schema), `./schema` (schema only)
 
-Production migrations are handled by Replit when publishing. In development, we just use `pnpm --filter @workspace/db run push`, and we fallback to `pnpm --filter @workspace/db run push-force`.
+Migrations target Supabase PostgreSQL via `SUPABASE_DB_URL`. In development, use `pnpm --filter @workspace/db run push`, with fallback to `pnpm --filter @workspace/db run push-force`.
 
 ### `lib/api-spec` (`@workspace/api-spec`)
 
