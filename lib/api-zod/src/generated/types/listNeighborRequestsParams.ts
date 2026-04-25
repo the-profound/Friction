@@ -7,5 +7,6 @@
  */
 
 export type ListNeighborRequestsParams = {
-  recipientId: string;
+  recipientId?: string;
+  requesterId?: string;
 };

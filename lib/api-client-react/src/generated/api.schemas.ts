@@ -109,7 +109,6 @@ export interface Article {
 
 export interface CreateArticleBody {
   authorId: string;
-  /** @minLength 1 */
   title: string;
   content?: string;
 }

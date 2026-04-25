@@ -16,6 +16,7 @@ export interface SendRecordWithDetails {
   inboxId: string;
   deliverySlot: Date;
   sentAt: Date;
+  isDelivered: boolean;
   article?: Article;
   recipient?: User;
 }

@@ -15,4 +15,5 @@ export interface NeighborRequestWithUser {
   status: NeighborRequestWithUserStatus;
   createdAt: Date;
   requester?: User;
+  recipient?: User;
 }

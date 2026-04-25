@@ -157,10 +157,9 @@ export const ListArticlesResponse = zod.array(ListArticlesResponseItem);
 /**
  * @summary Create a new article (DRAFT)
  */
-
 export const CreateArticleBody = zod.object({
   authorId: zod.string().uuid(),
-  title: zod.string().min(1),
+  title: zod.string(),
   content: zod.string().optional(),
 });
 
@@ -1191,10 +1190,11 @@ export const RemoveNeighborParams = zod.object({
 });
 
 /**
- * @summary List pending neighbor requests for a user
+ * @summary List pending neighbor requests for a user (by recipientId or requesterId)
  */
 export const ListNeighborRequestsQueryParams = zod.object({
-  recipientId: zod.coerce.string().uuid(),
+  recipientId: zod.coerce.string().uuid().optional(),
+  requesterId: zod.coerce.string().uuid().optional(),
 });
 
 export const ListNeighborRequestsResponseItem = zod.object({
@@ -1204,6 +1204,17 @@ export const ListNeighborRequestsResponseItem = zod.object({
   status: zod.enum(["PENDING"]),
   createdAt: zod.date(),
   requester: zod
+    .object({
+      id: zod.string().uuid(),
+      email: zod.string(),
+      nickname: zod.string(),
+      avatarUrl: zod.string().nullish(),
+      recentSavedCollectionId: zod.string().uuid().nullish(),
+      createdAt: zod.date(),
+      updatedAt: zod.date(),
+    })
+    .optional(),
+  recipient: zod
     .object({
       id: zod.string().uuid(),
       email: zod.string(),
@@ -1286,6 +1297,7 @@ export const ListSendRecordsResponseItem = zod.object({
   inboxId: zod.string().uuid(),
   deliverySlot: zod.date(),
   sentAt: zod.date(),
+  isDelivered: zod.boolean(),
   article: zod
     .object({
       id: zod.string().uuid(),
@@ -1357,6 +1369,7 @@ export const GetSendRecordResponse = zod.object({
   inboxId: zod.string().uuid(),
   deliverySlot: zod.date(),
   sentAt: zod.date(),
+  isDelivered: zod.boolean(),
   article: zod
     .object({
       id: zod.string().uuid(),

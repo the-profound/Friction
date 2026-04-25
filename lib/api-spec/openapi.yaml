@@ -1605,7 +1605,6 @@ components:
           format: uuid
         title:
           type: string
-          minLength: 1
         content:
           type: string
       required: [authorId, title]

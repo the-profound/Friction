@@ -4829,10 +4829,10 @@ export const useRemoveNeighbor = <
 };
 
 /**
- * @summary List pending neighbor requests for a user
+ * @summary List pending neighbor requests for a user (by recipientId or requesterId)
  */
 export const getListNeighborRequestsUrl = (
-  params: ListNeighborRequestsParams,
+  params?: ListNeighborRequestsParams,
 ) => {
   const normalizedParams = new URLSearchParams();
 
@@ -4850,7 +4850,7 @@ export const getListNeighborRequestsUrl = (
 };
 
 export const listNeighborRequests = async (
-  params: ListNeighborRequestsParams,
+  params?: ListNeighborRequestsParams,
   options?: RequestInit,
 ): Promise<NeighborRequestWithUser[]> => {
   return customFetch<NeighborRequestWithUser[]>(
@@ -4872,7 +4872,7 @@ export const getListNeighborRequestsQueryOptions = <
   TData = Awaited<ReturnType<typeof listNeighborRequests>>,
   TError = ErrorType<unknown>,
 >(
-  params: ListNeighborRequestsParams,
+  params?: ListNeighborRequestsParams,
   options?: {
     query?: UseQueryOptions<
       Awaited<ReturnType<typeof listNeighborRequests>>,
@@ -4905,14 +4905,14 @@ export type ListNeighborRequestsQueryResult = NonNullable<
 export type ListNeighborRequestsQueryError = ErrorType<unknown>;
 
 /**
- * @summary List pending neighbor requests for a user
+ * @summary List pending neighbor requests for a user (by recipientId or requesterId)
  */
 
 export function useListNeighborRequests<
   TData = Awaited<ReturnType<typeof listNeighborRequests>>,
   TError = ErrorType<unknown>,
 >(
-  params: ListNeighborRequestsParams,
+  params?: ListNeighborRequestsParams,
   options?: {
     query?: UseQueryOptions<
       Awaited<ReturnType<typeof listNeighborRequests>>,
