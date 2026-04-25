@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
-import { View, Text, StyleSheet, Pressable, Alert, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, Pressable, Alert, ActivityIndicator, Keyboard, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -35,6 +35,7 @@ export default function DraftScreen() {
   const editorRef = useRef<WebViewMarkdownEditorRef>(null);
   const [title, setTitle] = useState("");
   const [charCount, setCharCount] = useState(0);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [editorReady, setEditorReady] = useState(false);
   const contentRef = useRef("");
   const titleRef = useRef("");
@@ -44,6 +45,16 @@ export default function DraftScreen() {
     resolve: (md: string) => void;
     requestId: string;
   } | null>(null);
+
+  useEffect(() => {
+    if (Platform.OS !== "ios") return;
+    const showSub = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener("keyboardDidHide", () => setKeyboardVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (article && !initializedRef.current) {
@@ -179,6 +190,11 @@ export default function DraftScreen() {
     }
   }, [flush, id, router, updateArticle, transitionStatus, queryClient, getEditorContent, markDirty]);
 
+  const handleDismissKeyboard = useCallback(() => {
+    editorRef.current?.blur();
+    Keyboard.dismiss();
+  }, []);
+
   const handleBack = useCallback(async () => {
     const content = await getEditorContent();
     const currentTitle = titleRef.current.trim();
@@ -242,6 +258,11 @@ Alert.alert("오류", "저장에 실패했습니다. 내용을 확인해주세�
           />
         </View>
         <View style={styles.editorFooter}>
+          {keyboardVisible && (
+            <Pressable onPress={handleDismissKeyboard} hitSlop={12} style={styles.keyboardDismissButton}>
+              <Feather name="chevron-down" size={18} color={Colors.zinc500} />
+            </Pressable>
+          )}
           <Text style={styles.charCountText}>{charCount}자</Text>
         </View>
       </View>
@@ -286,10 +307,15 @@ const styles = StyleSheet.create({
   },
   editorFooter: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "flex-end",
     paddingVertical: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Colors.zinc100,
+  },
+  keyboardDismissButton: {
+    marginRight: "auto",
+    padding: 4,
   },
   charCountText: {
     ...Typography.caption,

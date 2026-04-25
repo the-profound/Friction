@@ -41,6 +41,7 @@ export interface WebViewMarkdownEditorRef {
   requestExportMarkdown: (requestId: string) => void;
   setEditable: (isEditable: boolean) => void;
   setTitle: (title: string) => void;
+  blur: () => void;
 }
 
 export interface WebViewMarkdownEditorProps {

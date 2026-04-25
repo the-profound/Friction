@@ -58,6 +58,10 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       setTitle(title: string) {
         sendCommand({ type: "setTitle", title });
       },
+      blur() {
+        const js = `(function(){try{if(document.activeElement){document.activeElement.blur();}}catch(e){}})();true;`;
+        webViewRef.current?.injectJavaScript(js);
+      },
     }), [sendCommand]);
 
     const handleMessage = useCallback(

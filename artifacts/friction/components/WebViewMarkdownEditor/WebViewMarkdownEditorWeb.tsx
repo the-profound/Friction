@@ -134,6 +134,11 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
           titleRef.current.value = title;
         }
       },
+      blur() {
+        if (editor && !editor.isDestroyed) {
+          editor.commands.blur();
+        }
+      },
     }), [editor, requestExportMarkdown, onError]);
 
     const handleTitleInput = useCallback(
