@@ -1252,11 +1252,17 @@ paths:
     get:
       operationId: listNeighborRequests
       tags: [neighbors]
-      summary: List pending neighbor requests for a user
+      summary: List pending neighbor requests for a user (by recipientId or requesterId)
       parameters:
         - name: recipientId
           in: query
-          required: true
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: requesterId
+          in: query
+          required: false
           schema:
             type: string
             format: uuid
@@ -2179,6 +2185,8 @@ components:
           format: date-time
         requester:
           $ref: "#/components/schemas/User"
+        recipient:
+          $ref: "#/components/schemas/User"
       required: [id, requesterId, recipientId, status, createdAt]
 
     CreateNeighborRequestBody:
@@ -2243,11 +2251,13 @@ components:
         sentAt:
           type: string
           format: date-time
+        isDelivered:
+          type: boolean
         article:
           $ref: "#/components/schemas/Article"
         recipient:
           $ref: "#/components/schemas/User"
-      required: [id, senderId, recipientId, articleId, inboxId, deliverySlot, sentAt]
+      required: [id, senderId, recipientId, articleId, inboxId, deliverySlot, sentAt, isDelivered]
 
     SendArticleBody:
       type: object

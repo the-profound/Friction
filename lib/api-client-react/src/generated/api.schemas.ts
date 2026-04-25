@@ -419,6 +419,7 @@ export interface NeighborRequestWithUser {
   status: NeighborRequestWithUserStatus;
   createdAt: string;
   requester?: User;
+  recipient?: User;
 }
 
 export interface CreateNeighborRequestBody {
@@ -444,6 +445,7 @@ export interface SendRecordWithDetails {
   inboxId: string;
   deliverySlot: string;
   sentAt: string;
+  isDelivered: boolean;
   article?: Article;
   recipient?: User;
 }
@@ -515,7 +517,8 @@ export type ListNeighborsParams = {
 };
 
 export type ListNeighborRequestsParams = {
-  recipientId: string;
+  recipientId?: string;
+  requesterId?: string;
 };
 
 export type ListSendRecordsParams = {

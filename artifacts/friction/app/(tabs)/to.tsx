@@ -90,9 +90,16 @@ export default function ToScreen() {
   const renderSendRecordItem = ({ item }: { item: SendRecordWithDetails }) => (
     <Pressable style={styles.listItem} onPress={() => handleArticlePress(item.articleId)}>
       <View style={styles.listItemInfo}>
-        <Text style={styles.listItemTitle} numberOfLines={1}>
-          {item.article?.title ?? "제목 없음"}
-        </Text>
+        <View style={styles.recordTitleRow}>
+          <Text style={[styles.listItemTitle, styles.recordTitleFlex]} numberOfLines={1}>
+            {item.article?.title ?? "제목 없음"}
+          </Text>
+          <View style={[styles.deliveryBadge, item.isDelivered ? styles.deliveredBadge : styles.pendingBadge]}>
+            <Text style={[styles.deliveryBadgeText, item.isDelivered ? styles.deliveredBadgeText : styles.pendingBadgeText]}>
+              {item.isDelivered ? "수신됨" : "배달 전"}
+            </Text>
+          </View>
+        </View>
         <Text style={styles.listItemSub}>
           → {item.recipient?.nickname ?? "알 수 없음"} · {formatDeliveryTime(new Date(item.deliverySlot))}
         </Text>
@@ -410,6 +417,37 @@ const styles = StyleSheet.create({
   listItemSub: {
     ...Typography.body,
     fontSize: 13,
+    color: Colors.zinc500,
+  },
+  recordTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexWrap: "wrap",
+  },
+  recordTitleFlex: {
+    flexShrink: 1,
+  },
+  deliveryBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    alignSelf: "center",
+  },
+  deliveredBadge: {
+    backgroundColor: "#D1FAE5",
+  },
+  pendingBadge: {
+    backgroundColor: Colors.zinc100,
+  },
+  deliveryBadgeText: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  deliveredBadgeText: {
+    color: "#065F46",
+  },
+  pendingBadgeText: {
     color: Colors.zinc500,
   },
   profileContent: {

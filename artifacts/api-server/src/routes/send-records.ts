@@ -54,7 +54,13 @@ router.get("/send-records", async (req, res) => {
     .leftJoin(usersTable, eq(sendRecordsTable.recipientId, usersTable.id))
     .where(eq(sendRecordsTable.senderId, senderId));
 
-  res.json(records);
+  const now = new Date();
+  const enriched = records.map((r) => ({
+    ...r,
+    isDelivered: new Date(r.deliverySlot) <= now,
+  }));
+
+  res.json(enriched);
 });
 
 router.get("/send-records/:id", async (req, res) => {
@@ -79,7 +85,8 @@ router.get("/send-records/:id", async (req, res) => {
     res.status(404).json({ error: "Send record not found" });
     return;
   }
-  res.json(records[0]);
+  const now = new Date();
+  res.json({ ...records[0], isDelivered: new Date(records[0].deliverySlot) <= now });
 });
 
 router.delete("/send-records/:id", async (req, res) => {
@@ -147,7 +154,8 @@ router.post("/send-records", async (req, res) => {
     return records[0];
   });
 
-  res.status(201).json(result);
+  const now = new Date();
+  res.status(201).json(result ? { ...result, isDelivered: new Date(result.deliverySlot) <= now } : result);
 });
 
 export default router;

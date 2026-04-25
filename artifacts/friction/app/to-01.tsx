@@ -23,7 +23,7 @@ import type {
   UserSearchResult,
 } from "@workspace/api-client-react";
 
-type Tab = "neighbors" | "requests";
+type Tab = "neighbors" | "requests" | "sent";
 
 interface ProfileTarget {
   nickname: string;
@@ -62,6 +62,8 @@ export default function NeighborListScreen() {
   const neighbors = (neighborsQuery.data ?? []) as NeighborWithUser[];
   const requestsQuery = useListNeighborRequests({ recipientId: userId });
   const pendingRequests = (requestsQuery.data ?? []) as NeighborRequestWithUser[];
+  const sentRequestsQuery = useListNeighborRequests({ requesterId: userId });
+  const sentRequests = (sentRequestsQuery.data ?? []) as NeighborRequestWithUser[];
   const acceptRequest = useAcceptNeighborRequest();
   const rejectRequest = useRejectNeighborRequest();
   const createRequest = useCreateNeighborRequest();
@@ -106,6 +108,7 @@ export default function NeighborListScreen() {
           data: { requesterId: userId, recipientId: targetUser.id },
         });
         searchResults.refetch();
+        sentRequestsQuery.refetch();
         Alert.alert("완료", `${targetUser.nickname}님께 이웃 요청을 보냈어요!`);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "요청에 실패했습니다.";
@@ -114,7 +117,7 @@ export default function NeighborListScreen() {
         setSendingToUserId(null);
       }
     },
-    [userId, createRequest, searchResults],
+    [userId, createRequest, searchResults, sentRequestsQuery],
   );
 
   const handleCancelRequest = useCallback(
@@ -122,6 +125,7 @@ export default function NeighborListScreen() {
       try {
         await deleteNeighborRequest.mutateAsync({ id: requestId });
         searchResults.refetch();
+        sentRequestsQuery.refetch();
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "요청 취소에 실패했습니다.";
         Alert.alert("오류", msg);
@@ -129,7 +133,7 @@ export default function NeighborListScreen() {
         setCancelTarget(null);
       }
     },
-    [deleteNeighborRequest, searchResults],
+    [deleteNeighborRequest, searchResults, sentRequestsQuery],
   );
 
   const handleNeighborPress = useCallback((item: NeighborWithUser) => {
@@ -210,6 +214,24 @@ export default function NeighborListScreen() {
     </View>
   );
 
+  const renderSentRequestItem = ({ item }: { item: NeighborRequestWithUser }) => (
+    <View style={styles.requestItem}>
+      <View style={styles.avatarCircle}>
+        <Text style={styles.avatarText}>{(item.recipient?.nickname ?? "?")[0]}</Text>
+      </View>
+      <View style={styles.neighborInfo}>
+        <Text style={styles.neighborName}>{item.recipient?.nickname ?? "알 수 없음"}</Text>
+        <Text style={styles.neighborSub}>보낸 이웃 요청</Text>
+      </View>
+      <Pressable
+        style={styles.rejectButton}
+        onPress={() => setCancelTarget({ id: item.id, name: item.recipient?.nickname ?? "알 수 없음" })}
+      >
+        <Text style={styles.rejectText}>취소</Text>
+      </Pressable>
+    </View>
+  );
+
   const renderSearchResultItem = ({ item }: { item: UserSearchResult }) => {
     const isSending = sendingToUserId === item.id;
     const isPending = item.status === "pending";
@@ -279,7 +301,15 @@ export default function NeighborListScreen() {
           onPress={() => setActiveTab("requests")}
         >
           <Text style={[styles.tabText, activeTab === "requests" && styles.tabTextActive]}>
-            요청 ({pendingRequests.length})
+            받은 요청 ({pendingRequests.length})
+          </Text>
+        </Pressable>
+        <Pressable
+          style={[styles.tab, activeTab === "sent" && styles.tabActive]}
+          onPress={() => setActiveTab("sent")}
+        >
+          <Text style={[styles.tabText, activeTab === "sent" && styles.tabTextActive]}>
+            보낸 요청 ({sentRequests.length})
           </Text>
         </Pressable>
       </View>
@@ -322,39 +352,76 @@ export default function NeighborListScreen() {
             showsVerticalScrollIndicator={false}
           />
         )
-      ) : requestsQuery.isLoading ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.loadingText}>불러오는 중...</Text>
-        </View>
-      ) : requestsQuery.isError ? (
-        <View style={styles.emptyContainer}>
-          <Feather name="alert-circle" size={40} color={Colors.zinc300} />
-          <Text style={styles.emptyTitle}>불러오기 실패</Text>
-          <Pressable style={styles.addButton} onPress={() => requestsQuery.refetch()}>
-            <Text style={styles.addButtonText}>다시 시도</Text>
-          </Pressable>
-        </View>
-      ) : pendingRequests.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Feather name="bell" size={40} color={Colors.zinc300} />
-          <Text style={styles.emptyTitle}>대기 중인 요청이 없어요</Text>
-          <Text style={styles.emptySubtitle}>이웃 요청이 오면 여기에 표시돼요</Text>
-        </View>
+      ) : activeTab === "requests" ? (
+        requestsQuery.isLoading ? (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.loadingText}>불러오는 중...</Text>
+          </View>
+        ) : requestsQuery.isError ? (
+          <View style={styles.emptyContainer}>
+            <Feather name="alert-circle" size={40} color={Colors.zinc300} />
+            <Text style={styles.emptyTitle}>불러오기 실패</Text>
+            <Pressable style={styles.addButton} onPress={() => requestsQuery.refetch()}>
+              <Text style={styles.addButtonText}>다시 시도</Text>
+            </Pressable>
+          </View>
+        ) : pendingRequests.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Feather name="bell" size={40} color={Colors.zinc300} />
+            <Text style={styles.emptyTitle}>대기 중인 요청이 없어요</Text>
+            <Text style={styles.emptySubtitle}>이웃 요청이 오면 여기에 표시돼요</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={pendingRequests}
+            keyExtractor={(item) => item.id}
+            renderItem={renderRequestItem}
+            contentContainerStyle={styles.listContent}
+            refreshControl={
+              <RefreshControl
+                refreshing={requestsQuery.isRefetching}
+                onRefresh={() => requestsQuery.refetch()}
+                tintColor={Colors.zinc400}
+              />
+            }
+            showsVerticalScrollIndicator={false}
+          />
+        )
       ) : (
-        <FlatList
-          data={pendingRequests}
-          keyExtractor={(item) => item.id}
-          renderItem={renderRequestItem}
-          contentContainerStyle={styles.listContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={requestsQuery.isRefetching}
-              onRefresh={() => requestsQuery.refetch()}
-              tintColor={Colors.zinc400}
-            />
-          }
-          showsVerticalScrollIndicator={false}
-        />
+        sentRequestsQuery.isLoading ? (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.loadingText}>불러오는 중...</Text>
+          </View>
+        ) : sentRequestsQuery.isError ? (
+          <View style={styles.emptyContainer}>
+            <Feather name="alert-circle" size={40} color={Colors.zinc300} />
+            <Text style={styles.emptyTitle}>불러오기 실패</Text>
+            <Pressable style={styles.addButton} onPress={() => sentRequestsQuery.refetch()}>
+              <Text style={styles.addButtonText}>다시 시도</Text>
+            </Pressable>
+          </View>
+        ) : sentRequests.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Feather name="send" size={40} color={Colors.zinc300} />
+            <Text style={styles.emptyTitle}>보낸 요청이 없어요</Text>
+            <Text style={styles.emptySubtitle}>이웃 추가 버튼으로 요청을 보내보세요</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={sentRequests}
+            keyExtractor={(item) => item.id}
+            renderItem={renderSentRequestItem}
+            contentContainerStyle={styles.listContent}
+            refreshControl={
+              <RefreshControl
+                refreshing={sentRequestsQuery.isRefetching}
+                onRefresh={() => sentRequestsQuery.refetch()}
+                tintColor={Colors.zinc400}
+              />
+            }
+            showsVerticalScrollIndicator={false}
+          />
+        )
       )}
 
       <BottomSheet

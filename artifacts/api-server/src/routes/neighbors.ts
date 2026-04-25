@@ -62,9 +62,35 @@ router.delete("/neighbors/:id", async (req, res) => {
 });
 
 router.get("/neighbor-requests", async (req, res) => {
-  const { recipientId } = req.query;
+  const { recipientId, requesterId } = req.query;
+
+  if (requesterId && typeof requesterId === "string") {
+    const requests = await db
+      .select({
+        id: neighborRequestsTable.id,
+        requesterId: neighborRequestsTable.requesterId,
+        recipientId: neighborRequestsTable.recipientId,
+        status: neighborRequestsTable.status,
+        createdAt: neighborRequestsTable.createdAt,
+      })
+      .from(neighborRequestsTable)
+      .where(and(
+        eq(neighborRequestsTable.requesterId, requesterId),
+        eq(neighborRequestsTable.status, "PENDING"),
+      ));
+
+    const results = [];
+    for (const r of requests) {
+      const [recipient] = await db.select().from(usersTable).where(eq(usersTable.id, r.recipientId));
+      results.push({ ...r, recipient: recipient ?? null });
+    }
+
+    res.json(results);
+    return;
+  }
+
   if (!recipientId || typeof recipientId !== "string") {
-    res.status(400).json({ error: "recipientId is required" });
+    res.status(400).json({ error: "recipientId or requesterId is required" });
     return;
   }
 
