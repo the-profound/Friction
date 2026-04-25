@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, count } from "drizzle-orm";
+import { and, eq, count, gt, isNull } from "drizzle-orm";
 import {
   db,
   teamCollectionsTable,
@@ -7,6 +7,7 @@ import {
   teamCollectionArticlesTable,
   articlesTable,
   usersTable,
+  inboxTable,
 } from "@workspace/db";
 import {
   CreateTeamCollectionBody,
@@ -177,6 +178,8 @@ router.delete("/team-collections/:teamId/members/:userId", async (req, res) => {
 });
 
 router.get("/team-collections/:id/articles", async (req, res) => {
+  const now = new Date();
+
   const articles = await db
     .select({
       id: teamCollectionArticlesTable.id,
@@ -188,7 +191,19 @@ router.get("/team-collections/:id/articles", async (req, res) => {
     })
     .from(teamCollectionArticlesTable)
     .leftJoin(articlesTable, eq(teamCollectionArticlesTable.articleId, articlesTable.id))
-    .where(eq(teamCollectionArticlesTable.teamCollectionId, req.params.id));
+    .leftJoin(
+      inboxTable,
+      and(
+        eq(inboxTable.articleId, teamCollectionArticlesTable.articleId),
+        gt(inboxTable.visibleAt, now),
+      ),
+    )
+    .where(
+      and(
+        eq(teamCollectionArticlesTable.teamCollectionId, req.params.id),
+        isNull(inboxTable.id),
+      ),
+    );
 
   res.json(articles);
 });
