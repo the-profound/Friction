@@ -34,7 +34,10 @@ export type WebViewToRNEvent =
   | { type: "onChange"; payload: OnChangePayload }
   | { type: "onExportMarkdown"; payload: OnExportMarkdownPayload }
   | { type: "onTitleChange"; payload: { title: string } }
-  | { type: "onError"; payload: OnErrorPayload };
+  | { type: "onError"; payload: OnErrorPayload }
+  | { type: "onKeyboardShow" }
+  | { type: "onKeyboardHide" }
+  | { type: "onSwipeDownToDismiss" };
 
 export interface WebViewMarkdownEditorRef {
   setMarkdown: (markdown: string) => void;
@@ -55,4 +58,5 @@ export interface WebViewMarkdownEditorProps {
   onExportMarkdown?: (payload: OnExportMarkdownPayload) => void;
   onTitleChange?: (title: string) => void;
   onError?: (payload: OnErrorPayload) => void;
+  onKeyboardVisibilityChange?: (visible: boolean) => void;
 }

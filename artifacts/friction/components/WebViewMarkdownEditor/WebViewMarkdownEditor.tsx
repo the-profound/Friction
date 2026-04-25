@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useImperativeHandle, forwardRef, useEffect } from "react";
-import { StyleSheet, Platform } from "react-native";
+import { StyleSheet, Platform, Keyboard } from "react-native";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { getEditorHtml, EDITOR_CONFIG_VERSION } from "./editorHtml";
 import type {
@@ -22,6 +22,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       onExportMarkdown,
       onTitleChange,
       onError,
+      onKeyboardVisibilityChange,
     },
     ref,
   ) {
@@ -85,12 +86,24 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
             case "onError":
               onError?.(data.payload);
               break;
+            case "onKeyboardShow":
+              onKeyboardVisibilityChange?.(true);
+              break;
+            case "onKeyboardHide":
+              onKeyboardVisibilityChange?.(false);
+              break;
+            case "onSwipeDownToDismiss": {
+              const blurJs = `(function(){try{if(document.activeElement){document.activeElement.blur();}}catch(e){}})();true;`;
+              webViewRef.current?.injectJavaScript(blurJs);
+              Keyboard.dismiss();
+              break;
+            }
           }
         } catch {
           onError?.({ code: "MESSAGE_PARSE_FAIL", message: "Failed to parse WebView message" });
         }
       },
-      [flushQueue, onReady, onChange, onExportMarkdown, onTitleChange, onError],
+      [flushQueue, onReady, onChange, onExportMarkdown, onTitleChange, onError, onKeyboardVisibilityChange],
     );
 
     useEffect(() => {

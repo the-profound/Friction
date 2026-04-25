@@ -248,6 +248,24 @@ interface Command {
   let changeTimer: ReturnType<typeof setTimeout> | null = null;
   const CHANGE_THROTTLE_MS = 400;
 
+  let titleFocused = false;
+  let editorFocused = false;
+  let keyboardOpen = false;
+  let syncScheduled = false;
+
+  function syncKeyboardState() {
+    if (syncScheduled) return;
+    syncScheduled = true;
+    Promise.resolve().then(() => {
+      syncScheduled = false;
+      const next = titleFocused || editorFocused;
+      if (next !== keyboardOpen) {
+        keyboardOpen = next;
+        postToRN({ type: keyboardOpen ? "onKeyboardShow" : "onKeyboardHide" });
+      }
+    });
+  }
+
   function autoResizeTitle() {
     if (!titleInput) return;
     titleInput.style.height = "auto";
@@ -288,6 +306,14 @@ interface Command {
           const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
           postToRN({ type: "onChange", payload: { isDirty: true, charCount, wordCount } });
         }, CHANGE_THROTTLE_MS);
+      },
+      onFocus: () => {
+        editorFocused = true;
+        syncKeyboardState();
+      },
+      onBlur: () => {
+        editorFocused = false;
+        syncKeyboardState();
       },
     });
   }
@@ -371,6 +397,65 @@ interface Command {
         autoResizeTitle();
         postToRN({ type: "onTitleChange", payload: { title: titleInput!.value } });
       });
+      titleInput.addEventListener("focus", function () {
+        titleFocused = true;
+        syncKeyboardState();
+      });
+      titleInput.addEventListener("blur", function () {
+        titleFocused = false;
+        syncKeyboardState();
+      });
     }
+
+    function isEditorElement(el: EventTarget | null): boolean {
+      if (!el || !(el instanceof Element)) return false;
+      return el.id === "title-input" || !!el.closest(".ProseMirror");
+    }
+
+    document.addEventListener("focusin", function (e) {
+      if (!isEditorElement(e.target)) return;
+      const target = e.target as Element;
+      if (target.id === "title-input") {
+        titleFocused = true;
+      } else {
+        editorFocused = true;
+      }
+      syncKeyboardState();
+    });
+
+    document.addEventListener("focusout", function (e) {
+      if (!isEditorElement(e.target)) return;
+      const target = e.target as Element;
+      if (target.id === "title-input") {
+        titleFocused = false;
+      } else {
+        editorFocused = false;
+      }
+      syncKeyboardState();
+    });
+
+    let swipeStartY = 0;
+    let swipeDismissed = false;
+    const SWIPE_THRESHOLD = 48;
+
+    document.addEventListener("touchstart", function (e) {
+      swipeStartY = e.touches[0].clientY;
+      swipeDismissed = false;
+    }, { passive: true });
+
+    document.addEventListener("touchmove", function (e) {
+      if (swipeDismissed) return;
+      if (!keyboardOpen) return;
+      if (window.scrollY > 0) return;
+      const dy = e.touches[0].clientY - swipeStartY;
+      if (dy > SWIPE_THRESHOLD) {
+        swipeDismissed = true;
+        postToRN({ type: "onSwipeDownToDismiss" });
+      }
+    }, { passive: true });
+
+    document.addEventListener("touchend", function () {
+      swipeDismissed = false;
+    }, { passive: true });
   });
 })();

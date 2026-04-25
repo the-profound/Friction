@@ -1,8 +1,8 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
-import { View, Text, StyleSheet, Pressable, Alert, ActivityIndicator, Keyboard, Platform } from "react-native";
+import { View, Text, StyleSheet, Pressable, Alert, ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { Feather } from "@expo/vector-icons";
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useAutoSave } from "@/lib/useAutoSave";
 import { canTransitionForward } from "@/lib/articleStatusCycle";
@@ -47,16 +47,6 @@ export default function DraftScreen() {
   } | null>(null);
 
   useEffect(() => {
-    if (Platform.OS !== "ios") return;
-    const showSub = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
-    const hideSub = Keyboard.addListener("keyboardDidHide", () => setKeyboardVisible(false));
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
-
-  useEffect(() => {
     if (article && !initializedRef.current) {
       initializedRef.current = true;
       const t = article.title || "";
@@ -72,6 +62,15 @@ export default function DraftScreen() {
       }
     }
   }, [article, editorReady]);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener("keyboardDidHide", () => setKeyboardVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const handleEditorReady = useCallback(() => {
     setEditorReady(true);
@@ -240,11 +239,20 @@ Alert.alert("오류", "저장에 실패했습니다. 내용을 확인해주세�
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
         </Pressable>
         <Text style={styles.headerTitle}>작성</Text>
-        <Pressable onPress={handleNext} hitSlop={12}>
-          <Text style={styles.nextButton}>다음</Text>
-        </Pressable>
+        {keyboardVisible ? (
+          <Pressable onPress={handleDismissKeyboard} hitSlop={12}>
+            <MaterialCommunityIcons name="keyboard-off-outline" size={22} color={Colors.zinc600} />
+          </Pressable>
+        ) : (
+          <Pressable onPress={handleNext} hitSlop={12}>
+            <Text style={styles.nextButton}>다음</Text>
+          </Pressable>
+        )}
       </View>
-      <View style={styles.editor}>
+      <KeyboardAvoidingView
+        style={styles.editor}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
         <View style={styles.markdownEditorContainer}>
           <WebViewMarkdownEditor
             ref={editorRef}
@@ -256,17 +264,13 @@ Alert.alert("오류", "저장에 실패했습니다. 내용을 확인해주세�
             onChange={handleEditorChange}
             onExportMarkdown={handleExportMarkdown}
             onTitleChange={handleTitleChange}
+            onKeyboardVisibilityChange={setKeyboardVisible}
           />
         </View>
         <View style={styles.editorFooter}>
-          {keyboardVisible && (
-            <Pressable onPress={handleDismissKeyboard} hitSlop={12} style={styles.keyboardDismissButton}>
-              <Feather name="chevron-down" size={18} color={Colors.zinc500} />
-            </Pressable>
-          )}
           <Text style={styles.charCountText}>{charCount}자</Text>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -313,10 +317,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Colors.zinc100,
-  },
-  keyboardDismissButton: {
-    marginRight: "auto",
-    padding: 4,
   },
   charCountText: {
     ...Typography.caption,
