@@ -1,6 +1,8 @@
 import React, { useRef, useImperativeHandle, forwardRef } from "react";
 import {
   Animated,
+  Easing,
+  Platform,
   PanResponder,
   View,
   StyleSheet,
@@ -10,7 +12,10 @@ import {
 
 const BUTTON_WIDTH = 80;
 const SWIPE_THRESHOLD = 40;
-const VELOCITY_THRESHOLD = 0.5;
+const VELOCITY_THRESHOLD = 0.3;
+const SNAP_DURATION = 220;
+
+const USE_NATIVE_DRIVER = Platform.OS !== "web";
 
 export interface SwipeableRowHandle {
   close: () => void;
@@ -41,6 +46,7 @@ const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
 
     const translateX = useRef(new Animated.Value(0)).current;
     const isOpen = useRef(false);
+    const currentAnim = useRef<Animated.CompositeAnimation | null>(null);
 
     useImperativeHandle(ref, () => ({
       close: () => {
@@ -50,25 +56,40 @@ const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
     }));
 
     function animateTo(toValue: number) {
-      Animated.spring(translateX, {
+      if (currentAnim.current) {
+        currentAnim.current.stop();
+      }
+      const anim = Animated.timing(translateX, {
         toValue,
-        useNativeDriver: true,
-        bounciness: 0,
-        speed: 20,
-      }).start();
+        duration: SNAP_DURATION,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: USE_NATIVE_DRIVER,
+      });
+      currentAnim.current = anim;
+      anim.start(() => {
+        currentAnim.current = null;
+      });
     }
 
     const panResponder = useRef(
       PanResponder.create({
+        onStartShouldSetPanResponder: () => false,
         onMoveShouldSetPanResponder: (_, gestureState) => {
           const { dx, dy } = gestureState;
-          return Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 5;
+          return Math.abs(dx) > Math.abs(dy) * 1.5 && Math.abs(dx) > 6;
+        },
+        onPanResponderGrant: () => {
+          if (currentAnim.current) {
+            currentAnim.current.stop();
+            currentAnim.current = null;
+          }
         },
         onPanResponderMove: (_, gestureState) => {
           const { dx } = gestureState;
           const base = isOpen.current ? -totalWidth : 0;
-          const next = Math.min(0, Math.max(-totalWidth, base + dx));
-          translateX.setValue(next);
+          const raw = base + dx;
+          const clamped = Math.min(0, Math.max(-totalWidth, raw));
+          translateX.setValue(clamped);
         },
         onPanResponderRelease: (_, gestureState) => {
           const { dx, vx } = gestureState;
@@ -76,8 +97,7 @@ const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
           const newPos = Math.min(0, Math.max(-totalWidth, base + dx));
 
           if (isOpen.current) {
-            const shouldClose =
-              newPos > -totalWidth + SWIPE_THRESHOLD || vx > VELOCITY_THRESHOLD;
+            const shouldClose = newPos > -totalWidth + SWIPE_THRESHOLD || vx > VELOCITY_THRESHOLD;
             if (shouldClose) {
               animateTo(0);
               isOpen.current = false;
@@ -85,8 +105,7 @@ const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
               animateTo(-totalWidth);
             }
           } else {
-            const shouldOpen =
-              newPos < -SWIPE_THRESHOLD || vx < -VELOCITY_THRESHOLD;
+            const shouldOpen = newPos < -SWIPE_THRESHOLD || vx < -VELOCITY_THRESHOLD;
             if (shouldOpen) {
               animateTo(-totalWidth);
               isOpen.current = true;
@@ -96,8 +115,15 @@ const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
             }
           }
         },
+        onPanResponderTerminate: () => {
+          animateTo(isOpen.current ? -totalWidth : 0);
+        },
       })
     ).current;
+
+    if (resolvedActions.length === 0) {
+      return <View>{children}</View>;
+    }
 
     return (
       <View style={styles.container}>
