@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
-import { Colors, Typography, Spacing } from "@/constants/tokens";
+import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
 import { PageHeader } from "@/components/NavBar/PageHeader";
 import { useNavigation } from "@/contexts/NavigationContext";
 import { useUser } from "@/contexts/UserContext";
@@ -455,7 +455,7 @@ export default function OfScreen() {
             renderItem={selectionMode ? renderSentenceSelectionItem : renderSentenceItem}
             contentContainerStyle={[
               styles.listContent,
-              selectionMode && { paddingBottom: insets.bottom + 80 + 24 },
+              selectionMode && { paddingBottom: insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + 80 },
             ]}
             refreshControl={
               !selectionMode ? (
@@ -524,7 +524,7 @@ export default function OfScreen() {
       {renderContent()}
 
       {isSentenceSelectionMode && (
-        <View style={[styles.selectionBar, { paddingBottom: insets.bottom + 12 }]}>
+        <View style={[styles.selectionBar, { paddingBottom: insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + 12 }]}>
           <Pressable
             style={[
               styles.bulkDeleteButton,
