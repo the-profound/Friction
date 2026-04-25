@@ -47,7 +47,11 @@ export default function OfScreen() {
   const [newDescription, setNewDescription] = useState("");
   const [selectedSentence, setSelectedSentence] = useState<StoredSentence | null>(null);
   const [sentenceDeleteTarget, setSentenceDeleteTarget] = useState<string | null>(null);
-  const [sentenceMenuVisible, setSentenceMenuVisible] = useState(false);
+
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   const myCollectionsQuery = useListMyCollections({ ownerId: userId });
   const teamCollectionsQuery = useListTeamCollections({ userId });
@@ -64,6 +68,8 @@ export default function OfScreen() {
 
   const activeMiniPersonal = ofMiniSubTab.personal;
   const activeMiniGroup = ofMiniSubTab.group;
+
+  const selectedCount = selectedIds.size;
 
   const filteredMyCollections = useMemo(() => {
     let list = myCollections;
@@ -103,6 +109,59 @@ export default function OfScreen() {
     return sentences.filter((s) => s.text.toLowerCase().includes(q));
   }, [sentences, searchQuery]);
 
+  const enterSelectionMode = useCallback(() => {
+    setSelectedIds(new Set());
+    setSelectionMode(true);
+    setSearchActive(false);
+    setSearchQuery("");
+  }, []);
+
+  const exitSelectionMode = useCallback(() => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  }, []);
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleBulkDeletePress = useCallback(() => {
+    if (selectedIds.size === 0) return;
+    setShowBulkDeleteConfirm(true);
+  }, [selectedIds]);
+
+  const handleBulkDeleteConfirm = useCallback(async () => {
+    setShowBulkDeleteConfirm(false);
+    setIsBulkDeleting(true);
+    const ids = Array.from(selectedIds);
+    let failCount = 0;
+    for (const id of ids) {
+      try {
+        await deleteSentence.mutateAsync({ id });
+      } catch {
+        failCount++;
+      }
+    }
+    await sentencesQuery.refetch();
+    setIsBulkDeleting(false);
+    exitSelectionMode();
+    if (failCount === 0) {
+      Alert.alert("완료", `${ids.length}개 문장을 삭제했어요.`);
+    } else if (failCount < ids.length) {
+      Alert.alert("오류", `일부 삭제에 실패했어요. (${failCount}개)`);
+    } else {
+      Alert.alert("오류", "삭제에 실패했어요.");
+    }
+  }, [selectedIds, deleteSentence, sentencesQuery, exitSelectionMode]);
+
   const handleSearch = useCallback(() => {
     setSearchActive((prev) => {
       if (prev) setSearchQuery("");
@@ -112,7 +171,7 @@ export default function OfScreen() {
 
   const handleAdd = useCallback(() => {
     if (ofSubTab === "sentence") {
-Alert.alert("알림", "읽기 화면에서 문장을 길게 눌러 수집할 수 있어요");
+      Alert.alert("알림", "읽기 화면에서 문장을 길게 눌러 수집할 수 있어요");
       return;
     }
     setNewName("");
@@ -122,7 +181,7 @@ Alert.alert("알림", "읽기 화면에서 문장을 길게 눌러 수집할 수
 
   const handleCreateConfirm = useCallback(async () => {
     if (!newName.trim()) {
-Alert.alert("오류", "이름을 입력해주세요");
+      Alert.alert("오류", "이름을 입력해주세요");
       return;
     }
     try {
@@ -240,7 +299,7 @@ Alert.alert("오류", "이름을 입력해주세요");
     </Pressable>
   );
 
-  const renderSentenceItem = ({ item }: { item: StoredSentence }) => (
+  const renderSentenceItem = useCallback(({ item }: { item: StoredSentence }) => (
     <Pressable
       style={styles.sentenceItem}
       onPress={() => setSelectedSentence(item)}
@@ -262,7 +321,30 @@ Alert.alert("오류", "이름을 입력해주세요");
         <Feather name="star" size={16} color={item.isFavorite ? "#F59E0B" : Colors.zinc300} />
       </Pressable>
     </Pressable>
-  );
+  ), [handleSentenceToggleFavorite]);
+
+  const renderSentenceSelectionItem = useCallback(({ item }: { item: StoredSentence }) => {
+    const isSelected = selectedIds.has(item.id);
+    return (
+      <Pressable
+        style={styles.selectionRow}
+        onPress={() => toggleSelect(item.id)}
+      >
+        <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+          {isSelected && <Feather name="check" size={14} color={Colors.white} />}
+        </View>
+        <View style={styles.sentenceItemContent}>
+          <Text style={styles.sentenceText} numberOfLines={2}>
+            &ldquo;{item.text}&rdquo;
+          </Text>
+          <View style={styles.sentenceMeta}>
+            <Text style={styles.sentenceDate}>{new Date(item.createdAt).toLocaleDateString("ko-KR")}</Text>
+            {item.isFavorite && <Feather name="star" size={12} color="#F59E0B" />}
+          </View>
+        </View>
+      </Pressable>
+    );
+  }, [selectedIds, toggleSelect]);
 
   const renderEmptyPersonal = () => {
     if (activeMiniPersonal === "subscribed") {
@@ -370,29 +452,50 @@ Alert.alert("오류", "이름을 입력해주세요");
             key="of-sentence-list"
             data={filteredSentences}
             keyExtractor={(item) => item.id}
-            renderItem={renderSentenceItem}
-            contentContainerStyle={styles.listContent}
-            refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={Colors.zinc400} />}
+            renderItem={selectionMode ? renderSentenceSelectionItem : renderSentenceItem}
+            contentContainerStyle={[
+              styles.listContent,
+              selectionMode && { paddingBottom: insets.bottom + 80 + 24 },
+            ]}
+            refreshControl={
+              !selectionMode ? (
+                <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={Colors.zinc400} />
+              ) : undefined
+            }
             showsVerticalScrollIndicator={false}
           />
         );
     }
   };
 
+  const isSentenceSelectionMode = ofSubTab === "sentence" && selectionMode;
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <PageHeader
-        title="보관함"
-        showAdd={ofSubTab !== "sentence"}
-        onAddPress={handleAdd}
-        showSearch
-        onSearchPress={handleSearch}
-        searchActive={searchActive}
-        showKebab={ofSubTab === "sentence"}
-        onKebabPress={() => setSentenceMenuVisible(true)}
-      />
+      {isSentenceSelectionMode ? (
+        <View style={styles.selectionHeader}>
+          <Pressable onPress={exitSelectionMode} hitSlop={12}>
+            <Text style={styles.selectionCancelText}>취소</Text>
+          </Pressable>
+          <Text style={styles.selectionHeaderTitle}>
+            {selectedCount > 0 ? `${selectedCount}개 선택` : "문장 선택"}
+          </Text>
+          <View style={{ width: 44 }} />
+        </View>
+      ) : (
+        <PageHeader
+          title="보관함"
+          showAdd={ofSubTab !== "sentence"}
+          onAddPress={handleAdd}
+          showSearch
+          onSearchPress={handleSearch}
+          searchActive={searchActive}
+          showKebab={ofSubTab === "sentence"}
+          onKebabPress={enterSelectionMode}
+        />
+      )}
 
-      {searchActive && (
+      {!selectionMode && searchActive && (
         <View style={styles.searchBar}>
           <Feather name="search" size={16} color={Colors.zinc400} />
           <TextInput
@@ -419,6 +522,27 @@ Alert.alert("오류", "이름을 입력해주세요");
       )}
 
       {renderContent()}
+
+      {isSentenceSelectionMode && (
+        <View style={[styles.selectionBar, { paddingBottom: insets.bottom + 12 }]}>
+          <Pressable
+            style={[
+              styles.bulkDeleteButton,
+              (selectedCount === 0 || isBulkDeleting) && styles.bulkDeleteButtonDisabled,
+            ]}
+            onPress={handleBulkDeletePress}
+            disabled={selectedCount === 0 || isBulkDeleting}
+          >
+            <Text style={styles.bulkDeleteText}>
+              {isBulkDeleting
+                ? "삭제 중..."
+                : selectedCount > 0
+                  ? `${selectedCount}개 선택 삭제`
+                  : "선택 삭제"}
+            </Text>
+          </Pressable>
+        </View>
+      )}
 
       <BottomSheet
         visible={createSheetVisible}
@@ -537,30 +661,16 @@ Alert.alert("오류", "이름을 입력해주세요");
         onCancel={() => setSentenceDeleteTarget(null)}
       />
 
-      <BottomSheet
-        visible={sentenceMenuVisible}
-        onClose={() => setSentenceMenuVisible(false)}
-        snapPoints={[0.28]}
-      >
-        <View style={styles.sentenceMenuContainer}>
-          <Pressable
-            style={styles.sentenceMenuRow}
-            onPress={() => {
-              setSentenceMenuVisible(false);
-              router.push({ pathname: "/of-03", params: { startSelection: "1" } });
-            }}
-          >
-            <Feather name="trash-2" size={18} color="#DC2626" />
-            <Text style={[styles.sentenceMenuLabel, { color: "#DC2626" }]}>선택 삭제</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.sentenceMenuRow, styles.sentenceMenuCancel]}
-            onPress={() => setSentenceMenuVisible(false)}
-          >
-            <Text style={styles.sentenceMenuCancelLabel}>닫기</Text>
-          </Pressable>
-        </View>
-      </BottomSheet>
+      <ConfirmModal
+        visible={showBulkDeleteConfirm}
+        title="문장 삭제"
+        description={`선택한 ${selectedCount}개 문장을 삭제하시겠어요?`}
+        confirmLabel="삭제"
+        cancelLabel="취소"
+        destructive
+        onConfirm={handleBulkDeleteConfirm}
+        onCancel={() => setShowBulkDeleteConfirm(false)}
+      />
     </View>
   );
 }
@@ -569,6 +679,25 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.white,
+  },
+  selectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: Spacing.screenPx,
+    paddingTop: 50,
+    paddingBottom: 20,
+    backgroundColor: Colors.white,
+  },
+  selectionHeaderTitle: {
+    ...Typography.bodySemiBold,
+    fontSize: 17,
+    color: Colors.zinc900,
+  },
+  selectionCancelText: {
+    ...Typography.body,
+    fontSize: 15,
+    color: Colors.zinc500,
   },
   searchBar: {
     flexDirection: "row",
@@ -640,6 +769,31 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.zinc100,
     gap: 8,
   },
+  selectionRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingVertical: 14,
+    paddingHorizontal: Spacing.screenPx,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.zinc100,
+    gap: 12,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: Colors.zinc300,
+    backgroundColor: Colors.white,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 2,
+    flexShrink: 0,
+  },
+  checkboxSelected: {
+    backgroundColor: Colors.zinc900,
+    borderColor: Colors.zinc900,
+  },
   sentenceItemContent: {
     flex: 1,
   },
@@ -664,56 +818,31 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.zinc400,
   },
-  sentenceSheetContainer: {
-    paddingTop: 4,
-    paddingBottom: 16,
-  },
-  sentenceSheetQuote: {
-    ...Typography.body,
-    fontSize: 16,
-    color: Colors.zinc800,
-    fontStyle: "italic",
-    lineHeight: 26,
+  selectionBar: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
     paddingHorizontal: Spacing.screenPx,
-    marginBottom: 8,
-  },
-  sentenceSheetDate: {
-    ...Typography.caption,
-    fontSize: 12,
-    color: Colors.zinc400,
-    paddingHorizontal: Spacing.screenPx,
-    marginBottom: 12,
-  },
-  sentenceSheetDivider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: Colors.zinc100,
-    marginBottom: 8,
-  },
-  sentenceSheetActions: {
-    gap: 0,
-  },
-  sentenceSheetRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    paddingHorizontal: Spacing.screenPx,
-    paddingVertical: 14,
-  },
-  sentenceSheetActionLabel: {
-    ...Typography.body,
-    fontSize: 16,
-    color: Colors.zinc800,
-  },
-  sentenceSheetCancel: {
-    justifyContent: "center",
-    marginTop: 4,
+    paddingTop: 12,
+    backgroundColor: Colors.white,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Colors.zinc100,
   },
-  sentenceSheetCancelLabel: {
-    ...Typography.body,
+  bulkDeleteButton: {
+    backgroundColor: "#EF4444",
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bulkDeleteButtonDisabled: {
+    opacity: 0.4,
+  },
+  bulkDeleteText: {
+    ...Typography.bodySemiBold,
     fontSize: 15,
-    color: Colors.zinc500,
+    color: Colors.white,
   },
   emptyContainer: {
     flex: 1,
@@ -785,29 +914,52 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.white,
   },
-  sentenceMenuContainer: {
+  sentenceSheetContainer: {
     paddingTop: 4,
     paddingBottom: 16,
   },
-  sentenceMenuRow: {
+  sentenceSheetQuote: {
+    ...Typography.body,
+    fontSize: 16,
+    color: Colors.zinc800,
+    fontStyle: "italic",
+    lineHeight: 26,
+    paddingHorizontal: Spacing.screenPx,
+    marginBottom: 10,
+  },
+  sentenceSheetDate: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc400,
+    paddingHorizontal: Spacing.screenPx,
+    marginBottom: 12,
+  },
+  sentenceSheetDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: Colors.zinc100,
+    marginBottom: 4,
+  },
+  sentenceSheetActions: {
+    paddingHorizontal: Spacing.screenPx,
+  },
+  sentenceSheetRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
-    paddingHorizontal: Spacing.screenPx,
     paddingVertical: 14,
   },
-  sentenceMenuLabel: {
+  sentenceSheetActionLabel: {
     ...Typography.body,
     fontSize: 16,
     color: Colors.zinc800,
   },
-  sentenceMenuCancel: {
+  sentenceSheetCancel: {
     justifyContent: "center",
     marginTop: 4,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Colors.zinc100,
   },
-  sentenceMenuCancelLabel: {
+  sentenceSheetCancelLabel: {
     ...Typography.body,
     fontSize: 15,
     color: Colors.zinc500,
