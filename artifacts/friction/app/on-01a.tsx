@@ -178,17 +178,19 @@ export default function DraftScreen() {
         if (!old || typeof old !== "object") return old;
         return { ...old, title: currentTitle, content };
       });
-      await transitionStatus.mutateAsync({
-        id: id!,
-        data: { targetStatus: TransitionArticleBodyTargetStatus.DIVIDING },
-      });
+      if (article?.status !== "DIVIDING") {
+        await transitionStatus.mutateAsync({
+          id: id!,
+          data: { targetStatus: TransitionArticleBodyTargetStatus.DIVIDING },
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
       router.push({ pathname: "/on-01b", params: { id } });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "상태 전환에 실패했습니다.";
       Alert.alert("오류", msg);
     }
-  }, [flush, id, router, updateArticle, transitionStatus, queryClient, getEditorContent, markDirty]);
+  }, [flush, id, router, updateArticle, transitionStatus, queryClient, getEditorContent, markDirty, article]);
 
   const handleDismissKeyboard = useCallback(() => {
     editorRef.current?.blur();

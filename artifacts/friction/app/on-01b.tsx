@@ -11,7 +11,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { useRouter, useLocalSearchParams, Stack } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing, ReaderTokens, cqiToPx, readerFontSize, readerLetterSpacing } from "@/constants/tokens";
 import {
@@ -545,10 +545,12 @@ export default function DividingScreen() {
       });
       // 캐시를 즉시 갱신하여 on-01c가 최신 pages를 받도록 함
       queryClient.setQueryData([`/api/articles/${id}`], updatedArticle);
-      await transitionStatus.mutateAsync({
-        id: id!,
-        data: { targetStatus: TransitionArticleBodyTargetStatus.CLOSING },
-      });
+      if (article?.status !== "CLOSING") {
+        await transitionStatus.mutateAsync({
+          id: id!,
+          data: { targetStatus: TransitionArticleBodyTargetStatus.CLOSING },
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
       router.push({ pathname: "/on-01c", params: { id } });
     } catch (e: unknown) {
@@ -600,16 +602,21 @@ export default function DividingScreen() {
 
   if (!id || articleLoading) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.zinc400} />
+      <>
+        <Stack.Screen options={{ gestureEnabled: false }} />
+        <View style={[styles.container, { paddingTop: insets.top }]}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={Colors.zinc400} />
+          </View>
         </View>
-      </View>
+      </>
     );
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <>
+      <Stack.Screen options={{ gestureEnabled: false }} />
+      <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <Pressable onPress={handleBack} hitSlop={12}>
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
@@ -811,6 +818,7 @@ export default function DividingScreen() {
         onCancel={() => setStepBackConfirmVisible(false)}
       />
     </View>
+    </>
   );
 }
 

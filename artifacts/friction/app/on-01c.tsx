@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { useRouter, useLocalSearchParams, Stack } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing, ReaderTokens, cqiToPx, readerFontSize } from "@/constants/tokens";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
@@ -332,16 +332,21 @@ export default function ClosingScreen() {
 
   if (!id || articleLoading) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.zinc400} />
+      <>
+        <Stack.Screen options={{ gestureEnabled: false }} />
+        <View style={[styles.container, { paddingTop: insets.top }]}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={Colors.zinc400} />
+          </View>
         </View>
-      </View>
+      </>
     );
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <>
+      <Stack.Screen options={{ gestureEnabled: false }} />
+      <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <Pressable onPress={handleBack} hitSlop={12}>
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
@@ -516,6 +521,7 @@ export default function ClosingScreen() {
         isLoading={myCollectionsQuery.isLoading}
       />
     </View>
+    </>
   );
 }
 
