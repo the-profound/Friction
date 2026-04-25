@@ -73,12 +73,11 @@ export default function DraftScreen() {
     }
   }, [article, editorReady]);
 
-  useEffect(() => {
-    if (editorReady && initializedRef.current) {
-      editorRef.current?.setMarkdown(articleContentRef.current);
-      editorRef.current?.setTitle(titleRef.current);
-    }
-  }, [editorReady]);
+  const handleEditorReady = useCallback(() => {
+    setEditorReady(true);
+    editorRef.current?.setMarkdown(articleContentRef.current);
+    editorRef.current?.setTitle(titleRef.current);
+  }, []);
 
   const getEditorContent = useCallback((): Promise<string> => {
     return new Promise((resolve) => {
@@ -253,7 +252,7 @@ Alert.alert("오류", "저장에 실패했습니다. 내용을 확인해주세�
             titleValue={title}
             placeholder="떠오르는 생각을 자유롭게 적어보세요..."
             editable
-            onReady={() => setEditorReady(true)}
+            onReady={handleEditorReady}
             onChange={handleEditorChange}
             onExportMarkdown={handleExportMarkdown}
             onTitleChange={handleTitleChange}
