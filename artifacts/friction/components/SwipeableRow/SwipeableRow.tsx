@@ -73,7 +73,7 @@ const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
 
     const panResponder = useRef(
       PanResponder.create({
-        onStartShouldSetPanResponder: () => false,
+        onStartShouldSetPanResponder: () => isOpen.current,
         onMoveShouldSetPanResponder: (_, gestureState) => {
           const { dx, dy } = gestureState;
           return Math.abs(dx) > Math.abs(dy) * 1.5 && Math.abs(dx) > 6;
@@ -92,12 +92,13 @@ const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
           translateX.setValue(clamped);
         },
         onPanResponderRelease: (_, gestureState) => {
-          const { dx, vx } = gestureState;
+          const { dx, dy, vx } = gestureState;
           const base = isOpen.current ? -totalWidth : 0;
           const newPos = Math.min(0, Math.max(-totalWidth, base + dx));
 
           if (isOpen.current) {
-            const shouldClose = newPos > -totalWidth + SWIPE_THRESHOLD || vx > VELOCITY_THRESHOLD;
+            const isTap = Math.abs(dx) < 5 && Math.abs(dy) < 5;
+            const shouldClose = isTap || newPos > -totalWidth + SWIPE_THRESHOLD || vx > VELOCITY_THRESHOLD;
             if (shouldClose) {
               animateTo(0);
               isOpen.current = false;
