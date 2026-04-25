@@ -150,6 +150,7 @@ export interface InboxItem {
   createdAt: string;
   article?: Article;
   sender?: User;
+  collectionName?: string | null;
 }
 
 export interface MyCollection {

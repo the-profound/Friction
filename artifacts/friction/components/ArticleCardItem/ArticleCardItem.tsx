@@ -12,6 +12,7 @@ import type { ArticleCover } from "@workspace/api-client-react";
 interface ArticleCardItemProps {
   title: string;
   authorName?: string;
+  collectionName?: string | null;
   onPress: () => void;
   cover?: ArticleCover | null;
   isRead?: boolean;
@@ -25,6 +26,7 @@ const READ_TEXT = Colors.zinc400;
 export default function ArticleCardItem({
   title,
   authorName,
+  collectionName,
   onPress,
   cover,
   isRead = false,
@@ -52,6 +54,14 @@ export default function ArticleCardItem({
       >
         {title}
       </Text>
+      {collectionName ? (
+        <Text
+          style={[styles.collectionName, { textAlign }]}
+          numberOfLines={1}
+        >
+          {collectionName}
+        </Text>
+      ) : null}
     </View>
   );
 
@@ -133,5 +143,10 @@ const styles = StyleSheet.create({
   title: {
     ...Typography.bodySemiBold,
     fontSize: 20,
+  },
+  collectionName: {
+    ...Typography.caption,
+    color: Colors.zinc400,
+    marginTop: 6,
   },
 });

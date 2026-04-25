@@ -19,4 +19,5 @@ export interface InboxItem {
   createdAt: Date;
   article?: Article;
   sender?: User;
+  collectionName?: string | null;
 }

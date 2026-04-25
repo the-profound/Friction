@@ -415,6 +415,7 @@ export const ListInboxResponseItem = zod.object({
       updatedAt: zod.date(),
     })
     .optional(),
+  collectionName: zod.string().nullish(),
 });
 export const ListInboxResponse = zod.array(ListInboxResponseItem);
 
@@ -477,6 +478,7 @@ export const GetInboxItemResponse = zod.object({
       updatedAt: zod.date(),
     })
     .optional(),
+  collectionName: zod.string().nullish(),
 });
 
 /**
@@ -545,6 +547,7 @@ export const MarkInboxOpenedResponse = zod.object({
       updatedAt: zod.date(),
     })
     .optional(),
+  collectionName: zod.string().nullish(),
 });
 
 /**
@@ -607,6 +610,7 @@ export const MarkInboxReadResponse = zod.object({
       updatedAt: zod.date(),
     })
     .optional(),
+  collectionName: zod.string().nullish(),
 });
 
 /**

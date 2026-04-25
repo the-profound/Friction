@@ -1,8 +1,17 @@
 import { Router, type IRouter } from "express";
-import { and, eq, lte } from "drizzle-orm";
+import { and, eq, lte, sql } from "drizzle-orm";
 import { db, inboxTable, articlesTable, usersTable, userArticleReadsTable } from "@workspace/db";
 
 const router: IRouter = Router();
+
+const collectionNameSubquery = sql<string | null>`(
+  SELECT tc.name
+  FROM team_collection_articles tca
+  JOIN team_collections tc ON tca.team_collection_id = tc.id
+  WHERE tca.article_id = ${inboxTable.articleId}
+  ORDER BY tca.added_at ASC
+  LIMIT 1
+)`;
 
 router.get("/inbox", async (req, res) => {
   const { recipientId } = req.query;
@@ -23,6 +32,7 @@ router.get("/inbox", async (req, res) => {
       createdAt: inboxTable.createdAt,
       article: articlesTable,
       sender: usersTable,
+      collectionName: collectionNameSubquery,
     })
     .from(inboxTable)
     .leftJoin(articlesTable, eq(inboxTable.articleId, articlesTable.id))
@@ -49,6 +59,7 @@ router.get("/inbox/:id", async (req, res) => {
       createdAt: inboxTable.createdAt,
       article: articlesTable,
       sender: usersTable,
+      collectionName: collectionNameSubquery,
     })
     .from(inboxTable)
     .leftJoin(articlesTable, eq(inboxTable.articleId, articlesTable.id))

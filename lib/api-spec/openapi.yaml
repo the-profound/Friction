@@ -1692,6 +1692,9 @@ components:
           $ref: "#/components/schemas/Article"
         sender:
           $ref: "#/components/schemas/User"
+        collectionName:
+          type: string
+          nullable: true
       required: [id, recipientId, articleId, senderId, visibleAt, isRead, createdAt]
 
     # ─── MyCollection ───────────────────────────────

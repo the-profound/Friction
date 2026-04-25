@@ -216,6 +216,7 @@ function CarouselGroup({
           onCardPress(item);
         }}
         authorName={item.sender?.nickname ?? item.sender?.id}
+        collectionName={item.collectionName}
         cover={item.article?.cover}
         isRead={item.isRead}
         isActive={index === activeIndex}
