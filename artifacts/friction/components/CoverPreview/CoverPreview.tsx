@@ -19,7 +19,10 @@ export default function CoverPreview({
 }: CoverPreviewProps) {
   const cover = resolveArticleCover(coverProp);
   const isImage = cover.type === "image" && !!cover.imageUrl;
-  const bgColor = cover.type === "color" && cover.bgColor ? cover.bgColor : Colors.zinc50;
+  const bgColor =
+    cover.type === "color" || cover.type === "default"
+      ? (cover.bgColor ?? Colors.zinc50)
+      : Colors.zinc50;
 
   const [containerWidth, setContainerWidth] = useState(0);
 
@@ -27,8 +30,8 @@ export default function CoverPreview({
     setContainerWidth(e.nativeEvent.layout.width);
   }, []);
 
-  const alignItems = cover.align === "center" ? "center" : "flex-start";
-  const textAlign = cover.align === "center" ? "center" as const : "left" as const;
+  const alignItems = cover.align === "left" ? "flex-start" : "center";
+  const textAlign = cover.align === "left" ? "left" as const : "center" as const;
 
   const titleSize = containerWidth > 0 ? readerFontSize(6.5, containerWidth) : (compact ? 16 : 22);
   const authorSize = containerWidth > 0 ? readerFontSize(3.6, containerWidth) : (compact ? 11 : 14);

@@ -222,7 +222,7 @@ function SelectableTextWeb({ text, onCollect, onMemo, onSelectionStateChange, fo
     lineHeight != null && { lineHeight },
     letterSpacing != null && { letterSpacing },
     {
-      wordBreak: "break-word" as any,
+      wordBreak: "break-all" as any,
       overflowWrap: "anywhere" as any,
       userSelect: isSelectMode ? ("text" as const) : ("none" as const),
     },

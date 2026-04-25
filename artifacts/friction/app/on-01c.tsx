@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useRef, useMemo } from "react"
 import {
   View,
   Text,
+  ScrollView,
   StyleSheet,
   Pressable,
   Alert,
@@ -17,6 +18,8 @@ import { Colors, Typography, Spacing, ReaderTokens, cqiToPx, readerFontSize } fr
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import CoverPreview from "@/components/CoverPreview/CoverPreview";
 import CoverEditor from "@/components/CoverEditor/CoverEditor";
+import MarkdownBlock from "@/components/MarkdownBlock/MarkdownBlock";
+import { parseMarkdownBlocks } from "@/utils/markdownParser";
 import MyCollectionsModal from "@/components/MyCollectionsModal/MyCollectionsModal";
 import { resolveArticleCover, getDefaultCover } from "@/utils/articleCover";
 import { canStepBack } from "@/lib/articleStatusCycle";
@@ -300,17 +303,9 @@ export default function ClosingScreen() {
     setPreviewCardWidth((prev) => (prev === w ? prev : w));
   }, []);
 
-  const strippedContent = useMemo(() => {
-    if (!currentPage) return "";
-    return currentPage
-      .replace(/^#{1,6}\s+/gm, "")
-      .replace(/\*\*\*(.*?)\*\*\*/g, "$1")
-      .replace(/\*\*(.*?)\*\*/g, "$1")
-      .replace(/\*(.*?)\*/g, "$1")
-      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-      .replace(/^[-*_]{3,}$/gm, "")
-      .replace(/^>\s+/gm, "")
-      .trim();
+  const previewBlocks = useMemo(() => {
+    if (!currentPage) return [];
+    return parseMarkdownBlocks(currentPage);
   }, [currentPage]);
 
   const totalVirtualPagesRef = useRef(totalVirtualPages);
@@ -417,30 +412,35 @@ export default function ClosingScreen() {
             ) : (
               <View style={styles.previewCard} onLayout={handlePreviewCardLayout}>
                 {previewCardWidth > 0 && (
-                  <View
-                    style={{
-                      flex: 1,
-                      justifyContent: "center",
+                  <ScrollView
+                    style={{ flex: 1 }}
+                    contentContainerStyle={{
                       paddingHorizontal: cqiToPx(ReaderTokens.padding.xCqi, previewCardWidth),
                       paddingVertical: cqiToPx(ReaderTokens.padding.yCqi, previewCardWidth),
+                      gap: readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth) * ReaderTokens.lineHeight.relaxed * 0.5,
                     }}
+                    scrollEnabled={false}
+                    showsVerticalScrollIndicator={false}
                   >
-                    <Text
-                      style={{
-                        fontFamily: ReaderTokens.fontFamily.serif,
-                        fontSize: readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth),
-                        lineHeight:
-                          readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth) *
-                          ReaderTokens.lineHeight.relaxed,
-                        letterSpacing:
-                          readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth) *
-                          ReaderTokens.letterSpacing.relaxedEm,
-                        color: ReaderTokens.bodyText,
-                      }}
-                    >
-                      {strippedContent}
-                    </Text>
-                  </View>
+                    <View pointerEvents="none">
+                      {previewBlocks.map((block, i) => (
+                        <MarkdownBlock
+                          key={i}
+                          block={block}
+                          onCollect={() => {}}
+                          fontSize={readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth)}
+                          lineHeight={
+                            readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth) *
+                            ReaderTokens.lineHeight.relaxed
+                          }
+                          letterSpacing={
+                            readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth) *
+                            ReaderTokens.letterSpacing.relaxedEm
+                          }
+                        />
+                      ))}
+                    </View>
+                  </ScrollView>
                 )}
               </View>
             )}
