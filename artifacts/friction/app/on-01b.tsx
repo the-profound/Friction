@@ -217,7 +217,7 @@ function useReaderLayout(screenWidth: number, screenHeight: number) {
     const bodyFontSize = readerFontSize(ReaderTokens.typeScale.bodyCqi, containerWidth);
     const bodyLineHeight = bodyFontSize * ReaderTokens.lineHeight.relaxed;
     const bodyLetterSpacing = readerLetterSpacing(ReaderTokens.letterSpacing.relaxedEm, bodyFontSize);
-    return { safeAreaWidth, safeAreaHeight, paddingX, paddingY, bodyFontSize, bodyLineHeight, bodyLetterSpacing };
+    return { containerWidth, safeAreaWidth, safeAreaHeight, paddingX, paddingY, bodyFontSize, bodyLineHeight, bodyLetterSpacing };
   }, [screenWidth, screenHeight]);
 }
 
@@ -263,7 +263,7 @@ export default function DividingScreen() {
   const baseWarnings = useMemo(() => validatePages(pages), [pages]);
 
   const readerLayout = useReaderLayout(screenWidth, screenHeight);
-  const { safeAreaWidth, safeAreaHeight, paddingX, paddingY, bodyFontSize, bodyLineHeight, bodyLetterSpacing } = readerLayout;
+  const { containerWidth, safeAreaWidth, safeAreaHeight, paddingX, paddingY, bodyFontSize, bodyLineHeight, bodyLetterSpacing } = readerLayout;
 
   const pageContentHeight = safeAreaHeight;
 
@@ -541,7 +541,7 @@ export default function DividingScreen() {
       const pagesJson = pages.map((p) => p.content);
       const updatedArticle = await updateArticle.mutateAsync({
         id: id!,
-        data: { content, pages: pagesJson },
+        data: { content, pages: pagesJson, layoutWidth: containerWidth },
       });
       // 캐시를 즉시 갱신하여 on-01c가 최신 pages를 받도록 함
       queryClient.setQueryData([`/api/articles/${id}`], updatedArticle);
@@ -557,7 +557,7 @@ export default function DividingScreen() {
       const msg = e instanceof Error ? e.message : "상태 전환에 실패했습니다.";
       Alert.alert("오류", msg);
     }
-  }, [content, article, pages, hasRedWarnings, id, router, updateArticle, transitionStatus, queryClient]);
+  }, [content, article, pages, hasRedWarnings, id, router, updateArticle, transitionStatus, queryClient, containerWidth]);
 
   const handleBack = useCallback(async () => {
     if (!id) { router.replace("/(tabs)/on"); return; }
@@ -565,7 +565,7 @@ export default function DividingScreen() {
       const pagesJson = pages.map((p) => p.content);
       const updatedArticle = await updateArticle.mutateAsync({
         id,
-        data: { content, pages: pagesJson },
+        data: { content, pages: pagesJson, layoutWidth: containerWidth },
       });
       queryClient.setQueryData([`/api/articles/${id}`], updatedArticle);
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
@@ -574,7 +574,7 @@ export default function DividingScreen() {
       const msg = e instanceof Error ? e.message : "저장에 실패했습니다.";
       Alert.alert("오류", msg);
     }
-  }, [id, content, pages, router, updateArticle, queryClient]);
+  }, [id, content, pages, router, updateArticle, queryClient, containerWidth]);
 
   const handleConfirmStepBack = useCallback(async () => {
     setStepBackConfirmVisible(false);

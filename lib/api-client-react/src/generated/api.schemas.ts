@@ -99,6 +99,7 @@ export interface Article {
   content: string;
   status: ArticleStatus;
   pages?: string[] | null;
+  layoutWidth?: number | null;
   style?: ArticleStyle;
   cover?: ArticleCover | null;
   letterAt?: string | null;
@@ -120,6 +121,7 @@ export interface UpdateArticleBody {
   title?: string;
   content?: string;
   pages?: string[] | null;
+  layoutWidth?: number | null;
   style?: UpdateArticleBodyStyle;
   cover?: ArticleCover | null;
 }

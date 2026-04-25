@@ -1,4 +1,4 @@
-import { jsonb, pgEnum, pgTable, text, timestamp, uuid, uniqueIndex, varchar } from "drizzle-orm/pg-core";
+import { doublePrecision, jsonb, pgEnum, pgTable, text, timestamp, uuid, uniqueIndex, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { sql } from "drizzle-orm";
@@ -16,6 +16,7 @@ export const articlesTable = pgTable(
     content: text("content").notNull(),
     status: articleStatusEnum("status").notNull().default("DRAFT"),
     pages: jsonb("pages"),
+    layoutWidth: doublePrecision("layout_width"),
     style: jsonb("style"),
     cover: jsonb("cover"),
     letterAt: timestamp("letter_at", { withTimezone: true }),

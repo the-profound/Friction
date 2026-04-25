@@ -36,6 +36,13 @@
       "when": 1776583209649,
       "tag": "0004_add_owner_archive_unique_index",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1745568000000,
+      "tag": "0005_add_layout_width_to_articles",
+      "breakpoints": true
     }
   ]
 }

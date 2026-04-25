@@ -51,14 +51,22 @@ import MemoBottomSheet from "@/components/MemoBottomSheet/MemoBottomSheet";
 import MyCollectionsModal from "@/components/MyCollectionsModal/MyCollectionsModal";
 import type { CollectionItem } from "@/components/MyCollectionsModal/MyCollectionsModal";
 
-function computeReaderLayout(availableWidth: number, availableHeight: number): ReaderLayout {
+function computeReaderLayout(availableWidth: number, availableHeight: number, overrideContainerWidth?: number): ReaderLayout {
   const widthFromHeight = availableHeight * ReaderTokens.aspectRatio;
   const heightFromWidth = availableWidth / ReaderTokens.aspectRatio;
 
-  const containerWidth =
-    widthFromHeight <= availableWidth ? widthFromHeight : availableWidth;
-  const containerHeight =
-    heightFromWidth <= availableHeight ? heightFromWidth : availableHeight;
+  const containerWidth = overrideContainerWidth != null
+    ? overrideContainerWidth
+    : (widthFromHeight <= availableWidth ? widthFromHeight : availableWidth);
+  const containerHeight = overrideContainerWidth != null
+    ? overrideContainerWidth / ReaderTokens.aspectRatio
+    : (heightFromWidth <= availableHeight ? heightFromWidth : availableHeight);
+
+  const scaleFactor = overrideContainerWidth != null
+    ? Math.min(availableWidth / containerWidth, availableHeight / containerHeight, 1.0)
+    : 1.0;
+  const frameWidth = containerWidth * scaleFactor;
+  const frameHeight = containerHeight * scaleFactor;
 
   const paddingX = cqiToPx(ReaderTokens.padding.xCqi, containerWidth);
   const paddingY = cqiToPx(ReaderTokens.padding.yCqi, containerWidth);
@@ -100,6 +108,9 @@ function computeReaderLayout(availableWidth: number, availableHeight: number): R
   return {
     containerWidth,
     containerHeight,
+    frameWidth,
+    frameHeight,
+    scaleFactor,
     paddingX,
     paddingY,
     safeAreaWidth,
@@ -199,13 +210,17 @@ export default function ReadScreen() {
     );
   }, []);
 
+  const storedLayoutWidth = (article?.layoutWidth != null && article.layoutWidth > 0)
+    ? article.layoutWidth
+    : undefined;
   const layout = useMemo(
     () =>
       computeReaderLayout(
         pageListSize.width > 0 ? pageListSize.width : screenWidth,
         pageListSize.height > 0 ? pageListSize.height : screenWidth / ReaderTokens.aspectRatio,
+        storedLayoutWidth,
       ),
-    [pageListSize.width, pageListSize.height, screenWidth],
+    [pageListSize.width, pageListSize.height, screenWidth, storedLayoutWidth],
   );
   const createSentence = useCreateStoredSentence();
   const collectionsQuery = useListMyCollections({ ownerId: userId });
@@ -734,12 +749,22 @@ Alert.alert("완료", "보관함에 저장됐어요");
             style={[
               styles.readerFrame,
               {
-                width: layout.containerWidth,
-                height: layout.containerHeight,
+                width: layout.frameWidth,
+                height: layout.frameHeight,
                 backgroundColor: ReaderTokens.bodyBg,
               },
             ]}
           >
+            {/* Scale-transform wrapper: keeps text metrics at storedLayoutWidth while
+                fitting visually within the recipient's available viewport */}
+            <View style={{
+              position: "absolute",
+              left: (layout.frameWidth - layout.containerWidth) / 2,
+              top: (layout.frameHeight - layout.containerHeight) / 2,
+              width: layout.containerWidth,
+              height: layout.containerHeight,
+              transform: [{ scale: layout.scaleFactor }],
+            }}>
             {isCommitting ? (
               <>
                 <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ translateX: outX }] }]}>
@@ -844,6 +869,7 @@ Alert.alert("완료", "보관함에 저장됐어요");
                 )}
               </Animated.View>
             )}
+            </View>
           </View>
 
         </View>
@@ -1025,6 +1051,9 @@ Alert.alert("완료", "보관함에 저장됐어요");
 interface ReaderLayout {
   containerWidth: number;
   containerHeight: number;
+  frameWidth: number;
+  frameHeight: number;
+  scaleFactor: number;
   paddingX: number;
   paddingY: number;
   safeAreaWidth: number;

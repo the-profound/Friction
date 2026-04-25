@@ -83,6 +83,7 @@ export default function ClosingScreen() {
   const [titleEditing, setTitleEditing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [previewCardWidth, setPreviewCardWidth] = useState(0);
+  const storedLayoutWidth = (article?.layoutWidth != null && article.layoutWidth > 0) ? article.layoutWidth : null;
   const exportedArticleIdRef = useRef<string | null>(null);
   const initializedRef = useRef(false);
   const saveCoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -411,7 +412,40 @@ export default function ClosingScreen() {
               </View>
             ) : (
               <View style={styles.previewCard} onLayout={handlePreviewCardLayout}>
-                {previewCardWidth > 0 && (
+                {previewCardWidth > 0 && storedLayoutWidth !== null ? (
+                  <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+                    <View style={{
+                      width: storedLayoutWidth,
+                      height: storedLayoutWidth / ReaderTokens.aspectRatio,
+                      transform: [{ scale: previewCardWidth / storedLayoutWidth }],
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}>
+                      {/* Mirror reader structure: centered safe-area box → padded content */}
+                      <View style={{ width: cqiToPx(ReaderTokens.safeArea.widthCqi, storedLayoutWidth) }}>
+                        <View
+                          pointerEvents="none"
+                          style={{
+                            paddingHorizontal: cqiToPx(ReaderTokens.padding.xCqi, storedLayoutWidth),
+                            paddingVertical: cqiToPx(ReaderTokens.padding.yCqi, storedLayoutWidth),
+                          }}
+                        >
+                          {previewBlocks.map((block, i) => (
+                            <View key={i} style={{ marginBottom: readerFontSize(ReaderTokens.typeScale.bodyCqi, storedLayoutWidth) * ReaderTokens.lineHeight.relaxed * 0.6 }}>
+                              <MarkdownBlock
+                                block={block}
+                                onCollect={() => {}}
+                                fontSize={readerFontSize(ReaderTokens.typeScale.bodyCqi, storedLayoutWidth)}
+                                lineHeight={readerFontSize(ReaderTokens.typeScale.bodyCqi, storedLayoutWidth) * ReaderTokens.lineHeight.relaxed}
+                                letterSpacing={readerFontSize(ReaderTokens.typeScale.bodyCqi, storedLayoutWidth) * ReaderTokens.letterSpacing.relaxedEm}
+                              />
+                            </View>
+                          ))}
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+                ) : previewCardWidth > 0 ? (
                   <ScrollView
                     style={{ flex: 1 }}
                     contentContainerStyle={{
@@ -429,19 +463,13 @@ export default function ClosingScreen() {
                           block={block}
                           onCollect={() => {}}
                           fontSize={readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth)}
-                          lineHeight={
-                            readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth) *
-                            ReaderTokens.lineHeight.relaxed
-                          }
-                          letterSpacing={
-                            readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth) *
-                            ReaderTokens.letterSpacing.relaxedEm
-                          }
+                          lineHeight={readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth) * ReaderTokens.lineHeight.relaxed}
+                          letterSpacing={readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth) * ReaderTokens.letterSpacing.relaxedEm}
                         />
                       ))}
                     </View>
                   </ScrollView>
-                )}
+                ) : null}
               </View>
             )}
           </View>

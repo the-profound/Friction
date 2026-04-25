@@ -129,6 +129,7 @@ export const ListArticlesResponseItem = zod.object({
   content: zod.string(),
   status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
   pages: zod.array(zod.string()).nullish(),
+  layoutWidth: zod.number().nullish(),
   style: zod.object({}).passthrough().nullish(),
   cover: zod
     .object({
@@ -179,6 +180,7 @@ export const GetOrCreateReadingMemoResponse = zod.object({
   content: zod.string(),
   status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
   pages: zod.array(zod.string()).nullish(),
+  layoutWidth: zod.number().nullish(),
   style: zod.object({}).passthrough().nullish(),
   cover: zod
     .object({
@@ -217,6 +219,7 @@ export const GetArticleResponse = zod.object({
   content: zod.string(),
   status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
   pages: zod.array(zod.string()).nullish(),
+  layoutWidth: zod.number().nullish(),
   style: zod.object({}).passthrough().nullish(),
   cover: zod
     .object({
@@ -253,6 +256,7 @@ export const UpdateArticleBody = zod.object({
   title: zod.string().min(1).optional(),
   content: zod.string().optional(),
   pages: zod.array(zod.string()).nullish(),
+  layoutWidth: zod.number().nullish(),
   style: zod.object({}).passthrough().nullish(),
   cover: zod
     .object({
@@ -280,6 +284,7 @@ export const UpdateArticleResponse = zod.object({
   content: zod.string(),
   status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
   pages: zod.array(zod.string()).nullish(),
+  layoutWidth: zod.number().nullish(),
   style: zod.object({}).passthrough().nullish(),
   cover: zod
     .object({
@@ -330,6 +335,7 @@ export const TransitionArticleStatusResponse = zod.object({
   content: zod.string(),
   status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
   pages: zod.array(zod.string()).nullish(),
+  layoutWidth: zod.number().nullish(),
   style: zod.object({}).passthrough().nullish(),
   cover: zod
     .object({

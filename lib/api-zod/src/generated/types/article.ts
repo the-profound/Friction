@@ -16,6 +16,7 @@ export interface Article {
   content: string;
   status: ArticleStatus;
   pages?: string[] | null;
+  layoutWidth?: number | null;
   style?: ArticleStyle;
   cover?: ArticleCover | null;
   letterAt?: Date | null;
