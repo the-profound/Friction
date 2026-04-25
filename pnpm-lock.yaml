@@ -302,7 +302,7 @@ importers:
         specifier: ^19.0.0-beta-e993439-20250117
         version: 19.0.0-beta-ebf51a3-20250411
       esbuild:
-        specifier: ^0.27.3
+        specifier: 0.27.3
         version: 0.27.3
       expo:
         specifier: ~54.0.27
