@@ -73,6 +73,7 @@ export default function OnScreen() {
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
+  const [scrollEnabled, setScrollEnabled] = useState(true);
   const openRowRef = useRef<SwipeableRowHandle | null>(null);
   const rowRefs = useRef<Map<string, SwipeableRowHandle>>(new Map());
 
@@ -232,6 +233,7 @@ export default function OnScreen() {
         }}
         onDeletePress={() => handleDeletePress(item.id)}
         onSwipeOpen={() => handleSwipeOpen(item.id)}
+        onScrollLock={(locked) => setScrollEnabled(!locked)}
       >
         <ArticleListItem
           title={item.title || "제목 없음"}
@@ -352,6 +354,7 @@ export default function OnScreen() {
           ]}
           onScrollBeginDrag={selectionMode ? undefined : closeOpenRow}
           ListFooterComponent={selectionMode ? undefined : listFooter}
+          scrollEnabled={scrollEnabled}
         />
       )}
 

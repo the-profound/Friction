@@ -32,10 +32,11 @@ interface SwipeableRowProps {
   onDeletePress?: () => void;
   actions?: SwipeAction[];
   onSwipeOpen?: () => void;
+  onScrollLock?: (locked: boolean) => void;
 }
 
 const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
-  ({ children, onDeletePress, actions, onSwipeOpen }, ref) => {
+  ({ children, onDeletePress, actions, onSwipeOpen, onScrollLock }, ref) => {
     const resolvedActions: SwipeAction[] = actions
       ? actions
       : onDeletePress
@@ -47,6 +48,10 @@ const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
     const translateX = useRef(new Animated.Value(0)).current;
     const isOpen = useRef(false);
     const currentAnim = useRef<Animated.CompositeAnimation | null>(null);
+    const onScrollLockRef = useRef(onScrollLock);
+    onScrollLockRef.current = onScrollLock;
+    const onSwipeOpenRef = useRef(onSwipeOpen);
+    onSwipeOpenRef.current = onSwipeOpen;
 
     useImperativeHandle(ref, () => ({
       close: () => {
@@ -83,6 +88,7 @@ const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
             currentAnim.current.stop();
             currentAnim.current = null;
           }
+          onScrollLockRef.current?.(true);
         },
         onPanResponderMove: (_, gestureState) => {
           const { dx } = gestureState;
@@ -95,6 +101,7 @@ const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
           const { dx, dy, vx } = gestureState;
           const base = isOpen.current ? -totalWidth : 0;
           const newPos = Math.min(0, Math.max(-totalWidth, base + dx));
+          onScrollLockRef.current?.(false);
 
           if (isOpen.current) {
             const isTap = Math.abs(dx) < 5 && Math.abs(dy) < 5;
@@ -110,13 +117,14 @@ const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
             if (shouldOpen) {
               animateTo(-totalWidth);
               isOpen.current = true;
-              onSwipeOpen?.();
+              onSwipeOpenRef.current?.();
             } else {
               animateTo(0);
             }
           }
         },
         onPanResponderTerminate: () => {
+          onScrollLockRef.current?.(false);
           animateTo(isOpen.current ? -totalWidth : 0);
         },
       })

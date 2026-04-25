@@ -48,6 +48,7 @@ export default function PersonalCollectionDetailScreen() {
   const [moveTargetArticle, setMoveTargetArticle] = useState<MyCollectionArticleWithDetails | null>(null);
   const [isMoveSheetVisible, setIsMoveSheetVisible] = useState(false);
 
+  const [scrollEnabled, setScrollEnabled] = useState(true);
   const openRowRef = useRef<SwipeableRowHandle | null>(null);
   const rowRefs = useRef<Map<string, SwipeableRowHandle>>(new Map());
 
@@ -310,6 +311,7 @@ export default function PersonalCollectionDetailScreen() {
           },
         ]}
         onSwipeOpen={() => handleSwipeOpen(item.articleId)}
+        onScrollLock={(locked) => setScrollEnabled(!locked)}
       >
         <Pressable
           style={styles.articleItem}
@@ -467,6 +469,7 @@ export default function PersonalCollectionDetailScreen() {
           ]}
           onScrollBeginDrag={selectionMode ? undefined : closeOpenRow}
           showsVerticalScrollIndicator={false}
+          scrollEnabled={scrollEnabled}
         />
       )}
 
