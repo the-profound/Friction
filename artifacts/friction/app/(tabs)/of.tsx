@@ -47,6 +47,7 @@ export default function OfScreen() {
   const [newDescription, setNewDescription] = useState("");
   const [selectedSentence, setSelectedSentence] = useState<StoredSentence | null>(null);
   const [sentenceDeleteTarget, setSentenceDeleteTarget] = useState<string | null>(null);
+  const [sentenceMenuVisible, setSentenceMenuVisible] = useState(false);
 
   const myCollectionsQuery = useListMyCollections({ ownerId: userId });
   const teamCollectionsQuery = useListTeamCollections({ userId });
@@ -387,6 +388,8 @@ Alert.alert("오류", "이름을 입력해주세요");
         showSearch
         onSearchPress={handleSearch}
         searchActive={searchActive}
+        showKebab={ofSubTab === "sentence"}
+        onKebabPress={() => setSentenceMenuVisible(true)}
       />
 
       {searchActive && (
@@ -533,6 +536,31 @@ Alert.alert("오류", "이름을 입력해주세요");
         }}
         onCancel={() => setSentenceDeleteTarget(null)}
       />
+
+      <BottomSheet
+        visible={sentenceMenuVisible}
+        onClose={() => setSentenceMenuVisible(false)}
+        snapPoints={[0.28]}
+      >
+        <View style={styles.sentenceMenuContainer}>
+          <Pressable
+            style={styles.sentenceMenuRow}
+            onPress={() => {
+              setSentenceMenuVisible(false);
+              router.push({ pathname: "/of-03", params: { startSelection: "1" } });
+            }}
+          >
+            <Feather name="trash-2" size={18} color="#DC2626" />
+            <Text style={[styles.sentenceMenuLabel, { color: "#DC2626" }]}>선택 삭제</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.sentenceMenuRow, styles.sentenceMenuCancel]}
+            onPress={() => setSentenceMenuVisible(false)}
+          >
+            <Text style={styles.sentenceMenuCancelLabel}>닫기</Text>
+          </Pressable>
+        </View>
+      </BottomSheet>
     </View>
   );
 }
@@ -756,5 +784,32 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 16,
     color: Colors.white,
+  },
+  sentenceMenuContainer: {
+    paddingTop: 4,
+    paddingBottom: 16,
+  },
+  sentenceMenuRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    paddingHorizontal: Spacing.screenPx,
+    paddingVertical: 14,
+  },
+  sentenceMenuLabel: {
+    ...Typography.body,
+    fontSize: 16,
+    color: Colors.zinc800,
+  },
+  sentenceMenuCancel: {
+    justifyContent: "center",
+    marginTop: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.zinc100,
+  },
+  sentenceMenuCancelLabel: {
+    ...Typography.body,
+    fontSize: 15,
+    color: Colors.zinc500,
   },
 });

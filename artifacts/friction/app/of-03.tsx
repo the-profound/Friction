@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
   Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
@@ -37,6 +37,7 @@ export default function SentenceCollectionScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { userId } = useUser();
+  const { startSelection } = useLocalSearchParams<{ startSelection?: string }>();
   const [filter, setFilter] = useState<FilterMode>("all");
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [selectedSentence, setSelectedSentence] = useState<StoredSentence | null>(null);
@@ -45,6 +46,12 @@ export default function SentenceCollectionScreen() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+
+  useEffect(() => {
+    if (startSelection === "1") {
+      setSelectionMode(true);
+    }
+  }, [startSelection]);
 
   const allSentencesQuery = useListStoredSentences({ userId });
   const allSentences = (allSentencesQuery.data ?? []) as StoredSentence[];
