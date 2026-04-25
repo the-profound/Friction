@@ -7,7 +7,7 @@ import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ArticleListItem from "@/components/ArticleListItem/ArticleListItem";
 import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
 import { useListArticles, useDeleteArticle, useCreateArticle } from "@workspace/api-client-react";
-import type { Article } from "@workspace/api-client-react";
+import type { Article, ArticleCover } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
 import type { ArticleStatus } from "@/lib/policies";
 import { useQueryClient } from "@tanstack/react-query";
@@ -110,6 +110,12 @@ export default function MemoCollectionScreen() {
     [router, closeOpenRow],
   );
 
+  const getCoverImageUrl = useCallback((article: Article): string | undefined => {
+    const cover = article.cover as ArticleCover | null | undefined;
+    if (cover?.type === "image" && cover.imageUrl) return cover.imageUrl;
+    return undefined;
+  }, []);
+
   const renderItem = useCallback(
     ({ item }: { item: Article }) => (
       <SwipeableRow
@@ -129,10 +135,11 @@ export default function MemoCollectionScreen() {
           statusBadge={item.status as ArticleStatus}
           timestamp={new Date(item.updatedAt)}
           onPress={() => handleArticlePress(item)}
+          coverImageUrl={getCoverImageUrl(item)}
         />
       </SwipeableRow>
     ),
-    [handleArticlePress, handleDeletePress, handleSwipeOpen],
+    [handleArticlePress, handleDeletePress, handleSwipeOpen, getCoverImageUrl],
   );
 
   return (

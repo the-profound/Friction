@@ -399,6 +399,7 @@ export default function ClosingScreen() {
         onChange={handleCoverChange}
         title={title}
         author={article?.authorId}
+        articleId={id ?? ""}
       />
 
       <ConfirmModal

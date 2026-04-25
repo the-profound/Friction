@@ -1,10 +1,11 @@
 import React, { useState, useCallback, useEffect } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView } from "react-native";
+import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert, Image } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "../../constants/tokens";
 import BottomSheet from "../BottomSheet/BottomSheet";
 import CoverPreview from "../CoverPreview/CoverPreview";
 import { getDefaultCover } from "../../utils/articleCover";
+import { useImageUpload } from "../../lib/useImageUpload";
 import type {
   ArticleCover,
   ArticleCoverType,
@@ -60,6 +61,7 @@ interface CoverEditorProps {
   onChange: (cover: ArticleCover) => void;
   title: string;
   author?: string;
+  articleId: string;
 }
 
 export default function CoverEditor({
@@ -69,6 +71,7 @@ export default function CoverEditor({
   onChange,
   title,
   author,
+  articleId,
 }: CoverEditorProps) {
   const [local, setLocal] = useState<ArticleCover>(cover);
 
@@ -88,6 +91,20 @@ export default function CoverEditor({
     },
     [onChange],
   );
+
+  const { pickAndUpload, isUploading } = useImageUpload({
+    articleId,
+    onSuccess: (imageUrl) => {
+      update({ type: "image", imageUrl });
+    },
+    onError: (err) => {
+      Alert.alert("업로드 실패", err.message);
+    },
+  });
+
+  const handleRemoveImage = useCallback(() => {
+    update({ type: "default", imageUrl: undefined });
+  }, [update]);
 
   return (
     <BottomSheet
@@ -205,11 +222,58 @@ export default function CoverEditor({
         )}
 
         {local.type === "image" && (
-          <View style={styles.imageNote}>
-            <Feather name="info" size={14} color={Colors.zinc400} />
-            <Text style={styles.imageNoteText}>
-              이미지 업로드는 추후 지원 예정입니다.
-            </Text>
+          <View style={styles.imageSection}>
+            {local.imageUrl ? (
+              <>
+                <Image
+                  source={{ uri: local.imageUrl }}
+                  style={styles.imageThumbnail}
+                  resizeMode="cover"
+                />
+                <View style={styles.imageActions}>
+                  <Pressable
+                    style={[styles.imageButton, styles.imageButtonSecondary]}
+                    onPress={pickAndUpload}
+                    disabled={isUploading}
+                  >
+                    {isUploading ? (
+                      <ActivityIndicator size="small" color={Colors.zinc600} />
+                    ) : (
+                      <Feather name="refresh-cw" size={15} color={Colors.zinc600} />
+                    )}
+                    <Text style={styles.imageButtonSecondaryLabel}>
+                      {isUploading ? "업로드 중..." : "이미지 변경"}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.imageButton, styles.imageButtonDanger]}
+                    onPress={handleRemoveImage}
+                    disabled={isUploading}
+                  >
+                    <Feather name="trash-2" size={15} color="#dc2626" />
+                    <Text style={styles.imageButtonDangerLabel}>이미지 제거</Text>
+                  </Pressable>
+                </View>
+              </>
+            ) : (
+              <Pressable
+                style={[styles.imagePickerButton, isUploading && styles.imagePickerButtonDisabled]}
+                onPress={pickAndUpload}
+                disabled={isUploading}
+              >
+                {isUploading ? (
+                  <ActivityIndicator size="small" color={Colors.zinc600} />
+                ) : (
+                  <Feather name="upload" size={20} color={Colors.zinc500} />
+                )}
+                <Text style={styles.imagePickerLabel}>
+                  {isUploading ? "업로드 중..." : "사진 선택"}
+                </Text>
+                {!isUploading && (
+                  <Text style={styles.imagePickerHint}>카메라 롤에서 사진을 선택합니다</Text>
+                )}
+              </Pressable>
+            )}
           </View>
         )}
 
@@ -292,19 +356,66 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: Colors.zinc700,
   },
-  imageNote: {
-    flexDirection: "row",
+  imageSection: {
+    marginTop: 16,
+    gap: 12,
+  },
+  imagePickerButton: {
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
+    borderStyle: "dashed",
+    borderRadius: 12,
+    padding: 20,
     alignItems: "center",
     gap: 8,
-    marginTop: 16,
-    padding: 12,
     backgroundColor: Colors.zinc50,
-    borderRadius: 10,
   },
-  imageNoteText: {
+  imagePickerButtonDisabled: {
+    opacity: 0.6,
+  },
+  imagePickerLabel: {
+    ...Typography.bodySemiBold,
+    fontSize: 14,
+    color: Colors.zinc700,
+  },
+  imagePickerHint: {
     ...Typography.caption,
     fontSize: 12,
-    color: Colors.zinc500,
+    color: Colors.zinc400,
+  },
+  imageThumbnail: {
+    width: "100%",
+    height: 160,
+    borderRadius: 10,
+    backgroundColor: Colors.zinc100,
+  },
+  imageActions: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  imageButton: {
     flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  imageButtonSecondary: {
+    backgroundColor: Colors.zinc100,
+  },
+  imageButtonSecondaryLabel: {
+    ...Typography.bodySemiBold,
+    fontSize: 13,
+    color: Colors.zinc600,
+  },
+  imageButtonDanger: {
+    backgroundColor: "#fef2f2",
+  },
+  imageButtonDangerLabel: {
+    ...Typography.bodySemiBold,
+    fontSize: 13,
+    color: "#dc2626",
   },
 });

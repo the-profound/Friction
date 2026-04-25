@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, StyleSheet, Pressable } from "react-native";
+import { View, Text, StyleSheet, Pressable, Image } from "react-native";
 import { Colors, Typography, Spacing } from "../../constants/tokens";
 import type { ArticleStatus } from "../../lib/policies";
 
@@ -17,6 +17,7 @@ interface ArticleListItemProps {
   statusBadge?: ArticleStatus;
   isRead?: boolean;
   rightMeta?: string;
+  coverImageUrl?: string;
 }
 
 const STATUS_BADGE_COLORS: Record<ArticleStatus, { bg: string; text: string }> = {
@@ -35,35 +36,45 @@ export default function ArticleListItem({
   statusBadge,
   isRead,
   rightMeta,
+  coverImageUrl,
 }: ArticleListItemProps) {
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [styles.container, pressed && styles.pressed]}
     >
-      <View style={styles.content}>
-        <View style={styles.topRow}>
-          <Text style={styles.title} numberOfLines={1}>
-            {title}
-          </Text>
-          {rightMeta && <Text style={styles.rightMeta}>{rightMeta}</Text>}
-        </View>
-        {preview && (
-          <Text style={styles.preview} numberOfLines={1}>
-            {preview}
-          </Text>
-        )}
-        <View style={styles.metaRow}>
-          {author && <Text style={styles.metaText}>{author.name}</Text>}
-          {timestamp && <Text style={styles.metaText}>{formatDate(timestamp)}</Text>}
-          {statusBadge && (
-            <View style={[styles.badge, { backgroundColor: STATUS_BADGE_COLORS[statusBadge].bg }]}>
-              <Text style={[styles.badgeText, { color: STATUS_BADGE_COLORS[statusBadge].text }]}>
-                {statusBadge === "DRAFT" ? "작성 중" : statusBadge === "DIVIDING" ? "분할 중" : statusBadge === "CLOSING" ? "마감 중" : "완성"}
-              </Text>
-            </View>
+      <View style={styles.inner}>
+        <View style={styles.content}>
+          <View style={styles.topRow}>
+            <Text style={styles.title} numberOfLines={1}>
+              {title}
+            </Text>
+            {rightMeta && <Text style={styles.rightMeta}>{rightMeta}</Text>}
+          </View>
+          {preview && (
+            <Text style={styles.preview} numberOfLines={1}>
+              {preview}
+            </Text>
           )}
+          <View style={styles.metaRow}>
+            {author && <Text style={styles.metaText}>{author.name}</Text>}
+            {timestamp && <Text style={styles.metaText}>{formatDate(timestamp)}</Text>}
+            {statusBadge && (
+              <View style={[styles.badge, { backgroundColor: STATUS_BADGE_COLORS[statusBadge].bg }]}>
+                <Text style={[styles.badgeText, { color: STATUS_BADGE_COLORS[statusBadge].text }]}>
+                  {statusBadge === "DRAFT" ? "작성 중" : statusBadge === "DIVIDING" ? "분할 중" : statusBadge === "CLOSING" ? "마감 중" : "완성"}
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
+        {coverImageUrl ? (
+          <Image
+            source={{ uri: coverImageUrl }}
+            style={styles.coverThumbnail}
+            resizeMode="cover"
+          />
+        ) : null}
       </View>
     </Pressable>
   );
@@ -86,7 +97,13 @@ const styles = StyleSheet.create({
   pressed: {
     backgroundColor: Colors.zinc50,
   },
+  inner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
   content: {
+    flex: 1,
     gap: 4,
   },
   topRow: {
@@ -129,5 +146,12 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 11,
     fontWeight: "600",
+  },
+  coverThumbnail: {
+    width: 52,
+    height: 52,
+    borderRadius: 8,
+    backgroundColor: Colors.zinc100,
+    flexShrink: 0,
   },
 });

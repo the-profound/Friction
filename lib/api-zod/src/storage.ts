@@ -1,0 +1,20 @@
+import * as zod from "zod";
+
+export const RequestUploadUrlBody = zod.object({
+  name: zod.string(),
+  size: zod.number(),
+  contentType: zod.string(),
+});
+
+export const RequestUploadUrlResponse = zod.object({
+  uploadURL: zod.string(),
+  objectPath: zod.string(),
+  metadata: zod.object({
+    name: zod.string(),
+    size: zod.number(),
+    contentType: zod.string(),
+  }),
+});
+
+export type RequestUploadUrlBodyType = zod.infer<typeof RequestUploadUrlBody>;
+export type RequestUploadUrlResponseType = zod.infer<typeof RequestUploadUrlResponse>;

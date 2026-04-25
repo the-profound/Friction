@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { and, eq } from "drizzle-orm";
 import { db, articlesTable, type ArticleStatus } from "@workspace/db";
 import { CreateArticleBody, UpdateArticleBody, TransitionArticleStatusBody, GetOrCreateReadingMemoQueryParams } from "@workspace/api-zod";
+import { ObjectStorageService } from "../lib/objectStorage";
 
 const FORWARD_TRANSITIONS: Record<string, string> = {
   DRAFT: "DIVIDING",
@@ -15,6 +16,7 @@ const BACK_TRANSITIONS: Record<string, string> = {
 };
 
 const router: IRouter = Router();
+const objectStorageService = new ObjectStorageService();
 
 router.get("/articles/reading-memo", async (req, res) => {
   const parsed = GetOrCreateReadingMemoQueryParams.safeParse(req.query);
@@ -140,6 +142,45 @@ router.patch("/articles/:id", async (req, res) => {
 
   const [article] = await db.update(articlesTable).set(updates).where(eq(articlesTable.id, req.params.id)).returning();
   res.json(article);
+});
+
+router.post("/articles/:id/cover-image", async (req, res) => {
+  const { id } = req.params;
+  const { name, size, contentType } = req.body ?? {};
+
+  if (!name || !contentType || typeof size !== "number") {
+    res.status(400).json({ error: "name, size, and contentType are required" });
+    return;
+  }
+  if (!contentType.startsWith("image/")) {
+    res.status(400).json({ error: "contentType must be an image MIME type" });
+    return;
+  }
+  const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+  if (size > MAX_IMAGE_SIZE) {
+    res.status(400).json({ error: "Image size must not exceed 10MB" });
+    return;
+  }
+
+  const [article] = await db.select().from(articlesTable).where(eq(articlesTable.id, id));
+  if (!article) {
+    res.status(404).json({ error: "Article not found" });
+    return;
+  }
+  if (article.status === "LETTER") {
+    res.status(400).json({ error: "Cannot change cover image of a finalized letter" });
+    return;
+  }
+
+  try {
+    const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+    const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+    const imageUrl = `/api/storage${objectPath}`;
+    res.json({ uploadURL, imageUrl });
+  } catch (error) {
+    req.log.error({ err: error }, "Error generating cover image upload URL");
+    res.status(500).json({ error: "Failed to generate upload URL" });
+  }
 });
 
 router.delete("/articles/:id", async (req, res) => {

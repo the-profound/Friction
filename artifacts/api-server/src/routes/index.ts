@@ -9,6 +9,7 @@ import readingRouter from "./reading";
 import teamCollectionsRouter from "./team-collections";
 import neighborsRouter from "./neighbors";
 import sendRecordsRouter from "./send-records";
+import storageRouter from "./storage";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use(readingRouter);
 router.use(teamCollectionsRouter);
 router.use(neighborsRouter);
 router.use(sendRecordsRouter);
+router.use(storageRouter);
 
 export default router;
