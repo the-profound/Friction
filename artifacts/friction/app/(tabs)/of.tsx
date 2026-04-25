@@ -190,18 +190,20 @@ export default function OfScreen() {
           data: { ownerId: userId, name: newName.trim(), description: newDescription.trim() },
         });
         myCollectionsQuery.refetch();
+        setCreateSheetVisible(false);
       } else {
-        await createTeamCollection.mutateAsync({
+        const newTeamCollection = await createTeamCollection.mutateAsync({
           data: { creatorId: userId, name: newName.trim(), description: newDescription.trim() },
         });
         teamCollectionsQuery.refetch();
+        setCreateSheetVisible(false);
+        router.push({ pathname: "/of-02-detail", params: { id: newTeamCollection.id } });
       }
-      setCreateSheetVisible(false);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "모음 생성에 실패했습니다.";
       Alert.alert("오류", msg);
     }
-  }, [ofSubTab, newName, newDescription, userId, createMyCollection, createTeamCollection, myCollectionsQuery, teamCollectionsQuery]);
+  }, [ofSubTab, newName, newDescription, userId, createMyCollection, createTeamCollection, myCollectionsQuery, teamCollectionsQuery, router]);
 
   const handleSentenceCopy = useCallback(async (text: string) => {
     try {

@@ -51,7 +51,7 @@ export default function TeamCollectionListScreen() {
       return;
     }
     try {
-      await createCollection.mutateAsync({
+      const newCollection = await createCollection.mutateAsync({
         data: { creatorId: userId, name: newName.trim(), description: newDescription.trim() },
       });
       setCreateSheetVisible(false);
@@ -59,12 +59,12 @@ export default function TeamCollectionListScreen() {
       setNewDescription("");
       setActiveTab("mine");
       collectionsQuery.refetch();
-Alert.alert("완료", "단체 모음을 만들었어요.");
+      router.push({ pathname: "/of-02-detail", params: { id: newCollection.id } });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "단체 모음 생성에 실패했습니다.";
       Alert.alert("오류", msg);
     }
-  }, [newName, newDescription, userId, createCollection, collectionsQuery]);
+  }, [newName, newDescription, userId, createCollection, collectionsQuery, router]);
 
   const handleDelete = useCallback(
     (id: string, name: string) => {
