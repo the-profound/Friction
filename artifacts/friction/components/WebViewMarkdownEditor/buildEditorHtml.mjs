@@ -14,7 +14,7 @@ const result = await esbuild.build({
   minify: true,
   format: "iife",
   platform: "browser",
-  target: ["es2017"],
+  target: ["es2020"],
   write: false,
   define: {
     "process.env.NODE_ENV": '"production"',
@@ -87,7 +87,7 @@ html,body{height:100%;background:transparent}
 body{padding:16px 0 0;overflow:auto}
 `.trim();
 
-const VERSION = "3.0.0";
+const VERSION = "3.1.0";
 
 const tsContent = `export const EDITOR_CONFIG_VERSION = "${VERSION}";
 
