@@ -1,11 +1,11 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useRef } from "react";
 import { View, Text, StyleSheet, FlatList, Pressable, RefreshControl } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ArticleListItem from "@/components/ArticleListItem/ArticleListItem";
-import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
+import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
 import { useListArticles, useDeleteArticle, useCreateArticle } from "@workspace/api-client-react";
 import type { Article } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
@@ -46,10 +46,10 @@ export default function MemoCollectionScreen() {
   const queryClient = useQueryClient();
   const { userId } = useUser();
   const { showToast } = useToast();
-  const [isManageMode, setIsManageMode] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>("latest");
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  const openRowRef = useRef<SwipeableRowHandle | null>(null);
+  const rowRefs = useRef<Map<string, SwipeableRowHandle>>(new Map());
 
   const { data: articles, isLoading, refetch, isRefetching } = useListArticles({
     authorId: userId,
@@ -73,95 +73,66 @@ export default function MemoCollectionScreen() {
     }
   }, [articles, sortMode]);
 
-  const toggleSelect = useCallback((id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
+  const closeOpenRow = useCallback(() => {
+    if (openRowRef.current) {
+      openRowRef.current.close();
+      openRowRef.current = null;
+    }
   }, []);
 
-  const handleDeleteSelected = useCallback(() => {
-    if (selectedIds.size === 0) return;
-    setShowDeleteConfirm(true);
-  }, [selectedIds]);
-
-  const handleDeleteConfirm = useCallback(async () => {
-    setShowDeleteConfirm(false);
-    const ids = Array.from(selectedIds);
-    let failCount = 0;
-    for (const id of ids) {
-      try {
-        await deleteArticle.mutateAsync({ id });
-      } catch {
-        failCount++;
-      }
+  const handleSwipeOpen = useCallback((articleId: string) => {
+    const currentOpen = openRowRef.current;
+    const newRef = rowRefs.current.get(articleId) ?? null;
+    if (currentOpen && currentOpen !== newRef) {
+      currentOpen.close();
     }
-    await queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
-    setSelectedIds(new Set());
-    setIsManageMode(false);
-    if (failCount === 0) {
+    openRowRef.current = newRef;
+  }, []);
+
+  const handleDeletePress = useCallback(async (articleId: string) => {
+    closeOpenRow();
+    try {
+      await deleteArticle.mutateAsync({ id: articleId });
+      await queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
       showToast({ message: "삭제했어요.", type: "success" });
-    } else {
+    } catch {
       showToast({ message: "삭제에 실패했습니다.", type: "error" });
     }
-  }, [selectedIds, deleteArticle, queryClient, showToast]);
-
-  const handleDeleteCancel = useCallback(() => {
-    setShowDeleteConfirm(false);
-  }, []);
-
-  const handleToggleManage = useCallback(() => {
-    if (isManageMode) {
-      setSelectedIds(new Set());
-    }
-    setIsManageMode(!isManageMode);
-  }, [isManageMode]);
+  }, [deleteArticle, queryClient, showToast, closeOpenRow]);
 
   const handleArticlePress = useCallback(
     (article: Article) => {
-      if (isManageMode) {
-        toggleSelect(article.id);
-        return;
-      }
+      closeOpenRow();
       if (article.status === "LETTER") return;
       const screen = getScreenForStatus(article.status);
       router.push({ pathname: screen as never, params: { id: article.id } });
     },
-    [isManageMode, toggleSelect, router],
+    [router, closeOpenRow],
   );
 
   const renderItem = useCallback(
     ({ item }: { item: Article }) => (
-      <View style={styles.itemRow}>
-        {isManageMode && (
-          <Pressable
-            style={styles.checkbox}
-            onPress={() => toggleSelect(item.id)}
-          >
-            <Feather
-              name={selectedIds.has(item.id) ? "check-square" : "square"}
-              size={20}
-              color={selectedIds.has(item.id) ? Colors.zinc900 : Colors.zinc300}
-            />
-          </Pressable>
-        )}
-        <View style={styles.itemContent}>
-          <ArticleListItem
-            title={item.title || "제목 없음"}
-            preview={item.content?.substring(0, 60) || ""}
-            statusBadge={item.status as ArticleStatus}
-            timestamp={new Date(item.updatedAt)}
-            onPress={() => handleArticlePress(item)}
-          />
-        </View>
-      </View>
+      <SwipeableRow
+        ref={(r) => {
+          if (r) {
+            rowRefs.current.set(item.id, r);
+          } else {
+            rowRefs.current.delete(item.id);
+          }
+        }}
+        onDeletePress={() => handleDeletePress(item.id)}
+        onSwipeOpen={() => handleSwipeOpen(item.id)}
+      >
+        <ArticleListItem
+          title={item.title || "제목 없음"}
+          preview={item.content?.substring(0, 60) || ""}
+          statusBadge={item.status as ArticleStatus}
+          timestamp={new Date(item.updatedAt)}
+          onPress={() => handleArticlePress(item)}
+        />
+      </SwipeableRow>
     ),
-    [isManageMode, selectedIds, toggleSelect, handleArticlePress],
+    [handleArticlePress, handleDeletePress, handleSwipeOpen],
   );
 
   return (
@@ -178,7 +149,10 @@ export default function MemoCollectionScreen() {
           <Pressable
             key={opt.key}
             style={[styles.sortChip, sortMode === opt.key && styles.sortChipActive]}
-            onPress={() => setSortMode(opt.key)}
+            onPress={() => {
+              closeOpenRow();
+              setSortMode(opt.key);
+            }}
           >
             <Text
               style={[styles.sortChipText, sortMode === opt.key && styles.sortChipTextActive]}
@@ -203,7 +177,7 @@ export default function MemoCollectionScreen() {
             onPress={async () => {
               try {
                 const article = await createArticle.mutateAsync({
-                  data: { authorId: userId, title: "새 메모" },
+                  data: { authorId: userId, title: "" },
                 });
                 router.push({ pathname: "/on-01a", params: { id: article.id } });
               } catch {
@@ -224,30 +198,9 @@ export default function MemoCollectionScreen() {
             <RefreshControl refreshing={isRefetching} onRefresh={refetch} />
           }
           contentContainerStyle={styles.listContent}
+          onScrollBeginDrag={closeOpenRow}
         />
       )}
-
-      {isManageMode && selectedIds.size > 0 && (
-        <View style={[styles.deleteBar, { paddingBottom: insets.bottom + 12 }]}>
-          <Pressable style={styles.deleteButton} onPress={handleDeleteSelected}>
-            <Feather name="trash-2" size={16} color={Colors.white} />
-            <Text style={styles.deleteButtonText}>
-              {selectedIds.size}개 삭제
-            </Text>
-          </Pressable>
-        </View>
-      )}
-
-      <ConfirmModal
-        visible={showDeleteConfirm}
-        title={`${selectedIds.size}개를 삭제할까요?`}
-        description="선택한 메모가 영구적으로 삭제됩니다."
-        confirmLabel="삭제"
-        cancelLabel="취소"
-        destructive
-        onConfirm={handleDeleteConfirm}
-        onCancel={handleDeleteCancel}
-      />
     </View>
   );
 }
@@ -268,11 +221,6 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 17,
     color: Colors.zinc900,
-  },
-  manageButton: {
-    ...Typography.bodySemiBold,
-    fontSize: 15,
-    color: Colors.zinc600,
   },
   sortBar: {
     flexDirection: "row",
@@ -300,17 +248,6 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: 80,
-  },
-  itemRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  checkbox: {
-    paddingLeft: Spacing.screenPx,
-    paddingRight: 4,
-  },
-  itemContent: {
-    flex: 1,
   },
   emptyContainer: {
     flex: 1,
@@ -344,31 +281,6 @@ const styles = StyleSheet.create({
   writeButtonText: {
     ...Typography.bodySemiBold,
     fontSize: 14,
-    color: Colors.white,
-  },
-  deleteBar: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: Spacing.screenPx,
-    paddingTop: 12,
-    backgroundColor: Colors.white,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.zinc200,
-  },
-  deleteButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    backgroundColor: "#DC2626",
-    paddingVertical: 14,
-    borderRadius: 12,
-  },
-  deleteButtonText: {
-    ...Typography.bodySemiBold,
-    fontSize: 15,
     color: Colors.white,
   },
 });

@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
-import { View, Text, StyleSheet, Pressable, TextInput, Alert, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, Pressable, Alert, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -12,15 +12,18 @@ import type { WebViewMarkdownEditorRef, OnChangePayload, OnExportMarkdownPayload
 import {
   useGetArticle,
   useUpdateArticle,
+  useDeleteArticle,
   useTransitionArticleStatus,
   TransitionArticleBodyTargetStatus,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/contexts/ToastContext";
 
 export default function DraftScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
 
   const articleQuery = useGetArticle(id ?? "");
@@ -28,6 +31,7 @@ export default function DraftScreen() {
   const articleLoading = id ? articleQuery.isLoading : false;
 
   const updateArticle = useUpdateArticle();
+  const deleteArticle = useDeleteArticle();
   const transitionStatus = useTransitionArticleStatus();
 
   const editorRef = useRef<WebViewMarkdownEditorRef>(null);
@@ -46,17 +50,24 @@ export default function DraftScreen() {
   useEffect(() => {
     if (article && !initializedRef.current) {
       initializedRef.current = true;
-      setTitle(article.title || "");
-      titleRef.current = article.title || "";
-      contentRef.current = article.content || "";
-      articleContentRef.current = article.content || "";
-      setCharCount(contentRef.current.length);
+      const t = article.title || "";
+      const c = article.content || "";
+      setTitle(t);
+      titleRef.current = t;
+      contentRef.current = c;
+      articleContentRef.current = c;
+      setCharCount(c.length);
+      if (editorReady) {
+        editorRef.current?.setMarkdown(c);
+        editorRef.current?.setTitle(t);
+      }
     }
-  }, [article]);
+  }, [article, editorReady]);
 
   useEffect(() => {
-    if (editorReady && initializedRef.current && articleContentRef.current) {
+    if (editorReady && initializedRef.current) {
       editorRef.current?.setMarkdown(articleContentRef.current);
+      editorRef.current?.setTitle(titleRef.current);
     }
   }, [editorReady]);
 
@@ -97,7 +108,7 @@ export default function DraftScreen() {
     [id, updateArticle],
   );
 
-  const { status: saveStatus, markDirty, flush } = useAutoSave({
+  const { markDirty, flush } = useAutoSave({
     onSave: handleSave,
     storageKey: id ? `draft_${id}` : undefined,
   });
@@ -172,23 +183,30 @@ export default function DraftScreen() {
 
   const handleBack = useCallback(async () => {
     const content = await getEditorContent();
+    const currentTitle = titleRef.current.trim();
+    const currentContent = content.trim();
+
+    if (!currentTitle && !currentContent) {
+      if (id) {
+        try {
+          await deleteArticle.mutateAsync({ id });
+        } catch {
+          showToast({ message: "빈 메모 삭제에 실패했습니다.", type: "error" });
+        }
+        queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+      }
+      router.back();
+      return;
+    }
+
     markDirty(titleRef.current, content);
-    await flush();
+    const flushResult = await flush();
+    if (!flushResult.ok) {
+      showToast({ message: "저장에 실패했습니다. 내용을 확인해주세요.", type: "error" });
+    }
     queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
     router.back();
-  }, [flush, router, queryClient, getEditorContent, markDirty]);
-
-  const saveStatusLabel =
-    saveStatus === "saving"
-      ? "저장 중..."
-      : saveStatus === "error"
-        ? "저장 실패"
-        : saveStatus === "saved"
-          ? "저장됨"
-          : "";
-
-  const saveStatusColor =
-    saveStatus === "error" ? "#ef4444" : Colors.zinc400;
+  }, [flush, router, queryClient, getEditorContent, markDirty, id, deleteArticle, showToast]);
 
   if (!id || articleLoading) {
     return (
@@ -206,36 +224,23 @@ export default function DraftScreen() {
         <Pressable onPress={handleBack} hitSlop={12}>
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
         </Pressable>
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>작성</Text>
-          {saveStatusLabel ? (
-            <Text style={[styles.saveStatus, { color: saveStatusColor }]}>
-              {saveStatusLabel}
-            </Text>
-          ) : null}
-        </View>
+        <Text style={styles.headerTitle}>작성</Text>
         <Pressable onPress={handleNext} hitSlop={12}>
           <Text style={styles.nextButton}>다음</Text>
         </Pressable>
       </View>
       <View style={styles.editor}>
-        <TextInput
-          style={styles.titleInput}
-          placeholder="제목"
-          placeholderTextColor={Colors.zinc400}
-          value={title}
-          onChangeText={handleTitleChange}
-          maxLength={100}
-        />
         <View style={styles.markdownEditorContainer}>
           <WebViewMarkdownEditor
             ref={editorRef}
             initialMarkdown={contentRef.current}
+            titleValue={title}
             placeholder="떠오르는 생각을 자유롭게 적어보세요..."
             editable
             onReady={() => setEditorReady(true)}
             onChange={handleEditorChange}
             onExportMarkdown={handleExportMarkdown}
+            onTitleChange={handleTitleChange}
           />
         </View>
         <View style={styles.editorFooter}>
@@ -263,18 +268,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.screenPx,
     paddingVertical: 12,
   },
-  headerCenter: {
-    alignItems: "center",
-  },
   headerTitle: {
     ...Typography.bodySemiBold,
     fontSize: 17,
     color: Colors.zinc900,
-  },
-  saveStatus: {
-    ...Typography.caption,
-    fontSize: 11,
-    marginTop: 2,
   },
   nextButton: {
     ...Typography.bodySemiBold,
@@ -285,15 +282,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: Spacing.screenPx,
     paddingTop: 8,
-  },
-  titleInput: {
-    ...Typography.bodySemiBold,
-    fontSize: 22,
-    color: Colors.zinc900,
-    paddingVertical: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.zinc100,
-    marginBottom: 12,
   },
   markdownEditorContainer: {
     flex: 1,

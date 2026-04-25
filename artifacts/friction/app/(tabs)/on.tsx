@@ -67,7 +67,6 @@ export default function OnScreen() {
 
   const [filter, setFilter] = useState<FilterMode>("all");
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
-  const [tapArticle, setTapArticle] = useState<Article | null>(null);
 
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -132,7 +131,7 @@ export default function OnScreen() {
     closeOpenRow();
     try {
       const article = await createArticle.mutateAsync({
-        data: { authorId: userId, title: "새 메모" },
+        data: { authorId: userId, title: "" },
       });
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
       router.push({ pathname: "/on-01a", params: { id: article.id } });
@@ -149,35 +148,12 @@ export default function OnScreen() {
   const handleArticlePress = useCallback(
     (article: Article) => {
       closeOpenRow();
-      setTapArticle(article);
+      if (article.status === "LETTER") return;
+      const screen = getScreenForStatus(article.status as ArticleStatus);
+      router.push({ pathname: screen as never, params: { id: article.id } });
     },
-    [closeOpenRow],
+    [closeOpenRow, router],
   );
-
-  const handleTapModalClose = useCallback(() => {
-    setTapArticle(null);
-  }, []);
-
-  const handleTapWrite = useCallback(() => {
-    if (!tapArticle) return;
-    const article = tapArticle;
-    setTapArticle(null);
-    const screen = getScreenForStatus(article.status as ArticleStatus);
-    router.push({ pathname: screen as never, params: { id: article.id } });
-  }, [tapArticle, router]);
-
-  const handleTapDelete = useCallback(async () => {
-    if (!tapArticle) return;
-    const id = tapArticle.id;
-    setTapArticle(null);
-    try {
-      await deleteArticle.mutateAsync({ id });
-      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
-      showToast({ message: "삭제했어요.", type: "success" });
-    } catch {
-      showToast({ message: "삭제에 실패했습니다.", type: "error" });
-    }
-  }, [tapArticle, deleteArticle, queryClient, showToast]);
 
   const handleDeletePress = useCallback((articleId: string) => {
     setDeleteTargetId(articleId);
@@ -396,21 +372,6 @@ export default function OnScreen() {
           </Pressable>
         </View>
       )}
-
-      <ConfirmModal
-        visible={tapArticle !== null}
-        title={tapArticle?.title || "제목 없음"}
-        description={tapArticle?.content?.substring(0, 60) || ""}
-        onCancel={handleTapModalClose}
-        actionButton={{
-          emoji: "✏️",
-          label: "쓰기",
-          onPress: handleTapWrite,
-        }}
-        deleteButton={{
-          onPress: handleTapDelete,
-        }}
-      />
 
       <ConfirmModal
         visible={deleteTargetId !== null}

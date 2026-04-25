@@ -13,12 +13,14 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
   function WebViewMarkdownEditor(
     {
       initialMarkdown,
+      titleValue,
       editorConfigVersion = EDITOR_CONFIG_VERSION,
       placeholder,
       editable = true,
       onReady,
       onChange,
       onExportMarkdown,
+      onTitleChange,
       onError,
     },
     ref,
@@ -53,6 +55,9 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       setEditable(isEditable: boolean) {
         sendCommand({ type: "setEditable", isEditable });
       },
+      setTitle(title: string) {
+        sendCommand({ type: "setTitle", title });
+      },
     }), [sendCommand]);
 
     const handleMessage = useCallback(
@@ -70,6 +75,9 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
             case "onExportMarkdown":
               onExportMarkdown?.(data.payload);
               break;
+            case "onTitleChange":
+              onTitleChange?.(data.payload.title);
+              break;
             case "onError":
               onError?.(data.payload);
               break;
@@ -78,7 +86,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
           onError?.({ code: "MESSAGE_PARSE_FAIL", message: "Failed to parse WebView message" });
         }
       },
-      [initialMarkdown, editorConfigVersion, placeholder, onReady, onChange, onExportMarkdown, onError, sendCommand],
+      [flushQueue, onReady, onChange, onExportMarkdown, onTitleChange, onError],
     );
 
     useEffect(() => {
@@ -99,7 +107,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
           readyRef.current = true;
           sendCommand({
             type: "init",
-            payload: { initialMarkdown, editorConfigVersion, placeholder },
+            payload: { initialMarkdown, editorConfigVersion, placeholder, titleValue },
           });
           flushQueue();
         }}

@@ -43,17 +43,20 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
   function WebViewMarkdownEditorWeb(
     {
       initialMarkdown,
+      titleValue,
       placeholder,
       editable = true,
       onReady,
       onChange,
       onExportMarkdown,
+      onTitleChange,
       onError,
     },
     ref,
   ) {
     const changeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const onExportMarkdownRef = useRef(onExportMarkdown);
+    const titleRef = useRef<HTMLTextAreaElement>(null);
     useEffect(() => { onExportMarkdownRef.current = onExportMarkdown; }, [onExportMarkdown]);
 
     const editor = useEditor({
@@ -126,11 +129,37 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
           editor.setEditable(isEditable);
         }
       },
+      setTitle(title: string) {
+        if (titleRef.current) {
+          titleRef.current.value = title;
+        }
+      },
     }), [editor, requestExportMarkdown, onError]);
+
+    const handleTitleInput = useCallback(
+      (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        onTitleChange?.(e.target.value);
+        const el = e.target;
+        el.style.height = "auto";
+        el.style.height = el.scrollHeight + "px";
+      },
+      [onTitleChange],
+    );
 
     return (
       <div style={containerStyle}>
         <style>{proseMirrorCss}</style>
+        {onTitleChange !== undefined && (
+          <textarea
+            ref={titleRef}
+            defaultValue={titleValue || ""}
+            placeholder="제목"
+            onChange={handleTitleInput}
+            rows={1}
+            style={titleInputStyle}
+            readOnly={!editable}
+          />
+        )}
         <EditorContent editor={editor} style={editorContentStyle} />
       </div>
     );
@@ -149,6 +178,24 @@ const containerStyle: React.CSSProperties = {
   fontSize: 16,
   lineHeight: 1.7,
   color: "#18181b",
+};
+
+const titleInputStyle: React.CSSProperties = {
+  display: "block",
+  width: "100%",
+  fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+  fontSize: 22,
+  fontWeight: 600,
+  lineHeight: 1.4,
+  color: "#18181b",
+  background: "transparent",
+  border: "none",
+  borderBottom: "1px solid #f4f4f5",
+  outline: "none",
+  resize: "none",
+  overflow: "hidden",
+  padding: "8px 24px",
+  marginBottom: 12,
 };
 
 const editorContentStyle: React.CSSProperties = {
@@ -185,4 +232,5 @@ const proseMirrorCss = `
   height: 0;
 }
 .ProseMirror u { text-decoration: underline; }
+textarea::placeholder { color: #a1a1aa; }
 `;
