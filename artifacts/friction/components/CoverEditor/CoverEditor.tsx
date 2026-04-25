@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert, Image } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "../../constants/tokens";
@@ -74,6 +74,8 @@ export default function CoverEditor({
   articleId,
 }: CoverEditorProps) {
   const [local, setLocal] = useState<ArticleCover>(cover);
+  const localRef = useRef(local);
+  localRef.current = local;
 
   useEffect(() => {
     if (visible) {
@@ -83,11 +85,9 @@ export default function CoverEditor({
 
   const update = useCallback(
     (patch: Partial<ArticleCover>) => {
-      setLocal((prev) => {
-        const next = { ...prev, ...patch };
-        onChange(next);
-        return next;
-      });
+      const next = { ...localRef.current, ...patch };
+      setLocal(next);
+      onChange(next);
     },
     [onChange],
   );
