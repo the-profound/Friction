@@ -230,16 +230,18 @@ export default function OfScreen() {
     }
   }, [toggleFavorite, sentencesQuery, selectedSentence]);
 
-  const handleSentenceDelete = useCallback(async (id: string) => {
+  const handleSentenceDeleteConfirm = useCallback(async () => {
+    if (!sentenceDeleteTarget) return;
+    const id = sentenceDeleteTarget;
+    setSentenceDeleteTarget(null);
     try {
       await deleteSentence.mutateAsync({ id });
       sentencesQuery.refetch();
-      setSelectedSentence(null);
       Alert.alert("완료", "문장을 삭제했어요");
     } catch {
       Alert.alert("오류", "삭제에 실패했어요");
     }
-  }, [deleteSentence, sentencesQuery]);
+  }, [sentenceDeleteTarget, deleteSentence, sentencesQuery]);
 
   const handleRefresh = useCallback(() => {
     if (ofSubTab === "personal") myCollectionsQuery.refetch();
@@ -654,10 +656,7 @@ export default function OfScreen() {
         confirmLabel="삭제"
         cancelLabel="취소"
         destructive
-        onConfirm={() => {
-          if (sentenceDeleteTarget) handleSentenceDelete(sentenceDeleteTarget);
-          setSentenceDeleteTarget(null);
-        }}
+        onConfirm={handleSentenceDeleteConfirm}
         onCancel={() => setSentenceDeleteTarget(null)}
       />
 
