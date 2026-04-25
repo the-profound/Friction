@@ -43,6 +43,11 @@ export default function SentenceCollectionScreen() {
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [selectedSentence, setSelectedSentence] = useState<StoredSentence | null>(null);
 
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+
   const allSentencesQuery = useListStoredSentences({ userId });
   const allSentences = (allSentencesQuery.data ?? []) as StoredSentence[];
 
@@ -60,6 +65,64 @@ export default function SentenceCollectionScreen() {
 
   const deleteSentence = useDeleteStoredSentence();
   const toggleFavorite = useToggleStoredSentenceFavorite();
+
+  const selectedCount = selectedIds.size;
+
+  const enterSelectionMode = useCallback(() => {
+    setSelectedIds(new Set());
+    setSelectionMode(true);
+  }, []);
+
+  const exitSelectionMode = useCallback(() => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  }, []);
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleBulkDeletePress = useCallback(() => {
+    if (selectedIds.size === 0) return;
+    setShowBulkDeleteConfirm(true);
+  }, [selectedIds]);
+
+  const handleBulkDeleteConfirm = useCallback(async () => {
+    setShowBulkDeleteConfirm(false);
+    setIsBulkDeleting(true);
+    const ids = Array.from(selectedIds);
+    let failCount = 0;
+    for (const id of ids) {
+      try {
+        await deleteSentence.mutateAsync({ id });
+      } catch {
+        failCount++;
+      }
+    }
+    await sentencesQuery.refetch();
+    await allSentencesQuery.refetch();
+    setIsBulkDeleting(false);
+    exitSelectionMode();
+    if (failCount === 0) {
+      showToast({ message: `${ids.length}개 문장을 삭제했어요.`, type: "success" });
+    } else if (failCount < ids.length) {
+      showToast({ message: `일부 삭제에 실패했어요. (${failCount}개)`, type: "error" });
+    } else {
+      showToast({ message: "삭제에 실패했어요.", type: "error" });
+    }
+  }, [selectedIds, deleteSentence, sentencesQuery, allSentencesQuery, exitSelectionMode, showToast]);
+
+  const handleBulkDeleteCancel = useCallback(() => {
+    setShowBulkDeleteConfirm(false);
+  }, []);
 
   const handleToggleFavorite = useCallback(
     async (id: string, currentFav: boolean) => {
@@ -115,94 +178,146 @@ export default function SentenceCollectionScreen() {
     [deleteSentence, sentencesQuery, allSentencesQuery, showToast],
   );
 
-  const renderItem = ({ item }: { item: StoredSentence }) => {
-    const page = getSentencePage(item);
-    return (
-      <Pressable
-        style={styles.sentenceItem}
-        onPress={() => setSelectedSentence(item)}
-        onLongPress={() => handleCopy(item.text)}
-      >
-        <View style={styles.sentenceContent}>
-          <Text style={styles.sentenceText} numberOfLines={3}>
-            &ldquo;{item.text}&rdquo;
-          </Text>
-          <View style={styles.sentenceMeta}>
-            <Text style={styles.sentenceDate}>
-              {new Date(item.createdAt).toLocaleDateString("ko-KR")}
+  const renderNormalItem = useCallback(
+    ({ item }: { item: StoredSentence }) => {
+      const page = getSentencePage(item);
+      return (
+        <Pressable
+          style={styles.sentenceItem}
+          onPress={() => setSelectedSentence(item)}
+          onLongPress={() => handleCopy(item.text)}
+        >
+          <View style={styles.sentenceContent}>
+            <Text style={styles.sentenceText} numberOfLines={3}>
+              &ldquo;{item.text}&rdquo;
             </Text>
-            {page !== undefined && (
-              <Text style={styles.sentencePage}>{page + 1}페이지</Text>
-            )}
+            <View style={styles.sentenceMeta}>
+              <Text style={styles.sentenceDate}>
+                {new Date(item.createdAt).toLocaleDateString("ko-KR")}
+              </Text>
+              {page !== undefined && (
+                <Text style={styles.sentencePage}>{page + 1}페이지</Text>
+              )}
+            </View>
           </View>
-        </View>
-        <View style={styles.rightActions}>
-          <Pressable
-            style={styles.actionBtn}
-            onPress={() => handleCopy(item.text)}
-            hitSlop={8}
-          >
-            <Feather name="copy" size={16} color={Colors.zinc400} />
-          </Pressable>
-          <Pressable
-            style={styles.actionBtn}
-            onPress={() => handleToggleFavorite(item.id, item.isFavorite)}
-            hitSlop={8}
-          >
-            <Feather
-              name="star"
-              size={18}
-              color={item.isFavorite ? "#F59E0B" : Colors.zinc300}
-            />
-          </Pressable>
-        </View>
-      </Pressable>
-    );
-  };
+          <View style={styles.rightActions}>
+            <Pressable
+              style={styles.actionBtn}
+              onPress={() => handleCopy(item.text)}
+              hitSlop={8}
+            >
+              <Feather name="copy" size={16} color={Colors.zinc400} />
+            </Pressable>
+            <Pressable
+              style={styles.actionBtn}
+              onPress={() => handleToggleFavorite(item.id, item.isFavorite)}
+              hitSlop={8}
+            >
+              <Feather
+                name="star"
+                size={18}
+                color={item.isFavorite ? "#F59E0B" : Colors.zinc300}
+              />
+            </Pressable>
+          </View>
+        </Pressable>
+      );
+    },
+    [handleCopy, handleToggleFavorite],
+  );
+
+  const renderSelectionItem = useCallback(
+    ({ item }: { item: StoredSentence }) => {
+      const isSelected = selectedIds.has(item.id);
+      const page = getSentencePage(item);
+      return (
+        <Pressable
+          style={styles.selectionRow}
+          onPress={() => toggleSelect(item.id)}
+        >
+          <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+            {isSelected && <Feather name="check" size={14} color={Colors.white} />}
+          </View>
+          <View style={styles.sentenceContent}>
+            <Text style={styles.sentenceText} numberOfLines={3}>
+              &ldquo;{item.text}&rdquo;
+            </Text>
+            <View style={styles.sentenceMeta}>
+              <Text style={styles.sentenceDate}>
+                {new Date(item.createdAt).toLocaleDateString("ko-KR")}
+              </Text>
+              {page !== undefined && (
+                <Text style={styles.sentencePage}>{page + 1}페이지</Text>
+              )}
+            </View>
+          </View>
+        </Pressable>
+      );
+    },
+    [selectedIds, toggleSelect],
+  );
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
-          <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-        </Pressable>
-        <Text style={styles.headerTitle}>문장 모음</Text>
-        <View style={{ width: 20 }} />
+        {selectionMode ? (
+          <>
+            <Pressable onPress={exitSelectionMode} hitSlop={12}>
+              <Text style={styles.cancelText}>취소</Text>
+            </Pressable>
+            <Text style={styles.headerTitle}>
+              {selectedCount > 0 ? `${selectedCount}개 선택` : "문장 선택"}
+            </Text>
+            <View style={{ width: 44 }} />
+          </>
+        ) : (
+          <>
+            <Pressable onPress={() => router.back()} hitSlop={12}>
+              <Feather name="arrow-left" size={20} color={Colors.zinc600} />
+            </Pressable>
+            <Text style={styles.headerTitle}>문장 모음</Text>
+            <Pressable onPress={enterSelectionMode} hitSlop={12}>
+              <Feather name="more-vertical" size={20} color={Colors.zinc600} />
+            </Pressable>
+          </>
+        )}
       </View>
 
-      <View style={styles.filterBar}>
-        <Pressable
-          style={[styles.filterChip, filter === "all" && styles.filterChipActive]}
-          onPress={() => setFilter("all")}
-        >
-          <Text
-            style={[
-              styles.filterChipText,
-              filter === "all" && styles.filterChipTextActive,
-            ]}
+      {!selectionMode && (
+        <View style={styles.filterBar}>
+          <Pressable
+            style={[styles.filterChip, filter === "all" && styles.filterChipActive]}
+            onPress={() => setFilter("all")}
           >
-            전체 ({totalCount})
-          </Text>
-        </Pressable>
-        <Pressable
-          style={[styles.filterChip, filter === "favorites" && styles.filterChipActive]}
-          onPress={() => setFilter("favorites")}
-        >
-          <Feather
-            name="star"
-            size={12}
-            color={filter === "favorites" ? Colors.white : Colors.zinc500}
-          />
-          <Text
-            style={[
-              styles.filterChipText,
-              filter === "favorites" && styles.filterChipTextActive,
-            ]}
+            <Text
+              style={[
+                styles.filterChipText,
+                filter === "all" && styles.filterChipTextActive,
+              ]}
+            >
+              전체 ({totalCount})
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.filterChip, filter === "favorites" && styles.filterChipActive]}
+            onPress={() => setFilter("favorites")}
           >
-            즐겨찾기 ({favCount})
-          </Text>
-        </Pressable>
-      </View>
+            <Feather
+              name="star"
+              size={12}
+              color={filter === "favorites" ? Colors.white : Colors.zinc500}
+            />
+            <Text
+              style={[
+                styles.filterChipText,
+                filter === "favorites" && styles.filterChipTextActive,
+              ]}
+            >
+              즐겨찾기 ({favCount})
+            </Text>
+          </Pressable>
+        </View>
+      )}
 
       {sentencesQuery.isLoading ? (
         <View style={styles.centerContainer}>
@@ -235,17 +350,43 @@ export default function SentenceCollectionScreen() {
         <FlatList
           data={sentences}
           keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          contentContainerStyle={styles.listContent}
+          renderItem={selectionMode ? renderSelectionItem : renderNormalItem}
+          contentContainerStyle={[
+            styles.listContent,
+            selectionMode && { paddingBottom: insets.bottom + 80 + 24 },
+          ]}
           refreshControl={
-            <RefreshControl
-              refreshing={sentencesQuery.isRefetching}
-              onRefresh={() => sentencesQuery.refetch()}
-              tintColor={Colors.zinc400}
-            />
+            !selectionMode ? (
+              <RefreshControl
+                refreshing={sentencesQuery.isRefetching}
+                onRefresh={() => sentencesQuery.refetch()}
+                tintColor={Colors.zinc400}
+              />
+            ) : undefined
           }
           showsVerticalScrollIndicator={false}
         />
+      )}
+
+      {selectionMode && (
+        <View style={[styles.selectionBar, { paddingBottom: insets.bottom + 12 }]}>
+          <Pressable
+            style={[
+              styles.bulkDeleteButton,
+              (selectedCount === 0 || isBulkDeleting) && styles.bulkDeleteButtonDisabled,
+            ]}
+            onPress={handleBulkDeletePress}
+            disabled={selectedCount === 0 || isBulkDeleting}
+          >
+            {isBulkDeleting ? (
+              <Text style={styles.bulkDeleteText}>삭제 중...</Text>
+            ) : (
+              <Text style={styles.bulkDeleteText}>
+                {selectedCount > 0 ? `${selectedCount}개 선택 삭제` : "선택 삭제"}
+              </Text>
+            )}
+          </Pressable>
+        </View>
       )}
 
       <ConfirmModal
@@ -260,6 +401,17 @@ export default function SentenceCollectionScreen() {
           setDeleteTarget(null);
         }}
         onCancel={() => setDeleteTarget(null)}
+      />
+
+      <ConfirmModal
+        visible={showBulkDeleteConfirm}
+        title="문장 삭제"
+        description={`선택한 ${selectedCount}개 문장을 삭제하시겠어요?`}
+        confirmLabel="삭제"
+        cancelLabel="취소"
+        destructive
+        onConfirm={handleBulkDeleteConfirm}
+        onCancel={handleBulkDeleteCancel}
       />
 
       <BottomSheet
@@ -383,6 +535,11 @@ const styles = StyleSheet.create({
     fontSize: 17,
     color: Colors.zinc900,
   },
+  cancelText: {
+    ...Typography.body,
+    fontSize: 15,
+    color: Colors.zinc500,
+  },
   filterBar: {
     flexDirection: "row",
     paddingHorizontal: Spacing.screenPx,
@@ -421,6 +578,31 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
     gap: 8,
+  },
+  selectionRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingVertical: 16,
+    paddingHorizontal: Spacing.screenPx,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.zinc100,
+    gap: 12,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: Colors.zinc300,
+    backgroundColor: Colors.white,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 2,
+    flexShrink: 0,
+  },
+  checkboxSelected: {
+    backgroundColor: Colors.zinc900,
+    borderColor: Colors.zinc900,
   },
   sentenceContent: {
     flex: 1,
@@ -491,6 +673,32 @@ const styles = StyleSheet.create({
   retryButtonText: {
     ...Typography.bodySemiBold,
     fontSize: 14,
+    color: Colors.white,
+  },
+  selectionBar: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: Spacing.screenPx,
+    paddingTop: 12,
+    backgroundColor: Colors.white,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.zinc100,
+  },
+  bulkDeleteButton: {
+    backgroundColor: "#EF4444",
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bulkDeleteButtonDisabled: {
+    opacity: 0.4,
+  },
+  bulkDeleteText: {
+    ...Typography.bodySemiBold,
+    fontSize: 15,
     color: Colors.white,
   },
 });
