@@ -230,6 +230,54 @@ R2N 전용 규칙
 
 ---
 
+## 8. Task 에이전트용 Quick Writeback 절차
+
+Task 에이전트가 구현을 완료한 뒤 사용자 개입 없이 Notion Queue DB에 완료 기록만 남기는 경량 절차이다.
+SSOT 수정 판단(Step 5~6)은 생략한다.
+
+### 언제 사용하는가
+
+- Task 에이전트가 할당된 구현 작업을 마치고 `mark_task_complete`를 호출하기 직전
+
+### Quick Writeback 흐름 (QW-Step 0 ~ QW-Step 4)
+
+**QW-Step 0: 환경 변수 확인**
+- bash로 `NOTION_QUEUE_DB_URL` 값을 읽는다.
+- 값이 없으면 writeback을 건너뛰고, `.local/tasks/evidence/qw-<taskRef>-skipped.md`에 "NOTION_QUEUE_DB_URL 미설정으로 건너뜀" 사유를 기록한다.
+
+**QW-Step 1: Queue DB 구조 조회**
+- `notionFetch`로 Queue DB를 조회해 `queueDataSourceId`를 확보한다.
+- 실패 시 writeback을 건너뛰고, `.local/tasks/evidence/qw-<taskRef>-skipped.md`에 실패 사유를 기록한다.
+
+**QW-Step 2: 개발 내용 수집**
+- 현재 세션 컨텍스트에서 아래 항목을 작성한다.
+  ```
+  - 완료 일시: (KST 실제 시각)
+  - 구현 요약(핵심 2~5줄):
+  - 수정 파일/영역:
+  - 테스트 방법:
+  - 비고(있으면):
+  ```
+- `request_title`: Task 제목 한 줄 요약
+
+**QW-Step 3: Queue DB 항목 생성**
+- `notionCreatePages`로 새 항목을 생성한다.
+- 기본값: 개발 상태 = "개발 완료", 개발 기록 = QW-Step 2의 dev_record
+
+**QW-Step 4: 생성 확인**
+- 생성된 항목을 `notionFetch`로 읽어 요청 제목과 개발 기록이 존재하는지 확인한다.
+- 확인 성공 시 `.local/tasks/evidence/qw-<taskRef>-done.md`에 Queue 페이지 ID와 요청 제목을 기록한다.
+
+### Quick Writeback 전용 규칙
+
+- **no_ssot_in_quick**: SSOT 문서 수정·판단·검토를 일절 수행하지 않는다.
+- **no_user_approval**: 사용자 승인(user_query) 없이 바로 생성한다.
+- **skip_on_error**: 환경 변수 누락·네트워크 오류 등으로 실패하더라도 Task 완료를 막지 않는다. 실패 사유는 `.local/tasks/evidence/qw-<taskRef>-skipped.md`에 기록한다.
+- 그 외 공통 규칙(env_vars_first, bash_for_secrets, clean_url, read_before_write 등)은 동일하게 적용한다.
+
+---
+
 ## 변경 로그
 
+- 2026-04-25 [추가] Task 에이전트용 Quick Writeback 절차 (Section 8) 추가
 - 2026-03-27 [편집] 코드 블록 과다 사용 제거, SKILL 본문을 단일 code block으로 통합

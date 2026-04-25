@@ -143,6 +143,14 @@ Queue 항목 + SSOT를 종합하여 추출
   - test_plan
   - risks
 
+- **task_breakdown의 마지막 단계는 반드시 Notion Quick Writeback이어야 한다.**
+  - 이 단계는 `bulkCreateProjectTasks`로 생성되는 Task 플랜의 설명(description) 마지막에도 아래 섹션으로 포함시킨다.
+
+```markdown
+## Notion Writeback
+구현 완료 후 Replit2Notion 스킬의 Quick Writeback 절차에 따라 Notion Queue DB에 완료 기록을 생성한다. 개발 상태는 '개발 완료'로 기록한다.
+```
+
 ### Step 7: SSOT 변경 검토 (ssot_change_review)
 
 - 코딩 전 SSOT 수정 필요 여부 판단
@@ -234,4 +242,5 @@ N2R 전용 규칙
 
 ## 변경 로그
 
+- 2026-04-25 [편집] Step 6에 Quick Writeback 단계 포함 의무화 추가 (Task #104)
 - 2026-03-27 [편집] 코드 블록 과다 사용 제거, SKILL 본문을 단일 code block으로 통합
