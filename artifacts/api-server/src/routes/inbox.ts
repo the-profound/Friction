@@ -5,12 +5,24 @@ import { db, inboxTable, articlesTable, usersTable, userArticleReadsTable } from
 const router: IRouter = Router();
 
 const collectionNameSubquery = sql<string | null>`(
-  SELECT tc.name
-  FROM team_collection_articles tca
-  JOIN team_collections tc ON tca.team_collection_id = tc.id
-  WHERE tca.article_id = ${inboxTable.articleId}
-  ORDER BY tca.added_at ASC
-  LIMIT 1
+  SELECT COALESCE(
+    (
+      SELECT tc.name
+      FROM team_collection_articles tca
+      JOIN team_collections tc ON tca.team_collection_id = tc.id
+      WHERE tca.article_id = ${inboxTable.articleId}
+      ORDER BY tca.added_at ASC
+      LIMIT 1
+    ),
+    (
+      SELECT mc.name
+      FROM my_collection_articles mca
+      JOIN my_collections mc ON mca.my_collection_id = mc.id
+      WHERE mca.article_id = ${inboxTable.articleId}
+      ORDER BY mca.added_at ASC
+      LIMIT 1
+    )
+  )
 )`;
 
 router.get("/inbox", async (req, res) => {
