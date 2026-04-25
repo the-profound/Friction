@@ -1,18 +1,19 @@
-import React, { useState, useCallback, useEffect, useRef } from "react";
+import React, { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import {
   View,
   Text,
   StyleSheet,
   Pressable,
-  ScrollView,
   Alert,
   ActivityIndicator,
   TextInput,
+  LayoutChangeEvent,
 } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import { Colors, Typography, Spacing } from "@/constants/tokens";
+import { Colors, Typography, Spacing, ReaderTokens, cqiToPx, readerFontSize } from "@/constants/tokens";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import CoverPreview from "@/components/CoverPreview/CoverPreview";
 import CoverEditor from "@/components/CoverEditor/CoverEditor";
@@ -21,6 +22,7 @@ import { resolveArticleCover, getDefaultCover } from "@/utils/articleCover";
 import { useUser } from "@/contexts/UserContext";
 import {
   useGetArticle,
+  useGetUser,
   useUpdateArticle,
   useTransitionArticleStatus,
   useListMyCollections,
@@ -41,6 +43,11 @@ export default function ClosingScreen() {
   const articleQuery = useGetArticle(id ?? "");
   const article = id ? articleQuery.data : undefined;
   const articleLoading = id ? articleQuery.isLoading : false;
+
+  const authorQuery = useGetUser(article?.authorId ?? "");
+  const authorName = article?.authorId
+    ? (authorQuery.data?.nickname ?? authorQuery.data?.email ?? undefined)
+    : undefined;
 
   const { refetch: refetchArticle } = articleQuery;
   useEffect(() => {
@@ -70,6 +77,7 @@ export default function ClosingScreen() {
   const [collectionPickerVisible, setCollectionPickerVisible] = useState(false);
   const [titleEditing, setTitleEditing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [previewCardWidth, setPreviewCardWidth] = useState(0);
   const exportedArticleIdRef = useRef<string | null>(null);
   const initializedRef = useRef(false);
   const saveCoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -266,6 +274,41 @@ export default function ClosingScreen() {
   const contentPageIndex = hasCoverPage ? clampedPreviewPage - 1 : clampedPreviewPage;
   const currentPage = isCoverPage ? null : (pages[contentPageIndex] ?? null);
 
+  const handlePreviewCardLayout = useCallback((e: LayoutChangeEvent) => {
+    const w = e.nativeEvent.layout.width;
+    setPreviewCardWidth((prev) => (prev === w ? prev : w));
+  }, []);
+
+  const strippedContent = useMemo(() => {
+    if (!currentPage) return "";
+    return currentPage
+      .replace(/^#{1,6}\s+/gm, "")
+      .replace(/\*\*\*(.*?)\*\*\*/g, "$1")
+      .replace(/\*\*(.*?)\*\*/g, "$1")
+      .replace(/\*(.*?)\*/g, "$1")
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+      .replace(/^[-*_]{3,}$/gm, "")
+      .replace(/^>\s+/gm, "")
+      .trim();
+  }, [currentPage]);
+
+  const totalVirtualPagesRef = useRef(totalVirtualPages);
+  totalVirtualPagesRef.current = totalVirtualPages;
+
+  const swipeGesture = Gesture.Pan()
+    .activeOffsetX([-20, 20])
+    .failOffsetY([-15, 15])
+    .runOnJS(true)
+    .onEnd((e) => {
+      const total = totalVirtualPagesRef.current;
+      if (total < 1) return;
+      if (e.translationX < -40) {
+        setPreviewPage((p) => Math.min(total - 1, Math.max(0, p + 1)));
+      } else if (e.translationX > 40) {
+        setPreviewPage((p) => Math.max(0, Math.min(total - 1, p - 1)));
+      }
+    });
+
   if (!id || articleLoading) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -333,31 +376,51 @@ export default function ClosingScreen() {
         </Pressable>
       </View>
 
-      <ScrollView style={styles.previewArea} contentContainerStyle={styles.previewInner}>
-        {totalVirtualPages === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Feather name="eye" size={36} color={Colors.zinc300} />
-            <Text style={styles.emptyTitle}>미리보기할 내용이 없어요</Text>
+      <GestureDetector gesture={swipeGesture}>
+        <View style={styles.previewArea}>
+          <View style={styles.previewInner}>
+            {totalVirtualPages === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Feather name="eye" size={36} color={Colors.zinc300} />
+                <Text style={styles.emptyTitle}>미리보기할 내용이 없어요</Text>
+              </View>
+            ) : isCoverPage ? (
+              <View style={styles.coverPreviewWrapper}>
+                <CoverPreview cover={cover} title={title} author={authorName} />
+              </View>
+            ) : (
+              <View style={styles.previewCard} onLayout={handlePreviewCardLayout}>
+                {previewCardWidth > 0 && (
+                  <View
+                    style={{
+                      flex: 1,
+                      justifyContent: "center",
+                      paddingHorizontal: cqiToPx(ReaderTokens.padding.xCqi, previewCardWidth),
+                      paddingVertical: cqiToPx(ReaderTokens.padding.yCqi, previewCardWidth),
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontFamily: ReaderTokens.fontFamily.serif,
+                        fontSize: readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth),
+                        lineHeight:
+                          readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth) *
+                          ReaderTokens.lineHeight.relaxed,
+                        letterSpacing:
+                          readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth) *
+                          ReaderTokens.letterSpacing.relaxedEm,
+                        color: ReaderTokens.bodyText,
+                      }}
+                    >
+                      {strippedContent}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
           </View>
-        ) : isCoverPage ? (
-          <View style={styles.coverPreviewWrapper}>
-            <CoverPreview cover={cover} title={title} author={article?.authorId} />
-          </View>
-        ) : (
-          <View
-            style={[
-              styles.previewCard,
-              {
-                backgroundColor:
-                  cover.type === "color" && cover.bgColor ? cover.bgColor : Colors.zinc50,
-              },
-            ]}
-          >
-            <Text style={styles.previewTitle}>{title || "제목 없음"}</Text>
-            <Text style={styles.previewContent}>{currentPage}</Text>
-          </View>
-        )}
-      </ScrollView>
+        </View>
+      </GestureDetector>
 
       {totalVirtualPages > 1 && (
         <View style={[styles.pageNav, { paddingBottom: insets.bottom + 16 }]}>
@@ -398,7 +461,7 @@ export default function ClosingScreen() {
         cover={cover}
         onChange={handleCoverChange}
         title={title}
-        author={article?.authorId}
+        author={authorName}
         articleId={id ?? ""}
       />
 
@@ -506,31 +569,26 @@ const styles = StyleSheet.create({
   },
   previewArea: {
     flex: 1,
+    overflow: "hidden",
   },
   previewInner: {
+    flex: 1,
     paddingHorizontal: Spacing.screenPx,
     paddingTop: 16,
-    paddingBottom: 40,
+    paddingBottom: 16,
+    justifyContent: "center",
   },
   coverPreviewWrapper: {
     alignItems: "center",
   },
   previewCard: {
     borderRadius: 16,
-    padding: 24,
-    minHeight: 400,
-  },
-  previewTitle: {
-    ...Typography.bodySemiBold,
-    fontSize: 20,
-    color: Colors.zinc900,
-    marginBottom: 20,
-  },
-  previewContent: {
-    ...Typography.body,
-    fontSize: 16,
-    lineHeight: 28,
-    color: Colors.zinc800,
+    width: "100%",
+    aspectRatio: 5 / 8,
+    maxHeight: 480,
+    alignSelf: "center",
+    backgroundColor: ReaderTokens.bodyBg,
+    overflow: "hidden",
   },
   emptyContainer: {
     flex: 1,

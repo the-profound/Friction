@@ -1,6 +1,6 @@
-import React from "react";
-import { View, Text, StyleSheet, Image } from "react-native";
-import { Colors, Typography } from "../../constants/tokens";
+import React, { useState, useCallback } from "react";
+import { View, Text, StyleSheet, Image, LayoutChangeEvent } from "react-native";
+import { Colors, ReaderTokens, cqiToPx, readerFontSize, readerLetterSpacing } from "../../constants/tokens";
 import type { ArticleCover } from "@workspace/api-client-react";
 import { resolveArticleCover } from "../../utils/articleCover";
 
@@ -21,6 +21,20 @@ export default function CoverPreview({
   const isImage = cover.type === "image" && !!cover.imageUrl;
   const bgColor = cover.type === "color" && cover.bgColor ? cover.bgColor : Colors.zinc50;
 
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  const onLayout = useCallback((e: LayoutChangeEvent) => {
+    setContainerWidth(e.nativeEvent.layout.width);
+  }, []);
+
+  const alignItems = cover.align === "center" ? "center" : "flex-start";
+  const textAlign = cover.align === "center" ? "center" as const : "left" as const;
+
+  const titleSize = containerWidth > 0 ? readerFontSize(6.5, containerWidth) : (compact ? 16 : 22);
+  const authorSize = containerWidth > 0 ? readerFontSize(3.6, containerWidth) : (compact ? 11 : 14);
+  const paddingX = containerWidth > 0 ? cqiToPx(ReaderTokens.padding.xCqi, containerWidth) * 2 : 24;
+  const paddingY = containerWidth > 0 ? cqiToPx(ReaderTokens.padding.yCqi, containerWidth) * 2 : 32;
+
   return (
     <View
       style={[
@@ -28,6 +42,7 @@ export default function CoverPreview({
         compact && styles.containerCompact,
         { backgroundColor: isImage ? Colors.zinc200 : bgColor },
       ]}
+      onLayout={onLayout}
     >
       {isImage && (
         <Image
@@ -36,34 +51,42 @@ export default function CoverPreview({
           resizeMode="cover"
         />
       )}
+      {isImage && <View style={styles.imageOverlay} />}
       <View
         style={[
           styles.overlay,
-          {
-            alignItems: cover.align === "center" ? "center" : "flex-start",
-          },
+          { alignItems, paddingHorizontal: paddingX, paddingVertical: paddingY },
         ]}
       >
-        <Text
-          style={[
-            compact ? styles.titleCompact : styles.title,
-            { color: cover.textColor, textAlign: cover.align },
-          ]}
-          numberOfLines={compact ? 2 : 3}
-        >
-          {title || "제목 없음"}
-        </Text>
         {author ? (
           <Text
-            style={[
-              compact ? styles.authorCompact : styles.author,
-              { color: cover.textColor, textAlign: cover.align, opacity: 0.7 },
-            ]}
+            style={{
+              fontFamily: ReaderTokens.fontFamily.sans,
+              fontSize: authorSize,
+              lineHeight: authorSize * ReaderTokens.lineHeight.relaxed,
+              color: cover.textColor,
+              textAlign,
+              opacity: 0.7,
+              marginBottom: cqiToPx(1.5, containerWidth > 0 ? containerWidth : 160),
+            }}
             numberOfLines={1}
           >
             {author}
           </Text>
         ) : null}
+        <Text
+          style={{
+            fontFamily: ReaderTokens.fontFamily.serifBold,
+            fontSize: titleSize,
+            lineHeight: titleSize * ReaderTokens.lineHeight.tight,
+            letterSpacing: readerLetterSpacing(ReaderTokens.letterSpacing.tightEm, titleSize),
+            color: cover.textColor,
+            textAlign,
+          }}
+          numberOfLines={compact ? 2 : 3}
+        >
+          {title || "제목 없음"}
+        </Text>
       </View>
     </View>
   );
@@ -75,35 +98,18 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     aspectRatio: 5 / 8,
     width: "100%",
-    maxHeight: 400,
-    justifyContent: "flex-end",
+    maxHeight: 480,
+    justifyContent: "center",
   },
   containerCompact: {
     maxHeight: 200,
     aspectRatio: 4 / 5,
   },
+  imageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.25)",
+  },
   overlay: {
-    padding: 24,
-    justifyContent: "flex-end",
-  },
-  title: {
-    ...Typography.bodySemiBold,
-    fontSize: 22,
-    lineHeight: 30,
-  },
-  titleCompact: {
-    ...Typography.bodySemiBold,
-    fontSize: 16,
-    lineHeight: 22,
-  },
-  author: {
-    ...Typography.body,
-    fontSize: 14,
-    marginTop: 8,
-  },
-  authorCompact: {
-    ...Typography.body,
-    fontSize: 11,
-    marginTop: 4,
+    justifyContent: "center",
   },
 });

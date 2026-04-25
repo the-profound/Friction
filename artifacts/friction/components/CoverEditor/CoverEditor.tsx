@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert, Image } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "../../constants/tokens";
 import BottomSheet from "../BottomSheet/BottomSheet";
@@ -73,6 +74,7 @@ export default function CoverEditor({
   author,
   articleId,
 }: CoverEditorProps) {
+  const insets = useSafeAreaInsets();
   const [local, setLocal] = useState<ArticleCover>(cover);
   const localRef = useRef(local);
   localRef.current = local;
@@ -114,6 +116,7 @@ export default function CoverEditor({
       snapPoints={[0.75, 0.9]}
     >
       <ScrollView
+        style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
@@ -277,15 +280,18 @@ export default function CoverEditor({
           </View>
         )}
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: insets.bottom + 120 }} />
       </ScrollView>
     </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
+  scrollView: {
+    flex: 1,
+  },
   scrollContent: {
-    paddingBottom: 20,
+    paddingBottom: 0,
   },
   previewWrapper: {
     alignItems: "center",
