@@ -19,6 +19,7 @@ import CoverPreview from "@/components/CoverPreview/CoverPreview";
 import CoverEditor from "@/components/CoverEditor/CoverEditor";
 import MyCollectionsModal from "@/components/MyCollectionsModal/MyCollectionsModal";
 import { resolveArticleCover, getDefaultCover } from "@/utils/articleCover";
+import { canStepBack } from "@/lib/articleStatusCycle";
 import { useUser } from "@/contexts/UserContext";
 import {
   useGetArticle,
@@ -74,6 +75,7 @@ export default function ClosingScreen() {
   const [cover, setCover] = useState<ArticleCover>(getDefaultCover());
   const [coverEditorVisible, setCoverEditorVisible] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
+  const [stepBackConfirmVisible, setStepBackConfirmVisible] = useState(false);
   const [collectionPickerVisible, setCollectionPickerVisible] = useState(false);
   const [titleEditing, setTitleEditing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -252,6 +254,25 @@ export default function ClosingScreen() {
     router.replace("/(tabs)/on");
   }, [router, queryClient, flushCoverSave]);
 
+  const handleConfirmStepBack = useCallback(async () => {
+    setStepBackConfirmVisible(false);
+    const result = canStepBack("CLOSING");
+    if (!result.allowed) return;
+    if (!id) return;
+    try {
+      await flushCoverSave();
+      await transitionStatus.mutateAsync({
+        id,
+        data: { targetStatus: TransitionArticleBodyTargetStatus.DIVIDING },
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+      router.replace({ pathname: "/on-01b", params: { id } });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "상태 전환에 실패했습니다.";
+      Alert.alert("오류", msg);
+    }
+  }, [id, flushCoverSave, transitionStatus, queryClient, router]);
+
   const handleSaveTitle = useCallback(async () => {
     setTitleEditing(false);
     if (!id) return;
@@ -325,14 +346,14 @@ export default function ClosingScreen() {
         <Pressable onPress={handleBack} hitSlop={12}>
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
         </Pressable>
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>마감</Text>
+        <Pressable style={styles.headerCenter} onPress={() => setStepBackConfirmVisible(true)} hitSlop={8}>
+          <Text style={[styles.headerTitle, styles.headerTitleTappable]}>마감</Text>
           {totalVirtualPages > 0 && (
             <Text style={styles.pageIndicator}>
               {isCoverPage ? "표지" : `${Math.max(0, contentPageIndex) + 1} / ${pages.length}`}
             </Text>
           )}
-        </View>
+        </Pressable>
         <Pressable onPress={handleExport} hitSlop={12} disabled={isExporting}>
           {isExporting ? (
             <ActivityIndicator size="small" color={Colors.zinc400} />
@@ -476,6 +497,16 @@ export default function ClosingScreen() {
         onCancel={() => setConfirmVisible(false)}
       />
 
+      <ConfirmModal
+        visible={stepBackConfirmVisible}
+        title="분할 단계로 돌아가기"
+        description="분할 단계로 돌아가겠습니까? 표지와 스타일 설정은 유지됩니다."
+        confirmLabel="돌아가기"
+        cancelLabel="취소"
+        onConfirm={handleConfirmStepBack}
+        onCancel={() => setStepBackConfirmVisible(false)}
+      />
+
       <MyCollectionsModal
         visible={collectionPickerVisible}
         onClose={() => setCollectionPickerVisible(false)}
@@ -512,6 +543,10 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 17,
     color: Colors.zinc900,
+  },
+  headerTitleTappable: {
+    textDecorationLine: "underline",
+    textDecorationColor: Colors.zinc400,
   },
   pageIndicator: {
     ...Typography.caption,

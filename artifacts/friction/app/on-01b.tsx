@@ -19,7 +19,7 @@ import {
   validatePages,
 } from "@/lib/pageDivision";
 import type { DivisionWarning } from "@/lib/pageDivision";
-import { canTransitionForward } from "@/lib/articleStatusCycle";
+import { canTransitionForward, canStepBack } from "@/lib/articleStatusCycle";
 import type { ArticleStatus } from "@/lib/policies";
 import { MarkdownPolicy } from "@/lib/policies";
 import {
@@ -31,6 +31,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { parseMarkdownBlocks } from "@/utils/markdownParser";
 import MarkdownBlock from "@/components/MarkdownBlock/MarkdownBlock";
+import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 
 const PAGE_DIVIDER = MarkdownPolicy.PAGE_DIVIDER;
 
@@ -236,6 +237,7 @@ export default function DividingScreen() {
 
   const [content, setContent] = useState("");
   const [mode, setMode] = useState<"preview" | "edit">("preview");
+  const [stepBackConfirmVisible, setStepBackConfirmVisible] = useState(false);
   const initializedRef = useRef(false);
 
   useEffect(() => {
@@ -572,6 +574,30 @@ export default function DividingScreen() {
     }
   }, [id, content, pages, router, updateArticle, queryClient]);
 
+  const handleConfirmStepBack = useCallback(async () => {
+    setStepBackConfirmVisible(false);
+    const result = canStepBack("DIVIDING");
+    if (!result.allowed) return;
+    if (!id) return;
+    try {
+      const pagesJson = pages.map((p) => p.content);
+      const updatedArticle = await updateArticle.mutateAsync({
+        id,
+        data: { content, pages: pagesJson },
+      });
+      queryClient.setQueryData([`/api/articles/${id}`], updatedArticle);
+      await transitionStatus.mutateAsync({
+        id,
+        data: { targetStatus: TransitionArticleBodyTargetStatus.DRAFT },
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+      router.replace({ pathname: "/on-01a", params: { id } });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "상태 전환에 실패했습니다.";
+      Alert.alert("오류", msg);
+    }
+  }, [id, content, pages, updateArticle, transitionStatus, queryClient, router]);
+
   if (!id || articleLoading) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -588,10 +614,10 @@ export default function DividingScreen() {
         <Pressable onPress={handleBack} hitSlop={12}>
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
         </Pressable>
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>분할</Text>
+        <Pressable style={styles.headerCenter} onPress={() => setStepBackConfirmVisible(true)} hitSlop={8}>
+          <Text style={[styles.headerTitle, styles.headerTitleTappable]}>분할</Text>
           <Text style={styles.pageCount}>{pages.length}페이지</Text>
-        </View>
+        </Pressable>
         <Pressable onPress={handleNext} hitSlop={12}>
           <Text style={styles.nextButton}>다음</Text>
         </Pressable>
@@ -774,6 +800,16 @@ export default function DividingScreen() {
           )}
         </ScrollView>
       )}
+
+      <ConfirmModal
+        visible={stepBackConfirmVisible}
+        title="작성 단계로 돌아가기"
+        description="작성 단계로 돌아가겠습니까? 현재 분할 상태는 저장됩니다."
+        confirmLabel="돌아가기"
+        cancelLabel="취소"
+        onConfirm={handleConfirmStepBack}
+        onCancel={() => setStepBackConfirmVisible(false)}
+      />
     </View>
   );
 }
@@ -802,6 +838,10 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 17,
     color: Colors.zinc900,
+  },
+  headerTitleTappable: {
+    textDecorationLine: "underline",
+    textDecorationColor: Colors.zinc400,
   },
   pageCount: {
     ...Typography.caption,
