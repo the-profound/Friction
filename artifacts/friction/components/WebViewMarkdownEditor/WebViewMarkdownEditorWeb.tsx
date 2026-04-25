@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useImperativeHandle, forwardRef, useRef } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import Placeholder from "@tiptap/extension-placeholder";
+import { StarterKit } from "@tiptap/starter-kit";
+import { Placeholder } from "@tiptap/extension-placeholder";
+import { Underline } from "@tiptap/extension-underline";
 import { marked } from "marked";
 import TurndownService from "turndown";
 import type {
@@ -10,19 +11,14 @@ import type {
   OnChangePayload,
 } from "./types";
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
+marked.setOptions({ breaks: true, gfm: true } as Parameters<typeof marked.setOptions>[0]);
 
 function markdownToHtml(md: string): string {
   try {
-    const result = marked.parse(md || "", { gfm: true, breaks: true, async: false });
+    const result = marked.parse(md || "");
     return typeof result === "string" ? result : "";
-  } catch {
-    return `<p>${escapeHtml(md || "")}</p>`;
+  } catch (e: unknown) {
+    return `<p>${md || ""}</p>`;
   }
 }
 
@@ -67,11 +63,11 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
       extensions: [
         StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
         Placeholder.configure({ placeholder: placeholder || "여기에 메모를 작성하세요..." }),
+        Underline,
       ],
       content: markdownToHtml(initialMarkdown),
       editable,
       autofocus: false,
-      immediatelyRender: true,
       onUpdate: ({ editor: ed }) => {
         if (changeTimerRef.current) clearTimeout(changeTimerRef.current);
         changeTimerRef.current = setTimeout(() => {
