@@ -341,7 +341,7 @@ export default function PersonalCollectionDetailScreen() {
           label: "읽기",
           onPress: handleArticleActionRead,
         }}
-        deleteButton={isArchive ? undefined : {
+        deleteButton={{
           onPress: handleArticleActionDelete,
         }}
       />
