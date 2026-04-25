@@ -36,8 +36,6 @@ export default function PersonalCollectionDetailScreen() {
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
-  const [articleActionTarget, setArticleActionTarget] = useState<MyCollectionArticleWithDetails | null>(null);
-
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
@@ -242,23 +240,6 @@ export default function PersonalCollectionDetailScreen() {
     [id, moveTargetArticle, removeArticle, addArticle, queryClient, articlesQuery],
   );
 
-  const handleArticleActionRead = useCallback(() => {
-    if (!articleActionTarget) return;
-    const item = articleActionTarget;
-    setArticleActionTarget(null);
-    router.push({
-      pathname: "/read",
-      params: { articleId: item.articleId, mode: "re_read" },
-    });
-  }, [articleActionTarget, router]);
-
-  const handleArticleActionDelete = useCallback(async () => {
-    if (!articleActionTarget) return;
-    const item = articleActionTarget;
-    setArticleActionTarget(null);
-    await handleRemoveArticle(item.articleId);
-  }, [articleActionTarget, handleRemoveArticle]);
-
   const handleCollectionManagePress = useCallback(() => {
     Alert.alert("모음 관리", undefined, [
       { text: "이름/설명 수정", onPress: handleOpenEdit },
@@ -313,7 +294,7 @@ export default function PersonalCollectionDetailScreen() {
       >
         <Pressable
           style={styles.articleItem}
-          onPress={() => setArticleActionTarget(item)}
+          onPress={() => router.push({ pathname: "/read", params: { articleId: item.articleId, mode: "re_read" } })}
         >
           <View style={styles.articleInfo}>
             <Text style={styles.articleTitle} numberOfLines={1}>
@@ -327,7 +308,7 @@ export default function PersonalCollectionDetailScreen() {
         </Pressable>
       </SwipeableRow>
     ),
-    [closeOpenRow, handleRemoveArticle, handleSwipeOpen],
+    [closeOpenRow, handleRemoveArticle, handleSwipeOpen, router],
   );
 
   const renderSelectionItem = useCallback(
@@ -578,20 +559,6 @@ export default function PersonalCollectionDetailScreen() {
           handleDeleteCollection();
         }}
         onCancel={() => setDeleteConfirmVisible(false)}
-      />
-
-      <ConfirmModal
-        visible={articleActionTarget !== null}
-        title={articleActionTarget?.article?.title ?? "제목 없음"}
-        onCancel={() => setArticleActionTarget(null)}
-        actionButton={{
-          emoji: "📖",
-          label: "읽기",
-          onPress: handleArticleActionRead,
-        }}
-        deleteButton={{
-          onPress: handleArticleActionDelete,
-        }}
       />
 
       <ConfirmModal

@@ -1,12 +1,14 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import { View, Text, StyleSheet, FlatList, Pressable, Alert, Share, TextInput } from "react-native";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
+import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
+import { useToast } from "@/contexts/ToastContext";
 import {
   useGetTeamCollection,
   useUpdateTeamCollection,
@@ -43,10 +45,13 @@ export default function TeamCollectionDetailScreen() {
   const [inviteSheetVisible, setInviteSheetVisible] = useState(false);
   const [inviteUserId, setInviteUserId] = useState("");
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
-  const [articleActionTarget, setArticleActionTarget] = useState<TeamCollectionArticleWithDetails | null>(null);
-  const [showDeleteHint, setShowDeleteHint] = useState(false);
+  const [deleteArticleTarget, setDeleteArticleTarget] = useState<string | null>(null);
+  const [scrollEnabled, setScrollEnabled] = useState(true);
+  const [manageSheetVisible, setManageSheetVisible] = useState(false);
   const [memberTarget, setMemberTarget] = useState<{ id: string; nickname: string } | null>(null);
   const [kickTarget, setKickTarget] = useState<{ id: string; nickname: string } | null>(null);
+  const openRowRef = useRef<SwipeableRowHandle | null>(null);
+  const rowRefs = useRef<Map<string, SwipeableRowHandle>>(new Map());
 
   const collectionQuery = useGetTeamCollection(id ?? "");
   const collection = collectionQuery.data;
@@ -67,6 +72,7 @@ export default function TeamCollectionDetailScreen() {
   const addMember = useAddTeamMember();
   const createNeighborRequest = useCreateNeighborRequest();
 
+  const { showToast } = useToast();
   const isOwner = members.some((m) => m.userId === userId && m.role === "OWNER");
   const isMember = members.some((m) => m.userId === userId);
 
@@ -183,10 +189,24 @@ export default function TeamCollectionDetailScreen() {
     [id, removeArticle, articlesQuery],
   );
 
-  const handleArticleActionRead = useCallback(() => {
-    if (!articleActionTarget) return;
-    const item = articleActionTarget;
-    setArticleActionTarget(null);
+  const closeOpenRow = useCallback(() => {
+    if (openRowRef.current) {
+      openRowRef.current.close();
+      openRowRef.current = null;
+    }
+  }, []);
+
+  const handleSwipeOpen = useCallback((articleId: string) => {
+    const currentOpen = openRowRef.current;
+    const newRef = rowRefs.current.get(articleId) ?? null;
+    if (currentOpen && currentOpen !== newRef) {
+      currentOpen.close();
+    }
+    openRowRef.current = newRef;
+  }, []);
+
+  const handleArticleNavigate = useCallback((item: TeamCollectionArticleWithDetails) => {
+    closeOpenRow();
     const unreadInboxItem = inboxItems.find(
       (inbox) => inbox.articleId === item.articleId && !inbox.isRead,
     );
@@ -201,40 +221,55 @@ export default function TeamCollectionDetailScreen() {
         params: { articleId: item.articleId, mode: "re_read" },
       });
     }
-  }, [articleActionTarget, router, inboxItems]);
+  }, [router, inboxItems, closeOpenRow]);
 
-  const canDeleteTarget = articleActionTarget
-    ? isOwner || articleActionTarget.article?.authorId === userId
-    : false;
-
-  const handleArticleActionDelete = useCallback(async () => {
-    if (!articleActionTarget) return;
-    if (!canDeleteTarget) {
-      setShowDeleteHint(true);
+  const handleArticleDeletePress = useCallback((item: TeamCollectionArticleWithDetails) => {
+    const canDelete = isOwner || item.article?.authorId === userId;
+    if (!canDelete) {
+      closeOpenRow();
+      showToast({ message: "모음장과 작성자만 글을 삭제할 수 있습니다.", type: "info" });
       return;
     }
-    const item = articleActionTarget;
-    setArticleActionTarget(null);
-    setShowDeleteHint(false);
-    await handleRemoveArticle(item.articleId);
-  }, [articleActionTarget, canDeleteTarget, handleRemoveArticle]);
+    setDeleteArticleTarget(item.articleId);
+  }, [isOwner, userId, closeOpenRow, showToast]);
+
+  const handleArticleDeleteConfirm = useCallback(async () => {
+    if (!deleteArticleTarget) return;
+    const articleId = deleteArticleTarget;
+    setDeleteArticleTarget(null);
+    closeOpenRow();
+    await handleRemoveArticle(articleId);
+  }, [deleteArticleTarget, closeOpenRow, handleRemoveArticle]);
 
   const renderArticleItem = ({ item }: { item: TeamCollectionArticleWithDetails }) => {
     return (
-      <Pressable
-        style={styles.articleItem}
-        onPress={() => { setArticleActionTarget(item); setShowDeleteHint(false); }}
+      <SwipeableRow
+        ref={(r) => {
+          if (r) {
+            rowRefs.current.set(item.id, r);
+          } else {
+            rowRefs.current.delete(item.id);
+          }
+        }}
+        onDeletePress={() => handleArticleDeletePress(item)}
+        onSwipeOpen={() => handleSwipeOpen(item.id)}
+        onScrollLock={(locked) => setScrollEnabled(!locked)}
       >
-        <View style={styles.articleInfo}>
-          <Text style={styles.articleTitle} numberOfLines={1}>
-            {item.article?.title ?? "제목 없음"}
-          </Text>
-          <Text style={styles.articleDate}>
-            {new Date(item.addedAt).toLocaleDateString("ko-KR")}에 추가
-          </Text>
-        </View>
-        <Feather name="chevron-right" size={16} color={Colors.zinc300} />
-      </Pressable>
+        <Pressable
+          style={styles.articleItem}
+          onPress={() => handleArticleNavigate(item)}
+        >
+          <View style={styles.articleInfo}>
+            <Text style={styles.articleTitle} numberOfLines={1}>
+              {item.article?.title ?? "제목 없음"}
+            </Text>
+            <Text style={styles.articleDate}>
+              {new Date(item.addedAt).toLocaleDateString("ko-KR")}에 추가
+            </Text>
+          </View>
+          <Feather name="chevron-right" size={16} color={Colors.zinc300} />
+        </Pressable>
+      </SwipeableRow>
     );
   };
 
@@ -291,18 +326,7 @@ export default function TeamCollectionDetailScreen() {
         </Text>
         <Pressable
           hitSlop={12}
-          onPress={() => {
-            const options: Array<{ text: string; onPress?: () => void; style?: "destructive" | "cancel" | "default" }> = [];
-            if (isOwner) {
-              options.push({ text: "이름/설명 수정", onPress: handleOpenEdit });
-              options.push({ text: "초대 링크 공유", onPress: handleShareInvite });
-              options.push({ text: "삭제", style: "destructive", onPress: () => setDeleteConfirmVisible(true) });
-            } else {
-              options.push({ text: "초대 링크 공유", onPress: handleShareInvite });
-            }
-            options.push({ text: "닫기", style: "cancel" });
-            Alert.alert("단체 모음 관리", undefined, options);
-          }}
+          onPress={() => setManageSheetVisible(true)}
         >
           <Feather name="more-horizontal" size={20} color={Colors.zinc600} />
         </Pressable>
@@ -376,6 +400,7 @@ export default function TeamCollectionDetailScreen() {
               renderItem={renderArticleItem}
               contentContainerStyle={styles.listContent}
               showsVerticalScrollIndicator={false}
+              scrollEnabled={scrollEnabled}
             />
           )}
         </View>
@@ -426,10 +451,45 @@ export default function TeamCollectionDetailScreen() {
       )}
 
       <BottomSheet
+        visible={manageSheetVisible}
+        onClose={() => setManageSheetVisible(false)}
+        snapPoints={[isOwner ? 0.38 : 0.28]}
+      >
+        <View style={styles.manageSheetContent}>
+          {isOwner && (
+            <Pressable
+              style={styles.manageSheetRow}
+              onPress={() => { setManageSheetVisible(false); handleOpenEdit(); }}
+            >
+              <Feather name="edit-2" size={18} color={Colors.zinc700} />
+              <Text style={styles.manageSheetLabel}>이름/설명 수정</Text>
+            </Pressable>
+          )}
+          <Pressable
+            style={styles.manageSheetRow}
+            onPress={() => { setManageSheetVisible(false); handleShareInvite(); }}
+          >
+            <Feather name="share-2" size={18} color={Colors.zinc700} />
+            <Text style={styles.manageSheetLabel}>초대 링크 공유</Text>
+          </Pressable>
+          {isOwner && (
+            <Pressable
+              style={styles.manageSheetRow}
+              onPress={() => { setManageSheetVisible(false); setDeleteConfirmVisible(true); }}
+            >
+              <Feather name="trash-2" size={18} color="#DC2626" />
+              <Text style={[styles.manageSheetLabel, { color: "#DC2626" }]}>모음 삭제</Text>
+            </Pressable>
+          )}
+        </View>
+      </BottomSheet>
+
+      <BottomSheet
         visible={editSheetVisible}
         onClose={() => setEditSheetVisible(false)}
         title="모음 수정"
-        snapPoints={[0.45]}
+        snapPoints={[0.55, 0.95]}
+        keyboardAware
       >
         <View style={styles.formContent}>
           <TextInput
@@ -499,19 +559,14 @@ export default function TeamCollectionDetailScreen() {
       />
 
       <ConfirmModal
-        visible={articleActionTarget !== null}
-        title={articleActionTarget?.article?.title ?? "제목 없음"}
-        onCancel={() => { setArticleActionTarget(null); setShowDeleteHint(false); }}
-        actionButton={{
-          emoji: "📖",
-          label: "읽기",
-          onPress: handleArticleActionRead,
-        }}
-        deleteButton={{
-          onPress: handleArticleActionDelete,
-          disabled: !canDeleteTarget,
-        }}
-        hint={showDeleteHint ? "모음장과 작성자만 글을 삭제할 수 있습니다" : undefined}
+        visible={deleteArticleTarget !== null}
+        title="글 삭제"
+        description="이 글을 단체 모음에서 제거하시겠어요?"
+        confirmLabel="삭제"
+        cancelLabel="취소"
+        destructive
+        onConfirm={handleArticleDeleteConfirm}
+        onCancel={() => { setDeleteArticleTarget(null); closeOpenRow(); }}
       />
 
       <BottomSheet
@@ -837,5 +892,22 @@ const styles = StyleSheet.create({
   },
   profileKickText: {
     color: "#DC2626",
+  },
+  manageSheetContent: {
+    paddingVertical: 8,
+  },
+  manageSheetRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    paddingHorizontal: 4,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.zinc100,
+  },
+  manageSheetLabel: {
+    ...Typography.body,
+    fontSize: 16,
+    color: Colors.zinc800,
   },
 });

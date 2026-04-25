@@ -273,13 +273,13 @@ export default function OfScreen() {
       style={styles.collectionCard}
       onPress={() => router.push({ pathname: "/of-01-detail", params: { id: item.id } })}
     >
-      <View style={[styles.collectionIcon, item.isArchive && { backgroundColor: "#E9E4F7" }]}>
-        <Feather name={item.isArchive ? "archive" : "folder"} size={20} color={item.isArchive ? "#7C5CBF" : Colors.zinc500} />
+      <View style={styles.collectionIcon}>
+        <Feather name="folder" size={20} color={Colors.zinc500} />
       </View>
       <Text style={styles.collectionName} numberOfLines={1}>{item.name}</Text>
       <View style={styles.collectionMeta}>
         <Text style={styles.collectionCount}>{item.articleCount ?? 0}편</Text>
-        {item.isPublic && !item.isArchive && <Feather name="globe" size={12} color={Colors.zinc400} />}
+        {item.isPublic && <Feather name="globe" size={12} color={Colors.zinc400} />}
       </View>
     </Pressable>
   );
@@ -289,7 +289,7 @@ export default function OfScreen() {
       style={styles.collectionCard}
       onPress={() => router.push({ pathname: "/of-02-detail", params: { id: item.id } })}
     >
-      <View style={[styles.collectionIcon, { backgroundColor: "#EDE9FE" }]}>
+      <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: "#EDE9FE", alignItems: "center", justifyContent: "center" }}>
         <Feather name="users" size={20} color="#7C3AED" />
       </View>
       <Text style={styles.collectionName} numberOfLines={1}>{item.name}</Text>
