@@ -12,6 +12,7 @@ import {
   Platform,
   Animated,
   PanResponder,
+  Alert,
   NativeSyntheticEvent,
   NativeScrollEvent,
 } from "react-native";
@@ -27,7 +28,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useListInbox, useMarkInboxOpened, useDeleteInboxItem } from "@workspace/api-client-react";
 import type { InboxItem } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
-import { useToast } from "@/contexts/ToastContext";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const CARD_W = Sizing.cardSlotW;
@@ -275,7 +275,6 @@ export default function InboxScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { userId } = useUser();
-  const { showToast } = useToast();
   const [searchActive, setSearchActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [tapItem, setTapItem] = useState<InboxItem | null>(null);
@@ -349,12 +348,12 @@ export default function InboxScreen() {
     try {
       await deleteInboxItem.mutateAsync({ id: item.id });
       queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
-      showToast({ message: "수신함에서 삭제되었습니다.", type: "success", position: "bottom" });
+Alert.alert("완료", "수신함에서 삭제되었습니다.");
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";
-      showToast({ message: msg, type: "error", position: "bottom" });
+      Alert.alert("오류", msg);
     }
-  }, [tapItem, deleteInboxItem, queryClient, showToast]);
+  }, [tapItem, deleteInboxItem, queryClient]);
 
   const handleRefresh = useCallback(() => {
     refetch();

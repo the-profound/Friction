@@ -5,7 +5,6 @@ import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
-import { useToast } from "@/contexts/ToastContext";
 import {
   useListTeamCollections,
   useCreateTeamCollection,
@@ -28,7 +27,6 @@ export default function TeamCollectionListScreen() {
   const [joinSheetVisible, setJoinSheetVisible] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
 
-  const { showToast } = useToast();
   const collectionsQuery = useListTeamCollections({ userId });
   const collections = (collectionsQuery.data ?? []) as TeamCollectionWithRole[];
   const createCollection = useCreateTeamCollection();
@@ -61,12 +59,12 @@ export default function TeamCollectionListScreen() {
       setNewDescription("");
       setActiveTab("mine");
       collectionsQuery.refetch();
-      showToast({ message: "단체 모음을 만들었어요.", type: "success" });
+Alert.alert("완료", "단체 모음을 만들었어요.");
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "단체 모음 생성에 실패했습니다.";
       Alert.alert("오류", msg);
     }
-  }, [newName, newDescription, userId, createCollection, collectionsQuery, showToast]);
+  }, [newName, newDescription, userId, createCollection, collectionsQuery]);
 
   const handleDelete = useCallback(
     (id: string, name: string) => {

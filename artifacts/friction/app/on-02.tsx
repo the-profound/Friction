@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useRef } from "react";
-import { View, Text, StyleSheet, FlatList, Pressable, RefreshControl } from "react-native";
+import { View, Text, StyleSheet, FlatList, Pressable, RefreshControl, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -11,7 +11,6 @@ import type { Article, ArticleCover } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
 import type { ArticleStatus } from "@/lib/policies";
 import { useQueryClient } from "@tanstack/react-query";
-import { useToast } from "@/contexts/ToastContext";
 
 type SortMode = "latest" | "oldest" | "status";
 
@@ -45,7 +44,6 @@ export default function MemoCollectionScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { userId } = useUser();
-  const { showToast } = useToast();
   const [sortMode, setSortMode] = useState<SortMode>("latest");
 
   const openRowRef = useRef<SwipeableRowHandle | null>(null);
@@ -94,11 +92,11 @@ export default function MemoCollectionScreen() {
     try {
       await deleteArticle.mutateAsync({ id: articleId });
       await queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
-      showToast({ message: "삭제했어요.", type: "success" });
+      Alert.alert("완료", "삭제했어요.");
     } catch {
-      showToast({ message: "삭제에 실패했습니다.", type: "error" });
+      Alert.alert("오류", "삭제에 실패했습니다.");
     }
-  }, [deleteArticle, queryClient, showToast, closeOpenRow]);
+  }, [deleteArticle, queryClient, closeOpenRow]);
 
   const handleArticlePress = useCallback(
     (article: Article) => {
@@ -188,7 +186,7 @@ export default function MemoCollectionScreen() {
                 });
                 router.push({ pathname: "/on-01a", params: { id: article.id } });
               } catch {
-                showToast({ message: "메모 생성에 실패했습니다.", type: "error" });
+                Alert.alert("오류", "메모 생성에 실패했습니다.");
               }
             }}
           >

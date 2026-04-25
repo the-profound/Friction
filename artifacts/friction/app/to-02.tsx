@@ -5,7 +5,6 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
-import { useToast } from "@/contexts/ToastContext";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import {
@@ -44,7 +43,6 @@ export default function SendScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { userId } = useUser();
-  const { showToast } = useToast();
   const { targetGroup, targetGroupName, returnToId } = useLocalSearchParams<{
     targetGroup?: string;
     targetGroupName?: string;
@@ -139,12 +137,7 @@ export default function SendScreen() {
           ? formatDeliveryTime(new Date(result.deliverySlot))
           : formatDeliveryTime(deliveryInfo.visibleAt);
         navigateBack();
-        showToast({
-          message: `${neighbor.user?.nickname ?? "이웃"}에게 발송됐어요 · ${arrivalTime} 도착 예정`,
-          type: "success",
-          duration: 4000,
-          position: "bottom",
-        });
+        Alert.alert("완료", `${neighbor.user?.nickname ?? "이웃"}에게 발송됐어요 · ${arrivalTime} 도착 예정`);
       } else {
         const collection = selectedRecipient.data;
         await addToTeamCollection.mutateAsync({
@@ -154,12 +147,7 @@ export default function SendScreen() {
         setConfirmVisible(false);
         const arrivalTime = formatDeliveryTime(deliveryInfo.visibleAt);
         navigateBack();
-        showToast({
-          message: `'${collection.name}' 모음에 발송됐어요 · ${arrivalTime} 도착 예정`,
-          type: "success",
-          duration: 4000,
-          position: "bottom",
-        });
+        Alert.alert("완료", `'${collection.name}' 모음에 발송됐어요 · ${arrivalTime} 도착 예정`);
       }
     } catch (e: unknown) {
       setConfirmVisible(false);
@@ -175,7 +163,6 @@ export default function SendScreen() {
     addToTeamCollection,
     deliveryInfo,
     navigateBack,
-    showToast,
   ]);
 
   const isPending = sendArticle.isPending || addToTeamCollection.isPending;

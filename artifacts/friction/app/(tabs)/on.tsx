@@ -6,6 +6,7 @@ import {
   FlatList,
   Pressable,
   RefreshControl,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -19,7 +20,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useListArticles, useCreateArticle, useDeleteArticle } from "@workspace/api-client-react";
 import type { Article } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
-import { useToast } from "@/contexts/ToastContext";
 import type { ArticleStatus } from "@/lib/policies";
 
 type FilterMode = "all" | "DRAFT" | "DIVIDING" | "CLOSING";
@@ -63,7 +63,6 @@ export default function OnScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { userId } = useUser();
-  const { showToast } = useToast();
 
   const [filter, setFilter] = useState<FilterMode>("all");
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
@@ -137,9 +136,9 @@ export default function OnScreen() {
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
       router.push({ pathname: "/on-01a", params: { id: article.id } });
     } catch {
-      showToast({ message: "메모 생성에 실패했습니다.", type: "error" });
+Alert.alert("오류", "메모 생성에 실패했습니다.");
     }
-  }, [createArticle, userId, router, queryClient, closeOpenRow, showToast]);
+  }, [createArticle, userId, router, queryClient, closeOpenRow]);
 
   const handleViewAll = useCallback(() => {
     closeOpenRow();
@@ -173,11 +172,11 @@ export default function OnScreen() {
     try {
       await deleteArticle.mutateAsync({ id });
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
-      showToast({ message: "삭제했어요.", type: "success" });
+      Alert.alert("완료", "삭제했어요.");
     } catch {
-      showToast({ message: "삭제에 실패했습니다.", type: "error" });
+      Alert.alert("오류", "삭제에 실패했습니다.");
     }
-  }, [deleteTargetId, deleteArticle, queryClient, closeOpenRow, showToast]);
+  }, [deleteTargetId, deleteArticle, queryClient, closeOpenRow]);
 
   const handleSwipeOpen = useCallback((articleId: string) => {
     const currentOpen = openRowRef.current;
@@ -209,13 +208,13 @@ export default function OnScreen() {
     setIsBulkDeleting(false);
     exitSelectionMode();
     if (failCount === 0) {
-      showToast({ message: "삭제했어요.", type: "success" });
+      Alert.alert("완료", "삭제했어요.");
     } else if (failCount < ids.length) {
-      showToast({ message: `일부 삭제에 실패했습니다. (${failCount}개)`, type: "error" });
+      Alert.alert("오류", `일부 삭제에 실패했습니다. (${failCount}개)`);
     } else {
-      showToast({ message: "삭제에 실패했습니다.", type: "error" });
+      Alert.alert("오류", "삭제에 실패했습니다.");
     }
-  }, [selectedIds, deleteArticle, queryClient, exitSelectionMode, showToast]);
+  }, [selectedIds, deleteArticle, queryClient, exitSelectionMode]);
 
   const handleBulkDeleteCancel = useCallback(() => {
     setShowBulkDeleteConfirm(false);

@@ -17,13 +17,11 @@ import {
   TransitionArticleBodyTargetStatus,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useToast } from "@/contexts/ToastContext";
 
 export default function DraftScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { showToast } = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
 
   const articleQuery = useGetArticle(id ?? "");
@@ -191,7 +189,7 @@ export default function DraftScreen() {
         try {
           await deleteArticle.mutateAsync({ id });
         } catch {
-          showToast({ message: "빈 메모 삭제에 실패했습니다.", type: "error" });
+Alert.alert("오류", "빈 메모 삭제에 실패했습니다.");
         }
         queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
       }
@@ -202,11 +200,11 @@ export default function DraftScreen() {
     markDirty(titleRef.current, content);
     const flushResult = await flush();
     if (!flushResult.ok) {
-      showToast({ message: "저장에 실패했습니다. 내용을 확인해주세요.", type: "error" });
+Alert.alert("오류", "저장에 실패했습니다. 내용을 확인해주세요.");
     }
     queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
     router.back();
-  }, [flush, router, queryClient, getEditorContent, markDirty, id, deleteArticle, showToast]);
+  }, [flush, router, queryClient, getEditorContent, markDirty, id, deleteArticle]);
 
   if (!id || articleLoading) {
     return (

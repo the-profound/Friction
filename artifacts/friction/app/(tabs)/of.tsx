@@ -8,6 +8,7 @@ import {
   RefreshControl,
   TextInput,
   Platform,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -17,7 +18,6 @@ import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { PageHeader } from "@/components/NavBar/PageHeader";
 import { useNavigation } from "@/contexts/NavigationContext";
 import { useUser } from "@/contexts/UserContext";
-import { useToast } from "@/contexts/ToastContext";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import {
   useListMyCollections,
@@ -40,8 +40,6 @@ export default function OfScreen() {
   const router = useRouter();
   const { ofSubTab, ofMiniSubTab } = useNavigation();
   const { userId } = useUser();
-  const { showToast } = useToast();
-
   const [searchActive, setSearchActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [createSheetVisible, setCreateSheetVisible] = useState(false);
@@ -113,17 +111,17 @@ export default function OfScreen() {
 
   const handleAdd = useCallback(() => {
     if (ofSubTab === "sentence") {
-      showToast({ message: "읽기 화면에서 문장을 길게 눌러 수집할 수 있어요", type: "info" });
+Alert.alert("알림", "읽기 화면에서 문장을 길게 눌러 수집할 수 있어요");
       return;
     }
     setNewName("");
     setNewDescription("");
     setCreateSheetVisible(true);
-  }, [ofSubTab, showToast]);
+  }, [ofSubTab]);
 
   const handleCreateConfirm = useCallback(async () => {
     if (!newName.trim()) {
-      showToast({ message: "이름을 입력해주세요", type: "error" });
+Alert.alert("오류", "이름을 입력해주세요");
       return;
     }
     try {
@@ -141,9 +139,9 @@ export default function OfScreen() {
       setCreateSheetVisible(false);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "모음 생성에 실패했습니다.";
-      showToast({ message: msg, type: "error" });
+      Alert.alert("오류", msg);
     }
-  }, [ofSubTab, newName, newDescription, userId, createMyCollection, createTeamCollection, myCollectionsQuery, teamCollectionsQuery, showToast]);
+  }, [ofSubTab, newName, newDescription, userId, createMyCollection, createTeamCollection, myCollectionsQuery, teamCollectionsQuery]);
 
   const handleSentenceCopy = useCallback(async (text: string) => {
     try {
@@ -152,12 +150,12 @@ export default function OfScreen() {
       } else {
         await Clipboard.setStringAsync(text);
       }
-      showToast({ message: "문장을 복사했어요", type: "success" });
+      Alert.alert("완료", "문장을 복사했어요");
       setSelectedSentence(null);
     } catch {
-      showToast({ message: "복사에 실패했어요", type: "error" });
+      Alert.alert("오류", "복사에 실패했어요");
     }
-  }, [showToast]);
+  }, []);
 
   const handleSentenceToggleFavorite = useCallback(async (id: string, currentFav: boolean) => {
     try {
@@ -166,22 +164,22 @@ export default function OfScreen() {
       if (selectedSentence?.id === id) {
         setSelectedSentence((prev) => prev ? { ...prev, isFavorite: !currentFav } : null);
       }
-      showToast({ message: currentFav ? "즐겨찾기를 해제했어요" : "즐겨찾기에 추가했어요", type: "success" });
+      Alert.alert("완료", currentFav ? "즐겨찾기를 해제했어요" : "즐겨찾기에 추가했어요");
     } catch {
-      showToast({ message: "즐겨찾기 변경에 실패했어요", type: "error" });
+      Alert.alert("오류", "즐겨찾기 변경에 실패했어요");
     }
-  }, [toggleFavorite, sentencesQuery, selectedSentence, showToast]);
+  }, [toggleFavorite, sentencesQuery, selectedSentence]);
 
   const handleSentenceDelete = useCallback(async (id: string) => {
     try {
       await deleteSentence.mutateAsync({ id });
       sentencesQuery.refetch();
       setSelectedSentence(null);
-      showToast({ message: "문장을 삭제했어요", type: "success" });
+      Alert.alert("완료", "문장을 삭제했어요");
     } catch {
-      showToast({ message: "삭제에 실패했어요", type: "error" });
+      Alert.alert("오류", "삭제에 실패했어요");
     }
-  }, [deleteSentence, sentencesQuery, showToast]);
+  }, [deleteSentence, sentencesQuery]);
 
   const handleRefresh = useCallback(() => {
     if (ofSubTab === "personal") myCollectionsQuery.refetch();

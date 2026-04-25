@@ -1,6 +1,5 @@
 import React, { useState, useCallback, useRef } from "react";
 import { View, Text, StyleSheet, FlatList, Pressable, Switch, Alert, TextInput } from "react-native";
-import { useToast } from "@/contexts/ToastContext";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -30,7 +29,6 @@ export default function PersonalCollectionDetailScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { userId } = useUser();
-  const { showToast } = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
 
   const [showPicker, setShowPicker] = useState(false);
@@ -133,13 +131,13 @@ export default function PersonalCollectionDetailScreen() {
     setIsBulkDeleting(false);
     exitSelectionMode();
     if (failCount === 0) {
-      showToast({ message: "삭제했어요.", type: "success" });
+      Alert.alert("완료", "삭제했어요.");
     } else if (failCount < ids.length) {
-      showToast({ message: `일부 삭제에 실패했습니다. (${failCount}개)`, type: "error" });
+      Alert.alert("오류", `일부 삭제에 실패했습니다. (${failCount}개)`);
     } else {
-      showToast({ message: "삭제에 실패했습니다.", type: "error" });
+      Alert.alert("오류", "삭제에 실패했습니다.");
     }
-  }, [id, selectedIds, removeArticle, queryClient, exitSelectionMode, showToast]);
+  }, [id, selectedIds, removeArticle, queryClient, exitSelectionMode]);
 
   const handleTogglePublic = useCallback(
     async (value: boolean) => {
@@ -216,12 +214,12 @@ export default function PersonalCollectionDetailScreen() {
         await removeArticle.mutateAsync({ collectionId: id, articleId });
         articlesQuery.refetch();
         collectionQuery.refetch();
-        showToast({ message: "글을 제거했어요.", type: "success" });
+        Alert.alert("완료", "글을 제거했어요.");
       } catch {
-        showToast({ message: "글 제거에 실패했습니다.", type: "error" });
+        Alert.alert("오류", "글 제거에 실패했습니다.");
       }
     },
-    [id, removeArticle, articlesQuery, collectionQuery, showToast],
+    [id, removeArticle, articlesQuery, collectionQuery],
   );
 
   const handleMoveArticle = useCallback(
@@ -235,13 +233,13 @@ export default function PersonalCollectionDetailScreen() {
         await addArticle.mutateAsync({ id: targetCollectionId, data: { articleId } });
         await queryClient.invalidateQueries({ queryKey: getListMyCollectionArticlesQueryKey(id) });
         await queryClient.invalidateQueries({ queryKey: getGetMyCollectionQueryKey(id) });
-        showToast({ message: "글을 이동했어요.", type: "success" });
+        Alert.alert("완료", "글을 이동했어요.");
       } catch {
-        showToast({ message: "글 이동에 실패했습니다.", type: "error" });
+        Alert.alert("오류", "글 이동에 실패했습니다.");
         articlesQuery.refetch();
       }
     },
-    [id, moveTargetArticle, removeArticle, addArticle, queryClient, articlesQuery, showToast],
+    [id, moveTargetArticle, removeArticle, addArticle, queryClient, articlesQuery],
   );
 
   const handleArticleActionRead = useCallback(() => {

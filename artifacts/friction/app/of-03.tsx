@@ -7,6 +7,7 @@ import {
   Pressable,
   RefreshControl,
   Platform,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -14,7 +15,6 @@ import { Feather } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
-import { useToast } from "@/contexts/ToastContext";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import {
@@ -37,8 +37,6 @@ export default function SentenceCollectionScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { userId } = useUser();
-  const { showToast } = useToast();
-
   const [filter, setFilter] = useState<FilterMode>("all");
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [selectedSentence, setSelectedSentence] = useState<StoredSentence | null>(null);
@@ -112,13 +110,13 @@ export default function SentenceCollectionScreen() {
     setIsBulkDeleting(false);
     exitSelectionMode();
     if (failCount === 0) {
-      showToast({ message: `${ids.length}개 문장을 삭제했어요.`, type: "success" });
+      Alert.alert("완료", `${ids.length}개 문장을 삭제했어요.`);
     } else if (failCount < ids.length) {
-      showToast({ message: `일부 삭제에 실패했어요. (${failCount}개)`, type: "error" });
+      Alert.alert("오류", `일부 삭제에 실패했어요. (${failCount}개)`);
     } else {
-      showToast({ message: "삭제에 실패했어요.", type: "error" });
+      Alert.alert("오류", "삭제에 실패했어요.");
     }
-  }, [selectedIds, deleteSentence, sentencesQuery, allSentencesQuery, exitSelectionMode, showToast]);
+  }, [selectedIds, deleteSentence, sentencesQuery, allSentencesQuery, exitSelectionMode]);
 
   const handleBulkDeleteCancel = useCallback(() => {
     setShowBulkDeleteConfirm(false);
@@ -135,15 +133,12 @@ export default function SentenceCollectionScreen() {
             prev ? { ...prev, isFavorite: !currentFav } : null,
           );
         }
-        showToast({
-          message: currentFav ? "즐겨찾기를 해제했어요" : "즐겨찾기에 추가했어요",
-          type: "success",
-        });
+        Alert.alert("완료", currentFav ? "즐겨찾기를 해제했어요" : "즐겨찾기에 추가했어요");
       } catch {
-        showToast({ message: "즐겨찾기 변경에 실패했어요", type: "error" });
+        Alert.alert("오류", "즐겨찾기 변경에 실패했어요");
       }
     },
-    [toggleFavorite, sentencesQuery, allSentencesQuery, selectedSentence, showToast],
+    [toggleFavorite, sentencesQuery, allSentencesQuery, selectedSentence],
   );
 
   const handleCopy = useCallback(
@@ -154,13 +149,13 @@ export default function SentenceCollectionScreen() {
         } else {
           await Clipboard.setStringAsync(text);
         }
-        showToast({ message: "문장을 복사했어요", type: "success" });
+        Alert.alert("완료", "문장을 복사했어요");
         setSelectedSentence(null);
       } catch {
-        showToast({ message: "복사에 실패했어요", type: "error" });
+        Alert.alert("오류", "복사에 실패했어요");
       }
     },
-    [showToast],
+    [],
   );
 
   const handleDelete = useCallback(
@@ -170,12 +165,12 @@ export default function SentenceCollectionScreen() {
         sentencesQuery.refetch();
         allSentencesQuery.refetch();
         setSelectedSentence(null);
-        showToast({ message: "문장을 삭제했어요", type: "success" });
+        Alert.alert("완료", "문장을 삭제했어요");
       } catch {
-        showToast({ message: "삭제에 실패했어요", type: "error" });
+        Alert.alert("오류", "삭제에 실패했어요");
       }
     },
-    [deleteSentence, sentencesQuery, allSentencesQuery, showToast],
+    [deleteSentence, sentencesQuery, allSentencesQuery],
   );
 
   const renderNormalItem = useCallback(

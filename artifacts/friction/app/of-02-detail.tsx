@@ -1,6 +1,5 @@
 import React, { useState, useCallback } from "react";
 import { View, Text, StyleSheet, FlatList, Pressable, Alert, Share, TextInput } from "react-native";
-import { useToast } from "@/contexts/ToastContext";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -36,7 +35,6 @@ export default function TeamCollectionDetailScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { userId } = useUser();
-  const { showToast } = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [activeTab, setActiveTab] = useState<DetailTab>("articles");
   const [editSheetVisible, setEditSheetVisible] = useState(false);
@@ -177,12 +175,12 @@ export default function TeamCollectionDetailScreen() {
       try {
         await removeArticle.mutateAsync({ teamId: id, articleId });
         articlesQuery.refetch();
-        showToast({ message: "글을 제거했어요.", type: "success" });
+        Alert.alert("완료", "글을 제거했어요.");
       } catch {
-        showToast({ message: "글 제거에 실패했습니다.", type: "error" });
+        Alert.alert("오류", "글 제거에 실패했습니다.");
       }
     },
-    [id, removeArticle, articlesQuery, showToast],
+    [id, removeArticle, articlesQuery],
   );
 
   const handleArticleActionRead = useCallback(() => {

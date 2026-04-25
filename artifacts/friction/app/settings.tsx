@@ -9,6 +9,7 @@ import {
   StyleSheet,
   Text,
   View,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQueryClient } from "@tanstack/react-query";
@@ -16,7 +17,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import ProgressIndicator from "@/components/ProgressIndicator/ProgressIndicator";
 import { Colors, Spacing, Typography } from "@/constants/tokens";
-import { useToast } from "@/contexts/ToastContext";
 import { useUser } from "@/contexts/UserContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useGetUser, useDeleteUser } from "@workspace/api-client-react";
@@ -35,7 +35,6 @@ const appVersion = resolveAppVersion();
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { showToast } = useToast();
   const { userId } = useUser();
   const { signOut } = useAuth();
   const queryClient = useQueryClient();
@@ -57,7 +56,7 @@ export default function SettingsScreen() {
       await signOut();
       queryClient.clear();
     } catch {
-      showToast({ message: "로그아웃에 실패했습니다.", type: "error" });
+Alert.alert("오류", "로그아웃에 실패했습니다.");
     }
   }
 
@@ -69,7 +68,7 @@ export default function SettingsScreen() {
       queryClient.clear();
       setDeleteModalVisible(false);
     } catch {
-      showToast({ message: "탈퇴 처리에 실패했습니다. 다시 시도해주세요.", type: "error" });
+Alert.alert("오류", "탈퇴 처리에 실패했습니다. 다시 시도해주세요.");
       setDeleteModalVisible(false);
     } finally {
       setIsDeleting(false);
@@ -78,7 +77,7 @@ export default function SettingsScreen() {
 
   function openUrl(url: string) {
     Linking.openURL(url).catch(() => {
-      showToast({ message: "링크를 열 수 없습니다.", type: "error" });
+Alert.alert("오류", "링크를 열 수 없습니다.");
     });
   }
 
