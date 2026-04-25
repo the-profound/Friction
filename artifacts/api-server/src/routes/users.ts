@@ -7,21 +7,40 @@ import { CreateUserBody, UpdateUserBody, UpdateUserRecentCollectionBody } from "
 const router: IRouter = Router();
 
 router.post("/users/sync", async (req, res) => {
-  const { id, email } = req.body ?? {};
+  const { id, email, nickname } = req.body ?? {};
   if (!id || typeof id !== "string" || !email || typeof email !== "string") {
     res.status(400).json({ error: "id and email are required" });
     return;
   }
-  const defaultNickname = email.split("@")[0]?.slice(0, 20) ?? "사용자";
+
+  const resolvedNickname =
+    typeof nickname === "string" && nickname.trim().length > 0
+      ? nickname.trim().slice(0, 20)
+      : null;
+
+  if (resolvedNickname) {
+    const [user] = await db
+      .insert(usersTable)
+      .values({ id, email, nickname: resolvedNickname })
+      .onConflictDoUpdate({
+        target: usersTable.id,
+        set: { email, updatedAt: new Date() },
+      })
+      .returning();
+    res.json(user);
+    return;
+  }
 
   const [user] = await db
-    .insert(usersTable)
-    .values({ id, email, nickname: defaultNickname })
-    .onConflictDoUpdate({
-      target: usersTable.id,
-      set: { email, updatedAt: new Date() },
-    })
+    .update(usersTable)
+    .set({ email, updatedAt: new Date() })
+    .where(eq(usersTable.id, id))
     .returning();
+
+  if (!user) {
+    res.status(400).json({ error: "nickname is required for new user" });
+    return;
+  }
 
   res.json(user);
 });

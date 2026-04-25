@@ -29,9 +29,11 @@ export function UserProvider({
     if (syncedIdRef.current === id) return;
 
     syncedIdRef.current = id;
+    const rawNickname = session?.user?.user_metadata?.nickname;
+    const nickname = typeof rawNickname === "string" && rawNickname.trim().length > 0 ? rawNickname : undefined;
     customFetch("/api/users/sync", {
       method: "POST",
-      body: JSON.stringify({ id, email }),
+      body: JSON.stringify({ id, email, ...(nickname ? { nickname } : {}) }),
     }).catch(() => {});
   }, [session]);
 

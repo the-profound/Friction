@@ -1,4 +1,6 @@
 import { Feather } from "@expo/vector-icons";
+import * as Linking from "expo-linking";
+import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -17,19 +19,29 @@ import { Colors, Spacing, Typography } from "@/constants/tokens";
 import { useAuth } from "@/contexts/AuthContext";
 
 type Mode = "login" | "signup";
+type SignupStep = 1 | 2;
 
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
 
+const PRIVACY_URL = "https://friction.app/privacy";
+
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { signInWithPassword, signUp } = useAuth();
 
   const [mode, setMode] = useState<Mode>("login");
+  const [signupStep, setSignupStep] = useState<SignupStep>(1);
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
+  const [nickname, setNickname] = useState("");
+  const [agreedTerms, setAgreedTerms] = useState(false);
+  const [agreedPrivacy, setAgreedPrivacy] = useState(false);
+
   const [showPassword, setShowPassword] = useState(false);
   const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -38,9 +50,13 @@ export default function LoginScreen() {
 
   function switchMode(next: Mode) {
     setMode(next);
+    setSignupStep(1);
     setErrorMessage(null);
     setPassword("");
     setPasswordConfirm("");
+    setNickname("");
+    setAgreedTerms(false);
+    setAgreedPrivacy(false);
     setShowPassword(false);
     setShowPasswordConfirm(false);
     setSignupDone(false);
@@ -78,7 +94,7 @@ export default function LoginScreen() {
     }
   }
 
-  async function handleSignUp() {
+  function handleSignUpStep1() {
     if (!isValidEmail(email)) {
       setErrorMessage("올바른 이메일 주소를 입력해주세요.");
       return;
@@ -92,17 +108,39 @@ export default function LoginScreen() {
       return;
     }
     setErrorMessage(null);
+    setSignupStep(2);
+  }
+
+  async function handleSignUpStep2() {
+    const trimmedNickname = nickname.trim();
+    if (!trimmedNickname) {
+      setErrorMessage("이름(닉네임)을 입력해주세요.");
+      return;
+    }
+    if (trimmedNickname.length > 20) {
+      setErrorMessage("이름은 20자 이내로 입력해주세요.");
+      return;
+    }
+    if (!agreedTerms || !agreedPrivacy) {
+      setErrorMessage("서비스 이용약관과 개인정보 처리방침에 동의해주세요.");
+      return;
+    }
+    setErrorMessage(null);
     setIsLoading(true);
     try {
-      const { error, needsConfirmation } = await signUp(email.trim(), password);
+      const { error, needsConfirmation } = await signUp(email.trim(), password, trimmedNickname);
       if (error) {
         const msg = error.message.toLowerCase();
-        if (msg.includes("already registered") || msg.includes("already exists") || msg.includes("user already")) {
+        if (needsConfirmation && msg.includes("사용자 정보 저장")) {
+          setSignupDone(true);
+        } else if (msg.includes("already registered") || msg.includes("already exists") || msg.includes("user already")) {
           setErrorMessage("이미 가입된 이메일입니다. 로그인해주세요.");
         } else if (msg.includes("network") || msg.includes("fetch")) {
           setErrorMessage("네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.");
         } else if (msg.includes("password")) {
           setErrorMessage("비밀번호는 6자 이상이어야 합니다.");
+        } else if (msg.includes("사용자 정보 저장")) {
+          setErrorMessage("계정은 생성됐지만 프로필 저장에 실패했습니다. 잠시 후 로그인해주세요.");
         } else {
           setErrorMessage("회원가입에 실패했습니다. 다시 시도해주세요.");
         }
@@ -117,7 +155,10 @@ export default function LoginScreen() {
   }
 
   const canSubmitLogin = email.trim().length > 0 && password.length > 0 && !isLoading;
-  const canSubmitSignup = email.trim().length > 0 && password.length > 0 && passwordConfirm.length > 0 && !isLoading;
+  const canSubmitSignupStep1 =
+    email.trim().length > 0 && password.length > 0 && passwordConfirm.length > 0 && !isLoading;
+  const canSubmitSignupStep2 =
+    nickname.trim().length > 0 && agreedTerms && agreedPrivacy && !isLoading;
 
   return (
     <KeyboardAvoidingView
@@ -168,7 +209,7 @@ export default function LoginScreen() {
               <Text style={styles.buttonText}>로그인 화면으로</Text>
             </Pressable>
           </View>
-        ) : (
+        ) : mode === "login" ? (
           <View style={styles.formContainer}>
             <TextInput
               style={styles.input}
@@ -195,14 +236,14 @@ export default function LoginScreen() {
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
                 autoCorrect={false}
-                autoComplete={mode === "login" ? "password" : "new-password"}
+                autoComplete="password"
                 value={password}
                 onChangeText={(text) => {
                   setPassword(text);
                   if (errorMessage) setErrorMessage(null);
                 }}
-                onSubmitEditing={mode === "login" ? handleLogin : undefined}
-                returnKeyType={mode === "login" ? "done" : "next"}
+                onSubmitEditing={handleLogin}
+                returnKeyType="done"
                 editable={!isLoading}
               />
               <Pressable
@@ -215,39 +256,103 @@ export default function LoginScreen() {
               </Pressable>
             </View>
 
-            {mode === "signup" && (
-              <View style={styles.passwordContainer}>
-                <TextInput
-                  style={styles.passwordInput}
-                  placeholder="비밀번호 확인"
-                  placeholderTextColor={Colors.zinc400}
-                  secureTextEntry={!showPasswordConfirm}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoComplete="new-password"
-                  value={passwordConfirm}
-                  onChangeText={(text) => {
-                    setPasswordConfirm(text);
-                    if (errorMessage) setErrorMessage(null);
-                  }}
-                  onSubmitEditing={handleSignUp}
-                  returnKeyType="done"
-                  editable={!isLoading}
-                />
-                <Pressable
-                  style={styles.eyeButton}
-                  onPress={() => setShowPasswordConfirm((v) => !v)}
-                  accessibilityRole="button"
-                  accessibilityLabel={showPasswordConfirm ? "비밀번호 숨기기" : "비밀번호 보기"}
-                >
-                  <Feather name={showPasswordConfirm ? "eye-off" : "eye"} size={20} color={Colors.zinc400} />
-                </Pressable>
-              </View>
-            )}
+            {errorMessage ? (
+              <Text style={styles.errorText}>{errorMessage}</Text>
+            ) : null}
 
-            {mode === "signup" && (
-              <Text style={styles.hint}>비밀번호는 6자 이상이어야 합니다.</Text>
-            )}
+            <Pressable
+              style={({ pressed }) => [
+                styles.button,
+                !canSubmitLogin && styles.buttonDisabled,
+                pressed && styles.buttonPressed,
+              ]}
+              onPress={handleLogin}
+              disabled={!canSubmitLogin}
+              accessibilityRole="button"
+              accessibilityLabel="로그인"
+            >
+              {isLoading ? (
+                <ActivityIndicator size="small" color={Colors.white} />
+              ) : (
+                <Text style={styles.buttonText}>로그인</Text>
+              )}
+            </Pressable>
+          </View>
+        ) : signupStep === 1 ? (
+          <View style={styles.formContainer}>
+            <TextInput
+              style={styles.input}
+              placeholder="이메일 주소"
+              placeholderTextColor={Colors.zinc400}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="email"
+              value={email}
+              onChangeText={(text) => {
+                setEmail(text);
+                if (errorMessage) setErrorMessage(null);
+              }}
+              returnKeyType="next"
+              editable={!isLoading}
+            />
+
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="비밀번호"
+                placeholderTextColor={Colors.zinc400}
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="new-password"
+                value={password}
+                onChangeText={(text) => {
+                  setPassword(text);
+                  if (errorMessage) setErrorMessage(null);
+                }}
+                returnKeyType="next"
+                editable={!isLoading}
+              />
+              <Pressable
+                style={styles.eyeButton}
+                onPress={() => setShowPassword((v) => !v)}
+                accessibilityRole="button"
+                accessibilityLabel={showPassword ? "비밀번호 숨기기" : "비밀번호 보기"}
+              >
+                <Feather name={showPassword ? "eye-off" : "eye"} size={20} color={Colors.zinc400} />
+              </Pressable>
+            </View>
+
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="비밀번호 확인"
+                placeholderTextColor={Colors.zinc400}
+                secureTextEntry={!showPasswordConfirm}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="new-password"
+                value={passwordConfirm}
+                onChangeText={(text) => {
+                  setPasswordConfirm(text);
+                  if (errorMessage) setErrorMessage(null);
+                }}
+                onSubmitEditing={handleSignUpStep1}
+                returnKeyType="done"
+                editable={!isLoading}
+              />
+              <Pressable
+                style={styles.eyeButton}
+                onPress={() => setShowPasswordConfirm((v) => !v)}
+                accessibilityRole="button"
+                accessibilityLabel={showPasswordConfirm ? "비밀번호 숨기기" : "비밀번호 보기"}
+              >
+                <Feather name={showPasswordConfirm ? "eye-off" : "eye"} size={20} color={Colors.zinc400} />
+              </Pressable>
+            </View>
+
+            <Text style={styles.hint}>비밀번호는 6자 이상이어야 합니다.</Text>
 
             {errorMessage ? (
               <Text style={styles.errorText}>{errorMessage}</Text>
@@ -256,18 +361,114 @@ export default function LoginScreen() {
             <Pressable
               style={({ pressed }) => [
                 styles.button,
-                !(mode === "login" ? canSubmitLogin : canSubmitSignup) && styles.buttonDisabled,
+                !canSubmitSignupStep1 && styles.buttonDisabled,
                 pressed && styles.buttonPressed,
               ]}
-              onPress={mode === "login" ? handleLogin : handleSignUp}
-              disabled={!(mode === "login" ? canSubmitLogin : canSubmitSignup)}
+              onPress={handleSignUpStep1}
+              disabled={!canSubmitSignupStep1}
               accessibilityRole="button"
-              accessibilityLabel={mode === "login" ? "로그인" : "회원가입"}
+              accessibilityLabel="다음"
+            >
+              <Text style={styles.buttonText}>다음</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View style={styles.formContainer}>
+            <Pressable
+              style={styles.backRow}
+              onPress={() => {
+                setSignupStep(1);
+                setErrorMessage(null);
+              }}
+            >
+              <Feather name="arrow-left" size={16} color={Colors.zinc500} />
+              <Text style={styles.backRowText}>이전 단계로</Text>
+            </Pressable>
+
+            <TextInput
+              style={styles.input}
+              placeholder="이름(닉네임)"
+              placeholderTextColor={Colors.zinc400}
+              autoCapitalize="none"
+              autoCorrect={false}
+              maxLength={20}
+              value={nickname}
+              onChangeText={(text) => {
+                setNickname(text);
+                if (errorMessage) setErrorMessage(null);
+              }}
+              returnKeyType="done"
+              editable={!isLoading}
+            />
+            <Text style={styles.hint}>이웃 검색 시 표시되는 이름입니다. (최대 20자)</Text>
+
+            <View style={styles.agreementBox}>
+              <View style={styles.checkRow}>
+                <Pressable
+                  onPress={() => setAgreedTerms((v) => !v)}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: agreedTerms }}
+                  hitSlop={8}
+                >
+                  <View style={[styles.checkbox, agreedTerms && styles.checkboxChecked]}>
+                    {agreedTerms && <Feather name="check" size={13} color={Colors.white} />}
+                  </View>
+                </Pressable>
+                <Text style={styles.checkLabel} onPress={() => setAgreedTerms((v) => !v)}>
+                  {"(필수) "}
+                  <Text
+                    style={styles.checkLink}
+                    onPress={(e) => { e.stopPropagation(); router.push("/terms"); }}
+                  >
+                    서비스 이용약관
+                  </Text>
+                  {"에 동의합니다"}
+                </Text>
+              </View>
+
+              <View style={styles.checkRow}>
+                <Pressable
+                  onPress={() => setAgreedPrivacy((v) => !v)}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: agreedPrivacy }}
+                  hitSlop={8}
+                >
+                  <View style={[styles.checkbox, agreedPrivacy && styles.checkboxChecked]}>
+                    {agreedPrivacy && <Feather name="check" size={13} color={Colors.white} />}
+                  </View>
+                </Pressable>
+                <Text style={styles.checkLabel} onPress={() => setAgreedPrivacy((v) => !v)}>
+                  {"(필수) "}
+                  <Text
+                    style={styles.checkLink}
+                    onPress={(e) => { e.stopPropagation(); Linking.openURL(PRIVACY_URL); }}
+                  >
+                    개인정보 처리방침
+                  </Text>
+                  {"에 동의합니다"}
+                </Text>
+              </View>
+            </View>
+
+            {errorMessage ? (
+              <Text style={styles.errorText}>{errorMessage}</Text>
+            ) : null}
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.button,
+                !canSubmitSignupStep2 && styles.buttonDisabled,
+                pressed && styles.buttonPressed,
+              ]}
+              onPress={handleSignUpStep2}
+              disabled={!canSubmitSignupStep2}
+              accessibilityRole="button"
+              accessibilityLabel="가입 완료"
             >
               {isLoading ? (
                 <ActivityIndicator size="small" color={Colors.white} />
               ) : (
-                <Text style={styles.buttonText}>{mode === "login" ? "로그인" : "회원가입"}</Text>
+                <Text style={styles.buttonText}>가입 완료</Text>
               )}
             </Pressable>
           </View>
@@ -432,5 +633,51 @@ const styles = StyleSheet.create({
   confirmEmail: {
     ...Typography.bodySemiBold,
     color: Colors.zinc700,
+  },
+  backRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    alignSelf: "flex-start",
+  },
+  backRowText: {
+    ...Typography.caption,
+    fontSize: 14,
+    color: Colors.zinc500,
+  },
+  agreementBox: {
+    width: "100%",
+    gap: 10,
+    paddingVertical: 4,
+  },
+  checkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: Colors.zinc300,
+    backgroundColor: Colors.white,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkboxChecked: {
+    backgroundColor: Colors.zinc900,
+    borderColor: Colors.zinc900,
+  },
+  checkLabel: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc600,
+    flex: 1,
+  },
+  checkLink: {
+    ...Typography.bodySemiBold,
+    color: Colors.zinc900,
+    textDecorationLine: "underline",
   },
 });
