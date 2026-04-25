@@ -260,22 +260,13 @@ export default function PersonalCollectionDetailScreen() {
     await handleRemoveArticle(item.articleId);
   }, [articleActionTarget, handleRemoveArticle]);
 
-  const handleKebabPress = useCallback(() => {
-    const isArchive = collection?.isArchive ?? false;
-    if (isArchive) {
-      Alert.alert("글 관리", undefined, [
-        { text: "글 선택 삭제", onPress: enterSelectionMode },
-        { text: "닫기", style: "cancel" },
-      ]);
-    } else {
-      Alert.alert("모음 관리", undefined, [
-        { text: "글 선택 삭제", onPress: enterSelectionMode },
-        { text: "이름/설명 수정", onPress: handleOpenEdit },
-        { text: "삭제", style: "destructive", onPress: () => setDeleteConfirmVisible(true) },
-        { text: "닫기", style: "cancel" },
-      ]);
-    }
-  }, [collection, enterSelectionMode, handleOpenEdit]);
+  const handleCollectionManagePress = useCallback(() => {
+    Alert.alert("모음 관리", undefined, [
+      { text: "이름/설명 수정", onPress: handleOpenEdit },
+      { text: "삭제", style: "destructive", onPress: () => setDeleteConfirmVisible(true) },
+      { text: "닫기", style: "cancel" },
+    ]);
+  }, [handleOpenEdit]);
 
   const alreadyAddedIds = articles.map((a) => a.articleId);
 
@@ -399,9 +390,16 @@ export default function PersonalCollectionDetailScreen() {
             <Text style={styles.headerTitle} numberOfLines={1}>
               {collection?.name ?? "개인 모음"}
             </Text>
-            <Pressable hitSlop={12} onPress={handleKebabPress}>
-              <Feather name="more-horizontal" size={20} color={Colors.zinc600} />
-            </Pressable>
+            <View style={styles.headerRight}>
+              {!isArchive && (
+                <Pressable hitSlop={12} onPress={handleCollectionManagePress}>
+                  <Feather name="settings" size={18} color={Colors.zinc600} />
+                </Pressable>
+              )}
+              <Pressable hitSlop={12} onPress={enterSelectionMode}>
+                <Feather name="more-vertical" size={20} color={Colors.zinc600} />
+              </Pressable>
+            </View>
           </>
         )}
       </View>
@@ -620,6 +618,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: Spacing.screenPx,
     paddingVertical: 12,
+  },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
   },
   headerTitle: {
     ...Typography.bodySemiBold,

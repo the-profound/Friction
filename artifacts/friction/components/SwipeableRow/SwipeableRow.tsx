@@ -151,5 +151,6 @@ const styles = StyleSheet.create({
   },
   rowContent: {
     backgroundColor: "#FFFFFF",
+    width: "100%",
   },
 });
