@@ -8,7 +8,7 @@ import {
   Pressable,
 } from "react-native";
 
-const DELETE_BUTTON_WIDTH = 80;
+const BUTTON_WIDTH = 80;
 const SWIPE_THRESHOLD = 40;
 const VELOCITY_THRESHOLD = 0.5;
 
@@ -16,14 +16,29 @@ export interface SwipeableRowHandle {
   close: () => void;
 }
 
+export interface SwipeAction {
+  label: string;
+  color: string;
+  onPress: () => void;
+}
+
 interface SwipeableRowProps {
   children: React.ReactNode;
-  onDeletePress: () => void;
+  onDeletePress?: () => void;
+  actions?: SwipeAction[];
   onSwipeOpen?: () => void;
 }
 
 const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
-  ({ children, onDeletePress, onSwipeOpen }, ref) => {
+  ({ children, onDeletePress, actions, onSwipeOpen }, ref) => {
+    const resolvedActions: SwipeAction[] = actions
+      ? actions
+      : onDeletePress
+        ? [{ label: "삭제", color: "#EF4444", onPress: onDeletePress }]
+        : [];
+
+    const totalWidth = BUTTON_WIDTH * resolvedActions.length;
+
     const translateX = useRef(new Animated.Value(0)).current;
     const isOpen = useRef(false);
 
@@ -51,29 +66,29 @@ const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
         },
         onPanResponderMove: (_, gestureState) => {
           const { dx } = gestureState;
-          const base = isOpen.current ? -DELETE_BUTTON_WIDTH : 0;
-          const next = Math.min(0, Math.max(-DELETE_BUTTON_WIDTH, base + dx));
+          const base = isOpen.current ? -totalWidth : 0;
+          const next = Math.min(0, Math.max(-totalWidth, base + dx));
           translateX.setValue(next);
         },
         onPanResponderRelease: (_, gestureState) => {
           const { dx, vx } = gestureState;
-          const base = isOpen.current ? -DELETE_BUTTON_WIDTH : 0;
-          const newPos = Math.min(0, Math.max(-DELETE_BUTTON_WIDTH, base + dx));
+          const base = isOpen.current ? -totalWidth : 0;
+          const newPos = Math.min(0, Math.max(-totalWidth, base + dx));
 
           if (isOpen.current) {
             const shouldClose =
-              newPos > -DELETE_BUTTON_WIDTH + SWIPE_THRESHOLD || vx > VELOCITY_THRESHOLD;
+              newPos > -totalWidth + SWIPE_THRESHOLD || vx > VELOCITY_THRESHOLD;
             if (shouldClose) {
               animateTo(0);
               isOpen.current = false;
             } else {
-              animateTo(-DELETE_BUTTON_WIDTH);
+              animateTo(-totalWidth);
             }
           } else {
             const shouldOpen =
               newPos < -SWIPE_THRESHOLD || vx < -VELOCITY_THRESHOLD;
             if (shouldOpen) {
-              animateTo(-DELETE_BUTTON_WIDTH);
+              animateTo(-totalWidth);
               isOpen.current = true;
               onSwipeOpen?.();
             } else {
@@ -86,10 +101,16 @@ const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
 
     return (
       <View style={styles.container}>
-        <View style={[styles.deleteButtonContainer, { width: DELETE_BUTTON_WIDTH }]}>
-          <Pressable style={styles.deleteButton} onPress={onDeletePress}>
-            <Text style={styles.deleteButtonText}>삭제</Text>
-          </Pressable>
+        <View style={[styles.actionsContainer, { width: totalWidth }]}>
+          {resolvedActions.map((action, index) => (
+            <Pressable
+              key={index}
+              style={[styles.actionButton, { backgroundColor: action.color, width: BUTTON_WIDTH }]}
+              onPress={action.onPress}
+            >
+              <Text style={styles.actionButtonText}>{action.label}</Text>
+            </Pressable>
+          ))}
         </View>
         <Animated.View
           style={[styles.rowContent, { transform: [{ translateX }] }]}
@@ -111,22 +132,19 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     position: "relative",
   },
-  deleteButtonContainer: {
+  actionsContainer: {
     position: "absolute",
     right: 0,
     top: 0,
     bottom: 0,
-    justifyContent: "center",
-    alignItems: "center",
+    flexDirection: "row",
   },
-  deleteButton: {
+  actionButton: {
     flex: 1,
-    width: "100%",
-    backgroundColor: "#EF4444",
     justifyContent: "center",
     alignItems: "center",
   },
-  deleteButtonText: {
+  actionButtonText: {
     color: "#FFFFFF",
     fontSize: 15,
     fontWeight: "600",

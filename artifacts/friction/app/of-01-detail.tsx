@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import { View, Text, StyleSheet, FlatList, Pressable, Switch, Alert, TextInput } from "react-native";
 import { useToast } from "@/contexts/ToastContext";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
@@ -16,12 +16,14 @@ import {
   useAddArticleToMyCollection,
   useRemoveArticleFromMyCollection,
   useListArticles,
+  useListMyCollections,
   getListMyCollectionArticlesQueryKey,
   getGetMyCollectionQueryKey,
 } from "@workspace/api-client-react";
-import type { MyCollectionArticleWithDetails } from "@workspace/api-client-react";
+import type { MyCollectionArticleWithDetails, MyCollection } from "@workspace/api-client-react";
 import { MyArticlesPickerBottomSheet } from "@/components/MyArticlesPickerBottomSheet/MyArticlesPickerBottomSheet";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
+import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
 
 export default function PersonalCollectionDetailScreen() {
   const insets = useSafeAreaInsets();
@@ -30,12 +32,24 @@ export default function PersonalCollectionDetailScreen() {
   const { userId } = useUser();
   const { showToast } = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
+
   const [showPicker, setShowPicker] = useState(false);
   const [editSheetVisible, setEditSheetVisible] = useState(false);
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
   const [articleActionTarget, setArticleActionTarget] = useState<MyCollectionArticleWithDetails | null>(null);
+
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+
+  const [moveTargetArticle, setMoveTargetArticle] = useState<MyCollectionArticleWithDetails | null>(null);
+  const [isMoveSheetVisible, setIsMoveSheetVisible] = useState(false);
+
+  const openRowRef = useRef<SwipeableRowHandle | null>(null);
+  const rowRefs = useRef<Map<string, SwipeableRowHandle>>(new Map());
 
   const collectionQuery = useGetMyCollection(id ?? "");
   const collection = collectionQuery.data;
@@ -46,10 +60,85 @@ export default function PersonalCollectionDetailScreen() {
   const myArticlesQuery = useListArticles({ authorId: userId, status: "LETTER" as const });
   const myArticles = (myArticlesQuery.data ?? []) as Array<{ id: string; title: string; status: string; content?: string }>;
 
+  const allCollectionsQuery = useListMyCollections({ ownerId: userId });
+  const otherCollections = ((allCollectionsQuery.data ?? []) as MyCollection[]).filter(
+    (c) => c.id !== id && !c.isArchive
+  );
+
   const updateCollection = useUpdateMyCollection();
   const deleteCollection = useDeleteMyCollection();
   const addArticle = useAddArticleToMyCollection();
   const removeArticle = useRemoveArticleFromMyCollection();
+
+  const closeOpenRow = useCallback(() => {
+    if (openRowRef.current) {
+      openRowRef.current.close();
+      openRowRef.current = null;
+    }
+  }, []);
+
+  const handleSwipeOpen = useCallback((articleId: string) => {
+    const currentOpen = openRowRef.current;
+    const newRef = rowRefs.current.get(articleId) ?? null;
+    if (currentOpen && currentOpen !== newRef) {
+      currentOpen.close();
+    }
+    openRowRef.current = newRef;
+  }, []);
+
+  const enterSelectionMode = useCallback(() => {
+    closeOpenRow();
+    setSelectedIds(new Set());
+    setSelectionMode(true);
+  }, [closeOpenRow]);
+
+  const exitSelectionMode = useCallback(() => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  }, []);
+
+  const toggleSelect = useCallback((entryId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(entryId)) {
+        next.delete(entryId);
+      } else {
+        next.add(entryId);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleBulkDeletePress = useCallback(() => {
+    if (selectedIds.size === 0) return;
+    setShowBulkDeleteConfirm(true);
+  }, [selectedIds]);
+
+  const handleBulkDeleteConfirm = useCallback(async () => {
+    if (!id) return;
+    setShowBulkDeleteConfirm(false);
+    setIsBulkDeleting(true);
+    const ids = Array.from(selectedIds);
+    let failCount = 0;
+    for (const articleId of ids) {
+      try {
+        await removeArticle.mutateAsync({ collectionId: id, articleId });
+      } catch {
+        failCount++;
+      }
+    }
+    await queryClient.invalidateQueries({ queryKey: getListMyCollectionArticlesQueryKey(id) });
+    await queryClient.invalidateQueries({ queryKey: getGetMyCollectionQueryKey(id) });
+    setIsBulkDeleting(false);
+    exitSelectionMode();
+    if (failCount === 0) {
+      showToast({ message: "삭제했어요.", type: "success" });
+    } else if (failCount < ids.length) {
+      showToast({ message: `일부 삭제에 실패했습니다. (${failCount}개)`, type: "error" });
+    } else {
+      showToast({ message: "삭제에 실패했습니다.", type: "error" });
+    }
+  }, [id, selectedIds, removeArticle, queryClient, exitSelectionMode, showToast]);
 
   const handleTogglePublic = useCallback(
     async (value: boolean) => {
@@ -134,6 +223,26 @@ export default function PersonalCollectionDetailScreen() {
     [id, removeArticle, articlesQuery, collectionQuery, showToast],
   );
 
+  const handleMoveArticle = useCallback(
+    async (targetCollectionId: string) => {
+      if (!id || !moveTargetArticle) return;
+      const articleId = moveTargetArticle.articleId;
+      setIsMoveSheetVisible(false);
+      setMoveTargetArticle(null);
+      try {
+        await removeArticle.mutateAsync({ collectionId: id, articleId });
+        await addArticle.mutateAsync({ id: targetCollectionId, data: { articleId } });
+        await queryClient.invalidateQueries({ queryKey: getListMyCollectionArticlesQueryKey(id) });
+        await queryClient.invalidateQueries({ queryKey: getGetMyCollectionQueryKey(id) });
+        showToast({ message: "글을 이동했어요.", type: "success" });
+      } catch {
+        showToast({ message: "글 이동에 실패했습니다.", type: "error" });
+        articlesQuery.refetch();
+      }
+    },
+    [id, moveTargetArticle, removeArticle, addArticle, queryClient, articlesQuery, showToast],
+  );
+
   const handleArticleActionRead = useCallback(() => {
     if (!articleActionTarget) return;
     const item = articleActionTarget;
@@ -151,6 +260,23 @@ export default function PersonalCollectionDetailScreen() {
     await handleRemoveArticle(item.articleId);
   }, [articleActionTarget, handleRemoveArticle]);
 
+  const handleKebabPress = useCallback(() => {
+    const isArchive = collection?.isArchive ?? false;
+    if (isArchive) {
+      Alert.alert("글 관리", undefined, [
+        { text: "글 선택 삭제", onPress: enterSelectionMode },
+        { text: "닫기", style: "cancel" },
+      ]);
+    } else {
+      Alert.alert("모음 관리", undefined, [
+        { text: "글 선택 삭제", onPress: enterSelectionMode },
+        { text: "이름/설명 수정", onPress: handleOpenEdit },
+        { text: "삭제", style: "destructive", onPress: () => setDeleteConfirmVisible(true) },
+        { text: "닫기", style: "cancel" },
+      ]);
+    }
+  }, [collection, enterSelectionMode, handleOpenEdit]);
+
   const alreadyAddedIds = articles.map((a) => a.articleId);
 
   const pickerArticles = myArticles.map((a) => ({
@@ -160,21 +286,86 @@ export default function PersonalCollectionDetailScreen() {
     excerpt: a.content?.substring(0, 60),
   }));
 
-  const renderArticleItem = ({ item }: { item: MyCollectionArticleWithDetails }) => (
-    <Pressable
-      style={styles.articleItem}
-      onPress={() => setArticleActionTarget(item)}
-    >
-      <View style={styles.articleInfo}>
-        <Text style={styles.articleTitle} numberOfLines={1}>
-          {item.article?.title ?? "제목 없음"}
-        </Text>
-        <Text style={styles.articleDate}>
-          {new Date(item.addedAt).toLocaleDateString("ko-KR")}에 추가
-        </Text>
-      </View>
-      <Feather name="chevron-right" size={16} color={Colors.zinc300} />
-    </Pressable>
+  const selectedCount = selectedIds.size;
+  const isArchive = collection?.isArchive ?? false;
+
+  const renderNormalItem = useCallback(
+    ({ item }: { item: MyCollectionArticleWithDetails }) => (
+      <SwipeableRow
+        ref={(r) => {
+          if (r) {
+            rowRefs.current.set(item.articleId, r);
+          } else {
+            rowRefs.current.delete(item.articleId);
+          }
+        }}
+        actions={[
+          {
+            label: "이동",
+            color: Colors.zinc500,
+            onPress: () => {
+              closeOpenRow();
+              setMoveTargetArticle(item);
+              setIsMoveSheetVisible(true);
+            },
+          },
+          {
+            label: "삭제",
+            color: "#EF4444",
+            onPress: () => {
+              closeOpenRow();
+              handleRemoveArticle(item.articleId);
+            },
+          },
+        ]}
+        onSwipeOpen={() => handleSwipeOpen(item.articleId)}
+      >
+        <Pressable
+          style={styles.articleItem}
+          onPress={() => setArticleActionTarget(item)}
+        >
+          <View style={styles.articleInfo}>
+            <Text style={styles.articleTitle} numberOfLines={1}>
+              {item.article?.title ?? "제목 없음"}
+            </Text>
+            <Text style={styles.articleDate}>
+              {new Date(item.addedAt).toLocaleDateString("ko-KR")}에 추가
+            </Text>
+          </View>
+          <Feather name="chevron-right" size={16} color={Colors.zinc300} />
+        </Pressable>
+      </SwipeableRow>
+    ),
+    [closeOpenRow, handleRemoveArticle, handleSwipeOpen],
+  );
+
+  const renderSelectionItem = useCallback(
+    ({ item }: { item: MyCollectionArticleWithDetails }) => {
+      const isSelected = selectedIds.has(item.articleId);
+      return (
+        <Pressable
+          style={styles.selectionRow}
+          onPress={() => toggleSelect(item.articleId)}
+        >
+          <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+            {isSelected && <Feather name="check" size={14} color={Colors.white} />}
+          </View>
+          <View style={styles.selectionItemContent}>
+            <View style={styles.articleItem}>
+              <View style={styles.articleInfo}>
+                <Text style={styles.articleTitle} numberOfLines={1}>
+                  {item.article?.title ?? "제목 없음"}
+                </Text>
+                <Text style={styles.articleDate}>
+                  {new Date(item.addedAt).toLocaleDateString("ko-KR")}에 추가
+                </Text>
+              </View>
+            </View>
+          </View>
+        </Pressable>
+      );
+    },
+    [selectedIds, toggleSelect],
   );
 
   if (!id) {
@@ -187,42 +378,41 @@ export default function PersonalCollectionDetailScreen() {
     );
   }
 
-  const isArchive = collection?.isArchive ?? false;
-
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
-          <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-        </Pressable>
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          {collection?.name ?? "개인 모음"}
-        </Text>
-        {isArchive ? (
-          <View style={{ width: 32 }} />
+        {selectionMode ? (
+          <>
+            <View style={{ width: 32 }} />
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              {selectedCount > 0 ? `${selectedCount}개 선택됨` : "선택"}
+            </Text>
+            <Pressable hitSlop={12} onPress={exitSelectionMode}>
+              <Text style={styles.cancelText}>취소</Text>
+            </Pressable>
+          </>
         ) : (
-          <Pressable
-            hitSlop={12}
-            onPress={() =>
-              Alert.alert("모음 관리", undefined, [
-                { text: "이름/설명 수정", onPress: handleOpenEdit },
-                { text: "삭제", style: "destructive", onPress: () => setDeleteConfirmVisible(true) },
-                { text: "닫기", style: "cancel" },
-              ])
-            }
-          >
-            <Feather name="more-horizontal" size={20} color={Colors.zinc600} />
-          </Pressable>
+          <>
+            <Pressable onPress={() => router.back()} hitSlop={12}>
+              <Feather name="arrow-left" size={20} color={Colors.zinc600} />
+            </Pressable>
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              {collection?.name ?? "개인 모음"}
+            </Text>
+            <Pressable hitSlop={12} onPress={handleKebabPress}>
+              <Feather name="more-horizontal" size={20} color={Colors.zinc600} />
+            </Pressable>
+          </>
         )}
       </View>
 
-      {collection?.description ? (
+      {!selectionMode && collection?.description ? (
         <View style={styles.descSection}>
           <Text style={styles.descText}>{collection.description}</Text>
         </View>
       ) : null}
 
-      {!isArchive && (
+      {!selectionMode && !isArchive && (
         <View style={styles.metaSection}>
           <View style={styles.visibilityRow}>
             <Text style={styles.visibilityLabel}>공개 설정</Text>
@@ -240,17 +430,19 @@ export default function PersonalCollectionDetailScreen() {
         </View>
       )}
 
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>
-          글 목록 ({articles.length})
-        </Text>
-        {!isArchive && (
-          <Pressable style={styles.addArticleButton} onPress={() => setShowPicker(true)}>
-            <Feather name="plus" size={16} color={Colors.zinc600} />
-            <Text style={styles.addArticleText}>글 추가</Text>
-          </Pressable>
-        )}
-      </View>
+      {!selectionMode && (
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>
+            글 목록 ({articles.length})
+          </Text>
+          {!isArchive && (
+            <Pressable style={styles.addArticleButton} onPress={() => setShowPicker(true)}>
+              <Feather name="plus" size={16} color={Colors.zinc600} />
+              <Text style={styles.addArticleText}>글 추가</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
 
       {articlesQuery.isError ? (
         <View style={styles.emptyContainer}>
@@ -269,11 +461,33 @@ export default function PersonalCollectionDetailScreen() {
       ) : (
         <FlatList
           data={articles}
-          keyExtractor={(item) => item.id}
-          renderItem={renderArticleItem}
-          contentContainerStyle={styles.listContent}
+          keyExtractor={(item) => item.articleId}
+          renderItem={selectionMode ? renderSelectionItem : renderNormalItem}
+          contentContainerStyle={[
+            styles.listContent,
+            selectionMode && { paddingBottom: insets.bottom + 80 + 24 },
+          ]}
+          onScrollBeginDrag={selectionMode ? undefined : closeOpenRow}
           showsVerticalScrollIndicator={false}
         />
+      )}
+
+      {selectionMode && (
+        <View style={[styles.selectionBar, { paddingBottom: insets.bottom + 12 }]}>
+          <Pressable
+            style={[styles.bulkDeleteButton, selectedCount === 0 && styles.bulkDeleteButtonDisabled]}
+            onPress={handleBulkDeletePress}
+            disabled={selectedCount === 0 || isBulkDeleting}
+          >
+            {isBulkDeleting ? (
+              <Text style={styles.bulkDeleteText}>삭제 중...</Text>
+            ) : (
+              <Text style={styles.bulkDeleteText}>
+                {selectedCount > 0 ? `${selectedCount}개 선택 삭제` : "선택 삭제"}
+              </Text>
+            )}
+          </Pressable>
+        </View>
       )}
 
       <MyArticlesPickerBottomSheet
@@ -318,6 +532,41 @@ export default function PersonalCollectionDetailScreen() {
         </View>
       </BottomSheet>
 
+      <BottomSheet
+        visible={isMoveSheetVisible}
+        onClose={() => { setIsMoveSheetVisible(false); setMoveTargetArticle(null); }}
+        title="이동할 보관함 선택"
+        snapPoints={[0.5]}
+      >
+        <View style={styles.moveSheetContent}>
+          {otherCollections.length === 0 ? (
+            <View style={styles.moveEmptyContainer}>
+              <Text style={styles.moveEmptyText}>이동 가능한 다른 보관함이 없어요</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={otherCollections}
+              keyExtractor={(c) => c.id}
+              renderItem={({ item: coll }) => (
+                <Pressable
+                  style={styles.moveCollectionItem}
+                  onPress={() => handleMoveArticle(coll.id)}
+                >
+                  <View style={styles.moveCollectionIcon}>
+                    <Feather name="folder" size={18} color={Colors.zinc500} />
+                  </View>
+                  <Text style={styles.moveCollectionName} numberOfLines={1}>
+                    {coll.name}
+                  </Text>
+                  <Feather name="chevron-right" size={16} color={Colors.zinc300} />
+                </Pressable>
+              )}
+              showsVerticalScrollIndicator={false}
+            />
+          )}
+        </View>
+      </BottomSheet>
+
       <ConfirmModal
         visible={deleteConfirmVisible}
         title="모음 삭제"
@@ -345,6 +594,17 @@ export default function PersonalCollectionDetailScreen() {
           onPress: handleArticleActionDelete,
         }}
       />
+
+      <ConfirmModal
+        visible={showBulkDeleteConfirm}
+        title={`${selectedCount}개를 삭제할까요?`}
+        description="선택한 글이 이 보관함에서 제거됩니다."
+        confirmLabel="삭제"
+        cancelLabel="취소"
+        destructive
+        onConfirm={handleBulkDeleteConfirm}
+        onCancel={() => setShowBulkDeleteConfirm(false)}
+      />
     </View>
   );
 }
@@ -368,6 +628,11 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: "center",
     marginHorizontal: 8,
+  },
+  cancelText: {
+    ...Typography.body,
+    fontSize: 15,
+    color: Colors.zinc600,
   },
   descSection: {
     paddingHorizontal: Spacing.screenPx,
@@ -438,6 +703,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.screenPx,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
+    backgroundColor: Colors.white,
   },
   articleInfo: {
     flex: 1,
@@ -515,5 +781,90 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 16,
     color: Colors.white,
+  },
+  selectionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingLeft: Spacing.screenPx,
+    backgroundColor: Colors.white,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: Colors.zinc300,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.white,
+    marginRight: 12,
+    flexShrink: 0,
+  },
+  checkboxSelected: {
+    backgroundColor: Colors.zinc900,
+    borderColor: Colors.zinc900,
+  },
+  selectionItemContent: {
+    flex: 1,
+  },
+  selectionBar: {
+    paddingHorizontal: Spacing.screenPx,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: Colors.zinc100,
+    backgroundColor: Colors.white,
+  },
+  bulkDeleteButton: {
+    height: 52,
+    backgroundColor: "#DC2626",
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bulkDeleteButtonDisabled: {
+    backgroundColor: Colors.zinc200,
+  },
+  bulkDeleteText: {
+    ...Typography.bodySemiBold,
+    fontSize: 16,
+    color: Colors.white,
+  },
+  moveSheetContent: {
+    flex: 1,
+    paddingTop: 4,
+  },
+  moveEmptyContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 40,
+  },
+  moveEmptyText: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc400,
+  },
+  moveCollectionItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 16,
+    paddingHorizontal: Spacing.screenPx,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.zinc100,
+    gap: 12,
+  },
+  moveCollectionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: Colors.zinc50,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  moveCollectionName: {
+    ...Typography.body,
+    fontSize: 15,
+    color: Colors.zinc900,
+    flex: 1,
   },
 });
