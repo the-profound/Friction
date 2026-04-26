@@ -1,30 +1,40 @@
-import React, { useState, useCallback, useEffect, useRef } from "react";
-import { View, Text, StyleSheet, FlatList, Pressable, Alert, RefreshControl, TextInput, ActivityIndicator } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import { Colors, Typography, Spacing } from "@/constants/tokens";
+
+import { Colors, Spacing, Typography } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
-import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
+import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import {
-  useListNeighbors,
-  useListNeighborRequests,
   useAcceptNeighborRequest,
-  useRejectNeighborRequest,
   useCreateNeighborRequest,
+  useDeleteNeighborRequest,
+  useListNeighborRequests,
+  useListNeighbors,
+  useRejectNeighborRequest,
   useRemoveNeighbor,
   useSearchUsersByNickname,
-  useDeleteNeighborRequest,
 } from "@workspace/api-client-react";
 import type {
-  NeighborWithUser,
   NeighborRequestWithUser,
+  NeighborWithUser,
   UserSearchResult,
 } from "@workspace/api-client-react";
 
-type Tab = "neighbors" | "requests" | "sent";
+type SectionKey = "neighbors" | "requests" | "sent";
 
 interface ProfileTarget {
   nickname: string;
@@ -33,11 +43,19 @@ interface ProfileTarget {
   joinedAt?: string;
 }
 
-export default function NeighborListScreen() {
+interface NeighborsInlineProps {
+  initialSection?: SectionKey;
+  /** Bumps when an external trigger (e.g. parent screen) wants to focus the requests section. */
+  focusRequestsSignal?: number;
+}
+
+export function NeighborsInline({
+  initialSection = "neighbors",
+  focusRequestsSignal,
+}: NeighborsInlineProps) {
   const insets = useSafeAreaInsets();
-  const router = useRouter();
   const { userId } = useUser();
-  const [activeTab, setActiveTab] = useState<Tab>("neighbors");
+  const [activeSection, setActiveSection] = useState<SectionKey>(initialSection);
   const [addSheetVisible, setAddSheetVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -59,12 +77,19 @@ export default function NeighborListScreen() {
     };
   }, [searchQuery]);
 
+  useEffect(() => {
+    if (focusRequestsSignal !== undefined) {
+      setActiveSection("requests");
+    }
+  }, [focusRequestsSignal]);
+
   const neighborsQuery = useListNeighbors({ userId });
   const neighbors = (neighborsQuery.data ?? []) as NeighborWithUser[];
   const requestsQuery = useListNeighborRequests({ recipientId: userId });
   const pendingRequests = (requestsQuery.data ?? []) as NeighborRequestWithUser[];
   const sentRequestsQuery = useListNeighborRequests({ requesterId: userId });
   const sentRequests = (sentRequestsQuery.data ?? []) as NeighborRequestWithUser[];
+
   const acceptRequest = useAcceptNeighborRequest();
   const rejectRequest = useRejectNeighborRequest();
   const createRequest = useCreateNeighborRequest();
@@ -211,7 +236,9 @@ export default function NeighborListScreen() {
           style={styles.rejectButton}
           disabledStyle={styles.buttonDisabled}
           textStyle={styles.rejectText}
-          onPress={() => setRejectTarget({ id: item.id, name: item.requester?.nickname ?? "알 수 없음" })}
+          onPress={() =>
+            setRejectTarget({ id: item.id, name: item.requester?.nickname ?? "알 수 없음" })
+          }
           pending={rejectRequest.isPending}
           disabled={acceptRequest.isPending}
           label="거절"
@@ -232,7 +259,9 @@ export default function NeighborListScreen() {
       </View>
       <Pressable
         style={styles.rejectButton}
-        onPress={() => setCancelTarget({ id: item.id, name: item.recipient?.nickname ?? "알 수 없음" })}
+        onPress={() =>
+          setCancelTarget({ id: item.id, name: item.recipient?.nickname ?? "알 수 없음" })
+        }
       >
         <Text style={styles.rejectText}>취소</Text>
       </Pressable>
@@ -257,7 +286,11 @@ export default function NeighborListScreen() {
       <Pressable
         style={[styles.searchResultItem, isDisabled && styles.searchResultDisabled]}
         onPress={handlePress}
-        onLongPress={isPending && item.requestId ? () => setCancelTarget({ id: item.requestId!, name: item.nickname }) : undefined}
+        onLongPress={
+          isPending && item.requestId
+            ? () => setCancelTarget({ id: item.requestId!, name: item.nickname })
+            : undefined
+        }
         disabled={isDisabled}
       >
         <View style={styles.avatarCircle}>
@@ -285,43 +318,50 @@ export default function NeighborListScreen() {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
-          <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-        </Pressable>
-        <Text style={styles.headerTitle}>이웃 관리</Text>
-        <View style={{ width: 20 }} />
-      </View>
-
-      <View style={styles.tabBar}>
+    <View style={styles.container}>
+      <View style={styles.sectionTabBar}>
         <Pressable
-          style={[styles.tab, activeTab === "neighbors" && styles.tabActive]}
-          onPress={() => setActiveTab("neighbors")}
+          style={[styles.sectionTab, activeSection === "neighbors" && styles.sectionTabActive]}
+          onPress={() => setActiveSection("neighbors")}
         >
-          <Text style={[styles.tabText, activeTab === "neighbors" && styles.tabTextActive]}>
+          <Text
+            style={[
+              styles.sectionTabText,
+              activeSection === "neighbors" && styles.sectionTabTextActive,
+            ]}
+          >
             이웃 ({neighbors.length})
           </Text>
         </Pressable>
         <Pressable
-          style={[styles.tab, activeTab === "requests" && styles.tabActive]}
-          onPress={() => setActiveTab("requests")}
+          style={[styles.sectionTab, activeSection === "requests" && styles.sectionTabActive]}
+          onPress={() => setActiveSection("requests")}
         >
-          <Text style={[styles.tabText, activeTab === "requests" && styles.tabTextActive]}>
+          <Text
+            style={[
+              styles.sectionTabText,
+              activeSection === "requests" && styles.sectionTabTextActive,
+            ]}
+          >
             받은 요청 ({pendingRequests.length})
           </Text>
         </Pressable>
         <Pressable
-          style={[styles.tab, activeTab === "sent" && styles.tabActive]}
-          onPress={() => setActiveTab("sent")}
+          style={[styles.sectionTab, activeSection === "sent" && styles.sectionTabActive]}
+          onPress={() => setActiveSection("sent")}
         >
-          <Text style={[styles.tabText, activeTab === "sent" && styles.tabTextActive]}>
+          <Text
+            style={[
+              styles.sectionTabText,
+              activeSection === "sent" && styles.sectionTabTextActive,
+            ]}
+          >
             보낸 요청 ({sentRequests.length})
           </Text>
         </Pressable>
       </View>
 
-      {activeTab === "neighbors" ? (
+      {activeSection === "neighbors" ? (
         neighborsQuery.isLoading ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.loadingText}>불러오는 중...</Text>
@@ -330,6 +370,7 @@ export default function NeighborListScreen() {
           <View style={styles.emptyContainer}>
             <Feather name="alert-circle" size={40} color={Colors.zinc300} />
             <Text style={styles.emptyTitle}>불러오기 실패</Text>
+            <Text style={styles.emptySubtitle}>네트워크를 확인하고 다시 시도해주세요</Text>
             <Pressable style={styles.addButton} onPress={() => neighborsQuery.refetch()}>
               <Text style={styles.addButtonText}>다시 시도</Text>
             </Pressable>
@@ -359,7 +400,7 @@ export default function NeighborListScreen() {
             showsVerticalScrollIndicator={false}
           />
         )
-      ) : activeTab === "requests" ? (
+      ) : activeSection === "requests" ? (
         requestsQuery.isLoading ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.loadingText}>불러오는 중...</Text>
@@ -394,41 +435,39 @@ export default function NeighborListScreen() {
             showsVerticalScrollIndicator={false}
           />
         )
+      ) : sentRequestsQuery.isLoading ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.loadingText}>불러오는 중...</Text>
+        </View>
+      ) : sentRequestsQuery.isError ? (
+        <View style={styles.emptyContainer}>
+          <Feather name="alert-circle" size={40} color={Colors.zinc300} />
+          <Text style={styles.emptyTitle}>불러오기 실패</Text>
+          <Pressable style={styles.addButton} onPress={() => sentRequestsQuery.refetch()}>
+            <Text style={styles.addButtonText}>다시 시도</Text>
+          </Pressable>
+        </View>
+      ) : sentRequests.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Feather name="send" size={40} color={Colors.zinc300} />
+          <Text style={styles.emptyTitle}>보낸 요청이 없어요</Text>
+          <Text style={styles.emptySubtitle}>이웃 추가 버튼으로 요청을 보내보세요</Text>
+        </View>
       ) : (
-        sentRequestsQuery.isLoading ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.loadingText}>불러오는 중...</Text>
-          </View>
-        ) : sentRequestsQuery.isError ? (
-          <View style={styles.emptyContainer}>
-            <Feather name="alert-circle" size={40} color={Colors.zinc300} />
-            <Text style={styles.emptyTitle}>불러오기 실패</Text>
-            <Pressable style={styles.addButton} onPress={() => sentRequestsQuery.refetch()}>
-              <Text style={styles.addButtonText}>다시 시도</Text>
-            </Pressable>
-          </View>
-        ) : sentRequests.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Feather name="send" size={40} color={Colors.zinc300} />
-            <Text style={styles.emptyTitle}>보낸 요청이 없어요</Text>
-            <Text style={styles.emptySubtitle}>이웃 추가 버튼으로 요청을 보내보세요</Text>
-          </View>
-        ) : (
-          <FlatList
-            data={sentRequests}
-            keyExtractor={(item) => item.id}
-            renderItem={renderSentRequestItem}
-            contentContainerStyle={styles.listContent}
-            refreshControl={
-              <RefreshControl
-                refreshing={sentRequestsQuery.isRefetching}
-                onRefresh={() => sentRequestsQuery.refetch()}
-                tintColor={Colors.zinc400}
-              />
-            }
-            showsVerticalScrollIndicator={false}
-          />
-        )
+        <FlatList
+          data={sentRequests}
+          keyExtractor={(item) => item.id}
+          renderItem={renderSentRequestItem}
+          contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={sentRequestsQuery.isRefetching}
+              onRefresh={() => sentRequestsQuery.refetch()}
+              tintColor={Colors.zinc400}
+            />
+          }
+          showsVerticalScrollIndicator={false}
+        />
       )}
 
       <BottomSheet
@@ -546,7 +585,9 @@ export default function NeighborListScreen() {
             )}
             <View style={styles.profileIdRow}>
               <Text style={styles.profileIdLabel}>ID</Text>
-              <Text style={styles.profileIdValue} selectable>{profileTarget.id}</Text>
+              <Text style={styles.profileIdValue} selectable>
+                {profileTarget.id}
+              </Text>
             </View>
           </View>
         )}
@@ -555,6 +596,8 @@ export default function NeighborListScreen() {
       <Pressable
         style={[styles.fab, { bottom: insets.bottom + 20 }]}
         onPress={() => setAddSheetVisible(true)}
+        accessibilityRole="button"
+        accessibilityLabel="이웃 추가"
       >
         <Feather name="user-plus" size={20} color={Colors.white} />
       </Pressable>
@@ -567,39 +610,28 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.white,
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.screenPx,
-    paddingVertical: 12,
-  },
-  headerTitle: {
-    ...Typography.bodySemiBold,
-    fontSize: 17,
-    color: Colors.zinc900,
-  },
-  tabBar: {
+  sectionTabBar: {
     flexDirection: "row",
     paddingHorizontal: Spacing.screenPx,
+    paddingTop: 4,
     gap: 8,
     marginBottom: 8,
   },
-  tab: {
+  sectionTab: {
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: Colors.zinc50,
   },
-  tabActive: {
+  sectionTabActive: {
     backgroundColor: Colors.zinc900,
   },
-  tabText: {
+  sectionTabText: {
     ...Typography.caption,
     fontSize: 13,
     color: Colors.zinc500,
   },
-  tabTextActive: {
+  sectionTabTextActive: {
     color: Colors.white,
     fontWeight: "600",
   },
@@ -608,6 +640,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: Spacing.screenPx,
+    paddingBottom: Spacing.navBarPaddingBottom,
     gap: 8,
   },
   emptyTitle: {
@@ -628,7 +661,7 @@ const styles = StyleSheet.create({
     color: Colors.zinc500,
   },
   listContent: {
-    paddingBottom: 100,
+    paddingBottom: Spacing.navBarPaddingBottom,
   },
   neighborItem: {
     flexDirection: "row",

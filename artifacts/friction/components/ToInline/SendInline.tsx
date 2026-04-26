@@ -1,24 +1,32 @@
-import React, { useState, useCallback, useMemo, useEffect } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView, Alert } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { Colors, Typography, Spacing } from "@/constants/tokens";
+import { useQueryClient } from "@tanstack/react-query";
+
+import { Colors, Spacing, Typography } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
-import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
+import { useToast } from "@/contexts/ToastContext";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
+import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import {
+  getListSendRecordsQueryKey,
+  getListTeamArticlesQueryKey,
+  useAddTeamArticle,
   useListArticles,
   useListNeighbors,
-  useSendArticle,
   useListTeamCollections,
-  useAddTeamArticle,
-  getListTeamArticlesQueryKey,
+  useSendArticle,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
-import type { NeighborWithUser, TeamCollectionWithRole } from "@workspace/api-client-react";
-import { getNextDeliverySlot, formatDeliveryTime, canSendToNeighbor } from "@/lib/deliverySync";
+import type {
+  NeighborWithUser,
+  TeamCollectionWithRole,
+} from "@workspace/api-client-react";
+import {
+  canSendToNeighbor,
+  formatDeliveryTime,
+  getNextDeliverySlot,
+} from "@/lib/deliverySync";
 import type { ArticleStatus } from "@/lib/policies";
 
 interface LetterArticle {
@@ -28,30 +36,41 @@ interface LetterArticle {
   content?: string;
 }
 
-type RecipientNeighbor = {
-  type: "neighbor";
-  data: NeighborWithUser;
-};
-
-type RecipientCollection = {
-  type: "collection";
-  data: TeamCollectionWithRole;
-};
-
+type RecipientNeighbor = { type: "neighbor"; data: NeighborWithUser };
+type RecipientCollection = { type: "collection"; data: TeamCollectionWithRole };
 type Recipient = RecipientNeighbor | RecipientCollection | null;
 
 type SegmentTab = "neighbor" | "collection";
 
-export default function SendScreen() {
-  const insets = useSafeAreaInsets();
-  const router = useRouter();
+interface SendInlineProps {
+  /** Pre-selected target group id (for case A from of-02-detail). */
+  targetGroup?: string;
+  /** Pre-selected target group display name. */
+  targetGroupName?: string;
+  /** Pre-selected article id (for case B from inbox / OF). */
+  prefillArticleId?: string;
+  /** Pre-selected neighbor id (for case A' from neighbor card). */
+  prefillNeighborId?: string;
+  /** Optional team collection id whose article list should be invalidated after send. */
+  returnToId?: string;
+  /** Bumps when prefill params change so the component re-applies them. */
+  prefillKey?: string | number;
+  /** Called after a successful send so the parent can clear prefill query params. */
+  onSent?: () => void;
+}
+
+export function SendInline({
+  targetGroup,
+  targetGroupName,
+  prefillArticleId,
+  prefillNeighborId,
+  returnToId,
+  prefillKey,
+  onSent,
+}: SendInlineProps) {
   const queryClient = useQueryClient();
   const { userId } = useUser();
-  const { targetGroup, targetGroupName, returnToId } = useLocalSearchParams<{
-    targetGroup?: string;
-    targetGroupName?: string;
-    returnToId?: string;
-  }>();
+  const { showToast } = useToast();
 
   const [selectedArticle, setSelectedArticle] = useState<LetterArticle | null>(null);
   const [selectedRecipient, setSelectedRecipient] = useState<Recipient>(null);
@@ -74,6 +93,7 @@ export default function SendScreen() {
 
   const deliveryInfo = useMemo(() => getNextDeliverySlot(), [confirmVisible]);
 
+  // Apply collection prefill (case A: from of-02-detail "내 글 추가")
   useEffect(() => {
     if (!targetGroup) return;
     const resolvedName =
@@ -92,16 +112,30 @@ export default function SendScreen() {
       } as TeamCollectionWithRole,
     };
     setSelectedRecipient(preselected);
-  }, [targetGroup, targetGroupName, teamCollections]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetGroup, targetGroupName, teamCollections, prefillKey]);
 
-  const navigateBack = useCallback(() => {
-    if (returnToId) {
-      queryClient.invalidateQueries({ queryKey: getListTeamArticlesQueryKey(returnToId) });
+  // Apply neighbor prefill (case A': neighbor card tap)
+  useEffect(() => {
+    if (!prefillNeighborId) return;
+    const found = neighbors.find((n) => n.neighborUserId === prefillNeighborId);
+    if (found) {
+      setSelectedRecipient({ type: "neighbor", data: found });
     }
-    router.back();
-  }, [returnToId, router, queryClient]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillNeighborId, neighbors, prefillKey]);
 
-  const canSend = selectedArticle && selectedRecipient;
+  // Apply article prefill (case B: from OF / inbox)
+  useEffect(() => {
+    if (!prefillArticleId) return;
+    const found = articles.find((a) => a.id === prefillArticleId);
+    if (found) {
+      setSelectedArticle(found);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillArticleId, articles, prefillKey]);
+
+  const canSend = !!selectedArticle && !!selectedRecipient;
 
   const recipientDisplayName = useMemo(() => {
     if (!selectedRecipient) return null;
@@ -139,8 +173,11 @@ export default function SendScreen() {
         const arrivalTime = result?.deliverySlot
           ? formatDeliveryTime(new Date(result.deliverySlot))
           : formatDeliveryTime(deliveryInfo.visibleAt);
-        navigateBack();
-        Alert.alert("완료", `${neighbor.user?.nickname ?? "이웃"}에게 발송됐어요 · ${arrivalTime} 도착 예정`);
+        queryClient.invalidateQueries({ queryKey: getListSendRecordsQueryKey({ senderId: userId }) });
+        showToast({
+          message: `${neighbor.user?.nickname ?? "이웃"}에게 발송됐어요 · ${arrivalTime} 도착 예정`,
+          type: "success",
+        });
       } else {
         const collection = selectedRecipient.data;
         await addToTeamCollection.mutateAsync({
@@ -149,9 +186,18 @@ export default function SendScreen() {
         });
         setConfirmVisible(false);
         const arrivalTime = formatDeliveryTime(deliveryInfo.visibleAt);
-        navigateBack();
-        Alert.alert("완료", `'${collection.name}' 모음에 발송됐어요 · ${arrivalTime} 도착 예정`);
+        if (returnToId) {
+          queryClient.invalidateQueries({ queryKey: getListTeamArticlesQueryKey(returnToId) });
+        }
+        queryClient.invalidateQueries({ queryKey: getListSendRecordsQueryKey({ senderId: userId }) });
+        showToast({
+          message: `'${collection.name}' 모음에 발송됐어요 · ${arrivalTime} 도착 예정`,
+          type: "success",
+        });
       }
+      setSelectedArticle(null);
+      setSelectedRecipient(null);
+      onSent?.();
     } catch (e: unknown) {
       setConfirmVisible(false);
       const msg = e instanceof Error ? e.message : "실패했습니다.";
@@ -165,7 +211,10 @@ export default function SendScreen() {
     sendArticle,
     addToTeamCollection,
     deliveryInfo,
-    navigateBack,
+    queryClient,
+    returnToId,
+    showToast,
+    onSent,
   ]);
 
   const isPending = sendArticle.isPending || addToTeamCollection.isPending;
@@ -195,21 +244,19 @@ export default function SendScreen() {
   }, [selectedArticle, selectedRecipient, deliveryInfo]);
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <Pressable onPress={navigateBack} hitSlop={12}>
-          <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-        </Pressable>
-        <Text style={styles.headerTitle}>보내기</Text>
-        <View style={{ width: 20 }} />
-      </View>
-
+    <View style={styles.container}>
       <ScrollView style={styles.content} contentContainerStyle={styles.contentInner}>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>편지 선택</Text>
           <Pressable style={styles.selectButton} onPress={() => setLetterPickerVisible(true)}>
-            <Feather name="file-text" size={18} color={selectedArticle ? Colors.zinc900 : Colors.zinc500} />
-            <Text style={[styles.selectButtonText, selectedArticle && styles.selectButtonTextActive]}>
+            <Feather
+              name="file-text"
+              size={18}
+              color={selectedArticle ? Colors.zinc900 : Colors.zinc500}
+            />
+            <Text
+              style={[styles.selectButtonText, selectedArticle && styles.selectButtonTextActive]}
+            >
               {selectedArticle?.title ?? "보낼 편지를 선택하세요"}
             </Text>
             <Feather name="chevron-right" size={18} color={Colors.zinc400} />
@@ -224,7 +271,9 @@ export default function SendScreen() {
               size={18}
               color={selectedRecipient ? Colors.zinc900 : Colors.zinc500}
             />
-            <Text style={[styles.selectButtonText, selectedRecipient && styles.selectButtonTextActive]}>
+            <Text
+              style={[styles.selectButtonText, selectedRecipient && styles.selectButtonTextActive]}
+            >
               {recipientDisplayName ?? "받는 사람/모음을 선택하세요"}
             </Text>
             <Feather name="chevron-right" size={18} color={Colors.zinc400} />
@@ -239,7 +288,7 @@ export default function SendScreen() {
         </View>
       </ScrollView>
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
+      <View style={styles.footer}>
         <SubmitButton
           style={styles.sendButton}
           disabledStyle={styles.sendButtonDisabled}
@@ -285,15 +334,22 @@ export default function SendScreen() {
             {articles.map((article) => (
               <Pressable
                 key={article.id}
-                style={[styles.pickerItem, selectedArticle?.id === article.id && styles.pickerItemSelected]}
+                style={[
+                  styles.pickerItem,
+                  selectedArticle?.id === article.id && styles.pickerItemSelected,
+                ]}
                 onPress={() => {
                   setSelectedArticle(article);
                   setLetterPickerVisible(false);
                 }}
               >
-                <Text style={styles.pickerItemTitle} numberOfLines={1}>{article.title || "제목 없음"}</Text>
+                <Text style={styles.pickerItemTitle} numberOfLines={1}>
+                  {article.title || "제목 없음"}
+                </Text>
                 {article.content && (
-                  <Text style={styles.pickerItemSub} numberOfLines={1}>{article.content.substring(0, 60)}</Text>
+                  <Text style={styles.pickerItemSub} numberOfLines={1}>
+                    {article.content.substring(0, 60)}
+                  </Text>
                 )}
               </Pressable>
             ))}
@@ -312,7 +368,12 @@ export default function SendScreen() {
             style={[styles.segmentButton, segmentTab === "neighbor" && styles.segmentButtonActive]}
             onPress={() => setSegmentTab("neighbor")}
           >
-            <Text style={[styles.segmentButtonText, segmentTab === "neighbor" && styles.segmentButtonTextActive]}>
+            <Text
+              style={[
+                styles.segmentButtonText,
+                segmentTab === "neighbor" && styles.segmentButtonTextActive,
+              ]}
+            >
               이웃
             </Text>
           </Pressable>
@@ -320,7 +381,12 @@ export default function SendScreen() {
             style={[styles.segmentButton, segmentTab === "collection" && styles.segmentButtonActive]}
             onPress={() => setSegmentTab("collection")}
           >
-            <Text style={[styles.segmentButtonText, segmentTab === "collection" && styles.segmentButtonTextActive]}>
+            <Text
+              style={[
+                styles.segmentButtonText,
+                segmentTab === "collection" && styles.segmentButtonTextActive,
+              ]}
+            >
               모음
             </Text>
           </Pressable>
@@ -356,91 +422,99 @@ export default function SendScreen() {
                     <Pressable
                       key={neighbor.id}
                       style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
-                      onPress={() =>
-                        setPendingRecipient({ type: "neighbor", data: neighbor })
-                      }
+                      onPress={() => setPendingRecipient({ type: "neighbor", data: neighbor })}
                     >
                       <View style={styles.pickerNeighborRow}>
                         <View style={styles.pickerAvatar}>
-                          <Text style={styles.pickerAvatarText}>{(neighbor.user?.nickname ?? "?")[0]}</Text>
+                          <Text style={styles.pickerAvatarText}>
+                            {(neighbor.user?.nickname ?? "?")[0]}
+                          </Text>
                         </View>
                         <View style={styles.pickerNeighborInfo}>
-                          <Text style={styles.pickerItemTitle}>{neighbor.user?.nickname ?? "이름 없음"}</Text>
+                          <Text style={styles.pickerItemTitle}>
+                            {neighbor.user?.nickname ?? "이름 없음"}
+                          </Text>
                           <Text style={styles.pickerItemSub}>{neighbor.user?.email ?? ""}</Text>
                         </View>
-                        {isSelected && (
-                          <Feather name="check" size={18} color={Colors.zinc900} />
-                        )}
+                        {isSelected && <Feather name="check" size={18} color={Colors.zinc900} />}
                       </View>
                     </Pressable>
                   );
                 })}
               </ScrollView>
             )
+          ) : teamCollectionsQuery.isLoading ? (
+            <View style={styles.pickerEmpty}>
+              <Text style={styles.pickerEmptySub}>불러오는 중...</Text>
+            </View>
+          ) : teamCollectionsQuery.isError ? (
+            <View style={styles.pickerEmpty}>
+              <Feather name="alert-circle" size={32} color={Colors.zinc300} />
+              <Text style={styles.pickerEmptyTitle}>불러오기 실패</Text>
+              <Pressable onPress={() => teamCollectionsQuery.refetch()}>
+                <Text style={[styles.pickerEmptySub, { color: Colors.zinc900 }]}>다시 시도</Text>
+              </Pressable>
+            </View>
+          ) : teamCollections.length === 0 ? (
+            <View style={styles.pickerEmpty}>
+              <Feather name="users" size={32} color={Colors.zinc300} />
+              <Text style={styles.pickerEmptyTitle}>단체 모음이 없어요</Text>
+              <Text style={styles.pickerEmptySub}>단체 모음을 먼저 만들어주세요</Text>
+            </View>
           ) : (
-            teamCollectionsQuery.isLoading ? (
-              <View style={styles.pickerEmpty}>
-                <Text style={styles.pickerEmptySub}>불러오는 중...</Text>
-              </View>
-            ) : teamCollectionsQuery.isError ? (
-              <View style={styles.pickerEmpty}>
-                <Feather name="alert-circle" size={32} color={Colors.zinc300} />
-                <Text style={styles.pickerEmptyTitle}>불러오기 실패</Text>
-                <Pressable onPress={() => teamCollectionsQuery.refetch()}>
-                  <Text style={[styles.pickerEmptySub, { color: Colors.zinc900 }]}>다시 시도</Text>
-                </Pressable>
-              </View>
-            ) : teamCollections.length === 0 ? (
-              <View style={styles.pickerEmpty}>
-                <Feather name="users" size={32} color={Colors.zinc300} />
-                <Text style={styles.pickerEmptyTitle}>단체 모음이 없어요</Text>
-                <Text style={styles.pickerEmptySub}>단체 모음을 먼저 만들어주세요</Text>
-              </View>
-            ) : (
-              <ScrollView nestedScrollEnabled style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 8 }}>
-                {teamCollections.map((col) => {
-                  const isSelected =
-                    pendingRecipient?.type === "collection" &&
-                    pendingRecipient.data.id === col.id;
-                  return (
-                    <Pressable
-                      key={col.id}
-                      style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
-                      onPress={() =>
-                        setPendingRecipient({
-                          type: "collection",
-                          data: col,
-                        })
-                      }
-                    >
-                      <View style={styles.collectionRow}>
-                        <View style={styles.collectionIcon}>
-                          <Feather name="users" size={16} color={Colors.zinc500} />
-                        </View>
-                        <View style={styles.collectionInfo}>
-                          <Text style={styles.pickerItemTitle} numberOfLines={1}>{col.name}</Text>
-                          {col.description ? (
-                            <Text style={styles.pickerItemSub} numberOfLines={1}>{col.description}</Text>
-                          ) : null}
-                        </View>
-                        {isSelected && (
-                          <Feather name="check" size={18} color={Colors.zinc900} />
-                        )}
+            <ScrollView nestedScrollEnabled style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 8 }}>
+              {teamCollections.map((col) => {
+                const isSelected =
+                  pendingRecipient?.type === "collection" &&
+                  pendingRecipient.data.id === col.id;
+                return (
+                  <Pressable
+                    key={col.id}
+                    style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
+                    onPress={() =>
+                      setPendingRecipient({
+                        type: "collection",
+                        data: col,
+                      })
+                    }
+                  >
+                    <View style={styles.collectionRow}>
+                      <View style={styles.collectionIcon}>
+                        <Feather name="users" size={16} color={Colors.zinc500} />
                       </View>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-            )
+                      <View style={styles.collectionInfo}>
+                        <Text style={styles.pickerItemTitle} numberOfLines={1}>
+                          {col.name}
+                        </Text>
+                        {col.description ? (
+                          <Text style={styles.pickerItemSub} numberOfLines={1}>
+                            {col.description}
+                          </Text>
+                        ) : null}
+                      </View>
+                      {isSelected && <Feather name="check" size={18} color={Colors.zinc900} />}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
           )}
         </View>
 
         <Pressable
-          style={[styles.confirmPickerButton, !pendingRecipient && styles.confirmPickerButtonDisabled]}
+          style={[
+            styles.confirmPickerButton,
+            !pendingRecipient && styles.confirmPickerButtonDisabled,
+          ]}
           disabled={!pendingRecipient}
           onPress={handleConfirmRecipient}
         >
-          <Text style={[styles.confirmPickerButtonText, !pendingRecipient && styles.confirmPickerButtonTextDisabled]}>
+          <Text
+            style={[
+              styles.confirmPickerButtonText,
+              !pendingRecipient && styles.confirmPickerButtonTextDisabled,
+            ]}
+          >
             선택 완료
           </Text>
         </Pressable>
@@ -464,24 +538,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.white,
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.screenPx,
-    paddingVertical: 12,
-  },
-  headerTitle: {
-    ...Typography.bodySemiBold,
-    fontSize: 17,
-    color: Colors.zinc900,
-  },
   content: {
     flex: 1,
   },
   contentInner: {
     paddingHorizontal: Spacing.screenPx,
     paddingTop: 16,
+    paddingBottom: 24,
     gap: 24,
   },
   section: {
@@ -528,6 +591,7 @@ const styles = StyleSheet.create({
   footer: {
     paddingHorizontal: Spacing.screenPx,
     paddingTop: 12,
+    paddingBottom: Spacing.navBarPaddingBottom,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Colors.zinc100,
   },
@@ -577,16 +641,6 @@ const styles = StyleSheet.create({
   },
   recipientListArea: {
     flex: 1,
-  },
-  collectionGroupLabel: {
-    ...Typography.caption,
-    fontSize: 12,
-    color: Colors.zinc400,
-    fontWeight: "600",
-    letterSpacing: 0.5,
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    textTransform: "uppercase",
   },
   collectionRow: {
     flexDirection: "row",

@@ -113,8 +113,6 @@ function RootLayoutNav() {
           <Stack.Screen name="on-01b" />
           <Stack.Screen name="on-01c" />
           <Stack.Screen name="on-02" />
-          <Stack.Screen name="to-01" />
-          <Stack.Screen name="to-02" />
           <Stack.Screen name="to-03" />
           <Stack.Screen name="settings" options={{ presentation: "card" }} />
           <Stack.Screen name="terms" options={{ presentation: "card" }} />

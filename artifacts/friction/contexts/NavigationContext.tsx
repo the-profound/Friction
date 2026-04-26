@@ -34,8 +34,6 @@ const DETAIL_ROUTE_MAP: Record<string, DetailRouteInfo> = {
   "of-02": { tab: "OF", ofSubTab: "group" },
   "of-02-detail": { tab: "OF", ofSubTab: "group" },
   "of-03": { tab: "OF", ofSubTab: "sentence" },
-  "to-01": { tab: "TO", toSubTab: "neighbors" },
-  "to-02": { tab: "TO", toSubTab: "send" },
   "to-03": { tab: "TO", toSubTab: "history" },
   "read": { tab: "IN" },
 };

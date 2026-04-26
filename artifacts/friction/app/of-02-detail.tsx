@@ -389,8 +389,9 @@ export default function TeamCollectionDetailScreen() {
                 style={styles.addButton}
                 onPress={() =>
                   router.push({
-                    pathname: "/to-02",
+                    pathname: "/(tabs)/to",
                     params: {
+                      subTab: "send",
                       targetGroup: id,
                       targetGroupName: collection?.name ?? "",
                       returnToId: id,

@@ -1,58 +1,109 @@
-import React, { useCallback, useState, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, Pressable, FlatList, RefreshControl } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { PageHeader } from "@/components/NavBar/PageHeader";
 import { useNavigation } from "@/contexts/NavigationContext";
 import { useUser } from "@/contexts/UserContext";
-import BottomSheet from "@/components/BottomSheet/BottomSheet";
+import { NeighborsInline } from "@/components/ToInline/NeighborsInline";
+import { SendInline } from "@/components/ToInline/SendInline";
 import {
-  useListNeighbors,
   useListNeighborRequests,
   useListSendRecords,
 } from "@workspace/api-client-react";
 import type {
-  NeighborWithUser,
   NeighborRequestWithUser,
   SendRecordWithDetails,
 } from "@workspace/api-client-react";
 import { formatDeliveryTime } from "@/lib/deliverySync";
 
-interface NeighborProfileTarget {
-  nickname: string;
-  email: string;
-  id: string;
-  joinedAt?: string;
+type ParamRouter = ReturnType<typeof useRouter>;
+
+/**
+ * expo-router's `setParams` accepts a partial record of params; passing `undefined`
+ * for a key clears it at runtime, but its type signature insists on `string`. This
+ * helper centralises the safe cast so we don't sprinkle `as unknown as string` casts
+ * at every call site.
+ */
+function clearRouterParams(router: ParamRouter, keys: string[]): void {
+  const cleared = Object.fromEntries(keys.map((k) => [k, undefined])) as unknown as Record<
+    string,
+    string
+  >;
+  router.setParams(cleared);
 }
 
 export default function ToScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { toSubTab } = useNavigation();
+  const { toSubTab, setToSubTab } = useNavigation();
   const { userId } = useUser();
-  const [profileTarget, setProfileTarget] = useState<NeighborProfileTarget | null>(null);
+  const params = useLocalSearchParams<{
+    targetGroup?: string;
+    targetGroupName?: string;
+    returnToId?: string;
+    articleId?: string;
+    neighborId?: string;
+    focusRequests?: string;
+  }>();
 
-  const neighborsQuery = useListNeighbors({ userId });
-  const neighbors = (neighborsQuery.data ?? []) as NeighborWithUser[];
+  const [focusRequestsSignal, setFocusRequestsSignal] = useState<number | undefined>(undefined);
+
+  // When external entry sets focusRequests=1, switch to neighbors subtab and signal
+  // the inline component to focus the "received requests" section.
+  useEffect(() => {
+    if (params.focusRequests === "1") {
+      setToSubTab("neighbors");
+      setFocusRequestsSignal(Date.now());
+      // Clear the param so re-renders don't re-trigger.
+      clearRouterParams(router, ["focusRequests"]);
+    }
+  }, [params.focusRequests, router, setToSubTab]);
+
+  // Build a stable prefill key so SendInline re-applies prefill when params change.
+  const prefillKey = useMemo(
+    () =>
+      [
+        params.targetGroup ?? "",
+        params.targetGroupName ?? "",
+        params.articleId ?? "",
+        params.neighborId ?? "",
+        params.returnToId ?? "",
+      ].join("|"),
+    [
+      params.targetGroup,
+      params.targetGroupName,
+      params.articleId,
+      params.neighborId,
+      params.returnToId,
+    ],
+  );
+
+  const handleSendComplete = useCallback(() => {
+    // Clear prefill params so subsequent visits don't re-prefill.
+    clearRouterParams(router, [
+      "targetGroup",
+      "targetGroupName",
+      "articleId",
+      "neighborId",
+      "returnToId",
+    ]);
+  }, [router]);
+
   const requestsQuery = useListNeighborRequests({ recipientId: userId });
   const pendingRequests = (requestsQuery.data ?? []) as NeighborRequestWithUser[];
   const sendRecordsQuery = useListSendRecords({ senderId: userId });
   const sendRecords = (sendRecordsQuery.data ?? []) as SendRecordWithDetails[];
 
   const recentSendRecords = useMemo(
-    () => [...sendRecords].sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime()).slice(0, 5),
+    () =>
+      [...sendRecords]
+        .sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime())
+        .slice(0, 5),
     [sendRecords],
   );
-
-  const handleAddNeighbor = useCallback(() => {
-    router.push("/to-01");
-  }, [router]);
-
-  const handleSend = useCallback(() => {
-    router.push("/to-02");
-  }, [router]);
 
   const handleViewHistory = useCallback(() => {
     router.push("/to-03");
@@ -65,27 +116,9 @@ export default function ToScreen() {
     [router],
   );
 
-  const handleNeighborPress = useCallback((item: NeighborWithUser) => {
-    setProfileTarget({
-      nickname: item.user?.nickname ?? "이름 없음",
-      email: item.user?.email ?? "",
-      id: item.neighborUserId,
-      joinedAt: item.acceptedAt ? new Date(item.acceptedAt).toLocaleDateString("ko-KR") : undefined,
-    });
+  const handleFocusRequests = useCallback(() => {
+    setFocusRequestsSignal(Date.now());
   }, []);
-
-  const renderNeighborItem = ({ item }: { item: NeighborWithUser }) => (
-    <Pressable style={styles.listItem} onPress={() => handleNeighborPress(item)}>
-      <View style={styles.avatarCircle}>
-        <Text style={styles.avatarText}>{(item.user?.nickname ?? "?")[0]}</Text>
-      </View>
-      <View style={styles.listItemInfo}>
-        <Text style={styles.listItemTitle}>{item.user?.nickname ?? "이름 없음"}</Text>
-        <Text style={styles.listItemSub}>{item.user?.email ?? ""}</Text>
-      </View>
-      <Feather name="chevron-right" size={16} color={Colors.zinc300} />
-    </Pressable>
-  );
 
   const renderSendRecordItem = ({ item }: { item: SendRecordWithDetails }) => (
     <Pressable style={styles.listItem} onPress={() => handleArticlePress(item.articleId)}>
@@ -94,92 +127,30 @@ export default function ToScreen() {
           <Text style={[styles.listItemTitle, styles.recordTitleFlex]} numberOfLines={1}>
             {item.article?.title ?? "제목 없음"}
           </Text>
-          <View style={[styles.deliveryBadge, item.isDelivered ? styles.deliveredBadge : styles.pendingBadge]}>
-            <Text style={[styles.deliveryBadgeText, item.isDelivered ? styles.deliveredBadgeText : styles.pendingBadgeText]}>
+          <View
+            style={[
+              styles.deliveryBadge,
+              item.isDelivered ? styles.deliveredBadge : styles.pendingBadge,
+            ]}
+          >
+            <Text
+              style={[
+                styles.deliveryBadgeText,
+                item.isDelivered ? styles.deliveredBadgeText : styles.pendingBadgeText,
+              ]}
+            >
               {item.isDelivered ? "수신됨" : "배달 전"}
             </Text>
           </View>
         </View>
         <Text style={styles.listItemSub}>
-          → {item.recipient?.nickname ?? "알 수 없음"} · {formatDeliveryTime(new Date(item.deliverySlot))}
+          → {item.recipient?.nickname ?? "알 수 없음"} ·{" "}
+          {formatDeliveryTime(new Date(item.deliverySlot))}
         </Text>
       </View>
       <Feather name="chevron-right" size={16} color={Colors.zinc300} />
     </Pressable>
   );
-
-  const renderNeighborsTab = () => {
-    if (neighborsQuery.isLoading) {
-      return (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.loadingText}>불러오는 중...</Text>
-        </View>
-      );
-    }
-
-    if (neighborsQuery.isError) {
-      return (
-        <View style={styles.emptyContainer}>
-          <Feather name="alert-circle" size={40} color={Colors.zinc300} />
-          <Text style={styles.emptyTitle}>불러오기 실패</Text>
-          <Text style={styles.emptySubtitle}>네트워크를 확인하고 다시 시도해주세요</Text>
-          <Pressable style={styles.actionButton} onPress={() => { neighborsQuery.refetch(); requestsQuery.refetch(); }}>
-            <Feather name="refresh-cw" size={16} color={Colors.white} />
-            <Text style={styles.actionButtonText}>다시 시도</Text>
-          </Pressable>
-        </View>
-      );
-    }
-
-    return (
-      <View style={styles.tabContent}>
-        {pendingRequests.length > 0 && (
-          <Pressable style={styles.requestBanner} onPress={handleAddNeighbor}>
-            <Feather name="bell" size={16} color="#D97706" />
-            <Text style={styles.requestBannerText}>
-              대기 중인 이웃 요청 {pendingRequests.length}건
-            </Text>
-            <Feather name="chevron-right" size={16} color={Colors.zinc400} />
-          </Pressable>
-        )}
-
-        {neighbors.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Feather name="users" size={40} color={Colors.zinc300} />
-            <Text style={styles.emptyTitle}>이웃이 없어요</Text>
-            <Text style={styles.emptySubtitle}>편지를 주고받을 이웃을 추가해보세요</Text>
-            <Pressable style={styles.actionButton} onPress={handleAddNeighbor}>
-              <Feather name="user-plus" size={16} color={Colors.white} />
-              <Text style={styles.actionButtonText}>이웃 관리</Text>
-            </Pressable>
-          </View>
-        ) : (
-          <FlatList
-            data={neighbors}
-            keyExtractor={(item) => item.id}
-            renderItem={renderNeighborItem}
-            contentContainerStyle={styles.listContent}
-            ListHeaderComponent={
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>이웃 {neighbors.length}명</Text>
-                <Pressable onPress={handleAddNeighbor}>
-                  <Text style={styles.moreLink}>관리</Text>
-                </Pressable>
-              </View>
-            }
-            refreshControl={
-              <RefreshControl
-                refreshing={neighborsQuery.isRefetching}
-                onRefresh={() => { neighborsQuery.refetch(); requestsQuery.refetch(); }}
-                tintColor={Colors.zinc400}
-              />
-            }
-            showsVerticalScrollIndicator={false}
-          />
-        )}
-      </View>
-    );
-  };
 
   const renderHistoryTab = () => {
     if (sendRecordsQuery.isLoading) {
@@ -240,16 +211,31 @@ export default function ToScreen() {
     );
   };
 
-  const renderSendTab = () => (
-    <View style={styles.emptyContainer}>
-      <Feather name="send" size={40} color={Colors.zinc300} />
-      <Text style={styles.emptyTitle}>편지 보내기</Text>
-      <Text style={styles.emptySubtitle}>완성된 편지를 이웃에게 보내보세요</Text>
-      <Pressable style={styles.actionButton} onPress={handleSend}>
-        <Feather name="send" size={16} color={Colors.white} />
-        <Text style={styles.actionButtonText}>보내기</Text>
-      </Pressable>
+  const renderNeighborsTab = () => (
+    <View style={styles.tabContent}>
+      {pendingRequests.length > 0 && (
+        <Pressable style={styles.requestBanner} onPress={handleFocusRequests}>
+          <Feather name="bell" size={16} color="#D97706" />
+          <Text style={styles.requestBannerText}>
+            대기 중인 이웃 요청 {pendingRequests.length}건
+          </Text>
+          <Feather name="chevron-right" size={16} color={Colors.zinc400} />
+        </Pressable>
+      )}
+      <NeighborsInline focusRequestsSignal={focusRequestsSignal} />
     </View>
+  );
+
+  const renderSendTab = () => (
+    <SendInline
+      targetGroup={params.targetGroup}
+      targetGroupName={params.targetGroupName}
+      prefillArticleId={params.articleId}
+      prefillNeighborId={params.neighborId}
+      returnToId={params.returnToId}
+      prefillKey={prefillKey}
+      onSent={handleSendComplete}
+    />
   );
 
   const renderContent = () => {
@@ -265,35 +251,8 @@ export default function ToScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <PageHeader
-        title="발신함"
-        showSearch={false}
-      />
+      <PageHeader title="발신함" showSearch={false} />
       {renderContent()}
-
-      <BottomSheet
-        visible={profileTarget !== null}
-        onClose={() => setProfileTarget(null)}
-        title="이웃 프로필"
-        snapPoints={[0.42]}
-      >
-        {profileTarget && (
-          <View style={styles.profileContent}>
-            <View style={styles.profileAvatarLarge}>
-              <Text style={styles.profileAvatarLargeText}>{profileTarget.nickname[0]}</Text>
-            </View>
-            <Text style={styles.profileName}>{profileTarget.nickname}</Text>
-            <Text style={styles.profileEmail}>{profileTarget.email}</Text>
-            {profileTarget.joinedAt && (
-              <Text style={styles.profileJoined}>이웃이 된 날: {profileTarget.joinedAt}</Text>
-            )}
-            <View style={styles.profileIdRow}>
-              <Text style={styles.profileIdLabel}>ID</Text>
-              <Text style={styles.profileIdValue} selectable>{profileTarget.id}</Text>
-            </View>
-          </View>
-        )}
-      </BottomSheet>
     </View>
   );
 }
@@ -392,19 +351,6 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.zinc100,
     gap: 12,
   },
-  avatarCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.zinc100,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: {
-    ...Typography.bodySemiBold,
-    fontSize: 16,
-    color: Colors.zinc600,
-  },
   listItemInfo: {
     flex: 1,
     gap: 2,
@@ -448,60 +394,6 @@ const styles = StyleSheet.create({
     color: "#065F46",
   },
   pendingBadgeText: {
-    color: Colors.zinc500,
-  },
-  profileContent: {
-    alignItems: "center",
-    paddingTop: 8,
-    paddingBottom: 16,
-    paddingHorizontal: 20,
-    gap: 4,
-  },
-  profileAvatarLarge: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: Colors.zinc100,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 8,
-  },
-  profileAvatarLargeText: {
-    ...Typography.bodySemiBold,
-    fontSize: 26,
-    color: Colors.zinc500,
-  },
-  profileName: {
-    ...Typography.bodySemiBold,
-    fontSize: 18,
-    color: Colors.zinc900,
-  },
-  profileEmail: {
-    ...Typography.body,
-    fontSize: 14,
-    color: Colors.zinc500,
-    marginBottom: 4,
-  },
-  profileJoined: {
-    ...Typography.body,
-    fontSize: 13,
-    color: Colors.zinc400,
-    marginTop: 4,
-  },
-  profileIdRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 4,
-  },
-  profileIdLabel: {
-    ...Typography.bodySemiBold,
-    fontSize: 12,
-    color: Colors.zinc400,
-  },
-  profileIdValue: {
-    ...Typography.body,
-    fontSize: 12,
     color: Colors.zinc500,
   },
 });
