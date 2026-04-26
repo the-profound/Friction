@@ -12,6 +12,7 @@ import { ListItem } from "@tiptap/extension-list/item";
 import { UndoRedo } from "@tiptap/extensions/undo-redo";
 import { Placeholder } from "@tiptap/extensions/placeholder";
 import { Underline } from "@tiptap/extension-underline";
+import { HorizontalRule } from "@tiptap/extension-horizontal-rule";
 
 function escapeHtml(s: string): string {
   return s
@@ -40,6 +41,12 @@ function markdownToHtml(md: string): string {
       const line = lines[i];
 
       if (line.trim() === "") {
+        i++;
+        continue;
+      }
+
+      if (/^(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
+        blocks.push(`<hr>`);
         i++;
         continue;
       }
@@ -108,7 +115,8 @@ function markdownToHtml(md: string): string {
         !/^(#{1,3})\s+/.test(lines[i]) &&
         !/^>\s?/.test(lines[i]) &&
         !/^[-*]\s+/.test(lines[i]) &&
-        !/^\d+\.\s+/.test(lines[i])
+        !/^\d+\.\s+/.test(lines[i]) &&
+        !/^(-{3,}|\*{3,}|_{3,})\s*$/.test(lines[i])
       ) {
         paraLines.push(lines[i]);
         i++;
@@ -155,6 +163,7 @@ function htmlToMarkdown(html: string): string {
 
     function blockMd(el: HTMLElement, depth: number): string {
       const tag = el.tagName.toLowerCase();
+      if (tag === "hr") return `---\n\n`;
       if (tag === "h1") return `# ${childrenToInline(el)}\n\n`;
       if (tag === "h2") return `## ${childrenToInline(el)}\n\n`;
       if (tag === "h3") return `### ${childrenToInline(el)}\n\n`;
@@ -289,6 +298,7 @@ interface Command {
         Italic,
         Underline,
         Blockquote,
+        HorizontalRule,
         BulletList,
         OrderedList,
         ListItem,
