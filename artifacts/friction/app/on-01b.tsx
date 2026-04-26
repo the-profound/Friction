@@ -17,8 +17,17 @@ import { Colors, Typography, Spacing, ReaderTokens, cqiToPx, readerFontSize, rea
 import {
   splitContentToPages,
   validatePages,
+  splitContentForDivision,
+  splitPageContentForDivision,
+  simulateGreedyJobs,
+  resolveBSJob,
+  runGreedy,
+  bsCandidateKey,
+  bsCandidatesForJob,
+  type BSJob,
+  type BSResult,
+  type DivisionWarning,
 } from "@/lib/pageDivision";
-import type { DivisionWarning } from "@/lib/pageDivision";
 import { canTransitionForward, canStepBack } from "@/lib/articleStatusCycle";
 import type { ArticleStatus } from "@/lib/policies";
 import { MarkdownPolicy } from "@/lib/policies";
@@ -29,182 +38,16 @@ import {
   TransitionArticleBodyTargetStatus,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { parseMarkdownBlocks } from "@/utils/markdownParser";
-import MarkdownBlock from "@/components/MarkdownBlock/MarkdownBlock";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
+import PretextMeasureLayer, {
+  type MeasureRequest,
+  type MeasureCandidate,
+} from "@/components/PretextMeasureLayer/PretextMeasureLayer";
 
 const PAGE_DIVIDER = MarkdownPolicy.PAGE_DIVIDER;
 
-const SECTION_BOUNDARY_RE = /^(#{1,3}\s)/;
-
-// ─── 그리디 분할 엔진 타입 ────────────────────────────────────────────────────
-type BSJob = {
-  paraIdx: number;
-  allWords: string[];    // 원본 단락의 전체 단어 배열
-  wordOffset: number;    // 이 job이 탐색을 시작하는 단어 인덱스
-  lo: number;
-  hi: number;
-  best: number;
-  targetH: number;       // 이 job의 목표 높이 (소제목 잔여 또는 전체 threshold)
-};
-
-// 분할 결과: 단락 인덱스 → [{단어 시작 오프셋, 단어 수}]
-type BSResult = { wordOffset: number; wordCount: number };
-
-type SplitEngineState =
-  | {
-      phase: 'para';
-      paragraphs: string[];
-      scope: 'all' | { pageIndex: number };
-      threshold: number;
-      paraKey: number;
-    }
-  | {
-      phase: 'bs';
-      paragraphs: string[];
-      scope: 'all' | { pageIndex: number };
-      threshold: number;
-      paraHeights: Record<number, number>;
-      bsJobs: BSJob[];
-      currentJobIdx: number;
-      bsKey: number;
-      splitResults: Record<number, BSResult[]>; // 완료된 분할 결과 누적
-    };
-
-/**
- * Greedy 분할 알고리즘 (순수 함수)
- *
- * 규칙 1: 소제목(###) → 무조건 앞에서 페이지 분할
- * 규칙 2: 소제목 페이지에 본문 결합 — 소제목만 남기지 않는다.
- *   currentParas가 소제목만 있고 다음 문단이 넘칠 경우 BS로 소제목 뒤를 채움.
- * 규칙 3: 일반 문단 — 넘칠 때 이전 \n\n에서 자름 (Case A).
- *   페이지 첫 문단이라 이전 \n\n이 없으면 BS 단어 단위로 자름 (Case B).
- *
- * splitResults: 각 단락의 다단(多段) 분할 정보. 한 문단이 3~4페이지가 되더라도
- * 결과 배열의 각 entry를 순서대로 적용해 모두 별도 페이지로 분리한다.
- */
-function runGreedy(
-  paragraphs: string[],
-  paraHeights: Record<number, number>,
-  splitResults: Record<number, BSResult[]>,
-  threshold: number,
-): string[] {
-  const pages: string[] = [];
-  let currentParas: string[] = [];
-  let currentH = 0;
-
-  /**
-   * BS 분할 적용: splitResults[paraIdx]의 청크들을 순서대로 페이지에 올린다.
-   * - 첫 번째 청크: 현재 페이지(currentParas)에 이어 붙인 뒤 flush
-   * - 이후 청크: 각각 독립 페이지
-   * - 마지막 남은 단어: 다음 페이지의 시작(currentParas)에 넣음
-   */
-  const applyBSSplit = (para: string, paraH: number, paraIdx: number) => {
-    const results = splitResults[paraIdx];
-    const allWords = para.split(/ +/).filter((w) => w);
-    const isListItem = /^-\s/.test(para);
-
-    if (!results || results.length === 0) {
-      // BS 결과 없음 → 단락 전체를 현재 페이지에 올리고 flush
-      pages.push([...currentParas, para].join('\n\n'));
-      currentParas = [];
-      currentH = 0;
-      return;
-    }
-
-    let offset = 0;
-    for (let ri = 0; ri < results.length; ri++) {
-      const { wordOffset, wordCount } = results[ri];
-      // wordOffset은 항상 offset과 같아야 하지만 방어적으로 사용
-      const rawChunk = allWords.slice(wordOffset, wordOffset + wordCount).join(' ');
-      const chunk = ri > 0 && isListItem && rawChunk ? '\u3000' + rawChunk : rawChunk;
-      offset = wordOffset + wordCount;
-
-      if (ri === 0) {
-        // 첫 청크: 현재 페이지(소제목 등)에 이어 붙임
-        if (rawChunk) currentParas.push(rawChunk);
-        pages.push(currentParas.join('\n\n'));
-        currentParas = [];
-        currentH = 0;
-      } else {
-        // 이후 청크: 각각 독립 페이지
-        if (chunk) pages.push(chunk);
-      }
-    }
-
-    // 마지막 남은 단어 → 다음 페이지의 첫 요소로
-    if (offset < allWords.length) {
-      const rawRemaining = allWords.slice(offset).join(' ');
-      const remaining = isListItem ? '\u3000' + rawRemaining : rawRemaining;
-      currentParas = [remaining];
-      currentH = paraH * (allWords.length - offset) / allWords.length;
-    }
-  };
-
-  for (let i = 0; i < paragraphs.length; i++) {
-    const para = paragraphs[i];
-    const paraH = paraHeights[i] ?? 0;
-    const firstLine = para.split('\n')[0] ?? '';
-    const isHeading = SECTION_BOUNDARY_RE.test(firstLine);
-
-    // 규칙 1: 소제목 → 무조건 앞에서 페이지 분할
-    if (isHeading && currentParas.length > 0) {
-      pages.push(currentParas.join('\n\n'));
-      currentParas = [];
-      currentH = 0;
-    }
-
-    if (currentH + paraH <= threshold) {
-      // 제한 이내: 계속 추가
-      currentParas.push(para);
-      currentH += paraH;
-    } else if (currentParas.length > 0) {
-      const isHeadingOnlyPage = currentParas.every(
-        (p) => SECTION_BOUNDARY_RE.test(p.split('\n')[0] ?? ''),
-      );
-      if (isHeadingOnlyPage) {
-        // 규칙 2: 소제목만 있는 페이지 → BS 결과로 잔여 공간 채움
-        applyBSSplit(para, paraH, i);
-      } else {
-        // 규칙 3 Case A: 이전 \n\n에서 자름
-        pages.push(currentParas.join('\n\n'));
-        currentParas = [];
-        currentH = 0;
-        // 이동된 단락 자체가 threshold 초과이고 BS 결과가 있으면 분할 적용
-        if (paraH > threshold && splitResults[i]?.length) {
-          applyBSSplit(para, paraH, i);
-        } else {
-          currentParas = [para];
-          currentH = paraH;
-        }
-      }
-    } else {
-      // 규칙 3 Case B: 페이지 첫 문단 초과 → BS 단어 단위 분할
-      applyBSSplit(para, paraH, i);
-    }
-  }
-
-  if (currentParas.length > 0) pages.push(currentParas.join('\n\n'));
-  return pages.filter((p) => p.trim());
-}
-
-function splitAtSectionBoundaries(para: string): string[] {
-  const lines = para.split('\n');
-  const result: string[] = [];
-  let current: string[] = [];
-  for (const line of lines) {
-    if (SECTION_BOUNDARY_RE.test(line) && current.some((l) => l.trim())) {
-      result.push(current.join('\n').trim());
-      current = [line];
-    } else {
-      current.push(line);
-    }
-  }
-  if (current.some((l) => l.trim())) {
-    result.push(current.join('\n').trim());
-  }
-  return result.filter((c) => c.trim());
-}
+const PARA_KEY_PREFIX = "para_";
+const PAGE_KEY_PREFIX = "page_";
 
 function useReaderLayout(screenWidth: number, screenHeight: number) {
   return useMemo(() => {
@@ -238,6 +81,7 @@ export default function DividingScreen() {
   const [content, setContent] = useState("");
   const [mode, setMode] = useState<"preview" | "edit">("preview");
   const [stepBackConfirmVisible, setStepBackConfirmVisible] = useState(false);
+  const [splitting, setSplitting] = useState(false);
   const initializedRef = useRef(false);
 
   useEffect(() => {
@@ -268,18 +112,71 @@ export default function DividingScreen() {
   const pageContentHeight = safeAreaHeight;
 
   const [pageHeights, setPageHeights] = useState<Record<number, number>>({});
-  const handleMeasureHeight = useCallback((idx: number, height: number) => {
+
+  // ─── Pretext 측정 레이어 ────────────────────────────────────────────────────
+  // (1) 경고용 페이지 측정: debouncedContent 변경 시 measurePages 전체를 다시 측정
+  // (2) 엔진용 BS 측정: handleAutoSplit/handleInsertDivider가 필요할 때 imperative하게 호출
+  const warningRequest = useMemo<MeasureRequest | null>(() => {
+    if (measurePages.length === 0) return null;
+    return {
+      candidates: measurePages.map((p) => ({
+        key: `${PAGE_KEY_PREFIX}${p.pageIndex}`,
+        content: p.content,
+      })),
+      width: safeAreaWidth,
+      paddingX,
+      paddingTop: paddingY,
+      paddingBottom: insets.bottom + paddingY,
+      fontSize: bodyFontSize,
+      lineHeight: bodyLineHeight,
+      letterSpacing: bodyLetterSpacing,
+    };
+  }, [measurePages, safeAreaWidth, paddingX, paddingY, insets.bottom, bodyFontSize, bodyLineHeight, bodyLetterSpacing]);
+
+  const handleWarningMeasured = useCallback((heights: Record<string, number>) => {
     setPageHeights((prev) => {
-      if (prev[idx] === height) return prev;
-      return { ...prev, [idx]: height };
+      const next: Record<number, number> = {};
+      for (const k in heights) {
+        if (k.startsWith(PAGE_KEY_PREFIX)) {
+          const idx = Number(k.slice(PAGE_KEY_PREFIX.length));
+          if (Number.isFinite(idx)) next[idx] = heights[k];
+        }
+      }
+      const prevKeys = Object.keys(prev);
+      const nextKeys = Object.keys(next);
+      if (prevKeys.length === nextKeys.length && nextKeys.every((k) => prev[Number(k)] === next[Number(k)])) {
+        return prev;
+      }
+      return next;
     });
   }, []);
 
-  // ─── 그리디 분할 엔진 상태 ───────────────────────────────────────────────────
-  const [splitEngine, setSplitEngine] = useState<SplitEngineState | null>(null);
-  const [splitParaHeights, setSplitParaHeights] = useState<Record<number, number>>({});
-  const [bsMeasuredH, setBsMeasuredH] = useState<number | null>(null);
-  const splitKeyRef = useRef(0);
+  const [engineRequest, setEngineRequest] = useState<MeasureRequest | null>(null);
+  const engineResolveRef = useRef<((heights: Record<string, number>) => void) | null>(null);
+
+  const measureEngine = useCallback(
+    (candidates: MeasureCandidate[]): Promise<Record<string, number>> => {
+      return new Promise((resolve) => {
+        engineResolveRef.current = resolve;
+        setEngineRequest({
+          candidates,
+          width: safeAreaWidth,
+          paddingX,
+          fontSize: bodyFontSize,
+          lineHeight: bodyLineHeight,
+          letterSpacing: bodyLetterSpacing,
+        });
+      });
+    },
+    [safeAreaWidth, paddingX, bodyFontSize, bodyLineHeight, bodyLetterSpacing],
+  );
+
+  const handleEngineMeasured = useCallback((heights: Record<string, number>) => {
+    const r = engineResolveRef.current;
+    engineResolveRef.current = null;
+    setEngineRequest(null);
+    if (r) r(heights);
+  }, []);
 
   // 분할 임계값: 자동분할과 이 페이지 나누기 동일하게 사용
   const splitThreshold = useMemo(() => {
@@ -299,231 +196,142 @@ export default function DividingScreen() {
         level: "red" as const,
         reason: "이 페이지는 읽기 화면에서 스크롤이 필요할 수 있습니다",
       }));
-  }, [measurePages, pageHeights, pageContentHeight]);
+  }, [measurePages, pageHeights, pageContentHeight, bodyLineHeight]);
 
   const warnings = useMemo(() => [...baseWarnings, ...heightWarnings], [baseWarnings, heightWarnings]);
   const hasRedWarnings = warnings.some((w) => w.level === "red");
 
-  const handleInsertDivider = useCallback((afterPageIndex: number) => {
-    const rawPages = content.split(new RegExp(`\n?${PAGE_DIVIDER}\n?`, "m"));
-    if (afterPageIndex < 0 || afterPageIndex >= rawPages.length) return;
-    const pageContent = rawPages[afterPageIndex];
-    const rawParas = pageContent.split("\n\n").filter((p) => p.trim());
-    const paragraphs = rawParas.flatMap(splitAtSectionBoundaries);
-    if (paragraphs.length < 2) {
-      Alert.alert("분할 불가", "이 페이지에는 나눌 수 있는 단락이 부족합니다.");
-      return;
-    }
-    setSplitParaHeights({});
-    setBsMeasuredH(null);
-    setSplitEngine({
-      phase: 'para',
-      paragraphs,
-      scope: { pageIndex: afterPageIndex },
-      threshold: splitThreshold,
-      paraKey: ++splitKeyRef.current,
-    });
-  }, [content, splitThreshold]);
+  // ─── 자동 분할 엔진 (lib/pageDivision) ──────────────────────────────────────
+  /**
+   * 단락 배열을 받아 (1) 단락 높이 측정, (2) BS 잡 큐 처리, (3) runGreedy
+   * 순서로 페이지 배열을 만든다. BS는 한 paragraph의 후보 1..N을 한 번의
+   * Pretext mount로 모두 측정한 뒤 JS에서 BS 수렴 → 화면 깜빡임을 줄인다.
+   */
+  const runDivisionEngine = useCallback(
+    async (paragraphs: string[]): Promise<string[] | null> => {
+      if (paragraphs.length < 1) return null;
 
-  const handleRemoveDivider = useCallback((pageBreakIndex: number) => {
-    const parts = content.split(new RegExp(`\n?${PAGE_DIVIDER}\n?`, "m"));
-    if (pageBreakIndex < 0 || pageBreakIndex >= parts.length - 1) return;
-    parts[pageBreakIndex] = parts[pageBreakIndex] + "\n\n" + parts[pageBreakIndex + 1];
-    parts.splice(pageBreakIndex + 1, 1);
-    setContent(parts.join(`\n${PAGE_DIVIDER}\n`));
-  }, [content]);
-
-  const handleAutoSplit = useCallback(() => {
-    const plain = content.replace(new RegExp(`\n?${PAGE_DIVIDER}\n?`, "gm"), "\n\n");
-    const rawParagraphs = plain.split("\n\n").filter((p) => p.trim());
-    const paragraphs = rawParagraphs.flatMap(splitAtSectionBoundaries);
-    if (paragraphs.length < 2) {
-      Alert.alert("자동 분할 불가", "단락이 부족하여 자동 분할할 수 없습니다.");
-      return;
-    }
-    setSplitParaHeights({});
-    setBsMeasuredH(null);
-    setSplitEngine({
-      phase: 'para',
-      paragraphs,
-      scope: 'all',
-      threshold: splitThreshold,
-      paraKey: ++splitKeyRef.current,
-    });
-  }, [content, splitThreshold]);
-
-  // ─── 그리디 엔진: 단락 측정 완료 후 처리 ────────────────────────────────────
-  useEffect(() => {
-    if (!splitEngine || splitEngine.phase !== 'para') return;
-    const allMeasured = splitEngine.paragraphs.every((_, i) => splitParaHeights[i] !== undefined);
-    if (!allMeasured) return;
-
-    // 그리디 시뮬레이션: 어떤 단락이 BS가 필요한지, targetH는 얼마인지 파악
-    const { paragraphs, threshold } = splitEngine;
-    const bsJobs: BSJob[] = [];
-    let simParaIdxs: number[] = [];
-    let simH = 0;
-
-    for (let i = 0; i < paragraphs.length; i++) {
-      const para = paragraphs[i];
-      const paraH = splitParaHeights[i] ?? 0;
-      const isHeading = SECTION_BOUNDARY_RE.test(para.split('\n')[0] ?? '');
-
-      if (isHeading && simParaIdxs.length > 0) {
-        simParaIdxs = [];
-        simH = 0;
-      }
-
-      if (simH + paraH <= threshold) {
-        simParaIdxs.push(i);
-        simH += paraH;
-      } else if (simParaIdxs.length > 0) {
-        const isHeadingOnlyPage = simParaIdxs.every(
-          (pi) => SECTION_BOUNDARY_RE.test(paragraphs[pi].split('\n')[0] ?? ''),
-        );
-        if (isHeadingOnlyPage) {
-          // 규칙 2: 소제목 페이지 잔여 공간 채우기 (targetH = 소제목 높이 제외한 나머지)
-          const remainingH = Math.max(0, threshold - simH);
-          const allWords = para.split(/ +/).filter((w) => w);
-          if (allWords.length > 1 && remainingH > 0) {
-            bsJobs.push({ paraIdx: i, allWords, wordOffset: 0, lo: 1, hi: allWords.length, best: 1, targetH: remainingH });
-          }
-          simParaIdxs = [i];
-          simH = paraH * 0.5;
-        } else {
-          // 규칙 3 Case A: 이전 \n\n에서 자름, 현재 단락 다음 페이지
-          simParaIdxs = [i];
-          simH = paraH;
-          // 이동된 단락 자체가 threshold를 초과하면 BSJob 추가 (마지막 단락 분할 누락 방지)
-          if (paraH > threshold) {
-            const allWords = para.split(/ +/).filter((w) => w);
-            if (allWords.length > 1) {
-              bsJobs.push({ paraIdx: i, allWords, wordOffset: 0, lo: 1, hi: allWords.length, best: 1, targetH: threshold });
-              simH = paraH * 0.5;
-            }
-          }
-        }
-      } else {
-        // 규칙 3 Case B: 페이지 첫 단락 초과 → 전체 threshold 기준 BS
-        const allWords = para.split(/ +/).filter((w) => w);
-        if (allWords.length > 1) {
-          bsJobs.push({ paraIdx: i, allWords, wordOffset: 0, lo: 1, hi: allWords.length, best: 1, targetH: threshold });
-        }
-        simParaIdxs = [i];
-        simH = paraH * 0.5;
-      }
-    }
-
-    if (bsJobs.length > 0) {
-      setSplitEngine({
-        phase: 'bs',
-        paragraphs: splitEngine.paragraphs,
-        scope: splitEngine.scope,
-        threshold: splitEngine.threshold,
-        paraHeights: { ...splitParaHeights },
-        bsJobs,
-        currentJobIdx: 0,
-        bsKey: ++splitKeyRef.current,
-        splitResults: {},
+      // Phase 1: 단락 높이 일괄 측정
+      const paraCandidates: MeasureCandidate[] = paragraphs.map((p, i) => ({
+        key: `${PARA_KEY_PREFIX}${i}`,
+        content: p,
+      }));
+      const paraHeightMap = await measureEngine(paraCandidates);
+      const paraHeights: Record<number, number> = {};
+      paragraphs.forEach((_, i) => {
+        paraHeights[i] = paraHeightMap[`${PARA_KEY_PREFIX}${i}`] ?? 0;
       });
-    } else {
-      const resultPages = runGreedy(splitEngine.paragraphs, splitParaHeights, {}, splitEngine.threshold);
-      const { scope } = splitEngine;
-      if (scope === 'all') {
-        const joined = resultPages.join(`\n${PAGE_DIVIDER}\n`);
+
+      // Phase 2: BS 잡 결정 → 후보 일괄 측정 → JS BS → 잔여 cuts 반복
+      const initialJobs = simulateGreedyJobs(paragraphs, paraHeights, splitThreshold);
+      const splitResults: Record<number, BSResult[]> = {};
+      let pendingJobs: BSJob[] = initialJobs;
+
+      while (pendingJobs.length > 0) {
+        const candidates: MeasureCandidate[] = [];
+        for (const job of pendingJobs) {
+          for (const c of bsCandidatesForJob(job)) {
+            candidates.push({
+              key: bsCandidateKey(job.paraIdx, job.wordOffset, c.count),
+              content: c.content,
+            });
+          }
+        }
+        if (candidates.length === 0) break;
+
+        const heights = await measureEngine(candidates);
+
+        const nextPending: BSJob[] = [];
+        for (const job of pendingJobs) {
+          const result = resolveBSJob(job, heights);
+          if (!splitResults[job.paraIdx]) splitResults[job.paraIdx] = [];
+          splitResults[job.paraIdx].push({
+            wordOffset: job.wordOffset,
+            wordCount: result.wordCount,
+          });
+          if (result.hasRemaining) {
+            nextPending.push({
+              paraIdx: job.paraIdx,
+              allWords: job.allWords,
+              wordOffset: result.nextOffset,
+              targetH: splitThreshold,
+            });
+          }
+        }
+        pendingJobs = nextPending;
+      }
+
+      // Phase 3: 그리디 컴팩션
+      return runGreedy(paragraphs, paraHeights, splitResults, splitThreshold);
+    },
+    [measureEngine, splitThreshold],
+  );
+
+  const applyEngineResult = useCallback(
+    (engineOutPages: string[], scope: "all" | { pageIndex: number }) => {
+      if (scope === "all") {
+        const joined = engineOutPages.join(`\n${PAGE_DIVIDER}\n`);
         setContent(joined);
         setDebouncedContent(joined);
       } else {
         const rawPages = content.split(new RegExp(`\n?${PAGE_DIVIDER}\n?`, "m"));
-        rawPages.splice(scope.pageIndex, 1, ...resultPages);
+        rawPages.splice(scope.pageIndex, 1, ...engineOutPages);
         const joined = rawPages.join(`\n${PAGE_DIVIDER}\n`);
         setContent(joined);
         setDebouncedContent(joined);
       }
       setPageHeights({});
-      setSplitEngine(null);
-      setSplitParaHeights({});
+    },
+    [content],
+  );
+
+  const handleAutoSplit = useCallback(async () => {
+    if (splitting) return;
+    const paragraphs = splitContentForDivision(content);
+    if (paragraphs.length < 2) {
+      Alert.alert("자동 분할 불가", "단락이 부족하여 자동 분할할 수 없습니다.");
+      return;
     }
-  }, [splitEngine, splitParaHeights, content]);
-
-  // ─── 그리디 엔진: binary search 측정 스텝 처리 ───────────────────────────────
-  // 한 문단이 여러 페이지에 걸칠 경우, job 완료 후 남은 단어가 있으면
-  // 자동으로 다음 BSJob을 큐에 추가하여 끝까지 분할한다.
-  useEffect(() => {
-    if (!splitEngine || splitEngine.phase !== 'bs') return;
-    if (bsMeasuredH === null) return;
-
-    const { bsJobs, currentJobIdx, threshold, splitResults } = splitEngine;
-    const job = { ...bsJobs[currentJobIdx] };
-    const mid = Math.floor((job.lo + job.hi) / 2);
-
-    if (bsMeasuredH <= job.targetH) {
-      job.best = mid;
-      job.lo = mid + 1;
-    } else {
-      job.hi = mid - 1;
+    setSplitting(true);
+    try {
+      const out = await runDivisionEngine(paragraphs);
+      if (out) applyEngineResult(out, "all");
+    } finally {
+      setSplitting(false);
     }
+  }, [content, splitting, runDivisionEngine, applyEngineResult]);
 
-    const newBsJobs = [...bsJobs];
-    newBsJobs[currentJobIdx] = job;
-    setBsMeasuredH(null);
-
-    if (job.lo > job.hi) {
-      // ── 이 job 완료: 결과를 splitResults에 기록 ──
-      const newSplitResults: Record<number, BSResult[]> = { ...splitResults };
-      const entry: BSResult = { wordOffset: job.wordOffset, wordCount: job.best };
-      newSplitResults[job.paraIdx] = [...(newSplitResults[job.paraIdx] ?? []), entry];
-
-      // ── 남은 단어 확인: 있으면 새 BSJob 추가 (연속 분할 루프) ──
-      const nextWordOffset = job.wordOffset + job.best;
-      if (nextWordOffset < job.allWords.length) {
-        const remainingWords = job.allWords.slice(nextWordOffset);
-        const nextJob: BSJob = {
-          paraIdx: job.paraIdx,
-          allWords: job.allWords,
-          wordOffset: nextWordOffset,
-          lo: 1,
-          hi: remainingWords.length, // 모든 남은 단어가 맞으면 best = length (분할 없음)
-          best: Math.min(1, remainingWords.length),
-          targetH: threshold, // 다음 페이지는 항상 전체 threshold
-        };
-        // 현재 job 다음에 삽입
-        newBsJobs.splice(currentJobIdx + 1, 0, nextJob);
+  const handleInsertDivider = useCallback(
+    async (afterPageIndex: number) => {
+      if (splitting) return;
+      const rawPages = content.split(new RegExp(`\n?${PAGE_DIVIDER}\n?`, "m"));
+      if (afterPageIndex < 0 || afterPageIndex >= rawPages.length) return;
+      const paragraphs = splitPageContentForDivision(rawPages[afterPageIndex]);
+      if (paragraphs.length < 2) {
+        Alert.alert("분할 불가", "이 페이지에는 나눌 수 있는 단락이 부족합니다.");
+        return;
       }
-
-      const nextJobIdx = currentJobIdx + 1;
-      if (nextJobIdx < newBsJobs.length) {
-        // 다음 job으로 이동
-        setSplitEngine({
-          ...splitEngine,
-          bsJobs: newBsJobs,
-          currentJobIdx: nextJobIdx,
-          bsKey: ++splitKeyRef.current,
-          splitResults: newSplitResults,
-        });
-      } else {
-        // 모든 job 완료 → runGreedy 실행
-        const resultPages = runGreedy(splitEngine.paragraphs, splitEngine.paraHeights, newSplitResults, threshold);
-        const { scope } = splitEngine;
-        if (scope === 'all') {
-          const joined = resultPages.join(`\n${PAGE_DIVIDER}\n`);
-          setContent(joined);
-          setDebouncedContent(joined);
-        } else {
-          const rawPages = content.split(new RegExp(`\n?${PAGE_DIVIDER}\n?`, "m"));
-          rawPages.splice(scope.pageIndex, 1, ...resultPages);
-          const joined = rawPages.join(`\n${PAGE_DIVIDER}\n`);
-          setContent(joined);
-          setDebouncedContent(joined);
-        }
-        setPageHeights({});
-        setSplitEngine(null);
-        setSplitParaHeights({});
+      setSplitting(true);
+      try {
+        const out = await runDivisionEngine(paragraphs);
+        if (out) applyEngineResult(out, { pageIndex: afterPageIndex });
+      } finally {
+        setSplitting(false);
       }
-    } else {
-      setSplitEngine({ ...splitEngine, bsJobs: newBsJobs, bsKey: ++splitKeyRef.current });
-    }
-  }, [bsMeasuredH, splitEngine, content]);
+    },
+    [content, splitting, runDivisionEngine, applyEngineResult],
+  );
+
+  const handleRemoveDivider = useCallback(
+    (pageBreakIndex: number) => {
+      const parts = content.split(new RegExp(`\n?${PAGE_DIVIDER}\n?`, "m"));
+      if (pageBreakIndex < 0 || pageBreakIndex >= parts.length - 1) return;
+      parts[pageBreakIndex] = parts[pageBreakIndex] + "\n\n" + parts[pageBreakIndex + 1];
+      parts.splice(pageBreakIndex + 1, 1);
+      setContent(parts.join(`\n${PAGE_DIVIDER}\n`));
+    },
+    [content],
+  );
 
   const handleNext = useCallback(async () => {
     const result = canTransitionForward("DIVIDING" as ArticleStatus, {
@@ -646,87 +454,16 @@ export default function DividingScreen() {
           <Text style={[styles.toolbarText, mode === "edit" && styles.toolbarTextActive]}>편집</Text>
         </Pressable>
         <View style={styles.toolbarSpacer} />
-        <Pressable style={styles.autoSplitButton} onPress={handleAutoSplit}>
+        <Pressable style={styles.autoSplitButton} onPress={handleAutoSplit} disabled={splitting}>
           <Feather name="scissors" size={14} color={Colors.zinc600} />
           <Text style={styles.autoSplitText}>자동분할</Text>
         </Pressable>
       </View>
 
-      {/* 경고 표시용: 현재 페이지들의 전체 높이 측정 (패딩 포함) */}
-      {measurePages.map((page, idx) => {
-        const blocks = parseMarkdownBlocks(page.content);
-        return (
-          <View
-            key={`measure-${idx}`}
-            pointerEvents="none"
-            style={{
-              position: "absolute",
-              opacity: 0,
-              width: safeAreaWidth,
-              paddingHorizontal: paddingX,
-              paddingTop: paddingY,
-              paddingBottom: insets.bottom + paddingY,
-            }}
-            onLayout={(e) => handleMeasureHeight(idx, e.nativeEvent.layout.height)}
-          >
-            {blocks.map((block, bi) => (
-              <View key={bi} style={{ marginBottom: bodyLineHeight * 0.6 }}>
-                <MarkdownBlock block={block} onCollect={() => {}} fontSize={bodyFontSize} lineHeight={bodyLineHeight} letterSpacing={bodyLetterSpacing} />
-              </View>
-            ))}
-          </View>
-        );
-      })}
-
-      {/* 그리디 엔진: 단락별 높이 측정 (패딩 없음 → netHeight와 직접 비교) */}
-      {splitEngine?.phase === 'para' && splitEngine.paragraphs.map((para, i) => {
-        const blocks = parseMarkdownBlocks(para);
-        return (
-          <View
-            key={`split-para-${splitEngine.paraKey}-${i}`}
-            pointerEvents="none"
-            style={{ position: "absolute", opacity: 0, width: safeAreaWidth, paddingHorizontal: paddingX }}
-            onLayout={(e) => {
-              const h = e.nativeEvent.layout.height;
-              setSplitParaHeights((prev) => {
-                if (prev[i] === h) return prev;
-                return { ...prev, [i]: h };
-              });
-            }}
-          >
-            {blocks.map((block, bi) => (
-              <View key={bi} style={{ marginBottom: bodyLineHeight * 0.6 }}>
-                <MarkdownBlock block={block} onCollect={() => {}} fontSize={bodyFontSize} lineHeight={bodyLineHeight} letterSpacing={bodyLetterSpacing} />
-              </View>
-            ))}
-          </View>
-        );
-      })}
-
-      {/* 그리디 엔진: binary search 후보 텍스트 측정 (1개씩) */}
-      {(() => {
-        if (!splitEngine || splitEngine.phase !== 'bs') return null;
-        const job = splitEngine.bsJobs[splitEngine.currentJobIdx];
-        if (!job || job.lo > job.hi) return null;
-        const mid = Math.floor((job.lo + job.hi) / 2);
-        // wordOffset 이후 mid개의 단어만 측정 (allWords 기반)
-        const candidateText = job.allWords.slice(job.wordOffset, job.wordOffset + mid).join(' ');
-        const blocks = parseMarkdownBlocks(candidateText);
-        return (
-          <View
-            key={`split-bs-${splitEngine.bsKey}`}
-            pointerEvents="none"
-            style={{ position: "absolute", opacity: 0, width: safeAreaWidth, paddingHorizontal: paddingX }}
-            onLayout={(e) => setBsMeasuredH(e.nativeEvent.layout.height)}
-          >
-            {blocks.map((block, bi) => (
-              <View key={bi} style={{ marginBottom: bodyLineHeight * 0.6 }}>
-                <MarkdownBlock block={block} onCollect={() => {}} fontSize={bodyFontSize} lineHeight={bodyLineHeight} letterSpacing={bodyLetterSpacing} />
-              </View>
-            ))}
-          </View>
-        );
-      })()}
+      {/* 단일 Pretext 측정 레이어 — (1) 페이지 경고용 측정 */}
+      <PretextMeasureLayer request={warningRequest} onMeasured={handleWarningMeasured} />
+      {/* 단일 Pretext 측정 레이어 — (2) 자동분할 엔진용 BS 측정 */}
+      <PretextMeasureLayer request={engineRequest} onMeasured={handleEngineMeasured} />
 
       {mode === "edit" ? (
         <View style={styles.editContainer}>
@@ -775,6 +512,7 @@ export default function DividingScreen() {
                       <Pressable
                         style={styles.splitPageButton}
                         onPress={() => handleInsertDivider(idx)}
+                        disabled={splitting}
                       >
                         <Feather name="scissors" size={14} color={Colors.zinc600} />
                         <Text style={styles.splitPageText}>이 페이지 나누기</Text>
@@ -793,6 +531,7 @@ export default function DividingScreen() {
                     <Pressable
                       style={styles.addDividerRow}
                       onPress={() => handleInsertDivider(idx)}
+                      disabled={splitting}
                     >
                       <View style={styles.addDividerLine} />
                       <View style={styles.addDividerButton}>
