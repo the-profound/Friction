@@ -13,32 +13,43 @@ export interface UserSearchResult {
   requestId?: string;
 }
 
-export const searchUsersByNicknameUrl = (nickname: string, userId: string) =>
-  `/api/users/search?nickname=${encodeURIComponent(nickname)}&userId=${encodeURIComponent(userId)}`;
+export interface SearchUsersOptions {
+  excludeTeamId?: string;
+}
+
+export const searchUsersByNicknameUrl = (nickname: string, userId: string, options?: SearchUsersOptions) => {
+  let url = `/api/users/search?nickname=${encodeURIComponent(nickname)}&userId=${encodeURIComponent(userId)}`;
+  if (options?.excludeTeamId) {
+    url += `&excludeTeamId=${encodeURIComponent(options.excludeTeamId)}`;
+  }
+  return url;
+};
 
 export const searchUsersByNickname = async (
   nickname: string,
   userId: string,
-  options?: RequestInit,
+  options?: SearchUsersOptions & RequestInit,
 ): Promise<UserSearchResult[]> => {
-  return customFetch<UserSearchResult[]>(searchUsersByNicknameUrl(nickname, userId), {
-    ...options,
+  const { excludeTeamId, ...fetchOptions } = options ?? {};
+  return customFetch<UserSearchResult[]>(searchUsersByNicknameUrl(nickname, userId, { excludeTeamId }), {
+    ...fetchOptions,
     method: "GET",
   });
 };
 
-export const getSearchUsersByNicknameQueryKey = (nickname: string, userId: string) =>
-  ["users", "search", nickname, userId] as const;
+export const getSearchUsersByNicknameQueryKey = (nickname: string, userId: string, options?: SearchUsersOptions) =>
+  ["users", "search", nickname, userId, options?.excludeTeamId ?? null] as const;
 
 export const useSearchUsersByNickname = (
   nickname: string,
   userId: string,
-  options?: Omit<UseQueryOptions<UserSearchResult[]>, "queryKey" | "queryFn" | "enabled">,
+  options?: SearchUsersOptions & Omit<UseQueryOptions<UserSearchResult[]>, "queryKey" | "queryFn" | "enabled">,
 ): UseQueryResult<UserSearchResult[]> => {
+  const { excludeTeamId, ...queryOptions } = options ?? {};
   return useQuery({
-    queryKey: getSearchUsersByNicknameQueryKey(nickname, userId),
-    queryFn: () => searchUsersByNickname(nickname, userId),
+    queryKey: getSearchUsersByNicknameQueryKey(nickname, userId, { excludeTeamId }),
+    queryFn: () => searchUsersByNickname(nickname, userId, { excludeTeamId }),
     enabled: nickname.trim().length > 0 && userId.length > 0,
-    ...options,
+    ...queryOptions,
   });
 };

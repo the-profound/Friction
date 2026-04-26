@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useRef } from "react";
-import { View, Text, StyleSheet, FlatList, Pressable, Alert, Share, TextInput } from "react-native";
+import React, { useState, useCallback, useRef, useEffect } from "react";
+import { View, Text, StyleSheet, FlatList, Pressable, Alert, Share, TextInput, ActivityIndicator, ScrollView } from "react-native";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -20,6 +20,7 @@ import {
   useAddTeamMember,
   useListInbox,
   useCreateNeighborRequest,
+  useSearchUsersByNickname,
   getListTeamArticlesQueryKey,
   getListTeamMembersQueryKey,
 } from "@workspace/api-client-react";
@@ -27,6 +28,7 @@ import type {
   TeamMemberWithUser,
   TeamCollectionArticleWithDetails,
   InboxItem,
+  UserSearchResult,
 } from "@workspace/api-client-react";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 
@@ -43,7 +45,9 @@ export default function TeamCollectionDetailScreen() {
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [inviteSheetVisible, setInviteSheetVisible] = useState(false);
-  const [inviteUserId, setInviteUserId] = useState("");
+  const [inviteQuery, setInviteQuery] = useState("");
+  const [debouncedInviteQuery, setDebouncedInviteQuery] = useState("");
+  const inviteDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
   const [deleteArticleTarget, setDeleteArticleTarget] = useState<string | null>(null);
   const [scrollEnabled, setScrollEnabled] = useState(true);
@@ -52,6 +56,20 @@ export default function TeamCollectionDetailScreen() {
   const [kickTarget, setKickTarget] = useState<{ id: string; nickname: string } | null>(null);
   const openRowRef = useRef<SwipeableRowHandle | null>(null);
   const rowRefs = useRef<Map<string, SwipeableRowHandle>>(new Map());
+
+  useEffect(() => {
+    if (inviteDebounceRef.current) clearTimeout(inviteDebounceRef.current);
+    inviteDebounceRef.current = setTimeout(() => {
+      setDebouncedInviteQuery(inviteQuery);
+    }, 300);
+    return () => {
+      if (inviteDebounceRef.current) clearTimeout(inviteDebounceRef.current);
+    };
+  }, [inviteQuery]);
+
+  const inviteSearchResults = useSearchUsersByNickname(debouncedInviteQuery, userId, {
+    excludeTeamId: id,
+  });
 
   const collectionQuery = useGetTeamCollection(id ?? "");
   const collection = collectionQuery.data;
@@ -73,6 +91,15 @@ export default function TeamCollectionDetailScreen() {
   const createNeighborRequest = useCreateNeighborRequest();
 
   const { showToast } = useToast();
+
+  const prevInviteError = useRef(false);
+  useEffect(() => {
+    if (inviteSearchResults.isError && !prevInviteError.current) {
+      showToast({ message: "검색에 실패했습니다. 잠시 후 다시 시도해주세요.", type: "error" });
+    }
+    prevInviteError.current = inviteSearchResults.isError;
+  }, [inviteSearchResults.isError, showToast]);
+
   const isOwner = members.some((m) => m.userId === userId && m.role === "OWNER");
   const isMember = members.some((m) => m.userId === userId);
 
@@ -158,22 +185,19 @@ export default function TeamCollectionDetailScreen() {
     }
   }, [id, collection]);
 
-  const handleInviteMember = useCallback(async () => {
-    if (!id || !inviteUserId.trim()) {
-      Alert.alert("오류", "사용자 ID를 입력해주세요.");
-      return;
-    }
+  const handleInviteUserTap = useCallback(async (user: UserSearchResult) => {
+    if (!id) return;
     try {
-      await addMember.mutateAsync({ id, data: { userId: inviteUserId.trim() } });
+      await addMember.mutateAsync({ id, data: { userId: user.id } });
       setInviteSheetVisible(false);
-      setInviteUserId("");
-      membersQuery.refetch();
-      Alert.alert("완료", "멤버가 추가되었습니다.");
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "멤버 추가에 실패했습니다.";
-      Alert.alert("오류", msg);
+      setInviteQuery("");
+      setDebouncedInviteQuery("");
+      await membersQuery.refetch();
+      showToast({ message: `${user.nickname}님이 멤버로 추가되었습니다.`, type: "success" });
+    } catch {
+      showToast({ message: "멤버 추가에 실패했습니다. 잠시 후 다시 시도해주세요.", type: "error" });
     }
-  }, [id, inviteUserId, addMember, membersQuery]);
+  }, [id, addMember, membersQuery, showToast]);
 
   const handleRemoveArticle = useCallback(
     async (articleId: string) => {
@@ -410,7 +434,7 @@ export default function TeamCollectionDetailScreen() {
             <View style={styles.articleActions}>
               <Pressable
                 style={styles.addButton}
-                onPress={() => { setInviteUserId(""); setInviteSheetVisible(true); }}
+                onPress={() => { setInviteQuery(""); setDebouncedInviteQuery(""); setInviteSheetVisible(true); }}
               >
                 <Feather name="user-plus" size={16} color={Colors.zinc600} />
                 <Text style={styles.addButtonText}>멤버 초대</Text>
@@ -521,26 +545,64 @@ export default function TeamCollectionDetailScreen() {
 
       <BottomSheet
         visible={inviteSheetVisible}
-        onClose={() => setInviteSheetVisible(false)}
+        onClose={() => {
+          setInviteSheetVisible(false);
+          setInviteQuery("");
+          setDebouncedInviteQuery("");
+        }}
         title="멤버 초대"
-        snapPoints={[0.35]}
+        snapPoints={[0.7]}
+        keyboardAware
       >
-        <View style={styles.formContent}>
+        <View style={styles.inviteContent}>
           <TextInput
             style={styles.formInput}
-            placeholder="초대할 사용자 ID"
+            placeholder="닉네임 또는 이메일로 검색"
             placeholderTextColor={Colors.zinc400}
-            value={inviteUserId}
-            onChangeText={setInviteUserId}
+            value={inviteQuery}
+            onChangeText={setInviteQuery}
             autoFocus
+            autoCapitalize="none"
+            autoCorrect={false}
           />
-          <Pressable
-            style={[styles.formButton, !inviteUserId.trim() && styles.formButtonDisabled]}
-            onPress={handleInviteMember}
-            disabled={!inviteUserId.trim()}
-          >
-            <Text style={styles.formButtonText}>초대</Text>
-          </Pressable>
+          {inviteQuery.trim().length === 0 ? (
+            <View style={styles.inviteEmptyState}>
+              <Text style={styles.inviteEmptyText}>닉네임 또는 이메일을 입력해 주세요</Text>
+            </View>
+          ) : inviteSearchResults.isLoading ? (
+            <View style={styles.inviteEmptyState}>
+              <ActivityIndicator size="small" color={Colors.zinc400} />
+            </View>
+          ) : inviteSearchResults.isError ? (
+            <View style={styles.inviteEmptyState}>
+              <Text style={styles.inviteEmptyText}>검색 결과를 불러올 수 없습니다.</Text>
+            </View>
+          ) : (inviteSearchResults.data ?? []).length === 0 ? (
+            <View style={styles.inviteEmptyState}>
+              <Text style={styles.inviteEmptyText}>일치하는 사용자가 없습니다</Text>
+            </View>
+          ) : (
+            <ScrollView style={styles.inviteResultList} keyboardShouldPersistTaps="handled">
+              {(inviteSearchResults.data ?? []).map((user) => (
+                <Pressable
+                  key={user.id}
+                  style={styles.inviteResultItem}
+                  onPress={() => handleInviteUserTap(user)}
+                >
+                  <View style={styles.inviteAvatar}>
+                    <Text style={styles.inviteAvatarText}>
+                      {user.nickname.charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                  <View style={styles.inviteUserInfo}>
+                    <Text style={styles.inviteNickname} numberOfLines={1}>{user.nickname}</Text>
+                    <Text style={styles.inviteEmail} numberOfLines={1}>{user.email}</Text>
+                  </View>
+                  <Feather name="user-plus" size={18} color={Colors.zinc400} />
+                </Pressable>
+              ))}
+            </ScrollView>
+          )}
         </View>
       </BottomSheet>
 
@@ -909,5 +971,60 @@ const styles = StyleSheet.create({
     ...Typography.body,
     fontSize: 16,
     color: Colors.zinc800,
+  },
+  inviteContent: {
+    paddingVertical: 12,
+    flex: 1,
+    gap: 12,
+  },
+  inviteEmptyState: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 32,
+  },
+  inviteEmptyText: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc400,
+    textAlign: "center",
+  },
+  inviteResultList: {
+    flex: 1,
+  },
+  inviteResultItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.zinc100,
+    gap: 12,
+  },
+  inviteAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.zinc200,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  inviteAvatarText: {
+    ...Typography.bodySemiBold,
+    fontSize: 16,
+    color: Colors.zinc600,
+  },
+  inviteUserInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  inviteNickname: {
+    ...Typography.bodySemiBold,
+    fontSize: 15,
+    color: Colors.zinc900,
+  },
+  inviteEmail: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc500,
   },
 });

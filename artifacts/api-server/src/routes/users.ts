@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { and, eq, ilike, inArray, ne, or } from "drizzle-orm";
-import { db, usersTable, myCollectionsTable, neighborsTable, neighborRequestsTable } from "@workspace/db";
+import { and, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
+import { db, usersTable, myCollectionsTable, neighborsTable, neighborRequestsTable, teamCollectionMembershipsTable } from "@workspace/db";
 import type { Neighbor, NeighborRequest } from "@workspace/db";
 import { CreateUserBody, UpdateUserBody, UpdateUserRecentCollectionBody } from "@workspace/api-zod";
 
@@ -46,7 +46,7 @@ router.post("/users/sync", async (req, res) => {
 });
 
 router.get("/users/search", async (req, res) => {
-  const { nickname, userId } = req.query;
+  const { nickname, userId, excludeTeamId } = req.query;
   if (!nickname || typeof nickname !== "string" || nickname.trim() === "") {
     res.status(400).json({ error: "nickname query param is required" });
     return;
@@ -56,10 +56,44 @@ router.get("/users/search", async (req, res) => {
     return;
   }
 
+  const q = nickname.trim().toLowerCase();
+
+  const priorityExpr = sql<number>`
+    CASE
+      WHEN lower(${usersTable.nickname}) LIKE ${q + "%"} THEN 0
+      WHEN lower(${usersTable.email}) LIKE ${q + "%"} THEN 1
+      WHEN lower(${usersTable.nickname}) LIKE ${"%" + q + "%"} THEN 2
+      ELSE 3
+    END
+  `;
+
+  let excludedMemberIds: string[] = [];
+  if (excludeTeamId && typeof excludeTeamId === "string") {
+    const memberships = await db
+      .select({ userId: teamCollectionMembershipsTable.userId })
+      .from(teamCollectionMembershipsTable)
+      .where(eq(teamCollectionMembershipsTable.teamCollectionId, excludeTeamId));
+    excludedMemberIds = memberships.map((m) => m.userId);
+  }
+
+  const whereConditions = and(
+    or(
+      ilike(usersTable.nickname, `%${q}%`),
+      ilike(usersTable.email, `%${q}%`),
+    ),
+    ne(usersTable.id, userId),
+    excludedMemberIds.length > 0 ? sql`${usersTable.id} NOT IN (${sql.join(excludedMemberIds.map((id) => sql`${id}`), sql`, `)})` : sql`TRUE`,
+  );
+
   const matchingUsers = await db
     .select()
     .from(usersTable)
-    .where(and(ilike(usersTable.nickname, `%${nickname.trim()}%`), ne(usersTable.id, userId)))
+    .where(whereConditions)
+    .orderBy(
+      priorityExpr,
+      sql`lower(${usersTable.nickname})`,
+      sql`lower(${usersTable.email})`,
+    )
     .limit(20);
 
   if (matchingUsers.length === 0) {
