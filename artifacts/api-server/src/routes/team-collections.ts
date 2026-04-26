@@ -75,12 +75,24 @@ router.post("/team-collections", async (req, res) => {
 });
 
 router.get("/team-collections/:id", async (req, res) => {
-  const [collection] = await db.select().from(teamCollectionsTable).where(eq(teamCollectionsTable.id, req.params.id));
-  if (!collection) {
+  const [row] = await db
+    .select({
+      id: teamCollectionsTable.id,
+      name: teamCollectionsTable.name,
+      description: teamCollectionsTable.description,
+      creatorId: teamCollectionsTable.creatorId,
+      createdAt: teamCollectionsTable.createdAt,
+      updatedAt: teamCollectionsTable.updatedAt,
+      creatorNickname: usersTable.nickname,
+    })
+    .from(teamCollectionsTable)
+    .leftJoin(usersTable, eq(teamCollectionsTable.creatorId, usersTable.id))
+    .where(eq(teamCollectionsTable.id, req.params.id));
+  if (!row) {
     res.status(404).json({ error: "Team collection not found" });
     return;
   }
-  res.json(collection);
+  res.json(row);
 });
 
 router.patch("/team-collections/:id", async (req, res) => {

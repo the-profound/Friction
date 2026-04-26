@@ -275,6 +275,7 @@ export interface TeamCollection {
   name: string;
   description?: string | null;
   creatorId: string;
+  creatorNickname?: string | null;
   createdAt: string;
   updatedAt: string;
 }

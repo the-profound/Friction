@@ -2,7 +2,9 @@ import type { MainTabKey, OfSubTabKey, ToSubTabKey } from "@/constants/tokens";
 
 export type NavLayer = "main" | "sub";
 
-export type OfMiniSubTabKey = "my" | "subscribed" | "joined";
+export type PersonalMiniSubTabKey = "my" | "subscribed";
+export type GroupMiniSubTabKey = "my" | "joined";
+export type OfMiniSubTabKey = PersonalMiniSubTabKey | GroupMiniSubTabKey;
 
 export interface NavState {
   activeTab: MainTabKey;

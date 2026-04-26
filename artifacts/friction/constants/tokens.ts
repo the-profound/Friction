@@ -252,7 +252,6 @@ export const TabConfig = {
     group: [
       { key: "my" as const, label: "나의 단체 모음" },
       { key: "joined" as const, label: "참여 중" },
-      { key: "subscribed" as const, label: "구독 중" },
     ],
     sentence: null,
   },
