@@ -99,19 +99,20 @@ Notion Queue DB에서 작업 항목 하나를 선택하고, SSOT Docs DB에서 �
 
 B) notionQueryDatabaseView (뷰 URL 시크릿이 있을 때 우선 시도)
 - NOTION_QUEUE_VIEW_URL 시크릿이 설정되어 있을 때만 실행한다.
-- 정제된 뷰 URL로 `notionQueryDatabaseView`를 호출해 한 번에 후보 목록을 받는다.
+- 정제된 뷰 URL로 `notionQueryDatabaseView`를 호출해 한 번에 후보 목록을 받는다. (결과는 session_cache에 보관해 같은 세션에서 재사용. 사용자가 명시적으로 새로고침을 요청하면 캐시 무효화)
 - 결과가 비어 있거나 호출 실패 시 즉시 Path A로 폴백한다.
 - 결과에서 "개발 중" 항목은 제외하고 "개발 전" 항목만 유효 후보로 취급한다.
 - 후보가 2개 이상이면 사용자에게 목록을 보여주고 선택을 받는다.
 - 후보가 0개면 Path A로 폴백한다.
 
 A) notionFetch + notionSearch (Path B 실패 또는 시크릿 없을 때 폴백)
-- Queue DB를 fetch해서 collection URL을 얻는다.
+- Queue DB를 fetch해서 collection URL을 얻는다. (결과는 session_cache에 보관해 같은 세션에서 재사용)
 - 상태값(예: "개발 전")을 키워드로 search한다. (빈 쿼리 금지)
-- 각 후보 페이지를 notionFetch로 로드해 속성을 검증한다.
+- 검색 결과 속성(개발 상태)으로 후보를 필터링한다. 후보별 개별 fetch는 생략한다.
   - "개발 중"은 제외
   - "개발 전"만 선택
 - 후보가 2개 이상이면 사용자에게 목록을 보여주고 선택을 받는다.
+- 최종 선택된 1건만 notionFetch로 상세 로드한다.
 - 후보가 0개면 처리 가능한 항목이 없다고 알리고 중단한다.
 
 C) requestId / pageUrl 직접 지정
@@ -129,7 +130,7 @@ C) requestId / pageUrl 직접 지정
 우선순위
 1) Queue 항목의 "영향 문서" relation
 2) relation이 비었으면 아래 순서로 후보를 탐색한다.
-   a) NOTION_SSOT_VIEW_URL이 설정된 경우: `notionQueryDatabaseView`로 후보를 빠르게 좁힌 뒤 키워드로 재필터링한다. 실패하면 (b)로 폴백한다.
+   a) NOTION_SSOT_VIEW_URL이 설정된 경우: `notionQueryDatabaseView`로 후보를 빠르게 좁힌 뒤 키워드로 재필터링한다. (결과는 session_cache에 보관. 사용자가 명시적으로 새로고침을 요청하면 캐시 무효화) 실패하면 (b)로 폴백한다.
    b) 유형 매핑 + 키워드 검색 (기존 방식)
 
 출력
@@ -137,7 +138,7 @@ C) requestId / pageUrl 직접 지정
 
 ### Step 4: SSOT 문서 로드 (load_ssot_docs)
 
-- Promise.all 금지 (순차 fetch)
+- 독립적인 SSOT 문서는 병렬 fetch한다 (최대 동시 3건). 순서 의존성이 없으면 동시 실행이 기본이다.
 - 각 문서를 fetch해서 내용/속성을 확보한다.
 
 ### Step 5: 요구사항 추출 (extract_requirements)
@@ -186,7 +187,8 @@ Queue 항목 + SSOT를 종합하여 추출
 
 ### Step 9: 구현 (implement)
 
-- 구현 시작 시 즉시 Queue 항목 "개발 상태"를 "개발 중"으로 변경한다. (락)
+- 구현 시작 시 Queue 항목을 fetch하고, 즉시 "개발 상태"를 "개발 중"으로 변경한다. (락 — 직렬 처리: 락 후 writeback 순서 보장)
+- 이 fetch 결과(기존 개발 기록 포함)를 `queue_snapshot`으로 보관해 Step 10에서 재사용한다.
 - SSOT를 단일 진실 공급원으로 취급한다.
 - Queue 항목과 SSOT 충돌 시 SSOT 우선, 불일치는 writeback에 기록한다.
 
@@ -197,7 +199,7 @@ Queue 항목 + SSOT를 종합하여 추출
 - 개발 기록 속성(text) 업데이트로 writeback을 수행한다.
 
 절차
-1) read-before-write: Queue 항목을 fetch해서 기존 개발 기록을 확인한다.
+1) read-before-write: Step 9에서 저장한 `queue_snapshot`을 재사용해 기존 개발 기록을 확인한다. (추가 fetch 불필요 — Step 9 락과 같은 fetch 결과 공유)
 2) 기존 기록이 있으면 보존하고 아래에 추가한다.
 3) properties 업데이트 1회로 종료한다.
   - 개발 상태: 개발 완료
@@ -222,7 +224,7 @@ Queue 항목 + SSOT를 종합하여 추출
 
 - Secrets 값 접근: code_execution에서 직접 접근 불가 → bash로만 읽기
 - Notion URL 쿼리 파라미터: `?v=...`, `&source=copy_link` 제거 필요
-- notionSearch 제약: 빈 쿼리 불가, filter 미지원 → 결과를 개별 fetch로 검증
+- notionSearch 제약: 빈 쿼리 불가, filter 미지원 → 결과 속성으로 후보 필터링(개별 fetch 생략), 최종 선택 1건만 상세 fetch
 - MCP 응답 빈 값: 비어 있으면 즉시 실패 처리
 - URL 보안: 에러 메시지에 URL이 포함되지 않도록 마스킹
 
@@ -235,7 +237,9 @@ Queue 항목 + SSOT를 종합하여 추출
 - bash_for_secrets: Secrets는 bash로만
 - clean_url: URL 쿼리 파라미터 제거
 - notionFetch_first: DB 조회는 notionFetch 우선
-- sequential_fetch: 여러 페이지는 순차 fetch
+- parallel_fetch: 서로 독립적인 읽기 호출은 병렬 실행 (최대 동시 3건)
+- serial_writes: 락·writeback 등 순서가 중요한 쓰기 호출은 직렬 유지 (이유: Step 9 락 → Step 10 writeback 순서 보장)
+- session_cache: 한 세션에서 Queue DB collection URL과 후보 페이지 목록은 캐시해 재사용. 사용자가 명시적으로 새로고침을 요청하면 캐시 무효화.
 - parse_strict: properties 파싱 실패 시 즉시 중단
 - schema_is_contract: 속성 이름·타입은 스킬 정의를 계약으로
 - ssot_priority: relation > DB 검색
@@ -251,12 +255,13 @@ Queue 항목 + SSOT를 종합하여 추출
 N2R 전용 규칙
 - single_queue_item: 실행당 Queue 항목 1개
 - exclude_in_progress: "개발 중" 제외
-- lock_on_start: Step 9에서 즉시 락
+- lock_on_start: Step 9에서 즉시 락 (fetch 결과를 queue_snapshot으로 보관)
 
 ---
 
 ## 변경 로그
 
+- 2026-04-26 [편집] 체감 속도 개선 리팩터: sequential_fetch → parallel_fetch(최대 3건 동시)/serial_writes로 대체, session_cache 컨벤션 추가, Step 1 Path B/A에 캐시 사용 명시, Step 3 SSOT 뷰 결과 캐시 명시, Step 4 병렬 fetch 허용, Step 1 Path A 후보 개별 fetch 제거(최종 선택 1건만 상세 fetch), Step 9 fetch 결과를 queue_snapshot으로 보관해 Step 10 read-before-write와 공유 (Task #119)
 - 2026-04-26 [편집] 뷰 기반 빠른 조회 도입: NOTION_QUEUE_VIEW_URL / NOTION_SSOT_VIEW_URL 시크릿 추가, Step 0 확인 키 확장, Step 1 우선순위 B→A→C로 변경, Step 3 SSOT 뷰 폴백 가이드 추가 (Task #118)
 - 2026-04-25 [편집] Step 6에 Quick Writeback 단계 포함 의무화 추가 (Task #104)
 - 2026-03-27 [편집] 코드 블록 과다 사용 제거, SKILL 본문을 단일 code block으로 통합

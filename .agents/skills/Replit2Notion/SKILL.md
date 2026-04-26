@@ -194,7 +194,7 @@ description: 채팅으로 요청받은 개발 작업을 완료한 뒤, 그 결�
 
 - Secrets 값 접근: code_execution에서 직접 접근 불가 → bash로만 읽기
 - Notion URL 쿼리 파라미터: `?v=...`, `&source=copy_link` 제거 필요
-- notionSearch 제약: 빈 쿼리 불가, filter 미지원 → 결과를 개별 fetch로 검증
+- notionSearch 제약: 빈 쿼리 불가, filter 미지원 → 결과 속성으로 후보 필터링 후 개별 fetch 최소화
 - Properties 파싱: 파싱 실패 시 명시적 에러
 - notionUpdatePage 파라미터: update_content는 content_updates, update_properties는 properties
 - notionCreatePages: database_id가 아니라 data_source_id 필요
@@ -210,7 +210,9 @@ description: 채팅으로 요청받은 개발 작업을 완료한 뒤, 그 결�
 - bash_for_secrets: Secrets는 bash로만
 - clean_url: URL 쿼리 파라미터 제거
 - notionFetch_first: DB 조회는 notionFetch 우선
-- sequential_fetch: 여러 페이지는 순차 fetch
+- parallel_fetch: 서로 독립적인 읽기 호출은 병렬 실행 (최대 동시 3건)
+- serial_writes: 락·writeback 등 순서가 중요한 쓰기 호출은 직렬 유지
+- session_cache: 한 세션에서 Queue DB collection URL과 후보 페이지 목록은 캐시해 재사용. 사용자가 명시적으로 새로고침을 요청하면 캐시 무효화.
 - parse_strict: properties 파싱 실패 시 즉시 중단
 - schema_is_contract: 속성 이름·타입은 스킬 정의를 계약으로
 - ssot_priority: relation > DB 검색
@@ -279,5 +281,6 @@ SSOT 수정 판단(Step 5~6)은 생략한다.
 
 ## 변경 로그
 
+- 2026-04-26 [편집] 체감 속도 개선 리팩터: sequential_fetch → parallel_fetch(최대 3건 동시)/serial_writes로 대체, session_cache 컨벤션 추가 (Task #119)
 - 2026-04-25 [추가] Task 에이전트용 Quick Writeback 절차 (Section 8) 추가
 - 2026-03-27 [편집] 코드 블록 과다 사용 제거, SKILL 본문을 단일 code block으로 통합
