@@ -17,7 +17,7 @@ import {
   NativeScrollEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
 import { PageHeader } from "@/components/NavBar/PageHeader";
@@ -358,6 +358,18 @@ Alert.alert("완료", "수신함에서 삭제되었습니다.");
   const handleRefresh = useCallback(() => {
     refetch();
   }, [refetch]);
+
+  // Refetch the inbox every time this tab regains focus so freshly-delivered
+  // letters appear without a manual pull-to-refresh.
+  // NOTE: depend ONLY on the stable `refetch` reference (not whole query
+  // objects) — query result objects get a new identity on every render,
+  // which would re-fire useFocusEffect cleanup/setup in a loop.
+  const refetchInbox = refetch;
+  useFocusEffect(
+    useCallback(() => {
+      refetchInbox();
+    }, [refetchInbox]),
+  );
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>

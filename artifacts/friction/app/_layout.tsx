@@ -20,8 +20,9 @@ import { setBaseUrl } from "@workspace/api-client-react";
 import { Colors } from "@/constants/tokens";
 import { Platform } from "react-native";
 
-// 웹 개발 환경에서는 로그인 없이 시뮬레이션 (minji UUID fallback 사용)
+// 웹 개발 환경에서는 로그인 없이 시뮬레이션 (DEV_WEB_BYPASS_USER_ID로 시드된 계정 사용)
 const DEV_WEB_BYPASS = __DEV__ && Platform.OS === "web";
+const DEV_WEB_BYPASS_USER_ID = "92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f";
 
 if (process.env.EXPO_PUBLIC_DOMAIN) {
   const domain = process.env.EXPO_PUBLIC_DOMAIN;
@@ -94,7 +95,32 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return <>{children}</>;
+  // Auth-bypass routes (login flow) render without UserProvider — they have no
+  // user yet and must not depend on useUser().
+  if (inBypassRoute) {
+    return <>{children}</>;
+  }
+
+  // Authenticated screens always run inside UserProvider with a real user id.
+  // For real sessions we let UserProvider derive the id from AuthContext so
+  // its /api/users/sync effect actually runs. DEV_WEB_BYPASS injects the
+  // seeded dev id explicitly because there is no real session in that mode
+  // (and that dev account is already seeded in the DB, so no sync is needed).
+  if (session?.user?.id) {
+    return <UserProvider>{children}</UserProvider>;
+  }
+
+  if (DEV_WEB_BYPASS) {
+    return <UserProvider userId={DEV_WEB_BYPASS_USER_ID}>{children}</UserProvider>;
+  }
+
+  // Authenticated state without a user id should be transient — show the
+  // loader rather than rendering screens that depend on useUser().
+  return (
+    <View style={styles.loadingContainer}>
+      <ActivityIndicator size="large" color={Colors.zinc400} />
+    </View>
+  );
 }
 
 function RootLayoutNav() {
@@ -157,16 +183,14 @@ export default function RootLayout() {
           <GestureHandlerRootView>
             <KeyboardProvider>
               <AuthProvider>
-                <UserProvider>
-                  <ActiveReadingProvider>
-                    <ToastProvider>
-                      <NavigationProvider>
-                        <RootLayoutNav />
-                        <ToastContainer />
-                      </NavigationProvider>
-                    </ToastProvider>
-                  </ActiveReadingProvider>
-                </UserProvider>
+                <ActiveReadingProvider>
+                  <ToastProvider>
+                    <NavigationProvider>
+                      <RootLayoutNav />
+                      <ToastContainer />
+                    </NavigationProvider>
+                  </ToastProvider>
+                </ActiveReadingProvider>
               </AuthProvider>
             </KeyboardProvider>
           </GestureHandlerRootView>

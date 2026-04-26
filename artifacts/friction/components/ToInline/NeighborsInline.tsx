@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 
 import { Colors, Spacing, Typography } from "@/constants/tokens";
@@ -19,6 +20,7 @@ import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import {
+  ApiError,
   useAcceptNeighborRequest,
   useCreateNeighborRequest,
   useDeleteNeighborRequest,
@@ -33,6 +35,21 @@ import type {
   NeighborWithUser,
   UserSearchResult,
 } from "@workspace/api-client-react";
+
+/**
+ * Surface server-side validation messages from ApiError when present, falling
+ * back to the generic Error message and finally a caller-provided default.
+ */
+function describeApiError(e: unknown, fallback: string): string {
+  if (e instanceof ApiError) {
+    const data = e.data as { error?: string; message?: string } | null;
+    if (data?.error) return data.error;
+    if (data?.message) return data.message;
+    if (e.message) return e.message;
+  }
+  if (e instanceof Error && e.message) return e.message;
+  return fallback;
+}
 
 type SectionKey = "neighbors" | "requests" | "sent";
 
@@ -98,6 +115,22 @@ export function NeighborsInline({
 
   const searchResults = useSearchUsersByNickname(debouncedQuery, userId);
 
+  // Refetch all neighbor lists every time this screen regains focus so
+  // requests sent/received while the screen was backgrounded show up
+  // without a manual refresh.
+  // NOTE: depend on stable `refetch` references (not whole query objects)
+  // to avoid a focus refetch loop (query objects re-identify each render).
+  const refetchNeighbors = neighborsQuery.refetch;
+  const refetchRequests = requestsQuery.refetch;
+  const refetchSentRequests = sentRequestsQuery.refetch;
+  useFocusEffect(
+    useCallback(() => {
+      refetchNeighbors();
+      refetchRequests();
+      refetchSentRequests();
+    }, [refetchNeighbors, refetchRequests, refetchSentRequests]),
+  );
+
   const handleAccept = useCallback(
     async (requestId: string) => {
       try {
@@ -105,8 +138,7 @@ export function NeighborsInline({
         requestsQuery.refetch();
         neighborsQuery.refetch();
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "수락에 실패했습니다.";
-        Alert.alert("오류", msg);
+        Alert.alert("오류", describeApiError(e, "수락에 실패했습니다."));
       }
     },
     [acceptRequest, requestsQuery, neighborsQuery],
@@ -118,8 +150,7 @@ export function NeighborsInline({
         await rejectRequest.mutateAsync({ id: requestId });
         requestsQuery.refetch();
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "거절에 실패했습니다.";
-        Alert.alert("오류", msg);
+        Alert.alert("오류", describeApiError(e, "거절에 실패했습니다."));
       }
     },
     [rejectRequest, requestsQuery],
@@ -137,8 +168,7 @@ export function NeighborsInline({
         sentRequestsQuery.refetch();
         Alert.alert("완료", `${targetUser.nickname}님께 이웃 요청을 보냈어요!`);
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "요청에 실패했습니다.";
-        Alert.alert("오류", msg);
+        Alert.alert("오류", describeApiError(e, "요청에 실패했습니다."));
       } finally {
         setSendingToUserId(null);
       }
@@ -153,8 +183,7 @@ export function NeighborsInline({
         searchResults.refetch();
         sentRequestsQuery.refetch();
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "요청 취소에 실패했습니다.";
-        Alert.alert("오류", msg);
+        Alert.alert("오류", describeApiError(e, "요청 취소에 실패했습니다."));
       } finally {
         setCancelTarget(null);
       }
@@ -177,8 +206,7 @@ export function NeighborsInline({
       await removeNeighbor.mutateAsync({ id: deleteTarget.id });
       neighborsQuery.refetch();
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";
-      Alert.alert("오류", msg);
+      Alert.alert("오류", describeApiError(e, "삭제에 실패했습니다."));
     } finally {
       setDeleteTarget(null);
     }

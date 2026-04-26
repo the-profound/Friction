@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, Pressable, FlatList, RefreshControl } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { PageHeader } from "@/components/NavBar/PageHeader";
@@ -119,6 +119,20 @@ export default function ToScreen() {
   const handleFocusRequests = useCallback(() => {
     setFocusRequestsSignal(Date.now());
   }, []);
+
+  // Refetch the request banner count + recent send records every time this
+  // tab regains focus so newly-arrived items appear without manual refresh.
+  // The neighbors list itself is owned by NeighborsInline (which has its own
+  // focus refetch). Depend only on the stable `refetch` references — query
+  // objects re-identify on every render and would cause a focus refetch loop.
+  const refetchRequests = requestsQuery.refetch;
+  const refetchSendRecords = sendRecordsQuery.refetch;
+  useFocusEffect(
+    useCallback(() => {
+      refetchRequests();
+      refetchSendRecords();
+    }, [refetchRequests, refetchSendRecords]),
+  );
 
   const renderSendRecordItem = ({ item }: { item: SendRecordWithDetails }) => (
     <Pressable style={styles.listItem} onPress={() => handleArticlePress(item.articleId)}>

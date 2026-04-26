@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from "react";
 import { View, Text, StyleSheet, FlatList, Pressable, Alert, RefreshControl, TextInput } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
@@ -39,6 +39,17 @@ export default function TeamCollectionListScreen() {
   const createCollection = useCreateTeamCollection();
   const deleteCollection = useDeleteTeamCollection();
   const addMember = useAddTeamMember();
+
+  // Refetch on focus so newly-created or newly-joined team collections
+  // (e.g. accepted on another device) appear without a manual refresh.
+  // NOTE: depend on the stable `refetch` reference (not the whole query
+  // object) to avoid a focus refetch loop.
+  const refetchCollections = collectionsQuery.refetch;
+  useFocusEffect(
+    useCallback(() => {
+      refetchCollections();
+    }, [refetchCollections]),
+  );
 
   const tabs: { key: MiniTab; label: string }[] = [
     { key: "mine", label: "나의 단체 모음" },

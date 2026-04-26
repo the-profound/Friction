@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, FlatList, Pressable, Alert, Share, TextInput, A
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
@@ -91,6 +91,25 @@ export default function TeamCollectionDetailScreen() {
   const createNeighborRequest = useCreateNeighborRequest();
 
   const { showToast } = useToast();
+
+  // Refetch members + articles + collection metadata each time the screen
+  // regains focus so memberships added elsewhere (or invites accepted by the
+  // current user on a different device) become visible without a manual
+  // refresh.
+  // NOTE: depend on stable `refetch` references (not whole query objects)
+  // to avoid a focus refetch loop.
+  const refetchCollection = collectionQuery.refetch;
+  const refetchMembers = membersQuery.refetch;
+  const refetchArticles = articlesQuery.refetch;
+  const refetchInbox = inboxQuery.refetch;
+  useFocusEffect(
+    useCallback(() => {
+      refetchCollection();
+      refetchMembers();
+      refetchArticles();
+      refetchInbox();
+    }, [refetchCollection, refetchMembers, refetchArticles, refetchInbox]),
+  );
 
   const prevInviteError = useRef(false);
   useEffect(() => {
@@ -194,8 +213,19 @@ export default function TeamCollectionDetailScreen() {
       setDebouncedInviteQuery("");
       await membersQuery.refetch();
       showToast({ message: `${user.nickname}님이 멤버로 추가되었습니다.`, type: "success" });
-    } catch {
-      showToast({ message: "멤버 추가에 실패했습니다. 잠시 후 다시 시도해주세요.", type: "error" });
+    } catch (e: unknown) {
+      // Surface the server's error message (e.g. "User is already a member")
+      // instead of swallowing it with a generic toast — this is what made
+      // failed invites look "silent" to operators during cross-testing.
+      const serverMessage =
+        e && typeof e === "object" && "data" in e && e.data && typeof e.data === "object"
+          ? (e.data as { error?: unknown }).error
+          : undefined;
+      const fallback = e instanceof Error ? e.message : "멤버 추가에 실패했습니다.";
+      const message = typeof serverMessage === "string" && serverMessage.length > 0
+        ? serverMessage
+        : fallback;
+      showToast({ message, type: "error" });
     }
   }, [id, addMember, membersQuery, showToast]);
 

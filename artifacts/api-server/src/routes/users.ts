@@ -6,6 +6,13 @@ import { CreateUserBody, UpdateUserBody, UpdateUserRecentCollectionBody } from "
 
 const router: IRouter = Router();
 
+function deriveNicknameFromEmail(email: string): string {
+  const local = email.split("@")[0] ?? "";
+  const sanitized = local.replace(/[^A-Za-z0-9가-힣._-]/g, "").trim();
+  const fallback = sanitized.length > 0 ? sanitized : "user";
+  return fallback.slice(0, 20);
+}
+
 router.post("/users/sync", async (req, res) => {
   const { id, email, nickname } = req.body ?? {};
   if (!id || typeof id !== "string" || !email || typeof email !== "string") {
@@ -13,34 +20,29 @@ router.post("/users/sync", async (req, res) => {
     return;
   }
 
-  const resolvedNickname =
+  const trimmedNickname =
     typeof nickname === "string" && nickname.trim().length > 0
       ? nickname.trim().slice(0, 20)
       : null;
 
-  if (resolvedNickname) {
-    const [user] = await db
-      .insert(usersTable)
-      .values({ id, email, nickname: resolvedNickname })
-      .onConflictDoUpdate({
-        target: usersTable.id,
-        set: { email, updatedAt: new Date() },
-      })
-      .returning();
-    res.json(user);
-    return;
-  }
+  // Always upsert so accounts created out-of-band (e.g. directly in the auth
+  // dashboard) end up with a `users` row on first login. When the client did
+  // not supply a nickname, fall back to the email local-part so search,
+  // membership FKs, and neighbor requests can still resolve the user.
+  const resolvedNickname = trimmedNickname ?? deriveNicknameFromEmail(email);
 
   const [user] = await db
-    .update(usersTable)
-    .set({ email, updatedAt: new Date() })
-    .where(eq(usersTable.id, id))
+    .insert(usersTable)
+    .values({ id, email, nickname: resolvedNickname })
+    .onConflictDoUpdate({
+      target: usersTable.id,
+      // Preserve the existing nickname; only refresh email + updatedAt. If
+      // the caller explicitly provided a nickname we honor it.
+      set: trimmedNickname
+        ? { email, nickname: trimmedNickname, updatedAt: new Date() }
+        : { email, updatedAt: new Date() },
+    })
     .returning();
-
-  if (!user) {
-    res.status(400).json({ error: "nickname is required for new user" });
-    return;
-  }
 
   res.json(user);
 });

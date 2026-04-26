@@ -11,7 +11,7 @@ import {
   Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
@@ -361,6 +361,23 @@ export default function OfScreen() {
     else if (ofSubTab === "group") teamCollectionsQuery.refetch();
     else sentencesQuery.refetch();
   }, [ofSubTab, myCollectionsQuery, teamCollectionsQuery, sentencesQuery]);
+
+  // Refetch every time the screen regains focus so newly-joined team
+  // collections (e.g. after being added as a member elsewhere) show up
+  // without a manual refresh.
+  // NOTE: depend on stable `refetch` references rather than whole query
+  // objects to avoid a focus refetch loop (query objects re-identify each
+  // render).
+  const refetchPersonal = myCollectionsQuery.refetch;
+  const refetchTeams = teamCollectionsQuery.refetch;
+  const refetchSentences = sentencesQuery.refetch;
+  useFocusEffect(
+    useCallback(() => {
+      refetchPersonal();
+      refetchTeams();
+      refetchSentences();
+    }, [refetchPersonal, refetchTeams, refetchSentences]),
+  );
 
   const isRefetching =
     ofSubTab === "personal"
