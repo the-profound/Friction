@@ -19,6 +19,7 @@ import type {
   SendRecordWithDetails,
 } from "@workspace/api-client-react";
 import { formatDeliveryTime } from "@/lib/deliverySync";
+import { useFocusPollingOptions } from "@/lib/useScreenFocused";
 
 type ParamRouter = ReturnType<typeof useRouter>;
 
@@ -93,9 +94,13 @@ export default function ToScreen() {
     ]);
   }, [router]);
 
-  const requestsQuery = useListNeighborRequests({ recipientId: userId });
+  // Poll the request banner count + send records while the screen is focused
+  // so newly-arrived neighbor requests appear within seconds without a manual
+  // refresh. The neighbors list itself polls inside NeighborsInline.
+  const pollOpts = useFocusPollingOptions();
+  const requestsQuery = useListNeighborRequests({ recipientId: userId }, pollOpts);
   const pendingRequests = (requestsQuery.data ?? []) as NeighborRequestWithUser[];
-  const sendRecordsQuery = useListSendRecords({ senderId: userId });
+  const sendRecordsQuery = useListSendRecords({ senderId: userId }, pollOpts);
   const sendRecords = (sendRecordsQuery.data ?? []) as SendRecordWithDetails[];
 
   const recentSendRecords = useMemo(

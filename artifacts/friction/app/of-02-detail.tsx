@@ -31,6 +31,7 @@ import type {
   UserSearchResult,
 } from "@workspace/api-client-react";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
+import { useFocusPollingOptions } from "@/lib/useScreenFocused";
 
 type DetailTab = "articles" | "members";
 
@@ -71,18 +72,22 @@ export default function TeamCollectionDetailScreen() {
     excludeTeamId: id,
   });
 
+  // Poll the team-collection's members + articles + the inbox while focused
+  // so newly-added members and freshly-shared articles appear within seconds
+  // without a manual refresh.
+  const pollOpts = useFocusPollingOptions();
   const collectionQuery = useGetTeamCollection(id ?? "");
   const collection = collectionQuery.data;
 
-  const membersQuery = useListTeamMembers(id ?? "");
+  const membersQuery = useListTeamMembers(id ?? "", pollOpts);
   const members = (membersQuery.data ?? []) as TeamMemberWithUser[];
 
-  const articlesQuery = useListTeamArticles(id ?? "", { userId });
+  const articlesQuery = useListTeamArticles(id ?? "", { userId }, pollOpts);
   const articles = (articlesQuery.data ?? []) as TeamCollectionArticleWithDetails[];
 
   const updateCollection = useUpdateTeamCollection();
   const deleteCollection = useDeleteTeamCollection();
-  const inboxQuery = useListInbox({ recipientId: userId });
+  const inboxQuery = useListInbox({ recipientId: userId }, pollOpts);
   const inboxItems = (inboxQuery.data ?? []) as InboxItem[];
 
   const removeArticle = useRemoveTeamArticle();

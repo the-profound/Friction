@@ -41,6 +41,7 @@ import type { GroupMiniSubTabKey } from "@/types/navigation";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
+import { useFocusPollingOptions } from "@/lib/useScreenFocused";
 
 export default function OfScreen() {
   const insets = useSafeAreaInsets();
@@ -88,7 +89,12 @@ export default function OfScreen() {
   }, []);
 
   const myCollectionsQuery = useListMyCollections({ ownerId: userId });
-  const teamCollectionsQuery = useListTeamCollections({ userId });
+  // Poll team collections while focused so newly-joined memberships (e.g.
+  // when an operator adds you to their team) appear within seconds without
+  // a manual refresh. Personal collections + stored sentences only change
+  // via local actions, so they keep their existing focus-only refetch.
+  const teamPollOpts = useFocusPollingOptions();
+  const teamCollectionsQuery = useListTeamCollections({ userId }, teamPollOpts);
   const sentencesQuery = useListStoredSentences({ userId });
 
   const createMyCollection = useCreateMyCollection();

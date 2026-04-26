@@ -16,6 +16,7 @@ import { Feather } from "@expo/vector-icons";
 
 import { Colors, Spacing, Typography } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
+import { useFocusPollingOptions } from "@/lib/useScreenFocused";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import RefreshableEmpty from "@/components/RefreshableEmpty";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
@@ -101,11 +102,15 @@ export function NeighborsInline({
     }
   }, [focusRequestsSignal]);
 
-  const neighborsQuery = useListNeighbors({ userId });
+  // Poll incoming-related queries (received requests, neighbors, sent
+  // requests) while the screen is focused so newly-arrived items appear
+  // within seconds without a manual refresh.
+  const pollOpts = useFocusPollingOptions();
+  const neighborsQuery = useListNeighbors({ userId }, pollOpts);
   const neighbors = (neighborsQuery.data ?? []) as NeighborWithUser[];
-  const requestsQuery = useListNeighborRequests({ recipientId: userId });
+  const requestsQuery = useListNeighborRequests({ recipientId: userId }, pollOpts);
   const pendingRequests = (requestsQuery.data ?? []) as NeighborRequestWithUser[];
-  const sentRequestsQuery = useListNeighborRequests({ requesterId: userId });
+  const sentRequestsQuery = useListNeighborRequests({ requesterId: userId }, pollOpts);
   const sentRequests = (sentRequestsQuery.data ?? []) as NeighborRequestWithUser[];
 
   const acceptRequest = useAcceptNeighborRequest();

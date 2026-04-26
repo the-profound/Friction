@@ -28,6 +28,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useListInbox, useMarkInboxOpened, useDeleteInboxItem } from "@workspace/api-client-react";
 import type { InboxItem } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
+import { useFocusPollingOptions } from "@/lib/useScreenFocused";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const CARD_W = Sizing.cardSlotW;
@@ -279,7 +280,14 @@ export default function InboxScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [tapItem, setTapItem] = useState<InboxItem | null>(null);
 
-  const { data: inboxData, isLoading, refetch, isRefetching } = useListInbox({ recipientId: userId });
+  // Poll while the user is sitting on the inbox so newly-delivered letters
+  // appear within seconds without a manual pull-to-refresh. Polling stops
+  // automatically when the screen is blurred or unmounted.
+  const pollOpts = useFocusPollingOptions();
+  const { data: inboxData, isLoading, refetch, isRefetching } = useListInbox(
+    { recipientId: userId },
+    pollOpts,
+  );
   const markOpened = useMarkInboxOpened();
   const deleteInboxItem = useDeleteInboxItem();
 
