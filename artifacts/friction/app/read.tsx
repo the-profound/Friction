@@ -368,6 +368,11 @@ export default function ReadScreen() {
 
   const outX = useRef(new Animated.Value(0)).current;
   const inX = useRef(new Animated.Value(0)).current;
+  // Separate transform for the outgoing page during commit animation.
+  // Decoupling this from `outX` (which drives the single-view transform)
+  // prevents a one-frame flash of the previous page over the new one when
+  // the dual-view → single-view transition happens after the animation.
+  const commitOutX = useRef(new Animated.Value(0)).current;
   const [isCommitting, setIsCommitting] = useState(false);
   const isCommittingRef = useRef(false);
   const containerWidthRef = useRef(layout.containerWidth);
@@ -452,6 +457,12 @@ export default function ReadScreen() {
 
         isCommittingRef.current = true;
         outgoingPageRef.current = { page: currentPageRef.current, showingCover: showingCoverRef.current };
+        // Hand off the current swipe position from `outX` (single-view transform)
+        // to `commitOutX` (dual-view outgoing transform), and reset `outX` to 0
+        // so that when we drop back to the single view the new content is already
+        // centered without a one-frame flash.
+        commitOutX.setValue(dx);
+        outX.setValue(0);
         inX.setValue(-swipeDir * width);
 
         if (swipeDir === -1) {
@@ -462,7 +473,7 @@ export default function ReadScreen() {
         setIsCommitting(true);
 
         Animated.parallel([
-          Animated.timing(outX, {
+          Animated.timing(commitOutX, {
             toValue: swipeDir * width,
             duration: 240,
             useNativeDriver: true,
@@ -474,10 +485,14 @@ export default function ReadScreen() {
             useNativeDriver: true,
           }),
         ]).start(() => {
-          outX.setValue(0);
-          inX.setValue(0);
+          // Switch back to single view first. Since `outX` is already 0, the
+          // single view renders the new page centered with no visible jump.
           isCommittingRef.current = false;
           setIsCommitting(false);
+          // Reset the dual-view transforms; the dual view is about to unmount,
+          // so this has no visible effect but keeps values clean for next time.
+          commitOutX.setValue(0);
+          inX.setValue(0);
         });
       },
       onPanResponderTerminationRequest: () => false,
@@ -767,7 +782,7 @@ Alert.alert("완료", "보관함에 저장됐어요");
             }}>
             {isCommitting ? (
               <>
-                <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ translateX: outX }] }]}>
+                <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ translateX: commitOutX }] }]}>
                   {outgoingPageRef.current.showingCover ? (
                     <CoverPage
                       cover={cover}
