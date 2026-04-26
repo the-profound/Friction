@@ -129,7 +129,12 @@ export const ListArticlesResponseItem = zod.object({
   content: zod.string(),
   status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
   pages: zod.array(zod.string()).nullish(),
-  layoutWidth: zod.number().nullish(),
+  layoutWidth: zod
+    .number()
+    .nullish()
+    .describe(
+      "Container width used when splitting pages (px). Used to ensure consistent line-break rendering across preview and reader screens.",
+    ),
   style: zod.object({}).passthrough().nullish(),
   cover: zod
     .object({
@@ -180,7 +185,12 @@ export const GetOrCreateReadingMemoResponse = zod.object({
   content: zod.string(),
   status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
   pages: zod.array(zod.string()).nullish(),
-  layoutWidth: zod.number().nullish(),
+  layoutWidth: zod
+    .number()
+    .nullish()
+    .describe(
+      "Container width used when splitting pages (px). Used to ensure consistent line-break rendering across preview and reader screens.",
+    ),
   style: zod.object({}).passthrough().nullish(),
   cover: zod
     .object({
@@ -219,7 +229,12 @@ export const GetArticleResponse = zod.object({
   content: zod.string(),
   status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
   pages: zod.array(zod.string()).nullish(),
-  layoutWidth: zod.number().nullish(),
+  layoutWidth: zod
+    .number()
+    .nullish()
+    .describe(
+      "Container width used when splitting pages (px). Used to ensure consistent line-break rendering across preview and reader screens.",
+    ),
   style: zod.object({}).passthrough().nullish(),
   cover: zod
     .object({
@@ -256,7 +271,10 @@ export const UpdateArticleBody = zod.object({
   title: zod.string().min(1).optional(),
   content: zod.string().optional(),
   pages: zod.array(zod.string()).nullish(),
-  layoutWidth: zod.number().nullish(),
+  layoutWidth: zod
+    .number()
+    .nullish()
+    .describe("Container width used when splitting pages (px)."),
   style: zod.object({}).passthrough().nullish(),
   cover: zod
     .object({
@@ -284,7 +302,12 @@ export const UpdateArticleResponse = zod.object({
   content: zod.string(),
   status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
   pages: zod.array(zod.string()).nullish(),
-  layoutWidth: zod.number().nullish(),
+  layoutWidth: zod
+    .number()
+    .nullish()
+    .describe(
+      "Container width used when splitting pages (px). Used to ensure consistent line-break rendering across preview and reader screens.",
+    ),
   style: zod.object({}).passthrough().nullish(),
   cover: zod
     .object({
@@ -335,7 +358,12 @@ export const TransitionArticleStatusResponse = zod.object({
   content: zod.string(),
   status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
   pages: zod.array(zod.string()).nullish(),
-  layoutWidth: zod.number().nullish(),
+  layoutWidth: zod
+    .number()
+    .nullish()
+    .describe(
+      "Container width used when splitting pages (px). Used to ensure consistent line-break rendering across preview and reader screens.",
+    ),
   style: zod.object({}).passthrough().nullish(),
   cover: zod
     .object({
@@ -385,6 +413,12 @@ export const ListInboxResponseItem = zod.object({
       content: zod.string(),
       status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
       pages: zod.array(zod.string()).nullish(),
+      layoutWidth: zod
+        .number()
+        .nullish()
+        .describe(
+          "Container width used when splitting pages (px). Used to ensure consistent line-break rendering across preview and reader screens.",
+        ),
       style: zod.object({}).passthrough().nullish(),
       cover: zod
         .object({
@@ -448,6 +482,12 @@ export const GetInboxItemResponse = zod.object({
       content: zod.string(),
       status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
       pages: zod.array(zod.string()).nullish(),
+      layoutWidth: zod
+        .number()
+        .nullish()
+        .describe(
+          "Container width used when splitting pages (px). Used to ensure consistent line-break rendering across preview and reader screens.",
+        ),
       style: zod.object({}).passthrough().nullish(),
       cover: zod
         .object({
@@ -517,6 +557,12 @@ export const MarkInboxOpenedResponse = zod.object({
       content: zod.string(),
       status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
       pages: zod.array(zod.string()).nullish(),
+      layoutWidth: zod
+        .number()
+        .nullish()
+        .describe(
+          "Container width used when splitting pages (px). Used to ensure consistent line-break rendering across preview and reader screens.",
+        ),
       style: zod.object({}).passthrough().nullish(),
       cover: zod
         .object({
@@ -580,6 +626,12 @@ export const MarkInboxReadResponse = zod.object({
       content: zod.string(),
       status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
       pages: zod.array(zod.string()).nullish(),
+      layoutWidth: zod
+        .number()
+        .nullish()
+        .describe(
+          "Container width used when splitting pages (px). Used to ensure consistent line-break rendering across preview and reader screens.",
+        ),
       style: zod.object({}).passthrough().nullish(),
       cover: zod
         .object({
@@ -730,6 +782,12 @@ export const ListMyCollectionArticlesResponseItem = zod.object({
       content: zod.string(),
       status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
       pages: zod.array(zod.string()).nullish(),
+      layoutWidth: zod
+        .number()
+        .nullish()
+        .describe(
+          "Container width used when splitting pages (px). Used to ensure consistent line-break rendering across preview and reader screens.",
+        ),
       style: zod.object({}).passthrough().nullish(),
       cover: zod
         .object({
@@ -1086,6 +1144,16 @@ export const ListTeamArticlesParams = zod.object({
   id: zod.coerce.string().uuid(),
 });
 
+export const ListTeamArticlesQueryParams = zod.object({
+  userId: zod.coerce
+    .string()
+    .uuid()
+    .optional()
+    .describe(
+      "When provided, each item includes the requesting user's per-article read state (isRead\/completedAt) so callers can decide reading mode (basic vs re_read) without an extra request.",
+    ),
+});
+
 export const ListTeamArticlesResponseItem = zod.object({
   id: zod.string().uuid(),
   teamCollectionId: zod.string().uuid(),
@@ -1100,6 +1168,12 @@ export const ListTeamArticlesResponseItem = zod.object({
       content: zod.string(),
       status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
       pages: zod.array(zod.string()).nullish(),
+      layoutWidth: zod
+        .number()
+        .nullish()
+        .describe(
+          "Container width used when splitting pages (px). Used to ensure consistent line-break rendering across preview and reader screens.",
+        ),
       style: zod.object({}).passthrough().nullish(),
       cover: zod
         .object({
@@ -1124,6 +1198,18 @@ export const ListTeamArticlesResponseItem = zod.object({
       updatedAt: zod.date(),
     })
     .optional(),
+  isRead: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Whether the requesting user has ever completed this article. Only present when the listTeamArticles request includes userId.",
+    ),
+  completedAt: zod
+    .date()
+    .nullish()
+    .describe(
+      "Timestamp at which the requesting user first completed this article, or null if never. Only present when the listTeamArticles request includes userId.",
+    ),
 });
 export const ListTeamArticlesResponse = zod.array(ListTeamArticlesResponseItem);
 
@@ -1312,6 +1398,12 @@ export const ListSendRecordsResponseItem = zod.object({
       content: zod.string(),
       status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
       pages: zod.array(zod.string()).nullish(),
+      layoutWidth: zod
+        .number()
+        .nullish()
+        .describe(
+          "Container width used when splitting pages (px). Used to ensure consistent line-break rendering across preview and reader screens.",
+        ),
       style: zod.object({}).passthrough().nullish(),
       cover: zod
         .object({
@@ -1384,6 +1476,12 @@ export const GetSendRecordResponse = zod.object({
       content: zod.string(),
       status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
       pages: zod.array(zod.string()).nullish(),
+      layoutWidth: zod
+        .number()
+        .nullish()
+        .describe(
+          "Container width used when splitting pages (px). Used to ensure consistent line-break rendering across preview and reader screens.",
+        ),
       style: zod.object({}).passthrough().nullish(),
       cover: zod
         .object({

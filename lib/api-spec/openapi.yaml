@@ -1126,6 +1126,13 @@ paths:
       summary: List articles in team collection
       parameters:
         - $ref: "#/components/parameters/IdPath"
+        - name: userId
+          in: query
+          required: false
+          description: When provided, each item includes the requesting user's per-article read state (isRead/completedAt) so callers can decide reading mode (basic vs re_read) without an extra request.
+          schema:
+            type: string
+            format: uuid
       responses:
         "200":
           description: Articles
@@ -2094,6 +2101,14 @@ components:
           format: date-time
         article:
           $ref: "#/components/schemas/Article"
+        isRead:
+          type: boolean
+          description: Whether the requesting user has ever completed this article. Only present when the listTeamArticles request includes userId.
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp at which the requesting user first completed this article, or null if never. Only present when the listTeamArticles request includes userId.
       required: [id, teamCollectionId, articleId, addedBy, addedAt]
 
     AddTeamMemberBody:

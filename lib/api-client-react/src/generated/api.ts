@@ -42,6 +42,7 @@ import type {
   ListNeighborsParams,
   ListSendRecordsParams,
   ListStoredSentencesParams,
+  ListTeamArticlesParams,
   ListTeamCollectionsParams,
   MyCollection,
   MyCollectionArticle,
@@ -4304,16 +4305,32 @@ export const useRemoveTeamMember = <
 /**
  * @summary List articles in team collection
  */
-export const getListTeamArticlesUrl = (id: string) => {
-  return `/api/team-collections/${id}/articles`;
+export const getListTeamArticlesUrl = (
+  id: string,
+  params?: ListTeamArticlesParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/team-collections/${id}/articles?${stringifiedParams}`
+    : `/api/team-collections/${id}/articles`;
 };
 
 export const listTeamArticles = async (
   id: string,
+  params?: ListTeamArticlesParams,
   options?: RequestInit,
 ): Promise<TeamCollectionArticleWithDetails[]> => {
   return customFetch<TeamCollectionArticleWithDetails[]>(
-    getListTeamArticlesUrl(id),
+    getListTeamArticlesUrl(id, params),
     {
       ...options,
       method: "GET",
@@ -4321,8 +4338,14 @@ export const listTeamArticles = async (
   );
 };
 
-export const getListTeamArticlesQueryKey = (id: string) => {
-  return [`/api/team-collections/${id}/articles`] as const;
+export const getListTeamArticlesQueryKey = (
+  id: string,
+  params?: ListTeamArticlesParams,
+) => {
+  return [
+    `/api/team-collections/${id}/articles`,
+    ...(params ? [params] : []),
+  ] as const;
 };
 
 export const getListTeamArticlesQueryOptions = <
@@ -4330,6 +4353,7 @@ export const getListTeamArticlesQueryOptions = <
   TError = ErrorType<unknown>,
 >(
   id: string,
+  params?: ListTeamArticlesParams,
   options?: {
     query?: UseQueryOptions<
       Awaited<ReturnType<typeof listTeamArticles>>,
@@ -4341,11 +4365,13 @@ export const getListTeamArticlesQueryOptions = <
 ) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getListTeamArticlesQueryKey(id);
+  const queryKey =
+    queryOptions?.queryKey ?? getListTeamArticlesQueryKey(id, params);
 
   const queryFn: QueryFunction<
     Awaited<ReturnType<typeof listTeamArticles>>
-  > = ({ signal }) => listTeamArticles(id, { signal, ...requestOptions });
+  > = ({ signal }) =>
+    listTeamArticles(id, params, { signal, ...requestOptions });
 
   return {
     queryKey,
@@ -4373,6 +4399,7 @@ export function useListTeamArticles<
   TError = ErrorType<unknown>,
 >(
   id: string,
+  params?: ListTeamArticlesParams,
   options?: {
     query?: UseQueryOptions<
       Awaited<ReturnType<typeof listTeamArticles>>,
@@ -4382,7 +4409,7 @@ export function useListTeamArticles<
     request?: SecondParameter<typeof customFetch>;
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getListTeamArticlesQueryOptions(id, options);
+  const queryOptions = getListTeamArticlesQueryOptions(id, params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

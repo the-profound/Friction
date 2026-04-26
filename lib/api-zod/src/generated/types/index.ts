@@ -38,6 +38,7 @@ export * from "./listNeighborRequestsParams";
 export * from "./listNeighborsParams";
 export * from "./listSendRecordsParams";
 export * from "./listStoredSentencesParams";
+export * from "./listTeamArticlesParams";
 export * from "./listTeamCollectionsParams";
 export * from "./myCollection";
 export * from "./myCollectionArticle";

@@ -8,6 +8,7 @@ import {
   articlesTable,
   usersTable,
   inboxTable,
+  userArticleReadsTable,
 } from "@workspace/db";
 import {
   CreateTeamCollectionBody,
@@ -226,18 +227,67 @@ router.delete("/team-collections/:teamId/members/:userId", async (req, res) => {
   res.status(204).send();
 });
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 router.get("/team-collections/:id/articles", async (req, res) => {
   const now = new Date();
+  const { userId } = req.query;
+  if (userId !== undefined && (typeof userId !== "string" || !UUID_REGEX.test(userId))) {
+    res.status(400).json({ error: "userId must be a UUID" });
+    return;
+  }
+  const requesterId = typeof userId === "string" && userId.length > 0 ? userId : null;
+
+  const baseSelect = {
+    id: teamCollectionArticlesTable.id,
+    teamCollectionId: teamCollectionArticlesTable.teamCollectionId,
+    articleId: teamCollectionArticlesTable.articleId,
+    addedBy: teamCollectionArticlesTable.addedBy,
+    addedAt: teamCollectionArticlesTable.addedAt,
+    article: articlesTable,
+  };
+
+  if (requesterId) {
+    const articles = await db
+      .select({
+        ...baseSelect,
+        completedAt: userArticleReadsTable.completedAt,
+      })
+      .from(teamCollectionArticlesTable)
+      .leftJoin(articlesTable, eq(teamCollectionArticlesTable.articleId, articlesTable.id))
+      .leftJoin(
+        inboxTable,
+        and(
+          eq(inboxTable.articleId, teamCollectionArticlesTable.articleId),
+          gt(inboxTable.visibleAt, now),
+        ),
+      )
+      .leftJoin(
+        userArticleReadsTable,
+        and(
+          eq(userArticleReadsTable.articleId, teamCollectionArticlesTable.articleId),
+          eq(userArticleReadsTable.userId, requesterId),
+        ),
+      )
+      .where(
+        and(
+          eq(teamCollectionArticlesTable.teamCollectionId, req.params.id),
+          isNull(inboxTable.id),
+        ),
+      );
+
+    res.json(
+      articles.map((a: typeof articles[number]) => ({
+        ...a,
+        isRead: a.completedAt !== null,
+        completedAt: a.completedAt,
+      })),
+    );
+    return;
+  }
 
   const articles = await db
-    .select({
-      id: teamCollectionArticlesTable.id,
-      teamCollectionId: teamCollectionArticlesTable.teamCollectionId,
-      articleId: teamCollectionArticlesTable.articleId,
-      addedBy: teamCollectionArticlesTable.addedBy,
-      addedAt: teamCollectionArticlesTable.addedAt,
-      article: articlesTable,
-    })
+    .select(baseSelect)
     .from(teamCollectionArticlesTable)
     .leftJoin(articlesTable, eq(teamCollectionArticlesTable.articleId, articlesTable.id))
     .leftJoin(

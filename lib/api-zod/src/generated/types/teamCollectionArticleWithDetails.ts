@@ -14,4 +14,8 @@ export interface TeamCollectionArticleWithDetails {
   addedBy: string;
   addedAt: Date;
   article?: Article;
+  /** Whether the requesting user has ever completed this article. Only present when the listTeamArticles request includes userId. */
+  isRead?: boolean;
+  /** Timestamp at which the requesting user first completed this article, or null if never. Only present when the listTeamArticles request includes userId. */
+  completedAt?: Date | null;
 }

@@ -99,6 +99,7 @@ export interface Article {
   content: string;
   status: ArticleStatus;
   pages?: string[] | null;
+  /** Container width used when splitting pages (px). Used to ensure consistent line-break rendering across preview and reader screens. */
   layoutWidth?: number | null;
   style?: ArticleStyle;
   cover?: ArticleCover | null;
@@ -121,6 +122,7 @@ export interface UpdateArticleBody {
   title?: string;
   content?: string;
   pages?: string[] | null;
+  /** Container width used when splitting pages (px). */
   layoutWidth?: number | null;
   style?: UpdateArticleBodyStyle;
   cover?: ArticleCover | null;
@@ -275,7 +277,6 @@ export interface TeamCollection {
   name: string;
   description?: string | null;
   creatorId: string;
-  creatorNickname?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -366,6 +367,10 @@ export interface TeamCollectionArticleWithDetails {
   addedBy: string;
   addedAt: string;
   article?: Article;
+  /** Whether the requesting user has ever completed this article. Only present when the listTeamArticles request includes userId. */
+  isRead?: boolean;
+  /** Timestamp at which the requesting user first completed this article, or null if never. Only present when the listTeamArticles request includes userId. */
+  completedAt?: string | null;
 }
 
 export interface AddTeamMemberBody {
@@ -513,6 +518,13 @@ export type CheckArticleRead200 = {
 
 export type ListTeamCollectionsParams = {
   userId: string;
+};
+
+export type ListTeamArticlesParams = {
+  /**
+   * When provided, each item includes the requesting user's per-article read state (isRead/completedAt) so callers can decide reading mode (basic vs re_read) without an extra request.
+   */
+  userId?: string;
 };
 
 export type ListNeighborsParams = {

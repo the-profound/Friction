@@ -77,7 +77,7 @@ export default function TeamCollectionDetailScreen() {
   const membersQuery = useListTeamMembers(id ?? "");
   const members = (membersQuery.data ?? []) as TeamMemberWithUser[];
 
-  const articlesQuery = useListTeamArticles(id ?? "");
+  const articlesQuery = useListTeamArticles(id ?? "", { userId });
   const articles = (articlesQuery.data ?? []) as TeamCollectionArticleWithDetails[];
 
   const updateCollection = useUpdateTeamCollection();
@@ -261,21 +261,27 @@ export default function TeamCollectionDetailScreen() {
 
   const handleArticleNavigate = useCallback((item: TeamCollectionArticleWithDetails) => {
     closeOpenRow();
-    const unreadInboxItem = inboxItems.find(
-      (inbox) => inbox.articleId === item.articleId && !inbox.isRead,
-    );
-    if (unreadInboxItem) {
-      router.push({
-        pathname: "/read",
-        params: { articleId: item.articleId, inboxId: unreadInboxItem.id, mode: "basic" },
-      });
-    } else {
+    const isOwnArticle = item.article?.authorId === userId;
+    const hasReadBefore = item.completedAt != null;
+
+    if (isOwnArticle || hasReadBefore) {
       router.push({
         pathname: "/read",
         params: { articleId: item.articleId, mode: "re_read" },
       });
+      return;
     }
-  }, [router, inboxItems, closeOpenRow]);
+
+    const unreadInboxItem = inboxItems.find(
+      (inbox) => inbox.articleId === item.articleId && !inbox.isRead,
+    );
+    router.push({
+      pathname: "/read",
+      params: unreadInboxItem
+        ? { articleId: item.articleId, inboxId: unreadInboxItem.id, mode: "basic" }
+        : { articleId: item.articleId, mode: "basic" },
+    });
+  }, [router, inboxItems, closeOpenRow, userId]);
 
   const handleArticleDeletePress = useCallback((item: TeamCollectionArticleWithDetails) => {
     const canDelete = isOwner || item.article?.authorId === userId;

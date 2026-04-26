@@ -13,6 +13,7 @@ export interface UpdateArticleBody {
   title?: string;
   content?: string;
   pages?: string[] | null;
+  /** Container width used when splitting pages (px). */
   layoutWidth?: number | null;
   style?: UpdateArticleBodyStyle;
   cover?: ArticleCover | null;

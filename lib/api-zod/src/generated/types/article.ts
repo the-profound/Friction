@@ -16,6 +16,7 @@ export interface Article {
   content: string;
   status: ArticleStatus;
   pages?: string[] | null;
+  /** Container width used when splitting pages (px). Used to ensure consistent line-break rendering across preview and reader screens. */
   layoutWidth?: number | null;
   style?: ArticleStyle;
   cover?: ArticleCover | null;
