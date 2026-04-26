@@ -5,6 +5,7 @@ import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { PageHeader } from "@/components/NavBar/PageHeader";
+import RefreshableEmpty from "@/components/RefreshableEmpty";
 import { useNavigation } from "@/contexts/NavigationContext";
 import { useUser } from "@/contexts/UserContext";
 import { NeighborsInline } from "@/components/ToInline/NeighborsInline";
@@ -191,11 +192,15 @@ export default function ToScreen() {
 
     if (sendRecords.length === 0) {
       return (
-        <View style={styles.emptyContainer}>
+        <RefreshableEmpty
+          refreshing={sendRecordsQuery.isRefetching}
+          onRefresh={() => sendRecordsQuery.refetch()}
+          contentContainerStyle={styles.emptyContainer}
+        >
           <Feather name="send" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>보낸 편지가 없어요</Text>
           <Text style={styles.emptySubtitle}>편지를 보내면 여기에 기록돼요</Text>
-        </View>
+        </RefreshableEmpty>
       );
     }
 

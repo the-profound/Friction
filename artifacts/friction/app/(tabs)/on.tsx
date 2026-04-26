@@ -16,6 +16,7 @@ import { PageHeader } from "@/components/NavBar/PageHeader";
 import ArticleListItem from "@/components/ArticleListItem/ArticleListItem";
 import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
+import RefreshableEmpty from "@/components/RefreshableEmpty";
 import { useQueryClient } from "@tanstack/react-query";
 import { useListArticles, useCreateArticle, useDeleteArticle } from "@workspace/api-client-react";
 import type { Article } from "@workspace/api-client-react";
@@ -326,7 +327,11 @@ Alert.alert("오류", "메모 생성에 실패했습니다.");
           <Text style={styles.emptySubtitle}>불러오는 중...</Text>
         </View>
       ) : sortedArticles.length === 0 ? (
-        <View style={styles.emptyContainer}>
+        <RefreshableEmpty
+          refreshing={isRefetching}
+          onRefresh={refetch}
+          contentContainerStyle={styles.emptyContainer}
+        >
           <Feather name="edit-3" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>메모를 작성해보세요</Text>
           <Text style={styles.emptySubtitle}>
@@ -336,7 +341,7 @@ Alert.alert("오류", "메모 생성에 실패했습니다.");
             <Feather name="edit-3" size={16} color={Colors.white} />
             <Text style={styles.createButtonText}>새 메모</Text>
           </Pressable>
-        </View>
+        </RefreshableEmpty>
       ) : (
         <FlatList
           data={sortedArticles}

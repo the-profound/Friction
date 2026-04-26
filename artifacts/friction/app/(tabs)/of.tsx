@@ -19,6 +19,7 @@ import { PageHeader } from "@/components/NavBar/PageHeader";
 import { useNavigation } from "@/contexts/NavigationContext";
 import { useUser } from "@/contexts/UserContext";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
+import RefreshableEmpty from "@/components/RefreshableEmpty";
 import {
   useListMyCollections,
   useListTeamCollections,
@@ -500,59 +501,79 @@ export default function OfScreen() {
   const renderEmptyPersonal = () => {
     if (activeMiniPersonal === "subscribed") {
       return (
-        <View style={styles.emptyContainer}>
+        <RefreshableEmpty
+          refreshing={isRefetching}
+          onRefresh={handleRefresh}
+          contentContainerStyle={styles.emptyContainer}
+        >
           <Feather name="globe" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>구독 모음이 없어요</Text>
           <Text style={styles.emptySubtitle}>공개로 설정한 모음이 여기에 표시돼요{"\n"}구독 기능은 추후 업데이트 예정이에요</Text>
           <Pressable style={styles.emptyButton} onPress={handleAdd}>
             <Text style={styles.emptyButtonText}>새 모음 만들기</Text>
           </Pressable>
-        </View>
+        </RefreshableEmpty>
       );
     }
     return (
-      <View style={styles.emptyContainer}>
+      <RefreshableEmpty
+        refreshing={isRefetching}
+        onRefresh={handleRefresh}
+        contentContainerStyle={styles.emptyContainer}
+      >
         <Feather name="folder" size={40} color={Colors.zinc300} />
         <Text style={styles.emptyTitle}>내 모음이 없어요</Text>
         <Text style={styles.emptySubtitle}>완성된 편지를 모아두는 나만의 공간을 만들어보세요</Text>
         <Pressable style={styles.emptyButton} onPress={handleAdd}>
           <Text style={styles.emptyButtonText}>새 모음 만들기</Text>
         </Pressable>
-      </View>
+      </RefreshableEmpty>
     );
   };
 
   const renderEmptyTeam = () => {
     if (activeMiniGroup === "joined") {
       return (
-        <View style={styles.emptyContainer}>
+        <RefreshableEmpty
+          refreshing={isRefetching}
+          onRefresh={handleRefresh}
+          contentContainerStyle={styles.emptyContainer}
+        >
           <Feather name="user-check" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>참여 중인 모음이 없어요</Text>
           <Text style={styles.emptySubtitle}>초대 코드를 입력하면 단체 모음에 참여할 수 있어요</Text>
           <Pressable style={styles.emptyButton} onPress={handleOpenJoin}>
             <Text style={styles.emptyButtonText}>초대 코드로 참여</Text>
           </Pressable>
-        </View>
+        </RefreshableEmpty>
       );
     }
     return (
-      <View style={styles.emptyContainer}>
+      <RefreshableEmpty
+        refreshing={isRefetching}
+        onRefresh={handleRefresh}
+        contentContainerStyle={styles.emptyContainer}
+      >
         <Feather name="users" size={40} color={Colors.zinc300} />
         <Text style={styles.emptyTitle}>단체 모음이 없어요</Text>
         <Text style={styles.emptySubtitle}>함께 글을 나눌 모임을 만들어보세요</Text>
         <Pressable style={styles.emptyButton} onPress={handleOpenCreate}>
           <Text style={styles.emptyButtonText}>새 단체 모음 만들기</Text>
         </Pressable>
-      </View>
+      </RefreshableEmpty>
     );
   };
 
   const renderEmptySentence = () => (
-    <View style={styles.emptyContainer}>
+    <RefreshableEmpty
+      refreshing={isRefetching}
+      onRefresh={handleRefresh}
+      contentContainerStyle={styles.emptyContainer}
+    >
       <Feather name="bookmark" size={40} color={Colors.zinc300} />
       <Text style={styles.emptyTitle}>수집한 문장이 없어요</Text>
       <Text style={styles.emptySubtitle}>읽기 화면에서 마음에 드는 문장을{"\n"}길게 눌러 수집해보세요</Text>
-    </View>
+    </RefreshableEmpty>
   );
 
   const renderContent = () => {

@@ -17,6 +17,7 @@ import { Feather } from "@expo/vector-icons";
 import { Colors, Spacing, Typography } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
+import RefreshableEmpty from "@/components/RefreshableEmpty";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import {
@@ -404,14 +405,18 @@ export function NeighborsInline({
             </Pressable>
           </View>
         ) : neighbors.length === 0 ? (
-          <View style={styles.emptyContainer}>
+          <RefreshableEmpty
+            refreshing={neighborsQuery.isRefetching}
+            onRefresh={() => neighborsQuery.refetch()}
+            contentContainerStyle={styles.emptyContainer}
+          >
             <Feather name="users" size={40} color={Colors.zinc300} />
             <Text style={styles.emptyTitle}>아직 이웃이 없어요</Text>
             <Text style={styles.emptySubtitle}>닉네임으로 이웃을 찾아보세요</Text>
             <Pressable style={styles.addButton} onPress={() => setAddSheetVisible(true)}>
               <Text style={styles.addButtonText}>이웃 추가</Text>
             </Pressable>
-          </View>
+          </RefreshableEmpty>
         ) : (
           <FlatList
             data={neighbors}
@@ -442,11 +447,15 @@ export function NeighborsInline({
             </Pressable>
           </View>
         ) : pendingRequests.length === 0 ? (
-          <View style={styles.emptyContainer}>
+          <RefreshableEmpty
+            refreshing={requestsQuery.isRefetching}
+            onRefresh={() => requestsQuery.refetch()}
+            contentContainerStyle={styles.emptyContainer}
+          >
             <Feather name="bell" size={40} color={Colors.zinc300} />
             <Text style={styles.emptyTitle}>대기 중인 요청이 없어요</Text>
             <Text style={styles.emptySubtitle}>이웃 요청이 오면 여기에 표시돼요</Text>
-          </View>
+          </RefreshableEmpty>
         ) : (
           <FlatList
             data={pendingRequests}
@@ -476,11 +485,15 @@ export function NeighborsInline({
           </Pressable>
         </View>
       ) : sentRequests.length === 0 ? (
-        <View style={styles.emptyContainer}>
+        <RefreshableEmpty
+          refreshing={sentRequestsQuery.isRefetching}
+          onRefresh={() => sentRequestsQuery.refetch()}
+          contentContainerStyle={styles.emptyContainer}
+        >
           <Feather name="send" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>보낸 요청이 없어요</Text>
           <Text style={styles.emptySubtitle}>이웃 추가 버튼으로 요청을 보내보세요</Text>
-        </View>
+        </RefreshableEmpty>
       ) : (
         <FlatList
           data={sentRequests}
