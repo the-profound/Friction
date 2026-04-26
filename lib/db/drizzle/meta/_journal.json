@@ -43,6 +43,13 @@
       "when": 1745568000000,
       "tag": "0005_add_layout_width_to_articles",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1777000000000,
+      "tag": "0006_realtime_publication_for_incoming_items",
+      "breakpoints": true
     }
   ]
 }

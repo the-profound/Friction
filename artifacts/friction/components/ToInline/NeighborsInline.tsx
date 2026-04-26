@@ -16,7 +16,11 @@ import { Feather } from "@expo/vector-icons";
 
 import { Colors, Spacing, Typography } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
-import { useFocusPollingOptions } from "@/lib/useScreenFocused";
+import {
+  INCOMING_FALLBACK_POLL_INTERVAL_MS,
+  useFocusPollingOptions,
+} from "@/lib/useScreenFocused";
+import { useRealtimeChannel } from "@/lib/useRealtimeChannel";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import RefreshableEmpty from "@/components/RefreshableEmpty";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
@@ -102,16 +106,34 @@ export function NeighborsInline({
     }
   }, [focusRequestsSignal]);
 
-  // Poll incoming-related queries (received requests, neighbors, sent
-  // requests) while the screen is focused so newly-arrived items appear
-  // within seconds without a manual refresh.
-  const pollOpts = useFocusPollingOptions();
+  // Realtime subscriptions push neighbor + request updates within sub-second
+  // latency; the slower focus-gated poll (60s) stays as a safety net for
+  // environments where the realtime channel is unavailable.
+  const pollOpts = useFocusPollingOptions(INCOMING_FALLBACK_POLL_INTERVAL_MS);
   const neighborsQuery = useListNeighbors({ userId }, pollOpts);
   const neighbors = (neighborsQuery.data ?? []) as NeighborWithUser[];
   const requestsQuery = useListNeighborRequests({ recipientId: userId }, pollOpts);
   const pendingRequests = (requestsQuery.data ?? []) as NeighborRequestWithUser[];
   const sentRequestsQuery = useListNeighborRequests({ requesterId: userId }, pollOpts);
   const sentRequests = (sentRequestsQuery.data ?? []) as NeighborRequestWithUser[];
+
+  // Watch the neighbors table for both pair orderings (user_a / user_b) so
+  // any new accepted neighbor relationship surfaces immediately regardless of
+  // which side the row was inserted from.
+  useRealtimeChannel(
+    userId ? `neighbors:${userId}` : null,
+    [
+      { table: "neighbors", filter: `user_a_id=eq.${userId}` },
+      { table: "neighbors", filter: `user_b_id=eq.${userId}` },
+      { table: "neighbor_requests", filter: `recipient_id=eq.${userId}` },
+      { table: "neighbor_requests", filter: `requester_id=eq.${userId}` },
+    ],
+    () => {
+      neighborsQuery.refetch();
+      requestsQuery.refetch();
+      sentRequestsQuery.refetch();
+    },
+  );
 
   const acceptRequest = useAcceptNeighborRequest();
   const rejectRequest = useRejectNeighborRequest();

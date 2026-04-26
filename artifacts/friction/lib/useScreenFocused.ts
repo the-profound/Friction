@@ -26,6 +26,16 @@ export function useScreenFocused(): boolean {
 export const INCOMING_POLL_INTERVAL_MS = 15000;
 
 /**
+ * Slower polling interval used as a safety-net fallback when realtime
+ * subscriptions are also active. Realtime push delivers sub-second updates;
+ * the polling interval only needs to cover the rare case where the realtime
+ * channel is unavailable (e.g. the table isn't in the publication, the
+ * websocket connection failed, etc.). Bumping this from 15s to 60s cuts
+ * background request volume by 4× without compromising eventual freshness.
+ */
+export const INCOMING_FALLBACK_POLL_INTERVAL_MS = 60000;
+
+/**
  * Returns React Query options that enable a focus-gated polling interval
  * on a generated `useListX` / `useGetX` hook. Polling stops automatically
  * when the screen is blurred or unmounted.

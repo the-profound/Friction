@@ -28,7 +28,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useListInbox, useMarkInboxOpened, useDeleteInboxItem } from "@workspace/api-client-react";
 import type { InboxItem } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
+import { INCOMING_FALLBACK_POLL_INTERVAL_MS } from "@/lib/useScreenFocused";
 import { useFocusPollingOptions } from "@/lib/useScreenFocused";
+import { useRealtimeChannel } from "@/lib/useRealtimeChannel";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const CARD_W = Sizing.cardSlotW;
@@ -280,13 +282,23 @@ export default function InboxScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [tapItem, setTapItem] = useState<InboxItem | null>(null);
 
-  // Poll while the user is sitting on the inbox so newly-delivered letters
-  // appear within seconds without a manual pull-to-refresh. Polling stops
-  // automatically when the screen is blurred or unmounted.
-  const pollOpts = useFocusPollingOptions();
+  // Realtime subscription is the primary mechanism for surfacing freshly-
+  // delivered letters — sub-second push without background HTTP traffic.
+  // The slower focus-gated poll (60s) stays as a safety net for environments
+  // where the realtime channel is unavailable. Both stop automatically when
+  // the screen is blurred or unmounted.
+  const pollOpts = useFocusPollingOptions(INCOMING_FALLBACK_POLL_INTERVAL_MS);
   const { data: inboxData, isLoading, refetch, isRefetching } = useListInbox(
     { recipientId: userId },
     pollOpts,
+  );
+
+  useRealtimeChannel(
+    userId ? `inbox:${userId}` : null,
+    [{ table: "inbox", filter: `recipient_id=eq.${userId}` }],
+    () => {
+      refetch();
+    },
   );
   const markOpened = useMarkInboxOpened();
   const deleteInboxItem = useDeleteInboxItem();

@@ -31,7 +31,11 @@ import type {
   UserSearchResult,
 } from "@workspace/api-client-react";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
-import { useFocusPollingOptions } from "@/lib/useScreenFocused";
+import {
+  INCOMING_FALLBACK_POLL_INTERVAL_MS,
+  useFocusPollingOptions,
+} from "@/lib/useScreenFocused";
+import { useRealtimeChannel } from "@/lib/useRealtimeChannel";
 
 type DetailTab = "articles" | "members";
 
@@ -72,10 +76,10 @@ export default function TeamCollectionDetailScreen() {
     excludeTeamId: id,
   });
 
-  // Poll the team-collection's members + articles + the inbox while focused
-  // so newly-added members and freshly-shared articles appear within seconds
-  // without a manual refresh.
-  const pollOpts = useFocusPollingOptions();
+  // Realtime subscriptions push membership + article changes within sub-
+  // second latency; the slower focus-gated poll (60s) stays as a safety net
+  // for environments where the realtime channel is unavailable.
+  const pollOpts = useFocusPollingOptions(INCOMING_FALLBACK_POLL_INTERVAL_MS);
   const collectionQuery = useGetTeamCollection(id ?? "");
   const collection = collectionQuery.data;
 
@@ -89,6 +93,32 @@ export default function TeamCollectionDetailScreen() {
   const deleteCollection = useDeleteTeamCollection();
   const inboxQuery = useListInbox({ recipientId: userId }, pollOpts);
   const inboxItems = (inboxQuery.data ?? []) as InboxItem[];
+
+  useRealtimeChannel(
+    id ? `team-collection:${id}` : null,
+    [
+      {
+        table: "team_collection_memberships",
+        filter: `team_collection_id=eq.${id}`,
+      },
+      {
+        table: "team_collection_articles",
+        filter: `team_collection_id=eq.${id}`,
+      },
+    ],
+    () => {
+      membersQuery.refetch();
+      articlesQuery.refetch();
+    },
+  );
+
+  useRealtimeChannel(
+    userId ? `team-detail-inbox:${userId}` : null,
+    [{ table: "inbox", filter: `recipient_id=eq.${userId}` }],
+    () => {
+      inboxQuery.refetch();
+    },
+  );
 
   const removeArticle = useRemoveTeamArticle();
   const removeMember = useRemoveTeamMember();

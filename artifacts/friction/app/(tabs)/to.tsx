@@ -19,7 +19,11 @@ import type {
   SendRecordWithDetails,
 } from "@workspace/api-client-react";
 import { formatDeliveryTime } from "@/lib/deliverySync";
-import { useFocusPollingOptions } from "@/lib/useScreenFocused";
+import {
+  INCOMING_FALLBACK_POLL_INTERVAL_MS,
+  useFocusPollingOptions,
+} from "@/lib/useScreenFocused";
+import { useRealtimeChannel } from "@/lib/useRealtimeChannel";
 
 type ParamRouter = ReturnType<typeof useRouter>;
 
@@ -94,14 +98,30 @@ export default function ToScreen() {
     ]);
   }, [router]);
 
-  // Poll the request banner count + send records while the screen is focused
-  // so newly-arrived neighbor requests appear within seconds without a manual
-  // refresh. The neighbors list itself polls inside NeighborsInline.
-  const pollOpts = useFocusPollingOptions();
+  // Realtime subscription is the primary mechanism for surfacing freshly-
+  // arrived neighbor requests; the slower focus-gated poll (60s) stays as a
+  // safety net. The neighbors list itself owns its own subscription inside
+  // NeighborsInline. Send records still use plain focus polling because they
+  // also reflect server-side delivery state changes that are not driven by a
+  // single watched table.
+  const pollOpts = useFocusPollingOptions(INCOMING_FALLBACK_POLL_INTERVAL_MS);
   const requestsQuery = useListNeighborRequests({ recipientId: userId }, pollOpts);
   const pendingRequests = (requestsQuery.data ?? []) as NeighborRequestWithUser[];
   const sendRecordsQuery = useListSendRecords({ senderId: userId }, pollOpts);
   const sendRecords = (sendRecordsQuery.data ?? []) as SendRecordWithDetails[];
+
+  useRealtimeChannel(
+    userId ? `to-requests:${userId}` : null,
+    [
+      {
+        table: "neighbor_requests",
+        filter: `recipient_id=eq.${userId}`,
+      },
+    ],
+    () => {
+      requestsQuery.refetch();
+    },
+  );
 
   const recentSendRecords = useMemo(
     () =>
