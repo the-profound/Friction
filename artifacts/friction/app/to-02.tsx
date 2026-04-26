@@ -7,6 +7,7 @@ import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
+import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import {
   useListArticles,
   useListNeighbors,
@@ -239,16 +240,20 @@ export default function SendScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
-        <Pressable
-          style={[styles.sendButton, (!canSend || isPending) && styles.sendButtonDisabled]}
-          disabled={!canSend || isPending}
+        <SubmitButton
+          style={styles.sendButton}
+          disabledStyle={styles.sendButtonDisabled}
+          textStyle={styles.sendButtonText}
+          disabledTextStyle={styles.sendButtonTextDisabled}
           onPress={() => setConfirmVisible(true)}
-        >
-          <Feather name="send" size={16} color={canSend && !isPending ? Colors.white : Colors.zinc400} />
-          <Text style={[styles.sendButtonText, (!canSend || isPending) && styles.sendButtonTextDisabled]}>
-            {isPending ? "처리 중..." : "보내기"}
-          </Text>
-        </Pressable>
+          pending={isPending}
+          disabled={!canSend}
+          label="보내기"
+          pendingLabel="처리 중..."
+          renderIcon={({ disabled }) => (
+            <Feather name="send" size={16} color={disabled ? Colors.zinc400 : Colors.white} />
+          )}
+        />
       </View>
 
       <BottomSheet

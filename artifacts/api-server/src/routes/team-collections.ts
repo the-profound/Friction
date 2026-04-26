@@ -18,6 +18,8 @@ import {
 
 const router: IRouter = Router();
 
+const pendingTeamCollectionCreates = new Set<string>();
+
 router.get("/team-collections", async (req, res) => {
   const { userId } = req.query;
   if (!userId || typeof userId !== "string") {
@@ -58,20 +60,55 @@ router.post("/team-collections", async (req, res) => {
     return;
   }
   const { name, description, creatorId } = parsed.data;
+  const normalizedDesc = (description ?? "").trim() || null;
 
-  const [collection] = await db.insert(teamCollectionsTable).values({
-    name,
-    description: description ?? null,
-    creatorId,
-  }).returning();
+  const lockKey = `${creatorId}:${name}:${normalizedDesc ?? ""}`;
+  if (pendingTeamCollectionCreates.has(lockKey)) {
+    res.status(409).json({ error: "중복 요청입니다. 잠시 후 다시 시도해주세요." });
+    return;
+  }
 
-  await db.insert(teamCollectionMembershipsTable).values({
-    teamCollectionId: collection.id,
-    userId: creatorId,
-    role: "OWNER",
-  });
+  pendingTeamCollectionCreates.add(lockKey);
+  try {
+    const dedupeWindow = new Date(Date.now() - 10_000);
+    const descCondition = normalizedDesc
+      ? eq(teamCollectionsTable.description, normalizedDesc)
+      : isNull(teamCollectionsTable.description);
 
-  res.status(201).json(collection);
+    const [recent] = await db
+      .select()
+      .from(teamCollectionsTable)
+      .where(
+        and(
+          eq(teamCollectionsTable.creatorId, creatorId),
+          eq(teamCollectionsTable.name, name),
+          descCondition,
+          gt(teamCollectionsTable.createdAt, dedupeWindow),
+        ),
+      )
+      .limit(1);
+
+    if (recent) {
+      res.status(201).json(recent);
+      return;
+    }
+
+    const [collection] = await db.insert(teamCollectionsTable).values({
+      name,
+      description: normalizedDesc,
+      creatorId,
+    }).returning();
+
+    await db.insert(teamCollectionMembershipsTable).values({
+      teamCollectionId: collection.id,
+      userId: creatorId,
+      role: "OWNER",
+    });
+
+    res.status(201).json(collection);
+  } finally {
+    pendingTeamCollectionCreates.delete(lockKey);
+  }
 });
 
 router.get("/team-collections/:id", async (req, res) => {

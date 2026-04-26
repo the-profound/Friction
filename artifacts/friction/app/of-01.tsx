@@ -13,6 +13,7 @@ import {
 } from "@workspace/api-client-react";
 import type { MyCollection } from "@workspace/api-client-react";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
+import SubmitButton from "@/components/SubmitButton/SubmitButton";
 
 type MiniTab = "mine" | "public";
 
@@ -220,13 +221,16 @@ export default function PersonalCollectionListScreen() {
               thumbColor={Colors.white}
             />
           </View>
-          <Pressable
-            style={[styles.confirmButton, !newName.trim() && styles.confirmDisabled]}
+          <SubmitButton
+            style={styles.confirmButton}
+            disabledStyle={styles.confirmDisabled}
+            textStyle={styles.confirmButtonText}
             onPress={handleCreate}
+            pending={createCollection.isPending}
             disabled={!newName.trim()}
-          >
-            <Text style={styles.confirmButtonText}>만들기</Text>
-          </Pressable>
+            label="만들기"
+            pendingLabel="만드는 중..."
+          />
         </View>
       </BottomSheet>
 

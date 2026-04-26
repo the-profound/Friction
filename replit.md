@@ -155,6 +155,7 @@ Reading/writing platform mobile app. All 37 Notion Queue DB items processed (순
 **Shared components:**
 - `components/BottomSheet/BottomSheet.tsx` — draggable bottom sheet with snap points
 - `components/ConfirmModal/ConfirmModal.tsx` — confirmation dialog
+- `components/SubmitButton/SubmitButton.tsx` — Pressable wrapper that auto-disables and swaps label while a mutation is pending; built-in re-entry guard prevents double-submit. Used across all create/save/send/accept buttons (of.tsx, of-01.tsx, of-01-detail.tsx, of-02.tsx, on-02.tsx, to-01.tsx, to-02.tsx).
 - `components/ProgressIndicator/ProgressIndicator.tsx` — linear/circular progress
 - `components/ArticleCardItem/ArticleCardItem.tsx` — 5:8 cover-style carousel card (330×528) with image/color/default background, title & author overlay
 - `components/ArticleListItem/ArticleListItem.tsx` — list item with status badge

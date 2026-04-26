@@ -5,6 +5,7 @@ import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ArticleListItem from "@/components/ArticleListItem/ArticleListItem";
+import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
 import { useListArticles, useDeleteArticle, useCreateArticle } from "@workspace/api-client-react";
 import type { Article, ArticleCover } from "@workspace/api-client-react";
@@ -177,8 +178,9 @@ export default function MemoCollectionScreen() {
           <Feather name="edit-3" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>아직 메모가 없어요</Text>
           <Text style={styles.emptySubtitle}>기록함에서 새 메모를 작성해보세요</Text>
-          <Pressable
+          <SubmitButton
             style={styles.writeButton}
+            textStyle={styles.writeButtonText}
             onPress={async () => {
               try {
                 const article = await createArticle.mutateAsync({
@@ -189,10 +191,13 @@ export default function MemoCollectionScreen() {
                 Alert.alert("오류", "메모 생성에 실패했습니다.");
               }
             }}
-          >
-            <Feather name="edit" size={16} color={Colors.white} />
-            <Text style={styles.writeButtonText}>새 메모 쓰기</Text>
-          </Pressable>
+            pending={createArticle.isPending}
+            label="새 메모 쓰기"
+            pendingLabel="만드는 중..."
+            renderIcon={({ disabled }) => (
+              <Feather name="edit" size={16} color={disabled ? Colors.zinc300 : Colors.white} />
+            )}
+          />
         </View>
       ) : (
         <FlatList

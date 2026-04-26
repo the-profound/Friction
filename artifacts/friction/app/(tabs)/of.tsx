@@ -38,6 +38,7 @@ import type {
 } from "@workspace/api-client-react";
 import type { GroupMiniSubTabKey } from "@/types/navigation";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
+import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
 
 export default function OfScreen() {
@@ -285,11 +286,14 @@ export default function OfScreen() {
     }
   }, [joinPreview, userId, addTeamMember, teamCollectionsQuery, setOfMiniSubTab]);
 
+  const isCreating = createMyCollection.isPending || createTeamCollection.isPending;
+
   const handleCreateConfirm = useCallback(async () => {
     if (!newName.trim()) {
       Alert.alert("오류", "이름을 입력해주세요");
       return;
     }
+    if (isCreating) return;
     try {
       if (ofSubTab === "personal") {
         const newMyCollection = await createMyCollection.mutateAsync({
@@ -310,7 +314,7 @@ export default function OfScreen() {
       const msg = e instanceof Error ? e.message : "모음 생성에 실패했습니다.";
       Alert.alert("오류", msg);
     }
-  }, [ofSubTab, newName, newDescription, userId, createMyCollection, createTeamCollection, myCollectionsQuery, teamCollectionsQuery, router]);
+  }, [ofSubTab, newName, newDescription, userId, isCreating, createMyCollection, createTeamCollection, myCollectionsQuery, teamCollectionsQuery, router]);
 
   const handleSentenceCopy = useCallback(async (text: string) => {
     try {
@@ -738,13 +742,16 @@ export default function OfScreen() {
             {joinError ? (
               <Text style={styles.joinErrorText}>{joinError}</Text>
             ) : null}
-            <Pressable
-              style={[styles.createConfirmButton, (!inviteCode.trim() || isJoinLoading) && styles.createConfirmDisabled]}
+            <SubmitButton
+              style={styles.createConfirmButton}
+              disabledStyle={styles.createConfirmDisabled}
+              textStyle={styles.createConfirmText}
               onPress={handleJoinCodeSubmit}
-              disabled={!inviteCode.trim() || isJoinLoading}
-            >
-              <Text style={styles.createConfirmText}>{isJoinLoading ? "확인 중..." : "다음"}</Text>
-            </Pressable>
+              pending={isJoinLoading}
+              disabled={!inviteCode.trim()}
+              label="다음"
+              pendingLabel="확인 중..."
+            />
           </View>
         ) : joinPreview ? (
           <View style={styles.joinPreviewContainer}>
@@ -763,13 +770,15 @@ export default function OfScreen() {
             {joinError ? (
               <Text style={styles.joinErrorText}>{joinError}</Text>
             ) : null}
-            <Pressable
-              style={[styles.createConfirmButton, isJoinLoading && styles.createConfirmDisabled]}
+            <SubmitButton
+              style={styles.createConfirmButton}
+              disabledStyle={styles.createConfirmDisabled}
+              textStyle={styles.createConfirmText}
               onPress={handleJoinConfirm}
-              disabled={isJoinLoading}
-            >
-              <Text style={styles.createConfirmText}>{isJoinLoading ? "참가 중..." : "참가하기"}</Text>
-            </Pressable>
+              pending={isJoinLoading}
+              label="참가하기"
+              pendingLabel="참가 중..."
+            />
             <Pressable
               style={styles.joinBackButton}
               onPress={() => { setJoinStep("code"); setJoinError(null); }}
@@ -805,13 +814,16 @@ export default function OfScreen() {
             multiline
             textAlignVertical="top"
           />
-          <Pressable
-            style={[styles.createConfirmButton, !newName.trim() && styles.createConfirmDisabled]}
+          <SubmitButton
+            style={styles.createConfirmButton}
+            disabledStyle={styles.createConfirmDisabled}
+            textStyle={styles.createConfirmText}
             onPress={handleCreateConfirm}
+            pending={isCreating}
             disabled={!newName.trim()}
-          >
-            <Text style={styles.createConfirmText}>만들기</Text>
-          </Pressable>
+            label="만들기"
+            pendingLabel="만드는 중..."
+          />
         </View>
       </BottomSheet>
 

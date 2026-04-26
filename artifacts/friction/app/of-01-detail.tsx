@@ -22,6 +22,7 @@ import {
 import type { MyCollectionArticleWithDetails, MyCollection } from "@workspace/api-client-react";
 import { MyArticlesPickerBottomSheet } from "@/components/MyArticlesPickerBottomSheet/MyArticlesPickerBottomSheet";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
+import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
 
 export default function PersonalCollectionDetailScreen() {
@@ -503,13 +504,16 @@ export default function PersonalCollectionDetailScreen() {
             multiline
             textAlignVertical="top"
           />
-          <Pressable
-            style={[styles.editConfirmButton, !editName.trim() && styles.editConfirmDisabled]}
+          <SubmitButton
+            style={styles.editConfirmButton}
+            disabledStyle={styles.editConfirmDisabled}
+            textStyle={styles.editConfirmText}
             onPress={handleSaveEdit}
+            pending={updateCollection.isPending}
             disabled={!editName.trim()}
-          >
-            <Text style={styles.editConfirmText}>저장</Text>
-          </Pressable>
+            label="저장"
+            pendingLabel="저장 중..."
+          />
         </View>
       </BottomSheet>
 

@@ -14,6 +14,7 @@ import {
 } from "@workspace/api-client-react";
 import type { TeamCollectionWithRole, TeamCollection } from "@workspace/api-client-react";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
+import SubmitButton from "@/components/SubmitButton/SubmitButton";
 
 type MiniTab = "mine" | "joined";
 
@@ -54,6 +55,7 @@ export default function TeamCollectionListScreen() {
       Alert.alert("오류", "이름을 입력해주세요.");
       return;
     }
+    if (createCollection.isPending) return;
     try {
       const newCollection = await createCollection.mutateAsync({
         data: { creatorId: userId, name: newName.trim(), description: newDescription.trim() },
@@ -318,13 +320,16 @@ export default function TeamCollectionListScreen() {
               autoCapitalize="none"
             />
             {joinError ? <Text style={styles.joinErrorText}>{joinError}</Text> : null}
-            <Pressable
-              style={[styles.confirmButton, (!inviteCode.trim() || isJoinLoading) && styles.confirmDisabled]}
+            <SubmitButton
+              style={styles.confirmButton}
+              disabledStyle={styles.confirmDisabled}
+              textStyle={styles.confirmButtonText}
               onPress={handleJoinCodeSubmit}
-              disabled={!inviteCode.trim() || isJoinLoading}
-            >
-              <Text style={styles.confirmButtonText}>{isJoinLoading ? "확인 중..." : "다음"}</Text>
-            </Pressable>
+              pending={isJoinLoading}
+              disabled={!inviteCode.trim()}
+              label="다음"
+              pendingLabel="확인 중..."
+            />
           </View>
         ) : joinPreview ? (
           <View style={styles.joinPreviewContainer}>
@@ -341,13 +346,15 @@ export default function TeamCollectionListScreen() {
               ) : null}
             </View>
             {joinError ? <Text style={styles.joinErrorText}>{joinError}</Text> : null}
-            <Pressable
-              style={[styles.confirmButton, isJoinLoading && styles.confirmDisabled]}
+            <SubmitButton
+              style={styles.confirmButton}
+              disabledStyle={styles.confirmDisabled}
+              textStyle={styles.confirmButtonText}
               onPress={handleJoinConfirm}
-              disabled={isJoinLoading}
-            >
-              <Text style={styles.confirmButtonText}>{isJoinLoading ? "참가 중..." : "참가하기"}</Text>
-            </Pressable>
+              pending={isJoinLoading}
+              label="참가하기"
+              pendingLabel="참가 중..."
+            />
             <Pressable
               style={styles.joinBackButton}
               onPress={() => { setJoinStep("code"); setJoinError(null); }}
@@ -383,13 +390,16 @@ export default function TeamCollectionListScreen() {
             multiline
             textAlignVertical="top"
           />
-          <Pressable
-            style={[styles.confirmButton, !newName.trim() && styles.confirmDisabled]}
+          <SubmitButton
+            style={styles.confirmButton}
+            disabledStyle={styles.confirmDisabled}
+            textStyle={styles.confirmButtonText}
             onPress={handleCreate}
+            pending={createCollection.isPending}
             disabled={!newName.trim()}
-          >
-            <Text style={styles.confirmButtonText}>만들기</Text>
-          </Pressable>
+            label="만들기"
+            pendingLabel="만드는 중..."
+          />
         </View>
       </BottomSheet>
     </View>

@@ -7,6 +7,7 @@ import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
+import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import {
   useListNeighbors,
   useListNeighborRequests,
@@ -196,20 +197,26 @@ export default function NeighborListScreen() {
         <Text style={styles.neighborSub}>이웃 요청</Text>
       </View>
       <View style={styles.requestActions}>
-        <Pressable
-          style={[styles.acceptButton, acceptRequest.isPending && styles.buttonDisabled]}
+        <SubmitButton
+          style={styles.acceptButton}
+          disabledStyle={styles.buttonDisabled}
+          textStyle={styles.acceptText}
           onPress={() => handleAccept(item.id)}
-          disabled={acceptRequest.isPending || rejectRequest.isPending}
-        >
-          <Text style={styles.acceptText}>{acceptRequest.isPending ? "처리 중..." : "수락"}</Text>
-        </Pressable>
-        <Pressable
-          style={[styles.rejectButton, rejectRequest.isPending && styles.buttonDisabled]}
+          pending={acceptRequest.isPending}
+          disabled={rejectRequest.isPending}
+          label="수락"
+          pendingLabel="처리 중..."
+        />
+        <SubmitButton
+          style={styles.rejectButton}
+          disabledStyle={styles.buttonDisabled}
+          textStyle={styles.rejectText}
           onPress={() => setRejectTarget({ id: item.id, name: item.requester?.nickname ?? "알 수 없음" })}
-          disabled={acceptRequest.isPending || rejectRequest.isPending}
-        >
-          <Text style={styles.rejectText}>거절</Text>
-        </Pressable>
+          pending={rejectRequest.isPending}
+          disabled={acceptRequest.isPending}
+          label="거절"
+          pendingLabel="처리 중..."
+        />
       </View>
     </View>
   );
