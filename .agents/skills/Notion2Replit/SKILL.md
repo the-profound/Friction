@@ -161,10 +161,50 @@ Queue 항목 + SSOT를 종합하여 추출
 
 - **task_breakdown의 마지막 단계는 반드시 Notion Quick Writeback이어야 한다.**
   - 이 단계는 `bulkCreateProjectTasks`로 생성되는 Task 플랜의 설명(description) 마지막에도 아래 섹션으로 포함시킨다.
+  - Task가 단일이든 N개로 분리되든 아래 형식을 그대로 사용한다.
 
 ```markdown
 ## Notion Writeback
-구현 완료 후 Replit2Notion 스킬의 Quick Writeback 절차에 따라 Notion Queue DB에 완료 기록을 생성한다. 개발 상태는 '개발 완료'로 기록한다.
+구현 완료 후 Replit2Notion 스킬의 Quick Writeback 절차에 따라 원본 Queue 페이지를 업데이트한다.
+
+Source Queue Page URL: <원본 Queue 페이지 URL, 없으면 (none)>
+Source Queue Request ID: <원본 Queue 요청 ID, 없으면 (none)>
+Split: <i> of <N>
+```
+
+위 섹션 작성 규칙
+- `Source Queue Page URL`과 `Source Queue Request ID`는 처리 중인 Queue 항목의 실제 값을 채운다.
+- 원본 Queue가 없는 경우(채팅에서 바로 시작한 R2N 흐름)는 두 값 모두 `(none)`으로 명시한다.
+- `Split: i of N`: 1개 Queue → 1개 Task면 `Split: 1 of 1`, 1개 Queue → N개 Task로 분리되면 각 Task에 `Split: 1 of N`, `Split: 2 of N`, … 식으로 순서대로 부여한다. 다수 Queue → 1개 Task로 묶이면 `Split: 1 of 1`로 처리하고 Source 줄을 Queue 수만큼 반복한다.
+
+예시 A (단일 Queue → 단일 Task)
+```
+Source Queue Page URL: https://www.notion.so/abc123
+Source Queue Request ID: 42
+Split: 1 of 1
+```
+
+예시 B (단일 Queue → 3개 Task 분리, 이 Task는 2번째)
+```
+Source Queue Page URL: https://www.notion.so/abc123
+Source Queue Request ID: 42
+Split: 2 of 3
+```
+
+예시 C (2개 Queue → 단일 Task 묶음)
+```
+Source Queue Page URL: https://www.notion.so/abc123
+Source Queue Request ID: 42
+Source Queue Page URL: https://www.notion.so/def456
+Source Queue Request ID: 43
+Split: 1 of 1
+```
+
+예시 D (원본 Queue 없는 R2N 채팅 시작)
+```
+Source Queue Page URL: (none)
+Source Queue Request ID: (none)
+Split: 1 of 1
 ```
 
 ### Step 7: SSOT 변경 검토 (ssot_change_review)
@@ -187,7 +227,7 @@ Queue 항목 + SSOT를 종합하여 추출
 
 ### Step 9: 구현 (implement)
 
-- 구현 시작 시 Queue 항목을 fetch하고, 즉시 "개발 상태"를 "개발 중"으로 변경한다. (락 — 직렬 처리: 락 후 writeback 순서 보장)
+- 구현 시작 시 Queue 항목을 fetch하고, 즉시 "개발 상태"를 "개발 중"으로 변경한다. (락 — 직렬 처리: 락 후 writeback 순서 보장) 단, 이미 "개발 중"인 경우(split Task가 거의 동시에 시작될 때)는 재락하지 않고 그대로 진행한다.
 - 이 fetch 결과(기존 개발 기록 포함)를 `queue_snapshot`으로 보관해 Step 10에서 재사용한다.
 - SSOT를 단일 진실 공급원으로 취급한다.
 - Queue 항목과 SSOT 충돌 시 SSOT 우선, 불일치는 writeback에 기록한다.
@@ -255,12 +295,14 @@ Queue 항목 + SSOT를 종합하여 추출
 N2R 전용 규칙
 - single_queue_item: 실행당 Queue 항목 1개
 - exclude_in_progress: "개발 중" 제외
-- lock_on_start: Step 9에서 즉시 락 (fetch 결과를 queue_snapshot으로 보관)
+- lock_on_start: Step 9에서 즉시 락 (fetch 결과를 queue_snapshot으로 보관); 이미 "개발 중"이면 재락 생략
+- include_source_in_writeback: Task 설명의 `## Notion Writeback` 섹션에 원본 Queue Page URL·Request ID·Split 표기를 반드시 포함한다
 
 ---
 
 ## 변경 로그
 
+- 2026-04-26 [편집] Quick Writeback 원본 Queue 인식: Step 6 Writeback 템플릿에 Source Queue Page URL·Request ID·Split 표기 추가, 예시 A~D 추가, Step 9 락 동작에 "이미 개발 중이면 재락 생략" 명시, N2R 전용 규칙에 include_source_in_writeback·lock_on_start 재락 생략 추가 (Task #126)
 - 2026-04-26 [편집] 체감 속도 개선 리팩터: sequential_fetch → parallel_fetch(최대 3건 동시)/serial_writes로 대체, session_cache 컨벤션 추가, Step 1 Path B/A에 캐시 사용 명시, Step 3 SSOT 뷰 결과 캐시 명시, Step 4 병렬 fetch 허용, Step 1 Path A 후보 개별 fetch 제거(최종 선택 1건만 상세 fetch), Step 9 fetch 결과를 queue_snapshot으로 보관해 Step 10 read-before-write와 공유 (Task #119)
 - 2026-04-26 [편집] 뷰 기반 빠른 조회 도입: NOTION_QUEUE_VIEW_URL / NOTION_SSOT_VIEW_URL 시크릿 추가, Step 0 확인 키 확장, Step 1 우선순위 B→A→C로 변경, Step 3 SSOT 뷰 폴백 가이드 추가 (Task #118)
 - 2026-04-25 [편집] Step 6에 Quick Writeback 단계 포함 의무화 추가 (Task #104)

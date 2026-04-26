@@ -229,6 +229,8 @@ R2N 전용 규칙
 - create_with_record: Queue 페이지 생성 시 개발 기록 포함
 - data_source_id_for_create: parent는 data_source_id
 - verify_after_create: 생성 후 fetch로 확인
+- update_source_when_known: 원본 Queue 식별자(Source Queue Page URL)가 있으면 신규 생성하지 않고 원본 페이지를 업데이트한다
+- last_split_completes: `Split: i of N`에서 `i == N`인 Task만 원본 Queue의 "개발 상태"를 "개발 완료"로 세팅한다. 나머지는 "개발 중"으로 유지한다
 
 ---
 
@@ -251,6 +253,16 @@ SSOT 수정 판단(Step 5~6)은 생략한다.
 - `notionFetch`로 Queue DB를 조회해 `queueDataSourceId`를 확보한다.
 - 실패 시 writeback을 건너뛰고, `.local/tasks/evidence/qw-<taskRef>-skipped.md`에 실패 사유를 기록한다.
 
+**QW-Step 1.5: 원본 Queue 식별자 파싱**
+- 현재 Task 설명의 `## Notion Writeback` 섹션에서 아래 줄을 파싱한다.
+  - `Source Queue Page URL:` — 원본 Queue 페이지 URL (복수 줄 가능)
+  - `Source Queue Request ID:` — 원본 Queue 요청 ID (Page URL과 짝으로 복수 줄 가능)
+  - `Split: i of N` — 분리 순서 (없으면 단일 Task로 취급, i=1, N=1)
+- 파싱 규칙
+  - `Source Queue Page URL: (none)` 이면 폴백(신규 생성) 경로임을 확정하고 QW-Step 3-B로 이동한다.
+  - URL이 유효한 값이면 QW-Step 3-A(원본 페이지 업데이트)로 이동한다.
+  - `## Notion Writeback` 섹션 자체가 없거나 파싱 실패(필수 줄 누락 등)는 **명시적 에러**로 처리한다. 조용한 폴백 불가. `.local/tasks/evidence/qw-<taskRef>-skipped.md`에 파싱 실패 사유를 기록하고 중단한다.
+
 **QW-Step 2: 개발 내용 수집**
 - 현재 세션 컨텍스트에서 아래 항목을 작성한다.
   ```
@@ -261,26 +273,59 @@ SSOT 수정 판단(Step 5~6)은 생략한다.
   - 비고(있으면):
   ```
 - `request_title`: Task 제목 한 줄 요약
+- `task_ref_header`: `### [Task #<ref>] <request_title> — <완료 일시 KST>` 형식의 헤더 문자열. append 블록의 첫 줄에 사용한다.
 
-**QW-Step 3: Queue DB 항목 생성**
+**QW-Step 3-A: 원본 Queue 페이지 업데이트** (Source Queue Page URL이 유효한 경우)
+
+원본 페이지가 여러 개(다수 Queue → 단일 Task 묶음)면 각 페이지에 대해 아래를 순서대로 실행한다.
+
+1. read-before-write: 원본 Queue 페이지를 `notionFetch`로 읽어 기존 "개발 기록" 텍스트를 확보한다.
+2. 멱등성 체크: 기존 "개발 기록"에 이번 `task_ref_header`와 동일한 줄이 이미 존재하면 해당 블록만 교체하고 새로 추가하지 않는다(재실행 안전).
+3. 없으면 기존 "개발 기록" 뒤에 아래를 append한다.
+   ```
+   <task_ref_header>
+   <QW-Step 2의 dev_record>
+   ```
+4. 상태 결정 (`Split: i of N` 기준)
+   - `i == N` 이거나 Split 표기가 없으면(단일): 개발 상태 = "개발 완료"
+   - `i < N` 이면: 개발 상태 = "개발 중"
+5. `notionUpdatePage(update_properties)`로 아래를 1회 업데이트한다.
+   - 개발 기록: 위에서 조합한 fullRecord
+   - 개발 상태: 위 규칙대로 결정된 값
+
+**QW-Step 3-B: 신규 Queue 페이지 생성** (Source Queue Page URL이 `(none)`인 경우)
 - `notionCreatePages`로 새 항목을 생성한다.
 - 기본값: 개발 상태 = "개발 완료", 개발 기록 = QW-Step 2의 dev_record
 
-**QW-Step 4: 생성 확인**
-- 생성된 항목을 `notionFetch`로 읽어 요청 제목과 개발 기록이 존재하는지 확인한다.
-- 확인 성공 시 `.local/tasks/evidence/qw-<taskRef>-done.md`에 Queue 페이지 ID와 요청 제목을 기록한다.
+**QW-Step 4: 검증 및 기록**
+- QW-Step 3-A(업데이트) 경로: 원본 페이지를 `notionFetch`로 읽어 아래를 확인한다.
+  - (a) 이번 `task_ref_header`가 "개발 기록"에 포함되어 있는지
+  - (b) "개발 상태"가 위 규칙대로 설정되었는지
+  - 확인 성공 시 `.local/tasks/evidence/qw-<taskRef>-done.md`에 원본 Queue 페이지 ID, 요청 제목, 적용된 개발 상태, Split 정보를 기록한다.
+- QW-Step 3-B(신규 생성) 경로: 생성된 항목을 `notionFetch`로 읽어 요청 제목과 개발 기록이 존재하는지 확인한다.
+  - 확인 성공 시 `.local/tasks/evidence/qw-<taskRef>-done.md`에 Queue 페이지 ID와 요청 제목을 기록한다.
+
+### 동시성·멱등성 가이드
+
+- 각 Task의 append 블록은 `### [Task #ref] 제목 — 완료 시각` 형식의 고유 헤더로 시작한다.
+- 같은 Task ref 헤더가 이미 "개발 기록"에 존재하면 새로 추가하지 않고 해당 블록만 교체한다(재실행 안전).
+- 상태 세팅("개발 완료" / "개발 중")은 마지막 쓰기가 이기는 idempotent 동작이다.
+- 분산 락은 구현하지 않는다. read-before-write append와 Task ref 헤더 체크로 best-effort 처리한다.
 
 ### Quick Writeback 전용 규칙
 
 - **no_ssot_in_quick**: SSOT 문서 수정·판단·검토를 일절 수행하지 않는다.
-- **no_user_approval**: 사용자 승인(user_query) 없이 바로 생성한다.
-- **skip_on_error**: 환경 변수 누락·네트워크 오류 등으로 실패하더라도 Task 완료를 막지 않는다. 실패 사유는 `.local/tasks/evidence/qw-<taskRef>-skipped.md`에 기록한다.
+- **no_user_approval**: 사용자 승인(user_query) 없이 바로 실행한다.
+- **skip_on_error**: 환경 변수 누락·네트워크 오류 등으로 실패하더라도 Task 완료를 막지 않는다. 실패 사유는 `.local/tasks/evidence/qw-<taskRef>-skipped.md`에 기록한다. 단, QW-Step 1.5 파싱 실패는 명시적 에러로 기록 후 중단한다(skip_on_error의 예외).
+- **update_source_when_known**: 원본 Queue 식별자(Source Queue Page URL)가 있으면 신규 생성하지 않고 원본 페이지를 업데이트한다.
+- **last_split_completes**: `Split: i of N`에서 `i == N`인 Task만 원본 Queue의 "개발 상태"를 "개발 완료"로 변경한다. 나머지는 "개발 중"으로 유지한다.
 - 그 외 공통 규칙(env_vars_first, bash_for_secrets, clean_url, read_before_write 등)은 동일하게 적용한다.
 
 ---
 
 ## 변경 로그
 
+- 2026-04-26 [편집] Quick Writeback 원본 Queue 인식: QW-Step 1.5(소스 식별자 파싱) 추가, QW-Step 3을 3-A(원본 업데이트)/3-B(신규 생성 폴백)으로 분리, QW-Step 4 검증 강화, 동시성·멱등성 가이드 추가, R2N 컨벤션에 update_source_when_known·last_split_completes 추가 (Task #126)
 - 2026-04-26 [편집] 체감 속도 개선 리팩터: sequential_fetch → parallel_fetch(최대 3건 동시)/serial_writes로 대체, session_cache 컨벤션 추가 (Task #119)
 - 2026-04-25 [추가] Task 에이전트용 Quick Writeback 절차 (Section 8) 추가
 - 2026-03-27 [편집] 코드 블록 과다 사용 제거, SKILL 본문을 단일 code block으로 통합
