@@ -30,6 +30,13 @@ interface ConfirmModalProps {
   confirmLabel?: string;
   cancelLabel?: string;
   destructive?: boolean;
+  /**
+   * Optional handler for backdrop / outside tap. When omitted, backdrop press
+   * falls through to `onCancel` (the previous default). Provide this when the
+   * cancel button has a side effect that should NOT fire on accidental
+   * backdrop dismiss.
+   */
+  onBackdropPress?: () => void;
 }
 
 export default function ConfirmModal({
@@ -44,6 +51,7 @@ export default function ConfirmModal({
   confirmLabel = "확인",
   cancelLabel = "취소",
   destructive = false,
+  onBackdropPress,
 }: ConfirmModalProps) {
   // Freeze content while the modal is fading out so the last real values
   // remain visible instead of flashing the empty/fallback state.
@@ -80,7 +88,7 @@ export default function ConfirmModal({
 
   return (
     <Modal transparent visible={visible} animationType="fade" statusBarTranslucent>
-      <Pressable style={styles.overlay} onPress={onCancel}>
+      <Pressable style={styles.overlay} onPress={onBackdropPress ?? onCancel}>
         <View style={styles.contentWrapper}>
           <Pressable style={styles.card} onPress={(e) => e.stopPropagation()}>
             <Text style={styles.title}>{displayTitle}</Text>

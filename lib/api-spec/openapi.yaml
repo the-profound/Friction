@@ -1146,6 +1146,10 @@ paths:
       operationId: addTeamArticle
       tags: [team-collections]
       summary: Add article to team collection (own articles only)
+      description: |
+        Adds an article to the team collection and fans it out to all OWNER/MEMBER inboxes
+        (excluding the sender). When `asNotice=true`, the sender must be an OWNER and no
+        other notice may already exist for the current KST notice date for this collection.
       parameters:
         - $ref: "#/components/parameters/IdPath"
       requestBody:
@@ -1162,7 +1166,44 @@ paths:
               schema:
                 $ref: "#/components/schemas/TeamCollectionArticle"
         "400":
-          description: Not own article or validation error
+          description: Not own article, not OWNER (when asNotice=true), or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: A notice already exists for this collection on the current notice date
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /team-collections/{id}/today-greeting-status:
+    get:
+      operationId: getTodayGreetingStatus
+      tags: [team-collections]
+      summary: Today's "오늘의 인사" status for a (collection, user) pair
+      description: |
+        Returns whether the requesting user is an OWNER of the collection and whether a notice
+        has already been sent for the current KST notice date window. Used by the send screen
+        to decide if the "오늘의 인사" modal should be shown.
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TodayGreetingStatus"
+        "400":
+          description: Validation error
           content:
             application/json:
               schema:
@@ -1600,6 +1641,14 @@ components:
           type: string
           format: uuid
           nullable: true
+        isNotice:
+          type: boolean
+          description: True when this article was sent as the day's "오늘의 인사" notice.
+        noticeDate:
+          type: string
+          format: date
+          nullable: true
+          description: KST date this article was designated as a notice (YYYY-MM-DD). Null when isNotice=false.
         createdAt:
           type: string
           format: date-time
@@ -2128,7 +2177,25 @@ components:
         addedBy:
           type: string
           format: uuid
+        asNotice:
+          type: boolean
+          description: When true, the addedBy user is the OWNER and this article is designated as today's "오늘의 인사" for this collection. The server validates ownership and one-per-day uniqueness.
       required: [articleId, addedBy]
+
+    TodayGreetingStatus:
+      type: object
+      properties:
+        isOwner:
+          type: boolean
+          description: Whether the requesting user is an OWNER of this team collection.
+        alreadySentToday:
+          type: boolean
+          description: Whether an "오늘의 인사" has already been sent for this collection on the current notice date window.
+        noticeDate:
+          type: string
+          format: date
+          description: The KST notice date (YYYY-MM-DD) the next greeting would be assigned to. Today before 18:00 KST, tomorrow after.
+      required: [isOwner, alreadySentToday, noticeDate]
 
     # ─── Neighbor ───────────────────────────────────
     Neighbor:

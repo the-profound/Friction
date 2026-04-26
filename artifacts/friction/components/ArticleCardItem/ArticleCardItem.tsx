@@ -17,6 +17,17 @@ interface ArticleCardItemProps {
   cover?: ArticleCover | null;
   isRead?: boolean;
   isActive?: boolean;
+  /** When set, renders a "MM월 DD일 인사" badge at the top-left. Format: YYYY-MM-DD. */
+  noticeDate?: string | null;
+}
+
+function formatNoticeLabel(dateStr: string): string {
+  const parts = dateStr.split("-");
+  if (parts.length !== 3) return "인사";
+  const month = Number(parts[1]);
+  const day = Number(parts[2]);
+  if (!Number.isFinite(month) || !Number.isFinite(day)) return "인사";
+  return `${month}월 ${day}일 인사`;
 }
 
 const DEFAULT_BG = Colors.zinc50;
@@ -31,6 +42,7 @@ export default function ArticleCardItem({
   cover,
   isRead = false,
   isActive = true,
+  noticeDate,
 }: ArticleCardItemProps) {
   const textColor = isRead
     ? READ_TEXT
@@ -67,6 +79,14 @@ export default function ArticleCardItem({
 
   const coverType = cover?.type ?? "default";
 
+  const noticeBadge = noticeDate ? (
+    <View style={styles.noticeBadge} pointerEvents="none">
+      <Text style={styles.noticeBadgeText} numberOfLines={1}>
+        {formatNoticeLabel(noticeDate)}
+      </Text>
+    </View>
+  ) : null;
+
   return (
     <Pressable
       onPress={onPress}
@@ -84,6 +104,7 @@ export default function ArticleCardItem({
         >
           <View style={styles.imageOverlay} />
           {content}
+          {noticeBadge}
         </ImageBackground>
       ) : (
         <View
@@ -98,6 +119,7 @@ export default function ArticleCardItem({
           ]}
         >
           {content}
+          {noticeBadge}
         </View>
       )}
     </Pressable>
@@ -148,5 +170,20 @@ const styles = StyleSheet.create({
     ...Typography.caption,
     color: Colors.zinc400,
     marginTop: 6,
+  },
+  noticeBadge: {
+    position: "absolute",
+    top: 12,
+    left: 12,
+    backgroundColor: Colors.white,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  noticeBadgeText: {
+    ...Typography.caption,
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#92323D",
   },
 });

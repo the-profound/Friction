@@ -10,9 +10,11 @@ import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import {
+  getGetTodayGreetingStatusQueryKey,
   getListSendRecordsQueryKey,
   getListTeamArticlesQueryKey,
   useAddTeamArticle,
+  useGetTodayGreetingStatus,
   useListArticles,
   useListNeighbors,
   useListTeamCollections,
@@ -93,6 +95,37 @@ export function SendInline({
 
   const deliveryInfo = useMemo(() => getNextDeliverySlot(), [confirmVisible]);
 
+  // When a team collection is selected, look up whether the current user can
+  // send today's greeting (only OWNERs, and only once per KST notice day).
+  const collectionId =
+    selectedRecipient?.type === "collection" ? selectedRecipient.data.id : null;
+  const todayGreetingQuery = useGetTodayGreetingStatus(
+    collectionId ?? "",
+    { userId },
+    {
+      query: {
+        queryKey: getGetTodayGreetingStatusQueryKey(collectionId ?? "", { userId }),
+        enabled: !!collectionId,
+      },
+    },
+  );
+  const greetingStatus = todayGreetingQuery.data;
+  // While the greeting status is still loading for a selected collection,
+  // hold the send button so eligible OWNERs can't accidentally bypass the
+  // notice prompt by tapping faster than the query resolves.
+  const greetingStatusLoading =
+    !!collectionId && (todayGreetingQuery.isLoading || todayGreetingQuery.isFetching) && !greetingStatus;
+  const canOfferTodayGreeting =
+    !!collectionId && !!greetingStatus && greetingStatus.isOwner && !greetingStatus.alreadySentToday;
+  const [noticePromptVisible, setNoticePromptVisible] = useState(false);
+
+  const noticeDateLabel = useMemo(() => {
+    if (!greetingStatus?.noticeDate) return "";
+    const [, mm, dd] = greetingStatus.noticeDate.split("-");
+    if (!mm || !dd) return "";
+    return `${parseInt(mm, 10)}월 ${parseInt(dd, 10)}일`;
+  }, [greetingStatus?.noticeDate]);
+
   // Apply collection prefill (case A: from of-02-detail "내 글 추가")
   useEffect(() => {
     if (!targetGroup) return;
@@ -145,77 +178,92 @@ export function SendInline({
     return selectedRecipient.data.name;
   }, [selectedRecipient]);
 
-  const handleSend = useCallback(async () => {
-    if (!selectedArticle || !selectedRecipient) return;
+  const handleSend = useCallback(
+    async (asNotice = false) => {
+      if (!selectedArticle || !selectedRecipient) return;
 
-    try {
-      if (selectedRecipient.type === "neighbor") {
-        const neighbor = selectedRecipient.data;
-        const isNeighbor = neighbors.some((n) => n.neighborUserId === neighbor.neighborUserId);
-        const guard = canSendToNeighbor(
-          selectedArticle.status as ArticleStatus,
-          userId,
-          neighbor.neighborUserId,
-          isNeighbor,
-        );
-        if (!guard.allowed) {
-          Alert.alert("보낼 수 없음", guard.reason ?? "");
-          return;
+      try {
+        if (selectedRecipient.type === "neighbor") {
+          const neighbor = selectedRecipient.data;
+          const isNeighbor = neighbors.some((n) => n.neighborUserId === neighbor.neighborUserId);
+          const guard = canSendToNeighbor(
+            selectedArticle.status as ArticleStatus,
+            userId,
+            neighbor.neighborUserId,
+            isNeighbor,
+          );
+          if (!guard.allowed) {
+            Alert.alert("보낼 수 없음", guard.reason ?? "");
+            return;
+          }
+          const result = await sendArticle.mutateAsync({
+            data: {
+              senderId: userId,
+              recipientId: neighbor.neighborUserId,
+              articleId: selectedArticle.id,
+            },
+          });
+          setConfirmVisible(false);
+          setNoticePromptVisible(false);
+          const arrivalTime = result?.deliverySlot
+            ? formatDeliveryTime(new Date(result.deliverySlot))
+            : formatDeliveryTime(deliveryInfo.visibleAt);
+          queryClient.invalidateQueries({ queryKey: getListSendRecordsQueryKey({ senderId: userId }) });
+          showToast({
+            message: `${neighbor.user?.nickname ?? "이웃"}에게 발송됐어요 · ${arrivalTime} 도착 예정`,
+            type: "success",
+          });
+        } else {
+          const collection = selectedRecipient.data;
+          await addToTeamCollection.mutateAsync({
+            id: collection.id,
+            data: {
+              articleId: selectedArticle.id,
+              addedBy: userId,
+              ...(asNotice ? { asNotice: true } : {}),
+            },
+          });
+          setConfirmVisible(false);
+          setNoticePromptVisible(false);
+          const arrivalTime = formatDeliveryTime(deliveryInfo.visibleAt);
+          if (returnToId) {
+            queryClient.invalidateQueries({ queryKey: getListTeamArticlesQueryKey(returnToId) });
+          }
+          queryClient.invalidateQueries({ queryKey: getListSendRecordsQueryKey({ senderId: userId }) });
+          queryClient.invalidateQueries({
+            queryKey: getGetTodayGreetingStatusQueryKey(collection.id, { userId }),
+          });
+          showToast({
+            message: asNotice
+              ? `'${collection.name}' 모음에 오늘의 인사를 보냈어요 · ${arrivalTime} 도착 예정`
+              : `'${collection.name}' 모음에 발송됐어요 · ${arrivalTime} 도착 예정`,
+            type: "success",
+          });
         }
-        const result = await sendArticle.mutateAsync({
-          data: {
-            senderId: userId,
-            recipientId: neighbor.neighborUserId,
-            articleId: selectedArticle.id,
-          },
-        });
+        setSelectedArticle(null);
+        setSelectedRecipient(null);
+        onSent?.();
+      } catch (e: unknown) {
         setConfirmVisible(false);
-        const arrivalTime = result?.deliverySlot
-          ? formatDeliveryTime(new Date(result.deliverySlot))
-          : formatDeliveryTime(deliveryInfo.visibleAt);
-        queryClient.invalidateQueries({ queryKey: getListSendRecordsQueryKey({ senderId: userId }) });
-        showToast({
-          message: `${neighbor.user?.nickname ?? "이웃"}에게 발송됐어요 · ${arrivalTime} 도착 예정`,
-          type: "success",
-        });
-      } else {
-        const collection = selectedRecipient.data;
-        await addToTeamCollection.mutateAsync({
-          id: collection.id,
-          data: { articleId: selectedArticle.id, addedBy: userId },
-        });
-        setConfirmVisible(false);
-        const arrivalTime = formatDeliveryTime(deliveryInfo.visibleAt);
-        if (returnToId) {
-          queryClient.invalidateQueries({ queryKey: getListTeamArticlesQueryKey(returnToId) });
-        }
-        queryClient.invalidateQueries({ queryKey: getListSendRecordsQueryKey({ senderId: userId }) });
-        showToast({
-          message: `'${collection.name}' 모음에 발송됐어요 · ${arrivalTime} 도착 예정`,
-          type: "success",
-        });
+        setNoticePromptVisible(false);
+        const msg = e instanceof Error ? e.message : "실패했습니다.";
+        Alert.alert("오류", msg);
       }
-      setSelectedArticle(null);
-      setSelectedRecipient(null);
-      onSent?.();
-    } catch (e: unknown) {
-      setConfirmVisible(false);
-      const msg = e instanceof Error ? e.message : "실패했습니다.";
-      Alert.alert("오류", msg);
-    }
-  }, [
-    selectedArticle,
-    selectedRecipient,
-    userId,
-    neighbors,
-    sendArticle,
-    addToTeamCollection,
-    deliveryInfo,
-    queryClient,
-    returnToId,
-    showToast,
-    onSent,
-  ]);
+    },
+    [
+      selectedArticle,
+      selectedRecipient,
+      userId,
+      neighbors,
+      sendArticle,
+      addToTeamCollection,
+      deliveryInfo,
+      queryClient,
+      returnToId,
+      showToast,
+      onSent,
+    ],
+  );
 
   const isPending = sendArticle.isPending || addToTeamCollection.isPending;
 
@@ -294,11 +342,17 @@ export function SendInline({
           disabledStyle={styles.sendButtonDisabled}
           textStyle={styles.sendButtonText}
           disabledTextStyle={styles.sendButtonTextDisabled}
-          onPress={() => setConfirmVisible(true)}
-          pending={isPending}
-          disabled={!canSend}
+          onPress={() => {
+            if (canOfferTodayGreeting) {
+              setNoticePromptVisible(true);
+            } else {
+              setConfirmVisible(true);
+            }
+          }}
+          pending={isPending || greetingStatusLoading}
+          disabled={!canSend || greetingStatusLoading}
           label="보내기"
-          pendingLabel="처리 중..."
+          pendingLabel={greetingStatusLoading ? "확인 중..." : "처리 중..."}
           renderIcon={({ disabled }) => (
             <Feather name="send" size={16} color={disabled ? Colors.zinc400 : Colors.white} />
           )}
@@ -526,8 +580,22 @@ export function SendInline({
         description={confirmDescription}
         confirmLabel="보내기"
         cancelLabel="취소"
-        onConfirm={handleSend}
+        onConfirm={() => handleSend(false)}
         onCancel={() => setConfirmVisible(false)}
+      />
+
+      <ConfirmModal
+        visible={noticePromptVisible}
+        title={`이 글을 ${noticeDateLabel} <오늘의 인사>로\n설정하시겠습니까?`}
+        description={"(수신자의 수신함 맨 앞에 표시됩니다.)"}
+        confirmLabel="예"
+        cancelLabel="아니오"
+        onConfirm={() => handleSend(true)}
+        onCancel={() => {
+          setNoticePromptVisible(false);
+          handleSend(false);
+        }}
+        onBackdropPress={() => setNoticePromptVisible(false)}
       />
     </View>
   );

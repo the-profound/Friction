@@ -77,11 +77,23 @@ function groupByDate(items: InboxItem[]): DateGroup[] {
     map.get(key)!.push(item);
   }
 
-  return Array.from(map.entries()).map(([dateKey, groupItems]) => ({
-    dateKey,
-    label: formatDateLabel(groupItems[0].visibleAt),
-    items: groupItems,
-  }));
+  return Array.from(map.entries()).map(([dateKey, groupItems]) => {
+    // Notices for this date sort to the front of the group.
+    const ordered = [...groupItems].sort((a, b) => {
+      const aIsNoticeForKey =
+        a.article?.isNotice === true && a.article?.noticeDate === dateKey;
+      const bIsNoticeForKey =
+        b.article?.isNotice === true && b.article?.noticeDate === dateKey;
+      if (aIsNoticeForKey && !bIsNoticeForKey) return -1;
+      if (!aIsNoticeForKey && bIsNoticeForKey) return 1;
+      return 0;
+    });
+    return {
+      dateKey,
+      label: formatDateLabel(ordered[0].visibleAt),
+      items: ordered,
+    };
+  });
 }
 
 /**
@@ -223,6 +235,12 @@ function CarouselGroup({
         cover={item.article?.cover}
         isRead={item.isRead}
         isActive={index === activeIndex}
+        noticeDate={
+          item.article?.isNotice === true &&
+          item.article?.noticeDate === group.dateKey
+            ? item.article.noticeDate
+            : null
+        }
       />
     </View>
   ));

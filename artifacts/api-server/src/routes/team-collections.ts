@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, count, gt, isNull } from "drizzle-orm";
+import { and, eq, count, gt, isNull, ne, sql } from "drizzle-orm";
 import {
   db,
   teamCollectionsTable,
@@ -16,6 +16,41 @@ import {
   AddTeamMemberBody,
   AddTeamArticleBody,
 } from "@workspace/api-zod";
+
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+
+/**
+ * Returns the KST date (YYYY-MM-DD) that the next "오늘의 인사" should be assigned to.
+ * Before 18:00 KST → today; at/after 18:00 KST → tomorrow.
+ * The returned string is shaped to match Postgres `date` columns.
+ */
+function computeNoticeDateKST(now: Date = new Date()): string {
+  const kst = new Date(now.getTime() + KST_OFFSET_MS);
+  const kstHour = kst.getUTCHours();
+  const base = new Date(Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth(), kst.getUTCDate()));
+  if (kstHour >= 18) base.setUTCDate(base.getUTCDate() + 1);
+  return `${base.getUTCFullYear()}-${String(base.getUTCMonth() + 1).padStart(2, "0")}-${String(base.getUTCDate()).padStart(2, "0")}`;
+}
+
+/**
+ * Returns the next regular delivery slot (the same logic the send-records route uses).
+ * Notice posts use the same slot logic, so a notice keyed to today (sent before 18:00 KST)
+ * lands at 18:00 KST today, and one keyed to tomorrow (sent after 18:00 KST) lands at
+ * 06:00 KST tomorrow — matching the "오늘의 인사" date label shown to the OWNER.
+ */
+function computeDeliverySlot(now: Date = new Date()): Date {
+  const kst = new Date(now.getTime() + KST_OFFSET_MS);
+  const kstHour = kst.getUTCHours();
+  const todayMidnightKST = new Date(Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth(), kst.getUTCDate()));
+  if (kstHour < 6) {
+    return new Date(todayMidnightKST.getTime() + 6 * 60 * 60 * 1000 - KST_OFFSET_MS);
+  }
+  if (kstHour < 18) {
+    return new Date(todayMidnightKST.getTime() + 18 * 60 * 60 * 1000 - KST_OFFSET_MS);
+  }
+  const tomorrow = new Date(todayMidnightKST.getTime() + 24 * 60 * 60 * 1000);
+  return new Date(tomorrow.getTime() + 6 * 60 * 60 * 1000 - KST_OFFSET_MS);
+}
 
 const router: IRouter = Router();
 
@@ -313,7 +348,8 @@ router.post("/team-collections/:id/articles", async (req, res) => {
     res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
     return;
   }
-  const { articleId, addedBy } = parsed.data;
+  const { articleId, addedBy, asNotice } = parsed.data;
+  const teamCollectionId = req.params.id;
 
   const [article] = await db.select().from(articlesTable).where(eq(articlesTable.id, articleId));
   if (!article) {
@@ -325,9 +361,27 @@ router.post("/team-collections/:id/articles", async (req, res) => {
     return;
   }
 
+  // Authorization: sender must be a member of the target team collection.
+  const [senderMembership] = await db
+    .select()
+    .from(teamCollectionMembershipsTable)
+    .where(and(
+      eq(teamCollectionMembershipsTable.teamCollectionId, teamCollectionId),
+      eq(teamCollectionMembershipsTable.userId, addedBy),
+    ));
+  if (!senderMembership) {
+    res.status(403).json({ error: "Not a member of this team collection." });
+    return;
+  }
+
+  if (asNotice && senderMembership.role !== "OWNER") {
+    res.status(400).json({ error: "Only OWNERs can send today's greeting." });
+    return;
+  }
+
   const existing = await db.select().from(teamCollectionArticlesTable)
     .where(and(
-      eq(teamCollectionArticlesTable.teamCollectionId, req.params.id),
+      eq(teamCollectionArticlesTable.teamCollectionId, teamCollectionId),
       eq(teamCollectionArticlesTable.articleId, articleId),
     ));
 
@@ -336,12 +390,108 @@ router.post("/team-collections/:id/articles", async (req, res) => {
     return;
   }
 
-  const [entry] = await db.insert(teamCollectionArticlesTable).values({
-    teamCollectionId: req.params.id,
-    articleId,
-    addedBy,
-  }).returning();
+  const noticeDate: string | null = asNotice ? computeNoticeDateKST() : null;
+  const visibleAt = computeDeliverySlot();
+
+  const members = await db
+    .select({ userId: teamCollectionMembershipsTable.userId })
+    .from(teamCollectionMembershipsTable)
+    .where(and(
+      eq(teamCollectionMembershipsTable.teamCollectionId, teamCollectionId),
+      ne(teamCollectionMembershipsTable.userId, addedBy),
+    ));
+
+  let conflicted = false;
+  const entry = await db.transaction(async (tx) => {
+    if (asNotice && noticeDate) {
+      // Serialize concurrent notice sends for the same (collection, noticeDate)
+      // so the one-per-day check + insert is atomic.
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`notice:${teamCollectionId}:${noticeDate}`}, 0))`,
+      );
+
+      const conflict = await tx
+        .select({ id: articlesTable.id })
+        .from(teamCollectionArticlesTable)
+        .innerJoin(articlesTable, eq(teamCollectionArticlesTable.articleId, articlesTable.id))
+        .where(and(
+          eq(teamCollectionArticlesTable.teamCollectionId, teamCollectionId),
+          eq(articlesTable.isNotice, true),
+          eq(articlesTable.noticeDate, noticeDate),
+        ));
+      if (conflict.length > 0) {
+        conflicted = true;
+        return null;
+      }
+
+      await tx
+        .update(articlesTable)
+        .set({ isNotice: true, noticeDate })
+        .where(eq(articlesTable.id, articleId));
+    }
+
+    const [created] = await tx.insert(teamCollectionArticlesTable).values({
+      teamCollectionId,
+      articleId,
+      addedBy,
+    }).returning();
+
+    if (members.length > 0) {
+      await tx.insert(inboxTable).values(
+        members.map((m) => ({
+          recipientId: m.userId,
+          articleId,
+          senderId: addedBy,
+          visibleAt,
+        })),
+      );
+    }
+
+    return created;
+  });
+
+  if (conflicted || !entry) {
+    res.status(409).json({ error: "Today's greeting was already sent for this collection." });
+    return;
+  }
+
   res.status(201).json(entry);
+});
+
+router.get("/team-collections/:id/today-greeting-status", async (req, res) => {
+  const { userId } = req.query;
+  if (typeof userId !== "string" || !UUID_REGEX.test(userId)) {
+    res.status(400).json({ error: "userId must be a UUID" });
+    return;
+  }
+  const teamCollectionId = req.params.id;
+
+  const [membership] = await db
+    .select()
+    .from(teamCollectionMembershipsTable)
+    .where(and(
+      eq(teamCollectionMembershipsTable.teamCollectionId, teamCollectionId),
+      eq(teamCollectionMembershipsTable.userId, userId),
+    ));
+
+  const isOwner = !!membership && membership.role === "OWNER";
+  const noticeDate = computeNoticeDateKST();
+
+  const existing = await db
+    .select({ id: articlesTable.id })
+    .from(teamCollectionArticlesTable)
+    .innerJoin(articlesTable, eq(teamCollectionArticlesTable.articleId, articlesTable.id))
+    .where(and(
+      eq(teamCollectionArticlesTable.teamCollectionId, teamCollectionId),
+      eq(articlesTable.isNotice, true),
+      eq(articlesTable.noticeDate, noticeDate),
+    ));
+
+  res.json({
+    isOwner,
+    alreadySentToday: existing.length > 0,
+    noticeDate,
+  });
 });
 
 router.delete("/team-collections/:teamId/articles/:articleId", async (req, res) => {

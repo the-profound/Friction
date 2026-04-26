@@ -105,6 +105,10 @@ export interface Article {
   cover?: ArticleCover | null;
   letterAt?: string | null;
   sourceArticleId?: string | null;
+  /** True when this article was sent as the day's "오늘의 인사" notice. */
+  isNotice?: boolean;
+  /** KST date this article was designated as a notice (YYYY-MM-DD). Null when isNotice=false. */
+  noticeDate?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -380,6 +384,17 @@ export interface AddTeamMemberBody {
 export interface AddTeamArticleBody {
   articleId: string;
   addedBy: string;
+  /** When true, the addedBy user is the OWNER and this article is designated as today's "오늘의 인사" for this collection. The server validates ownership and one-per-day uniqueness. */
+  asNotice?: boolean;
+}
+
+export interface TodayGreetingStatus {
+  /** Whether the requesting user is an OWNER of this team collection. */
+  isOwner: boolean;
+  /** Whether an "오늘의 인사" has already been sent for this collection on the current notice date window. */
+  alreadySentToday: boolean;
+  /** The KST notice date (YYYY-MM-DD) the next greeting would be assigned to. Today before 18:00 KST, tomorrow after. */
+  noticeDate: string;
 }
 
 export interface Neighbor {
@@ -525,6 +540,10 @@ export type ListTeamArticlesParams = {
    * When provided, each item includes the requesting user's per-article read state (isRead/completedAt) so callers can decide reading mode (basic vs re_read) without an extra request.
    */
   userId?: string;
+};
+
+export type GetTodayGreetingStatusParams = {
+  userId: string;
 };
 
 export type ListNeighborsParams = {
