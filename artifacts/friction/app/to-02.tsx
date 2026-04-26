@@ -13,7 +13,9 @@ import {
   useSendArticle,
   useListTeamCollections,
   useAddTeamArticle,
+  getListTeamArticlesQueryKey,
 } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { NeighborWithUser, TeamCollectionWithRole } from "@workspace/api-client-react";
 import { getNextDeliverySlot, formatDeliveryTime, canSendToNeighbor } from "@/lib/deliverySync";
 import type { ArticleStatus } from "@/lib/policies";
@@ -42,6 +44,7 @@ type SegmentTab = "neighbor" | "collection";
 export default function SendScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { userId } = useUser();
   const { targetGroup, targetGroupName, returnToId } = useLocalSearchParams<{
     targetGroup?: string;
@@ -92,11 +95,10 @@ export default function SendScreen() {
 
   const navigateBack = useCallback(() => {
     if (returnToId) {
-      router.replace({ pathname: "/of-02-detail", params: { id: returnToId } });
-    } else {
-      router.back();
+      queryClient.invalidateQueries({ queryKey: getListTeamArticlesQueryKey(returnToId) });
     }
-  }, [returnToId, router]);
+    router.back();
+  }, [returnToId, router, queryClient]);
 
   const canSend = selectedArticle && selectedRecipient;
 

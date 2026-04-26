@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useMemo } from "react";
+import React, { useCallback, useState, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -34,6 +34,7 @@ import type {
   StoredSentence,
 } from "@workspace/api-client-react";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
+import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
 
 export default function OfScreen() {
   const insets = useSafeAreaInsets();
@@ -52,6 +53,26 @@ export default function OfScreen() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+
+  const [sentenceScrollEnabled, setSentenceScrollEnabled] = useState(true);
+  const sentenceOpenRowRef = useRef<SwipeableRowHandle | null>(null);
+  const sentenceRowRefs = useRef<Map<string, SwipeableRowHandle>>(new Map());
+
+  const closeSentenceOpenRow = useCallback(() => {
+    if (sentenceOpenRowRef.current) {
+      sentenceOpenRowRef.current.close();
+      sentenceOpenRowRef.current = null;
+    }
+  }, []);
+
+  const handleSentenceSwipeOpen = useCallback((id: string) => {
+    const currentOpen = sentenceOpenRowRef.current;
+    const newRef = sentenceRowRefs.current.get(id) ?? null;
+    if (currentOpen && currentOpen !== newRef) {
+      currentOpen.close();
+    }
+    sentenceOpenRowRef.current = newRef;
+  }, []);
 
   const myCollectionsQuery = useListMyCollections({ ownerId: userId });
   const teamCollectionsQuery = useListTeamCollections({ userId });
@@ -186,11 +207,12 @@ export default function OfScreen() {
     }
     try {
       if (ofSubTab === "personal") {
-        await createMyCollection.mutateAsync({
+        const newMyCollection = await createMyCollection.mutateAsync({
           data: { ownerId: userId, name: newName.trim(), description: newDescription.trim() },
         });
         myCollectionsQuery.refetch();
         setCreateSheetVisible(false);
+        router.push({ pathname: "/of-01-detail", params: { id: newMyCollection.id } });
       } else {
         const newTeamCollection = await createTeamCollection.mutateAsync({
           data: { creatorId: userId, name: newName.trim(), description: newDescription.trim() },
@@ -304,28 +326,47 @@ export default function OfScreen() {
   );
 
   const renderSentenceItem = useCallback(({ item }: { item: StoredSentence }) => (
-    <Pressable
-      style={styles.sentenceItem}
-      onPress={() => setSelectedSentence(item)}
+    <SwipeableRow
+      ref={(r) => {
+        if (r) {
+          sentenceRowRefs.current.set(item.id, r);
+        } else {
+          sentenceRowRefs.current.delete(item.id);
+        }
+      }}
+      onDeletePress={() => {
+        closeSentenceOpenRow();
+        setSentenceDeleteTarget(item.id);
+      }}
+      onSwipeOpen={() => handleSentenceSwipeOpen(item.id)}
+      onScrollLock={(locked) => setSentenceScrollEnabled(!locked)}
     >
-      <View style={styles.sentenceItemContent}>
-        <Text style={styles.sentenceText} numberOfLines={2}>
-          &ldquo;{item.text}&rdquo;
-        </Text>
-        <View style={styles.sentenceMeta}>
-          <Text style={styles.sentenceDate}>{new Date(item.createdAt).toLocaleDateString("ko-KR")}</Text>
-          {item.isFavorite && <Feather name="star" size={12} color="#F59E0B" />}
-        </View>
-      </View>
       <Pressable
-        onPress={() => handleSentenceToggleFavorite(item.id, item.isFavorite)}
-        hitSlop={8}
-        style={styles.sentenceStarBtn}
+        style={styles.sentenceItem}
+        onPress={() => {
+          closeSentenceOpenRow();
+          setSelectedSentence(item);
+        }}
       >
-        <Feather name="star" size={16} color={item.isFavorite ? "#F59E0B" : Colors.zinc300} />
+        <View style={styles.sentenceItemContent}>
+          <Text style={styles.sentenceText} numberOfLines={2}>
+            &ldquo;{item.text}&rdquo;
+          </Text>
+          <View style={styles.sentenceMeta}>
+            <Text style={styles.sentenceDate}>{new Date(item.createdAt).toLocaleDateString("ko-KR")}</Text>
+            {item.isFavorite && <Feather name="star" size={12} color="#F59E0B" />}
+          </View>
+        </View>
+        <Pressable
+          onPress={() => handleSentenceToggleFavorite(item.id, item.isFavorite)}
+          hitSlop={8}
+          style={styles.sentenceStarBtn}
+        >
+          <Feather name="star" size={16} color={item.isFavorite ? "#F59E0B" : Colors.zinc300} />
+        </Pressable>
       </Pressable>
-    </Pressable>
-  ), [handleSentenceToggleFavorite]);
+    </SwipeableRow>
+  ), [handleSentenceToggleFavorite, closeSentenceOpenRow, handleSentenceSwipeOpen]);
 
   const renderSentenceSelectionItem = useCallback(({ item }: { item: StoredSentence }) => {
     const isSelected = selectedIds.has(item.id);
@@ -466,6 +507,7 @@ export default function OfScreen() {
                 <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={Colors.zinc400} />
               ) : undefined
             }
+            scrollEnabled={selectionMode || sentenceScrollEnabled}
             showsVerticalScrollIndicator={false}
           />
         );

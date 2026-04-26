@@ -247,6 +247,7 @@ export default function TeamCollectionListScreen() {
         onClose={() => setCreateSheetVisible(false)}
         title="새 단체 모음"
         snapPoints={[0.45]}
+        keyboardAware
       >
         <View style={styles.createForm}>
           <TextInput
@@ -281,6 +282,7 @@ export default function TeamCollectionListScreen() {
         onClose={() => setJoinSheetVisible(false)}
         title="초대 코드로 참여"
         snapPoints={[0.3]}
+        keyboardAware
       >
         <View style={styles.createForm}>
           <Text style={styles.joinHint}>

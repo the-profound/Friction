@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Friction 1.0.0",
+    "name": "Friction",
     "slug": "friction",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -14,13 +14,15 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "bundleIdentifier": "com.friction.app"
     },
     "android": {
-      "softwareKeyboardLayoutMode": "pan"
+      "softwareKeyboardLayoutMode": "pan",
+      "package": "com.friction.app"
     },
     "web": {
-      "favicon": "./assets/images/icon.png"
+      "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
       [

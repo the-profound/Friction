@@ -483,6 +483,7 @@ export default function PersonalCollectionDetailScreen() {
         onClose={() => setEditSheetVisible(false)}
         title="모음 수정"
         snapPoints={[0.45]}
+        keyboardAware
       >
         <View style={styles.editForm}>
           <TextInput

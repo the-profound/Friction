@@ -41,7 +41,7 @@ export default function PersonalCollectionListScreen() {
       return;
     }
     try {
-      await createCollection.mutateAsync({
+      const newCollection = await createCollection.mutateAsync({
         data: { ownerId: userId, name: newName.trim(), description: newDescription.trim(), isPublic: newIsPublic },
       });
       setCreateSheetVisible(false);
@@ -49,11 +49,12 @@ export default function PersonalCollectionListScreen() {
       setNewDescription("");
       setNewIsPublic(false);
       collectionsQuery.refetch();
+      router.push({ pathname: "/of-01-detail", params: { id: newCollection.id } });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "모음 생성에 실패했습니다.";
       Alert.alert("오류", msg);
     }
-  }, [newName, newDescription, newIsPublic, userId, createCollection, collectionsQuery]);
+  }, [newName, newDescription, newIsPublic, userId, createCollection, collectionsQuery, router]);
 
   const handleDelete = useCallback(
     async (id: string) => {
@@ -185,6 +186,7 @@ export default function PersonalCollectionListScreen() {
         onClose={() => setCreateSheetVisible(false)}
         title="새 개인 모음"
         snapPoints={[0.45]}
+        keyboardAware
       >
         <View style={styles.createForm}>
           <TextInput
