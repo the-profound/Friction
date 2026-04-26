@@ -25,6 +25,14 @@ Notion Queue DB에서 작업 항목 하나를 선택하고, SSOT Docs DB에서 �
   - `NOTION_QUEUE_DB_URL`: Queue DB Notion URL
   - `NOTION_SSOT_DB_URL`: SSOT Docs DB Notion URL
   - (선택) `NOTION_EDIT_LOG_DB_URL`: Replit → Notion 수정 로그 DB URL
+  - (선택) `NOTION_QUEUE_VIEW_URL`: Queue DB의 "개발 전 only + 개발 순서 오름차순" 필터 뷰 URL. 설정 시 Step 1에서 Path B(뷰 기반 단일 호출)를 우선 사용한다.
+  - (선택) `NOTION_SSOT_VIEW_URL`: SSOT Docs DB의 보조 뷰 URL. 설정 시 Step 3에서 후보를 빠르게 좁히는 데 활용한다.
+
+뷰 URL 시크릿 등록 방법
+- Notion Queue DB에서 필터(개발 상태 = "개발 전") + 정렬(개발 순서 오름차순 → 요청 ID 오름차순)을 적용한 뷰를 만든다.
+- 해당 뷰 URL을 복사한 뒤 `?v=...`, `&source=copy_link` 등 쿼리 파라미터를 제거해 정제한다.
+- 정제된 URL을 `NOTION_QUEUE_VIEW_URL` 시크릿으로 등록한다.
+- (선택) SSOT Docs DB에도 보조 뷰를 만들어 `NOTION_SSOT_VIEW_URL` 시크릿으로 등록한다.
 
 환경 변수가 없으면 Step 0에서 사용자에게 요청한다.
 
@@ -76,9 +84,10 @@ Notion Queue DB에서 작업 항목 하나를 선택하고, SSOT Docs DB에서 �
 ### Step 0: 환경 변수 확인 (check_env_vars)
 
 - 항상 가장 먼저 수행한다.
-- 확인 키: NOTION_QUEUE_DB_URL, NOTION_SSOT_DB_URL, NOTION_EDIT_LOG_DB_URL
+- 확인 키: NOTION_QUEUE_DB_URL, NOTION_SSOT_DB_URL, NOTION_EDIT_LOG_DB_URL, NOTION_QUEUE_VIEW_URL, NOTION_SSOT_VIEW_URL
 - Secrets 실제 값은 bash로만 읽는다.
 - Notion URL은 `?v=...`, `&source=copy_link` 등을 제거해 정제한다.
+- NOTION_QUEUE_VIEW_URL이 존재하면 Step 1에서 Path B를 먼저 시도한다. (없으면 Path A로 직행)
 
 정제 함수 (필요 최소)
 - cleanNotionUrl(url): url에서 `?` 이후 제거
@@ -86,9 +95,17 @@ Notion Queue DB에서 작업 항목 하나를 선택하고, SSOT Docs DB에서 �
 
 ### Step 1: Queue 항목 선택 (pick_queue_item)
 
-우선순위: A → B → C
+우선순위: B → A → C
 
-A) notionFetch + notionSearch (권장)
+B) notionQueryDatabaseView (뷰 URL 시크릿이 있을 때 우선 시도)
+- NOTION_QUEUE_VIEW_URL 시크릿이 설정되어 있을 때만 실행한다.
+- 정제된 뷰 URL로 `notionQueryDatabaseView`를 호출해 한 번에 후보 목록을 받는다.
+- 결과가 비어 있거나 호출 실패 시 즉시 Path A로 폴백한다.
+- 결과에서 "개발 중" 항목은 제외하고 "개발 전" 항목만 유효 후보로 취급한다.
+- 후보가 2개 이상이면 사용자에게 목록을 보여주고 선택을 받는다.
+- 후보가 0개면 Path A로 폴백한다.
+
+A) notionFetch + notionSearch (Path B 실패 또는 시크릿 없을 때 폴백)
 - Queue DB를 fetch해서 collection URL을 얻는다.
 - 상태값(예: "개발 전")을 키워드로 search한다. (빈 쿼리 금지)
 - 각 후보 페이지를 notionFetch로 로드해 속성을 검증한다.
@@ -96,10 +113,6 @@ A) notionFetch + notionSearch (권장)
   - "개발 전"만 선택
 - 후보가 2개 이상이면 사용자에게 목록을 보여주고 선택을 받는다.
 - 후보가 0개면 처리 가능한 항목이 없다고 알리고 중단한다.
-
-B) notionQueryDatabaseView
-- 정제된 뷰 URL이 있을 때만 사용
-- 실패 시 A로 전환
 
 C) requestId / pageUrl 직접 지정
 
@@ -115,7 +128,9 @@ C) requestId / pageUrl 직접 지정
 
 우선순위
 1) Queue 항목의 "영향 문서" relation
-2) relation이 비었으면 유형 매핑 + 키워드 검색
+2) relation이 비었으면 아래 순서로 후보를 탐색한다.
+   a) NOTION_SSOT_VIEW_URL이 설정된 경우: `notionQueryDatabaseView`로 후보를 빠르게 좁힌 뒤 키워드로 재필터링한다. 실패하면 (b)로 폴백한다.
+   b) 유형 매핑 + 키워드 검색 (기존 방식)
 
 출력
 - ssot_doc_page_urls
@@ -242,5 +257,6 @@ N2R 전용 규칙
 
 ## 변경 로그
 
+- 2026-04-26 [편집] 뷰 기반 빠른 조회 도입: NOTION_QUEUE_VIEW_URL / NOTION_SSOT_VIEW_URL 시크릿 추가, Step 0 확인 키 확장, Step 1 우선순위 B→A→C로 변경, Step 3 SSOT 뷰 폴백 가이드 추가 (Task #118)
 - 2026-04-25 [편집] Step 6에 Quick Writeback 단계 포함 의무화 추가 (Task #104)
 - 2026-03-27 [편집] 코드 블록 과다 사용 제거, SKILL 본문을 단일 code block으로 통합
