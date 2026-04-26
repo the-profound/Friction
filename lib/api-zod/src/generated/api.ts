@@ -527,6 +527,8 @@ export const ListInboxResponseItem = zod.object({
     })
     .optional(),
   collectionName: zod.string().nullish(),
+  isReplyToMe: zod.boolean(),
+  replyToArticleId: zod.string().uuid().nullish(),
 });
 export const ListInboxResponse = zod.array(ListInboxResponseItem);
 
@@ -608,6 +610,8 @@ export const GetInboxItemResponse = zod.object({
     })
     .optional(),
   collectionName: zod.string().nullish(),
+  isReplyToMe: zod.boolean(),
+  replyToArticleId: zod.string().uuid().nullish(),
 });
 
 /**
@@ -695,6 +699,8 @@ export const MarkInboxOpenedResponse = zod.object({
     })
     .optional(),
   collectionName: zod.string().nullish(),
+  isReplyToMe: zod.boolean(),
+  replyToArticleId: zod.string().uuid().nullish(),
 });
 
 /**
@@ -776,6 +782,8 @@ export const MarkInboxReadResponse = zod.object({
     })
     .optional(),
   collectionName: zod.string().nullish(),
+  isReplyToMe: zod.boolean(),
+  replyToArticleId: zod.string().uuid().nullish(),
 });
 
 /**

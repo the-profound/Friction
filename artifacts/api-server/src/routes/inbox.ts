@@ -1,8 +1,11 @@
 import { Router, type IRouter } from "express";
 import { and, eq, lte, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { db, inboxTable, articlesTable, usersTable, userArticleReadsTable } from "@workspace/db";
 
 const router: IRouter = Router();
+
+const sourceArticle = alias(articlesTable, "source_article");
 
 const collectionNameSubquery = sql<string | null>`(
   SELECT COALESCE(
@@ -45,10 +48,13 @@ router.get("/inbox", async (req, res) => {
       article: articlesTable,
       sender: usersTable,
       collectionName: collectionNameSubquery,
+      isReplyToMe: sql<boolean>`(${sourceArticle.id} IS NOT NULL AND ${sourceArticle.authorId} = ${inboxTable.recipientId})`,
+      replyToArticleId: articlesTable.sourceArticleId,
     })
     .from(inboxTable)
     .leftJoin(articlesTable, eq(inboxTable.articleId, articlesTable.id))
     .leftJoin(usersTable, eq(inboxTable.senderId, usersTable.id))
+    .leftJoin(sourceArticle, eq(articlesTable.sourceArticleId, sourceArticle.id))
     .where(and(
       eq(inboxTable.recipientId, recipientId),
       lte(inboxTable.visibleAt, new Date()),
@@ -72,10 +78,13 @@ router.get("/inbox/:id", async (req, res) => {
       article: articlesTable,
       sender: usersTable,
       collectionName: collectionNameSubquery,
+      isReplyToMe: sql<boolean>`(${sourceArticle.id} IS NOT NULL AND ${sourceArticle.authorId} = ${inboxTable.recipientId})`,
+      replyToArticleId: articlesTable.sourceArticleId,
     })
     .from(inboxTable)
     .leftJoin(articlesTable, eq(inboxTable.articleId, articlesTable.id))
     .leftJoin(usersTable, eq(inboxTable.senderId, usersTable.id))
+    .leftJoin(sourceArticle, eq(articlesTable.sourceArticleId, sourceArticle.id))
     .where(eq(inboxTable.id, req.params.id));
 
   if (!items[0]) {

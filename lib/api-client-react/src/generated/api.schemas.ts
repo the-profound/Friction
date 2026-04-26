@@ -158,6 +158,8 @@ export interface InboxItem {
   article?: Article;
   sender?: User;
   collectionName?: string | null;
+  isReplyToMe: boolean;
+  replyToArticleId?: string | null;
 }
 
 export interface MyCollection {

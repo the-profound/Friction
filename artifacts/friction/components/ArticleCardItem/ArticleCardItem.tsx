@@ -19,6 +19,8 @@ interface ArticleCardItemProps {
   isActive?: boolean;
   /** When set, renders a "MM월 DD일 인사" badge at the top-left. Format: YYYY-MM-DD. */
   noticeDate?: string | null;
+  /** When true, renders a "답장" badge at the top-left of the card. */
+  isReply?: boolean;
 }
 
 function formatNoticeLabel(dateStr: string): string {
@@ -43,6 +45,7 @@ export default function ArticleCardItem({
   isRead = false,
   isActive = true,
   noticeDate,
+  isReply = false,
 }: ArticleCardItemProps) {
   const textColor = isRead
     ? READ_TEXT
@@ -79,13 +82,23 @@ export default function ArticleCardItem({
 
   const coverType = cover?.type ?? "default";
 
-  const noticeBadge = noticeDate ? (
-    <View style={styles.noticeBadge} pointerEvents="none">
-      <Text style={styles.noticeBadgeText} numberOfLines={1}>
-        {formatNoticeLabel(noticeDate)}
-      </Text>
-    </View>
-  ) : null;
+  const badges =
+    noticeDate || isReply ? (
+      <View style={styles.badgeStack} pointerEvents="none">
+        {noticeDate ? (
+          <View style={styles.noticeBadge}>
+            <Text style={styles.noticeBadgeText} numberOfLines={1}>
+              {formatNoticeLabel(noticeDate)}
+            </Text>
+          </View>
+        ) : null}
+        {isReply ? (
+          <View style={styles.replyBadge}>
+            <Text style={styles.replyBadgeText} numberOfLines={1}>답장</Text>
+          </View>
+        ) : null}
+      </View>
+    ) : null;
 
   return (
     <Pressable
@@ -104,7 +117,7 @@ export default function ArticleCardItem({
         >
           <View style={styles.imageOverlay} />
           {content}
-          {noticeBadge}
+          {badges}
         </ImageBackground>
       ) : (
         <View
@@ -119,7 +132,7 @@ export default function ArticleCardItem({
           ]}
         >
           {content}
-          {noticeBadge}
+          {badges}
         </View>
       )}
     </Pressable>
@@ -171,10 +184,15 @@ const styles = StyleSheet.create({
     color: Colors.zinc400,
     marginTop: 6,
   },
-  noticeBadge: {
+  badgeStack: {
     position: "absolute",
     top: 12,
     left: 12,
+    flexDirection: "column",
+    gap: 4,
+  },
+  noticeBadge: {
+    alignSelf: "flex-start",
     backgroundColor: Colors.white,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -185,5 +203,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     color: "#92323D",
+  },
+  replyBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: Colors.white,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  replyBadgeText: {
+    ...Typography.caption,
+    fontSize: 12,
+    fontWeight: "600",
+    color: Colors.zinc900,
   },
 });

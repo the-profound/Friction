@@ -1758,7 +1758,13 @@ components:
         collectionName:
           type: string
           nullable: true
-      required: [id, recipientId, articleId, senderId, visibleAt, isRead, createdAt]
+        isReplyToMe:
+          type: boolean
+        replyToArticleId:
+          type: string
+          format: uuid
+          nullable: true
+      required: [id, recipientId, articleId, senderId, visibleAt, isRead, createdAt, isReplyToMe]
 
     # ─── MyCollection ───────────────────────────────
     MyCollection:

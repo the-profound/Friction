@@ -78,7 +78,8 @@ function groupByDate(items: InboxItem[]): DateGroup[] {
   }
 
   return Array.from(map.entries()).map(([dateKey, groupItems]) => {
-    // Notices for this date sort to the front of the group.
+    // Sort order within a group: notices → replies → regular letters.
+    // Items in the same tier keep their original visibleAt order.
     const ordered = [...groupItems].sort((a, b) => {
       const aIsNoticeForKey =
         a.article?.isNotice === true && a.article?.noticeDate === dateKey;
@@ -86,6 +87,10 @@ function groupByDate(items: InboxItem[]): DateGroup[] {
         b.article?.isNotice === true && b.article?.noticeDate === dateKey;
       if (aIsNoticeForKey && !bIsNoticeForKey) return -1;
       if (!aIsNoticeForKey && bIsNoticeForKey) return 1;
+      const aIsReply = a.isReplyToMe === true;
+      const bIsReply = b.isReplyToMe === true;
+      if (aIsReply && !bIsReply) return -1;
+      if (!aIsReply && bIsReply) return 1;
       return 0;
     });
     return {
@@ -241,6 +246,7 @@ function CarouselGroup({
             ? item.article.noticeDate
             : null
         }
+        isReply={item.isReplyToMe === true}
       />
     </View>
   ));
