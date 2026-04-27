@@ -118,6 +118,25 @@ export function countPages(content: string): number {
   return splitContentToPages(content).length;
 }
 
+/**
+ * 누적 블록 높이가 가용 높이를 처음 초과하는 블록의 인덱스를 반환한다.
+ * 모든 블록이 가용 높이 안에 들어오면 -1.
+ *
+ * blockHeights[i] 는 i번째 블록 단독 측정값이며 marginBottom(=blockGap) 포함.
+ */
+export function findOverflowBlockIndex(
+  blockHeights: number[],
+  availableHeight: number,
+  tolerance: number = 0,
+): number {
+  let cumulative = 0;
+  for (let i = 0; i < blockHeights.length; i++) {
+    cumulative += blockHeights[i];
+    if (cumulative > availableHeight + tolerance) return i;
+  }
+  return -1;
+}
+
 export function derivePages(content: string): string[] {
   return splitContentToPages(content)
     .map((p) => p.content)

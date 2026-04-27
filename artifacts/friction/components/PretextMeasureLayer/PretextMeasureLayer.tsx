@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { View } from "react-native";
 import MarkdownBlock from "../MarkdownBlock/MarkdownBlock";
-import { parseMarkdownBlocks } from "../../utils/markdownParser";
+import { parseMarkdownBlocks, type MarkdownBlockType } from "../../utils/markdownParser";
 
 /**
  * Pretext 측정 프리미티브 — 화면측 한 곳의 단일 레이어로 텍스트 블록의
@@ -18,8 +18,10 @@ import { parseMarkdownBlocks } from "../../utils/markdownParser";
 export type MeasureCandidate = {
   /** 측정 결과 맵의 키. 호출자가 의미를 부여한다. */
   key: string;
-  /** 마크다운 블록으로 렌더되는 본문. */
-  content: string;
+  /** 마크다운 블록으로 렌더되는 본문. (blocks가 비어 있을 때만 사용) */
+  content?: string;
+  /** 사전 파싱된 블록을 직접 측정. content보다 우선. */
+  blocks?: MarkdownBlockType[];
 };
 
 export type MeasureRequest = {
@@ -79,7 +81,7 @@ export default function PretextMeasureLayer({ request, onMeasured }: Props) {
   return (
     <View pointerEvents="none" style={{ position: "absolute", left: 0, top: 0, opacity: 0 }}>
       {request.candidates.map((c) => {
-        const blocks = parseMarkdownBlocks(c.content);
+        const blocks = c.blocks ?? parseMarkdownBlocks(c.content ?? "");
         return (
           <View
             key={c.key}

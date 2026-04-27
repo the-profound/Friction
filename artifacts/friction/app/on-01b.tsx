@@ -27,10 +27,13 @@ import {
   runGreedy,
   bsCandidateKey,
   bsCandidatesForJob,
+  findOverflowBlockIndex,
   type BSJob,
   type BSResult,
   type DivisionWarning,
 } from "@/lib/pageDivision";
+import { parseMarkdownBlocks, type MarkdownBlockType } from "@/utils/markdownParser";
+import MarkdownBlock from "@/components/MarkdownBlock/MarkdownBlock";
 import { canTransitionForward, canStepBack } from "@/lib/articleStatusCycle";
 import type { ArticleStatus } from "@/lib/policies";
 import { MarkdownPolicy } from "@/lib/policies";
@@ -232,43 +235,88 @@ export default function DividingScreen() {
   const { containerWidth, safeAreaWidth, safeAreaHeight, paddingX, paddingY, bodyFontSize, bodyLineHeight, bodyLetterSpacing } = readerLayout;
 
   const pageContentHeight = safeAreaHeight;
+  const blockGap = bodyLineHeight * 0.6;
+  const availableContentHeight = safeAreaHeight - 2 * paddingY - insets.bottom;
 
-  const [pageHeights, setPageHeights] = useState<Record<number, number>>({});
+  // 페이지별 파싱된 블록 캐시 — 측정 키와 시각 렌더 모두 같은 블록 배열을 사용한다.
+  const pageBlockMap = useMemo(() => {
+    const map: Record<number, MarkdownBlockType[]> = {};
+    for (const p of measurePages) {
+      map[p.pageIndex] = parseMarkdownBlocks(p.content);
+    }
+    return map;
+  }, [measurePages]);
 
+  const [blockHeights, setBlockHeights] = useState<Record<string, number>>({});
+
+  // 블록 단위 측정 요청. 페이지 padding 없이 블록 단독 높이만 잰다.
   const warningRequest = useMemo<MeasureRequest | null>(() => {
     if (measurePages.length === 0) return null;
+    const candidates: MeasureCandidate[] = [];
+    for (const p of measurePages) {
+      const blocks = pageBlockMap[p.pageIndex] ?? [];
+      blocks.forEach((b, bi) => {
+        candidates.push({
+          key: `${PAGE_KEY_PREFIX}${p.pageIndex}_b_${bi}`,
+          blocks: [b],
+        });
+      });
+    }
+    if (candidates.length === 0) return null;
     return {
-      candidates: measurePages.map((p) => ({
-        key: `${PAGE_KEY_PREFIX}${p.pageIndex}`,
-        content: p.content,
-      })),
+      candidates,
       width: safeAreaWidth,
       paddingX,
-      paddingTop: paddingY,
-      paddingBottom: insets.bottom + paddingY,
+      blockGap,
       fontSize: bodyFontSize,
       lineHeight: bodyLineHeight,
       letterSpacing: bodyLetterSpacing,
     };
-  }, [measurePages, safeAreaWidth, paddingX, paddingY, insets.bottom, bodyFontSize, bodyLineHeight, bodyLetterSpacing]);
+  }, [measurePages, pageBlockMap, safeAreaWidth, paddingX, blockGap, bodyFontSize, bodyLineHeight, bodyLetterSpacing]);
 
   const handleWarningMeasured = useCallback((heights: Record<string, number>) => {
-    setPageHeights((prev) => {
-      const next: Record<number, number> = {};
-      for (const k in heights) {
-        if (k.startsWith(PAGE_KEY_PREFIX)) {
-          const idx = Number(k.slice(PAGE_KEY_PREFIX.length));
-          if (Number.isFinite(idx)) next[idx] = heights[k];
-        }
-      }
+    setBlockHeights((prev) => {
       const prevKeys = Object.keys(prev);
-      const nextKeys = Object.keys(next);
-      if (prevKeys.length === nextKeys.length && nextKeys.every((k) => prev[Number(k)] === next[Number(k)])) {
+      const nextKeys = Object.keys(heights);
+      if (prevKeys.length === nextKeys.length && nextKeys.every((k) => prev[k] === heights[k])) {
         return prev;
       }
-      return next;
+      return heights;
     });
   }, []);
+
+  // 페이지별 합산 높이(컨텐츠 + 패딩 + insets) 및 오버플로 시작 블록 인덱스
+  const pageOverflowInfo = useMemo(() => {
+    const info: Record<number, { totalHeight: number; overflowBlockIdx: number }> = {};
+    for (const p of measurePages) {
+      const blocks = pageBlockMap[p.pageIndex] ?? [];
+      const heights: number[] = [];
+      let allMeasured = true;
+      for (let bi = 0; bi < blocks.length; bi++) {
+        const h = blockHeights[`${PAGE_KEY_PREFIX}${p.pageIndex}_b_${bi}`];
+        if (h === undefined) {
+          allMeasured = false;
+          break;
+        }
+        heights.push(h);
+      }
+      if (!allMeasured) continue;
+      const blockSum = heights.reduce((a, b) => a + b, 0);
+      const totalHeight = blockSum + 2 * paddingY + insets.bottom;
+      const overflowBlockIdx = findOverflowBlockIndex(heights, availableContentHeight, bodyLineHeight);
+      info[p.pageIndex] = { totalHeight, overflowBlockIdx };
+    }
+    return info;
+  }, [measurePages, pageBlockMap, blockHeights, paddingY, insets.bottom, availableContentHeight, bodyLineHeight]);
+
+  // 호환을 위해 pageHeights 유지 — handleNext에서 사용된다.
+  const pageHeights = useMemo<Record<number, number>>(() => {
+    const map: Record<number, number> = {};
+    for (const k in pageOverflowInfo) {
+      map[Number(k)] = pageOverflowInfo[Number(k)].totalHeight;
+    }
+    return map;
+  }, [pageOverflowInfo]);
 
   const [engineRequest, setEngineRequest] = useState<MeasureRequest | null>(null);
   const engineResolveRef = useRef<((heights: Record<string, number>) => void) | null>(null);
@@ -382,7 +430,7 @@ export default function DividingScreen() {
       contentRef.current = joined;
       setContent(joined);
       setDebouncedContent(joined);
-      setPageHeights({});
+      setBlockHeights({});
       if (editorRef.current && editorReady) {
         editorRef.current.setMarkdown(joined);
       }
@@ -448,7 +496,7 @@ export default function DividingScreen() {
       contentRef.current = joined;
       setContent(joined);
       setDebouncedContent(joined);
-      setPageHeights({});
+      setBlockHeights({});
       if (editorRef.current && editorReady) {
         editorRef.current.setMarkdown(joined);
       }
@@ -663,6 +711,78 @@ export default function DividingScreen() {
           })}
         </ScrollView>
 
+        {(() => {
+          const overflowEntries = measurePages
+            .map((p) => ({ page: p, info: pageOverflowInfo[p.pageIndex] }))
+            .filter((e) => e.info && e.info.overflowBlockIdx >= 0);
+          if (overflowEntries.length === 0) return null;
+          const cardW = 140;
+          const cardH = cardW / ReaderTokens.aspectRatio;
+          const previewScale = cardW / containerWidth;
+          const innerH = containerWidth / ReaderTokens.aspectRatio;
+          return (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.overflowPreviewStrip}
+              contentContainerStyle={styles.overflowPreviewStripContent}
+            >
+              {overflowEntries.map(({ page, info }) => {
+                const blocks = pageBlockMap[page.pageIndex] ?? [];
+                const overflowIdx = info.overflowBlockIdx;
+                return (
+                  <View key={`overflow-card-${page.pageIndex}`} style={styles.overflowPreviewCard}>
+                    <View style={[styles.overflowPreviewClip, { width: cardW, height: cardH }]}>
+                      <View
+                        style={{
+                          width: containerWidth,
+                          height: innerH,
+                          transform: [{ scale: previewScale }],
+                          transformOrigin: "top left",
+                        }}
+                      >
+                        <View
+                          style={{
+                            width: containerWidth,
+                            height: innerH,
+                            backgroundColor: Colors.white,
+                            paddingHorizontal: paddingX,
+                            paddingTop: paddingY,
+                            paddingBottom: paddingY + insets.bottom,
+                            overflow: "hidden",
+                          }}
+                        >
+                          {blocks.map((b, bi) => {
+                            const isOverflow = bi >= overflowIdx;
+                            return (
+                              <View
+                                key={`oc-${page.pageIndex}-b-${bi}`}
+                                style={{
+                                  marginBottom: blockGap,
+                                  backgroundColor: isOverflow ? Colors.readerOverflowBg : undefined,
+                                }}
+                              >
+                                <MarkdownBlock
+                                  block={b}
+                                  onCollect={() => {}}
+                                  fontSize={bodyFontSize}
+                                  lineHeight={bodyLineHeight}
+                                  letterSpacing={bodyLetterSpacing}
+                                />
+                              </View>
+                            );
+                          })}
+                        </View>
+                      </View>
+                    </View>
+                    <Text style={styles.overflowPreviewLabel}>{page.pageIndex + 1}쪽</Text>
+                  </View>
+                );
+              })}
+            </ScrollView>
+          );
+        })()}
+
         <PretextMeasureLayer request={warningRequest} onMeasured={handleWarningMeasured} />
         <PretextMeasureLayer request={engineRequest} onMeasured={handleEngineMeasured} />
 
@@ -815,6 +935,36 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
+  },
+  overflowPreviewStrip: {
+    flexGrow: 0,
+    flexShrink: 0,
+    backgroundColor: "#fef2f2",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.zinc100,
+  },
+  overflowPreviewStripContent: {
+    paddingHorizontal: Spacing.screenPx,
+    paddingVertical: 10,
+    gap: 12,
+    alignItems: "flex-start",
+  },
+  overflowPreviewCard: {
+    alignItems: "center",
+    gap: 4,
+  },
+  overflowPreviewClip: {
+    overflow: "hidden",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#fecaca",
+    backgroundColor: Colors.white,
+  },
+  overflowPreviewLabel: {
+    ...Typography.caption,
+    fontSize: 11,
+    color: "#b91c1c",
+    fontWeight: "600",
   },
   pageStripContent: {
     paddingHorizontal: Spacing.screenPx,

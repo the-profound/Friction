@@ -45,6 +45,8 @@ export const Colors = {
   noticeAccent: "#92323D",
   /** rgba(146,50,61,0.08) — 인사 헤더/행 배경 */
   noticeAccentSoft: "rgba(146,50,61,0.08)",
+
+  readerOverflowBg: "#fecaca",
 } as const;
 
 export const Spacing = {
