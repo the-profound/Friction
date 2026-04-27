@@ -468,19 +468,18 @@ export default function ReadScreen() {
 
         isCommittingRef.current = true;
         outgoingPageRef.current = { page: currentPageRef.current, showingCover: showingCoverRef.current };
-        // Hand off the current swipe position from `outX` (single-view transform)
-        // to `commitOutX` (dual-view outgoing transform), and reset `outX` to 0
-        // so that when we drop back to the single view the new content is already
-        // centered without a one-frame flash.
+        // Outgoing page (dual-view): set invisible and position at dx.
+        // Opacity 0 prevents ghost-text on the first dual-view frame.
         commitOutX.setValue(dx);
-        // Set outgoing page opacity to 0 immediately so it is never visible
-        // on the first dual-view frame. The user already saw the page being
-        // dragged via outX (single-view); during the commit animation only the
-        // incoming page needs to be visible. This is the only reliable fix for
-        // the ghost-text flash on native (iOS/Android) where the PanResponder
-        // release and React re-render land on different frames.
         commitOutOpacity.setValue(0);
-        outX.setValue(0);
+
+        // Move the single-view page off-screen in the swipe direction so it
+        // appears to continue past the edge rather than bouncing back to
+        // center. This avoids the one-frame snap that caused the bounce when
+        // we previously reset outX to 0 before setIsCommitting(true) re-rendered.
+        outX.setValue(swipeDir * width);
+
+        // Incoming page starts off-screen on the opposite side.
         inX.setValue(-swipeDir * width);
 
         if (swipeDir === -1) {
@@ -490,23 +489,16 @@ export default function ReadScreen() {
         }
         setIsCommitting(true);
 
-        Animated.parallel([
-          Animated.spring(inX, {
-            toValue: 0,
-            tension: 120,
-            friction: 18,
-            useNativeDriver: true,
-          }),
-        ]).start(() => {
-          // Switch back to single view. `outX` is already 0, so the single
-          // view renders the new page centered with no visible jump.
-          //
-          // Do NOT reset commitOutX/inX here — resetting commitOutX to 0
-          // before this `setIsCommitting(false)` re-render completes would
-          // momentarily snap the outgoing page back to center while the dual
-          // view is still mounted, causing a one-frame ghost-text flash.
-          // The values stay at their final off-screen positions; they are
-          // re-initialized at the start of the next commit anyway.
+        Animated.spring(inX, {
+          toValue: 0,
+          tension: 120,
+          friction: 18,
+          useNativeDriver: true,
+        }).start(() => {
+          // Reset the single-view position to center BEFORE switching back
+          // to single view, so the new page is already centered when the
+          // dual → single transition re-render fires.
+          outX.setValue(0);
           isCommittingRef.current = false;
           setIsCommitting(false);
         });
