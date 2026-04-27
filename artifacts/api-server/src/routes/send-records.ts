@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
-import { db, sendRecordsTable, articlesTable, inboxTable, usersTable } from "@workspace/db";
+import { eq, sql } from "drizzle-orm";
+import { db, sendRecordsTable, articlesTable, inboxTable, usersTable, teamCollectionsTable } from "@workspace/db";
 import { SendArticleBody } from "@workspace/api-zod";
 
 function computeDeliverySlot(): Date {
@@ -44,14 +44,18 @@ router.get("/send-records", async (req, res) => {
       recipientId: sendRecordsTable.recipientId,
       articleId: sendRecordsTable.articleId,
       inboxId: sendRecordsTable.inboxId,
+      targetType: sql<string>`${sendRecordsTable.targetType}::text`.as("target_type"),
+      collectionId: sendRecordsTable.teamCollectionId,
       deliverySlot: sendRecordsTable.deliverySlot,
       sentAt: sendRecordsTable.sentAt,
       article: articlesTable,
       recipient: usersTable,
+      collectionName: teamCollectionsTable.name,
     })
     .from(sendRecordsTable)
     .leftJoin(articlesTable, eq(sendRecordsTable.articleId, articlesTable.id))
     .leftJoin(usersTable, eq(sendRecordsTable.recipientId, usersTable.id))
+    .leftJoin(teamCollectionsTable, eq(sendRecordsTable.teamCollectionId, teamCollectionsTable.id))
     .where(eq(sendRecordsTable.senderId, senderId));
 
   const now = new Date();
@@ -71,14 +75,18 @@ router.get("/send-records/:id", async (req, res) => {
       recipientId: sendRecordsTable.recipientId,
       articleId: sendRecordsTable.articleId,
       inboxId: sendRecordsTable.inboxId,
+      targetType: sql<string>`${sendRecordsTable.targetType}::text`.as("target_type"),
+      collectionId: sendRecordsTable.teamCollectionId,
       deliverySlot: sendRecordsTable.deliverySlot,
       sentAt: sendRecordsTable.sentAt,
       article: articlesTable,
       recipient: usersTable,
+      collectionName: teamCollectionsTable.name,
     })
     .from(sendRecordsTable)
     .leftJoin(articlesTable, eq(sendRecordsTable.articleId, articlesTable.id))
     .leftJoin(usersTable, eq(sendRecordsTable.recipientId, usersTable.id))
+    .leftJoin(teamCollectionsTable, eq(sendRecordsTable.teamCollectionId, teamCollectionsTable.id))
     .where(eq(sendRecordsTable.id, req.params.id));
 
   if (!records[0]) {

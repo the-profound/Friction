@@ -378,14 +378,6 @@ export interface TeamCollectionArticleWithDetails {
   isRead?: boolean;
   /** Timestamp at which the requesting user first completed this article, or null if never. Only present when the listTeamArticles request includes userId. */
   completedAt?: string | null;
-  /** sourceArticleId of the article (i.e. the ID of the article this is a reply to), if any. */
-  sourceArticleId?: string | null;
-  /** True when the source article (parent) is also present in this same team collection. */
-  parentInThisCollection?: boolean;
-  /** True when this row is a soft-deleted placeholder kept because it still has live replies. */
-  isDeletedPlaceholder?: boolean;
-  /** The requester's inbox visibleAt for this article, if an inbox row exists. Only present when the listTeamArticles request includes userId. */
-  visibleAt?: string | null;
 }
 
 export interface AddTeamMemberBody {
@@ -461,22 +453,43 @@ export interface CreateNeighborRequestBody {
   recipientId: string;
 }
 
+export type SendRecordTargetType =
+  (typeof SendRecordTargetType)[keyof typeof SendRecordTargetType];
+
+export const SendRecordTargetType = {
+  person: "person",
+  group: "group",
+} as const;
+
 export interface SendRecord {
   id: string;
   senderId: string;
-  recipientId: string;
+  recipientId?: string | null;
   articleId: string;
-  inboxId: string;
+  inboxId?: string | null;
+  targetType: SendRecordTargetType;
+  collectionId?: string | null;
   deliverySlot: string;
   sentAt: string;
 }
 
+export type SendRecordWithDetailsTargetType =
+  (typeof SendRecordWithDetailsTargetType)[keyof typeof SendRecordWithDetailsTargetType];
+
+export const SendRecordWithDetailsTargetType = {
+  person: "person",
+  group: "group",
+} as const;
+
 export interface SendRecordWithDetails {
   id: string;
   senderId: string;
-  recipientId: string;
+  recipientId?: string | null;
   articleId: string;
-  inboxId: string;
+  inboxId?: string | null;
+  targetType: SendRecordWithDetailsTargetType;
+  collectionId?: string | null;
+  collectionName?: string | null;
   deliverySlot: string;
   sentAt: string;
   isDelivered: boolean;

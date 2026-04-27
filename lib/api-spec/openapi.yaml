@@ -2313,19 +2313,28 @@ components:
         recipientId:
           type: string
           format: uuid
+          nullable: true
         articleId:
           type: string
           format: uuid
         inboxId:
           type: string
           format: uuid
+          nullable: true
+        targetType:
+          type: string
+          enum: [person, group]
+        collectionId:
+          type: string
+          format: uuid
+          nullable: true
         deliverySlot:
           type: string
           format: date-time
         sentAt:
           type: string
           format: date-time
-      required: [id, senderId, recipientId, articleId, inboxId, deliverySlot, sentAt]
+      required: [id, senderId, articleId, targetType, deliverySlot, sentAt]
 
     SendRecordWithDetails:
       type: object
@@ -2339,12 +2348,24 @@ components:
         recipientId:
           type: string
           format: uuid
+          nullable: true
         articleId:
           type: string
           format: uuid
         inboxId:
           type: string
           format: uuid
+          nullable: true
+        targetType:
+          type: string
+          enum: [person, group]
+        collectionId:
+          type: string
+          format: uuid
+          nullable: true
+        collectionName:
+          type: string
+          nullable: true
         deliverySlot:
           type: string
           format: date-time
@@ -2357,7 +2378,7 @@ components:
           $ref: "#/components/schemas/Article"
         recipient:
           $ref: "#/components/schemas/User"
-      required: [id, senderId, recipientId, articleId, inboxId, deliverySlot, sentAt, isDelivered]
+      required: [id, senderId, articleId, targetType, deliverySlot, sentAt, isDelivered]
 
     SendArticleBody:
       type: object

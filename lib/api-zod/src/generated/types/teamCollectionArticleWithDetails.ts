@@ -18,12 +18,4 @@ export interface TeamCollectionArticleWithDetails {
   isRead?: boolean;
   /** Timestamp at which the requesting user first completed this article, or null if never. Only present when the listTeamArticles request includes userId. */
   completedAt?: Date | null;
-  /** sourceArticleId of the article (i.e. the ID of the article this is a reply to), if any. */
-  sourceArticleId?: string | null;
-  /** True when the source article (parent) is also present in this same team collection. */
-  parentInThisCollection?: boolean;
-  /** True when this row is a soft-deleted placeholder kept because it still has live replies. */
-  isDeletedPlaceholder?: boolean;
-  /** The requester's inbox visibleAt for this article, if an inbox row exists. Only present when the listTeamArticles request includes userId. */
-  visibleAt?: Date | null;
 }

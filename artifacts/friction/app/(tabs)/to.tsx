@@ -168,37 +168,48 @@ export default function ToScreen() {
     }, [refetchRequests, refetchSendRecords, queryClient, userId]),
   );
 
-  const renderSendRecordItem = ({ item }: { item: SendRecordWithDetails }) => (
-    <Pressable style={styles.listItem} onPress={() => handleArticlePress(item.articleId)}>
-      <View style={styles.listItemInfo}>
-        <View style={styles.recordTitleRow}>
-          <Text style={[styles.listItemTitle, styles.recordTitleFlex]} numberOfLines={1}>
-            {item.article?.title ?? "제목 없음"}
-          </Text>
-          <View
-            style={[
-              styles.deliveryBadge,
-              item.isDelivered ? styles.deliveredBadge : styles.pendingBadge,
-            ]}
-          >
-            <Text
+  const renderSendRecordItem = ({ item }: { item: SendRecordWithDetails }) => {
+    const isGroup = item.targetType === "group";
+    const targetLabel = isGroup ? "단체 모음" : "개인";
+    const recipientDisplay = isGroup
+      ? (item.collectionName ?? "단체 모음")
+      : (item.recipient?.nickname ?? "알 수 없음");
+    return (
+      <Pressable style={styles.listItem} onPress={() => handleArticlePress(item.articleId)}>
+        <View style={styles.listItemInfo}>
+          <View style={styles.recordTitleRow}>
+            <Text style={[styles.listItemTitle, styles.recordTitleFlex]} numberOfLines={1}>
+              {item.article?.title ?? "제목 없음"}
+            </Text>
+            <View style={[styles.typeBadge, isGroup ? styles.groupTypeBadge : styles.personTypeBadge]}>
+              <Text style={[styles.typeBadgeText, isGroup ? styles.groupTypeBadgeText : styles.personTypeBadgeText]}>
+                {targetLabel}
+              </Text>
+            </View>
+            <View
               style={[
-                styles.deliveryBadgeText,
-                item.isDelivered ? styles.deliveredBadgeText : styles.pendingBadgeText,
+                styles.deliveryBadge,
+                item.isDelivered ? styles.deliveredBadge : styles.pendingBadge,
               ]}
             >
-              {item.isDelivered ? "수신됨" : "배달 전"}
-            </Text>
+              <Text
+                style={[
+                  styles.deliveryBadgeText,
+                  item.isDelivered ? styles.deliveredBadgeText : styles.pendingBadgeText,
+                ]}
+              >
+                {item.isDelivered ? "수신됨" : "배달 전"}
+              </Text>
+            </View>
           </View>
+          <Text style={styles.listItemSub}>
+            → {recipientDisplay} · {formatDeliveryTime(new Date(item.deliverySlot))}
+          </Text>
         </View>
-        <Text style={styles.listItemSub}>
-          → {item.recipient?.nickname ?? "알 수 없음"} ·{" "}
-          {formatDeliveryTime(new Date(item.deliverySlot))}
-        </Text>
-      </View>
-      <Feather name="chevron-right" size={16} color={Colors.zinc300} />
-    </Pressable>
-  );
+        <Feather name="chevron-right" size={16} color={Colors.zinc300} />
+      </Pressable>
+    );
+  };
 
   const renderHistoryTab = () => {
     if (sendRecordsQuery.isLoading) {
@@ -447,5 +458,27 @@ const styles = StyleSheet.create({
   },
   pendingBadgeText: {
     color: Colors.zinc500,
+  },
+  typeBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    alignSelf: "center",
+  },
+  personTypeBadge: {
+    backgroundColor: Colors.zinc100,
+  },
+  groupTypeBadge: {
+    backgroundColor: "#EDE9FE",
+  },
+  typeBadgeText: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  personTypeBadgeText: {
+    color: Colors.zinc500,
+  },
+  groupTypeBadgeText: {
+    color: "#5B21B6",
   },
 });

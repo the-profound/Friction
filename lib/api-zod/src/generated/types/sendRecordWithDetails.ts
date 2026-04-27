@@ -6,14 +6,18 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { Article } from "./article";
+import type { SendRecordWithDetailsTargetType } from "./sendRecordWithDetailsTargetType";
 import type { User } from "./user";
 
 export interface SendRecordWithDetails {
   id: string;
   senderId: string;
-  recipientId: string;
+  recipientId?: string | null;
   articleId: string;
-  inboxId: string;
+  inboxId?: string | null;
+  targetType: SendRecordWithDetailsTargetType;
+  collectionId?: string | null;
+  collectionName?: string | null;
   deliverySlot: Date;
   sentAt: Date;
   isDelivered: boolean;

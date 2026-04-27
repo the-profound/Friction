@@ -457,25 +457,23 @@ router.post("/team-collections/:id/articles", async (req, res) => {
     }).returning();
 
     if (members.length > 0) {
-      const inboxEntries = await tx.insert(inboxTable).values(
+      await tx.insert(inboxTable).values(
         members.map((m) => ({
           recipientId: m.userId,
           articleId,
           senderId: addedBy,
           visibleAt,
         })),
-      ).returning();
-
-      await tx.insert(sendRecordsTable).values(
-        inboxEntries.map((inbox) => ({
-          senderId: addedBy,
-          recipientId: inbox.recipientId,
-          articleId,
-          inboxId: inbox.id,
-          deliverySlot: visibleAt,
-        })),
       );
     }
+
+    await tx.insert(sendRecordsTable).values({
+      senderId: addedBy,
+      articleId,
+      teamCollectionId,
+      targetType: "group" as const,
+      deliverySlot: visibleAt,
+    });
 
     return created;
   });

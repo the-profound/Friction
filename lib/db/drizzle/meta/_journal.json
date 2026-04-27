@@ -64,6 +64,13 @@
       "when": 1778000000000,
       "tag": "0008_add_team_collection_deleted_at",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1745712000000,
+      "tag": "0009_add_target_type_to_send_records",
+      "breakpoints": true
     }
   ]
 }

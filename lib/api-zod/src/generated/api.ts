@@ -529,6 +529,7 @@ export const ListInboxResponseItem = zod.object({
   collectionName: zod.string().nullish(),
   isReplyToMe: zod.boolean(),
   replyToArticleId: zod.string().uuid().nullish(),
+  hasReadBefore: zod.boolean(),
 });
 export const ListInboxResponse = zod.array(ListInboxResponseItem);
 
@@ -612,6 +613,7 @@ export const GetInboxItemResponse = zod.object({
   collectionName: zod.string().nullish(),
   isReplyToMe: zod.boolean(),
   replyToArticleId: zod.string().uuid().nullish(),
+  hasReadBefore: zod.boolean(),
 });
 
 /**
@@ -701,6 +703,7 @@ export const MarkInboxOpenedResponse = zod.object({
   collectionName: zod.string().nullish(),
   isReplyToMe: zod.boolean(),
   replyToArticleId: zod.string().uuid().nullish(),
+  hasReadBefore: zod.boolean(),
 });
 
 /**
@@ -784,6 +787,7 @@ export const MarkInboxReadResponse = zod.object({
   collectionName: zod.string().nullish(),
   isReplyToMe: zod.boolean(),
   replyToArticleId: zod.string().uuid().nullish(),
+  hasReadBefore: zod.boolean(),
 });
 
 /**
@@ -1567,9 +1571,12 @@ export const ListSendRecordsQueryParams = zod.object({
 export const ListSendRecordsResponseItem = zod.object({
   id: zod.string().uuid(),
   senderId: zod.string().uuid(),
-  recipientId: zod.string().uuid(),
+  recipientId: zod.string().uuid().nullish(),
   articleId: zod.string().uuid(),
-  inboxId: zod.string().uuid(),
+  inboxId: zod.string().uuid().nullish(),
+  targetType: zod.enum(["person", "group"]),
+  collectionId: zod.string().uuid().nullish(),
+  collectionName: zod.string().nullish(),
   deliverySlot: zod.date(),
   sentAt: zod.date(),
   isDelivered: zod.boolean(),
@@ -1657,9 +1664,12 @@ export const GetSendRecordParams = zod.object({
 export const GetSendRecordResponse = zod.object({
   id: zod.string().uuid(),
   senderId: zod.string().uuid(),
-  recipientId: zod.string().uuid(),
+  recipientId: zod.string().uuid().nullish(),
   articleId: zod.string().uuid(),
-  inboxId: zod.string().uuid(),
+  inboxId: zod.string().uuid().nullish(),
+  targetType: zod.enum(["person", "group"]),
+  collectionId: zod.string().uuid().nullish(),
+  collectionName: zod.string().nullish(),
   deliverySlot: zod.date(),
   sentAt: zod.date(),
   isDelivered: zod.boolean(),
