@@ -53,6 +53,7 @@ function parseInlineMarkedTokens(markedTokens: Token[]): InlineToken[] {
 }
 
 function inlineTokensFromText(text: string): InlineToken[] {
+  if (!text) return [];
   const inlineTokens = marked.lexer(text, { breaks: false, gfm: true });
   const firstBlock = inlineTokens[0];
   if (firstBlock && firstBlock.type === "paragraph" && (firstBlock as Tokens.Paragraph).tokens) {
@@ -73,7 +74,7 @@ function flattenListItems(
   const result: MarkdownBlockType[] = [];
   let idx = startIndex;
   for (const item of items) {
-    const rawText = item.text;
+    const rawText = item.text ?? "";
     const tokens = inlineTokensFromText(rawText);
     if (ordered) {
       result.push({ type: "ol_item", tokens, rawText, index: idx++ });
