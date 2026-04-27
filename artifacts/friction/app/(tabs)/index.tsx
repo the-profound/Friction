@@ -51,40 +51,48 @@ interface DateGroup {
   items: InboxItem[];
 }
 
-function formatDateLabel(dateStr: string): string {
-  const d = new Date(dateStr);
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const target = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const diffDays = Math.round((today.getTime() - target.getTime()) / (1000 * 60 * 60 * 24));
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+const AFTERNOON_HOUR_KST = 18;
 
-  if (diffDays === 0) return "오늘";
-  if (diffDays === 1) return "어제";
-  if (diffDays < 7) return `${diffDays}일 전`;
-  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
+function getSlotKey(visibleAt: string): string {
+  const utcMs = new Date(visibleAt).getTime();
+  const kstDate = new Date(utcMs + KST_OFFSET_MS);
+  const yyyy = kstDate.getUTCFullYear();
+  const mm = String(kstDate.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(kstDate.getUTCDate()).padStart(2, "0");
+  const slot = kstDate.getUTCHours() < AFTERNOON_HOUR_KST ? "am" : "pm";
+  return `${yyyy}-${mm}-${dd}-${slot}`;
 }
 
-function groupByDate(items: InboxItem[]): DateGroup[] {
+function formatSlotLabel(slotKey: string): string {
+  const [yyyy, mm, dd, slot] = slotKey.split("-");
+  const month = parseInt(mm, 10);
+  const day = parseInt(dd, 10);
+  const period = slot === "am" ? "오전" : "오후";
+  return `${month}월 ${day}일 ${period}`;
+}
+
+function groupBySlot(items: InboxItem[]): DateGroup[] {
   const map = new Map<string, InboxItem[]>();
   const sorted = [...items].sort(
     (a, b) => new Date(b.visibleAt).getTime() - new Date(a.visibleAt).getTime(),
   );
 
   for (const item of sorted) {
-    const d = new Date(item.visibleAt);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const key = getSlotKey(item.visibleAt);
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(item);
   }
 
   return Array.from(map.entries()).map(([dateKey, groupItems]) => {
+    const datePart = dateKey.slice(0, 10);
     // Sort order within a group: notices → replies → regular letters.
     // Items in the same tier keep their original visibleAt order.
     const ordered = [...groupItems].sort((a, b) => {
       const aIsNoticeForKey =
-        a.article?.isNotice === true && a.article?.noticeDate === dateKey;
+        a.article?.isNotice === true && a.article?.noticeDate === datePart;
       const bIsNoticeForKey =
-        b.article?.isNotice === true && b.article?.noticeDate === dateKey;
+        b.article?.isNotice === true && b.article?.noticeDate === datePart;
       if (aIsNoticeForKey && !bIsNoticeForKey) return -1;
       if (!aIsNoticeForKey && bIsNoticeForKey) return 1;
       const aIsReply = a.isReplyToMe === true;
@@ -95,7 +103,7 @@ function groupByDate(items: InboxItem[]): DateGroup[] {
     });
     return {
       dateKey,
-      label: formatDateLabel(ordered[0].visibleAt),
+      label: formatSlotLabel(dateKey),
       items: ordered,
     };
   });
@@ -242,7 +250,7 @@ function CarouselGroup({
         isActive={index === activeIndex}
         noticeDate={
           item.article?.isNotice === true &&
-          item.article?.noticeDate === group.dateKey
+          item.article?.noticeDate === group.dateKey.slice(0, 10)
             ? item.article.noticeDate
             : null
         }
@@ -345,7 +353,7 @@ export default function InboxScreen() {
     });
   }, [visibleItems, searchQuery]);
 
-  const groups = useMemo(() => groupByDate(filteredItems), [filteredItems]);
+  const groups = useMemo(() => groupBySlot(filteredItems), [filteredItems]);
 
   const handleSearchPress = useCallback(() => {
     setSearchActive((prev) => {
