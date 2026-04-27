@@ -326,8 +326,8 @@ export default function TeamCollectionDetailScreen() {
     router.push({
       pathname: "/read",
       params: unreadInboxItem
-        ? { articleId: item.articleId, inboxId: unreadInboxItem.id, mode: "basic" }
-        : { articleId: item.articleId, mode: "basic" },
+        ? { articleId: item.articleId, inboxId: unreadInboxItem.id, mode: "basic", entrySource: "list" }
+        : { articleId: item.articleId, mode: "basic", entrySource: "list" },
     });
   }, [router, inboxItems, closeOpenRow, userId]);
 

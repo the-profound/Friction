@@ -136,15 +136,19 @@ export default function ReadScreen() {
     articleId: string;
     inboxId?: string;
     mode?: string;
+    entrySource?: string;
   }>();
 
   const articleId = params.articleId ?? "";
   const inboxId = params.inboxId;
   const mode: ReadingMode = (params.mode as ReadingMode) ?? "basic";
+  const entrySource = params.entrySource as "list" | "inbox" | undefined;
   // True when the user opens an article for the first time via a collection
   // article list rather than via the inbox. In this case the completion CTA
   // should offer "보관하기 / 보관 안 함" instead of "보관하기 / 삭제하기".
-  const isListEntry = mode === "basic" && !inboxId;
+  const isListEntry =
+    entrySource === "list" ||
+    (mode === "basic" && !inboxId && entrySource !== "inbox");
 
   const articleQuery = useGetArticle(articleId);
   const article = articleId ? articleQuery.data : undefined;
