@@ -377,6 +377,9 @@ export default function ReadScreen() {
   // prevents a one-frame flash of the previous page over the new one when
   // the dual-view → single-view transition happens after the animation.
   const commitOutX = useRef(new Animated.Value(0)).current;
+  // Opacity for the outgoing page: fades from 1→0 as it exits, eliminating
+  // any ghost-text flash on the first frame of the dual-view transition.
+  const commitOutOpacity = useRef(new Animated.Value(1)).current;
   const [isCommitting, setIsCommitting] = useState(false);
   const isCommittingRef = useRef(false);
   const containerWidthRef = useRef(layout.containerWidth);
@@ -466,6 +469,7 @@ export default function ReadScreen() {
         // so that when we drop back to the single view the new content is already
         // centered without a one-frame flash.
         commitOutX.setValue(dx);
+        commitOutOpacity.setValue(1);
         outX.setValue(0);
         inX.setValue(-swipeDir * width);
 
@@ -479,13 +483,21 @@ export default function ReadScreen() {
         Animated.parallel([
           Animated.timing(commitOutX, {
             toValue: swipeDir * width,
-            duration: 240,
+            duration: 220,
+            useNativeDriver: true,
+          }),
+          // Fade out the outgoing page rapidly so no ghost text bleeds through
+          // on the first frame of the dual-view (where commitOutX starts near
+          // the drag-release position, which can be close to center).
+          Animated.timing(commitOutOpacity, {
+            toValue: 0,
+            duration: 80,
             useNativeDriver: true,
           }),
           Animated.spring(inX, {
             toValue: 0,
-            tension: 100,
-            friction: 16,
+            tension: 120,
+            friction: 18,
             useNativeDriver: true,
           }),
         ]).start(() => {
@@ -753,10 +765,10 @@ Alert.alert("완료", "보관함에 저장됐어요");
       <Stack.Screen
         options={{
           headerShown: false,
-          gestureEnabled: mode !== "basic" || reading.canExit,
+          gestureEnabled: false,
         }}
       />
-      {mode === "re_read" && (
+      {(mode === "re_read" || (mode === "basic" && reading.canExit)) && (
         <View style={styles.header}>
           <Pressable onPress={handleBack} hitSlop={12} style={styles.backButton}>
             <Feather name="arrow-left" size={20} color={Colors.zinc600} />
@@ -792,7 +804,7 @@ Alert.alert("완료", "보관함에 저장됐어요");
             }}>
             {isCommitting ? (
               <>
-                <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ translateX: commitOutX }] }]}>
+                <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ translateX: commitOutX }], opacity: commitOutOpacity }]}>
                   {outgoingPageRef.current.showingCover ? (
                     <CoverPage
                       cover={cover}
