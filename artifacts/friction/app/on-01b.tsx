@@ -21,7 +21,6 @@ import {
   splitContentToPages,
   splitPageContentForDivision,
   validatePages,
-  splitContentForDivision,
   simulateGreedyJobs,
   resolveBSJob,
   runGreedy,
@@ -367,6 +366,15 @@ export default function DividingScreen() {
   const warnings = useMemo(() => [...baseWarnings, ...heightWarnings], [baseWarnings, heightWarnings]);
   const hasRedWarnings = warnings.some((w) => w.level === "red");
 
+  // 자동 분할은 안전 영역을 초과한 페이지에만 적용하므로, 초과 페이지 인덱스를 따로 추린다.
+  // baseWarnings(빈 페이지 등)는 자동 분할로 해결할 수 없으므로 대상에서 제외한다.
+  const overflowPageIndices = useMemo(() => {
+    const set = new Set<number>();
+    for (const w of heightWarnings) set.add(w.pageIndex);
+    return Array.from(set).sort((a, b) => a - b);
+  }, [heightWarnings]);
+  const hasOverflowPages = overflowPageIndices.length > 0;
+
   const runDivisionEngine = useCallback(
     async (paragraphs: string[]): Promise<string[] | null> => {
       if (paragraphs.length < 1) return null;
@@ -439,22 +447,49 @@ export default function DividingScreen() {
     [editorReady, markDirty],
   );
 
+  // SSOT [PD] — 자동 분할 적용 범위 규칙
+  // 자동 분할 버튼은 "안전 영역을 초과한 페이지 구간"에만 분할 엔진을 적용한다.
+  // 초과되지 않은 사용자 분할 경계는 그대로 보존하며, 자동 분할 직후에도
+  // 사용자가 페이지 chip의 합치기/나누기 버튼으로 미세 조정할 수 있다.
+  // 초과 페이지가 없으면 버튼은 비활성 상태로 유지된다.
   const handleAutoSplit = useCallback(async () => {
     if (splitting) return;
+    if (!hasOverflowPages) return;
     const cur = await getEditorContent();
-    const paragraphs = splitContentForDivision(cur);
-    if (paragraphs.length < 2) {
-      Alert.alert("자동 분할 불가", "단락이 부족하여 자동 분할할 수 없습니다.");
+    const rawPages = cur.split(new RegExp(`\n?${PAGE_DIVIDER}\n?`, "m"));
+    // 인덱스 보존을 위해 높은 인덱스부터 순서대로 처리한다.
+    const targets = [...overflowPageIndices]
+      .filter((i) => i >= 0 && i < rawPages.length)
+      .sort((a, b) => b - a);
+    if (targets.length === 0) {
+      Alert.alert("자동 분할 불필요", "분량을 초과하는 페이지가 없습니다.");
       return;
     }
     setSplitting(true);
     try {
-      const out = await runDivisionEngine(paragraphs);
-      if (out) applyEngineResult(out);
+      const next = [...rawPages];
+      let appliedAny = false;
+      for (const idx of targets) {
+        const paragraphs = splitPageContentForDivision(next[idx]);
+        if (paragraphs.length < 2) continue;
+        const out = await runDivisionEngine(paragraphs);
+        if (out && out.length > 0) {
+          next.splice(idx, 1, ...out);
+          appliedAny = true;
+        }
+      }
+      if (!appliedAny) {
+        Alert.alert(
+          "자동 분할 불가",
+          "초과된 페이지를 더 잘게 나눌 수 없습니다. 본문을 직접 편집해 주세요.",
+        );
+        return;
+      }
+      applyEngineResult(next);
     } finally {
       setSplitting(false);
     }
-  }, [splitting, getEditorContent, runDivisionEngine, applyEngineResult]);
+  }, [splitting, hasOverflowPages, overflowPageIndices, getEditorContent, runDivisionEngine, applyEngineResult]);
 
   const handleSplitPage = useCallback(
     async (pageIndex: number) => {
@@ -650,9 +685,18 @@ export default function DividingScreen() {
         <View style={styles.toolbar}>
           <View style={styles.toolbarSpacer} />
           <Pressable
-            style={[styles.autoSplitButton, splitting && styles.autoSplitButtonDisabled]}
+            style={[
+              styles.autoSplitButton,
+              (splitting || !hasOverflowPages) && styles.autoSplitButtonDisabled,
+            ]}
             onPress={handleAutoSplit}
-            disabled={splitting}
+            disabled={splitting || !hasOverflowPages}
+            accessibilityState={{ disabled: splitting || !hasOverflowPages }}
+            accessibilityHint={
+              hasOverflowPages
+                ? "분량을 초과한 페이지만 다시 나눕니다. 다른 페이지 분할은 그대로 유지됩니다."
+                : "초과된 페이지가 없어 자동 분할을 사용할 수 없습니다."
+            }
           >
             <Feather name="scissors" size={14} color={Colors.zinc600} />
             <Text style={styles.autoSplitText}>{splitting ? "분할 중…" : "자동분할"}</Text>
