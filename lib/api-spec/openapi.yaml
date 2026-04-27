@@ -1764,7 +1764,9 @@ components:
           type: string
           format: uuid
           nullable: true
-      required: [id, recipientId, articleId, senderId, visibleAt, isRead, createdAt, isReplyToMe]
+        hasReadBefore:
+          type: boolean
+      required: [id, recipientId, articleId, senderId, visibleAt, isRead, createdAt, isReplyToMe, hasReadBefore]
 
     # ─── MyCollection ───────────────────────────────
     MyCollection:

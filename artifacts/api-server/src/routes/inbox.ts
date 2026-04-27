@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, lte, sql } from "drizzle-orm";
+import { and, eq, lte, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db, inboxTable, articlesTable, usersTable, userArticleReadsTable } from "@workspace/db";
 
@@ -50,14 +50,23 @@ router.get("/inbox", async (req, res) => {
       collectionName: collectionNameSubquery,
       isReplyToMe: sql<boolean>`(${sourceArticle.id} IS NOT NULL AND ${sourceArticle.authorId} = ${inboxTable.recipientId})`,
       replyToArticleId: articlesTable.sourceArticleId,
+      hasReadBefore: sql<boolean>`(${userArticleReadsTable.completedAt} IS NOT NULL)`,
     })
     .from(inboxTable)
     .leftJoin(articlesTable, eq(inboxTable.articleId, articlesTable.id))
     .leftJoin(usersTable, eq(inboxTable.senderId, usersTable.id))
     .leftJoin(sourceArticle, eq(articlesTable.sourceArticleId, sourceArticle.id))
+    .leftJoin(
+      userArticleReadsTable,
+      and(
+        eq(userArticleReadsTable.articleId, inboxTable.articleId),
+        eq(userArticleReadsTable.userId, inboxTable.recipientId),
+      ),
+    )
     .where(and(
       eq(inboxTable.recipientId, recipientId),
       lte(inboxTable.visibleAt, new Date()),
+      ne(inboxTable.senderId, inboxTable.recipientId),
     ))
     .orderBy(inboxTable.visibleAt);
 

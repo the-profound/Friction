@@ -22,4 +22,5 @@ export interface InboxItem {
   collectionName?: string | null;
   isReplyToMe: boolean;
   replyToArticleId?: string | null;
+  hasReadBefore: boolean;
 }

@@ -374,7 +374,7 @@ export default function InboxScreen() {
         console.warn("Failed to mark inbox opened:", e instanceof Error ? e.message : e);
       }
     }
-    const mode = item.isRead ? "re_read" : "basic";
+    const mode = (item.isRead || item.hasReadBefore) ? "re_read" : "basic";
     router.push({
       pathname: "/read",
       params: {
