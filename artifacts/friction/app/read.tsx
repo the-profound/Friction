@@ -469,7 +469,13 @@ export default function ReadScreen() {
         // so that when we drop back to the single view the new content is already
         // centered without a one-frame flash.
         commitOutX.setValue(dx);
-        commitOutOpacity.setValue(1);
+        // Set outgoing page opacity to 0 immediately so it is never visible
+        // on the first dual-view frame. The user already saw the page being
+        // dragged via outX (single-view); during the commit animation only the
+        // incoming page needs to be visible. This is the only reliable fix for
+        // the ghost-text flash on native (iOS/Android) where the PanResponder
+        // release and React re-render land on different frames.
+        commitOutOpacity.setValue(0);
         outX.setValue(0);
         inX.setValue(-swipeDir * width);
 
@@ -481,19 +487,6 @@ export default function ReadScreen() {
         setIsCommitting(true);
 
         Animated.parallel([
-          Animated.timing(commitOutX, {
-            toValue: swipeDir * width,
-            duration: 220,
-            useNativeDriver: true,
-          }),
-          // Fade out the outgoing page rapidly so no ghost text bleeds through
-          // on the first frame of the dual-view (where commitOutX starts near
-          // the drag-release position, which can be close to center).
-          Animated.timing(commitOutOpacity, {
-            toValue: 0,
-            duration: 80,
-            useNativeDriver: true,
-          }),
           Animated.spring(inX, {
             toValue: 0,
             tension: 120,
