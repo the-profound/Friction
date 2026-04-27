@@ -86,6 +86,18 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // Authenticated: wrap ALL routes (including login/bypass) in UserProvider so
+  // that there is no window during the login→tabs navigation transition where a
+  // tab screen mounts while UserProvider is absent from the tree.
+  // login.tsx / login-callback.tsx do not call useUser(), so this is safe.
+  if (session?.user?.id) {
+    return <UserProvider>{children}</UserProvider>;
+  }
+
+  if (DEV_WEB_BYPASS) {
+    return <UserProvider userId={DEV_WEB_BYPASS_USER_ID}>{children}</UserProvider>;
+  }
+
   // Block rendering protected routes while redirecting to login
   if (!isAuthed && !inBypassRoute) {
     return (
@@ -95,27 +107,12 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Auth-bypass routes (login flow) render without UserProvider — they have no
-  // user yet and must not depend on useUser().
+  // Unauthenticated login/bypass routes — no UserProvider needed
   if (inBypassRoute) {
     return <>{children}</>;
   }
 
-  // Authenticated screens always run inside UserProvider with a real user id.
-  // For real sessions we let UserProvider derive the id from AuthContext so
-  // its /api/users/sync effect actually runs. DEV_WEB_BYPASS injects the
-  // seeded dev id explicitly because there is no real session in that mode
-  // (and that dev account is already seeded in the DB, so no sync is needed).
-  if (session?.user?.id) {
-    return <UserProvider>{children}</UserProvider>;
-  }
-
-  if (DEV_WEB_BYPASS) {
-    return <UserProvider userId={DEV_WEB_BYPASS_USER_ID}>{children}</UserProvider>;
-  }
-
-  // Authenticated state without a user id should be transient — show the
-  // loader rather than rendering screens that depend on useUser().
+  // Transient: authenticated state resolving
   return (
     <View style={styles.loadingContainer}>
       <ActivityIndicator size="large" color={Colors.zinc400} />

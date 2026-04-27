@@ -31,20 +31,45 @@ router.post("/users/sync", async (req, res) => {
   // membership FKs, and neighbor requests can still resolve the user.
   const resolvedNickname = trimmedNickname ?? deriveNicknameFromEmail(email);
 
-  const [user] = await db
-    .insert(usersTable)
-    .values({ id, email, nickname: resolvedNickname })
-    .onConflictDoUpdate({
-      target: usersTable.id,
-      // Preserve the existing nickname; only refresh email + updatedAt. If
-      // the caller explicitly provided a nickname we honor it.
-      set: trimmedNickname
-        ? { email, nickname: trimmedNickname, updatedAt: new Date() }
-        : { email, updatedAt: new Date() },
-    })
-    .returning();
+  try {
+    const [user] = await db
+      .insert(usersTable)
+      .values({ id, email, nickname: resolvedNickname })
+      .onConflictDoUpdate({
+        target: usersTable.id,
+        // Preserve the existing nickname; only refresh email + updatedAt. If
+        // the caller explicitly provided a nickname we honor it.
+        set: trimmedNickname
+          ? { email, nickname: trimmedNickname, updatedAt: new Date() }
+          : { email, updatedAt: new Date() },
+      })
+      .returning();
 
-  res.json(user);
+    res.json(user);
+    return;
+  } catch (err: unknown) {
+    // Postgres unique_violation error code is 23505. This can happen when the
+    // auth id (id) doesn't yet exist in public.users but the email is already
+    // owned by a different row (e.g. an out-of-band backfill collision).
+    // In that case return the existing row by email so the caller can proceed
+    // without a 500, and log the discrepancy for operator investigation.
+    const pgCode = err && typeof err === "object" && "code" in err ? (err as { code?: unknown }).code : null;
+    if (pgCode === "23505") {
+      const [existing] = await db
+        .select()
+        .from(usersTable)
+        .where(eq(usersTable.email, email))
+        .limit(1);
+      if (existing) {
+        console.warn(
+          `[users/sync] email conflict: auth id=${id} differs from public.users id=${existing.id} for ${email}. Returning existing row.`,
+        );
+        res.json(existing);
+        return;
+      }
+    }
+    throw err;
+  }
 });
 
 router.get("/users/search", async (req, res) => {

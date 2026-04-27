@@ -1,0 +1,142 @@
+Error: useUser must be used inside <UserProvider>.
+
+This error is located at:
+    at B (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:1135:4454)
+    at Suspense (<anonymous>)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:794:383)
+    at s (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:803:3681)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:741:455)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:670:230)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:739:127)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:703:325)
+    at RCTView (<anonymous>)
+    at View (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:296:1246)
+    at RCTView (<anonymous>)
+    at View (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:296:1246)
+    at Animated(View) (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:418:466)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:821:142)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:888:145)
+    at RNSScreen (<anonymous>)
+    at Animated(Anonymous) (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:418:466)
+    at t (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:909:329)
+    at Suspense (<anonymous>)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:909:119)
+    at c (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:908:296)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:906:894)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:906:4288)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:897:260)
+    at RNSScreenNavigationContainer (<anonymous>)
+    at c (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:922:364)
+    at v (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:897:636)
+    at RCTView (<anonymous>)
+    at View (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:296:1246)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:868:379)
+    at v (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:887:650)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:814:181)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:728:189)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:747:390)
+    at t (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:736:696)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:736:227)
+    at l (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:813:448)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:793:1115)
+    at c (<anonymous>)
+    at Suspense (<anonymous>)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:794:383)
+    at s (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:803:3681)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:741:455)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:670:230)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:739:127)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:703:325)
+    at RNSScreenContentWrapper (<anonymous>)
+    at l (<anonymous>)
+    at u (<anonymous>)
+    at RNSScreen (<anonymous>)
+    at Animated(Anonymous) (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:418:466)
+    at t (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:909:329)
+    at Suspense (<anonymous>)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:909:119)
+    at c (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:908:296)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:906:894)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:906:4288)
+    at y (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:929:790)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:703:325)
+    at S (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:969:2450)
+    at RNSScreenStack (<anonymous>)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:926:400)
+    at G (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:925:831)
+    at RCTView (<anonymous>)
+    at View (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:296:1246)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:868:379)
+    at v (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:887:650)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:969:132)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:728:189)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:747:390)
+    at t (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:736:696)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:736:227)
+    at m (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:966:1240)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:793:1115)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:649:4509)
+    at I (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:1267:897)
+    at B (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:1267:1237)
+    at O (<anonymous>)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:1133:185)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:1245:180)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:1743:188)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:1194:179)
+    at KeyboardControllerView (<anonymous>)
+    at Animated(Anonymous) (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:418:466)
+    at AnimatedComponent(Animated(Anonymous)) (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:1447:237)
+    at Animated(Anonymous) (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:1447:605)
+    at T (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:1692:1436)
+    at RCTView (<anonymous>)
+    at View (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:296:1246)
+    at o (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:1614:330)
+    at o (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:1168:804)
+    at s (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:1740:360)
+    at RNCSafeAreaProvider (<anonymous>)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:860:477)
+    at R (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:1267:3078)
+    at Suspense (<anonymous>)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:794:383)
+    at s (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:803:3681)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:741:455)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:670:230)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:739:127)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:703:325)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:728:189)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:747:390)
+    at t (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:736:696)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:736:227)
+    at U (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:1047:2992)
+    at RNCSafeAreaProvider (<anonymous>)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:860:477)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:977:202)
+    at anonymous (https://friction-1.replit.app/1777211620662-126/_expo/static/js/ios/bundle.js:1047:1058)
+    at an
+
+anonymous
+    bundle.js:1193:1635
+B
+    bundle.js:1135:4516
+Gl
+    bundle.js:181:37629
+Ga
+    bundle.js:181:67567
+hi
+    bundle.js:181:77271
+io
+    bundle.js:181:102943
+lo
+    bundle.js:181:101968
+to
+    bundle.js:181:101810
+$u
+    bundle.js:181:99092
+Ht
+    bundle.js:181:29381
+Dt
+    bundle.js:181:27999
+bo
+    bundle.js:181:106203
+anonymous
+    bundle.js:181:104617
