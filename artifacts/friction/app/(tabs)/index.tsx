@@ -40,6 +40,7 @@ const CARD_PEEK = Spacing.cardPeek;
 const SNAP_INTERVAL = CARD_W + CARD_GAP;
 const SNAP_THRESHOLD = 48;
 const FLING_VELOCITY = 0.5;
+const GROUP_ITEM_H = Sizing.groupH + 8;
 
 function getBaseX(idx: number) {
   return -(idx * SNAP_INTERVAL) + CARD_PEEK;
@@ -471,9 +472,14 @@ Alert.alert("완료", "수신함에서 삭제되었습니다.");
           }
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
-          snapToInterval={Sizing.groupH}
+          snapToInterval={GROUP_ITEM_H}
           snapToAlignment="start"
           decelerationRate="fast"
+          getItemLayout={(_data, index) => ({
+            length: GROUP_ITEM_H,
+            offset: GROUP_ITEM_H * index,
+            index,
+          })}
         />
       )}
 
