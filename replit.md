@@ -17,6 +17,27 @@ The project is structured to ensure maintainability, scalability, and developer 
 3. **절차 준수** — 스킬에 명시된 단계·규칙·형식을 작업 전 과정에 걸쳐 지킨다.
 4. **DB 규칙 준수** — Replit 내장 DB(database skill, Replit PostgreSQL)는 절대 사용하지 않는다. 모든 DB 작업은 `SUPABASE_DB_URL` 환경변수를 통해 Supabase에만 연결한다.
 
+# Developer Setup
+
+### 개발 데이터 세팅 (최초 1회)
+
+API 서버는 시드 데이터를 서버 시작 시 자동으로 주입하지 않습니다.  
+새 환경에서 처음 개발할 때 아래 커맨드를 **한 번** 실행하세요:
+
+```bash
+pnpm --filter @workspace/api-server seed
+```
+
+- 시드는 idempotent(멱등)합니다 — 이미 적용됐으면 건너뜁니다.
+- 테스트 컬렉션: `하윤이네 모임` (2d9417a7-...)
+- 개발 bypass 유저: 민지 dev (`DEV_WEB_BYPASS_USER_ID = 92d8bf9b-...`, `_layout.tsx` 참고)
+
+### 유닛 테스트 실행
+
+```bash
+pnpm --filter @workspace/friction test
+```
+
 # System Architecture
 
 The project is a pnpm workspace monorepo using TypeScript.

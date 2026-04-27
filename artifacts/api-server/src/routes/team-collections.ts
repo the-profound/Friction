@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, count, gt, isNull, ne, sql } from "drizzle-orm";
+import { and, eq, count, gt, isNull, isNotNull, sql } from "drizzle-orm";
 import {
   db,
   teamCollectionsTable,
@@ -266,6 +266,7 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 
 router.get("/team-collections/:id/articles", async (req, res) => {
   const now = new Date();
+  const teamCollectionId = req.params.id;
   const { userId } = req.query;
   if (userId !== undefined && (typeof userId !== "string" || !UUID_REGEX.test(userId))) {
     res.status(400).json({ error: "userId must be a UUID" });
@@ -273,73 +274,92 @@ router.get("/team-collections/:id/articles", async (req, res) => {
   }
   const requesterId = typeof userId === "string" && userId.length > 0 ? userId : null;
 
-  const baseSelect = {
-    id: teamCollectionArticlesTable.id,
-    teamCollectionId: teamCollectionArticlesTable.teamCollectionId,
-    articleId: teamCollectionArticlesTable.articleId,
-    addedBy: teamCollectionArticlesTable.addedBy,
-    addedAt: teamCollectionArticlesTable.addedAt,
-    article: articlesTable,
-  };
+  // Fetch all rows for this collection (including soft-deleted).
+  // We'll post-filter in JS based on visibility rules.
+  // Always join inbox and reads tables; if no requesterId, join conditions will never
+  // match (NULL = anything is false) so those columns return NULL.
+  const NEVER_MATCH_ID = "00000000-0000-0000-0000-000000000000";
+  const effectiveRequesterId = requesterId ?? NEVER_MATCH_ID;
 
-  if (requesterId) {
-    const articles = await db
-      .select({
-        ...baseSelect,
-        completedAt: userArticleReadsTable.completedAt,
-      })
-      .from(teamCollectionArticlesTable)
-      .leftJoin(articlesTable, eq(teamCollectionArticlesTable.articleId, articlesTable.id))
-      .leftJoin(
-        inboxTable,
-        and(
-          eq(inboxTable.articleId, teamCollectionArticlesTable.articleId),
-          gt(inboxTable.visibleAt, now),
-        ),
-      )
-      .leftJoin(
-        userArticleReadsTable,
-        and(
-          eq(userArticleReadsTable.articleId, teamCollectionArticlesTable.articleId),
-          eq(userArticleReadsTable.userId, requesterId),
-        ),
-      )
-      .where(
-        and(
-          eq(teamCollectionArticlesTable.teamCollectionId, req.params.id),
-          isNull(inboxTable.id),
-        ),
-      );
-
-    res.json(
-      articles.map((a: typeof articles[number]) => ({
-        ...a,
-        isRead: a.completedAt !== null,
-        completedAt: a.completedAt,
-      })),
-    );
-    return;
-  }
-
-  const articles = await db
-    .select(baseSelect)
+  const rows = await db
+    .select({
+      id: teamCollectionArticlesTable.id,
+      teamCollectionId: teamCollectionArticlesTable.teamCollectionId,
+      articleId: teamCollectionArticlesTable.articleId,
+      addedBy: teamCollectionArticlesTable.addedBy,
+      addedAt: teamCollectionArticlesTable.addedAt,
+      deletedAt: teamCollectionArticlesTable.deletedAt,
+      article: articlesTable,
+      completedAt: userArticleReadsTable.completedAt,
+      requesterVisibleAt: inboxTable.visibleAt,
+    })
     .from(teamCollectionArticlesTable)
     .leftJoin(articlesTable, eq(teamCollectionArticlesTable.articleId, articlesTable.id))
     .leftJoin(
       inboxTable,
       and(
         eq(inboxTable.articleId, teamCollectionArticlesTable.articleId),
-        gt(inboxTable.visibleAt, now),
+        eq(inboxTable.recipientId, effectiveRequesterId),
       ),
     )
-    .where(
+    .leftJoin(
+      userArticleReadsTable,
       and(
-        eq(teamCollectionArticlesTable.teamCollectionId, req.params.id),
-        isNull(inboxTable.id),
+        eq(userArticleReadsTable.articleId, teamCollectionArticlesTable.articleId),
+        eq(userArticleReadsTable.userId, effectiveRequesterId),
       ),
-    );
+    )
+    .where(eq(teamCollectionArticlesTable.teamCollectionId, teamCollectionId));
 
-  res.json(articles);
+  // Build sets for O(1) lookups
+  // ALL article IDs in this collection (including soft-deleted placeholders)
+  const allCollectionArticleIds = new Set(rows.map((r) => r.articleId));
+
+  // Article IDs that have at least one live reply in this collection
+  const replyParentIds = new Set<string>();
+  for (const r of rows) {
+    if (r.deletedAt == null && r.article?.sourceArticleId) {
+      replyParentIds.add(r.article.sourceArticleId);
+    }
+  }
+
+  const visible = rows.filter((r) => {
+    if (r.deletedAt != null) {
+      // Soft-deleted: only include as placeholder if it still has live replies
+      return replyParentIds.has(r.articleId);
+    }
+
+    // Live row: strictly gate by inbox visibleAt when requesterId is present.
+    // Sender's own articles are included in inbox inserts (same delivery slot),
+    // so missing inbox records mean the article has not been delivered yet.
+    if (requesterId) {
+      if (r.requesterVisibleAt == null) return false;
+      return new Date(String(r.requesterVisibleAt)) <= now;
+    }
+    // No requesterId supplied — show everything (system/admin access)
+    return true;
+  });
+
+  res.json(
+    visible.map((a) => ({
+      id: a.id,
+      teamCollectionId: a.teamCollectionId,
+      articleId: a.articleId,
+      addedBy: a.addedBy,
+      addedAt: a.addedAt,
+      article: a.article,
+      isRead: a.completedAt != null,
+      completedAt: a.completedAt ?? null,
+      sourceArticleId: a.article?.sourceArticleId ?? null,
+      // parentInThisCollection uses ALL collection article IDs (including
+      // soft-deleted placeholders) so threading survives parent deletion
+      parentInThisCollection: a.article?.sourceArticleId
+        ? allCollectionArticleIds.has(a.article.sourceArticleId)
+        : false,
+      isDeletedPlaceholder: a.deletedAt != null,
+      visibleAt: a.requesterVisibleAt ?? null,
+    })),
+  );
 });
 
 router.post("/team-collections/:id/articles", async (req, res) => {
@@ -393,13 +413,12 @@ router.post("/team-collections/:id/articles", async (req, res) => {
   const noticeDate: string | null = asNotice ? computeNoticeDateKST() : null;
   const visibleAt = computeDeliverySlot();
 
+  // Include ALL members (including the sender) so author-visibility is also
+  // gated by inbox visibleAt — matching "본인 글도 요청자 inbox visibleAt 이후에만 노출"
   const members = await db
     .select({ userId: teamCollectionMembershipsTable.userId })
     .from(teamCollectionMembershipsTable)
-    .where(and(
-      eq(teamCollectionMembershipsTable.teamCollectionId, teamCollectionId),
-      ne(teamCollectionMembershipsTable.userId, addedBy),
-    ));
+    .where(eq(teamCollectionMembershipsTable.teamCollectionId, teamCollectionId));
 
   let conflicted = false;
   const entry = await db.transaction(async (tx) => {
@@ -495,17 +514,120 @@ router.get("/team-collections/:id/today-greeting-status", async (req, res) => {
 });
 
 router.delete("/team-collections/:teamId/articles/:articleId", async (req, res) => {
-  const [deleted] = await db.delete(teamCollectionArticlesTable)
-    .where(and(
-      eq(teamCollectionArticlesTable.teamCollectionId, req.params.teamId),
-      eq(teamCollectionArticlesTable.articleId, req.params.articleId),
-    ))
-    .returning();
+  const { teamId, articleId } = req.params;
 
-  if (!deleted) {
+  const [row] = await db
+    .select()
+    .from(teamCollectionArticlesTable)
+    .where(
+      and(
+        eq(teamCollectionArticlesTable.teamCollectionId, teamId),
+        eq(teamCollectionArticlesTable.articleId, articleId),
+      ),
+    )
+    .limit(1);
+
+  if (!row) {
     res.status(404).json({ error: "Article not in collection" });
     return;
   }
+
+  // Check if this article has live replies in this collection
+  // (other team_collection_articles rows whose article.sourceArticleId = articleId and deletedAt IS NULL)
+  const liveReplies = await db
+    .select({ id: teamCollectionArticlesTable.id })
+    .from(teamCollectionArticlesTable)
+    .innerJoin(articlesTable, eq(teamCollectionArticlesTable.articleId, articlesTable.id))
+    .where(
+      and(
+        eq(teamCollectionArticlesTable.teamCollectionId, teamId),
+        eq(articlesTable.sourceArticleId, articleId),
+        isNull(teamCollectionArticlesTable.deletedAt),
+      ),
+    )
+    .limit(1);
+
+  const hasLiveReplies = liveReplies.length > 0;
+
+  await db.transaction(async (tx) => {
+    if (hasLiveReplies) {
+      // Soft delete: keep the row as a placeholder for child threading
+      await tx
+        .update(teamCollectionArticlesTable)
+        .set({ deletedAt: new Date() })
+        .where(
+          and(
+            eq(teamCollectionArticlesTable.teamCollectionId, teamId),
+            eq(teamCollectionArticlesTable.articleId, articleId),
+          ),
+        );
+    } else {
+      // Hard delete: no live replies, remove completely
+      await tx
+        .delete(teamCollectionArticlesTable)
+        .where(
+          and(
+            eq(teamCollectionArticlesTable.teamCollectionId, teamId),
+            eq(teamCollectionArticlesTable.articleId, articleId),
+          ),
+        );
+    }
+
+    // After either branch: if this article is itself a reply, check whether
+    // its parent is a soft-deleted placeholder that now has no live replies
+    // left.  This handles both:
+    //   • hard-delete of a reply (parent may become orphaned placeholder)
+    //   • soft-delete of a reply (the deleted reply no longer counts as live,
+    //     so the grandparent's placeholder may become orphaned)
+    const [article] = await tx
+      .select({ sourceArticleId: articlesTable.sourceArticleId })
+      .from(articlesTable)
+      .where(eq(articlesTable.id, articleId))
+      .limit(1);
+
+    if (article?.sourceArticleId) {
+      const parentRow = await tx
+        .select({ id: teamCollectionArticlesTable.id })
+        .from(teamCollectionArticlesTable)
+        .where(
+          and(
+            eq(teamCollectionArticlesTable.teamCollectionId, teamId),
+            eq(teamCollectionArticlesTable.articleId, article.sourceArticleId),
+            isNotNull(teamCollectionArticlesTable.deletedAt),
+          ),
+        )
+        .limit(1);
+
+      if (parentRow.length > 0) {
+        // Parent is a soft-deleted placeholder — check for remaining live replies
+        const remainingReplies = await tx
+          .select({ id: teamCollectionArticlesTable.id })
+          .from(teamCollectionArticlesTable)
+          .innerJoin(articlesTable, eq(teamCollectionArticlesTable.articleId, articlesTable.id))
+          .where(
+            and(
+              eq(teamCollectionArticlesTable.teamCollectionId, teamId),
+              eq(articlesTable.sourceArticleId, article.sourceArticleId),
+              isNull(teamCollectionArticlesTable.deletedAt),
+            ),
+          )
+          .limit(1);
+
+        if (remainingReplies.length === 0) {
+          // Parent has no more live replies → remove the orphaned placeholder
+          await tx
+            .delete(teamCollectionArticlesTable)
+            .where(
+              and(
+                eq(teamCollectionArticlesTable.teamCollectionId, teamId),
+                eq(teamCollectionArticlesTable.articleId, article.sourceArticleId),
+              ),
+            );
+        }
+      }
+    }
+  });
+
   res.status(204).send();
 });
 

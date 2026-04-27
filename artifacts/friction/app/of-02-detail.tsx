@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { View, Text, StyleSheet, FlatList, Pressable, Alert, Share, TextInput, ActivityIndicator, ScrollView } from "react-native";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
@@ -39,6 +39,7 @@ import {
   isQueryStale,
 } from "@/lib/useScreenFocused";
 import { useRealtimeChannel } from "@/lib/useRealtimeChannel";
+import { buildTeamArticleRows, type TeamArticleListRow } from "@/lib/teamCollectionUtils";
 
 type DetailTab = "articles" | "members";
 
@@ -349,37 +350,92 @@ export default function TeamCollectionDetailScreen() {
     await handleRemoveArticle(articleId);
   }, [deleteArticleTarget, closeOpenRow, handleRemoveArticle]);
 
-  const renderArticleItem = ({ item }: { item: TeamCollectionArticleWithDetails }) => {
-    return (
-      <SwipeableRow
-        ref={(r) => {
-          if (r) {
-            rowRefs.current.set(item.id, r);
-          } else {
-            rowRefs.current.delete(item.id);
-          }
-        }}
-        onDeletePress={() => handleArticleDeletePress(item)}
-        onSwipeOpen={() => handleSwipeOpen(item.id)}
-        onScrollLock={(locked) => setScrollEnabled(!locked)}
-      >
-        <Pressable
-          style={styles.articleItem}
-          onPress={() => handleArticleNavigate(item)}
-        >
-          <View style={styles.articleInfo}>
-            <Text style={styles.articleTitle} numberOfLines={1}>
-              {item.article?.title ?? "제목 없음"}
-            </Text>
-            <Text style={styles.articleDate}>
-              {new Date(item.addedAt).toLocaleDateString("ko-KR")}에 추가
-            </Text>
+  const articleRows = useMemo(() => buildTeamArticleRows(articles), [articles]);
+
+  const isNew = useCallback((item: TeamCollectionArticleWithDetails): boolean => {
+    const ts = item.visibleAt ?? item.addedAt;
+    if (!ts) return false;
+    return Date.now() - new Date(ts).getTime() < 24 * 60 * 60 * 1000;
+  }, []);
+
+  const renderArticleRow = useCallback(
+    (item: TeamCollectionArticleWithDetails, indent: boolean, isNoticeOfDay: boolean) => {
+      if (item.isDeletedPlaceholder) {
+        return (
+          <View
+            key={`placeholder-${item.id}`}
+            style={[
+              styles.articleItem,
+              indent && styles.articleItemIndent,
+              styles.deletedPlaceholder,
+            ]}
+          >
+            <Text style={styles.deletedPlaceholderText}>(삭제된 글입니다.)</Text>
           </View>
-          <Feather name="chevron-right" size={16} color={Colors.zinc300} />
-        </Pressable>
-      </SwipeableRow>
-    );
-  };
+        );
+      }
+
+      const showNew = isNew(item);
+      const rowBg = isNoticeOfDay ? Colors.noticeAccentSoft : undefined;
+
+      return (
+        <SwipeableRow
+          key={item.id}
+          ref={(r) => {
+            if (r) {
+              rowRefs.current.set(item.id, r);
+            } else {
+              rowRefs.current.delete(item.id);
+            }
+          }}
+          onDeletePress={() => handleArticleDeletePress(item)}
+          onSwipeOpen={() => handleSwipeOpen(item.id)}
+          onScrollLock={(locked) => setScrollEnabled(!locked)}
+        >
+          <Pressable
+            style={[
+              styles.articleItem,
+              indent && styles.articleItemIndent,
+              rowBg ? { backgroundColor: rowBg } : undefined,
+            ]}
+            onPress={() => handleArticleNavigate(item)}
+          >
+            <View style={styles.articleInfo}>
+              <View style={styles.articleTitleRow}>
+                <Text style={styles.articleTitle} numberOfLines={1}>
+                  {item.article?.title ?? "제목 없음"}
+                </Text>
+                {showNew && (
+                  <View style={styles.newBadge}>
+                    <Text style={styles.newBadgeText}>NEW</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={styles.articleDate}>
+                {new Date(item.addedAt).toLocaleDateString("ko-KR")}에 추가
+              </Text>
+            </View>
+            <Feather name="chevron-right" size={16} color={Colors.zinc300} />
+          </Pressable>
+        </SwipeableRow>
+      );
+    },
+    [handleArticleDeletePress, handleSwipeOpen, handleArticleNavigate, isNew],
+  );
+
+  const renderRow = useCallback(
+    ({ item }: { item: TeamArticleListRow }) => {
+      if (item.type === "header") {
+        return (
+          <View style={styles.dateHeader}>
+            <Text style={styles.dateHeaderText}>{item.label}</Text>
+          </View>
+        );
+      }
+      return renderArticleRow(item.item, item.indent, item.isNoticeOfDay);
+    },
+    [renderArticleRow],
+  );
 
   const renderMemberItem = ({ item }: { item: TeamMemberWithUser }) => {
     const isSelf = item.userId === userId;
@@ -452,7 +508,7 @@ export default function TeamCollectionDetailScreen() {
           onPress={() => setActiveTab("articles")}
         >
           <Text style={[styles.tabText, activeTab === "articles" && styles.tabTextActive]}>
-            글 목록 ({articles.length})
+            글 목록 ({articles.filter((a) => !a.isDeletedPlaceholder).length})
           </Text>
         </Pressable>
         <Pressable
@@ -496,7 +552,11 @@ export default function TeamCollectionDetailScreen() {
                 <Text style={styles.retryButtonText}>다시 시도</Text>
               </Pressable>
             </View>
-          ) : articles.length === 0 ? (
+          ) : articlesQuery.isLoading ? (
+            <View style={styles.emptyContainer}>
+              <ActivityIndicator size="large" color={Colors.zinc300} />
+            </View>
+          ) : articleRows.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Feather name="file-text" size={36} color={Colors.zinc300} />
               <Text style={styles.emptyTitle}>아직 추가된 글이 없어요</Text>
@@ -504,9 +564,11 @@ export default function TeamCollectionDetailScreen() {
             </View>
           ) : (
             <FlatList
-              data={articles}
-              keyExtractor={(item) => item.id}
-              renderItem={renderArticleItem}
+              data={articleRows}
+              keyExtractor={(item) =>
+                item.type === "header" ? `header-${item.dateKey}` : item.item.id
+              }
+              renderItem={renderRow}
               contentContainerStyle={styles.listContent}
               showsVerticalScrollIndicator={false}
               scrollEnabled={scrollEnabled}
@@ -540,6 +602,10 @@ export default function TeamCollectionDetailScreen() {
               <Pressable style={styles.retryButton} onPress={() => membersQuery.refetch()}>
                 <Text style={styles.retryButtonText}>다시 시도</Text>
               </Pressable>
+            </View>
+          ) : membersQuery.isLoading ? (
+            <View style={styles.emptyContainer}>
+              <ActivityIndicator size="large" color={Colors.zinc300} />
             </View>
           ) : members.length === 0 ? (
             <View style={styles.emptyContainer}>
@@ -853,6 +919,16 @@ const styles = StyleSheet.create({
   listContent: {
     paddingBottom: 40,
   },
+  dateHeader: {
+    paddingHorizontal: Spacing.screenPx,
+    paddingVertical: 8,
+    backgroundColor: Colors.noticeAccentSoft,
+  },
+  dateHeaderText: {
+    ...Typography.dateHeader,
+    fontSize: 12,
+    color: Colors.noticeAccent,
+  },
   articleItem: {
     flexDirection: "row",
     alignItems: "center",
@@ -860,20 +936,51 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.screenPx,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
+    backgroundColor: Colors.white,
+  },
+  articleItemIndent: {
+    paddingLeft: Spacing.screenPx + 20,
   },
   articleInfo: {
     flex: 1,
     gap: 2,
   },
+  articleTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
   articleTitle: {
     ...Typography.bodySemiBold,
     fontSize: 15,
     color: Colors.zinc900,
+    flex: 1,
+  },
+  newBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: Colors.noticeAccentSoft,
+  },
+  newBadgeText: {
+    ...Typography.caption,
+    fontSize: 11,
+    fontWeight: "700" as const,
+    color: Colors.noticeAccent,
   },
   articleDate: {
     ...Typography.caption,
     fontSize: 12,
     color: Colors.zinc400,
+  },
+  deletedPlaceholder: {
+    backgroundColor: Colors.zinc50,
+  },
+  deletedPlaceholderText: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc400,
+    fontStyle: "italic",
   },
   memberItem: {
     flexDirection: "row",

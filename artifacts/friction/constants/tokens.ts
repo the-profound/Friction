@@ -40,6 +40,11 @@ export const Colors = {
   backButtonIcon: "#52525b",
 
   cardInactiveOpacity: 0.55,
+
+  /** #92323D — 오늘의 인사·NEW 강조색 */
+  noticeAccent: "#92323D",
+  /** rgba(146,50,61,0.08) — 인사 헤더/행 배경 */
+  noticeAccentSoft: "rgba(146,50,61,0.08)",
 } as const;
 
 export const Spacing = {

@@ -40,6 +40,7 @@ export const teamCollectionArticlesTable = pgTable("team_collection_articles", {
   articleId: uuid("article_id").notNull().references(() => articlesTable.id),
   addedBy: uuid("added_by").notNull().references(() => usersTable.id),
   addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
 }, (t) => [
   unique("team_collection_articles_unique").on(t.teamCollectionId, t.articleId),
 ]);
