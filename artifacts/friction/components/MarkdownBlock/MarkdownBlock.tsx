@@ -12,6 +12,7 @@ interface MarkdownBlockProps {
   fontSize: number;
   lineHeight: number;
   letterSpacing: number;
+  clearSignal?: number;
 }
 
 function renderInlineTokens(tokens: InlineToken[]) {
@@ -53,6 +54,7 @@ export default function MarkdownBlock({
   fontSize,
   lineHeight,
   letterSpacing,
+  clearSignal,
 }: MarkdownBlockProps) {
   const plainText = block.rawText;
   const formatted = hasFormatting(block.tokens);
@@ -68,6 +70,7 @@ export default function MarkdownBlock({
           fontSize={fontSize}
           lineHeight={lineHeight}
           letterSpacing={letterSpacing}
+          clearSignal={clearSignal}
         />
       );
     }
@@ -80,6 +83,7 @@ export default function MarkdownBlock({
         fontSize={fontSize}
         lineHeight={lineHeight}
         letterSpacing={letterSpacing}
+        clearSignal={clearSignal}
       >
         <Text style={[styles.paragraph, { fontSize, lineHeight, letterSpacing }]}>
           {renderInlineTokens(block.tokens)}
@@ -99,6 +103,7 @@ export default function MarkdownBlock({
         fontSize={sz}
         lineHeight={sz * 1.25}
         letterSpacing={letterSpacing * 0.5}
+        clearSignal={clearSignal}
       >
         <Text style={[styles.heading, { fontSize: sz, lineHeight: sz * 1.25, letterSpacing: letterSpacing * 0.5 }]}>
           {renderInlineTokens(block.tokens)}
@@ -118,6 +123,7 @@ export default function MarkdownBlock({
         fontSize={sz}
         lineHeight={sz * 1.3}
         letterSpacing={letterSpacing * 0.5}
+        clearSignal={clearSignal}
       >
         <Text style={[styles.heading, { fontSize: sz, lineHeight: sz * 1.3, letterSpacing: letterSpacing * 0.5 }]}>
           {renderInlineTokens(block.tokens)}
@@ -137,6 +143,7 @@ export default function MarkdownBlock({
         fontSize={sz}
         lineHeight={sz * 1.35}
         letterSpacing={letterSpacing * 0.5}
+        clearSignal={clearSignal}
       >
         <Text style={[styles.heading, { fontSize: sz, lineHeight: sz * 1.35, letterSpacing: letterSpacing * 0.5 }]}>
           {renderInlineTokens(block.tokens)}
@@ -158,6 +165,7 @@ export default function MarkdownBlock({
             fontSize={fontSize}
             lineHeight={lineHeight}
             letterSpacing={letterSpacing}
+            clearSignal={clearSignal}
           >
             <Text style={[styles.blockquoteText, { fontSize, lineHeight, letterSpacing }]}>
               {renderInlineTokens(block.tokens)}
@@ -181,6 +189,7 @@ export default function MarkdownBlock({
             fontSize={fontSize}
             lineHeight={lineHeight}
             letterSpacing={letterSpacing}
+            clearSignal={clearSignal}
           >
             <Text style={[styles.listItemText, { fontSize, lineHeight, letterSpacing }]}>
               {renderInlineTokens(block.tokens)}
@@ -206,6 +215,7 @@ export default function MarkdownBlock({
             fontSize={fontSize}
             lineHeight={lineHeight}
             letterSpacing={letterSpacing}
+            clearSignal={clearSignal}
           >
             <Text style={[styles.listItemText, { fontSize, lineHeight, letterSpacing }]}>
               {renderInlineTokens(block.tokens)}

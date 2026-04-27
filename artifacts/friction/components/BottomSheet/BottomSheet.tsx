@@ -13,6 +13,7 @@ import {
   type TextStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, ZIndex, Spacing } from "../../constants/tokens";
 
 const HANDLE_HEIGHT = 28;
@@ -27,6 +28,7 @@ interface BottomSheetProps {
   enableDragDown?: boolean;
   dismissable?: boolean;
   keyboardAware?: boolean;
+  closeButton?: boolean;
 }
 
 export default function BottomSheet({
@@ -39,6 +41,7 @@ export default function BottomSheet({
   enableDragDown = true,
   dismissable = true,
   keyboardAware = false,
+  closeButton = false,
 }: BottomSheetProps) {
   const insets = useSafeAreaInsets();
   const { height: SCREEN_H } = useWindowDimensions();
@@ -186,7 +189,16 @@ export default function BottomSheet({
         >
           <View {...panResponder.panHandlers} style={styles.handleArea}>
             <View style={styles.handle} />
-            {title && <Text style={[styles.title, titleStyle]}>{title}</Text>}
+            {(title || closeButton) && (
+              <View style={styles.titleRow}>
+                {title && <Text style={[styles.title, titleStyle]}>{title}</Text>}
+                {closeButton && (
+                  <Pressable onPress={close} style={styles.closeButton} hitSlop={12}>
+                    <Feather name="x" size={20} color={Colors.zinc500} />
+                  </Pressable>
+                )}
+              </View>
+            )}
           </View>
           <View
             style={[
@@ -237,10 +249,24 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: Colors.zinc300,
   },
-  title: {
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     marginTop: 8,
+    paddingHorizontal: Spacing.screenPx,
+    position: "relative",
+  },
+  title: {
     ...Typography.bodySemiBold,
     color: Colors.zinc900,
+    flex: 1,
+    textAlign: "center",
+  },
+  closeButton: {
+    position: "absolute",
+    right: Spacing.screenPx,
+    padding: 4,
   },
   content: {
     flex: 1,

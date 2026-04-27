@@ -205,6 +205,7 @@ export default function ReadScreen() {
   const [completionSheetVisible, setCompletionSheetVisible] = useState(false);
   const [sentencePopupVisible, setSentencePopupVisible] = useState(false);
   const [selectedText, setSelectedText] = useState("");
+  const [clearSelectionSignal, setClearSelectionSignal] = useState(0);
   const [memoSheetVisible, setMemoSheetVisible] = useState(false);
   const [memoAppendContent, setMemoAppendContent] = useState<string | undefined>(undefined);
   const [myCollectionsModalVisible, setMyCollectionsModalVisible] = useState(false);
@@ -637,6 +638,11 @@ Alert.alert("완료", "보관함에 저장됐어요");
     }
   }, [selectedText, userId, articleId, contentPageIndex, createSentence, queryClient]);
 
+  const handleCancelSentence = useCallback(() => {
+    setSentencePopupVisible(false);
+    setSelectedText("");
+    setClearSelectionSignal((n) => n + 1);
+  }, []);
 
   const dynamicStyles = useMemo(
     () =>
@@ -812,6 +818,7 @@ Alert.alert("완료", "보관함에 저장됐어요");
                         onSelectionStateChange={(isSelecting) => { isTextSelectingRef.current = isSelecting; }}
                         bottomInset={insets.bottom}
                         layout={layout}
+                        clearSignal={clearSelectionSignal}
                       />
                       {outgoingPageRef.current.page > 0 && article && (
                         <View style={styles.titleBar}>
@@ -845,6 +852,7 @@ Alert.alert("완료", "보관함에 저장됐어요");
                         onSelectionStateChange={(isSelecting) => { isTextSelectingRef.current = isSelecting; }}
                         bottomInset={insets.bottom}
                         layout={layout}
+                        clearSignal={clearSelectionSignal}
                       />
                       {!isOnCoverPage && article && (
                         <View style={styles.titleBar}>
@@ -880,6 +888,7 @@ Alert.alert("완료", "보관함에 저장됐어요");
                       onSelectionStateChange={(isSelecting) => { isTextSelectingRef.current = isSelecting; }}
                       bottomInset={insets.bottom}
                       layout={layout}
+                      clearSignal={clearSelectionSignal}
                     />
                     {!isOnCoverPage && article && (
                       <View style={styles.titleBar}>
@@ -1015,10 +1024,12 @@ Alert.alert("완료", "보관함에 저장됐어요");
 
       <BottomSheet
         visible={sentencePopupVisible}
-        onClose={() => setSentencePopupVisible(false)}
+        onClose={handleCancelSentence}
         title="문장 저장"
         titleStyle={dynamicStyles.sheetTitle}
         snapPoints={[0.3]}
+        dismissable={false}
+        closeButton
       >
         <View style={styles.sentenceContent}>
           <Text style={dynamicStyles.sentencePreview} numberOfLines={3}>
@@ -1027,7 +1038,7 @@ Alert.alert("완료", "보관함에 저장됐어요");
           <View style={styles.sentenceActions}>
             <Pressable
               style={[styles.sentenceButton, styles.sentenceButtonCancel]}
-              onPress={() => setSentencePopupVisible(false)}
+              onPress={handleCancelSentence}
             >
               <Text style={dynamicStyles.sentenceButtonCancelText}>취소</Text>
             </Pressable>
@@ -1110,6 +1121,7 @@ function PageView({
   onSelectionStateChange,
   bottomInset,
   layout,
+  clearSignal,
 }: {
   content: string;
   pageIndex: number;
@@ -1118,6 +1130,7 @@ function PageView({
   onSelectionStateChange?: (isSelecting: boolean) => void;
   bottomInset: number;
   layout: ReaderLayout;
+  clearSignal?: number;
 }) {
   const blocks = useMemo(() => parseMarkdownBlocks(content), [content]);
 
@@ -1156,6 +1169,7 @@ function PageView({
                 fontSize={layout.bodyFontSize}
                 lineHeight={layout.bodyLineHeight}
                 letterSpacing={layout.bodyLetterSpacing}
+                clearSignal={clearSignal}
               />
             </View>
           ))}

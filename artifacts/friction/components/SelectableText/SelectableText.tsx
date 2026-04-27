@@ -12,6 +12,7 @@ interface SelectableTextProps {
   lineHeight?: number;
   letterSpacing?: number;
   children?: React.ReactNode;
+  clearSignal?: number;
 }
 
 interface CaretPositionResult {
@@ -54,7 +55,7 @@ function selectWordAtPoint(x: number, y: number): boolean {
   return true;
 }
 
-function SelectableTextWeb({ text, onCollect, onMemo, onSelectionStateChange, fontSize, lineHeight, letterSpacing, children }: SelectableTextProps) {
+function SelectableTextWeb({ text, onCollect, onMemo, onSelectionStateChange, fontSize, lineHeight, letterSpacing, children, clearSignal }: SelectableTextProps) {
   const [selectedText, setSelectedText] = useState("");
   const [showCollectButton, setShowCollectButton] = useState(false);
   const [isSelectMode, setIsSelectMode] = useState(false);
@@ -64,6 +65,7 @@ function SelectableTextWeb({ text, onCollect, onMemo, onSelectionStateChange, fo
   const isDraggingSelectionRef = useRef(false);
   const onSelectionStateChangeRef = useRef(onSelectionStateChange);
   onSelectionStateChangeRef.current = onSelectionStateChange;
+  const prevClearSignalRef = useRef(clearSignal);
 
   const exitSelectMode = useCallback(() => {
     if (!isSelectModeRef.current) return;
@@ -74,6 +76,12 @@ function SelectableTextWeb({ text, onCollect, onMemo, onSelectionStateChange, fo
     window.getSelection()?.removeAllRanges();
     onSelectionStateChangeRef.current?.(false);
   }, []);
+
+  useEffect(() => {
+    if (clearSignal === prevClearSignalRef.current) return;
+    prevClearSignalRef.current = clearSignal;
+    exitSelectMode();
+  }, [clearSignal, exitSelectMode]);
 
   useEffect(() => {
     if (Platform.OS !== "web") return;
@@ -253,7 +261,7 @@ function SelectableTextWeb({ text, onCollect, onMemo, onSelectionStateChange, fo
   );
 }
 
-function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange, fontSize, lineHeight, letterSpacing, children }: SelectableTextProps) {
+function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange, fontSize, lineHeight, letterSpacing, children, clearSignal }: SelectableTextProps) {
   const [selection, setSelection] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
   const [showCollectButton, setShowCollectButton] = useState(false);
   const textRef = useRef(text);
@@ -261,6 +269,20 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
   const isSelectingRef = useRef(false);
   const onSelectionStateChangeRef = useRef(onSelectionStateChange);
   onSelectionStateChangeRef.current = onSelectionStateChange;
+  const textInputRef = useRef<TextInput>(null);
+  const prevClearSignalRef = useRef(clearSignal);
+
+  useEffect(() => {
+    if (clearSignal === prevClearSignalRef.current) return;
+    prevClearSignalRef.current = clearSignal;
+    setShowCollectButton(false);
+    setSelection({ start: 0, end: 0 });
+    if (isSelectingRef.current) {
+      isSelectingRef.current = false;
+      onSelectionStateChangeRef.current?.(false);
+    }
+    textInputRef.current?.blur();
+  }, [clearSignal]);
 
   const handleSelectionChange = useCallback(
     (e: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => {
@@ -328,6 +350,7 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
         <View>
           {children}
           <TextInput
+            ref={textInputRef}
             style={[inputStyle, styles.overlayInput]}
             value={text}
             multiline
@@ -346,6 +369,7 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
   return (
     <View style={styles.container}>
       <TextInput
+        ref={textInputRef}
         style={inputStyle}
         value={text}
         multiline
