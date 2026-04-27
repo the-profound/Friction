@@ -4,21 +4,24 @@ import {
   Text,
   StyleSheet,
   Pressable,
-  ScrollView,
   Alert,
   ActivityIndicator,
-  TextInput,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
   useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams, Stack } from "expo-router";
-import { Feather } from "@expo/vector-icons";
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Colors, Typography, Spacing, ReaderTokens, cqiToPx, readerFontSize, readerLetterSpacing } from "@/constants/tokens";
+import { useAutoSave } from "@/lib/useAutoSave";
 import {
   splitContentToPages,
+  splitPageContentForDivision,
   validatePages,
   splitContentForDivision,
-  splitPageContentForDivision,
   simulateGreedyJobs,
   resolveBSJob,
   runGreedy,
@@ -43,10 +46,15 @@ import PretextMeasureLayer, {
   type MeasureRequest,
   type MeasureCandidate,
 } from "@/components/PretextMeasureLayer/PretextMeasureLayer";
+import WebViewMarkdownEditor from "@/components/WebViewMarkdownEditor/WebViewMarkdownEditorCompat";
+import type {
+  WebViewMarkdownEditorRef,
+  OnChangePayload,
+  OnExportMarkdownPayload,
+} from "@/components/WebViewMarkdownEditor/types";
 
 const PAGE_DIVIDER = MarkdownPolicy.PAGE_DIVIDER;
 
-const PARA_KEY_PREFIX = "para_";
 const PAGE_KEY_PREFIX = "page_";
 
 function useReaderLayout(screenWidth: number, screenHeight: number) {
@@ -78,22 +86,137 @@ export default function DividingScreen() {
   const updateArticle = useUpdateArticle();
   const transitionStatus = useTransitionArticleStatus();
 
+  const editorRef = useRef<WebViewMarkdownEditorRef>(null);
+  const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
-  const [mode, setMode] = useState<"preview" | "edit">("preview");
+  const [charCount, setCharCount] = useState(0);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [editorReady, setEditorReady] = useState(false);
+  const titleRef = useRef("");
+  const contentRef = useRef("");
+  const initializedRef = useRef(false);
+  const initialContentRef = useRef("");
+  const initialTitleRef = useRef("");
+  const pendingExportRef = useRef<{
+    resolve: (md: string) => void;
+    requestId: string;
+  } | null>(null);
+
   const [stepBackConfirmVisible, setStepBackConfirmVisible] = useState(false);
   const [splitting, setSplitting] = useState(false);
-  const initializedRef = useRef(false);
 
   useEffect(() => {
     if (article && !initializedRef.current) {
       initializedRef.current = true;
+      const t = article.title || "";
+      let c = article.content || "";
       if (article.pages && Array.isArray(article.pages) && article.pages.length > 0) {
-        setContent((article.pages as string[]).join(`\n${PAGE_DIVIDER}\n`));
-      } else {
-        setContent(article.content || "");
+        c = (article.pages as string[]).join(`\n${PAGE_DIVIDER}\n`);
+      }
+      setTitle(t);
+      titleRef.current = t;
+      setContent(c);
+      contentRef.current = c;
+      initialContentRef.current = c;
+      initialTitleRef.current = t;
+      setCharCount(c.length);
+      if (editorReady) {
+        editorRef.current?.setMarkdown(c);
+        editorRef.current?.setTitle(t);
       }
     }
-  }, [article]);
+  }, [article, editorReady]);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener("keyboardDidHide", () => setKeyboardVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  const handleEditorReady = useCallback(() => {
+    setEditorReady(true);
+    editorRef.current?.setMarkdown(initialContentRef.current);
+    editorRef.current?.setTitle(initialTitleRef.current);
+  }, []);
+
+  const getEditorContent = useCallback((): Promise<string> => {
+    return new Promise((resolve) => {
+      if (!editorRef.current || !editorReady) {
+        resolve(contentRef.current);
+        return;
+      }
+      const requestId = `export_${Date.now()}`;
+      pendingExportRef.current = { resolve, requestId };
+      editorRef.current.requestExportMarkdown(requestId);
+      setTimeout(() => {
+        if (pendingExportRef.current?.requestId === requestId) {
+          pendingExportRef.current = null;
+          resolve(contentRef.current);
+        }
+      }, 2000);
+    });
+  }, [editorReady]);
+
+  const handleExportMarkdown = useCallback((payload: OnExportMarkdownPayload) => {
+    contentRef.current = payload.markdown;
+    setContent(payload.markdown);
+    if (pendingExportRef.current?.requestId === payload.requestId) {
+      pendingExportRef.current.resolve(payload.markdown);
+      pendingExportRef.current = null;
+    }
+  }, []);
+
+  const handleSave = useCallback(
+    async (data: { title: string; content: string }) => {
+      if (!id) return;
+      const pgs = splitContentToPages(data.content).map((p) => p.content);
+      await updateArticle.mutateAsync({
+        id,
+        data: { title: data.title, content: data.content, pages: pgs },
+      });
+    },
+    [id, updateArticle],
+  );
+
+  const { markDirty, flush } = useAutoSave({
+    onSave: handleSave,
+    storageKey: id ? `dividing_${id}` : undefined,
+  });
+
+  const handleEditorChange = useCallback(
+    (_payload: OnChangePayload) => {
+      if (_payload.charCount !== undefined) {
+        setCharCount(_payload.charCount);
+      }
+      if (_payload.isDirty && editorRef.current) {
+        const requestId = `autosave_${Date.now()}`;
+        pendingExportRef.current = {
+          resolve: (md: string) => {
+            contentRef.current = md;
+            setContent(md);
+            markDirty(titleRef.current, md);
+          },
+          requestId,
+        };
+        editorRef.current.requestExportMarkdown(requestId);
+      }
+    },
+    [markDirty],
+  );
+
+  const handleTitleChange = useCallback(
+    (text: string) => {
+      setTitle(text);
+      titleRef.current = text;
+      markDirty(text, contentRef.current);
+    },
+    [markDirty],
+  );
+
+  const pages = useMemo(() => splitContentToPages(content), [content]);
 
   const [debouncedContent, setDebouncedContent] = useState(content);
   useEffect(() => {
@@ -101,7 +224,6 @@ export default function DividingScreen() {
     return () => clearTimeout(timer);
   }, [content]);
 
-  const pages = useMemo(() => splitContentToPages(content), [content]);
   const measurePages = useMemo(() => splitContentToPages(debouncedContent), [debouncedContent]);
 
   const baseWarnings = useMemo(() => validatePages(pages), [pages]);
@@ -113,9 +235,6 @@ export default function DividingScreen() {
 
   const [pageHeights, setPageHeights] = useState<Record<number, number>>({});
 
-  // ─── Pretext 측정 레이어 ────────────────────────────────────────────────────
-  // (1) 경고용 페이지 측정: debouncedContent 변경 시 measurePages 전체를 다시 측정
-  // (2) 엔진용 BS 측정: handleAutoSplit/handleInsertDivider가 필요할 때 imperative하게 호출
   const warningRequest = useMemo<MeasureRequest | null>(() => {
     if (measurePages.length === 0) return null;
     return {
@@ -178,7 +297,6 @@ export default function DividingScreen() {
     if (r) r(heights);
   }, []);
 
-  // 분할 임계값: 자동분할과 이 페이지 나누기 동일하게 사용
   const splitThreshold = useMemo(() => {
     const netH = safeAreaHeight - 2 * paddingY - insets.bottom;
     return (netH + bodyLineHeight) * 0.92;
@@ -201,28 +319,20 @@ export default function DividingScreen() {
   const warnings = useMemo(() => [...baseWarnings, ...heightWarnings], [baseWarnings, heightWarnings]);
   const hasRedWarnings = warnings.some((w) => w.level === "red");
 
-  // ─── 자동 분할 엔진 (lib/pageDivision) ──────────────────────────────────────
-  /**
-   * 단락 배열을 받아 (1) 단락 높이 측정, (2) BS 잡 큐 처리, (3) runGreedy
-   * 순서로 페이지 배열을 만든다. BS는 한 paragraph의 후보 1..N을 한 번의
-   * Pretext mount로 모두 측정한 뒤 JS에서 BS 수렴 → 화면 깜빡임을 줄인다.
-   */
   const runDivisionEngine = useCallback(
     async (paragraphs: string[]): Promise<string[] | null> => {
       if (paragraphs.length < 1) return null;
 
-      // Phase 1: 단락 높이 일괄 측정
       const paraCandidates: MeasureCandidate[] = paragraphs.map((p, i) => ({
-        key: `${PARA_KEY_PREFIX}${i}`,
+        key: `para_${i}`,
         content: p,
       }));
       const paraHeightMap = await measureEngine(paraCandidates);
       const paraHeights: Record<number, number> = {};
       paragraphs.forEach((_, i) => {
-        paraHeights[i] = paraHeightMap[`${PARA_KEY_PREFIX}${i}`] ?? 0;
+        paraHeights[i] = paraHeightMap[`para_${i}`] ?? 0;
       });
 
-      // Phase 2: BS 잡 결정 → 후보 일괄 측정 → JS BS → 잔여 cuts 반복
       const initialJobs = simulateGreedyJobs(paragraphs, paraHeights, splitThreshold);
       const splitResults: Record<number, BSResult[]> = {};
       let pendingJobs: BSJob[] = initialJobs;
@@ -261,33 +371,30 @@ export default function DividingScreen() {
         pendingJobs = nextPending;
       }
 
-      // Phase 3: 그리디 컴팩션
       return runGreedy(paragraphs, paraHeights, splitResults, splitThreshold);
     },
     [measureEngine, splitThreshold],
   );
 
   const applyEngineResult = useCallback(
-    (engineOutPages: string[], scope: "all" | { pageIndex: number }) => {
-      if (scope === "all") {
-        const joined = engineOutPages.join(`\n${PAGE_DIVIDER}\n`);
-        setContent(joined);
-        setDebouncedContent(joined);
-      } else {
-        const rawPages = content.split(new RegExp(`\n?${PAGE_DIVIDER}\n?`, "m"));
-        rawPages.splice(scope.pageIndex, 1, ...engineOutPages);
-        const joined = rawPages.join(`\n${PAGE_DIVIDER}\n`);
-        setContent(joined);
-        setDebouncedContent(joined);
-      }
+    (engineOutPages: string[]) => {
+      const joined = engineOutPages.join(`\n${PAGE_DIVIDER}\n`);
+      contentRef.current = joined;
+      setContent(joined);
+      setDebouncedContent(joined);
       setPageHeights({});
+      if (editorRef.current && editorReady) {
+        editorRef.current.setMarkdown(joined);
+      }
+      markDirty(titleRef.current, joined);
     },
-    [content],
+    [editorReady, markDirty],
   );
 
   const handleAutoSplit = useCallback(async () => {
     if (splitting) return;
-    const paragraphs = splitContentForDivision(content);
+    const cur = await getEditorContent();
+    const paragraphs = splitContentForDivision(cur);
     if (paragraphs.length < 2) {
       Alert.alert("자동 분할 불가", "단락이 부족하여 자동 분할할 수 없습니다.");
       return;
@@ -295,18 +402,19 @@ export default function DividingScreen() {
     setSplitting(true);
     try {
       const out = await runDivisionEngine(paragraphs);
-      if (out) applyEngineResult(out, "all");
+      if (out) applyEngineResult(out);
     } finally {
       setSplitting(false);
     }
-  }, [content, splitting, runDivisionEngine, applyEngineResult]);
+  }, [splitting, getEditorContent, runDivisionEngine, applyEngineResult]);
 
-  const handleInsertDivider = useCallback(
-    async (afterPageIndex: number) => {
+  const handleSplitPage = useCallback(
+    async (pageIndex: number) => {
       if (splitting) return;
-      const rawPages = content.split(new RegExp(`\n?${PAGE_DIVIDER}\n?`, "m"));
-      if (afterPageIndex < 0 || afterPageIndex >= rawPages.length) return;
-      const paragraphs = splitPageContentForDivision(rawPages[afterPageIndex]);
+      const cur = await getEditorContent();
+      const rawPages = cur.split(new RegExp(`\n?${PAGE_DIVIDER}\n?`, "m"));
+      if (pageIndex < 0 || pageIndex >= rawPages.length) return;
+      const paragraphs = splitPageContentForDivision(rawPages[pageIndex]);
       if (paragraphs.length < 2) {
         Alert.alert("분할 불가", "이 페이지에는 나눌 수 있는 단락이 부족합니다.");
         return;
@@ -314,31 +422,70 @@ export default function DividingScreen() {
       setSplitting(true);
       try {
         const out = await runDivisionEngine(paragraphs);
-        if (out) applyEngineResult(out, { pageIndex: afterPageIndex });
+        if (out) {
+          const before = rawPages.slice(0, pageIndex);
+          const after = rawPages.slice(pageIndex + 1);
+          const newPages = [...before, ...out, ...after];
+          applyEngineResult(newPages);
+        }
       } finally {
         setSplitting(false);
       }
     },
-    [content, splitting, runDivisionEngine, applyEngineResult],
+    [splitting, getEditorContent, runDivisionEngine, applyEngineResult],
   );
 
-  const handleRemoveDivider = useCallback(
-    (pageBreakIndex: number) => {
-      const parts = content.split(new RegExp(`\n?${PAGE_DIVIDER}\n?`, "m"));
-      if (pageBreakIndex < 0 || pageBreakIndex >= parts.length - 1) return;
-      parts[pageBreakIndex] = parts[pageBreakIndex] + "\n\n" + parts[pageBreakIndex + 1];
-      parts.splice(pageBreakIndex + 1, 1);
-      setContent(parts.join(`\n${PAGE_DIVIDER}\n`));
+  const handleMergeWithPrevious = useCallback(
+    async (pageIndex: number) => {
+      if (pageIndex <= 0) return;
+      const cur = await getEditorContent();
+      const parts = cur.split(new RegExp(`\n?${PAGE_DIVIDER}\n?`, "m"));
+      const breakIndex = pageIndex - 1;
+      if (breakIndex < 0 || breakIndex >= parts.length - 1) return;
+      parts[breakIndex] = parts[breakIndex] + "\n\n" + parts[breakIndex + 1];
+      parts.splice(breakIndex + 1, 1);
+      const joined = parts.join(`\n${PAGE_DIVIDER}\n`);
+      contentRef.current = joined;
+      setContent(joined);
+      setDebouncedContent(joined);
+      setPageHeights({});
+      if (editorRef.current && editorReady) {
+        editorRef.current.setMarkdown(joined);
+      }
+      markDirty(titleRef.current, joined);
     },
-    [content],
+    [getEditorContent, editorReady, markDirty],
   );
 
   const handleNext = useCallback(async () => {
+    const cur = await getEditorContent();
+    markDirty(titleRef.current, cur);
+    const flushResult = await flush();
+    if (!flushResult.ok) {
+      Alert.alert("저장 실패", "저장이 완료되지 않았습니다. 다시 시도해주세요.");
+      return;
+    }
+
+    const pgs = splitContentToPages(cur);
+    const liveBaseWarnings = validatePages(pgs);
+    const liveHeightWarnings = pgs
+      .filter((p) => {
+        const h = pageHeights[p.pageIndex];
+        return h !== undefined && h > pageContentHeight + bodyLineHeight;
+      })
+      .map((p): DivisionWarning => ({
+        pageIndex: p.pageIndex,
+        paragraphIndex: -1,
+        level: "red",
+        reason: "이 페이지는 읽기 화면에서 스크롤이 필요할 수 있습니다",
+      }));
+    const liveHasRedWarnings =
+      [...liveBaseWarnings, ...liveHeightWarnings].some((w) => w.level === "red");
     const result = canTransitionForward("DIVIDING" as ArticleStatus, {
-      content,
-      title: article?.title || "",
-      pages: pages.map((p) => ({ pageIndex: p.pageIndex, content: p.content, charCount: p.charCount })),
-      hasRedWarnings,
+      content: cur,
+      title: titleRef.current,
+      pages: pgs.map((p) => ({ pageIndex: p.pageIndex, content: p.content, charCount: p.charCount })),
+      hasRedWarnings: liveHasRedWarnings,
     });
     if (!result.allowed) {
       Alert.alert("전환 불가", result.reason);
@@ -346,12 +493,11 @@ export default function DividingScreen() {
     }
 
     try {
-      const pagesJson = pages.map((p) => p.content);
+      const pagesJson = pgs.map((p) => p.content);
       const updatedArticle = await updateArticle.mutateAsync({
         id: id!,
-        data: { content, pages: pagesJson, layoutWidth: containerWidth },
+        data: { title: titleRef.current, content: cur, pages: pagesJson, layoutWidth: containerWidth },
       });
-      // 캐시를 즉시 갱신하여 on-01c가 최신 pages를 받도록 함
       queryClient.setQueryData([`/api/articles/${id}`], updatedArticle);
       if (article?.status !== "CLOSING") {
         await transitionStatus.mutateAsync({
@@ -365,37 +511,37 @@ export default function DividingScreen() {
       const msg = e instanceof Error ? e.message : "상태 전환에 실패했습니다.";
       Alert.alert("오류", msg);
     }
-  }, [content, article, pages, hasRedWarnings, id, router, updateArticle, transitionStatus, queryClient, containerWidth]);
+  }, [getEditorContent, markDirty, flush, hasRedWarnings, id, router, updateArticle, transitionStatus, queryClient, containerWidth, article]);
 
   const handleBack = useCallback(async () => {
-    if (!id) { router.replace("/(tabs)/on"); return; }
-    try {
-      const pagesJson = pages.map((p) => p.content);
-      const updatedArticle = await updateArticle.mutateAsync({
-        id,
-        data: { content, pages: pagesJson, layoutWidth: containerWidth },
-      });
-      queryClient.setQueryData([`/api/articles/${id}`], updatedArticle);
-      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+    if (!id) {
       router.replace("/(tabs)/on");
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "저장에 실패했습니다.";
-      Alert.alert("오류", msg);
+      return;
     }
-  }, [id, content, pages, router, updateArticle, queryClient, containerWidth]);
+    const cur = await getEditorContent();
+    markDirty(titleRef.current, cur);
+    const flushResult = await flush();
+    if (!flushResult.ok) {
+      Alert.alert("오류", "저장에 실패했습니다. 다시 시도해주세요.");
+      return;
+    }
+    queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+    router.replace("/(tabs)/on");
+  }, [id, getEditorContent, markDirty, flush, router, queryClient]);
 
   const handleConfirmStepBack = useCallback(async () => {
     setStepBackConfirmVisible(false);
     const result = canStepBack("DIVIDING");
     if (!result.allowed) return;
     if (!id) return;
+    const cur = await getEditorContent();
+    markDirty(titleRef.current, cur);
+    const flushResult = await flush();
+    if (!flushResult.ok) {
+      Alert.alert("오류", "저장에 실패했습니다.");
+      return;
+    }
     try {
-      const pagesJson = pages.map((p) => p.content);
-      const updatedArticle = await updateArticle.mutateAsync({
-        id,
-        data: { content, pages: pagesJson },
-      });
-      queryClient.setQueryData([`/api/articles/${id}`], updatedArticle);
       await transitionStatus.mutateAsync({
         id,
         data: { targetStatus: TransitionArticleBodyTargetStatus.DRAFT },
@@ -406,7 +552,12 @@ export default function DividingScreen() {
       const msg = e instanceof Error ? e.message : "상태 전환에 실패했습니다.";
       Alert.alert("오류", msg);
     }
-  }, [id, content, pages, updateArticle, transitionStatus, queryClient, router]);
+  }, [id, getEditorContent, markDirty, flush, transitionStatus, queryClient, router]);
+
+  const handleDismissKeyboard = useCallback(() => {
+    editorRef.current?.blur();
+    Keyboard.dismiss();
+  }, []);
 
   if (!id || articleLoading) {
     return (
@@ -425,138 +576,129 @@ export default function DividingScreen() {
     <>
       <Stack.Screen options={{ gestureEnabled: false }} />
       <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <Pressable onPress={handleBack} hitSlop={12}>
-          <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-        </Pressable>
-        <Pressable style={styles.headerCenter} onPress={() => setStepBackConfirmVisible(true)} hitSlop={8}>
-          <Text style={[styles.headerTitle, styles.headerTitleTappable]}>분할</Text>
-          <Text style={styles.pageCount}>{pages.length}페이지</Text>
-        </Pressable>
-        <Pressable onPress={handleNext} hitSlop={12}>
-          <Text style={styles.nextButton}>다음</Text>
-        </Pressable>
-      </View>
-
-      <View style={styles.toolbar}>
-        <Pressable
-          style={[styles.toolbarButton, mode === "preview" && styles.toolbarButtonActive]}
-          onPress={() => setMode("preview")}
-        >
-          <Feather name="eye" size={14} color={mode === "preview" ? Colors.white : Colors.zinc600} />
-          <Text style={[styles.toolbarText, mode === "preview" && styles.toolbarTextActive]}>미리보기</Text>
-        </Pressable>
-        <Pressable
-          style={[styles.toolbarButton, mode === "edit" && styles.toolbarButtonActive]}
-          onPress={() => setMode("edit")}
-        >
-          <Feather name="edit-2" size={14} color={mode === "edit" ? Colors.white : Colors.zinc600} />
-          <Text style={[styles.toolbarText, mode === "edit" && styles.toolbarTextActive]}>편집</Text>
-        </Pressable>
-        <View style={styles.toolbarSpacer} />
-        <Pressable style={styles.autoSplitButton} onPress={handleAutoSplit} disabled={splitting}>
-          <Feather name="scissors" size={14} color={Colors.zinc600} />
-          <Text style={styles.autoSplitText}>자동분할</Text>
-        </Pressable>
-      </View>
-
-      {/* 단일 Pretext 측정 레이어 — (1) 페이지 경고용 측정 */}
-      <PretextMeasureLayer request={warningRequest} onMeasured={handleWarningMeasured} />
-      {/* 단일 Pretext 측정 레이어 — (2) 자동분할 엔진용 BS 측정 */}
-      <PretextMeasureLayer request={engineRequest} onMeasured={handleEngineMeasured} />
-
-      {mode === "edit" ? (
-        <View style={styles.editContainer}>
-          <Text style={styles.editHint}>
-            "{PAGE_DIVIDER}" 를 줄 단위로 입력하면 페이지가 나뉩니다
-          </Text>
-          <TextInput
-            style={styles.editInput}
-            value={content}
-            onChangeText={setContent}
-            multiline
-            textAlignVertical="top"
-            scrollEnabled
-            placeholder="내용을 편집하세요..."
-            placeholderTextColor={Colors.zinc400}
-          />
-        </View>
-      ) : (
-        <ScrollView style={styles.content} contentContainerStyle={styles.contentInner}>
-          {pages.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Feather name="scissors" size={36} color={Colors.zinc300} />
-              <Text style={styles.emptyTitle}>분할할 내용이 없어요</Text>
-              <Text style={styles.emptySubtitle}>이전 단계에서 작성한 내용이 표시됩니다</Text>
-            </View>
+        <View style={styles.header}>
+          <Pressable onPress={handleBack} hitSlop={12}>
+            <Feather name="arrow-left" size={20} color={Colors.zinc600} />
+          </Pressable>
+          <Pressable
+            style={styles.headerCenter}
+            onPress={() => setStepBackConfirmVisible(true)}
+            hitSlop={8}
+          >
+            <Text style={[styles.headerTitle, styles.headerTitleTappable]}>분할</Text>
+            <Text style={styles.pageCount}>{pages.length}페이지</Text>
+          </Pressable>
+          {keyboardVisible ? (
+            <Pressable onPress={handleDismissKeyboard} hitSlop={12}>
+              <MaterialCommunityIcons name="keyboard-off-outline" size={22} color={Colors.zinc600} />
+            </Pressable>
           ) : (
-            pages.map((page, idx) => {
-              const pageWarnings = warnings.filter((w) => w.pageIndex === idx);
-              const isHeightOverflow = pageHeights[idx] !== undefined && pageHeights[idx] > pageContentHeight + bodyLineHeight;
-              return (
-                <View key={idx}>
-                  <View style={[styles.pageCard, pageWarnings.length > 0 && styles.pageCardWarning]}>
-                    <View style={styles.pageHeader}>
-                      <Text style={styles.pageLabel}>페이지 {idx + 1}</Text>
-                      <Text style={styles.charCount}>{page.charCount}자</Text>
-                    </View>
-                    <Text style={styles.pageContent} numberOfLines={6}>
-                      {page.content}
-                    </Text>
-                    {pageWarnings.map((w, wi) => (
-                      <Text key={wi} style={styles.warningText}>
-                        {w.reason}
-                      </Text>
-                    ))}
-                    {isHeightOverflow && (
-                      <Pressable
-                        style={styles.splitPageButton}
-                        onPress={() => handleInsertDivider(idx)}
-                        disabled={splitting}
-                      >
-                        <Feather name="scissors" size={14} color={Colors.zinc600} />
-                        <Text style={styles.splitPageText}>이 페이지 나누기</Text>
-                      </Pressable>
-                    )}
-                  </View>
-                  {idx < pages.length - 1 ? (
-                    <Pressable style={styles.dividerRow} onPress={() => handleRemoveDivider(idx)}>
-                      <View style={styles.dividerLine} />
-                      <View style={styles.dividerButton}>
-                        <Feather name="x" size={12} color={Colors.zinc500} />
-                      </View>
-                      <View style={styles.dividerLine} />
-                    </Pressable>
-                  ) : idx < pages.length && (
-                    <Pressable
-                      style={styles.addDividerRow}
-                      onPress={() => handleInsertDivider(idx)}
-                      disabled={splitting}
-                    >
-                      <View style={styles.addDividerLine} />
-                      <View style={styles.addDividerButton}>
-                        <Feather name="plus" size={12} color={Colors.zinc500} />
-                      </View>
-                      <View style={styles.addDividerLine} />
-                    </Pressable>
-                  )}
-                </View>
-              );
-            })
+            <Pressable onPress={handleNext} hitSlop={12}>
+              <Text style={styles.nextButton}>다음</Text>
+            </Pressable>
           )}
-        </ScrollView>
-      )}
+        </View>
 
-      <ConfirmModal
-        visible={stepBackConfirmVisible}
-        title="작성 단계로 돌아가기"
-        description="작성 단계로 돌아가겠습니까? 현재 분할 상태는 저장됩니다."
-        confirmLabel="돌아가기"
-        cancelLabel="취소"
-        onConfirm={handleConfirmStepBack}
-        onCancel={() => setStepBackConfirmVisible(false)}
-      />
-    </View>
+        <View style={styles.toolbar}>
+          <View style={styles.toolbarSpacer} />
+          <Pressable
+            style={[styles.autoSplitButton, splitting && styles.autoSplitButtonDisabled]}
+            onPress={handleAutoSplit}
+            disabled={splitting}
+          >
+            <Feather name="scissors" size={14} color={Colors.zinc600} />
+            <Text style={styles.autoSplitText}>{splitting ? "분할 중…" : "자동분할"}</Text>
+          </Pressable>
+        </View>
+
+        {warnings.length > 0 ? (
+          <View style={styles.warningBanner}>
+            <Feather name="alert-triangle" size={14} color="#ef4444" />
+            <Text style={styles.warningBannerText} numberOfLines={2}>
+              {warnings.length === 1
+                ? warnings[0].reason
+                : `${warnings.length}개 페이지가 한 페이지 분량을 초과합니다. 자동분할을 사용하거나 본문을 직접 편집해 주세요.`}
+            </Text>
+          </View>
+        ) : null}
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.pageStrip}
+          contentContainerStyle={styles.pageStripContent}
+        >
+          {pages.map((p) => {
+            const idx = p.pageIndex;
+            const hasWarning = warnings.some((w) => w.pageIndex === idx);
+            return (
+              <View
+                key={`page-chip-${idx}`}
+                style={[styles.pageChip, hasWarning && styles.pageChipWarning]}
+              >
+                {idx > 0 ? (
+                  <Pressable
+                    onPress={() => handleMergeWithPrevious(idx)}
+                    hitSlop={6}
+                    style={styles.chipMergeButton}
+                    accessibilityLabel={`페이지 ${idx + 1} 이전 페이지와 합치기`}
+                  >
+                    <Feather name="x" size={12} color={Colors.zinc600} />
+                  </Pressable>
+                ) : null}
+                <Text style={styles.chipPageNumber}>{idx + 1}쪽</Text>
+                <Text style={styles.chipCharCount}>{p.charCount}자</Text>
+                <Pressable
+                  onPress={() => handleSplitPage(idx)}
+                  disabled={splitting}
+                  hitSlop={6}
+                  style={[styles.chipSplitButton, splitting && styles.chipSplitButtonDisabled]}
+                  accessibilityLabel={`페이지 ${idx + 1} 나누기`}
+                >
+                  <Feather name="scissors" size={11} color={Colors.zinc600} />
+                  <Text style={styles.chipSplitText}>나누기</Text>
+                </Pressable>
+              </View>
+            );
+          })}
+        </ScrollView>
+
+        <PretextMeasureLayer request={warningRequest} onMeasured={handleWarningMeasured} />
+        <PretextMeasureLayer request={engineRequest} onMeasured={handleEngineMeasured} />
+
+        <KeyboardAvoidingView
+          style={styles.editor}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <View style={styles.markdownEditorContainer}>
+            <WebViewMarkdownEditor
+              ref={editorRef}
+              initialMarkdown={contentRef.current}
+              titleValue={title}
+              placeholder="떠오르는 생각을 자유롭게 적어보세요..."
+              editable
+              onReady={handleEditorReady}
+              onChange={handleEditorChange}
+              onExportMarkdown={handleExportMarkdown}
+              onTitleChange={handleTitleChange}
+              onKeyboardVisibilityChange={setKeyboardVisible}
+            />
+          </View>
+          <View style={styles.editorFooter}>
+            <Text style={styles.charCountText}>{charCount}자</Text>
+          </View>
+        </KeyboardAvoidingView>
+
+        <ConfirmModal
+          visible={stepBackConfirmVisible}
+          title="작성 단계로 돌아가기"
+          description="작성 단계로 돌아가겠습니까? 현재 분할 상태는 저장됩니다."
+          confirmLabel="돌아가기"
+          cancelLabel="취소"
+          onConfirm={handleConfirmStepBack}
+          onCancel={() => setStepBackConfirmVisible(false)}
+        />
+      </View>
     </>
   );
 }
@@ -610,26 +752,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
   },
-  toolbarButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: Colors.zinc50,
-  },
-  toolbarButtonActive: {
-    backgroundColor: Colors.zinc900,
-  },
-  toolbarText: {
-    ...Typography.caption,
-    fontSize: 12,
-    color: Colors.zinc600,
-  },
-  toolbarTextActive: {
-    color: Colors.white,
-  },
   toolbarSpacer: {
     flex: 1,
   },
@@ -643,150 +765,111 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.zinc200,
   },
+  autoSplitButtonDisabled: {
+    opacity: 0.5,
+  },
   autoSplitText: {
     ...Typography.caption,
     fontSize: 12,
     color: Colors.zinc600,
   },
-  editContainer: {
+  editor: {
     flex: 1,
     paddingHorizontal: Spacing.screenPx,
+    paddingTop: 8,
   },
-  editHint: {
-    ...Typography.caption,
-    fontSize: 11,
-    color: Colors.zinc400,
-    paddingVertical: 8,
-    textAlign: "center",
-  },
-  editInput: {
-    flex: 1,
-    ...Typography.body,
-    fontSize: 15,
-    lineHeight: 24,
-    color: Colors.zinc800,
-    paddingVertical: 0,
-    textAlignVertical: "top",
-  },
-  content: {
+  markdownEditorContainer: {
     flex: 1,
   },
-  contentInner: {
-    paddingHorizontal: Spacing.screenPx,
-    paddingTop: 12,
-    paddingBottom: 40,
-    gap: 0,
-  },
-  pageCard: {
-    backgroundColor: Colors.zinc50,
-    borderRadius: 12,
-    padding: 16,
-  },
-  pageCardWarning: {
-    borderWidth: 1,
-    borderColor: "#ef4444",
-  },
-  pageHeader: {
+  editorFooter: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 8,
+    alignItems: "center",
+    justifyContent: "flex-end",
+    paddingVertical: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.zinc100,
   },
-  pageLabel: {
-    ...Typography.bodySemiBold,
-    fontSize: 13,
-    color: Colors.zinc600,
-  },
-  charCount: {
+  charCountText: {
     ...Typography.caption,
     fontSize: 12,
     color: Colors.zinc400,
   },
-  pageContent: {
-    ...Typography.body,
-    fontSize: 14,
-    lineHeight: 22,
-    color: Colors.zinc800,
-  },
-  warningText: {
-    ...Typography.caption,
-    fontSize: 12,
-    color: "#ef4444",
-    marginTop: 8,
-  },
-  splitPageButton: {
+  warningBanner: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginTop: 10,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: Colors.zinc100,
-    alignSelf: "flex-start",
+    paddingHorizontal: Spacing.screenPx,
+    paddingVertical: 8,
+    backgroundColor: "#fef2f2",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#fecaca",
   },
-  splitPageText: {
+  warningBannerText: {
     ...Typography.caption,
+    flex: 1,
     fontSize: 12,
-    color: Colors.zinc600,
+    color: "#b91c1c",
   },
-  dividerRow: {
-    flexDirection: "row",
-    alignItems: "center",
+  pageStrip: {
+    flexGrow: 0,
+    flexShrink: 0,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.zinc100,
+  },
+  pageStripContent: {
+    paddingHorizontal: Spacing.screenPx,
     paddingVertical: 8,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: Colors.zinc200,
-  },
-  dividerButton: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: Colors.zinc100,
-    alignItems: "center",
-    justifyContent: "center",
-    marginHorizontal: 8,
-  },
-  addDividerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 8,
-  },
-  addDividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: Colors.zinc100,
-    borderStyle: "dashed" as never,
-  },
-  addDividerButton: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: Colors.zinc50,
-    borderWidth: 1,
-    borderColor: Colors.zinc200,
-    alignItems: "center",
-    justifyContent: "center",
-    marginHorizontal: 8,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingVertical: 80,
     gap: 8,
   },
-  emptyTitle: {
-    ...Typography.bodySemiBold,
-    fontSize: 16,
-    color: Colors.zinc900,
-    marginTop: 8,
+  pageChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
+    backgroundColor: Colors.zinc50,
   },
-  emptySubtitle: {
-    ...Typography.body,
-    fontSize: 14,
+  pageChipWarning: {
+    borderColor: "#ef4444",
+    backgroundColor: "#fef2f2",
+  },
+  chipMergeButton: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.zinc200,
+  },
+  chipPageNumber: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc700,
+    fontWeight: "600",
+  },
+  chipCharCount: {
+    ...Typography.caption,
+    fontSize: 11,
     color: Colors.zinc500,
-    textAlign: "center",
+  },
+  chipSplitButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 10,
+    backgroundColor: Colors.zinc200,
+  },
+  chipSplitButtonDisabled: {
+    opacity: 0.5,
+  },
+  chipSplitText: {
+    ...Typography.caption,
+    fontSize: 11,
+    color: Colors.zinc700,
   },
 });
