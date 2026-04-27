@@ -485,14 +485,17 @@ export default function ReadScreen() {
             useNativeDriver: true,
           }),
         ]).start(() => {
-          // Switch back to single view first. Since `outX` is already 0, the
-          // single view renders the new page centered with no visible jump.
+          // Switch back to single view. `outX` is already 0, so the single
+          // view renders the new page centered with no visible jump.
+          //
+          // Do NOT reset commitOutX/inX here — resetting commitOutX to 0
+          // before this `setIsCommitting(false)` re-render completes would
+          // momentarily snap the outgoing page back to center while the dual
+          // view is still mounted, causing a one-frame ghost-text flash.
+          // The values stay at their final off-screen positions; they are
+          // re-initialized at the start of the next commit anyway.
           isCommittingRef.current = false;
           setIsCommitting(false);
-          // Reset the dual-view transforms; the dual view is about to unmount,
-          // so this has no visible effect but keeps values clean for next time.
-          commitOutX.setValue(0);
-          inX.setValue(0);
         });
       },
       onPanResponderTerminationRequest: () => false,

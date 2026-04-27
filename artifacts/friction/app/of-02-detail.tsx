@@ -61,6 +61,7 @@ export default function TeamCollectionDetailScreen() {
   const [kickTarget, setKickTarget] = useState<{ id: string; nickname: string } | null>(null);
   const openRowRef = useRef<SwipeableRowHandle | null>(null);
   const rowRefs = useRef<Map<string, SwipeableRowHandle>>(new Map());
+  const isNavigatingRef = useRef(false);
 
   useEffect(() => {
     if (inviteDebounceRef.current) clearTimeout(inviteDebounceRef.current);
@@ -139,6 +140,7 @@ export default function TeamCollectionDetailScreen() {
   const refetchInbox = inboxQuery.refetch;
   useFocusEffect(
     useCallback(() => {
+      isNavigatingRef.current = false;
       refetchCollection();
       refetchMembers();
       refetchArticles();
@@ -295,6 +297,8 @@ export default function TeamCollectionDetailScreen() {
   }, []);
 
   const handleArticleNavigate = useCallback((item: TeamCollectionArticleWithDetails) => {
+    if (isNavigatingRef.current) return;
+    isNavigatingRef.current = true;
     closeOpenRow();
     const isOwnArticle = item.article?.authorId === userId;
     const hasReadBefore = item.completedAt != null;
