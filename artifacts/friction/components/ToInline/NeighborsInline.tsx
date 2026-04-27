@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 
-import { Colors, Spacing, Typography } from "@/constants/tokens";
+import { Colors, Sizing, Spacing, Typography } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
 import {
   INCOMING_FALLBACK_POLL_INTERVAL_MS,
@@ -662,7 +662,7 @@ export function NeighborsInline({
       </BottomSheet>
 
       <Pressable
-        style={[styles.fab, { bottom: insets.bottom + 20 }]}
+        style={[styles.fab, { bottom: insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + Spacing.xl }]}
         onPress={() => setAddSheetVisible(true)}
         accessibilityRole="button"
         accessibilityLabel="이웃 추가"
