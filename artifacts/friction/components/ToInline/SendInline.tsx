@@ -10,6 +10,7 @@ import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import {
+  ApiError,
   getGetTodayGreetingStatusQueryKey,
   getListSendRecordsQueryKey,
   getListTeamArticlesQueryKey,
@@ -246,7 +247,15 @@ export function SendInline({
       } catch (e: unknown) {
         setConfirmVisible(false);
         setNoticePromptVisible(false);
-        const msg = e instanceof Error ? e.message : "실패했습니다.";
+        let msg = "실패했습니다.";
+        if (e instanceof ApiError) {
+          const errorData = e.data as { error?: string } | null;
+          if (e.status === 400 && errorData?.error === "Article already in collection") {
+            msg = "이미 모음에 전송된 글입니다.";
+          } else if (e.status === 409 && errorData?.error === "Today's greeting was already sent") {
+            msg = "이미 오늘의 인사를 보낸 모임입니다.";
+          }
+        }
         Alert.alert("오류", msg);
       }
     },
