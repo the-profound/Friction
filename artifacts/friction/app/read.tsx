@@ -141,6 +141,10 @@ export default function ReadScreen() {
   const articleId = params.articleId ?? "";
   const inboxId = params.inboxId;
   const mode: ReadingMode = (params.mode as ReadingMode) ?? "basic";
+  // True when the user opens an article for the first time via a collection
+  // article list rather than via the inbox. In this case the completion CTA
+  // should offer "보관하기 / 보관 안 함" instead of "보관하기 / 삭제하기".
+  const isListEntry = mode === "basic" && !inboxId;
 
   const articleQuery = useGetArticle(articleId);
   const article = articleId ? articleQuery.data : undefined;
@@ -287,18 +291,18 @@ export default function ReadScreen() {
     if (mode !== "basic") return;
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
       if (!reading.canExit) {
-        Alert.alert("읽기 중", "완독 후 보관/삭제를 선택해주세요.");
+        Alert.alert("읽기 중", isListEntry ? "완독 후 보관 여부를 선택해주세요." : "완독 후 보관/삭제를 선택해주세요.");
         return true;
       }
       return false;
     });
     return () => sub.remove();
-  }, [mode, reading.canExit]);
+  }, [mode, reading.canExit, isListEntry]);
 
 
   const handleBack = useCallback(async () => {
     if (mode === "basic" && !reading.canExit) {
-      Alert.alert("읽기 중", "완독 후 보관/삭제를 선택해주세요.");
+      Alert.alert("읽기 중", isListEntry ? "완독 후 보관 여부를 선택해주세요." : "완독 후 보관/삭제를 선택해주세요.");
       return;
     }
     if (reading.session.state === "READING" || reading.session.state === "PAUSED") {
@@ -306,7 +310,7 @@ export default function ReadScreen() {
     }
     await readingMemo.cleanup();
     router.back();
-  }, [mode, reading, router, readingMemo]);
+  }, [mode, isListEntry, reading, router, readingMemo]);
 
   const canNavigate = mode === "re_read" || reading.session.state === "READING";
 
@@ -576,18 +580,21 @@ Alert.alert("완료", "보관함에 저장됐어요");
       const result = await reading.commitCompletion();
       setCompletionSheetVisible(false);
       if (result.success) {
-        queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+        if (!isListEntry) {
+          // 수신함 경로: 읽기 완료 후 수신함 목록 갱신
+          queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+        }
         clearActiveSession();
         await readingMemo.cleanup();
         router.back();
-  Alert.alert("완료", "편지를 삭제했어요");
+        Alert.alert("완료", isListEntry ? "읽기를 완료했어요" : "편지를 삭제했어요");
       } else {
         Alert.alert("오류", result.error ?? "완독 처리에 실패했습니다.");
       }
     } finally {
       setIsDeleting(false);
     }
-  }, [isDeleting, reading, router, clearActiveSession, queryClient, readingMemo]);
+  }, [isDeleting, isListEntry, reading, router, clearActiveSession, queryClient, readingMemo]);
 
   const handleCollectSentence = useCallback((text: string) => {
     if (text.trim().length > 0) {
@@ -984,11 +991,20 @@ Alert.alert("완료", "보관함에 저장됐어요");
                   <Text style={dynamicStyles.completionButtonSecondaryText}>다시 읽기</Text>
                 </Pressable>
                 <Pressable
-                  style={[styles.completionButton, styles.completionButtonSecondary, styles.completionButtonDelete, isDeleting && styles.completionButtonDisabled]}
+                  style={[
+                    styles.completionButton,
+                    styles.completionButtonSecondary,
+                    !isListEntry && styles.completionButtonDelete,
+                    isDeleting && styles.completionButtonDisabled,
+                  ]}
                   onPress={handleCommitAndSkip}
                   disabled={isDeleting}
                 >
-                  <Text style={dynamicStyles.completionButtonSecondaryText}>{isDeleting ? "삭제 중..." : "삭제하기"}</Text>
+                  <Text style={dynamicStyles.completionButtonSecondaryText}>
+                    {isDeleting
+                      ? (isListEntry ? "처리 중..." : "삭제 중...")
+                      : (isListEntry ? "보관 안 함" : "삭제하기")}
+                  </Text>
                 </Pressable>
               </View>
             </>
