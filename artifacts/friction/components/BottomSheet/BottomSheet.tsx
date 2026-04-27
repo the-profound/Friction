@@ -256,6 +256,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingHorizontal: Spacing.screenPx,
     position: "relative",
+    alignSelf: "stretch",
   },
   title: {
     ...Typography.bodySemiBold,
@@ -265,7 +266,7 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     position: "absolute",
-    right: Spacing.screenPx,
+    right: 0,
     padding: 4,
   },
   content: {
