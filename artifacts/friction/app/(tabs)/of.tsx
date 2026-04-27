@@ -30,6 +30,9 @@ import {
   useToggleStoredSentenceFavorite,
   useAddTeamMember,
   getTeamCollection,
+  getListMyCollectionsQueryKey,
+  getListTeamCollectionsQueryKey,
+  getListStoredSentencesQueryKey,
 } from "@workspace/api-client-react";
 import type {
   MyCollection,
@@ -41,13 +44,15 @@ import type { GroupMiniSubTabKey } from "@/types/navigation";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
-import { useFocusPollingOptions } from "@/lib/useScreenFocused";
+import { useFocusPollingOptions, isQueryStale } from "@/lib/useScreenFocused";
+import { useQueryClient } from "@tanstack/react-query";
 
 export default function OfScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { ofSubTab, ofMiniSubTab, setOfMiniSubTab } = useNavigation();
   const { userId } = useUser();
+  const queryClient = useQueryClient();
   const [searchActive, setSearchActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [actionSheetVisible, setActionSheetVisible] = useState(false);
@@ -369,21 +374,24 @@ export default function OfScreen() {
     else sentencesQuery.refetch();
   }, [ofSubTab, myCollectionsQuery, teamCollectionsQuery, sentencesQuery]);
 
-  // Refetch every time the screen regains focus so newly-joined team
-  // collections (e.g. after being added as a member elsewhere) show up
-  // without a manual refresh.
-  // NOTE: depend on stable `refetch` references rather than whole query
-  // objects to avoid a focus refetch loop (query objects re-identify each
-  // render).
+  // Refetch on focus ONLY if cached data is stale (older than the global
+  // staleTime / FOCUS_STALE_THRESHOLD_MS). Fresh data is shown immediately
+  // without a loading indicator or scroll-position jump.
   const refetchPersonal = myCollectionsQuery.refetch;
   const refetchTeams = teamCollectionsQuery.refetch;
   const refetchSentences = sentencesQuery.refetch;
   useFocusEffect(
     useCallback(() => {
-      refetchPersonal();
-      refetchTeams();
-      refetchSentences();
-    }, [refetchPersonal, refetchTeams, refetchSentences]),
+      if (isQueryStale(queryClient, getListMyCollectionsQueryKey({ ownerId: userId }))) {
+        refetchPersonal();
+      }
+      if (isQueryStale(queryClient, getListTeamCollectionsQueryKey({ userId }))) {
+        refetchTeams();
+      }
+      if (isQueryStale(queryClient, getListStoredSentencesQueryKey({ userId }))) {
+        refetchSentences();
+      }
+    }, [refetchPersonal, refetchTeams, refetchSentences, queryClient, userId]),
   );
 
   const isRefetching =

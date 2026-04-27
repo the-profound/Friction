@@ -19,7 +19,9 @@ import { useUser } from "@/contexts/UserContext";
 import {
   INCOMING_FALLBACK_POLL_INTERVAL_MS,
   useFocusPollingOptions,
+  isQueryStale,
 } from "@/lib/useScreenFocused";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRealtimeChannel } from "@/lib/useRealtimeChannel";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import RefreshableEmpty from "@/components/RefreshableEmpty";
@@ -35,6 +37,8 @@ import {
   useRejectNeighborRequest,
   useRemoveNeighbor,
   useSearchUsersByNickname,
+  getListNeighborsQueryKey,
+  getListNeighborRequestsQueryKey,
 } from "@workspace/api-client-react";
 import type {
   NeighborRequestWithUser,
@@ -78,6 +82,7 @@ export function NeighborsInline({
 }: NeighborsInlineProps) {
   const insets = useSafeAreaInsets();
   const { userId } = useUser();
+  const queryClient = useQueryClient();
   const [activeSection, setActiveSection] = useState<SectionKey>(initialSection);
   const [addSheetVisible, setAddSheetVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -143,20 +148,24 @@ export function NeighborsInline({
 
   const searchResults = useSearchUsersByNickname(debouncedQuery, userId);
 
-  // Refetch all neighbor lists every time this screen regains focus so
-  // requests sent/received while the screen was backgrounded show up
-  // without a manual refresh.
-  // NOTE: depend on stable `refetch` references (not whole query objects)
-  // to avoid a focus refetch loop (query objects re-identify each render).
+  // Refetch on focus ONLY if cached data is stale. Realtime subscriptions
+  // handle near-instant updates; the stale check prevents loading spinners
+  // and scroll jumps on quick tab switches.
   const refetchNeighbors = neighborsQuery.refetch;
   const refetchRequests = requestsQuery.refetch;
   const refetchSentRequests = sentRequestsQuery.refetch;
   useFocusEffect(
     useCallback(() => {
-      refetchNeighbors();
-      refetchRequests();
-      refetchSentRequests();
-    }, [refetchNeighbors, refetchRequests, refetchSentRequests]),
+      if (isQueryStale(queryClient, getListNeighborsQueryKey({ userId }))) {
+        refetchNeighbors();
+      }
+      if (isQueryStale(queryClient, getListNeighborRequestsQueryKey({ recipientId: userId }))) {
+        refetchRequests();
+      }
+      if (isQueryStale(queryClient, getListNeighborRequestsQueryKey({ requesterId: userId }))) {
+        refetchSentRequests();
+      }
+    }, [refetchNeighbors, refetchRequests, refetchSentRequests, queryClient, userId]),
   );
 
   const handleAccept = useCallback(

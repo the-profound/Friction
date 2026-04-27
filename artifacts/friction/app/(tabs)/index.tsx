@@ -25,11 +25,10 @@ import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import DotIndicator from "@/components/DotIndicator/DotIndicator";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import { useQueryClient } from "@tanstack/react-query";
-import { useListInbox, useMarkInboxOpened, useDeleteInboxItem } from "@workspace/api-client-react";
+import { useListInbox, useMarkInboxOpened, useDeleteInboxItem, getListInboxQueryKey } from "@workspace/api-client-react";
 import type { InboxItem } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
-import { INCOMING_FALLBACK_POLL_INTERVAL_MS } from "@/lib/useScreenFocused";
-import { useFocusPollingOptions } from "@/lib/useScreenFocused";
+import { INCOMING_FALLBACK_POLL_INTERVAL_MS, useFocusPollingOptions, isQueryStale } from "@/lib/useScreenFocused";
 import { useRealtimeChannel } from "@/lib/useRealtimeChannel";
 
 const { width: SCREEN_W } = Dimensions.get("window");
@@ -404,16 +403,18 @@ Alert.alert("완료", "수신함에서 삭제되었습니다.");
     refetch();
   }, [refetch]);
 
-  // Refetch the inbox every time this tab regains focus so freshly-delivered
-  // letters appear without a manual pull-to-refresh.
-  // NOTE: depend ONLY on the stable `refetch` reference (not whole query
-  // objects) — query result objects get a new identity on every render,
-  // which would re-fire useFocusEffect cleanup/setup in a loop.
+  // Refetch the inbox when this tab regains focus ONLY if the cached data
+  // is stale (older than FOCUS_STALE_THRESHOLD_MS / the global staleTime).
+  // Skipping the refetch when data is fresh avoids the full-screen loading
+  // spinner and scroll-position jump that users see on quick tab switches.
+  // Realtime + 60 s polling handle near-instant updates while focused.
   const refetchInbox = refetch;
   useFocusEffect(
     useCallback(() => {
-      refetchInbox();
-    }, [refetchInbox]),
+      if (isQueryStale(queryClient, getListInboxQueryKey({ recipientId: userId }))) {
+        refetchInbox();
+      }
+    }, [refetchInbox, queryClient, userId]),
   );
 
   return (

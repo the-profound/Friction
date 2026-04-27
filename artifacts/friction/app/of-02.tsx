@@ -11,7 +11,10 @@ import {
   useDeleteTeamCollection,
   useAddTeamMember,
   getTeamCollection,
+  getListTeamCollectionsQueryKey,
 } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { isQueryStale } from "@/lib/useScreenFocused";
 import type { TeamCollectionWithRole, TeamCollection } from "@workspace/api-client-react";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
@@ -22,6 +25,7 @@ export default function TeamCollectionListScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { userId } = useUser();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<MiniTab>("mine");
   const [actionSheetVisible, setActionSheetVisible] = useState(false);
   const [createSheetVisible, setCreateSheetVisible] = useState(false);
@@ -40,15 +44,15 @@ export default function TeamCollectionListScreen() {
   const deleteCollection = useDeleteTeamCollection();
   const addMember = useAddTeamMember();
 
-  // Refetch on focus so newly-created or newly-joined team collections
-  // (e.g. accepted on another device) appear without a manual refresh.
-  // NOTE: depend on the stable `refetch` reference (not the whole query
-  // object) to avoid a focus refetch loop.
+  // Refetch on focus ONLY if cached data is stale. This avoids a spinner
+  // every time the user navigates back from a team collection detail screen.
   const refetchCollections = collectionsQuery.refetch;
   useFocusEffect(
     useCallback(() => {
-      refetchCollections();
-    }, [refetchCollections]),
+      if (isQueryStale(queryClient, getListTeamCollectionsQueryKey({ userId }))) {
+        refetchCollections();
+      }
+    }, [refetchCollections, queryClient, userId]),
   );
 
   const tabs: { key: MiniTab; label: string }[] = [

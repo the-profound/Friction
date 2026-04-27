@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { useFocusEffect } from "expo-router";
+import type { QueryClient } from "@tanstack/react-query";
 
 /**
  * Tracks whether the current screen is focused (i.e. the active route in the
@@ -58,4 +59,37 @@ export function useFocusPollingOptions(intervalMs: number = INCOMING_POLL_INTERV
       refetchInterval: focused ? intervalMs : false,
     },
   };
+}
+
+/**
+ * How old cached query data must be (in ms) before a focus-triggered refetch
+ * is allowed. Must match the global `staleTime` configured in the QueryClient.
+ */
+export const FOCUS_STALE_THRESHOLD_MS = 30_000;
+
+/**
+ * Returns `true` if the query identified by `queryKey` has no cached data, or
+ * if its cached data is older than `thresholdMs` (defaults to
+ * `FOCUS_STALE_THRESHOLD_MS`).
+ *
+ * Use this in `useFocusEffect` callbacks to skip unnecessary refetches when
+ * the user switches tabs quickly — data that was just fetched should not be
+ * re-requested, as doing so causes a full loading indicator and a potential
+ * scroll-position jump.
+ *
+ * Example:
+ *   useFocusEffect(useCallback(() => {
+ *     if (isQueryStale(queryClient, getListInboxQueryKey({ recipientId }))) {
+ *       refetch();
+ *     }
+ *   }, [queryClient, refetch, recipientId]));
+ */
+export function isQueryStale(
+  queryClient: QueryClient,
+  queryKey: readonly unknown[],
+  thresholdMs: number = FOCUS_STALE_THRESHOLD_MS,
+): boolean {
+  const state = queryClient.getQueryState(queryKey);
+  if (!state?.dataUpdatedAt) return true;
+  return Date.now() - state.dataUpdatedAt > thresholdMs;
 }

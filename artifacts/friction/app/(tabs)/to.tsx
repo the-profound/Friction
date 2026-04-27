@@ -13,6 +13,8 @@ import { SendInline } from "@/components/ToInline/SendInline";
 import {
   useListNeighborRequests,
   useListSendRecords,
+  getListNeighborRequestsQueryKey,
+  getListSendRecordsQueryKey,
 } from "@workspace/api-client-react";
 import type {
   NeighborRequestWithUser,
@@ -22,8 +24,10 @@ import { formatDeliveryTime } from "@/lib/deliverySync";
 import {
   INCOMING_FALLBACK_POLL_INTERVAL_MS,
   useFocusPollingOptions,
+  isQueryStale,
 } from "@/lib/useScreenFocused";
 import { useRealtimeChannel } from "@/lib/useRealtimeChannel";
+import { useQueryClient } from "@tanstack/react-query";
 
 type ParamRouter = ReturnType<typeof useRouter>;
 
@@ -46,6 +50,7 @@ export default function ToScreen() {
   const router = useRouter();
   const { toSubTab, setToSubTab } = useNavigation();
   const { userId } = useUser();
+  const queryClient = useQueryClient();
   const params = useLocalSearchParams<{
     targetGroup?: string;
     targetGroupName?: string;
@@ -146,18 +151,21 @@ export default function ToScreen() {
     setFocusRequestsSignal(Date.now());
   }, []);
 
-  // Refetch the request banner count + recent send records every time this
-  // tab regains focus so newly-arrived items appear without manual refresh.
-  // The neighbors list itself is owned by NeighborsInline (which has its own
-  // focus refetch). Depend only on the stable `refetch` references — query
-  // objects re-identify on every render and would cause a focus refetch loop.
+  // Refetch on focus ONLY if cached data is stale (older than the global
+  // staleTime). Skips the refetch for quick tab switches so users see their
+  // send records and pending requests immediately without a spinner.
+  // Realtime + 60 s polling handle new arrivals while the tab is focused.
   const refetchRequests = requestsQuery.refetch;
   const refetchSendRecords = sendRecordsQuery.refetch;
   useFocusEffect(
     useCallback(() => {
-      refetchRequests();
-      refetchSendRecords();
-    }, [refetchRequests, refetchSendRecords]),
+      if (isQueryStale(queryClient, getListNeighborRequestsQueryKey({ recipientId: userId }))) {
+        refetchRequests();
+      }
+      if (isQueryStale(queryClient, getListSendRecordsQueryKey({ senderId: userId }))) {
+        refetchSendRecords();
+      }
+    }, [refetchRequests, refetchSendRecords, queryClient, userId]),
   );
 
   const renderSendRecordItem = ({ item }: { item: SendRecordWithDetails }) => (

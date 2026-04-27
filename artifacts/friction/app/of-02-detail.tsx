@@ -23,6 +23,8 @@ import {
   useSearchUsersByNickname,
   getListTeamArticlesQueryKey,
   getListTeamMembersQueryKey,
+  getGetTeamCollectionQueryKey,
+  getListInboxQueryKey,
 } from "@workspace/api-client-react";
 import type {
   TeamMemberWithUser,
@@ -34,6 +36,7 @@ import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import {
   INCOMING_FALLBACK_POLL_INTERVAL_MS,
   useFocusPollingOptions,
+  isQueryStale,
 } from "@/lib/useScreenFocused";
 import { useRealtimeChannel } from "@/lib/useRealtimeChannel";
 
@@ -128,12 +131,10 @@ export default function TeamCollectionDetailScreen() {
 
   const { showToast } = useToast();
 
-  // Refetch members + articles + collection metadata each time the screen
-  // regains focus so memberships added elsewhere (or invites accepted by the
-  // current user on a different device) become visible without a manual
-  // refresh.
-  // NOTE: depend on stable `refetch` references (not whole query objects)
-  // to avoid a focus refetch loop.
+  // Refetch on focus ONLY if cached data is stale. Realtime channels handle
+  // live updates while the screen is active; polling covers the background
+  // interval. The stale check prevents redundant round-trips when navigating
+  // back from a sub-sheet within 30 s.
   const refetchCollection = collectionQuery.refetch;
   const refetchMembers = membersQuery.refetch;
   const refetchArticles = articlesQuery.refetch;
@@ -141,11 +142,19 @@ export default function TeamCollectionDetailScreen() {
   useFocusEffect(
     useCallback(() => {
       isNavigatingRef.current = false;
-      refetchCollection();
-      refetchMembers();
-      refetchArticles();
-      refetchInbox();
-    }, [refetchCollection, refetchMembers, refetchArticles, refetchInbox]),
+      if (id && isQueryStale(queryClient, getGetTeamCollectionQueryKey(id))) {
+        refetchCollection();
+      }
+      if (id && isQueryStale(queryClient, getListTeamMembersQueryKey(id))) {
+        refetchMembers();
+      }
+      if (id && isQueryStale(queryClient, getListTeamArticlesQueryKey(id))) {
+        refetchArticles();
+      }
+      if (isQueryStale(queryClient, getListInboxQueryKey({ recipientId: userId }))) {
+        refetchInbox();
+      }
+    }, [refetchCollection, refetchMembers, refetchArticles, refetchInbox, queryClient, id, userId]),
   );
 
   const prevInviteError = useRef(false);

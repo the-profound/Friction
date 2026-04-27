@@ -34,7 +34,18 @@ if (process.env.EXPO_PUBLIC_DOMAIN) {
 
 SplashScreen.preventAutoHideAsync();
 
-const queryClient = new QueryClient();
+// Keep cached data "fresh" for 30 seconds so that switching between tabs
+// does not trigger a full refetch (and show a loading spinner) if the data
+// was fetched within the last half-minute.  Individual screens still call
+// refetch() on focus, but only when the data is older than this threshold
+// (see `isQueryStale` in lib/useScreenFocused.ts).
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+    },
+  },
+});
 
 function ActiveReadingGuard({ children }: { children: React.ReactNode }) {
   const { activeSession } = useActiveReading();
