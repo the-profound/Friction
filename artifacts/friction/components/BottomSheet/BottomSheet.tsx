@@ -191,9 +191,11 @@ export default function BottomSheet({
             <View style={styles.handle} />
             {(title || closeButton) && (
               <View style={styles.titleRow}>
+                {/* 왼쪽 균형용 spacer (closeButton 너비와 동일) */}
+                {closeButton ? <View style={styles.titleSpacer} /> : null}
                 {title && <Text style={[styles.title, titleStyle]}>{title}</Text>}
                 {closeButton && (
-                  <Pressable onPress={close} style={styles.closeButton} hitSlop={12}>
+                  <Pressable onPress={close} style={styles.closeButton} hitSlop={16}>
                     <Feather name="x" size={20} color={Colors.zinc500} />
                   </Pressable>
                 )}
@@ -252,11 +254,13 @@ const styles = StyleSheet.create({
   titleRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
     marginTop: 8,
     paddingHorizontal: Spacing.screenPx,
-    position: "relative",
     alignSelf: "stretch",
+  },
+  titleSpacer: {
+    width: 28,
+    height: 28,
   },
   title: {
     ...Typography.bodySemiBold,
@@ -265,9 +269,10 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   closeButton: {
-    position: "absolute",
-    right: 0,
-    padding: 4,
+    width: 28,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
   },
   content: {
     flex: 1,
