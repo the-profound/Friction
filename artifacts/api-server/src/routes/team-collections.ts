@@ -312,19 +312,41 @@ router.get("/team-collections/:id/articles", async (req, res) => {
     )
     .where(eq(teamCollectionArticlesTable.teamCollectionId, teamCollectionId));
 
+  // Deduplicate rows by teamCollectionArticle.id.
+  // inboxTable has no unique constraint on (articleId, recipientId), so a LEFT JOIN
+  // can produce multiple rows for the same team_collection_article.id if the same
+  // article was delivered more than once to the requester. Keep the row with the
+  // earliest requesterVisibleAt so visibility is not accidentally delayed.
+  const rowsById = new Map<string, (typeof rows)[0]>();
+  for (const r of rows) {
+    const existing = rowsById.get(r.id);
+    if (!existing) {
+      rowsById.set(r.id, r);
+    } else {
+      const existingTs = existing.requesterVisibleAt
+        ? new Date(String(existing.requesterVisibleAt)).getTime()
+        : Infinity;
+      const newTs = r.requesterVisibleAt
+        ? new Date(String(r.requesterVisibleAt)).getTime()
+        : Infinity;
+      if (newTs < existingTs) rowsById.set(r.id, r);
+    }
+  }
+  const dedupedRows = Array.from(rowsById.values());
+
   // Build sets for O(1) lookups
   // ALL article IDs in this collection (including soft-deleted placeholders)
-  const allCollectionArticleIds = new Set(rows.map((r) => r.articleId));
+  const allCollectionArticleIds = new Set(dedupedRows.map((r) => r.articleId));
 
   // Article IDs that have at least one live reply in this collection
   const replyParentIds = new Set<string>();
-  for (const r of rows) {
+  for (const r of dedupedRows) {
     if (r.deletedAt == null && r.article?.sourceArticleId) {
       replyParentIds.add(r.article.sourceArticleId);
     }
   }
 
-  const visible = rows.filter((r) => {
+  const visible = dedupedRows.filter((r) => {
     if (r.deletedAt != null) {
       // Soft-deleted: only include as placeholder if it still has live replies
       return replyParentIds.has(r.articleId);
