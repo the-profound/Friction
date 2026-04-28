@@ -7,11 +7,18 @@ import {
   BackHandler,
   Alert,
   Platform,
-  PanResponder,
-  Animated,
   useWindowDimensions,
   type LayoutChangeEvent,
 } from "react-native";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  runOnJS,
+  Easing,
+} from "react-native-reanimated";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams, Stack } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -363,30 +370,18 @@ export default function ReadScreen() {
     reading.prevPage();
   }, [canNavigate, showingCover, hasCover, currentPage, reading]);
 
-  const SWIPE_MIN_DISTANCE = 40;
-  const SWIPE_MIN_RATIO = 1.5;
-
   const handleSwipeLeftRef = useRef(handleSwipeLeft);
   const handleSwipeRightRef = useRef(handleSwipeRight);
   useEffect(() => { handleSwipeLeftRef.current = handleSwipeLeft; }, [handleSwipeLeft]);
   useEffect(() => { handleSwipeRightRef.current = handleSwipeRight; }, [handleSwipeRight]);
 
-  const setMemoSheetVisibleRef = useRef(setMemoSheetVisible);
-
   const isTextSelectingRef = useRef(false);
 
-  const outX = useRef(new Animated.Value(0)).current;
-  const inX = useRef(new Animated.Value(0)).current;
-  // Separate transform for the outgoing page during commit animation.
-  // Decoupling this from `outX` (which drives the single-view transform)
-  // prevents a one-frame flash of the previous page over the new one when
-  // the dual-view → single-view transition happens after the animation.
-  const commitOutX = useRef(new Animated.Value(0)).current;
-  // Opacity for the outgoing page: fades from 1→0 as it exits, eliminating
-  // any ghost-text flash on the first frame of the dual-view transition.
-  const commitOutOpacity = useRef(new Animated.Value(1)).current;
-  const [isCommitting, setIsCommitting] = useState(false);
-  const isCommittingRef = useRef(false);
+  // ── Reanimated shared values ──────────────────────────────────────────────
+  // Single translateX drives the 3-slot pre-rendered row (prev | current | next).
+  // All animation runs on the UI thread; no JS-bridge latency.
+  const translateXSV = useSharedValue(0);
+
   const containerWidthRef = useRef(layout.containerWidth);
   useEffect(() => { containerWidthRef.current = layout.containerWidth; }, [layout.containerWidth]);
   const canNavigateRef = useRef(canNavigate);
@@ -399,114 +394,138 @@ export default function ReadScreen() {
   useEffect(() => { isOnLastPageRef.current = isOnLastPage; }, [isOnLastPage]);
   const hasCoverRef = useRef(hasCover);
   useEffect(() => { hasCoverRef.current = hasCover; }, [hasCover]);
-  const outgoingPageRef = useRef<{ page: number; showingCover: boolean }>({ page: 0, showingCover: false });
 
-  const swipePanResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) => {
-        if (isTextSelectingRef.current) return false;
-        if (isCommittingRef.current) return false;
-        const absDx = Math.abs(g.dx);
-        const absDy = Math.abs(g.dy);
-        const isHorizontalSwipe = absDx > absDy * SWIPE_MIN_RATIO && absDx > SWIPE_MIN_DISTANCE / 2;
-        const isUpwardSwipe = g.dy < -20 && absDy > absDx;
-        return isHorizontalSwipe || isUpwardSwipe;
-      },
-      onMoveShouldSetPanResponderCapture: (_, g) => {
-        if (isTextSelectingRef.current) return false;
-        if (isCommittingRef.current) return false;
-        const absDx = Math.abs(g.dx);
-        const absDy = Math.abs(g.dy);
-        const isHorizontalSwipe = absDx > absDy * SWIPE_MIN_RATIO && absDx > SWIPE_MIN_DISTANCE / 2;
-        const isUpwardSwipe = g.dy < -20 && absDy > absDx;
-        return isHorizontalSwipe || isUpwardSwipe;
-      },
-      onPanResponderMove: (_, g) => {
-        if (!isCommittingRef.current) {
-          const swipingLeftOnLastPage = isOnLastPageRef.current && g.dx < 0;
-          const swipingRightAtNoCoverStart = !hasCoverRef.current && currentPageRef.current <= 1 && g.dx > 0;
-          if (!swipingLeftOnLastPage && !swipingRightAtNoCoverStart) {
-            outX.setValue(g.dx);
-          }
-        }
-      },
-      onPanResponderRelease: (_, g) => {
-        if (isCommittingRef.current) return;
-        const dx = g.dx;
-        const dy = g.dy;
-        const absDx = Math.abs(dx);
-        const absDy = Math.abs(dy);
+  // Animated style for the row container
+  const rowAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateXSV.value }],
+  }));
 
-        // 위로 스와이프: 수직 우세, dy < -40 → 메모 바텀시트 열기
-        if (dy < -40 && absDy > absDx) {
-          setMemoSheetVisibleRef.current(true);
-          return;
-        }
+  // After a page turn completes and React re-renders with the new currentPage,
+  // snap the row back to center before the next paint (Fabric: synchronous via JSI).
+  useLayoutEffect(() => {
+    translateXSV.value = 0;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, showingCover]);
 
-        const width = containerWidthRef.current || 300;
-        const swipeDir = dx < 0 ? -1 : 1; // -1 = left swipe (next), +1 = right swipe (prev)
+  // ── Gesture state ref (always fresh, avoids stale closure in useMemo) ────
+  const gestureState = useRef({
+    canNavigate: false,
+    isOnLastPage: false,
+    atBoundaryLeft: true,
+    containerWidth: 300,
+    isTextSelecting: false,
+    isCommitting: false,
+  });
+  gestureState.current = {
+    canNavigate,
+    isOnLastPage,
+    atBoundaryLeft: showingCover || currentPage === 0 || (!hasCover && currentPage <= 1),
+    containerWidth: layout.containerWidth,
+    isTextSelecting: isTextSelectingRef.current,
+    isCommitting: false, // updated inline
+  };
+  const isCommittingRef = useRef(false);
 
-        const swipingBack = swipeDir === 1;
-        const isAtBoundary = swipingBack
-          ? (showingCoverRef.current || currentPageRef.current === 0 || (!hasCoverRef.current && currentPageRef.current <= 1))
-          : false;
+  // Callbacks invoked via runOnJS after UI-thread animation completes
+  const finishPageTurnRef = useRef((_direction: -1 | 1) => {});
+  const openMemoRef = useRef(() => {});
+  useEffect(() => {
+    finishPageTurnRef.current = (direction: -1 | 1) => {
+      isCommittingRef.current = false;
+      if (direction === -1) handleSwipeLeftRef.current();
+      else handleSwipeRightRef.current();
+      // translateXSV resets in useLayoutEffect after currentPage changes
+    };
+  }, []);
+  useEffect(() => {
+    openMemoRef.current = () => setMemoSheetVisible(true);
+  }, [setMemoSheetVisible]);
 
-        if (!canNavigateRef.current || absDx < SWIPE_MIN_DISTANCE || isAtBoundary) {
-          Animated.spring(outX, {
-            toValue: 0,
-            tension: 120,
-            friction: 14,
-            useNativeDriver: true,
-          }).start();
-          return;
-        }
+  const snapConfig = { damping: 18, stiffness: 280, mass: 0.8 };
 
-        // 마지막 페이지에서 왼쪽 스와이프: 슬라이드 애니메이션 없이 바텀시트만 표시
-        if (isOnLastPageRef.current && swipeDir === -1) {
-          handleSwipeLeftRef.current();
-          return;
-        }
+  // Gesture.Pan runs on JS thread (runOnJS:true) for gesture recognition,
+  // but withTiming / withSpring animate purely on the UI thread.
+  const panGesture = useMemo(() => Gesture.Pan()
+    .minDistance(8)
+    .runOnJS(true)
+    .onBegin(() => {
+      // nothing
+    })
+    .onUpdate((e) => {
+      const gs = gestureState.current;
+      if (gs.isTextSelecting || isCommittingRef.current) return;
 
-        isCommittingRef.current = true;
-        outgoingPageRef.current = { page: currentPageRef.current, showingCover: showingCoverRef.current };
-        // Outgoing page (dual-view): set invisible and position at dx.
-        // Opacity 0 prevents ghost-text on the first dual-view frame.
-        commitOutX.setValue(dx);
-        commitOutOpacity.setValue(0);
+      const dx = e.translationX;
+      const dy = e.translationY;
+      // Only track horizontal movement for page sliding
+      if (Math.abs(dy) > Math.abs(dx) * 1.8) return;
 
-        // Move the single-view page off-screen in the swipe direction so it
-        // appears to continue past the edge rather than bouncing back to
-        // center. This avoids the one-frame snap that caused the bounce when
-        // we previously reset outX to 0 before setIsCommitting(true) re-rendered.
-        outX.setValue(swipeDir * width);
+      if (dx < 0 && gs.isOnLastPage) return;  // no next on last page
+      if (dx > 0 && gs.atBoundaryLeft) return; // no prev at start
 
-        // Incoming page starts off-screen on the opposite side.
-        inX.setValue(-swipeDir * width);
+      translateXSV.value = dx;
+    })
+    .onEnd((e) => {
+      if (isCommittingRef.current) return;
 
-        if (swipeDir === -1) {
-          handleSwipeLeftRef.current();
-        } else {
-          handleSwipeRightRef.current();
-        }
-        setIsCommitting(true);
+      const gs = gestureState.current;
+      const dx = e.translationX;
+      const dy = e.translationY;
+      const absDx = Math.abs(dx);
+      const W = gs.containerWidth || 300;
 
-        Animated.spring(inX, {
-          toValue: 0,
-          tension: 120,
-          friction: 18,
-          useNativeDriver: true,
-        }).start(() => {
-          // Reset the single-view position to center BEFORE switching back
-          // to single view, so the new page is already centered when the
-          // dual → single transition re-render fires.
-          outX.setValue(0);
-          isCommittingRef.current = false;
-          setIsCommitting(false);
-        });
-      },
-      onPanResponderTerminationRequest: () => false,
-    }),
-  ).current;
+      // Upward swipe → open memo sheet
+      if (dy < -50 && Math.abs(dy) > absDx * 1.5) {
+        translateXSV.value = withSpring(0, snapConfig);
+        runOnJS(openMemoRef.current)();
+        return;
+      }
+
+      if (!gs.canNavigate) {
+        translateXSV.value = withSpring(0, snapConfig);
+        return;
+      }
+
+      const goingNext = dx < 0;
+
+      // Boundary checks
+      if (goingNext && gs.isOnLastPage) {
+        translateXSV.value = withSpring(0, snapConfig);
+        // Trigger completion (no swipe animation needed)
+        runOnJS(handleSwipeLeftRef.current)();
+        return;
+      }
+      if (!goingNext && gs.atBoundaryLeft) {
+        translateXSV.value = withSpring(0, snapConfig);
+        return;
+      }
+
+      const THRESHOLD = W * 0.22;
+      const VELOCITY_THRESHOLD = 450;
+      const shouldCommit = absDx > THRESHOLD || Math.abs(e.velocityX) > VELOCITY_THRESHOLD;
+
+      if (!shouldCommit) {
+        translateXSV.value = withSpring(0, snapConfig);
+        return;
+      }
+
+      const direction: -1 | 1 = goingNext ? -1 : 1;
+      isCommittingRef.current = true;
+
+      // Animate the row to the committed position, then update React state
+      translateXSV.value = withTiming(direction * W, {
+        duration: 240,
+        easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
+      }, () => {
+        runOnJS(finishPageTurnRef.current)(direction);
+      });
+    })
+    .onFinalize(() => {
+      // If gesture is cancelled externally, snap back
+      if (!isCommittingRef.current) {
+        translateXSV.value = withSpring(0, snapConfig);
+      }
+    }), []);
 
   const isCollectionsReady = !collectionsQuery.isLoading && !collectionsQuery.isError;
 
@@ -777,142 +796,156 @@ Alert.alert("완료", "보관함에 저장됐어요");
       )}
 
       {totalPages > 0 ? (
-        <View
-          style={[styles.pageListContainer, Platform.OS === "web" ? { touchAction: "none" } as object : undefined]}
-          onLayout={handlePageListLayout}
-          {...swipePanResponder.panHandlers}
-        >
+        <GestureDetector gesture={panGesture}>
           <View
-            style={[
-              styles.readerFrame,
-              {
-                width: layout.frameWidth,
-                height: layout.frameHeight,
-                backgroundColor: ReaderTokens.bodyBg,
-              },
-            ]}
+            style={[styles.pageListContainer, Platform.OS === "web" ? { touchAction: "none" } as object : undefined]}
+            onLayout={handlePageListLayout}
           >
-            {/* Scale-transform wrapper: keeps text metrics at storedLayoutWidth while
-                fitting visually within the recipient's available viewport */}
-            <View style={{
-              position: "absolute",
-              left: (layout.frameWidth - layout.containerWidth) / 2,
-              top: (layout.frameHeight - layout.containerHeight) / 2,
-              width: layout.containerWidth,
-              height: layout.containerHeight,
-              transform: [{ scale: layout.scaleFactor }],
-            }}>
-            {isCommitting ? (
-              <>
-                <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ translateX: commitOutX }], opacity: commitOutOpacity }]}>
-                  {outgoingPageRef.current.showingCover ? (
-                    <CoverPage
-                      cover={cover}
-                      title={article?.title ?? ""}
-                      authorName={authorName}
-                      containerWidth={layout.containerWidth}
-                      containerHeight={layout.containerHeight}
-                    />
-                  ) : (
-                    <>
-                      <PageView
-                        content={contentPages[Math.max(0, outgoingPageRef.current.page - 1)] ?? ""}
-                        pageIndex={Math.max(0, outgoingPageRef.current.page - 1)}
-                        onCollectSentence={handleCollectSentence}
-                        onMemoSentence={handleMemoSentence}
-                        onSelectionStateChange={(isSelecting) => { isTextSelectingRef.current = isSelecting; }}
-                        bottomInset={insets.bottom}
-                        layout={layout}
-                        clearSignal={clearSelectionSignal}
+            <View
+              style={[
+                styles.readerFrame,
+                {
+                  width: layout.frameWidth,
+                  height: layout.frameHeight,
+                  backgroundColor: ReaderTokens.bodyBg,
+                },
+              ]}
+            >
+              {/* Scale-transform wrapper */}
+              <View style={{
+                position: "absolute",
+                left: (layout.frameWidth - layout.containerWidth) / 2,
+                top: (layout.frameHeight - layout.containerHeight) / 2,
+                width: layout.containerWidth,
+                height: layout.containerHeight,
+                transform: [{ scale: layout.scaleFactor }],
+                overflow: "hidden",
+              }}>
+                {/* 3-slot pre-rendered row: [prev | current | next]
+                    Row starts at left:-containerWidth so "current" sits at screen-x=0.
+                    translateXSV slides the entire row; useLayoutEffect resets to 0
+                    after each page change (Fabric JSI = synchronous, no flash). */}
+                <Animated.View style={[{
+                  position: "absolute",
+                  top: 0,
+                  left: -layout.containerWidth,
+                  width: layout.containerWidth * 3,
+                  height: layout.containerHeight,
+                  flexDirection: "row",
+                }, rowAnimStyle]}>
+
+                  {/* ── PREV SLOT ─────────────────────────────────────── */}
+                  <View style={{ width: layout.containerWidth, height: layout.containerHeight }}>
+                    {(() => {
+                      const canGoBack = !showingCover && !(currentPage <= 1 && !hasCover);
+                      if (!canGoBack) return null;
+                      if (currentPage === 1 && hasCover) {
+                        // prev of first content page = cover
+                        return (
+                          <CoverPage
+                            cover={cover}
+                            title={article?.title ?? ""}
+                            authorName={authorName}
+                            containerWidth={layout.containerWidth}
+                            containerHeight={layout.containerHeight}
+                          />
+                        );
+                      }
+                      const prevIdx = contentPageIndex - 1;
+                      if (prevIdx < 0 || !contentPages[prevIdx]) return null;
+                      return (
+                        <PageView
+                          content={contentPages[prevIdx]}
+                          pageIndex={prevIdx}
+                          onCollectSentence={handleCollectSentence}
+                          onMemoSentence={handleMemoSentence}
+                          onSelectionStateChange={(isSelecting) => { isTextSelectingRef.current = isSelecting; }}
+                          bottomInset={insets.bottom}
+                          layout={layout}
+                          clearSignal={clearSelectionSignal}
+                        />
+                      );
+                    })()}
+                  </View>
+
+                  {/* ── CURRENT SLOT ──────────────────────────────────── */}
+                  <View style={{ width: layout.containerWidth, height: layout.containerHeight }}>
+                    {showingCover ? (
+                      <CoverPage
+                        cover={cover}
+                        title={article?.title ?? ""}
+                        authorName={authorName}
+                        containerWidth={layout.containerWidth}
+                        containerHeight={layout.containerHeight}
                       />
-                      {outgoingPageRef.current.page > 0 && article && (
-                        <View style={styles.titleBar}>
-                          <Text style={dynamicStyles.articleTitle} numberOfLines={1}>{article.title}</Text>
-                          {mode === "re_read" && (
-                            <View style={styles.modeBadge}>
-                              <Text style={dynamicStyles.modeBadgeText}>다시읽기</Text>
-                            </View>
-                          )}
-                        </View>
-                      )}
-                    </>
-                  )}
-                </Animated.View>
-                <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ translateX: inX }] }]}>
-                  {showingCover ? (
-                    <CoverPage
-                      cover={cover}
-                      title={article?.title ?? ""}
-                      authorName={authorName}
-                      containerWidth={layout.containerWidth}
-                      containerHeight={layout.containerHeight}
-                    />
-                  ) : (
-                    <>
-                      <PageView
-                        content={currentPageContent}
-                        pageIndex={contentPageIndex}
-                        onCollectSentence={handleCollectSentence}
-                        onMemoSentence={handleMemoSentence}
-                        onSelectionStateChange={(isSelecting) => { isTextSelectingRef.current = isSelecting; }}
-                        bottomInset={insets.bottom}
-                        layout={layout}
-                        clearSignal={clearSelectionSignal}
-                      />
-                      {!isOnCoverPage && article && (
-                        <View style={styles.titleBar}>
-                          <Text style={dynamicStyles.articleTitle} numberOfLines={1}>{article.title}</Text>
-                          {mode === "re_read" && (
-                            <View style={styles.modeBadge}>
-                              <Text style={dynamicStyles.modeBadgeText}>다시읽기</Text>
-                            </View>
-                          )}
-                        </View>
-                      )}
-                    </>
-                  )}
-                </Animated.View>
-              </>
-            ) : (
-              <Animated.View style={{ flex: 1, transform: [{ translateX: outX }] }}>
-                {showingCover ? (
-                  <CoverPage
-                    cover={cover}
-                    title={article?.title ?? ""}
-                    authorName={authorName}
-                    containerWidth={layout.containerWidth}
-                    containerHeight={layout.containerHeight}
-                  />
-                ) : (
-                  <>
-                    <PageView
-                      content={currentPageContent}
-                      pageIndex={contentPageIndex}
-                      onCollectSentence={handleCollectSentence}
-                      onMemoSentence={handleMemoSentence}
-                      onSelectionStateChange={(isSelecting) => { isTextSelectingRef.current = isSelecting; }}
-                      bottomInset={insets.bottom}
-                      layout={layout}
-                      clearSignal={clearSelectionSignal}
-                    />
-                    {!isOnCoverPage && article && (
-                      <View style={styles.titleBar}>
-                        <Text style={dynamicStyles.articleTitle} numberOfLines={1}>{article.title}</Text>
-                        {mode === "re_read" && (
-                          <View style={styles.modeBadge}>
-                            <Text style={dynamicStyles.modeBadgeText}>다시읽기</Text>
+                    ) : (
+                      <>
+                        <PageView
+                          content={currentPageContent}
+                          pageIndex={contentPageIndex}
+                          onCollectSentence={handleCollectSentence}
+                          onMemoSentence={handleMemoSentence}
+                          onSelectionStateChange={(isSelecting) => { isTextSelectingRef.current = isSelecting; }}
+                          bottomInset={insets.bottom}
+                          layout={layout}
+                          clearSignal={clearSelectionSignal}
+                        />
+                        {!isOnCoverPage && article && (
+                          <View style={styles.titleBar}>
+                            <Text style={dynamicStyles.articleTitle} numberOfLines={1}>{article.title}</Text>
+                            {mode === "re_read" && (
+                              <View style={styles.modeBadge}>
+                                <Text style={dynamicStyles.modeBadgeText}>다시읽기</Text>
+                              </View>
+                            )}
                           </View>
                         )}
-                      </View>
+                      </>
                     )}
-                  </>
-                )}
-              </Animated.View>
-            )}
+                  </View>
+
+                  {/* ── NEXT SLOT ─────────────────────────────────────── */}
+                  <View style={{ width: layout.containerWidth, height: layout.containerHeight }}>
+                    {(() => {
+                      if (isOnLastPage) return null;
+                      if (showingCover) {
+                        // next of cover = first content page
+                        if (!contentPages[0]) return null;
+                        return (
+                          <PageView
+                            content={contentPages[0]}
+                            pageIndex={0}
+                            onCollectSentence={handleCollectSentence}
+                            onMemoSentence={handleMemoSentence}
+                            onSelectionStateChange={(isSelecting) => { isTextSelectingRef.current = isSelecting; }}
+                            bottomInset={insets.bottom}
+                            layout={layout}
+                            clearSignal={clearSelectionSignal}
+                          />
+                        );
+                      }
+                      const nextIdx = contentPageIndex + 1;
+                      if (nextIdx >= contentPages.length) return null;
+                      return (
+                        <PageView
+                          content={contentPages[nextIdx]}
+                          pageIndex={nextIdx}
+                          onCollectSentence={handleCollectSentence}
+                          onMemoSentence={handleMemoSentence}
+                          onSelectionStateChange={(isSelecting) => { isTextSelectingRef.current = isSelecting; }}
+                          bottomInset={insets.bottom}
+                          layout={layout}
+                          clearSignal={clearSelectionSignal}
+                        />
+                      );
+                    })()}
+                  </View>
+
+                </Animated.View>
+              </View>
             </View>
           </View>
-
-        </View>
+        </GestureDetector>
       ) : (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyTitle}>페이지가 없습니다</Text>
@@ -1117,7 +1150,7 @@ interface ReaderLayout {
   titleLetterSpacing: number;
 }
 
-function PageView({
+const PageView = React.memo(function PageView({
   content,
   pageIndex,
   onCollectSentence,
@@ -1181,7 +1214,7 @@ function PageView({
       </View>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {
