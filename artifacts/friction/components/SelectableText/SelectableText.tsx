@@ -254,6 +254,9 @@ function SelectableTextWeb({ text, onCollect, onMemo, onSelectionStateChange, fo
                 <Text style={styles.collectButtonText}>메모</Text>
               </Pressable>
             )}
+            <Pressable style={styles.cancelButton} onPress={exitSelectMode} hitSlop={8}>
+              <Feather name="x" size={16} color={Colors.zinc400} />
+            </Pressable>
           </View>
         </View>
       )}
@@ -322,6 +325,16 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
     }
   }, [selection, onMemo]);
 
+  const handleCancel = useCallback(() => {
+    setShowCollectButton(false);
+    setSelection({ start: 0, end: 0 });
+    if (isSelectingRef.current) {
+      isSelectingRef.current = false;
+      onSelectionStateChangeRef.current?.(false);
+    }
+    textInputRef.current?.blur();
+  }, []);
+
   const inputStyle = [
     styles.textInput,
     fontSize != null && { fontSize },
@@ -341,6 +354,9 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
           <Text style={styles.collectButtonText}>메모</Text>
         </Pressable>
       )}
+      <Pressable style={styles.cancelButton} onPress={handleCancel} hitSlop={8}>
+        <Feather name="x" size={16} color={Colors.zinc400} />
+      </Pressable>
     </View>
   );
 
@@ -468,5 +484,12 @@ const styles = StyleSheet.create({
     fontFamily: ReaderTokens.fontFamily.sansSemiBold,
     color: Colors.white,
     fontWeight: "600",
+  },
+  cancelButton: {
+    width: 28,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 4,
   },
 });
