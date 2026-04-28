@@ -578,7 +578,7 @@ const styles = StyleSheet.create({
     width: CARD_W,
   },
   emptyContainer: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: Spacing.screenPx,

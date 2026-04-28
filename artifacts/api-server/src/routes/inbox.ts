@@ -67,6 +67,7 @@ router.get("/inbox", async (req, res) => {
       eq(inboxTable.recipientId, recipientId),
       lte(inboxTable.visibleAt, new Date()),
       ne(inboxTable.senderId, inboxTable.recipientId),
+      eq(inboxTable.isRead, false),
     ))
     .orderBy(inboxTable.visibleAt);
 
