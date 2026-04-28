@@ -678,6 +678,11 @@ Alert.alert("완료", "보관함에 저장됐어요");
           fontFamily: ReaderTokens.fontFamily.sansSemiBold,
           color: Colors.zinc600,
         },
+        completionButtonTertiaryText: {
+          fontSize: layout.bodyFontSize * 0.9,
+          fontFamily: ReaderTokens.fontFamily.sans,
+          color: Colors.zinc400,
+        },
         sentencePreview: {
           fontSize: layout.bodyFontSize,
           fontFamily: ReaderTokens.fontFamily.serif,
@@ -937,7 +942,7 @@ Alert.alert("완료", "보관함에 저장됐어요");
             setCompletionSheetVisible(false);
           }
         }}
-        snapPoints={mode === "re_read" ? [0.28] : [0.42]}
+        snapPoints={mode === "re_read" ? [0.28] : [0.5]}
         enableDragDown={mode === "re_read"}
         dismissable={true}
       >
@@ -990,33 +995,32 @@ Alert.alert("완료", "보관함에 저장됐어요");
                 </Text>
               </Pressable>
 
-              <View style={styles.completionSecondaryRow}>
-                <Pressable
-                  style={[styles.completionButton, styles.completionButtonSecondary, styles.completionButtonReread]}
-                  onPress={() => {
-                    setCompletionSheetVisible(false);
-                    reading.restartReading();
-                  }}
-                >
-                  <Text style={dynamicStyles.completionButtonSecondaryText}>다시 읽기</Text>
-                </Pressable>
-                <Pressable
-                  style={[
-                    styles.completionButton,
-                    styles.completionButtonSecondary,
-                    !isListEntry && styles.completionButtonDelete,
-                    isDeleting && styles.completionButtonDisabled,
-                  ]}
-                  onPress={handleCommitAndSkip}
-                  disabled={isDeleting}
-                >
-                  <Text style={dynamicStyles.completionButtonSecondaryText}>
-                    {isDeleting
-                      ? (isListEntry ? "처리 중..." : "삭제 중...")
-                      : (isListEntry ? "보관 안 함" : "삭제하기")}
-                  </Text>
-                </Pressable>
-              </View>
+              <Pressable
+                style={[
+                  styles.completionButton,
+                  styles.completionButtonSecondary,
+                  !isListEntry && styles.completionButtonDelete,
+                  isDeleting && styles.completionButtonDisabled,
+                ]}
+                onPress={handleCommitAndSkip}
+                disabled={isDeleting}
+              >
+                <Text style={dynamicStyles.completionButtonSecondaryText}>
+                  {isDeleting
+                    ? (isListEntry ? "처리 중..." : "삭제 중...")
+                    : (isListEntry ? "보관 안 함" : "삭제하기")}
+                </Text>
+              </Pressable>
+
+              <Pressable
+                style={styles.completionButtonTertiary}
+                onPress={() => {
+                  setCompletionSheetVisible(false);
+                  reading.restartReading();
+                }}
+              >
+                <Text style={dynamicStyles.completionButtonTertiaryText}>다시 읽기</Text>
+              </Pressable>
             </>
           )}
         </View>
@@ -1302,16 +1306,14 @@ const styles = StyleSheet.create({
     fontFamily: "Pretendard",
     color: Colors.zinc700,
   },
-  completionSecondaryRow: {
-    flexDirection: "row",
-    gap: 8,
+  completionButtonTertiary: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 6,
     width: "100%",
   },
-  completionButtonReread: {
-    flex: 7,
-  },
   completionButtonDelete: {
-    flex: 3,
+    backgroundColor: "#fef2f2",
   },
   coverPageContainer: {
     flex: 1,
