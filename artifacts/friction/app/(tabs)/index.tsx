@@ -460,6 +460,7 @@ Alert.alert("완료", "수신함에서 삭제되었습니다.");
         </View>
       ) : groups.length === 0 ? (
         <ScrollView
+          style={{ flex: 1 }}
           contentContainerStyle={styles.emptyContainer}
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={refetch} />
