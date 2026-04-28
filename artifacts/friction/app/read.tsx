@@ -112,6 +112,10 @@ function computeReaderLayout(availableWidth: number, availableHeight: number, ov
     bodyFontSize,
   );
 
+  // Reserve space for the title bar overlay at the bottom of the page
+  // Formula: paddingTop(8) + captionFontSize * iOS line height factor(~1.3) + paddingBottom(12)
+  const titleBarHeight = Math.round(20 + captionFontSize * 1.3);
+
   return {
     containerWidth,
     containerHeight,
@@ -129,6 +133,7 @@ function computeReaderLayout(availableWidth: number, availableHeight: number, ov
     bodyLetterSpacing,
     titleLineHeight,
     titleLetterSpacing,
+    titleBarHeight,
   };
 }
 
@@ -856,23 +861,16 @@ Alert.alert("완료", "보관함에 저장됐어요");
                       const prevIdx = contentPageIndex - 1;
                       if (prevIdx < 0 || !contentPages[prevIdx]) return null;
                       return (
-                        <>
-                          <PageView
-                            content={contentPages[prevIdx]}
-                            pageIndex={prevIdx}
-                            onCollectSentence={handleCollectSentence}
-                            onMemoSentence={handleMemoSentence}
-                            onSelectionStateChange={(isSelecting) => { isTextSelectingRef.current = isSelecting; }}
-                            bottomInset={insets.bottom}
-                            layout={layout}
-                            clearSignal={clearSelectionSignal}
-                          />
-                          {showTitleBar && (
-                            <View style={[styles.titleBar, { opacity: 0 }]} pointerEvents="none">
-                              <Text style={dynamicStyles.articleTitle} numberOfLines={1}>{article!.title}</Text>
-                            </View>
-                          )}
-                        </>
+                        <PageView
+                          content={contentPages[prevIdx]}
+                          pageIndex={prevIdx}
+                          onCollectSentence={handleCollectSentence}
+                          onMemoSentence={handleMemoSentence}
+                          onSelectionStateChange={(isSelecting) => { isTextSelectingRef.current = isSelecting; }}
+                          bottomInset={insets.bottom}
+                          layout={layout}
+                          clearSignal={clearSelectionSignal}
+                        />
                       );
                     })()}
                   </View>
@@ -888,28 +886,16 @@ Alert.alert("완료", "보관함에 저장됐어요");
                         containerHeight={layout.containerHeight}
                       />
                     ) : (
-                      <>
-                        <PageView
-                          content={currentPageContent}
-                          pageIndex={contentPageIndex}
-                          onCollectSentence={handleCollectSentence}
-                          onMemoSentence={handleMemoSentence}
-                          onSelectionStateChange={(isSelecting) => { isTextSelectingRef.current = isSelecting; }}
-                          bottomInset={insets.bottom}
-                          layout={layout}
-                          clearSignal={clearSelectionSignal}
-                        />
-                        {!isOnCoverPage && article && (
-                          <View style={styles.titleBar}>
-                            <Text style={dynamicStyles.articleTitle} numberOfLines={1}>{article.title}</Text>
-                            {mode === "re_read" && (
-                              <View style={styles.modeBadge}>
-                                <Text style={dynamicStyles.modeBadgeText}>다시읽기</Text>
-                              </View>
-                            )}
-                          </View>
-                        )}
-                      </>
+                      <PageView
+                        content={currentPageContent}
+                        pageIndex={contentPageIndex}
+                        onCollectSentence={handleCollectSentence}
+                        onMemoSentence={handleMemoSentence}
+                        onSelectionStateChange={(isSelecting) => { isTextSelectingRef.current = isSelecting; }}
+                        bottomInset={insets.bottom}
+                        layout={layout}
+                        clearSignal={clearSelectionSignal}
+                      />
                     )}
                   </View>
 
@@ -918,7 +904,7 @@ Alert.alert("완료", "보관함에 저장됐어요");
                     {(() => {
                       if (isOnLastPage) return null;
                       if (showingCover) {
-                        // next of cover = first content page (showTitleBar is false here)
+                        // next of cover = first content page
                         if (!contentPages[0]) return null;
                         return (
                           <PageView
@@ -936,28 +922,35 @@ Alert.alert("완료", "보관함에 저장됐어요");
                       const nextIdx = contentPageIndex + 1;
                       if (nextIdx >= contentPages.length) return null;
                       return (
-                        <>
-                          <PageView
-                            content={contentPages[nextIdx]}
-                            pageIndex={nextIdx}
-                            onCollectSentence={handleCollectSentence}
-                            onMemoSentence={handleMemoSentence}
-                            onSelectionStateChange={(isSelecting) => { isTextSelectingRef.current = isSelecting; }}
-                            bottomInset={insets.bottom}
-                            layout={layout}
-                            clearSignal={clearSelectionSignal}
-                          />
-                          {showTitleBar && (
-                            <View style={[styles.titleBar, { opacity: 0 }]} pointerEvents="none">
-                              <Text style={dynamicStyles.articleTitle} numberOfLines={1}>{article!.title}</Text>
-                            </View>
-                          )}
-                        </>
+                        <PageView
+                          content={contentPages[nextIdx]}
+                          pageIndex={nextIdx}
+                          onCollectSentence={handleCollectSentence}
+                          onMemoSentence={handleMemoSentence}
+                          onSelectionStateChange={(isSelecting) => { isTextSelectingRef.current = isSelecting; }}
+                          bottomInset={insets.bottom}
+                          layout={layout}
+                          clearSignal={clearSelectionSignal}
+                        />
                       );
                     })()}
                   </View>
 
                 </Animated.View>
+
+                {/* Title bar: fixed overlay at bottom of scale wrapper.
+                    Lives OUTSIDE the 3-slot animated row so it never causes
+                    layout shifts when article data loads or page changes. */}
+                {showTitleBar && (
+                  <View style={[styles.titleBar, { position: "absolute", bottom: 0, left: 0, right: 0 }]} pointerEvents="none">
+                    <Text style={dynamicStyles.articleTitle} numberOfLines={1}>{article!.title}</Text>
+                    {mode === "re_read" && (
+                      <View style={styles.modeBadge}>
+                        <Text style={dynamicStyles.modeBadgeText}>다시읽기</Text>
+                      </View>
+                    )}
+                  </View>
+                )}
               </View>
             </View>
           </View>
@@ -1164,6 +1157,7 @@ interface ReaderLayout {
   bodyLetterSpacing: number;
   titleLineHeight: number;
   titleLetterSpacing: number;
+  titleBarHeight: number;
 }
 
 const PageView = React.memo(function PageView({
@@ -1199,7 +1193,8 @@ const PageView = React.memo(function PageView({
           justifyContent: "center" as const,
           paddingHorizontal: layout.paddingX,
           paddingTop: layout.paddingY,
-          paddingBottom: bottomInset + layout.paddingY,
+          // Reserve space below text for the absolute-positioned title bar overlay
+          paddingBottom: bottomInset + layout.paddingY + layout.titleBarHeight,
         },
         blockWrapper: {
           marginBottom: layout.bodyLineHeight * 0.6,
