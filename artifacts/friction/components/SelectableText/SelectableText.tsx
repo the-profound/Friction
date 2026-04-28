@@ -267,6 +267,8 @@ function SelectableTextWeb({ text, onCollect, onMemo, onSelectionStateChange, fo
 function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange, fontSize, lineHeight, letterSpacing, children, clearSignal }: SelectableTextProps) {
   const [selection, setSelection] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
   const [showCollectButton, setShowCollectButton] = useState(false);
+  // When true, pass {start:0,end:0} as controlled selection to force iOS to clear handles
+  const [forceClearSelection, setForceClearSelection] = useState(false);
   const textRef = useRef(text);
   textRef.current = text;
   const isSelectingRef = useRef(false);
@@ -274,6 +276,13 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
   onSelectionStateChangeRef.current = onSelectionStateChange;
   const textInputRef = useRef<TextInput>(null);
   const prevClearSignalRef = useRef(clearSignal);
+
+  const clearNativeSelection = useCallback(() => {
+    setForceClearSelection(true);
+    textInputRef.current?.blur();
+    // Reset controlled prop after one frame so normal selection works again
+    setTimeout(() => setForceClearSelection(false), 100);
+  }, []);
 
   useEffect(() => {
     if (clearSignal === prevClearSignalRef.current) return;
@@ -284,8 +293,8 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
       isSelectingRef.current = false;
       onSelectionStateChangeRef.current?.(false);
     }
-    textInputRef.current?.blur();
-  }, [clearSignal]);
+    clearNativeSelection();
+  }, [clearSignal, clearNativeSelection]);
 
   const handleSelectionChange = useCallback(
     (e: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => {
@@ -332,8 +341,8 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
       isSelectingRef.current = false;
       onSelectionStateChangeRef.current?.(false);
     }
-    textInputRef.current?.blur();
-  }, []);
+    clearNativeSelection();
+  }, [clearNativeSelection]);
 
   const inputStyle = [
     styles.textInput,
@@ -354,6 +363,7 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
           <Text style={styles.collectButtonText}>메모</Text>
         </Pressable>
       )}
+      <View style={{ flex: 1 }} />
       <Pressable style={styles.cancelButton} onPress={handleCancel} hitSlop={8}>
         <Feather name="x" size={16} color={Colors.zinc400} />
       </Pressable>
@@ -373,7 +383,7 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
             editable={false}
             scrollEnabled={false}
             onSelectionChange={handleSelectionChange}
-            selection={undefined}
+            selection={forceClearSelection ? { start: 0, end: 0 } : undefined}
             selectTextOnFocus={false}
           />
         </View>
@@ -392,7 +402,7 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
         editable={false}
         scrollEnabled={false}
         onSelectionChange={handleSelectionChange}
-        selection={undefined}
+        selection={forceClearSelection ? { start: 0, end: 0 } : undefined}
         selectTextOnFocus={false}
       />
       {showCollectButton && collectBar}

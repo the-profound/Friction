@@ -339,6 +339,8 @@ export default function ReadScreen() {
       (!articleCover.textColor || articleCover.textColor === Colors.zinc900)
     );
   const showingCover = hasCover && !coverDismissed && currentPage === 0;
+  // Whether the current slot shows the title bar at the bottom
+  const showTitleBar = !isOnCoverPage && !showingCover && !!article;
 
   useEffect(() => {
     if (currentPage === 0 && hasCover) {
@@ -854,16 +856,23 @@ Alert.alert("완료", "보관함에 저장됐어요");
                       const prevIdx = contentPageIndex - 1;
                       if (prevIdx < 0 || !contentPages[prevIdx]) return null;
                       return (
-                        <PageView
-                          content={contentPages[prevIdx]}
-                          pageIndex={prevIdx}
-                          onCollectSentence={handleCollectSentence}
-                          onMemoSentence={handleMemoSentence}
-                          onSelectionStateChange={(isSelecting) => { isTextSelectingRef.current = isSelecting; }}
-                          bottomInset={insets.bottom}
-                          layout={layout}
-                          clearSignal={clearSelectionSignal}
-                        />
+                        <>
+                          <PageView
+                            content={contentPages[prevIdx]}
+                            pageIndex={prevIdx}
+                            onCollectSentence={handleCollectSentence}
+                            onMemoSentence={handleMemoSentence}
+                            onSelectionStateChange={(isSelecting) => { isTextSelectingRef.current = isSelecting; }}
+                            bottomInset={insets.bottom}
+                            layout={layout}
+                            clearSignal={clearSelectionSignal}
+                          />
+                          {showTitleBar && (
+                            <View style={[styles.titleBar, { opacity: 0 }]} pointerEvents="none">
+                              <Text style={dynamicStyles.articleTitle} numberOfLines={1}>{article!.title}</Text>
+                            </View>
+                          )}
+                        </>
                       );
                     })()}
                   </View>
@@ -909,7 +918,7 @@ Alert.alert("완료", "보관함에 저장됐어요");
                     {(() => {
                       if (isOnLastPage) return null;
                       if (showingCover) {
-                        // next of cover = first content page
+                        // next of cover = first content page (showTitleBar is false here)
                         if (!contentPages[0]) return null;
                         return (
                           <PageView
@@ -927,16 +936,23 @@ Alert.alert("완료", "보관함에 저장됐어요");
                       const nextIdx = contentPageIndex + 1;
                       if (nextIdx >= contentPages.length) return null;
                       return (
-                        <PageView
-                          content={contentPages[nextIdx]}
-                          pageIndex={nextIdx}
-                          onCollectSentence={handleCollectSentence}
-                          onMemoSentence={handleMemoSentence}
-                          onSelectionStateChange={(isSelecting) => { isTextSelectingRef.current = isSelecting; }}
-                          bottomInset={insets.bottom}
-                          layout={layout}
-                          clearSignal={clearSelectionSignal}
-                        />
+                        <>
+                          <PageView
+                            content={contentPages[nextIdx]}
+                            pageIndex={nextIdx}
+                            onCollectSentence={handleCollectSentence}
+                            onMemoSentence={handleMemoSentence}
+                            onSelectionStateChange={(isSelecting) => { isTextSelectingRef.current = isSelecting; }}
+                            bottomInset={insets.bottom}
+                            layout={layout}
+                            clearSignal={clearSelectionSignal}
+                          />
+                          {showTitleBar && (
+                            <View style={[styles.titleBar, { opacity: 0 }]} pointerEvents="none">
+                              <Text style={dynamicStyles.articleTitle} numberOfLines={1}>{article!.title}</Text>
+                            </View>
+                          )}
+                        </>
                       );
                     })()}
                   </View>
