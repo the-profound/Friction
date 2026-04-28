@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useImperativeHandle, forwardRef, useEffect } from "react";
-import { StyleSheet, Platform, Keyboard } from "react-native";
+import { View, StyleSheet, Platform, Keyboard } from "react-native";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { getEditorHtml, EDITOR_CONFIG_VERSION } from "./editorHtml";
 import type {
@@ -23,6 +23,8 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       onTitleChange,
       onError,
       onKeyboardVisibilityChange,
+      sourceArticleSlotText,
+      onSourceArticleSlotTap,
     },
     ref,
   ) {
@@ -98,12 +100,15 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
               Keyboard.dismiss();
               break;
             }
+            case "onSourceArticleSlotTap":
+              onSourceArticleSlotTap?.();
+              break;
           }
         } catch {
           onError?.({ code: "MESSAGE_PARSE_FAIL", message: "Failed to parse WebView message" });
         }
       },
-      [flushQueue, onReady, onChange, onExportMarkdown, onTitleChange, onError, onKeyboardVisibilityChange],
+      [flushQueue, onReady, onChange, onExportMarkdown, onTitleChange, onError, onKeyboardVisibilityChange, onSourceArticleSlotTap],
     );
 
     useEffect(() => {
@@ -112,38 +117,44 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       }
     }, [editable, sendCommand]);
 
+    useEffect(() => {
+      sendCommand({ type: "setSourceArticleSlot", text: sourceArticleSlotText ?? "" });
+    }, [sourceArticleSlotText, sendCommand]);
+
     const html = getEditorHtml();
 
     return (
-      <WebView
-        ref={webViewRef}
-        source={{ html }}
-        style={styles.webView}
-        onMessage={handleMessage}
-        onLoad={() => {
-          readyRef.current = true;
-          sendCommand({
-            type: "init",
-            payload: { initialMarkdown, editorConfigVersion, placeholder, titleValue },
-          });
-          flushQueue();
-        }}
-        onError={(e) => {
-          onError?.({ code: "WEBVIEW_LOAD_FAIL", message: e.nativeEvent.description || "WebView load failed" });
-        }}
-        originWhitelist={["*"]}
-        javaScriptEnabled
-        domStorageEnabled={false}
-        allowFileAccess={false}
-        allowUniversalAccessFromFileURLs={false}
-        mediaPlaybackRequiresUserAction
-        scrollEnabled
-        bounces={false}
-        keyboardDisplayRequiresUserAction={false}
-        hideKeyboardAccessoryView={Platform.OS === "ios"}
-        showsVerticalScrollIndicator={false}
-        contentMode="mobile"
-      />
+      <View style={styles.container}>
+        <WebView
+          ref={webViewRef}
+          source={{ html }}
+          style={styles.webView}
+          onMessage={handleMessage}
+          onLoad={() => {
+            readyRef.current = true;
+            sendCommand({
+              type: "init",
+              payload: { initialMarkdown, editorConfigVersion, placeholder, titleValue },
+            });
+            flushQueue();
+          }}
+          onError={(e) => {
+            onError?.({ code: "WEBVIEW_LOAD_FAIL", message: e.nativeEvent.description || "WebView load failed" });
+          }}
+          originWhitelist={["*"]}
+          javaScriptEnabled
+          domStorageEnabled={false}
+          allowFileAccess={false}
+          allowUniversalAccessFromFileURLs={false}
+          mediaPlaybackRequiresUserAction
+          scrollEnabled
+          bounces={false}
+          keyboardDisplayRequiresUserAction={false}
+          hideKeyboardAccessoryView={Platform.OS === "ios"}
+          showsVerticalScrollIndicator={false}
+          contentMode="mobile"
+        />
+      </View>
     );
   },
 );
@@ -151,6 +162,9 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
 export default WebViewMarkdownEditor;
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   webView: {
     flex: 1,
     backgroundColor: "transparent",

@@ -130,6 +130,8 @@ export interface UpdateArticleBody {
   layoutWidth?: number | null;
   style?: UpdateArticleBodyStyle;
   cover?: ArticleCover | null;
+  /** ID of the source article this draft is a reply to. Set to null to unlink. */
+  sourceArticleId?: string | null;
 }
 
 export type TransitionArticleBodyTargetStatus =
@@ -506,6 +508,10 @@ export interface SendArticleBody {
 export type ListArticlesParams = {
   authorId?: string;
   status?: ListArticlesStatus;
+  /**
+   * Filter articles by title keyword (case-insensitive substring match)
+   */
+  titleQuery?: string;
 };
 
 export type ListArticlesStatus =
@@ -525,6 +531,10 @@ export type GetOrCreateReadingMemoParams = {
 
 export type ListInboxParams = {
   recipientId: string;
+  /**
+   * Filter inbox items by article title keyword (case-insensitive substring match)
+   */
+  titleQuery?: string;
 };
 
 export type ListMyCollectionsParams = {

@@ -8,4 +8,8 @@
 
 export type ListInboxParams = {
   recipientId: string;
+  /**
+   * Filter inbox items by article title keyword (case-insensitive substring match)
+   */
+  titleQuery?: string;
 };

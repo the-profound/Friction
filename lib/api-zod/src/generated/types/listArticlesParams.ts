@@ -10,4 +10,8 @@ import type { ListArticlesStatus } from "./listArticlesStatus";
 export type ListArticlesParams = {
   authorId?: string;
   status?: ListArticlesStatus;
+  /**
+   * Filter articles by title keyword (case-insensitive substring match)
+   */
+  titleQuery?: string;
 };

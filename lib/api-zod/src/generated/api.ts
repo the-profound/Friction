@@ -120,6 +120,12 @@ export const UpdateUserRecentCollectionResponse = zod.object({
 export const ListArticlesQueryParams = zod.object({
   authorId: zod.coerce.string().uuid().optional(),
   status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]).optional(),
+  titleQuery: zod.coerce
+    .string()
+    .optional()
+    .describe(
+      "Filter articles by title keyword (case-insensitive substring match)",
+    ),
 });
 
 export const ListArticlesResponseItem = zod.object({
@@ -329,6 +335,13 @@ export const UpdateArticleBody = zod.object({
     })
     .nullish()
     .describe("Article cover display settings. null means default cover."),
+  sourceArticleId: zod
+    .string()
+    .uuid()
+    .nullish()
+    .describe(
+      "ID of the source article this draft is a reply to. Set to null to unlink.",
+    ),
 });
 
 export const UpdateArticleResponse = zod.object({
@@ -454,6 +467,12 @@ export const TransitionArticleStatusResponse = zod.object({
  */
 export const ListInboxQueryParams = zod.object({
   recipientId: zod.coerce.string().uuid(),
+  titleQuery: zod.coerce
+    .string()
+    .optional()
+    .describe(
+      "Filter inbox items by article title keyword (case-insensitive substring match)",
+    ),
 });
 
 export const ListInboxResponseItem = zod.object({

@@ -17,12 +17,15 @@ import {
   TransitionArticleBodyTargetStatus,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useUser } from "@/contexts/UserContext";
+import SourceArticlePickerSheet from "@/components/SourceArticlePickerSheet/SourceArticlePickerSheet";
 
 export default function DraftScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { userId } = useUser();
 
   const articleQuery = useGetArticle(id ?? "");
   const article = id ? articleQuery.data : undefined;
@@ -46,6 +49,20 @@ export default function DraftScreen() {
     requestId: string;
   } | null>(null);
 
+  const [sourceArticleId, setSourceArticleId] = useState<string | null>(null);
+  const [sourceArticleTitle, setSourceArticleTitle] = useState<string | null>(null);
+  const [pickerVisible, setPickerVisible] = useState(false);
+
+  const sourceArticleQuery = useGetArticle(sourceArticleId ?? "", {
+    query: { enabled: !!sourceArticleId },
+  });
+
+  useEffect(() => {
+    if (sourceArticleQuery.data) {
+      setSourceArticleTitle(sourceArticleQuery.data.title || null);
+    }
+  }, [sourceArticleQuery.data]);
+
   useEffect(() => {
     if (article && !initializedRef.current) {
       initializedRef.current = true;
@@ -59,6 +76,9 @@ export default function DraftScreen() {
       if (editorReady) {
         editorRef.current?.setMarkdown(c);
         editorRef.current?.setTitle(t);
+      }
+      if (article.sourceArticleId) {
+        setSourceArticleId(article.sourceArticleId);
       }
     }
   }, [article, editorReady]);
@@ -145,6 +165,39 @@ export default function DraftScreen() {
     },
     [markDirty],
   );
+
+  const handleSourceArticleSelect = useCallback(
+    async (articleId: string, articleTitle: string) => {
+      if (!id) return;
+      try {
+        await updateArticle.mutateAsync({
+          id,
+          data: { sourceArticleId: articleId },
+        });
+        setSourceArticleId(articleId);
+        setSourceArticleTitle(articleTitle);
+        queryClient.invalidateQueries({ queryKey: [`/api/articles/${id}`] });
+      } catch {
+        Alert.alert("오류", "원글 연결에 실패했습니다.");
+      }
+    },
+    [id, updateArticle, queryClient],
+  );
+
+  const handleSourceArticleUnlink = useCallback(async () => {
+    if (!id) return;
+    try {
+      await updateArticle.mutateAsync({
+        id,
+        data: { sourceArticleId: null },
+      });
+      setSourceArticleId(null);
+      setSourceArticleTitle(null);
+      queryClient.invalidateQueries({ queryKey: [`/api/articles/${id}`] });
+    } catch {
+      Alert.alert("오류", "원글 연결 해제에 실패했습니다.");
+    }
+  }, [id, updateArticle, queryClient]);
 
   const handleNext = useCallback(async () => {
     const content = await getEditorContent();
@@ -249,6 +302,7 @@ Alert.alert("오류", "저장에 실패했습니다. 내용을 확인해주세�
           </Pressable>
         )}
       </View>
+
       <KeyboardAvoidingView
         style={styles.editor}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -265,12 +319,44 @@ Alert.alert("오류", "저장에 실패했습니다. 내용을 확인해주세�
             onExportMarkdown={handleExportMarkdown}
             onTitleChange={handleTitleChange}
             onKeyboardVisibilityChange={setKeyboardVisible}
+            belowTitleSlot={
+              <Pressable
+                style={styles.sourceArticleRow}
+                onPress={() => setPickerVisible(true)}
+                hitSlop={4}
+              >
+                <Text style={styles.sourceArticleText} numberOfLines={1}>
+                  {sourceArticleId
+                    ? `⤷ ${sourceArticleTitle ?? "로딩 중..."} 의 답장`
+                    : "⤷ 이 글을 답장으로 설정"}
+                </Text>
+                <Text style={styles.sourceArticleGear}>⚙️</Text>
+              </Pressable>
+            }
+            sourceArticleSlotText={
+              sourceArticleId
+                ? `⤷ ${sourceArticleTitle ?? "로딩 중..."} 의 답장 ⚙️`
+                : "⤷ 이 글을 답장으로 설정 ⚙️"
+            }
+            onSourceArticleSlotTap={() => setPickerVisible(true)}
           />
         </View>
         <View style={styles.editorFooter}>
           <Text style={styles.charCountText}>{charCount}자</Text>
         </View>
       </KeyboardAvoidingView>
+
+      {userId && (
+        <SourceArticlePickerSheet
+          visible={pickerVisible}
+          onClose={() => setPickerVisible(false)}
+          userId={userId}
+          currentSourceArticleId={sourceArticleId}
+          currentSourceArticleTitle={sourceArticleTitle}
+          onSelect={handleSourceArticleSelect}
+          onUnlink={handleSourceArticleUnlink}
+        />
+      )}
     </View>
   );
 }
@@ -301,6 +387,22 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 15,
     color: Colors.zinc900,
+  },
+  sourceArticleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: Spacing.screenPx,
+    paddingBottom: 8,
+    gap: 4,
+  },
+  sourceArticleText: {
+    flex: 1,
+    fontSize: 13,
+    color: Colors.zinc400,
+    fontFamily: "Pretendard",
+  },
+  sourceArticleGear: {
+    fontSize: 13,
   },
   editor: {
     flex: 1,

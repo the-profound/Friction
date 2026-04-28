@@ -17,4 +17,6 @@ export interface UpdateArticleBody {
   layoutWidth?: number | null;
   style?: UpdateArticleBodyStyle;
   cover?: ArticleCover | null;
+  /** ID of the source article this draft is a reply to. Set to null to unlink. */
+  sourceArticleId?: string | null;
 }

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, lte, ne, sql } from "drizzle-orm";
+import { and, eq, ilike, lte, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db, inboxTable, articlesTable, usersTable, userArticleReadsTable } from "@workspace/db";
 
@@ -29,10 +29,20 @@ const collectionNameSubquery = sql<string | null>`(
 )`;
 
 router.get("/inbox", async (req, res) => {
-  const { recipientId } = req.query;
+  const { recipientId, titleQuery } = req.query;
   if (!recipientId || typeof recipientId !== "string") {
     res.status(400).json({ error: "recipientId is required" });
     return;
+  }
+
+  const whereConditions = [
+    eq(inboxTable.recipientId, recipientId),
+    lte(inboxTable.visibleAt, new Date()),
+    ne(inboxTable.senderId, inboxTable.recipientId),
+    eq(inboxTable.isRead, false),
+  ];
+  if (titleQuery && typeof titleQuery === "string") {
+    whereConditions.push(ilike(articlesTable.title, `%${titleQuery}%`));
   }
 
   const items = await db
@@ -63,12 +73,7 @@ router.get("/inbox", async (req, res) => {
         eq(userArticleReadsTable.userId, inboxTable.recipientId),
       ),
     )
-    .where(and(
-      eq(inboxTable.recipientId, recipientId),
-      lte(inboxTable.visibleAt, new Date()),
-      ne(inboxTable.senderId, inboxTable.recipientId),
-      eq(inboxTable.isRead, false),
-    ))
+    .where(and(...whereConditions))
     .orderBy(inboxTable.visibleAt);
 
   res.json(items);

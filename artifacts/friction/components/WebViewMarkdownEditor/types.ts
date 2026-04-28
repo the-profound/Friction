@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 export interface EditorInitPayload {
   initialMarkdown: string;
   editorConfigVersion: string;
@@ -10,7 +12,8 @@ export type RNToWebViewCommand =
   | { type: "setMarkdown"; markdown: string }
   | { type: "setTitle"; title: string }
   | { type: "requestExportMarkdown"; requestId: string }
-  | { type: "setEditable"; isEditable: boolean };
+  | { type: "setEditable"; isEditable: boolean }
+  | { type: "setSourceArticleSlot"; text: string };
 
 export interface OnChangePayload {
   isDirty: boolean;
@@ -37,7 +40,8 @@ export type WebViewToRNEvent =
   | { type: "onError"; payload: OnErrorPayload }
   | { type: "onKeyboardShow" }
   | { type: "onKeyboardHide" }
-  | { type: "onSwipeDownToDismiss" };
+  | { type: "onSwipeDownToDismiss" }
+  | { type: "onSourceArticleSlotTap" };
 
 export interface WebViewMarkdownEditorRef {
   setMarkdown: (markdown: string) => void;
@@ -59,4 +63,7 @@ export interface WebViewMarkdownEditorProps {
   onTitleChange?: (title: string) => void;
   onError?: (payload: OnErrorPayload) => void;
   onKeyboardVisibilityChange?: (visible: boolean) => void;
+  belowTitleSlot?: ReactNode;
+  sourceArticleSlotText?: string | null;
+  onSourceArticleSlotTap?: () => void;
 }

@@ -51,6 +51,7 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
       onExportMarkdown,
       onTitleChange,
       onError,
+      belowTitleSlot,
     },
     ref,
   ) {
@@ -165,6 +166,7 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
             readOnly={!editable}
           />
         )}
+        {belowTitleSlot}
         <EditorContent editor={editor} style={editorContentStyle} />
       </div>
     );

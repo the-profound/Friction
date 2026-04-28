@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq } from "drizzle-orm";
+import { and, eq, ilike, ne } from "drizzle-orm";
 import { db, articlesTable, type ArticleStatus } from "@workspace/db";
 import { CreateArticleBody, UpdateArticleBody, TransitionArticleStatusBody, GetOrCreateReadingMemoQueryParams } from "@workspace/api-zod";
 import { ObjectStorageService } from "../lib/objectStorage";
@@ -75,10 +75,11 @@ router.get("/articles/reading-memo", async (req, res) => {
 });
 
 router.get("/articles", async (req, res) => {
-  const { authorId, status } = req.query;
+  const { authorId, status, titleQuery } = req.query;
   const conditions = [];
   if (authorId) conditions.push(eq(articlesTable.authorId, authorId as string));
   if (status) conditions.push(eq(articlesTable.status, status as ArticleStatus));
+  if (titleQuery) conditions.push(ilike(articlesTable.title, `%${titleQuery as string}%`));
 
   const articles = conditions.length > 0
     ? await db.select().from(articlesTable).where(and(...conditions))
@@ -135,13 +136,30 @@ router.patch("/articles/:id", async (req, res) => {
   if (parsed.data.layoutWidth !== undefined) updates.layoutWidth = parsed.data.layoutWidth;
   if (parsed.data.style !== undefined) updates.style = parsed.data.style;
   if (parsed.data.cover !== undefined) updates.cover = parsed.data.cover;
+  if ("sourceArticleId" in parsed.data) updates.sourceArticleId = parsed.data.sourceArticleId;
 
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No fields to update" });
     return;
   }
 
-  const [article] = await db.update(articlesTable).set(updates).where(eq(articlesTable.id, req.params.id)).returning();
+  const newSourceArticleId = updates.sourceArticleId as string | null | undefined;
+  const article = await db.transaction(async (tx) => {
+    if (newSourceArticleId) {
+      await tx
+        .update(articlesTable)
+        .set({ sourceArticleId: null })
+        .where(
+          and(
+            eq(articlesTable.authorId, existing.authorId),
+            eq(articlesTable.sourceArticleId, newSourceArticleId),
+            ne(articlesTable.id, req.params.id),
+          ),
+        );
+    }
+    const [updated] = await tx.update(articlesTable).set(updates).where(eq(articlesTable.id, req.params.id)).returning();
+    return updated;
+  });
   res.json(article);
 });
 

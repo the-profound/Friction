@@ -207,6 +207,11 @@ paths:
           schema:
             type: string
             enum: [DRAFT, DIVIDING, CLOSING, LETTER]
+        - name: titleQuery
+          in: query
+          schema:
+            type: string
+          description: Filter articles by title keyword (case-insensitive substring match)
       responses:
         "200":
           description: Article list
@@ -395,6 +400,11 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: titleQuery
+          in: query
+          schema:
+            type: string
+          description: Filter inbox items by article title keyword (case-insensitive substring match)
       responses:
         "200":
           description: Inbox items
@@ -1692,6 +1702,11 @@ components:
         cover:
           $ref: "#/components/schemas/ArticleCover"
           nullable: true
+        sourceArticleId:
+          type: string
+          format: uuid
+          nullable: true
+          description: ID of the source article this draft is a reply to. Set to null to unlink.
 
     ArticleCover:
       type: object
