@@ -258,7 +258,7 @@ export function NeighborsInline({
   const renderNeighborItem = ({ item }: { item: NeighborWithUser }) => (
     <Pressable style={styles.neighborItem} onPress={() => handleNeighborPress(item)}>
       <View style={styles.avatarCircle}>
-        <Text style={styles.avatarText}>{(item.user?.nickname ?? "?")[0]}</Text>
+        <Feather name="user" size={18} color={Colors.zinc500} />
       </View>
       <View style={styles.neighborInfo}>
         <Text style={styles.neighborName}>{item.user?.nickname ?? "이름 없음"}</Text>
@@ -280,7 +280,7 @@ export function NeighborsInline({
   const renderRequestItem = ({ item }: { item: NeighborRequestWithUser }) => (
     <View style={styles.requestItem}>
       <View style={styles.avatarCircle}>
-        <Text style={styles.avatarText}>{(item.requester?.nickname ?? "?")[0]}</Text>
+        <Feather name="user" size={18} color={Colors.zinc500} />
       </View>
       <View style={styles.neighborInfo}>
         <Text style={styles.neighborName}>{item.requester?.nickname ?? "알 수 없음"}</Text>
@@ -316,7 +316,7 @@ export function NeighborsInline({
   const renderSentRequestItem = ({ item }: { item: NeighborRequestWithUser }) => (
     <View style={styles.requestItem}>
       <View style={styles.avatarCircle}>
-        <Text style={styles.avatarText}>{(item.recipient?.nickname ?? "?")[0]}</Text>
+        <Feather name="user" size={18} color={Colors.zinc500} />
       </View>
       <View style={styles.neighborInfo}>
         <Text style={styles.neighborName}>{item.recipient?.nickname ?? "알 수 없음"}</Text>
@@ -359,7 +359,7 @@ export function NeighborsInline({
         disabled={isDisabled}
       >
         <View style={styles.avatarCircle}>
-          <Text style={styles.avatarText}>{item.nickname[0]}</Text>
+          <Feather name="user" size={18} color={Colors.zinc500} />
         </View>
         <View style={styles.neighborInfo}>
           <Text style={[styles.neighborName, isDisabled && styles.textMuted]}>{item.nickname}</Text>
@@ -653,7 +653,7 @@ export function NeighborsInline({
         {profileTarget && (
           <View style={styles.profileContent}>
             <View style={styles.profileAvatarLarge}>
-              <Text style={styles.profileAvatarLargeText}>{profileTarget.nickname[0]}</Text>
+              <Feather name="user" size={36} color={Colors.zinc500} />
             </View>
             <Text style={styles.profileName}>{profileTarget.nickname}</Text>
             <Text style={styles.profileEmail}>{profileTarget.email}</Text>

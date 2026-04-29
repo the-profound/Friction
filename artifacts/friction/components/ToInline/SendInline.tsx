@@ -489,9 +489,7 @@ export function SendInline({
                     >
                       <View style={styles.pickerNeighborRow}>
                         <View style={styles.pickerAvatar}>
-                          <Text style={styles.pickerAvatarText}>
-                            {(neighbor.user?.nickname ?? "?")[0]}
-                          </Text>
+                          <Feather name="user" size={16} color={Colors.zinc500} />
                         </View>
                         <View style={styles.pickerNeighborInfo}>
                           <Text style={styles.pickerItemTitle}>
