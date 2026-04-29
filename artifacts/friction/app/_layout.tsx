@@ -1,5 +1,7 @@
 import "react-native-url-polyfill/auto";
 import { useFonts } from "expo-font";
+import Feather from "@expo/vector-icons/Feather";
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter, usePathname, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -191,6 +193,8 @@ loadEditorFonts();
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
+    ...Feather.font,
+    ...MaterialCommunityIcons.font,
     "Pretendard-ExtraLight": require("../assets/fonts/Pretendard-ExtraLight.otf"),
     "Pretendard-SemiBold": require("../assets/fonts/Pretendard-SemiBold.otf"),
     "Pretendard-Black": require("../assets/fonts/Pretendard-Black.otf"),
