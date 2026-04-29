@@ -32,7 +32,6 @@ import {
   type DivisionWarning,
 } from "@/lib/pageDivision";
 import { parseMarkdownBlocks, type MarkdownBlockType } from "@/utils/markdownParser";
-import MarkdownBlock from "@/components/MarkdownBlock/MarkdownBlock";
 import { canTransitionForward, canStepBack } from "@/lib/articleStatusCycle";
 import type { ArticleStatus } from "@/lib/policies";
 import { MarkdownPolicy } from "@/lib/policies";
@@ -374,6 +373,29 @@ export default function DividingScreen() {
     return Array.from(set).sort((a, b) => a - b);
   }, [heightWarnings]);
   const hasOverflowPages = overflowPageIndices.length > 0;
+
+  // 오버플로 하이라이트를 에디터에 전달
+  useEffect(() => {
+    if (!editorReady || !editorRef.current) return;
+    if (overflowPageIndices.length === 0) {
+      editorRef.current.setOverflowFromBlock(null);
+      return;
+    }
+    const firstOverflowPageIdx = overflowPageIndices[0];
+    const info = pageOverflowInfo[firstOverflowPageIdx];
+    if (!info || info.overflowBlockIdx < 0) {
+      editorRef.current.setOverflowFromBlock(null);
+      return;
+    }
+
+    let offset = 0;
+    for (let i = 0; i < firstOverflowPageIdx; i++) {
+      const blocks = pageBlockMap[i] ?? [];
+      offset += blocks.length + 1; // +1 for HR page divider block
+    }
+
+    editorRef.current.setOverflowFromBlock(offset + info.overflowBlockIdx);
+  }, [editorReady, overflowPageIndices, pageOverflowInfo, pageBlockMap]);
 
   const runDivisionEngine = useCallback(
     async (paragraphs: string[]): Promise<string[] | null> => {
@@ -755,77 +777,6 @@ export default function DividingScreen() {
           })}
         </ScrollView>
 
-        {(() => {
-          const overflowEntries = measurePages
-            .map((p) => ({ page: p, info: pageOverflowInfo[p.pageIndex] }))
-            .filter((e) => e.info && e.info.overflowBlockIdx >= 0);
-          if (overflowEntries.length === 0) return null;
-          const cardW = 140;
-          const cardH = cardW / ReaderTokens.aspectRatio;
-          const previewScale = cardW / containerWidth;
-          const innerH = containerWidth / ReaderTokens.aspectRatio;
-          return (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.overflowPreviewStrip}
-              contentContainerStyle={styles.overflowPreviewStripContent}
-            >
-              {overflowEntries.map(({ page, info }) => {
-                const blocks = pageBlockMap[page.pageIndex] ?? [];
-                const overflowIdx = info.overflowBlockIdx;
-                return (
-                  <View key={`overflow-card-${page.pageIndex}`} style={styles.overflowPreviewCard}>
-                    <View style={[styles.overflowPreviewClip, { width: cardW, height: cardH }]}>
-                      <View
-                        style={{
-                          width: containerWidth,
-                          height: innerH,
-                          transform: [{ scale: previewScale }],
-                          transformOrigin: "top left",
-                        }}
-                      >
-                        <View
-                          style={{
-                            width: containerWidth,
-                            height: innerH,
-                            backgroundColor: Colors.white,
-                            paddingHorizontal: paddingX,
-                            paddingTop: paddingY,
-                            paddingBottom: paddingY + insets.bottom,
-                            overflow: "hidden",
-                          }}
-                        >
-                          {blocks.map((b, bi) => {
-                            const isOverflow = bi >= overflowIdx;
-                            return (
-                              <View
-                                key={`oc-${page.pageIndex}-b-${bi}`}
-                                style={{
-                                  marginBottom: blockGap,
-                                  backgroundColor: isOverflow ? Colors.readerOverflowBg : undefined,
-                                }}
-                              >
-                                <MarkdownBlock
-                                  block={b}
-                                  onCollect={() => {}}
-                                  fontSize={bodyFontSize}
-                                  lineHeight={bodyLineHeight}
-                                  letterSpacing={bodyLetterSpacing}
-                                />
-                              </View>
-                            );
-                          })}
-                        </View>
-                      </View>
-                    </View>
-                    <Text style={styles.overflowPreviewLabel}>{page.pageIndex + 1}쪽</Text>
-                  </View>
-                );
-              })}
-            </ScrollView>
-          );
-        })()}
 
         <PretextMeasureLayer request={warningRequest} onMeasured={handleWarningMeasured} />
         <PretextMeasureLayer request={engineRequest} onMeasured={handleEngineMeasured} />
@@ -979,36 +930,6 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
-  },
-  overflowPreviewStrip: {
-    flexGrow: 0,
-    flexShrink: 0,
-    backgroundColor: "#fef2f2",
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.zinc100,
-  },
-  overflowPreviewStripContent: {
-    paddingHorizontal: Spacing.screenPx,
-    paddingVertical: 10,
-    gap: 12,
-    alignItems: "flex-start",
-  },
-  overflowPreviewCard: {
-    alignItems: "center",
-    gap: 4,
-  },
-  overflowPreviewClip: {
-    overflow: "hidden",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#fecaca",
-    backgroundColor: Colors.white,
-  },
-  overflowPreviewLabel: {
-    ...Typography.caption,
-    fontSize: 11,
-    color: "#b91c1c",
-    fontWeight: "600",
   },
   pageStripContent: {
     paddingHorizontal: Spacing.screenPx,

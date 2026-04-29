@@ -87,10 +87,12 @@ html,body{height:100%;background:transparent}
 .ProseMirror code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#f4f4f5;padding:0.1em 0.3em;border-radius:3px;letter-spacing:0;font-size:0.9em}
 .ProseMirror pre{background:#f4f4f5;padding:0.75em 1em;border-radius:4px;overflow-x:auto;margin:0.5em 0;letter-spacing:0;text-align:left}
 .ProseMirror pre code{background:none;padding:0}
+.ProseMirror > .overflow-highlight{background:#fecaca}
+#source-article-slot{display:none;width:100%;font-size:13px;color:#a1a1aa;font-family:system-ui,-apple-system,sans-serif;padding:0 0 8px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;-webkit-tap-highlight-color:transparent}
 body{padding:16px 0 0;overflow:auto}
 `.trim();
 
-const VERSION = "3.6.0";
+const VERSION = "3.7.0";
 
 const tsContent = `export const EDITOR_CONFIG_VERSION = "${VERSION}";
 
@@ -104,6 +106,7 @@ export function getEditorHtml(): string {
 </head>
 <body>
 <textarea id="title-input" rows="1" placeholder="제목"></textarea>
+<div id="source-article-slot"></div>
 <div id="editor-content"></div>
 <script>
 ${escapedJs}

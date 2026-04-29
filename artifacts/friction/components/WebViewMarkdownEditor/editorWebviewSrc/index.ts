@@ -249,6 +249,8 @@ interface Command {
   title?: string;
   requestId?: string;
   isEditable?: boolean;
+  blockIndex?: number | null;
+  text?: string;
 }
 
 (function () {
@@ -387,6 +389,33 @@ interface Command {
           }
           break;
         }
+        case "setSourceArticleSlot": {
+          const s = document.getElementById("source-article-slot");
+          if (s) {
+            const text = cmd.text || "";
+            if (text) {
+              s.textContent = text;
+              (s as HTMLElement).style.display = "block";
+            } else {
+              (s as HTMLElement).style.display = "none";
+            }
+          }
+          break;
+        }
+        case "setOverflowFromBlock": {
+          const proseMirror = document.querySelector(".ProseMirror");
+          if (!proseMirror) break;
+          const blocks = Array.from(proseMirror.children);
+          const idx = cmd.blockIndex;
+          blocks.forEach((el, i) => {
+            if (idx !== null && idx !== undefined && i >= idx) {
+              el.classList.add("overflow-highlight");
+            } else {
+              el.classList.remove("overflow-highlight");
+            }
+          });
+          break;
+        }
       }
     } catch (e) {
       postToRN({ type: "onError", payload: { code: "COMMAND_FAIL", message: String(e) } });
@@ -401,6 +430,13 @@ interface Command {
   });
 
   window.addEventListener("load", function () {
+    const slotEl = document.getElementById("source-article-slot");
+    if (slotEl) {
+      slotEl.addEventListener("click", function () {
+        postToRN({ type: "onSourceArticleSlotTap" });
+      });
+    }
+
     titleInput = document.getElementById("title-input") as HTMLTextAreaElement | null;
     if (titleInput) {
       titleInput.addEventListener("input", function () {

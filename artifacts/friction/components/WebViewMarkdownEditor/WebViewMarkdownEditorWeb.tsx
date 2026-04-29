@@ -140,6 +140,8 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
           editor.commands.blur();
         }
       },
+      setOverflowFromBlock(_blockIndex: number | null) {
+      },
     }), [editor, requestExportMarkdown, onError]);
 
     const handleTitleInput = useCallback(

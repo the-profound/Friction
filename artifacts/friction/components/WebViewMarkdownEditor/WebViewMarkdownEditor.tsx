@@ -65,6 +65,9 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
         const js = `(function(){try{if(document.activeElement){document.activeElement.blur();}}catch(e){}})();true;`;
         webViewRef.current?.injectJavaScript(js);
       },
+      setOverflowFromBlock(blockIndex: number | null) {
+        sendCommand({ type: "setOverflowFromBlock", blockIndex });
+      },
     }), [sendCommand]);
 
     const handleMessage = useCallback(

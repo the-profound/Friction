@@ -13,7 +13,8 @@ export type RNToWebViewCommand =
   | { type: "setTitle"; title: string }
   | { type: "requestExportMarkdown"; requestId: string }
   | { type: "setEditable"; isEditable: boolean }
-  | { type: "setSourceArticleSlot"; text: string };
+  | { type: "setSourceArticleSlot"; text: string }
+  | { type: "setOverflowFromBlock"; blockIndex: number | null };
 
 export interface OnChangePayload {
   isDirty: boolean;
@@ -49,6 +50,7 @@ export interface WebViewMarkdownEditorRef {
   setEditable: (isEditable: boolean) => void;
   setTitle: (title: string) => void;
   blur: () => void;
+  setOverflowFromBlock: (blockIndex: number | null) => void;
 }
 
 export interface WebViewMarkdownEditorProps {
