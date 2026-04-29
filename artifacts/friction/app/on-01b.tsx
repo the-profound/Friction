@@ -678,7 +678,13 @@ export default function DividingScreen() {
   }, [getEditorContent, markDirty, flush, hasRedWarnings, id, router, updateArticle, transitionStatus, queryClient, containerWidth, article]);
 
   const handleBack = useCallback(async () => {
+    if (isNavigatingRef.current) return;
+    isNavigatingRef.current = true;
+    setIsNavigating(true);
+
     if (!id) {
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
       router.replace("/(tabs)/on");
       return;
     }
@@ -686,22 +692,40 @@ export default function DividingScreen() {
     markDirty(titleRef.current, cur);
     const flushResult = await flush();
     if (!flushResult.ok) {
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
       Alert.alert("오류", "저장에 실패했습니다. 다시 시도해주세요.");
       return;
     }
     queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+    isNavigatingRef.current = false;
+    setIsNavigating(false);
     router.replace("/(tabs)/on");
   }, [id, getEditorContent, markDirty, flush, router, queryClient]);
 
   const handleConfirmStepBack = useCallback(async () => {
     setStepBackConfirmVisible(false);
+    if (isNavigatingRef.current) return;
+    isNavigatingRef.current = true;
+    setIsNavigating(true);
+
     const result = canStepBack("DIVIDING");
-    if (!result.allowed) return;
-    if (!id) return;
+    if (!result.allowed) {
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
+      return;
+    }
+    if (!id) {
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
+      return;
+    }
     const cur = await getEditorContent();
     markDirty(titleRef.current, cur);
     const flushResult = await flush();
     if (!flushResult.ok) {
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
       Alert.alert("오류", "저장에 실패했습니다.");
       return;
     }
@@ -711,8 +735,12 @@ export default function DividingScreen() {
         data: { targetStatus: TransitionArticleBodyTargetStatus.DRAFT },
       });
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
       router.replace({ pathname: "/on-01a", params: { id } });
     } catch (e: unknown) {
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
       const msg = e instanceof Error ? e.message : "상태 전환에 실패했습니다.";
       Alert.alert("오류", msg);
     }

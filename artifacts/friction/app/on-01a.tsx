@@ -273,6 +273,10 @@ export default function DraftScreen() {
   }, []);
 
   const handleBack = useCallback(async () => {
+    if (isNavigatingRef.current) return;
+    isNavigatingRef.current = true;
+    setIsNavigating(true);
+
     const content = await getEditorContent();
     const currentTitle = titleRef.current.trim();
     const currentContent = content.trim();
@@ -282,10 +286,12 @@ export default function DraftScreen() {
         try {
           await deleteArticle.mutateAsync({ id });
         } catch {
-Alert.alert("오류", "빈 메모 삭제에 실패했습니다.");
+          Alert.alert("오류", "빈 메모 삭제에 실패했습니다.");
         }
         queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
       }
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
       router.back();
       return;
     }
@@ -293,9 +299,14 @@ Alert.alert("오류", "빈 메모 삭제에 실패했습니다.");
     markDirty(titleRef.current, content);
     const flushResult = await flush();
     if (!flushResult.ok) {
-Alert.alert("오류", "저장에 실패했습니다. 내용을 확인해주세요.");
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
+      Alert.alert("오류", "저장에 실패했습니다. 내용을 확인해주세요.");
+      return;
     }
     queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+    isNavigatingRef.current = false;
+    setIsNavigating(false);
     router.back();
   }, [flush, router, queryClient, getEditorContent, markDirty, id, deleteArticle]);
 

@@ -81,6 +81,7 @@ export default function ClosingScreen() {
   const [collectionPickerVisible, setCollectionPickerVisible] = useState(false);
   const [titleEditing, setTitleEditing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const isActionInProgressRef = useRef(false);
   const [previewCardWidth, setPreviewCardWidth] = useState(0);
   const storedLayoutWidth = (article?.layoutWidth != null && article.layoutWidth > 0) ? article.layoutWidth : null;
   const exportedArticleIdRef = useRef<string | null>(null);
@@ -169,6 +170,8 @@ export default function ClosingScreen() {
 
   const handleConfirmExport = useCallback(async () => {
     setConfirmVisible(false);
+    if (isActionInProgressRef.current) return;
+    isActionInProgressRef.current = true;
     if (saveCoverTimerRef.current) {
       clearTimeout(saveCoverTimerRef.current);
       saveCoverTimerRef.current = null;
@@ -187,6 +190,7 @@ export default function ClosingScreen() {
       Alert.alert("내보내기 실패", msg);
     } finally {
       setIsExporting(false);
+      isActionInProgressRef.current = false;
     }
   }, [id, title, pages, cover, updateArticle]);
 
@@ -252,16 +256,27 @@ export default function ClosingScreen() {
   );
 
   const handleBack = useCallback(async () => {
+    if (isActionInProgressRef.current) return;
+    isActionInProgressRef.current = true;
     await flushCoverSave();
     queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+    isActionInProgressRef.current = false;
     router.replace("/(tabs)/on");
   }, [router, queryClient, flushCoverSave]);
 
   const handleConfirmStepBack = useCallback(async () => {
     setStepBackConfirmVisible(false);
+    if (isActionInProgressRef.current) return;
+    isActionInProgressRef.current = true;
     const result = canStepBack("CLOSING");
-    if (!result.allowed) return;
-    if (!id) return;
+    if (!result.allowed) {
+      isActionInProgressRef.current = false;
+      return;
+    }
+    if (!id) {
+      isActionInProgressRef.current = false;
+      return;
+    }
     try {
       await flushCoverSave();
       await transitionStatus.mutateAsync({
@@ -269,8 +284,10 @@ export default function ClosingScreen() {
         data: { targetStatus: TransitionArticleBodyTargetStatus.DIVIDING },
       });
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+      isActionInProgressRef.current = false;
       router.replace({ pathname: "/on-01b", params: { id } });
     } catch (e: unknown) {
+      isActionInProgressRef.current = false;
       const msg = e instanceof Error ? e.message : "상태 전환에 실패했습니다.";
       Alert.alert("오류", msg);
     }
