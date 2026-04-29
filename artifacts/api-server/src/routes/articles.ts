@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { and, eq, ilike, ne } from "drizzle-orm";
-import { db, articlesTable, type ArticleStatus } from "@workspace/db";
+import { and, eq, exists, ilike, ne } from "drizzle-orm";
+import { db, articlesTable, myCollectionArticlesTable, type ArticleStatus } from "@workspace/db";
 import { CreateArticleBody, UpdateArticleBody, TransitionArticleStatusBody, GetOrCreateReadingMemoQueryParams } from "@workspace/api-zod";
 import { ObjectStorageService } from "../lib/objectStorage";
 
@@ -80,6 +80,17 @@ router.get("/articles", async (req, res) => {
   if (authorId) conditions.push(eq(articlesTable.authorId, authorId as string));
   if (status) conditions.push(eq(articlesTable.status, status as ArticleStatus));
   if (titleQuery) conditions.push(ilike(articlesTable.title, `%${titleQuery as string}%`));
+
+  if (status === "LETTER" && authorId) {
+    conditions.push(
+      exists(
+        db
+          .select({ id: myCollectionArticlesTable.id })
+          .from(myCollectionArticlesTable)
+          .where(eq(myCollectionArticlesTable.articleId, articlesTable.id)),
+      ),
+    );
+  }
 
   const articles = conditions.length > 0
     ? await db.select().from(articlesTable).where(and(...conditions))
