@@ -87,10 +87,16 @@ export default function SourceArticlePickerSheet({
     onClose();
   }, [onUnlink, onClose]);
 
+  const now = new Date();
   const receivedItems: InboxItem[] = inboxQuery.data
-    ? [...inboxQuery.data].sort(
-        (a, b) => new Date(b.visibleAt).getTime() - new Date(a.visibleAt).getTime(),
-      )
+    ? [...inboxQuery.data]
+        // Guard: only show items that are actually visible (visibleAt <= now).
+        // The server already applies this filter, but we re-apply client-side
+        // to protect against edge cases with cached/stale data.
+        .filter((item) => new Date(item.visibleAt) <= now)
+        .sort(
+          (a, b) => new Date(b.visibleAt).getTime() - new Date(a.visibleAt).getTime(),
+        )
     : [];
 
   const writtenItems: Article[] = myArticlesQuery.data

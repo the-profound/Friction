@@ -29,7 +29,7 @@ const collectionNameSubquery = sql<string | null>`(
 )`;
 
 router.get("/inbox", async (req, res) => {
-  const { recipientId, titleQuery } = req.query;
+  const { recipientId, titleQuery, isRead } = req.query;
   if (!recipientId || typeof recipientId !== "string") {
     res.status(400).json({ error: "recipientId is required" });
     return;
@@ -39,8 +39,14 @@ router.get("/inbox", async (req, res) => {
     eq(inboxTable.recipientId, recipientId),
     lte(inboxTable.visibleAt, new Date()),
     ne(inboxTable.senderId, inboxTable.recipientId),
-    eq(inboxTable.isRead, false),
   ];
+  // Optional isRead filter: pass isRead=false to get only unread items (inbox screen),
+  // or omit entirely to get all visible items (picker, etc.)
+  if (isRead === "false") {
+    whereConditions.push(eq(inboxTable.isRead, false));
+  } else if (isRead === "true") {
+    whereConditions.push(eq(inboxTable.isRead, true));
+  }
   if (titleQuery && typeof titleQuery === "string") {
     whereConditions.push(ilike(articlesTable.title, `%${titleQuery}%`));
   }

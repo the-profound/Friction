@@ -321,7 +321,10 @@ export default function InboxScreen() {
   // the screen is blurred or unmounted.
   const pollOpts = useFocusPollingOptions(INCOMING_FALLBACK_POLL_INTERVAL_MS);
   const { data: inboxData, isLoading, refetch, isRefetching } = useListInbox(
-    { recipientId: userId },
+    // isRead=false tells the server to return only unread items, keeping the
+    // response payload small as read letters accumulate over time.
+    // The picker (SourceArticlePickerSheet) omits this param to see all visible items.
+    { recipientId: userId, isRead: false } as Parameters<typeof useListInbox>[0],
     pollOpts,
   );
 
@@ -419,7 +422,7 @@ Alert.alert("완료", "수신함에서 삭제되었습니다.");
   const refetchInbox = refetch;
   useFocusEffect(
     useCallback(() => {
-      if (isQueryStale(queryClient, getListInboxQueryKey({ recipientId: userId }))) {
+      if (isQueryStale(queryClient, getListInboxQueryKey({ recipientId: userId, isRead: false } as Parameters<typeof getListInboxQueryKey>[0]))) {
         refetchInbox();
       }
     }, [refetchInbox, queryClient, userId]),
