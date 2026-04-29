@@ -167,6 +167,14 @@ export default function DividingScreen() {
   const handleExportMarkdown = useCallback((payload: OnExportMarkdownPayload) => {
     contentRef.current = payload.markdown;
     setContent(payload.markdown);
+
+    // 분할 화면에서는 모든 편집(분할선 추가/삭제/이동, 내용 수정) 이후
+    // 스크롤 필요 여부가 즉시 재계산돼야 하므로 디바운스를 건너뛰고
+    // debouncedContent를 항상 즉시 갱신한다.
+    // PretextMeasureLayer는 request 참조 동등성으로 중복 측정을 방지하므로
+    // 잦은 갱신에도 불필요한 remount가 발생하지 않는다.
+    setDebouncedContent(payload.markdown);
+
     if (pendingExportRef.current?.requestId === payload.requestId) {
       pendingExportRef.current.resolve(payload.markdown);
       pendingExportRef.current = null;
@@ -249,6 +257,13 @@ export default function DividingScreen() {
   }, [measurePages]);
 
   const [blockHeights, setBlockHeights] = useState<Record<string, number>>({});
+
+  // debouncedContent가 바뀔 때마다 blockHeights 캐시를 초기화해 재측정을 강제한다.
+  // applyEngineResult/handleMergeWithPrevious처럼 즉시 갱신하는 경로에서도
+  // debouncedContent가 바뀌므로 여기서 한 번 더 정리해줘도 중복 없이 안전하다.
+  useEffect(() => {
+    setBlockHeights({});
+  }, [debouncedContent]);
 
   // 블록 단위 측정 요청. 페이지 padding 없이 블록 단독 높이만 잰다.
   const warningRequest = useMemo<MeasureRequest | null>(() => {
