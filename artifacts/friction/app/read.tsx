@@ -1134,6 +1134,29 @@ Alert.alert("완료", "보관함에 저장됐어요");
             },
           );
         }}
+        onCreateAndSelect={async (name, description) => {
+          let newCol: { id: string };
+          try {
+            newCol = await createCollection.mutateAsync({
+              data: { ownerId: userId, name, description: description || undefined },
+            });
+          } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : "모음 생성에 실패했습니다.";
+            Alert.alert("생성 실패", msg);
+            return;
+          }
+          setSelectedCollectionId(newCol.id);
+          setMyCollectionsModalVisible(false);
+          queryClient.invalidateQueries({ queryKey: ["/api/my-collections"] });
+          try {
+            await updateRecentCollection.mutateAsync(
+              { id: userId, data: { collectionId: newCol.id } },
+            );
+            queryClient.invalidateQueries({ queryKey: getGetUserRecentCollectionQueryKey(userId) });
+          } catch (e) {
+            console.warn("[MyCollectionsModal] recent collection update failed (non-fatal):", e);
+          }
+        }}
         isLoading={collectionsQuery.isLoading}
       />
     </View>
