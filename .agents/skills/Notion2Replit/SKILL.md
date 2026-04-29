@@ -1,12 +1,87 @@
 ---
 name: Notion2Replit
-description: Notion Queue DB에서 작업 항목을 선택하고 SSOT Docs DB의 관련 문서를 해석하여 Replit에서 구현한 뒤 결과를 Queue 항목에 writeback하는 전체 개발 워크플로우. 사용자가 "Queue 작업을 처리해줘", "Queue에서 개발 항목 골라서 구현해줘", "Queue DB → 개발 → Notion 업데이트" 같은 요청을 할 때 사용.
+description: Planning Agent가 사용자로부터 Notion Queue 참조(requestId / pageUrl / 자동선택)를 받아 Task를 생성하는 스킬. 사용자가 "Queue 작업을 처리해줘", "Queue에서 개발 항목 골라서 구현해줘", "Queue DB → 개발 → Notion 업데이트" 같은 요청을 할 때 사용. Planning Agent는 Notion에 직접 연결하지 않고 Task만 생성하며, 실제 MCP 연결·구현·writeback은 Task Agent가 수행한다.
 ---
 
 # Queue DB → Plan → Dev → Writeback
 
 Notion Queue DB에서 작업 항목 하나를 선택하고, SSOT Docs DB에서 관련 문서를 해석하여 구현 계획을 수립한다.
 필요 시 SSOT 문서 수정을 제안·승인·반영한 뒤 코드를 구현하고, 완료 결과를 Queue 항목에 다시 기록(writeback)한다.
+
+---
+
+## A. Planning Agent 역할
+
+> **Planning Agent는 이 섹션만 읽고 수행한다. Notion MCP에 직접 연결하지 않는다.**
+
+### A-1. 언제 이 흐름을 수행하는가
+
+- 사용자가 "Queue 작업 처리해줘", "Queue에서 항목 골라서 구현해줘" 등을 요청할 때
+- Planning Agent는 Notion MCP 도구를 사용할 수 없으므로, 직접 Queue를 조회하거나 구현하지 않는다.
+- 대신 Queue 참조 정보를 담은 Task를 생성하고 종료한다. Task Agent가 나머지를 수행한다.
+
+### A-2. Queue 참조 확인
+
+사용자 메시지에서 아래 세 가지 중 하나를 파악한다.
+
+1. **requestId**: 요청 ID 숫자 (예: "42번 Queue 처리해줘")
+2. **pageUrl**: Notion 페이지 URL (예: "https://www.notion.so/... 처리해줘")
+3. **자동선택**: 명시적 지정 없이 "알아서 골라줘" 또는 Queue 참조가 없는 경우
+
+Queue 참조가 불명확하면 사용자에게 아래 중 하나를 물어본다.
+- 요청 ID 숫자
+- Notion 페이지 URL
+- 또는 "자동선택"으로 진행할지 여부
+
+### A-3. Task 생성
+
+Queue 참조를 확인한 뒤 `bulkCreateProjectTasks`로 Task를 생성하고 종료한다.
+
+생성할 Task의 제목: `[N2R] Notion Queue 처리 — <참조 요약>`
+- requestId가 있으면: `[N2R] Notion Queue 처리 — 요청 ID <n>`
+- pageUrl이 있으면: `[N2R] Notion Queue 처리 — <URL 앞 40자>`
+- 자동선택이면: `[N2R] Notion Queue 처리 — 자동선택`
+
+Task 설명은 아래 **A-4 Task 플랜 템플릿**을 그대로 사용한다. Planning Agent는 이 Task를 생성한 뒤 추가 작업 없이 종료한다.
+
+### A-4. Task 플랜 템플릿
+
+```markdown
+## Notion Queue 참조
+
+선택 방식: <requestId | pageUrl | 자동선택>
+Request ID: <숫자, 없으면 (none)>
+Page URL: <URL, 없으면 (none)>
+
+## 수행 지침
+
+Task Agent는 아래 섹션 B(Task Agent 실행 흐름)에 따라 Step 0부터 전체 워크플로우를 수행한다.
+Notion2Replit 스킬의 `## B. Task Agent 실행 흐름`을 참고한다.
+
+## Notion Writeback
+구현 완료 후 Replit2Notion 스킬의 Quick Writeback 절차에 따라 원본 Queue 페이지를 업데이트한다.
+
+Source Queue Page URL: <Task Agent가 Step 1~2에서 확정한 URL, 생성 시점에는 (none)>
+Source Queue Request ID: <Task Agent가 Step 1~2에서 확정한 ID, 생성 시점에는 (none)>
+Split: 1 of 1
+```
+
+> **참고**: `Source Queue Page URL`과 `Source Queue Request ID`는 Task Agent가 Step 1~2에서 Queue 항목을 확정한 뒤 Task 설명을 업데이트하거나 writeback 시점에 실제 값을 사용한다. Planning Agent가 생성 시점에는 `(none)`으로 채워도 된다.
+
+---
+
+## B. Task Agent 실행 흐름
+
+> **Task Agent는 이 섹션을 읽고 Step 0부터 전체 워크플로우를 수행한다.**
+
+### B-1. 진입점
+
+Task 설명의 `## Notion Queue 참조` 섹션에서 아래를 파싱한다.
+- `선택 방식`: requestId / pageUrl / 자동선택
+- `Request ID`: 숫자 또는 (none)
+- `Page URL`: URL 또는 (none)
+
+파싱한 값으로 Step 1의 Queue 항목 선택 방법(A/B/C)을 결정한 뒤 Step 0부터 순서대로 실행한다.
 
 ---
 
@@ -95,7 +170,11 @@ Notion Queue DB에서 작업 항목 하나를 선택하고, SSOT Docs DB에서 �
 
 ### Step 1: Queue 항목 선택 (pick_queue_item)
 
-우선순위: B → A → C
+Task 설명의 `## Notion Queue 참조`에서 파싱한 선택 방식에 따라 아래 중 하나를 우선 적용한다.
+- requestId 또는 pageUrl이 있으면 → C) 직접 지정으로 시작
+- 자동선택이면 → 우선순위 B → A 순으로 시도
+
+우선순위 (자동선택 시): B → A → C
 
 B) notionQueryDatabaseView (뷰 URL 시크릿이 있을 때 우선 시도)
 - NOTION_QUEUE_VIEW_URL 시크릿이 설정되어 있을 때만 실행한다.
@@ -293,6 +372,8 @@ Split: 1 of 1
 - record_via_property: 개발 기록은 text 속성 업데이트로
 
 N2R 전용 규칙
+- planning_agent_no_mcp: Planning Agent는 Notion MCP에 직접 연결하지 않는다. Queue 참조만 받아 Task를 생성하고 종료한다.
+- task_agent_full_flow: Task Agent는 Task 설명의 `## Notion Queue 참조` 섹션을 파싱해 Step 0부터 전체 흐름을 수행한다.
 - single_queue_item: 실행당 Queue 항목 1개
 - exclude_in_progress: "개발 중" 제외
 - lock_on_start: Step 9에서 즉시 락 (fetch 결과를 queue_snapshot으로 보관); 이미 "개발 중"이면 재락 생략
@@ -302,6 +383,7 @@ N2R 전용 규칙
 
 ## 변경 로그
 
+- 2026-04-29 [편집] Planning Agent / Task Agent 역할 분리: description 업데이트, `## A. Planning Agent 역할` 섹션(Queue 참조 확인·Task 생성·플랜 템플릿) 추가, `## B. Task Agent 실행 흐름` 진입점 명시, Step 1에 Task 설명 파싱 후 선택 방식 결정 로직 추가, N2R 전용 규칙에 planning_agent_no_mcp·task_agent_full_flow 추가 (Task #222)
 - 2026-04-26 [편집] Quick Writeback 원본 Queue 인식: Step 6 Writeback 템플릿에 Source Queue Page URL·Request ID·Split 표기 추가, 예시 A~D 추가, Step 9 락 동작에 "이미 개발 중이면 재락 생략" 명시, N2R 전용 규칙에 include_source_in_writeback·lock_on_start 재락 생략 추가 (Task #126)
 - 2026-04-26 [편집] 체감 속도 개선 리팩터: sequential_fetch → parallel_fetch(최대 3건 동시)/serial_writes로 대체, session_cache 컨벤션 추가, Step 1 Path B/A에 캐시 사용 명시, Step 3 SSOT 뷰 결과 캐시 명시, Step 4 병렬 fetch 허용, Step 1 Path A 후보 개별 fetch 제거(최종 선택 1건만 상세 fetch), Step 9 fetch 결과를 queue_snapshot으로 보관해 Step 10 read-before-write와 공유 (Task #119)
 - 2026-04-26 [편집] 뷰 기반 빠른 조회 도입: NOTION_QUEUE_VIEW_URL / NOTION_SSOT_VIEW_URL 시크릿 추가, Step 0 확인 키 확장, Step 1 우선순위 B→A→C로 변경, Step 3 SSOT 뷰 폴백 가이드 추가 (Task #118)
