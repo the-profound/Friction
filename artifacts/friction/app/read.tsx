@@ -340,14 +340,7 @@ export default function ReadScreen() {
     () => (article?.cover ? resolveArticleCover(article.cover) : null),
     [article?.cover],
   );
-  const hasCover =
-    articleCover !== null &&
-    articleCover.type !== "default" &&
-    !(
-      articleCover.type === "color" &&
-      !articleCover.bgColor &&
-      (!articleCover.textColor || articleCover.textColor === Colors.zinc900)
-    );
+  const hasCover = articleCover !== null && articleCover.type !== "default";
   const showingCover = hasCover && !coverDismissed && currentPage === 0;
   // Whether the current slot shows the title bar at the bottom
   const showTitleBar = !isOnCoverPage && !showingCover && !!article;
