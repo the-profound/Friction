@@ -207,6 +207,13 @@ export default function DraftScreen() {
     isNavigatingRef.current = true;
     setIsNavigating(true);
 
+    if (!titleRef.current.trim()) {
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
+      Alert.alert("알림", "제목을 입력해주세요.");
+      return;
+    }
+
     const content = await getEditorContent();
     markDirty(titleRef.current, content);
     const flushResult = await flush();
