@@ -22,6 +22,7 @@ interface UseReadingMemoReturn {
   flushSave: () => Promise<void>;
   cleanup: () => Promise<void>;
   saveState: "idle" | "saving" | "saved" | "error";
+  triggerCreate: () => void;
 }
 
 const AUTOSAVE_DEBOUNCE_MS = 1200;
@@ -33,6 +34,7 @@ export function useReadingMemo({
 }: UseReadingMemoOptions): UseReadingMemoReturn {
   const queryClient = useQueryClient();
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [memoEnabled, setMemoEnabled] = useState(false);
   const pendingContentRef = useRef<string | null>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestContentRef = useRef<string>("");
@@ -44,7 +46,7 @@ export function useReadingMemo({
     {
       query: {
         queryKey: getGetOrCreateReadingMemoQueryKey({ userId, sourceArticleId }),
-        enabled: enabled && !!userId && !!sourceArticleId,
+        enabled: enabled && memoEnabled && !!userId && !!sourceArticleId,
       },
     },
   );
@@ -188,6 +190,10 @@ export function useReadingMemo({
     }
   }, [memoArticleId, deleteArticle, queryClient, userId, sourceArticleId, saveContent]);
 
+  const triggerCreate = useCallback(() => {
+    setMemoEnabled(true);
+  }, []);
+
   return {
     memoArticleId,
     memoContent: memoQuery.data?.content ?? "",
@@ -197,5 +203,6 @@ export function useReadingMemo({
     flushSave,
     cleanup,
     saveState,
+    triggerCreate,
   };
 }

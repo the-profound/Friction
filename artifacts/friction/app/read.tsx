@@ -263,6 +263,11 @@ export default function ReadScreen() {
     enabled: !!userId && !!articleId,
   });
 
+  const handleOpenMemo = useCallback(() => {
+    readingMemo.triggerCreate();
+    setMemoSheetVisible(true);
+  }, [readingMemo]);
+
   useEffect(() => {
     if (mode === "basic" && articleId) {
       setActiveSession({ articleId, inboxId, mode });
@@ -445,8 +450,8 @@ export default function ReadScreen() {
     };
   }, []);
   useEffect(() => {
-    openMemoRef.current = () => setMemoSheetVisible(true);
-  }, [setMemoSheetVisible]);
+    openMemoRef.current = () => handleOpenMemo();
+  }, [handleOpenMemo]);
 
   const snapConfig = { damping: 18, stiffness: 280, mass: 0.8 };
 
@@ -638,8 +643,9 @@ Alert.alert("완료", "보관함에 저장됐어요");
     const title = article?.title ?? "";
     const quoteBlock = `> ${text.trim()}\n>\n> ${author}, <${title}>, ${pageNum}면`;
     setMemoAppendContent(quoteBlock);
+    readingMemo.triggerCreate();
     setMemoSheetVisible(true);
-  }, [currentPage, authorName, article?.title]);
+  }, [currentPage, authorName, article?.title, readingMemo]);
 
   const handleSaveSentence = useCallback(async () => {
     if (!selectedText) return;
@@ -966,7 +972,7 @@ Alert.alert("완료", "보관함에 저장됐어요");
           <ProgressIndicator type="linear" progress={reading.progress} size="small" />
         </View>
         <Pressable
-          onPress={() => setMemoSheetVisible(true)}
+          onPress={handleOpenMemo}
           hitSlop={16}
           style={styles.bottomMemoButton}
         >
