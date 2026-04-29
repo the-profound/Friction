@@ -8,6 +8,7 @@
     "seed": "tsx ./src/seed.ts",
     "seed-test-accounts": "tsx ./src/seed-test-accounts.ts",
     "backfill-public-users": "tsx ./src/backfill-public-users.ts",
+    "migrate-pages-format": "tsx ./src/migrate-pages-format.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
