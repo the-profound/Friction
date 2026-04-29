@@ -137,6 +137,14 @@ function computeReaderLayout(availableWidth: number, availableHeight: number, ov
   };
 }
 
+function normalizePageItem(item: unknown): string {
+  if (typeof item === 'string') return item;
+  if (item !== null && typeof item === 'object' && typeof (item as { content?: unknown }).content === 'string') {
+    return (item as { content: string }).content;
+  }
+  return '';
+}
+
 export default function ReadScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -185,7 +193,7 @@ export default function ReadScreen() {
   const contentPages: string[] = useMemo(() => {
     if (!article) return [];
     if (article.pages && Array.isArray(article.pages) && article.pages.length > 0) {
-      return article.pages;
+      return article.pages.map(normalizePageItem);
     }
     if (article.content) return [article.content];
     return [];

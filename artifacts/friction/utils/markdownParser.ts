@@ -86,6 +86,7 @@ function flattenListItems(
 }
 
 export function parseMarkdownBlocks(markdown: string): MarkdownBlockType[] {
+  if (typeof markdown !== 'string') return [];
   if (!markdown || !markdown.trim()) return [];
 
   const lexed = marked.lexer(markdown, { breaks: true, gfm: true });
