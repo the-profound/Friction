@@ -37,6 +37,7 @@ import { resolveArticleCover } from "@/utils/articleCover";
 import CoverPage from "@/components/CoverPage/CoverPage";
 import MarkdownBlock from "@/components/MarkdownBlock/MarkdownBlock";
 import { parseMarkdownBlocks } from "@/utils/markdownParser";
+import { normalizePageItem } from "@/utils/normalizePageItem";
 import { useReadingSession } from "@/lib/useReadingSession";
 import { useReadingMemo } from "@/lib/useReadingMemo";
 import { useQueryClient } from "@tanstack/react-query";
@@ -135,14 +136,6 @@ function computeReaderLayout(availableWidth: number, availableHeight: number, ov
     titleLetterSpacing,
     titleBarHeight,
   };
-}
-
-function normalizePageItem(item: unknown): string {
-  if (typeof item === 'string') return item;
-  if (item !== null && typeof item === 'object' && typeof (item as { content?: unknown }).content === 'string') {
-    return (item as { content: string }).content;
-  }
-  return '';
 }
 
 export default function ReadScreen() {
