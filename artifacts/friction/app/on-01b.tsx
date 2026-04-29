@@ -97,6 +97,9 @@ export default function DividingScreen() {
   const titleRef = useRef("");
   const contentRef = useRef("");
   const initializedRef = useRef(false);
+  // Capture mount time so we can verify fresh data (dataUpdatedAt >= mountedAt)
+  // before initializing the editor, avoiding stale-cache initialization.
+  const mountedAtRef = useRef(Date.now());
   const initialContentRef = useRef("");
   const initialTitleRef = useRef("");
   const isNavigatingRef = useRef(false);
@@ -109,8 +112,22 @@ export default function DividingScreen() {
   const [stepBackConfirmVisible, setStepBackConfirmVisible] = useState(false);
   const [splitting, setSplitting] = useState(false);
 
+  // Force a fresh fetch on mount so stale cache never initializes the editor
+  // with outdated divider positions.
   useEffect(() => {
-    if (article && !initializedRef.current) {
+    if (id) {
+      queryClient.invalidateQueries({ queryKey: [`/api/articles/${id}`] });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    // Gate initialization on data being NEWER than this component's mount time.
+    // This is more reliable than checking isFetching alone, which can be false
+    // for a brief window between mount and when invalidateQueries triggers the
+    // refetch, potentially letting stale cached data initialize the editor.
+    const isDataFresh = articleQuery.dataUpdatedAt >= mountedAtRef.current;
+    if (article && !initializedRef.current && isDataFresh) {
       initializedRef.current = true;
       const t = article.title || "";
       let c = article.content || "";
@@ -129,7 +146,7 @@ export default function DividingScreen() {
         editorRef.current?.setTitle(t);
       }
     }
-  }, [article, editorReady]);
+  }, [article, editorReady, articleQuery.dataUpdatedAt]);
 
   useEffect(() => {
     const showSub = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
@@ -483,8 +500,13 @@ export default function DividingScreen() {
         editorRef.current.setMarkdown(joined);
       }
       markDirty(titleRef.current, joined);
+      // Flush immediately after a structural change so navigating away before
+      // the debounce fires does not lose the new divider positions.
+      flush().catch((err) => {
+        console.warn("[on-01b] Immediate flush failed after structural change:", err);
+      });
     },
-    [editorReady, markDirty],
+    [editorReady, markDirty, flush],
   );
 
   // SSOT [PD] — 자동 분할 적용 범위 규칙
@@ -576,8 +598,13 @@ export default function DividingScreen() {
         editorRef.current.setMarkdown(joined);
       }
       markDirty(titleRef.current, joined);
+      // Flush immediately so the merged state is persisted before the user
+      // can navigate away within the debounce window.
+      flush().catch((err) => {
+        console.warn("[on-01b] Immediate flush failed after merge:", err);
+      });
     },
-    [getEditorContent, editorReady, markDirty],
+    [getEditorContent, editorReady, markDirty, flush],
   );
 
   const handleNext = useCallback(async () => {

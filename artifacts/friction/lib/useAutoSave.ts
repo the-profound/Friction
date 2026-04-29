@@ -51,6 +51,10 @@ export function useAutoSave({
   const savingRef = useRef(false);
   const retryCountRef = useRef(0);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Tracks dirty state synchronously so flush() called immediately after
+  // markDirty() can detect pending changes before the React state update
+  // has been applied (state updates are batched and may be delayed).
+  const isDirtyRef = useRef(false);
   const onSaveRef = useRef(onSave);
   onSaveRef.current = onSave;
   const queueKey = storageKey ? `autosave_queue_${storageKey}` : null;
@@ -71,6 +75,7 @@ export function useAutoSave({
         retryCountRef.current = 0;
         if (queueKey) persistQueue(queueKey, null);
         if (requestIdRef.current === id) {
+          isDirtyRef.current = false;
           setIsDirty(false);
           setStatus("saved");
         }
@@ -100,6 +105,7 @@ export function useAutoSave({
     loadQueue(queueKey).then((queued) => {
       if (cancelled || !queued) return;
       latestDataRef.current = queued;
+      isDirtyRef.current = true;
       setIsDirty(true);
       doSave();
     });
@@ -109,6 +115,7 @@ export function useAutoSave({
   const markDirty = useCallback(
     (title: string, content: string) => {
       latestDataRef.current = { title, content };
+      isDirtyRef.current = true;
       setIsDirty(true);
 
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
@@ -129,11 +136,13 @@ export function useAutoSave({
       retryTimerRef.current = null;
     }
     savingRef.current = false;
-    if (isDirty || status === "error") {
+    // Use isDirtyRef (updated synchronously) instead of isDirty state so that
+    // flush() called immediately after markDirty() correctly detects pending changes.
+    if (isDirtyRef.current || status === "error") {
       await doSave();
     }
     return { ok: savingRef.current === false && retryCountRef.current === 0 };
-  }, [isDirty, status, doSave]);
+  }, [status, doSave]);
 
   const retry = useCallback(async () => {
     if (status !== "error") return;
