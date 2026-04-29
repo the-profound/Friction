@@ -1,12 +1,24 @@
-export const EDITOR_CONFIG_VERSION = "3.7.0";
+export const EDITOR_CONFIG_VERSION = "3.8.0";
 
-export function getEditorHtml(): string {
+export interface EditorFontOptions {
+  regularBase64?: string | null;
+  semiBoldBase64?: string | null;
+}
+
+function buildFontFaceCSS(opts: EditorFontOptions): string {
+  const { regularBase64, semiBoldBase64 } = opts;
+  if (!regularBase64 || !semiBoldBase64) return "";
+  return `@font-face{font-family:'Eulyoo1945-Regular';src:url('data:font/woff2;base64,${regularBase64}') format('woff2');font-weight:400;font-style:normal}@font-face{font-family:'Eulyoo1945-SemiBold';src:url('data:font/woff2;base64,${semiBoldBase64}') format('woff2');font-weight:600;font-style:normal}`;
+}
+
+export function getEditorHtml(fontOptions: EditorFontOptions = {}): string {
+  const fontFaceCSS = buildFontFaceCSS(fontOptions);
   return `<!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
-<style>*{margin:0;padding:0;box-sizing:border-box}
+<style>${fontFaceCSS}*{margin:0;padding:0;box-sizing:border-box}
 html,body{height:100%;background:transparent}
 #title-input{
   display:block;

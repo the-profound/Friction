@@ -2,6 +2,7 @@ import React, { useRef, useCallback, useImperativeHandle, forwardRef, useEffect 
 import { View, StyleSheet, Platform, Keyboard } from "react-native";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { getEditorHtml, EDITOR_CONFIG_VERSION } from "./editorHtml";
+import { getEditorFonts } from "@/lib/editorFontStore";
 import type {
   WebViewMarkdownEditorProps,
   WebViewMarkdownEditorRef,
@@ -124,7 +125,8 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       sendCommand({ type: "setSourceArticleSlot", text: sourceArticleSlotText ?? "" });
     }, [sourceArticleSlotText, sendCommand]);
 
-    const html = getEditorHtml();
+    const { regularBase64, semiBoldBase64 } = getEditorFonts();
+    const html = getEditorHtml({ regularBase64, semiBoldBase64 });
 
     return (
       <View style={styles.container}>

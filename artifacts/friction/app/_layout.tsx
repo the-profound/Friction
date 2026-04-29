@@ -8,6 +8,9 @@ import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { Asset } from "expo-asset";
+import * as FileSystem from "expo-file-system";
+import { setEditorFonts } from "@/lib/editorFontStore";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import ToastContainer from "@/components/Toast/Toast";
@@ -166,6 +169,25 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 });
+
+async function loadEditorFonts(): Promise<void> {
+  try {
+    const [regularAsset, semiBoldAsset] = await Asset.loadAsync([
+      require("../assets/fonts/Eulyoo1945-Regular.woff2"),
+      require("../assets/fonts/Eulyoo1945-SemiBold.woff2"),
+    ]);
+    const regularUri = regularAsset.localUri ?? regularAsset.uri;
+    const semiBoldUri = semiBoldAsset.localUri ?? semiBoldAsset.uri;
+    const [regular, semiBold] = await Promise.all([
+      FileSystem.readAsStringAsync(regularUri, { encoding: "base64" }),
+      FileSystem.readAsStringAsync(semiBoldUri, { encoding: "base64" }),
+    ]);
+    setEditorFonts(regular, semiBold);
+  } catch {
+  }
+}
+
+loadEditorFonts();
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
