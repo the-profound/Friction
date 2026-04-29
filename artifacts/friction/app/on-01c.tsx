@@ -2,7 +2,6 @@ import React, { useState, useCallback, useEffect, useRef, useMemo } from "react"
 import {
   View,
   Text,
-  ScrollView,
   StyleSheet,
   Pressable,
   Alert,
@@ -417,11 +416,13 @@ export default function ClosingScreen() {
                     <View style={{
                       width: storedLayoutWidth,
                       height: storedLayoutWidth / ReaderTokens.aspectRatio,
-                      transform: [{ scale: previewCardWidth / storedLayoutWidth }],
+                      transform: [{ scale: Math.min(previewCardWidth / storedLayoutWidth, 1.0) }],
                       alignItems: "center",
                       justifyContent: "center",
                     }}>
-                      {/* Mirror reader structure: centered safe-area box → padded content */}
+                      {/* Mirror reader structure: centered safe-area box → padded content.
+                          Scale is capped at 1.0 so the preview never zooms in beyond the
+                          original dividing-stage dimensions — matching read.tsx behaviour. */}
                       <View style={{ width: cqiToPx(ReaderTokens.safeArea.widthCqi, storedLayoutWidth) }}>
                         <View
                           pointerEvents="none"
@@ -446,29 +447,26 @@ export default function ClosingScreen() {
                     </View>
                   </View>
                 ) : previewCardWidth > 0 ? (
-                  <ScrollView
-                    style={{ flex: 1 }}
-                    contentContainerStyle={{
+                  <View
+                    style={{
+                      flex: 1,
                       paddingHorizontal: cqiToPx(ReaderTokens.padding.xCqi, previewCardWidth),
                       paddingVertical: cqiToPx(ReaderTokens.padding.yCqi, previewCardWidth),
-                      gap: readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth) * ReaderTokens.lineHeight.relaxed * 0.5,
                     }}
-                    scrollEnabled={false}
-                    showsVerticalScrollIndicator={false}
+                    pointerEvents="none"
                   >
-                    <View pointerEvents="none">
-                      {previewBlocks.map((block, i) => (
+                    {previewBlocks.map((block, i) => (
+                      <View key={i} style={{ marginBottom: readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth) * ReaderTokens.lineHeight.relaxed * 0.6 }}>
                         <MarkdownBlock
-                          key={i}
                           block={block}
                           onCollect={() => {}}
                           fontSize={readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth)}
                           lineHeight={readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth) * ReaderTokens.lineHeight.relaxed}
                           letterSpacing={readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth) * ReaderTokens.letterSpacing.relaxedEm}
                         />
-                      ))}
-                    </View>
-                  </ScrollView>
+                      </View>
+                    ))}
+                  </View>
                 ) : null}
               </View>
             )}
