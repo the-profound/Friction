@@ -40,6 +40,7 @@ import {
   useUpdateArticle,
   useTransitionArticleStatus,
   TransitionArticleBodyTargetStatus,
+  ApiError,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
@@ -98,6 +99,8 @@ export default function DividingScreen() {
   const initializedRef = useRef(false);
   const initialContentRef = useRef("");
   const initialTitleRef = useRef("");
+  const isNavigatingRef = useRef(false);
+  const [isNavigating, setIsNavigating] = useState(false);
   const pendingExportRef = useRef<{
     resolve: (md: string) => void;
     requestId: string;
@@ -563,10 +566,16 @@ export default function DividingScreen() {
   );
 
   const handleNext = useCallback(async () => {
+    if (isNavigatingRef.current) return;
+    isNavigatingRef.current = true;
+    setIsNavigating(true);
+
     const cur = await getEditorContent();
     markDirty(titleRef.current, cur);
     const flushResult = await flush();
     if (!flushResult.ok) {
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
       Alert.alert("저장 실패", "저장이 완료되지 않았습니다. 다시 시도해주세요.");
       return;
     }
@@ -593,6 +602,8 @@ export default function DividingScreen() {
       hasRedWarnings: liveHasRedWarnings,
     });
     if (!result.allowed) {
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
       Alert.alert("전환 불가", result.reason);
       return;
     }
@@ -605,14 +616,20 @@ export default function DividingScreen() {
       });
       queryClient.setQueryData([`/api/articles/${id}`], updatedArticle);
       if (article?.status !== "CLOSING") {
-        await transitionStatus.mutateAsync({
-          id: id!,
-          data: { targetStatus: TransitionArticleBodyTargetStatus.CLOSING },
-        });
+        try {
+          await transitionStatus.mutateAsync({
+            id: id!,
+            data: { targetStatus: TransitionArticleBodyTargetStatus.CLOSING },
+          });
+        } catch (e: unknown) {
+          if (!(e instanceof ApiError && e.status === 400)) throw e;
+        }
       }
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
       router.push({ pathname: "/on-01c", params: { id } });
     } catch (e: unknown) {
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
       const msg = e instanceof Error ? e.message : "상태 전환에 실패했습니다.";
       Alert.alert("오류", msg);
     }
@@ -698,8 +715,8 @@ export default function DividingScreen() {
               <MaterialCommunityIcons name="keyboard-off-outline" size={22} color={Colors.zinc600} />
             </Pressable>
           ) : (
-            <Pressable onPress={handleNext} hitSlop={12}>
-              <Text style={styles.nextButton}>다음</Text>
+            <Pressable onPress={handleNext} hitSlop={12} disabled={isNavigating}>
+              <Text style={[styles.nextButton, isNavigating && styles.nextButtonDisabled]}>다음</Text>
             </Pressable>
           )}
         </View>
@@ -857,6 +874,9 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 15,
     color: Colors.zinc900,
+  },
+  nextButtonDisabled: {
+    color: Colors.zinc400,
   },
   toolbar: {
     flexDirection: "row",
