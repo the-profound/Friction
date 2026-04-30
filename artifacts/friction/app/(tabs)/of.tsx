@@ -437,7 +437,7 @@ export default function OfScreen() {
       onPress={() => router.push({ pathname: "/of-02-detail", params: { id: item.id } })}
     >
       <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: "#EDE9FE", alignItems: "center", justifyContent: "center" }}>
-        <Feather name="users" size={20} color="#7C3AED" />
+        <Feather name="users" size={20} color="#92323D" />
       </View>
       <Text style={styles.collectionName} numberOfLines={1}>{item.name}</Text>
       <View style={styles.collectionMeta}>
