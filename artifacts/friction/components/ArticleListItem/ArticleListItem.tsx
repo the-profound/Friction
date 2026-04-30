@@ -22,8 +22,8 @@ interface ArticleListItemProps {
 
 const STATUS_BADGE_COLORS: Record<ArticleStatus, { bg: string; text: string }> = {
   DRAFT: { bg: Colors.zinc200, text: Colors.zinc600 },
-  DIVIDING: { bg: "#92323D", text: "#000000" },
-  CLOSING: { bg: "#bf6f78", text: "#000000" },
+  DIVIDING: { bg: "#e4b4b9", text: Colors.zinc700 },
+  CLOSING: { bg: "#d17b85", text: "#333336" },
   LETTER: { bg: "#D1FAE5", text: "#059669" },
 };
 
