@@ -123,6 +123,9 @@ export function countPages(content: string): number {
  * 모든 블록이 가용 높이 안에 들어오면 -1.
  *
  * blockHeights[i] 는 i번째 블록 단독 측정값이며 marginBottom(=blockGap) 포함.
+ *
+ * tolerance: 한 줄 정도의 여유분(=bodyLineHeight)을 허용하기 위한 슬랙.
+ *  cumulative > availableHeight + tolerance 일 때 비로소 초과로 판단한다.
  */
 export function findOverflowBlockIndex(
   blockHeights: number[],
@@ -135,6 +138,50 @@ export function findOverflowBlockIndex(
     if (cumulative > availableHeight + tolerance) return i;
   }
   return -1;
+}
+
+/**
+ * 0..blockIndex-1 까지의 블록 높이 누적합을 반환한다.
+ * findOverflowBlockIndex 가 가리키는 오버플로 블록 직전까지의 누적값을 얻을 때 쓴다.
+ */
+export function cumulativeHeightBefore(
+  blockHeights: number[],
+  blockIndex: number,
+): number {
+  let sum = 0;
+  const limit = Math.min(blockIndex, blockHeights.length);
+  for (let i = 0; i < limit; i++) sum += blockHeights[i];
+  return sum;
+}
+
+/**
+ * 오버플로 블록 안에서 안전 영역을 처음 벗어나는 글자 위치(0-indexed)를 근사 산출한다.
+ * 블록 높이를 행 높이로 나눠 몇 번째 줄부터 넘치는지 구하고,
+ * 블록 텍스트 길이에 비례 배분해 글자 오프셋으로 변환한다.
+ *
+ * - blockHeight: 오버플로 블록 단독 높이 (marginBottom 포함)
+ * - lineHeight: 본문 한 줄 높이
+ * - remainingHeight: 이 블록 시작 시점에 남아 있던 가용 높이 (음수면 0으로 처리)
+ * - blockTextLength: 오버플로 블록의 plain text 글자 수
+ *
+ * 반환값:
+ *  - 0 이상: 그 글자부터 페이지 끝까지 빨간 배경 강조
+ *  - 0이면 블록의 첫 글자부터 강조
+ *  - 입력이 비정상이면 0 (블록 전체 강조 fallback)
+ */
+export function findOverflowCharOffsetInBlock(
+  blockHeight: number,
+  lineHeight: number,
+  remainingHeight: number,
+  blockTextLength: number,
+): number {
+  if (blockTextLength <= 0) return 0;
+  if (lineHeight <= 0 || blockHeight <= 0) return 0;
+  const safeRemaining = Math.max(0, remainingHeight);
+  if (safeRemaining >= blockHeight) return blockTextLength;
+  const ratio = safeRemaining / blockHeight;
+  const offset = Math.floor(ratio * blockTextLength);
+  return Math.max(0, Math.min(blockTextLength, offset));
 }
 
 export function derivePages(content: string): string[] {

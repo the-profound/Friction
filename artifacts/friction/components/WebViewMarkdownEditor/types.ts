@@ -7,6 +7,11 @@ export interface EditorInitPayload {
   titleValue?: string;
 }
 
+export interface OverflowRange {
+  pageIndex: number;
+  startCharOffset: number;
+}
+
 export type RNToWebViewCommand =
   | { type: "init"; payload: EditorInitPayload }
   | { type: "setMarkdown"; markdown: string }
@@ -14,7 +19,7 @@ export type RNToWebViewCommand =
   | { type: "requestExportMarkdown"; requestId: string }
   | { type: "setEditable"; isEditable: boolean }
   | { type: "setSourceArticleSlot"; text: string }
-  | { type: "setOverflowFromBlock"; blockIndex: number | null };
+  | { type: "setOverflowRanges"; ranges: OverflowRange[] | null };
 
 export interface OnChangePayload {
   isDirty: boolean;
@@ -50,7 +55,7 @@ export interface WebViewMarkdownEditorRef {
   setEditable: (isEditable: boolean) => void;
   setTitle: (title: string) => void;
   blur: () => void;
-  setOverflowFromBlock: (blockIndex: number | null) => void;
+  setOverflowRanges: (ranges: OverflowRange[] | null) => void;
 }
 
 export interface WebViewMarkdownEditorProps {

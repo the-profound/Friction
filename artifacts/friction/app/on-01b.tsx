@@ -28,11 +28,13 @@ import {
   bsCandidateKey,
   bsCandidatesForJob,
   findOverflowBlockIndex,
+  cumulativeHeightBefore,
+  findOverflowCharOffsetInBlock,
   type BSJob,
   type BSResult,
   type DivisionWarning,
 } from "@/lib/pageDivision";
-import { parseMarkdownBlocks, type MarkdownBlockType } from "@/utils/markdownParser";
+import { parseMarkdownBlocks, tokensToPlainText, type MarkdownBlockType } from "@/utils/markdownParser";
 import { canTransitionForward, canStepBack } from "@/lib/articleStatusCycle";
 import type { ArticleStatus } from "@/lib/policies";
 import { MarkdownPolicy } from "@/lib/policies";
@@ -54,6 +56,7 @@ import type {
   WebViewMarkdownEditorRef,
   OnChangePayload,
   OnExportMarkdownPayload,
+  OverflowRange,
 } from "@/components/WebViewMarkdownEditor/types";
 
 const PAGE_DIVIDER = MarkdownPolicy.PAGE_DIVIDER;
@@ -422,28 +425,67 @@ export default function DividingScreen() {
   }, [heightWarnings]);
   const hasOverflowPages = overflowPageIndices.length > 0;
 
-  // 오버플로 하이라이트를 에디터에 전달
+  // 오버플로 하이라이트(글자 단위)를 모든 초과 페이지에 대해 에디터에 전달한다.
+  // 각 페이지에 대해 "초과가 시작된 글자 위치" 를 페이지 내부 글자 오프셋으로 계산해
+  // 보낸다. 빈 배열/null 이면 모든 강조가 해제된다.
   useEffect(() => {
     if (!editorReady || !editorRef.current) return;
     if (overflowPageIndices.length === 0) {
-      editorRef.current.setOverflowFromBlock(null);
-      return;
-    }
-    const firstOverflowPageIdx = overflowPageIndices[0];
-    const info = pageOverflowInfo[firstOverflowPageIdx];
-    if (!info || info.overflowBlockIdx < 0) {
-      editorRef.current.setOverflowFromBlock(null);
+      editorRef.current.setOverflowRanges(null);
       return;
     }
 
-    let offset = 0;
-    for (let i = 0; i < firstOverflowPageIdx; i++) {
-      const blocks = pageBlockMap[i] ?? [];
-      offset += blocks.length + 1; // +1 for HR page divider block
+    const ranges: OverflowRange[] = [];
+    for (const pageIdx of overflowPageIndices) {
+      const info = pageOverflowInfo[pageIdx];
+      if (!info || info.overflowBlockIdx < 0) continue;
+      const blocks = pageBlockMap[pageIdx] ?? [];
+      const obi = info.overflowBlockIdx;
+
+      // 0..obi-1 블록의 plain text 길이 합
+      let baseTextOffset = 0;
+      for (let i = 0; i < obi && i < blocks.length; i++) {
+        baseTextOffset += tokensToPlainText(blocks[i].tokens).length;
+      }
+
+      // 오버플로 블록 내부에서 안전 영역을 처음 벗어나는 글자 위치를 근사 산출
+      let charOffsetInBlock = 0;
+      const overflowBlock = blocks[obi];
+      if (overflowBlock) {
+        const overflowBlockHeight =
+          blockHeights[`${PAGE_KEY_PREFIX}${pageIdx}_b_${obi}`] ?? 0;
+        const cumBefore = cumulativeHeightBefore(
+          blocks.map((_, i) =>
+            blockHeights[`${PAGE_KEY_PREFIX}${pageIdx}_b_${i}`] ?? 0,
+          ),
+          obi,
+        );
+        const remaining = availableContentHeight - cumBefore;
+        const overflowBlockText = tokensToPlainText(overflowBlock.tokens);
+        charOffsetInBlock = findOverflowCharOffsetInBlock(
+          overflowBlockHeight,
+          bodyLineHeight,
+          remaining,
+          overflowBlockText.length,
+        );
+      }
+
+      ranges.push({
+        pageIndex: pageIdx,
+        startCharOffset: baseTextOffset + charOffsetInBlock,
+      });
     }
 
-    editorRef.current.setOverflowFromBlock(offset + info.overflowBlockIdx);
-  }, [editorReady, overflowPageIndices, pageOverflowInfo, pageBlockMap]);
+    editorRef.current.setOverflowRanges(ranges.length > 0 ? ranges : null);
+  }, [
+    editorReady,
+    overflowPageIndices,
+    pageOverflowInfo,
+    pageBlockMap,
+    blockHeights,
+    availableContentHeight,
+    bodyLineHeight,
+  ]);
 
   const runDivisionEngine = useCallback(
     async (paragraphs: string[]): Promise<string[] | null> => {

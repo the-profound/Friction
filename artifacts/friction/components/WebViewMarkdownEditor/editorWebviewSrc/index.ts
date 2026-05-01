@@ -1,4 +1,4 @@
-import { Editor } from "@tiptap/core";
+import { Editor, Extension } from "@tiptap/core";
 import { Document } from "@tiptap/extension-document";
 import { Paragraph } from "@tiptap/extension-paragraph";
 import { Text } from "@tiptap/extension-text";
@@ -13,6 +13,105 @@ import { UndoRedo } from "@tiptap/extensions/undo-redo";
 import { Placeholder } from "@tiptap/extensions/placeholder";
 import { Underline } from "@tiptap/extension-underline";
 import { HorizontalRule } from "@tiptap/extension-horizontal-rule";
+import { Plugin, PluginKey } from "@tiptap/pm/state";
+import { Decoration, DecorationSet } from "@tiptap/pm/view";
+import type { Node as PMNode } from "@tiptap/pm/model";
+
+interface OverflowRange {
+  pageIndex: number;
+  startCharOffset: number;
+}
+
+const overflowPluginKey = new PluginKey<DecorationSet>("overflow-highlights");
+
+function computeOverflowDecorations(doc: PMNode, ranges: OverflowRange[]): DecorationSet {
+  if (!ranges || ranges.length === 0) return DecorationSet.empty;
+
+  // 페이지 경계: doc 의 직접 자식 중 horizontalRule 노드를 페이지 구분자로 사용한다.
+  // page N 의 컨텐츠 범위 = [start, end) (HR 노드 자체는 제외)
+  const pageRanges: { start: number; end: number }[] = [];
+  let pageStart = 0;
+  doc.forEach((node, offset) => {
+    if (node.type.name === "horizontalRule") {
+      pageRanges.push({ start: pageStart, end: offset });
+      pageStart = offset + node.nodeSize;
+    }
+  });
+  pageRanges.push({ start: pageStart, end: doc.content.size });
+
+  const decorations: Decoration[] = [];
+  for (const range of ranges) {
+    const page = pageRanges[range.pageIndex];
+    if (!page) continue;
+    if (page.end <= page.start) continue;
+
+    // 페이지 내부에서 startCharOffset 만큼의 텍스트를 건너뛴 PM position 을 찾는다.
+    let charsRemaining = Math.max(0, range.startCharOffset);
+    let highlightStart = -1;
+    doc.nodesBetween(page.start, page.end, (node, pos) => {
+      if (highlightStart >= 0) return false;
+      if (!node.isText) return true;
+      const text = node.text || "";
+      const len = text.length;
+      if (charsRemaining < len) {
+        // pos 는 텍스트 노드의 시작 위치
+        const candidate = pos + charsRemaining;
+        const clamped = Math.min(Math.max(candidate, page.start), page.end);
+        highlightStart = clamped;
+        return false;
+      }
+      charsRemaining -= len;
+      // 텍스트 노드를 모두 소비했으면 그 끝 지점을 후보로 잡아두고 다음 텍스트 노드로 넘어간다.
+      // (마지막 텍스트 노드의 끝까지 다 소진됐다면 highlightStart 는 -1 로 남고 아래에서 page.start 로 폴백)
+      return true;
+    });
+
+    if (highlightStart < 0) {
+      // 텍스트 길이보다 startCharOffset 이 더 크면 강조할 글자가 없으므로 건너뛴다.
+      continue;
+    }
+    if (highlightStart >= page.end) continue;
+
+    decorations.push(
+      Decoration.inline(highlightStart, page.end, { class: "overflow-highlight" }),
+    );
+  }
+
+  return DecorationSet.create(doc, decorations);
+}
+
+const OverflowDecorationExtension = Extension.create({
+  name: "overflowDecoration",
+  addProseMirrorPlugins() {
+    return [
+      new Plugin<DecorationSet>({
+        key: overflowPluginKey,
+        state: {
+          init: () => DecorationSet.empty,
+          apply(tr, old) {
+            const meta = tr.getMeta(overflowPluginKey) as
+              | { ranges: OverflowRange[] | null }
+              | undefined;
+            if (meta) {
+              return computeOverflowDecorations(tr.doc, meta.ranges || []);
+            }
+            // 문서가 변경됐다면 기존 데코를 새 좌표계로 매핑한다.
+            // 이후 다음 setOverflowRanges 호출이 들어오면 정확히 재계산된다.
+            if (tr.docChanged && old !== DecorationSet.empty) {
+              return old.map(tr.mapping, tr.doc);
+            }
+            return old;
+          },
+        },
+        props: {
+          decorations(state) {
+            return overflowPluginKey.getState(state);
+          },
+        },
+      }),
+    ];
+  },
+});
 
 const HorizontalRuleWithControls = HorizontalRule.extend({
   addNodeView() {
@@ -369,7 +468,7 @@ interface Command {
   title?: string;
   requestId?: string;
   isEditable?: boolean;
-  blockIndex?: number | null;
+  ranges?: OverflowRange[] | null;
   text?: string;
 }
 
@@ -426,6 +525,7 @@ interface Command {
         ListItem,
         UndoRedo,
         Placeholder.configure({ placeholder }),
+        OverflowDecorationExtension,
       ],
       content: initialHtml,
       editable: true,
@@ -522,18 +622,12 @@ interface Command {
           }
           break;
         }
-        case "setOverflowFromBlock": {
-          const proseMirror = document.querySelector(".ProseMirror");
-          if (!proseMirror) break;
-          const blocks = Array.from(proseMirror.children);
-          const idx = cmd.blockIndex;
-          blocks.forEach((el, i) => {
-            if (idx !== null && idx !== undefined && i >= idx) {
-              el.classList.add("overflow-highlight");
-            } else {
-              el.classList.remove("overflow-highlight");
-            }
-          });
+        case "setOverflowRanges": {
+          if (editor && !editor.isDestroyed) {
+            const ranges = cmd.ranges || [];
+            const tr = editor.state.tr.setMeta(overflowPluginKey, { ranges });
+            editor.view.dispatch(tr);
+          }
           break;
         }
       }

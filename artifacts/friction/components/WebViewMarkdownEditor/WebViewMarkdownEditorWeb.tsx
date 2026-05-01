@@ -148,7 +148,7 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
           editor.commands.blur();
         }
       },
-      setOverflowFromBlock(_blockIndex: number | null) {
+      setOverflowRanges(_ranges) {
       },
     }), [editor, requestExportMarkdown, onError]);
 
