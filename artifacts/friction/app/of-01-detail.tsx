@@ -44,6 +44,8 @@ export default function PersonalCollectionDetailScreen() {
 
   const [moveTargetArticle, setMoveTargetArticle] = useState<MyCollectionArticleWithDetails | null>(null);
   const [isMoveSheetVisible, setIsMoveSheetVisible] = useState(false);
+  const [isBulkMoveMode, setIsBulkMoveMode] = useState(false);
+  const [isBulkMoving, setIsBulkMoving] = useState(false);
 
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const openRowRef = useRef<SwipeableRowHandle | null>(null);
@@ -223,7 +225,37 @@ export default function PersonalCollectionDetailScreen() {
 
   const handleMoveArticle = useCallback(
     async (targetCollectionId: string) => {
-      if (!id || !moveTargetArticle) return;
+      if (!id) return;
+
+      if (isBulkMoveMode) {
+        setIsMoveSheetVisible(false);
+        setIsBulkMoving(true);
+        const ids = Array.from(selectedIds);
+        let failCount = 0;
+        for (const articleId of ids) {
+          try {
+            await removeArticle.mutateAsync({ collectionId: id, articleId });
+            await addArticle.mutateAsync({ id: targetCollectionId, data: { articleId } });
+          } catch {
+            failCount++;
+          }
+        }
+        await queryClient.invalidateQueries({ queryKey: getListMyCollectionArticlesQueryKey(id) });
+        await queryClient.invalidateQueries({ queryKey: getGetMyCollectionQueryKey(id) });
+        setIsBulkMoving(false);
+        setIsBulkMoveMode(false);
+        exitSelectionMode();
+        if (failCount === 0) {
+          Alert.alert("완료", "글을 이동했어요.");
+        } else if (failCount < ids.length) {
+          Alert.alert("오류", `일부 이동에 실패했습니다. (${failCount}개)`);
+        } else {
+          Alert.alert("오류", "글 이동에 실패했습니다.");
+        }
+        return;
+      }
+
+      if (!moveTargetArticle) return;
       const articleId = moveTargetArticle.articleId;
       setIsMoveSheetVisible(false);
       setMoveTargetArticle(null);
@@ -238,12 +270,18 @@ export default function PersonalCollectionDetailScreen() {
         articlesQuery.refetch();
       }
     },
-    [id, moveTargetArticle, removeArticle, addArticle, queryClient, articlesQuery],
+    [id, isBulkMoveMode, selectedIds, moveTargetArticle, removeArticle, addArticle, queryClient, articlesQuery, exitSelectionMode],
   );
+
+  const handleBulkMovePress = useCallback(() => {
+    if (selectedIds.size === 0) return;
+    setIsBulkMoveMode(true);
+    setIsMoveSheetVisible(true);
+  }, [selectedIds]);
 
   const handleMorePress = useCallback(() => {
     Alert.alert("모음 관리", undefined, [
-      { text: "글 선택 삭제", onPress: enterSelectionMode },
+      { text: "선택", onPress: enterSelectionMode },
       { text: "모음 이름 변경", onPress: handleOpenEdit },
       { text: "모음 삭제", style: "destructive", onPress: () => setDeleteConfirmVisible(true) },
       { text: "닫기", style: "cancel" },
@@ -451,19 +489,26 @@ export default function PersonalCollectionDetailScreen() {
 
       {selectionMode && (
         <View style={[styles.selectionBar, { paddingBottom: insets.bottom + 12 }]}>
-          <Pressable
-            style={[styles.bulkDeleteButton, selectedCount === 0 && styles.bulkDeleteButtonDisabled]}
-            onPress={handleBulkDeletePress}
-            disabled={selectedCount === 0 || isBulkDeleting}
-          >
-            {isBulkDeleting ? (
-              <Text style={styles.bulkDeleteText}>삭제 중...</Text>
-            ) : (
+          <View style={styles.selectionBarButtons}>
+            <Pressable
+              style={[styles.bulkActionButton, styles.bulkDeleteButton, (selectedCount === 0 || isBulkDeleting || isBulkMoving) && styles.bulkActionButtonDisabled]}
+              onPress={handleBulkDeletePress}
+              disabled={selectedCount === 0 || isBulkDeleting || isBulkMoving}
+            >
               <Text style={styles.bulkDeleteText}>
-                {selectedCount > 0 ? `${selectedCount}개 선택 삭제` : "선택 삭제"}
+                {isBulkDeleting ? "삭제 중..." : "삭제"}
               </Text>
-            )}
-          </Pressable>
+            </Pressable>
+            <Pressable
+              style={[styles.bulkActionButton, styles.bulkMoveButton, (selectedCount === 0 || isBulkDeleting || isBulkMoving) && styles.bulkActionButtonDisabled]}
+              onPress={handleBulkMovePress}
+              disabled={selectedCount === 0 || isBulkDeleting || isBulkMoving}
+            >
+              <Text style={styles.bulkMoveText}>
+                {isBulkMoving ? "이동 중..." : "이동"}
+              </Text>
+            </Pressable>
+          </View>
         </View>
       )}
 
@@ -515,7 +560,7 @@ export default function PersonalCollectionDetailScreen() {
 
       <BottomSheet
         visible={isMoveSheetVisible}
-        onClose={() => { setIsMoveSheetVisible(false); setMoveTargetArticle(null); }}
+        onClose={() => { setIsMoveSheetVisible(false); setMoveTargetArticle(null); setIsBulkMoveMode(false); }}
         title="이동할 보관함 선택"
         snapPoints={[0.5]}
       >
@@ -786,17 +831,32 @@ const styles = StyleSheet.create({
     borderTopColor: Colors.zinc100,
     backgroundColor: Colors.white,
   },
-  bulkDeleteButton: {
+  selectionBarButtons: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  bulkActionButton: {
+    flex: 1,
     height: 52,
-    backgroundColor: "#DC2626",
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
   },
-  bulkDeleteButtonDisabled: {
+  bulkActionButtonDisabled: {
     backgroundColor: Colors.zinc200,
   },
+  bulkDeleteButton: {
+    backgroundColor: "#DC2626",
+  },
   bulkDeleteText: {
+    ...Typography.bodySemiBold,
+    fontSize: 16,
+    color: Colors.white,
+  },
+  bulkMoveButton: {
+    backgroundColor: Colors.zinc800,
+  },
+  bulkMoveText: {
     ...Typography.bodySemiBold,
     fontSize: 16,
     color: Colors.white,
