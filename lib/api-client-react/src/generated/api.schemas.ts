@@ -117,6 +117,7 @@ export interface CreateArticleBody {
   authorId: string;
   title: string;
   content?: string;
+  sourceArticleId?: string;
 }
 
 export type UpdateArticleBodyStyle = { [key: string]: unknown } | null;
@@ -524,7 +525,7 @@ export const ListArticlesStatus = {
   LETTER: "LETTER",
 } as const;
 
-export type GetOrCreateReadingMemoParams = {
+export type ReadingMemoParams = {
   userId: string;
   sourceArticleId: string;
 };

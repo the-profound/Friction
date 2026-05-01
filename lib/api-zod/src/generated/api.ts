@@ -185,18 +185,20 @@ export const CreateArticleBody = zod.object({
   authorId: zod.string().uuid(),
   title: zod.string(),
   content: zod.string().optional(),
+  sourceArticleId: zod.string().uuid().optional(),
 });
 
 /**
- * Returns the unique memo article for the given user and source article (1글1메모 원칙). Creates a new DRAFT memo if none exists; if a memo already exists, returns it regardless of its current status. Note: this GET is intentionally side-effecting (creates a row on first access). Avoid caching via intermediary proxies.
- * @summary Get or create a ReadingMemo for a source article
+ * Returns the existing DRAFT memo article for the given user and source article, if one exists.
+ * Returns 404 if no reading memo has been created yet (memo is created lazily on first non-empty save).
+ * @summary Get a ReadingMemo for a source article
  */
-export const GetOrCreateReadingMemoQueryParams = zod.object({
+export const ReadingMemoQueryParams = zod.object({
   userId: zod.coerce.string().uuid(),
   sourceArticleId: zod.coerce.string().uuid(),
 });
 
-export const GetOrCreateReadingMemoResponse = zod.object({
+export const ReadingMemoResponse = zod.object({
   id: zod.string().uuid(),
   authorId: zod.string().uuid(),
   title: zod.string(),

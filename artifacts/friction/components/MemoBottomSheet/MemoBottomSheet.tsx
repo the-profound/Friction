@@ -49,10 +49,9 @@ export default function MemoBottomSheet({
   useEffect(() => {
     if (editorReady && appendContent && !appendInjectedRef.current) {
       appendInjectedRef.current = true;
-      const base = initialContent ? `${initialContent}\n\n${appendContent}\n` : `${appendContent}\n`;
-      editorRef.current?.setMarkdown(base);
+      editorRef.current?.setMarkdown(appendContent);
     }
-  }, [editorReady, appendContent, initialContent]);
+  }, [editorReady, appendContent]);
 
   const handleSaveStateUpdate = useCallback(
     (state: "saved" | "saving" | "error") => {

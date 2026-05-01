@@ -6,9 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface CreateArticleBody {
-  authorId: string;
-  title: string;
-  content?: string;
-  sourceArticleId?: string;
-}
+export type ReadingMemoParams = {
+  userId: string;
+  sourceArticleId: string;
+};

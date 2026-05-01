@@ -1,16 +1,13 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import {
-  useGetOrCreateReadingMemo,
+  useCreateArticle,
   useUpdateArticle,
   useDeleteArticle,
-  getGetOrCreateReadingMemoQueryKey,
 } from "@workspace/api-client-react";
 
 interface UseReadingMemoOptions {
   userId: string;
   sourceArticleId: string;
-  enabled?: boolean;
 }
 
 interface UseReadingMemoReturn {
@@ -22,66 +19,110 @@ interface UseReadingMemoReturn {
   flushSave: () => Promise<void>;
   cleanup: () => Promise<void>;
   saveState: "idle" | "saving" | "saved" | "error";
-  triggerCreate: () => void;
 }
 
 const AUTOSAVE_DEBOUNCE_MS = 1200;
 
-export function useReadingMemo({
-  userId,
-  sourceArticleId,
-  enabled = true,
-}: UseReadingMemoOptions): UseReadingMemoReturn {
-  const queryClient = useQueryClient();
+export function useReadingMemo({ userId, sourceArticleId }: UseReadingMemoOptions): UseReadingMemoReturn {
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [memoEnabled, setMemoEnabled] = useState(false);
-  const pendingContentRef = useRef<string | null>(null);
-  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const latestContentRef = useRef<string>("");
-  const cleanupCalledRef = useRef(false);
-  const memoArticleIdRef = useRef<string | undefined>(undefined);
+  const [memoArticleId, setMemoArticleId] = useState<string | undefined>(undefined);
+  const [memoContent, setMemoContent] = useState<string>("");
 
-  const memoQuery = useGetOrCreateReadingMemo(
-    { userId, sourceArticleId },
-    {
-      query: {
-        queryKey: getGetOrCreateReadingMemoQueryKey({ userId, sourceArticleId }),
-        enabled: enabled && memoEnabled && !!userId && !!sourceArticleId,
-      },
-    },
-  );
-
+  const createArticle = useCreateArticle();
   const updateArticle = useUpdateArticle();
   const deleteArticle = useDeleteArticle();
-  const memoArticleId = memoQuery.data?.id;
 
-  const deleteArticleRef = useRef(deleteArticle);
+  const latestContentRef = useRef<string>("");
+  const pendingContentRef = useRef<string | null>(null);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cleanupCalledRef = useRef(false);
+  const memoArticleIdRef = useRef<string | undefined>(undefined);
+  const createPromiseRef = useRef<Promise<string | null> | null>(null);
+
+  const createArticleRef = useRef(createArticle);
   const updateArticleRef = useRef(updateArticle);
-  useEffect(() => { deleteArticleRef.current = deleteArticle; }, [deleteArticle]);
+  const deleteArticleRef = useRef(deleteArticle);
+  useEffect(() => { createArticleRef.current = createArticle; }, [createArticle]);
   useEffect(() => { updateArticleRef.current = updateArticle; }, [updateArticle]);
+  useEffect(() => { deleteArticleRef.current = deleteArticle; }, [deleteArticle]);
 
   useEffect(() => {
     memoArticleIdRef.current = memoArticleId;
   }, [memoArticleId]);
 
   useEffect(() => {
-    latestContentRef.current = memoQuery.data?.content ?? "";
-  }, [memoQuery.data?.content]);
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    memoArticleIdRef.current = undefined;
+    latestContentRef.current = "";
+    pendingContentRef.current = null;
+    cleanupCalledRef.current = false;
+    createPromiseRef.current = null;
+    setMemoArticleId(undefined);
+    setMemoContent("");
+    setSaveState("idle");
+  }, [userId, sourceArticleId]);
+
+  const createDraftIfNeeded = useCallback(
+    async (content: string): Promise<string | null> => {
+      if (memoArticleIdRef.current) return memoArticleIdRef.current;
+      if (createPromiseRef.current) return createPromiseRef.current;
+
+      const promise = createArticleRef.current
+        .mutateAsync({
+          data: {
+            authorId: userId,
+            title: "읽기 메모",
+            content,
+            sourceArticleId,
+          },
+        })
+        .then((article) => {
+          const id = article.id;
+          memoArticleIdRef.current = id;
+          setMemoArticleId(id);
+          createPromiseRef.current = null;
+          return id;
+        })
+        .catch((err) => {
+          console.warn("[useReadingMemo] failed to create draft:", err);
+          createPromiseRef.current = null;
+          return null;
+        });
+
+      createPromiseRef.current = promise;
+      return promise;
+    },
+    [userId, sourceArticleId],
+  );
 
   const saveContent = useCallback(
     async (markdown: string) => {
-      if (!memoArticleId) {
-        pendingContentRef.current = markdown;
+      if (!markdown.trim()) {
+        setSaveState("idle");
         return;
       }
       setSaveState("saving");
       try {
-        await updateArticle.mutateAsync({
-          id: memoArticleId,
+        let id = memoArticleIdRef.current;
+        if (!id) {
+          id = (await createDraftIfNeeded(markdown)) ?? undefined;
+          if (!id) {
+            setSaveState("error");
+            return;
+          }
+          const latestAfterCreate = latestContentRef.current;
+          if (latestAfterCreate.trim() && latestAfterCreate !== markdown) {
+            await updateArticleRef.current.mutateAsync({ id, data: { content: latestAfterCreate } });
+          }
+          setSaveState("saved");
+          return;
+        }
+        await updateArticleRef.current.mutateAsync({
+          id,
           data: { content: markdown },
-        });
-        queryClient.invalidateQueries({
-          queryKey: getGetOrCreateReadingMemoQueryKey({ userId, sourceArticleId }),
         });
         setSaveState("saved");
       } catch (err) {
@@ -89,51 +130,14 @@ export function useReadingMemo({
         setSaveState("error");
       }
     },
-    [memoArticleId, updateArticle, queryClient, userId, sourceArticleId],
+    [createDraftIfNeeded],
   );
-
-  useEffect(() => {
-    if (memoArticleId && pendingContentRef.current !== null) {
-      const buffered = pendingContentRef.current;
-      pendingContentRef.current = null;
-      saveContent(buffered);
-    }
-  }, [memoArticleId, saveContent]);
-
-  useEffect(() => {
-    return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-        debounceTimerRef.current = null;
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (cleanupCalledRef.current) return;
-      const id = memoArticleIdRef.current;
-      if (!id) return;
-      cleanupCalledRef.current = true;
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-        debounceTimerRef.current = null;
-      }
-      const content = latestContentRef.current;
-      if (content.trim() === "") {
-        deleteArticleRef.current.mutate({ id });
-      } else if (pendingContentRef.current !== null) {
-        const pending = pendingContentRef.current;
-        pendingContentRef.current = null;
-        updateArticleRef.current.mutate({ id, data: { content: pending } });
-      }
-    };
-  }, []);
 
   const updateMemoContent = useCallback(
     (markdown: string) => {
       latestContentRef.current = markdown;
       pendingContentRef.current = markdown;
+      setMemoContent(markdown);
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
@@ -163,46 +167,68 @@ export function useReadingMemo({
 
   const cleanup = useCallback(async () => {
     if (cleanupCalledRef.current) return;
+    cleanupCalledRef.current = true;
 
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = null;
     }
 
-    if (!memoArticleId) return;
-    cleanupCalledRef.current = true;
+    const content = latestContentRef.current;
+    const id = memoArticleIdRef.current;
+    const pending = pendingContentRef.current;
 
-    const currentContent = latestContentRef.current;
-    if (currentContent.trim() === "") {
+    if (content.trim() === "") {
+      if (id) {
+        try {
+          await deleteArticleRef.current.mutateAsync({ id });
+        } catch (err) {
+          console.warn("[useReadingMemo] cleanup delete failed:", err);
+        }
+      }
+      return;
+    }
+
+    if (!id) {
+      const contentToCreate = pending ?? content;
+      try {
+        const createdId = await createDraftIfNeeded(contentToCreate);
+        if (createdId) {
+          const latestAfterCreate = latestContentRef.current;
+          if (latestAfterCreate.trim() && latestAfterCreate !== contentToCreate) {
+            await updateArticleRef.current.mutateAsync({ id: createdId, data: { content: latestAfterCreate } });
+          }
+        }
+      } catch (err) {
+        console.warn("[useReadingMemo] cleanup create failed:", err);
+      }
+    } else if (pending !== null) {
       pendingContentRef.current = null;
       try {
-        await deleteArticle.mutateAsync({ id: memoArticleId });
-        queryClient.invalidateQueries({
-          queryKey: getGetOrCreateReadingMemoQueryKey({ userId, sourceArticleId }),
-        });
+        await updateArticleRef.current.mutateAsync({ id, data: { content: pending } });
       } catch (err) {
-        console.warn("[useReadingMemo] cleanup delete failed:", err);
+        console.warn("[useReadingMemo] cleanup save failed:", err);
       }
-    } else if (pendingContentRef.current !== null) {
-      const content = pendingContentRef.current;
-      pendingContentRef.current = null;
-      await saveContent(content);
     }
-  }, [memoArticleId, deleteArticle, queryClient, userId, sourceArticleId, saveContent]);
+  }, [createDraftIfNeeded]);
 
-  const triggerCreate = useCallback(() => {
-    setMemoEnabled(true);
+  const cleanupRef = useRef(cleanup);
+  useEffect(() => { cleanupRef.current = cleanup; }, [cleanup]);
+
+  useEffect(() => {
+    return () => {
+      void cleanupRef.current();
+    };
   }, []);
 
   return {
     memoArticleId,
-    memoContent: memoQuery.data?.content ?? "",
-    isMemoLoading: memoQuery.isLoading,
-    isMemoError: memoQuery.isError,
+    memoContent,
+    isMemoLoading: false,
+    isMemoError: false,
     updateMemoContent,
     flushSave,
     cleanup,
     saveState,
-    triggerCreate,
   };
 }

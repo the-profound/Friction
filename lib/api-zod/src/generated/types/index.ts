@@ -26,7 +26,7 @@ export * from "./createTeamCollectionBody";
 export * from "./createUserArticleReadBody";
 export * from "./createUserBody";
 export * from "./errorResponse";
-export * from "./getOrCreateReadingMemoParams";
+export * from "./readingMemoParams";
 export * from "./getReadingRecordParams";
 export * from "./getTodayGreetingStatusParams";
 export * from "./healthStatus";

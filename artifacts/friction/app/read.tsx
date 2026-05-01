@@ -261,13 +261,11 @@ export default function ReadScreen() {
   const readingMemo = useReadingMemo({
     userId,
     sourceArticleId: articleId,
-    enabled: !!userId && !!articleId,
   });
 
   const handleOpenMemo = useCallback(() => {
-    readingMemo.triggerCreate();
     setMemoSheetVisible(true);
-  }, [readingMemo]);
+  }, []);
 
   useEffect(() => {
     if (mode === "basic" && articleId) {
@@ -636,8 +634,10 @@ Alert.alert("완료", "보관함에 저장됐어요");
     const author = authorName ?? "";
     const title = article?.title ?? "";
     const quoteBlock = `> ${text.trim()}\n>\n> ${author}, <${title}>, ${pageNum}면`;
-    setMemoAppendContent(quoteBlock);
-    readingMemo.triggerCreate();
+    const base = readingMemo.memoContent;
+    const combined = base ? `${base}\n\n${quoteBlock}\n` : `${quoteBlock}\n`;
+    readingMemo.updateMemoContent(combined);
+    setMemoAppendContent(combined);
     setMemoSheetVisible(true);
   }, [currentPage, authorName, article?.title, readingMemo]);
 
@@ -1097,7 +1097,6 @@ Alert.alert("완료", "보관함에 저장됐어요");
       </BottomSheet>
 
       <MemoBottomSheet
-        key={readingMemo.memoArticleId ?? "memo-loading"}
         visible={memoSheetVisible}
         onClose={async () => {
           await readingMemo.flushSave();

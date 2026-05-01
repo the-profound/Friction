@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { and, eq, exists, ilike, ne } from "drizzle-orm";
 import { db, articlesTable, myCollectionArticlesTable, type ArticleStatus } from "@workspace/db";
-import { CreateArticleBody, UpdateArticleBody, TransitionArticleStatusBody, GetOrCreateReadingMemoQueryParams } from "@workspace/api-zod";
+import { CreateArticleBody, UpdateArticleBody, TransitionArticleStatusBody, ReadingMemoQueryParams } from "@workspace/api-zod";
 import { ObjectStorageService } from "../lib/objectStorage";
 
 const FORWARD_TRANSITIONS: Record<string, string> = {
@@ -19,59 +19,29 @@ const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
 
 router.get("/articles/reading-memo", async (req, res) => {
-  const parsed = GetOrCreateReadingMemoQueryParams.safeParse(req.query);
+  const parsed = ReadingMemoQueryParams.safeParse(req.query);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
     return;
   }
   const { userId, sourceArticleId } = parsed.data;
 
-  const [sourceArticle] = await db.select().from(articlesTable).where(eq(articlesTable.id, sourceArticleId));
-  if (!sourceArticle) {
-    res.status(404).json({ error: "Source article not found" });
+  const [existingMemo] = await db
+    .select()
+    .from(articlesTable)
+    .where(
+      and(
+        eq(articlesTable.authorId, userId),
+        eq(articlesTable.sourceArticleId, sourceArticleId),
+        eq(articlesTable.status, "DRAFT"),
+      ),
+    );
+
+  if (!existingMemo) {
+    res.status(404).json({ error: "Reading memo not found" });
     return;
   }
-
-  const memoTitle = `읽기 메모 — ${sourceArticle.title}`;
-
-  const draftMemoCondition = and(
-    eq(articlesTable.authorId, userId),
-    eq(articlesTable.sourceArticleId, sourceArticleId),
-    eq(articlesTable.status, "DRAFT"),
-  );
-  const anyMemoCondition = and(
-    eq(articlesTable.authorId, userId),
-    eq(articlesTable.sourceArticleId, sourceArticleId),
-  );
-
-  const memo = await db.transaction(async (tx) => {
-    const [existingDraft] = await tx.select().from(articlesTable).where(draftMemoCondition);
-
-    if (existingDraft) return existingDraft;
-
-    const [created] = await tx
-      .insert(articlesTable)
-      .values({
-        authorId: userId,
-        title: memoTitle,
-        content: "",
-        status: "DRAFT",
-        sourceArticleId,
-      })
-      .onConflictDoNothing()
-      .returning();
-
-    if (created) return created;
-
-    const [afterConflict] = await tx.select().from(articlesTable).where(anyMemoCondition);
-    return afterConflict;
-  });
-
-  if (!memo) {
-    res.status(500).json({ error: "Failed to get or create reading memo" });
-    return;
-  }
-  res.json(memo);
+  res.json(existingMemo);
 });
 
 router.get("/articles", async (req, res) => {
@@ -104,13 +74,46 @@ router.post("/articles", async (req, res) => {
     res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
     return;
   }
-  const { authorId, title, content } = parsed.data;
-  const [article] = await db.insert(articlesTable).values({
-    authorId,
-    title,
-    content: content ?? "",
-    status: "DRAFT",
-  }).returning();
+  const { authorId, content, sourceArticleId } = parsed.data;
+  let { title } = parsed.data;
+
+  if (sourceArticleId) {
+    const [sourceArticle] = await db
+      .select()
+      .from(articlesTable)
+      .where(eq(articlesTable.id, sourceArticleId));
+    if (sourceArticle) {
+      title = `읽기 메모 — ${sourceArticle.title}`;
+    }
+  }
+
+  const article = await db.transaction(async (tx) => {
+    if (sourceArticleId) {
+      // Intentionally unlink all prior source-linked drafts for this (author, source) pair before
+      // inserting the new one. This satisfies the unique index on (authorId, sourceArticleId) and
+      // implements the "always start a fresh memo per re-read" policy — old memos are preserved in
+      // the archive but are no longer linked to this source article.
+      await tx
+        .update(articlesTable)
+        .set({ sourceArticleId: null })
+        .where(
+          and(
+            eq(articlesTable.authorId, authorId),
+            eq(articlesTable.sourceArticleId, sourceArticleId),
+          ),
+        );
+    }
+
+    const [created] = await tx.insert(articlesTable).values({
+      authorId,
+      title,
+      content: content ?? "",
+      status: "DRAFT",
+      ...(sourceArticleId ? { sourceArticleId } : {}),
+    }).returning();
+    return created;
+  });
+
   res.status(201).json(article);
 });
 
