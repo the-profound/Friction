@@ -110,8 +110,6 @@ export default function DividingScreen() {
   } | null>(null);
 
   const [stepBackConfirmVisible, setStepBackConfirmVisible] = useState(false);
-  const [closingConfirmVisible, setClosingConfirmVisible] = useState(false);
-  const pendingClosingDataRef = useRef<{ pagesJson: string[]; cur: string } | null>(null);
   const [splitting, setSplitting] = useState(false);
 
   // Force a fresh fetch on mount so stale cache never initializes the editor
@@ -653,20 +651,7 @@ export default function DividingScreen() {
     }
 
     const pagesJson = pgs.map((p) => p.content);
-    pendingClosingDataRef.current = { pagesJson, cur };
-    isNavigatingRef.current = false;
-    setIsNavigating(false);
-    setClosingConfirmVisible(true);
-  }, [getEditorContent, markDirty, flush, hasRedWarnings, id, router, updateArticle, transitionStatus, queryClient, containerWidth, article]);
-
-  const handleConfirmClosing = useCallback(async () => {
-    setClosingConfirmVisible(false);
-    if (isNavigatingRef.current) return;
-    isNavigatingRef.current = true;
-    setIsNavigating(true);
-
-    const pending = pendingClosingDataRef.current;
-    if (!pending || !id) {
+    if (!id) {
       isNavigatingRef.current = false;
       setIsNavigating(false);
       return;
@@ -674,7 +659,7 @@ export default function DividingScreen() {
     try {
       const updatedArticle = await updateArticle.mutateAsync({
         id,
-        data: { title: titleRef.current, content: pending.cur, pages: pending.pagesJson, layoutWidth: containerWidth },
+        data: { title: titleRef.current, content: cur, pages: pagesJson, layoutWidth: containerWidth },
       });
       queryClient.setQueryData([`/api/articles/${id}`], updatedArticle);
       if (article?.status !== "CLOSING") {
@@ -688,7 +673,6 @@ export default function DividingScreen() {
         }
       }
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
-      pendingClosingDataRef.current = null;
       router.push({ pathname: "/on-01c", params: { id } });
     } catch (e: unknown) {
       isNavigatingRef.current = false;
@@ -696,7 +680,7 @@ export default function DividingScreen() {
       const msg = e instanceof Error ? e.message : "상태 전환에 실패했습니다.";
       Alert.alert("오류", msg);
     }
-  }, [id, updateArticle, transitionStatus, queryClient, router, containerWidth, article]);
+  }, [getEditorContent, markDirty, flush, hasRedWarnings, id, router, updateArticle, transitionStatus, queryClient, containerWidth, article]);
 
   const handleBack = useCallback(async () => {
     if (isNavigatingRef.current) return;
@@ -920,18 +904,6 @@ export default function DividingScreen() {
           cancelLabel="취소"
           onConfirm={handleConfirmStepBack}
           onCancel={() => setStepBackConfirmVisible(false)}
-        />
-        <ConfirmModal
-          visible={closingConfirmVisible}
-          title="마감 단계로 전환"
-          description={"마감 단계로 넘어가면 본문을 더 이상 수정할 수 없습니다.\n지금 마감 단계로 전환하시겠습니까?"}
-          confirmLabel="마감으로 전환"
-          cancelLabel="아직 수정할게요"
-          onConfirm={handleConfirmClosing}
-          onCancel={() => {
-            setClosingConfirmVisible(false);
-            pendingClosingDataRef.current = null;
-          }}
         />
       </View>
     </>
