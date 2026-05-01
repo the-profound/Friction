@@ -71,12 +71,8 @@ export async function seedDevData(): Promise<void> {
         AND article_id   = 'a1000001-0000-4000-a000-000000000001'
       LIMIT 1
     `);
-    if (sentinel.length > 0) {
-      logger.info("Dev seed data already present (v2), skipping");
-      return;
-    }
-
-    logger.info("Inserting dev seed data (v2)…");
+    if (sentinel.length === 0) {
+      logger.info("Inserting dev seed data (v2)…");
 
     // -----------------------------------------------------------------------
     // 1. Users
@@ -422,7 +418,285 @@ export async function seedDevData(): Promise<void> {
           '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-23 21:00:00+00', FALSE, NOW())
     `);
 
-    logger.info("Dev seed data (v2) inserted successfully");
+      logger.info("Dev seed data (v2) inserted successfully");
+    } else {
+      logger.info("Dev seed data already present (v2), skipping");
+    }
+
+    // -----------------------------------------------------------------------
+    // v3 sentinel: has the민지 10-letter thread block already been applied?
+    // Check for 하윤's inbox row on the first v3 article (a1000010).
+    // -----------------------------------------------------------------------
+    const { rows: sentinelV3 } = await client.query(`
+      SELECT id FROM inbox
+      WHERE recipient_id = '54cbadb0-eab9-4f69-8c32-90a9e00d7908'
+        AND article_id   = 'a1000010-0000-4000-a000-000000000010'
+      LIMIT 1
+    `);
+    if (sentinelV3.length > 0) {
+      logger.info("Dev seed data already present (v3), skipping");
+    } else {
+      logger.info("Inserting dev seed data (v3)…");
+
+      // ---------------------------------------------------------------------
+      // v3-1. Articles a1000010–a1000019
+      //   Thread A: 민지 원글(a1000010) → 하윤 답장(a1000011) → 민지 재답장(a1000012)
+      //   Thread B: 서준 원글(a1000013) → 민지 답장(a1000014) → 서준 재답장(a1000015)
+      //   Thread C: 하윤 원글(a1000016) → 민지 답장(a1000017)
+      //   Thread D: 민지 원글(a1000018) → 서준 답장(a1000019)
+      // ---------------------------------------------------------------------
+      await client.query(`
+        INSERT INTO articles
+          (id, author_id, title, content, status, pages, style, cover,
+           source_article_id, is_notice, notice_date, created_at, updated_at)
+        VALUES
+          ('a1000010-0000-4000-a000-000000000010',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            '봄비 소리', '오늘 아침 봄비가 내렸다. 창문을 열어두고 빗소리를 들으며 오래전 일들을 떠올렸다.',
+            'LETTER', '[]', NULL, NULL, NULL, FALSE, NULL,
+            '2026-04-28 08:00:00+00', '2026-04-28 08:00:00+00'),
+          ('a1000011-0000-4000-a000-000000000011',
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
+            '봄비 소리 - 답장', '민지야, 나도 오늘 빗소리 들으며 커피 한 잔 마셨어. 봄비는 왜 이렇게 마음을 촉촉하게 만드는지.',
+            'LETTER', '[]', NULL, NULL,
+            'a1000010-0000-4000-a000-000000000010', FALSE, NULL,
+            '2026-04-28 10:00:00+00', '2026-04-28 10:00:00+00'),
+          ('a1000012-0000-4000-a000-000000000012',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            '봄비 소리 - 재답장', '하윤아, 맞아. 봄비 맞으며 산책이라도 한번 같이 해야겠다. 다음 주에 시간 돼?',
+            'LETTER', '[]', NULL, NULL,
+            'a1000011-0000-4000-a000-000000000011', FALSE, NULL,
+            '2026-04-28 12:00:00+00', '2026-04-28 12:00:00+00'),
+
+          ('a1000013-0000-4000-a000-000000000013',
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
+            '최근에 읽은 책', '요즘 소설을 다시 읽기 시작했다. 오랫동안 바빠서 멀리했던 책들이 새삼 그리웠다.',
+            'LETTER', '[]', NULL, NULL, NULL, FALSE, NULL,
+            '2026-04-29 01:00:00+00', '2026-04-29 01:00:00+00'),
+          ('a1000014-0000-4000-a000-000000000014',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            '최근에 읽은 책 - 답장', '서준아, 나도 요즘 책을 다시 읽고 있어! 어떤 소설 읽었어? 추천해줘.',
+            'LETTER', '[]', NULL, NULL,
+            'a1000013-0000-4000-a000-000000000013', FALSE, NULL,
+            '2026-04-29 03:00:00+00', '2026-04-29 03:00:00+00'),
+          ('a1000015-0000-4000-a000-000000000015',
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
+            '최근에 읽은 책 - 재답장', '민지야, 요즘 무라카미 하루키 단편집 읽는 중이야. 분위기가 딱 봄이랑 맞아.',
+            'LETTER', '[]', NULL, NULL,
+            'a1000014-0000-4000-a000-000000000014', FALSE, NULL,
+            '2026-04-29 05:00:00+00', '2026-04-29 05:00:00+00'),
+
+          ('a1000016-0000-4000-a000-000000000016',
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
+            '주말 오후', '오늘 오후에 아무 계획 없이 그냥 집에 있었다. 오랜만에 완전히 아무것도 안 한 날이었다.',
+            'LETTER', '[]', NULL, NULL, NULL, FALSE, NULL,
+            '2026-04-30 00:00:00+00', '2026-04-30 00:00:00+00'),
+          ('a1000017-0000-4000-a000-000000000017',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            '주말 오후 - 답장', '하윤아, 그런 날이 제일 좋더라. 나도 요즘 아무것도 안 하는 시간이 필요했어.',
+            'LETTER', '[]', NULL, NULL,
+            'a1000016-0000-4000-a000-000000000016', FALSE, NULL,
+            '2026-04-30 02:00:00+00', '2026-04-30 02:00:00+00'),
+
+          ('a1000018-0000-4000-a000-000000000018',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            '요즘 생각들', '요즘 들어 사소한 것들이 새삼 소중하게 느껴진다. 아침 햇살, 밥 냄새, 웃음 소리 같은 것들.',
+            'LETTER', '[]', NULL, NULL, NULL, FALSE, NULL,
+            '2026-04-30 21:00:00+00', '2026-04-30 21:00:00+00'),
+          ('a1000019-0000-4000-a000-000000000019',
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
+            '요즘 생각들 - 답장', '민지야, 그 마음 알아. 나도 요즘 그런 생각 많이 해. 우리 자주 이야기하자.',
+            'LETTER', '[]', NULL, NULL,
+            'a1000018-0000-4000-a000-000000000018', FALSE, NULL,
+            '2026-04-30 23:00:00+00', '2026-04-30 23:00:00+00')
+        ON CONFLICT (id) DO UPDATE SET
+          title = EXCLUDED.title,
+          content = EXCLUDED.content,
+          status = EXCLUDED.status,
+          pages = EXCLUDED.pages,
+          style = EXCLUDED.style,
+          cover = EXCLUDED.cover,
+          source_article_id = EXCLUDED.source_article_id,
+          is_notice = EXCLUDED.is_notice,
+          notice_date = EXCLUDED.notice_date,
+          updated_at = EXCLUDED.updated_at
+      `);
+
+      // ---------------------------------------------------------------------
+      // v3-2. team_collection_articles — all 10 into 하윤이네 모임
+      // ---------------------------------------------------------------------
+      await client.query(`
+        INSERT INTO team_collection_articles
+          (id, team_collection_id, article_id, added_by, added_at, deleted_at)
+        VALUES
+          (gen_random_uuid(), '2d9417a7-27e4-46c0-9ae5-3c4a4298c0f2',
+            'a1000010-0000-4000-a000-000000000010',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-28 08:00:00+00', NULL),
+          (gen_random_uuid(), '2d9417a7-27e4-46c0-9ae5-3c4a4298c0f2',
+            'a1000011-0000-4000-a000-000000000011',
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-04-28 10:00:00+00', NULL),
+          (gen_random_uuid(), '2d9417a7-27e4-46c0-9ae5-3c4a4298c0f2',
+            'a1000012-0000-4000-a000-000000000012',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-28 12:00:00+00', NULL),
+          (gen_random_uuid(), '2d9417a7-27e4-46c0-9ae5-3c4a4298c0f2',
+            'a1000013-0000-4000-a000-000000000013',
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-04-29 01:00:00+00', NULL),
+          (gen_random_uuid(), '2d9417a7-27e4-46c0-9ae5-3c4a4298c0f2',
+            'a1000014-0000-4000-a000-000000000014',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-29 03:00:00+00', NULL),
+          (gen_random_uuid(), '2d9417a7-27e4-46c0-9ae5-3c4a4298c0f2',
+            'a1000015-0000-4000-a000-000000000015',
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-04-29 05:00:00+00', NULL),
+          (gen_random_uuid(), '2d9417a7-27e4-46c0-9ae5-3c4a4298c0f2',
+            'a1000016-0000-4000-a000-000000000016',
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-04-30 00:00:00+00', NULL),
+          (gen_random_uuid(), '2d9417a7-27e4-46c0-9ae5-3c4a4298c0f2',
+            'a1000017-0000-4000-a000-000000000017',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-30 02:00:00+00', NULL),
+          (gen_random_uuid(), '2d9417a7-27e4-46c0-9ae5-3c4a4298c0f2',
+            'a1000018-0000-4000-a000-000000000018',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-30 21:00:00+00', NULL),
+          (gen_random_uuid(), '2d9417a7-27e4-46c0-9ae5-3c4a4298c0f2',
+            'a1000019-0000-4000-a000-000000000019',
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-04-30 23:00:00+00', NULL)
+        ON CONFLICT ON CONSTRAINT team_collection_articles_unique DO NOTHING
+      `);
+
+      // ---------------------------------------------------------------------
+      // v3-3. Inbox entries — 3 members each (하윤·서준·민지), including sender
+      //
+      //   Delivery slot logic (KST):
+      //     addedAt 06:00–18:00 KST → 18:00 KST same day  (UTC same day 09:00)
+      //     addedAt 18:00+ KST      → 06:00 KST next day  (UTC same day 21:00)
+      //
+      //   a1000010: addedAt 08:00 UTC = KST 17:00 → slot KST 18:00 = UTC 09:00 (Apr 28)
+      //   a1000011: addedAt 10:00 UTC = KST 19:00 → slot KST next 06:00 = UTC 21:00 (Apr 28)
+      //   a1000012: addedAt 12:00 UTC = KST 21:00 → slot KST next 06:00 = UTC 21:00 (Apr 28)
+      //   a1000013: addedAt 01:00 UTC = KST 10:00 → slot KST 18:00 = UTC 09:00 (Apr 29)
+      //   a1000014: addedAt 03:00 UTC = KST 12:00 → slot KST 18:00 = UTC 09:00 (Apr 29)
+      //   a1000015: addedAt 05:00 UTC = KST 14:00 → slot KST 18:00 = UTC 09:00 (Apr 29)
+      //   a1000016: addedAt 00:00 UTC = KST 09:00 → slot KST 18:00 = UTC 09:00 (Apr 30)
+      //   a1000017: addedAt 02:00 UTC = KST 11:00 → slot KST 18:00 = UTC 09:00 (Apr 30)
+      //   a1000018: addedAt Apr30 21:00 UTC = KST May1 06:00 → slot KST 18:00 = UTC May1 09:00
+      //   a1000019: addedAt Apr30 23:00 UTC = KST May1 08:00 → slot KST 18:00 = UTC May1 09:00
+      // ---------------------------------------------------------------------
+      await client.query(`
+        INSERT INTO inbox
+          (id, recipient_id, article_id, sender_id, visible_at, is_read, created_at)
+        VALUES
+          -- a1000010 (민지 원글, visibleAt Apr 28 09:00 UTC)
+          (gen_random_uuid(), '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
+            'a1000010-0000-4000-a000-000000000010',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-28 09:00:00+00', FALSE, NOW()),
+          (gen_random_uuid(), '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
+            'a1000010-0000-4000-a000-000000000010',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-28 09:00:00+00', FALSE, NOW()),
+          (gen_random_uuid(), '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            'a1000010-0000-4000-a000-000000000010',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-28 09:00:00+00', FALSE, NOW()),
+
+          -- a1000011 (하윤 답장, visibleAt Apr 28 21:00 UTC)
+          (gen_random_uuid(), '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
+            'a1000011-0000-4000-a000-000000000011',
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-04-28 21:00:00+00', FALSE, NOW()),
+          (gen_random_uuid(), '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            'a1000011-0000-4000-a000-000000000011',
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-04-28 21:00:00+00', FALSE, NOW()),
+          (gen_random_uuid(), '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
+            'a1000011-0000-4000-a000-000000000011',
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-04-28 21:00:00+00', FALSE, NOW()),
+
+          -- a1000012 (민지 재답장, visibleAt Apr 28 21:00 UTC)
+          (gen_random_uuid(), '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
+            'a1000012-0000-4000-a000-000000000012',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-28 21:00:00+00', FALSE, NOW()),
+          (gen_random_uuid(), '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
+            'a1000012-0000-4000-a000-000000000012',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-28 21:00:00+00', FALSE, NOW()),
+          (gen_random_uuid(), '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            'a1000012-0000-4000-a000-000000000012',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-28 21:00:00+00', FALSE, NOW()),
+
+          -- a1000013 (서준 원글, visibleAt Apr 29 09:00 UTC)
+          (gen_random_uuid(), '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
+            'a1000013-0000-4000-a000-000000000013',
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-04-29 09:00:00+00', FALSE, NOW()),
+          (gen_random_uuid(), '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            'a1000013-0000-4000-a000-000000000013',
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-04-29 09:00:00+00', FALSE, NOW()),
+          (gen_random_uuid(), '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
+            'a1000013-0000-4000-a000-000000000013',
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-04-29 09:00:00+00', FALSE, NOW()),
+
+          -- a1000014 (민지 답장, visibleAt Apr 29 09:00 UTC)
+          (gen_random_uuid(), '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
+            'a1000014-0000-4000-a000-000000000014',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-29 09:00:00+00', FALSE, NOW()),
+          (gen_random_uuid(), '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
+            'a1000014-0000-4000-a000-000000000014',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-29 09:00:00+00', FALSE, NOW()),
+          (gen_random_uuid(), '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            'a1000014-0000-4000-a000-000000000014',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-29 09:00:00+00', FALSE, NOW()),
+
+          -- a1000015 (서준 재답장, visibleAt Apr 29 09:00 UTC)
+          (gen_random_uuid(), '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
+            'a1000015-0000-4000-a000-000000000015',
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-04-29 09:00:00+00', FALSE, NOW()),
+          (gen_random_uuid(), '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            'a1000015-0000-4000-a000-000000000015',
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-04-29 09:00:00+00', FALSE, NOW()),
+          (gen_random_uuid(), '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
+            'a1000015-0000-4000-a000-000000000015',
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-04-29 09:00:00+00', FALSE, NOW()),
+
+          -- a1000016 (하윤 원글, visibleAt Apr 30 09:00 UTC)
+          (gen_random_uuid(), '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
+            'a1000016-0000-4000-a000-000000000016',
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-04-30 09:00:00+00', FALSE, NOW()),
+          (gen_random_uuid(), '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            'a1000016-0000-4000-a000-000000000016',
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-04-30 09:00:00+00', FALSE, NOW()),
+          (gen_random_uuid(), '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
+            'a1000016-0000-4000-a000-000000000016',
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-04-30 09:00:00+00', FALSE, NOW()),
+
+          -- a1000017 (민지 답장, visibleAt Apr 30 09:00 UTC)
+          (gen_random_uuid(), '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
+            'a1000017-0000-4000-a000-000000000017',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-30 09:00:00+00', FALSE, NOW()),
+          (gen_random_uuid(), '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
+            'a1000017-0000-4000-a000-000000000017',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-30 09:00:00+00', FALSE, NOW()),
+          (gen_random_uuid(), '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            'a1000017-0000-4000-a000-000000000017',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-30 09:00:00+00', FALSE, NOW()),
+
+          -- a1000018 (민지 원글, visibleAt Apr 30 21:00 UTC = KST May 1 06:00, guaranteed past)
+          (gen_random_uuid(), '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
+            'a1000018-0000-4000-a000-000000000018',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-30 21:00:00+00', FALSE, NOW()),
+          (gen_random_uuid(), '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
+            'a1000018-0000-4000-a000-000000000018',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-30 21:00:00+00', FALSE, NOW()),
+          (gen_random_uuid(), '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            'a1000018-0000-4000-a000-000000000018',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-30 21:00:00+00', FALSE, NOW()),
+
+          -- a1000019 (서준 답장, visibleAt Apr 30 21:00 UTC = KST May 1 06:00, guaranteed past)
+          (gen_random_uuid(), '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
+            'a1000019-0000-4000-a000-000000000019',
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-04-30 21:00:00+00', FALSE, NOW()),
+          (gen_random_uuid(), '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            'a1000019-0000-4000-a000-000000000019',
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-04-30 21:00:00+00', FALSE, NOW()),
+          (gen_random_uuid(), '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
+            'a1000019-0000-4000-a000-000000000019',
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-04-30 21:00:00+00', FALSE, NOW())
+      `);
+
+      logger.info("Dev seed data (v3) inserted successfully");
+    }
   } catch (err) {
     logger.error({ err }, "Seed data error");
     throw err;
