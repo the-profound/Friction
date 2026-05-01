@@ -241,13 +241,14 @@ export default function PersonalCollectionDetailScreen() {
     [id, moveTargetArticle, removeArticle, addArticle, queryClient, articlesQuery],
   );
 
-  const handleCollectionManagePress = useCallback(() => {
+  const handleMorePress = useCallback(() => {
     Alert.alert("모음 관리", undefined, [
-      { text: "이름/설명 수정", onPress: handleOpenEdit },
-      { text: "삭제", style: "destructive", onPress: () => setDeleteConfirmVisible(true) },
+      { text: "글 선택 삭제", onPress: enterSelectionMode },
+      { text: "모음 이름 변경", onPress: handleOpenEdit },
+      { text: "모음 삭제", style: "destructive", onPress: () => setDeleteConfirmVisible(true) },
       { text: "닫기", style: "cancel" },
     ]);
-  }, [handleOpenEdit]);
+  }, [enterSelectionMode, handleOpenEdit]);
 
   const alreadyAddedIds = articles.map((a) => a.articleId);
 
@@ -373,12 +374,7 @@ export default function PersonalCollectionDetailScreen() {
               {collection?.name ?? "개인 모음"}
             </Text>
             <View style={styles.headerRight}>
-              {!isArchive && (
-                <Pressable hitSlop={12} onPress={handleCollectionManagePress}>
-                  <Feather name="settings" size={18} color={Colors.zinc600} />
-                </Pressable>
-              )}
-              <Pressable hitSlop={12} onPress={enterSelectionMode}>
+              <Pressable hitSlop={12} onPress={isArchive ? enterSelectionMode : handleMorePress}>
                 <Feather name="more-vertical" size={20} color={Colors.zinc600} />
               </Pressable>
             </View>
