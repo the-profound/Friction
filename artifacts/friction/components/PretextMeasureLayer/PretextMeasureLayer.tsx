@@ -55,27 +55,38 @@ export default function PretextMeasureLayer({ request, onMeasured }: Props) {
   const remainingRef = useRef(0);
   const completedRef = useRef(false);
   const requestRef = useRef<MeasureRequest | null>(null);
+  const onMeasuredRef = useRef(onMeasured);
+  onMeasuredRef.current = onMeasured;
 
-  // request 객체가 새로 들어오면 측정 상태를 리셋한다.
-  useEffect(() => {
-    if (request === requestRef.current) return;
+  // request가 바뀔 때마다 증가하는 렌더 키.
+  // candidate View의 React key에 포함시켜 request 교체 시 모든 View를
+  // 강제로 remount시킨다. 이렇게 하지 않으면 key가 같은 View는 React가
+  // 재사용하고 onLayout을 재발생시키지 않아 측정이 누락된다.
+  const renderKeyRef = useRef(0);
+
+  // request 객체가 새로 들어오면 측정 상태를 렌더 중에 동기적으로 리셋한다.
+  // useEffect 안에서 리셋하면 React Native가 onLayout 콜백을 먼저 실행한 뒤
+  // useEffect가 실행되어, onLayout 내부의 `if (completedRef.current) return;`
+  // 가드가 이전 측정의 true 값을 보고 측정을 건너뛰는 타이밍 버그가 발생한다.
+  if (request !== requestRef.current) {
     requestRef.current = request;
+    renderKeyRef.current += 1;
     heightsRef.current = {};
     completedRef.current = false;
-    if (!request || request.candidates.length === 0) {
-      remainingRef.current = 0;
-      if (request && request.candidates.length === 0) {
-        // 빈 요청은 즉시 완료 통보
-        completedRef.current = true;
-        onMeasured({});
-      }
-      return;
+    remainingRef.current = request?.candidates.length ?? 0;
+  }
+
+  // 빈 candidates 요청은 onLayout이 발생하지 않으므로 effect에서 즉시 완료 통보한다.
+  useEffect(() => {
+    if (request && request.candidates.length === 0 && !completedRef.current) {
+      completedRef.current = true;
+      onMeasuredRef.current({});
     }
-    remainingRef.current = request.candidates.length;
-  }, [request, onMeasured]);
+  }, [request]);
 
   if (!request) return null;
 
+  const renderKey = renderKeyRef.current;
   const blockGap = request.blockGap ?? request.lineHeight * 0.6;
 
   return (
@@ -84,7 +95,7 @@ export default function PretextMeasureLayer({ request, onMeasured }: Props) {
         const blocks = c.blocks ?? parseMarkdownBlocks(c.content ?? "");
         return (
           <View
-            key={c.key}
+            key={`${renderKey}-${c.key}`}
             style={{
               position: "absolute",
               width: request.width,
@@ -99,7 +110,7 @@ export default function PretextMeasureLayer({ request, onMeasured }: Props) {
               remainingRef.current -= 1;
               if (remainingRef.current <= 0) {
                 completedRef.current = true;
-                onMeasured({ ...heightsRef.current });
+                onMeasuredRef.current({ ...heightsRef.current });
               }
             }}
           >
