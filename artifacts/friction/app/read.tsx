@@ -163,8 +163,9 @@ export default function ReadScreen() {
   const mode: ReadingMode = (params.mode as ReadingMode) ?? "basic";
   const entrySource = params.entrySource as "list" | "inbox" | undefined;
   // True when the user opens an article for the first time via a collection
-  // article list rather than via the inbox. In this case the completion CTA
-  // should offer "보관하기 / 보관 안 함" instead of "보관하기 / 삭제하기".
+  // article list rather than via the inbox. In this case the completion CTA's
+  // secondary action is labeled "보관 안 함"; via the inbox path it is "나가기".
+  // In both cases the underlying action is non-destructive (no permanent delete).
   const isListEntry =
     entrySource === "list" ||
     (mode === "basic" && !inboxId && entrySource !== "inbox");
@@ -318,7 +319,7 @@ export default function ReadScreen() {
     if (mode !== "basic") return;
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
       if (!reading.canExit) {
-        Alert.alert("읽기 중", isListEntry ? "완독 후 보관 여부를 선택해주세요." : "완독 후 보관/삭제를 선택해주세요.");
+        Alert.alert("읽기 중", "완독 후 보관 여부를 선택해주세요.");
         return true;
       }
       return false;
@@ -329,7 +330,7 @@ export default function ReadScreen() {
 
   const handleBack = useCallback(async () => {
     if (mode === "basic" && !reading.canExit) {
-      Alert.alert("읽기 중", isListEntry ? "완독 후 보관 여부를 선택해주세요." : "완독 후 보관/삭제를 선택해주세요.");
+      Alert.alert("읽기 중", "완독 후 보관 여부를 선택해주세요.");
       return;
     }
     if (reading.session.state === "READING" || reading.session.state === "PAUSED") {
@@ -618,7 +619,7 @@ Alert.alert("완료", "보관함에 저장됐어요");
         clearActiveSession();
         await readingMemo.cleanup();
         router.back();
-        Alert.alert("완료", isListEntry ? "읽기를 완료했어요" : "편지를 삭제했어요");
+        Alert.alert("완료", "읽기를 완료했어요");
       } else {
         Alert.alert("오류", result.error ?? "완독 처리에 실패했습니다.");
       }
@@ -1047,7 +1048,6 @@ Alert.alert("완료", "보관함에 저장됐어요");
                 style={[
                   styles.completionButton,
                   styles.completionButtonSecondary,
-                  !isListEntry && styles.completionButtonDelete,
                   isDeleting && styles.completionButtonDisabled,
                 ]}
                 onPress={handleCommitAndSkip}
@@ -1055,8 +1055,8 @@ Alert.alert("완료", "보관함에 저장됐어요");
               >
                 <Text style={dynamicStyles.completionButtonSecondaryText}>
                   {isDeleting
-                    ? (isListEntry ? "처리 중..." : "삭제 중...")
-                    : (isListEntry ? "보관 안 함" : "삭제하기")}
+                    ? "처리 중..."
+                    : (isListEntry ? "보관 안 함" : "나가기")}
                 </Text>
               </Pressable>
 
@@ -1395,9 +1395,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingVertical: 6,
     width: "100%",
-  },
-  completionButtonDelete: {
-    backgroundColor: "#fef2f2",
   },
   coverPageContainer: {
     flex: 1,
