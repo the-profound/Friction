@@ -20,6 +20,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useUser } from "@/contexts/UserContext";
 import SourceArticlePickerSheet from "@/components/SourceArticlePickerSheet/SourceArticlePickerSheet";
+import WritingStateBar, { type WritingStage } from "@/components/WritingStateBar/WritingStateBar";
 
 export default function DraftScreen() {
   const insets = useSafeAreaInsets();
@@ -310,6 +311,15 @@ export default function DraftScreen() {
     router.back();
   }, [flush, router, queryClient, getEditorContent, markDirty, id, deleteArticle]);
 
+  const handleStateBarPress = useCallback((target: WritingStage) => {
+    if (target === "DRAFT") return;
+    if (target === "DIVIDING") {
+      handleNext();
+      return;
+    }
+    Alert.alert("이동 불가", "분할 단계를 먼저 완료해야 마감 단계로 이동할 수 있습니다.");
+  }, [handleNext]);
+
   if (!id || articleLoading) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -326,15 +336,19 @@ export default function DraftScreen() {
         <Pressable onPress={handleBack} hitSlop={12}>
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
         </Pressable>
-        <Text style={styles.headerTitle}>작성</Text>
+        <WritingStateBar
+          current="DRAFT"
+          onPress={handleStateBarPress}
+          disabled={isNavigating}
+        />
         {keyboardVisible ? (
           <Pressable onPress={handleDismissKeyboard} hitSlop={12}>
             <MaterialCommunityIcons name="keyboard-off-outline" size={22} color={Colors.zinc600} />
           </Pressable>
+        ) : isNavigating ? (
+          <ActivityIndicator size="small" color={Colors.zinc400} />
         ) : (
-          <Pressable onPress={handleNext} hitSlop={12} disabled={isNavigating}>
-            <Text style={[styles.nextButton, isNavigating && styles.nextButtonDisabled]}>다음</Text>
-          </Pressable>
+          <View style={styles.headerRight} />
         )}
       </View>
 
@@ -413,18 +427,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.screenPx,
     paddingVertical: 12,
   },
-  headerTitle: {
-    ...Typography.bodySemiBold,
-    fontSize: 17,
-    color: Colors.zinc900,
-  },
-  nextButton: {
-    ...Typography.bodySemiBold,
-    fontSize: 15,
-    color: Colors.zinc900,
-  },
-  nextButtonDisabled: {
-    color: Colors.zinc400,
+  headerRight: {
+    width: 22,
+    height: 22,
   },
   sourceArticleRow: {
     flexDirection: "row",

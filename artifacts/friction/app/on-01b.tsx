@@ -12,6 +12,7 @@ import {
   ScrollView,
   useWindowDimensions,
 } from "react-native";
+import WritingStateBar, { type WritingStage } from "@/components/WritingStateBar/WritingStateBar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams, Stack } from "expo-router";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -768,6 +769,17 @@ export default function DividingScreen() {
     Keyboard.dismiss();
   }, []);
 
+  const handleStateBarPress = useCallback((target: WritingStage) => {
+    if (target === "DIVIDING") return;
+    if (target === "DRAFT") {
+      setStepBackConfirmVisible(true);
+      return;
+    }
+    if (target === "CLOSING") {
+      handleNext();
+    }
+  }, [handleNext]);
+
   if (!id || articleLoading) {
     return (
       <>
@@ -789,26 +801,24 @@ export default function DividingScreen() {
           <Pressable onPress={handleBack} hitSlop={12}>
             <Feather name="arrow-left" size={20} color={Colors.zinc600} />
           </Pressable>
-          <Pressable
-            style={styles.headerCenter}
-            onPress={() => setStepBackConfirmVisible(true)}
-            hitSlop={8}
-          >
-            <Text style={[styles.headerTitle, styles.headerTitleTappable]}>분할</Text>
-            <Text style={styles.pageCount}>{pages.length}페이지</Text>
-          </Pressable>
+          <WritingStateBar
+            current="DIVIDING"
+            onPress={handleStateBarPress}
+            disabled={isNavigating}
+          />
           {keyboardVisible ? (
             <Pressable onPress={handleDismissKeyboard} hitSlop={12}>
               <MaterialCommunityIcons name="keyboard-off-outline" size={22} color={Colors.zinc600} />
             </Pressable>
+          ) : isNavigating ? (
+            <ActivityIndicator size="small" color={Colors.zinc400} />
           ) : (
-            <Pressable onPress={handleNext} hitSlop={12} disabled={isNavigating}>
-              <Text style={[styles.nextButton, isNavigating && styles.nextButtonDisabled]}>다음</Text>
-            </Pressable>
+            <View style={styles.headerRight} />
           )}
         </View>
 
         <View style={styles.toolbar}>
+          <Text style={styles.pageCountLabel}>{pages.length}페이지</Text>
           <View style={styles.toolbarSpacer} />
           <Pressable
             style={[
@@ -939,31 +949,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.screenPx,
     paddingVertical: 12,
   },
-  headerCenter: {
-    alignItems: "center",
+  headerRight: {
+    width: 22,
+    height: 22,
   },
-  headerTitle: {
-    ...Typography.bodySemiBold,
-    fontSize: 17,
-    color: Colors.zinc900,
-  },
-  headerTitleTappable: {
-    textDecorationLine: "underline",
-    textDecorationColor: Colors.zinc400,
-  },
-  pageCount: {
+  pageCountLabel: {
     ...Typography.caption,
     fontSize: 12,
     color: Colors.zinc500,
-    marginTop: 2,
-  },
-  nextButton: {
-    ...Typography.bodySemiBold,
-    fontSize: 15,
-    color: Colors.zinc900,
-  },
-  nextButtonDisabled: {
-    color: Colors.zinc400,
   },
   toolbar: {
     flexDirection: "row",

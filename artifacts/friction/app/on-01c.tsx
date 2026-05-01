@@ -22,6 +22,7 @@ import { parseMarkdownBlocks } from "@/utils/markdownParser";
 import MyCollectionsModal from "@/components/MyCollectionsModal/MyCollectionsModal";
 import { resolveArticleCover, getDefaultCover } from "@/utils/articleCover";
 import { canStepBack } from "@/lib/articleStatusCycle";
+import WritingStateBar, { type WritingStage } from "@/components/WritingStateBar/WritingStateBar";
 import { useUser } from "@/contexts/UserContext";
 import {
   useGetArticle,
@@ -324,6 +325,15 @@ export default function ClosingScreen() {
     }
   }, [id, title, updateArticle]);
 
+  const handleStateBarPress = useCallback((target: WritingStage) => {
+    if (target === "CLOSING") return;
+    if (target === "DIVIDING") {
+      setStepBackConfirmVisible(true);
+      return;
+    }
+    Alert.alert("이동 불가", "분할 단계를 거쳐 작성 단계로 이동할 수 있습니다.");
+  }, []);
+
   const hasCoverPage = cover.type !== "default";
   const totalVirtualPages = pages.length > 0
     ? (hasCoverPage ? pages.length + 1 : pages.length)
@@ -384,14 +394,11 @@ export default function ClosingScreen() {
         <Pressable onPress={handleBack} hitSlop={12}>
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
         </Pressable>
-        <Pressable style={styles.headerCenter} onPress={() => setStepBackConfirmVisible(true)} hitSlop={8}>
-          <Text style={[styles.headerTitle, styles.headerTitleTappable]}>마감</Text>
-          {totalVirtualPages > 0 && (
-            <Text style={styles.pageIndicator}>
-              {isCoverPage ? "표지" : `${Math.max(0, contentPageIndex) + 1} / ${pages.length}`}
-            </Text>
-          )}
-        </Pressable>
+        <WritingStateBar
+          current="CLOSING"
+          onPress={handleStateBarPress}
+          disabled={isExporting}
+        />
         <Pressable onPress={handleExport} hitSlop={12} disabled={isExporting}>
           {isExporting ? (
             <ActivityIndicator size="small" color={Colors.zinc400} />
@@ -614,24 +621,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: Spacing.screenPx,
     paddingVertical: 12,
-  },
-  headerCenter: {
-    alignItems: "center",
-  },
-  headerTitle: {
-    ...Typography.bodySemiBold,
-    fontSize: 17,
-    color: Colors.zinc900,
-  },
-  headerTitleTappable: {
-    textDecorationLine: "underline",
-    textDecorationColor: Colors.zinc400,
-  },
-  pageIndicator: {
-    ...Typography.caption,
-    fontSize: 12,
-    color: Colors.zinc500,
-    marginTop: 2,
   },
   exportButton: {
     ...Typography.bodySemiBold,
