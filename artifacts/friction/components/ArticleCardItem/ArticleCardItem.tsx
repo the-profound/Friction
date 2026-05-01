@@ -6,7 +6,7 @@ import {
   Pressable,
   ImageBackground,
 } from "react-native";
-import { Colors, Typography, Sizing } from "../../constants/tokens";
+import { Colors, Typography, Sizing, ReaderTokens, readerFontSize, readerLetterSpacing } from "../../constants/tokens";
 import type { ArticleCover } from "@workspace/api-client-react";
 
 interface ArticleCardItemProps {
@@ -148,6 +148,9 @@ export default function ArticleCardItem({
 const CARD_W = Sizing.cardSlotW;
 const CARD_H = CARD_W * Sizing.cardRatio;
 
+const TITLE_SIZE = readerFontSize(6.5, CARD_W);
+const AUTHOR_SIZE = readerFontSize(3.6, CARD_W);
+
 const styles = StyleSheet.create({
   card: {
     width: CARD_W,
@@ -175,15 +178,19 @@ const styles = StyleSheet.create({
   inner: {
     flex: 1,
     padding: 24,
-    justifyContent: "flex-end",
+    justifyContent: "center",
   },
   author: {
-    ...Typography.caption,
+    fontFamily: ReaderTokens.fontFamily.sans,
+    fontSize: AUTHOR_SIZE,
+    lineHeight: AUTHOR_SIZE * ReaderTokens.lineHeight.relaxed,
     marginBottom: 6,
   },
   title: {
-    ...Typography.bodySemiBold,
-    fontSize: 20,
+    fontFamily: ReaderTokens.fontFamily.serifBold,
+    fontSize: TITLE_SIZE,
+    lineHeight: TITLE_SIZE * ReaderTokens.lineHeight.tight,
+    letterSpacing: readerLetterSpacing(ReaderTokens.letterSpacing.tightEm, TITLE_SIZE),
   },
   collectionTag: {
     position: "absolute",
