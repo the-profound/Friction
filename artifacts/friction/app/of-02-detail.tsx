@@ -713,7 +713,7 @@ export default function TeamCollectionDetailScreen() {
           setDebouncedInviteQuery("");
         }}
         title="멤버 초대"
-        snapPoints={[0.7]}
+        snapPoints={[0.55]}
         keyboardAware
       >
         <View style={styles.inviteContent}>

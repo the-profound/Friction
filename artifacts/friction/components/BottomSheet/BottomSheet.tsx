@@ -17,6 +17,7 @@ import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, ZIndex, Spacing } from "../../constants/tokens";
 
 const HANDLE_HEIGHT = 28;
+const MIN_TOP_GAP = 24;
 
 interface BottomSheetProps {
   visible: boolean;
@@ -55,6 +56,8 @@ export default function BottomSheet({
     [SCREEN_H, snapPoints],
   );
 
+  const minTranslateY = insets.top + MIN_TOP_GAP;
+
   useEffect(() => {
     if (visible) {
       currentSnap.current = 0;
@@ -84,9 +87,13 @@ export default function BottomSheet({
 
     const showSub = Keyboard.addListener(showEvent, (e) => {
       const kbHeight = e.endCoordinates.height;
-      keyboardOffsetRef.current = kbHeight;
       const base = getSnapY(currentSnap.current);
-      const target = Math.max(base - kbHeight, 0);
+      // Cap upward lift so the sheet's top never exceeds (safeArea top + small gap).
+      // The remaining content below the keyboard line is handled by the consumer's
+      // internal ScrollView, avoiding a "full-screen takeover" feel.
+      const target = Math.max(base - kbHeight, minTranslateY);
+      // Effective lift after capping; remember it so drag gestures stay aligned.
+      keyboardOffsetRef.current = base - target;
       Animated.spring(translateY, {
         toValue: target,
         useNativeDriver: true,
@@ -109,7 +116,7 @@ export default function BottomSheet({
       showSub.remove();
       hideSub.remove();
     };
-  }, [keyboardAware, visible, getSnapY]);
+  }, [keyboardAware, visible, getSnapY, minTranslateY]);
 
   const close = useCallback(() => {
     Keyboard.dismiss();
