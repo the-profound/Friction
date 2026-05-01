@@ -1,8 +1,9 @@
-import React, { useRef, useCallback, useImperativeHandle, forwardRef, useEffect, useState } from "react";
-import { View, StyleSheet, Platform, Keyboard } from "react-native";
+import React, { useRef, useCallback, useImperativeHandle, forwardRef, useEffect, useState, useMemo } from "react";
+import { View, StyleSheet, Platform, Keyboard, ActivityIndicator } from "react-native";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { getEditorHtml, EDITOR_CONFIG_VERSION } from "./editorHtml";
-import { getEditorFonts, subscribeEditorFonts } from "@/lib/editorFontStore";
+import { getEditorFonts, subscribeEditorFonts, consumeEditorFontsErrorToast, type EditorFontState } from "@/lib/editorFontStore";
+import { useToast } from "@/contexts/ToastContext";
 import type {
   WebViewMarkdownEditorProps,
   WebViewMarkdownEditorRef,
@@ -125,20 +126,42 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       sendCommand({ type: "setSourceArticleSlot", text: sourceArticleSlotText ?? "" });
     }, [sourceArticleSlotText, sendCommand]);
 
-    const [fonts, setFonts] = useState(() => getEditorFonts());
+    const [fonts, setFonts] = useState<EditorFontState>(() => getEditorFonts());
+    const { showToast } = useToast();
 
     useEffect(() => {
-      const unsubscribe = subscribeEditorFonts((regular, semiBold) => {
-        setFonts({ regularBase64: regular, semiBoldBase64: semiBold });
-      });
-      const current = getEditorFonts();
-      if (current.regularBase64 && current.semiBoldBase64) {
-        setFonts(current);
-      }
+      const unsubscribe = subscribeEditorFonts((next) => setFonts(next));
+      setFonts(getEditorFonts());
       return unsubscribe;
     }, []);
 
-    const html = getEditorHtml({ regularBase64: fonts.regularBase64, semiBoldBase64: fonts.semiBoldBase64 });
+    useEffect(() => {
+      if (fonts.error && !fonts.regularBase64 && consumeEditorFontsErrorToast()) {
+        showToast({
+          message: "에디터 폰트를 불러오지 못했어요. 시스템 폰트로 표시됩니다.",
+          type: "error",
+          duration: 4000,
+        });
+      }
+    }, [fonts.error, fonts.regularBase64, showToast]);
+
+    const fontsReady = !!(fonts.regularBase64 && fonts.semiBoldBase64);
+    // If font loading hard-failed, fall back to system serif (no @font-face)
+    // so the editor remains usable instead of getting stuck on a spinner.
+    const canRenderEditor = fontsReady || !!fonts.error;
+
+    const html = useMemo(
+      () => getEditorHtml({ regularBase64: fonts.regularBase64, semiBoldBase64: fonts.semiBoldBase64 }),
+      [fonts.regularBase64, fonts.semiBoldBase64],
+    );
+
+    if (!canRenderEditor) {
+      return (
+        <View style={[styles.container, styles.loading]}>
+          <ActivityIndicator size="small" color="#a1a1aa" />
+        </View>
+      );
+    }
 
     return (
       <View style={styles.container}>
@@ -185,5 +208,9 @@ const styles = StyleSheet.create({
   webView: {
     flex: 1,
     backgroundColor: "transparent",
+  },
+  loading: {
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

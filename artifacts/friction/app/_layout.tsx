@@ -11,7 +11,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Asset } from "expo-asset";
-import { setEditorFonts } from "@/lib/editorFontStore";
+import { setEditorFonts, setEditorFontsError } from "@/lib/editorFontStore";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import ToastContainer from "@/components/Toast/Toast";
@@ -187,7 +187,9 @@ async function loadEditorFonts(): Promise<void> {
     ]);
     setEditorFonts(regular, semiBold);
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     console.error("[editorFonts] Failed to load editor fonts:", err);
+    setEditorFontsError(message);
   }
 }
 
