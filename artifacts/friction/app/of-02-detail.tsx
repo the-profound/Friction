@@ -352,6 +352,14 @@ export default function TeamCollectionDetailScreen() {
 
   const articleRows = useMemo(() => buildTeamArticleRows(articles), [articles]);
 
+  const memberNicknameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const m of members) {
+      if (m.user?.nickname) map.set(m.userId, m.user.nickname);
+    }
+    return map;
+  }, [members]);
+
   const isNew = useCallback((item: TeamCollectionArticleWithDetails): boolean => {
     const ts = item.visibleAt ?? item.addedAt;
     if (!ts) return false;
@@ -377,6 +385,8 @@ export default function TeamCollectionDetailScreen() {
 
       const showNew = isNew(item);
       const rowBg = isNoticeOfDay ? Colors.noticeAccentSoft : undefined;
+      const authorId = item.article?.authorId ?? item.addedBy;
+      const authorNickname = authorId ? memberNicknameMap.get(authorId) : undefined;
 
       return (
         <SwipeableRow
@@ -413,6 +423,7 @@ export default function TeamCollectionDetailScreen() {
               </View>
               <Text style={styles.articleDate}>
                 {new Date(item.addedAt).toLocaleDateString("ko-KR")}에 추가
+                {authorNickname ? `  ·  ${authorNickname}` : ""}
               </Text>
             </View>
             <Feather name="chevron-right" size={16} color={Colors.zinc300} />
@@ -420,7 +431,7 @@ export default function TeamCollectionDetailScreen() {
         </SwipeableRow>
       );
     },
-    [handleArticleDeletePress, handleSwipeOpen, handleArticleNavigate, isNew],
+    [handleArticleDeletePress, handleSwipeOpen, handleArticleNavigate, isNew, memberNicknameMap],
   );
 
   const renderRow = useCallback(
