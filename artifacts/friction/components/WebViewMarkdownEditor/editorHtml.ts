@@ -8,7 +8,7 @@ export interface EditorFontOptions {
 function buildFontFaceCSS(opts: EditorFontOptions): string {
   const { regularBase64, semiBoldBase64 } = opts;
   if (!regularBase64 || !semiBoldBase64) return "";
-  return `@font-face{font-family:'Eulyoo1945-Regular';src:url('data:font/woff2;base64,${regularBase64}') format('woff2');font-weight:400;font-style:normal}@font-face{font-family:'Eulyoo1945-SemiBold';src:url('data:font/woff2;base64,${semiBoldBase64}') format('woff2');font-weight:600;font-style:normal}`;
+  return `@font-face{font-family:'Eulyoo1945-Regular';src:url('data:font/otf;base64,${regularBase64}') format('opentype');font-weight:400;font-style:normal}@font-face{font-family:'Eulyoo1945-SemiBold';src:url('data:font/otf;base64,${semiBoldBase64}') format('opentype');font-weight:600;font-style:normal}`;
 }
 
 export function getEditorHtml(fontOptions: EditorFontOptions = {}): string {

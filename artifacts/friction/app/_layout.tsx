@@ -175,8 +175,8 @@ const styles = StyleSheet.create({
 async function loadEditorFonts(): Promise<void> {
   try {
     const [regularAsset, semiBoldAsset] = await Asset.loadAsync([
-      require("../assets/fonts/Eulyoo1945-Regular.woff2"),
-      require("../assets/fonts/Eulyoo1945-SemiBold.woff2"),
+      require("../assets/fonts/Eulyoo1945-Regular.otf"),
+      require("../assets/fonts/Eulyoo1945-SemiBold.otf"),
     ]);
     const regularUri = regularAsset.localUri ?? regularAsset.uri;
     const semiBoldUri = semiBoldAsset.localUri ?? semiBoldAsset.uri;
