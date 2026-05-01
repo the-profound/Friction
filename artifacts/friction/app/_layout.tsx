@@ -11,7 +11,6 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Asset } from "expo-asset";
-import * as FileSystem from "expo-file-system";
 import { setEditorFonts } from "@/lib/editorFontStore";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -173,7 +172,9 @@ const styles = StyleSheet.create({
 });
 
 async function loadEditorFonts(): Promise<void> {
+  if (Platform.OS === "web") return;
   try {
+    const FileSystem = await import("expo-file-system");
     const [regularAsset, semiBoldAsset] = await Asset.loadAsync([
       require("../assets/fonts/Eulyoo1945-Regular.otf"),
       require("../assets/fonts/Eulyoo1945-SemiBold.otf"),
