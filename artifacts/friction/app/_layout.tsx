@@ -185,7 +185,8 @@ async function loadEditorFonts(): Promise<void> {
       FileSystem.readAsStringAsync(semiBoldUri, { encoding: "base64" }),
     ]);
     setEditorFonts(regular, semiBold);
-  } catch {
+  } catch (err) {
+    console.error("[editorFonts] Failed to load editor fonts:", err);
   }
 }
 

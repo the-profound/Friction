@@ -1,8 +1,8 @@
-import React, { useRef, useCallback, useImperativeHandle, forwardRef, useEffect } from "react";
+import React, { useRef, useCallback, useImperativeHandle, forwardRef, useEffect, useState } from "react";
 import { View, StyleSheet, Platform, Keyboard } from "react-native";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { getEditorHtml, EDITOR_CONFIG_VERSION } from "./editorHtml";
-import { getEditorFonts } from "@/lib/editorFontStore";
+import { getEditorFonts, subscribeEditorFonts } from "@/lib/editorFontStore";
 import type {
   WebViewMarkdownEditorProps,
   WebViewMarkdownEditorRef,
@@ -125,8 +125,20 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       sendCommand({ type: "setSourceArticleSlot", text: sourceArticleSlotText ?? "" });
     }, [sourceArticleSlotText, sendCommand]);
 
-    const { regularBase64, semiBoldBase64 } = getEditorFonts();
-    const html = getEditorHtml({ regularBase64, semiBoldBase64 });
+    const [fonts, setFonts] = useState(() => getEditorFonts());
+
+    useEffect(() => {
+      const unsubscribe = subscribeEditorFonts((regular, semiBold) => {
+        setFonts({ regularBase64: regular, semiBoldBase64: semiBold });
+      });
+      const current = getEditorFonts();
+      if (current.regularBase64 && current.semiBoldBase64) {
+        setFonts(current);
+      }
+      return unsubscribe;
+    }, []);
+
+    const html = getEditorHtml({ regularBase64: fonts.regularBase64, semiBoldBase64: fonts.semiBoldBase64 });
 
     return (
       <View style={styles.container}>
