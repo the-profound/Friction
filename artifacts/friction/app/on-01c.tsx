@@ -460,7 +460,9 @@ export default function ClosingScreen() {
                     }}>
                       {/* Mirror reader structure: centered safe-area box → padded content.
                           Scale is capped at 1.0 so the preview never zooms in beyond the
-                          original dividing-stage dimensions — matching read.tsx behaviour. */}
+                          original dividing-stage dimensions — matching read.tsx behaviour.
+                          textColumnWidth is the same integer-pixel value used by read.tsx
+                          PageView and PretextMeasureLayer, preventing Yoga pixel-snap drift. */}
                       <View style={{ width: cqiToPx(ReaderTokens.safeArea.widthCqi, storedLayoutWidth) }}>
                         <View
                           pointerEvents="none"
@@ -469,17 +471,21 @@ export default function ClosingScreen() {
                             paddingVertical: cqiToPx(ReaderTokens.padding.yCqi, storedLayoutWidth),
                           }}
                         >
-                          {previewBlocks.map((block, i) => (
-                            <View key={i} style={{ marginBottom: readerFontSize(ReaderTokens.typeScale.bodyCqi, storedLayoutWidth) * ReaderTokens.lineHeight.relaxed * 0.6 }}>
-                              <MarkdownBlock
-                                block={block}
-                                onCollect={() => {}}
-                                fontSize={readerFontSize(ReaderTokens.typeScale.bodyCqi, storedLayoutWidth)}
-                                lineHeight={readerFontSize(ReaderTokens.typeScale.bodyCqi, storedLayoutWidth) * ReaderTokens.lineHeight.relaxed}
-                                letterSpacing={readerFontSize(ReaderTokens.typeScale.bodyCqi, storedLayoutWidth) * ReaderTokens.letterSpacing.relaxedEm}
-                              />
-                            </View>
-                          ))}
+                          {/* Explicit integer-pixel text column width — must match the
+                              textColumnWidth used by read.tsx/PageView and PretextMeasureLayer. */}
+                          <View style={{ width: Math.round(cqiToPx(ReaderTokens.safeArea.widthCqi, storedLayoutWidth) - 2 * cqiToPx(ReaderTokens.padding.xCqi, storedLayoutWidth)) }}>
+                            {previewBlocks.map((block, i) => (
+                              <View key={i} style={{ marginBottom: readerFontSize(ReaderTokens.typeScale.bodyCqi, storedLayoutWidth) * ReaderTokens.lineHeight.relaxed * 0.6 }}>
+                                <MarkdownBlock
+                                  block={block}
+                                  onCollect={() => {}}
+                                  fontSize={readerFontSize(ReaderTokens.typeScale.bodyCqi, storedLayoutWidth)}
+                                  lineHeight={readerFontSize(ReaderTokens.typeScale.bodyCqi, storedLayoutWidth) * ReaderTokens.lineHeight.relaxed}
+                                  letterSpacing={readerFontSize(ReaderTokens.typeScale.bodyCqi, storedLayoutWidth) * ReaderTokens.letterSpacing.relaxedEm}
+                                />
+                              </View>
+                            ))}
+                          </View>
                         </View>
                       </View>
                     </View>
@@ -493,17 +499,20 @@ export default function ClosingScreen() {
                     }}
                     pointerEvents="none"
                   >
-                    {previewBlocks.map((block, i) => (
-                      <View key={i} style={{ marginBottom: readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth) * ReaderTokens.lineHeight.relaxed * 0.6 }}>
-                        <MarkdownBlock
-                          block={block}
-                          onCollect={() => {}}
-                          fontSize={readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth)}
-                          lineHeight={readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth) * ReaderTokens.lineHeight.relaxed}
-                          letterSpacing={readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth) * ReaderTokens.letterSpacing.relaxedEm}
-                        />
-                      </View>
-                    ))}
+                    {/* Explicit integer-pixel text column width (fallback path without storedLayoutWidth) */}
+                    <View style={{ width: Math.round(cqiToPx(ReaderTokens.safeArea.widthCqi, previewCardWidth) - 2 * cqiToPx(ReaderTokens.padding.xCqi, previewCardWidth)) }}>
+                      {previewBlocks.map((block, i) => (
+                        <View key={i} style={{ marginBottom: readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth) * ReaderTokens.lineHeight.relaxed * 0.6 }}>
+                          <MarkdownBlock
+                            block={block}
+                            onCollect={() => {}}
+                            fontSize={readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth)}
+                            lineHeight={readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth) * ReaderTokens.lineHeight.relaxed}
+                            letterSpacing={readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth) * ReaderTokens.letterSpacing.relaxedEm}
+                          />
+                        </View>
+                      ))}
+                    </View>
                   </View>
                 ) : null}
               </View>

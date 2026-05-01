@@ -27,10 +27,13 @@ export type MeasureCandidate = {
 export type MeasureRequest = {
   /** 같은 request 객체를 또 넘겨도 다시 측정하지 않는다 (참조 동등성으로 식별). */
   candidates: MeasureCandidate[];
-  /** 측정 컨테이너의 가용 폭 (페이지 safe area 폭). */
+  /** 측정 컨테이너의 가용 폭 (페이지 safe area 폭). paddingX와 함께 사용할 경우 실제 텍스트 폭은 width - 2*paddingX. */
   width: number;
-  /** 좌우 padding (페이지 readerLayout.paddingX와 동일하게). */
+  /** 좌우 padding (페이지 readerLayout.paddingX와 동일하게). textColumnWidth가 있으면 무시된다. */
   paddingX: number;
+  /** 명시적 텍스트 컬럼 너비(정수 픽셀). 설정하면 width/paddingX 대신 이 값을 컨테이너 폭으로 직접 사용한다.
+   *  read.tsx의 PageView와 동일한 값을 넘겨야 줄넘김이 일치한다. */
+  textColumnWidth?: number;
   /** 옵션: 위쪽 padding (전체 페이지 높이 측정 시에만 사용). */
   paddingTop?: number;
   /** 옵션: 아래쪽 padding (insets.bottom + paddingY 등). */
@@ -88,6 +91,10 @@ export default function PretextMeasureLayer({ request, onMeasured }: Props) {
 
   const renderKey = renderKeyRef.current;
   const blockGap = request.blockGap ?? request.lineHeight * 0.6;
+  // textColumnWidth가 주어지면 해당 값을 컨테이너 폭으로 직접 사용 (paddingHorizontal 불필요).
+  // 주어지지 않으면 기존 방식(width + paddingHorizontal)을 유지해 후방 호환성을 보장한다.
+  const containerWidth = request.textColumnWidth ?? request.width;
+  const containerPaddingX = request.textColumnWidth != null ? 0 : request.paddingX;
 
   return (
     <View pointerEvents="none" style={{ position: "absolute", left: 0, top: 0, opacity: 0 }}>
@@ -98,8 +105,8 @@ export default function PretextMeasureLayer({ request, onMeasured }: Props) {
             key={`${renderKey}-${c.key}`}
             style={{
               position: "absolute",
-              width: request.width,
-              paddingHorizontal: request.paddingX,
+              width: containerWidth,
+              paddingHorizontal: containerPaddingX,
               paddingTop: request.paddingTop,
               paddingBottom: request.paddingBottom,
             }}

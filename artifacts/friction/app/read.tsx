@@ -117,6 +117,11 @@ function computeReaderLayout(availableWidth: number, availableHeight: number, ov
   // Formula: paddingTop(8) + captionFontSize * iOS line height factor(~1.3) + paddingBottom(12)
   const titleBarHeight = Math.round(20 + captionFontSize * 1.3);
 
+  // Explicit integer pixel width of the text column.
+  // Computed once here so every consumer (PageView, PretextMeasureLayer, on-01c preview)
+  // uses the same integer and Yoga pixel-snapping cannot diverge across different parent positions.
+  const textColumnWidth = Math.round(safeAreaWidth - 2 * paddingX);
+
   return {
     containerWidth,
     containerHeight,
@@ -127,6 +132,7 @@ function computeReaderLayout(availableWidth: number, availableHeight: number, ov
     paddingY,
     safeAreaWidth,
     safeAreaHeight,
+    textColumnWidth,
     bodyFontSize,
     captionFontSize,
     metadataFontSize,
@@ -1172,6 +1178,10 @@ interface ReaderLayout {
   paddingY: number;
   safeAreaWidth: number;
   safeAreaHeight: number;
+  /** Explicit integer pixel width for the text column (safeAreaWidth - 2*paddingX, rounded).
+   *  Use this as the width constraint for text containers instead of relying on
+   *  paddingHorizontal, so Yoga pixel-snapping is consistent across different parent positions. */
+  textColumnWidth: number;
   bodyFontSize: number;
   captionFontSize: number;
   metadataFontSize: number;
@@ -1218,31 +1228,39 @@ const PageView = React.memo(function PageView({
           // Reserve space below text for the absolute-positioned title bar overlay
           paddingBottom: bottomInset + layout.paddingY + layout.titleBarHeight,
         },
+        // Explicit integer-pixel width column — prevents Yoga from pixel-snapping
+        // the available text width differently depending on the parent's position.
+        // Must match the width used by PretextMeasureLayer for line-break consistency.
+        textColumn: {
+          width: layout.textColumnWidth,
+        },
         blockWrapper: {
           marginBottom: layout.bodyLineHeight * 0.6,
         },
       }),
-    [layout.safeAreaWidth, layout.paddingX, layout.paddingY, layout.bodyLineHeight, bottomInset],
+    [layout.safeAreaWidth, layout.paddingX, layout.paddingY, layout.textColumnWidth, layout.bodyLineHeight, bottomInset],
   );
 
   return (
     <View style={[styles.pageContainer, { flex: 1 }]}>
       <View style={[dynamicPageStyles.safeAreaBox, { flex: 1 }]}>
         <View style={[dynamicPageStyles.pageContent, { flex: 1 }]}>
-          {blocks.map((block, idx) => (
-            <View key={`${pageIndex}-b-${idx}`} style={dynamicPageStyles.blockWrapper}>
-              <MarkdownBlock
-                block={block}
-                onCollect={onCollectSentence}
-                onMemo={onMemoSentence}
-                onSelectionStateChange={onSelectionStateChange}
-                fontSize={layout.bodyFontSize}
-                lineHeight={layout.bodyLineHeight}
-                letterSpacing={layout.bodyLetterSpacing}
-                clearSignal={clearSignal}
-              />
-            </View>
-          ))}
+          <View style={dynamicPageStyles.textColumn}>
+            {blocks.map((block, idx) => (
+              <View key={`${pageIndex}-b-${idx}`} style={dynamicPageStyles.blockWrapper}>
+                <MarkdownBlock
+                  block={block}
+                  onCollect={onCollectSentence}
+                  onMemo={onMemoSentence}
+                  onSelectionStateChange={onSelectionStateChange}
+                  fontSize={layout.bodyFontSize}
+                  lineHeight={layout.bodyLineHeight}
+                  letterSpacing={layout.bodyLetterSpacing}
+                  clearSignal={clearSignal}
+                />
+              </View>
+            ))}
+          </View>
         </View>
       </View>
     </View>

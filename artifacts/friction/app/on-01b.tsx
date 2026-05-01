@@ -67,10 +67,13 @@ function useReaderLayout(screenWidth: number, screenHeight: number) {
     const safeAreaHeight = cqiToPx(ReaderTokens.safeArea.heightCqi, containerWidth);
     const paddingX = cqiToPx(ReaderTokens.padding.xCqi, containerWidth);
     const paddingY = cqiToPx(ReaderTokens.padding.yCqi, containerWidth);
+    // Explicit integer text column width — same formula as computeReaderLayout in read.tsx
+    // so PretextMeasureLayer uses the exact same pixel grid as the reader screen.
+    const textColumnWidth = Math.round(safeAreaWidth - 2 * paddingX);
     const bodyFontSize = readerFontSize(ReaderTokens.typeScale.bodyCqi, containerWidth);
     const bodyLineHeight = bodyFontSize * ReaderTokens.lineHeight.relaxed;
     const bodyLetterSpacing = readerLetterSpacing(ReaderTokens.letterSpacing.relaxedEm, bodyFontSize);
-    return { containerWidth, safeAreaWidth, safeAreaHeight, paddingX, paddingY, bodyFontSize, bodyLineHeight, bodyLetterSpacing };
+    return { containerWidth, safeAreaWidth, safeAreaHeight, paddingX, paddingY, textColumnWidth, bodyFontSize, bodyLineHeight, bodyLetterSpacing };
   }, [screenWidth, screenHeight]);
 }
 
@@ -258,7 +261,14 @@ export default function DividingScreen() {
   const baseWarnings = useMemo(() => validatePages(pages), [pages]);
 
   const readerLayout = useReaderLayout(screenWidth, screenHeight);
-  const { containerWidth, safeAreaWidth, safeAreaHeight, paddingX, paddingY, bodyFontSize, bodyLineHeight, bodyLetterSpacing } = readerLayout;
+  const { containerWidth, safeAreaWidth, safeAreaHeight, paddingX, paddingY, textColumnWidth, bodyFontSize, bodyLineHeight, bodyLetterSpacing } = readerLayout;
+
+  // NOTE — WebView 편집기(on-01b) vs React Native 독자 화면(read.tsx) 줄넘김 차이:
+  // 이 화면의 편집 영역은 WebView 기반이고 read.tsx는 React Native(Yoga) 렌더러를 사용한다.
+  // 두 엔진의 텍스트 측정 방식(서체 힌팅, 글자 간격 계산 등)이 달라 편집 중 보이는 줄넘김과
+  // 독자 화면의 줄넘김 사이에 1~2글자 차이가 발생할 수 있다. 이는 렌더링 엔진 자체의 한계이며
+  // 현재 범위에서 수정 대상이 아니다. PretextMeasureLayer는 React Native로 측정하므로
+  // 오버플로 경고 및 자동분할 결과는 read.tsx와 정합한다.
 
   const pageContentHeight = safeAreaHeight;
   const blockGap = bodyLineHeight * 0.6;
@@ -300,12 +310,13 @@ export default function DividingScreen() {
       candidates,
       width: safeAreaWidth,
       paddingX,
+      textColumnWidth,
       blockGap,
       fontSize: bodyFontSize,
       lineHeight: bodyLineHeight,
       letterSpacing: bodyLetterSpacing,
     };
-  }, [measurePages, pageBlockMap, safeAreaWidth, paddingX, blockGap, bodyFontSize, bodyLineHeight, bodyLetterSpacing]);
+  }, [measurePages, pageBlockMap, safeAreaWidth, paddingX, textColumnWidth, blockGap, bodyFontSize, bodyLineHeight, bodyLetterSpacing]);
 
   const handleWarningMeasured = useCallback((heights: Record<string, number>) => {
     setBlockHeights((prev) => {
@@ -362,13 +373,14 @@ export default function DividingScreen() {
           candidates,
           width: safeAreaWidth,
           paddingX,
+          textColumnWidth,
           fontSize: bodyFontSize,
           lineHeight: bodyLineHeight,
           letterSpacing: bodyLetterSpacing,
         });
       });
     },
-    [safeAreaWidth, paddingX, bodyFontSize, bodyLineHeight, bodyLetterSpacing],
+    [safeAreaWidth, paddingX, textColumnWidth, bodyFontSize, bodyLineHeight, bodyLetterSpacing],
   );
 
   const handleEngineMeasured = useCallback((heights: Record<string, number>) => {
