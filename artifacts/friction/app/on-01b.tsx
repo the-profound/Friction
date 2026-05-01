@@ -938,7 +938,7 @@ export default function DividingScreen() {
         <PretextMeasureLayer request={engineRequest} onMeasured={handleEngineMeasured} />
 
         <KeyboardAvoidingView
-          style={styles.editor}
+          style={[styles.editor, { paddingHorizontal: paddingX }]}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
           <View style={styles.markdownEditorContainer}>
@@ -953,6 +953,8 @@ export default function DividingScreen() {
               onExportMarkdown={handleExportMarkdown}
               onTitleChange={handleTitleChange}
               onKeyboardVisibilityChange={setKeyboardVisible}
+              bodyFontSize={bodyFontSize}
+              bodyLetterSpacing={bodyLetterSpacing}
             />
           </View>
           <View style={styles.editorFooter}>

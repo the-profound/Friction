@@ -4,7 +4,8 @@ export type InlineToken =
   | { kind: "text"; value: string }
   | { kind: "bold"; value: string }
   | { kind: "italic"; value: string }
-  | { kind: "bold_italic"; value: string };
+  | { kind: "bold_italic"; value: string }
+  | { kind: "underline"; value: string };
 
 export type MarkdownBlockType =
   | { type: "h1"; tokens: InlineToken[]; rawText: string }
@@ -14,6 +15,39 @@ export type MarkdownBlockType =
   | { type: "blockquote"; tokens: InlineToken[]; rawText: string }
   | { type: "ul_item"; tokens: InlineToken[]; rawText: string }
   | { type: "ol_item"; tokens: InlineToken[]; rawText: string; index: number };
+
+function splitOnUnderline(text: string): InlineToken[] {
+  const result: InlineToken[] = [];
+  const pattern = /<u>([\s\S]*?)<\/u>/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      result.push({ kind: "text", value: text.slice(lastIndex, match.index) });
+    }
+    result.push({ kind: "underline", value: match[1] });
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) {
+    result.push({ kind: "text", value: text.slice(lastIndex) });
+  }
+  if (result.length === 0) {
+    result.push({ kind: "text", value: text });
+  }
+  return result;
+}
+
+function expandUnderlines(tokens: InlineToken[]): InlineToken[] {
+  const result: InlineToken[] = [];
+  for (const token of tokens) {
+    if (token.kind === "text" && token.value.includes("<u>")) {
+      result.push(...splitOnUnderline(token.value));
+    } else {
+      result.push(token);
+    }
+  }
+  return result;
+}
 
 function parseInlineMarkedTokens(markedTokens: Token[]): InlineToken[] {
   const result: InlineToken[] = [];
@@ -49,7 +83,7 @@ function parseInlineMarkedTokens(markedTokens: Token[]): InlineToken[] {
       result.push({ kind: "text", value: (token as { raw: string }).raw });
     }
   }
-  return result;
+  return expandUnderlines(result);
 }
 
 function inlineTokensFromText(text: string): InlineToken[] {
@@ -59,7 +93,7 @@ function inlineTokensFromText(text: string): InlineToken[] {
   if (firstBlock && firstBlock.type === "paragraph" && (firstBlock as Tokens.Paragraph).tokens) {
     return parseInlineMarkedTokens((firstBlock as Tokens.Paragraph).tokens!);
   }
-  return [{ kind: "text", value: text }];
+  return expandUnderlines([{ kind: "text", value: text }]);
 }
 
 export function tokensToPlainText(tokens: InlineToken[]): string {
@@ -96,14 +130,14 @@ export function parseMarkdownBlocks(markdown: string): MarkdownBlockType[] {
     if (token.type === "heading") {
       const t = token as Tokens.Heading;
       const rawText = t.text;
-      const tokens = t.tokens ? parseInlineMarkedTokens(t.tokens) : [{ kind: "text" as const, value: rawText }];
+      const tokens = t.tokens ? parseInlineMarkedTokens(t.tokens) : expandUnderlines([{ kind: "text" as const, value: rawText }]);
       if (t.depth === 1) blocks.push({ type: "h1", tokens, rawText });
       else if (t.depth === 2) blocks.push({ type: "h2", tokens, rawText });
       else blocks.push({ type: "h3", tokens, rawText });
     } else if (token.type === "paragraph") {
       const t = token as Tokens.Paragraph;
       const rawText = t.text;
-      const tokens = t.tokens ? parseInlineMarkedTokens(t.tokens) : [{ kind: "text" as const, value: rawText }];
+      const tokens = t.tokens ? parseInlineMarkedTokens(t.tokens) : expandUnderlines([{ kind: "text" as const, value: rawText }]);
       blocks.push({ type: "paragraph", tokens, rawText });
     } else if (token.type === "blockquote") {
       const t = token as Tokens.Blockquote;
@@ -114,7 +148,7 @@ export function parseMarkdownBlocks(markdown: string): MarkdownBlockType[] {
           blocks.push({ type: "blockquote", tokens: inner.tokens, rawText: inner.rawText });
         }
       } else {
-        blocks.push({ type: "blockquote", tokens: [{ kind: "text", value: rawText }], rawText });
+        blocks.push({ type: "blockquote", tokens: expandUnderlines([{ kind: "text", value: rawText }]), rawText });
       }
     } else if (token.type === "list") {
       const t = token as Tokens.List;

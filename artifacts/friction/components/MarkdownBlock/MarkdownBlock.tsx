@@ -38,6 +38,13 @@ function renderInlineTokens(tokens: InlineToken[]) {
         </Text>
       );
     }
+    if (token.kind === "underline") {
+      return (
+        <Text key={i} style={styles.underline}>
+          {token.value}
+        </Text>
+      );
+    }
     return <Text key={i}>{token.value}</Text>;
   });
 }
@@ -102,10 +109,10 @@ export default function MarkdownBlock({
         onSelectionStateChange={onSelectionStateChange}
         fontSize={sz}
         lineHeight={sz * 1.25}
-        letterSpacing={letterSpacing * 0.5}
+        letterSpacing={sz * 0.025}
         clearSignal={clearSignal}
       >
-        <Text style={[styles.heading, { fontSize: sz, lineHeight: sz * 1.25, letterSpacing: letterSpacing * 0.5 }]}>
+        <Text style={[styles.heading, { fontSize: sz, lineHeight: sz * 1.25, letterSpacing: sz * 0.025, fontWeight: "600" }]}>
           {renderInlineTokens(block.tokens)}
         </Text>
       </SelectableText>
@@ -122,10 +129,10 @@ export default function MarkdownBlock({
         onSelectionStateChange={onSelectionStateChange}
         fontSize={sz}
         lineHeight={sz * 1.3}
-        letterSpacing={letterSpacing * 0.5}
+        letterSpacing={sz * 0.025}
         clearSignal={clearSignal}
       >
-        <Text style={[styles.heading, { fontSize: sz, lineHeight: sz * 1.3, letterSpacing: letterSpacing * 0.5 }]}>
+        <Text style={[styles.heading, { fontSize: sz, lineHeight: sz * 1.3, letterSpacing: sz * 0.025, fontWeight: "600" }]}>
           {renderInlineTokens(block.tokens)}
         </Text>
       </SelectableText>
@@ -142,10 +149,10 @@ export default function MarkdownBlock({
         onSelectionStateChange={onSelectionStateChange}
         fontSize={sz}
         lineHeight={sz * 1.35}
-        letterSpacing={letterSpacing * 0.5}
+        letterSpacing={sz * 0.025}
         clearSignal={clearSignal}
       >
-        <Text style={[styles.heading, { fontSize: sz, lineHeight: sz * 1.35, letterSpacing: letterSpacing * 0.5 }]}>
+        <Text style={[styles.heading, { fontSize: sz, lineHeight: sz * 1.35, letterSpacing: sz * 0.025, fontWeight: "600" }]}>
           {renderInlineTokens(block.tokens)}
         </Text>
       </SelectableText>
@@ -154,7 +161,7 @@ export default function MarkdownBlock({
 
   if (block.type === "blockquote") {
     return (
-      <View style={styles.blockquoteContainer}>
+      <View style={[styles.blockquoteContainer, { gap: fontSize * 1.0 }]}>
         <View style={styles.blockquoteLine} />
         <View style={styles.blockquoteBody}>
           <SelectableText
@@ -178,7 +185,7 @@ export default function MarkdownBlock({
 
   if (block.type === "ul_item") {
     return (
-      <View style={styles.listItemRow}>
+      <View style={[styles.listItemRow, { paddingLeft: fontSize * 1.5 }]}>
         <Text style={[styles.listBullet, { fontSize, lineHeight }]}>{"•"}</Text>
         <View style={styles.listItemBody}>
           <SelectableText
@@ -202,7 +209,7 @@ export default function MarkdownBlock({
 
   if (block.type === "ol_item") {
     return (
-      <View style={styles.listItemRow}>
+      <View style={[styles.listItemRow, { paddingLeft: fontSize * 1.5 }]}>
         <Text style={[styles.listBullet, { fontSize, lineHeight }]}>
           {block.index}.
         </Text>
@@ -252,9 +259,11 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontStyle: "italic",
   },
+  underline: {
+    textDecorationLine: "underline",
+  },
   blockquoteContainer: {
     flexDirection: "row",
-    gap: 10,
     alignItems: "stretch",
   },
   blockquoteLine: {

@@ -27,6 +27,8 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       onKeyboardVisibilityChange,
       sourceArticleSlotText,
       onSourceArticleSlotTap,
+      bodyFontSize,
+      bodyLetterSpacing,
     },
     ref,
   ) {
@@ -123,6 +125,12 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
     }, [editable, sendCommand]);
 
     useEffect(() => {
+      if (readyRef.current && bodyFontSize != null && bodyLetterSpacing != null) {
+        sendCommand({ type: "setBodyMetrics", fontSizePx: bodyFontSize, letterSpacingPx: bodyLetterSpacing });
+      }
+    }, [bodyFontSize, bodyLetterSpacing, sendCommand]);
+
+    useEffect(() => {
       sendCommand({ type: "setSourceArticleSlot", text: sourceArticleSlotText ?? "" });
     }, [sourceArticleSlotText, sendCommand]);
 
@@ -176,6 +184,9 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
               type: "init",
               payload: { initialMarkdown, editorConfigVersion, placeholder, titleValue },
             });
+            if (bodyFontSize != null && bodyLetterSpacing != null) {
+              sendCommand({ type: "setBodyMetrics", fontSizePx: bodyFontSize, letterSpacingPx: bodyLetterSpacing });
+            }
             flushQueue();
           }}
           onError={(e) => {

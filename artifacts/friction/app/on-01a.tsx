@@ -1,9 +1,9 @@
-import React, { useState, useCallback, useEffect, useRef } from "react";
-import { View, Text, StyleSheet, Pressable, Alert, ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform } from "react-native";
+import React, { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { View, Text, StyleSheet, Pressable, Alert, ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
-import { Colors, Typography, Spacing } from "@/constants/tokens";
+import { Colors, Typography, Spacing, ReaderTokens, cqiToPx, readerFontSize, readerLetterSpacing } from "@/constants/tokens";
 import { useAutoSave } from "@/lib/useAutoSave";
 import { canTransitionForward } from "@/lib/articleStatusCycle";
 import type { ArticleStatus } from "@/lib/policies";
@@ -28,6 +28,16 @@ export default function DraftScreen() {
   const queryClient = useQueryClient();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { userId } = useUser();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+
+  const editorLayout = useMemo(() => {
+    const widthFromHeight = screenHeight * ReaderTokens.aspectRatio;
+    const containerWidth = widthFromHeight <= screenWidth ? widthFromHeight : screenWidth;
+    const paddingX = cqiToPx(ReaderTokens.padding.xCqi, containerWidth);
+    const bodyFontSize = readerFontSize(ReaderTokens.typeScale.bodyCqi, containerWidth);
+    const bodyLetterSpacing = readerLetterSpacing(ReaderTokens.letterSpacing.relaxedEm, bodyFontSize);
+    return { paddingX, bodyFontSize, bodyLetterSpacing };
+  }, [screenWidth, screenHeight]);
 
   const articleQuery = useGetArticle(id ?? "");
   const article = id ? articleQuery.data : undefined;
@@ -353,7 +363,7 @@ export default function DraftScreen() {
       </View>
 
       <KeyboardAvoidingView
-        style={styles.editor}
+        style={[styles.editor, { paddingHorizontal: editorLayout.paddingX }]}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <View style={styles.markdownEditorContainer}>
@@ -368,6 +378,8 @@ export default function DraftScreen() {
             onExportMarkdown={handleExportMarkdown}
             onTitleChange={handleTitleChange}
             onKeyboardVisibilityChange={setKeyboardVisible}
+            bodyFontSize={editorLayout.bodyFontSize}
+            bodyLetterSpacing={editorLayout.bodyLetterSpacing}
             belowTitleSlot={
               <Pressable
                 style={styles.sourceArticleRow}

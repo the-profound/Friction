@@ -1234,11 +1234,8 @@ const PageView = React.memo(function PageView({
         textColumn: {
           width: layout.textColumnWidth,
         },
-        blockWrapper: {
-          marginBottom: layout.bodyLineHeight * 0.6,
-        },
       }),
-    [layout.safeAreaWidth, layout.paddingX, layout.paddingY, layout.textColumnWidth, layout.bodyLineHeight, bottomInset],
+    [layout.safeAreaWidth, layout.paddingX, layout.paddingY, layout.textColumnWidth, bottomInset],
   );
 
   return (
@@ -1246,20 +1243,42 @@ const PageView = React.memo(function PageView({
       <View style={[dynamicPageStyles.safeAreaBox, { flex: 1 }]}>
         <View style={[dynamicPageStyles.pageContent, { flex: 1 }]}>
           <View style={dynamicPageStyles.textColumn}>
-            {blocks.map((block, idx) => (
-              <View key={`${pageIndex}-b-${idx}`} style={dynamicPageStyles.blockWrapper}>
-                <MarkdownBlock
-                  block={block}
-                  onCollect={onCollectSentence}
-                  onMemo={onMemoSentence}
-                  onSelectionStateChange={onSelectionStateChange}
-                  fontSize={layout.bodyFontSize}
-                  lineHeight={layout.bodyLineHeight}
-                  letterSpacing={layout.bodyLetterSpacing}
-                  clearSignal={clearSignal}
-                />
-              </View>
-            ))}
+            {blocks.map((block, idx) => {
+              const fs = layout.bodyFontSize;
+              const nextBlock = blocks[idx + 1];
+              let wrapperStyle: { marginTop?: number; marginBottom?: number; marginVertical?: number } = {};
+              if (block.type === "paragraph") {
+                wrapperStyle = { marginBottom: fs * 1.0 };
+              } else if (block.type === "h1") {
+                const sz = fs * 1.6;
+                wrapperStyle = { marginTop: sz * 1.0, marginBottom: sz * 0.4 };
+              } else if (block.type === "h2") {
+                const sz = fs * 1.3;
+                wrapperStyle = { marginTop: sz * 0.8, marginBottom: sz * 0.3 };
+              } else if (block.type === "h3") {
+                const sz = fs * 1.1;
+                wrapperStyle = { marginTop: sz * 0.6, marginBottom: sz * 0.3 };
+              } else if (block.type === "blockquote") {
+                wrapperStyle = { marginVertical: fs * 0.5 };
+              } else if (block.type === "ul_item" || block.type === "ol_item") {
+                const isLastInList = !nextBlock || (nextBlock.type !== "ul_item" && nextBlock.type !== "ol_item");
+                wrapperStyle = { marginBottom: isLastInList ? fs * 1.0 : fs * 0.2 };
+              }
+              return (
+                <View key={`${pageIndex}-b-${idx}`} style={wrapperStyle}>
+                  <MarkdownBlock
+                    block={block}
+                    onCollect={onCollectSentence}
+                    onMemo={onMemoSentence}
+                    onSelectionStateChange={onSelectionStateChange}
+                    fontSize={layout.bodyFontSize}
+                    lineHeight={layout.bodyLineHeight}
+                    letterSpacing={layout.bodyLetterSpacing}
+                    clearSignal={clearSignal}
+                  />
+                </View>
+              );
+            })}
           </View>
         </View>
       </View>

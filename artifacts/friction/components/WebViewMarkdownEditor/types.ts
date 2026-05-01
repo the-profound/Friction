@@ -19,7 +19,8 @@ export type RNToWebViewCommand =
   | { type: "requestExportMarkdown"; requestId: string }
   | { type: "setEditable"; isEditable: boolean }
   | { type: "setSourceArticleSlot"; text: string }
-  | { type: "setOverflowRanges"; ranges: OverflowRange[] | null };
+  | { type: "setOverflowRanges"; ranges: OverflowRange[] | null }
+  | { type: "setBodyMetrics"; fontSizePx: number; letterSpacingPx: number };
 
 export interface OnChangePayload {
   isDirty: boolean;
@@ -73,4 +74,6 @@ export interface WebViewMarkdownEditorProps {
   belowTitleSlot?: ReactNode;
   sourceArticleSlotText?: string | null;
   onSourceArticleSlotTap?: () => void;
+  bodyFontSize?: number;
+  bodyLetterSpacing?: number;
 }

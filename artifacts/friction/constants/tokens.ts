@@ -277,7 +277,7 @@ export const ReaderTokens = {
   },
 
   padding: {
-    xCqi: 6,
+    xCqi: 4,
     yCqi: 10,
   },
 

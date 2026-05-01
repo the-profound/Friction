@@ -470,6 +470,8 @@ interface Command {
   isEditable?: boolean;
   ranges?: OverflowRange[] | null;
   text?: string;
+  fontSizePx?: number;
+  letterSpacingPx?: number;
 }
 
 (function () {
@@ -627,6 +629,16 @@ interface Command {
             const ranges = cmd.ranges || [];
             const tr = editor.state.tr.setMeta(overflowPluginKey, { ranges });
             editor.view.dispatch(tr);
+          }
+          break;
+        }
+        case "setBodyMetrics": {
+          const root = document.documentElement;
+          if (cmd.fontSizePx != null) {
+            root.style.setProperty("--body-font-size", cmd.fontSizePx + "px");
+          }
+          if (cmd.letterSpacingPx != null) {
+            root.style.setProperty("--body-letter-spacing", cmd.letterSpacingPx + "px");
           }
           break;
         }
