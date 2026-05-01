@@ -126,41 +126,51 @@ router.post("/send-records", async (req, res) => {
 
   const deliverySlot = computeDeliverySlot();
 
-  const result = await db.transaction(async (tx) => {
-    const [inboxEntry] = await tx.insert(inboxTable).values({
-      recipientId,
-      articleId,
-      senderId,
-      visibleAt: deliverySlot,
-    }).returning();
+  let result;
+  try {
+    result = await db.transaction(async (tx) => {
+      const [inboxEntry] = await tx.insert(inboxTable).values({
+        recipientId,
+        articleId,
+        senderId,
+        visibleAt: deliverySlot,
+      }).returning();
 
-    const [sendRecord] = await tx.insert(sendRecordsTable).values({
-      senderId,
-      recipientId,
-      articleId,
-      inboxId: inboxEntry.id,
-      deliverySlot,
-    }).returning();
+      const [sendRecord] = await tx.insert(sendRecordsTable).values({
+        senderId,
+        recipientId,
+        articleId,
+        inboxId: inboxEntry.id,
+        deliverySlot,
+      }).returning();
 
-    const records = await tx
-      .select({
-        id: sendRecordsTable.id,
-        senderId: sendRecordsTable.senderId,
-        recipientId: sendRecordsTable.recipientId,
-        articleId: sendRecordsTable.articleId,
-        inboxId: sendRecordsTable.inboxId,
-        deliverySlot: sendRecordsTable.deliverySlot,
-        sentAt: sendRecordsTable.sentAt,
-        article: articlesTable,
-        recipient: usersTable,
-      })
-      .from(sendRecordsTable)
-      .leftJoin(articlesTable, eq(sendRecordsTable.articleId, articlesTable.id))
-      .leftJoin(usersTable, eq(sendRecordsTable.recipientId, usersTable.id))
-      .where(eq(sendRecordsTable.id, sendRecord.id));
+      const records = await tx
+        .select({
+          id: sendRecordsTable.id,
+          senderId: sendRecordsTable.senderId,
+          recipientId: sendRecordsTable.recipientId,
+          articleId: sendRecordsTable.articleId,
+          inboxId: sendRecordsTable.inboxId,
+          deliverySlot: sendRecordsTable.deliverySlot,
+          sentAt: sendRecordsTable.sentAt,
+          article: articlesTable,
+          recipient: usersTable,
+        })
+        .from(sendRecordsTable)
+        .leftJoin(articlesTable, eq(sendRecordsTable.articleId, articlesTable.id))
+        .leftJoin(usersTable, eq(sendRecordsTable.recipientId, usersTable.id))
+        .where(eq(sendRecordsTable.id, sendRecord.id));
 
-    return records[0];
-  });
+      return records[0];
+    });
+  } catch (err: unknown) {
+    const pgErr = err as { code?: string };
+    if (pgErr?.code === "23505") {
+      res.status(409).json({ error: "This article has already been sent to the recipient." });
+      return;
+    }
+    throw err;
+  }
 
   const now = new Date();
   res.status(201).json(result ? { ...result, isDelivered: new Date(result.deliverySlot) <= now } : result);

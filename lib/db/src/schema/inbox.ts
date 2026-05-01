@@ -1,4 +1,4 @@
-import { boolean, pgTable, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, pgTable, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -14,7 +14,9 @@ export const inboxTable = pgTable("inbox", {
   openedAt: timestamp("opened_at", { withTimezone: true }),
   isRead: boolean("is_read").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [
+  unique("inbox_recipient_article_unique").on(t.recipientId, t.articleId),
+]);
 
 export const insertInboxSchema = createInsertSchema(inboxTable).omit({ id: true, createdAt: true });
 export type InsertInbox = z.infer<typeof insertInboxSchema>;

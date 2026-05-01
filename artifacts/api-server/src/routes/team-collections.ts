@@ -486,7 +486,7 @@ router.post("/team-collections/:id/articles", async (req, res) => {
           senderId: addedBy,
           visibleAt,
         })),
-      );
+      ).onConflictDoNothing();
     }
 
     await tx.insert(sendRecordsTable).values({

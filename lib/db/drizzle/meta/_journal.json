@@ -71,6 +71,13 @@
       "when": 1745712000000,
       "tag": "0009_add_target_type_to_send_records",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1746057600000,
+      "tag": "0010_add_inbox_recipient_article_unique",
+      "breakpoints": true
     }
   ]
 }
