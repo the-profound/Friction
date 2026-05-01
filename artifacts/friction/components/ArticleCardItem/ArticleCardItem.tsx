@@ -69,14 +69,6 @@ export default function ArticleCardItem({
       >
         {title}
       </Text>
-      {collectionName ? (
-        <Text
-          style={[styles.collectionName, { textAlign }]}
-          numberOfLines={1}
-        >
-          {collectionName}
-        </Text>
-      ) : null}
     </View>
   );
 
@@ -118,6 +110,13 @@ export default function ArticleCardItem({
           <View style={styles.imageOverlay} />
           {content}
           {badges}
+          {collectionName ? (
+            <View style={styles.collectionTag} pointerEvents="none">
+              <Text style={styles.collectionTagText} numberOfLines={1}>
+                {collectionName}
+              </Text>
+            </View>
+          ) : null}
         </ImageBackground>
       ) : (
         <View
@@ -133,6 +132,13 @@ export default function ArticleCardItem({
         >
           {content}
           {badges}
+          {collectionName ? (
+            <View style={styles.collectionTag} pointerEvents="none">
+              <Text style={styles.collectionTagText} numberOfLines={1}>
+                {collectionName}
+              </Text>
+            </View>
+          ) : null}
         </View>
       )}
     </Pressable>
@@ -179,10 +185,20 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 20,
   },
-  collectionName: {
+  collectionTag: {
+    position: "absolute",
+    bottom: 12,
+    left: 12,
+    alignSelf: "flex-start",
+    backgroundColor: Colors.white,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  collectionTagText: {
     ...Typography.caption,
-    color: Colors.zinc400,
-    marginTop: 6,
+    fontSize: 12,
+    color: Colors.zinc700,
   },
   badgeStack: {
     position: "absolute",
