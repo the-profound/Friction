@@ -236,8 +236,10 @@ const proseMirrorCss = `
   color: #1A1A1A;
   -webkit-text-size-adjust: 100%;
   text-align: justify;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
 }
-.ProseMirror p { margin-bottom: 1em; text-align: justify; }
+.ProseMirror p { margin-bottom: 1em; text-align: justify; overflow-wrap: break-word; }
 .ProseMirror h1 { font-family: 'Eulyoo1945-SemiBold', serif; font-size: 1.6em; font-weight: 700; letter-spacing: 0.025em; margin: 1em 0 0.4em; line-height: 1.25; text-align: left; }
 .ProseMirror h2 { font-family: 'Eulyoo1945-SemiBold', serif; font-size: 1.3em; font-weight: 700; letter-spacing: 0.025em; margin: 0.8em 0 0.3em; line-height: 1.3; text-align: left; }
 .ProseMirror h3 { font-family: 'Eulyoo1945-SemiBold', serif; font-size: 1.1em; font-weight: 600; letter-spacing: 0.025em; margin: 0.6em 0 0.3em; line-height: 1.35; text-align: left; }

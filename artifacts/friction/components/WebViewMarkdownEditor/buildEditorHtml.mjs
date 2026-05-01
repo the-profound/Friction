@@ -65,7 +65,6 @@ html,body{height:100%;background:transparent}
   -webkit-text-size-adjust:100%;
   outline:none;
   text-align:justify;
-  word-break:keep-all;
   overflow-wrap:break-word;
   text-justify:inter-ideograph;
 }
@@ -75,7 +74,7 @@ html,body{height:100%;background:transparent}
   word-wrap:break-word;
   white-space:pre-wrap;
 }
-.ProseMirror p{margin-bottom:1em;text-align:justify;word-break:keep-all;overflow-wrap:break-word;text-justify:inter-ideograph}
+.ProseMirror p{margin-bottom:1em;text-align:justify;overflow-wrap:break-word;text-justify:inter-ideograph}
 .ProseMirror h1{font-family:'Eulyoo1945-SemiBold',serif;font-size:1.6em;font-weight:700;letter-spacing:0.025em;margin:1em 0 0.4em;line-height:1.25;text-align:left}
 .ProseMirror h2{font-family:'Eulyoo1945-SemiBold',serif;font-size:1.3em;font-weight:700;letter-spacing:0.025em;margin:0.8em 0 0.3em;line-height:1.3;text-align:left}
 .ProseMirror h3{font-family:'Eulyoo1945-SemiBold',serif;font-size:1.1em;font-weight:600;letter-spacing:0.025em;margin:0.6em 0 0.3em;line-height:1.35;text-align:left}
