@@ -30,8 +30,16 @@ function htmlToMarkdown(html: string): string {
       bulletListMarker: "-",
       codeBlockStyle: "fenced",
     });
-    const raw = td.turndown(html || "");
-    return raw.replace(/^\\([#\-*>])/gm, "$1");
+    const originalEscape = td.escape.bind(td);
+    td.escape = (str: string) => {
+      return (
+        originalEscape(str)
+          .replace(/\\(\*{1,3})(?=\S)/g, "$1")
+          .replace(/(?<=\S)\\(\*{1,3})/g, "$1")
+          .replace(/\\(_+)/g, "$1")
+      );
+    };
+    return td.turndown(html || "").replace(/^\\([#\->])/gm, "$1");
   } catch {
     return "";
   }
