@@ -699,7 +699,7 @@ export default function OfScreen() {
 
       {!selectionMode && searchActive && (
         <View style={styles.searchBar}>
-          <Feather name="search" size={16} color={Colors.zinc400} />
+          <Feather name="search" size={Sizing.searchBarIconSize} color={Colors.searchIcon} />
           <TextInput
             style={styles.searchInput}
             placeholder={
@@ -709,7 +709,7 @@ export default function OfScreen() {
                   ? "단체 모음 이름으로 검색"
                   : "문장 내용으로 검색"
             }
-            placeholderTextColor={Colors.zinc400}
+            placeholderTextColor={Colors.searchPlaceholder}
             value={searchQuery}
             onChangeText={setSearchQuery}
             autoFocus
@@ -717,7 +717,7 @@ export default function OfScreen() {
           />
           {searchQuery.length > 0 && (
             <Pressable onPress={() => setSearchQuery("")} hitSlop={8}>
-              <Feather name="x" size={16} color={Colors.zinc400} />
+              <Feather name="x" size={16} color={Colors.searchIcon} />
             </Pressable>
           )}
         </View>
@@ -1000,19 +1000,18 @@ const styles = StyleSheet.create({
   searchBar: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: Colors.zinc50,
+    backgroundColor: Colors.searchBarBg,
     marginHorizontal: Spacing.screenPx,
-    borderRadius: 20,
-    height: 40,
+    borderRadius: Sizing.searchBarHeight / 2,
+    height: Sizing.searchBarHeight,
     paddingHorizontal: 16,
     gap: 10,
     marginBottom: 8,
   },
   searchInput: {
     flex: 1,
-    ...Typography.body,
-    fontSize: 14,
-    color: Colors.zinc900,
+    ...Typography.searchInput,
+    color: Colors.searchText,
     padding: 0,
   },
   gridContent: {
