@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -174,8 +175,11 @@ export default function LoginScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          <Feather name="book-open" size={56} color={Colors.zinc300} />
-          <Text style={styles.title}>Friction</Text>
+          <Image
+            source={require("../assets/images/splash-icon.png")}
+            style={styles.logo}
+            resizeMode="contain"
+          />
           <Text style={styles.subtitle}>읽고, 나누고, 연결하세요</Text>
         </View>
 
@@ -495,11 +499,9 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 36,
   },
-  title: {
-    ...Typography.headerTitle,
-    fontSize: 36,
-    color: Colors.zinc900,
-    marginTop: 4,
+  logo: {
+    width: 120,
+    height: 120,
   },
   subtitle: {
     ...Typography.body,
