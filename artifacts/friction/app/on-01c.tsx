@@ -53,9 +53,17 @@ export default function ClosingScreen() {
     : undefined;
 
   const { refetch: refetchArticle } = articleQuery;
+
+  // Capture mount time so we can verify fresh data (dataUpdatedAt >= mountedAt)
+  // before initializing title/cover, avoiding stale-cache initialization.
+  const mountedAtRef = useRef(Date.now());
+
+  // Force a fresh fetch on mount so stale cache never initializes the screen
+  // with outdated title or cover.
   useEffect(() => {
-    if (id) refetchArticle();
-  // Run once on mount to ensure fresh data when navigating here without going home first
+    if (id) {
+      queryClient.invalidateQueries({ queryKey: [`/api/articles/${id}`] });
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -98,13 +106,17 @@ export default function ClosingScreen() {
       setPreviewPage(0);
       return incoming;
     });
-    // title·cover는 이 화면에서 편집하므로 최초 1회만 초기화
-    if (!initializedRef.current) {
+    // title·cover는 이 화면에서 편집하므로 최초 1회만 초기화.
+    // Gate initialization on data being NEWER than this component's mount time.
+    // This prevents stale cached data from initializing before the fresh fetch
+    // triggered by invalidateQueries on mount has resolved.
+    const isDataFresh = articleQuery.dataUpdatedAt >= mountedAtRef.current;
+    if (!initializedRef.current && isDataFresh) {
       initializedRef.current = true;
       setTitle(article.title || "");
       setCover(resolveArticleCover(article.cover));
     }
-  }, [article]);
+  }, [article, articleQuery.dataUpdatedAt]);
 
   const pendingCoverRef = useRef<ArticleCover | null>(null);
 
