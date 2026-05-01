@@ -780,6 +780,109 @@ export async function seedDevData(): Promise<void> {
 
       logger.info("Dev seed data (v4) inserted successfully");
     }
+
+    // -----------------------------------------------------------------------
+    // v5 sentinel: three more letters in 하윤이네 모임 (a1000022–a1000024)
+    // -----------------------------------------------------------------------
+    const { rows: sentinelV5 } = await client.query(`
+      SELECT id FROM inbox
+      WHERE recipient_id = '54cbadb0-eab9-4f69-8c32-90a9e00d7908'
+        AND article_id   = 'a1000022-0000-4000-a000-000000000022'
+      LIMIT 1
+    `);
+    if (sentinelV5.length > 0) {
+      logger.info("Dev seed data already present (v5), skipping");
+    } else {
+      logger.info("Inserting dev seed data (v5)…");
+
+      // v5-1. Articles
+      await client.query(`
+        INSERT INTO articles
+          (id, author_id, title, content, status, pages, style, cover,
+           source_article_id, is_notice, notice_date, created_at, updated_at)
+        VALUES
+          ('a1000022-0000-4000-a000-000000000022',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            '산책 일기', '오늘 오래간만에 한강변을 걸었다. 강바람이 생각보다 차가워서 귀가 얼얼해졌지만, 물 위로 지는 노을이 너무 예뻐서 한참을 서서 바라봤다. 그냥 조용히 걷는 시간이 이렇게 소중한 거였나 싶었다.',
+            'LETTER', '[]', NULL, NULL, NULL, FALSE, NULL,
+            '2026-05-01 03:00:00+00', '2026-05-01 03:00:00+00'),
+          ('a1000023-0000-4000-a000-000000000023',
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
+            '오늘의 날씨 같은 기분', '흐렸다가 맑아지는 날이었다. 오전엔 괜히 울적했는데 점심을 먹고 나서부터 기분이 좀 나아졌다. 날씨랑 기분이 꼭 닮아 있을 때가 있다. 별일도 없는데 하루가 이렇게 달라지네.',
+            'LETTER', '[]', NULL, NULL, NULL, FALSE, NULL,
+            '2026-05-01 05:00:00+00', '2026-05-01 05:00:00+00'),
+          ('a1000024-0000-4000-a000-000000000024',
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
+            '오래된 사진', '서랍을 정리하다가 5년 전 사진을 발견했다. 다들 그때가 더 어려 보이는데, 나만 별로 안 변한 것 같아서 좀 억울하다. 근데 사진 속 표정들이 지금보다 훨씬 밝아서, 그땐 뭐가 그렇게 좋았나 한참 생각했다.',
+            'LETTER', '[]', NULL, NULL, NULL, FALSE, NULL,
+            '2026-05-01 07:00:00+00', '2026-05-01 07:00:00+00')
+        ON CONFLICT (id) DO UPDATE SET
+          title = EXCLUDED.title,
+          content = EXCLUDED.content,
+          updated_at = EXCLUDED.updated_at
+      `);
+
+      // v5-2. team_collection_articles (하윤이네 모임)
+      await client.query(`
+        INSERT INTO team_collection_articles
+          (id, team_collection_id, article_id, added_by, added_at, deleted_at)
+        VALUES
+          (gen_random_uuid(), '2d9417a7-27e4-46c0-9ae5-3c4a4298c0f2',
+            'a1000022-0000-4000-a000-000000000022',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            '2026-05-01 03:00:00+00', NULL),
+          (gen_random_uuid(), '2d9417a7-27e4-46c0-9ae5-3c4a4298c0f2',
+            'a1000023-0000-4000-a000-000000000023',
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
+            '2026-05-01 05:00:00+00', NULL),
+          (gen_random_uuid(), '2d9417a7-27e4-46c0-9ae5-3c4a4298c0f2',
+            'a1000024-0000-4000-a000-000000000024',
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
+            '2026-05-01 07:00:00+00', NULL)
+        ON CONFLICT ON CONSTRAINT team_collection_articles_unique DO NOTHING
+      `);
+
+      // v5-3. Inbox entries (visibleAt May 1 21:00 UTC = KST May 2 06:00)
+      await client.query(`
+        INSERT INTO inbox
+          (id, recipient_id, article_id, sender_id, visible_at, is_read, created_at)
+        VALUES
+          -- a1000022 (민지 원글)
+          (gen_random_uuid(), '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
+            'a1000022-0000-4000-a000-000000000022',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-05-01 21:00:00+00', FALSE, NOW()),
+          (gen_random_uuid(), '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
+            'a1000022-0000-4000-a000-000000000022',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-05-01 21:00:00+00', FALSE, NOW()),
+          (gen_random_uuid(), '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            'a1000022-0000-4000-a000-000000000022',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-05-01 21:00:00+00', FALSE, NOW()),
+
+          -- a1000023 (하윤 원글)
+          (gen_random_uuid(), '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
+            'a1000023-0000-4000-a000-000000000023',
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-05-01 21:00:00+00', FALSE, NOW()),
+          (gen_random_uuid(), '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            'a1000023-0000-4000-a000-000000000023',
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-05-01 21:00:00+00', FALSE, NOW()),
+          (gen_random_uuid(), '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
+            'a1000023-0000-4000-a000-000000000023',
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-05-01 21:00:00+00', FALSE, NOW()),
+
+          -- a1000024 (서준 원글)
+          (gen_random_uuid(), '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
+            'a1000024-0000-4000-a000-000000000024',
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-05-01 21:00:00+00', FALSE, NOW()),
+          (gen_random_uuid(), '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            'a1000024-0000-4000-a000-000000000024',
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-05-01 21:00:00+00', FALSE, NOW()),
+          (gen_random_uuid(), '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
+            'a1000024-0000-4000-a000-000000000024',
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-05-01 21:00:00+00', FALSE, NOW())
+      `);
+
+      logger.info("Dev seed data (v5) inserted successfully");
+    }
   } catch (err) {
     logger.error({ err }, "Seed data error");
     throw err;
