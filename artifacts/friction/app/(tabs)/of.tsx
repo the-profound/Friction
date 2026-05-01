@@ -343,6 +343,7 @@ export default function OfScreen() {
   }, []);
 
   const handleSentenceToggleFavorite = useCallback(async (id: string, currentFav: boolean) => {
+    if (toggleFavorite.isPending) return;
     try {
       await toggleFavorite.mutateAsync({ id, data: { isFavorite: !currentFav } });
       sentencesQuery.refetch();
@@ -356,7 +357,7 @@ export default function OfScreen() {
   }, [toggleFavorite, sentencesQuery, selectedSentence]);
 
   const handleSentenceDeleteConfirm = useCallback(async () => {
-    if (!sentenceDeleteTarget) return;
+    if (!sentenceDeleteTarget || deleteSentence.isPending) return;
     const id = sentenceDeleteTarget;
     setSentenceDeleteTarget(null);
     try {

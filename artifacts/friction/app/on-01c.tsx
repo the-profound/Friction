@@ -233,12 +233,16 @@ export default function ClosingScreen() {
 
   const handleCollectionSelect = useCallback(
     async (collection: { id: string; name: string }) => {
+      if (isActionInProgressRef.current) return;
+      isActionInProgressRef.current = true;
       setCollectionPickerVisible(false);
       try {
         await finalizeExport(collection.id);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "모음 저장에 실패했습니다.";
         Alert.alert("저장 실패", msg);
+      } finally {
+        isActionInProgressRef.current = false;
       }
     },
     [finalizeExport],
@@ -246,6 +250,8 @@ export default function ClosingScreen() {
 
   const handleCreateAndSelect = useCallback(
     async (name: string, description: string) => {
+      if (isActionInProgressRef.current) return;
+      isActionInProgressRef.current = true;
       let created: { id: string };
       try {
         created = await createMyCollection.mutateAsync({
@@ -254,6 +260,7 @@ export default function ClosingScreen() {
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "모음 생성에 실패했습니다.";
         Alert.alert("생성 실패", msg);
+        isActionInProgressRef.current = false;
         return;
       }
       setCollectionPickerVisible(false);
@@ -262,6 +269,8 @@ export default function ClosingScreen() {
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "모음 저장에 실패했습니다.";
         Alert.alert("저장 실패", msg);
+      } finally {
+        isActionInProgressRef.current = false;
       }
     },
     [userId, createMyCollection, finalizeExport],

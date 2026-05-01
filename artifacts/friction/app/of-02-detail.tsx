@@ -178,7 +178,7 @@ export default function TeamCollectionDetailScreen() {
   }, [userId]);
 
   const handleSendNeighborRequest = useCallback(async () => {
-    if (!memberTarget) return;
+    if (!memberTarget || createNeighborRequest.isPending) return;
     try {
       await createNeighborRequest.mutateAsync({
         data: { requesterId: userId, recipientId: memberTarget.id },
@@ -192,7 +192,7 @@ export default function TeamCollectionDetailScreen() {
   }, [memberTarget, userId, createNeighborRequest]);
 
   const handleKickConfirm = useCallback(async () => {
-    if (!id || !kickTarget) return;
+    if (!id || !kickTarget || removeMember.isPending) return;
     const target = kickTarget;
     setKickTarget(null);
     try {
@@ -212,8 +212,8 @@ export default function TeamCollectionDetailScreen() {
   }, [collection]);
 
   const handleSaveEdit = useCallback(async () => {
-    if (!id || !editName.trim()) {
-      Alert.alert("오류", "이름을 입력해주세요.");
+    if (!id || !editName.trim() || updateCollection.isPending) {
+      if (!editName.trim()) Alert.alert("오류", "이름을 입력해주세요.");
       return;
     }
     try {
@@ -230,7 +230,7 @@ export default function TeamCollectionDetailScreen() {
   }, [id, editName, editDescription, updateCollection, collectionQuery]);
 
   const handleDeleteCollection = useCallback(async () => {
-    if (!id) return;
+    if (!id || deleteCollection.isPending) return;
     try {
       await deleteCollection.mutateAsync({ id });
       queryClient.invalidateQueries({ queryKey: ["/api/team-collections"] });
@@ -252,7 +252,7 @@ export default function TeamCollectionDetailScreen() {
   }, [id, collection]);
 
   const handleInviteUserTap = useCallback(async (user: UserSearchResult) => {
-    if (!id) return;
+    if (!id || addMember.isPending) return;
     try {
       await addMember.mutateAsync({ id, data: { userId: user.id } });
       setInviteSheetVisible(false);
@@ -278,7 +278,7 @@ export default function TeamCollectionDetailScreen() {
 
   const handleRemoveArticle = useCallback(
     async (articleId: string) => {
-      if (!id) return;
+      if (!id || removeArticle.isPending) return;
       try {
         await removeArticle.mutateAsync({ teamId: id, articleId });
         articlesQuery.refetch();
@@ -696,11 +696,11 @@ export default function TeamCollectionDetailScreen() {
             textAlignVertical="top"
           />
           <Pressable
-            style={[styles.formButton, !editName.trim() && styles.formButtonDisabled]}
+            style={[styles.formButton, (!editName.trim() || updateCollection.isPending) && styles.formButtonDisabled]}
             onPress={handleSaveEdit}
-            disabled={!editName.trim()}
+            disabled={!editName.trim() || updateCollection.isPending}
           >
-            <Text style={styles.formButtonText}>저장</Text>
+            <Text style={styles.formButtonText}>{updateCollection.isPending ? "저장 중..." : "저장"}</Text>
           </Pressable>
         </View>
       </BottomSheet>
@@ -748,8 +748,9 @@ export default function TeamCollectionDetailScreen() {
               {(inviteSearchResults.data ?? []).map((user) => (
                 <Pressable
                   key={user.id}
-                  style={styles.inviteResultItem}
+                  style={[styles.inviteResultItem, addMember.isPending && { opacity: 0.5 }]}
                   onPress={() => handleInviteUserTap(user)}
+                  disabled={addMember.isPending}
                 >
                   <View style={styles.inviteAvatar}>
                     <Text style={styles.inviteAvatarText}>

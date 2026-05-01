@@ -180,7 +180,7 @@ export default function PersonalCollectionDetailScreen() {
   }, [id, editName, editDescription, updateCollection, collectionQuery]);
 
   const handleDeleteCollection = useCallback(async () => {
-    if (!id) return;
+    if (!id || deleteCollection.isPending) return;
     try {
       await deleteCollection.mutateAsync({ id });
       queryClient.invalidateQueries({ queryKey: ["/api/my-collections"] });
@@ -210,7 +210,7 @@ export default function PersonalCollectionDetailScreen() {
 
   const handleRemoveArticle = useCallback(
     async (articleId: string) => {
-      if (!id) return;
+      if (!id || removeArticle.isPending) return;
       try {
         await removeArticle.mutateAsync({ collectionId: id, articleId });
         articlesQuery.refetch();
@@ -225,7 +225,7 @@ export default function PersonalCollectionDetailScreen() {
 
   const handleMoveArticle = useCallback(
     async (targetCollectionId: string) => {
-      if (!id) return;
+      if (!id || removeArticle.isPending || addArticle.isPending) return;
 
       if (isBulkMoveMode) {
         setIsMoveSheetVisible(false);

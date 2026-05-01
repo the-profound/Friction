@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import Constants from "expo-constants";
 import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   Pressable,
   ScrollView,
@@ -41,6 +41,7 @@ export default function SettingsScreen() {
 
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const logoutInflightRef = useRef(false);
 
   const {
     data: user,
@@ -52,11 +53,15 @@ export default function SettingsScreen() {
   const deleteUserMutation = useDeleteUser();
 
   async function handleLogout() {
+    if (logoutInflightRef.current) return;
+    logoutInflightRef.current = true;
     try {
       await signOut();
       queryClient.clear();
     } catch {
-Alert.alert("오류", "로그아웃에 실패했습니다.");
+      Alert.alert("오류", "로그아웃에 실패했습니다.");
+    } finally {
+      logoutInflightRef.current = false;
     }
   }
 

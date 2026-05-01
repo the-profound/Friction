@@ -89,6 +89,7 @@ export default function MemoCollectionScreen() {
   }, []);
 
   const handleDeletePress = useCallback(async (articleId: string) => {
+    if (deleteArticle.isPending) return;
     closeOpenRow();
     try {
       await deleteArticle.mutateAsync({ id: articleId });

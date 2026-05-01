@@ -215,6 +215,7 @@ export function NeighborsInline({
 
   const handleCancelRequest = useCallback(
     async (requestId: string) => {
+      if (deleteNeighborRequest.isPending) return;
       try {
         await deleteNeighborRequest.mutateAsync({ id: requestId });
         searchResults.refetch();
@@ -238,7 +239,7 @@ export function NeighborsInline({
   }, []);
 
   const handleDeleteNeighborConfirm = useCallback(async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget || removeNeighbor.isPending) return;
     try {
       await removeNeighbor.mutateAsync({ id: deleteTarget.id });
       neighborsQuery.refetch();
