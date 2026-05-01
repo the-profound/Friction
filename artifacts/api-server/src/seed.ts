@@ -199,7 +199,17 @@ export async function seedDevData(): Promise<void> {
           'LETTER', '[]', NULL, NULL,
           'a0000001-0000-4000-a000-000000000001', FALSE, NULL,
           '2026-04-23 11:00:00+00', '2026-04-23 11:00:00+00')
-      ON CONFLICT (id) DO NOTHING
+      ON CONFLICT (id) DO UPDATE SET
+        title = EXCLUDED.title,
+        content = EXCLUDED.content,
+        status = EXCLUDED.status,
+        pages = EXCLUDED.pages,
+        style = EXCLUDED.style,
+        cover = EXCLUDED.cover,
+        source_article_id = EXCLUDED.source_article_id,
+        is_notice = EXCLUDED.is_notice,
+        notice_date = EXCLUDED.notice_date,
+        updated_at = EXCLUDED.updated_at
     `);
 
     // -----------------------------------------------------------------------
