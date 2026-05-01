@@ -174,7 +174,7 @@ const styles = StyleSheet.create({
 async function loadEditorFonts(): Promise<void> {
   if (Platform.OS === "web") return;
   try {
-    const FileSystem = await import("expo-file-system");
+    const FileSystem = await import("expo-file-system/legacy");
     const [regularAsset, semiBoldAsset] = await Asset.loadAsync([
       require("../assets/fonts/Eulyoo1945-Regular.otf"),
       require("../assets/fonts/Eulyoo1945-SemiBold.otf"),
