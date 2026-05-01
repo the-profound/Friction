@@ -14,6 +14,126 @@ import { Placeholder } from "@tiptap/extensions/placeholder";
 import { Underline } from "@tiptap/extension-underline";
 import { HorizontalRule } from "@tiptap/extension-horizontal-rule";
 
+const HorizontalRuleWithControls = HorizontalRule.extend({
+  addNodeView() {
+    // Tracks which position should show controls after a move transaction
+    let activatedPos: number | undefined;
+
+    return ({ editor, getPos }) => {
+      const wrapper = document.createElement("div");
+      wrapper.className = "hr-wrapper";
+
+      const hr = document.createElement("hr");
+      wrapper.appendChild(hr);
+
+      const controls = document.createElement("div");
+      controls.className = "hr-controls";
+      controls.style.display = "none";
+
+      const upBtn = document.createElement("button");
+      upBtn.className = "hr-btn";
+      upBtn.textContent = "↑";
+      upBtn.type = "button";
+
+      const downBtn = document.createElement("button");
+      downBtn.className = "hr-btn";
+      downBtn.textContent = "↓";
+      downBtn.type = "button";
+
+      controls.appendChild(upBtn);
+      controls.appendChild(downBtn);
+      wrapper.appendChild(controls);
+
+      function getNodeEntries() {
+        const pos = typeof getPos === "function" ? getPos() : undefined;
+        if (pos === undefined) return null;
+        const { doc } = editor.state;
+        const entries: { pos: number; node: ReturnType<typeof doc.child> }[] = [];
+        doc.forEach((node, offset) => entries.push({ pos: offset, node }));
+        const idx = entries.findIndex((e) => e.pos === pos);
+        if (idx < 0) return null;
+        return { pos, entries, idx };
+      }
+
+      function updateButtonStates() {
+        const info = getNodeEntries();
+        if (!info) return;
+        upBtn.disabled = info.idx === 0;
+        downBtn.disabled = info.idx >= info.entries.length - 1;
+        upBtn.style.opacity = upBtn.disabled ? "0.3" : "1";
+        downBtn.style.opacity = downBtn.disabled ? "0.3" : "1";
+      }
+
+      function showControls() {
+        document.querySelectorAll(".hr-controls").forEach((el) => {
+          if (el !== controls) (el as HTMLElement).style.display = "none";
+        });
+        controls.style.display = "flex";
+        updateButtonStates();
+      }
+
+      // Restore controls visibility if this NodeView was just created after a move
+      const initPos = typeof getPos === "function" ? getPos() : undefined;
+      if (initPos !== undefined && initPos === activatedPos) {
+        activatedPos = undefined;
+        showControls();
+      }
+
+      // Click anywhere in the wrapper (including padding area) to show controls
+      wrapper.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (controls.contains(e.target as Node)) return;
+        showControls();
+      });
+
+      const outsideClickHandler = (e: MouseEvent) => {
+        if (!wrapper.contains(e.target as Node)) {
+          controls.style.display = "none";
+        }
+      };
+      document.addEventListener("click", outsideClickHandler, true);
+
+      upBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const info = getNodeEntries();
+        if (!info || info.idx === 0) return;
+        const { state, view } = editor;
+        const hrNode = info.entries[info.idx].node;
+        const prevEntry = info.entries[info.idx - 1];
+        const prevNodeStart = prevEntry.pos;
+        // New position of HR after move = prevNodeStart
+        activatedPos = prevNodeStart;
+        const tr = state.tr
+          .insert(prevNodeStart, hrNode)
+          .delete(info.pos + hrNode.nodeSize, info.pos + 2 * hrNode.nodeSize);
+        view.dispatch(tr);
+      });
+
+      downBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const info = getNodeEntries();
+        if (!info || info.idx >= info.entries.length - 1) return;
+        const { state, view } = editor;
+        const hrNode = info.entries[info.idx].node;
+        const nextEntry = info.entries[info.idx + 1];
+        // New position of HR after move = info.pos + nextEntry.node.nodeSize
+        activatedPos = info.pos + nextEntry.node.nodeSize;
+        const tr = state.tr
+          .delete(info.pos, info.pos + hrNode.nodeSize)
+          .insert(info.pos + nextEntry.node.nodeSize, hrNode);
+        view.dispatch(tr);
+      });
+
+      return {
+        dom: wrapper,
+        destroy() {
+          document.removeEventListener("click", outsideClickHandler, true);
+        },
+      };
+    };
+  },
+});
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -300,7 +420,7 @@ interface Command {
         Italic,
         Underline,
         Blockquote,
-        HorizontalRule,
+        HorizontalRuleWithControls,
         BulletList,
         OrderedList,
         ListItem,

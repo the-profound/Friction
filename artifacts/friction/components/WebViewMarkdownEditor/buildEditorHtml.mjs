@@ -65,6 +65,9 @@ html,body{height:100%;background:transparent}
   -webkit-text-size-adjust:100%;
   outline:none;
   text-align:justify;
+  word-break:keep-all;
+  overflow-wrap:break-word;
+  text-justify:inter-ideograph;
 }
 .ProseMirror{
   outline:none;
@@ -72,14 +75,17 @@ html,body{height:100%;background:transparent}
   word-wrap:break-word;
   white-space:pre-wrap;
 }
-.ProseMirror p{margin-bottom:1em;text-align:justify}
+.ProseMirror p{margin-bottom:1em;text-align:justify;word-break:keep-all;overflow-wrap:break-word;text-justify:inter-ideograph}
 .ProseMirror h1{font-family:'Eulyoo1945-SemiBold',serif;font-size:1.6em;font-weight:700;letter-spacing:0.025em;margin:1em 0 0.4em;line-height:1.25;text-align:left}
 .ProseMirror h2{font-family:'Eulyoo1945-SemiBold',serif;font-size:1.3em;font-weight:700;letter-spacing:0.025em;margin:0.8em 0 0.3em;line-height:1.3;text-align:left}
 .ProseMirror h3{font-family:'Eulyoo1945-SemiBold',serif;font-size:1.1em;font-weight:600;letter-spacing:0.025em;margin:0.6em 0 0.3em;line-height:1.35;text-align:left}
 .ProseMirror ul,.ProseMirror ol{padding-left:1.5em;margin-bottom:1em;text-align:left}
 .ProseMirror li{margin-bottom:0.2em;text-align:left}
 .ProseMirror blockquote{font-family:'Eulyoo1945-Regular',serif;font-style:italic;border-left:3px solid #d4d4d8;padding-left:1em;margin:0.5em 0;color:#52525b;text-align:left}
-.ProseMirror hr{border:none;border-top:1px solid #e4e4e7;margin:1em 0}
+.ProseMirror hr{border:none;border-top:1px solid #e4e4e7;margin:0}
+.hr-wrapper{position:relative;margin:1em 0;cursor:pointer;padding:10px 0}
+.hr-controls{display:none;justify-content:center;gap:8px;padding:4px 0 2px}
+.hr-btn{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid #d4d4d8;border-radius:50%;background:#fff;color:#3f3f46;font-size:16px;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation;user-select:none;transition:opacity 0.15s}
 .ProseMirror p.is-editor-empty:first-child::before{content:attr(data-placeholder);color:#a1a1aa;pointer-events:none;float:left;height:0}
 .ProseMirror u{text-decoration:underline}
 .ProseMirror strong{font-family:'Eulyoo1945-SemiBold',serif;font-weight:700}
@@ -92,7 +98,7 @@ html,body{height:100%;background:transparent}
 body{padding:16px 0 0;overflow:auto}
 `.trim();
 
-const VERSION = "3.8.0";
+const VERSION = "3.9.0";
 
 const tsContent = `export const EDITOR_CONFIG_VERSION = "${VERSION}";
 
