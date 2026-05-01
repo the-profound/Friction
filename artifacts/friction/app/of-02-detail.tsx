@@ -922,11 +922,10 @@ const styles = StyleSheet.create({
   dateHeader: {
     paddingHorizontal: Spacing.screenPx,
     paddingVertical: 8,
-    backgroundColor: Colors.noticeAccentSoft,
   },
   dateHeaderText: {
     ...Typography.dateHeader,
-    fontSize: 12,
+    fontSize: 15,
     color: Colors.noticeAccent,
   },
   articleItem: {
