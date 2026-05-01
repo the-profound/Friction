@@ -697,6 +697,89 @@ export async function seedDevData(): Promise<void> {
 
       logger.info("Dev seed data (v3) inserted successfully");
     }
+
+    // -----------------------------------------------------------------------
+    // v4 sentinel: two new standalone letters (a1000020, a1000021)
+    // -----------------------------------------------------------------------
+    const { rows: sentinelV4 } = await client.query(`
+      SELECT id FROM inbox
+      WHERE recipient_id = '54cbadb0-eab9-4f69-8c32-90a9e00d7908'
+        AND article_id   = 'a1000020-0000-4000-a000-000000000020'
+      LIMIT 1
+    `);
+    if (sentinelV4.length > 0) {
+      logger.info("Dev seed data already present (v4), skipping");
+    } else {
+      logger.info("Inserting dev seed data (v4)…");
+
+      // v4-1. Articles
+      await client.query(`
+        INSERT INTO articles
+          (id, author_id, title, content, status, pages, style, cover,
+           source_article_id, is_notice, notice_date, created_at, updated_at)
+        VALUES
+          ('a1000020-0000-4000-a000-000000000020',
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
+            '5월의 첫 아침', '5월이 왔다. 창문 너머로 라일락 향기가 흘러들어 오는 것 같은 아침이었다. 계절이 바뀔 때마다 괜히 새로운 마음이 든다는 게 신기하면서도 좋다. 아직 아무것도 망치지 않은 달이라서 그런가, 5월 첫날은 늘 설레는 것 같다.',
+            'LETTER', '[]', NULL, NULL, NULL, FALSE, NULL,
+            '2026-05-01 00:00:00+00', '2026-05-01 00:00:00+00'),
+          ('a1000021-0000-4000-a000-000000000021',
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
+            '요즘 듣는 음악', '요즘 일할 때 재즈를 자주 듣는다. 말 없이 흘러가는 선율이 집중하기에 오히려 좋더라. 추천하고 싶은 앨범이 있는데, 언제 한번 같이 들어볼 날이 생기면 좋겠다.',
+            'LETTER', '[]', NULL, NULL, NULL, FALSE, NULL,
+            '2026-05-01 01:30:00+00', '2026-05-01 01:30:00+00')
+        ON CONFLICT (id) DO UPDATE SET
+          title = EXCLUDED.title,
+          content = EXCLUDED.content,
+          updated_at = EXCLUDED.updated_at
+      `);
+
+      // v4-2. team_collection_articles (하윤이네 모임)
+      await client.query(`
+        INSERT INTO team_collection_articles
+          (id, team_collection_id, article_id, added_by, added_at, deleted_at)
+        VALUES
+          (gen_random_uuid(), '2d9417a7-27e4-46c0-9ae5-3c4a4298c0f2',
+            'a1000020-0000-4000-a000-000000000020',
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
+            '2026-05-01 00:00:00+00', NULL),
+          (gen_random_uuid(), '2d9417a7-27e4-46c0-9ae5-3c4a4298c0f2',
+            'a1000021-0000-4000-a000-000000000021',
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
+            '2026-05-01 01:30:00+00', NULL)
+        ON CONFLICT ON CONSTRAINT team_collection_articles_unique DO NOTHING
+      `);
+
+      // v4-3. Inbox entries (visibleAt May 1 09:00 UTC = KST 18:00, guaranteed past)
+      await client.query(`
+        INSERT INTO inbox
+          (id, recipient_id, article_id, sender_id, visible_at, is_read, created_at)
+        VALUES
+          -- a1000020 (하윤 원글)
+          (gen_random_uuid(), '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
+            'a1000020-0000-4000-a000-000000000020',
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-05-01 09:00:00+00', FALSE, NOW()),
+          (gen_random_uuid(), '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            'a1000020-0000-4000-a000-000000000020',
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-05-01 09:00:00+00', FALSE, NOW()),
+          (gen_random_uuid(), '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
+            'a1000020-0000-4000-a000-000000000020',
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-05-01 09:00:00+00', FALSE, NOW()),
+
+          -- a1000021 (서준 원글)
+          (gen_random_uuid(), '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
+            'a1000021-0000-4000-a000-000000000021',
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-05-01 09:00:00+00', FALSE, NOW()),
+          (gen_random_uuid(), '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            'a1000021-0000-4000-a000-000000000021',
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-05-01 09:00:00+00', FALSE, NOW()),
+          (gen_random_uuid(), '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
+            'a1000021-0000-4000-a000-000000000021',
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-05-01 09:00:00+00', FALSE, NOW())
+      `);
+
+      logger.info("Dev seed data (v4) inserted successfully");
+    }
   } catch (err) {
     logger.error({ err }, "Seed data error");
     throw err;
