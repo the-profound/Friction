@@ -714,7 +714,7 @@ Alert.alert("완료", "보관함에 저장됐어요");
         completionButtonTertiaryText: {
           fontSize: layout.bodyFontSize * 0.9,
           fontFamily: ReaderTokens.fontFamily.sans,
-          color: Colors.zinc400,
+          color: Colors.zinc600,
         },
         sentencePreview: {
           fontSize: layout.bodyFontSize,
@@ -1412,8 +1412,12 @@ const styles = StyleSheet.create({
   completionButtonTertiary: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 6,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
     width: "100%",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
   },
   coverPageContainer: {
     flex: 1,
