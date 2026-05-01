@@ -290,7 +290,7 @@ function htmlToMarkdown(html: string): string {
       if (tag === "p") {
         const txt = childrenToInline(el);
         if (!txt.trim()) return "\n";
-        const escaped = txt.replace(/^([#>\-*])/, "\\$1");
+        const escaped = txt.replace(/^([#>\-])/, "\\$1");
         return `${escaped}\n\n`;
       }
       if (tag === "ul" || tag === "ol") {
