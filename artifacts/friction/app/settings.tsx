@@ -22,7 +22,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useGetUser, useDeleteUser } from "@workspace/api-client-react";
 
 const PRIVACY_URL = "https://friction.app/privacy";
-const FEEDBACK_URL = "https://friction.app/feedback";
+const FEEDBACK_URL = "https://open.kakao.com/o/g8fT9bsi";
 
 function resolveAppVersion(): string {
   const v = Constants.expoConfig?.version;
