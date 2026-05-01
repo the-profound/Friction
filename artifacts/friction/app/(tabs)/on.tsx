@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -18,7 +18,7 @@ import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/Swip
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import RefreshableEmpty from "@/components/RefreshableEmpty";
 import { useQueryClient } from "@tanstack/react-query";
-import { useListArticles, useCreateArticle, useDeleteArticle } from "@workspace/api-client-react";
+import { useListArticles, useCreateArticle, useDeleteArticle, getGetArticleQueryKey } from "@workspace/api-client-react";
 import type { Article } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
 import type { ArticleStatus } from "@/lib/policies";
@@ -83,6 +83,13 @@ export default function OnScreen() {
 
   const createArticle = useCreateArticle();
   const deleteArticle = useDeleteArticle();
+
+  useEffect(() => {
+    if (!articles) return;
+    for (const article of articles) {
+      queryClient.setQueryData(getGetArticleQueryKey(article.id), article);
+    }
+  }, [articles, queryClient]);
 
   const filteredArticles = useMemo(() => {
     if (!articles) return [];
