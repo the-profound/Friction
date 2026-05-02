@@ -1,9 +1,10 @@
 /**
  * Team Collection 글 목록 정렬·그루핑 유틸
  *
- * KST 18:00 컷오프 규칙:
- *   - visibleAt의 KST 시각이 18:00 미만 → 해당 날짜 그룹
- *   - visibleAt의 KST 시각이 18:00 이상 → 다음 날 그룹
+ * 날짜 그룹핑 정책:
+ *   - 단체 모음 글 목록: 순수 KST 달력 날짜 기준 (18:00 컷오프 없음)
+ *     → visibleAt / addedAt 모두 toKstCalendarDateKey 사용
+ *   - 수신함(index.tsx)만 18:00 컷오프(toKstDateKey) 적용 — 여기서는 사용 안 함
  */
 
 import type { TeamCollectionArticleWithDetails } from "@workspace/api-client-react";
@@ -112,10 +113,11 @@ export function buildTeamArticleRows(
   if (articles.length === 0) return [];
 
   // 각 항목에 dateKey 부여
-  // visibleAt이 있으면 18:00 컷오프 적용(배달 슬롯 규칙), 없으면 addedAt 기준 순수 KST 달력 날짜
+  // visibleAt 유무와 관계없이 순수 KST 달력 날짜(18:00 컷오프 없음)로 그룹핑
+  // (18:00 컷오프는 수신함 배달 슬롯 전용이며 단체 모음 글 목록에는 적용하지 않는다)
   const withKeys: ArticleWithKey[] = articles.map((a) => {
     const dateKey = a.visibleAt
-      ? toKstDateKey(a.visibleAt)
+      ? toKstCalendarDateKey(a.visibleAt)
       : toKstCalendarDateKey(a.addedAt);
     return { ...a, _dateKey: dateKey };
   });
