@@ -231,6 +231,7 @@ export interface StoredSentence {
   position?: StoredSentencePosition;
   isFavorite: boolean;
   createdAt: string;
+  articleTitle: string | null;
 }
 
 export type CreateStoredSentenceBodyPosition = {

@@ -476,6 +476,9 @@ export default function OfScreen() {
           <Text style={styles.sentenceText} numberOfLines={2}>
             &ldquo;{item.text}&rdquo;
           </Text>
+          {item.articleTitle ? (
+            <Text style={styles.sentenceSource} numberOfLines={1}>{item.articleTitle}</Text>
+          ) : null}
           <View style={styles.sentenceMeta}>
             <Text style={styles.sentenceDate}>{new Date(item.createdAt).toLocaleDateString("ko-KR")}</Text>
             {item.isFavorite && <Feather name="star" size={12} color="#F59E0B" />}
@@ -506,6 +509,9 @@ export default function OfScreen() {
           <Text style={styles.sentenceText} numberOfLines={2}>
             &ldquo;{item.text}&rdquo;
           </Text>
+          {item.articleTitle ? (
+            <Text style={styles.sentenceSource} numberOfLines={1}>{item.articleTitle}</Text>
+          ) : null}
           <View style={styles.sentenceMeta}>
             <Text style={styles.sentenceDate}>{new Date(item.createdAt).toLocaleDateString("ko-KR")}</Text>
             {item.isFavorite && <Feather name="star" size={12} color="#F59E0B" />}
@@ -1116,6 +1122,12 @@ const styles = StyleSheet.create({
     ...Typography.caption,
     fontSize: 12,
     color: Colors.zinc400,
+  },
+  sentenceSource: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc400,
+    marginTop: 4,
   },
   selectionBar: {
     position: "absolute",

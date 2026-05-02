@@ -15,4 +15,5 @@ export interface StoredSentence {
   position?: StoredSentencePosition;
   isFavorite: boolean;
   createdAt: Date;
+  articleTitle: string | null;
 }
