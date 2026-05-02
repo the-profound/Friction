@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
-import { View, Text, StyleSheet, FlatList, Pressable, Alert, Share, TextInput, ActivityIndicator, ScrollView } from "react-native";
+import { View, Text, StyleSheet, FlatList, Pressable, Alert, Share, TextInput, ActivityIndicator, ScrollView, Platform } from "react-native";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -243,11 +243,29 @@ export default function TeamCollectionDetailScreen() {
 
   const handleShareInvite = useCallback(async () => {
     if (!id || !collection) return;
-    try {
-      await Share.share({
-        message: `"${collection.name}" 단체 모음에 참여하세요! 초대 코드: ${id}`,
-      });
-    } catch {
+    const message = `"${collection.name}" 단체 모음에 참여하세요! 초대 코드: ${id}`;
+    if (Platform.OS === "web") {
+      try {
+        if (typeof navigator !== "undefined" && navigator.share) {
+          await navigator.share({ text: message });
+        } else {
+          await navigator.clipboard.writeText(id);
+          Alert.alert("완료", "초대 코드가 클립보드에 복사되었어요");
+        }
+      } catch {
+        try {
+          await navigator.clipboard.writeText(id);
+          Alert.alert("완료", "초대 코드가 클립보드에 복사되었어요");
+        } catch {
+          Alert.alert("오류", "공유에 실패했어요");
+        }
+      }
+    } else {
+      try {
+        await Share.share({ message });
+      } catch {
+        Alert.alert("오류", "공유에 실패했어요");
+      }
     }
   }, [id, collection]);
 
