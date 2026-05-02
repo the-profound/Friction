@@ -266,9 +266,16 @@ function SelectableTextWeb({ text, onCollect, onMemo, onSelectionStateChange, fo
 }
 
 function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange, fontSize, lineHeight, letterSpacing, children, clearSignal }: SelectableTextProps) {
+  // When the native OS menu module is unavailable (Expo Go), fall back to the
+  // same floating pill bar used by SelectableTextWeb.
+  const useNativeMenu = TextSelectionMenu.isAvailable;
+
   const [selection, setSelection] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
   // When true, pass {start:0,end:0} as controlled selection to force iOS to clear handles
   const [forceClearSelection, setForceClearSelection] = useState(false);
+  // Fallback pill bar state (Expo Go / no native module)
+  const [showFallbackBar, setShowFallbackBar] = useState(false);
+  const pendingFallbackTextRef = useRef("");
 
   const textRef = useRef(text);
   textRef.current = text;
@@ -304,6 +311,8 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
       onSelectionStateChangeRef.current?.(false);
     }
     TextSelectionMenu.deactivate();
+    setShowFallbackBar(false);
+    pendingFallbackTextRef.current = "";
     clearNativeSelection();
   }, [clearNativeSelection]);
 
@@ -344,6 +353,8 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
         setSelection({ start: 0, end: 0 });
         onSelectionStateChangeRef.current?.(false);
         TextSelectionMenu.deactivate();
+        setShowFallbackBar(false);
+        pendingFallbackTextRef.current = "";
       }
     }, 200);
   }, []);
@@ -362,6 +373,8 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
       isSelectingRef.current = false;
       onSelectionStateChangeRef.current?.(false);
       TextSelectionMenu.deactivate();
+      setShowFallbackBar(false);
+      pendingFallbackTextRef.current = "";
     }
     clearNativeSelection();
   }, [clearSignal, clearNativeSelection]);
@@ -375,14 +388,52 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
         isSelectingRef.current = nowSelecting;
         onSelectionStateChangeRef.current?.(nowSelecting);
         if (nowSelecting) {
-          TextSelectionMenu.activate(onMemo != null);
+          if (useNativeMenu) {
+            TextSelectionMenu.activate(onMemo != null);
+          }
         } else {
-          TextSelectionMenu.deactivate();
+          if (useNativeMenu) TextSelectionMenu.deactivate();
+          setShowFallbackBar(false);
+          pendingFallbackTextRef.current = "";
+        }
+      }
+      // Update fallback bar whenever selection is non-empty and native menu is unavailable
+      if (!useNativeMenu) {
+        if (start !== end) {
+          const selected = textRef.current.substring(start, end).trim();
+          setShowFallbackBar(selected.length > 0);
+        } else {
+          setShowFallbackBar(false);
         }
       }
     },
-    [onMemo],
+    [onMemo, useNativeMenu],
   );
+
+  // Fallback bar handlers (used when native module is unavailable)
+  const handleFallbackCollectPressIn = useCallback(() => {
+    const { start, end } = selectionRef.current;
+    pendingFallbackTextRef.current = textRef.current.substring(start, end).trim();
+  }, []);
+
+  const handleFallbackMemoPressIn = useCallback(() => {
+    const { start, end } = selectionRef.current;
+    pendingFallbackTextRef.current = textRef.current.substring(start, end).trim();
+  }, []);
+
+  const handleFallbackCollect = useCallback(() => {
+    const t = pendingFallbackTextRef.current;
+    pendingFallbackTextRef.current = "";
+    if (t.length > 0) onCollectRef.current(t);
+    dismissSelection();
+  }, [dismissSelection]);
+
+  const handleFallbackMemo = useCallback(() => {
+    const t = pendingFallbackTextRef.current;
+    pendingFallbackTextRef.current = "";
+    if (t.length > 0) onMemoRef.current?.(t);
+    dismissSelection();
+  }, [dismissSelection]);
 
   const inputStyle = [
     styles.textInput,
@@ -390,6 +441,26 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
     lineHeight != null && { lineHeight },
     letterSpacing != null && { letterSpacing },
   ];
+
+  const fallbackBar = !useNativeMenu && showFallbackBar ? (
+    <View style={styles.collectBarAbsoluteWrap}>
+      <View style={styles.collectBarPill}>
+        <Pressable style={styles.collectButton} onPressIn={handleFallbackCollectPressIn} onPress={handleFallbackCollect}>
+          <Feather name="bookmark" size={14} color={Colors.zinc900} />
+          <Text style={styles.collectButtonText}>수집</Text>
+        </Pressable>
+        {onMemo && (
+          <Pressable style={styles.collectButton} onPressIn={handleFallbackMemoPressIn} onPress={handleFallbackMemo}>
+            <Feather name="edit-3" size={14} color={Colors.zinc900} />
+            <Text style={styles.collectButtonText}>메모</Text>
+          </Pressable>
+        )}
+        <Pressable style={styles.cancelButton} onPress={dismissSelection} hitSlop={8}>
+          <Feather name="x" size={16} color={Colors.zinc400} />
+        </Pressable>
+      </View>
+    </View>
+  ) : null;
 
   if (children) {
     return (
@@ -409,6 +480,7 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
             selectTextOnFocus={false}
           />
         </View>
+        {fallbackBar}
       </View>
     );
   }
@@ -429,6 +501,7 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
           selectTextOnFocus={false}
         />
       </View>
+      {fallbackBar}
     </View>
   );
 }
