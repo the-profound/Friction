@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useEffect, useState, useMemo } from "react";
-import { View, StyleSheet, ActivityIndicator } from "react-native";
+import { View, StyleSheet, ActivityIndicator, Animated } from "react-native";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { getReaderHtml } from "./readerHtml";
 import { getEditorFonts, subscribeEditorFonts, type EditorFontState } from "@/lib/editorFontStore";
@@ -13,6 +13,9 @@ export interface WebViewMarkdownReaderProps {
   onReady?: () => void;
   clearSelectionSignal?: number;
 }
+
+const FADE_IN_DURATION_MS = 100;
+const CONTENT_READY_FALLBACK_MS = 250;
 
 export default function WebViewMarkdownReader({
   markdown,
@@ -32,10 +35,63 @@ export default function WebViewMarkdownReader({
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
 
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnimRef = useRef<Animated.CompositeAnimation | null>(null);
+  // Tracks the latest setContent we issued. onContentReady from older
+  // injections is ignored so we never fade in stale content.
+  const pendingVersionRef = useRef(0);
+  const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearFallbackTimer = useCallback(() => {
+    if (fallbackTimerRef.current != null) {
+      clearTimeout(fallbackTimerRef.current);
+      fallbackTimerRef.current = null;
+    }
+  }, []);
+
+  const fadeIn = useCallback(() => {
+    if (fadeAnimRef.current) {
+      fadeAnimRef.current.stop();
+    }
+    fadeAnimRef.current = Animated.timing(opacityAnim, {
+      toValue: 1,
+      duration: FADE_IN_DURATION_MS,
+      useNativeDriver: true,
+    });
+    fadeAnimRef.current.start();
+  }, [opacityAnim]);
+
   const sendCommand = useCallback((cmd: object) => {
     const js = `(function(){try{handleCommand(${JSON.stringify(cmd)})}catch(e){}})();true;`;
     webViewRef.current?.injectJavaScript(js);
   }, []);
+
+  const beginContentSwap = useCallback(() => {
+    // Hide instantly so the brief gap during async DOM update is invisible.
+    if (fadeAnimRef.current) {
+      fadeAnimRef.current.stop();
+    }
+    opacityAnim.setValue(0);
+    pendingVersionRef.current += 1;
+    const myVersion = pendingVersionRef.current;
+    clearFallbackTimer();
+    // Safety net: if onContentReady is somehow lost (e.g. dropped message),
+    // still reveal the WebView shortly after so the screen never stays blank.
+    fallbackTimerRef.current = setTimeout(() => {
+      fallbackTimerRef.current = null;
+      if (pendingVersionRef.current === myVersion) {
+        fadeIn();
+      }
+    }, CONTENT_READY_FALLBACK_MS);
+    return myVersion;
+  }, [opacityAnim, fadeIn, clearFallbackTimer]);
+
+  const injectContent = useCallback(
+    (htmlToInject: string, version: number) => {
+      sendCommand({ type: "setContent", html: htmlToInject, version });
+    },
+    [sendCommand],
+  );
 
   const handleMessage = useCallback(
     (event: WebViewMessageEvent) => {
@@ -43,23 +99,36 @@ export default function WebViewMarkdownReader({
         const data = JSON.parse(event.nativeEvent.data);
         if (data.type === "onReady") {
           onReadyRef.current?.();
+        } else if (data.type === "onContentReady") {
+          // Only honor the ready event for the most recent injection.
+          // If `version` is missing (older HTML), fall back to fading in.
+          if (data.version == null || data.version === pendingVersionRef.current) {
+            clearFallbackTimer();
+            fadeIn();
+          }
         } else if (data.type === "onTextSelect") {
           onTextSelectRef.current?.(data.text ?? "", !!data.isEmpty);
         }
       } catch {}
     },
-    [],
+    [fadeIn, clearFallbackTimer],
   );
 
-  const prevMarkdownRef = useRef(markdown);
+  // Memoize markdown→HTML so we don't re-parse on unrelated re-renders.
+  const html = useMemo(() => markdownToHtml(markdown), [markdown]);
+  const htmlRef = useRef(html);
+  htmlRef.current = html;
+
+  const prevHtmlRef = useRef<string | null>(null);
   useEffect(() => {
     if (!readyRef.current) return;
-    if (markdown === prevMarkdownRef.current) return;
-    prevMarkdownRef.current = markdown;
-    sendCommand({ type: "setContent", html: markdownToHtml(markdown) });
+    if (html === prevHtmlRef.current) return;
+    prevHtmlRef.current = html;
+    const version = beginContentSwap();
+    injectContent(html, version);
     sendCommand({ type: "clearSelection" });
     onTextSelectRef.current?.("", true);
-  }, [markdown, sendCommand]);
+  }, [html, sendCommand, beginContentSwap, injectContent]);
 
   useEffect(() => {
     if (readyRef.current && bodyFontSize != null && bodyLetterSpacing != null) {
@@ -75,6 +144,17 @@ export default function WebViewMarkdownReader({
     }
   }, [clearSelectionSignal, sendCommand]);
 
+  // Cleanup on unmount: stop any in-flight fade and pending fallback timers.
+  useEffect(() => {
+    return () => {
+      if (fadeAnimRef.current) {
+        fadeAnimRef.current.stop();
+        fadeAnimRef.current = null;
+      }
+      clearFallbackTimer();
+    };
+  }, [clearFallbackTimer]);
+
   const [fonts, setFonts] = useState<EditorFontState>(() => getEditorFonts());
 
   useEffect(() => {
@@ -86,7 +166,7 @@ export default function WebViewMarkdownReader({
   const fontsReady = !!(fonts.regularBase64 && fonts.semiBoldBase64);
   const canRender = fontsReady || !!fonts.error;
 
-  const html = useMemo(
+  const documentHtml = useMemo(
     () => getReaderHtml({ regularBase64: fonts.regularBase64, semiBoldBase64: fonts.semiBoldBase64 }),
     [fonts.regularBase64, fonts.semiBoldBase64],
   );
@@ -100,34 +180,42 @@ export default function WebViewMarkdownReader({
   }
 
   return (
-    <WebView
-      ref={webViewRef}
-      source={{ html }}
-      style={styles.webView}
-      onMessage={handleMessage}
-      onLoad={() => {
-        readyRef.current = true;
-        prevMarkdownRef.current = markdownRef.current;
-        sendCommand({ type: "setContent", html: markdownToHtml(markdownRef.current) });
-        if (bodyFontSize != null && bodyLetterSpacing != null) {
-          sendCommand({ type: "setBodyMetrics", fontSizePx: bodyFontSize, letterSpacingPx: bodyLetterSpacing });
-        }
-      }}
-      originWhitelist={["*"]}
-      javaScriptEnabled
-      domStorageEnabled={false}
-      allowFileAccess={false}
-      allowUniversalAccessFromFileURLs={false}
-      mediaPlaybackRequiresUserAction
-      scrollEnabled={false}
-      bounces={false}
-      showsVerticalScrollIndicator={false}
-      contentMode="mobile"
-    />
+    <Animated.View style={[styles.container, { opacity: opacityAnim }]}>
+      <WebView
+        ref={webViewRef}
+        source={{ html: documentHtml }}
+        style={styles.webView}
+        onMessage={handleMessage}
+        onLoad={() => {
+          readyRef.current = true;
+          prevHtmlRef.current = htmlRef.current;
+          // Hide before the very first content injection too, then fade in
+          // when the WebView reports the new DOM is in place.
+          const version = beginContentSwap();
+          injectContent(htmlRef.current, version);
+          if (bodyFontSize != null && bodyLetterSpacing != null) {
+            sendCommand({ type: "setBodyMetrics", fontSizePx: bodyFontSize, letterSpacingPx: bodyLetterSpacing });
+          }
+        }}
+        originWhitelist={["*"]}
+        javaScriptEnabled
+        domStorageEnabled={false}
+        allowFileAccess={false}
+        allowUniversalAccessFromFileURLs={false}
+        mediaPlaybackRequiresUserAction
+        scrollEnabled={false}
+        bounces={false}
+        showsVerticalScrollIndicator={false}
+        contentMode="mobile"
+      />
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   webView: {
     flex: 1,
     backgroundColor: "transparent",

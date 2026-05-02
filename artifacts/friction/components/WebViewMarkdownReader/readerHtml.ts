@@ -75,6 +75,7 @@ try{
 if(cmd.type==="setContent"){
 if(el)el.innerHTML=cmd.html||"";
 if(!didReady){didReady=true;postToRN({type:"onReady"});}
+postToRN({type:"onContentReady",version:cmd.version});
 }else if(cmd.type==="setBodyMetrics"){
 document.documentElement.style.setProperty("--body-font-size",cmd.fontSizePx+"px");
 document.documentElement.style.setProperty("--body-letter-spacing",cmd.letterSpacingPx+"px");
