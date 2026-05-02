@@ -945,6 +945,15 @@ Alert.alert("완료", "보관함에 저장됐어요");
           >
             <View
               style={[
+                styles.readerShadowWrapper,
+                {
+                  width: layout.frameWidth,
+                  height: layout.frameHeight,
+                },
+              ]}
+            >
+            <View
+              style={[
                 styles.readerFrame,
                 {
                   width: layout.frameWidth,
@@ -1075,6 +1084,7 @@ Alert.alert("완료", "보관함에 저장됐어요");
                   </View>
                 )}
               </View>
+            </View>
             </View>
           </View>
         </GestureDetector>
@@ -1551,22 +1561,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  readerShadowWrapper: {
+    alignSelf: "center",
+    ...Platform.select({
+      web: {
+        boxShadow: "0 -10px 24px rgba(0,0,0,0.07), 0 10px 24px rgba(0,0,0,0.07)",
+      },
+      default: {
+        elevation: 8,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.12,
+        shadowRadius: 20,
+      },
+    }),
+  },
   readerFrame: {
     alignSelf: "center",
     overflow: "hidden",
     backgroundColor: ReaderTokens.bodyBg,
-    ...Platform.select({
-      web: {
-        boxShadow: "0 -6px 18px rgba(0,0,0,0.045), 0 6px 18px rgba(0,0,0,0.045)",
-      },
-      default: {
-        elevation: 4,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.06,
-        shadowRadius: 18,
-      },
-    }),
   },
   bottomBar: {
     flexDirection: "row",
