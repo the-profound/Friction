@@ -8,26 +8,11 @@ import { useUser } from "@/contexts/UserContext";
 import { useListSendRecords } from "@workspace/api-client-react";
 import type { SendRecordWithDetails } from "@workspace/api-client-react";
 import { formatDeliveryTime } from "@/lib/deliverySync";
+import { toKstCalendarDateKey, formatDateLabel } from "@/lib/teamCollectionUtils";
 
 interface DateSection {
   title: string;
   data: SendRecordWithDetails[];
-}
-
-function formatSectionDate(dateStr: string): string {
-  const parts = dateStr.split("-");
-  const year = parseInt(parts[0], 10);
-  const month = parseInt(parts[1], 10) - 1;
-  const day = parseInt(parts[2], 10);
-  const target = new Date(year, month, day);
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const diffDays = Math.round((today.getTime() - target.getTime()) / (1000 * 60 * 60 * 24));
-
-  if (diffDays === 0) return "오늘";
-  if (diffDays === 1) return "어제";
-  if (diffDays < 7) return `${diffDays}일 전`;
-  return `${year}.${String(month + 1).padStart(2, "0")}.${String(day).padStart(2, "0")}`;
 }
 
 export default function SendHistoryScreen() {
@@ -45,14 +30,13 @@ export default function SendHistoryScreen() {
 
     const map = new Map<string, SendRecordWithDetails[]>();
     for (const record of sorted) {
-      const d = new Date(record.sentAt);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const key = toKstCalendarDateKey(record.sentAt);
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(record);
     }
 
     return Array.from(map.entries()).map(([dateKey, data]) => ({
-      title: formatSectionDate(dateKey),
+      title: formatDateLabel(dateKey),
       data,
     }));
   }, [sendRecords]);

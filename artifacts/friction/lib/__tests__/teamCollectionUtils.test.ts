@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   toKstDateKey,
+  toKstCalendarDateKey,
   formatDateLabel,
   buildTeamArticleRows,
   type TeamArticleListRow,
@@ -314,5 +315,86 @@ describe("buildTeamArticleRows — soft-delete placeholder", () => {
     for (const a of articles) {
       expect(ids).toContain(a.articleId);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// toKstCalendarDateKey — 18:00 컷오프 없는 순수 KST 달력 날짜
+// ---------------------------------------------------------------------------
+
+describe("toKstCalendarDateKey", () => {
+  it("KST 18:00 이후에도 당일 날짜를 반환한다", () => {
+    // 2026-04-27 18:26 KST = 2026-04-27 09:26 UTC
+    expect(toKstCalendarDateKey("2026-04-27T09:26:00.000Z")).toBe("2026-04-27");
+  });
+
+  it("KST 정각 18:00에도 당일 날짜를 반환한다", () => {
+    // 2026-04-25 18:00 KST = 2026-04-25 09:00 UTC
+    expect(toKstCalendarDateKey("2026-04-25T09:00:00.000Z")).toBe("2026-04-25");
+  });
+
+  it("KST 23:59에도 당일 날짜를 반환한다", () => {
+    // 2026-04-25 23:59 KST = 2026-04-25 14:59 UTC
+    expect(toKstCalendarDateKey("2026-04-25T14:59:00.000Z")).toBe("2026-04-25");
+  });
+
+  it("KST 00:00 직전(UTC 전날 14:59)은 전날 날짜", () => {
+    // 2026-04-24 23:59 KST = 2026-04-24 14:59 UTC
+    expect(toKstCalendarDateKey("2026-04-24T14:59:00.000Z")).toBe("2026-04-24");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildTeamArticleRows — visibleAt=null, addedAt KST 18:00 이후 fallback
+// ---------------------------------------------------------------------------
+
+describe("buildTeamArticleRows — addedAt fallback, KST 18:00 이후", () => {
+  it("visibleAt=null이고 addedAt이 KST 18:26이면 당일 그룹에 속한다", () => {
+    // addedAt: 2026-04-27 18:26 KST = 2026-04-27 09:26 UTC → 그룹은 "2026-04-27"
+    const placeholder = makeArticle({
+      visibleAt: null,
+      addedAt: "2026-04-27T09:26:00.000Z",
+      title: "18시 이후 추가됨",
+      isDeletedPlaceholder: true,
+    });
+
+    const rows = buildTeamArticleRows([placeholder]);
+    const headers = rows.filter((r) => r.type === "header");
+    expect(headers).toHaveLength(1);
+    expect((headers[0] as Extract<typeof headers[0], { type: "header" }>).dateKey).toBe("2026-04-27");
+  });
+
+  it("visibleAt=null, addedAt KST 18:26인 글은 '내일' 그룹이 아닌 당일 그룹에 배치된다", () => {
+    // 18:00 컷오프가 잘못 적용되면 2026-04-28 그룹으로 넘어가서 diffDays = -1이 됨
+    const addedAt = "2026-04-27T09:26:00.000Z"; // 2026-04-27 18:26 KST
+
+    const placeholder = makeArticle({
+      visibleAt: null,
+      addedAt,
+      title: "삭제됨 — 18:26 추가",
+      isDeletedPlaceholder: true,
+    });
+
+    const rows = buildTeamArticleRows([placeholder]);
+    const header = rows.find((r) => r.type === "header") as Extract<typeof rows[0], { type: "header" }> | undefined;
+    expect(header).toBeDefined();
+    // 그룹 dateKey가 addedAt의 KST 달력 날짜와 일치해야 함
+    expect(header!.dateKey).toBe("2026-04-27");
+    // 다음 날 그룹(2026-04-28)으로 밀리지 않아야 함
+    expect(header!.dateKey).not.toBe("2026-04-28");
+  });
+
+  it("visibleAt이 있으면 18:00 컷오프가 그대로 적용된다", () => {
+    // 2026-04-27 18:00 KST = 2026-04-27 09:00 UTC → 18:00 컷오프로 다음 날 그룹
+    const article = makeArticle({
+      visibleAt: "2026-04-27T09:00:00.000Z",
+      addedAt: "2026-04-27T09:00:00.000Z",
+      title: "visibleAt 있음",
+    });
+
+    const rows = buildTeamArticleRows([article]);
+    const header = rows.find((r) => r.type === "header") as Extract<typeof rows[0], { type: "header" }> | undefined;
+    expect(header).toBeDefined();
+    expect(header!.dateKey).toBe("2026-04-28");
   });
 });
