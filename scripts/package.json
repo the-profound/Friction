@@ -7,6 +7,7 @@
     "hello": "tsx ./src/hello.ts",
     "seed": "tsx ./src/seed.ts",
     "seed-test-accounts": "tsx ./src/seed-test-accounts.ts",
+    "seed:articles": "tsx ./src/seed-long-articles.ts",
     "backfill-public-users": "tsx ./src/backfill-public-users.ts",
     "migrate-pages-format": "tsx ./src/migrate-pages-format.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
