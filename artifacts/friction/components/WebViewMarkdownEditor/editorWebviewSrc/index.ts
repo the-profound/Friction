@@ -560,7 +560,20 @@ interface Command {
         Document,
         Paragraph,
         Text,
-        Heading.configure({ levels: [1, 2, 3] }),
+        Heading.extend({
+          addKeyboardShortcuts() {
+            return {
+              Backspace: ({ editor: ed }) => {
+                const { selection } = ed.state;
+                const { $from, empty } = selection;
+                if (!empty) return false;
+                if ($from.parentOffset !== 0) return false;
+                if ($from.parent.type !== this.type) return false;
+                return ed.commands.setParagraph();
+              },
+            };
+          },
+        }).configure({ levels: [1, 2, 3] }),
         Bold,
         Italic,
         Underline,
