@@ -316,7 +316,7 @@ export default function TeamCollectionDetailScreen() {
     if (isOwnArticle || hasReadBefore) {
       router.push({
         pathname: "/read",
-        params: { articleId: item.articleId, mode: "re_read" },
+        params: { articleId: item.articleId, mode: "re_read", teamCollectionId: id },
       });
       return;
     }
@@ -327,10 +327,10 @@ export default function TeamCollectionDetailScreen() {
     router.push({
       pathname: "/read",
       params: unreadInboxItem
-        ? { articleId: item.articleId, inboxId: unreadInboxItem.id, mode: "basic", entrySource: "list" }
-        : { articleId: item.articleId, mode: "basic", entrySource: "list" },
+        ? { articleId: item.articleId, inboxId: unreadInboxItem.id, mode: "basic", entrySource: "list", teamCollectionId: id }
+        : { articleId: item.articleId, mode: "basic", entrySource: "list", teamCollectionId: id },
     });
-  }, [router, inboxItems, closeOpenRow, userId]);
+  }, [router, inboxItems, closeOpenRow, userId, id]);
 
   const handleArticleDeletePress = useCallback((item: TeamCollectionArticleWithDetails) => {
     const canDelete = isOwner || item.article?.authorId === userId;
@@ -361,6 +361,7 @@ export default function TeamCollectionDetailScreen() {
   }, [members]);
 
   const isNew = useCallback((item: TeamCollectionArticleWithDetails): boolean => {
+    if (item.completedAt) return false;
     const ts = item.visibleAt ?? item.addedAt;
     if (!ts) return false;
     return Date.now() - new Date(ts).getTime() < 24 * 60 * 60 * 1000;

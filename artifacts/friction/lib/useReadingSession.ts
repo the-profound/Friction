@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useUpsertReadingRecord, useCreateUserArticleRead, useMarkInboxRead, useGetReadingRecord, useDeleteReadingRecord, getGetReadingRecordQueryKey } from "@workspace/api-client-react";
+import { useUpsertReadingRecord, useCreateUserArticleRead, useMarkInboxRead, useGetReadingRecord, useDeleteReadingRecord, getGetReadingRecordQueryKey, getListTeamArticlesQueryKey } from "@workspace/api-client-react";
 import type { ReadingMode } from "./policies";
 import {
   createInitialSession,
@@ -25,6 +25,7 @@ export interface UseReadingSessionOptions {
   totalPages: number;
   userId: string;
   inboxId?: string;
+  teamCollectionId?: string;
 }
 
 export interface ReadingSessionActions {
@@ -53,6 +54,7 @@ export function useReadingSession({
   totalPages,
   userId,
   inboxId,
+  teamCollectionId,
 }: UseReadingSessionOptions): ReadingSessionActions {
   const { data: savedRecord, isLoading: isRestoring } = useGetReadingRecord(
     { userId, articleId },
@@ -101,6 +103,8 @@ export function useReadingSession({
   const deleteReading = useDeleteReadingRecord();
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inboxIdRef = useRef(inboxId);
+  const teamCollectionIdRef = useRef(teamCollectionId);
+  useEffect(() => { teamCollectionIdRef.current = teamCollectionId; }, [teamCollectionId]);
 
   const savePosition = useCallback(
     (currentPage: number, scrollPosition: number) => {
@@ -192,6 +196,10 @@ export function useReadingSession({
       if (inboxIdRef.current) {
         await markInboxReadMutation.mutateAsync({ id: inboxIdRef.current });
         queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+      }
+
+      if (teamCollectionIdRef.current) {
+        queryClient.invalidateQueries({ queryKey: getListTeamArticlesQueryKey(teamCollectionIdRef.current) });
       }
 
       setSession((s) => ({ ...s, state: "COMPLETED_COMMITTED" as ReadingSessionState }));

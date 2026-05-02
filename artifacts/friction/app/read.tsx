@@ -166,12 +166,14 @@ export default function ReadScreen() {
     inboxId?: string;
     mode?: string;
     entrySource?: string;
+    teamCollectionId?: string;
   }>();
 
   const articleId = params.articleId ?? "";
   const inboxId = params.inboxId;
   const mode: ReadingMode = (params.mode as ReadingMode) ?? "basic";
   const entrySource = params.entrySource as "list" | "inbox" | undefined;
+  const teamCollectionId = params.teamCollectionId;
   // True when the user opens an article for the first time via a collection
   // article list rather than via the inbox. In this case the completion CTA's
   // secondary action is labeled "보관 안 함"; via the inbox path it is "나가기".
@@ -217,6 +219,7 @@ export default function ReadScreen() {
     totalPages,
     userId,
     inboxId,
+    teamCollectionId,
   });
 
   const currentPage = totalPages > 0
