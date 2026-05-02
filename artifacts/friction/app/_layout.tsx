@@ -12,7 +12,7 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Asset } from "expo-asset";
 import { setEditorFonts, setEditorFontsError } from "@/lib/editorFontStore";
-import { initPostHog } from "@/lib/posthog";
+import { posthog, PostHogProvider } from "@/lib/posthog";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import ToastContainer from "@/components/Toast/Toast";
@@ -36,8 +36,6 @@ if (process.env.EXPO_PUBLIC_DOMAIN) {
     : `https://${domain}`;
   setBaseUrl(baseUrl);
 }
-
-initPostHog();
 
 SplashScreen.preventAutoHideAsync();
 
@@ -218,25 +216,27 @@ export default function RootLayout() {
   if (!fontsLoaded && !fontError) return null;
 
   return (
-    <SafeAreaProvider>
-      <ErrorBoundary>
-        <QueryClientProvider client={queryClient}>
-          <GestureHandlerRootView>
-            <KeyboardProvider>
-              <AuthProvider>
-                <ActiveReadingProvider>
-                  <ToastProvider>
-                    <NavigationProvider>
-                      <RootLayoutNav />
-                      <ToastContainer />
-                    </NavigationProvider>
-                  </ToastProvider>
-                </ActiveReadingProvider>
-              </AuthProvider>
-            </KeyboardProvider>
-          </GestureHandlerRootView>
-        </QueryClientProvider>
-      </ErrorBoundary>
-    </SafeAreaProvider>
+    <PostHogProvider client={posthog} autocapture>
+      <SafeAreaProvider>
+        <ErrorBoundary>
+          <QueryClientProvider client={queryClient}>
+            <GestureHandlerRootView>
+              <KeyboardProvider>
+                <AuthProvider>
+                  <ActiveReadingProvider>
+                    <ToastProvider>
+                      <NavigationProvider>
+                        <RootLayoutNav />
+                        <ToastContainer />
+                      </NavigationProvider>
+                    </ToastProvider>
+                  </ActiveReadingProvider>
+                </AuthProvider>
+              </KeyboardProvider>
+            </GestureHandlerRootView>
+          </QueryClientProvider>
+        </ErrorBoundary>
+      </SafeAreaProvider>
+    </PostHogProvider>
   );
 }
