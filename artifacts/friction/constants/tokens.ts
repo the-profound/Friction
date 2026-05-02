@@ -217,6 +217,18 @@ export const Shadows = {
     },
     default: {},
   }),
+  previewPage: Platform.select({
+    ios: {
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.12,
+      shadowRadius: 8,
+    },
+    android: {
+      elevation: 4,
+    },
+    default: {},
+  }),
 } as const;
 
 export const Borders = {
@@ -324,7 +336,7 @@ export const ReaderTokens = {
     tightEm: -0.02,
   },
 
-  bodyBg: "#F5F5F5",
+  bodyBg: "#FFFFFF",
   bodyText: "#1A1A1A",
 } as const;
 

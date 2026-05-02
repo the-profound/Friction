@@ -13,7 +13,7 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams, Stack } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import { Colors, Typography, Spacing, ReaderTokens, cqiToPx, readerFontSize } from "@/constants/tokens";
+import { Colors, Typography, Spacing, ReaderTokens, Shadows, cqiToPx, readerFontSize } from "@/constants/tokens";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import CoverPreview from "@/components/CoverPreview/CoverPreview";
 import CoverEditor from "@/components/CoverEditor/CoverEditor";
@@ -461,6 +461,7 @@ export default function ClosingScreen() {
                 <CoverPreview cover={cover} title={title} author={authorName} />
               </View>
             ) : (
+              <View style={styles.previewCardShadow}>
               <View style={styles.previewCard} onLayout={handlePreviewCardLayout}>
                 {previewCardWidth > 0 && storedLayoutWidth !== null ? (
                   <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
@@ -528,6 +529,7 @@ export default function ClosingScreen() {
                     </View>
                   </View>
                 ) : null}
+              </View>
               </View>
             )}
           </View>
@@ -686,16 +688,22 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 16,
     justifyContent: "center",
+    backgroundColor: ReaderTokens.bodyBg,
   },
   coverPreviewWrapper: {
     alignItems: "center",
   },
-  previewCard: {
-    borderRadius: 16,
+  previewCardShadow: {
+    borderRadius: 2,
     width: "100%",
     aspectRatio: 5 / 8,
     maxHeight: 480,
     alignSelf: "center",
+    ...Shadows.previewPage,
+  },
+  previewCard: {
+    borderRadius: 2,
+    flex: 1,
     backgroundColor: ReaderTokens.bodyBg,
     overflow: "hidden",
   },
