@@ -15,6 +15,7 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
+import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { PageHeader } from "@/components/NavBar/PageHeader";
 import { useNavigation } from "@/contexts/NavigationContext";
 import { useUser } from "@/contexts/UserContext";
@@ -49,6 +50,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 export default function OfScreen() {
   const insets = useSafeAreaInsets();
+  const navBottom = useNavBarBottomSafeArea();
   const router = useRouter();
   const { ofSubTab, ofMiniSubTab, setOfMiniSubTab } = useNavigation();
   const { userId } = useUser();
@@ -519,7 +521,7 @@ export default function OfScreen() {
         <RefreshableEmpty
           refreshing={isRefetching}
           onRefresh={handleRefresh}
-          contentContainerStyle={styles.emptyContainer}
+          contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
         >
           <Feather name="globe" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>구독 모음이 없어요</Text>
@@ -534,7 +536,7 @@ export default function OfScreen() {
       <RefreshableEmpty
         refreshing={isRefetching}
         onRefresh={handleRefresh}
-        contentContainerStyle={styles.emptyContainer}
+        contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
       >
         <Feather name="folder" size={40} color={Colors.zinc300} />
         <Text style={styles.emptyTitle}>내 모음이 없어요</Text>
@@ -552,7 +554,7 @@ export default function OfScreen() {
         <RefreshableEmpty
           refreshing={isRefetching}
           onRefresh={handleRefresh}
-          contentContainerStyle={styles.emptyContainer}
+          contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
         >
           <Feather name="user-check" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>참여 중인 모음이 없어요</Text>
@@ -567,7 +569,7 @@ export default function OfScreen() {
       <RefreshableEmpty
         refreshing={isRefetching}
         onRefresh={handleRefresh}
-        contentContainerStyle={styles.emptyContainer}
+        contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
       >
         <Feather name="users" size={40} color={Colors.zinc300} />
         <Text style={styles.emptyTitle}>단체 모음이 없어요</Text>
@@ -583,7 +585,7 @@ export default function OfScreen() {
     <RefreshableEmpty
       refreshing={isRefetching}
       onRefresh={handleRefresh}
-      contentContainerStyle={styles.emptyContainer}
+      contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
     >
       <Feather name="bookmark" size={40} color={Colors.zinc300} />
       <Text style={styles.emptyTitle}>수집한 문장이 없어요</Text>
@@ -594,7 +596,7 @@ export default function OfScreen() {
   const renderContent = () => {
     if (isLoading) {
       return (
-        <View style={styles.emptyContainer}>
+        <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
           <Text style={styles.loadingText}>불러오는 중...</Text>
         </View>
       );
@@ -602,7 +604,7 @@ export default function OfScreen() {
 
     if (isError) {
       return (
-        <View style={styles.emptyContainer}>
+        <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
           <Feather name="alert-circle" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>불러오기에 실패했어요</Text>
           <Pressable style={styles.emptyButton} onPress={handleRefresh}>
@@ -624,7 +626,7 @@ export default function OfScreen() {
             renderItem={renderPersonalItem}
             numColumns={2}
             columnWrapperStyle={styles.gridRow}
-            contentContainerStyle={styles.gridContent}
+            contentContainerStyle={[styles.gridContent, { paddingBottom: navBottom }]}
             refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={Colors.zinc400} />}
             showsVerticalScrollIndicator={false}
           />
@@ -640,7 +642,7 @@ export default function OfScreen() {
             renderItem={renderTeamItem}
             numColumns={2}
             columnWrapperStyle={styles.gridRow}
-            contentContainerStyle={styles.gridContent}
+            contentContainerStyle={[styles.gridContent, { paddingBottom: navBottom }]}
             refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={Colors.zinc400} />}
             showsVerticalScrollIndicator={false}
           />
@@ -656,7 +658,7 @@ export default function OfScreen() {
             renderItem={selectionMode ? renderSentenceSelectionItem : renderSentenceItem}
             contentContainerStyle={[
               styles.listContent,
-              selectionMode && { paddingBottom: insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + 80 },
+              { paddingBottom: selectionMode ? insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + 80 : navBottom },
             ]}
             refreshControl={
               !selectionMode ? (

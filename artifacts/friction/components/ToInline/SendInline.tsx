@@ -4,6 +4,7 @@ import { Feather } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { Colors, Spacing, Typography } from "@/constants/tokens";
+import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { useUser } from "@/contexts/UserContext";
 import { useToast } from "@/contexts/ToastContext";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
@@ -71,6 +72,7 @@ export function SendInline({
   prefillKey,
   onSent,
 }: SendInlineProps) {
+  const navBottom = useNavBarBottomSafeArea();
   const queryClient = useQueryClient();
   const { userId } = useUser();
   const { showToast } = useToast();
@@ -345,7 +347,7 @@ export function SendInline({
         </View>
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: navBottom }]}>
         <SubmitButton
           style={styles.sendButton}
           disabledStyle={styles.sendButtonDisabled}

@@ -15,6 +15,7 @@ import { useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 
 import { Colors, Sizing, Spacing, Typography } from "@/constants/tokens";
+import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { useUser } from "@/contexts/UserContext";
 import {
   INCOMING_FALLBACK_POLL_INTERVAL_MS,
@@ -81,6 +82,7 @@ export function NeighborsInline({
   focusRequestsSignal,
 }: NeighborsInlineProps) {
   const insets = useSafeAreaInsets();
+  const navBottom = useNavBarBottomSafeArea();
   const { userId } = useUser();
   const queryClient = useQueryClient();
   const [activeSection, setActiveSection] = useState<SectionKey>(initialSection);
@@ -429,11 +431,11 @@ export function NeighborsInline({
 
       {activeSection === "neighbors" ? (
         neighborsQuery.isLoading ? (
-          <View style={styles.emptyContainer}>
+          <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
             <Text style={styles.loadingText}>불러오는 중...</Text>
           </View>
         ) : neighborsQuery.isError ? (
-          <View style={styles.emptyContainer}>
+          <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
             <Feather name="alert-circle" size={40} color={Colors.zinc300} />
             <Text style={styles.emptyTitle}>불러오기 실패</Text>
             <Text style={styles.emptySubtitle}>네트워크를 확인하고 다시 시도해주세요</Text>
@@ -445,7 +447,7 @@ export function NeighborsInline({
           <RefreshableEmpty
             refreshing={neighborsQuery.isRefetching}
             onRefresh={() => neighborsQuery.refetch()}
-            contentContainerStyle={styles.emptyContainer}
+            contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
           >
             <Feather name="users" size={40} color={Colors.zinc300} />
             <Text style={styles.emptyTitle}>아직 이웃이 없어요</Text>
@@ -459,7 +461,7 @@ export function NeighborsInline({
             data={neighbors}
             keyExtractor={(item) => item.id}
             renderItem={renderNeighborItem}
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={[styles.listContent, { paddingBottom: navBottom }]}
             refreshControl={
               <RefreshControl
                 refreshing={neighborsQuery.isRefetching}
@@ -472,11 +474,11 @@ export function NeighborsInline({
         )
       ) : activeSection === "requests" ? (
         requestsQuery.isLoading ? (
-          <View style={styles.emptyContainer}>
+          <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
             <Text style={styles.loadingText}>불러오는 중...</Text>
           </View>
         ) : requestsQuery.isError ? (
-          <View style={styles.emptyContainer}>
+          <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
             <Feather name="alert-circle" size={40} color={Colors.zinc300} />
             <Text style={styles.emptyTitle}>불러오기 실패</Text>
             <Pressable style={styles.addButton} onPress={() => requestsQuery.refetch()}>
@@ -487,7 +489,7 @@ export function NeighborsInline({
           <RefreshableEmpty
             refreshing={requestsQuery.isRefetching}
             onRefresh={() => requestsQuery.refetch()}
-            contentContainerStyle={styles.emptyContainer}
+            contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
           >
             <Feather name="bell" size={40} color={Colors.zinc300} />
             <Text style={styles.emptyTitle}>대기 중인 요청이 없어요</Text>
@@ -498,7 +500,7 @@ export function NeighborsInline({
             data={pendingRequests}
             keyExtractor={(item) => item.id}
             renderItem={renderRequestItem}
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={[styles.listContent, { paddingBottom: navBottom }]}
             refreshControl={
               <RefreshControl
                 refreshing={requestsQuery.isRefetching}
@@ -510,11 +512,11 @@ export function NeighborsInline({
           />
         )
       ) : sentRequestsQuery.isLoading ? (
-        <View style={styles.emptyContainer}>
+        <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
           <Text style={styles.loadingText}>불러오는 중...</Text>
         </View>
       ) : sentRequestsQuery.isError ? (
-        <View style={styles.emptyContainer}>
+        <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
           <Feather name="alert-circle" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>불러오기 실패</Text>
           <Pressable style={styles.addButton} onPress={() => sentRequestsQuery.refetch()}>
@@ -525,7 +527,7 @@ export function NeighborsInline({
         <RefreshableEmpty
           refreshing={sentRequestsQuery.isRefetching}
           onRefresh={() => sentRequestsQuery.refetch()}
-          contentContainerStyle={styles.emptyContainer}
+          contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
         >
           <Feather name="send" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>보낸 요청이 없어요</Text>
@@ -536,7 +538,7 @@ export function NeighborsInline({
           data={sentRequests}
           keyExtractor={(item) => item.id}
           renderItem={renderSentRequestItem}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { paddingBottom: navBottom }]}
           refreshControl={
             <RefreshControl
               refreshing={sentRequestsQuery.isRefetching}

@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
+import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { PageHeader } from "@/components/NavBar/PageHeader";
 import ArticleListItem from "@/components/ArticleListItem/ArticleListItem";
 import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
@@ -61,6 +62,7 @@ function formatRelativeDate(dateStr: string): string {
 
 export default function OnScreen() {
   const insets = useSafeAreaInsets();
+  const navBottom = useNavBarBottomSafeArea();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { userId } = useUser();
@@ -330,14 +332,14 @@ Alert.alert("오류", "메모 생성에 실패했습니다.");
       )}
 
       {isLoading ? (
-        <View style={styles.emptyContainer}>
+        <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
           <Text style={styles.emptySubtitle}>불러오는 중...</Text>
         </View>
       ) : sortedArticles.length === 0 ? (
         <RefreshableEmpty
           refreshing={isRefetching}
           onRefresh={refetch}
-          contentContainerStyle={styles.emptyContainer}
+          contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
         >
           <Feather name="edit-3" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>메모를 작성해보세요</Text>
@@ -361,7 +363,7 @@ Alert.alert("오류", "메모 생성에 실패했습니다.");
           }
           contentContainerStyle={[
             styles.listContent,
-            selectionMode && { paddingBottom: insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + 80 },
+            { paddingBottom: selectionMode ? insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + 80 : navBottom },
           ]}
           onScrollBeginDrag={selectionMode ? undefined : closeOpenRow}
           ListFooterComponent={selectionMode ? undefined : listFooter}

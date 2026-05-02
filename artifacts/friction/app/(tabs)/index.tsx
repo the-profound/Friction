@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
+import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { PageHeader } from "@/components/NavBar/PageHeader";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import DotIndicator from "@/components/DotIndicator/DotIndicator";
@@ -307,6 +308,7 @@ function CarouselGroup({
 
 export default function InboxScreen() {
   const insets = useSafeAreaInsets();
+  const navBottom = useNavBarBottomSafeArea();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { userId } = useUser();
@@ -458,13 +460,13 @@ Alert.alert("완료", "수신함에서 삭제되었습니다.");
       )}
 
       {isLoading ? (
-        <View style={styles.emptyContainer}>
+        <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
           <Text style={styles.emptyText}>불러오는 중...</Text>
         </View>
       ) : groups.length === 0 ? (
         <ScrollView
           style={{ flex: 1 }}
-          contentContainerStyle={styles.emptyContainer}
+          contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={refetch} />
           }
@@ -483,7 +485,7 @@ Alert.alert("완료", "수신함에서 삭제되었습니다.");
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={Colors.zinc400} />
           }
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { paddingBottom: navBottom }]}
           showsVerticalScrollIndicator={false}
           snapToInterval={GROUP_ITEM_H}
           snapToAlignment="start"

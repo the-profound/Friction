@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
+import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { PageHeader } from "@/components/NavBar/PageHeader";
 import RefreshableEmpty from "@/components/RefreshableEmpty";
 import { useNavigation } from "@/contexts/NavigationContext";
@@ -47,6 +48,7 @@ function clearRouterParams(router: ParamRouter, keys: string[]): void {
 
 export default function ToScreen() {
   const insets = useSafeAreaInsets();
+  const navBottom = useNavBarBottomSafeArea();
   const router = useRouter();
   const { toSubTab, setToSubTab } = useNavigation();
   const { userId } = useUser();
@@ -214,7 +216,7 @@ export default function ToScreen() {
   const renderHistoryTab = () => {
     if (sendRecordsQuery.isLoading) {
       return (
-        <View style={styles.emptyContainer}>
+        <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
           <Text style={styles.loadingText}>불러오는 중...</Text>
         </View>
       );
@@ -222,7 +224,7 @@ export default function ToScreen() {
 
     if (sendRecordsQuery.isError) {
       return (
-        <View style={styles.emptyContainer}>
+        <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
           <Feather name="alert-circle" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>불러오기 실패</Text>
           <Text style={styles.emptySubtitle}>네트워크를 확인하고 다시 시도해주세요</Text>
@@ -239,7 +241,7 @@ export default function ToScreen() {
         <RefreshableEmpty
           refreshing={sendRecordsQuery.isRefetching}
           onRefresh={() => sendRecordsQuery.refetch()}
-          contentContainerStyle={styles.emptyContainer}
+          contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
         >
           <Feather name="send" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>보낸 편지가 없어요</Text>
@@ -253,7 +255,7 @@ export default function ToScreen() {
         data={recentSendRecords}
         keyExtractor={(item) => item.id}
         renderItem={renderSendRecordItem}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, { paddingBottom: navBottom }]}
         ListHeaderComponent={
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>최근 발신 {sendRecords.length}건</Text>
