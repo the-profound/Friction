@@ -20,7 +20,9 @@ export type RNToWebViewCommand =
   | { type: "setEditable"; isEditable: boolean }
   | { type: "setSourceArticleSlot"; text: string }
   | { type: "setOverflowRanges"; ranges: OverflowRange[] | null }
-  | { type: "setBodyMetrics"; fontSizePx: number; letterSpacingPx: number };
+  | { type: "setBodyMetrics"; fontSizePx: number; letterSpacingPx: number }
+  | { type: "setBlockType"; blockType: string }
+  | { type: "toggleMark"; mark: string };
 
 export interface OnChangePayload {
   isDirty: boolean;
@@ -39,6 +41,13 @@ export interface OnErrorPayload {
   message: string;
 }
 
+export interface OnSelectionUpdatePayload {
+  activeBlock: string;
+  isBold: boolean;
+  isItalic: boolean;
+  isUnderline: boolean;
+}
+
 export type WebViewToRNEvent =
   | { type: "onReady" }
   | { type: "onChange"; payload: OnChangePayload }
@@ -49,7 +58,8 @@ export type WebViewToRNEvent =
   | { type: "onKeyboardHide" }
   | { type: "onSwipeDownToDismiss" }
   | { type: "onSourceArticleSlotTap" }
-  | { type: "onTextSelect"; text: string; isEmpty: boolean };
+  | { type: "onTextSelect"; text: string; isEmpty: boolean }
+  | { type: "onSelectionUpdate"; payload: OnSelectionUpdatePayload };
 
 export interface WebViewMarkdownEditorRef {
   setMarkdown: (markdown: string) => void;
@@ -58,6 +68,8 @@ export interface WebViewMarkdownEditorRef {
   setTitle: (title: string) => void;
   blur: () => void;
   setOverflowRanges: (ranges: OverflowRange[] | null) => void;
+  setBlockType: (blockType: string) => void;
+  toggleMark: (mark: string) => void;
 }
 
 export interface WebViewMarkdownEditorProps {
@@ -72,6 +84,7 @@ export interface WebViewMarkdownEditorProps {
   onTitleChange?: (title: string) => void;
   onError?: (payload: OnErrorPayload) => void;
   onKeyboardVisibilityChange?: (visible: boolean) => void;
+  onSelectionUpdate?: (payload: OnSelectionUpdatePayload) => void;
   belowTitleSlot?: ReactNode;
   sourceArticleSlotText?: string | null;
   onSourceArticleSlotTap?: () => void;

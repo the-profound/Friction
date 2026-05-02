@@ -150,6 +150,10 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
       },
       setOverflowRanges(_ranges) {
       },
+      setBlockType(_blockType: string) {
+      },
+      toggleMark(_mark: string) {
+      },
     }), [editor, requestExportMarkdown, onError]);
 
     const handleTitleInput = useCallback(

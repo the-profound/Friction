@@ -2,14 +2,14 @@ import React, { useState, useCallback, useEffect, useRef } from "react";
 import { View, Text, StyleSheet, Pressable, Alert, ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useAutoSave } from "@/lib/useAutoSave";
 import { useEditorLayout } from "@/lib/useEditorLayout";
 import { canTransitionForward } from "@/lib/articleStatusCycle";
 import type { ArticleStatus } from "@/lib/policies";
 import WebViewMarkdownEditor from "@/components/WebViewMarkdownEditor/WebViewMarkdownEditorCompat";
-import type { WebViewMarkdownEditorRef, OnChangePayload, OnExportMarkdownPayload } from "@/components/WebViewMarkdownEditor/types";
+import type { WebViewMarkdownEditorRef, OnChangePayload, OnExportMarkdownPayload, OnSelectionUpdatePayload } from "@/components/WebViewMarkdownEditor/types";
 import {
   useGetArticle,
   useUpdateArticle,
@@ -22,6 +22,15 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useUser } from "@/contexts/UserContext";
 import SourceArticlePickerSheet from "@/components/SourceArticlePickerSheet/SourceArticlePickerSheet";
 import WritingStateBar, { type WritingStage } from "@/components/WritingStateBar/WritingStateBar";
+import KeyboardToolbar from "@/components/KeyboardToolbar/KeyboardToolbar";
+import BlockTypeSheet from "@/components/KeyboardToolbar/BlockTypeSheet";
+
+const DEFAULT_SELECTION: OnSelectionUpdatePayload = {
+  activeBlock: "paragraph",
+  isBold: false,
+  isItalic: false,
+  isUnderline: false,
+};
 
 export default function DraftScreen() {
   const insets = useSafeAreaInsets();
@@ -44,6 +53,8 @@ export default function DraftScreen() {
   const [charCount, setCharCount] = useState(0);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [editorReady, setEditorReady] = useState(false);
+  const [selectionState, setSelectionState] = useState<OnSelectionUpdatePayload>(DEFAULT_SELECTION);
+  const [blockTypeSheetVisible, setBlockTypeSheetVisible] = useState(false);
   const contentRef = useRef("");
   const titleRef = useRef("");
   const initializedRef = useRef(false);
@@ -171,6 +182,30 @@ export default function DraftScreen() {
     },
     [markDirty],
   );
+
+  const handleSelectionUpdate = useCallback((payload: OnSelectionUpdatePayload) => {
+    setSelectionState(payload);
+  }, []);
+
+  const handleToolbarFormat = useCallback(() => {
+    setBlockTypeSheetVisible(true);
+  }, []);
+
+  const handleBlockTypeSelect = useCallback((blockType: string) => {
+    editorRef.current?.setBlockType(blockType);
+  }, []);
+
+  const handleToolbarBold = useCallback(() => {
+    editorRef.current?.toggleMark("bold");
+  }, []);
+
+  const handleToolbarItalic = useCallback(() => {
+    editorRef.current?.toggleMark("italic");
+  }, []);
+
+  const handleToolbarUnderline = useCallback(() => {
+    editorRef.current?.toggleMark("underline");
+  }, []);
 
   const handleSourceArticleSelect = useCallback(
     async (articleId: string, articleTitle: string) => {
@@ -343,11 +378,7 @@ export default function DraftScreen() {
           onPress={handleStateBarPress}
           disabled={isNavigating}
         />
-        {keyboardVisible ? (
-          <Pressable onPress={handleDismissKeyboard} hitSlop={12}>
-            <MaterialCommunityIcons name="keyboard-off-outline" size={22} color={Colors.zinc600} />
-          </Pressable>
-        ) : isNavigating ? (
+        {isNavigating ? (
           <ActivityIndicator size="small" color={Colors.zinc400} />
         ) : (
           <View style={styles.headerRight} />
@@ -371,6 +402,7 @@ export default function DraftScreen() {
             onExportMarkdown={handleExportMarkdown}
             onTitleChange={handleTitleChange}
             onKeyboardVisibilityChange={setKeyboardVisible}
+            onSelectionUpdate={handleSelectionUpdate}
             bodyFontSize={editorLayout.bodyFontSize}
             bodyLetterSpacing={editorLayout.bodyLetterSpacing}
             belowTitleSlot={
@@ -399,6 +431,17 @@ export default function DraftScreen() {
           <Text style={styles.charCountText}>{charCount}자</Text>
         </View>
         </View>
+
+        {keyboardVisible && Platform.OS !== "web" && (
+          <KeyboardToolbar
+            selectionState={selectionState}
+            onFormatPress={handleToolbarFormat}
+            onBoldPress={handleToolbarBold}
+            onItalicPress={handleToolbarItalic}
+            onUnderlinePress={handleToolbarUnderline}
+            onDismissKeyboard={handleDismissKeyboard}
+          />
+        )}
       </KeyboardAvoidingView>
 
       {userId && (
@@ -412,6 +455,13 @@ export default function DraftScreen() {
           onUnlink={handleSourceArticleUnlink}
         />
       )}
+
+      <BlockTypeSheet
+        visible={blockTypeSheetVisible}
+        activeBlock={selectionState.activeBlock}
+        onClose={() => setBlockTypeSheetVisible(false)}
+        onSelect={handleBlockTypeSelect}
+      />
     </View>
   );
 }

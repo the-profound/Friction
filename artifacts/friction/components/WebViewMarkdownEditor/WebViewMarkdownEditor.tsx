@@ -9,6 +9,7 @@ import type {
   WebViewMarkdownEditorRef,
   RNToWebViewCommand,
   WebViewToRNEvent,
+  OnSelectionUpdatePayload,
 } from "./types";
 
 const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdownEditorProps>(
@@ -25,6 +26,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       onTitleChange,
       onError,
       onKeyboardVisibilityChange,
+      onSelectionUpdate,
       sourceArticleSlotText,
       onSourceArticleSlotTap,
       bodyFontSize,
@@ -72,6 +74,12 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       setOverflowRanges(ranges) {
         sendCommand({ type: "setOverflowRanges", ranges });
       },
+      setBlockType(blockType: string) {
+        sendCommand({ type: "setBlockType", blockType });
+      },
+      toggleMark(mark: string) {
+        sendCommand({ type: "toggleMark", mark });
+      },
     }), [sendCommand]);
 
     const handleMessage = useCallback(
@@ -110,12 +118,15 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
             case "onSourceArticleSlotTap":
               onSourceArticleSlotTap?.();
               break;
+            case "onSelectionUpdate":
+              onSelectionUpdate?.(data.payload);
+              break;
           }
         } catch {
           onError?.({ code: "MESSAGE_PARSE_FAIL", message: "Failed to parse WebView message" });
         }
       },
-      [flushQueue, onReady, onChange, onExportMarkdown, onTitleChange, onError, onKeyboardVisibilityChange, onSourceArticleSlotTap],
+      [flushQueue, onReady, onChange, onExportMarkdown, onTitleChange, onError, onKeyboardVisibilityChange, onSelectionUpdate, onSourceArticleSlotTap],
     );
 
     useEffect(() => {

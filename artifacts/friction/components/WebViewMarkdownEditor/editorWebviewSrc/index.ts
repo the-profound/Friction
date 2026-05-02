@@ -516,6 +516,8 @@ interface Command {
   text?: string;
   fontSizePx?: number;
   letterSpacingPx?: number;
+  blockType?: string;
+  mark?: string;
 }
 
 (function () {
@@ -546,6 +548,26 @@ interface Command {
     if (!titleInput) return;
     titleInput.style.height = "auto";
     titleInput.style.height = titleInput.scrollHeight + "px";
+  }
+
+  function getSelectionPayload(ed: Editor) {
+    const activeBlock = ed.isActive("heading", { level: 1 }) ? "heading1"
+      : ed.isActive("heading", { level: 2 }) ? "heading2"
+      : ed.isActive("heading", { level: 3 }) ? "heading3"
+      : ed.isActive("blockquote") ? "blockquote"
+      : ed.isActive("bulletList") ? "bulletList"
+      : ed.isActive("orderedList") ? "orderedList"
+      : "paragraph";
+    return {
+      activeBlock,
+      isBold: ed.isActive("bold"),
+      isItalic: ed.isActive("italic"),
+      isUnderline: ed.isActive("underline"),
+    };
+  }
+
+  function postSelectionState(ed: Editor) {
+    postToRN({ type: "onSelectionUpdate", payload: getSelectionPayload(ed) });
   }
 
   function setupEditor(placeholder: string, initialMarkdown: string) {
@@ -597,6 +619,10 @@ interface Command {
           const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
           postToRN({ type: "onChange", payload: { isDirty: true, charCount, wordCount } });
         }, CHANGE_THROTTLE_MS);
+        postSelectionState(ed);
+      },
+      onSelectionUpdate: ({ editor: ed }) => {
+        postSelectionState(ed);
       },
       onFocus: () => {
         editorFocused = true;
@@ -696,6 +722,48 @@ interface Command {
           }
           if (cmd.letterSpacingPx != null) {
             root.style.setProperty("--body-letter-spacing", cmd.letterSpacingPx + "px");
+          }
+          break;
+        }
+        case "setBlockType": {
+          if (editor && !editor.isDestroyed) {
+            const bt = cmd.blockType || "paragraph";
+            const chain = editor.chain().focus();
+            if (bt === "heading1") {
+              chain.setHeading({ level: 1 }).run();
+            } else if (bt === "heading2") {
+              chain.setHeading({ level: 2 }).run();
+            } else if (bt === "heading3") {
+              chain.setHeading({ level: 3 }).run();
+            } else if (bt === "blockquote") {
+              chain.setBlockquote().run();
+            } else if (bt === "bulletList") {
+              if (!editor.isActive("bulletList")) {
+                chain.toggleBulletList().run();
+              }
+            } else if (bt === "orderedList") {
+              if (!editor.isActive("orderedList")) {
+                chain.toggleOrderedList().run();
+              }
+            } else {
+              chain.clearNodes().setParagraph().run();
+            }
+            postSelectionState(editor);
+          }
+          break;
+        }
+        case "toggleMark": {
+          if (editor && !editor.isDestroyed) {
+            const mk = cmd.mark || "";
+            const chain = editor.chain().focus();
+            if (mk === "bold") {
+              chain.toggleBold().run();
+            } else if (mk === "italic") {
+              chain.toggleItalic().run();
+            } else if (mk === "underline") {
+              chain.toggleUnderline().run();
+            }
+            postSelectionState(editor);
           }
           break;
         }
