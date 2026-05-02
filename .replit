@@ -31,6 +31,8 @@ channel = "stable-25_05"
 [userenv]
 
 [userenv.shared]
+EXPO_PUBLIC_POSTHOG_TOKEN = "phc_ujzCizkg5fppua6PwidhQAuhegBrVQ3cm78GP9mmr4S5"
+EXPO_PUBLIC_POSTHOG_HOST = "https://us.i.posthog.com"
 
 [[ports]]
 localPort = 3000

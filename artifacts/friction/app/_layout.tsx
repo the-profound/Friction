@@ -12,6 +12,7 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Asset } from "expo-asset";
 import { setEditorFonts, setEditorFontsError } from "@/lib/editorFontStore";
+import { initPostHog } from "@/lib/posthog";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import ToastContainer from "@/components/Toast/Toast";
@@ -35,6 +36,8 @@ if (process.env.EXPO_PUBLIC_DOMAIN) {
     : `https://${domain}`;
   setBaseUrl(baseUrl);
 }
+
+initPostHog();
 
 SplashScreen.preventAutoHideAsync();
 
