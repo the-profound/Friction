@@ -1,7 +1,8 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
-import { View, TextInput, StyleSheet, Pressable, Text, Platform, type LayoutChangeEvent, type NativeSyntheticEvent, type TextInputSelectionChangeEventData } from "react-native";
+import { View, TextInput, StyleSheet, Pressable, Text, Platform, type NativeSyntheticEvent, type TextInputSelectionChangeEventData } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { Colors, ReaderTokens } from "../../constants/tokens";
+import * as TextSelectionMenu from "../../modules/TextSelectionMenu";
 
 interface SelectableTextProps {
   text: string;
@@ -266,22 +267,23 @@ function SelectableTextWeb({ text, onCollect, onMemo, onSelectionStateChange, fo
 
 function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange, fontSize, lineHeight, letterSpacing, children, clearSignal }: SelectableTextProps) {
   const [selection, setSelection] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
-  const [showCollectButton, setShowCollectButton] = useState(false);
   // When true, pass {start:0,end:0} as controlled selection to force iOS to clear handles
   const [forceClearSelection, setForceClearSelection] = useState(false);
-  const [measuredHeight, setMeasuredHeight] = useState(0);
 
-  const handleContainerLayout = useCallback((e: LayoutChangeEvent) => {
-    setMeasuredHeight(e.nativeEvent.layout.height);
-  }, []);
   const textRef = useRef(text);
   textRef.current = text;
+  const selectionRef = useRef(selection);
+  selectionRef.current = selection;
   const isSelectingRef = useRef(false);
   const onSelectionStateChangeRef = useRef(onSelectionStateChange);
   onSelectionStateChangeRef.current = onSelectionStateChange;
+  const onCollectRef = useRef(onCollect);
+  onCollectRef.current = onCollect;
+  const onMemoRef = useRef(onMemo);
+  onMemoRef.current = onMemo;
   const textInputRef = useRef<TextInput>(null);
   const prevClearSignalRef = useRef(clearSignal);
-  // Track pending dismiss timer so we can cancel it if a button press fires first
+  // Track pending dismiss timer so we can cancel it if a menu action fires first
   const blurDismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearNativeSelection = useCallback(() => {
@@ -291,17 +293,57 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
     setTimeout(() => setForceClearSelection(false), 100);
   }, []);
 
+  const dismissSelection = useCallback(() => {
+    if (blurDismissTimerRef.current) {
+      clearTimeout(blurDismissTimerRef.current);
+      blurDismissTimerRef.current = null;
+    }
+    if (isSelectingRef.current) {
+      isSelectingRef.current = false;
+      setSelection({ start: 0, end: 0 });
+      onSelectionStateChangeRef.current?.(false);
+    }
+    TextSelectionMenu.deactivate();
+    clearNativeSelection();
+  }, [clearNativeSelection]);
+
+  // Listen for native OS menu item taps
+  useEffect(() => {
+    const collectSub = TextSelectionMenu.addCollectListener(() => {
+      const { start, end } = selectionRef.current;
+      const selected = textRef.current.substring(start, end).trim();
+      if (selected.length > 0) {
+        onCollectRef.current(selected);
+      }
+      dismissSelection();
+    });
+
+    const memoSub = TextSelectionMenu.addMemoListener(() => {
+      const { start, end } = selectionRef.current;
+      const selected = textRef.current.substring(start, end).trim();
+      if (selected.length > 0) {
+        onMemoRef.current?.(selected);
+      }
+      dismissSelection();
+    });
+
+    return () => {
+      collectSub?.remove();
+      memoSub?.remove();
+    };
+  }, [dismissSelection]);
+
   // Auto-dismiss when the TextInput loses focus (e.g. user taps outside on iOS).
-  // A short delay ensures any pending button-press handlers fire before we clear state.
+  // A short delay ensures any pending native menu action events fire before we clear state.
   const handleBlur = useCallback(() => {
     if (blurDismissTimerRef.current) clearTimeout(blurDismissTimerRef.current);
     blurDismissTimerRef.current = setTimeout(() => {
       blurDismissTimerRef.current = null;
       if (isSelectingRef.current) {
         isSelectingRef.current = false;
-        setShowCollectButton(false);
         setSelection({ start: 0, end: 0 });
         onSelectionStateChangeRef.current?.(false);
+        TextSelectionMenu.deactivate();
       }
     }, 200);
   }, []);
@@ -315,11 +357,11 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
   useEffect(() => {
     if (clearSignal === prevClearSignalRef.current) return;
     prevClearSignalRef.current = clearSignal;
-    setShowCollectButton(false);
     setSelection({ start: 0, end: 0 });
     if (isSelectingRef.current) {
       isSelectingRef.current = false;
       onSelectionStateChangeRef.current?.(false);
+      TextSelectionMenu.deactivate();
     }
     clearNativeSelection();
   }, [clearSignal, clearNativeSelection]);
@@ -329,40 +371,18 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
       const { start, end } = e.nativeEvent.selection;
       setSelection({ start, end });
       const nowSelecting = start !== end;
-      setShowCollectButton(nowSelecting);
       if (nowSelecting !== isSelectingRef.current) {
         isSelectingRef.current = nowSelecting;
         onSelectionStateChangeRef.current?.(nowSelecting);
+        if (nowSelecting) {
+          TextSelectionMenu.activate(onMemo != null);
+        } else {
+          TextSelectionMenu.deactivate();
+        }
       }
     },
-    [],
+    [onMemo],
   );
-
-  const handleCollect = useCallback(() => {
-    if (blurDismissTimerRef.current) { clearTimeout(blurDismissTimerRef.current); blurDismissTimerRef.current = null; }
-    const selected = textRef.current.substring(selection.start, selection.end);
-    if (selected.trim().length > 0) {
-      onCollect(selected.trim());
-      setShowCollectButton(false);
-      if (isSelectingRef.current) {
-        isSelectingRef.current = false;
-        onSelectionStateChangeRef.current?.(false);
-      }
-    }
-  }, [selection, onCollect]);
-
-  const handleMemo = useCallback(() => {
-    if (blurDismissTimerRef.current) { clearTimeout(blurDismissTimerRef.current); blurDismissTimerRef.current = null; }
-    const selected = textRef.current.substring(selection.start, selection.end);
-    if (selected.trim().length > 0) {
-      onMemo?.(selected.trim());
-      setShowCollectButton(false);
-      if (isSelectingRef.current) {
-        isSelectingRef.current = false;
-        onSelectionStateChangeRef.current?.(false);
-      }
-    }
-  }, [selection, onMemo]);
 
   const inputStyle = [
     styles.textInput,
@@ -371,29 +391,10 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
     letterSpacing != null && { letterSpacing },
   ];
 
-  // Rendered as an absolute overlay so it never contributes to layout height,
-  // preventing the pagination frame from shifting when the bar appears.
-  const collectBarOverlay = showCollectButton && (
-    <View style={[styles.collectBarNativeWrap, { top: measuredHeight + 8 }]}>
-      <View style={styles.collectBarPill}>
-        <Pressable style={styles.collectButton} onPress={handleCollect}>
-          <Feather name="bookmark" size={14} color={Colors.zinc900} />
-          <Text style={styles.collectButtonText}>수집</Text>
-        </Pressable>
-        {onMemo && (
-          <Pressable style={styles.collectButton} onPress={handleMemo}>
-            <Feather name="edit-3" size={14} color={Colors.zinc900} />
-            <Text style={styles.collectButtonText}>메모</Text>
-          </Pressable>
-        )}
-      </View>
-    </View>
-  );
-
   if (children) {
     return (
       <View style={styles.container}>
-        <View onLayout={handleContainerLayout}>
+        <View>
           {children}
           <TextInput
             ref={textInputRef}
@@ -408,14 +409,13 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
             selectTextOnFocus={false}
           />
         </View>
-        {collectBarOverlay}
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <View onLayout={handleContainerLayout}>
+      <View>
         <TextInput
           ref={textInputRef}
           style={inputStyle}
@@ -429,7 +429,6 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
           selectTextOnFocus={false}
         />
       </View>
-      {collectBarOverlay}
     </View>
   );
 }
@@ -507,16 +506,6 @@ const styles = StyleSheet.create({
       default: {},
     }),
   },
-  // Used by SelectableTextNative — absolute overlay so it never adds to layout height.
-  // top is set dynamically via measuredHeight + 8 to place the bar just below the text block.
-  collectBarNativeWrap: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    zIndex: 9999,
-    flexDirection: "row",
-    justifyContent: "center",
-  },
   collectButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -531,5 +520,8 @@ const styles = StyleSheet.create({
     fontFamily: ReaderTokens.fontFamily.sansSemiBold,
     color: Colors.zinc900,
     fontWeight: "600",
+  },
+  cancelButton: {
+    padding: 4,
   },
 });
