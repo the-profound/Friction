@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
-import { View, TextInput, StyleSheet, Pressable, Text, Platform, type NativeSyntheticEvent, type TextInputSelectionChangeEventData } from "react-native";
+import { View, TextInput, StyleSheet, Pressable, Text, Platform, type LayoutChangeEvent, type NativeSyntheticEvent, type TextInputSelectionChangeEventData } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { Colors, ReaderTokens } from "../../constants/tokens";
 
@@ -269,6 +269,11 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
   const [showCollectButton, setShowCollectButton] = useState(false);
   // When true, pass {start:0,end:0} as controlled selection to force iOS to clear handles
   const [forceClearSelection, setForceClearSelection] = useState(false);
+  const [measuredHeight, setMeasuredHeight] = useState(0);
+
+  const handleContainerLayout = useCallback((e: LayoutChangeEvent) => {
+    setMeasuredHeight(e.nativeEvent.layout.height);
+  }, []);
   const textRef = useRef(text);
   textRef.current = text;
   const isSelectingRef = useRef(false);
@@ -359,17 +364,6 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
     }
   }, [selection, onMemo]);
 
-  const handleCancel = useCallback(() => {
-    if (blurDismissTimerRef.current) { clearTimeout(blurDismissTimerRef.current); blurDismissTimerRef.current = null; }
-    setShowCollectButton(false);
-    setSelection({ start: 0, end: 0 });
-    if (isSelectingRef.current) {
-      isSelectingRef.current = false;
-      onSelectionStateChangeRef.current?.(false);
-    }
-    clearNativeSelection();
-  }, [clearNativeSelection]);
-
   const inputStyle = [
     styles.textInput,
     fontSize != null && { fontSize },
@@ -380,7 +374,7 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
   // Rendered as an absolute overlay so it never contributes to layout height,
   // preventing the pagination frame from shifting when the bar appears.
   const collectBarOverlay = showCollectButton && (
-    <View style={styles.collectBarNativeWrap}>
+    <View style={[styles.collectBarNativeWrap, { top: measuredHeight + 8 }]}>
       <View style={styles.collectBarPill}>
         <Pressable style={styles.collectButton} onPress={handleCollect}>
           <Feather name="bookmark" size={14} color={Colors.white} />
@@ -392,9 +386,6 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
             <Text style={styles.collectButtonText}>메모</Text>
           </Pressable>
         )}
-        <Pressable style={styles.cancelButton} onPress={handleCancel} hitSlop={8}>
-          <Feather name="x" size={16} color={Colors.zinc400} />
-        </Pressable>
       </View>
     </View>
   );
@@ -402,7 +393,7 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
   if (children) {
     return (
       <View style={styles.container}>
-        <View>
+        <View onLayout={handleContainerLayout}>
           {children}
           <TextInput
             ref={textInputRef}
@@ -424,18 +415,20 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
 
   return (
     <View style={styles.container}>
-      <TextInput
-        ref={textInputRef}
-        style={inputStyle}
-        value={text}
-        multiline
-        editable={false}
-        scrollEnabled={false}
-        onSelectionChange={handleSelectionChange}
-        onBlur={handleBlur}
-        selection={forceClearSelection ? { start: 0, end: 0 } : undefined}
-        selectTextOnFocus={false}
-      />
+      <View onLayout={handleContainerLayout}>
+        <TextInput
+          ref={textInputRef}
+          style={inputStyle}
+          value={text}
+          multiline
+          editable={false}
+          scrollEnabled={false}
+          onSelectionChange={handleSelectionChange}
+          onBlur={handleBlur}
+          selection={forceClearSelection ? { start: 0, end: 0 } : undefined}
+          selectTextOnFocus={false}
+        />
+      </View>
       {collectBarOverlay}
     </View>
   );
@@ -501,10 +494,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   // Used by SelectableTextNative — absolute overlay so it never adds to layout height.
-  // Positioned at the bottom of the container, above the OS selection handles area.
+  // top is set dynamically via measuredHeight + 8 to place the bar just below the text block.
   collectBarNativeWrap: {
     position: "absolute",
-    bottom: 0,
     left: 0,
     right: 0,
     zIndex: 9999,
@@ -525,12 +517,5 @@ const styles = StyleSheet.create({
     fontFamily: ReaderTokens.fontFamily.sansSemiBold,
     color: Colors.white,
     fontWeight: "600",
-  },
-  cancelButton: {
-    width: 28,
-    height: 28,
-    alignItems: "center",
-    justifyContent: "center",
-    marginLeft: 4,
   },
 });
