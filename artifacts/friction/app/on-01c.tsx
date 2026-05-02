@@ -24,6 +24,7 @@ import { resolveArticleCover, getDefaultCover } from "@/utils/articleCover";
 import { canStepBack } from "@/lib/articleStatusCycle";
 import WritingStateBar, { type WritingStage } from "@/components/WritingStateBar/WritingStateBar";
 import { useUser } from "@/contexts/UserContext";
+import { trackArticlePublished } from "@/lib/analytics";
 import {
   useGetArticle,
   useGetUser,
@@ -220,6 +221,11 @@ export default function ClosingScreen() {
         });
         queryClient.setQueryData([`/api/articles/${articleId}`], updated);
       }
+      trackArticlePublished({
+        articleId,
+        charCount: pages.reduce((sum, p) => sum + p.length, 0),
+        pageCount: pages.length,
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
       await addArticleToMyCollection.mutateAsync({
         id: collectionId,
@@ -229,7 +235,7 @@ export default function ClosingScreen() {
       router.dismissAll();
       router.push({ pathname: "/of-01" });
     },
-    [article, refetchArticle, transitionStatus, addArticleToMyCollection, queryClient, router],
+    [article, pages, refetchArticle, transitionStatus, addArticleToMyCollection, queryClient, router],
   );
 
   const handleCollectionSelect = useCallback(

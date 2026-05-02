@@ -13,6 +13,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Asset } from "expo-asset";
 import { setEditorFonts, setEditorFontsError } from "@/lib/editorFontStore";
 import { posthog, PostHogProvider } from "@/lib/posthog";
+import { trackAppOpen } from "@/lib/analytics";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import ToastContainer from "@/components/Toast/Toast";
@@ -197,6 +198,10 @@ async function loadEditorFonts(): Promise<void> {
 loadEditorFonts();
 
 export default function RootLayout() {
+  useEffect(() => {
+    trackAppOpen();
+  }, []);
+
   const [fontsLoaded, fontError] = useFonts({
     ...Feather.font,
     ...MaterialCommunityIcons.font,

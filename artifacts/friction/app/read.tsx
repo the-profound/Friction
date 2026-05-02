@@ -6,10 +6,20 @@ import {
   Pressable,
   BackHandler,
   Alert,
+  AppState,
   Platform,
   useWindowDimensions,
   type LayoutChangeEvent,
 } from "react-native";
+import {
+  trackPageTurn,
+  trackReadingStart,
+  trackReadingComplete,
+  trackArticleAction,
+  trackAppBackgroundedDuringReading,
+  trackSentenceCollected,
+  trackMemoCreatedDuringReading,
+} from "@/lib/analytics";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -274,6 +284,12 @@ export default function ReadScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // ── Analytics tracking refs ────────────────────────────────────────────────
+  const pageEnterTimeRef = useRef<number>(Date.now());
+  const readingStartTimeRef = useRef<number>(0);
+  const completionTimeRef = useRef<number>(0);
+  const hasTrackedReadingStartRef = useRef(false);
+
   const readingMemo = useReadingMemo({
     userId,
     sourceArticleId: articleId,
@@ -295,6 +311,51 @@ export default function ReadScreen() {
       reading.startReading();
     }
   }, [reading.isRestoring, reading.isSessionHydrated, reading.session.state, totalPages]);
+
+  // Reset page-enter clock whenever the current page changes
+  useEffect(() => {
+    pageEnterTimeRef.current = Date.now();
+  }, [currentPage]);
+
+  // Fire reading_start once when the session enters READING state
+  useEffect(() => {
+    if (reading.session.state === "READING" && !hasTrackedReadingStartRef.current) {
+      hasTrackedReadingStartRef.current = true;
+      readingStartTimeRef.current = Date.now();
+      trackReadingStart({
+        articleId,
+        totalPages,
+        resumedFromPage: reading.session.position.currentPage,
+      });
+    }
+  }, [reading.session.state, articleId, totalPages, reading.session.position.currentPage]);
+
+  // Fire reading_complete and record completion time when the sheet opens
+  useEffect(() => {
+    if (reading.session.state === "COMPLETED_READY" && completionTimeRef.current === 0) {
+      completionTimeRef.current = Date.now();
+      trackReadingComplete({
+        articleId,
+        totalPages,
+        totalReadMs: readingStartTimeRef.current > 0
+          ? Date.now() - readingStartTimeRef.current
+          : 0,
+      });
+    }
+  }, [reading.session.state, articleId, totalPages]);
+
+  // Fire app_backgrounded_during_reading when OS suspends the app mid-read
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (nextState) => {
+      if (
+        nextState === "background" &&
+        (reading.session.state === "READING" || reading.session.state === "PAUSED")
+      ) {
+        trackAppBackgroundedDuringReading({ articleId, currentPage, totalPages });
+      }
+    });
+    return () => sub.remove();
+  }, [articleId, currentPage, totalPages, reading.session.state]);
 
   useEffect(() => {
     if (Platform.OS !== "web") return;
@@ -374,21 +435,41 @@ export default function ReadScreen() {
 
   const handleSwipeLeft = useCallback(() => {
     if (!canNavigate) return;
+    const dwellMs = Date.now() - pageEnterTimeRef.current;
     if (showingCover) {
       setCoverDismissed(true);
       reading.nextPage();
       return;
     }
+    trackPageTurn({
+      articleId,
+      fromPage: currentPage,
+      toPage: currentPage + 1,
+      direction: "forward",
+      dwellMs,
+      totalPages,
+      pageCharCount: contentPages[contentPageIndex]?.length,
+    });
     reading.nextPage();
-  }, [canNavigate, showingCover, reading]);
+  }, [canNavigate, showingCover, reading, articleId, currentPage, totalPages, contentPages, contentPageIndex]);
 
   const handleSwipeRight = useCallback(() => {
     if (!canNavigate) return;
     if (showingCover) return;
     // When there is no cover, page 0 is an empty slot — block navigation back to it
     if (!hasCover && currentPage <= 1) return;
+    const dwellMs = Date.now() - pageEnterTimeRef.current;
+    trackPageTurn({
+      articleId,
+      fromPage: currentPage,
+      toPage: currentPage - 1,
+      direction: "backward",
+      dwellMs,
+      totalPages,
+      pageCharCount: contentPages[contentPageIndex]?.length,
+    });
     reading.prevPage();
-  }, [canNavigate, showingCover, hasCover, currentPage, reading]);
+  }, [canNavigate, showingCover, hasCover, currentPage, reading, articleId, totalPages, contentPages, contentPageIndex]);
 
   const handleSwipeLeftRef = useRef(handleSwipeLeft);
   const handleSwipeRightRef = useRef(handleSwipeRight);
@@ -617,6 +698,7 @@ export default function ReadScreen() {
       }
 
       setCompletionSheetVisible(false);
+      trackArticleAction({ articleId, action: "save", msSinceComplete: Date.now() - completionTimeRef.current });
       queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
       clearActiveSession();
       await readingMemo.cleanup();
@@ -634,6 +716,7 @@ Alert.alert("완료", "보관함에 저장됐어요");
       const result = await reading.commitCompletion();
       setCompletionSheetVisible(false);
       if (result.success) {
+        trackArticleAction({ articleId, action: "skip", msSinceComplete: Date.now() - completionTimeRef.current });
         if (!isListEntry) {
           // 수신함 경로: 읽기 완료 후 수신함 목록 갱신
           queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
@@ -668,7 +751,8 @@ Alert.alert("완료", "보관함에 저장됐어요");
     readingMemo.updateMemoContent(combined);
     setMemoAppendContent(combined);
     setMemoSheetVisible(true);
-  }, [currentPage, authorName, article?.title, readingMemo]);
+    trackMemoCreatedDuringReading({ articleId, page: currentPage });
+  }, [currentPage, authorName, article?.title, readingMemo, articleId]);
 
   const handleSaveSentence = useCallback(async () => {
     if (!selectedText) return;
@@ -684,6 +768,7 @@ Alert.alert("완료", "보관함에 저장됐어요");
         },
       });
       queryClient.invalidateQueries({ queryKey: ["/api/stored-sentences"] });
+      trackSentenceCollected({ articleId, page: contentPageIndex, textLength: selectedText.length });
       setSentencePopupVisible(false);
       setSelectedText("");
       Alert.alert("저장 완료", "문장이 저장되었습니다.");
