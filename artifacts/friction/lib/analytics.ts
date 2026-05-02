@@ -109,13 +109,15 @@ export function trackAppBackgroundedDuringReading(params: {
   totalPages: number;
 }): void {
   if (!posthog) return;
-  const progressPct = params.totalPages > 0
-    ? Math.round((params.currentPage / params.totalPages) * 100)
+  const currentPage = Number(params.currentPage);
+  const totalPages = Number(params.totalPages);
+  const progressPct: number = totalPages > 0
+    ? Math.round((currentPage / totalPages) * 100)
     : 0;
   posthog.capture("app_backgrounded_during_reading", {
     article_id: params.articleId,
-    current_page: params.currentPage,
-    total_pages: params.totalPages,
+    current_page: currentPage,
+    total_pages: totalPages,
     progress_pct: progressPct,
     hour_kst: kstHour(),
   });
