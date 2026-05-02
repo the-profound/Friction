@@ -8,7 +8,7 @@ interface MarkdownBlockProps {
   block: MarkdownBlockType;
   onCollect: (text: string) => void;
   onMemo?: (text: string) => void;
-  onSelectionStateChange?: (isSelecting: boolean) => void;
+  onSelectionStateChange?: (isSelecting: boolean, selectedText?: string) => void;
   fontSize: number;
   lineHeight: number;
   letterSpacing: number;

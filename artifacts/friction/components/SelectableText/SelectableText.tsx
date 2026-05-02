@@ -1,14 +1,13 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
-import { View, TextInput, StyleSheet, Pressable, Text, Platform, type NativeSyntheticEvent, type TextInputSelectionChangeEventData } from "react-native";
-import { Feather } from "@expo/vector-icons";
-import { Colors, ReaderTokens } from "../../constants/tokens";
+import { View, TextInput, StyleSheet, Text, Platform, type NativeSyntheticEvent, type TextInputSelectionChangeEventData } from "react-native";
+import { ReaderTokens } from "../../constants/tokens";
 import * as TextSelectionMenu from "../../modules/TextSelectionMenu";
 
 interface SelectableTextProps {
   text: string;
   onCollect: (selectedText: string) => void;
   onMemo?: (selectedText: string) => void;
-  onSelectionStateChange?: (isSelecting: boolean) => void;
+  onSelectionStateChange?: (isSelecting: boolean, selectedText?: string) => void;
   fontSize?: number;
   lineHeight?: number;
   letterSpacing?: number;
@@ -57,11 +56,8 @@ function selectWordAtPoint(x: number, y: number): boolean {
 }
 
 function SelectableTextWeb({ text, onCollect, onMemo, onSelectionStateChange, fontSize, lineHeight, letterSpacing, children, clearSignal }: SelectableTextProps) {
-  const [selectedText, setSelectedText] = useState("");
-  const [showCollectButton, setShowCollectButton] = useState(false);
   const [isSelectMode, setIsSelectMode] = useState(false);
   const textBodyRef = useRef<Text>(null);
-  const pendingTextRef = useRef("");
   const isSelectModeRef = useRef(false);
   const isDraggingSelectionRef = useRef(false);
   const onSelectionStateChangeRef = useRef(onSelectionStateChange);
@@ -72,8 +68,6 @@ function SelectableTextWeb({ text, onCollect, onMemo, onSelectionStateChange, fo
     if (!isSelectModeRef.current) return;
     isSelectModeRef.current = false;
     setIsSelectMode(false);
-    setShowCollectButton(false);
-    setSelectedText("");
     window.getSelection()?.removeAllRanges();
     onSelectionStateChangeRef.current?.(false);
   }, []);
@@ -99,24 +93,18 @@ function SelectableTextWeb({ text, onCollect, onMemo, onSelectionStateChange, fo
           setIsSelectMode(false);
           onSelectionStateChangeRef.current?.(false);
         }
-        setShowCollectButton(false);
-        setSelectedText("");
         return;
       }
       const range = sel.getRangeAt(0);
       if (el && el.contains(range.commonAncestorContainer)) {
         const selected = sel.toString().trim();
-        setSelectedText(selected);
-        setShowCollectButton(true);
         if (!isSelectModeRef.current) {
           isSelectModeRef.current = true;
           setIsSelectMode(true);
-          onSelectionStateChangeRef.current?.(true);
         }
+        onSelectionStateChangeRef.current?.(true, selected);
         return;
       }
-      setShowCollectButton(false);
-      setSelectedText("");
     };
 
     document.addEventListener("selectionchange", handleSelectionChange);
@@ -139,7 +127,8 @@ function SelectableTextWeb({ text, onCollect, onMemo, onSelectionStateChange, fo
       if (selected) {
         isSelectModeRef.current = true;
         setIsSelectMode(true);
-        onSelectionStateChangeRef.current?.(true);
+        const selText = window.getSelection()?.toString().trim() ?? "";
+        onSelectionStateChangeRef.current?.(true, selText);
       } else {
         el.style.userSelect = "none";
       }
@@ -149,16 +138,15 @@ function SelectableTextWeb({ text, onCollect, onMemo, onSelectionStateChange, fo
     return () => el.removeEventListener("dblclick", handleDblClick);
   }, []);
 
-  // When the collect bar is showing (select mode), let the browser handle
-  // drag selection naturally (starting a completely fresh selection from the
-  // mousedown point). We only need to:
+  // When in select mode, let the browser handle drag selection naturally
+  // (starting a completely fresh selection from the mousedown point). We only need to:
   //   1. Flag that a drag is in progress so handleSelectionChange does not
   //      exit select mode while the range is momentarily empty between
   //      mousedown and the first mousemove.
   //   2. On mouseup, if the drag ended with no text selected (plain click),
   //      explicitly exit select mode.
-  // The PanResponder in read.tsx is already blocked because isTextSelectingRef
-  // is true while the collect bar is visible.
+  // The pan gesture in read.tsx is already blocked because isTextSelectingRef
+  // is true while in select mode.
   useEffect(() => {
     if (Platform.OS !== "web") return;
     const el = textBodyRef.current as unknown as HTMLElement | null;
@@ -183,8 +171,6 @@ function SelectableTextWeb({ text, onCollect, onMemo, onSelectionStateChange, fo
       if (!sel || sel.toString().trim().length === 0) {
         isSelectModeRef.current = false;
         setIsSelectMode(false);
-        setShowCollectButton(false);
-        setSelectedText("");
         window.getSelection()?.removeAllRanges();
         onSelectionStateChangeRef.current?.(false);
       }
@@ -198,32 +184,6 @@ function SelectableTextWeb({ text, onCollect, onMemo, onSelectionStateChange, fo
       document.removeEventListener("mouseup", handleMouseUp);
     };
   }, []);
-
-  const handleCollectPressIn = useCallback(() => {
-    pendingTextRef.current = selectedText;
-  }, [selectedText]);
-
-  const handleMemoPressIn = useCallback(() => {
-    pendingTextRef.current = selectedText;
-  }, [selectedText]);
-
-  const handleCollect = useCallback(() => {
-    const t = pendingTextRef.current;
-    pendingTextRef.current = "";
-    if (t.length > 0) {
-      onCollect(t);
-      exitSelectMode();
-    }
-  }, [onCollect, exitSelectMode]);
-
-  const handleMemo = useCallback(() => {
-    const t = pendingTextRef.current;
-    pendingTextRef.current = "";
-    if (t.length > 0) {
-      onMemo?.(t);
-      exitSelectMode();
-    }
-  }, [onMemo, exitSelectMode]);
 
   const textStyle = [
     styles.textBody,
@@ -242,40 +202,18 @@ function SelectableTextWeb({ text, onCollect, onMemo, onSelectionStateChange, fo
       <Text style={textStyle} ref={textBodyRef}>
         {children ?? text}
       </Text>
-      {showCollectButton && (
-        <View style={styles.collectBarAbsoluteWrap}>
-          <View style={styles.collectBarPill}>
-            <Pressable style={styles.collectButton} onPressIn={handleCollectPressIn} onPress={handleCollect}>
-              <Feather name="bookmark" size={14} color={Colors.zinc900} />
-              <Text style={styles.collectButtonText}>수집</Text>
-            </Pressable>
-            {onMemo && (
-              <Pressable style={styles.collectButton} onPressIn={handleMemoPressIn} onPress={handleMemo}>
-                <Feather name="edit-3" size={14} color={Colors.zinc900} />
-                <Text style={styles.collectButtonText}>메모</Text>
-              </Pressable>
-            )}
-            <Pressable style={styles.cancelButton} onPress={exitSelectMode} hitSlop={8}>
-              <Feather name="x" size={16} color={Colors.zinc400} />
-            </Pressable>
-          </View>
-        </View>
-      )}
     </View>
   );
 }
 
 function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange, fontSize, lineHeight, letterSpacing, children, clearSignal }: SelectableTextProps) {
-  // When the native OS menu module is unavailable (Expo Go), fall back to the
-  // same floating pill bar used by SelectableTextWeb.
+  // When the native OS menu module is unavailable (Expo Go), the parent
+  // (ReadScreen) renders the pill overlay via onSelectionStateChange.
   const useNativeMenu = TextSelectionMenu.isAvailable;
 
   const [selection, setSelection] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
   // When true, pass {start:0,end:0} as controlled selection to force iOS to clear handles
   const [forceClearSelection, setForceClearSelection] = useState(false);
-  // Fallback pill bar state (Expo Go / no native module)
-  const [showFallbackBar, setShowFallbackBar] = useState(false);
-  const pendingFallbackTextRef = useRef("");
 
   const textRef = useRef(text);
   textRef.current = text;
@@ -311,8 +249,6 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
       onSelectionStateChangeRef.current?.(false);
     }
     TextSelectionMenu.deactivate();
-    setShowFallbackBar(false);
-    pendingFallbackTextRef.current = "";
     clearNativeSelection();
   }, [clearNativeSelection]);
 
@@ -353,8 +289,6 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
         setSelection({ start: 0, end: 0 });
         onSelectionStateChangeRef.current?.(false);
         TextSelectionMenu.deactivate();
-        setShowFallbackBar(false);
-        pendingFallbackTextRef.current = "";
       }
     }, 200);
   }, []);
@@ -373,8 +307,6 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
       isSelectingRef.current = false;
       onSelectionStateChangeRef.current?.(false);
       TextSelectionMenu.deactivate();
-      setShowFallbackBar(false);
-      pendingFallbackTextRef.current = "";
     }
     clearNativeSelection();
   }, [clearSignal, clearNativeSelection]);
@@ -386,54 +318,24 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
       const nowSelecting = start !== end;
       if (nowSelecting !== isSelectingRef.current) {
         isSelectingRef.current = nowSelecting;
-        onSelectionStateChangeRef.current?.(nowSelecting);
         if (nowSelecting) {
+          const selected = textRef.current.substring(start, end).trim();
+          onSelectionStateChangeRef.current?.(true, selected);
           if (useNativeMenu) {
             TextSelectionMenu.activate(onMemo != null);
           }
         } else {
+          onSelectionStateChangeRef.current?.(false);
           if (useNativeMenu) TextSelectionMenu.deactivate();
-          setShowFallbackBar(false);
-          pendingFallbackTextRef.current = "";
         }
-      }
-      // Update fallback bar whenever selection is non-empty and native menu is unavailable
-      if (!useNativeMenu) {
-        if (start !== end) {
-          const selected = textRef.current.substring(start, end).trim();
-          setShowFallbackBar(selected.length > 0);
-        } else {
-          setShowFallbackBar(false);
-        }
+      } else if (nowSelecting) {
+        // selection range changed while still selecting — update parent with new text
+        const selected = textRef.current.substring(start, end).trim();
+        onSelectionStateChangeRef.current?.(true, selected);
       }
     },
     [onMemo, useNativeMenu],
   );
-
-  // Fallback bar handlers (used when native module is unavailable)
-  const handleFallbackCollectPressIn = useCallback(() => {
-    const { start, end } = selectionRef.current;
-    pendingFallbackTextRef.current = textRef.current.substring(start, end).trim();
-  }, []);
-
-  const handleFallbackMemoPressIn = useCallback(() => {
-    const { start, end } = selectionRef.current;
-    pendingFallbackTextRef.current = textRef.current.substring(start, end).trim();
-  }, []);
-
-  const handleFallbackCollect = useCallback(() => {
-    const t = pendingFallbackTextRef.current;
-    pendingFallbackTextRef.current = "";
-    if (t.length > 0) onCollectRef.current(t);
-    dismissSelection();
-  }, [dismissSelection]);
-
-  const handleFallbackMemo = useCallback(() => {
-    const t = pendingFallbackTextRef.current;
-    pendingFallbackTextRef.current = "";
-    if (t.length > 0) onMemoRef.current?.(t);
-    dismissSelection();
-  }, [dismissSelection]);
 
   const inputStyle = [
     styles.textInput,
@@ -441,26 +343,6 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
     lineHeight != null && { lineHeight },
     letterSpacing != null && { letterSpacing },
   ];
-
-  const fallbackBar = !useNativeMenu && showFallbackBar ? (
-    <View style={styles.collectBarAbsoluteWrap}>
-      <View style={styles.collectBarPill}>
-        <Pressable style={styles.collectButton} onPressIn={handleFallbackCollectPressIn} onPress={handleFallbackCollect}>
-          <Feather name="bookmark" size={14} color={Colors.zinc900} />
-          <Text style={styles.collectButtonText}>수집</Text>
-        </Pressable>
-        {onMemo && (
-          <Pressable style={styles.collectButton} onPressIn={handleFallbackMemoPressIn} onPress={handleFallbackMemo}>
-            <Feather name="edit-3" size={14} color={Colors.zinc900} />
-            <Text style={styles.collectButtonText}>메모</Text>
-          </Pressable>
-        )}
-        <Pressable style={styles.cancelButton} onPress={dismissSelection} hitSlop={8}>
-          <Feather name="x" size={16} color={Colors.zinc400} />
-        </Pressable>
-      </View>
-    </View>
-  ) : null;
 
   if (children) {
     return (
@@ -480,7 +362,6 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
             selectTextOnFocus={false}
           />
         </View>
-        {fallbackBar}
       </View>
     );
   }
@@ -501,7 +382,6 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
           selectTextOnFocus={false}
         />
       </View>
-      {fallbackBar}
     </View>
   );
 }
@@ -543,58 +423,5 @@ const styles = StyleSheet.create({
     bottom: 0,
     color: "transparent",
     backgroundColor: "transparent",
-  },
-  // Used by SelectableTextWeb: absolutely positioned just below the text block.
-  // top:'100%' is a web CSS percentage; cast to satisfy RN number types.
-  collectBarAbsoluteWrap: {
-    position: "absolute",
-    top: "100%" as unknown as number,
-    left: 0,
-    right: 0,
-    marginTop: 6,
-    zIndex: 9999,
-    flexDirection: "row",
-    justifyContent: "center",
-  },
-  collectBarPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Colors.white,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 8,
-    borderWidth: 1,
-    borderColor: Colors.zinc200,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
-        shadowRadius: 6,
-      },
-      android: {
-        elevation: 3,
-      },
-      default: {},
-    }),
-  },
-  collectButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: Colors.zinc100,
-    borderRadius: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  collectButtonText: {
-    fontSize: 12,
-    fontFamily: ReaderTokens.fontFamily.sansSemiBold,
-    color: Colors.zinc900,
-    fontWeight: "600",
-  },
-  cancelButton: {
-    padding: 4,
   },
 });

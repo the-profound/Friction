@@ -239,6 +239,9 @@ export default function ReadScreen() {
   const [memoSheetVisible, setMemoSheetVisible] = useState(false);
   const [memoAppendContent, setMemoAppendContent] = useState<string | undefined>(undefined);
   const [myCollectionsModalVisible, setMyCollectionsModalVisible] = useState(false);
+  const [showSelectionPill, setShowSelectionPill] = useState(false);
+  const [selectionPillText, setSelectionPillText] = useState("");
+  const [bottomBarHeight, setBottomBarHeight] = useState(70);
 
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | undefined>(undefined);
   const [pageListSize, setPageListSize] = useState({ width: 0, height: 0 });
@@ -980,7 +983,15 @@ Alert.alert("완료", "보관함에 저장됐어요");
                           pageIndex={prevIdx}
                           onCollectSentence={handleCollectSentence}
                           onMemoSentence={handleMemoSentence}
-                          onSelectionStateChange={(isSelecting) => { isTextSelectingRef.current = isSelecting; }}
+                          onSelectionStateChange={(isSelecting, text) => {
+                            isTextSelectingRef.current = isSelecting;
+                            if (isSelecting && text) {
+                              setSelectionPillText(text);
+                              setShowSelectionPill(true);
+                            } else {
+                              setShowSelectionPill(false);
+                            }
+                          }}
                           bottomInset={insets.bottom}
                           layout={layout}
                           clearSignal={clearSelectionSignal}
@@ -1005,7 +1016,15 @@ Alert.alert("완료", "보관함에 저장됐어요");
                         pageIndex={contentPageIndex}
                         onCollectSentence={handleCollectSentence}
                         onMemoSentence={handleMemoSentence}
-                        onSelectionStateChange={(isSelecting) => { isTextSelectingRef.current = isSelecting; }}
+                        onSelectionStateChange={(isSelecting, text) => {
+                          isTextSelectingRef.current = isSelecting;
+                          if (isSelecting && text) {
+                            setSelectionPillText(text);
+                            setShowSelectionPill(true);
+                          } else {
+                            setShowSelectionPill(false);
+                          }
+                        }}
                         bottomInset={insets.bottom}
                         layout={layout}
                         clearSignal={clearSelectionSignal}
@@ -1026,7 +1045,15 @@ Alert.alert("완료", "보관함에 저장됐어요");
                             pageIndex={0}
                             onCollectSentence={handleCollectSentence}
                             onMemoSentence={handleMemoSentence}
-                            onSelectionStateChange={(isSelecting) => { isTextSelectingRef.current = isSelecting; }}
+                            onSelectionStateChange={(isSelecting, text) => {
+                              isTextSelectingRef.current = isSelecting;
+                              if (isSelecting && text) {
+                                setSelectionPillText(text);
+                                setShowSelectionPill(true);
+                              } else {
+                                setShowSelectionPill(false);
+                              }
+                            }}
                             bottomInset={insets.bottom}
                             layout={layout}
                             clearSignal={clearSelectionSignal}
@@ -1041,7 +1068,15 @@ Alert.alert("완료", "보관함에 저장됐어요");
                           pageIndex={nextIdx}
                           onCollectSentence={handleCollectSentence}
                           onMemoSentence={handleMemoSentence}
-                          onSelectionStateChange={(isSelecting) => { isTextSelectingRef.current = isSelecting; }}
+                          onSelectionStateChange={(isSelecting, text) => {
+                            isTextSelectingRef.current = isSelecting;
+                            if (isSelecting && text) {
+                              setSelectionPillText(text);
+                              setShowSelectionPill(true);
+                            } else {
+                              setShowSelectionPill(false);
+                            }
+                          }}
                           bottomInset={insets.bottom}
                           layout={layout}
                           clearSignal={clearSelectionSignal}
@@ -1075,7 +1110,53 @@ Alert.alert("완료", "보관함에 저장됐어요");
         </View>
       )}
 
-      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
+      {/* ── Selection pill overlay — fixed above the bottom bar ─────────── */}
+      {showSelectionPill && (
+        <View
+          style={[
+            styles.selectionPillWrap,
+            { bottom: insets.bottom + bottomBarHeight + Math.max(0, (pageListSize.height - layout.frameHeight) / 2) + layout.titleBarHeight + 12 },
+          ]}
+          pointerEvents="box-none"
+        >
+          <View style={styles.selectionPill}>
+            <Pressable
+              style={styles.selectionPillButton}
+              onPress={() => {
+                const t = selectionPillText;
+                setShowSelectionPill(false);
+                setSelectionPillText("");
+                handleCollectSentence(t);
+                setClearSelectionSignal((n) => n + 1);
+              }}
+            >
+              <Feather name="bookmark" size={14} color={Colors.zinc200} />
+              <Text style={styles.selectionPillButtonText}>수집</Text>
+            </Pressable>
+            <Pressable
+              style={styles.selectionPillButton}
+              onPress={() => {
+                const t = selectionPillText;
+                setShowSelectionPill(false);
+                setSelectionPillText("");
+                handleMemoSentence(t);
+                setClearSelectionSignal((n) => n + 1);
+              }}
+            >
+              <Feather name="edit-3" size={14} color={Colors.zinc200} />
+              <Text style={styles.selectionPillButtonText}>메모</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+
+      <View
+        style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}
+        onLayout={(e) => {
+          const h = e.nativeEvent.layout.height;
+          setBottomBarHeight((prev) => (prev === h ? prev : h));
+        }}
+      >
         <View style={styles.bottomProgressContainer}>
           <ProgressIndicator type="linear" progress={reading.progress} size="small" />
         </View>
@@ -1313,7 +1394,7 @@ const PageView = React.memo(function PageView({
   pageIndex: number;
   onCollectSentence: (text: string) => void;
   onMemoSentence: (text: string) => void;
-  onSelectionStateChange?: (isSelecting: boolean) => void;
+  onSelectionStateChange?: (isSelecting: boolean, selectedText?: string) => void;
   bottomInset: number;
   layout: ReaderLayout;
   clearSignal?: number;
@@ -1569,6 +1650,50 @@ const styles = StyleSheet.create({
     height: 40,
     alignItems: "center",
     justifyContent: "center",
+  },
+  selectionPillWrap: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    zIndex: 200,
+  },
+  selectionPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.zinc800,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 8,
+    marginBottom: 8,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.18,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+      default: {},
+    }),
+  },
+  selectionPillButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: Colors.zinc700,
+    borderRadius: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  selectionPillButtonText: {
+    fontSize: 12,
+    fontFamily: ReaderTokens.fontFamily.sansSemiBold,
+    color: Colors.zinc200,
+    fontWeight: "600",
   },
   completeButtonContainer: {
     position: "absolute",
