@@ -389,7 +389,7 @@ export default function DraftScreen() {
         style={styles.editorOuter}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <View style={[styles.editorInner, { width: editorLayout.safeAreaWidth, paddingHorizontal: editorLayout.paddingX }]}>
+        <View style={[styles.editorInner, { width: editorLayout.safeAreaWidth }]}>
         <View style={styles.markdownEditorContainer}>
           <WebViewMarkdownEditor
             ref={editorRef}
@@ -405,9 +405,10 @@ export default function DraftScreen() {
             onSelectionUpdate={handleSelectionUpdate}
             bodyFontSize={editorLayout.bodyFontSize}
             bodyLetterSpacing={editorLayout.bodyLetterSpacing}
+            bodyPaddingX={editorLayout.paddingX}
             belowTitleSlot={
               <Pressable
-                style={styles.sourceArticleRow}
+                style={[styles.sourceArticleRow, { paddingHorizontal: editorLayout.paddingX }]}
                 onPress={() => setPickerVisible(true)}
                 hitSlop={4}
               >
@@ -490,7 +491,6 @@ const styles = StyleSheet.create({
   sourceArticleRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: Spacing.screenPx,
     paddingBottom: 8,
     gap: 4,
   },

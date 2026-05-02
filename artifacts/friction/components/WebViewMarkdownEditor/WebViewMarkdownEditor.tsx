@@ -31,6 +31,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       onSourceArticleSlotTap,
       bodyFontSize,
       bodyLetterSpacing,
+      bodyPaddingX,
     },
     ref,
   ) {
@@ -142,6 +143,15 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
     }, [bodyFontSize, bodyLetterSpacing, sendCommand]);
 
     useEffect(() => {
+      if (readyRef.current && bodyPaddingX != null) {
+        const px = `${bodyPaddingX}px`;
+        webViewRef.current?.injectJavaScript(
+          `(function(){try{document.body.style.paddingLeft='${px}';document.body.style.paddingRight='${px}';}catch(e){}})();true;`,
+        );
+      }
+    }, [bodyPaddingX]);
+
+    useEffect(() => {
       sendCommand({ type: "setSourceArticleSlot", text: sourceArticleSlotText ?? "" });
     }, [sourceArticleSlotText, sendCommand]);
 
@@ -197,6 +207,12 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
             });
             if (bodyFontSize != null && bodyLetterSpacing != null) {
               sendCommand({ type: "setBodyMetrics", fontSizePx: bodyFontSize, letterSpacingPx: bodyLetterSpacing });
+            }
+            if (bodyPaddingX != null) {
+              const px = `${bodyPaddingX}px`;
+              webViewRef.current?.injectJavaScript(
+                `(function(){try{document.body.style.paddingLeft='${px}';document.body.style.paddingRight='${px}';}catch(e){}})();true;`,
+              );
             }
             flushQueue();
           }}

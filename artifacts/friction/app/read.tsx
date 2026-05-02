@@ -1281,7 +1281,6 @@ Alert.alert("완료", "보관함에 저장됐어요");
           setMemoSheetVisible(false);
           setMemoAppendContent(undefined);
         }}
-        articleTitle={article?.title ?? ""}
         initialContent={readingMemo.memoContent}
         appendContent={memoAppendContent}
         saveState={readingMemo.saveState}

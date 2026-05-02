@@ -12,7 +12,6 @@ import { Colors, Typography } from "@/constants/tokens";
 interface MemoBottomSheetProps {
   visible: boolean;
   onClose: () => void;
-  articleTitle: string;
   initialContent?: string;
   appendContent?: string;
   saveState?: "idle" | "saving" | "saved" | "error";
@@ -23,7 +22,6 @@ interface MemoBottomSheetProps {
 export default function MemoBottomSheet({
   visible,
   onClose,
-  articleTitle,
   initialContent = "",
   appendContent,
   saveState: externalSaveState,
@@ -115,9 +113,6 @@ export default function MemoBottomSheet({
             <Text style={styles.headerTitle} numberOfLines={1}>
               읽기 메모
             </Text>
-            <Text style={styles.headerSub} numberOfLines={1}>
-              {articleTitle}
-            </Text>
           </View>
           <View style={styles.headerRight}>
             {saveIndicatorText ? (
@@ -167,16 +162,10 @@ const styles = StyleSheet.create({
   },
   headerLeft: {
     flex: 1,
-    gap: 2,
   },
   headerTitle: {
     ...Typography.bodySemiBold,
     color: Colors.zinc900,
-  },
-  headerSub: {
-    fontSize: 12,
-    fontFamily: "Pretendard",
-    color: Colors.zinc400,
   },
   headerRight: {
     flexDirection: "row",
