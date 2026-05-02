@@ -9,6 +9,7 @@ interface CoverPreviewProps {
   title: string;
   author?: string;
   compact?: boolean;
+  borderRadius?: number;
 }
 
 export default function CoverPreview({
@@ -16,6 +17,7 @@ export default function CoverPreview({
   title,
   author,
   compact = false,
+  borderRadius = 16,
 }: CoverPreviewProps) {
   const cover = resolveArticleCover(coverProp);
   const isImage = cover.type === "image" && !!cover.imageUrl;
@@ -43,7 +45,7 @@ export default function CoverPreview({
       style={[
         styles.container,
         compact && styles.containerCompact,
-        { backgroundColor: isImage ? Colors.zinc200 : bgColor },
+        { backgroundColor: isImage ? Colors.zinc200 : bgColor, borderRadius },
       ]}
       onLayout={onLayout}
     >

@@ -458,7 +458,7 @@ export default function ClosingScreen() {
               </View>
             ) : isCoverPage ? (
               <View style={styles.coverPreviewWrapper}>
-                <CoverPreview cover={cover} title={title} author={authorName} />
+                <CoverPreview cover={cover} title={title} author={authorName} borderRadius={2} />
               </View>
             ) : (
               <View style={styles.previewCardShadow}>
@@ -691,7 +691,12 @@ const styles = StyleSheet.create({
     backgroundColor: ReaderTokens.bodyBg,
   },
   coverPreviewWrapper: {
-    alignItems: "center",
+    borderRadius: 2,
+    width: "100%",
+    aspectRatio: 5 / 8,
+    maxHeight: 480,
+    alignSelf: "center",
+    ...Shadows.previewPage,
   },
   previewCardShadow: {
     borderRadius: 2,
