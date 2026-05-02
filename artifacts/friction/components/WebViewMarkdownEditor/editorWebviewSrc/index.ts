@@ -242,6 +242,8 @@ const HorizontalRuleWithControls = HorizontalRule.extend({
           .insert(prevNodeStart, hrNode)
           .delete(info.pos + hrNode.nodeSize, info.pos + 2 * hrNode.nodeSize);
         view.dispatch(tr);
+        // Dispatch may restore editor focus — blur again to keep keyboard dismissed.
+        editor.commands.blur();
       });
 
       downBtn.addEventListener("click", (e) => {
@@ -257,6 +259,8 @@ const HorizontalRuleWithControls = HorizontalRule.extend({
           .delete(info.pos, info.pos + hrNode.nodeSize)
           .insert(info.pos + nextEntry.node.nodeSize, hrNode);
         view.dispatch(tr);
+        // Dispatch may restore editor focus — blur again to keep keyboard dismissed.
+        editor.commands.blur();
       });
 
       return {
