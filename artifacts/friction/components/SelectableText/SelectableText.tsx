@@ -276,12 +276,35 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
   onSelectionStateChangeRef.current = onSelectionStateChange;
   const textInputRef = useRef<TextInput>(null);
   const prevClearSignalRef = useRef(clearSignal);
+  // Track pending dismiss timer so we can cancel it if a button press fires first
+  const blurDismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearNativeSelection = useCallback(() => {
     setForceClearSelection(true);
     textInputRef.current?.blur();
     // Reset controlled prop after one frame so normal selection works again
     setTimeout(() => setForceClearSelection(false), 100);
+  }, []);
+
+  // Auto-dismiss when the TextInput loses focus (e.g. user taps outside on iOS).
+  // A short delay ensures any pending button-press handlers fire before we clear state.
+  const handleBlur = useCallback(() => {
+    if (blurDismissTimerRef.current) clearTimeout(blurDismissTimerRef.current);
+    blurDismissTimerRef.current = setTimeout(() => {
+      blurDismissTimerRef.current = null;
+      if (isSelectingRef.current) {
+        isSelectingRef.current = false;
+        setShowCollectButton(false);
+        setSelection({ start: 0, end: 0 });
+        onSelectionStateChangeRef.current?.(false);
+      }
+    }, 200);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (blurDismissTimerRef.current) clearTimeout(blurDismissTimerRef.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -311,6 +334,7 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
   );
 
   const handleCollect = useCallback(() => {
+    if (blurDismissTimerRef.current) { clearTimeout(blurDismissTimerRef.current); blurDismissTimerRef.current = null; }
     const selected = textRef.current.substring(selection.start, selection.end);
     if (selected.trim().length > 0) {
       onCollect(selected.trim());
@@ -323,6 +347,7 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
   }, [selection, onCollect]);
 
   const handleMemo = useCallback(() => {
+    if (blurDismissTimerRef.current) { clearTimeout(blurDismissTimerRef.current); blurDismissTimerRef.current = null; }
     const selected = textRef.current.substring(selection.start, selection.end);
     if (selected.trim().length > 0) {
       onMemo?.(selected.trim());
@@ -335,6 +360,7 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
   }, [selection, onMemo]);
 
   const handleCancel = useCallback(() => {
+    if (blurDismissTimerRef.current) { clearTimeout(blurDismissTimerRef.current); blurDismissTimerRef.current = null; }
     setShowCollectButton(false);
     setSelection({ start: 0, end: 0 });
     if (isSelectingRef.current) {
@@ -351,22 +377,25 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
     letterSpacing != null && { letterSpacing },
   ];
 
-  const collectBar = (
-    <View style={styles.collectBar}>
-      <Pressable style={styles.collectButton} onPress={handleCollect}>
-        <Feather name="bookmark" size={14} color={Colors.white} />
-        <Text style={styles.collectButtonText}>수집</Text>
-      </Pressable>
-      {onMemo && (
-        <Pressable style={styles.collectButton} onPress={handleMemo}>
-          <Feather name="edit-3" size={14} color={Colors.white} />
-          <Text style={styles.collectButtonText}>메모</Text>
+  // Rendered as an absolute overlay so it never contributes to layout height,
+  // preventing the pagination frame from shifting when the bar appears.
+  const collectBarOverlay = showCollectButton && (
+    <View style={styles.collectBarNativeWrap}>
+      <View style={styles.collectBarPill}>
+        <Pressable style={styles.collectButton} onPress={handleCollect}>
+          <Feather name="bookmark" size={14} color={Colors.white} />
+          <Text style={styles.collectButtonText}>수집</Text>
         </Pressable>
-      )}
-      <View style={{ flex: 1 }} />
-      <Pressable style={styles.cancelButton} onPress={handleCancel} hitSlop={8}>
-        <Feather name="x" size={16} color={Colors.zinc400} />
-      </Pressable>
+        {onMemo && (
+          <Pressable style={styles.collectButton} onPress={handleMemo}>
+            <Feather name="edit-3" size={14} color={Colors.white} />
+            <Text style={styles.collectButtonText}>메모</Text>
+          </Pressable>
+        )}
+        <Pressable style={styles.cancelButton} onPress={handleCancel} hitSlop={8}>
+          <Feather name="x" size={16} color={Colors.zinc400} />
+        </Pressable>
+      </View>
     </View>
   );
 
@@ -383,11 +412,12 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
             editable={false}
             scrollEnabled={false}
             onSelectionChange={handleSelectionChange}
+            onBlur={handleBlur}
             selection={forceClearSelection ? { start: 0, end: 0 } : undefined}
             selectTextOnFocus={false}
           />
         </View>
-        {showCollectButton && collectBar}
+        {collectBarOverlay}
       </View>
     );
   }
@@ -402,10 +432,11 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
         editable={false}
         scrollEnabled={false}
         onSelectionChange={handleSelectionChange}
+        onBlur={handleBlur}
         selection={forceClearSelection ? { start: 0, end: 0 } : undefined}
         selectTextOnFocus={false}
       />
-      {showCollectButton && collectBar}
+      {collectBarOverlay}
     </View>
   );
 }
@@ -469,16 +500,16 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     gap: 8,
   },
-  // Used by SelectableTextNative
-  collectBar: {
+  // Used by SelectableTextNative — absolute overlay so it never adds to layout height.
+  // Positioned at the bottom of the container, above the OS selection handles area.
+  collectBarNativeWrap: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 9999,
     flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Colors.zinc900,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginTop: 8,
-    gap: 8,
+    justifyContent: "center",
   },
   collectButton: {
     flexDirection: "row",
