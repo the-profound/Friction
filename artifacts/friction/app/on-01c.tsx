@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -17,8 +17,7 @@ import { Colors, Typography, Spacing, ReaderTokens, Shadows, cqiToPx, readerFont
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import CoverPreview from "@/components/CoverPreview/CoverPreview";
 import CoverEditor from "@/components/CoverEditor/CoverEditor";
-import MarkdownBlock from "@/components/MarkdownBlock/MarkdownBlock";
-import { parseMarkdownBlocks } from "@/utils/markdownParser";
+import WebViewMarkdownReader from "@/components/WebViewMarkdownReader";
 import MyCollectionsModal from "@/components/MyCollectionsModal/MyCollectionsModal";
 import { resolveArticleCover, getDefaultCover } from "@/utils/articleCover";
 import { canStepBack } from "@/lib/articleStatusCycle";
@@ -357,10 +356,6 @@ export default function ClosingScreen() {
     setPreviewCardWidth((prev) => (prev === w ? prev : w));
   }, []);
 
-  const previewBlocks = useMemo(() => {
-    if (!currentPage) return [];
-    return parseMarkdownBlocks(currentPage);
-  }, [currentPage]);
 
   const totalVirtualPagesRef = useRef(totalVirtualPages);
   totalVirtualPagesRef.current = totalVirtualPages;
@@ -464,6 +459,8 @@ export default function ClosingScreen() {
               <View style={styles.previewCardShadow}>
               <View style={styles.previewCard} onLayout={handlePreviewCardLayout}>
                 {previewCardWidth > 0 && storedLayoutWidth !== null ? (
+                  // storedLayoutWidth를 알 때: 원래 분할 단계의 치수로 렌더링 후 scale 축소
+                  // (read.tsx PageView와 동일한 폰트 크기 → 정확한 미리보기 보장)
                   <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
                     <View style={{
                       width: storedLayoutWidth,
@@ -472,61 +469,32 @@ export default function ClosingScreen() {
                       alignItems: "center",
                       justifyContent: "center",
                     }}>
-                      {/* Mirror reader structure: centered safe-area box → padded content.
-                          Scale is capped at 1.0 so the preview never zooms in beyond the
-                          original dividing-stage dimensions — matching read.tsx behaviour.
-                          textColumnWidth is the same integer-pixel value used by read.tsx
-                          PageView and PretextMeasureLayer, preventing Yoga pixel-snap drift. */}
-                      <View style={{ width: cqiToPx(ReaderTokens.safeArea.widthCqi, storedLayoutWidth) }}>
-                        <View
-                          pointerEvents="none"
-                          style={{
-                            paddingHorizontal: cqiToPx(ReaderTokens.padding.xCqi, storedLayoutWidth),
-                            paddingVertical: cqiToPx(ReaderTokens.padding.yCqi, storedLayoutWidth),
-                          }}
-                        >
-                          {/* Explicit integer-pixel text column width — must match the
-                              textColumnWidth used by read.tsx/PageView and PretextMeasureLayer. */}
-                          <View style={{ width: Math.round(cqiToPx(ReaderTokens.safeArea.widthCqi, storedLayoutWidth) - 2 * cqiToPx(ReaderTokens.padding.xCqi, storedLayoutWidth)) }}>
-                            {previewBlocks.map((block, i) => (
-                              <View key={i} style={{ marginBottom: readerFontSize(ReaderTokens.typeScale.bodyCqi, storedLayoutWidth) * ReaderTokens.lineHeight.relaxed * 0.6 }}>
-                                <MarkdownBlock
-                                  block={block}
-                                  onCollect={() => {}}
-                                  fontSize={readerFontSize(ReaderTokens.typeScale.bodyCqi, storedLayoutWidth)}
-                                  lineHeight={readerFontSize(ReaderTokens.typeScale.bodyCqi, storedLayoutWidth) * ReaderTokens.lineHeight.relaxed}
-                                  letterSpacing={readerFontSize(ReaderTokens.typeScale.bodyCqi, storedLayoutWidth) * ReaderTokens.letterSpacing.relaxedEm}
-                                />
-                              </View>
-                            ))}
-                          </View>
-                        </View>
+                      <View style={{
+                        width: cqiToPx(ReaderTokens.safeArea.widthCqi, storedLayoutWidth),
+                        flex: 1,
+                        paddingHorizontal: cqiToPx(ReaderTokens.padding.xCqi, storedLayoutWidth),
+                        paddingVertical: cqiToPx(ReaderTokens.padding.yCqi, storedLayoutWidth),
+                      }}>
+                        <WebViewMarkdownReader
+                          markdown={currentPage!}
+                          bodyFontSize={readerFontSize(ReaderTokens.typeScale.bodyCqi, storedLayoutWidth)}
+                          bodyLetterSpacing={readerFontSize(ReaderTokens.typeScale.bodyCqi, storedLayoutWidth) * ReaderTokens.letterSpacing.relaxedEm}
+                        />
                       </View>
                     </View>
                   </View>
                 ) : previewCardWidth > 0 ? (
-                  <View
-                    style={{
-                      flex: 1,
-                      paddingHorizontal: cqiToPx(ReaderTokens.padding.xCqi, previewCardWidth),
-                      paddingVertical: cqiToPx(ReaderTokens.padding.yCqi, previewCardWidth),
-                    }}
-                    pointerEvents="none"
-                  >
-                    {/* Explicit integer-pixel text column width (fallback path without storedLayoutWidth) */}
-                    <View style={{ width: Math.round(cqiToPx(ReaderTokens.safeArea.widthCqi, previewCardWidth) - 2 * cqiToPx(ReaderTokens.padding.xCqi, previewCardWidth)) }}>
-                      {previewBlocks.map((block, i) => (
-                        <View key={i} style={{ marginBottom: readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth) * ReaderTokens.lineHeight.relaxed * 0.6 }}>
-                          <MarkdownBlock
-                            block={block}
-                            onCollect={() => {}}
-                            fontSize={readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth)}
-                            lineHeight={readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth) * ReaderTokens.lineHeight.relaxed}
-                            letterSpacing={readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth) * ReaderTokens.letterSpacing.relaxedEm}
-                          />
-                        </View>
-                      ))}
-                    </View>
+                  // storedLayoutWidth 없는 폴백: previewCardWidth 기준으로 직접 렌더링
+                  <View style={{
+                    flex: 1,
+                    paddingHorizontal: cqiToPx(ReaderTokens.padding.xCqi, previewCardWidth),
+                    paddingVertical: cqiToPx(ReaderTokens.padding.yCqi, previewCardWidth),
+                  }}>
+                    <WebViewMarkdownReader
+                      markdown={currentPage!}
+                      bodyFontSize={readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth)}
+                      bodyLetterSpacing={readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth) * ReaderTokens.letterSpacing.relaxedEm}
+                    />
                   </View>
                 ) : null}
               </View>

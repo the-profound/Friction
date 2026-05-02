@@ -18,8 +18,9 @@ import {
  *   대부분 `screenHeight × 5/8`로 계산되며 가로가 좁은 경우 `screenWidth`로 캡된다.
  * - safeAreaWidth/Height: 컨테이너 안에서 본문 영역으로 쓰는 박스.
  * - paddingX/Y: safeArea 내부의 좌우/상하 패딩.
- * - textColumnWidth: `safeAreaWidth − 2×paddingX` 정수 픽셀. PretextMeasureLayer와
- *   read.tsx PageView가 동일한 정수 폭을 쓰도록 명시적으로 노출한다.
+ * - textColumnWidth: `safeAreaWidth − 2×paddingX` 정수 픽셀. PretextMeasureLayer(네이티브)와
+ *   read.tsx WebViewMarkdownReader 컨테이너가 동일한 정수 폭을 쓰도록 명시적으로 노출한다.
+ *   소수점 폭이면 Yoga 픽셀 스냅으로 PretextMeasureLayer 측정 폭이 달라질 수 있으므로 반드시 정수로 유지한다.
  * - body 메트릭: WebView에 주입할 본문 폰트 크기·줄간격·자간.
  */
 export function useEditorLayout() {

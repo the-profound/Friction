@@ -48,7 +48,8 @@ export type WebViewToRNEvent =
   | { type: "onKeyboardShow" }
   | { type: "onKeyboardHide" }
   | { type: "onSwipeDownToDismiss" }
-  | { type: "onSourceArticleSlotTap" };
+  | { type: "onSourceArticleSlotTap" }
+  | { type: "onTextSelect"; text: string; isEmpty: boolean };
 
 export interface WebViewMarkdownEditorRef {
   setMarkdown: (markdown: string) => void;

@@ -45,8 +45,7 @@ import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import CoverPreview from "@/components/CoverPreview/CoverPreview";
 import { resolveArticleCover } from "@/utils/articleCover";
 import CoverPage from "@/components/CoverPage/CoverPage";
-import MarkdownBlock from "@/components/MarkdownBlock/MarkdownBlock";
-import { parseMarkdownBlocks } from "@/utils/markdownParser";
+import WebViewMarkdownReader from "@/components/WebViewMarkdownReader";
 import { normalizePageItem } from "@/utils/normalizePageItem";
 import { useReadingSession } from "@/lib/useReadingSession";
 import { useReadingMemo } from "@/lib/useReadingMemo";
@@ -745,6 +744,16 @@ Alert.alert("완료", "보관함에 저장됐어요");
     }
   }, [isDeleting, isListEntry, reading, router, clearActiveSession, queryClient, readingMemo]);
 
+  const handleTextSelect = useCallback((text: string, isEmpty: boolean) => {
+    isTextSelectingRef.current = !isEmpty;
+    if (!isEmpty && text) {
+      setSelectionPillText(text);
+      setShowSelectionPill(true);
+    } else {
+      setShowSelectionPill(false);
+    }
+  }, []);
+
   const handleCollectSentence = useCallback((text: string) => {
     if (text.trim().length > 0) {
       setSelectedText(text.trim());
@@ -989,18 +998,7 @@ Alert.alert("완료", "보관함에 저장됐어요");
                       return (
                         <PageView
                           content={contentPages[prevIdx]}
-                          pageIndex={prevIdx}
-                          onCollectSentence={handleCollectSentence}
-                          onMemoSentence={handleMemoSentence}
-                          onSelectionStateChange={(isSelecting, text) => {
-                            isTextSelectingRef.current = isSelecting;
-                            if (isSelecting && text) {
-                              setSelectionPillText(text);
-                              setShowSelectionPill(true);
-                            } else {
-                              setShowSelectionPill(false);
-                            }
-                          }}
+                          onTextSelect={handleTextSelect}
                           bottomInset={insets.bottom}
                           layout={layout}
                           clearSignal={clearSelectionSignal}
@@ -1022,18 +1020,7 @@ Alert.alert("완료", "보관함에 저장됐어요");
                     ) : (
                       <PageView
                         content={currentPageContent}
-                        pageIndex={contentPageIndex}
-                        onCollectSentence={handleCollectSentence}
-                        onMemoSentence={handleMemoSentence}
-                        onSelectionStateChange={(isSelecting, text) => {
-                          isTextSelectingRef.current = isSelecting;
-                          if (isSelecting && text) {
-                            setSelectionPillText(text);
-                            setShowSelectionPill(true);
-                          } else {
-                            setShowSelectionPill(false);
-                          }
-                        }}
+                        onTextSelect={handleTextSelect}
                         bottomInset={insets.bottom}
                         layout={layout}
                         clearSignal={clearSelectionSignal}
@@ -1051,18 +1038,7 @@ Alert.alert("완료", "보관함에 저장됐어요");
                         return (
                           <PageView
                             content={contentPages[0]}
-                            pageIndex={0}
-                            onCollectSentence={handleCollectSentence}
-                            onMemoSentence={handleMemoSentence}
-                            onSelectionStateChange={(isSelecting, text) => {
-                              isTextSelectingRef.current = isSelecting;
-                              if (isSelecting && text) {
-                                setSelectionPillText(text);
-                                setShowSelectionPill(true);
-                              } else {
-                                setShowSelectionPill(false);
-                              }
-                            }}
+                            onTextSelect={handleTextSelect}
                             bottomInset={insets.bottom}
                             layout={layout}
                             clearSignal={clearSelectionSignal}
@@ -1074,18 +1050,7 @@ Alert.alert("완료", "보관함에 저장됐어요");
                       return (
                         <PageView
                           content={contentPages[nextIdx]}
-                          pageIndex={nextIdx}
-                          onCollectSentence={handleCollectSentence}
-                          onMemoSentence={handleMemoSentence}
-                          onSelectionStateChange={(isSelecting, text) => {
-                            isTextSelectingRef.current = isSelecting;
-                            if (isSelecting && text) {
-                              setSelectionPillText(text);
-                              setShowSelectionPill(true);
-                            } else {
-                              setShowSelectionPill(false);
-                            }
-                          }}
+                          onTextSelect={handleTextSelect}
                           bottomInset={insets.bottom}
                           layout={layout}
                           clearSignal={clearSelectionSignal}
@@ -1391,91 +1356,51 @@ interface ReaderLayout {
 
 const PageView = React.memo(function PageView({
   content,
-  pageIndex,
-  onCollectSentence,
-  onMemoSentence,
-  onSelectionStateChange,
+  onTextSelect,
   bottomInset,
   layout,
   clearSignal,
 }: {
   content: string;
-  pageIndex: number;
-  onCollectSentence: (text: string) => void;
-  onMemoSentence: (text: string) => void;
-  onSelectionStateChange?: (isSelecting: boolean, selectedText?: string) => void;
+  onTextSelect?: (text: string, isEmpty: boolean) => void;
   bottomInset: number;
   layout: ReaderLayout;
   clearSignal?: number;
 }) {
-  const blocks = useMemo(() => parseMarkdownBlocks(content), [content]);
-
   const dynamicPageStyles = useMemo(
     () =>
       StyleSheet.create({
         safeAreaBox: {
           width: layout.safeAreaWidth,
-          alignSelf: "center",
+          alignSelf: "center" as const,
+          flex: 1,
         },
         pageContent: {
-          flexGrow: 1,
-          justifyContent: "center" as const,
+          flex: 1,
           paddingHorizontal: layout.paddingX,
           paddingTop: layout.paddingY,
-          // Reserve space below text for the absolute-positioned title bar overlay
           paddingBottom: bottomInset + layout.paddingY + layout.titleBarHeight,
         },
-        // Explicit integer-pixel width column — prevents Yoga from pixel-snapping
-        // the available text width differently depending on the parent's position.
-        // Must match the width used by PretextMeasureLayer for line-break consistency.
         textColumn: {
           width: layout.textColumnWidth,
+          flex: 1,
         },
       }),
-    [layout.safeAreaWidth, layout.paddingX, layout.paddingY, layout.textColumnWidth, bottomInset],
+    [layout.safeAreaWidth, layout.paddingX, layout.paddingY, layout.titleBarHeight, layout.textColumnWidth, bottomInset],
   );
 
   return (
     <View style={[styles.pageContainer, { flex: 1 }]}>
-      <View style={[dynamicPageStyles.safeAreaBox, { flex: 1 }]}>
-        <View style={[dynamicPageStyles.pageContent, { flex: 1 }]}>
+      <View style={dynamicPageStyles.safeAreaBox}>
+        <View style={dynamicPageStyles.pageContent}>
           <View style={dynamicPageStyles.textColumn}>
-            {blocks.map((block, idx) => {
-              const fs = layout.bodyFontSize;
-              const nextBlock = blocks[idx + 1];
-              let wrapperStyle: { marginTop?: number; marginBottom?: number; marginVertical?: number } = {};
-              if (block.type === "paragraph") {
-                wrapperStyle = { marginBottom: fs * 1.0 };
-              } else if (block.type === "h1") {
-                const sz = fs * 1.6;
-                wrapperStyle = { marginTop: sz * 1.0, marginBottom: sz * 0.4 };
-              } else if (block.type === "h2") {
-                const sz = fs * 1.3;
-                wrapperStyle = { marginTop: sz * 0.8, marginBottom: sz * 0.3 };
-              } else if (block.type === "h3") {
-                const sz = fs * 1.1;
-                wrapperStyle = { marginTop: sz * 0.6, marginBottom: sz * 0.3 };
-              } else if (block.type === "blockquote") {
-                wrapperStyle = { marginVertical: fs * 0.5 };
-              } else if (block.type === "ul_item" || block.type === "ol_item") {
-                const isLastInList = !nextBlock || (nextBlock.type !== "ul_item" && nextBlock.type !== "ol_item");
-                wrapperStyle = { marginBottom: isLastInList ? fs * 1.0 : fs * 0.2 };
-              }
-              return (
-                <View key={`${pageIndex}-b-${idx}`} style={wrapperStyle}>
-                  <MarkdownBlock
-                    block={block}
-                    onCollect={onCollectSentence}
-                    onMemo={onMemoSentence}
-                    onSelectionStateChange={onSelectionStateChange}
-                    fontSize={layout.bodyFontSize}
-                    lineHeight={layout.bodyLineHeight}
-                    letterSpacing={layout.bodyLetterSpacing}
-                    clearSignal={clearSignal}
-                  />
-                </View>
-              );
-            })}
+            <WebViewMarkdownReader
+              markdown={content}
+              bodyFontSize={layout.bodyFontSize}
+              bodyLetterSpacing={layout.bodyLetterSpacing}
+              onTextSelect={onTextSelect}
+              clearSelectionSignal={clearSignal}
+            />
           </View>
         </View>
       </View>

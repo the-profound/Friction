@@ -47,9 +47,10 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
-import PretextMeasureLayer, {
-  type MeasureRequest,
-  type MeasureCandidate,
+import WebViewMeasureLayer from "@/components/WebViewMeasureLayer";
+import type {
+  MeasureRequest,
+  MeasureCandidate,
 } from "@/components/PretextMeasureLayer/PretextMeasureLayer";
 import WebViewMarkdownEditor from "@/components/WebViewMarkdownEditor/WebViewMarkdownEditorCompat";
 import type {
@@ -248,12 +249,10 @@ export default function DividingScreen() {
   const editorLayout = useEditorLayout();
   const { containerWidth, safeAreaWidth, safeAreaHeight, paddingX, paddingY, textColumnWidth, bodyFontSize, bodyLineHeight, bodyLetterSpacing } = editorLayout;
 
-  // NOTE — WebView 편집기(on-01b) vs React Native 독자 화면(read.tsx) 줄넘김 차이:
-  // 이 화면의 편집 영역은 WebView 기반이고 read.tsx는 React Native(Yoga) 렌더러를 사용한다.
-  // 두 엔진의 텍스트 측정 방식(서체 힌팅, 글자 간격 계산 등)이 달라 편집 중 보이는 줄넘김과
-  // 독자 화면의 줄넘김 사이에 1~2글자 차이가 발생할 수 있다. 이는 렌더링 엔진 자체의 한계이며
-  // 현재 범위에서 수정 대상이 아니다. PretextMeasureLayer는 React Native로 측정하므로
-  // 오버플로 경고 및 자동분할 결과는 read.tsx와 정합한다.
+  // NOTE — 측정/분할/읽기 화면 렌더링 엔진 정합:
+  // 편집기(WebViewMarkdownEditor), 측정 레이어(WebViewMeasureLayer), 읽기 화면(WebViewMarkdownReader)
+  // 모두 동일한 HTML/CSS/폰트를 사용하는 WebView 기반이다.
+  // 따라서 오버플로 경고·자동분할 경계·읽기 화면 페이지 경계가 동일한 WebKit 렌더링 결과에 기반한다.
 
   const pageContentHeight = safeAreaHeight;
   const blockGap = bodyLineHeight * 0.6;
@@ -873,12 +872,13 @@ export default function DividingScreen() {
           </View>
         ) : null}
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.pageStrip}
-          contentContainerStyle={styles.pageStripContent}
-        >
+        <View style={styles.pageStripWrapper}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.pageStrip}
+            contentContainerStyle={styles.pageStripContent}
+          >
           {pages.map((p) => {
             const idx = p.pageIndex;
             const hasWarning = warnings.some((w) => w.pageIndex === idx);
@@ -912,11 +912,11 @@ export default function DividingScreen() {
               </View>
             );
           })}
-        </ScrollView>
+          </ScrollView>
+        </View>
 
-
-        <PretextMeasureLayer request={warningRequest} onMeasured={handleWarningMeasured} />
-        <PretextMeasureLayer request={engineRequest} onMeasured={handleEngineMeasured} />
+        <WebViewMeasureLayer request={warningRequest} onMeasured={handleWarningMeasured} />
+        <WebViewMeasureLayer request={engineRequest} onMeasured={handleEngineMeasured} />
 
         <KeyboardAvoidingView
           style={styles.editorOuter}
@@ -1055,23 +1055,31 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#b91c1c",
   },
-  pageStrip: {
-    flexGrow: 0,
-    flexShrink: 0,
+  pageStripWrapper: {
+    // 일반 View에 height를 명시해야 Yoga가 확실하게 높이를 결정한다.
+    // (horizontal ScrollView에 직접 height를 주면 cross-axis 동작이 버전마다 달라 신뢰할 수 없다)
+    // chip 콘텐츠 max=21pt + paddingVertical(4×2)=8 + border(1×2)=2 → chip=31pt
+    // stripContent paddingVertical(6×2)=12 → wrapper=43pt. 여유 1pt 포함 44pt.
+    height: 44,
+    overflow: "hidden",
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
   },
+  pageStrip: {
+    flex: 1,
+  },
   pageStripContent: {
     paddingHorizontal: Spacing.screenPx,
-    paddingVertical: 8,
+    paddingVertical: 6,
     gap: 8,
+    alignItems: "flex-start",
   },
   pageChip: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 4,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.zinc200,
