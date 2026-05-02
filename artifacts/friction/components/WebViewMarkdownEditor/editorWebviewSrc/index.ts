@@ -113,6 +113,22 @@ const OverflowDecorationExtension = Extension.create({
   },
 });
 
+// Module-level state: tracks whether any hr-control panel is currently visible.
+// Both the NodeView (HorizontalRuleWithControls) and the IIFE event-setup block
+// share this state to coordinate blocking of text-editor focus.
+let _hrBlockActive = false;
+let _hrActiveHide: (() => void) | null = null;
+
+function _activateHrBlock(hideControls: () => void): void {
+  _hrBlockActive = true;
+  _hrActiveHide = hideControls;
+}
+
+function _deactivateHrBlock(): void {
+  _hrBlockActive = false;
+  _hrActiveHide = null;
+}
+
 const HorizontalRuleWithControls = HorizontalRule.extend({
   addNodeView() {
     // Tracks which position should show controls after a move transaction
@@ -163,12 +179,32 @@ const HorizontalRuleWithControls = HorizontalRule.extend({
         downBtn.style.opacity = downBtn.disabled ? "0.3" : "1";
       }
 
+      function hideControls() {
+        controls.style.display = "none";
+        // Only clear the global block state when this NodeView owns it.
+        // Other NodeViews' outsideClickHandlers also call hideControls() when
+        // their wrappers don't contain the click target — but their controls
+        // are already hidden (display:none), so they must not clear the block
+        // state that belongs to whichever NodeView is actually active.
+        if (_hrActiveHide === hideControls) {
+          _deactivateHrBlock();
+        }
+      }
+
       function showControls() {
+        // Hide any other open hr-controls panels first
         document.querySelectorAll(".hr-controls").forEach((el) => {
           if (el !== controls) (el as HTMLElement).style.display = "none";
         });
         controls.style.display = "flex";
         updateButtonStates();
+        // Blur the editor so the keyboard is dismissed. The editor's onBlur
+        // callback will set editorFocused=false and call syncKeyboardState(),
+        // which naturally posts onKeyboardHide to React Native.
+        editor.commands.blur();
+        // Register this panel as the active hr block so the document-level
+        // touch/mouse interceptor can close it if the user taps outside.
+        _activateHrBlock(hideControls);
       }
 
       // Restore controls visibility if this NodeView was just created after a move
@@ -187,7 +223,7 @@ const HorizontalRuleWithControls = HorizontalRule.extend({
 
       const outsideClickHandler = (e: MouseEvent) => {
         if (!wrapper.contains(e.target as Node)) {
-          controls.style.display = "none";
+          hideControls();
         }
       };
       document.addEventListener("click", outsideClickHandler, true);
@@ -227,6 +263,10 @@ const HorizontalRuleWithControls = HorizontalRule.extend({
         dom: wrapper,
         destroy() {
           document.removeEventListener("click", outsideClickHandler, true);
+          // If this NodeView is destroyed while its panel is active, clean up
+          if (_hrActiveHide === hideControls) {
+            _deactivateHrBlock();
+          }
         },
       };
     };
@@ -729,5 +769,36 @@ interface Command {
     document.addEventListener("touchend", function () {
       swipeDismissed = false;
     }, { passive: true });
+
+    // While an hr-control panel is active, intercept touches outside any
+    // .hr-wrapper so the text editor cannot gain focus and the keyboard
+    // stays dismissed. preventDefault() on touchstart suppresses the
+    // subsequent focus/click events, so we also manually invoke the hide
+    // callback so the panel closes on that same tap.
+    document.addEventListener("touchstart", function (e) {
+      if (!_hrBlockActive) return;
+      const target = e.target as Node;
+      const inWrapper = (target instanceof Element) && !!target.closest(".hr-wrapper");
+      if (!inWrapper) {
+        e.preventDefault();
+        if (_hrActiveHide) {
+          _hrActiveHide();
+        } else {
+          _deactivateHrBlock();
+        }
+      }
+    }, { capture: true, passive: false });
+
+    // For desktop/simulator mouse events: prevent focus on editor text while
+    // an hr-control panel is open. The click event still fires after mousedown
+    // preventDefault, so the existing outsideClickHandler will close the panel.
+    document.addEventListener("mousedown", function (e) {
+      if (!_hrBlockActive) return;
+      const target = e.target as Node;
+      const inWrapper = (target instanceof Element) && !!target.closest(".hr-wrapper");
+      if (!inWrapper) {
+        e.preventDefault();
+      }
+    }, { capture: true });
   });
 })();
