@@ -538,6 +538,19 @@ export default function ReadScreen() {
       }
     }), []);
 
+  const tapGesture = useMemo(() => Gesture.Tap()
+    .runOnJS(true)
+    .onEnd((_e, success) => {
+      if (success && isTextSelectingRef.current) {
+        setClearSelectionSignal((n) => n + 1);
+      }
+    }), []);
+
+  const combinedGesture = useMemo(
+    () => Gesture.Simultaneous(panGesture, tapGesture),
+    [panGesture, tapGesture],
+  );
+
   const isCollectionsReady = !collectionsQuery.isLoading && !collectionsQuery.isError;
 
   const handleCommitAndSave = useCallback(async () => {
@@ -810,7 +823,7 @@ Alert.alert("완료", "보관함에 저장됐어요");
       )}
 
       {totalPages > 0 ? (
-        <GestureDetector gesture={panGesture}>
+        <GestureDetector gesture={combinedGesture}>
           <View
             style={[styles.pageListContainer, Platform.OS === "web" ? { touchAction: "none" } as object : undefined]}
             onLayout={handlePageListLayout}
