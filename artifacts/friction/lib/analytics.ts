@@ -108,16 +108,20 @@ export function trackAppBackgroundedDuringReading(params: {
   currentPage: number;
   totalPages: number;
 }): void {
+  if (!posthog) return;
   const progressPct = params.totalPages > 0
     ? Math.round((params.currentPage / params.totalPages) * 100)
     : 0;
-  posthog?.capture("app_backgrounded_during_reading", {
+  posthog.capture("app_backgrounded_during_reading", {
     article_id: params.articleId,
     current_page: params.currentPage,
     total_pages: params.totalPages,
     progress_pct: progressPct,
     hour_kst: kstHour(),
   });
+  // Flush immediately — the app is going to background and the OS may suspend
+  // the JS thread before the next automatic flush cycle runs.
+  posthog.flush().catch(() => {});
 }
 
 // ── 7. Sentence Collected ─────────────────────────────────────────────────────

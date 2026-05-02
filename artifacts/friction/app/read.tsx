@@ -352,15 +352,21 @@ export default function ReadScreen() {
 
   // Fire app_backgrounded_during_reading when OS suspends the app mid-read
   useEffect(() => {
+    console.log("[Analytics] AppState listener registered — articleId:", articleId, "state:", reading.session.state);
     const sub = AppState.addEventListener("change", (nextState) => {
+      console.log("[Analytics] AppState changed →", nextState, "| session:", reading.session.state, "| page:", currentPage, "/", totalPages);
       if (
         nextState === "background" &&
         (reading.session.state === "READING" || reading.session.state === "PAUSED")
       ) {
+        console.log("[Analytics] Firing app_backgrounded_during_reading, flushing PostHog…");
         trackAppBackgroundedDuringReading({ articleId, currentPage, totalPages });
       }
     });
-    return () => sub.remove();
+    return () => {
+      console.log("[Analytics] AppState listener removed — articleId:", articleId);
+      sub.remove();
+    };
   }, [articleId, currentPage, totalPages, reading.session.state]);
 
   useEffect(() => {
