@@ -245,12 +245,12 @@ function SelectableTextWeb({ text, onCollect, onMemo, onSelectionStateChange, fo
         <View style={styles.collectBarAbsoluteWrap}>
           <View style={styles.collectBarPill}>
             <Pressable style={styles.collectButton} onPressIn={handleCollectPressIn} onPress={handleCollect}>
-              <Feather name="bookmark" size={14} color={Colors.white} />
+              <Feather name="bookmark" size={14} color={Colors.zinc900} />
               <Text style={styles.collectButtonText}>수집</Text>
             </Pressable>
             {onMemo && (
               <Pressable style={styles.collectButton} onPressIn={handleMemoPressIn} onPress={handleMemo}>
-                <Feather name="edit-3" size={14} color={Colors.white} />
+                <Feather name="edit-3" size={14} color={Colors.zinc900} />
                 <Text style={styles.collectButtonText}>메모</Text>
               </Pressable>
             )}
@@ -377,12 +377,12 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
     <View style={[styles.collectBarNativeWrap, { top: measuredHeight + 8 }]}>
       <View style={styles.collectBarPill}>
         <Pressable style={styles.collectButton} onPress={handleCollect}>
-          <Feather name="bookmark" size={14} color={Colors.white} />
+          <Feather name="bookmark" size={14} color={Colors.zinc900} />
           <Text style={styles.collectButtonText}>수집</Text>
         </Pressable>
         {onMemo && (
           <Pressable style={styles.collectButton} onPress={handleMemo}>
-            <Feather name="edit-3" size={14} color={Colors.white} />
+            <Feather name="edit-3" size={14} color={Colors.zinc900} />
             <Text style={styles.collectButtonText}>메모</Text>
           </Pressable>
         )}
@@ -487,11 +487,25 @@ const styles = StyleSheet.create({
   collectBarPill: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: Colors.zinc900,
+    backgroundColor: Colors.white,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
     gap: 8,
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 6,
+      },
+      android: {
+        elevation: 3,
+      },
+      default: {},
+    }),
   },
   // Used by SelectableTextNative — absolute overlay so it never adds to layout height.
   // top is set dynamically via measuredHeight + 8 to place the bar just below the text block.
@@ -507,7 +521,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: Colors.zinc700,
+    backgroundColor: Colors.zinc100,
     borderRadius: 6,
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -515,7 +529,7 @@ const styles = StyleSheet.create({
   collectButtonText: {
     fontSize: 12,
     fontFamily: ReaderTokens.fontFamily.sansSemiBold,
-    color: Colors.white,
+    color: Colors.zinc900,
     fontWeight: "600",
   },
 });
