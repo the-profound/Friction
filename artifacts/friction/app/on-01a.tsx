@@ -33,10 +33,11 @@ export default function DraftScreen() {
   const editorLayout = useMemo(() => {
     const widthFromHeight = screenHeight * ReaderTokens.aspectRatio;
     const containerWidth = widthFromHeight <= screenWidth ? widthFromHeight : screenWidth;
+    const safeAreaWidth = cqiToPx(ReaderTokens.safeArea.widthCqi, containerWidth);
     const paddingX = cqiToPx(ReaderTokens.padding.xCqi, containerWidth);
     const bodyFontSize = readerFontSize(ReaderTokens.typeScale.bodyCqi, containerWidth);
     const bodyLetterSpacing = readerLetterSpacing(ReaderTokens.letterSpacing.relaxedEm, bodyFontSize);
-    return { paddingX, bodyFontSize, bodyLetterSpacing };
+    return { safeAreaWidth, paddingX, bodyFontSize, bodyLetterSpacing };
   }, [screenWidth, screenHeight]);
 
   const articleQuery = useGetArticle(id ?? "");
@@ -363,9 +364,10 @@ export default function DraftScreen() {
       </View>
 
       <KeyboardAvoidingView
-        style={[styles.editor, { paddingHorizontal: editorLayout.paddingX }]}
+        style={styles.editorOuter}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
+        <View style={[styles.editorInner, { width: editorLayout.safeAreaWidth, paddingHorizontal: editorLayout.paddingX }]}>
         <View style={styles.markdownEditorContainer}>
           <WebViewMarkdownEditor
             ref={editorRef}
@@ -404,6 +406,7 @@ export default function DraftScreen() {
         </View>
         <View style={styles.editorFooter}>
           <Text style={styles.charCountText}>{charCount}자</Text>
+        </View>
         </View>
       </KeyboardAvoidingView>
 
@@ -459,9 +462,12 @@ const styles = StyleSheet.create({
   sourceArticleGear: {
     fontSize: 13,
   },
-  editor: {
+  editorOuter: {
     flex: 1,
-    paddingHorizontal: Spacing.screenPx,
+    alignItems: "center",
+  },
+  editorInner: {
+    flex: 1,
     paddingTop: 8,
   },
   markdownEditorContainer: {
