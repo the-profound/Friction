@@ -1,10 +1,11 @@
-import React, { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { View, Text, StyleSheet, Pressable, Alert, ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, useWindowDimensions } from "react-native";
+import React, { useState, useCallback, useEffect, useRef } from "react";
+import { View, Text, StyleSheet, Pressable, Alert, ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
-import { Colors, Typography, Spacing, ReaderTokens, cqiToPx, readerFontSize, readerLetterSpacing } from "@/constants/tokens";
+import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useAutoSave } from "@/lib/useAutoSave";
+import { useEditorLayout } from "@/lib/useEditorLayout";
 import { canTransitionForward } from "@/lib/articleStatusCycle";
 import type { ArticleStatus } from "@/lib/policies";
 import WebViewMarkdownEditor from "@/components/WebViewMarkdownEditor/WebViewMarkdownEditorCompat";
@@ -28,17 +29,7 @@ export default function DraftScreen() {
   const queryClient = useQueryClient();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { userId } = useUser();
-  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
-
-  const editorLayout = useMemo(() => {
-    const widthFromHeight = screenHeight * ReaderTokens.aspectRatio;
-    const containerWidth = widthFromHeight <= screenWidth ? widthFromHeight : screenWidth;
-    const safeAreaWidth = cqiToPx(ReaderTokens.safeArea.widthCqi, containerWidth);
-    const paddingX = cqiToPx(ReaderTokens.padding.xCqi, containerWidth);
-    const bodyFontSize = readerFontSize(ReaderTokens.typeScale.bodyCqi, containerWidth);
-    const bodyLetterSpacing = readerLetterSpacing(ReaderTokens.letterSpacing.relaxedEm, bodyFontSize);
-    return { safeAreaWidth, paddingX, bodyFontSize, bodyLetterSpacing };
-  }, [screenWidth, screenHeight]);
+  const editorLayout = useEditorLayout();
 
   const articleQuery = useGetArticle(id ?? "");
   const article = id ? articleQuery.data : undefined;

@@ -147,7 +147,7 @@ function computeReaderLayout(availableWidth: number, availableHeight: number, ov
 export default function ReadScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { width: screenWidth } = useWindowDimensions();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const queryClient = useQueryClient();
   const { userId } = useUser();
   const { setActiveSession, clearActiveSession } = useActiveReading();
@@ -242,14 +242,23 @@ export default function ReadScreen() {
   const storedLayoutWidth = (article?.layoutWidth != null && article.layoutWidth > 0)
     ? article.layoutWidth
     : undefined;
+  // 구형 글 fallback — `layoutWidth`가 저장되지 않은 글은 작성/분할 화면이 사용한
+  // 컨테이너 폭(useEditorLayout과 동일하게 `screenHeight × aspectRatio`)을
+  // override로 넘겨, 폰트 크기와 줄넘김이 작성·분할 단계와 일치하도록 한다.
+  // (그 전에는 `pageListSize.height`가 화면 chrome만큼 줄어들어 폰트가 미세하게 작아졌다.)
+  const fallbackContainerWidth = useMemo(() => {
+    const widthFromHeight = screenHeight * ReaderTokens.aspectRatio;
+    return widthFromHeight <= screenWidth ? widthFromHeight : screenWidth;
+  }, [screenWidth, screenHeight]);
+  const effectiveLayoutWidth = storedLayoutWidth ?? fallbackContainerWidth;
   const layout = useMemo(
     () =>
       computeReaderLayout(
         pageListSize.width > 0 ? pageListSize.width : screenWidth,
         pageListSize.height > 0 ? pageListSize.height : screenWidth / ReaderTokens.aspectRatio,
-        storedLayoutWidth,
+        effectiveLayoutWidth,
       ),
-    [pageListSize.width, pageListSize.height, screenWidth, storedLayoutWidth],
+    [pageListSize.width, pageListSize.height, screenWidth, effectiveLayoutWidth],
   );
   const createSentence = useCreateStoredSentence();
   const collectionsQuery = useListMyCollections({ ownerId: userId });

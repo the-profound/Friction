@@ -10,14 +10,14 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  useWindowDimensions,
 } from "react-native";
 import WritingStateBar, { type WritingStage } from "@/components/WritingStateBar/WritingStateBar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams, Stack } from "expo-router";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
-import { Colors, Typography, Spacing, ReaderTokens, cqiToPx, readerFontSize, readerLetterSpacing } from "@/constants/tokens";
+import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useAutoSave } from "@/lib/useAutoSave";
+import { useEditorLayout } from "@/lib/useEditorLayout";
 import {
   splitContentToPages,
   splitPageContentForDivision,
@@ -63,30 +63,11 @@ const PAGE_DIVIDER = MarkdownPolicy.PAGE_DIVIDER;
 
 const PAGE_KEY_PREFIX = "page_";
 
-function useReaderLayout(screenWidth: number, screenHeight: number) {
-  return useMemo(() => {
-    const widthFromHeight = screenHeight * ReaderTokens.aspectRatio;
-    const containerWidth = widthFromHeight <= screenWidth ? widthFromHeight : screenWidth;
-    const safeAreaWidth = cqiToPx(ReaderTokens.safeArea.widthCqi, containerWidth);
-    const safeAreaHeight = cqiToPx(ReaderTokens.safeArea.heightCqi, containerWidth);
-    const paddingX = cqiToPx(ReaderTokens.padding.xCqi, containerWidth);
-    const paddingY = cqiToPx(ReaderTokens.padding.yCqi, containerWidth);
-    // Explicit integer text column width — same formula as computeReaderLayout in read.tsx
-    // so PretextMeasureLayer uses the exact same pixel grid as the reader screen.
-    const textColumnWidth = Math.round(safeAreaWidth - 2 * paddingX);
-    const bodyFontSize = readerFontSize(ReaderTokens.typeScale.bodyCqi, containerWidth);
-    const bodyLineHeight = bodyFontSize * ReaderTokens.lineHeight.relaxed;
-    const bodyLetterSpacing = readerLetterSpacing(ReaderTokens.letterSpacing.relaxedEm, bodyFontSize);
-    return { containerWidth, safeAreaWidth, safeAreaHeight, paddingX, paddingY, textColumnWidth, bodyFontSize, bodyLineHeight, bodyLetterSpacing };
-  }, [screenWidth, screenHeight]);
-}
-
 export default function DividingScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
 
   const articleQuery = useGetArticle(id ?? "");
   const article = id ? articleQuery.data : undefined;
@@ -264,8 +245,8 @@ export default function DividingScreen() {
 
   const baseWarnings = useMemo(() => validatePages(pages), [pages]);
 
-  const readerLayout = useReaderLayout(screenWidth, screenHeight);
-  const { containerWidth, safeAreaWidth, safeAreaHeight, paddingX, paddingY, textColumnWidth, bodyFontSize, bodyLineHeight, bodyLetterSpacing } = readerLayout;
+  const editorLayout = useEditorLayout();
+  const { containerWidth, safeAreaWidth, safeAreaHeight, paddingX, paddingY, textColumnWidth, bodyFontSize, bodyLineHeight, bodyLetterSpacing } = editorLayout;
 
   // NOTE — WebView 편집기(on-01b) vs React Native 독자 화면(read.tsx) 줄넘김 차이:
   // 이 화면의 편집 영역은 WebView 기반이고 read.tsx는 React Native(Yoga) 렌더러를 사용한다.
@@ -938,27 +919,29 @@ export default function DividingScreen() {
         <PretextMeasureLayer request={engineRequest} onMeasured={handleEngineMeasured} />
 
         <KeyboardAvoidingView
-          style={[styles.editor, { paddingHorizontal: paddingX }]}
+          style={styles.editorOuter}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
-          <View style={styles.markdownEditorContainer}>
-            <WebViewMarkdownEditor
-              ref={editorRef}
-              initialMarkdown={contentRef.current}
-              titleValue={title}
-              placeholder="떠오르는 생각을 자유롭게 적어보세요..."
-              editable
-              onReady={handleEditorReady}
-              onChange={handleEditorChange}
-              onExportMarkdown={handleExportMarkdown}
-              onTitleChange={handleTitleChange}
-              onKeyboardVisibilityChange={setKeyboardVisible}
-              bodyFontSize={bodyFontSize}
-              bodyLetterSpacing={bodyLetterSpacing}
-            />
-          </View>
-          <View style={styles.editorFooter}>
-            <Text style={styles.charCountText}>{charCount}자</Text>
+          <View style={[styles.editorInner, { width: safeAreaWidth, paddingHorizontal: paddingX }]}>
+            <View style={styles.markdownEditorContainer}>
+              <WebViewMarkdownEditor
+                ref={editorRef}
+                initialMarkdown={contentRef.current}
+                titleValue={title}
+                placeholder="떠오르는 생각을 자유롭게 적어보세요..."
+                editable
+                onReady={handleEditorReady}
+                onChange={handleEditorChange}
+                onExportMarkdown={handleExportMarkdown}
+                onTitleChange={handleTitleChange}
+                onKeyboardVisibilityChange={setKeyboardVisible}
+                bodyFontSize={bodyFontSize}
+                bodyLetterSpacing={bodyLetterSpacing}
+              />
+            </View>
+            <View style={styles.editorFooter}>
+              <Text style={styles.charCountText}>{charCount}자</Text>
+            </View>
           </View>
         </KeyboardAvoidingView>
 
@@ -1032,9 +1015,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.zinc600,
   },
-  editor: {
+  editorOuter: {
     flex: 1,
-    paddingHorizontal: Spacing.screenPx,
+    alignItems: "center",
+  },
+  editorInner: {
+    flex: 1,
     paddingTop: 8,
   },
   markdownEditorContainer: {
