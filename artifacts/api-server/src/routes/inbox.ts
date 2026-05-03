@@ -7,15 +7,16 @@ const router: IRouter = Router();
 
 const sourceArticle = alias(articlesTable, "source_article");
 
+// Resolves the "출처 모임명" shown next to each inbox card.
+// New rows carry sourceTeamCollectionId for team-collection deliveries; for
+// 1:1/neighbor sends (NULL) we fall back to a personal-collection name lookup
+// so legacy NULL rows that were never backfilled still render something useful.
 const collectionNameSubquery = sql<string | null>`(
-  SELECT COALESCE(
+  COALESCE(
     (
       SELECT tc.name
-      FROM team_collection_articles tca
-      JOIN team_collections tc ON tca.team_collection_id = tc.id
-      WHERE tca.article_id = ${inboxTable.articleId}
-      ORDER BY tca.added_at ASC
-      LIMIT 1
+      FROM team_collections tc
+      WHERE tc.id = ${inboxTable.sourceTeamCollectionId}
     ),
     (
       SELECT mc.name
@@ -57,6 +58,7 @@ router.get("/inbox", async (req, res) => {
       recipientId: inboxTable.recipientId,
       articleId: inboxTable.articleId,
       senderId: inboxTable.senderId,
+      sourceTeamCollectionId: inboxTable.sourceTeamCollectionId,
       visibleAt: inboxTable.visibleAt,
       openedAt: inboxTable.openedAt,
       isRead: inboxTable.isRead,
@@ -92,6 +94,7 @@ router.get("/inbox/:id", async (req, res) => {
       recipientId: inboxTable.recipientId,
       articleId: inboxTable.articleId,
       senderId: inboxTable.senderId,
+      sourceTeamCollectionId: inboxTable.sourceTeamCollectionId,
       visibleAt: inboxTable.visibleAt,
       openedAt: inboxTable.openedAt,
       isRead: inboxTable.isRead,
@@ -161,6 +164,37 @@ router.post("/inbox/:id/read", async (req, res) => {
   });
 
   res.json(updated);
+});
+
+// Bulk-marks every other unread inbox row for the same (recipient, article)
+// as read. Used after a user finishes one delivery of an article that arrived
+// through multiple team collections so the duplicates clear without being
+// archived. Per-item /read endpoint above is unchanged.
+router.post("/inbox/article/:articleId/read-others", async (req, res) => {
+  const { articleId } = req.params;
+  const { recipientId, exceptInboxId } = req.query;
+
+  if (!recipientId || typeof recipientId !== "string") {
+    res.status(400).json({ error: "recipientId is required" });
+    return;
+  }
+
+  const conditions = [
+    eq(inboxTable.recipientId, recipientId),
+    eq(inboxTable.articleId, articleId),
+    eq(inboxTable.isRead, false),
+  ];
+  if (typeof exceptInboxId === "string" && exceptInboxId.length > 0) {
+    conditions.push(ne(inboxTable.id, exceptInboxId));
+  }
+
+  const updated = await db
+    .update(inboxTable)
+    .set({ isRead: true })
+    .where(and(...conditions))
+    .returning({ id: inboxTable.id });
+
+  res.json({ updatedCount: updated.length });
 });
 
 export default router;

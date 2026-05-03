@@ -13,6 +13,8 @@ export interface InboxItem {
   recipientId: string;
   articleId: string;
   senderId: string;
+  /** Team collection through which this inbox row was delivered. NULL for 1:1 / neighbor sends. */
+  sourceTeamCollectionId?: string | null;
   visibleAt: Date;
   openedAt?: Date | null;
   isRead: boolean;

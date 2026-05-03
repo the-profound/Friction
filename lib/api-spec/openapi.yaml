@@ -494,6 +494,43 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /inbox/article/{articleId}/read-others:
+    post:
+      operationId: markInboxOthersRead
+      tags: [inbox]
+      summary: Bulk-mark all other unread inbox copies of the same article as read
+      description: |
+        Marks every is_read=false inbox row for the given (recipientId, articleId)
+        as read, optionally excluding one inbox row by id. Used after a user
+        finishes reading one delivery of an article that arrived through multiple
+        team collections, to clear the duplicates without archiving them.
+      parameters:
+        - name: articleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: recipientId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: exceptInboxId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Number of inbox rows updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarkInboxOthersReadResponse"
+
   # ─── MyCollections ────────────────────────────────
   /my-collections:
     get:
@@ -1762,6 +1799,11 @@ components:
         senderId:
           type: string
           format: uuid
+        sourceTeamCollectionId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Team collection through which this inbox row was delivered. NULL for 1:1 / neighbor sends.
         visibleAt:
           type: string
           format: date-time
@@ -1790,6 +1832,13 @@ components:
         hasReadBefore:
           type: boolean
       required: [id, recipientId, articleId, senderId, visibleAt, isRead, createdAt, isReplyToMe, hasReadBefore]
+
+    MarkInboxOthersReadResponse:
+      type: object
+      properties:
+        updatedCount:
+          type: integer
+      required: [updatedCount]
 
     # ─── MyCollection ───────────────────────────────
     MyCollection:

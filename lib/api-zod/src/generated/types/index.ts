@@ -40,6 +40,8 @@ export * from "./listSendRecordsParams";
 export * from "./listStoredSentencesParams";
 export * from "./listTeamArticlesParams";
 export * from "./listTeamCollectionsParams";
+export * from "./markInboxOthersReadParams";
+export * from "./markInboxOthersReadResponse";
 export * from "./myCollection";
 export * from "./myCollectionArticle";
 export * from "./myCollectionArticleWithDetails";

@@ -157,6 +157,8 @@ export interface InboxItem {
   recipientId: string;
   articleId: string;
   senderId: string;
+  /** Team collection through which this inbox row was delivered. NULL for 1:1 / neighbor sends. */
+  sourceTeamCollectionId?: string | null;
   visibleAt: string;
   openedAt?: string | null;
   isRead: boolean;
@@ -167,6 +169,10 @@ export interface InboxItem {
   isReplyToMe: boolean;
   replyToArticleId?: string | null;
   hasReadBefore: boolean;
+}
+
+export interface MarkInboxOthersReadResponse {
+  updatedCount: number;
 }
 
 export interface MyCollection {
@@ -541,6 +547,11 @@ export type ListInboxParams = {
    * Filter inbox items by article title keyword (case-insensitive substring match)
    */
   titleQuery?: string;
+};
+
+export type MarkInboxOthersReadParams = {
+  recipientId: string;
+  exceptInboxId?: string;
 };
 
 export type ListMyCollectionsParams = {

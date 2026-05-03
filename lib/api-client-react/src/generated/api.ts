@@ -44,6 +44,8 @@ import type {
   ListStoredSentencesParams,
   ListTeamArticlesParams,
   ListTeamCollectionsParams,
+  MarkInboxOthersReadParams,
+  MarkInboxOthersReadResponse,
   MyCollection,
   MyCollectionArticle,
   MyCollectionArticleWithDetails,
@@ -1800,6 +1802,114 @@ export const useMarkInboxRead = <
   TContext
 > => {
   return useMutation(getMarkInboxReadMutationOptions(options));
+};
+
+/**
+ * Marks every is_read=false inbox row for the given (recipientId, articleId)
+as read, optionally excluding one inbox row by id. Used after a user
+finishes reading one delivery of an article that arrived through multiple
+team collections, to clear the duplicates without archiving them.
+
+ * @summary Bulk-mark all other unread inbox copies of the same article as read
+ */
+export const getMarkInboxOthersReadUrl = (
+  articleId: string,
+  params: MarkInboxOthersReadParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/inbox/article/${articleId}/read-others?${stringifiedParams}`
+    : `/api/inbox/article/${articleId}/read-others`;
+};
+
+export const markInboxOthersRead = async (
+  articleId: string,
+  params: MarkInboxOthersReadParams,
+  options?: RequestInit,
+): Promise<MarkInboxOthersReadResponse> => {
+  return customFetch<MarkInboxOthersReadResponse>(
+    getMarkInboxOthersReadUrl(articleId, params),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getMarkInboxOthersReadMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markInboxOthersRead>>,
+    TError,
+    { articleId: string; params: MarkInboxOthersReadParams },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof markInboxOthersRead>>,
+  TError,
+  { articleId: string; params: MarkInboxOthersReadParams },
+  TContext
+> => {
+  const mutationKey = ["markInboxOthersRead"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof markInboxOthersRead>>,
+    { articleId: string; params: MarkInboxOthersReadParams }
+  > = (props) => {
+    const { articleId, params } = props ?? {};
+
+    return markInboxOthersRead(articleId, params, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MarkInboxOthersReadMutationResult = NonNullable<
+  Awaited<ReturnType<typeof markInboxOthersRead>>
+>;
+
+export type MarkInboxOthersReadMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Bulk-mark all other unread inbox copies of the same article as read
+ */
+export const useMarkInboxOthersRead = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markInboxOthersRead>>,
+    TError,
+    { articleId: string; params: MarkInboxOthersReadParams },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof markInboxOthersRead>>,
+  TError,
+  { articleId: string; params: MarkInboxOthersReadParams },
+  TContext
+> => {
+  return useMutation(getMarkInboxOthersReadMutationOptions(options));
 };
 
 /**

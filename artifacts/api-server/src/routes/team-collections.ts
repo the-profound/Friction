@@ -342,13 +342,20 @@ router.post("/team-collections/:id/members", async (req, res) => {
     }
 
     if (perArticle.size > 0) {
+      // One row per (newMember, article, this team collection). The unique
+      // constraint inbox_recipient_article_source_unique guarantees the same
+      // article-from-the-same-collection won't duplicate even if backfill
+      // re-runs.
       const toInsert = Array.from(perArticle.entries()).map(([articleId, v]) => ({
         recipientId: userId,
         articleId,
         senderId: v.senderId,
+        sourceTeamCollectionId: teamCollectionId,
         visibleAt: v.visibleAt,
       }));
-      await tx.insert(inboxTable).values(toInsert).onConflictDoNothing();
+      await tx.insert(inboxTable).values(toInsert).onConflictDoNothing({
+        target: [inboxTable.recipientId, inboxTable.articleId, inboxTable.sourceTeamCollectionId],
+      });
     }
 
     return m;
@@ -588,14 +595,20 @@ router.post("/team-collections/:id/articles", async (req, res) => {
     }).returning();
 
     if (members.length > 0) {
+      // Tag each row with the source team collection so the same article
+      // delivered through another collection produces a separate inbox row
+      // with its own "출처 모임명".
       await tx.insert(inboxTable).values(
         members.map((m) => ({
           recipientId: m.userId,
           articleId,
           senderId: addedBy,
+          sourceTeamCollectionId: teamCollectionId,
           visibleAt,
         })),
-      ).onConflictDoNothing();
+      ).onConflictDoNothing({
+        target: [inboxTable.recipientId, inboxTable.articleId, inboxTable.sourceTeamCollectionId],
+      });
     }
 
     await tx.insert(sendRecordsTable).values({

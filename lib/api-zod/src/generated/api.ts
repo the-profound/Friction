@@ -517,6 +517,13 @@ export const ListInboxResponseItem = zod.object({
   recipientId: zod.string().uuid(),
   articleId: zod.string().uuid(),
   senderId: zod.string().uuid(),
+  sourceTeamCollectionId: zod
+    .string()
+    .uuid()
+    .nullish()
+    .describe(
+      "Team collection through which this inbox row was delivered. NULL for 1:1 \/ neighbor sends.",
+    ),
   visibleAt: zod.date(),
   openedAt: zod.date().nullish(),
   isRead: zod.boolean(),
@@ -607,6 +614,13 @@ export const GetInboxItemResponse = zod.object({
   recipientId: zod.string().uuid(),
   articleId: zod.string().uuid(),
   senderId: zod.string().uuid(),
+  sourceTeamCollectionId: zod
+    .string()
+    .uuid()
+    .nullish()
+    .describe(
+      "Team collection through which this inbox row was delivered. NULL for 1:1 \/ neighbor sends.",
+    ),
   visibleAt: zod.date(),
   openedAt: zod.date().nullish(),
   isRead: zod.boolean(),
@@ -703,6 +717,13 @@ export const MarkInboxOpenedResponse = zod.object({
   recipientId: zod.string().uuid(),
   articleId: zod.string().uuid(),
   senderId: zod.string().uuid(),
+  sourceTeamCollectionId: zod
+    .string()
+    .uuid()
+    .nullish()
+    .describe(
+      "Team collection through which this inbox row was delivered. NULL for 1:1 \/ neighbor sends.",
+    ),
   visibleAt: zod.date(),
   openedAt: zod.date().nullish(),
   isRead: zod.boolean(),
@@ -793,6 +814,13 @@ export const MarkInboxReadResponse = zod.object({
   recipientId: zod.string().uuid(),
   articleId: zod.string().uuid(),
   senderId: zod.string().uuid(),
+  sourceTeamCollectionId: zod
+    .string()
+    .uuid()
+    .nullish()
+    .describe(
+      "Team collection through which this inbox row was delivered. NULL for 1:1 \/ neighbor sends.",
+    ),
   visibleAt: zod.date(),
   openedAt: zod.date().nullish(),
   isRead: zod.boolean(),
@@ -868,6 +896,27 @@ export const MarkInboxReadResponse = zod.object({
   isReplyToMe: zod.boolean(),
   replyToArticleId: zod.string().uuid().nullish(),
   hasReadBefore: zod.boolean(),
+});
+
+/**
+ * Marks every is_read=false inbox row for the given (recipientId, articleId)
+as read, optionally excluding one inbox row by id. Used after a user
+finishes reading one delivery of an article that arrived through multiple
+team collections, to clear the duplicates without archiving them.
+
+ * @summary Bulk-mark all other unread inbox copies of the same article as read
+ */
+export const MarkInboxOthersReadParams = zod.object({
+  articleId: zod.coerce.string().uuid(),
+});
+
+export const MarkInboxOthersReadQueryParams = zod.object({
+  recipientId: zod.coerce.string().uuid(),
+  exceptInboxId: zod.coerce.string().uuid().optional(),
+});
+
+export const MarkInboxOthersReadResponse = zod.object({
+  updatedCount: zod.number(),
 });
 
 /**

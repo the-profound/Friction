@@ -59,8 +59,12 @@ import {
   useCreateMyCollection,
   useGetUserRecentCollection,
   useUpdateUserRecentCollection,
+  useListInbox,
+  useMarkInboxOthersRead,
   getGetUserRecentCollectionQueryKey,
+  getListInboxQueryKey,
 } from "@workspace/api-client-react";
+import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import { useUser } from "@/contexts/UserContext";
 import { useActiveReading } from "@/contexts/ActiveReadingContext";
 import type { ReadingMode } from "@/lib/policies";
@@ -288,6 +292,80 @@ export default function ReadScreen() {
   const updateRecentCollection = useUpdateUserRecentCollection();
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Detect other unread inbox copies of the same article (same article delivered
+  // through multiple team collections). After the user finishes one, we offer
+  // to bulk-mark the rest as read so they don't re-read duplicates.
+  const inboxListQuery = useListInbox(
+    { recipientId: userId, isRead: false } as Parameters<typeof useListInbox>[0],
+    {
+      query: {
+        queryKey: getListInboxQueryKey({ recipientId: userId, isRead: false } as Parameters<typeof getListInboxQueryKey>[0]),
+        enabled: !!userId && !!articleId,
+      },
+    },
+  );
+  const markOthersRead = useMarkInboxOthersRead();
+  const [duplicatePrompt, setDuplicatePrompt] = useState<{
+    count: number;
+    onResolved: () => void;
+  } | null>(null);
+  const [isMarkingOthers, setIsMarkingOthers] = useState(false);
+
+  const countOtherUnreadDuplicates = useCallback((): number => {
+    const items = inboxListQuery.data;
+    if (!items || !articleId) return 0;
+    return items.filter(
+      (it) => it.articleId === articleId && !it.isRead && (!inboxId || it.id !== inboxId),
+    ).length;
+  }, [inboxListQuery.data, articleId, inboxId]);
+
+  const isInboxEntry = entrySource === "inbox" || !!inboxId;
+
+  const promptOrContinue = useCallback(
+    (afterDecision: () => void) => {
+      if (!isInboxEntry) {
+        afterDecision();
+        return;
+      }
+      const count = countOtherUnreadDuplicates();
+      if (count > 0) {
+        setDuplicatePrompt({ count, onResolved: afterDecision });
+      } else {
+        afterDecision();
+      }
+    },
+    [countOtherUnreadDuplicates, isInboxEntry],
+  );
+
+  const handleConfirmMarkOthers = useCallback(async () => {
+    if (!duplicatePrompt || isMarkingOthers) return;
+    const next = duplicatePrompt.onResolved;
+    setIsMarkingOthers(true);
+    try {
+      await markOthersRead.mutateAsync({
+        articleId,
+        params: { recipientId: userId, ...(inboxId ? { exceptInboxId: inboxId } : {}) },
+      });
+      queryClient.invalidateQueries({
+        queryKey: getListInboxQueryKey({ recipientId: userId, isRead: false } as Parameters<typeof getListInboxQueryKey>[0]),
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+    } catch (e) {
+      console.warn("[markInboxOthersRead] failed (non-fatal):", e);
+    } finally {
+      setIsMarkingOthers(false);
+      setDuplicatePrompt(null);
+      next();
+    }
+  }, [duplicatePrompt, isMarkingOthers, markOthersRead, articleId, userId, inboxId, queryClient]);
+
+  const handleCancelMarkOthers = useCallback(() => {
+    if (!duplicatePrompt) return;
+    const next = duplicatePrompt.onResolved;
+    setDuplicatePrompt(null);
+    next();
+  }, [duplicatePrompt]);
 
   // ── Analytics tracking refs ────────────────────────────────────────────────
   const pageEnterTimeRef = useRef<number>(Date.now());
@@ -730,7 +808,7 @@ export default function ReadScreen() {
       clearActiveSession();
       await readingMemo.cleanup();
       router.back();
-Alert.alert("완료", "보관함에 저장됐어요");
+      Alert.alert("완료", "보관함에 저장됐어요");
     } finally {
       setIsSaving(false);
     }
@@ -750,15 +828,17 @@ Alert.alert("완료", "보관함에 저장됐어요");
         }
         clearActiveSession();
         await readingMemo.cleanup();
-        router.back();
-        Alert.alert("완료", "읽기를 완료했어요");
+        promptOrContinue(() => {
+          router.back();
+          Alert.alert("완료", "읽기를 완료했어요");
+        });
       } else {
         Alert.alert("오류", result.error ?? "완독 처리에 실패했습니다.");
       }
     } finally {
       setIsDeleting(false);
     }
-  }, [isDeleting, isListEntry, reading, router, clearActiveSession, queryClient, readingMemo]);
+  }, [isDeleting, isListEntry, reading, router, clearActiveSession, queryClient, readingMemo, articleId, promptOrContinue]);
 
   const handleTextSelect = useCallback((text: string, isEmpty: boolean) => {
     isTextSelectingRef.current = !isEmpty;
@@ -1355,6 +1435,20 @@ Alert.alert("완료", "보관함에 저장됐어요");
           }
         }}
         isLoading={collectionsQuery.isLoading}
+      />
+      <ConfirmModal
+        visible={!!duplicatePrompt}
+        title="같은 글이 더 있어요"
+        description={
+          duplicatePrompt
+            ? `수신함에 같은 글이 ${duplicatePrompt.count}개 더 있어요. 모두 미보관 읽음 처리할까요?`
+            : ""
+        }
+        confirmLabel={isMarkingOthers ? "처리 중..." : "네, 모두 읽음"}
+        cancelLabel="아니요"
+        onConfirm={handleConfirmMarkOthers}
+        onCancel={handleCancelMarkOthers}
+        onBackdropPress={handleCancelMarkOthers}
       />
     </View>
   );
