@@ -390,6 +390,14 @@ function markdownToHtml(md: string): string {
       blocks.push(`<p>${inner}</p>`);
     }
 
+    // 마지막 블록이 단락(<p>)이 아닌 경우(예: blockquote, 리스트, 헤딩으로 문서가
+    // 끝나는 경우) 그 아래를 탭해도 커서를 잡을 ProseMirror 노드가 없어 입력이
+    // 불가능해진다. 이를 방지하기 위해 항상 빈 단락을 마지막에 보장한다.
+    const last = blocks[blocks.length - 1];
+    if (!last || !/<\/p>$/.test(last)) {
+      blocks.push("<p></p>");
+    }
+
     return blocks.join("");
   } catch {
     return `<p>${escapeHtml(md || "")}</p>`;
@@ -663,6 +671,12 @@ interface Command {
           if (editor && !editor.isDestroyed) {
             const html = markdownToHtml(cmd.markdown || "");
             editor.commands.setContent(html);
+            // 인용구/리스트/헤딩 등으로 끝나는 메모를 주입할 때, 마지막 빈
+            // 단락(<p></p>)에 커서를 자동으로 위치시켜 사용자가 별도 탭 없이
+            // 바로 본문을 이어서 입력할 수 있게 한다.
+            try {
+              editor.commands.focus("end");
+            } catch {}
           }
           break;
         }

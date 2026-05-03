@@ -77,13 +77,21 @@ router.post("/articles", async (req, res) => {
   const { authorId, content, sourceArticleId } = parsed.data;
   let { title } = parsed.data;
 
+  // 읽기 메모 자동 제목: 클라이언트가 별도 제목을 지정하지 않은 경우(빈 문자열이거나
+  // 기본 placeholder "읽기 메모")에만 서버가 "읽기 메모 — {원글 제목}" 형식으로
+  // 채워준다. 사용자가 MemoBottomSheet 등에서 별도 제목을 지정한 경우에는
+  // 그 제목을 그대로 보존해 기록함에서도 동일하게 노출되도록 한다.
   if (sourceArticleId) {
-    const [sourceArticle] = await db
-      .select()
-      .from(articlesTable)
-      .where(eq(articlesTable.id, sourceArticleId));
-    if (sourceArticle) {
-      title = `읽기 메모 — ${sourceArticle.title}`;
+    const trimmedTitle = title.trim();
+    const isPlaceholderTitle = trimmedTitle === "" || trimmedTitle === "읽기 메모";
+    if (isPlaceholderTitle) {
+      const [sourceArticle] = await db
+        .select()
+        .from(articlesTable)
+        .where(eq(articlesTable.id, sourceArticleId));
+      if (sourceArticle) {
+        title = `읽기 메모 — ${sourceArticle.title}`;
+      }
     }
   }
 

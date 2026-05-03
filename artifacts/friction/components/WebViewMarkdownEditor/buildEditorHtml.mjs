@@ -94,7 +94,7 @@ html,body{height:100%;background:transparent}
 body{padding:16px 0 0;overflow:auto}
 `.trim();
 
-const VERSION = "3.11.0";
+const VERSION = "3.12.1";
 
 const tsContent = `export const EDITOR_CONFIG_VERSION = "${VERSION}";
 

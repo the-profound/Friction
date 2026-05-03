@@ -16,7 +16,14 @@ marked.setOptions({ breaks: true, gfm: true } as Parameters<typeof marked.setOpt
 function markdownToHtml(md: string): string {
   try {
     const result = marked.parse(md || "");
-    return typeof result === "string" ? result : "";
+    let html = typeof result === "string" ? result : "";
+    // 마지막 블록이 단락(<p>)이 아닌 경우(예: blockquote, 리스트, 헤딩) 그
+    // 아래를 탭/클릭해도 ProseMirror에 커서를 잡을 노드가 없어 입력이
+    // 불가능해진다. 항상 빈 단락을 보장한다.
+    if (!/<\/p>\s*$/.test(html)) {
+      html += "<p></p>";
+    }
+    return html;
   } catch (e: unknown) {
     return `<p>${md || ""}</p>`;
   }
@@ -127,6 +134,12 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
           try {
             const html = markdownToHtml(markdown);
             editor.commands.setContent(html);
+            // 인용구/리스트/헤딩 등으로 끝나는 메모를 주입할 때, 마지막 빈
+            // 단락에 커서를 자동 배치해 사용자가 별도 탭 없이 바로 본문을
+            // 이어서 입력할 수 있게 한다.
+            try {
+              editor.commands.focus("end");
+            } catch {}
           } catch (e: unknown) {
             onError?.({ code: "MARKDOWN_PARSE_FAIL", message: e instanceof Error ? e.message : String(e) });
           }

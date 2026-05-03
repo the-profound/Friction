@@ -783,7 +783,9 @@ Alert.alert("완료", "보관함에 저장됐어요");
     const title = article?.title ?? "";
     const quoteBlock = `> ${text.trim()}\n>\n> ${author}, <${title}>, ${pageNum}면`;
     const base = readingMemo.memoContent;
-    const combined = base ? `${base}\n\n${quoteBlock}\n` : `${quoteBlock}\n`;
+    // 인용구 뒤에 빈 줄(\n\n)을 두어 blockquote를 종료하고, 사용자가 인용구 아래
+    // 빈 영역을 탭했을 때 본문 단락에 커서가 잡히도록 한다.
+    const combined = base ? `${base}\n\n${quoteBlock}\n\n` : `${quoteBlock}\n\n`;
     readingMemo.updateMemoContent(combined);
     setMemoAppendContent(combined);
     setMemoSheetVisible(true);
