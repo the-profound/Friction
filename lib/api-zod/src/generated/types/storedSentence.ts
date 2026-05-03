@@ -15,5 +15,6 @@ export interface StoredSentence {
   position?: StoredSentencePosition;
   isFavorite: boolean;
   createdAt: Date;
+  /** Title of the source article (joined from articles table). May be null if the article is missing. */
   articleTitle: string | null;
 }

@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { and, eq, exists, ilike, ne } from "drizzle-orm";
-import { db, articlesTable, myCollectionArticlesTable, type ArticleStatus } from "@workspace/db";
+import { db, articlesTable, myCollectionArticlesTable, usersTable, type ArticleStatus } from "@workspace/db";
 import { CreateArticleBody, UpdateArticleBody, TransitionArticleStatusBody, ReadingMemoQueryParams } from "@workspace/api-zod";
 import { ObjectStorageService } from "../lib/objectStorage";
 
@@ -62,9 +62,22 @@ router.get("/articles", async (req, res) => {
     );
   }
 
-  const articles = conditions.length > 0
-    ? await db.select().from(articlesTable).where(and(...conditions))
-    : await db.select().from(articlesTable);
+  const baseQuery = db
+    .select({
+      article: articlesTable,
+      authorNickname: usersTable.nickname,
+    })
+    .from(articlesTable)
+    .leftJoin(usersTable, eq(usersTable.id, articlesTable.authorId));
+
+  const rows = conditions.length > 0
+    ? await baseQuery.where(and(...conditions))
+    : await baseQuery;
+
+  const articles = rows.map((r) => ({
+    ...r.article,
+    authorNickname: r.authorNickname ?? null,
+  }));
   res.json(articles);
 });
 

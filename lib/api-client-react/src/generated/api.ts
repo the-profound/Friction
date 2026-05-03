@@ -31,7 +31,6 @@ import type {
   CreateUserArticleReadBody,
   CreateUserBody,
   ErrorResponse,
-  ReadingMemoParams,
   GetReadingRecordParams,
   GetTodayGreetingStatusParams,
   HealthStatus,
@@ -52,6 +51,7 @@ import type {
   NeighborRequest,
   NeighborRequestWithUser,
   NeighborWithUser,
+  ReadingMemoParams,
   ReadingRecord,
   ReadingRecordNullable,
   RecentSavedCollectionResponse,
@@ -928,9 +928,7 @@ export const useCreateArticle = <
  * Returns the existing DRAFT reading memo for the given user and source article if one exists. Returns 404 if no reading memo has been created yet (memo is created lazily on first non-empty save via POST /articles).
  * @summary Get a ReadingMemo for a source article
  */
-export const getReadingMemoUrl = (
-  params: ReadingMemoParams,
-) => {
+export const getReadingMemoUrl = (params: ReadingMemoParams) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
@@ -946,7 +944,7 @@ export const getReadingMemoUrl = (
     : `/api/articles/reading-memo`;
 };
 
-export const getReadingMemo = async (
+export const readingMemo = async (
   params: ReadingMemoParams,
   options?: RequestInit,
 ): Promise<Article> => {
@@ -956,20 +954,18 @@ export const getReadingMemo = async (
   });
 };
 
-export const getReadingMemoQueryKey = (
-  params?: ReadingMemoParams,
-) => {
+export const getReadingMemoQueryKey = (params?: ReadingMemoParams) => {
   return [`/api/articles/reading-memo`, ...(params ? [params] : [])] as const;
 };
 
 export const getReadingMemoQueryOptions = <
-  TData = Awaited<ReturnType<typeof getReadingMemo>>,
+  TData = Awaited<ReturnType<typeof readingMemo>>,
   TError = ErrorType<ErrorResponse>,
 >(
   params: ReadingMemoParams,
   options?: {
     query?: UseQueryOptions<
-      Awaited<ReturnType<typeof getReadingMemo>>,
+      Awaited<ReturnType<typeof readingMemo>>,
       TError,
       TData
     >;
@@ -978,23 +974,21 @@ export const getReadingMemoQueryOptions = <
 ) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey =
-    queryOptions?.queryKey ?? getReadingMemoQueryKey(params);
+  const queryKey = queryOptions?.queryKey ?? getReadingMemoQueryKey(params);
 
-  const queryFn: QueryFunction<
-    Awaited<ReturnType<typeof getReadingMemo>>
-  > = ({ signal }) =>
-    getReadingMemo(params, { signal, ...requestOptions });
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof readingMemo>>> = ({
+    signal,
+  }) => readingMemo(params, { signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof getReadingMemo>>,
+    Awaited<ReturnType<typeof readingMemo>>,
     TError,
     TData
   > & { queryKey: QueryKey };
 };
 
 export type ReadingMemoQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getReadingMemo>>
+  Awaited<ReturnType<typeof readingMemo>>
 >;
 export type ReadingMemoQueryError = ErrorType<ErrorResponse>;
 
@@ -1002,14 +996,14 @@ export type ReadingMemoQueryError = ErrorType<ErrorResponse>;
  * @summary Get a ReadingMemo for a source article
  */
 
-export function useGetReadingMemo<
-  TData = Awaited<ReturnType<typeof getReadingMemo>>,
+export function useReadingMemo<
+  TData = Awaited<ReturnType<typeof readingMemo>>,
   TError = ErrorType<ErrorResponse>,
 >(
   params: ReadingMemoParams,
   options?: {
     query?: UseQueryOptions<
-      Awaited<ReturnType<typeof getReadingMemo>>,
+      Awaited<ReturnType<typeof readingMemo>>,
       TError,
       TData
     >;

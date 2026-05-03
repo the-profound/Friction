@@ -247,6 +247,11 @@ Alert.alert("오류", "메모 생성에 실패했습니다.");
         <ArticleListItem
           title={item.title || "제목 없음"}
           preview={item.content?.substring(0, 60) || ""}
+          author={
+            item.authorId !== userId && item.authorNickname
+              ? { name: item.authorNickname }
+              : undefined
+          }
           statusBadge={item.status as ArticleStatus}
           timestamp={new Date(item.updatedAt)}
           rightMeta={formatRelativeDate(item.updatedAt)}
@@ -254,7 +259,7 @@ Alert.alert("오류", "메모 생성에 실패했습니다.");
         />
       </SwipeableRow>
     ),
-    [handleArticlePress, handleDeletePress, handleSwipeOpen],
+    [handleArticlePress, handleDeletePress, handleSwipeOpen, userId],
   );
 
   const renderSelectionItem = useCallback(
@@ -272,6 +277,11 @@ Alert.alert("오류", "메모 생성에 실패했습니다.");
             <ArticleListItem
               title={item.title || "제목 없음"}
               preview={item.content?.substring(0, 60) || ""}
+              author={
+                item.authorId !== userId && item.authorNickname
+                  ? { name: item.authorNickname }
+                  : undefined
+              }
               statusBadge={item.status as ArticleStatus}
               timestamp={new Date(item.updatedAt)}
               rightMeta={formatRelativeDate(item.updatedAt)}
@@ -281,7 +291,7 @@ Alert.alert("오류", "메모 생성에 실패했습니다.");
         </Pressable>
       );
     },
-    [selectedIds, toggleSelect],
+    [selectedIds, toggleSelect, userId],
   );
 
   const listFooter = useCallback(

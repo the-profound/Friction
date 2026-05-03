@@ -10,5 +10,6 @@ export interface CreateArticleBody {
   authorId: string;
   title: string;
   content?: string;
+  /** Optional ID of the source article this draft is a reply/memo to. */
   sourceArticleId?: string;
 }

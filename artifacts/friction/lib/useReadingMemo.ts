@@ -3,7 +3,7 @@ import {
   useCreateArticle,
   useUpdateArticle,
   useDeleteArticle,
-  useGetReadingMemo,
+  useReadingMemo as useReadingMemoQuery,
   getReadingMemoQueryKey,
 } from "@workspace/api-client-react";
 
@@ -58,7 +58,7 @@ export function useReadingMemo({
   const deleteArticle = useDeleteArticle();
 
   const memoQueryEnabled = !!userId && !!sourceArticleId;
-  const memoQuery = useGetReadingMemo(
+  const memoQuery = useReadingMemoQuery(
     { userId, sourceArticleId },
     {
       query: {

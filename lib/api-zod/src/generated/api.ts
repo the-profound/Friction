@@ -131,6 +131,12 @@ export const ListArticlesQueryParams = zod.object({
 export const ListArticlesResponseItem = zod.object({
   id: zod.string().uuid(),
   authorId: zod.string().uuid(),
+  authorNickname: zod
+    .string()
+    .nullish()
+    .describe(
+      "Author's nickname. Populated by listArticles when joining users; may be null on other endpoints.",
+    ),
   title: zod.string(),
   content: zod.string(),
   status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
@@ -185,12 +191,17 @@ export const CreateArticleBody = zod.object({
   authorId: zod.string().uuid(),
   title: zod.string(),
   content: zod.string().optional(),
-  sourceArticleId: zod.string().uuid().optional(),
+  sourceArticleId: zod
+    .string()
+    .uuid()
+    .optional()
+    .describe(
+      "Optional ID of the source article this draft is a reply\/memo to.",
+    ),
 });
 
 /**
- * Returns the existing DRAFT memo article for the given user and source article, if one exists.
- * Returns 404 if no reading memo has been created yet (memo is created lazily on first non-empty save).
+ * Returns the existing DRAFT reading memo for the given user and source article if one exists. Returns 404 if no reading memo has been created yet (memo is created lazily on first non-empty save via POST /articles).
  * @summary Get a ReadingMemo for a source article
  */
 export const ReadingMemoQueryParams = zod.object({
@@ -201,6 +212,12 @@ export const ReadingMemoQueryParams = zod.object({
 export const ReadingMemoResponse = zod.object({
   id: zod.string().uuid(),
   authorId: zod.string().uuid(),
+  authorNickname: zod
+    .string()
+    .nullish()
+    .describe(
+      "Author's nickname. Populated by listArticles when joining users; may be null on other endpoints.",
+    ),
   title: zod.string(),
   content: zod.string(),
   status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
@@ -257,6 +274,12 @@ export const GetArticleParams = zod.object({
 export const GetArticleResponse = zod.object({
   id: zod.string().uuid(),
   authorId: zod.string().uuid(),
+  authorNickname: zod
+    .string()
+    .nullish()
+    .describe(
+      "Author's nickname. Populated by listArticles when joining users; may be null on other endpoints.",
+    ),
   title: zod.string(),
   content: zod.string(),
   status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
@@ -349,6 +372,12 @@ export const UpdateArticleBody = zod.object({
 export const UpdateArticleResponse = zod.object({
   id: zod.string().uuid(),
   authorId: zod.string().uuid(),
+  authorNickname: zod
+    .string()
+    .nullish()
+    .describe(
+      "Author's nickname. Populated by listArticles when joining users; may be null on other endpoints.",
+    ),
   title: zod.string(),
   content: zod.string(),
   status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
@@ -417,6 +446,12 @@ export const TransitionArticleStatusBody = zod.object({
 export const TransitionArticleStatusResponse = zod.object({
   id: zod.string().uuid(),
   authorId: zod.string().uuid(),
+  authorNickname: zod
+    .string()
+    .nullish()
+    .describe(
+      "Author's nickname. Populated by listArticles when joining users; may be null on other endpoints.",
+    ),
   title: zod.string(),
   content: zod.string(),
   status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
@@ -490,6 +525,12 @@ export const ListInboxResponseItem = zod.object({
     .object({
       id: zod.string().uuid(),
       authorId: zod.string().uuid(),
+      authorNickname: zod
+        .string()
+        .nullish()
+        .describe(
+          "Author's nickname. Populated by listArticles when joining users; may be null on other endpoints.",
+        ),
       title: zod.string(),
       content: zod.string(),
       status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
@@ -574,6 +615,12 @@ export const GetInboxItemResponse = zod.object({
     .object({
       id: zod.string().uuid(),
       authorId: zod.string().uuid(),
+      authorNickname: zod
+        .string()
+        .nullish()
+        .describe(
+          "Author's nickname. Populated by listArticles when joining users; may be null on other endpoints.",
+        ),
       title: zod.string(),
       content: zod.string(),
       status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
@@ -664,6 +711,12 @@ export const MarkInboxOpenedResponse = zod.object({
     .object({
       id: zod.string().uuid(),
       authorId: zod.string().uuid(),
+      authorNickname: zod
+        .string()
+        .nullish()
+        .describe(
+          "Author's nickname. Populated by listArticles when joining users; may be null on other endpoints.",
+        ),
       title: zod.string(),
       content: zod.string(),
       status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
@@ -748,6 +801,12 @@ export const MarkInboxReadResponse = zod.object({
     .object({
       id: zod.string().uuid(),
       authorId: zod.string().uuid(),
+      authorNickname: zod
+        .string()
+        .nullish()
+        .describe(
+          "Author's nickname. Populated by listArticles when joining users; may be null on other endpoints.",
+        ),
       title: zod.string(),
       content: zod.string(),
       status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
@@ -919,6 +978,12 @@ export const ListMyCollectionArticlesResponseItem = zod.object({
     .object({
       id: zod.string().uuid(),
       authorId: zod.string().uuid(),
+      authorNickname: zod
+        .string()
+        .nullish()
+        .describe(
+          "Author's nickname. Populated by listArticles when joining users; may be null on other endpoints.",
+        ),
       title: zod.string(),
       content: zod.string(),
       status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
@@ -1005,6 +1070,12 @@ export const ListStoredSentencesResponseItem = zod.object({
   position: zod.object({}).passthrough().nullish(),
   isFavorite: zod.boolean(),
   createdAt: zod.date(),
+  articleTitle: zod
+    .string()
+    .nullable()
+    .describe(
+      "Title of the source article (joined from articles table). May be null if the article is missing.",
+    ),
 });
 export const ListStoredSentencesResponse = zod.array(
   ListStoredSentencesResponseItem,
@@ -1036,6 +1107,12 @@ export const GetStoredSentenceResponse = zod.object({
   position: zod.object({}).passthrough().nullish(),
   isFavorite: zod.boolean(),
   createdAt: zod.date(),
+  articleTitle: zod
+    .string()
+    .nullable()
+    .describe(
+      "Title of the source article (joined from articles table). May be null if the article is missing.",
+    ),
 });
 
 /**
@@ -1064,6 +1141,12 @@ export const ToggleStoredSentenceFavoriteResponse = zod.object({
   position: zod.object({}).passthrough().nullish(),
   isFavorite: zod.boolean(),
   createdAt: zod.date(),
+  articleTitle: zod
+    .string()
+    .nullable()
+    .describe(
+      "Title of the source article (joined from articles table). May be null if the article is missing.",
+    ),
 });
 
 /**
@@ -1317,6 +1400,12 @@ export const ListTeamArticlesResponseItem = zod.object({
     .object({
       id: zod.string().uuid(),
       authorId: zod.string().uuid(),
+      authorNickname: zod
+        .string()
+        .nullish()
+        .describe(
+          "Author's nickname. Populated by listArticles when joining users; may be null on other endpoints.",
+        ),
       title: zod.string(),
       content: zod.string(),
       status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
@@ -1605,6 +1694,12 @@ export const ListSendRecordsResponseItem = zod.object({
     .object({
       id: zod.string().uuid(),
       authorId: zod.string().uuid(),
+      authorNickname: zod
+        .string()
+        .nullish()
+        .describe(
+          "Author's nickname. Populated by listArticles when joining users; may be null on other endpoints.",
+        ),
       title: zod.string(),
       content: zod.string(),
       status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
@@ -1698,6 +1793,12 @@ export const GetSendRecordResponse = zod.object({
     .object({
       id: zod.string().uuid(),
       authorId: zod.string().uuid(),
+      authorNickname: zod
+        .string()
+        .nullish()
+        .describe(
+          "Author's nickname. Populated by listArticles when joining users; may be null on other endpoints.",
+        ),
       title: zod.string(),
       content: zod.string(),
       status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),

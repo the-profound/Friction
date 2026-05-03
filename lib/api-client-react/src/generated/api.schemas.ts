@@ -95,6 +95,8 @@ export interface ArticleCover {
 export interface Article {
   id: string;
   authorId: string;
+  /** Author's nickname. Populated by listArticles when joining users; may be null on other endpoints. */
+  authorNickname?: string | null;
   title: string;
   content: string;
   status: ArticleStatus;
@@ -117,6 +119,7 @@ export interface CreateArticleBody {
   authorId: string;
   title: string;
   content?: string;
+  /** Optional ID of the source article this draft is a reply/memo to. */
   sourceArticleId?: string;
 }
 
@@ -231,6 +234,7 @@ export interface StoredSentence {
   position?: StoredSentencePosition;
   isFavorite: boolean;
   createdAt: string;
+  /** Title of the source article (joined from articles table). May be null if the article is missing. */
   articleTitle: string | null;
 }
 

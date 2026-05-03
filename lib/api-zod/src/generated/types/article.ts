@@ -12,6 +12,8 @@ import type { ArticleStyle } from "./articleStyle";
 export interface Article {
   id: string;
   authorId: string;
+  /** Author's nickname. Populated by listArticles when joining users; may be null on other endpoints. */
+  authorNickname?: string | null;
   title: string;
   content: string;
   status: ArticleStatus;
