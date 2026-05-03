@@ -43,19 +43,33 @@ import type {
   TeamCollectionWithRole,
   StoredSentence,
 } from "@workspace/api-client-react";
-import type { GroupMiniSubTabKey } from "@/types/navigation";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
 import { useFocusPollingOptions, isQueryStale } from "@/lib/useScreenFocused";
 import { useQueryClient } from "@tanstack/react-query";
 
+type PersonalFilter = "all" | "my" | "subscribed";
+type GroupFilter = "all" | "my" | "joined";
+
+const PERSONAL_FILTER_OPTIONS: { key: PersonalFilter; label: string }[] = [
+  { key: "all", label: "전체" },
+  { key: "my", label: "내 모음" },
+  { key: "subscribed", label: "구독 모음" },
+];
+
+const GROUP_FILTER_OPTIONS: { key: GroupFilter; label: string }[] = [
+  { key: "all", label: "전체" },
+  { key: "my", label: "내가 만든" },
+  { key: "joined", label: "참여 중" },
+];
+
 export default function OfScreen() {
   const { height: windowH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const navBottom = useNavBarBottomSafeArea();
   const router = useRouter();
-  const { ofSubTab, ofMiniSubTab, setOfMiniSubTab } = useNavigation();
+  const { ofSubTab } = useNavigation();
   const { userId } = useUser();
   const queryClient = useQueryClient();
   const [searchActive, setSearchActive] = useState(false);
@@ -117,16 +131,16 @@ export default function OfScreen() {
   const teamCollections = (teamCollectionsQuery.data ?? []) as TeamCollectionWithRole[];
   const sentences = (sentencesQuery.data ?? []) as StoredSentence[];
 
-  const activeMiniPersonal = ofMiniSubTab.personal;
-  const activeMiniGroup = ofMiniSubTab.group as GroupMiniSubTabKey;
+  const [personalFilter, setPersonalFilter] = useState<PersonalFilter>("all");
+  const [groupFilter, setGroupFilter] = useState<GroupFilter>("all");
 
   const selectedCount = selectedIds.size;
 
   const filteredMyCollections = useMemo(() => {
     let list = myCollections;
-    if (activeMiniPersonal === "my") {
+    if (personalFilter === "my") {
       list = myCollections.filter((c) => !c.isPublic);
-    } else if (activeMiniPersonal === "subscribed") {
+    } else if (personalFilter === "subscribed") {
       list = myCollections.filter((c) => c.isPublic);
     }
     if (searchQuery.trim()) {
@@ -138,19 +152,19 @@ export default function OfScreen() {
       if (!a.isArchive && b.isArchive) return 1;
       return 0;
     });
-  }, [myCollections, searchQuery, activeMiniPersonal]);
+  }, [myCollections, searchQuery, personalFilter]);
 
   const filteredTeamCollections = useMemo(() => {
     let list = teamCollections;
-    if (activeMiniGroup === "my") {
+    if (groupFilter === "my") {
       list = teamCollections.filter((c) => c.role === "OWNER");
-    } else if (activeMiniGroup === "joined") {
+    } else if (groupFilter === "joined") {
       list = teamCollections.filter((c) => c.role === "MEMBER");
     }
     if (!searchQuery.trim()) return list;
     const q = searchQuery.toLowerCase();
     return list.filter((c) => c.name.toLowerCase().includes(q));
-  }, [teamCollections, searchQuery, activeMiniGroup]);
+  }, [teamCollections, searchQuery, groupFilter]);
 
   const filteredSentences = useMemo(() => {
     if (!searchQuery.trim()) return sentences;
@@ -288,7 +302,7 @@ export default function OfScreen() {
       setJoinSheetVisible(false);
       setJoinPreview(null);
       setInviteCode("");
-      setOfMiniSubTab("group", "joined");
+      setGroupFilter("joined");
       await teamCollectionsQuery.refetch();
       Alert.alert("완료", `'${joinPreview.name}' 모음에 참여했어요!`);
     } catch (e: unknown) {
@@ -301,7 +315,7 @@ export default function OfScreen() {
     } finally {
       setIsJoinLoading(false);
     }
-  }, [joinPreview, userId, addTeamMember, teamCollectionsQuery, setOfMiniSubTab]);
+  }, [joinPreview, userId, addTeamMember, teamCollectionsQuery]);
 
   const isCreating = createMyCollection.isPending || createTeamCollection.isPending;
 
@@ -525,7 +539,7 @@ export default function OfScreen() {
   }, [selectedIds, toggleSelect]);
 
   const renderEmptyPersonal = () => {
-    if (activeMiniPersonal === "subscribed") {
+    if (personalFilter === "subscribed") {
       return (
         <RefreshableEmpty
           refreshing={isRefetching}
@@ -558,7 +572,7 @@ export default function OfScreen() {
   };
 
   const renderEmptyTeam = () => {
-    if (activeMiniGroup === "joined") {
+    if (groupFilter === "joined") {
       return (
         <RefreshableEmpty
           refreshing={isRefetching}
@@ -706,6 +720,38 @@ export default function OfScreen() {
           showKebab={ofSubTab === "sentence"}
           onKebabPress={enterSelectionMode}
         />
+      )}
+
+      {!selectionMode && !searchActive && ofSubTab === "personal" && (
+        <View style={styles.filterBar}>
+          {PERSONAL_FILTER_OPTIONS.map((opt) => (
+            <Pressable
+              key={opt.key}
+              style={[styles.filterChip, personalFilter === opt.key && styles.filterChipActive]}
+              onPress={() => setPersonalFilter(opt.key)}
+            >
+              <Text style={[styles.filterChipText, personalFilter === opt.key && styles.filterChipTextActive]}>
+                {opt.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
+
+      {!selectionMode && !searchActive && ofSubTab === "group" && (
+        <View style={styles.filterBar}>
+          {GROUP_FILTER_OPTIONS.map((opt) => (
+            <Pressable
+              key={opt.key}
+              style={[styles.filterChip, groupFilter === opt.key && styles.filterChipActive]}
+              onPress={() => setGroupFilter(opt.key)}
+            >
+              <Text style={[styles.filterChipText, groupFilter === opt.key && styles.filterChipTextActive]}>
+                {opt.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
       )}
 
       {!selectionMode && searchActive && (
@@ -1021,6 +1067,30 @@ const styles = StyleSheet.create({
     ...Typography.body,
     fontSize: 15,
     color: Colors.zinc500,
+  },
+  filterBar: {
+    flexDirection: "row",
+    paddingHorizontal: Spacing.screenPx,
+    gap: 8,
+    paddingVertical: 8,
+  },
+  filterChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: Colors.zinc50,
+  },
+  filterChipActive: {
+    backgroundColor: Colors.zinc900,
+  },
+  filterChipText: {
+    ...Typography.caption,
+    fontSize: 13,
+    color: Colors.zinc500,
+  },
+  filterChipTextActive: {
+    color: Colors.white,
+    fontWeight: "600",
   },
   searchBar: {
     flexDirection: "row",

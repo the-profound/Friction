@@ -71,7 +71,6 @@ export const Spacing = {
   dotsMarginTop: 20,
 
   navBarBottom: 20,
-  miniSubTabBottom: 98,
 
   navBarPaddingBottom: 108,
 } as const;
@@ -81,7 +80,6 @@ export const Sizing = {
   navBarHeight: 68,
   navBarRadius: 999,
   navBarZIndex: 30,
-  miniSubTabZIndex: 29,
 
   tabIconSize: 22,
   tabLabelSize: 10,
@@ -183,13 +181,10 @@ export const Animation = {
 
   searchBarDuration: 280,
 
-  miniSubTabDuration: 220,
-
   scaleActive: 1.1,
   scaleInactive: 0.97,
   subTabScaleFrom: 0.9,
   subTabTranslateYFrom: 6,
-  miniSubTabTranslateYFrom: 16,
 } as const;
 
 export const Shadows = {
@@ -240,7 +235,6 @@ export const Borders = {
 
 export const ZIndex = {
   navBar: 30,
-  miniSubTab: 29,
   overlay: 50,
   modal: 60,
   toast: 70,
@@ -263,17 +257,6 @@ export const TabConfig = {
     { key: "history" as const, label: "발신 목록", icon: "clock" as const },
     { key: "send" as const, label: "보내기", icon: "truck" as const },
   ],
-  ofMiniSubTabs: {
-    personal: [
-      { key: "my" as const, label: "내 모음" },
-      { key: "subscribed" as const, label: "구독 모음" },
-    ],
-    group: [
-      { key: "my" as const, label: "나의 단체 모음" },
-      { key: "joined" as const, label: "참여 중" },
-    ],
-    sentence: null,
-  },
 } as const;
 
 export type MainTabKey = (typeof TabConfig.mainTabs)[number]["key"];
