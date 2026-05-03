@@ -432,7 +432,7 @@ function htmlToMarkdown(html: string): string {
 
     function inlineMd(node: Node): string {
       if (node.nodeType === Node.TEXT_NODE) {
-        return (node.textContent || "").replace(/([\\`*_])/g, "\\$1");
+        return node.textContent || "";
       }
       if (node.nodeType !== Node.ELEMENT_NODE) return "";
       const el = node as HTMLElement;
@@ -462,8 +462,7 @@ function htmlToMarkdown(html: string): string {
       if (tag === "p") {
         const txt = childrenToInline(el);
         if (!txt.trim()) return "\n";
-        const escaped = txt.replace(/^([#>\-])/, "\\$1");
-        return `${escaped}\n\n`;
+        return `${txt}\n\n`;
       }
       if (tag === "ul" || tag === "ol") {
         const items = Array.from(el.children).filter(
