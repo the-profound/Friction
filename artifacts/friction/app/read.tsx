@@ -555,11 +555,25 @@ export default function ReadScreen() {
 
   const snapConfig = { damping: 18, stiffness: 280, mass: 0.8 };
 
+  // Android 10+ 제스처 내비게이션 모드에서 시스템 좌/우 엣지 스와이프(뒤로가기)와
+  // 페이지 넘기기 Pan 제스처가 충돌하지 않도록, Android에서만 좌·우 엣지 24dp를
+  // Pan 활성 영역에서 제외한다. iOS는 시스템 엣지 스와이프와 다르게 동작하므로
+  // 기존 감도(minDistance: 8)와 활성 영역을 그대로 유지한다.
+  const ANDROID_EDGE_EXCLUSION = 24;
+  const panHitSlop = Platform.OS === "android"
+    ? { left: -ANDROID_EDGE_EXCLUSION, right: -ANDROID_EDGE_EXCLUSION }
+    : undefined;
+
   // Gesture.Pan runs on JS thread (runOnJS:true) for gesture recognition,
   // but withTiming / withSpring animate purely on the UI thread.
-  const panGesture = useMemo(() => Gesture.Pan()
-    .minDistance(8)
-    .runOnJS(true)
+  const panGesture = useMemo(() => {
+    const g = Gesture.Pan()
+      .minDistance(8)
+      .runOnJS(true);
+    if (panHitSlop) {
+      g.hitSlop(panHitSlop);
+    }
+    return g
     .onBegin(() => {
       // nothing
     })
@@ -637,7 +651,8 @@ export default function ReadScreen() {
       if (!isCommittingRef.current) {
         translateXSV.value = withSpring(0, snapConfig);
       }
-    }), []);
+    });
+  }, []);
 
   const tapGesture = useMemo(() => Gesture.Tap()
     .runOnJS(true)
