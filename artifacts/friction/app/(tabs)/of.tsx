@@ -802,6 +802,13 @@ export default function OfScreen() {
               onChangeText={(v) => { setInviteCode(v); setJoinError(null); }}
               autoFocus
               autoCapitalize="none"
+              autoCorrect={false}
+              spellCheck={false}
+              textContentType="none"
+              autoComplete="off"
+              importantForAutofill="no"
+              passwordRules=""
+              keyboardType="default"
             />
             {joinError ? (
               <Text style={styles.joinErrorText}>{joinError}</Text>
