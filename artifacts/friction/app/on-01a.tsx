@@ -387,7 +387,7 @@ export default function DraftScreen() {
 
       <KeyboardAvoidingView
         style={styles.editorOuter}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <View style={[styles.editorInner, { width: editorLayout.safeAreaWidth }]}>
         <View style={styles.markdownEditorContainer}>

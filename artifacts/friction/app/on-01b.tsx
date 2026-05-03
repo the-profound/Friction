@@ -920,7 +920,7 @@ export default function DividingScreen() {
 
         <KeyboardAvoidingView
           style={styles.editorOuter}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
           <View style={[styles.editorInner, { width: safeAreaWidth, paddingHorizontal: paddingX }]}>
             <View style={styles.markdownEditorContainer}>
