@@ -126,6 +126,27 @@ export function useAutoSave({
     [debounceMs, doSave],
   );
 
+  // Title-only dirty path: avoids re-passing the full body string on each
+  // title keystroke. The body content is preserved from prior markDirty calls.
+  // `fallbackContent` is used as a seed when no body has been queued yet (e.g.
+  // user only edited the title before any body autosave fired) — this prevents
+  // wiping a previously loaded body to an empty string.
+  const markTitleDirty = useCallback(
+    (title: string, fallbackContent: string = "") => {
+      const prevContent = latestDataRef.current.content;
+      const content = prevContent !== "" ? prevContent : fallbackContent;
+      latestDataRef.current = { title, content };
+      isDirtyRef.current = true;
+      setIsDirty(true);
+
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = setTimeout(() => {
+        doSave();
+      }, debounceMs);
+    },
+    [debounceMs, doSave],
+  );
+
   const flush = useCallback(async (): Promise<{ ok: boolean }> => {
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
@@ -158,5 +179,5 @@ export function useAutoSave({
     };
   }, []);
 
-  return { status, isDirty, markDirty, flush, retry };
+  return { status, isDirty, markDirty, markTitleDirty, flush, retry };
 }

@@ -67,6 +67,9 @@ export default function DraftScreen() {
     resolve: (md: string) => void;
     requestId: string;
   } | null>(null);
+  const exportDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const exportPendingRef = useRef(false);
+  const EXPORT_DEBOUNCE_MS = 1200;
 
   const [sourceArticleId, setSourceArticleId] = useState<string | null>(null);
   const [sourceArticleTitle, setSourceArticleTitle] = useState<string | null>(null);
@@ -154,7 +157,7 @@ export default function DraftScreen() {
     [id, updateArticle],
   );
 
-  const { markDirty, flush } = useAutoSave({
+  const { markDirty, markTitleDirty, flush } = useAutoSave({
     onSave: handleSave,
     storageKey: id ? `draft_${id}` : undefined,
   });
@@ -163,16 +166,28 @@ export default function DraftScreen() {
     if (_payload.charCount !== undefined) {
       setCharCount(_payload.charCount);
     }
-    if (_payload.isDirty && editorRef.current) {
-      const requestId = `autosave_${Date.now()}`;
-      pendingExportRef.current = {
-        resolve: (md: string) => {
-          contentRef.current = md;
-          markDirty(titleRef.current, md);
-        },
-        requestId,
-      };
-      editorRef.current.requestExportMarkdown(requestId);
+    if (_payload.isDirty) {
+      // 매 onChange 마다 export+markDirty 를 즉시 돌리면 본문이 길어질수록
+      // editor.getHTML() → htmlToMarkdown → RN 브리지 왕복 → AsyncStorage 직렬화
+      // 비용이 입력 한 번마다 누적되어 한글 IME 합성 중에 화면이 멈추는 원인이 된다.
+      // 입력이 잠시 멈춘 뒤 1회만 export 하도록 디바운스한다.
+      exportPendingRef.current = true;
+      if (exportDebounceTimerRef.current) clearTimeout(exportDebounceTimerRef.current);
+      exportDebounceTimerRef.current = setTimeout(() => {
+        exportDebounceTimerRef.current = null;
+        if (!exportPendingRef.current) return;
+        exportPendingRef.current = false;
+        if (!editorRef.current) return;
+        const requestId = `autosave_${Date.now()}`;
+        pendingExportRef.current = {
+          resolve: (md: string) => {
+            contentRef.current = md;
+            markDirty(titleRef.current, md);
+          },
+          requestId,
+        };
+        editorRef.current.requestExportMarkdown(requestId);
+      }, EXPORT_DEBOUNCE_MS);
     }
   }, [markDirty]);
 
@@ -180,9 +195,13 @@ export default function DraftScreen() {
     (text: string) => {
       setTitle(text);
       titleRef.current = text;
-      markDirty(text, contentRef.current);
+      // 제목 전용 dirty 경로 사용: latestDataRef 에 본문 문자열을 매번 다시
+      // 싣지 않는다. 본문은 본문 입력 디바운스 경로(또는 flush 시 강제 export)
+      // 에서 갱신되며, 저장 직전 handleNext/handleBack 이 마지막 본문을
+      // markDirty 로 한 번 더 보장한다.
+      markTitleDirty(text, contentRef.current);
     },
-    [markDirty],
+    [markTitleDirty],
   );
 
   const handleSelectionUpdate = useCallback((payload: OnSelectionUpdatePayload) => {
@@ -254,6 +273,12 @@ export default function DraftScreen() {
       return;
     }
 
+    // 디바운스 대기 중이던 본문 export 가 있으면 취소하고, 즉시 1회만 export 한다.
+    if (exportDebounceTimerRef.current) {
+      clearTimeout(exportDebounceTimerRef.current);
+      exportDebounceTimerRef.current = null;
+    }
+    exportPendingRef.current = false;
     const content = await getEditorContent();
     markDirty(titleRef.current, content);
     const flushResult = await flush();
@@ -317,6 +342,11 @@ export default function DraftScreen() {
     isNavigatingRef.current = true;
     setIsNavigating(true);
 
+    if (exportDebounceTimerRef.current) {
+      clearTimeout(exportDebounceTimerRef.current);
+      exportDebounceTimerRef.current = null;
+    }
+    exportPendingRef.current = false;
     const content = await getEditorContent();
     const currentTitle = titleRef.current.trim();
     const currentContent = content.trim();
@@ -358,6 +388,15 @@ export default function DraftScreen() {
     }
     showToast({ message: "분할 단계를 먼저 완료해야 마감 단계로 이동할 수 있어요.", type: "info" });
   }, [handleNext, showToast]);
+
+  useEffect(() => {
+    return () => {
+      if (exportDebounceTimerRef.current) {
+        clearTimeout(exportDebounceTimerRef.current);
+        exportDebounceTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (Platform.OS !== "android") return;

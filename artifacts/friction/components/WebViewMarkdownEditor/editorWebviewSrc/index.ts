@@ -565,6 +565,10 @@ interface Command {
   const PROBE_DEBOUNCE_MS = 80;
 
   function scheduleOverflowProbe(delay: number = PROBE_DEBOUNCE_MS) {
+    // probe 비활성 (작성 탭 등) 일 때는 doc 변경 핫패스에서 빈 ranges 트랜잭션을
+    // 매번 dispatch 하지 않도록 타이머 자체를 걸지 않는다. ProseMirror 트랜잭션은
+    // 본문이 길수록 비용이 커서 입력 멈춤의 한 원인이 된다.
+    if (overflowAvailableContentHeight == null) return;
     if (probeTimer) clearTimeout(probeTimer);
     probeTimer = setTimeout(runOverflowProbe, delay);
   }
@@ -573,12 +577,7 @@ interface Command {
     probeTimer = null;
     if (!editor || editor.isDestroyed) return;
     const avail = overflowAvailableContentHeight;
-    if (avail == null || !(avail > 0)) {
-      // probe 비활성 — 강조 비움
-      const tr = editor.state.tr.setMeta(overflowPluginKey, { ranges: [] });
-      editor.view.dispatch(tr);
-      return;
-    }
+    if (avail == null || !(avail > 0)) return;
 
     const view = editor.view;
     const doc = editor.state.doc;
@@ -889,9 +888,19 @@ interface Command {
         }
         case "setOverflowProbeConfig": {
           const next = cmd.availableContentHeightPx;
+          const prev = overflowAvailableContentHeight;
           overflowAvailableContentHeight = (next != null && next > 0) ? next : null;
-          // 폰트/레이아웃이 안정될 시간을 잠깐 둔다.
-          scheduleOverflowProbe(50);
+          if (overflowAvailableContentHeight == null) {
+            // probe 가 비활성화되는 순간 1회만 강조를 비운다.
+            // (이후 doc 변경 시에는 scheduleOverflowProbe 가 no-op 이라 트랜잭션이 발생하지 않는다.)
+            if (prev != null && editor && !editor.isDestroyed) {
+              const tr = editor.state.tr.setMeta(overflowPluginKey, { ranges: [] });
+              editor.view.dispatch(tr);
+            }
+          } else {
+            // 폰트/레이아웃이 안정될 시간을 잠깐 둔다.
+            scheduleOverflowProbe(50);
+          }
           break;
         }
         case "setBodyMetrics": {
