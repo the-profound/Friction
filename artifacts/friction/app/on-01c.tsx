@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
   TextInput,
   LayoutChangeEvent,
+  BackHandler,
+  Platform,
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -338,6 +340,15 @@ export default function ClosingScreen() {
     }
     Alert.alert("이동 불가", "분할 단계를 거쳐 작성 단계로 이동할 수 있습니다.");
   }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      handleBack();
+      return true;
+    });
+    return () => sub.remove();
+  }, [handleBack]);
 
   const hasCoverPage = cover.type !== "default";
   const totalVirtualPages = pages.length > 0

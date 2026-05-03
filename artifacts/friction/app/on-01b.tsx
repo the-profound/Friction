@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  BackHandler,
 } from "react-native";
 import WritingStateBar, { type WritingStage } from "@/components/WritingStateBar/WritingStateBar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -801,6 +802,22 @@ export default function DividingScreen() {
       handleNext();
     }
   }, [handleNext]);
+
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      // 아직 article 데이터가 초기화되지 않았다면 refs가 비어있어
+      // 빈 title/content/pages를 기존 article에 덮어쓸 수 있다.
+      // 이 경우 저장 로직을 건너뛰고 단순히 뒤로 이동한다.
+      if (!initializedRef.current) {
+        router.replace("/(tabs)/on");
+        return true;
+      }
+      handleBack();
+      return true;
+    });
+    return () => sub.remove();
+  }, [handleBack, router]);
 
   if (!id || articleLoading) {
     return (

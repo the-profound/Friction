@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
-import { View, Text, StyleSheet, Pressable, Alert, ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform } from "react-native";
+import { View, Text, StyleSheet, Pressable, Alert, ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, BackHandler } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { useRouter, useLocalSearchParams, Stack } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useAutoSave } from "@/lib/useAutoSave";
@@ -357,18 +357,39 @@ export default function DraftScreen() {
     Alert.alert("이동 불가", "분할 단계를 먼저 완료해야 마감 단계로 이동할 수 있습니다.");
   }, [handleNext]);
 
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      // 아직 article 데이터가 초기화되지 않았다면 refs가 비어있어
+      // handleBack의 빈 메모 삭제 분기를 잘못 실행할 수 있다.
+      // 이 경우 저장 로직을 건너뛰고 단순히 뒤로 이동한다.
+      if (!initializedRef.current) {
+        router.back();
+        return true;
+      }
+      handleBack();
+      return true;
+    });
+    return () => sub.remove();
+  }, [handleBack, router]);
+
   if (!id || articleLoading) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.zinc400} />
+      <>
+        <Stack.Screen options={{ gestureEnabled: false }} />
+        <View style={[styles.container, { paddingTop: insets.top }]}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={Colors.zinc400} />
+          </View>
         </View>
-      </View>
+      </>
     );
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <>
+      <Stack.Screen options={{ gestureEnabled: false }} />
+      <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <Pressable onPress={handleBack} hitSlop={12}>
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
@@ -463,7 +484,8 @@ export default function DraftScreen() {
         onClose={() => setBlockTypeSheetVisible(false)}
         onSelect={handleBlockTypeSelect}
       />
-    </View>
+      </View>
+    </>
   );
 }
 
