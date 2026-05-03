@@ -89,12 +89,12 @@ html,body{height:100%;background:transparent}
 .ProseMirror u{text-decoration:underline}
 .ProseMirror strong{font-family:'Eulyoo1945-SemiBold',serif;font-weight:700}
 .ProseMirror em{font-style:italic}
-.ProseMirror > .overflow-highlight{background:#fecaca}
+.ProseMirror .overflow-highlight{background:#fecaca}
 #source-article-slot{display:none;width:100%;font-size:13px;color:#a1a1aa;font-family:system-ui,-apple-system,sans-serif;padding:0 0 8px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;-webkit-tap-highlight-color:transparent}
 body{padding:16px 0 0;overflow:auto}
 `.trim();
 
-const VERSION = "3.12.1";
+const VERSION = "3.12.2";
 
 const tsContent = `export const EDITOR_CONFIG_VERSION = "${VERSION}";
 
