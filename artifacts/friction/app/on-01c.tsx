@@ -350,7 +350,7 @@ export default function ClosingScreen() {
     return () => sub.remove();
   }, [handleBack]);
 
-  const hasCoverPage = cover.type !== "default";
+  const hasCoverPage = true;
   const totalVirtualPages = pages.length > 0
     ? (hasCoverPage ? pages.length + 1 : pages.length)
     : 0;
