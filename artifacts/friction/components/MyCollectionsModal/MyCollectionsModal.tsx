@@ -112,6 +112,7 @@ export default function MyCollectionsModal({
       onClose={handleClose}
       title="보관할 모음 선택"
       snapPoints={[0.55]}
+      keyboardAware
     >
       <View style={styles.container}>
         {onCreateAndSelect && (
