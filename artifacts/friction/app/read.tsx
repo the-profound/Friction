@@ -298,6 +298,7 @@ export default function ReadScreen() {
   const readingMemo = useReadingMemo({
     userId,
     sourceArticleId: articleId,
+    sourceArticleTitle: article?.title,
   });
 
   const handleOpenMemo = useCallback(() => {
@@ -1300,6 +1301,9 @@ Alert.alert("완료", "보관함에 저장됐어요");
         }}
         initialContent={readingMemo.memoContent}
         appendContent={memoAppendContent}
+        initialTitle={readingMemo.memoTitle}
+        defaultTitlePlaceholder={readingMemo.defaultMemoTitle}
+        onTitleChange={readingMemo.updateMemoTitle}
         saveState={readingMemo.saveState}
         onContentChange={readingMemo.updateMemoContent}
       />

@@ -11,19 +11,27 @@ import { Colors, Typography } from "@/constants/tokens";
 
 interface MemoBottomSheetProps {
   visible: boolean;
-  onClose: () => void;
+  onClose: () => void | Promise<void>;
   initialContent?: string;
   appendContent?: string;
+  initialTitle?: string;
+  defaultTitlePlaceholder?: string;
+  onTitleChange?: (title: string) => void;
   saveState?: "idle" | "saving" | "saved" | "error";
   onSaveStateChange?: (state: "saved" | "saving" | "error") => void;
   onContentChange?: (markdown: string) => void;
 }
+
+const CLOSE_EXPORT_TIMEOUT_MS = 2000;
 
 export default function MemoBottomSheet({
   visible,
   onClose,
   initialContent = "",
   appendContent,
+  initialTitle = "",
+  defaultTitlePlaceholder = "읽기 메모",
+  onTitleChange,
   saveState: externalSaveState,
   onSaveStateChange,
   onContentChange,
@@ -31,16 +39,27 @@ export default function MemoBottomSheet({
   const editorRef = useRef<WebViewMarkdownEditorRef>(null);
   const [editorReady, setEditorReady] = useState(false);
   const [localSaveState, setLocalSaveState] = useState<"saved" | "saving" | "error" | "idle">("idle");
+  const [isClosing, setIsClosing] = useState(false);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const exportRequestIdRef = useRef(0);
   const appendInjectedRef = useRef(false);
+  const closeExportResolverRef = useRef<(() => void) | null>(null);
   const saveState = externalSaveState ?? localSaveState;
+
+  const effectiveInitialTitle = initialTitle.trim()
+    ? initialTitle
+    : defaultTitlePlaceholder;
 
   useEffect(() => {
     if (!visible) {
       setEditorReady(false);
       setLocalSaveState("idle");
+      setIsClosing(false);
       appendInjectedRef.current = false;
+      if (closeExportResolverRef.current) {
+        closeExportResolverRef.current();
+        closeExportResolverRef.current = null;
+      }
     }
   }, [visible]);
 
@@ -78,20 +97,42 @@ export default function MemoBottomSheet({
   const handleExportMarkdown = useCallback(
     (payload: OnExportMarkdownPayload) => {
       onContentChange?.(payload.markdown);
+      if (payload.requestId === "close" && closeExportResolverRef.current) {
+        closeExportResolverRef.current();
+        closeExportResolverRef.current = null;
+      }
     },
     [onContentChange],
   );
 
-  const handleClose = useCallback(() => {
+  const handleClose = useCallback(async () => {
+    if (isClosing) return;
+    setIsClosing(true);
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
     }
-    editorRef.current?.requestExportMarkdown("close");
-    onClose();
-  }, [onClose]);
+    if (editorRef.current && editorReady) {
+      const exportDone = new Promise<void>((resolve) => {
+        closeExportResolverRef.current = resolve;
+      });
+      editorRef.current.requestExportMarkdown("close");
+      await Promise.race([
+        exportDone,
+        new Promise<void>((resolve) => setTimeout(resolve, CLOSE_EXPORT_TIMEOUT_MS)),
+      ]);
+      closeExportResolverRef.current = null;
+    }
+    try {
+      await onClose();
+    } finally {
+      setIsClosing(false);
+    }
+  }, [isClosing, editorReady, onClose]);
 
-  const saveIndicatorText =
-    saveState === "saving"
+  const saveIndicatorText = isClosing
+    ? "저장 중..."
+    : saveState === "saving"
       ? "저장 중..."
       : saveState === "saved"
         ? "저장됨"
@@ -109,17 +150,20 @@ export default function MemoBottomSheet({
     >
       <View style={styles.container}>
         <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Text style={styles.headerTitle} numberOfLines={1}>
-              읽기 메모
-            </Text>
-          </View>
+          <View style={styles.headerLeft} />
           <View style={styles.headerRight}>
             {saveIndicatorText ? (
               <Text style={styles.saveState}>{saveIndicatorText}</Text>
             ) : null}
-            <Pressable onPress={handleClose} style={styles.closeButton} hitSlop={12}>
-              <Text style={styles.closeButtonText}>닫기</Text>
+            <Pressable
+              onPress={handleClose}
+              style={styles.closeButton}
+              hitSlop={12}
+              disabled={isClosing}
+            >
+              <Text style={[styles.closeButtonText, isClosing && styles.closeButtonTextDisabled]}>
+                닫기
+              </Text>
             </Pressable>
           </View>
         </View>
@@ -133,11 +177,13 @@ export default function MemoBottomSheet({
           <WebViewMarkdownEditor
             ref={editorRef}
             initialMarkdown={initialContent}
+            titleValue={effectiveInitialTitle}
             placeholder="읽으면서 떠오른 생각을 적어보세요..."
             editable
             onReady={() => setEditorReady(true)}
             onChange={handleChange}
             onExportMarkdown={handleExportMarkdown}
+            onTitleChange={onTitleChange}
           />
         </View>
       </View>
@@ -163,10 +209,6 @@ const styles = StyleSheet.create({
   headerLeft: {
     flex: 1,
   },
-  headerTitle: {
-    ...Typography.bodySemiBold,
-    color: Colors.zinc900,
-  },
   headerRight: {
     flexDirection: "row",
     alignItems: "center",
@@ -183,6 +225,9 @@ const styles = StyleSheet.create({
   closeButtonText: {
     ...Typography.bodySemiBold,
     color: Colors.zinc600,
+  },
+  closeButtonTextDisabled: {
+    color: Colors.zinc400,
   },
   editorContainer: {
     flex: 1,
