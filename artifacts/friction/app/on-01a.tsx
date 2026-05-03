@@ -303,34 +303,40 @@ export default function DraftScreen() {
       return;
     }
 
-    try {
-      await updateArticle.mutateAsync({
-        id: id!,
-        data: { title: currentTitle, content },
-      });
-      queryClient.setQueryData([`/api/articles/${id}`], (old: unknown) => {
-        if (!old || typeof old !== "object") return old;
-        return { ...old, title: currentTitle, content };
-      });
-      if (article?.status !== "DIVIDING") {
-        try {
-          await transitionStatus.mutateAsync({
-            id: id!,
-            data: { targetStatus: TransitionArticleBodyTargetStatus.DIVIDING },
-          });
-        } catch (e: unknown) {
-          if (!(e instanceof ApiError && e.status === 400)) throw e;
-        }
-      }
+    // Optimistically reflect the new title/content/status in the cache so the
+    // next screen renders immediately with fresh data instead of flashing the
+    // previous version.
+    queryClient.setQueryData([`/api/articles/${id}`], (old: unknown) => {
+      if (!old || typeof old !== "object") return old;
+      return { ...old, title: currentTitle, content, status: "DIVIDING" };
+    });
+
+    // Navigate first for a natural, snappy stack-push animation. The body has
+    // already been persisted by flush() above, so on-01b can refetch and render
+    // the saved content. The status transition fires in the background — if it
+    // fails (non-400) we log and surface a toast, but the user keeps moving.
+    router.push({ pathname: "/on-01b", params: { id } });
+    isNavigatingRef.current = false;
+    setIsNavigating(false);
+
+    if (article?.status !== "DIVIDING") {
+      transitionStatus
+        .mutateAsync({
+          id: id!,
+          data: { targetStatus: TransitionArticleBodyTargetStatus.DIVIDING },
+        })
+        .catch((e: unknown) => {
+          const status = (e as { status?: number } | null)?.status;
+          if (status === 400) return;
+          console.warn("[on-01a] background status transition failed:", e);
+        })
+        .finally(() => {
+          queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+        });
+    } else {
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
-      router.push({ pathname: "/on-01b", params: { id } });
-    } catch (e: unknown) {
-      isNavigatingRef.current = false;
-      setIsNavigating(false);
-      const msg = e instanceof Error ? e.message : "상태 전환에 실패했습니다.";
-      Alert.alert("오류", msg);
     }
-  }, [flush, id, router, updateArticle, transitionStatus, queryClient, getEditorContent, markDirty, article, showToast]);
+  }, [flush, id, router, transitionStatus, queryClient, getEditorContent, markDirty, article, showToast]);
 
   const handleDismissKeyboard = useCallback(() => {
     editorRef.current?.blur();

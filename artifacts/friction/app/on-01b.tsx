@@ -672,30 +672,56 @@ export default function DividingScreen() {
       setIsNavigating(false);
       return;
     }
-    try {
-      const updatedArticle = await updateArticle.mutateAsync({
+
+    // Optimistically prime the cache so on-01c renders immediately with the
+    // freshly split pages, layoutWidth, and CLOSING status — no spinner, no
+    // stale-state flash.
+    queryClient.setQueryData([`/api/articles/${id}`], (old: unknown) => {
+      if (!old || typeof old !== "object") return old;
+      return {
+        ...old,
+        title: titleRef.current,
+        content: cur,
+        pages: pagesJson,
+        layoutWidth: containerWidth,
+        status: "CLOSING",
+      };
+    });
+
+    // Navigate first for a natural stack-push animation. flush() above already
+    // saved title/content/pages via handleSave; only layoutWidth and the status
+    // transition still need to hit the server, and they can run in parallel
+    // behind the navigation animation.
+    router.push({ pathname: "/on-01c", params: { id } });
+    isNavigatingRef.current = false;
+    setIsNavigating(false);
+
+    const layoutWidthSave = updateArticle
+      .mutateAsync({
         id,
-        data: { title: titleRef.current, content: cur, pages: pagesJson, layoutWidth: containerWidth },
+        data: { layoutWidth: containerWidth },
+      })
+      .catch((e: unknown) => {
+        console.warn("[on-01b] background layoutWidth save failed:", e);
       });
-      queryClient.setQueryData([`/api/articles/${id}`], updatedArticle);
-      if (article?.status !== "CLOSING") {
-        try {
-          await transitionStatus.mutateAsync({
-            id,
-            data: { targetStatus: TransitionArticleBodyTargetStatus.CLOSING },
-          });
-        } catch (e: unknown) {
-          if (!(e instanceof ApiError && e.status === 400)) throw e;
-        }
-      }
+
+    const statusChange =
+      article?.status !== "CLOSING"
+        ? transitionStatus
+            .mutateAsync({
+              id,
+              data: { targetStatus: TransitionArticleBodyTargetStatus.CLOSING },
+            })
+            .catch((e: unknown) => {
+              const status = (e as { status?: number } | null)?.status;
+              if (status === 400) return;
+              console.warn("[on-01b] background status transition failed:", e);
+            })
+        : Promise.resolve();
+
+    Promise.all([layoutWidthSave, statusChange]).finally(() => {
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
-      router.push({ pathname: "/on-01c", params: { id } });
-    } catch (e: unknown) {
-      isNavigatingRef.current = false;
-      setIsNavigating(false);
-      const msg = e instanceof Error ? e.message : "상태 전환에 실패했습니다.";
-      Alert.alert("오류", msg);
-    }
+    });
   }, [getEditorContent, markDirty, flush, hasRedWarnings, id, router, updateArticle, transitionStatus, queryClient, containerWidth, article, showToast]);
 
   const handleBack = useCallback(async () => {
