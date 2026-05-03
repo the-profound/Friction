@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, count, gt, isNull, isNotNull, sql } from "drizzle-orm";
+import { and, eq, count, gt, inArray, isNull, isNotNull, lte, ne, sql } from "drizzle-orm";
 import {
   db,
   teamCollectionsTable,
@@ -228,10 +228,11 @@ router.post("/team-collections/:id/members", async (req, res) => {
     return;
   }
   const { userId } = parsed.data;
+  const teamCollectionId = req.params.id;
 
   const existing = await db.select().from(teamCollectionMembershipsTable)
     .where(and(
-      eq(teamCollectionMembershipsTable.teamCollectionId, req.params.id),
+      eq(teamCollectionMembershipsTable.teamCollectionId, teamCollectionId),
       eq(teamCollectionMembershipsTable.userId, userId),
     ));
 
@@ -240,11 +241,119 @@ router.post("/team-collections/:id/members", async (req, res) => {
     return;
   }
 
-  const [membership] = await db.insert(teamCollectionMembershipsTable).values({
-    teamCollectionId: req.params.id,
-    userId,
-    role: "MEMBER",
-  }).returning();
+  const membership = await db.transaction(async (tx) => {
+    const [m] = await tx.insert(teamCollectionMembershipsTable).values({
+      teamCollectionId,
+      userId,
+      role: "MEMBER",
+    }).returning();
+
+    // Backfill inbox records for articles already delivered to THIS collection.
+    // All sources are scoped to the collection so a different-context delivery
+    // (1:1, neighbor, or another collection) cannot surface a post whose group
+    // delivery is still in the future. Two trusted sources of visibleAt:
+    //   1. send_records (group, this collection) — system-of-record. If a row
+    //      exists with a future deliverySlot the article is skipped entirely.
+    //   2. Existing inbox rows of other current members where senderId equals
+    //      team_collection_articles.addedBy — used only for legacy articles
+    //      that have no send_records row at all.
+    const now = new Date();
+
+    const collectionArticles = await tx
+      .select({
+        articleId: teamCollectionArticlesTable.articleId,
+        addedBy: teamCollectionArticlesTable.addedBy,
+      })
+      .from(teamCollectionArticlesTable)
+      .where(eq(teamCollectionArticlesTable.teamCollectionId, teamCollectionId));
+
+    if (collectionArticles.length === 0) {
+      return m;
+    }
+
+    const articleIds = collectionArticles.map((a) => a.articleId);
+    const addedByById = new Map(collectionArticles.map((a) => [a.articleId, a.addedBy] as const));
+
+    const groupSends = await tx
+      .select({
+        articleId: sendRecordsTable.articleId,
+        senderId: sendRecordsTable.senderId,
+        deliverySlot: sendRecordsTable.deliverySlot,
+      })
+      .from(sendRecordsTable)
+      .where(and(
+        eq(sendRecordsTable.teamCollectionId, teamCollectionId),
+        eq(sendRecordsTable.targetType, "group"),
+        inArray(sendRecordsTable.articleId, articleIds),
+      ));
+
+    const perArticle = new Map<string, { senderId: string; visibleAt: Date }>();
+    const articlesWithSendRecord = new Set<string>();
+    for (const row of groupSends) {
+      articlesWithSendRecord.add(row.articleId);
+      const ts = new Date(row.deliverySlot as unknown as string | Date);
+      if (ts.getTime() > now.getTime()) continue;
+      const cur = perArticle.get(row.articleId);
+      if (!cur || ts.getTime() < cur.visibleAt.getTime()) {
+        perArticle.set(row.articleId, { senderId: row.senderId, visibleAt: ts });
+      }
+    }
+
+    const legacyIds = articleIds.filter((id) => !articlesWithSendRecord.has(id));
+    if (legacyIds.length > 0) {
+      const inboxByMember = await tx
+        .select({
+          articleId: inboxTable.articleId,
+          senderId: inboxTable.senderId,
+          visibleAt: inboxTable.visibleAt,
+        })
+        .from(teamCollectionArticlesTable)
+        .innerJoin(
+          teamCollectionMembershipsTable,
+          and(
+            eq(teamCollectionMembershipsTable.teamCollectionId, teamCollectionArticlesTable.teamCollectionId),
+            ne(teamCollectionMembershipsTable.userId, userId),
+          ),
+        )
+        .innerJoin(
+          inboxTable,
+          and(
+            eq(inboxTable.articleId, teamCollectionArticlesTable.articleId),
+            eq(inboxTable.recipientId, teamCollectionMembershipsTable.userId),
+            eq(inboxTable.senderId, teamCollectionArticlesTable.addedBy),
+          ),
+        )
+        .where(and(
+          eq(teamCollectionArticlesTable.teamCollectionId, teamCollectionId),
+          inArray(teamCollectionArticlesTable.articleId, legacyIds),
+          lte(inboxTable.visibleAt, now),
+        ));
+      for (const row of inboxByMember) {
+        const ts = new Date(row.visibleAt as unknown as string | Date);
+        if (ts.getTime() > now.getTime()) continue;
+        const cur = perArticle.get(row.articleId);
+        if (!cur || ts.getTime() < cur.visibleAt.getTime()) {
+          perArticle.set(row.articleId, {
+            senderId: row.senderId ?? addedByById.get(row.articleId) ?? row.senderId,
+            visibleAt: ts,
+          });
+        }
+      }
+    }
+
+    if (perArticle.size > 0) {
+      const toInsert = Array.from(perArticle.entries()).map(([articleId, v]) => ({
+        recipientId: userId,
+        articleId,
+        senderId: v.senderId,
+        visibleAt: v.visibleAt,
+      }));
+      await tx.insert(inboxTable).values(toInsert).onConflictDoNothing();
+    }
+
+    return m;
+  });
+
   res.status(201).json(membership);
 });
 
