@@ -105,6 +105,16 @@ export default function BottomSheet({
 
   const minTranslateY = insets.top + MIN_TOP_GAP;
 
+  // Mutable refs so PanResponder (created once) always reads fresh values.
+  const getSnapYRef = useRef(getSnapY);
+  const snapCountRef = useRef(snapPoints.length);
+  // closeRef is populated after close() is defined below.
+  const closeRef = useRef<() => void>(() => {});
+
+  useEffect(() => { getSnapYRef.current = getSnapY; }, [getSnapY]);
+  useEffect(() => { snapCountRef.current = snapPoints.length; }, [snapPoints]);
+
+  // Animate to initial snap on open.
   useEffect(() => {
     if (visible) {
       currentSnap.current = 0;
@@ -127,6 +137,30 @@ export default function BottomSheet({
     }
   }, [visible]);
 
+  // Re-snap to first snap point when snap points semantically change while the
+  // sheet is already open (e.g. code-step → preview-step transition).
+  // Use a string key so inline array literals don't trigger spurious re-snaps
+  // on every parent re-render (e.g. while the user is typing).
+  const snapPointsKey = snapPoints.join("|");
+  const prevSnapPointsKey = useRef<string | null>(null);
+  useEffect(() => {
+    if (prevSnapPointsKey.current === null) {
+      prevSnapPointsKey.current = snapPointsKey;
+      return;
+    }
+    if (prevSnapPointsKey.current === snapPointsKey) return;
+    prevSnapPointsKey.current = snapPointsKey;
+    if (!visible) return;
+    currentSnap.current = 0;
+    keyboardOffsetRef.current = 0;
+    Animated.spring(translateY, {
+      toValue: getSnapY(0),
+      useNativeDriver: true,
+      damping: 20,
+      stiffness: 200,
+    }).start();
+  }, [snapPointsKey]);
+
   const close = useCallback(() => {
     closingRef.current = true;
     Keyboard.dismiss();
@@ -148,22 +182,24 @@ export default function BottomSheet({
     });
   }, [onClose]);
 
+  useEffect(() => { closeRef.current = close; }, [close]);
+
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => enableDragDown && dismissable,
       onMoveShouldSetPanResponder: (_, g) => enableDragDown && dismissable && Math.abs(g.dy) > 5,
       onPanResponderMove: (_, g) => {
-        const base = getSnapY(currentSnap.current) - keyboardOffsetRef.current;
-        const next = Math.max(base + g.dy, getSnapY(snapPoints.length - 1));
+        const base = getSnapYRef.current(currentSnap.current) - keyboardOffsetRef.current;
+        const next = Math.max(base + g.dy, getSnapYRef.current(snapCountRef.current - 1));
         translateY.setValue(next);
       },
       onPanResponderRelease: (_, g) => {
         if (g.dy > 100 || g.vy > 0.5) {
           if (currentSnap.current === 0) {
-            close();
+            closeRef.current();
           } else {
             currentSnap.current = Math.max(0, currentSnap.current - 1);
-            const target = getSnapY(currentSnap.current) - keyboardOffsetRef.current;
+            const target = getSnapYRef.current(currentSnap.current) - keyboardOffsetRef.current;
             Animated.spring(translateY, {
               toValue: Math.max(target, 0),
               useNativeDriver: true,
@@ -172,9 +208,9 @@ export default function BottomSheet({
             }).start();
           }
         } else if (g.dy < -100 || g.vy < -0.5) {
-          if (currentSnap.current < snapPoints.length - 1) {
+          if (currentSnap.current < snapCountRef.current - 1) {
             currentSnap.current += 1;
-            const target = getSnapY(currentSnap.current) - keyboardOffsetRef.current;
+            const target = getSnapYRef.current(currentSnap.current) - keyboardOffsetRef.current;
             Animated.spring(translateY, {
               toValue: Math.max(target, 0),
               useNativeDriver: true,
@@ -183,7 +219,7 @@ export default function BottomSheet({
             }).start();
           }
         } else {
-          const target = getSnapY(currentSnap.current) - keyboardOffsetRef.current;
+          const target = getSnapYRef.current(currentSnap.current) - keyboardOffsetRef.current;
           Animated.spring(translateY, {
             toValue: Math.max(target, 0),
             useNativeDriver: true,

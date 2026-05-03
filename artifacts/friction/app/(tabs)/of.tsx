@@ -7,6 +7,8 @@ import {
   FlatList,
   RefreshControl,
   TextInput,
+  ScrollView,
+  useWindowDimensions,
   Platform,
   Alert,
 } from "react-native";
@@ -49,6 +51,7 @@ import { useFocusPollingOptions, isQueryStale } from "@/lib/useScreenFocused";
 import { useQueryClient } from "@tanstack/react-query";
 
 export default function OfScreen() {
+  const { height: windowH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const navBottom = useNavBarBottomSafeArea();
   const router = useRouter();
@@ -785,7 +788,7 @@ export default function OfScreen() {
         visible={joinSheetVisible}
         onClose={() => { setJoinSheetVisible(false); setJoinError(null); }}
         title={joinStep === "code" ? "초대 코드로 참가" : "모음 정보 확인"}
-        snapPoints={joinStep === "preview" ? [0.55] : [0.4]}
+        snapPoints={joinStep === "preview" ? [0.65, 0.92] : [0.6, 0.85]}
         keyboardAware={joinStep === "code"}
       >
         {joinStep === "code" ? (
@@ -816,7 +819,12 @@ export default function OfScreen() {
           </View>
         ) : joinPreview ? (
           <View style={styles.joinPreviewContainer}>
-            <View style={styles.joinPreviewCard}>
+            <ScrollView
+              style={[styles.joinPreviewScroll, { maxHeight: Math.max(windowH * 0.38, 150) }]}
+              contentContainerStyle={styles.joinPreviewCard}
+              showsVerticalScrollIndicator={false}
+              bounces={false}
+            >
               <View style={styles.joinPreviewIcon}>
                 <Feather name="users" size={28} color="#7C3AED" />
               </View>
@@ -827,25 +835,27 @@ export default function OfScreen() {
               {joinPreview.creatorNickname ? (
                 <Text style={styles.joinPreviewOwner}>모음장: {joinPreview.creatorNickname}</Text>
               ) : null}
+            </ScrollView>
+            <View style={styles.joinPreviewActions}>
+              {joinError ? (
+                <Text style={styles.joinErrorText}>{joinError}</Text>
+              ) : null}
+              <SubmitButton
+                style={styles.createConfirmButton}
+                disabledStyle={styles.createConfirmDisabled}
+                textStyle={styles.createConfirmText}
+                onPress={handleJoinConfirm}
+                pending={isJoinLoading}
+                label="참가하기"
+                pendingLabel="참가 중..."
+              />
+              <Pressable
+                style={styles.joinBackButton}
+                onPress={() => { setJoinStep("code"); setJoinError(null); }}
+              >
+                <Text style={styles.joinBackText}>다른 코드 입력</Text>
+              </Pressable>
             </View>
-            {joinError ? (
-              <Text style={styles.joinErrorText}>{joinError}</Text>
-            ) : null}
-            <SubmitButton
-              style={styles.createConfirmButton}
-              disabledStyle={styles.createConfirmDisabled}
-              textStyle={styles.createConfirmText}
-              onPress={handleJoinConfirm}
-              pending={isJoinLoading}
-              label="참가하기"
-              pendingLabel="참가 중..."
-            />
-            <Pressable
-              style={styles.joinBackButton}
-              onPress={() => { setJoinStep("code"); setJoinError(null); }}
-            >
-              <Text style={styles.joinBackText}>다른 코드 입력</Text>
-            </Pressable>
           </View>
         ) : null}
       </BottomSheet>
@@ -854,7 +864,7 @@ export default function OfScreen() {
         visible={createSheetVisible}
         onClose={() => setCreateSheetVisible(false)}
         title={ofSubTab === "personal" ? "새 개인 모음" : "새 단체 모음"}
-        snapPoints={[0.55, 0.95]}
+        snapPoints={[0.65, 0.95]}
         keyboardAware
       >
         <View style={styles.createForm}>
@@ -1320,7 +1330,10 @@ const styles = StyleSheet.create({
   },
   joinPreviewContainer: {
     paddingVertical: 8,
-    gap: 16,
+    gap: 12,
+  },
+  joinPreviewScroll: {
+    borderRadius: 16,
   },
   joinPreviewCard: {
     backgroundColor: Colors.zinc50,
@@ -1328,6 +1341,9 @@ const styles = StyleSheet.create({
     padding: 20,
     alignItems: "center",
     gap: 8,
+  },
+  joinPreviewActions: {
+    gap: 0,
   },
   joinPreviewIcon: {
     width: 56,
