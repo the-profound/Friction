@@ -569,9 +569,16 @@ export default function ReadScreen() {
   const isTextSelectingRef = useRef(false);
 
   // ── Reanimated shared values ──────────────────────────────────────────────
-  // Single translateX drives the 3-slot pre-rendered row (prev | current | next).
-  // All animation runs on the UI thread; no JS-bridge latency.
-  const translateXSV = useSharedValue(0);
+  // translateXSV positions the row of absolute-positioned page slots so that
+  // `currentPage` sits at viewport center. Baseline = -currentPage * W; gesture
+  // adds a delta on top. Because each slot is keyed by its absolute page index
+  // (and absolutely positioned at left = pageIndex * W), the WebView that the
+  // user is actually looking at during a swipe is the *same* React instance
+  // before and after the page turn — no re-injection, no snap-back, no flash.
+  const translateXSV = useSharedValue(-currentPage * layout.containerWidth);
+  // baselineXSV mirrors -currentPage * W so the gesture worklet can compute
+  // absolute targets without reading JS-side state.
+  const baselineXSV = useSharedValue(-currentPage * layout.containerWidth);
 
   const containerWidthRef = useRef(layout.containerWidth);
   useEffect(() => { containerWidthRef.current = layout.containerWidth; }, [layout.containerWidth]);
@@ -591,12 +598,16 @@ export default function ReadScreen() {
     transform: [{ translateX: translateXSV.value }],
   }));
 
-  // After a page turn completes and React re-renders with the new currentPage,
-  // snap the row back to center before the next paint (Fabric: synchronous via JSI).
+  // Sync baseline + translateX whenever currentPage / W changes externally
+  // (e.g. jumpToPage, layout change). After a successful gesture commit the
+  // animation already lands on the new baseline so this is a no-op there.
   useLayoutEffect(() => {
-    translateXSV.value = 0;
+    const W = layout.containerWidth;
+    const target = -currentPage * W;
+    baselineXSV.value = target;
+    translateXSV.value = target;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, showingCover]);
+  }, [currentPage, layout.containerWidth]);
 
   // ── Gesture state ref (always fresh, avoids stale closure in useMemo) ────
   const gestureState = useRef({
@@ -668,7 +679,7 @@ export default function ReadScreen() {
       if (dx < 0 && gs.isOnLastPage) return;  // no next on last page
       if (dx > 0 && gs.atBoundaryLeft) return; // no prev at start
 
-      translateXSV.value = dx;
+      translateXSV.value = baselineXSV.value + dx;
     })
     .onEnd((e) => {
       if (isCommittingRef.current) return;
@@ -678,16 +689,17 @@ export default function ReadScreen() {
       const dy = e.translationY;
       const absDx = Math.abs(dx);
       const W = gs.containerWidth || 300;
+      const baseline = baselineXSV.value;
 
       // Upward swipe → open memo sheet
       if (dy < -50 && Math.abs(dy) > absDx * 1.5) {
-        translateXSV.value = withSpring(0, snapConfig);
+        translateXSV.value = withSpring(baseline, snapConfig);
         runOnJS(openMemoRef.current)();
         return;
       }
 
       if (!gs.canNavigate) {
-        translateXSV.value = withSpring(0, snapConfig);
+        translateXSV.value = withSpring(baseline, snapConfig);
         return;
       }
 
@@ -695,13 +707,13 @@ export default function ReadScreen() {
 
       // Boundary checks
       if (goingNext && gs.isOnLastPage) {
-        translateXSV.value = withSpring(0, snapConfig);
+        translateXSV.value = withSpring(baseline, snapConfig);
         // Trigger completion (no swipe animation needed)
         runOnJS(handleSwipeLeftRef.current)();
         return;
       }
       if (!goingNext && gs.atBoundaryLeft) {
-        translateXSV.value = withSpring(0, snapConfig);
+        translateXSV.value = withSpring(baseline, snapConfig);
         return;
       }
 
@@ -710,15 +722,17 @@ export default function ReadScreen() {
       const shouldCommit = absDx > THRESHOLD || Math.abs(e.velocityX) > VELOCITY_THRESHOLD;
 
       if (!shouldCommit) {
-        translateXSV.value = withSpring(0, snapConfig);
+        translateXSV.value = withSpring(baseline, snapConfig);
         return;
       }
 
       const direction: -1 | 1 = goingNext ? -1 : 1;
       isCommittingRef.current = true;
 
-      // Animate the row to the committed position, then update React state
-      translateXSV.value = withTiming(direction * W, {
+      // Animate the row to the new page's absolute baseline. After this lands,
+      // useLayoutEffect (currentPage dep) will re-set translateX to the same
+      // value, so there is no visible snap when React commits the new window.
+      translateXSV.value = withTiming(baseline + direction * W, {
         duration: 240,
         easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
       }, () => {
@@ -726,9 +740,9 @@ export default function ReadScreen() {
       });
     })
     .onFinalize(() => {
-      // If gesture is cancelled externally, snap back
+      // If gesture is cancelled externally, snap back to baseline
       if (!isCommittingRef.current) {
-        translateXSV.value = withSpring(0, snapConfig);
+        translateXSV.value = withSpring(baselineXSV.value, snapConfig);
       }
     });
   }, []);
@@ -1015,10 +1029,6 @@ export default function ReadScreen() {
     );
   }
 
-  const currentPageContent = !isOnCoverPage && contentPages.length > 0
-    ? contentPages[Math.min(contentPageIndex, contentPages.length - 1)]
-    : "";
-
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <Stack.Screen
@@ -1070,102 +1080,75 @@ export default function ReadScreen() {
                 transform: [{ scale: layout.scaleFactor }],
                 overflow: "hidden",
               }}>
-                {/* 3-slot pre-rendered row: [prev | current | next]
-                    Row starts at left:-containerWidth so "current" sits at screen-x=0.
-                    translateXSV slides the entire row; useLayoutEffect resets to 0
-                    after each page change (Fabric JSI = synchronous, no flash). */}
-                <Animated.View style={[{
-                  position: "absolute",
-                  top: 0,
-                  left: -layout.containerWidth,
-                  width: layout.containerWidth * 3,
-                  height: layout.containerHeight,
-                  flexDirection: "row",
-                }, rowAnimStyle]}>
-
-                  {/* ── PREV SLOT ─────────────────────────────────────── */}
-                  <View style={{ width: layout.containerWidth, height: layout.containerHeight }}>
-                    {(() => {
-                      const canGoBack = !showingCover && !(currentPage <= 1 && !hasCover);
-                      if (!canGoBack) return null;
-                      if (currentPage === 1 && hasCover) {
-                        // prev of first content page = cover
-                        return (
-                          <CoverPage
-                            cover={cover}
-                            title={article?.title ?? ""}
-                            authorName={authorName}
-                            containerWidth={layout.containerWidth}
-                            containerHeight={layout.containerHeight}
-                          />
-                        );
-                      }
-                      const prevIdx = contentPageIndex - 1;
-                      if (prevIdx < 0 || !contentPages[prevIdx]) return null;
-                      return (
+                {/* Windowed page slots, absolutely positioned at left = pageIndex * W.
+                    Each slot is keyed by its absolute page index, so when currentPage
+                    changes from N to N+1 the WebView the user is looking at keeps
+                    the same React identity (and the same DOM content) — only the
+                    off-screen edge slot is mounted/unmounted. translateX slides the
+                    whole row; baseline = -currentPage * W so no snap-back is needed
+                    after a page turn (the animation lands exactly on the new
+                    baseline). This eliminates the flicker that happened when the
+                    "current slot" WebView received a new markdown prop and had to
+                    re-inject content via the JS bridge. */}
+                <Animated.View
+                  style={[
+                    {
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: layout.containerWidth,
+                      height: layout.containerHeight,
+                    },
+                    rowAnimStyle,
+                  ]}
+                  pointerEvents="box-none"
+                >
+                  {(() => {
+                    const slots: React.ReactNode[] = [];
+                    // Render a small window around currentPage. We keep the
+                    // immediate neighbours mounted so swipes show pre-rendered
+                    // content, and unmount everything else to bound memory.
+                    const minIdx = hasCover ? 0 : 1;
+                    const start = Math.max(minIdx, currentPage - 1);
+                    const end = Math.min(totalPages - 1, currentPage + 1);
+                    for (let pageIdx = start; pageIdx <= end; pageIdx++) {
+                      const isCover = pageIdx === 0 && hasCover;
+                      const cIdx = pageIdx - 1;
+                      const node = isCover ? (
+                        <CoverPage
+                          cover={cover}
+                          title={article?.title ?? ""}
+                          authorName={authorName}
+                          containerWidth={layout.containerWidth}
+                          containerHeight={layout.containerHeight}
+                        />
+                      ) : (cIdx >= 0 && cIdx < contentPages.length ? (
                         <PageView
-                          content={contentPages[prevIdx]}
+                          content={contentPages[cIdx]}
                           onTextSelect={handleTextSelect}
                           bottomInset={insets.bottom}
                           layout={layout}
                           clearSignal={clearSelectionSignal}
                         />
+                      ) : null);
+                      if (!node) continue;
+                      slots.push(
+                        <View
+                          key={`page-${pageIdx}`}
+                          style={{
+                            position: "absolute",
+                            top: 0,
+                            left: pageIdx * layout.containerWidth,
+                            width: layout.containerWidth,
+                            height: layout.containerHeight,
+                          }}
+                        >
+                          {node}
+                        </View>,
                       );
-                    })()}
-                  </View>
-
-                  {/* ── CURRENT SLOT ──────────────────────────────────── */}
-                  <View style={{ width: layout.containerWidth, height: layout.containerHeight }}>
-                    {showingCover ? (
-                      <CoverPage
-                        cover={cover}
-                        title={article?.title ?? ""}
-                        authorName={authorName}
-                        containerWidth={layout.containerWidth}
-                        containerHeight={layout.containerHeight}
-                      />
-                    ) : (
-                      <PageView
-                        content={currentPageContent}
-                        onTextSelect={handleTextSelect}
-                        bottomInset={insets.bottom}
-                        layout={layout}
-                        clearSignal={clearSelectionSignal}
-                      />
-                    )}
-                  </View>
-
-                  {/* ── NEXT SLOT ─────────────────────────────────────── */}
-                  <View style={{ width: layout.containerWidth, height: layout.containerHeight }}>
-                    {(() => {
-                      if (isOnLastPage) return null;
-                      if (showingCover) {
-                        // next of cover = first content page
-                        if (!contentPages[0]) return null;
-                        return (
-                          <PageView
-                            content={contentPages[0]}
-                            onTextSelect={handleTextSelect}
-                            bottomInset={insets.bottom}
-                            layout={layout}
-                            clearSignal={clearSelectionSignal}
-                          />
-                        );
-                      }
-                      const nextIdx = contentPageIndex + 1;
-                      if (nextIdx >= contentPages.length) return null;
-                      return (
-                        <PageView
-                          content={contentPages[nextIdx]}
-                          onTextSelect={handleTextSelect}
-                          bottomInset={insets.bottom}
-                          layout={layout}
-                          clearSignal={clearSelectionSignal}
-                        />
-                      );
-                    })()}
-                  </View>
-
+                    }
+                    return slots;
+                  })()}
                 </Animated.View>
 
                 {/* Title bar: fixed overlay at bottom of scale wrapper.
