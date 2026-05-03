@@ -284,14 +284,26 @@ export default function ClosingScreen() {
     [userId, createMyCollection, finalizeExport],
   );
 
+  const flushTitleSave = useCallback(async () => {
+    if (!id) return;
+    if (!titleEditing) return;
+    setTitleEditing(false);
+    try {
+      await updateArticle.mutateAsync({ id, data: { title } });
+    } catch (e: unknown) {
+      console.warn("Failed to save title:", e instanceof Error ? e.message : e);
+    }
+  }, [id, title, titleEditing, updateArticle]);
+
   const handleBack = useCallback(async () => {
     if (isActionInProgressRef.current) return;
     isActionInProgressRef.current = true;
+    await flushTitleSave();
     await flushCoverSave();
     queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
     isActionInProgressRef.current = false;
     router.replace("/(tabs)/on");
-  }, [router, queryClient, flushCoverSave]);
+  }, [router, queryClient, flushCoverSave, flushTitleSave]);
 
   const handleConfirmStepBack = useCallback(async () => {
     setStepBackConfirmVisible(false);
@@ -307,6 +319,7 @@ export default function ClosingScreen() {
       return;
     }
     try {
+      await flushTitleSave();
       await flushCoverSave();
       await transitionStatus.mutateAsync({
         id,
@@ -427,13 +440,15 @@ export default function ClosingScreen() {
             value={title}
             onChangeText={setTitle}
             onBlur={handleSaveTitle}
-            onSubmitEditing={handleSaveTitle}
             autoFocus
             maxLength={100}
+            multiline
+            scrollEnabled={false}
+            textAlignVertical="top"
           />
         ) : (
           <Pressable style={styles.titleRow} onPress={() => setTitleEditing(true)}>
-            <Text style={styles.titleText} numberOfLines={1}>
+            <Text style={styles.titleText}>
               {title || "제목 없음"}
             </Text>
             <Feather name="edit-2" size={14} color={Colors.zinc400} />
@@ -622,18 +637,20 @@ const styles = StyleSheet.create({
   },
   titleRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 8,
   },
   titleText: {
     ...Typography.bodySemiBold,
     fontSize: 18,
+    lineHeight: 24,
     color: Colors.zinc900,
     flex: 1,
   },
   titleInput: {
     ...Typography.bodySemiBold,
     fontSize: 18,
+    lineHeight: 24,
     color: Colors.zinc900,
     paddingVertical: 4,
     borderBottomWidth: 1,
