@@ -38,11 +38,13 @@ import {
 } from "@workspace/api-client-react";
 import type { ArticleCover } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/contexts/ToastContext";
 
 export default function ClosingScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { userId } = useUser();
 
@@ -173,15 +175,15 @@ export default function ClosingScreen() {
 
   const handleExport = useCallback(() => {
     if (!title.trim()) {
-      Alert.alert("내보내기 불가", "제목을 입력해주세요.");
+      showToast({ message: "제목을 입력해주세요.", type: "info" });
       return;
     }
     if (pages.length === 0) {
-      Alert.alert("내보내기 불가", "페이지가 없습니다.");
+      showToast({ message: "페이지가 없어요.", type: "info" });
       return;
     }
     setConfirmVisible(true);
-  }, [title, pages]);
+  }, [title, pages, showToast]);
 
   const handleConfirmExport = useCallback(async () => {
     setConfirmVisible(false);
@@ -351,8 +353,8 @@ export default function ClosingScreen() {
       setStepBackConfirmVisible(true);
       return;
     }
-    Alert.alert("이동 불가", "분할 단계를 거쳐 작성 단계로 이동할 수 있습니다.");
-  }, []);
+    showToast({ message: "분할 단계를 거쳐 작성 단계로 이동할 수 있어요.", type: "info" });
+  }, [showToast]);
 
   useEffect(() => {
     if (Platform.OS !== "android") return;

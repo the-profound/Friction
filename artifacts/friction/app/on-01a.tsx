@@ -20,6 +20,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useUser } from "@/contexts/UserContext";
+import { useToast } from "@/contexts/ToastContext";
 import SourceArticlePickerSheet from "@/components/SourceArticlePickerSheet/SourceArticlePickerSheet";
 import WritingStateBar, { type WritingStage } from "@/components/WritingStateBar/WritingStateBar";
 import KeyboardToolbar from "@/components/KeyboardToolbar/KeyboardToolbar";
@@ -38,6 +39,7 @@ export default function DraftScreen() {
   const queryClient = useQueryClient();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { userId } = useUser();
+  const { showToast } = useToast();
   const editorLayout = useEditorLayout();
 
   const articleQuery = useGetArticle(id ?? "");
@@ -248,7 +250,7 @@ export default function DraftScreen() {
     if (!titleRef.current.trim()) {
       isNavigatingRef.current = false;
       setIsNavigating(false);
-      Alert.alert("알림", "제목을 입력해주세요.");
+      showToast({ message: "제목을 입력해주세요.", type: "info" });
       return;
     }
 
@@ -272,7 +274,7 @@ export default function DraftScreen() {
     if (!result.allowed) {
       isNavigatingRef.current = false;
       setIsNavigating(false);
-      Alert.alert("전환 불가", result.reason);
+      showToast({ message: result.reason, type: "info" });
       return;
     }
 
@@ -303,7 +305,7 @@ export default function DraftScreen() {
       const msg = e instanceof Error ? e.message : "상태 전환에 실패했습니다.";
       Alert.alert("오류", msg);
     }
-  }, [flush, id, router, updateArticle, transitionStatus, queryClient, getEditorContent, markDirty, article]);
+  }, [flush, id, router, updateArticle, transitionStatus, queryClient, getEditorContent, markDirty, article, showToast]);
 
   const handleDismissKeyboard = useCallback(() => {
     editorRef.current?.blur();
@@ -354,8 +356,8 @@ export default function DraftScreen() {
       handleNext();
       return;
     }
-    Alert.alert("이동 불가", "분할 단계를 먼저 완료해야 마감 단계로 이동할 수 있습니다.");
-  }, [handleNext]);
+    showToast({ message: "분할 단계를 먼저 완료해야 마감 단계로 이동할 수 있어요.", type: "info" });
+  }, [handleNext, showToast]);
 
   useEffect(() => {
     if (Platform.OS !== "android") return;

@@ -48,6 +48,7 @@ import {
   ApiError,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/contexts/ToastContext";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import WebViewMeasureLayer from "@/components/WebViewMeasureLayer";
 import type {
@@ -88,6 +89,7 @@ export default function DividingScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
 
   const articleQuery = useGetArticle(id ?? "");
@@ -538,7 +540,7 @@ export default function DividingScreen() {
       .filter((i) => i >= 0 && i < rawPages.length)
       .sort((a, b) => b - a);
     if (targets.length === 0) {
-      Alert.alert("자동 분할 불필요", "분량을 초과하는 페이지가 없습니다.");
+      showToast({ message: "분량을 초과하는 페이지가 없어요.", type: "info" });
       return;
     }
     setSplitting(true);
@@ -555,17 +557,17 @@ export default function DividingScreen() {
         }
       }
       if (!appliedAny) {
-        Alert.alert(
-          "자동 분할 불가",
-          "초과된 페이지를 더 잘게 나눌 수 없습니다. 본문을 직접 편집해 주세요.",
-        );
+        showToast({
+          message: "초과된 페이지를 더 잘게 나눌 수 없어요. 본문을 직접 편집해 주세요.",
+          type: "info",
+        });
         return;
       }
       applyEngineResult(next);
     } finally {
       setSplitting(false);
     }
-  }, [splitting, hasOverflowPages, overflowPageIndices, getEditorContent, runDivisionEngine, applyEngineResult]);
+  }, [splitting, hasOverflowPages, overflowPageIndices, getEditorContent, runDivisionEngine, applyEngineResult, showToast]);
 
   const handleSplitPage = useCallback(
     async (pageIndex: number) => {
@@ -575,7 +577,7 @@ export default function DividingScreen() {
       if (pageIndex < 0 || pageIndex >= rawPages.length) return;
       const paragraphs = splitPageContentForDivision(rawPages[pageIndex]);
       if (paragraphs.length < 2) {
-        Alert.alert("분할 불가", "이 페이지에는 나눌 수 있는 단락이 부족합니다.");
+        showToast({ message: "이 페이지에는 나눌 수 있는 단락이 부족해요.", type: "info" });
         return;
       }
       setSplitting(true);
@@ -660,7 +662,7 @@ export default function DividingScreen() {
     if (!result.allowed) {
       isNavigatingRef.current = false;
       setIsNavigating(false);
-      Alert.alert("전환 불가", result.reason);
+      showToast({ message: result.reason, type: "info" });
       return;
     }
 
@@ -694,7 +696,7 @@ export default function DividingScreen() {
       const msg = e instanceof Error ? e.message : "상태 전환에 실패했습니다.";
       Alert.alert("오류", msg);
     }
-  }, [getEditorContent, markDirty, flush, hasRedWarnings, id, router, updateArticle, transitionStatus, queryClient, containerWidth, article]);
+  }, [getEditorContent, markDirty, flush, hasRedWarnings, id, router, updateArticle, transitionStatus, queryClient, containerWidth, article, showToast]);
 
   const handleBack = useCallback(async () => {
     if (isNavigatingRef.current) return;
