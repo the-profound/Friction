@@ -124,11 +124,19 @@ export default function WebViewMarkdownReader({
     if (!readyRef.current) return;
     if (html === prevHtmlRef.current) return;
     prevHtmlRef.current = html;
-    const version = beginContentSwap();
-    injectContent(html, version);
+    // Subsequent content updates (e.g. page-turn swipe rotates 3-slot row and
+    // feeds the current slot a new markdown prop) must NOT hide the WebView
+    // first. Dropping opacity to 0 before the async DOM update was producing
+    // a visible blank-frame flicker — especially noticeable on Expo Go where
+    // the JS-bridge round-trip for setContent + onContentReady is slower.
+    // Keeping opacity at 1 lets the WebView swap its DOM atomically on the
+    // next paint; the prior content stays visible until the new one paints,
+    // which reads as a smooth page turn instead of a flash.
+    pendingVersionRef.current += 1;
+    injectContent(html, pendingVersionRef.current);
     sendCommand({ type: "clearSelection" });
     onTextSelectRef.current?.("", true);
-  }, [html, sendCommand, beginContentSwap, injectContent]);
+  }, [html, sendCommand, injectContent]);
 
   useEffect(() => {
     if (readyRef.current && bodyFontSize != null && bodyLetterSpacing != null) {
