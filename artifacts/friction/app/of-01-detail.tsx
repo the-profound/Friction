@@ -311,6 +311,24 @@ export default function PersonalCollectionDetailScreen() {
           }
         }}
         actions={[
+          ...(item.article?.authorId === userId
+            ? [
+                {
+                  label: "보내기",
+                  color: Colors.zinc900,
+                  onPress: () => {
+                    closeOpenRow();
+                    router.push({
+                      pathname: "/(tabs)/to",
+                      params: {
+                        subTab: "send",
+                        articleId: item.articleId,
+                      },
+                    });
+                  },
+                },
+              ]
+            : []),
           {
             label: "이동",
             color: Colors.zinc500,
@@ -348,7 +366,7 @@ export default function PersonalCollectionDetailScreen() {
         </Pressable>
       </SwipeableRow>
     ),
-    [closeOpenRow, handleRemoveArticle, handleSwipeOpen, router],
+    [closeOpenRow, handleRemoveArticle, handleSwipeOpen, router, userId, id],
   );
 
   const renderSelectionItem = useCallback(
