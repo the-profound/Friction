@@ -27,10 +27,11 @@ import {
   resolveBSJob,
   runGreedy,
   bsCandidateKey,
+  bsCandidateText,
   bsCandidatesForJob,
   findOverflowBlockIndex,
   cumulativeHeightBefore,
-  findOverflowCharOffsetInBlock,
+  paraToWords,
   type BSJob,
   type BSResult,
   type DivisionWarning,
@@ -64,6 +65,24 @@ import type {
 const PAGE_DIVIDER = MarkdownPolicy.PAGE_DIVIDER;
 
 const PAGE_KEY_PREFIX = "page_";
+
+/**
+ * 자동분할 BS와 동일한 측정 입력(마크다운 source `content`)을 만들기 위해
+ * 블록 type 별로 마크다운 prefix를 돌려준다. PretextMeasureLayer가
+ * `parseMarkdownBlocks(content)` 로 다시 파싱하므로 prefix를 붙여 주면
+ * 헤딩/목록/인용의 폰트·들여쓰기가 그대로 반영된 상태로 측정된다.
+ */
+function blockMarkdownPrefix(block: MarkdownBlockType): string {
+  switch (block.type) {
+    case "h1": return "# ";
+    case "h2": return "## ";
+    case "h3": return "### ";
+    case "ul_item": return "- ";
+    case "ol_item": return `${block.index}. `;
+    case "blockquote": return "> ";
+    case "paragraph": return "";
+  }
+}
 
 export default function DividingScreen() {
   const insets = useSafeAreaInsets();
@@ -406,67 +425,26 @@ export default function DividingScreen() {
   }, [heightWarnings]);
   const hasOverflowPages = overflowPageIndices.length > 0;
 
-  // 오버플로 하이라이트(글자 단위)를 모든 초과 페이지에 대해 에디터에 전달한다.
-  // 각 페이지에 대해 "초과가 시작된 글자 위치" 를 페이지 내부 글자 오프셋으로 계산해
-  // 보낸다. 빈 배열/null 이면 모든 강조가 해제된다.
+  // ─────────────────────────────────────────────────────────────────────────
+  // 오버플로 빨간 배경 시작 위치 — 에디터 직접 측정.
+  //
+  // RN 측정 레이어(WebViewMeasureLayer) 의 margin/padding 가정은 에디터의
+  // 실제 CSS(.ProseMirror p {margin-bottom:1em} 등) 와 다르므로 그 위에서
+  // 한 줄 정밀도의 강조 시작 위치를 계산하면 항상 작은 단위 부정합이 남는다.
+  // 그래서 "에디터에 직접 묻기" 방식으로 통일한다 — RN 은 안전 영역 높이만
+  // 알려주고, 에디터가 자기 ProseMirror DOM 의 view.coordsAtPos 를 binary
+  // search 해서 각 페이지에서 안전 영역을 처음 벗어나는 PM position 을 찾고
+  // 거기서부터 페이지 끝까지를 강조한다.
+  //
+  // 이 방식은 에디터의 실제 시각 레이아웃(폰트 메트릭·블록 마진 모두 포함)
+  // 위에서 동작하므로 "딱 그 줄부터" 강조가 항상 보장된다. 자동분할 BS 와는
+  // 측정 목적·정밀도 요구가 다르므로 별도 경로로 둔다 (자동분할은 단락 단위
+  // 분할이라 측정 레이어의 단위 부정합이 0.92 안전 계수 내에서 흡수된다).
+  // ─────────────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!editorReady || !editorRef.current) return;
-    if (overflowPageIndices.length === 0) {
-      editorRef.current.setOverflowRanges(null);
-      return;
-    }
-
-    const ranges: OverflowRange[] = [];
-    for (const pageIdx of overflowPageIndices) {
-      const info = pageOverflowInfo[pageIdx];
-      if (!info || info.overflowBlockIdx < 0) continue;
-      const blocks = pageBlockMap[pageIdx] ?? [];
-      const obi = info.overflowBlockIdx;
-
-      // 0..obi-1 블록의 plain text 길이 합
-      let baseTextOffset = 0;
-      for (let i = 0; i < obi && i < blocks.length; i++) {
-        baseTextOffset += tokensToPlainText(blocks[i].tokens).length;
-      }
-
-      // 오버플로 블록 내부에서 안전 영역을 처음 벗어나는 글자 위치를 근사 산출
-      let charOffsetInBlock = 0;
-      const overflowBlock = blocks[obi];
-      if (overflowBlock) {
-        const overflowBlockHeight =
-          blockHeights[`${PAGE_KEY_PREFIX}${pageIdx}_b_${obi}`] ?? 0;
-        const cumBefore = cumulativeHeightBefore(
-          blocks.map((_, i) =>
-            blockHeights[`${PAGE_KEY_PREFIX}${pageIdx}_b_${i}`] ?? 0,
-          ),
-          obi,
-        );
-        const remaining = availableContentHeight - cumBefore;
-        const overflowBlockText = tokensToPlainText(overflowBlock.tokens);
-        charOffsetInBlock = findOverflowCharOffsetInBlock(
-          overflowBlockHeight,
-          bodyLineHeight,
-          remaining,
-          overflowBlockText.length,
-        );
-      }
-
-      ranges.push({
-        pageIndex: pageIdx,
-        startCharOffset: baseTextOffset + charOffsetInBlock,
-      });
-    }
-
-    editorRef.current.setOverflowRanges(ranges.length > 0 ? ranges : null);
-  }, [
-    editorReady,
-    overflowPageIndices,
-    pageOverflowInfo,
-    pageBlockMap,
-    blockHeights,
-    availableContentHeight,
-    bodyLineHeight,
-  ]);
+    editorRef.current.setOverflowProbeConfig(availableContentHeight);
+  }, [editorReady, availableContentHeight]);
 
   const runDivisionEngine = useCallback(
     async (paragraphs: string[]): Promise<string[] | null> => {

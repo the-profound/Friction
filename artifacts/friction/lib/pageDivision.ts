@@ -154,36 +154,6 @@ export function cumulativeHeightBefore(
   return sum;
 }
 
-/**
- * 오버플로 블록 안에서 안전 영역을 처음 벗어나는 글자 위치(0-indexed)를 근사 산출한다.
- * 블록 높이를 행 높이로 나눠 몇 번째 줄부터 넘치는지 구하고,
- * 블록 텍스트 길이에 비례 배분해 글자 오프셋으로 변환한다.
- *
- * - blockHeight: 오버플로 블록 단독 높이 (marginBottom 포함)
- * - lineHeight: 본문 한 줄 높이
- * - remainingHeight: 이 블록 시작 시점에 남아 있던 가용 높이 (음수면 0으로 처리)
- * - blockTextLength: 오버플로 블록의 plain text 글자 수
- *
- * 반환값:
- *  - 0 이상: 그 글자부터 페이지 끝까지 빨간 배경 강조
- *  - 0이면 블록의 첫 글자부터 강조
- *  - 입력이 비정상이면 0 (블록 전체 강조 fallback)
- */
-export function findOverflowCharOffsetInBlock(
-  blockHeight: number,
-  lineHeight: number,
-  remainingHeight: number,
-  blockTextLength: number,
-): number {
-  if (blockTextLength <= 0) return 0;
-  if (lineHeight <= 0 || blockHeight <= 0) return 0;
-  const safeRemaining = Math.max(0, remainingHeight);
-  if (safeRemaining >= blockHeight) return blockTextLength;
-  const ratio = safeRemaining / blockHeight;
-  const offset = Math.floor(ratio * blockTextLength);
-  return Math.max(0, Math.min(blockTextLength, offset));
-}
-
 export function derivePages(content: string): string[] {
   return splitContentToPages(content)
     .map((p) => p.content)
@@ -252,7 +222,14 @@ function isHeadingPara(para: string): boolean {
   return SECTION_BOUNDARY_RE.test(para.split("\n")[0] ?? "");
 }
 
-function paraToWords(para: string): string[] {
+/**
+ * 자동분할 BS와 동일한 단어 토큰화. 공백(스페이스)만으로 분리하며 빈 토큰은 제거한다.
+ * 줄바꿈/탭은 단어에 포함된 채 유지된다.
+ *
+ * 분할 화면의 빨간 배경 시작 위치 계산도 같은 토큰화·측정 입력을 사용해
+ * 자동분할이 만들 페이지 경계와 강조 시작 위치가 정합하도록 한다.
+ */
+export function paraToWords(para: string): string[] {
   return para.split(/ +/).filter((w) => w);
 }
 

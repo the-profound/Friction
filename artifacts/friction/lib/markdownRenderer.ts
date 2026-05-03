@@ -38,7 +38,11 @@ export function inlineTokensToHtml(tokens: InlineToken[]): string {
  * blockGap을 별도로 더해 PretextMeasureLayer와 동일한 높이 계약을 유지한다.
  */
 export function blockToHtml(block: MarkdownBlockType): string {
-  const inner = inlineTokensToHtml(block.tokens);
+  // 빈 단락(엔터로 만든 빈 줄)은 한 줄 높이를 차지하도록 NBSP 로 렌더한다.
+  // 그렇지 않으면 측정 시 0 높이가 되어 빈 줄이 강조 위치에 반영되지 않는다.
+  const inner = block.tokens.length === 0
+    ? "&nbsp;"
+    : inlineTokensToHtml(block.tokens);
   switch (block.type) {
     case "h1":
       return `<h1>${inner}</h1>`;

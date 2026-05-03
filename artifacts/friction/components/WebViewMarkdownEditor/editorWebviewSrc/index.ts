@@ -24,11 +24,9 @@ interface OverflowRange {
 
 const overflowPluginKey = new PluginKey<DecorationSet>("overflow-highlights");
 
-function computeOverflowDecorations(doc: PMNode, ranges: OverflowRange[]): DecorationSet {
-  if (!ranges || ranges.length === 0) return DecorationSet.empty;
-
-  // 페이지 경계: doc 의 직접 자식 중 horizontalRule 노드를 페이지 구분자로 사용한다.
-  // page N 의 컨텐츠 범위 = [start, end) (HR 노드 자체는 제외)
+// 페이지 경계: doc 의 직접 자식 중 horizontalRule 노드를 페이지 구분자로 사용한다.
+// page N 의 컨텐츠 범위 = [start, end) (HR 노드 자체는 제외)
+function getPageRanges(doc: PMNode): { start: number; end: number }[] {
   const pageRanges: { start: number; end: number }[] = [];
   let pageStart = 0;
   doc.forEach((node, offset) => {
@@ -38,6 +36,29 @@ function computeOverflowDecorations(doc: PMNode, ranges: OverflowRange[]): Decor
     }
   });
   pageRanges.push({ start: pageStart, end: doc.content.size });
+  return pageRanges;
+}
+
+// PM position 을 "페이지 시작점부터의 plain-text char offset" 으로 변환.
+// computeOverflowDecorations 의 startCharOffset 해석과 정확히 정합되어야 한다.
+function pmPosToPageCharOffset(doc: PMNode, pageStart: number, pos: number): number {
+  let charOffset = 0;
+  doc.nodesBetween(pageStart, pos, (node, p) => {
+    if (!node.isText) return true;
+    const overlapStart = Math.max(p, pageStart);
+    const overlapEnd = Math.min(p + node.nodeSize, pos);
+    if (overlapEnd > overlapStart) {
+      charOffset += overlapEnd - overlapStart;
+    }
+    return true;
+  });
+  return charOffset;
+}
+
+function computeOverflowDecorations(doc: PMNode, ranges: OverflowRange[]): DecorationSet {
+  if (!ranges || ranges.length === 0) return DecorationSet.empty;
+
+  const pageRanges = getPageRanges(doc);
 
   const decorations: Decoration[] = [];
   for (const range of ranges) {
@@ -521,6 +542,7 @@ interface Command {
   requestId?: string;
   isEditable?: boolean;
   ranges?: OverflowRange[] | null;
+  availableContentHeightPx?: number | null;
   text?: string;
   fontSizePx?: number;
   letterSpacingPx?: number;
@@ -533,6 +555,138 @@ interface Command {
   let titleInput: HTMLTextAreaElement | null = null;
   let changeTimer: ReturnType<typeof setTimeout> | null = null;
   const CHANGE_THROTTLE_MS = 400;
+
+  // 오버플로 강조 측정 — RN 이 setOverflowProbeConfig 로 안전 영역 높이를
+  // 알려주면 에디터가 자기 DOM 을 walk 해서 각 페이지(HR 분할)에서 안전 영역을
+  // 처음 벗어나는 PM position 을 찾고 [그 위치 ~ 페이지 끝] 을 강조한다.
+  // RN 측 측정 레이어(WebViewMeasureLayer) 의 margin/padding 가정과 무관하게
+  // 항상 에디터의 실제 시각 레이아웃과 정확히 일치한다.
+  let overflowAvailableContentHeight: number | null = null;
+  let probeTimer: ReturnType<typeof setTimeout> | null = null;
+  const PROBE_DEBOUNCE_MS = 80;
+
+  function scheduleOverflowProbe(delay: number = PROBE_DEBOUNCE_MS) {
+    if (probeTimer) clearTimeout(probeTimer);
+    probeTimer = setTimeout(runOverflowProbe, delay);
+  }
+
+  function runOverflowProbe() {
+    probeTimer = null;
+    if (!editor || editor.isDestroyed) return;
+    const avail = overflowAvailableContentHeight;
+    if (avail == null || !(avail > 0)) {
+      // probe 비활성 — 강조 비움
+      const tr = editor.state.tr.setMeta(overflowPluginKey, { ranges: [] });
+      editor.view.dispatch(tr);
+      return;
+    }
+
+    const view = editor.view;
+    const doc = editor.state.doc;
+    const pageRanges = getPageRanges(doc);
+
+    const ranges: OverflowRange[] = [];
+
+    for (let pi = 0; pi < pageRanges.length; pi++) {
+      const page = pageRanges[pi];
+      if (page.end <= page.start) continue;
+
+      // 페이지 내 첫 텍스트 위치를 찾아 시작 y 를 잡는다.
+      // (빈 페이지나 텍스트 없는 페이지는 건너뛴다.)
+      let firstTextPos = -1;
+      doc.nodesBetween(page.start, page.end, (node, pos) => {
+        if (firstTextPos >= 0) return false;
+        if (node.isText && node.text && node.text.length > 0) {
+          firstTextPos = pos;
+          return false;
+        }
+        return true;
+      });
+      if (firstTextPos < 0) continue;
+
+      let pageTopY: number;
+      try {
+        pageTopY = view.coordsAtPos(firstTextPos + 1).top;
+      } catch {
+        continue;
+      }
+      const availBottom = pageTopY + avail;
+
+      // ── Binary search: 글리프 bottom 이 availBottom 을 처음 넘는 위치 탐색 ──
+      //
+      // .top 기준이 아닌 .bottom 기준을 쓰는 이유:
+      //   마지막 줄의 top 이 availBottom 안에 있어도 bottom(= top + line-height)
+      //   이 넘칠 수 있다. .top 기준 bsearch 는 이 케이스를 탐지 못해서
+      //   "경고 chip 은 뜨는데 빨간 강조는 없는" 불일치가 생긴다.
+      //   .bottom 기준이면 "글리프가 경계 밖으로 튀어나오는 첫 글자"를 잡는다.
+      let lo = firstTextPos + 1;
+      let hi = page.end;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        let bottomY: number;
+        try {
+          bottomY = view.coordsAtPos(mid).bottom;
+        } catch {
+          lo = mid + 1;
+          continue;
+        }
+        if (bottomY > availBottom) {
+          hi = mid;
+        } else {
+          lo = mid + 1;
+        }
+      }
+      const overflowPos = lo;
+
+      if (overflowPos < page.end) {
+        // 일반 케이스: 글리프가 경계를 넘는 글자가 있다.
+        const charOffset = pmPosToPageCharOffset(doc, page.start, overflowPos);
+        ranges.push({ pageIndex: pi, startCharOffset: charOffset });
+        continue;
+      }
+
+      // ── DOM 폴백: 블록 margin-bottom 만 넘치는 케이스 ──
+      //
+      // ProseMirror coordsAtPos 는 CSS margin-bottom 을 포함하지 않는다.
+      // 텍스트 본문은 모두 안에 들어오지만 마지막 블록의 margin-bottom 만
+      // 경계를 넘는 경우, bsearch 는 아무것도 찾지 못한다.
+      // 이때 경고 chip 은 뜨지만 빨간 강조가 없는 불일치가 발생한다.
+      //
+      // 해결: 마지막 블록 DOM 노드의 getBoundingClientRect().bottom +
+      //       getComputedStyle().marginBottom 로 실제 시각 바닥을 확인하고,
+      //       그것도 넘치면 마지막 블록 전체를 강조한다.
+      try {
+        const lastProbePos = Math.max(firstTextPos + 1, page.end - 1);
+        const domInfo = view.domAtPos(lastProbePos);
+        let el: Node | null = domInfo.node;
+        // 텍스트 노드이면 부모 Element 로 올라간다.
+        if (el.nodeType === Node.TEXT_NODE) el = el.parentElement;
+        // 에디터 direct-child 블록 노드까지 올라간다.
+        while (el && (el as Element).parentElement !== view.dom) {
+          el = (el as Element).parentElement;
+        }
+        const blockEl = el as Element | null;
+        if (blockEl) {
+          const rect = blockEl.getBoundingClientRect();
+          const marginBottom = parseFloat(getComputedStyle(blockEl).marginBottom) || 0;
+          if (rect.bottom + marginBottom > availBottom) {
+            // 블록 시작 PM position 을 찾아 그 블록 전체를 강조한다.
+            const blockStartPmPos = view.posAtDOM(blockEl, 0);
+            if (blockStartPmPos >= page.start && blockStartPmPos < page.end) {
+              const charOffset = pmPosToPageCharOffset(doc, page.start, blockStartPmPos + 1);
+              ranges.push({ pageIndex: pi, startCharOffset: charOffset });
+            }
+          }
+        }
+      } catch {
+        // DOM 접근 실패 시 이 페이지 강조는 조용히 건너뛴다.
+      }
+    }
+
+    if (!editor || editor.isDestroyed) return;
+    const tr = editor.state.tr.setMeta(overflowPluginKey, { ranges });
+    editor.view.dispatch(tr);
+  }
 
   let titleFocused = false;
   let editorFocused = false;
@@ -628,6 +782,8 @@ interface Command {
           postToRN({ type: "onChange", payload: { isDirty: true, charCount, wordCount } });
         }, CHANGE_THROTTLE_MS);
         postSelectionState(ed);
+        // 강조 위치는 시각 레이아웃에 의존하므로 doc 변경 직후 재측정한다.
+        scheduleOverflowProbe();
       },
       onSelectionUpdate: ({ editor: ed }) => {
         postSelectionState(ed);
@@ -665,6 +821,8 @@ interface Command {
           }
 
           postToRN({ type: "onReady" });
+          // 초기 콘텐츠 레이아웃이 안정된 뒤 한 번 강조를 측정한다.
+          scheduleOverflowProbe(150);
           break;
         }
         case "setMarkdown": {
@@ -677,6 +835,7 @@ interface Command {
             try {
               editor.commands.focus("end");
             } catch {}
+            scheduleOverflowProbe(150);
           }
           break;
         }
@@ -729,6 +888,13 @@ interface Command {
           }
           break;
         }
+        case "setOverflowProbeConfig": {
+          const next = cmd.availableContentHeightPx;
+          overflowAvailableContentHeight = (next != null && next > 0) ? next : null;
+          // 폰트/레이아웃이 안정될 시간을 잠깐 둔다.
+          scheduleOverflowProbe(50);
+          break;
+        }
         case "setBodyMetrics": {
           const root = document.documentElement;
           if (cmd.fontSizePx != null) {
@@ -737,6 +903,8 @@ interface Command {
           if (cmd.letterSpacingPx != null) {
             root.style.setProperty("--body-letter-spacing", cmd.letterSpacingPx + "px");
           }
+          // 폰트/자간이 바뀌면 줄바꿈 위치도 바뀌므로 강조 재측정.
+          scheduleOverflowProbe(150);
           break;
         }
         case "setBlockType": {

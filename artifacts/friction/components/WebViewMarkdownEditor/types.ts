@@ -20,6 +20,7 @@ export type RNToWebViewCommand =
   | { type: "setEditable"; isEditable: boolean }
   | { type: "setSourceArticleSlot"; text: string }
   | { type: "setOverflowRanges"; ranges: OverflowRange[] | null }
+  | { type: "setOverflowProbeConfig"; availableContentHeightPx: number | null }
   | { type: "setBodyMetrics"; fontSizePx: number; letterSpacingPx: number }
   | { type: "setBlockType"; blockType: string }
   | { type: "toggleMark"; mark: string };
@@ -68,6 +69,7 @@ export interface WebViewMarkdownEditorRef {
   setTitle: (title: string) => void;
   blur: () => void;
   setOverflowRanges: (ranges: OverflowRange[] | null) => void;
+  setOverflowProbeConfig: (availableContentHeightPx: number | null) => void;
   setBlockType: (blockType: string) => void;
   toggleMark: (mark: string) => void;
 }

@@ -75,6 +75,9 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       setOverflowRanges(ranges) {
         sendCommand({ type: "setOverflowRanges", ranges });
       },
+      setOverflowProbeConfig(availableContentHeightPx) {
+        sendCommand({ type: "setOverflowProbeConfig", availableContentHeightPx });
+      },
       setBlockType(blockType: string) {
         sendCommand({ type: "setBlockType", blockType });
       },

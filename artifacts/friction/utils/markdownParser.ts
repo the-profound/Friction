@@ -137,8 +137,17 @@ export function parseMarkdownBlocks(markdown: string): MarkdownBlockType[] {
     } else if (token.type === "paragraph") {
       const t = token as Tokens.Paragraph;
       const rawText = t.text;
-      const tokens = t.tokens ? parseInlineMarkedTokens(t.tokens) : expandUnderlines([{ kind: "text" as const, value: rawText }]);
-      blocks.push({ type: "paragraph", tokens, rawText });
+      // 에디터(TipTap)는 빈 단락을 직렬화할 때 연속 빈 단락 사이에
+      // `&nbsp;` 만 들어 있는 단락을 끼워 넣는다. 이 단락은 시각적으로
+      // 빈 줄이며 에디터에서도 텍스트 컨텐츠가 0이므로 빈 단락 블록으로
+      // 정규화해야 측정·offset 모두 정합한다.
+      const trimmed = rawText.trim();
+      if (trimmed === "&nbsp;" || trimmed === "\u00A0") {
+        blocks.push({ type: "paragraph", tokens: [], rawText: "" });
+      } else {
+        const tokens = t.tokens ? parseInlineMarkedTokens(t.tokens) : expandUnderlines([{ kind: "text" as const, value: rawText }]);
+        blocks.push({ type: "paragraph", tokens, rawText });
+      }
     } else if (token.type === "blockquote") {
       const t = token as Tokens.Blockquote;
       const rawText = t.text;
@@ -154,7 +163,17 @@ export function parseMarkdownBlocks(markdown: string): MarkdownBlockType[] {
       const t = token as Tokens.List;
       blocks.push(...flattenListItems(t.items, t.ordered, t.start as number || 1));
     } else if (token.type === "space") {
-      // skip
+      // 빈 줄(엔터)을 측정·표시에 한 줄씩 반영하기 위해 빈 단락 블록으로 보존한다.
+      // marked 는 단락 사이의 기본 구분자도 space("\n\n") 토큰으로 내보낸다.
+      // 그러므로 기본 구분 2개 newline 은 빈 단락 0개에 해당하고, 그 위로
+      // 두 개의 newline 이 더해질 때마다 빈 단락 1개가 추가된 것이다.
+      // 즉 추가 빈 단락 수 = max(0, floor((newlines - 2) / 2)).
+      const raw = (token as { raw?: string }).raw ?? "";
+      const newlines = (raw.match(/\n/g) ?? []).length;
+      const extraEmpty = Math.max(0, Math.floor((newlines - 2) / 2));
+      for (let k = 0; k < extraEmpty; k++) {
+        blocks.push({ type: "paragraph", tokens: [], rawText: "" });
+      }
     }
   }
 

@@ -163,6 +163,8 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
       },
       setOverflowRanges(_ranges) {
       },
+      setOverflowProbeConfig(_availableContentHeightPx) {
+      },
       setBlockType(_blockType: string) {
       },
       toggleMark(_mark: string) {
