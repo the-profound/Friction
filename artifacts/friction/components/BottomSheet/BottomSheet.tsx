@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from "react";
+import React, { useEffect, useRef, useCallback, type MutableRefObject } from "react";
 import {
   View,
   Text,
@@ -8,11 +8,11 @@ import {
   Animated,
   PanResponder,
   Keyboard,
-  Platform,
   useWindowDimensions,
   type TextStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useKeyboardAnimation } from "react-native-keyboard-controller";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, ZIndex, Spacing } from "../../constants/tokens";
 
@@ -30,6 +30,52 @@ interface BottomSheetProps {
   dismissable?: boolean;
   keyboardAware?: boolean;
   closeButton?: boolean;
+}
+
+interface KeyboardSyncProps {
+  translateY: Animated.Value;
+  currentSnapRef: MutableRefObject<number>;
+  keyboardOffsetRef: MutableRefObject<number>;
+  closingRef: MutableRefObject<boolean>;
+  getSnapY: (idx: number) => number;
+  minTranslateY: number;
+}
+
+// Mounted only when the sheet is visible and keyboardAware so that
+// useKeyboardAnimation's side effect (Android adjustResize mode) is scoped to
+// the sheet's lifetime and does not leak into the rest of the app.
+function KeyboardSync({
+  translateY,
+  currentSnapRef,
+  keyboardOffsetRef,
+  closingRef,
+  getSnapY,
+  minTranslateY,
+}: KeyboardSyncProps) {
+  const { height: keyboardHeightAnim } = useKeyboardAnimation();
+
+  useEffect(() => {
+    const id = keyboardHeightAnim.addListener(({ value }) => {
+      if (closingRef.current) return;
+      // height is exposed as Animated.multiply(rawHeight, -1), so negate it.
+      const kbHeight = Math.max(0, -value);
+      const base = getSnapY(currentSnapRef.current);
+      const target = Math.max(base - kbHeight, minTranslateY);
+      keyboardOffsetRef.current = base - target;
+      translateY.setValue(target);
+    });
+    return () => keyboardHeightAnim.removeListener(id);
+  }, [
+    keyboardHeightAnim,
+    getSnapY,
+    minTranslateY,
+    translateY,
+    currentSnapRef,
+    keyboardOffsetRef,
+    closingRef,
+  ]);
+
+  return null;
 }
 
 export default function BottomSheet({
@@ -50,6 +96,7 @@ export default function BottomSheet({
   const overlayOpacity = useRef(new Animated.Value(0)).current;
   const currentSnap = useRef(0);
   const keyboardOffsetRef = useRef(0);
+  const closingRef = useRef(false);
 
   const getSnapY = useCallback(
     (idx: number) => SCREEN_H * (1 - snapPoints[Math.min(idx, snapPoints.length - 1)]),
@@ -62,6 +109,7 @@ export default function BottomSheet({
     if (visible) {
       currentSnap.current = 0;
       keyboardOffsetRef.current = 0;
+      closingRef.current = false;
       translateY.setValue(SCREEN_H);
       Animated.parallel([
         Animated.spring(translateY, {
@@ -79,46 +127,8 @@ export default function BottomSheet({
     }
   }, [visible]);
 
-  useEffect(() => {
-    if (!keyboardAware || !visible) return;
-
-    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
-    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
-
-    const showSub = Keyboard.addListener(showEvent, (e) => {
-      const kbHeight = e.endCoordinates.height;
-      const base = getSnapY(currentSnap.current);
-      // Cap upward lift so the sheet's top never exceeds (safeArea top + small gap).
-      // The remaining content below the keyboard line is handled by the consumer's
-      // internal ScrollView, avoiding a "full-screen takeover" feel.
-      const target = Math.max(base - kbHeight, minTranslateY);
-      // Effective lift after capping; remember it so drag gestures stay aligned.
-      keyboardOffsetRef.current = base - target;
-      Animated.spring(translateY, {
-        toValue: target,
-        useNativeDriver: true,
-        damping: 20,
-        stiffness: 200,
-      }).start();
-    });
-
-    const hideSub = Keyboard.addListener(hideEvent, () => {
-      keyboardOffsetRef.current = 0;
-      Animated.spring(translateY, {
-        toValue: getSnapY(currentSnap.current),
-        useNativeDriver: true,
-        damping: 20,
-        stiffness: 200,
-      }).start();
-    });
-
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, [keyboardAware, visible, getSnapY, minTranslateY]);
-
   const close = useCallback(() => {
+    closingRef.current = true;
     Keyboard.dismiss();
     Animated.parallel([
       Animated.spring(translateY, {
@@ -132,7 +142,10 @@ export default function BottomSheet({
         duration: 200,
         useNativeDriver: true,
       }),
-    ]).start(() => onClose());
+    ]).start(() => {
+      keyboardOffsetRef.current = 0;
+      onClose();
+    });
   }, [onClose]);
 
   const panResponder = useRef(
@@ -186,6 +199,16 @@ export default function BottomSheet({
 
   return (
     <Modal transparent visible={visible} animationType="none" statusBarTranslucent>
+      {keyboardAware && (
+        <KeyboardSync
+          translateY={translateY}
+          currentSnapRef={currentSnap}
+          keyboardOffsetRef={keyboardOffsetRef}
+          closingRef={closingRef}
+          getSnapY={getSnapY}
+          minTranslateY={minTranslateY}
+        />
+      )}
       <View style={styles.container}>
         <Animated.View style={[styles.overlay, { opacity: overlayOpacity }]}>
           <Pressable style={StyleSheet.absoluteFill} onPress={dismissable ? close : undefined} />
