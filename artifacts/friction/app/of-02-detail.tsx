@@ -19,7 +19,10 @@ import {
   useRemoveTeamMember,
   useAddTeamMember,
   useListInbox,
+  ApiError,
   useCreateNeighborRequest,
+  useListNeighbors,
+  useListNeighborRequests,
   useSearchUsersByNickname,
   getListTeamArticlesQueryKey,
   getListTeamMembersQueryKey,
@@ -129,6 +132,9 @@ export default function TeamCollectionDetailScreen() {
   const removeMember = useRemoveTeamMember();
   const addMember = useAddTeamMember();
   const createNeighborRequest = useCreateNeighborRequest();
+  const neighborsQuery = useListNeighbors({ userId });
+  const sentRequestsQuery = useListNeighborRequests({ requesterId: userId });
+  const [optimisticPendingIds, setOptimisticPendingIds] = useState<Set<string>>(new Set());
 
   const { showToast } = useToast();
 
@@ -169,6 +175,41 @@ export default function TeamCollectionDetailScreen() {
   const isOwner = members.some((m) => m.userId === userId && m.role === "OWNER");
   const isMember = members.some((m) => m.userId === userId);
 
+  const neighborSet = useMemo(() => {
+    const set = new Set<string>();
+    for (const n of (neighborsQuery.data ?? []) as Array<{ neighborUserId: string }>) {
+      set.add(n.neighborUserId);
+    }
+    return set;
+  }, [neighborsQuery.data]);
+
+  const pendingRequestSet = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of (sentRequestsQuery.data ?? []) as Array<{ recipientId: string }>) {
+      set.add(r.recipientId);
+    }
+    return set;
+  }, [sentRequestsQuery.data]);
+
+  useEffect(() => {
+    if (optimisticPendingIds.size === 0) return;
+    setOptimisticPendingIds((prev) => {
+      const next = new Set<string>();
+      for (const mid of prev) {
+        if (!pendingRequestSet.has(mid) && !neighborSet.has(mid)) {
+          next.add(mid);
+        }
+      }
+      return next.size === prev.size ? prev : next;
+    });
+  }, [pendingRequestSet, neighborSet]);
+
+  const getMemberNeighborStatus = useCallback((memberId: string): "neighbor" | "pending" | "none" => {
+    if (neighborSet.has(memberId)) return "neighbor";
+    if (pendingRequestSet.has(memberId) || optimisticPendingIds.has(memberId)) return "pending";
+    return "none";
+  }, [neighborSet, pendingRequestSet, optimisticPendingIds]);
+
   const handleMemberPress = useCallback((item: TeamMemberWithUser) => {
     if (item.userId === userId) return;
     setMemberTarget({
@@ -179,17 +220,38 @@ export default function TeamCollectionDetailScreen() {
 
   const handleSendNeighborRequest = useCallback(async () => {
     if (!memberTarget || createNeighborRequest.isPending) return;
+    const targetId = memberTarget.id;
+    setOptimisticPendingIds((prev) => new Set(prev).add(targetId));
     try {
       await createNeighborRequest.mutateAsync({
-        data: { requesterId: userId, recipientId: memberTarget.id },
+        data: { requesterId: userId, recipientId: targetId },
       });
+      sentRequestsQuery.refetch();
       setMemberTarget(null);
       Alert.alert("완료", "이웃 요청을 보냈어요!");
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "요청에 실패했습니다.";
-      Alert.alert("오류", msg);
+      const isDuplicate =
+        e instanceof ApiError &&
+        typeof e.data === "object" &&
+        e.data !== null &&
+        "error" in e.data &&
+        ((e.data as { error?: string }).error === "Already neighbors" ||
+          (e.data as { error?: string }).error === "Request already exists");
+      if (isDuplicate) {
+        sentRequestsQuery.refetch();
+        neighborsQuery.refetch();
+        setMemberTarget(null);
+      } else {
+        setOptimisticPendingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(targetId);
+          return next;
+        });
+        const msg = e instanceof Error ? e.message : "요청에 실패했습니다.";
+        Alert.alert("오류", msg);
+      }
     }
-  }, [memberTarget, userId, createNeighborRequest]);
+  }, [memberTarget, userId, createNeighborRequest, sentRequestsQuery, neighborsQuery]);
 
   const handleKickConfirm = useCallback(async () => {
     if (!id || !kickTarget || removeMember.isPending) return;
@@ -829,14 +891,30 @@ export default function TeamCollectionDetailScreen() {
             <Text style={styles.profileName}>{memberTarget.nickname}</Text>
 
             <View style={styles.profileActions}>
-              <Pressable
-                style={styles.profileActionButton}
-                onPress={handleSendNeighborRequest}
-                disabled={createNeighborRequest.isPending}
-              >
-                <Feather name="user-plus" size={16} color={Colors.zinc700} />
-                <Text style={styles.profileActionText}>이웃 신청하기</Text>
-              </Pressable>
+              {getMemberNeighborStatus(memberTarget.id) === "neighbor" ? (
+                <View style={styles.profileActionButton}>
+                  <Feather name="check" size={16} color={Colors.zinc500} />
+                  <Text style={[styles.profileActionText, { color: Colors.zinc500 }]}>이웃입니다</Text>
+                </View>
+              ) : getMemberNeighborStatus(memberTarget.id) === "pending" ? (
+                <View style={styles.profileActionButton}>
+                  <Feather name="clock" size={16} color={Colors.zinc500} />
+                  <Text style={[styles.profileActionText, { color: Colors.zinc500 }]}>이웃 신청 중입니다</Text>
+                </View>
+              ) : (
+                <Pressable
+                  style={styles.profileActionButton}
+                  onPress={handleSendNeighborRequest}
+                  disabled={createNeighborRequest.isPending}
+                >
+                  {createNeighborRequest.isPending ? (
+                    <ActivityIndicator size="small" color={Colors.zinc400} />
+                  ) : (
+                    <Feather name="user-plus" size={16} color={Colors.zinc700} />
+                  )}
+                  <Text style={styles.profileActionText}>이웃 신청하기</Text>
+                </Pressable>
+              )}
 
               {isOwner && (
                 <Pressable

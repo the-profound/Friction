@@ -207,7 +207,19 @@ export function NeighborsInline({
         sentRequestsQuery.refetch();
         Alert.alert("완료", `${targetUser.nickname}님께 이웃 요청을 보냈어요!`);
       } catch (e: unknown) {
-        Alert.alert("오류", describeApiError(e, "요청에 실패했습니다."));
+        const isDuplicate =
+          e instanceof ApiError &&
+          typeof e.data === "object" &&
+          e.data !== null &&
+          "error" in e.data &&
+          ((e.data as { error?: string }).error === "Already neighbors" ||
+            (e.data as { error?: string }).error === "Request already exists");
+        if (isDuplicate) {
+          searchResults.refetch();
+          sentRequestsQuery.refetch();
+        } else {
+          Alert.alert("오류", describeApiError(e, "요청에 실패했습니다."));
+        }
       } finally {
         setSendingToUserId(null);
       }

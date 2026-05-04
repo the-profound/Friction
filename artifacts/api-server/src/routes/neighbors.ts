@@ -151,17 +151,31 @@ router.post("/neighbor-requests", async (req, res) => {
     ));
 
   if (existingRequest.length > 0) {
-    res.status(400).json({ error: "Request already exists" });
+    res.status(200).json(existingRequest[0]);
     return;
   }
 
-  const [request] = await db.insert(neighborRequestsTable).values({
-    requesterId,
-    recipientId,
-    status: "PENDING",
-  }).returning();
+  try {
+    const [request] = await db.insert(neighborRequestsTable).values({
+      requesterId,
+      recipientId,
+      status: "PENDING",
+    }).returning();
 
-  res.status(201).json(request);
+    res.status(201).json(request);
+  } catch (err: unknown) {
+    const isUniqueViolation =
+      err instanceof Error && "code" in err && (err as { code: string }).code === "23505";
+    if (isUniqueViolation) {
+      const [existing] = await db.select().from(neighborRequestsTable)
+        .where(and(eq(neighborRequestsTable.requesterId, requesterId), eq(neighborRequestsTable.recipientId, recipientId)));
+      if (existing) {
+        res.status(200).json(existing);
+        return;
+      }
+    }
+    throw err;
+  }
 });
 
 router.delete("/neighbor-requests/:id", async (req, res) => {
