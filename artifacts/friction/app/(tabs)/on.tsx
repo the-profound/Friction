@@ -6,6 +6,7 @@ import {
   FlatList,
   Pressable,
   RefreshControl,
+  TextInput,
   Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -70,6 +71,9 @@ export default function OnScreen() {
   const [filter, setFilter] = useState<FilterMode>("all");
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
+  const [searchActive, setSearchActive] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
@@ -106,6 +110,13 @@ export default function OnScreen() {
     );
   }, [filteredArticles]);
 
+  const displayedArticles = useMemo(() => {
+    const trimmed = searchQuery.trim();
+    if (!trimmed) return sortedArticles;
+    const q = trimmed.toLowerCase();
+    return sortedArticles.filter((a) => (a.title ?? "").toLowerCase().includes(q));
+  }, [sortedArticles, searchQuery]);
+
   const closeOpenRow = useCallback(() => {
     if (openRowRef.current) {
       openRowRef.current.close();
@@ -117,6 +128,8 @@ export default function OnScreen() {
     closeOpenRow();
     setSelectedIds(new Set());
     setSelectionMode(true);
+    setSearchActive(false);
+    setSearchQuery("");
   }, [closeOpenRow]);
 
   const exitSelectionMode = useCallback(() => {
@@ -150,10 +163,13 @@ Alert.alert("오류", "메모 생성에 실패했습니다.");
     }
   }, [createArticle, userId, router, queryClient, closeOpenRow]);
 
-  const handleViewAll = useCallback(() => {
+  const handleSearchPress = useCallback(() => {
     closeOpenRow();
-    router.push("/on-02");
-  }, [router, closeOpenRow]);
+    setSearchActive((prev) => {
+      if (prev) setSearchQuery("");
+      return !prev;
+    });
+  }, [closeOpenRow]);
 
   const handleArticlePress = useCallback(
     (article: Article) => {
@@ -316,10 +332,31 @@ Alert.alert("오류", "메모 생성에 실패했습니다.");
           onAddPress={handleNewMemo}
           addDisabled={createArticle.isPending}
           showSearch
-          onSearchPress={handleViewAll}
+          onSearchPress={handleSearchPress}
+          searchActive={searchActive}
           showKebab
           onKebabPress={enterSelectionMode}
         />
+      )}
+
+      {!selectionMode && searchActive && (
+        <View style={styles.searchBar}>
+          <Feather name="search" size={Sizing.searchBarIconSize} color={Colors.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="제목으로 검색"
+            placeholderTextColor={Colors.searchPlaceholder}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoFocus
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <Pressable onPress={() => setSearchQuery("")} hitSlop={8}>
+              <Feather name="x" size={16} color={Colors.zinc400} />
+            </Pressable>
+          )}
+        </View>
       )}
 
       {!selectionMode && (
@@ -345,6 +382,11 @@ Alert.alert("오류", "메모 생성에 실패했습니다.");
         <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
           <Text style={styles.emptySubtitle}>불러오는 중...</Text>
         </View>
+      ) : searchQuery.trim().length > 0 && displayedArticles.length === 0 ? (
+        <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
+          <Feather name="search" size={40} color={Colors.zinc300} />
+          <Text style={styles.emptySubtitle}>검색 결과가 없습니다</Text>
+        </View>
       ) : sortedArticles.length === 0 ? (
         <RefreshableEmpty
           refreshing={isRefetching}
@@ -363,7 +405,7 @@ Alert.alert("오류", "메모 생성에 실패했습니다.");
         </RefreshableEmpty>
       ) : (
         <FlatList
-          data={sortedArticles}
+          data={displayedArticles}
           keyExtractor={(item) => item.id}
           renderItem={selectionMode ? renderSelectionItem : renderNormalItem}
           refreshControl={
@@ -428,6 +470,24 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.white,
+  },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: Spacing.screenPx,
+    marginBottom: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: Colors.zinc100,
+    borderRadius: 10,
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    ...Typography.body,
+    fontSize: 15,
+    color: Colors.zinc900,
+    padding: 0,
   },
   filterBar: {
     flexDirection: "row",
