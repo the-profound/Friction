@@ -233,11 +233,6 @@ export default function ReadScreen() {
   const contentPageIndex = Math.max(0, currentPage - 1);
   const isOnLastPage = totalPages > 0 && currentPage >= totalPages - 1;
 
-  const [coverDismissed, setCoverDismissed] = useState(false);
-
-  useEffect(() => {
-    setCoverDismissed(false);
-  }, [articleId]);
 
   const [completionSheetVisible, setCompletionSheetVisible] = useState(false);
   const [sentencePopupVisible, setSentencePopupVisible] = useState(false);
@@ -520,15 +515,9 @@ export default function ReadScreen() {
     [article?.cover],
   );
   const hasCover = articleCover !== null && articleCover.type !== "default";
-  const showingCover = hasCover && !coverDismissed && currentPage === 0;
+  const showingCover = hasCover && currentPage === 0;
   // Whether the current slot shows the title bar at the bottom
   const showTitleBar = !isOnCoverPage && !showingCover && !!article;
-
-  useEffect(() => {
-    if (currentPage === 0 && hasCover) {
-      setCoverDismissed(false);
-    }
-  }, [currentPage, hasCover]);
 
   useLayoutEffect(() => {
     if (!hasCover && currentPage === 0 && reading.isSessionHydrated && !reading.isRestoring && totalPages > 1) {
@@ -540,7 +529,6 @@ export default function ReadScreen() {
     if (!canNavigate) return;
     const dwellMs = Date.now() - pageEnterTimeRef.current;
     if (showingCover) {
-      setCoverDismissed(true);
       reading.nextPage();
       return;
     }
@@ -558,7 +546,6 @@ export default function ReadScreen() {
 
   const handleSwipeRight = useCallback(() => {
     if (!canNavigate) return;
-    if (showingCover) return;
     // When there is no cover, page 0 is an empty slot — block navigation back to it
     if (!hasCover && currentPage <= 1) return;
     const dwellMs = Date.now() - pageEnterTimeRef.current;
@@ -572,7 +559,7 @@ export default function ReadScreen() {
       pageCharCount: contentPages[contentPageIndex]?.length,
     });
     reading.prevPage();
-  }, [canNavigate, showingCover, hasCover, currentPage, reading, articleId, totalPages, contentPages, contentPageIndex]);
+  }, [canNavigate, hasCover, currentPage, reading, articleId, totalPages, contentPages, contentPageIndex]);
 
   const handleSwipeLeftRef = useRef(handleSwipeLeft);
   const handleSwipeRightRef = useRef(handleSwipeRight);
@@ -597,8 +584,6 @@ export default function ReadScreen() {
   useEffect(() => { containerWidthRef.current = layout.containerWidth; }, [layout.containerWidth]);
   const canNavigateRef = useRef(canNavigate);
   useEffect(() => { canNavigateRef.current = canNavigate; }, [canNavigate]);
-  const showingCoverRef = useRef(showingCover);
-  useEffect(() => { showingCoverRef.current = showingCover; }, [showingCover]);
   const currentPageRef = useRef(currentPage);
   useEffect(() => { currentPageRef.current = currentPage; }, [currentPage]);
   const isOnLastPageRef = useRef(isOnLastPage);
@@ -634,7 +619,7 @@ export default function ReadScreen() {
   gestureState.current = {
     canNavigate,
     isOnLastPage,
-    atBoundaryLeft: showingCover || currentPage === 0 || (!hasCover && currentPage <= 1),
+    atBoundaryLeft: currentPage === 0 || (!hasCover && currentPage <= 1),
     containerWidth: layout.containerWidth,
     isTextSelecting: isTextSelectingRef.current,
     isCommitting: false, // updated inline
