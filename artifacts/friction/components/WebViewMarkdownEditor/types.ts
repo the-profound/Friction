@@ -24,7 +24,8 @@ export type RNToWebViewCommand =
   | { type: "setBodyMetrics"; fontSizePx: number; letterSpacingPx: number; titleFontSizePx?: number }
   | { type: "setBlockType"; blockType: string }
   | { type: "toggleMark"; mark: string }
-  | { type: "insertDivider" };
+  | { type: "insertDivider" }
+  | { type: "insertHardBreak" };
 
 export interface OnChangePayload {
   isDirty: boolean;
@@ -74,6 +75,7 @@ export interface WebViewMarkdownEditorRef {
   setBlockType: (blockType: string) => void;
   toggleMark: (mark: string) => void;
   insertDivider: () => void;
+  insertHardBreak: () => void;
 }
 
 export interface WebViewMarkdownEditorProps {

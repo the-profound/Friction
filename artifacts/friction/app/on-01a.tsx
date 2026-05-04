@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { View, Text, StyleSheet, Pressable, Alert, ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, BackHandler } from "react-native";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams, Stack } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -359,6 +360,10 @@ export default function DraftScreen() {
     editorRef.current?.insertDivider();
   }, []);
 
+  const handleShiftEnter = useCallback(() => {
+    editorRef.current?.insertHardBreak();
+  }, []);
+
   const handleBack = useCallback(async () => {
     if (isNavigatingRef.current) return;
     isNavigatingRef.current = true;
@@ -465,7 +470,11 @@ export default function DraftScreen() {
           onPress={handleStateBarPress}
           disabled={isNavigating}
         />
-        {isNavigating ? (
+        {keyboardVisible ? (
+          <Pressable onPress={handleDismissKeyboard} hitSlop={12}>
+            <MaterialCommunityIcons name="keyboard-off-outline" size={22} color={Colors.zinc600} />
+          </Pressable>
+        ) : isNavigating ? (
           <ActivityIndicator size="small" color={Colors.zinc400} />
         ) : (
           <View style={styles.headerRight} />
@@ -528,8 +537,8 @@ export default function DraftScreen() {
             onBoldPress={handleToolbarBold}
             onItalicPress={handleToolbarItalic}
             onUnderlinePress={handleToolbarUnderline}
-            onDismissKeyboard={handleDismissKeyboard}
             onInsertDivider={handleInsertDivider}
+            onShiftEnter={handleShiftEnter}
           />
         )}
       </KeyboardAvoidingView>

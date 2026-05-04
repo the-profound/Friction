@@ -13,6 +13,7 @@ import { UndoRedo } from "@tiptap/extensions/undo-redo";
 import { Placeholder } from "@tiptap/extensions/placeholder";
 import { Underline } from "@tiptap/extension-underline";
 import { HorizontalRule } from "@tiptap/extension-horizontal-rule";
+import { HardBreak } from "@tiptap/extension-hard-break";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import type { Node as PMNode } from "@tiptap/pm/model";
@@ -789,6 +790,7 @@ interface Command {
         OrderedList,
         ListItem,
         UndoRedo,
+        HardBreak,
         Placeholder.configure({ placeholder }),
         OverflowDecorationExtension,
       ],
@@ -982,6 +984,12 @@ interface Command {
         case "insertDivider": {
           if (editor && !editor.isDestroyed) {
             editor.chain().focus().setHorizontalRule().run();
+          }
+          break;
+        }
+        case "insertHardBreak": {
+          if (editor && !editor.isDestroyed) {
+            editor.chain().focus().setHardBreak().run();
           }
           break;
         }

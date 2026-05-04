@@ -167,6 +167,11 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
           editor.commands.setHorizontalRule();
         }
       },
+      insertHardBreak() {
+        if (editor && !editor.isDestroyed) {
+          editor.chain().focus().setHardBreak().run();
+        }
+      },
     }), [editor, requestExportMarkdown, onError]);
 
     const handleTitleInput = useCallback(

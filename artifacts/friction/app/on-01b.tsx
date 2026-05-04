@@ -854,6 +854,10 @@ export default function DividingScreen() {
     editorRef.current?.insertDivider();
   }, []);
 
+  const handleShiftEnter = useCallback(() => {
+    editorRef.current?.insertHardBreak();
+  }, []);
+
   const handleDismissKeyboard = useCallback(() => {
     editorRef.current?.blur();
     Keyboard.dismiss();
@@ -1036,8 +1040,8 @@ export default function DividingScreen() {
               onBoldPress={handleToolbarBold}
               onItalicPress={handleToolbarItalic}
               onUnderlinePress={handleToolbarUnderline}
-              onDismissKeyboard={handleDismissKeyboard}
               onInsertDivider={handleInsertDivider}
+              onShiftEnter={handleShiftEnter}
             />
           )}
         </KeyboardAvoidingView>

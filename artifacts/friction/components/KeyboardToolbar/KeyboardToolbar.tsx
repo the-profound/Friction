@@ -1,6 +1,6 @@
 import React from "react";
 import { View, Text, Pressable, StyleSheet, Platform } from "react-native";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 import type { OnSelectionUpdatePayload } from "@/components/WebViewMarkdownEditor/types";
 
 interface KeyboardToolbarProps {
@@ -9,8 +9,9 @@ interface KeyboardToolbarProps {
   onBoldPress: () => void;
   onItalicPress: () => void;
   onUnderlinePress: () => void;
-  onDismissKeyboard: () => void;
+  onDismissKeyboard?: () => void;
   onInsertDivider?: () => void;
+  onShiftEnter?: () => void;
 }
 
 const BLOCK_LABELS: Record<string, string> = {
@@ -29,8 +30,8 @@ export default function KeyboardToolbar({
   onBoldPress,
   onItalicPress,
   onUnderlinePress,
-  onDismissKeyboard,
   onInsertDivider,
+  onShiftEnter,
 }: KeyboardToolbarProps) {
   const { activeBlock, isBold, isItalic, isUnderline } = selectionState;
   const blockLabel = BLOCK_LABELS[activeBlock] ?? "본문";
@@ -77,21 +78,23 @@ export default function KeyboardToolbar({
 
       {onInsertDivider != null && (
         <Pressable
-          style={styles.dividerButton}
+          style={styles.button}
           onPress={onInsertDivider}
           hitSlop={8}
         >
-          <MaterialCommunityIcons name="content-cut" size={14} color="#a1a1aa" />
+          <Feather name="scissors" size={16} color="#a1a1aa" />
         </Pressable>
       )}
 
-      <Pressable
-        style={styles.button}
-        onPress={onDismissKeyboard}
-        hitSlop={8}
-      >
-        <MaterialCommunityIcons name="keyboard-off-outline" size={20} color="#a1a1aa" />
-      </Pressable>
+      {onShiftEnter != null && (
+        <Pressable
+          style={styles.button}
+          onPress={onShiftEnter}
+          hitSlop={8}
+        >
+          <Feather name="corner-down-left" size={18} color="#a1a1aa" />
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -104,7 +107,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#000000",
     height: 44,
     paddingHorizontal: 8,
-    paddingBottom: Platform.OS === "ios" ? 0 : 0,
   },
   button: {
     flex: 1,
@@ -132,16 +134,5 @@ const styles = StyleSheet.create({
   },
   activeText: {
     color: "#ffffff",
-  },
-  dividerButton: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    height: 44,
-  },
-  dividerLabel: {
-    color: "#a1a1aa",
-    fontSize: 12,
-    fontFamily: Platform.select({ ios: "Pretendard-Regular", default: "Pretendard" }),
   },
 });

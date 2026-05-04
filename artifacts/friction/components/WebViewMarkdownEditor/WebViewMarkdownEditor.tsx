@@ -88,6 +88,9 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       insertDivider() {
         sendCommand({ type: "insertDivider" });
       },
+      insertHardBreak() {
+        sendCommand({ type: "insertHardBreak" });
+      },
     }), [sendCommand]);
 
     const handleMessage = useCallback(
