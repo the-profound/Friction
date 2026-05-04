@@ -327,6 +327,10 @@ export default function ClosingScreen() {
         id,
         data: { targetStatus: TransitionArticleBodyTargetStatus.DIVIDING },
       });
+      queryClient.setQueryData([`/api/articles/${id}`], (old: unknown) => {
+        if (!old || typeof old !== "object") return old;
+        return { ...old, title, status: "DIVIDING" };
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
       isActionInProgressRef.current = false;
       router.replace({ pathname: "/on-01b", params: { id } });

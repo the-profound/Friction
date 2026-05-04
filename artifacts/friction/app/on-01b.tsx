@@ -800,6 +800,10 @@ export default function DividingScreen() {
         id,
         data: { targetStatus: TransitionArticleBodyTargetStatus.DRAFT },
       });
+      queryClient.setQueryData([`/api/articles/${id}`], (old: unknown) => {
+        if (!old || typeof old !== "object") return old;
+        return { ...old, title: titleRef.current, content: cur, status: "DRAFT" };
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
       isNavigatingRef.current = false;
       setIsNavigating(false);

@@ -61,6 +61,7 @@ export default function DraftScreen() {
   const titleRef = useRef("");
   const initializedRef = useRef(false);
   const articleContentRef = useRef("");
+  const mountedAtRef = useRef(Date.now());
   const isNavigatingRef = useRef(false);
   const [isNavigating, setIsNavigating] = useState(false);
   const pendingExportRef = useRef<{
@@ -86,7 +87,15 @@ export default function DraftScreen() {
   }, [sourceArticleQuery.data]);
 
   useEffect(() => {
-    if (article && !initializedRef.current) {
+    if (id) {
+      queryClient.invalidateQueries({ queryKey: [`/api/articles/${id}`] });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const isDataFresh = articleQuery.dataUpdatedAt >= mountedAtRef.current;
+    if (article && !initializedRef.current && isDataFresh) {
       initializedRef.current = true;
       const t = article.title || "";
       const c = article.content || "";
@@ -103,7 +112,7 @@ export default function DraftScreen() {
         setSourceArticleId(article.sourceArticleId);
       }
     }
-  }, [article, editorReady]);
+  }, [article, editorReady, articleQuery.dataUpdatedAt]);
 
   useEffect(() => {
     const showSub = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
