@@ -1261,7 +1261,7 @@ export default function ReadScreen() {
             setCompletionSheetVisible(false);
           }
         }}
-        snapPoints={collectionPickerMode ? [0.55] : (mode === "re_read" ? [0.28] : [0.5])}
+        snapPoints={collectionPickerMode ? [0.75] : (mode === "re_read" ? [0.28] : [0.5])}
         enableDragDown={mode === "re_read" && !collectionPickerMode}
         dismissable={true}
         keyboardAware={collectionPickerMode && pickerTab === "create"}
