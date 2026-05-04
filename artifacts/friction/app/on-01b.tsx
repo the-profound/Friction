@@ -1007,7 +1007,7 @@ export default function DividingScreen() {
               <Text style={styles.charCountText}>{charCount}자</Text>
             </View>
           </View>
-          {keyboardVisible && Platform.OS !== "web" && (
+          {keyboardVisible && Platform.OS !== "web" && selectionState.activeBlock !== "horizontalRule" && (
             <KeyboardToolbar
               selectionState={selectionState}
               onFormatPress={handleToolbarFormat}

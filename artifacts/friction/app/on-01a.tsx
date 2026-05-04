@@ -501,7 +501,7 @@ export default function DraftScreen() {
         </View>
         </View>
 
-        {keyboardVisible && Platform.OS !== "web" && (
+        {keyboardVisible && Platform.OS !== "web" && selectionState.activeBlock !== "horizontalRule" && (
           <KeyboardToolbar
             selectionState={selectionState}
             onFormatPress={handleToolbarFormat}

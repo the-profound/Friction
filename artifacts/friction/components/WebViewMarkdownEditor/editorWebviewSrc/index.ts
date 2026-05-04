@@ -733,7 +733,8 @@ interface Command {
   }
 
   function getSelectionPayload(ed: Editor) {
-    const activeBlock = ed.isActive("heading", { level: 1 }) ? "heading1"
+    const activeBlock = ed.isActive("horizontalRule") ? "horizontalRule"
+      : ed.isActive("heading", { level: 1 }) ? "heading1"
       : ed.isActive("heading", { level: 2 }) ? "heading2"
       : ed.isActive("heading", { level: 3 }) ? "heading3"
       : ed.isActive("blockquote") ? "blockquote"
