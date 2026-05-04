@@ -7,6 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
+import { useToast } from "@/contexts/ToastContext";
 import {
   useGetMyCollection,
   useUpdateMyCollection,
@@ -46,6 +47,9 @@ export default function PersonalCollectionDetailScreen() {
   const [isMoveSheetVisible, setIsMoveSheetVisible] = useState(false);
   const [isBulkMoveMode, setIsBulkMoveMode] = useState(false);
   const [isBulkMoving, setIsBulkMoving] = useState(false);
+
+  const [isDeletingCollection, setIsDeletingCollection] = useState(false);
+  const { showToast } = useToast();
 
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const openRowRef = useRef<SwipeableRowHandle | null>(null);
@@ -180,16 +184,22 @@ export default function PersonalCollectionDetailScreen() {
   }, [id, editName, editDescription, updateCollection, collectionQuery]);
 
   const handleDeleteCollection = useCallback(async () => {
-    if (!id || deleteCollection.isPending) return;
+    if (!id || isDeletingCollection) return;
+    setIsDeletingCollection(true);
     try {
       await deleteCollection.mutateAsync({ id });
+      setDeleteConfirmVisible(false);
       queryClient.invalidateQueries({ queryKey: ["/api/my-collections"] });
       router.back();
+      showToast({ message: "모음을 삭제했어요.", type: "success" });
     } catch (e: unknown) {
+      setDeleteConfirmVisible(false);
       const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";
-      Alert.alert("오류", msg);
+      showToast({ message: msg, type: "error" });
+    } finally {
+      setIsDeletingCollection(false);
     }
-  }, [id, deleteCollection, router, queryClient]);
+  }, [id, isDeletingCollection, deleteCollection, router, queryClient, showToast]);
 
   const handleAddArticles = useCallback(
     async (articleIds: string[]) => {
@@ -614,15 +624,12 @@ export default function PersonalCollectionDetailScreen() {
       <ConfirmModal
         visible={deleteConfirmVisible}
         title="모음 삭제"
-        description={`'${collection?.name ?? ""}'을(를) 삭제하시겠어요?`}
-        confirmLabel="삭제"
+        description={`'${collection?.name ?? ""}'을(를) 삭제할까요?\n모음 안의 글은 삭제되지 않아요.`}
+        confirmLabel={isDeletingCollection ? "삭제 중..." : "삭제"}
         cancelLabel="취소"
         destructive
-        onConfirm={() => {
-          setDeleteConfirmVisible(false);
-          handleDeleteCollection();
-        }}
-        onCancel={() => setDeleteConfirmVisible(false)}
+        onConfirm={handleDeleteCollection}
+        onCancel={() => { if (!isDeletingCollection) setDeleteConfirmVisible(false); }}
       />
 
       <ConfirmModal

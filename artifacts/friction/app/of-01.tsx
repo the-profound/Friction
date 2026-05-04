@@ -5,6 +5,7 @@ import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
+import { useToast } from "@/contexts/ToastContext";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import {
   useListMyCollections,
@@ -27,6 +28,8 @@ export default function PersonalCollectionListScreen() {
   const [newDescription, setNewDescription] = useState("");
   const [newIsPublic, setNewIsPublic] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const { showToast } = useToast();
 
   const collectionsQuery = useListMyCollections({ ownerId: userId });
   const collections = (collectionsQuery.data ?? []) as MyCollection[];
@@ -59,15 +62,22 @@ export default function PersonalCollectionListScreen() {
 
   const handleDelete = useCallback(
     async (id: string) => {
+      if (isDeleting) return;
+      setIsDeleting(true);
       try {
         await deleteCollection.mutateAsync({ id });
+        setDeleteTarget(null);
         collectionsQuery.refetch();
+        showToast({ message: "모음을 삭제했어요.", type: "success" });
       } catch (e: unknown) {
+        setDeleteTarget(null);
         const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";
-        Alert.alert("오류", msg);
+        showToast({ message: msg, type: "error" });
+      } finally {
+        setIsDeleting(false);
       }
     },
-    [deleteCollection, collectionsQuery],
+    [isDeleting, deleteCollection, collectionsQuery, showToast],
   );
 
   const renderItem = ({ item }: { item: MyCollection }) => (
@@ -238,17 +248,16 @@ export default function PersonalCollectionListScreen() {
       <ConfirmModal
         visible={deleteTarget !== null}
         title="모음 삭제"
-        description={`'${deleteTarget?.name ?? ""}'을(를) 삭제하시겠어요?`}
-        confirmLabel="삭제"
+        description={`'${deleteTarget?.name ?? ""}'을(를) 삭제할까요?\n모음 안의 글은 삭제되지 않아요.`}
+        confirmLabel={isDeleting ? "삭제 중..." : "삭제"}
         cancelLabel="취소"
         destructive
         onConfirm={() => {
           if (deleteTarget) {
             handleDelete(deleteTarget.id);
           }
-          setDeleteTarget(null);
         }}
-        onCancel={() => setDeleteTarget(null)}
+        onCancel={() => { if (!isDeleting) setDeleteTarget(null); }}
       />
     </View>
   );
