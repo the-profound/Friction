@@ -39,6 +39,7 @@ export function useEditorLayout() {
       ReaderTokens.letterSpacing.relaxedEm,
       bodyFontSize,
     );
+    const titleFontSize = readerFontSize(ReaderTokens.typeScale.titleCqi, containerWidth);
     return {
       containerWidth,
       safeAreaWidth,
@@ -49,6 +50,7 @@ export function useEditorLayout() {
       bodyFontSize,
       bodyLineHeight,
       bodyLetterSpacing,
+      titleFontSize,
     };
   }, [screenWidth, screenHeight]);
 }

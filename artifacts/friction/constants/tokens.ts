@@ -307,6 +307,7 @@ export const ReaderTokens = {
     bodyCqi: 4.0,
     captionCqi: 3.4,
     metadataCqi: 2.8,
+    titleCqi: 6.4,
   },
 
   lineHeight: {

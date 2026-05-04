@@ -30,12 +30,12 @@ const escapedJs = bundleJs
 
 const css = `
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{height:100%;background:transparent}
+html,body{height:100%;background:transparent;container-type:inline-size}
 #title-input{
   display:block;
   width:100%;
   font-family:'Eulyoo1945-SemiBold',serif;
-  font-size:22px;
+  font-size:var(--title-font-size,6.4cqi);
   font-weight:600;
   line-height:1.25;
   letter-spacing:-0.01em;
@@ -96,7 +96,7 @@ html,body{height:100%;background:transparent}
 body{padding:16px 0 0;overflow:auto}
 `.trim();
 
-const VERSION = "3.12.2";
+const VERSION = "3.13.0";
 
 const tsContent = `export const EDITOR_CONFIG_VERSION = "${VERSION}";
 

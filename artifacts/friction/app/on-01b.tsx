@@ -281,7 +281,7 @@ export default function DividingScreen() {
   const baseWarnings = useMemo(() => validatePages(pages), [pages]);
 
   const editorLayout = useEditorLayout();
-  const { containerWidth, safeAreaWidth, safeAreaHeight, paddingX, paddingY, textColumnWidth, bodyFontSize, bodyLineHeight, bodyLetterSpacing } = editorLayout;
+  const { containerWidth, safeAreaWidth, safeAreaHeight, paddingX, paddingY, textColumnWidth, bodyFontSize, bodyLineHeight, bodyLetterSpacing, titleFontSize } = editorLayout;
 
   // NOTE — 측정/분할/읽기 화면 렌더링 엔진 정합:
   // 편집기(WebViewMarkdownEditor), 측정 레이어(WebViewMeasureLayer), 읽기 화면(WebViewMarkdownReader)
@@ -1001,6 +1001,7 @@ export default function DividingScreen() {
                 onSelectionUpdate={handleSelectionUpdate}
                 bodyFontSize={bodyFontSize}
                 bodyLetterSpacing={bodyLetterSpacing}
+                titleFontSize={titleFontSize}
               />
             </View>
             <View style={styles.editorFooter}>

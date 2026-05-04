@@ -59,6 +59,7 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
       onTitleChange,
       onError,
       belowTitleSlot,
+      titleFontSize,
     },
     ref,
   ) {
@@ -188,7 +189,11 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
             placeholder="제목"
             onChange={handleTitleInput}
             rows={1}
-            style={titleInputStyle}
+            style={
+              titleFontSize != null
+                ? { ...titleInputStyle, fontSize: titleFontSize }
+                : titleInputStyle
+            }
             readOnly={!editable}
           />
         )}

@@ -567,6 +567,7 @@ interface Command {
   text?: string;
   fontSizePx?: number;
   letterSpacingPx?: number;
+  titleFontSizePx?: number;
   blockType?: string;
   mark?: string;
 }
@@ -933,6 +934,10 @@ interface Command {
           }
           if (cmd.letterSpacingPx != null) {
             root.style.setProperty("--body-letter-spacing", cmd.letterSpacingPx + "px");
+          }
+          if (cmd.titleFontSizePx != null) {
+            root.style.setProperty("--title-font-size", cmd.titleFontSizePx + "px");
+            if (titleInput) autoResizeTitle();
           }
           // 폰트/자간이 바뀌면 줄바꿈 위치도 바뀌므로 강조 재측정.
           scheduleOverflowProbe(150);

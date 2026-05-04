@@ -32,6 +32,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       bodyFontSize,
       bodyLetterSpacing,
       bodyPaddingX,
+      titleFontSize,
     },
     ref,
   ) {
@@ -144,9 +145,14 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
 
     useEffect(() => {
       if (readyRef.current && bodyFontSize != null && bodyLetterSpacing != null) {
-        sendCommand({ type: "setBodyMetrics", fontSizePx: bodyFontSize, letterSpacingPx: bodyLetterSpacing });
+        sendCommand({
+          type: "setBodyMetrics",
+          fontSizePx: bodyFontSize,
+          letterSpacingPx: bodyLetterSpacing,
+          titleFontSizePx: titleFontSize,
+        });
       }
-    }, [bodyFontSize, bodyLetterSpacing, sendCommand]);
+    }, [bodyFontSize, bodyLetterSpacing, titleFontSize, sendCommand]);
 
     useEffect(() => {
       if (readyRef.current && bodyPaddingX != null) {
@@ -212,7 +218,12 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
               payload: { initialMarkdown, editorConfigVersion, placeholder, titleValue },
             });
             if (bodyFontSize != null && bodyLetterSpacing != null) {
-              sendCommand({ type: "setBodyMetrics", fontSizePx: bodyFontSize, letterSpacingPx: bodyLetterSpacing });
+              sendCommand({
+                type: "setBodyMetrics",
+                fontSizePx: bodyFontSize,
+                letterSpacingPx: bodyLetterSpacing,
+                titleFontSizePx: titleFontSize,
+              });
             }
             if (bodyPaddingX != null) {
               const px = `${bodyPaddingX}px`;

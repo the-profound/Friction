@@ -474,6 +474,7 @@ export default function DraftScreen() {
             bodyFontSize={editorLayout.bodyFontSize}
             bodyLetterSpacing={editorLayout.bodyLetterSpacing}
             bodyPaddingX={editorLayout.paddingX}
+            titleFontSize={editorLayout.titleFontSize}
             belowTitleSlot={
               <Pressable
                 style={[styles.sourceArticleRow, { paddingHorizontal: editorLayout.paddingX }]}

@@ -21,7 +21,7 @@ export type RNToWebViewCommand =
   | { type: "setSourceArticleSlot"; text: string }
   | { type: "setOverflowRanges"; ranges: OverflowRange[] | null }
   | { type: "setOverflowProbeConfig"; availableContentHeightPx: number | null }
-  | { type: "setBodyMetrics"; fontSizePx: number; letterSpacingPx: number }
+  | { type: "setBodyMetrics"; fontSizePx: number; letterSpacingPx: number; titleFontSizePx?: number }
   | { type: "setBlockType"; blockType: string }
   | { type: "toggleMark"; mark: string }
   | { type: "insertDivider" };
@@ -95,4 +95,5 @@ export interface WebViewMarkdownEditorProps {
   bodyFontSize?: number;
   bodyLetterSpacing?: number;
   bodyPaddingX?: number;
+  titleFontSize?: number;
 }
