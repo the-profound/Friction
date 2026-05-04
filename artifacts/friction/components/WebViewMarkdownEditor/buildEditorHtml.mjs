@@ -83,8 +83,10 @@ html,body{height:100%;background:transparent}
 .ProseMirror blockquote{font-family:'Eulyoo1945-Regular',serif;font-style:italic;border-left:3px solid #d4d4d8;padding-left:1em;margin:0.5em 0;color:#52525b;text-align:left}
 .ProseMirror hr{border:none;border-top:1px solid #e4e4e7;margin:0}
 .hr-wrapper{position:relative;margin:1em 0;cursor:pointer;padding:10px 0}
-.hr-controls{display:none;justify-content:center;gap:8px;padding:4px 0 2px}
+.hr-controls{display:none;justify-content:space-between;align-items:center;padding:4px 0 2px}
+.hr-move-group{display:inline-flex;gap:8px}
 .hr-btn{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid #d4d4d8;border-radius:50%;background:#fff;color:#3f3f46;font-size:16px;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation;user-select:none;transition:opacity 0.15s}
+.hr-btn-delete{color:#a1a1aa;font-size:14px}
 .ProseMirror p.is-editor-empty:first-child::before{content:attr(data-placeholder);color:#a1a1aa;pointer-events:none;float:left;height:0}
 .ProseMirror u{text-decoration:underline}
 .ProseMirror strong{font-family:'Eulyoo1945-SemiBold',serif;font-weight:700}

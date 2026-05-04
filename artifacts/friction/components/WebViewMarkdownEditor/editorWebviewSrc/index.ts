@@ -176,8 +176,18 @@ const HorizontalRuleWithControls = HorizontalRule.extend({
       downBtn.textContent = "↓";
       downBtn.type = "button";
 
-      controls.appendChild(upBtn);
-      controls.appendChild(downBtn);
+      const moveGroup = document.createElement("div");
+      moveGroup.className = "hr-move-group";
+      moveGroup.appendChild(upBtn);
+      moveGroup.appendChild(downBtn);
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.className = "hr-btn hr-btn-delete";
+      deleteBtn.textContent = "✕";
+      deleteBtn.type = "button";
+
+      controls.appendChild(moveGroup);
+      controls.appendChild(deleteBtn);
       wrapper.appendChild(controls);
 
       function getNodeEntries() {
@@ -281,6 +291,18 @@ const HorizontalRuleWithControls = HorizontalRule.extend({
           .insert(info.pos + nextEntry.node.nodeSize, hrNode);
         view.dispatch(tr);
         // Dispatch may restore editor focus — blur again to keep keyboard dismissed.
+        editor.commands.blur();
+      });
+
+      deleteBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const pos = typeof getPos === "function" ? getPos() : undefined;
+        if (pos === undefined) return;
+        const { state, view } = editor;
+        const hrNode = state.doc.nodeAt(pos);
+        if (!hrNode) return;
+        const tr = state.tr.delete(pos, pos + hrNode.nodeSize);
+        view.dispatch(tr);
         editor.commands.blur();
       });
 
