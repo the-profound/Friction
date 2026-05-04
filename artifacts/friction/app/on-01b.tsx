@@ -647,6 +647,9 @@ export default function DividingScreen() {
     isNavigatingRef.current = true;
     setIsNavigating(true);
 
+    editorRef.current?.blur();
+    Keyboard.dismiss();
+
     const cur = await getEditorContent();
     markDirty(titleRef.current, cur);
     const flushResult = await flush();
@@ -748,6 +751,9 @@ export default function DividingScreen() {
     isNavigatingRef.current = true;
     setIsNavigating(true);
 
+    editorRef.current?.blur();
+    Keyboard.dismiss();
+
     if (!id) {
       isNavigatingRef.current = false;
       setIsNavigating(false);
@@ -775,6 +781,9 @@ export default function DividingScreen() {
     isNavigatingRef.current = true;
     setIsNavigating(true);
 
+    editorRef.current?.blur();
+    Keyboard.dismiss();
+
     const result = canStepBack("DIVIDING");
     if (!result.allowed) {
       isNavigatingRef.current = false;
@@ -795,26 +804,27 @@ export default function DividingScreen() {
       Alert.alert("오류", "저장에 실패했습니다.");
       return;
     }
-    try {
-      await transitionStatus.mutateAsync({
-        id,
-        data: { targetStatus: TransitionArticleBodyTargetStatus.DRAFT },
-      });
-      queryClient.setQueryData([`/api/articles/${id}`], (old: unknown) => {
-        if (!old || typeof old !== "object") return old;
-        return { ...old, title: titleRef.current, content: cur, status: "DRAFT" };
-      });
+    queryClient.setQueryData([`/api/articles/${id}`], (old: any) => {
+      if (!old || typeof old !== "object") return old;
+      return { ...old, title: titleRef.current, content: cur, status: "DRAFT" };
+    });
+
+    isNavigatingRef.current = false;
+    setIsNavigating(false);
+    router.replace({ pathname: "/on-01a", params: { id } });
+
+    transitionStatus.mutateAsync({
+      id,
+      data: { targetStatus: TransitionArticleBodyTargetStatus.DRAFT },
+    }).then(() => {
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
-      isNavigatingRef.current = false;
-      setIsNavigating(false);
-      router.replace({ pathname: "/on-01a", params: { id } });
-    } catch (e: unknown) {
-      isNavigatingRef.current = false;
-      setIsNavigating(false);
-      const msg = e instanceof Error ? e.message : "상태 전환에 실패했습니다.";
-      Alert.alert("오류", msg);
-    }
-  }, [id, getEditorContent, markDirty, flush, transitionStatus, queryClient, router]);
+      queryClient.invalidateQueries({ queryKey: [`/api/articles/${id}`] });
+    }).catch(() => {
+      showToast({ message: "상태 전환에 실패했어요. 새로고침해주세요.", type: "error" });
+      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/articles/${id}`] });
+    });
+  }, [id, getEditorContent, markDirty, flush, transitionStatus, queryClient, router, showToast]);
 
   const handleSelectionUpdate = useCallback((payload: OnSelectionUpdatePayload) => {
     setSelectionState(payload);

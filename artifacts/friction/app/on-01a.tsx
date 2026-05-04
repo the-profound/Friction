@@ -275,6 +275,9 @@ export default function DraftScreen() {
     isNavigatingRef.current = true;
     setIsNavigating(true);
 
+    editorRef.current?.blur();
+    Keyboard.dismiss();
+
     if (!titleRef.current.trim()) {
       isNavigatingRef.current = false;
       setIsNavigating(false);
@@ -356,6 +359,9 @@ export default function DraftScreen() {
     if (isNavigatingRef.current) return;
     isNavigatingRef.current = true;
     setIsNavigating(true);
+
+    editorRef.current?.blur();
+    Keyboard.dismiss();
 
     if (exportDebounceTimerRef.current) {
       clearTimeout(exportDebounceTimerRef.current);

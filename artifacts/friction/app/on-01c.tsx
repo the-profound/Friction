@@ -6,6 +6,7 @@ import {
   Pressable,
   Alert,
   ActivityIndicator,
+  Keyboard,
   TextInput,
   LayoutChangeEvent,
   BackHandler,
@@ -300,6 +301,7 @@ export default function ClosingScreen() {
   const handleBack = useCallback(async () => {
     if (isActionInProgressRef.current) return;
     isActionInProgressRef.current = true;
+    Keyboard.dismiss();
     await flushTitleSave();
     await flushCoverSave();
     queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
@@ -311,6 +313,7 @@ export default function ClosingScreen() {
     setStepBackConfirmVisible(false);
     if (isActionInProgressRef.current) return;
     isActionInProgressRef.current = true;
+    Keyboard.dismiss();
     const result = canStepBack("CLOSING");
     if (!result.allowed) {
       isActionInProgressRef.current = false;
@@ -323,23 +326,36 @@ export default function ClosingScreen() {
     try {
       await flushTitleSave();
       await flushCoverSave();
-      await transitionStatus.mutateAsync({
-        id,
-        data: { targetStatus: TransitionArticleBodyTargetStatus.DIVIDING },
-      });
-      queryClient.setQueryData([`/api/articles/${id}`], (old: unknown) => {
-        if (!old || typeof old !== "object") return old;
-        return { ...old, title, status: "DIVIDING" };
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+
+      // Optimistic navigation
+      queryClient.setQueryData(
+        [`/api/articles/${id}`],
+        (old: any) => (old ? { ...old, status: "DIVIDING" } : old),
+      );
+
       isActionInProgressRef.current = false;
       router.replace({ pathname: "/on-01b", params: { id } });
+
+      // Background transition
+      transitionStatus
+        .mutateAsync({
+          id,
+          data: { targetStatus: TransitionArticleBodyTargetStatus.DIVIDING },
+        })
+        .then(() => {
+          queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+        })
+        .catch(() => {
+          showToast({ message: "상태 전환에 실패했어요. 새로고침해주세요.", type: "error" });
+          queryClient.invalidateQueries({ queryKey: [`/api/articles/${id}`] });
+          queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+        });
     } catch (e: unknown) {
       isActionInProgressRef.current = false;
-      const msg = e instanceof Error ? e.message : "상태 전환에 실패했습니다.";
+      const msg = e instanceof Error ? e.message : "저장에 실패했습니다.";
       Alert.alert("오류", msg);
     }
-  }, [id, flushCoverSave, transitionStatus, queryClient, router]);
+  }, [id, flushCoverSave, flushTitleSave, transitionStatus, queryClient, router, showToast]);
 
   const handleSaveTitle = useCallback(async () => {
     setTitleEditing(false);

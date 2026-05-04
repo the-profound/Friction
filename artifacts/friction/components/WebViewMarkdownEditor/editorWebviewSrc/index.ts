@@ -851,12 +851,6 @@ interface Command {
           if (editor && !editor.isDestroyed) {
             const html = markdownToHtml(cmd.markdown || "");
             editor.commands.setContent(html);
-            // 인용구/리스트/헤딩 등으로 끝나는 메모를 주입할 때, 마지막 빈
-            // 단락(<p></p>)에 커서를 자동으로 위치시켜 사용자가 별도 탭 없이
-            // 바로 본문을 이어서 입력할 수 있게 한다.
-            try {
-              editor.commands.focus("end");
-            } catch {}
             scheduleOverflowProbe(150);
           }
           break;
