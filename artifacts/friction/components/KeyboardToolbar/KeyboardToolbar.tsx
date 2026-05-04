@@ -134,12 +134,10 @@ const styles = StyleSheet.create({
     color: "#ffffff",
   },
   dividerButton: {
-    flexDirection: "row",
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    gap: 3,
     height: 44,
-    paddingHorizontal: 6,
   },
   dividerLabel: {
     color: "#a1a1aa",
