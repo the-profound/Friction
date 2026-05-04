@@ -4,6 +4,9 @@ import {
   Text,
   StyleSheet,
   Pressable,
+  FlatList,
+  TextInput,
+  ActivityIndicator,
   BackHandler,
   Alert,
   AppState,
@@ -69,8 +72,6 @@ import { useUser } from "@/contexts/UserContext";
 import { useActiveReading } from "@/contexts/ActiveReadingContext";
 import type { ReadingMode } from "@/lib/policies";
 import MemoBottomSheet from "@/components/MemoBottomSheet/MemoBottomSheet";
-import MyCollectionsModal from "@/components/MyCollectionsModal/MyCollectionsModal";
-import type { CollectionItem } from "@/components/MyCollectionsModal/MyCollectionsModal";
 
 function computeReaderLayout(availableWidth: number, availableHeight: number, overrideContainerWidth?: number): ReaderLayout {
   const widthFromHeight = availableHeight * ReaderTokens.aspectRatio;
@@ -244,7 +245,19 @@ export default function ReadScreen() {
   const [clearSelectionSignal, setClearSelectionSignal] = useState(0);
   const [memoSheetVisible, setMemoSheetVisible] = useState(false);
   const [memoAppendContent, setMemoAppendContent] = useState<string | undefined>(undefined);
-  const [myCollectionsModalVisible, setMyCollectionsModalVisible] = useState(false);
+  const [collectionPickerMode, setCollectionPickerMode] = useState(false);
+  const [pickerTab, setPickerTab] = useState<"list" | "create">("list");
+  const [newCollectionName, setNewCollectionName] = useState("");
+  const [newCollectionDesc, setNewCollectionDesc] = useState("");
+  const [isCreatingCollection, setIsCreatingCollection] = useState(false);
+  useEffect(() => {
+    if (!completionSheetVisible) {
+      setCollectionPickerMode(false);
+      setPickerTab("list");
+      setNewCollectionName("");
+      setNewCollectionDesc("");
+    }
+  }, [completionSheetVisible]);
   const [showSelectionPill, setShowSelectionPill] = useState(false);
   const [selectionPillText, setSelectionPillText] = useState("");
   const [bottomBarHeight, setBottomBarHeight] = useState(70);
@@ -1237,6 +1250,10 @@ export default function ReadScreen() {
       <BottomSheet
         visible={completionSheetVisible}
         onClose={() => {
+          if (collectionPickerMode) {
+            setCollectionPickerMode(false);
+            return;
+          }
           if (mode === "re_read") {
             setCompletionSheetVisible(false);
           } else {
@@ -1244,10 +1261,158 @@ export default function ReadScreen() {
             setCompletionSheetVisible(false);
           }
         }}
-        snapPoints={mode === "re_read" ? [0.28] : [0.5]}
-        enableDragDown={mode === "re_read"}
+        snapPoints={collectionPickerMode ? [0.55] : (mode === "re_read" ? [0.28] : [0.5])}
+        enableDragDown={mode === "re_read" && !collectionPickerMode}
         dismissable={true}
+        keyboardAware={collectionPickerMode && pickerTab === "create"}
       >
+        {collectionPickerMode ? (
+          <View style={styles.pickerContainer}>
+            <Pressable
+              style={styles.pickerBackRow}
+              onPress={() => {
+                if (pickerTab === "create") {
+                  setPickerTab("list");
+                  setNewCollectionName("");
+                  setNewCollectionDesc("");
+                } else {
+                  setCollectionPickerMode(false);
+                }
+              }}
+            >
+              <Feather name="chevron-left" size={18} color={Colors.zinc600} />
+              <Text style={styles.pickerBackText}>보관할 모음 선택</Text>
+            </Pressable>
+
+            <View style={styles.pickerTabBar}>
+              <Pressable
+                style={[styles.pickerTab, pickerTab === "list" && styles.pickerTabActive]}
+                onPress={() => setPickerTab("list")}
+              >
+                <Text style={[styles.pickerTabText, pickerTab === "list" && styles.pickerTabTextActive]}>
+                  내 모음
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.pickerTab, pickerTab === "create" && styles.pickerTabActive]}
+                onPress={() => setPickerTab("create")}
+              >
+                <Text style={[styles.pickerTabText, pickerTab === "create" && styles.pickerTabTextActive]}>
+                  새 모음에 추가
+                </Text>
+              </Pressable>
+            </View>
+
+            {pickerTab === "list" ? (
+              <FlatList
+                data={
+                  (collectionsQuery.data ?? [])
+                    .filter((c: { id: string; name: string; isArchive?: boolean }) => !c.isArchive)
+                    .map((c: { id: string; name: string; articleCount?: number }) => ({
+                      id: c.id, name: c.name, articleCount: c.articleCount,
+                    }))
+                }
+                keyExtractor={(item) => item.id}
+                renderItem={({ item }) => {
+                  const isSelected = item.id === selectedCollectionId;
+                  return (
+                    <Pressable
+                      style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
+                      onPress={() => {
+                        setSelectedCollectionId(item.id);
+                        updateRecentCollection.mutate(
+                          { id: userId, data: { collectionId: item.id } },
+                          {
+                            onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetUserRecentCollectionQueryKey(userId) }),
+                          },
+                        );
+                        setCollectionPickerMode(false);
+                      }}
+                    >
+                      <View style={styles.pickerItemLeft}>
+                        <Feather name="folder" size={18} color={isSelected ? Colors.zinc900 : Colors.zinc500} />
+                        <Text style={[styles.pickerItemName, isSelected && styles.pickerItemNameSelected]} numberOfLines={1}>
+                          {item.name}
+                        </Text>
+                      </View>
+                      <View style={styles.pickerItemRight}>
+                        {item.articleCount !== undefined && (
+                          <Text style={styles.pickerItemCount}>{item.articleCount}편</Text>
+                        )}
+                        {isSelected && <Feather name="check" size={16} color={Colors.zinc900} />}
+                      </View>
+                    </Pressable>
+                  );
+                }}
+                ItemSeparatorComponent={() => <View style={styles.pickerSeparator} />}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.pickerListContent}
+                ListEmptyComponent={
+                  <View style={styles.pickerEmpty}>
+                    <Text style={styles.pickerEmptyText}>보관할 모음이 없어요</Text>
+                    <Text style={styles.pickerEmptySubtext}>새 모음에 추가 탭에서 만들어보세요</Text>
+                  </View>
+                }
+              />
+            ) : (
+              <View style={styles.pickerCreateForm}>
+                <TextInput
+                  style={styles.pickerCreateInput}
+                  placeholder="모음 이름"
+                  placeholderTextColor={Colors.zinc400}
+                  value={newCollectionName}
+                  onChangeText={setNewCollectionName}
+                  autoFocus
+                />
+                <TextInput
+                  style={[styles.pickerCreateInput, styles.pickerCreateInputMulti]}
+                  placeholder="설명 (선택사항)"
+                  placeholderTextColor={Colors.zinc400}
+                  value={newCollectionDesc}
+                  onChangeText={setNewCollectionDesc}
+                  multiline
+                  textAlignVertical="top"
+                />
+                <Pressable
+                  style={[styles.pickerCreateButton, (!newCollectionName.trim() || isCreatingCollection) && styles.pickerCreateButtonDisabled]}
+                  onPress={async () => {
+                    if (!newCollectionName.trim()) return;
+                    setIsCreatingCollection(true);
+                    try {
+                      const newCol = await createCollection.mutateAsync({
+                        data: { ownerId: userId, name: newCollectionName.trim(), description: newCollectionDesc.trim() || undefined },
+                      });
+                      setSelectedCollectionId(newCol.id);
+                      queryClient.invalidateQueries({ queryKey: ["/api/my-collections"] });
+                      updateRecentCollection.mutate(
+                        { id: userId, data: { collectionId: newCol.id } },
+                        {
+                          onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetUserRecentCollectionQueryKey(userId) }),
+                        },
+                      );
+                      setNewCollectionName("");
+                      setNewCollectionDesc("");
+                      setPickerTab("list");
+                      setCollectionPickerMode(false);
+                    } catch (e: unknown) {
+                      const msg = e instanceof Error ? e.message : "모음 생성에 실패했습니다.";
+                      Alert.alert("생성 실패", msg);
+                    } finally {
+                      setIsCreatingCollection(false);
+                    }
+                  }}
+                  disabled={!newCollectionName.trim() || isCreatingCollection}
+                >
+                  {isCreatingCollection ? (
+                    <ActivityIndicator size="small" color={Colors.white} />
+                  ) : (
+                    <Text style={styles.pickerCreateButtonText}>만들기</Text>
+                  )}
+                </Pressable>
+              </View>
+            )}
+          </View>
+        ) : (
         <View style={styles.completionContent}>
           <Text style={dynamicStyles.completionText}>글을 끝까지 다 읽었습니다.</Text>
 
@@ -1277,7 +1442,7 @@ export default function ReadScreen() {
             <>
               <Pressable
                 style={styles.collectionSelector}
-                onPress={() => setMyCollectionsModalVisible(true)}
+                onPress={() => setCollectionPickerMode(true)}
                 disabled={isSaving}
               >
                 <Feather name="folder" size={16} color={Colors.zinc500} />
@@ -1325,6 +1490,7 @@ export default function ReadScreen() {
             </>
           )}
         </View>
+        )}
       </BottomSheet>
 
       <BottomSheet
@@ -1371,54 +1537,6 @@ export default function ReadScreen() {
         onContentChange={readingMemo.updateMemoContent}
       />
 
-      <MyCollectionsModal
-        visible={myCollectionsModalVisible}
-        onClose={() => setMyCollectionsModalVisible(false)}
-        collections={
-          (collectionsQuery.data ?? [])
-            .filter((c: { id: string; name: string; articleCount?: number; isArchive?: boolean }) => !c.isArchive)
-            .map((c: { id: string; name: string; articleCount?: number }) => ({
-              id: c.id,
-              name: c.name,
-              articleCount: c.articleCount,
-            })) as CollectionItem[]
-        }
-        selectedCollectionId={selectedCollectionId}
-        onSelect={(collection) => {
-          setSelectedCollectionId(collection.id);
-          updateRecentCollection.mutate(
-            { id: userId, data: { collectionId: collection.id } },
-            {
-              onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetUserRecentCollectionQueryKey(userId) }),
-              onError: (e) => console.warn("[MyCollectionsModal] recent collection update failed (non-fatal):", e),
-            },
-          );
-        }}
-        onCreateAndSelect={async (name, description) => {
-          let newCol: { id: string };
-          try {
-            newCol = await createCollection.mutateAsync({
-              data: { ownerId: userId, name, description: description || undefined },
-            });
-          } catch (e: unknown) {
-            const msg = e instanceof Error ? e.message : "모음 생성에 실패했습니다.";
-            Alert.alert("생성 실패", msg);
-            return;
-          }
-          setSelectedCollectionId(newCol.id);
-          setMyCollectionsModalVisible(false);
-          queryClient.invalidateQueries({ queryKey: ["/api/my-collections"] });
-          try {
-            await updateRecentCollection.mutateAsync(
-              { id: userId, data: { collectionId: newCol.id } },
-            );
-            queryClient.invalidateQueries({ queryKey: getGetUserRecentCollectionQueryKey(userId) });
-          } catch (e) {
-            console.warn("[MyCollectionsModal] recent collection update failed (non-fatal):", e);
-          }
-        }}
-        isLoading={collectionsQuery.isLoading}
-      />
       <ConfirmModal
         visible={!!duplicatePrompt}
         title="같은 글이 더 있어요"
@@ -1757,5 +1875,136 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     gap: 8,
     width: "100%",
+  },
+  pickerContainer: {
+    flex: 1,
+  },
+  pickerBackRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingBottom: 12,
+    marginBottom: 4,
+  },
+  pickerBackText: {
+    fontSize: 15,
+    fontFamily: "Pretendard",
+    fontWeight: "600",
+    color: Colors.zinc700,
+  },
+  pickerTabBar: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 12,
+  },
+  pickerTab: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: Colors.zinc50,
+  },
+  pickerTabActive: {
+    backgroundColor: Colors.zinc900,
+  },
+  pickerTabText: {
+    fontSize: 13,
+    fontFamily: "Pretendard",
+    color: Colors.zinc500,
+  },
+  pickerTabTextActive: {
+    color: Colors.white,
+    fontWeight: "600",
+  },
+  pickerListContent: {
+    paddingVertical: 4,
+  },
+  pickerItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+    borderRadius: 8,
+  },
+  pickerItemSelected: {
+    backgroundColor: Colors.zinc50,
+  },
+  pickerItemLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+  },
+  pickerItemRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  pickerItemName: {
+    fontSize: 15,
+    fontFamily: "Pretendard",
+    color: Colors.zinc700,
+    flex: 1,
+  },
+  pickerItemNameSelected: {
+    fontWeight: "600",
+    color: Colors.zinc900,
+  },
+  pickerItemCount: {
+    fontSize: 13,
+    fontFamily: "Pretendard",
+    color: Colors.zinc400,
+  },
+  pickerSeparator: {
+    height: 1,
+    backgroundColor: Colors.zinc100,
+  },
+  pickerEmpty: {
+    paddingVertical: 40,
+    alignItems: "center",
+    gap: 6,
+  },
+  pickerEmptyText: {
+    fontSize: 14,
+    fontFamily: "Pretendard",
+    color: Colors.zinc500,
+  },
+  pickerEmptySubtext: {
+    fontSize: 13,
+    fontFamily: "Pretendard",
+    color: Colors.zinc400,
+  },
+  pickerCreateForm: {
+    paddingTop: 4,
+    gap: 12,
+  },
+  pickerCreateInput: {
+    fontSize: 15,
+    fontFamily: "Pretendard",
+    color: Colors.zinc900,
+    backgroundColor: Colors.zinc50,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  pickerCreateInputMulti: {
+    minHeight: 72,
+    lineHeight: 22,
+  },
+  pickerCreateButton: {
+    backgroundColor: Colors.zinc900,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    marginTop: 4,
+  },
+  pickerCreateButtonDisabled: {
+    backgroundColor: Colors.zinc300,
+  },
+  pickerCreateButtonText: {
+    fontSize: 16,
+    fontFamily: "Pretendard",
+    fontWeight: "600",
+    color: Colors.white,
   },
 });
