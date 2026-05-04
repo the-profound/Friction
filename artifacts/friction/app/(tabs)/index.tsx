@@ -29,7 +29,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useListInbox, useMarkInboxOpened, useDeleteInboxItem, getListInboxQueryKey } from "@workspace/api-client-react";
 import type { InboxItem } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
-import { INCOMING_FALLBACK_POLL_INTERVAL_MS, useFocusPollingOptions, isQueryStale } from "@/lib/useScreenFocused";
+import { isQueryStale } from "@/lib/useScreenFocused";
 import { useRealtimeChannel } from "@/lib/useRealtimeChannel";
 
 const { width: SCREEN_W } = Dimensions.get("window");
@@ -316,19 +316,13 @@ export default function InboxScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [tapItem, setTapItem] = useState<InboxItem | null>(null);
 
-  // Realtime subscription is the primary mechanism for surfacing freshly-
-  // delivered letters — sub-second push without background HTTP traffic.
-  // The slower focus-gated poll (60s) stays as a safety net for environments
-  // where the realtime channel is unavailable. Both stop automatically when
-  // the screen is blurred or unmounted.
-  const pollOpts = useFocusPollingOptions(INCOMING_FALLBACK_POLL_INTERVAL_MS);
-  const { data: inboxData, isLoading, refetch, isRefetching } = useListInbox(
+  const { data: inboxData, isLoading, refetch } = useListInbox(
     // isRead=false tells the server to return only unread items, keeping the
     // response payload small as read letters accumulate over time.
     // The picker (SourceArticlePickerSheet) omits this param to see all visible items.
     { recipientId: userId, isRead: false } as Parameters<typeof useListInbox>[0],
-    pollOpts,
   );
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
 
   useRealtimeChannel(
     userId ? `inbox:${userId}` : null,
@@ -412,15 +406,20 @@ Alert.alert("완료", "수신함에서 삭제되었습니다.");
     }
   }, [tapItem, deleteInboxItem, queryClient]);
 
-  const handleRefresh = useCallback(() => {
-    refetch();
+  const handleRefresh = useCallback(async () => {
+    setIsManualRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setIsManualRefreshing(false);
+    }
   }, [refetch]);
 
   // Refetch the inbox when this tab regains focus ONLY if the cached data
   // is stale (older than FOCUS_STALE_THRESHOLD_MS / the global staleTime).
   // Skipping the refetch when data is fresh avoids the full-screen loading
   // spinner and scroll-position jump that users see on quick tab switches.
-  // Realtime + 60 s polling handle near-instant updates while focused.
+  // Realtime subscriptions handle near-instant updates while focused.
   const refetchInbox = refetch;
   useFocusEffect(
     useCallback(() => {
@@ -468,7 +467,7 @@ Alert.alert("완료", "수신함에서 삭제되었습니다.");
           style={{ flex: 1 }}
           contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
           refreshControl={
-            <RefreshControl refreshing={isRefetching} onRefresh={refetch} />
+            <RefreshControl refreshing={isManualRefreshing} onRefresh={handleRefresh} />
           }
         >
           <Feather name="inbox" size={48} color={Colors.zinc300} />
@@ -483,7 +482,7 @@ Alert.alert("완료", "수신함에서 삭제되었습니다.");
             <CarouselGroup group={group} onCardPress={handleCardPress} />
           )}
           refreshControl={
-            <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={Colors.zinc400} />
+            <RefreshControl refreshing={isManualRefreshing} onRefresh={handleRefresh} tintColor={Colors.zinc400} />
           }
           contentContainerStyle={[styles.listContent, { paddingBottom: navBottom }]}
           showsVerticalScrollIndicator={false}

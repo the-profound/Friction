@@ -46,7 +46,7 @@ import type {
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
-import { useFocusPollingOptions, isQueryStale } from "@/lib/useScreenFocused";
+import { isQueryStale } from "@/lib/useScreenFocused";
 import { useQueryClient } from "@tanstack/react-query";
 
 type PersonalFilter = "all" | "my" | "subscribed";
@@ -113,12 +113,7 @@ export default function OfScreen() {
   }, []);
 
   const myCollectionsQuery = useListMyCollections({ ownerId: userId });
-  // Poll team collections while focused so newly-joined memberships (e.g.
-  // when an operator adds you to their team) appear within seconds without
-  // a manual refresh. Personal collections + stored sentences only change
-  // via local actions, so they keep their existing focus-only refetch.
-  const teamPollOpts = useFocusPollingOptions();
-  const teamCollectionsQuery = useListTeamCollections({ userId }, teamPollOpts);
+  const teamCollectionsQuery = useListTeamCollections({ userId });
   const sentencesQuery = useListStoredSentences({ userId });
 
   const createMyCollection = useCreateMyCollection();
@@ -388,10 +383,17 @@ export default function OfScreen() {
     }
   }, [sentenceDeleteTarget, deleteSentence, sentencesQuery]);
 
-  const handleRefresh = useCallback(() => {
-    if (ofSubTab === "personal") myCollectionsQuery.refetch();
-    else if (ofSubTab === "group") teamCollectionsQuery.refetch();
-    else sentencesQuery.refetch();
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+
+  const handleRefresh = useCallback(async () => {
+    setIsManualRefreshing(true);
+    try {
+      if (ofSubTab === "personal") await myCollectionsQuery.refetch();
+      else if (ofSubTab === "group") await teamCollectionsQuery.refetch();
+      else await sentencesQuery.refetch();
+    } finally {
+      setIsManualRefreshing(false);
+    }
   }, [ofSubTab, myCollectionsQuery, teamCollectionsQuery, sentencesQuery]);
 
   // Refetch on focus ONLY if cached data is stale (older than the global
@@ -413,13 +415,6 @@ export default function OfScreen() {
       }
     }, [refetchPersonal, refetchTeams, refetchSentences, queryClient, userId]),
   );
-
-  const isRefetching =
-    ofSubTab === "personal"
-      ? myCollectionsQuery.isRefetching
-      : ofSubTab === "group"
-        ? teamCollectionsQuery.isRefetching
-        : sentencesQuery.isRefetching;
 
   const isLoading =
     ofSubTab === "personal"
@@ -542,7 +537,7 @@ export default function OfScreen() {
     if (personalFilter === "subscribed") {
       return (
         <RefreshableEmpty
-          refreshing={isRefetching}
+          refreshing={isManualRefreshing}
           onRefresh={handleRefresh}
           contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
         >
@@ -557,7 +552,7 @@ export default function OfScreen() {
     }
     return (
       <RefreshableEmpty
-        refreshing={isRefetching}
+        refreshing={isManualRefreshing}
         onRefresh={handleRefresh}
         contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
       >
@@ -575,7 +570,7 @@ export default function OfScreen() {
     if (groupFilter === "joined") {
       return (
         <RefreshableEmpty
-          refreshing={isRefetching}
+          refreshing={isManualRefreshing}
           onRefresh={handleRefresh}
           contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
         >
@@ -590,7 +585,7 @@ export default function OfScreen() {
     }
     return (
       <RefreshableEmpty
-        refreshing={isRefetching}
+        refreshing={isManualRefreshing}
         onRefresh={handleRefresh}
         contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
       >
@@ -606,7 +601,7 @@ export default function OfScreen() {
 
   const renderEmptySentence = () => (
     <RefreshableEmpty
-      refreshing={isRefetching}
+      refreshing={isManualRefreshing}
       onRefresh={handleRefresh}
       contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
     >
@@ -650,7 +645,7 @@ export default function OfScreen() {
             numColumns={2}
             columnWrapperStyle={styles.gridRow}
             contentContainerStyle={[styles.gridContent, { paddingBottom: navBottom }]}
-            refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={Colors.zinc400} />}
+            refreshControl={<RefreshControl refreshing={isManualRefreshing} onRefresh={handleRefresh} tintColor={Colors.zinc400} />}
             showsVerticalScrollIndicator={false}
           />
         );
@@ -666,7 +661,7 @@ export default function OfScreen() {
             numColumns={2}
             columnWrapperStyle={styles.gridRow}
             contentContainerStyle={[styles.gridContent, { paddingBottom: navBottom }]}
-            refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={Colors.zinc400} />}
+            refreshControl={<RefreshControl refreshing={isManualRefreshing} onRefresh={handleRefresh} tintColor={Colors.zinc400} />}
             showsVerticalScrollIndicator={false}
           />
         );
@@ -685,7 +680,7 @@ export default function OfScreen() {
             ]}
             refreshControl={
               !selectionMode ? (
-                <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={Colors.zinc400} />
+                <RefreshControl refreshing={isManualRefreshing} onRefresh={handleRefresh} tintColor={Colors.zinc400} />
               ) : undefined
             }
             scrollEnabled={selectionMode || sentenceScrollEnabled}
