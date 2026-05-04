@@ -303,13 +303,6 @@ export default function DividingScreen() {
 
   const [blockHeights, setBlockHeights] = useState<Record<string, number>>({});
 
-  // debouncedContent가 바뀔 때마다 blockHeights 캐시를 초기화해 재측정을 강제한다.
-  // applyEngineResult/handleMergeWithPrevious처럼 즉시 갱신하는 경로에서도
-  // debouncedContent가 바뀌므로 여기서 한 번 더 정리해줘도 중복 없이 안전하다.
-  useEffect(() => {
-    setBlockHeights({});
-  }, [debouncedContent]);
-
   // 블록 단위 측정 요청. 페이지 padding 없이 블록 단독 높이만 잰다.
   const warningRequest = useMemo<MeasureRequest | null>(() => {
     if (measurePages.length === 0) return null;
@@ -347,9 +340,13 @@ export default function DividingScreen() {
     });
   }, []);
 
+  const prevPageOverflowInfoRef = useRef<Record<number, { totalHeight: number; overflowBlockIdx: number }>>({});
+
   // 페이지별 합산 높이(컨텐츠 + 패딩 + insets) 및 오버플로 시작 블록 인덱스
   const pageOverflowInfo = useMemo(() => {
     const info: Record<number, { totalHeight: number; overflowBlockIdx: number }> = {};
+    let anyPending = false;
+    const currentPageIndices = new Set(measurePages.map((p) => p.pageIndex));
     for (const p of measurePages) {
       const blocks = pageBlockMap[p.pageIndex] ?? [];
       const heights: number[] = [];
@@ -362,12 +359,24 @@ export default function DividingScreen() {
         }
         heights.push(h);
       }
-      if (!allMeasured) continue;
+      if (!allMeasured) {
+        anyPending = true;
+        continue;
+      }
       const blockSum = heights.reduce((a, b) => a + b, 0);
       const totalHeight = blockSum + 2 * paddingY + insets.bottom;
       const overflowBlockIdx = findOverflowBlockIndex(heights, availableContentHeight, bodyLineHeight);
       info[p.pageIndex] = { totalHeight, overflowBlockIdx };
     }
+    if (anyPending) {
+      const cached: Record<number, { totalHeight: number; overflowBlockIdx: number }> = {};
+      for (const idx of currentPageIndices) {
+        const prev = prevPageOverflowInfoRef.current[idx];
+        if (prev) cached[idx] = prev;
+      }
+      return cached;
+    }
+    prevPageOverflowInfoRef.current = info;
     return info;
   }, [measurePages, pageBlockMap, blockHeights, paddingY, insets.bottom, availableContentHeight, bodyLineHeight]);
 
@@ -523,7 +532,6 @@ export default function DividingScreen() {
       contentRef.current = joined;
       setContent(joined);
       setDebouncedContent(joined);
-      setBlockHeights({});
       if (editorRef.current && editorReady) {
         editorRef.current.setMarkdown(joined);
       }
@@ -621,7 +629,6 @@ export default function DividingScreen() {
       contentRef.current = joined;
       setContent(joined);
       setDebouncedContent(joined);
-      setBlockHeights({});
       if (editorRef.current && editorReady) {
         editorRef.current.setMarkdown(joined);
       }
