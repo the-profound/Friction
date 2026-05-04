@@ -636,8 +636,8 @@ export default function TeamCollectionDetailScreen() {
                   })
                 }
               >
-                <Feather name="plus" size={16} color={Colors.zinc600} />
-                <Text style={styles.addButtonText}>내 글 추가</Text>
+                <Feather name="send" size={16} color={Colors.zinc600} />
+                <Text style={styles.addButtonText}>내 글 보내기</Text>
               </Pressable>
             </View>
           )}
