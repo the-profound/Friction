@@ -980,6 +980,12 @@ interface Command {
           }
           break;
         }
+        case "insertDivider": {
+          if (editor && !editor.isDestroyed) {
+            editor.chain().focus().setHorizontalRule().run();
+          }
+          break;
+        }
       }
     } catch (e) {
       postToRN({ type: "onError", payload: { code: "COMMAND_FAIL", message: String(e) } });
