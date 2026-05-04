@@ -8,11 +8,12 @@ import {
   Animated,
   PanResponder,
   Keyboard,
+  Platform,
   useWindowDimensions,
   type TextStyle,
+  type KeyboardEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useKeyboardAnimation } from "react-native-keyboard-controller";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, ZIndex, Spacing } from "../../constants/tokens";
 
@@ -41,9 +42,6 @@ interface KeyboardSyncProps {
   minTranslateY: number;
 }
 
-// Mounted only when the sheet is visible and keyboardAware so that
-// useKeyboardAnimation's side effect (Android adjustResize mode) is scoped to
-// the sheet's lifetime and does not leak into the rest of the app.
 function KeyboardSync({
   translateY,
   currentSnapRef,
@@ -52,21 +50,44 @@ function KeyboardSync({
   getSnapY,
   minTranslateY,
 }: KeyboardSyncProps) {
-  const { height: keyboardHeightAnim } = useKeyboardAnimation();
-
   useEffect(() => {
-    const id = keyboardHeightAnim.addListener(({ value }) => {
+    const onShow = (e: KeyboardEvent) => {
       if (closingRef.current) return;
-      // height is exposed as Animated.multiply(rawHeight, -1), so negate it.
-      const kbHeight = Math.max(0, -value);
+      const kbHeight = e.endCoordinates.height;
+      if (!kbHeight || kbHeight <= 0) return;
       const base = getSnapY(currentSnapRef.current);
       const target = Math.max(base - kbHeight, minTranslateY);
       keyboardOffsetRef.current = base - target;
-      translateY.setValue(target);
-    });
-    return () => keyboardHeightAnim.removeListener(id);
+      const duration = Platform.OS === "ios" ? (e.duration || 250) : 250;
+      Animated.timing(translateY, {
+        toValue: target,
+        duration,
+        useNativeDriver: true,
+      }).start();
+    };
+
+    const onHide = () => {
+      if (closingRef.current) return;
+      keyboardOffsetRef.current = 0;
+      const base = getSnapY(currentSnapRef.current);
+      Animated.timing(translateY, {
+        toValue: base,
+        duration: 250,
+        useNativeDriver: true,
+      }).start();
+    };
+
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+
+    const showSub = Keyboard.addListener(showEvent, onShow);
+    const hideSub = Keyboard.addListener(hideEvent, onHide);
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
   }, [
-    keyboardHeightAnim,
     getSnapY,
     minTranslateY,
     translateY,
@@ -105,16 +126,13 @@ export default function BottomSheet({
 
   const minTranslateY = insets.top + MIN_TOP_GAP;
 
-  // Mutable refs so PanResponder (created once) always reads fresh values.
   const getSnapYRef = useRef(getSnapY);
   const snapCountRef = useRef(snapPoints.length);
-  // closeRef is populated after close() is defined below.
   const closeRef = useRef<() => void>(() => {});
 
   useEffect(() => { getSnapYRef.current = getSnapY; }, [getSnapY]);
   useEffect(() => { snapCountRef.current = snapPoints.length; }, [snapPoints]);
 
-  // Animate to initial snap on open.
   useEffect(() => {
     if (visible) {
       currentSnap.current = 0;
@@ -137,10 +155,6 @@ export default function BottomSheet({
     }
   }, [visible]);
 
-  // Re-snap to first snap point when snap points semantically change while the
-  // sheet is already open (e.g. code-step → preview-step transition).
-  // Use a string key so inline array literals don't trigger spurious re-snaps
-  // on every parent re-render (e.g. while the user is typing).
   const snapPointsKey = snapPoints.join("|");
   const prevSnapPointsKey = useRef<string | null>(null);
   useEffect(() => {
@@ -257,7 +271,6 @@ export default function BottomSheet({
             <View style={styles.handle} />
             {(title || closeButton) && (
               <View style={styles.titleRow}>
-                {/* 왼쪽 균형용 spacer (closeButton 너비와 동일) */}
                 {closeButton ? <View style={styles.titleSpacer} /> : null}
                 {title && <Text style={[styles.title, titleStyle]}>{title}</Text>}
                 {closeButton && (
