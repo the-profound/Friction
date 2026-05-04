@@ -77,7 +77,7 @@ html,body{height:100%;background:transparent;container-type:inline-size}
 .hr-btn{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid #d4d4d8;border-radius:50%;background:#fff;color:#3f3f46;font-size:16px;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation;user-select:none;transition:opacity 0.15s}
 .hr-btn-delete{color:#a1a1aa;font-size:14px}
 .ProseMirror p.is-editor-empty:first-child::before{content:attr(data-placeholder);color:#a1a1aa;pointer-events:none;float:left;height:0}
-.ProseMirror u{text-decoration:underline}
+.ProseMirror u{text-decoration:underline;text-underline-offset:0.2em}
 .ProseMirror strong{font-family:'Eulyoo1945-SemiBold',serif;font-weight:700}
 .ProseMirror em{font-style:italic}
 .ProseMirror .overflow-highlight{background:#fecaca}

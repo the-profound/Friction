@@ -42,7 +42,7 @@ body{display:flex;align-items:center;justify-content:center}
 #reader-content li p{margin-bottom:0}
 #reader-content blockquote{font-family:'Eulyoo1945-Regular',serif;font-style:italic;border-left:3px solid #d4d4d8;padding-left:1em;margin:0.5em 0;color:#52525b;text-align:left}
 #reader-content hr{border:none;border-top:1px solid #e4e4e7;margin:1em 0}
-#reader-content u{text-decoration:underline}
+#reader-content u{text-decoration:underline;text-underline-offset:0.2em}
 #reader-content strong{font-family:'Eulyoo1945-SemiBold',serif;font-weight:700}
 #reader-content em{font-style:italic}
 ::selection{background:rgba(59,130,246,0.3)}
