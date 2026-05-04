@@ -355,6 +355,10 @@ export default function DraftScreen() {
     Keyboard.dismiss();
   }, []);
 
+  const handleInsertDivider = useCallback(() => {
+    editorRef.current?.insertDivider();
+  }, []);
+
   const handleBack = useCallback(async () => {
     if (isNavigatingRef.current) return;
     isNavigatingRef.current = true;
@@ -525,6 +529,7 @@ export default function DraftScreen() {
             onItalicPress={handleToolbarItalic}
             onUnderlinePress={handleToolbarUnderline}
             onDismissKeyboard={handleDismissKeyboard}
+            onInsertDivider={handleInsertDivider}
           />
         )}
       </KeyboardAvoidingView>

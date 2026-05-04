@@ -82,7 +82,6 @@ export default function KeyboardToolbar({
           hitSlop={8}
         >
           <MaterialCommunityIcons name="content-cut" size={14} color="#a1a1aa" />
-          <Text style={styles.dividerLabel}>분할</Text>
         </Pressable>
       )}
 
