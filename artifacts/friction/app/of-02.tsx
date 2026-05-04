@@ -185,6 +185,7 @@ export default function TeamCollectionListScreen() {
       style={styles.collectionItem}
       onPress={() => router.push({ pathname: "/of-02-detail", params: { id: item.id } })}
       onLongPress={() => item.role === "OWNER" ? handleDelete(item.id, item.name) : undefined}
+      delayLongPress={1000}
     >
       <View style={styles.collectionIcon}>
         <Feather name="users" size={20} color="#7C3AED" />

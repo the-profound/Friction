@@ -181,6 +181,7 @@ export default function SentenceCollectionScreen() {
           style={styles.sentenceItem}
           onPress={() => setSelectedSentence(item)}
           onLongPress={() => handleCopy(item.text)}
+          delayLongPress={1000}
         >
           <View style={styles.sentenceContent}>
             <Text style={styles.sentenceText} numberOfLines={3}>

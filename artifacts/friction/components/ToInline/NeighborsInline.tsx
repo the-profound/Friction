@@ -371,6 +371,7 @@ export function NeighborsInline({
             ? () => setCancelTarget({ id: item.requestId!, name: item.nickname })
             : undefined
         }
+        delayLongPress={1000}
         disabled={isDisabled}
       >
         <View style={styles.avatarCircle}>

@@ -75,6 +75,7 @@ export default function PersonalCollectionListScreen() {
       style={styles.collectionItem}
       onPress={() => router.push({ pathname: "/of-01-detail", params: { id: item.id } })}
       onLongPress={() => setDeleteTarget({ id: item.id, name: item.name })}
+      delayLongPress={1000}
     >
       <View style={styles.collectionIcon}>
         <Feather name="folder" size={20} color={Colors.zinc500} />
