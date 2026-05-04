@@ -10,6 +10,7 @@ interface KeyboardToolbarProps {
   onItalicPress: () => void;
   onUnderlinePress: () => void;
   onDismissKeyboard: () => void;
+  onInsertDivider?: () => void;
 }
 
 const BLOCK_LABELS: Record<string, string> = {
@@ -29,6 +30,7 @@ export default function KeyboardToolbar({
   onItalicPress,
   onUnderlinePress,
   onDismissKeyboard,
+  onInsertDivider,
 }: KeyboardToolbarProps) {
   const { activeBlock, isBold, isItalic, isUnderline } = selectionState;
   const blockLabel = BLOCK_LABELS[activeBlock] ?? "본문";
@@ -72,6 +74,17 @@ export default function KeyboardToolbar({
           U
         </Text>
       </Pressable>
+
+      {onInsertDivider != null && (
+        <Pressable
+          style={styles.dividerButton}
+          onPress={onInsertDivider}
+          hitSlop={8}
+        >
+          <MaterialCommunityIcons name="content-cut" size={14} color="#a1a1aa" />
+          <Text style={styles.dividerLabel}>분할</Text>
+        </Pressable>
+      )}
 
       <Pressable
         style={styles.button}
@@ -120,5 +133,18 @@ const styles = StyleSheet.create({
   },
   activeText: {
     color: "#ffffff",
+  },
+  dividerButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 3,
+    height: 44,
+    paddingHorizontal: 6,
+  },
+  dividerLabel: {
+    color: "#a1a1aa",
+    fontSize: 12,
+    fontFamily: Platform.select({ ios: "Pretendard-Regular", default: "Pretendard" }),
   },
 });

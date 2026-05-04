@@ -161,6 +161,11 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
       },
       toggleMark(_mark: string) {
       },
+      insertDivider() {
+        if (editor && !editor.isDestroyed) {
+          editor.commands.setHorizontalRule();
+        }
+      },
     }), [editor, requestExportMarkdown, onError]);
 
     const handleTitleInput = useCallback(

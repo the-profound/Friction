@@ -60,10 +60,20 @@ import type {
   WebViewMarkdownEditorRef,
   OnChangePayload,
   OnExportMarkdownPayload,
+  OnSelectionUpdatePayload,
   OverflowRange,
 } from "@/components/WebViewMarkdownEditor/types";
+import KeyboardToolbar from "@/components/KeyboardToolbar/KeyboardToolbar";
+import BlockTypeSheet from "@/components/KeyboardToolbar/BlockTypeSheet";
 
 const PAGE_DIVIDER = MarkdownPolicy.PAGE_DIVIDER;
+
+const DEFAULT_SELECTION: OnSelectionUpdatePayload = {
+  activeBlock: "paragraph",
+  isBold: false,
+  isItalic: false,
+  isUnderline: false,
+};
 
 const PAGE_KEY_PREFIX = "page_";
 
@@ -120,6 +130,8 @@ export default function DividingScreen() {
     requestId: string;
   } | null>(null);
 
+  const [selectionState, setSelectionState] = useState<OnSelectionUpdatePayload>(DEFAULT_SELECTION);
+  const [blockTypeSheetVisible, setBlockTypeSheetVisible] = useState(false);
   const [stepBackConfirmVisible, setStepBackConfirmVisible] = useState(false);
   const [splitting, setSplitting] = useState(false);
 
@@ -793,6 +805,34 @@ export default function DividingScreen() {
     }
   }, [id, getEditorContent, markDirty, flush, transitionStatus, queryClient, router]);
 
+  const handleSelectionUpdate = useCallback((payload: OnSelectionUpdatePayload) => {
+    setSelectionState(payload);
+  }, []);
+
+  const handleToolbarFormat = useCallback(() => {
+    setBlockTypeSheetVisible(true);
+  }, []);
+
+  const handleBlockTypeSelect = useCallback((blockType: string) => {
+    editorRef.current?.setBlockType(blockType);
+  }, []);
+
+  const handleToolbarBold = useCallback(() => {
+    editorRef.current?.toggleMark("bold");
+  }, []);
+
+  const handleToolbarItalic = useCallback(() => {
+    editorRef.current?.toggleMark("italic");
+  }, []);
+
+  const handleToolbarUnderline = useCallback(() => {
+    editorRef.current?.toggleMark("underline");
+  }, []);
+
+  const handleInsertDivider = useCallback(() => {
+    editorRef.current?.insertDivider();
+  }, []);
+
   const handleDismissKeyboard = useCallback(() => {
     editorRef.current?.blur();
     Keyboard.dismiss();
@@ -958,6 +998,7 @@ export default function DividingScreen() {
                 onExportMarkdown={handleExportMarkdown}
                 onTitleChange={handleTitleChange}
                 onKeyboardVisibilityChange={setKeyboardVisible}
+                onSelectionUpdate={handleSelectionUpdate}
                 bodyFontSize={bodyFontSize}
                 bodyLetterSpacing={bodyLetterSpacing}
               />
@@ -966,6 +1007,17 @@ export default function DividingScreen() {
               <Text style={styles.charCountText}>{charCount}자</Text>
             </View>
           </View>
+          {keyboardVisible && Platform.OS !== "web" && (
+            <KeyboardToolbar
+              selectionState={selectionState}
+              onFormatPress={handleToolbarFormat}
+              onBoldPress={handleToolbarBold}
+              onItalicPress={handleToolbarItalic}
+              onUnderlinePress={handleToolbarUnderline}
+              onDismissKeyboard={handleDismissKeyboard}
+              onInsertDivider={handleInsertDivider}
+            />
+          )}
         </KeyboardAvoidingView>
 
         <ConfirmModal
@@ -976,6 +1028,13 @@ export default function DividingScreen() {
           cancelLabel="취소"
           onConfirm={handleConfirmStepBack}
           onCancel={() => setStepBackConfirmVisible(false)}
+        />
+
+        <BlockTypeSheet
+          visible={blockTypeSheetVisible}
+          activeBlock={selectionState.activeBlock}
+          onClose={() => setBlockTypeSheetVisible(false)}
+          onSelect={handleBlockTypeSelect}
         />
       </View>
     </>

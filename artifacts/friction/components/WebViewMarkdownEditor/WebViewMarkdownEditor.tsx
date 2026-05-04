@@ -84,6 +84,9 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       toggleMark(mark: string) {
         sendCommand({ type: "toggleMark", mark });
       },
+      insertDivider() {
+        sendCommand({ type: "insertDivider" });
+      },
     }), [sendCommand]);
 
     const handleMessage = useCallback(

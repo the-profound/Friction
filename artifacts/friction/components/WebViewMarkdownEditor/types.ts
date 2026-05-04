@@ -23,7 +23,8 @@ export type RNToWebViewCommand =
   | { type: "setOverflowProbeConfig"; availableContentHeightPx: number | null }
   | { type: "setBodyMetrics"; fontSizePx: number; letterSpacingPx: number }
   | { type: "setBlockType"; blockType: string }
-  | { type: "toggleMark"; mark: string };
+  | { type: "toggleMark"; mark: string }
+  | { type: "insertDivider" };
 
 export interface OnChangePayload {
   isDirty: boolean;
@@ -72,6 +73,7 @@ export interface WebViewMarkdownEditorRef {
   setOverflowProbeConfig: (availableContentHeightPx: number | null) => void;
   setBlockType: (blockType: string) => void;
   toggleMark: (mark: string) => void;
+  insertDivider: () => void;
 }
 
 export interface WebViewMarkdownEditorProps {
