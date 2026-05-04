@@ -496,6 +496,11 @@ export default function TeamCollectionDetailScreen() {
                 <Text style={styles.articleTitle} numberOfLines={1}>
                   {item.article?.title ?? "제목 없음"}
                 </Text>
+                {isNoticeOfDay && (
+                  <View style={styles.noticeOfDayBadge}>
+                    <Text style={styles.noticeOfDayBadgeText}>오늘의 인사</Text>
+                  </View>
+                )}
                 {showNew && (
                   <View style={styles.newBadge}>
                     <Text style={styles.newBadgeText}>NEW</Text>
@@ -1063,6 +1068,18 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.zinc900,
     flex: 1,
+  },
+  noticeOfDayBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: Colors.noticeAccentSoft,
+  },
+  noticeOfDayBadgeText: {
+    ...Typography.caption,
+    fontSize: 11,
+    fontWeight: "600" as const,
+    color: Colors.noticeAccent,
   },
   newBadge: {
     paddingHorizontal: 6,
