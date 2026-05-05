@@ -465,9 +465,10 @@ export default function TeamCollectionDetailScreen() {
         );
       }
 
-      const showNew = isNew(item);
-      const rowBg = isNoticeOfDay ? Colors.noticeAccentSoft : undefined;
       const authorId = item.article?.authorId ?? item.addedBy;
+      const isMyArticle = !!authorId && authorId === userId;
+      const showNew = !isMyArticle && isNew(item);
+      const rowBg = isNoticeOfDay ? Colors.noticeAccentSoft : undefined;
       const authorNickname = authorId ? memberNicknameMap.get(authorId) : undefined;
 
       return (
@@ -502,6 +503,11 @@ export default function TeamCollectionDetailScreen() {
                     <Text style={styles.noticeOfDayBadgeText}>오늘의 인사</Text>
                   </View>
                 )}
+                {isMyArticle && (
+                  <View style={styles.myArticleBadge}>
+                    <Text style={styles.myArticleBadgeText}>내 글</Text>
+                  </View>
+                )}
                 {showNew && (
                   <View style={styles.newBadge}>
                     <Text style={styles.newBadgeText}>NEW</Text>
@@ -518,7 +524,7 @@ export default function TeamCollectionDetailScreen() {
         </SwipeableRow>
       );
     },
-    [handleArticleDeletePress, handleSwipeOpen, handleArticleNavigate, isNew, memberNicknameMap],
+    [handleArticleDeletePress, handleSwipeOpen, handleArticleNavigate, isNew, memberNicknameMap, userId],
   );
 
   const renderRow = useCallback(
@@ -1097,6 +1103,18 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700" as const,
     color: Colors.noticeAccent,
+  },
+  myArticleBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: Colors.zinc200,
+  },
+  myArticleBadgeText: {
+    ...Typography.caption,
+    fontSize: 11,
+    fontWeight: "600" as const,
+    color: Colors.zinc500,
   },
   articleDate: {
     ...Typography.caption,
