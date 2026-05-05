@@ -59,8 +59,11 @@ function postToRN(ev){
 try{var rn=window.ReactNativeWebView;if(rn)rn.postMessage(JSON.stringify(ev))}catch(e){}
 }
 
+var hasActiveSelection=false;
 var debounceTimer=null;
 document.addEventListener("selectionchange",function(){
+var sel=window.getSelection();
+hasActiveSelection=!!(sel&&sel.rangeCount>0&&!sel.isCollapsed);
 if(debounceTimer)clearTimeout(debounceTimer);
 debounceTimer=setTimeout(function(){
 var sel=window.getSelection();
@@ -68,6 +71,34 @@ var t=sel?sel.toString().trim():"";
 postToRN({type:"onTextSelect",text:t,isEmpty:!t});
 },80);
 });
+
+var dragStartX=0,dragStartY=0,isDragging=false,touchStartTime=0;
+var DRAG_THRESHOLD=6;
+var LONG_PRESS_MS=300;
+document.addEventListener("touchstart",function(e){
+var t=e.touches[0];
+if(t){dragStartX=t.clientX;dragStartY=t.clientY;}
+touchStartTime=Date.now();
+isDragging=false;
+},{passive:true});
+document.addEventListener("touchmove",function(e){
+if(isDragging)return;
+var t=e.touches[0];
+if(!t)return;
+var dx=t.clientX-dragStartX;
+var dy=t.clientY-dragStartY;
+if(Math.sqrt(dx*dx+dy*dy)<=DRAG_THRESHOLD)return;
+var isLongPressLike=(Date.now()-touchStartTime)>=LONG_PRESS_MS||hasActiveSelection;
+if(!isLongPressLike)return;
+isDragging=true;
+postToRN({type:"onDragStart"});
+},{passive:true});
+document.addEventListener("touchend",function(){
+if(isDragging){isDragging=false;postToRN({type:"onDragEnd"});}
+},{passive:true});
+document.addEventListener("touchcancel",function(){
+if(isDragging){isDragging=false;postToRN({type:"onDragEnd"});}
+},{passive:true});
 
 var didReady=false;
 window.handleCommand=function(cmd){

@@ -12,6 +12,7 @@ export interface WebViewMarkdownReaderProps {
   onTextSelect?: (text: string, isEmpty: boolean) => void;
   onReady?: () => void;
   clearSelectionSignal?: number;
+  onDragStateChange?: (isDragging: boolean) => void;
 }
 
 const FADE_IN_DURATION_MS = 100;
@@ -24,6 +25,7 @@ export default function WebViewMarkdownReader({
   onTextSelect,
   onReady,
   clearSelectionSignal,
+  onDragStateChange,
 }: WebViewMarkdownReaderProps) {
   const webViewRef = useRef<WebView>(null);
   const readyRef = useRef(false);
@@ -34,6 +36,8 @@ export default function WebViewMarkdownReader({
   onTextSelectRef.current = onTextSelect;
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
+  const onDragStateChangeRef = useRef(onDragStateChange);
+  onDragStateChangeRef.current = onDragStateChange;
 
   const opacityAnim = useRef(new Animated.Value(0)).current;
   const fadeAnimRef = useRef<Animated.CompositeAnimation | null>(null);
@@ -108,6 +112,10 @@ export default function WebViewMarkdownReader({
           }
         } else if (data.type === "onTextSelect") {
           onTextSelectRef.current?.(data.text ?? "", !!data.isEmpty);
+        } else if (data.type === "onDragStart") {
+          onDragStateChangeRef.current?.(true);
+        } else if (data.type === "onDragEnd") {
+          onDragStateChangeRef.current?.(false);
         }
       } catch {}
     },

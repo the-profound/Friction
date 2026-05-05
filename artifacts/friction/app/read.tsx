@@ -568,6 +568,14 @@ export default function ReadScreen() {
   useEffect(() => { handleSwipeRightRef.current = handleSwipeRight; }, [handleSwipeRight]);
 
   const isTextSelectingRef = useRef(false);
+  const isDraggingRef = useRef(false);
+
+  const handleDragStateChange = useCallback((isDragging: boolean) => {
+    isDraggingRef.current = isDragging;
+    // Also mutate gestureState.current directly so panGesture handlers
+    // see the fresh value without waiting for the next render snapshot.
+    gestureState.current.isDragging = isDragging;
+  }, []);
 
   // ── Reanimated shared values ──────────────────────────────────────────────
   // translateXSV positions the row of absolute-positioned page slots so that
@@ -617,6 +625,7 @@ export default function ReadScreen() {
     atBoundaryLeft: true,
     containerWidth: 300,
     isTextSelecting: false,
+    isDragging: false,
     isCommitting: false,
   });
   gestureState.current = {
@@ -625,6 +634,7 @@ export default function ReadScreen() {
     atBoundaryLeft: currentPage === 0 || (!hasCover && currentPage <= 1),
     containerWidth: layout.containerWidth,
     isTextSelecting: isTextSelectingRef.current,
+    isDragging: isDraggingRef.current,
     isCommitting: false, // updated inline
   };
   const isCommittingRef = useRef(false);
@@ -666,11 +676,11 @@ export default function ReadScreen() {
     }
     return g
     .onBegin(() => {
-      // nothing
+      if (isDraggingRef.current || isTextSelectingRef.current) return;
     })
     .onUpdate((e) => {
+      if (isDraggingRef.current || isTextSelectingRef.current || isCommittingRef.current) return;
       const gs = gestureState.current;
-      if (gs.isTextSelecting || isCommittingRef.current) return;
 
       const dx = e.translationX;
       const dy = e.translationY;
@@ -684,6 +694,10 @@ export default function ReadScreen() {
     })
     .onEnd((e) => {
       if (isCommittingRef.current) return;
+      if (isDraggingRef.current || isTextSelectingRef.current) {
+        translateXSV.value = withSpring(baselineXSV.value, snapConfig);
+        return;
+      }
 
       const gs = gestureState.current;
       const dx = e.translationX;
@@ -1127,6 +1141,7 @@ export default function ReadScreen() {
                         <PageView
                           content={contentPages[cIdx]}
                           onTextSelect={handleTextSelect}
+                          onDragStateChange={handleDragStateChange}
                           bottomInset={insets.bottom}
                           layout={layout}
                           clearSignal={clearSelectionSignal}
@@ -1570,12 +1585,14 @@ interface ReaderLayout {
 const PageView = React.memo(function PageView({
   content,
   onTextSelect,
+  onDragStateChange,
   bottomInset,
   layout,
   clearSignal,
 }: {
   content: string;
   onTextSelect?: (text: string, isEmpty: boolean) => void;
+  onDragStateChange?: (isDragging: boolean) => void;
   bottomInset: number;
   layout: ReaderLayout;
   clearSignal?: number;
@@ -1612,6 +1629,7 @@ const PageView = React.memo(function PageView({
               bodyFontSize={layout.bodyFontSize}
               bodyLetterSpacing={layout.bodyLetterSpacing}
               onTextSelect={onTextSelect}
+              onDragStateChange={onDragStateChange}
               clearSelectionSignal={clearSignal}
             />
           </View>
