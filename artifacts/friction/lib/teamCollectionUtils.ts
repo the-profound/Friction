@@ -112,9 +112,7 @@ export function buildTeamArticleRows(
 ): TeamArticleListRow[] {
   if (articles.length === 0) return [];
 
-  // 각 항목에 dateKey 부여
-  // visibleAt 유무와 관계없이 순수 KST 달력 날짜(18:00 컷오프 없음)로 그룹핑
-  // (18:00 컷오프는 수신함 배달 슬롯 전용이며 단체 모음 글 목록에는 적용하지 않는다)
+  // 각 항목에 dateKey 부여 (순수 KST 달력 날짜, 18:00 컷오프 없음)
   const withKeys: ArticleWithKey[] = articles.map((a) => {
     const dateKey = a.visibleAt
       ? toKstCalendarDateKey(a.visibleAt)
@@ -122,9 +120,29 @@ export function buildTeamArticleRows(
     return { ...a, _dateKey: dateKey };
   });
 
-  // 날짜 그룹 맵 (최신순 정렬 먼저)
+  // 전역 replyMap: 날짜 그룹을 넘어 원글 아래에 답장을 붙인다
+  // sourceArticleId → [replies, 오래된 순]
+  const globalReplyMap = new Map<string, ArticleWithKey[]>();
+  const attachedReplyIds = new Set<string>();
+  for (const a of withKeys) {
+    if (!a.sourceArticleId || !a.parentInThisCollection || a.isDeletedPlaceholder) continue;
+    if (!globalReplyMap.has(a.sourceArticleId)) globalReplyMap.set(a.sourceArticleId, []);
+    globalReplyMap.get(a.sourceArticleId)!.push(a);
+    attachedReplyIds.add(a.articleId);
+  }
+  // 답장은 오래된 순(visibleAt 오름차순)으로 원글 아래 나열
+  for (const replies of globalReplyMap.values()) {
+    replies.sort((a, b) => {
+      const ta = a.visibleAt ?? a.addedAt;
+      const tb = b.visibleAt ?? b.addedAt;
+      return new Date(ta).getTime() - new Date(tb).getTime();
+    });
+  }
+
+  // 루트 글만 날짜 그룹핑 (답장으로 분류된 항목 제외)
   const groupMap = new Map<string, ArticleWithKey[]>();
   for (const a of withKeys) {
+    if (attachedReplyIds.has(a.articleId)) continue;
     if (!groupMap.has(a._dateKey)) groupMap.set(a._dateKey, []);
     groupMap.get(a._dateKey)!.push(a);
   }
@@ -137,7 +155,7 @@ export function buildTeamArticleRows(
   for (const dateKey of sortedKeys) {
     const groupItems = groupMap.get(dateKey)!;
 
-    // 그룹 내에서 일반 정렬: 오늘의 인사 → 나머지(visibleAt 내림차순)
+    // 그룹 내 정렬: 오늘의 인사 → 나머지(visibleAt 내림차순)
     const notices = groupItems.filter(
       (a) => a.article?.isNotice && a.article?.noticeDate === dateKey,
     );
@@ -145,59 +163,31 @@ export function buildTeamArticleRows(
       (a) => !(a.article?.isNotice && a.article?.noticeDate === dateKey),
     );
 
-    // 비공지 항목을 visibleAt 내림차순 정렬
     nonNotices.sort((a, b) => {
       const ta = a.visibleAt ?? a.addedAt;
       const tb = b.visibleAt ?? b.addedAt;
       return new Date(tb).getTime() - new Date(ta).getTime();
     });
 
-    // Build ID sets for this group's notices and non-notices so we can scope
-    // the DFS replyMap to parents that are actually traversed in this group.
-    // Replies whose parent is in a different date group fall back to top-level.
-    const nonNoticeIdSet = new Set(nonNotices.map((a) => a.articleId));
-    const noticeIdSet = new Set(notices.map((a) => a.articleId));
-
-    // DFS replyMap: sourceArticleId → [replies in this group, sorted]
-    // Only keyed by parents that are traversed in THIS group (notice or non-notice).
-    // Replies with a parent in a different date group will be top-level.
-    const replyMap = new Map<string, ArticleWithKey[]>();
-    for (const a of nonNotices) {
-      if (!a.sourceArticleId || !a.parentInThisCollection || a.isDeletedPlaceholder) continue;
-      const parentInThisGroup =
-        nonNoticeIdSet.has(a.sourceArticleId) || noticeIdSet.has(a.sourceArticleId);
-      if (!parentInThisGroup) continue; // parent in another group → render top-level
-      if (!replyMap.has(a.sourceArticleId)) replyMap.set(a.sourceArticleId, []);
-      replyMap.get(a.sourceArticleId)!.push(a);
-    }
-
     // 헤더 행
     result.push({ type: "header", dateKey, label: formatDateLabel(dateKey) });
 
-    // 오늘의 인사 먼저 (들여쓰기 없음) + 해당 공지에 대한 답장 즉시 삽입
+    // 오늘의 인사 먼저 (들여쓰기 없음) + 전역 replyMap으로 답장 DFS 삽입
     const visited = new Set<string>();
     for (const notice of notices) {
       result.push({ type: "article", item: notice, indent: false, isNoticeOfDay: true });
       visited.add(notice.articleId);
-      for (const child of replyMap.get(notice.articleId) ?? []) {
+      for (const child of globalReplyMap.get(notice.articleId) ?? []) {
         if (!visited.has(child.articleId)) {
-          insertWithReplies(child, replyMap, visited, result, true);
+          insertWithReplies(child, globalReplyMap, visited, result, true);
         }
       }
     }
 
-    // 독립 글(답장이 아니거나, 부모가 이 그룹에 없는 것) + DFS로 답장 끼워넣기
-    // isDeletedPlaceholder는 항상 top-level (자체가 부모 역할)
+    // 나머지 루트 글 + 전역 replyMap으로 답장 DFS 삽입
     for (const item of nonNotices) {
       if (visited.has(item.articleId)) continue;
-      const attachedAsReply =
-        item.sourceArticleId &&
-        item.parentInThisCollection &&
-        !item.isDeletedPlaceholder &&
-        (nonNoticeIdSet.has(item.sourceArticleId) || noticeIdSet.has(item.sourceArticleId));
-      if (attachedAsReply) continue; // DFS에서 처리됨
-
-      insertWithReplies(item, replyMap, visited, result, false);
+      insertWithReplies(item, globalReplyMap, visited, result, false);
     }
   }
 

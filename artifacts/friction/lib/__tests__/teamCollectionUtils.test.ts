@@ -249,9 +249,9 @@ describe("buildTeamArticleRows — 답장 스레딩", () => {
     expect(indents(rows)[rri]).toBe(true);
   });
 
-  it("부모가 다른 날짜 그룹에 있는 답장은 최상위 row로 렌더링된다 (드롭 없음)", () => {
+  it("부모가 다른 날짜 그룹에 있는 답장도 원글 바로 아래 들여쓰기로 붙는다 (크로스 날짜)", () => {
     const parentVisibleAt = "2026-04-25T05:00:00.000Z"; // 4/25 그룹
-    const replyVisibleAt = "2026-04-26T05:00:00.000Z";  // 4/26 그룹
+    const replyVisibleAt = "2026-04-26T05:00:00.000Z";  // 4/26이지만 원글 아래로 이동
 
     const parent = makeArticle({ visibleAt: parentVisibleAt, addedAt: parentVisibleAt, title: "원글" });
     const crossGroupReply = makeArticle({
@@ -266,9 +266,17 @@ describe("buildTeamArticleRows — 답장 스레딩", () => {
     const rows = buildTeamArticleRows([parent, crossGroupReply]);
     const ids = articleIds(rows);
 
+    // 두 글 모두 포함
     expect(ids).toContain(parent.articleId);
     expect(ids).toContain(crossGroupReply.articleId);
-    expect(indents(rows)[ids.indexOf(crossGroupReply.articleId)]).toBe(false);
+    // 답장은 원글 바로 다음에 위치
+    expect(ids.indexOf(crossGroupReply.articleId)).toBe(ids.indexOf(parent.articleId) + 1);
+    // 답장은 들여쓰기됨
+    expect(indents(rows)[ids.indexOf(crossGroupReply.articleId)]).toBe(true);
+    // 날짜 헤더는 원글 날짜(4/25) 하나만 존재 (4/26 헤더 없음)
+    const headers = rows.filter((r) => r.type === "header");
+    expect(headers).toHaveLength(1);
+    expect((headers[0] as Extract<typeof headers[0], { type: "header" }>).dateKey).toBe("2026-04-25");
   });
 });
 
