@@ -520,10 +520,11 @@ export default function ReadScreen() {
   const showTitleBar = !isOnCoverPage && !showingCover && !!article;
 
   useLayoutEffect(() => {
-    if (!hasCover && currentPage === 0 && reading.isSessionHydrated && !reading.isRestoring && totalPages > 1) {
-      reading.jumpToPage(1);
+    if (!articleLoading && !hasCover && currentPage === 0 && reading.isSessionHydrated && !reading.isRestoring && totalPages > 1) {
+      jumpToPageRef.current(1);
     }
-  }, [hasCover, currentPage, reading.isSessionHydrated, reading.isRestoring, totalPages, reading.jumpToPage]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [articleLoading, hasCover, currentPage, reading.isSessionHydrated, reading.isRestoring, totalPages]);
 
   const handleSwipeLeft = useCallback(() => {
     if (!canNavigate) return;
@@ -590,6 +591,8 @@ export default function ReadScreen() {
   useEffect(() => { isOnLastPageRef.current = isOnLastPage; }, [isOnLastPage]);
   const hasCoverRef = useRef(hasCover);
   useEffect(() => { hasCoverRef.current = hasCover; }, [hasCover]);
+  const jumpToPageRef = useRef(reading.jumpToPage);
+  useLayoutEffect(() => { jumpToPageRef.current = reading.jumpToPage; });
 
   // Animated style for the row container
   const rowAnimStyle = useAnimatedStyle(() => ({
