@@ -72,7 +72,7 @@ html,body{height:100%;background:transparent;container-type:inline-size}
   outline:none;
   min-height:200px;
   word-wrap:break-word;
-  white-space:pre-wrap;
+  white-space:pre-wrap !important;
 }
 .ProseMirror p{margin-bottom:1em;text-align:justify;overflow-wrap:break-word;text-justify:inter-ideograph}
 .ProseMirror h1{font-family:'Eulyoo1945-SemiBold',serif;font-size:1.6em;font-weight:600;letter-spacing:0.025em;margin:1em 0 0.4em;line-height:1.25;text-align:left}
