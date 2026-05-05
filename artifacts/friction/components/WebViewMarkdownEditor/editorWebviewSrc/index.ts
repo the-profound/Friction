@@ -102,6 +102,102 @@ function computeOverflowDecorations(doc: PMNode, ranges: OverflowRange[]): Decor
   return DecorationSet.create(doc, decorations);
 }
 
+// SelectionStabilityExtension
+// 문제: TipTap/ProseMirror 에디터에서 텍스트를 드래그로 선택한 후,
+//       가벼운 탭(touchstart → touchend, 이동 없음) 한 번으로 선택이 해제됨.
+// 해결: 비어있지 않은 선택 영역이 있을 때 선택 범위 내부에서의 단순 탭을
+//       가로채 ProseMirror 의 mousedown/pointerdown 핸들러가 선택을 collapse 하지 못하게 막는다.
+//       선택 범위 외부를 탭하거나 드래그하는 경우는 평소와 동일하게 동작한다.
+//       Guard는 300ms timeout으로 자동 소멸해 pointerdown/mousedown이 합성되지 않는
+//       플랫폼 경로에서도 상태가 남지 않는다.
+const SelectionStabilityExtension = Extension.create({
+  name: "selectionStability",
+  addProseMirrorPlugins() {
+    const TAP_MOVE_THRESHOLD_PX = 10;
+    const GUARD_EXPIRE_MS = 300;
+
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let hadNonEmptySelection = false;
+    let selectionFrom = 0;
+    let selectionTo = 0;
+    let pendingSelectionGuard = false;
+    let guardExpireTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function setGuard() {
+      if (guardExpireTimer) clearTimeout(guardExpireTimer);
+      pendingSelectionGuard = true;
+      guardExpireTimer = setTimeout(() => {
+        pendingSelectionGuard = false;
+        guardExpireTimer = null;
+      }, GUARD_EXPIRE_MS);
+    }
+
+    function consumeGuard(event: Event) {
+      if (!pendingSelectionGuard) return false;
+      if (guardExpireTimer) {
+        clearTimeout(guardExpireTimer);
+        guardExpireTimer = null;
+      }
+      pendingSelectionGuard = false;
+      event.preventDefault();
+      return true;
+    }
+
+    return [
+      new Plugin({
+        props: {
+          handleDOMEvents: {
+            touchstart: (view, event) => {
+              pendingSelectionGuard = false;
+              if (guardExpireTimer) {
+                clearTimeout(guardExpireTimer);
+                guardExpireTimer = null;
+              }
+              const sel = view.state.selection;
+              hadNonEmptySelection = !sel.empty;
+              if (!sel.empty && event.touches.length === 1) {
+                touchStartX = event.touches[0].clientX;
+                touchStartY = event.touches[0].clientY;
+                selectionFrom = sel.from;
+                selectionTo = sel.to;
+              } else {
+                hadNonEmptySelection = false;
+              }
+              return false;
+            },
+            touchend: (view, event) => {
+              if (!hadNonEmptySelection || event.changedTouches.length === 0) {
+                return false;
+              }
+              const t = event.changedTouches[0];
+              const dx = Math.abs(t.clientX - touchStartX);
+              const dy = Math.abs(t.clientY - touchStartY);
+              if (dx < TAP_MOVE_THRESHOLD_PX && dy < TAP_MOVE_THRESHOLD_PX) {
+                // 단순 탭 — 탭 위치가 선택 범위 내부인지 확인
+                const pos = view.posAtCoords({ left: t.clientX, top: t.clientY });
+                if (pos && pos.pos >= selectionFrom && pos.pos <= selectionTo) {
+                  setGuard();
+                }
+              }
+              hadNonEmptySelection = false;
+              return false;
+            },
+            // pointerdown: PointerEvent API (모던 브라우저 / 일부 플랫폼에서 mousedown 대신 발생)
+            pointerdown: (_view, event) => {
+              return consumeGuard(event);
+            },
+            // mousedown: 레거시 합성 이벤트 (iOS WKWebView 포함)
+            mousedown: (_view, event) => {
+              return consumeGuard(event);
+            },
+          },
+        },
+      }),
+    ];
+  },
+});
+
 const OverflowDecorationExtension = Extension.create({
   name: "overflowDecoration",
   addProseMirrorPlugins() {
@@ -793,6 +889,7 @@ interface Command {
         HardBreak,
         Placeholder.configure({ placeholder }),
         OverflowDecorationExtension,
+        SelectionStabilityExtension,
       ],
       content: initialHtml,
       editable: true,
