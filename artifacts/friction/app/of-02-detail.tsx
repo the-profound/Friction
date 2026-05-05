@@ -64,6 +64,7 @@ export default function TeamCollectionDetailScreen() {
   const [deleteArticleTarget, setDeleteArticleTarget] = useState<string | null>(null);
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const [manageSheetVisible, setManageSheetVisible] = useState(false);
+  const [manageSnapPoint, setManageSnapPoint] = useState(0.28);
   const [memberTarget, setMemberTarget] = useState<{ id: string; nickname: string } | null>(null);
   const [kickTarget, setKickTarget] = useState<{ id: string; nickname: string } | null>(null);
   const openRowRef = useRef<SwipeableRowHandle | null>(null);
@@ -587,7 +588,11 @@ export default function TeamCollectionDetailScreen() {
         </Text>
         <Pressable
           hitSlop={12}
-          onPress={() => setManageSheetVisible(true)}
+          onPress={() => {
+            if (manageSheetVisible) return;
+            setManageSnapPoint(isOwner ? 0.38 : 0.28);
+            setManageSheetVisible(true);
+          }}
         >
           <Feather name="more-horizontal" size={20} color={Colors.zinc600} />
         </Pressable>
@@ -725,7 +730,7 @@ export default function TeamCollectionDetailScreen() {
       <BottomSheet
         visible={manageSheetVisible}
         onClose={() => setManageSheetVisible(false)}
-        snapPoints={[isOwner ? 0.38 : 0.28]}
+        snapPoints={[manageSnapPoint]}
       >
         <View style={styles.manageSheetContent}>
           {isOwner && (

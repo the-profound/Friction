@@ -19,6 +19,7 @@ import { Colors, Typography, ZIndex, Spacing } from "../../constants/tokens";
 
 const HANDLE_HEIGHT = 28;
 const MIN_TOP_GAP = 24;
+const MIN_SCREEN_H = 300;
 
 interface BottomSheetProps {
   visible: boolean;
@@ -113,15 +114,17 @@ export default function BottomSheet({
 }: BottomSheetProps) {
   const insets = useSafeAreaInsets();
   const { height: SCREEN_H } = useWindowDimensions();
-  const translateY = useRef(new Animated.Value(SCREEN_H)).current;
+  const safeH = Math.max(SCREEN_H, MIN_SCREEN_H);
+  const translateY = useRef(new Animated.Value(safeH)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
   const currentSnap = useRef(0);
   const keyboardOffsetRef = useRef(0);
   const closingRef = useRef(false);
+  const animRef = useRef<Animated.CompositeAnimation | null>(null);
 
   const getSnapY = useCallback(
-    (idx: number) => SCREEN_H * (1 - snapPoints[Math.min(idx, snapPoints.length - 1)]),
-    [SCREEN_H, snapPoints],
+    (idx: number) => safeH * (1 - snapPoints[Math.min(idx, snapPoints.length - 1)]),
+    [safeH, snapPoints],
   );
 
   const minTranslateY = insets.top + MIN_TOP_GAP;
@@ -138,8 +141,15 @@ export default function BottomSheet({
       currentSnap.current = 0;
       keyboardOffsetRef.current = 0;
       closingRef.current = false;
-      translateY.setValue(SCREEN_H);
-      Animated.parallel([
+      translateY.setValue(safeH);
+      overlayOpacity.setValue(0);
+
+      if (animRef.current) {
+        animRef.current.stop();
+        animRef.current = null;
+      }
+
+      const anim = Animated.parallel([
         Animated.spring(translateY, {
           toValue: getSnapY(0),
           useNativeDriver: true,
@@ -151,7 +161,11 @@ export default function BottomSheet({
           duration: 200,
           useNativeDriver: true,
         }),
-      ]).start();
+      ]);
+      animRef.current = anim;
+      anim.start(({ finished }) => {
+        if (finished) animRef.current = null;
+      });
     }
   }, [visible]);
 
@@ -165,22 +179,37 @@ export default function BottomSheet({
     if (prevSnapPointsKey.current === snapPointsKey) return;
     prevSnapPointsKey.current = snapPointsKey;
     if (!visible) return;
+    if (closingRef.current) return;
     currentSnap.current = 0;
     keyboardOffsetRef.current = 0;
-    Animated.spring(translateY, {
+
+    if (animRef.current) {
+      animRef.current.stop();
+      animRef.current = null;
+    }
+
+    const anim = Animated.spring(translateY, {
       toValue: getSnapY(0),
       useNativeDriver: true,
       damping: 20,
       stiffness: 200,
-    }).start();
+    });
+    animRef.current = anim;
+    anim.start(({ finished }) => {
+      if (finished) animRef.current = null;
+    });
   }, [snapPointsKey]);
 
   const close = useCallback(() => {
     closingRef.current = true;
+    if (animRef.current) {
+      animRef.current.stop();
+      animRef.current = null;
+    }
     Keyboard.dismiss();
-    Animated.parallel([
+    const anim = Animated.parallel([
       Animated.spring(translateY, {
-        toValue: SCREEN_H,
+        toValue: safeH,
         useNativeDriver: true,
         damping: 20,
         stiffness: 200,
@@ -190,11 +219,16 @@ export default function BottomSheet({
         duration: 200,
         useNativeDriver: true,
       }),
-    ]).start(() => {
-      keyboardOffsetRef.current = 0;
-      onClose();
+    ]);
+    animRef.current = anim;
+    anim.start(({ finished }) => {
+      animRef.current = null;
+      if (finished) {
+        keyboardOffsetRef.current = 0;
+        onClose();
+      }
     });
-  }, [onClose]);
+  }, [onClose, safeH]);
 
   useEffect(() => { closeRef.current = close; }, [close]);
 
@@ -264,7 +298,7 @@ export default function BottomSheet({
           <Pressable style={StyleSheet.absoluteFill} onPress={dismissable ? close : undefined} />
         </Animated.View>
         <Animated.View
-          style={[styles.sheet, { height: SCREEN_H, transform: [{ translateY }] }]}
+          style={[styles.sheet, { height: safeH, transform: [{ translateY }] }]}
           pointerEvents="box-none"
         >
           <View {...panResponder.panHandlers} style={styles.handleArea}>
@@ -285,7 +319,7 @@ export default function BottomSheet({
             style={[
               styles.content,
               {
-                maxHeight: SCREEN_H * Math.max(...snapPoints) - HANDLE_HEIGHT,
+                maxHeight: safeH * Math.max(...snapPoints) - HANDLE_HEIGHT,
                 paddingBottom: Math.max(insets.bottom, 16),
               },
             ]}
