@@ -386,6 +386,40 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /articles/{id}/finalize:
+    post:
+      operationId: finalizeArticle
+      tags: [articles]
+      summary: Finalize article (transition to LETTER and add to a personal collection)
+      description: "Atomically transitions a CLOSING article to LETTER and adds it to the given personal collection. Idempotent on the LETTER transition: if the article is already LETTER, only the collection link is created. Replaces the previous two-step (transition + add-to-collection) flow with a single round trip."
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FinalizeArticleBody"
+      responses:
+        "200":
+          description: Finalized article
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Article"
+        "400":
+          description: Invalid transition or already in collection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Article or collection not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   # ─── Inbox ────────────────────────────────────────
   /inbox:
     get:
@@ -1782,6 +1816,15 @@ components:
           type: string
           enum: [DRAFT, DIVIDING, CLOSING, LETTER]
       required: [targetStatus]
+
+    FinalizeArticleBody:
+      type: object
+      properties:
+        myCollectionId:
+          type: string
+          format: uuid
+          description: Personal collection to add the finalized article to.
+      required: [myCollectionId]
 
     # ─── Inbox ──────────────────────────────────────
     InboxItem:

@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { and, eq, exists, ilike, ne } from "drizzle-orm";
-import { db, articlesTable, myCollectionArticlesTable, usersTable, type ArticleStatus } from "@workspace/db";
-import { CreateArticleBody, UpdateArticleBody, TransitionArticleStatusBody, ReadingMemoQueryParams } from "@workspace/api-zod";
+import { db, articlesTable, myCollectionArticlesTable, myCollectionsTable, usersTable, type ArticleStatus } from "@workspace/db";
+import { CreateArticleBody, UpdateArticleBody, TransitionArticleStatusBody, FinalizeArticleBody, ReadingMemoQueryParams } from "@workspace/api-zod";
 import { ObjectStorageService } from "../lib/objectStorage";
 
 const FORWARD_TRANSITIONS: Record<string, string> = {
@@ -304,6 +304,70 @@ router.post("/articles/:id/transition", async (req, res) => {
 
   const [updated] = await db.update(articlesTable).set(updates).where(eq(articlesTable.id, req.params.id)).returning();
   res.json(updated);
+});
+
+router.post("/articles/:id/finalize", async (req, res) => {
+  const parsed = FinalizeArticleBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
+    return;
+  }
+  const { myCollectionId } = parsed.data;
+  const articleId = req.params.id;
+
+  try {
+    const result = await db.transaction(async (tx) => {
+      const [article] = await tx.select().from(articlesTable).where(eq(articlesTable.id, articleId));
+      if (!article) {
+        return { status: 404, body: { error: "Article not found" } } as const;
+      }
+
+      const [collection] = await tx.select().from(myCollectionsTable).where(eq(myCollectionsTable.id, myCollectionId));
+      if (!collection) {
+        return { status: 404, body: { error: "Collection not found" } } as const;
+      }
+
+      let updatedArticle = article;
+      if (article.status === "CLOSING") {
+        const [updated] = await tx
+          .update(articlesTable)
+          .set({ status: "LETTER", letterAt: new Date() })
+          .where(eq(articlesTable.id, articleId))
+          .returning();
+        updatedArticle = updated;
+      } else if (article.status !== "LETTER") {
+        return {
+          status: 400,
+          body: {
+            error: `Invalid transition: ${article.status} → LETTER. Only CLOSING articles can be finalized.`,
+          },
+        } as const;
+      }
+
+      const existingLink = await tx
+        .select({ id: myCollectionArticlesTable.id })
+        .from(myCollectionArticlesTable)
+        .where(
+          and(
+            eq(myCollectionArticlesTable.myCollectionId, myCollectionId),
+            eq(myCollectionArticlesTable.articleId, articleId),
+          ),
+        );
+      if (existingLink.length === 0) {
+        await tx.insert(myCollectionArticlesTable).values({
+          myCollectionId,
+          articleId,
+        });
+      }
+
+      return { status: 200, body: updatedArticle } as const;
+    });
+
+    res.status(result.status).json(result.body);
+  } catch (error) {
+    req.log.error({ err: error }, "Error finalizing article");
+    res.status(500).json({ error: "Failed to finalize article" });
+  }
 });
 
 export default router;

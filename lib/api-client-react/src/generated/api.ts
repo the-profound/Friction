@@ -31,6 +31,7 @@ import type {
   CreateUserArticleReadBody,
   CreateUserBody,
   ErrorResponse,
+  FinalizeArticleBody,
   GetReadingRecordParams,
   GetTodayGreetingStatusParams,
   HealthStatus,
@@ -1367,6 +1368,94 @@ export const useTransitionArticleStatus = <
   TContext
 > => {
   return useMutation(getTransitionArticleStatusMutationOptions(options));
+};
+
+/**
+ * Atomically transitions a CLOSING article to LETTER and adds it to the given personal collection. Idempotent on the LETTER transition: if the article is already LETTER, only the collection link is created. Replaces the previous two-step (transition + add-to-collection) flow with a single round trip.
+ * @summary Finalize article (transition to LETTER and add to a personal collection)
+ */
+export const getFinalizeArticleUrl = (id: string) => {
+  return `/api/articles/${id}/finalize`;
+};
+
+export const finalizeArticle = async (
+  id: string,
+  finalizeArticleBody: FinalizeArticleBody,
+  options?: RequestInit,
+): Promise<Article> => {
+  return customFetch<Article>(getFinalizeArticleUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(finalizeArticleBody),
+  });
+};
+
+export const getFinalizeArticleMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof finalizeArticle>>,
+    TError,
+    { id: string; data: BodyType<FinalizeArticleBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof finalizeArticle>>,
+  TError,
+  { id: string; data: BodyType<FinalizeArticleBody> },
+  TContext
+> => {
+  const mutationKey = ["finalizeArticle"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof finalizeArticle>>,
+    { id: string; data: BodyType<FinalizeArticleBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return finalizeArticle(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type FinalizeArticleMutationResult = NonNullable<
+  Awaited<ReturnType<typeof finalizeArticle>>
+>;
+export type FinalizeArticleMutationBody = BodyType<FinalizeArticleBody>;
+export type FinalizeArticleMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Finalize article (transition to LETTER and add to a personal collection)
+ */
+export const useFinalizeArticle = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof finalizeArticle>>,
+    TError,
+    { id: string; data: BodyType<FinalizeArticleBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof finalizeArticle>>,
+  TError,
+  { id: string; data: BodyType<FinalizeArticleBody> },
+  TContext
+> => {
+  return useMutation(getFinalizeArticleMutationOptions(options));
 };
 
 /**

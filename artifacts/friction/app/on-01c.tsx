@@ -32,8 +32,8 @@ import {
   useGetUser,
   useUpdateArticle,
   useTransitionArticleStatus,
+  useFinalizeArticle,
   useListMyCollections,
-  useAddArticleToMyCollection,
   useCreateMyCollection,
   TransitionArticleBodyTargetStatus,
 } from "@workspace/api-client-react";
@@ -58,8 +58,6 @@ export default function ClosingScreen() {
     ? (authorQuery.data?.nickname ?? authorQuery.data?.email ?? undefined)
     : undefined;
 
-  const { refetch: refetchArticle } = articleQuery;
-
   // Capture mount time so we can verify fresh data (dataUpdatedAt >= mountedAt)
   // before initializing title/cover, avoiding stale-cache initialization.
   const mountedAtRef = useRef(Date.now());
@@ -75,7 +73,7 @@ export default function ClosingScreen() {
 
   const updateArticle = useUpdateArticle();
   const transitionStatus = useTransitionArticleStatus();
-  const addArticleToMyCollection = useAddArticleToMyCollection();
+  const finalizeArticle = useFinalizeArticle();
   const createMyCollection = useCreateMyCollection();
 
   const myCollectionsQuery = useListMyCollections({ ownerId: userId });
@@ -101,6 +99,10 @@ export default function ClosingScreen() {
   const exportedArticleIdRef = useRef<string | null>(null);
   const initializedRef = useRef(false);
   const saveCoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Step 3(E) — pages 변경 여부 추적: 분할 화면에서 이미 저장된 pages를 다시
+  // 보내지 않도록, 서버에서 받은 초기 pages 스냅샷을 저장해 둔다. on-01c는
+  // 현재 pages를 편집하지 않으므로 거의 항상 변경되지 않은 상태로 남는다.
+  const initialPagesRef = useRef<string[] | null>(null);
 
   useEffect(() => {
     if (!article) return;
@@ -117,6 +119,12 @@ export default function ClosingScreen() {
     // This prevents stale cached data from initializing before the fresh fetch
     // triggered by invalidateQueries on mount has resolved.
     const isDataFresh = articleQuery.dataUpdatedAt >= mountedAtRef.current;
+    // initialPagesRef도 같은 freshness 게이트를 적용. 그렇지 않으면 stale 캐시의
+    // pages가 스냅샷으로 굳어 fresh fetch가 도착했을 때 "변경됨"으로 오인되어
+    // 페이로드 최소화 효과가 사라진다.
+    if (initialPagesRef.current === null && isDataFresh) {
+      initialPagesRef.current = incoming;
+    }
     if (!initializedRef.current && isDataFresh) {
       initializedRef.current = true;
       setTitle(article.title || "");
@@ -194,12 +202,28 @@ export default function ClosingScreen() {
       clearTimeout(saveCoverTimerRef.current);
       saveCoverTimerRef.current = null;
     }
+    const coverToSave = pendingCoverRef.current ?? cover;
     pendingCoverRef.current = null;
     setIsExporting(true);
     try {
+      // Step 3(E) — PATCH 페이로드 최소화:
+      // pages는 분할 화면(on-01b)에서 이미 저장됐고 이 화면에서는 편집되지 않으므로,
+      // 초기 스냅샷과 다를 때만 포함한다 (실질적으로 거의 항상 생략된다).
+      // title/cover는 변경 여부와 무관하게 보내 최신 상태를 확정한다 — debounce로
+      // 아직 서버에 반영되지 않은 cover나, blur 전인 title을 한 번에 확정한다.
+      const patchData: { title?: string; pages?: string[]; cover?: typeof cover } = {
+        title,
+        cover: coverToSave,
+      };
+      const initialPages = initialPagesRef.current;
+      const pagesChanged =
+        initialPages === null || JSON.stringify(initialPages) !== JSON.stringify(pages);
+      if (pagesChanged) {
+        patchData.pages = pages;
+      }
       await updateArticle.mutateAsync({
         id: id!,
-        data: { title, pages, cover },
+        data: patchData,
       });
       exportedArticleIdRef.current = id!;
       setCollectionPickerVisible(true);
@@ -212,34 +236,30 @@ export default function ClosingScreen() {
     }
   }, [id, title, pages, cover, updateArticle]);
 
+  // Step 1(C) + Step 4(D) — 단일 finalize 호출:
+  // 기존 refetchArticle → transition → addArticleToMyCollection 3-step를 서버
+  // 트랜잭션 한 번으로 압축한다. 클라이언트는 article?.status를 알고 있으므로
+  // 별도 GET 재확인 없이 바로 finalize를 호출한다.
   const finalizeExport = useCallback(
     async (collectionId: string) => {
       const articleId = exportedArticleIdRef.current;
       if (!articleId) return;
-      const { data: freshArticle } = await refetchArticle();
-      const currentStatus = freshArticle?.status ?? article?.status;
-      if (currentStatus !== "LETTER") {
-        const updated = await transitionStatus.mutateAsync({
-          id: articleId,
-          data: { targetStatus: TransitionArticleBodyTargetStatus.LETTER },
-        });
-        queryClient.setQueryData([`/api/articles/${articleId}`], updated);
-      }
+      const updated = await finalizeArticle.mutateAsync({
+        id: articleId,
+        data: { myCollectionId: collectionId },
+      });
+      queryClient.setQueryData([`/api/articles/${articleId}`], updated);
       trackArticlePublished({
         articleId,
         charCount: pages.reduce((sum, p) => sum + p.length, 0),
         pageCount: pages.length,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
-      await addArticleToMyCollection.mutateAsync({
-        id: collectionId,
-        data: { articleId },
-      });
       queryClient.invalidateQueries({ queryKey: ["/api/my-collections"] });
       router.dismissAll();
       router.push({ pathname: "/of-01" });
     },
-    [article, pages, refetchArticle, transitionStatus, addArticleToMyCollection, queryClient, router],
+    [pages, finalizeArticle, queryClient, router],
   );
 
   const handleCollectionSelect = useCallback(

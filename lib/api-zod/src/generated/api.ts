@@ -499,6 +499,76 @@ export const TransitionArticleStatusResponse = zod.object({
 });
 
 /**
+ * Atomically transitions a CLOSING article to LETTER and adds it to the given personal collection. Idempotent on the LETTER transition: if the article is already LETTER, only the collection link is created. Replaces the previous two-step (transition + add-to-collection) flow with a single round trip.
+ * @summary Finalize article (transition to LETTER and add to a personal collection)
+ */
+export const FinalizeArticleParams = zod.object({
+  id: zod.coerce.string().uuid(),
+});
+
+export const FinalizeArticleBody = zod.object({
+  myCollectionId: zod
+    .string()
+    .uuid()
+    .describe("Personal collection to add the finalized article to."),
+});
+
+export const FinalizeArticleResponse = zod.object({
+  id: zod.string().uuid(),
+  authorId: zod.string().uuid(),
+  authorNickname: zod
+    .string()
+    .nullish()
+    .describe(
+      "Author's nickname. Populated by listArticles when joining users; may be null on other endpoints.",
+    ),
+  title: zod.string(),
+  content: zod.string(),
+  status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
+  pages: zod.array(zod.string()).nullish(),
+  layoutWidth: zod
+    .number()
+    .nullish()
+    .describe(
+      "Container width used when splitting pages (px). Used to ensure consistent line-break rendering across preview and reader screens.",
+    ),
+  style: zod.object({}).passthrough().nullish(),
+  cover: zod
+    .object({
+      type: zod.enum(["image", "color", "default"]),
+      imageUrl: zod
+        .string()
+        .url()
+        .optional()
+        .describe("Cover image URL (used when type=image)"),
+      bgColor: zod
+        .string()
+        .optional()
+        .describe("Background color hex (used when type=color)"),
+      textColor: zod.string().describe("Text color hex for title overlay"),
+      align: zod.enum(["left", "center"]),
+    })
+    .nullish()
+    .describe("Article cover display settings. null means default cover."),
+  letterAt: zod.date().nullish(),
+  sourceArticleId: zod.string().uuid().nullish(),
+  isNotice: zod
+    .boolean()
+    .optional()
+    .describe(
+      'True when this article was sent as the day\'s \"오늘의 인사\" notice.',
+    ),
+  noticeDate: zod
+    .date()
+    .nullish()
+    .describe(
+      "KST date this article was designated as a notice (YYYY-MM-DD). Null when isNotice=false.",
+    ),
+  createdAt: zod.date(),
+  updatedAt: zod.date(),
+});
+
+/**
  * Only returns items where visible_at <= now
  * @summary List inbox items for a user
  */

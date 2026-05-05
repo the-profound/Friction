@@ -283,6 +283,29 @@ export default function DividingScreen() {
   const editorLayout = useEditorLayout();
   const { containerWidth, safeAreaWidth, safeAreaHeight, paddingX, paddingY, textColumnWidth, bodyFontSize, bodyLineHeight, bodyLetterSpacing, titleFontSize } = editorLayout;
 
+  // Step 5(B) — layoutWidth 선저장:
+  // 분할 화면 진입 시 containerWidth는 useEditorLayout에서 즉시 결정되므로,
+  // article을 받아 stored layoutWidth와 다르면 백그라운드에서 PATCH로 미리 저장한다.
+  // "다음" 버튼을 눌러 on-01c로 이동할 때는 이미 저장돼 있으면 또 보내지 않는다.
+  const savedLayoutWidthRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!id || !article || !containerWidth) return;
+    const stored = (article as { layoutWidth?: number | null }).layoutWidth ?? null;
+    if (stored === containerWidth) {
+      savedLayoutWidthRef.current = containerWidth;
+      return;
+    }
+    if (savedLayoutWidthRef.current === containerWidth) return;
+    savedLayoutWidthRef.current = containerWidth;
+    updateArticle
+      .mutateAsync({ id, data: { layoutWidth: containerWidth } })
+      .catch((e: unknown) => {
+        // Background save — failure is non-fatal; handleNext will retry on Next.
+        savedLayoutWidthRef.current = null;
+        console.warn("[on-01b] background layoutWidth pre-save failed:", e);
+      });
+  }, [id, article, containerWidth, updateArticle]);
+
   // NOTE — 측정/분할/읽기 화면 렌더링 엔진 정합:
   // 편집기(WebViewMarkdownEditor), 측정 레이어(WebViewMeasureLayer), 읽기 화면(WebViewMarkdownReader)
   // 모두 동일한 HTML/CSS/폰트를 사용하는 WebView 기반이다.
@@ -718,14 +741,21 @@ export default function DividingScreen() {
     isNavigatingRef.current = false;
     setIsNavigating(false);
 
-    const layoutWidthSave = updateArticle
-      .mutateAsync({
-        id,
-        data: { layoutWidth: containerWidth },
-      })
-      .catch((e: unknown) => {
-        console.warn("[on-01b] background layoutWidth save failed:", e);
-      });
+    // Step 5(B) — pre-save 효과: layoutWidth가 이미 저장됐으면 PATCH 생략.
+    const layoutWidthAlreadySaved = savedLayoutWidthRef.current === containerWidth;
+    const layoutWidthSave = layoutWidthAlreadySaved
+      ? Promise.resolve()
+      : updateArticle
+          .mutateAsync({
+            id,
+            data: { layoutWidth: containerWidth },
+          })
+          .then(() => {
+            savedLayoutWidthRef.current = containerWidth;
+          })
+          .catch((e: unknown) => {
+            console.warn("[on-01b] background layoutWidth save failed:", e);
+          });
 
     const statusChange =
       article?.status !== "CLOSING"

@@ -152,6 +152,11 @@ export interface TransitionArticleBody {
   targetStatus: TransitionArticleBodyTargetStatus;
 }
 
+export interface FinalizeArticleBody {
+  /** Personal collection to add the finalized article to. */
+  myCollectionId: string;
+}
+
 export interface InboxItem {
   id: string;
   recipientId: string;
