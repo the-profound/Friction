@@ -64,7 +64,7 @@ export const Spacing = {
 
   cardGap: 12,
 
-  dateHeaderPt: 16,
+  dateHeaderPt: 8,
   dateHeaderPb: 12,
 
   dotsMarginTop: 20,
