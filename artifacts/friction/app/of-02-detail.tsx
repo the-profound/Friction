@@ -441,11 +441,8 @@ export default function TeamCollectionDetailScreen() {
     return map;
   }, [members]);
 
-  const isNew = useCallback((item: TeamCollectionArticleWithDetails): boolean => {
-    if (item.completedAt) return false;
-    const ts = item.visibleAt ?? item.addedAt;
-    if (!ts) return false;
-    return Date.now() - new Date(ts).getTime() < 24 * 60 * 60 * 1000;
+  const isUnread = useCallback((item: TeamCollectionArticleWithDetails): boolean => {
+    return !item.completedAt;
   }, []);
 
   const renderArticleRow = useCallback(
@@ -467,7 +464,7 @@ export default function TeamCollectionDetailScreen() {
 
       const authorId = item.article?.authorId ?? item.addedBy;
       const isMyArticle = !!authorId && authorId === userId;
-      const showNew = !isMyArticle && isNew(item);
+      const showUnread = !isMyArticle && isUnread(item);
       const rowBg = isNoticeOfDay ? Colors.noticeAccentSoft : undefined;
       const authorNickname = authorId ? memberNicknameMap.get(authorId) : undefined;
 
@@ -508,9 +505,9 @@ export default function TeamCollectionDetailScreen() {
                     <Text style={styles.myArticleBadgeText}>내 글</Text>
                   </View>
                 )}
-                {showNew && (
-                  <View style={styles.newBadge}>
-                    <Text style={styles.newBadgeText}>NEW</Text>
+                {showUnread && (
+                  <View style={styles.unreadBadge}>
+                    <Text style={styles.unreadBadgeText}>새 글</Text>
                   </View>
                 )}
               </View>
@@ -524,7 +521,7 @@ export default function TeamCollectionDetailScreen() {
         </SwipeableRow>
       );
     },
-    [handleArticleDeletePress, handleSwipeOpen, handleArticleNavigate, isNew, memberNicknameMap, userId],
+    [handleArticleDeletePress, handleSwipeOpen, handleArticleNavigate, isUnread, memberNicknameMap, userId],
   );
 
   const renderRow = useCallback(
@@ -1092,13 +1089,13 @@ const styles = StyleSheet.create({
     fontWeight: "600" as const,
     color: Colors.noticeAccent,
   },
-  newBadge: {
+  unreadBadge: {
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
     backgroundColor: Colors.noticeAccentSoft,
   },
-  newBadgeText: {
+  unreadBadgeText: {
     ...Typography.caption,
     fontSize: 11,
     fontWeight: "700" as const,
