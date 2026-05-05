@@ -36,14 +36,15 @@ const { width: SCREEN_W } = Dimensions.get("window");
 const CARD_W = Sizing.cardSlotW;
 const CARD_H = Sizing.cardH;
 const CARD_GAP = Spacing.cardGap;
-const CARD_PEEK = Spacing.cardPeek;
 const SNAP_INTERVAL = CARD_W + CARD_GAP;
 const SNAP_THRESHOLD = 48;
 const FLING_VELOCITY = 0.5;
 const GROUP_ITEM_H = Sizing.groupH + 8;
 
+const CENTER_OFFSET = (SCREEN_W - CARD_W) / 2;
+
 function getBaseX(idx: number) {
-  return -(idx * SNAP_INTERVAL) + CARD_PEEK;
+  return -(idx * SNAP_INTERVAL) + CENTER_OFFSET;
 }
 
 interface DateGroup {
@@ -290,7 +291,7 @@ function CarouselGroup({
           horizontal
           showsHorizontalScrollIndicator={false}
           snapToInterval={SNAP_INTERVAL}
-          snapToAlignment="start"
+          snapToAlignment="center"
           decelerationRate="fast"
           scrollEventThrottle={16}
           onScroll={handleScroll}
@@ -575,8 +576,7 @@ const styles = StyleSheet.create({
     height: CARD_H,
   },
   carouselContent: {
-    paddingLeft: CARD_PEEK,
-    paddingRight: CARD_PEEK,
+    paddingHorizontal: CENTER_OFFSET,
   },
   cardSlot: {
     width: CARD_W,

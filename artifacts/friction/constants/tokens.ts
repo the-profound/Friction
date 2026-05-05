@@ -63,7 +63,6 @@ export const Spacing = {
   headerPb: 8,
 
   cardGap: 12,
-  cardPeek: 24,
 
   dateHeaderPt: 16,
   dateHeaderPb: 12,
@@ -89,7 +88,7 @@ export const Sizing = {
   backButtonIconSize: 20,
   backButtonStrokeWidth: 2.5,
 
-  cardSlotW: 280,
+  cardSlotW: 300,
   cardRatio: 8 / 5,
   get cardH() {
     return this.cardSlotW * this.cardRatio;
