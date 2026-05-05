@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
   },
   inner: {
     flex: 1,
-    padding: 24,
+    padding: 20,
     justifyContent: "center",
   },
   author: {

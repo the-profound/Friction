@@ -89,7 +89,7 @@ export const Sizing = {
   backButtonIconSize: 20,
   backButtonStrokeWidth: 2.5,
 
-  cardSlotW: 330,
+  cardSlotW: 280,
   cardRatio: 8 / 5,
   get cardH() {
     return this.cardSlotW * this.cardRatio;
