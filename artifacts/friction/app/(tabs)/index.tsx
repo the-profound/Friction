@@ -291,7 +291,7 @@ function CarouselGroup({
           horizontal
           showsHorizontalScrollIndicator={false}
           snapToInterval={SNAP_INTERVAL}
-          snapToAlignment="center"
+          snapToAlignment="start"
           decelerationRate="fast"
           scrollEventThrottle={16}
           onScroll={handleScroll}
