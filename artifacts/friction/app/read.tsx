@@ -1153,7 +1153,7 @@ export default function ReadScreen() {
                     layout shifts when article data loads or page changes. */}
                 {showTitleBar && (
                   <View style={[styles.titleBar, { position: "absolute", bottom: 0, left: 0, right: 0 }]} pointerEvents="none">
-                    <Text style={dynamicStyles.articleTitle} numberOfLines={1}>{article!.title}</Text>
+                    <Text style={dynamicStyles.articleTitle} numberOfLines={1}>{article!.title.replace(/[\r\n]+/g, " ")}</Text>
                     {mode === "re_read" && (
                       <View style={styles.modeBadge}>
                         <Text style={dynamicStyles.modeBadgeText}>다시읽기</Text>

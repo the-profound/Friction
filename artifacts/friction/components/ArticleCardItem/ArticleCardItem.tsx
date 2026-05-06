@@ -65,7 +65,7 @@ export default function ArticleCardItem({
       ) : null}
       <Text
         style={[styles.title, { color: textColor, textAlign }]}
-        numberOfLines={2}
+        numberOfLines={4}
       >
         {title}
       </Text>

@@ -46,7 +46,7 @@ export default function ArticleListItem({
       <View style={styles.inner}>
         <View style={styles.content}>
           <View style={styles.topRow}>
-            <Text style={styles.title} numberOfLines={1}>
+            <Text style={styles.title} numberOfLines={3}>
               {title}
             </Text>
             {rightMeta && <Text style={styles.rightMeta}>{rightMeta}</Text>}
