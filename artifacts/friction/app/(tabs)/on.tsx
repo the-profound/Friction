@@ -415,7 +415,7 @@ Alert.alert("오류", "메모 생성에 실패했습니다.");
           }
           contentContainerStyle={[
             styles.listContent,
-            { paddingBottom: selectionMode ? insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + 80 : navBottom },
+            { paddingBottom: selectionMode ? insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + 80 : navBottom + 64 },
           ]}
           onScrollBeginDrag={selectionMode ? undefined : closeOpenRow}
           ListFooterComponent={selectionMode ? undefined : listFooter}
@@ -439,6 +439,17 @@ Alert.alert("오류", "메모 생성에 실패했습니다.");
             )}
           </Pressable>
         </View>
+      )}
+
+      {!selectionMode && (
+        <Pressable
+          style={[styles.fab, { bottom: insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + Spacing.xl }]}
+          onPress={handleNewMemo}
+          accessibilityRole="button"
+          accessibilityLabel="메모 추가"
+        >
+          <Feather name="edit-3" size={20} color={Colors.white} />
+        </Pressable>
       )}
 
       <ConfirmModal
@@ -600,5 +611,20 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 16,
     color: Colors.white,
+  },
+  fab: {
+    position: "absolute",
+    right: Spacing.screenPx,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: Colors.zinc900,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    elevation: 4,
   },
 });
