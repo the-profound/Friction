@@ -66,7 +66,6 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
     const changeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const onExportMarkdownRef = useRef(onExportMarkdown);
     const titleRef = useRef<HTMLTextAreaElement>(null);
-    const containerRef = useRef<HTMLDivElement>(null);
     useEffect(() => { onExportMarkdownRef.current = onExportMarkdown; }, [onExportMarkdown]);
 
     const editor = useEditor({

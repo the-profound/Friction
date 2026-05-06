@@ -117,7 +117,10 @@ export default function ClosingScreen() {
     // Gate initialization on data being NEWER than this component's mount time.
     // This prevents stale cached data from initializing before the fresh fetch
     // triggered by invalidateQueries on mount has resolved.
-    const isDataFresh = articleQuery.dataUpdatedAt >= mountedAtRef.current;
+    // 30s slack — see on-01a for rationale. Lets cache primed via optimistic
+    // setQueryData on the previous screen pass immediately while still waiting
+    // on truly stale caches.
+    const isDataFresh = articleQuery.dataUpdatedAt >= mountedAtRef.current - 30_000;
     // initialPagesRef도 같은 freshness 게이트를 적용. 그렇지 않으면 stale 캐시의
     // pages가 스냅샷으로 굳어 fresh fetch가 도착했을 때 "변경됨"으로 오인되어
     // 페이로드 최소화 효과가 사라진다.
@@ -350,10 +353,12 @@ export default function ClosingScreen() {
       await flushTitleSave();
       await flushCoverSave();
 
-      // Optimistic navigation
+      // Optimistic navigation. updatedAt bump lets on-01b's freshness gate
+      // accept this cache immediately, avoiding a needless refetch wait.
       queryClient.setQueryData(
         [`/api/articles/${id}`],
         (old: any) => (old ? { ...old, status: "DIVIDING" } : old),
+        { updatedAt: Date.now() },
       );
 
       // 마감 화면에서 보던 콘텐츠 페이지 인덱스 및 블록 인덱스를 분할 화면에 전달해

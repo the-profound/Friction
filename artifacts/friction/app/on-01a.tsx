@@ -95,7 +95,11 @@ export default function DraftScreen() {
   }, []);
 
   useEffect(() => {
-    const isDataFresh = articleQuery.dataUpdatedAt >= mountedAtRef.current;
+    // Allow up to 30s of slack so cache primed via setQueryData (with
+    // updatedAt: Date.now()) on the previous screen passes the gate immediately.
+    // A truly stale cache (older than 30s, e.g. cold entry from inbox) still
+    // waits for the in-flight refetch — preserving the original safety property.
+    const isDataFresh = articleQuery.dataUpdatedAt >= mountedAtRef.current - 30_000;
     if (article && !initializedRef.current && isDataFresh) {
       initializedRef.current = true;
       const t = article.title || "";
@@ -318,11 +322,18 @@ export default function DraftScreen() {
 
     // Optimistically reflect the new title/content/status in the cache so the
     // next screen renders immediately with fresh data instead of flashing the
-    // previous version.
-    queryClient.setQueryData([`/api/articles/${id}`], (old: unknown) => {
-      if (!old || typeof old !== "object") return old;
-      return { ...old, title: currentTitle, content, status: "DIVIDING" };
-    });
+    // previous version. We pass `{ updatedAt: Date.now() }` so the receiving
+    // screen's freshness gate (dataUpdatedAt vs mountedAt) accepts this cache
+    // immediately — without it, setQueryData leaves dataUpdatedAt at the last
+    // network fetch time and the next screen blocks on a needless refetch.
+    queryClient.setQueryData(
+      [`/api/articles/${id}`],
+      (old: unknown) => {
+        if (!old || typeof old !== "object") return old;
+        return { ...old, title: currentTitle, content, status: "DIVIDING" };
+      },
+      { updatedAt: Date.now() },
+    );
 
     // Navigate first for a natural, snappy stack-push animation. The body has
     // already been persisted by flush() above, so on-01b can refetch and render

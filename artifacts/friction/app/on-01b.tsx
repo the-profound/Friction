@@ -186,7 +186,10 @@ export default function DividingScreen() {
     // This is more reliable than checking isFetching alone, which can be false
     // for a brief window between mount and when invalidateQueries triggers the
     // refetch, potentially letting stale cached data initialize the editor.
-    const isDataFresh = articleQuery.dataUpdatedAt >= mountedAtRef.current;
+    // 30s slack — see on-01a for rationale. Cache primed via optimistic
+    // setQueryData(..., { updatedAt: Date.now() }) on the previous screen
+    // passes immediately; truly stale caches still wait for the refetch.
+    const isDataFresh = articleQuery.dataUpdatedAt >= mountedAtRef.current - 30_000;
     if (article && !initializedRef.current && isDataFresh) {
       initializedRef.current = true;
       setInitialized(true);
@@ -758,18 +761,23 @@ export default function DividingScreen() {
 
     // Optimistically prime the cache so on-01c renders immediately with the
     // freshly split pages, layoutWidth, and CLOSING status — no spinner, no
-    // stale-state flash.
-    queryClient.setQueryData([`/api/articles/${id}`], (old: unknown) => {
-      if (!old || typeof old !== "object") return old;
-      return {
-        ...old,
-        title: titleRef.current,
-        content: cur,
-        pages: pagesJson,
-        layoutWidth: containerWidth,
-        status: "CLOSING",
-      };
-    });
+    // stale-state flash. updatedAt bump lets on-01c's freshness gate accept
+    // this cache without blocking on a refetch.
+    queryClient.setQueryData(
+      [`/api/articles/${id}`],
+      (old: unknown) => {
+        if (!old || typeof old !== "object") return old;
+        return {
+          ...old,
+          title: titleRef.current,
+          content: cur,
+          pages: pagesJson,
+          layoutWidth: containerWidth,
+          status: "CLOSING",
+        };
+      },
+      { updatedAt: Date.now() },
+    );
 
     // Navigate first for a natural stack-push animation. flush() above already
     // saved title/content/pages via handleSave; only layoutWidth and the status
@@ -871,10 +879,14 @@ export default function DividingScreen() {
       Alert.alert("오류", "저장에 실패했습니다.");
       return;
     }
-    queryClient.setQueryData([`/api/articles/${id}`], (old: any) => {
-      if (!old || typeof old !== "object") return old;
-      return { ...old, title: titleRef.current, content: cur, status: "DRAFT" };
-    });
+    queryClient.setQueryData(
+      [`/api/articles/${id}`],
+      (old: any) => {
+        if (!old || typeof old !== "object") return old;
+        return { ...old, title: titleRef.current, content: cur, status: "DRAFT" };
+      },
+      { updatedAt: Date.now() },
+    );
 
     isNavigatingRef.current = false;
     setIsNavigating(false);
