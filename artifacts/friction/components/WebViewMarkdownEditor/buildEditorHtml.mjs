@@ -92,13 +92,13 @@ html,body{height:100%;background:transparent;container-type:inline-size}
 .ProseMirror strong{font-family:'Eulyoo1945-SemiBold',serif;font-weight:700}
 .ProseMirror em{font-style:italic}
 .ProseMirror .overflow-highlight{background:#fecaca}
-@keyframes anchor-pulse{0%{background:#fef08a;border-radius:3px}100%{background:transparent;border-radius:3px}}
-.anchor-highlight{animation:anchor-pulse 1.2s ease-out forwards}
+@keyframes page-anchor-pulse{0%{opacity:0}25%{opacity:1}75%{opacity:1}100%{opacity:0}}
+.page-anchor-overlay{position:absolute;left:0;width:100%;background:rgba(59,130,246,0.14);border-radius:6px;pointer-events:none;z-index:0;animation:page-anchor-pulse 1.6s ease-in-out forwards}
 #source-article-slot{display:none;width:100%;font-size:13px;color:#a1a1aa;font-family:system-ui,-apple-system,sans-serif;padding:0 0 8px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;-webkit-tap-highlight-color:transparent}
-body{padding:16px 0 0;overflow:auto}
+body{padding:16px 0 0;overflow:auto;position:relative}
 `.trim();
 
-const VERSION = "3.15.0";
+const VERSION = "3.16.0";
 
 const tsContent = `export const EDITOR_CONFIG_VERSION = "${VERSION}";
 

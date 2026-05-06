@@ -1093,63 +1093,93 @@ interface Command {
           break;
         }
         case "scrollToBlock": {
-          if (editor && !editor.isDestroyed) {
-            const pageIdx = cmd.pageIndex ?? 0;
-            const blockIdx = cmd.blockIndex ?? 0;
-            const doc = editor.state.doc;
-            const pageRanges = getPageRanges(doc);
-            const page = pageRanges[pageIdx] ?? pageRanges[0];
-            if (!page) break;
+          // Resolve the target block element + ALL non-HR block elements in the
+          // requested page, then scroll and show a page-wide blue overlay.
+          // Content may not be fully rendered yet (setMarkdown is async via WebView
+          // round-trip + TipTap commit); retry with backoff until doc is ready.
+          const pageIdx = cmd.pageIndex ?? 0;
+          const blockIdx = cmd.blockIndex ?? 0;
 
-            // Walk top-level nodes inside the page to find the Nth content block.
-            let blockCount = 0;
-            let targetPos = -1;
-            doc.forEach((node, offset) => {
-              if (targetPos >= 0) return;
-              // Skip nodes outside this page range.
-              if (offset < page.start || offset >= page.end) return;
-              // Skip HR dividers — they are page separators, not content blocks.
-              if (node.type.name === "horizontalRule") return;
-              if (blockCount === blockIdx) {
-                targetPos = offset;
-              } else {
-                blockCount++;
-              }
-            });
-
-            // Fallback: use page start when the specific block isn't found.
-            if (targetPos < 0) {
-              doc.forEach((node, offset) => {
-                if (targetPos >= 0) return;
-                if (offset < page.start || offset >= page.end) return;
-                if (node.type.name !== "horizontalRule") {
-                  targetPos = offset;
-                }
-              });
-            }
-            if (targetPos < 0) targetPos = page.start;
-
-            // Scroll the block DOM element into view.
+          const posToBlockEl = (view: any, pos: number): Element | null => {
             try {
-              const view = editor.view;
-              const resolvedPos = Math.max(1, targetPos + 1);
+              const resolvedPos = Math.max(1, pos + 1);
               const domInfo = view.domAtPos(resolvedPos);
               let el: Node | null = domInfo.node;
-              if (el.nodeType === Node.TEXT_NODE) el = el.parentElement;
+              if (el && el.nodeType === Node.TEXT_NODE) el = (el as Node).parentElement;
               while (el && (el as Element).parentElement !== view.dom) {
                 el = (el as Element).parentElement;
               }
-              if (el) {
-                (el as Element).scrollIntoView({ behavior: "smooth", block: "center" });
-                // Highlight pulse animation.
-                const blockEl = el as Element;
-                blockEl.classList.add("anchor-highlight");
-                setTimeout(() => {
-                  blockEl.classList.remove("anchor-highlight");
-                }, 1400);
-              }
+              return el as Element | null;
+            } catch {
+              return null;
+            }
+          };
+
+          const showPageOverlay = (firstEl: Element, lastEl: Element): void => {
+            try {
+              const container = document.body;
+              const containerRect = container.getBoundingClientRect();
+              const firstRect = firstEl.getBoundingClientRect();
+              const lastRect = lastEl.getBoundingClientRect();
+              const top = firstRect.top - containerRect.top + container.scrollTop;
+              const height = Math.max(0, lastRect.bottom - firstRect.top);
+              const overlay = document.createElement("div");
+              overlay.className = "page-anchor-overlay";
+              overlay.style.top = (top - 6) + "px";
+              overlay.style.height = (height + 12) + "px";
+              container.appendChild(overlay);
+              setTimeout(() => {
+                if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+              }, 1700);
             } catch {}
-          }
+          };
+
+          const attemptScroll = (retriesLeft: number): void => {
+            if (!editor || editor.isDestroyed) return;
+            const doc = editor.state.doc;
+            const pageRanges = getPageRanges(doc);
+            const page = pageRanges[pageIdx] ?? pageRanges[0];
+
+            // Collect every non-HR block position inside the page range.
+            const blocksInPage: number[] = [];
+            if (page) {
+              doc.forEach((node, offset) => {
+                if (offset < page.start || offset >= page.end) return;
+                if (node.type.name === "horizontalRule") return;
+                blocksInPage.push(offset);
+              });
+            }
+
+            // Doc not populated yet → retry.
+            if (!page || blocksInPage.length === 0) {
+              if (retriesLeft > 0) {
+                setTimeout(() => attemptScroll(retriesLeft - 1), 150);
+              }
+              return;
+            }
+
+            const targetPos = blocksInPage[Math.min(blockIdx, blocksInPage.length - 1)];
+            const view = editor.view;
+            const targetEl = posToBlockEl(view, targetPos);
+            const firstEl = posToBlockEl(view, blocksInPage[0]);
+            const lastEl = posToBlockEl(view, blocksInPage[blocksInPage.length - 1]);
+
+            // DOM not painted yet (block has 0 height) → retry.
+            if (!firstEl || !lastEl || (firstEl as HTMLElement).offsetHeight === 0) {
+              if (retriesLeft > 0) {
+                setTimeout(() => attemptScroll(retriesLeft - 1), 150);
+              }
+              return;
+            }
+
+            if (targetEl) {
+              targetEl.scrollIntoView({ behavior: "smooth", block: "center" });
+            }
+            // Defer overlay one frame so it's positioned after smooth scroll begins.
+            requestAnimationFrame(() => showPageOverlay(firstEl, lastEl));
+          };
+
+          attemptScroll(8); // ~8 * 150ms = up to 1.2s of retries
           break;
         }
       }
