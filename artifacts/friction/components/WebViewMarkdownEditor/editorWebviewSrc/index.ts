@@ -1173,7 +1173,7 @@ interface Command {
             }
 
             if (targetEl) {
-              targetEl.scrollIntoView({ behavior: "smooth", block: "center" });
+              targetEl.scrollIntoView({ behavior: "smooth", block: "start" });
             }
             // Defer overlay one frame so it's positioned after smooth scroll begins.
             requestAnimationFrame(() => showPageOverlay(firstEl, lastEl));
