@@ -100,11 +100,14 @@ body{padding:16px 0 0;overflow:auto;position:relative}
 
 const VERSION = "3.16.0";
 
-const tsContent = `export const EDITOR_CONFIG_VERSION = "${VERSION}";
+const tsContent = `import { buildWebViewPerfHeadScript } from "@/lib/webviewPerf";
+
+export const EDITOR_CONFIG_VERSION = "${VERSION}";
 
 export interface EditorFontOptions {
   regularBase64?: string | null;
   semiBoldBase64?: string | null;
+  perfEnabled?: boolean;
 }
 
 function buildFontFaceCSS(opts: EditorFontOptions): string {
@@ -115,11 +118,13 @@ function buildFontFaceCSS(opts: EditorFontOptions): string {
 
 export function getEditorHtml(fontOptions: EditorFontOptions = {}): string {
   const fontFaceCSS = buildFontFaceCSS(fontOptions);
+  const perfHeadScript = buildWebViewPerfHeadScript(!!fontOptions.perfEnabled);
   return \`<!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+\${perfHeadScript}
 <style>\${fontFaceCSS}${css}</style>
 </head>
 <body>

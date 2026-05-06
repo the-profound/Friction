@@ -677,6 +677,39 @@ interface Command {
   let changeTimer: ReturnType<typeof setTimeout> | null = null;
   const CHANGE_THROTTLE_MS = 400;
 
+  // ── 본문 동기화 핫패스 캐시 ──
+  // setMarkdown / requestExportMarkdown 의 markdown↔HTML 전체 변환과
+  // ProseMirror 전체 setContent 는 본문이 길수록 가장 큰 비용이라
+  // 다음 캐시들로 중복 작업을 건너뛴다.
+  //
+  //   lastAppliedMarkdown
+  //     마지막으로 setContent 한 markdown 의 정규화된 사본.
+  //     동일한 markdown 으로 setMarkdown 이 다시 들어오면 setContent 자체를 생략한다.
+  //
+  //   lastExportedMarkdown / lastExportedDocVersion
+  //     마지막 export 가 성공한 시점의 markdown 과 그때의 docChanged 카운터.
+  //     이후 doc 이 변하지 않았으면 htmlToMarkdown 변환을 생략하고 캐시를 반환한다.
+  //
+  //   docChangeCounter
+  //     onUpdate 의 transaction.docChanged 마다 증가. lastExportedDocVersion 비교에 사용.
+  //
+  //   lastEmittedCharCount / lastEmittedWordCount
+  //     마지막으로 emit 한 onChange 메트릭. 동일하면 emit 자체를 생략.
+  //     (RN 측은 charCount/wordCount 가 변하지 않은 이벤트로 얻을 정보가 없다.)
+  let lastAppliedMarkdown: string | null = null;
+  let lastExportedMarkdown = "";
+  let lastExportedDocVersion = -1;
+  let docChangeCounter = 0;
+  let lastEmittedCharCount = -1;
+  let lastEmittedWordCount = -1;
+
+  // 멱등 처리용 캐시 — 같은 값을 재전송한 경우 비싼 DOM/style 작업을 스킵한다.
+  let lastEditable: boolean | null = null;
+  let lastSourceArticleText: string | null = null;
+  let lastBodyFontSizePx: number | null = null;
+  let lastBodyLetterSpacingPx: number | null = null;
+  let lastTitleFontSizePx: number | null = null;
+
   // 오버플로 강조 측정 — RN 이 setOverflowProbeConfig 로 안전 영역 높이를
   // 알려주면 에디터가 자기 DOM 을 walk 해서 각 페이지(HR 분할)에서 안전 영역을
   // 처음 벗어나는 PM position 을 찾고 [그 위치 ~ 페이지 끝] 을 강조한다.
@@ -896,12 +929,27 @@ interface Command {
       content: initialHtml,
       editable: true,
       autofocus: false,
-      onUpdate: ({ editor: ed }) => {
+      onUpdate: ({ editor: ed, transaction }) => {
+        // export 캐시 무효화: 실제 doc 이 바뀐 트랜잭션만 카운트.
+        // selection/decoration-only 트랜잭션으로는 무효화하지 않는다.
+        if (transaction.docChanged) {
+          docChangeCounter++;
+          // 사용자 입력으로 인한 변경이 발생하면 setMarkdown guard 도 무효화한다.
+          // (이후 동일한 markdown 이 들어와도 setContent 가 다시 실행되도록.)
+          lastAppliedMarkdown = null;
+        }
         if (changeTimer) clearTimeout(changeTimer);
         changeTimer = setTimeout(() => {
           const text = ed.state.doc.textContent;
           const charCount = text.length;
           const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
+          // 직전 emit 과 charCount/wordCount 가 동일하면 emit 을 생략한다.
+          // (isDirty 는 현재 항상 true 라 단독으로는 새 정보를 주지 않는다.)
+          if (charCount === lastEmittedCharCount && wordCount === lastEmittedWordCount) {
+            return;
+          }
+          lastEmittedCharCount = charCount;
+          lastEmittedWordCount = wordCount;
           postToRN({ type: "onChange", payload: { isDirty: true, charCount, wordCount } });
         }, CHANGE_THROTTLE_MS);
         postSelectionState(ed);
@@ -942,6 +990,11 @@ interface Command {
             const html = markdownToHtml(initialMarkdown);
             editor.commands.setContent(html);
           }
+          // setupEditor / setContent 직후 캐시를 정합 상태로 맞춘다.
+          lastAppliedMarkdown = initialMarkdown;
+          // 새 본문이 들어왔으니 export 캐시도 비운다.
+          lastExportedMarkdown = "";
+          lastExportedDocVersion = -1;
 
           postToRN({ type: "onReady" });
           // 초기 콘텐츠 레이아웃이 안정된 뒤 한 번 강조를 측정한다.
@@ -950,8 +1003,20 @@ interface Command {
         }
         case "setMarkdown": {
           if (editor && !editor.isDestroyed) {
-            const html = markdownToHtml(cmd.markdown || "");
+            const next = cmd.markdown || "";
+            // 동일한 markdown 이 다시 들어오면 markdown→HTML 변환과
+            // ProseMirror 전체 setContent 를 모두 생략한다 (no-op).
+            if (lastAppliedMarkdown !== null && next === lastAppliedMarkdown) {
+              break;
+            }
+            const html = markdownToHtml(next);
             editor.commands.setContent(html);
+            lastAppliedMarkdown = next;
+            // 새 본문이 들어왔으니 export 캐시도 비운다.
+            // (setContent 트랜잭션은 docChanged=true 라 docChangeCounter 가
+            //  자동으로 증가하지만, 캐시도 명시적으로 비워 안전하게 둔다.)
+            lastExportedMarkdown = "";
+            lastExportedDocVersion = -1;
             scheduleOverflowProbe(150);
           }
           break;
@@ -965,8 +1030,17 @@ interface Command {
         }
         case "requestExportMarkdown": {
           if (editor && !editor.isDestroyed) {
-            const html = editor.getHTML();
-            const markdown = htmlToMarkdown(html);
+            // doc 이 마지막 export 이후 변하지 않았으면 htmlToMarkdown 변환을
+            // 생략하고 캐시된 markdown 을 그대로 반환한다.
+            let markdown: string;
+            if (lastExportedDocVersion === docChangeCounter) {
+              markdown = lastExportedMarkdown;
+            } else {
+              const html = editor.getHTML();
+              markdown = htmlToMarkdown(html);
+              lastExportedMarkdown = markdown;
+              lastExportedDocVersion = docChangeCounter;
+            }
             postToRN({
               type: "onExportMarkdown",
               payload: { requestId: cmd.requestId, markdown, isDirty: false },
@@ -975,19 +1049,25 @@ interface Command {
           break;
         }
         case "setEditable": {
-          if (editor && !editor.isDestroyed) {
-            editor.setEditable(!!cmd.isEditable);
-          }
-          if (titleInput) {
-            titleInput.readOnly = !cmd.isEditable;
-            titleInput.style.color = cmd.isEditable ? "#18181b" : "#52525b";
+          const next = !!cmd.isEditable;
+          // 같은 값을 재전송한 경우 ProseMirror/DOM 작업을 생략한다.
+          if (lastEditable !== next) {
+            if (editor && !editor.isDestroyed) {
+              editor.setEditable(next);
+            }
+            if (titleInput) {
+              titleInput.readOnly = !next;
+              titleInput.style.color = next ? "#18181b" : "#52525b";
+            }
+            lastEditable = next;
           }
           break;
         }
         case "setSourceArticleSlot": {
+          const text = cmd.text || "";
+          if (lastSourceArticleText === text) break;
           const s = document.getElementById("source-article-slot");
           if (s) {
-            const text = cmd.text || "";
             if (text) {
               s.textContent = text;
               (s as HTMLElement).style.display = "block";
@@ -995,6 +1075,7 @@ interface Command {
               (s as HTMLElement).style.display = "none";
             }
           }
+          lastSourceArticleText = text;
           break;
         }
         case "setOverflowRanges": {
@@ -1024,18 +1105,26 @@ interface Command {
         }
         case "setBodyMetrics": {
           const root = document.documentElement;
-          if (cmd.fontSizePx != null) {
+          // 같은 값을 재전송한 경우 CSS 변수/리프로브 작업을 생략한다.
+          let changed = false;
+          if (cmd.fontSizePx != null && cmd.fontSizePx !== lastBodyFontSizePx) {
             root.style.setProperty("--body-font-size", cmd.fontSizePx + "px");
+            lastBodyFontSizePx = cmd.fontSizePx;
+            changed = true;
           }
-          if (cmd.letterSpacingPx != null) {
+          if (cmd.letterSpacingPx != null && cmd.letterSpacingPx !== lastBodyLetterSpacingPx) {
             root.style.setProperty("--body-letter-spacing", cmd.letterSpacingPx + "px");
+            lastBodyLetterSpacingPx = cmd.letterSpacingPx;
+            changed = true;
           }
-          if (cmd.titleFontSizePx != null) {
+          if (cmd.titleFontSizePx != null && cmd.titleFontSizePx !== lastTitleFontSizePx) {
             root.style.setProperty("--title-font-size", cmd.titleFontSizePx + "px");
+            lastTitleFontSizePx = cmd.titleFontSizePx;
             if (titleInput) autoResizeTitle();
+            changed = true;
           }
-          // 폰트/자간이 바뀌면 줄바꿈 위치도 바뀌므로 강조 재측정.
-          scheduleOverflowProbe(150);
+          // 폰트/자간이 바뀐 경우에만 강조 재측정.
+          if (changed) scheduleOverflowProbe(150);
           break;
         }
         case "setBlockType": {
