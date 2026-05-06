@@ -98,6 +98,5 @@ export interface WebViewMarkdownEditorProps {
   onSourceArticleSlotTap?: () => void;
   bodyFontSize?: number;
   bodyLetterSpacing?: number;
-  bodyPaddingX?: number;
   titleFontSize?: number;
 }

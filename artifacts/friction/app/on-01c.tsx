@@ -16,7 +16,8 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams, Stack } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import { Colors, Typography, Spacing, ReaderTokens, Shadows, cqiToPx, readerFontSize } from "@/constants/tokens";
+import { Colors, Typography, Spacing, ReaderTokens, Shadows } from "@/constants/tokens";
+import { computeBodyLayout } from "@/lib/bodyLayout";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import CoverPreview from "@/components/CoverPreview/CoverPreview";
 import CoverEditor from "@/components/CoverEditor/CoverEditor";
@@ -544,43 +545,62 @@ export default function ClosingScreen() {
               <View style={styles.previewCardShadow}>
               <View style={styles.previewCard} onLayout={handlePreviewCardLayout}>
                 {previewCardWidth > 0 && storedLayoutWidth !== null ? (
-                  // storedLayoutWidth를 알 때: 원래 분할 단계의 치수로 렌더링 후 scale 축소
-                  // (read.tsx PageView와 동일한 폰트 크기 → 정확한 미리보기 보장)
-                  <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-                    <View style={{
-                      width: storedLayoutWidth,
-                      height: storedLayoutWidth / ReaderTokens.aspectRatio,
-                      transform: [{ scale: Math.min(previewCardWidth / storedLayoutWidth, 1.0) }],
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}>
-                      <View style={{
-                        width: cqiToPx(ReaderTokens.safeArea.widthCqi, storedLayoutWidth),
-                        flex: 1,
-                        paddingHorizontal: cqiToPx(ReaderTokens.padding.xCqi, storedLayoutWidth),
-                        paddingVertical: cqiToPx(ReaderTokens.padding.yCqi, storedLayoutWidth),
-                      }}>
-                        <WebViewMarkdownReader
-                          markdown={currentPage!}
-                          bodyFontSize={readerFontSize(ReaderTokens.typeScale.bodyCqi, storedLayoutWidth)}
-                          bodyLetterSpacing={readerFontSize(ReaderTokens.typeScale.bodyCqi, storedLayoutWidth) * ReaderTokens.letterSpacing.relaxedEm}
-                        />
+                  // storedLayoutWidth를 알 때: 원래 분할 단계의 치수로 렌더링 후 scale 축소.
+                  // 4개 화면(작성/분할/마감/읽기)이 모두 lib/bodyLayout.ts의 computeBodyLayout을
+                  // 거쳐 같은 정수 픽셀 textColumnWidth를 자식 View의 width에 직접 사용한다 →
+                  // PretextMeasureLayer / read.tsx PageView와 픽셀 단위로 일치하는 줄넘김.
+                  (() => {
+                    const storedBody = computeBodyLayout(storedLayoutWidth);
+                    return (
+                      <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+                        <View style={{
+                          width: storedLayoutWidth,
+                          height: storedLayoutWidth / ReaderTokens.aspectRatio,
+                          transform: [{ scale: Math.min(previewCardWidth / storedLayoutWidth, 1.0) }],
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}>
+                          <View style={{
+                            width: storedBody.safeAreaWidth,
+                            flex: 1,
+                            paddingVertical: storedBody.paddingY,
+                            alignItems: "center",
+                          }}>
+                            <View style={{ width: storedBody.textColumnWidth, flex: 1 }}>
+                              <WebViewMarkdownReader
+                                markdown={currentPage!}
+                                bodyFontSize={storedBody.bodyFontSize}
+                                bodyLetterSpacing={storedBody.bodyLetterSpacing}
+                              />
+                            </View>
+                          </View>
+                        </View>
                       </View>
-                    </View>
-                  </View>
+                    );
+                  })()
                 ) : previewCardWidth > 0 ? (
-                  // storedLayoutWidth 없는 폴백: previewCardWidth 기준으로 직접 렌더링
-                  <View style={{
-                    flex: 1,
-                    paddingHorizontal: cqiToPx(ReaderTokens.padding.xCqi, previewCardWidth),
-                    paddingVertical: cqiToPx(ReaderTokens.padding.yCqi, previewCardWidth),
-                  }}>
-                    <WebViewMarkdownReader
-                      markdown={currentPage!}
-                      bodyFontSize={readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth)}
-                      bodyLetterSpacing={readerFontSize(ReaderTokens.typeScale.bodyCqi, previewCardWidth) * ReaderTokens.letterSpacing.relaxedEm}
-                    />
-                  </View>
+                  // storedLayoutWidth 없는 폴백: previewCardWidth 자체를 컨테이너 폭으로 보고
+                  // 동일한 computeBodyLayout으로 텍스트 컬럼을 산출한다 (정수 textColumnWidth 사용).
+                  (() => {
+                    const fallbackBody = computeBodyLayout(previewCardWidth);
+                    return (
+                      <View style={{
+                        width: fallbackBody.safeAreaWidth,
+                        flex: 1,
+                        paddingVertical: fallbackBody.paddingY,
+                        alignItems: "center",
+                        alignSelf: "center",
+                      }}>
+                        <View style={{ width: fallbackBody.textColumnWidth, flex: 1 }}>
+                          <WebViewMarkdownReader
+                            markdown={currentPage!}
+                            bodyFontSize={fallbackBody.bodyFontSize}
+                            bodyLetterSpacing={fallbackBody.bodyLetterSpacing}
+                          />
+                        </View>
+                      </View>
+                    );
+                  })()
                 ) : null}
               </View>
               </View>

@@ -9,10 +9,22 @@
  * 폰트가 없는 초기 로딩 상태에서도 WebView 자체는 마운트되어 있어야 하므로
  * fontFaceCSS가 비어 있으면 시스템 serif로 fallback한다.
  */
+import { buildBodyTypographyCss } from "@/components/shared/bodyTypographyCss";
+
 export interface MeasureFontOptions {
   regularBase64?: string | null;
   semiBoldBase64?: string | null;
 }
+
+// 본문 타이포그래피는 편집기/리더와 동일한 모듈에서 받는다.
+// 측정 레이어는 블록 마진을 0으로 두고 blockGap을 외부에서 더하므로 blockMargins "zero",
+// hr은 1px 높이 + 마진 0(measure 모드)으로 받는다.
+const bodyTypographyCss = buildBodyTypographyCss({
+  rootSelector: ".mb",
+  blockSelector: ".mb",
+  blockMargins: "zero",
+  hrStyle: "measure",
+});
 
 export function getMeasureHtml(opts: MeasureFontOptions = {}): string {
   const { regularBase64, semiBoldBase64 } = opts;
@@ -29,31 +41,8 @@ export function getMeasureHtml(opts: MeasureFontOptions = {}): string {
 <style>${fontFaceCSS}
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{background:transparent;overflow:hidden;visibility:hidden}
-.mb{
-  position:absolute;left:0;top:0;
-  font-family:'Eulyoo1945-Regular',serif;
-  font-size:var(--body-font-size,16px);
-  line-height:1.8;
-  letter-spacing:var(--body-letter-spacing,0.8px);
-  color:#1A1A1A;
-  overflow-wrap:break-word;
-  word-wrap:break-word;
-  text-align:justify;
-  text-justify:inter-ideograph;
-  -webkit-text-size-adjust:100%;
-}
-.mb p{margin:0;text-align:justify;overflow-wrap:break-word;text-justify:inter-ideograph}
-.mb h1{font-family:'Eulyoo1945-SemiBold',serif;font-size:1.6em;font-weight:600;letter-spacing:0.025em;margin:0;line-height:1.25;text-align:left}
-.mb h2{font-family:'Eulyoo1945-SemiBold',serif;font-size:1.3em;font-weight:600;letter-spacing:0.025em;margin:0;line-height:1.3;text-align:left}
-.mb h3{font-family:'Eulyoo1945-SemiBold',serif;font-size:1.1em;font-weight:600;letter-spacing:0.025em;margin:0;line-height:1.35;text-align:left}
-.mb ul,.mb ol{padding-left:1.5em;margin:0;text-align:left}
-.mb li{margin:0;text-align:left}
-.mb li p{margin:0}
-.mb blockquote{font-family:'Eulyoo1945-Regular',serif;font-style:italic;border-left:3px solid #d4d4d8;padding-left:1em;margin:0;color:#52525b;text-align:left}
-.mb hr{border:none;border-top:1px solid #e4e4e7;height:1px;margin:0}
-.mb strong{font-family:'Eulyoo1945-SemiBold',serif;font-weight:700}
-.mb em{font-style:italic}
-.mb u{text-decoration:underline}
+${bodyTypographyCss}
+.mb{position:absolute;left:0;top:0}
 </style>
 </head>
 <body>

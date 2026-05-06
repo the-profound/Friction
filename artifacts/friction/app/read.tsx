@@ -39,10 +39,10 @@ import {
   Colors,
   Spacing,
   ReaderTokens,
-  cqiToPx,
   readerFontSize,
   readerLetterSpacing,
 } from "@/constants/tokens";
+import { computeBodyLayout } from "@/lib/bodyLayout";
 import ProgressIndicator from "@/components/ProgressIndicator/ProgressIndicator";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import CoverPreview from "@/components/CoverPreview/CoverPreview";
@@ -90,22 +90,12 @@ function computeReaderLayout(availableWidth: number, availableHeight: number, ov
   const frameWidth = containerWidth * scaleFactor;
   const frameHeight = containerHeight * scaleFactor;
 
-  const paddingX = cqiToPx(ReaderTokens.padding.xCqi, containerWidth);
-  const paddingY = cqiToPx(ReaderTokens.padding.yCqi, containerWidth);
+  // 본문(safeArea/padding/textColumnWidth/body 폰트 메트릭)은 lib/bodyLayout.ts의
+  // computeBodyLayout이 단일 진입점이다. 작성(on-01a)·분할(on-01b)·마감(on-01c)·
+  // 읽기(read.tsx) 4개 화면이 모두 같은 함수를 거치므로 textColumnWidth(정수 픽셀)와
+  // body 메트릭이 동일 컨테이너 폭에서 픽셀 단위로 일치한다.
+  const body = computeBodyLayout(containerWidth);
 
-  const safeAreaWidth = cqiToPx(
-    ReaderTokens.safeArea.widthCqi,
-    containerWidth,
-  );
-  const safeAreaHeight = cqiToPx(
-    ReaderTokens.safeArea.heightCqi,
-    containerWidth,
-  );
-
-  const bodyFontSize = readerFontSize(
-    ReaderTokens.typeScale.bodyCqi,
-    containerWidth,
-  );
   const captionFontSize = readerFontSize(
     ReaderTokens.typeScale.captionCqi,
     containerWidth,
@@ -115,26 +105,15 @@ function computeReaderLayout(availableWidth: number, availableHeight: number, ov
     containerWidth,
   );
 
-  const bodyLineHeight = bodyFontSize * ReaderTokens.lineHeight.relaxed;
-  const bodyLetterSpacing = readerLetterSpacing(
-    ReaderTokens.letterSpacing.relaxedEm,
-    bodyFontSize,
-  );
-
-  const titleLineHeight = bodyFontSize * ReaderTokens.lineHeight.tight;
+  const titleLineHeight = body.bodyFontSize * ReaderTokens.lineHeight.tight;
   const titleLetterSpacing = readerLetterSpacing(
     ReaderTokens.letterSpacing.tightEm,
-    bodyFontSize,
+    body.bodyFontSize,
   );
 
   // Reserve space for the title bar overlay at the bottom of the page
   // Formula: paddingTop(8) + captionFontSize * iOS line height factor(~1.3) + paddingBottom(12)
   const titleBarHeight = Math.round(20 + captionFontSize * 1.3);
-
-  // Explicit integer pixel width of the text column.
-  // Computed once here so every consumer (PageView, PretextMeasureLayer, on-01c preview)
-  // uses the same integer and Yoga pixel-snapping cannot diverge across different parent positions.
-  const textColumnWidth = Math.round(safeAreaWidth - 2 * paddingX);
 
   return {
     containerWidth,
@@ -142,16 +121,16 @@ function computeReaderLayout(availableWidth: number, availableHeight: number, ov
     frameWidth,
     frameHeight,
     scaleFactor,
-    paddingX,
-    paddingY,
-    safeAreaWidth,
-    safeAreaHeight,
-    textColumnWidth,
-    bodyFontSize,
+    paddingX: body.paddingX,
+    paddingY: body.paddingY,
+    safeAreaWidth: body.safeAreaWidth,
+    safeAreaHeight: body.safeAreaHeight,
+    textColumnWidth: body.textColumnWidth,
+    bodyFontSize: body.bodyFontSize,
     captionFontSize,
     metadataFontSize,
-    bodyLineHeight,
-    bodyLetterSpacing,
+    bodyLineHeight: body.bodyLineHeight,
+    bodyLetterSpacing: body.bodyLetterSpacing,
     titleLineHeight,
     titleLetterSpacing,
     titleBarHeight,

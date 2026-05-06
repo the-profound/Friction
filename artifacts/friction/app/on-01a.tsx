@@ -504,7 +504,14 @@ export default function DraftScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <View style={[styles.editorInner, { width: editorLayout.safeAreaWidth }]}>
-        <View style={styles.markdownEditorContainer}>
+        {/*
+          본문 텍스트 컬럼은 4개 화면(작성/분할/마감/읽기)이 동일한 정수 픽셀 폭으로
+          줄넘김을 결정해야 한다. 컨테이너에 paddingHorizontal을 주는 대신
+          editorLayout.textColumnWidth (= Math.round(safeAreaWidth − 2×paddingX))을
+          그대로 자식 View의 width로 사용해 Yoga 픽셀 스냅이 부모 위치에 따라
+          ±1px 흔들리는 일을 차단한다.
+        */}
+        <View style={[styles.markdownEditorContainer, { width: editorLayout.textColumnWidth, alignSelf: "center" }]}>
           <WebViewMarkdownEditor
             ref={editorRef}
             initialMarkdown={contentRef.current}
@@ -519,11 +526,10 @@ export default function DraftScreen() {
             onSelectionUpdate={handleSelectionUpdate}
             bodyFontSize={editorLayout.bodyFontSize}
             bodyLetterSpacing={editorLayout.bodyLetterSpacing}
-            bodyPaddingX={editorLayout.paddingX}
             titleFontSize={editorLayout.titleFontSize}
             belowTitleSlot={
               <Pressable
-                style={[styles.sourceArticleRow, { paddingHorizontal: editorLayout.paddingX }]}
+                style={styles.sourceArticleRow}
                 onPress={() => setPickerVisible(true)}
                 hitSlop={4}
               >

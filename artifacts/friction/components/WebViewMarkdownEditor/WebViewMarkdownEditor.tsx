@@ -31,7 +31,6 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       onSourceArticleSlotTap,
       bodyFontSize,
       bodyLetterSpacing,
-      bodyPaddingX,
       titleFontSize,
     },
     ref,
@@ -161,15 +160,6 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
     }, [bodyFontSize, bodyLetterSpacing, titleFontSize, sendCommand]);
 
     useEffect(() => {
-      if (readyRef.current && bodyPaddingX != null) {
-        const px = `${bodyPaddingX}px`;
-        webViewRef.current?.injectJavaScript(
-          `(function(){try{document.body.style.paddingLeft='${px}';document.body.style.paddingRight='${px}';}catch(e){}})();true;`,
-        );
-      }
-    }, [bodyPaddingX]);
-
-    useEffect(() => {
       sendCommand({ type: "setSourceArticleSlot", text: sourceArticleSlotText ?? "" });
     }, [sourceArticleSlotText, sendCommand]);
 
@@ -230,12 +220,6 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
                 letterSpacingPx: bodyLetterSpacing,
                 titleFontSizePx: titleFontSize,
               });
-            }
-            if (bodyPaddingX != null) {
-              const px = `${bodyPaddingX}px`;
-              webViewRef.current?.injectJavaScript(
-                `(function(){try{document.body.style.paddingLeft='${px}';document.body.style.paddingRight='${px}';}catch(e){}})();true;`,
-              );
             }
             flushQueue();
           }}
