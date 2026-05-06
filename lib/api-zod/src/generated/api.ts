@@ -669,6 +669,12 @@ export const ListInboxResponseItem = zod.object({
   isReplyToMe: zod.boolean(),
   replyToArticleId: zod.string().uuid().nullish(),
   hasReadBefore: zod.boolean(),
+  hasReadSourceArticle: zod
+    .boolean()
+    .nullish()
+    .describe(
+      "Whether the recipient has previously completed reading the source (parent) article. NULL when this item is not a reply (replyToArticleId is null).",
+    ),
 });
 export const ListInboxResponse = zod.array(ListInboxResponseItem);
 
@@ -766,6 +772,12 @@ export const GetInboxItemResponse = zod.object({
   isReplyToMe: zod.boolean(),
   replyToArticleId: zod.string().uuid().nullish(),
   hasReadBefore: zod.boolean(),
+  hasReadSourceArticle: zod
+    .boolean()
+    .nullish()
+    .describe(
+      "Whether the recipient has previously completed reading the source (parent) article. NULL when this item is not a reply (replyToArticleId is null).",
+    ),
 });
 
 /**
@@ -869,6 +881,12 @@ export const MarkInboxOpenedResponse = zod.object({
   isReplyToMe: zod.boolean(),
   replyToArticleId: zod.string().uuid().nullish(),
   hasReadBefore: zod.boolean(),
+  hasReadSourceArticle: zod
+    .boolean()
+    .nullish()
+    .describe(
+      "Whether the recipient has previously completed reading the source (parent) article. NULL when this item is not a reply (replyToArticleId is null).",
+    ),
 });
 
 /**
@@ -966,6 +984,12 @@ export const MarkInboxReadResponse = zod.object({
   isReplyToMe: zod.boolean(),
   replyToArticleId: zod.string().uuid().nullish(),
   hasReadBefore: zod.boolean(),
+  hasReadSourceArticle: zod
+    .boolean()
+    .nullish()
+    .describe(
+      "Whether the recipient has previously completed reading the source (parent) article. NULL when this item is not a reply (replyToArticleId is null).",
+    ),
 });
 
 /**

@@ -6,6 +6,7 @@ import { db, inboxTable, articlesTable, usersTable, userArticleReadsTable } from
 const router: IRouter = Router();
 
 const sourceArticle = alias(articlesTable, "source_article");
+const sourceArticleRead = alias(userArticleReadsTable, "source_article_read");
 
 // Resolves the "출처 모임명" shown next to each inbox card.
 // New rows carry sourceTeamCollectionId for team-collection deliveries; for
@@ -69,6 +70,7 @@ router.get("/inbox", async (req, res) => {
       isReplyToMe: sql<boolean>`(${sourceArticle.id} IS NOT NULL AND ${sourceArticle.authorId} = ${inboxTable.recipientId})`,
       replyToArticleId: articlesTable.sourceArticleId,
       hasReadBefore: sql<boolean>`(${userArticleReadsTable.completedAt} IS NOT NULL)`,
+      hasReadSourceArticle: sql<boolean | null>`(CASE WHEN ${articlesTable.sourceArticleId} IS NULL THEN NULL ELSE (${sourceArticleRead.completedAt} IS NOT NULL) END)`,
     })
     .from(inboxTable)
     .leftJoin(articlesTable, eq(inboxTable.articleId, articlesTable.id))
@@ -79,6 +81,13 @@ router.get("/inbox", async (req, res) => {
       and(
         eq(userArticleReadsTable.articleId, inboxTable.articleId),
         eq(userArticleReadsTable.userId, inboxTable.recipientId),
+      ),
+    )
+    .leftJoin(
+      sourceArticleRead,
+      and(
+        eq(sourceArticleRead.articleId, articlesTable.sourceArticleId),
+        eq(sourceArticleRead.userId, inboxTable.recipientId),
       ),
     )
     .where(and(...whereConditions))

@@ -25,4 +25,6 @@ export interface InboxItem {
   isReplyToMe: boolean;
   replyToArticleId?: string | null;
   hasReadBefore: boolean;
+  /** Whether the recipient has previously completed reading the source (parent) article. NULL when this item is not a reply (replyToArticleId is null). */
+  hasReadSourceArticle?: boolean | null;
 }

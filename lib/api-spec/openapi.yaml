@@ -1874,6 +1874,10 @@ components:
           nullable: true
         hasReadBefore:
           type: boolean
+        hasReadSourceArticle:
+          type: boolean
+          nullable: true
+          description: Whether the recipient has previously completed reading the source (parent) article. NULL when this item is not a reply (replyToArticleId is null).
       required: [id, recipientId, articleId, senderId, visibleAt, isRead, createdAt, isReplyToMe, hasReadBefore]
 
     MarkInboxOthersReadResponse:

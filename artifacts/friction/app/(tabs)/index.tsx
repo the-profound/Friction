@@ -320,6 +320,7 @@ export default function InboxScreen() {
   const [searchActive, setSearchActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [tapItem, setTapItem] = useState<InboxItem | null>(null);
+  const [sourcePromptItem, setSourcePromptItem] = useState<InboxItem | null>(null);
 
   const { data: inboxData, isLoading, refetch } = useListInbox(
     // isRead=false tells the server to return only unread items, keeping the
@@ -383,10 +384,7 @@ export default function InboxScreen() {
     setTapItem(null);
   }, []);
 
-  const handleRead = useCallback(async () => {
-    if (!tapItem) return;
-    const item = tapItem;
-    setTapItem(null);
+  const navigateToReply = useCallback(async (item: InboxItem) => {
     if (!item.openedAt) {
       try {
         await markOpened.mutateAsync({ id: item.id });
@@ -404,7 +402,54 @@ export default function InboxScreen() {
         mode,
       },
     });
-  }, [tapItem, markOpened, router, queryClient]);
+  }, [markOpened, router, queryClient]);
+
+  const handleRead = useCallback(async () => {
+    if (!tapItem) return;
+    const item = tapItem;
+    setTapItem(null);
+    // 답장(`replyToArticleId` 보유)이고 아직 원글을 읽지 않은 경우, 원글 먼저 읽기
+    // 안내 모달을 띄운다. 그 외에는 기존 흐름을 그대로 수행한다.
+    const isReply = item.isReplyToMe === true || !!item.replyToArticleId;
+    if (isReply && item.hasReadSourceArticle === false) {
+      setSourcePromptItem(item);
+      return;
+    }
+    await navigateToReply(item);
+  }, [tapItem, navigateToReply]);
+
+  const handleSourcePromptClose = useCallback(() => {
+    setSourcePromptItem(null);
+  }, []);
+
+  const handleReadSourceFirst = useCallback(() => {
+    const item = sourcePromptItem;
+    if (!item || !item.replyToArticleId) {
+      setSourcePromptItem(null);
+      return;
+    }
+    setSourcePromptItem(null);
+    // 원글에 대응하는 (현재 사용자의) 미독 인박스 행이 있다면 함께 전달.
+    // 없으면 inboxId 없이 진입 — read.tsx가 inboxId 없이도 동작한다.
+    const sourceInboxId = (inboxData as InboxItem[] | undefined)?.find(
+      (it) => it.articleId === item.replyToArticleId,
+    )?.id;
+    router.push({
+      pathname: "/read",
+      params: {
+        articleId: item.replyToArticleId,
+        ...(sourceInboxId ? { inboxId: sourceInboxId } : {}),
+        mode: "basic",
+      },
+    });
+  }, [sourcePromptItem, inboxData, router]);
+
+  const handleSkipToReply = useCallback(async () => {
+    const item = sourcePromptItem;
+    setSourcePromptItem(null);
+    if (!item) return;
+    await navigateToReply(item);
+  }, [sourcePromptItem, navigateToReply]);
 
   const handleDelete = useCallback(async () => {
     if (!tapItem) return;
@@ -522,6 +567,17 @@ Alert.alert("완료", "수신함에서 삭제되었습니다.");
         deleteButton={{
           onPress: handleDelete,
         }}
+      />
+
+      <ConfirmModal
+        visible={sourcePromptItem !== null}
+        title="원글을 먼저 읽어보시겠어요?"
+        description="맥락 파악을 위해 원글을 먼저 읽는 것을 추천합니다."
+        cancelLabel="건너뛰고 답장 읽기"
+        confirmLabel="원글 먼저 읽기"
+        onCancel={handleSkipToReply}
+        onConfirm={handleReadSourceFirst}
+        onBackdropPress={handleSourcePromptClose}
       />
     </View>
   );
