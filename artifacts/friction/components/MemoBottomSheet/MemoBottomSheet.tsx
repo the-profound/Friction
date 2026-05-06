@@ -11,7 +11,7 @@ import { Colors, Typography } from "@/constants/tokens";
 
 interface MemoBottomSheetProps {
   visible: boolean;
-  onClose: () => void | Promise<void>;
+  onClose: () => void;
   initialContent?: string;
   appendContent?: string;
   initialTitle?: string;
@@ -21,8 +21,6 @@ interface MemoBottomSheetProps {
   onSaveStateChange?: (state: "saved" | "saving" | "error") => void;
   onContentChange?: (markdown: string) => void;
 }
-
-const CLOSE_EXPORT_TIMEOUT_MS = 2000;
 
 export default function MemoBottomSheet({
   visible,
@@ -39,11 +37,9 @@ export default function MemoBottomSheet({
   const editorRef = useRef<WebViewMarkdownEditorRef>(null);
   const [editorReady, setEditorReady] = useState(false);
   const [localSaveState, setLocalSaveState] = useState<"saved" | "saving" | "error" | "idle">("idle");
-  const [isClosing, setIsClosing] = useState(false);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const exportRequestIdRef = useRef(0);
   const appendInjectedRef = useRef(false);
-  const closeExportResolverRef = useRef<(() => void) | null>(null);
   const saveState = externalSaveState ?? localSaveState;
 
   const effectiveInitialTitle = initialTitle.trim()
@@ -54,12 +50,7 @@ export default function MemoBottomSheet({
     if (!visible) {
       setEditorReady(false);
       setLocalSaveState("idle");
-      setIsClosing(false);
       appendInjectedRef.current = false;
-      if (closeExportResolverRef.current) {
-        closeExportResolverRef.current();
-        closeExportResolverRef.current = null;
-      }
     }
   }, [visible]);
 
@@ -97,42 +88,26 @@ export default function MemoBottomSheet({
   const handleExportMarkdown = useCallback(
     (payload: OnExportMarkdownPayload) => {
       onContentChange?.(payload.markdown);
-      if (payload.requestId === "close" && closeExportResolverRef.current) {
-        closeExportResolverRef.current();
-        closeExportResolverRef.current = null;
-      }
     },
     [onContentChange],
   );
 
-  const handleClose = useCallback(async () => {
-    if (isClosing) return;
-    setIsClosing(true);
+  // 낙관적 닫기: 시트를 즉시 닫고, 마지막으로 알려진 본문은 부모(useReadingMemo)
+  // 가 백그라운드에서 저장한다. WebView export는 fire-and-forget으로 트리거만
+  // 해두고 결과가 더 새로우면 onContentChange → 부모의 후속 저장으로 반영된다.
+  const handleClose = useCallback(() => {
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = null;
     }
     if (editorRef.current && editorReady) {
-      const exportDone = new Promise<void>((resolve) => {
-        closeExportResolverRef.current = resolve;
-      });
       editorRef.current.requestExportMarkdown("close");
-      await Promise.race([
-        exportDone,
-        new Promise<void>((resolve) => setTimeout(resolve, CLOSE_EXPORT_TIMEOUT_MS)),
-      ]);
-      closeExportResolverRef.current = null;
     }
-    try {
-      await onClose();
-    } finally {
-      setIsClosing(false);
-    }
-  }, [isClosing, editorReady, onClose]);
+    onClose();
+  }, [editorReady, onClose]);
 
-  const saveIndicatorText = isClosing
-    ? "저장 중..."
-    : saveState === "saving"
+  const saveIndicatorText =
+    saveState === "saving"
       ? "저장 중..."
       : saveState === "saved"
         ? "저장됨"
@@ -159,11 +134,8 @@ export default function MemoBottomSheet({
               onPress={handleClose}
               style={styles.closeButton}
               hitSlop={12}
-              disabled={isClosing}
             >
-              <Text style={[styles.closeButtonText, isClosing && styles.closeButtonTextDisabled]}>
-                닫기
-              </Text>
+              <Text style={styles.closeButtonText}>닫기</Text>
             </Pressable>
           </View>
         </View>
@@ -225,9 +197,6 @@ const styles = StyleSheet.create({
   closeButtonText: {
     ...Typography.bodySemiBold,
     color: Colors.zinc600,
-  },
-  closeButtonTextDisabled: {
-    color: Colors.zinc400,
   },
   editorContainer: {
     flex: 1,

@@ -72,6 +72,7 @@ import { useUser } from "@/contexts/UserContext";
 import { useActiveReading } from "@/contexts/ActiveReadingContext";
 import type { ReadingMode } from "@/lib/policies";
 import MemoBottomSheet from "@/components/MemoBottomSheet/MemoBottomSheet";
+import { useToast } from "@/contexts/ToastContext";
 
 function computeReaderLayout(availableWidth: number, availableHeight: number, overrideContainerWidth?: number): ReaderLayout {
   const widthFromHeight = availableHeight * ReaderTokens.aspectRatio;
@@ -144,6 +145,7 @@ export default function ReadScreen() {
   const queryClient = useQueryClient();
   const { userId } = useUser();
   const { setActiveSession, clearActiveSession } = useActiveReading();
+  const { showToast } = useToast();
   const params = useLocalSearchParams<{
     articleId: string;
     inboxId?: string;
@@ -364,6 +366,24 @@ export default function ReadScreen() {
     userId,
     sourceArticleId: articleId,
     sourceArticleTitle: article?.title,
+    onSaveError: useCallback(
+      (retry: () => void) => {
+        showToast({
+          message: "메모 저장에 실패했어요. 다시 시도할까요?",
+          type: "error",
+          duration: 15000,
+          action: { label: "다시 저장", onPress: retry },
+        });
+      },
+      [showToast],
+    ),
+    onSnapshotRecovered: useCallback(() => {
+      showToast({
+        message: "이전에 저장하지 못한 메모를 복구했어요.",
+        type: "info",
+        duration: 4000,
+      });
+    }, [showToast]),
   });
 
   const handleOpenMemo = useCallback(() => {
@@ -1507,10 +1527,12 @@ export default function ReadScreen() {
 
       <MemoBottomSheet
         visible={memoSheetVisible}
-        onClose={async () => {
-          await readingMemo.flushSave();
+        onClose={() => {
+          // 낙관적 닫기: 시트를 즉시 닫고 저장은 백그라운드에서 진행한다.
+          // 실패 시 useReadingMemo가 자동 1회 재시도 후 onSaveError 토스트로 알린다.
           setMemoSheetVisible(false);
           setMemoAppendContent(undefined);
+          readingMemo.closeWithBackgroundSave();
         }}
         initialContent={readingMemo.memoContent}
         appendContent={memoAppendContent}
