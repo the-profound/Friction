@@ -38,6 +38,13 @@ import { getMeasureHtml } from "./measureHtml";
 import { getEditorFonts, subscribeEditorFonts, type EditorFontState } from "@/lib/editorFontStore";
 import { blockToHtml, markdownToHtml } from "@/lib/markdownRenderer";
 import type { MeasureRequest } from "../PretextMeasureLayer/PretextMeasureLayer";
+import {
+  attachPerf,
+  flushWebViewPerf,
+  handlePerfMessage,
+  isWebViewPerfEnabled,
+  recordWebViewBoot,
+} from "@/lib/webviewPerf";
 
 interface Props {
   request: MeasureRequest | null;
@@ -47,6 +54,8 @@ interface Props {
 export default function WebViewMeasureLayer({ request, onMeasured }: Props) {
   const webViewRef = useRef<WebView>(null);
   const readyRef = useRef(false);
+  const mountedAtRef = useRef<number>(Date.now());
+  const bootRecordedRef = useRef(false);
   const pendingRef = useRef<MeasureRequest | null>(null);
   const prevRequestRef = useRef<MeasureRequest | null>(null);
   const requestRef = useRef<MeasureRequest | null>(request);
@@ -66,9 +75,18 @@ export default function WebViewMeasureLayer({ request, onMeasured }: Props) {
   const canRender = !!(fonts.regularBase64 && fonts.semiBoldBase64) || !!fonts.error;
 
   const html = useMemo(
-    () => getMeasureHtml({ regularBase64: fonts.regularBase64, semiBoldBase64: fonts.semiBoldBase64 }),
+    () => getMeasureHtml({
+      regularBase64: fonts.regularBase64,
+      semiBoldBase64: fonts.semiBoldBase64,
+      perfEnabled: isWebViewPerfEnabled(),
+    }),
     [fonts.regularBase64, fonts.semiBoldBase64],
   );
+
+  // 컴포넌트가 unmount 될 때 누적된 측정 지표를 콘솔에 요약 출력한다.
+  useEffect(() => {
+    return () => { flushWebViewPerf("measure"); };
+  }, []);
 
   // html이 바뀌면 WebView가 리로드되므로 readyRef를 동기적으로 초기화한다.
   const prevHtmlRef = useRef(html);
@@ -88,14 +106,14 @@ export default function WebViewMeasureLayer({ request, onMeasured }: Props) {
       key: c.key,
       html: c.blocks ? c.blocks.map(blockToHtml).join("") : markdownToHtml(c.content ?? ""),
     }));
-    const cmd = {
+    const cmd = attachPerf("measure", {
       type: "measure",
       containerWidth,
       fontSizePx: req.fontSize,
       letterSpacingPx: req.letterSpacing,
       blockGap,
       items,
-    };
+    });
     const js = `(function(){try{handleCommand(${JSON.stringify(cmd)})}catch(e){}})();true;`;
     webViewRef.current.injectJavaScript(js);
   }, []);
@@ -122,7 +140,11 @@ export default function WebViewMeasureLayer({ request, onMeasured }: Props) {
 
   const handleMessage = useCallback((event: WebViewMessageEvent) => {
     try {
-      const data = JSON.parse(event.nativeEvent.data);
+      const raw = event.nativeEvent.data;
+      const data = JSON.parse(raw);
+      if (handlePerfMessage("measure", data, raw.length)) {
+        return;
+      }
       if (data.type === "onMeasured") {
         onMeasuredRef.current(data.heights ?? {});
       }
@@ -140,6 +162,10 @@ export default function WebViewMeasureLayer({ request, onMeasured }: Props) {
         onMessage={handleMessage}
         onLoad={() => {
           readyRef.current = true;
+          if (!bootRecordedRef.current) {
+            bootRecordedRef.current = true;
+            recordWebViewBoot("measure", mountedAtRef.current);
+          }
           // 리로드 후 미전송 요청이 있으면 재전송. 없으면 현재 request를 재전송한다
           // (html 변경으로 인한 리로드 직후 in-flight 측정을 복구하기 위해).
           const toSend = pendingRef.current ?? requestRef.current;

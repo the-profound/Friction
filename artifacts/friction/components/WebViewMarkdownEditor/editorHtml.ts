@@ -1,10 +1,12 @@
 import { buildBodyTypographyCss } from "@/components/shared/bodyTypographyCss";
+import { buildWebViewPerfHeadScript } from "@/lib/webviewPerf";
 
 export const EDITOR_CONFIG_VERSION = "3.16.0";
 
 export interface EditorFontOptions {
   regularBase64?: string | null;
   semiBoldBase64?: string | null;
+  perfEnabled?: boolean;
 }
 
 function buildFontFaceCSS(opts: EditorFontOptions): string {
@@ -25,11 +27,13 @@ const bodyTypographyCss = buildBodyTypographyCss({
 
 export function getEditorHtml(fontOptions: EditorFontOptions = {}): string {
   const fontFaceCSS = buildFontFaceCSS(fontOptions);
+  const perfHeadScript = buildWebViewPerfHeadScript(!!fontOptions.perfEnabled);
   return `<!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+${perfHeadScript}
 <style>${fontFaceCSS}*{margin:0;padding:0;box-sizing:border-box}
 html,body{height:100%;background:transparent;container-type:inline-size}
 #title-input{

@@ -1,8 +1,10 @@
 import { buildBodyTypographyCss } from "@/components/shared/bodyTypographyCss";
+import { buildWebViewPerfHeadScript } from "@/lib/webviewPerf";
 
 export interface ReaderFontOptions {
   regularBase64?: string | null;
   semiBoldBase64?: string | null;
+  perfEnabled?: boolean;
 }
 
 // 본문 타이포그래피는 편집기/측정 레이어와 동일한 모듈에서 받는다.
@@ -22,12 +24,14 @@ export function getReaderHtml(fontOptions: ReaderFontOptions = {}): string {
   if (regularBase64 && semiBoldBase64) {
     fontFaceCSS = `@font-face{font-family:'Eulyoo1945-Regular';src:url('data:font/woff2;base64,${regularBase64}') format('woff2');font-weight:400;font-style:normal}@font-face{font-family:'Eulyoo1945-SemiBold';src:url('data:font/woff2;base64,${semiBoldBase64}') format('woff2');font-weight:600;font-style:normal}`;
   }
+  const perfHeadScript = buildWebViewPerfHeadScript(!!fontOptions.perfEnabled);
 
   return `<!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+${perfHeadScript}
 <style>${fontFaceCSS}
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{height:100%;background:transparent;overflow:hidden;-webkit-user-select:text;user-select:text}

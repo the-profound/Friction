@@ -4,6 +4,15 @@ import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { getEditorHtml, EDITOR_CONFIG_VERSION } from "./editorHtml";
 import { getEditorFonts, subscribeEditorFonts, consumeEditorFontsErrorToast, type EditorFontState } from "@/lib/editorFontStore";
 import { useToast } from "@/contexts/ToastContext";
+import {
+  attachPerf,
+  flushWebViewPerf,
+  handlePerfMessage,
+  isWebViewPerfEnabled,
+  recordExportReceive,
+  recordExportSend,
+  recordWebViewBoot,
+} from "@/lib/webviewPerf";
 import type {
   WebViewMarkdownEditorProps,
   WebViewMarkdownEditorRef,
@@ -38,13 +47,15 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
     const webViewRef = useRef<WebView>(null);
     const readyRef = useRef(false);
     const queueRef = useRef<RNToWebViewCommand[]>([]);
+    const mountedAtRef = useRef<number>(Date.now());
 
     const sendCommand = useCallback((cmd: RNToWebViewCommand) => {
       if (!readyRef.current) {
         queueRef.current.push(cmd);
         return;
       }
-      const js = `(function(){try{handleCommand(${JSON.stringify(cmd)})}catch(e){}})();true;`;
+      const wrapped = attachPerf("editor", cmd);
+      const js = `(function(){try{handleCommand(${JSON.stringify(wrapped)})}catch(e){}})();true;`;
       webViewRef.current?.injectJavaScript(js);
     }, []);
 
@@ -60,6 +71,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
         sendCommand({ type: "setMarkdown", markdown });
       },
       requestExportMarkdown(requestId: string) {
+        recordExportSend("editor", requestId);
         sendCommand({ type: "requestExportMarkdown", requestId });
       },
       setEditable(isEditable: boolean) {
@@ -98,9 +110,14 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
     const handleMessage = useCallback(
       (event: WebViewMessageEvent) => {
         try {
-          const data: WebViewToRNEvent = JSON.parse(event.nativeEvent.data);
+          const raw = event.nativeEvent.data;
+          const data: WebViewToRNEvent = JSON.parse(raw);
+          if (handlePerfMessage("editor", data as { type?: string }, raw.length)) {
+            return;
+          }
           switch (data.type) {
             case "onReady":
+              recordWebViewBoot("editor", mountedAtRef.current);
               flushQueue();
               onReady?.();
               break;
@@ -108,6 +125,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
               onChange?.(data.payload);
               break;
             case "onExportMarkdown":
+              recordExportReceive("editor", data.payload.requestId);
               onExportMarkdown?.(data.payload);
               break;
             case "onTitleChange":
@@ -188,9 +206,18 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
     const canRenderEditor = fontsReady || !!fonts.error;
 
     const html = useMemo(
-      () => getEditorHtml({ regularBase64: fonts.regularBase64, semiBoldBase64: fonts.semiBoldBase64 }),
+      () => getEditorHtml({
+        regularBase64: fonts.regularBase64,
+        semiBoldBase64: fonts.semiBoldBase64,
+        perfEnabled: isWebViewPerfEnabled(),
+      }),
       [fonts.regularBase64, fonts.semiBoldBase64],
     );
+
+    // 컴포넌트가 unmount 될 때 누적된 편집기 지표를 콘솔에 요약 출력한다.
+    useEffect(() => {
+      return () => { flushWebViewPerf("editor"); };
+    }, []);
 
     if (!canRenderEditor) {
       return (

@@ -4,6 +4,13 @@ import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { getReaderHtml } from "./readerHtml";
 import { getEditorFonts, subscribeEditorFonts, type EditorFontState } from "@/lib/editorFontStore";
 import { markdownToHtml } from "@/lib/markdownRenderer";
+import {
+  attachPerf,
+  flushWebViewPerf,
+  handlePerfMessage,
+  isWebViewPerfEnabled,
+  recordWebViewBoot,
+} from "@/lib/webviewPerf";
 
 export interface WebViewMarkdownReaderProps {
   markdown: string;
@@ -29,6 +36,7 @@ export default function WebViewMarkdownReader({
 }: WebViewMarkdownReaderProps) {
   const webViewRef = useRef<WebView>(null);
   const readyRef = useRef(false);
+  const mountedAtRef = useRef<number>(Date.now());
   const markdownRef = useRef(markdown);
   markdownRef.current = markdown;
   const prevClearSignalRef = useRef(clearSelectionSignal);
@@ -65,8 +73,9 @@ export default function WebViewMarkdownReader({
     fadeAnimRef.current.start();
   }, [opacityAnim]);
 
-  const sendCommand = useCallback((cmd: object) => {
-    const js = `(function(){try{handleCommand(${JSON.stringify(cmd)})}catch(e){}})();true;`;
+  const sendCommand = useCallback((cmd: { type: string } & Record<string, unknown>) => {
+    const wrapped = attachPerf("reader", cmd);
+    const js = `(function(){try{handleCommand(${JSON.stringify(wrapped)})}catch(e){}})();true;`;
     webViewRef.current?.injectJavaScript(js);
   }, []);
 
@@ -100,8 +109,13 @@ export default function WebViewMarkdownReader({
   const handleMessage = useCallback(
     (event: WebViewMessageEvent) => {
       try {
-        const data = JSON.parse(event.nativeEvent.data);
+        const raw = event.nativeEvent.data;
+        const data = JSON.parse(raw);
+        if (handlePerfMessage("reader", data, raw.length)) {
+          return;
+        }
         if (data.type === "onReady") {
+          recordWebViewBoot("reader", mountedAtRef.current);
           onReadyRef.current?.();
         } else if (data.type === "onContentReady") {
           // Only honor the ready event for the most recent injection.
@@ -183,9 +197,18 @@ export default function WebViewMarkdownReader({
   const canRender = fontsReady || !!fonts.error;
 
   const documentHtml = useMemo(
-    () => getReaderHtml({ regularBase64: fonts.regularBase64, semiBoldBase64: fonts.semiBoldBase64 }),
+    () => getReaderHtml({
+      regularBase64: fonts.regularBase64,
+      semiBoldBase64: fonts.semiBoldBase64,
+      perfEnabled: isWebViewPerfEnabled(),
+    }),
     [fonts.regularBase64, fonts.semiBoldBase64],
   );
+
+  // 컴포넌트가 unmount 될 때 누적된 리더 지표를 콘솔에 요약 출력한다.
+  useEffect(() => {
+    return () => { flushWebViewPerf("reader"); };
+  }, []);
 
   if (!canRender) {
     return (
