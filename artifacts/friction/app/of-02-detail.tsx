@@ -513,7 +513,7 @@ export default function TeamCollectionDetailScreen() {
                 )}
               </View>
               <Text style={styles.articleDate}>
-                {new Date(item.addedAt).toLocaleDateString("ko-KR")} ({new Date(item.addedAt).toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit", hour12: true })})에 수신
+                {new Date(item.addedAt).toLocaleDateString("ko-KR")} {new Date(item.addedAt).getHours() < 12 ? "오전" : "오후"}에 수신
                 {authorNickname ? `  ·  ${authorNickname}` : ""}
               </Text>
             </View>
