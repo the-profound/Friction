@@ -1,5 +1,6 @@
 import { buildBodyTypographyCss } from "@/components/shared/bodyTypographyCss";
 import { buildWebViewPerfHeadScript } from "@/lib/webviewPerf";
+import { buildWebViewBridgeHeadScript } from "@/lib/webViewBridgeShim";
 
 export interface ReaderFontOptions {
   regularBase64?: string | null;
@@ -25,6 +26,7 @@ export function getReaderHtml(fontOptions: ReaderFontOptions = {}): string {
     fontFaceCSS = `@font-face{font-family:'Eulyoo1945-Regular';src:url('data:font/woff2;base64,${regularBase64}') format('woff2');font-weight:400;font-style:normal}@font-face{font-family:'Eulyoo1945-SemiBold';src:url('data:font/woff2;base64,${semiBoldBase64}') format('woff2');font-weight:600;font-style:normal}`;
   }
   const perfHeadScript = buildWebViewPerfHeadScript(!!fontOptions.perfEnabled);
+  const bridgeHeadScript = buildWebViewBridgeHeadScript();
 
   return `<!DOCTYPE html>
 <html lang="ko">
@@ -32,6 +34,7 @@ export function getReaderHtml(fontOptions: ReaderFontOptions = {}): string {
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
 ${perfHeadScript}
+${bridgeHeadScript}
 <style>${fontFaceCSS}
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{height:100%;background:transparent;overflow:hidden;-webkit-user-select:text;user-select:text}
@@ -46,11 +49,9 @@ ${bodyTypographyCss}
 <script>
 "use strict";
 (function(){
+var bridge=window.__rnBridge;
+var post=bridge.post;
 var el=document.getElementById("reader-content");
-
-function postToRN(ev){
-try{var rn=window.ReactNativeWebView;if(rn)rn.postMessage(JSON.stringify(ev))}catch(e){}
-}
 
 var hasActiveSelection=false;
 var debounceTimer=null;
@@ -61,7 +62,7 @@ if(debounceTimer)clearTimeout(debounceTimer);
 debounceTimer=setTimeout(function(){
 var sel=window.getSelection();
 var t=sel?sel.toString().trim():"";
-postToRN({type:"onTextSelect",text:t,isEmpty:!t});
+post({type:"onTextSelect",text:t,isEmpty:!t});
 },80);
 });
 
@@ -84,31 +85,30 @@ if(Math.sqrt(dx*dx+dy*dy)<=DRAG_THRESHOLD)return;
 var isLongPressLike=(Date.now()-touchStartTime)>=LONG_PRESS_MS||hasActiveSelection;
 if(!isLongPressLike)return;
 isDragging=true;
-postToRN({type:"onDragStart"});
+post({type:"onDragStart"});
 },{passive:true});
 document.addEventListener("touchend",function(){
-if(isDragging){isDragging=false;postToRN({type:"onDragEnd"});}
+if(isDragging){isDragging=false;post({type:"onDragEnd"});}
 },{passive:true});
 document.addEventListener("touchcancel",function(){
-if(isDragging){isDragging=false;postToRN({type:"onDragEnd"});}
+if(isDragging){isDragging=false;post({type:"onDragEnd"});}
 },{passive:true});
 
 var didReady=false;
-window.handleCommand=function(cmd){
-try{
-if(cmd.type==="setContent"){
+bridge.register("setContent",function(cmd){
 if(el)el.innerHTML=cmd.html||"";
-if(!didReady){didReady=true;postToRN({type:"onReady"});}
-postToRN({type:"onContentReady",version:cmd.version});
-}else if(cmd.type==="setBodyMetrics"){
+if(!didReady){didReady=true;post({type:"onReady"});}
+post({type:"onContentReady",version:cmd.version});
+});
+bridge.register("setBodyMetrics",function(cmd){
 document.documentElement.style.setProperty("--body-font-size",cmd.fontSizePx+"px");
 document.documentElement.style.setProperty("--body-letter-spacing",cmd.letterSpacingPx+"px");
-}else if(cmd.type==="clearSelection"){
+});
+bridge.register("clearSelection",function(){
 var sel=window.getSelection();if(sel)sel.removeAllRanges();
-postToRN({type:"onTextSelect",text:"",isEmpty:true});
-}
-}catch(e){}
-};
+post({type:"onTextSelect",text:"",isEmpty:true});
+});
+bridge.installDispatcher();
 })();
 </script>
 </body>

@@ -636,9 +636,20 @@ function htmlToMarkdown(html: string): string {
   }
 }
 
+// 모든 RN 송신은 webViewBridgeShim 이 head 단계에서 깔아준 window.__rnBridge.post 로
+// 통과시킨다. fallback 으로 직접 ReactNativeWebView.postMessage 를 호출하여
+// shim 미주입 환경(테스트/구버전 HTML)에서도 동작을 유지한다.
 function postToRN(event: object) {
   try {
-    const rn = (window as unknown as { ReactNativeWebView?: { postMessage: (s: string) => void } }).ReactNativeWebView;
+    const w = window as unknown as {
+      __rnBridge?: { post?: (ev: object) => void };
+      ReactNativeWebView?: { postMessage: (s: string) => void };
+    };
+    if (w.__rnBridge && typeof w.__rnBridge.post === "function") {
+      w.__rnBridge.post(event);
+      return;
+    }
+    const rn = w.ReactNativeWebView;
     if (rn) {
       rn.postMessage(JSON.stringify(event));
     }

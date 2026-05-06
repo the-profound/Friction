@@ -5,12 +5,11 @@ import { getReaderHtml } from "./readerHtml";
 import { getEditorFonts, subscribeEditorFonts, type EditorFontState } from "@/lib/editorFontStore";
 import { markdownToHtml } from "@/lib/markdownRenderer";
 import {
-  attachPerf,
   flushWebViewPerf,
-  handlePerfMessage,
   isWebViewPerfEnabled,
   recordWebViewBoot,
 } from "@/lib/webviewPerf";
+import { createWebViewBridge, type WebViewBridge, type WebViewCommand } from "@/lib/webViewBridge";
 
 export interface WebViewMarkdownReaderProps {
   markdown: string;
@@ -35,7 +34,6 @@ export default function WebViewMarkdownReader({
   onDragStateChange,
 }: WebViewMarkdownReaderProps) {
   const webViewRef = useRef<WebView>(null);
-  const readyRef = useRef(false);
   const mountedAtRef = useRef<number>(Date.now());
   const markdownRef = useRef(markdown);
   markdownRef.current = markdown;
@@ -46,6 +44,12 @@ export default function WebViewMarkdownReader({
   onReadyRef.current = onReady;
   const onDragStateChangeRef = useRef(onDragStateChange);
   onDragStateChangeRef.current = onDragStateChange;
+
+  const bridgeRef = useRef<WebViewBridge | null>(null);
+  if (bridgeRef.current == null) {
+    bridgeRef.current = createWebViewBridge({ webViewRef, category: "reader" });
+  }
+  const bridge = bridgeRef.current;
 
   const opacityAnim = useRef(new Animated.Value(0)).current;
   const fadeAnimRef = useRef<Animated.CompositeAnimation | null>(null);
@@ -73,12 +77,6 @@ export default function WebViewMarkdownReader({
     fadeAnimRef.current.start();
   }, [opacityAnim]);
 
-  const sendCommand = useCallback((cmd: { type: string } & Record<string, unknown>) => {
-    const wrapped = attachPerf("reader", cmd);
-    const js = `(function(){try{handleCommand(${JSON.stringify(wrapped)})}catch(e){}})();true;`;
-    webViewRef.current?.injectJavaScript(js);
-  }, []);
-
   const beginContentSwap = useCallback(() => {
     // Hide instantly so the brief gap during async DOM update is invisible.
     if (fadeAnimRef.current) {
@@ -101,39 +99,36 @@ export default function WebViewMarkdownReader({
 
   const injectContent = useCallback(
     (htmlToInject: string, version: number) => {
-      sendCommand({ type: "setContent", html: htmlToInject, version });
+      bridge.send({ type: "setContent", html: htmlToInject, version });
     },
-    [sendCommand],
+    [bridge],
   );
 
   const handleMessage = useCallback(
     (event: WebViewMessageEvent) => {
-      try {
-        const raw = event.nativeEvent.data;
-        const data = JSON.parse(raw);
-        if (handlePerfMessage("reader", data, raw.length)) {
-          return;
-        }
+      bridge.handleMessage(event, (data) => {
         if (data.type === "onReady") {
           recordWebViewBoot("reader", mountedAtRef.current);
           onReadyRef.current?.();
         } else if (data.type === "onContentReady") {
           // Only honor the ready event for the most recent injection.
           // If `version` is missing (older HTML), fall back to fading in.
-          if (data.version == null || data.version === pendingVersionRef.current) {
+          const v = (data as { version?: number }).version;
+          if (v == null || v === pendingVersionRef.current) {
             clearFallbackTimer();
             fadeIn();
           }
         } else if (data.type === "onTextSelect") {
-          onTextSelectRef.current?.(data.text ?? "", !!data.isEmpty);
+          const d = data as { text?: string; isEmpty?: boolean };
+          onTextSelectRef.current?.(d.text ?? "", !!d.isEmpty);
         } else if (data.type === "onDragStart") {
           onDragStateChangeRef.current?.(true);
         } else if (data.type === "onDragEnd") {
           onDragStateChangeRef.current?.(false);
         }
-      } catch {}
+      });
     },
-    [fadeIn, clearFallbackTimer],
+    [bridge, fadeIn, clearFallbackTimer],
   );
 
   // Memoize markdown→HTML so we don't re-parse on unrelated re-renders.
@@ -143,7 +138,7 @@ export default function WebViewMarkdownReader({
 
   const prevHtmlRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!readyRef.current) return;
+    if (!bridge.isReady()) return;
     if (html === prevHtmlRef.current) return;
     prevHtmlRef.current = html;
     // Subsequent content updates (e.g. page-turn swipe rotates 3-slot row and
@@ -156,23 +151,23 @@ export default function WebViewMarkdownReader({
     // which reads as a smooth page turn instead of a flash.
     pendingVersionRef.current += 1;
     injectContent(html, pendingVersionRef.current);
-    sendCommand({ type: "clearSelection" });
+    bridge.send({ type: "clearSelection" } as WebViewCommand);
     onTextSelectRef.current?.("", true);
-  }, [html, sendCommand, injectContent]);
+  }, [bridge, html, injectContent]);
 
   useEffect(() => {
-    if (readyRef.current && bodyFontSize != null && bodyLetterSpacing != null) {
-      sendCommand({ type: "setBodyMetrics", fontSizePx: bodyFontSize, letterSpacingPx: bodyLetterSpacing });
+    if (bridge.isReady() && bodyFontSize != null && bodyLetterSpacing != null) {
+      bridge.send({ type: "setBodyMetrics", fontSizePx: bodyFontSize, letterSpacingPx: bodyLetterSpacing });
     }
-  }, [bodyFontSize, bodyLetterSpacing, sendCommand]);
+  }, [bridge, bodyFontSize, bodyLetterSpacing]);
 
   useEffect(() => {
     if (clearSelectionSignal === prevClearSignalRef.current) return;
     prevClearSignalRef.current = clearSelectionSignal;
-    if (readyRef.current) {
-      sendCommand({ type: "clearSelection" });
+    if (bridge.isReady()) {
+      bridge.send({ type: "clearSelection" } as WebViewCommand);
     }
-  }, [clearSelectionSignal, sendCommand]);
+  }, [bridge, clearSelectionSignal]);
 
   // Cleanup on unmount: stop any in-flight fade and pending fallback timers.
   useEffect(() => {
@@ -182,8 +177,9 @@ export default function WebViewMarkdownReader({
         fadeAnimRef.current = null;
       }
       clearFallbackTimer();
+      bridge.reset("WebViewMarkdownReader unmount");
     };
-  }, [clearFallbackTimer]);
+  }, [bridge, clearFallbackTimer]);
 
   const [fonts, setFonts] = useState<EditorFontState>(() => getEditorFonts());
 
@@ -226,14 +222,14 @@ export default function WebViewMarkdownReader({
         style={styles.webView}
         onMessage={handleMessage}
         onLoad={() => {
-          readyRef.current = true;
+          bridge.markReady();
           prevHtmlRef.current = htmlRef.current;
           // Hide before the very first content injection too, then fade in
           // when the WebView reports the new DOM is in place.
           const version = beginContentSwap();
           injectContent(htmlRef.current, version);
           if (bodyFontSize != null && bodyLetterSpacing != null) {
-            sendCommand({ type: "setBodyMetrics", fontSizePx: bodyFontSize, letterSpacingPx: bodyLetterSpacing });
+            bridge.send({ type: "setBodyMetrics", fontSizePx: bodyFontSize, letterSpacingPx: bodyLetterSpacing });
           }
         }}
         originWhitelist={["*"]}

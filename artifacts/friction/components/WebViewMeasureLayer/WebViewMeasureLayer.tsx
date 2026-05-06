@@ -10,10 +10,11 @@
  *   props: { request: MeasureRequest | null; onMeasured: (heights: Record<string, number>) => void }
  *
  * 측정 흐름:
- *   1. 폰트 로드 완료(canRender = true) 후 WebView 마운트 → onLoad → readyRef = true
- *   2. request props 변경 → candidates를 HTML 아이템으로 변환 → injectJavaScript
- *   3. WebView JS: 블록별 getBoundingClientRect().height + blockGap → postMessage
- *   4. handleMessage → onMeasured(heights)
+ *   1. 폰트 로드 완료(canRender = true) 후 WebView 마운트 → onLoad → bridge.markReady()
+ *   2. request props 변경 → candidates를 HTML 아이템으로 변환 → bridge.request("measure", ...)
+ *   3. WebView JS('measure' 핸들러): 블록별 getBoundingClientRect().height + blockGap →
+ *      Promise<heights>를 반환하면 공통 브릿지가 __rpcResponse 로 회신
+ *   4. RN 측 bridge.request 가 Promise<heights> 로 resolve → onMeasured(heights)
  *
  * 폰트 대기 전략 (WebViewMarkdownReader와 동일):
  *   canRender = false 동안에는 컴포넌트가 null을 반환한다.
@@ -39,12 +40,11 @@ import { getEditorFonts, subscribeEditorFonts, type EditorFontState } from "@/li
 import { blockToHtml, markdownToHtml } from "@/lib/markdownRenderer";
 import type { MeasureRequest } from "../PretextMeasureLayer/PretextMeasureLayer";
 import {
-  attachPerf,
   flushWebViewPerf,
-  handlePerfMessage,
   isWebViewPerfEnabled,
   recordWebViewBoot,
 } from "@/lib/webviewPerf";
+import { createWebViewBridge, type WebViewBridge } from "@/lib/webViewBridge";
 
 interface Props {
   request: MeasureRequest | null;
@@ -53,7 +53,6 @@ interface Props {
 
 export default function WebViewMeasureLayer({ request, onMeasured }: Props) {
   const webViewRef = useRef<WebView>(null);
-  const readyRef = useRef(false);
   const mountedAtRef = useRef<number>(Date.now());
   const bootRecordedRef = useRef(false);
   const pendingRef = useRef<MeasureRequest | null>(null);
@@ -62,6 +61,12 @@ export default function WebViewMeasureLayer({ request, onMeasured }: Props) {
   requestRef.current = request;
   const onMeasuredRef = useRef(onMeasured);
   onMeasuredRef.current = onMeasured;
+
+  const bridgeRef = useRef<WebViewBridge | null>(null);
+  if (bridgeRef.current == null) {
+    bridgeRef.current = createWebViewBridge({ webViewRef, category: "measure" });
+  }
+  const bridge = bridgeRef.current;
 
   const [fonts, setFonts] = useState<EditorFontState>(() => getEditorFonts());
   useEffect(() => {
@@ -91,53 +96,50 @@ export default function WebViewMeasureLayer({ request, onMeasured }: Props) {
 
   // 컴포넌트가 unmount 될 때 누적된 측정 지표를 콘솔에 요약 출력한다.
   useEffect(() => {
-    return () => { flushWebViewPerf("measure"); };
-  }, []);
+    return () => {
+      flushWebViewPerf("measure");
+      bridge.reset("WebViewMeasureLayer unmount");
+    };
+  }, [bridge]);
 
-  // html이 바뀌면 WebView가 리로드되므로 readyRef를 동기적으로 초기화한다.
+  // html이 바뀌면 WebView가 리로드되므로 bridge ready 상태를 동기적으로 초기화한다.
   // (위 stableHtmlRef 덕분에 정상 흐름에서는 트리거되지 않지만 안전망으로 유지.)
   const prevHtmlRef = useRef(html);
   if (html !== prevHtmlRef.current) {
     prevHtmlRef.current = html;
-    readyRef.current = false;
+    bridge.reset("WebViewMeasureLayer html changed");
   }
 
-  // 측정 요청은 last-write-wins 큐로 처리한다. 짧은 간격으로 여러 요청이 들어오면
-  // 가장 최근 요청만 in-flight 로 남기고, 직전 in-flight 결과는 stale 로 간주해 버린다.
-  const lastRequestIdRef = useRef(0);
-  const inFlightRequestIdRef = useRef<number | null>(null);
+  // 측정 요청은 last-write-wins로 처리한다. 짧은 간격으로 여러 요청이 들어오면
+  // 가장 최근 요청에 대한 응답만 사용하고, 직전 in-flight 결과는 stale 로 간주해 버린다.
+  // bridge.request 가 발급하는 requestId 와는 별도로, sequence 카운터로 stale 판단을 한다.
+  const latestSeqRef = useRef(0);
 
   const sendMeasure = useCallback((req: MeasureRequest) => {
-    if (!readyRef.current || !webViewRef.current) {
-      pendingRef.current = req;
-      return;
-    }
-    // 이미 in-flight 인 측정이 있으면 새 요청을 pending 으로 미뤄두고 반환한다.
-    // onMeasured (또는 stale 결과) 도착 시 drain 하여 마지막 큐만 전송한다.
-    if (inFlightRequestIdRef.current != null) {
-      pendingRef.current = req;
-      return;
-    }
     const containerWidth = req.textColumnWidth ?? (req.width - 2 * req.paddingX);
     const blockGap = req.blockGap ?? req.lineHeight * 0.6;
     const items = req.candidates.map((c) => ({
       key: c.key,
       html: c.blocks ? c.blocks.map(blockToHtml).join("") : markdownToHtml(c.content ?? ""),
     }));
-    const requestId = ++lastRequestIdRef.current;
-    inFlightRequestIdRef.current = requestId;
-    const cmd = attachPerf("measure", {
-      type: "measure",
-      requestId,
-      containerWidth,
-      fontSizePx: req.fontSize,
-      letterSpacingPx: req.letterSpacing,
-      blockGap,
-      items,
-    });
-    const js = `(function(){try{handleCommand(${JSON.stringify(cmd)})}catch(e){}})();true;`;
-    webViewRef.current.injectJavaScript(js);
-  }, []);
+    const seq = ++latestSeqRef.current;
+    bridge
+      .request<Record<string, number>>("measure", {
+        containerWidth,
+        fontSizePx: req.fontSize,
+        letterSpacingPx: req.letterSpacing,
+        blockGap,
+        items,
+      })
+      .then((heights) => {
+        // stale: 새로운 측정이 그 사이 발급되었으면 결과를 버린다.
+        if (seq !== latestSeqRef.current) return;
+        onMeasuredRef.current(heights ?? {});
+      })
+      .catch(() => {
+        // bridge.reset() 으로 reject 되거나 WebView 가 사라진 경우 — 조용히 무시.
+      });
+  }, [bridge]);
 
   useEffect(() => {
     if (!request) return;
@@ -160,38 +162,10 @@ export default function WebViewMeasureLayer({ request, onMeasured }: Props) {
   }, [request, sendMeasure, canRender]);
 
   const handleMessage = useCallback((event: WebViewMessageEvent) => {
-    try {
-      const raw = event.nativeEvent.data;
-      const data = JSON.parse(raw);
-      if (handlePerfMessage("measure", data, raw.length)) {
-        return;
-      }
-      if (data.type === "onMeasured") {
-        // requestId 가 함께 오면 in-flight 와 비교해 stale 결과를 버린다.
-        // 누락된 경우(기존 호환)는 그대로 통과시킨다.
-        let isStale = false;
-        if (typeof data.requestId === "number") {
-          if (data.requestId !== inFlightRequestIdRef.current) {
-            isStale = true;
-          } else {
-            inFlightRequestIdRef.current = null;
-          }
-        } else {
-          inFlightRequestIdRef.current = null;
-        }
-        if (!isStale) {
-          onMeasuredRef.current(data.heights ?? {});
-        }
-        // in-flight 가 비었으니 그동안 큐잉된 마지막 측정 요청을 drain.
-        if (inFlightRequestIdRef.current == null && pendingRef.current) {
-          const next = pendingRef.current;
-          pendingRef.current = null;
-          if (next.candidates.length > 0) sendMeasure(next);
-          else onMeasuredRef.current({});
-        }
-      }
-    } catch {}
-  }, []);
+    // 모든 응답은 bridge.request 의 Promise 로 라우팅된다.
+    // 이 컴포넌트는 별도의 typed event 가 없으므로 onEvent 는 no-op.
+    bridge.handleMessage(event, () => {});
+  }, [bridge]);
 
   if (!canRender) return null;
 
@@ -203,7 +177,7 @@ export default function WebViewMeasureLayer({ request, onMeasured }: Props) {
         style={styles.webView}
         onMessage={handleMessage}
         onLoad={() => {
-          readyRef.current = true;
+          bridge.markReady();
           if (!bootRecordedRef.current) {
             bootRecordedRef.current = true;
             recordWebViewBoot("measure", mountedAtRef.current);
