@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
-import { View, TextInput, StyleSheet, Text, Platform, type NativeSyntheticEvent, type TextInputSelectionChangeEventData } from "react-native";
+import { View, TextInput, StyleSheet, Text, Platform, type TextStyle, type NativeSyntheticEvent, type TextInputSelectionChangeEventData } from "react-native";
 import { ReaderTokens } from "../../constants/tokens";
 import * as TextSelectionMenu from "../../modules/TextSelectionMenu";
 
@@ -185,16 +185,20 @@ function SelectableTextWeb({ text, onCollect, onMemo, onSelectionStateChange, fo
     };
   }, []);
 
+  const webOverrides: TextStyle = {
+    wordBreak: "normal",
+    overflowWrap: "break-word",
+    hyphens: "auto",
+    WebkitHyphens: "auto",
+    userSelect: isSelectMode ? "text" : "none",
+  } as unknown as TextStyle;
+
   const textStyle = [
     styles.textBody,
     fontSize != null && { fontSize },
     lineHeight != null && { lineHeight },
     letterSpacing != null && { letterSpacing },
-    {
-      wordBreak: "break-all" as any,
-      overflowWrap: "anywhere" as any,
-      userSelect: isSelectMode ? ("text" as const) : ("none" as const),
-    },
+    webOverrides,
   ];
 
   return (

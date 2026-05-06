@@ -58,9 +58,11 @@ export default function WebViewMarkdownReaderWeb({
     textAlign: "justify" as const,
     overflowWrap: "break-word" as const,
     wordWrap: "break-word" as const,
+    wordBreak: "normal" as const,
+    hyphens: "auto",
+    WebkitHyphens: "auto",
     userSelect: "text" as const,
     WebkitUserSelect: "text" as const,
-    wordBreak: "break-all" as const,
   }), [bodyFontSize, bodyLetterSpacing]);
 
   return (
@@ -70,6 +72,7 @@ export default function WebViewMarkdownReaderWeb({
         ref={containerRef}
         style={contentStyle}
         className="reader-content"
+        lang="en"
         dangerouslySetInnerHTML={{ __html: html }}
       />
     </div>
@@ -86,14 +89,14 @@ const wrapperStyle: React.CSSProperties = {
 };
 
 const webReaderCSS = `
-.reader-content p{margin-bottom:1em;text-align:justify;overflow-wrap:break-word;text-justify:inter-ideograph}
+.reader-content p{margin-bottom:1em;text-align:justify;overflow-wrap:break-word;word-break:normal;-webkit-hyphens:auto;hyphens:auto;text-justify:inter-ideograph}
 .reader-content h1{font-family:'Eulyoo1945-SemiBold',serif;font-size:1.6em;font-weight:600;letter-spacing:0.025em;margin:1em 0 0.4em;line-height:1.25;text-align:left}
 .reader-content h2{font-family:'Eulyoo1945-SemiBold',serif;font-size:1.3em;font-weight:600;letter-spacing:0.025em;margin:0.8em 0 0.3em;line-height:1.3;text-align:left}
 .reader-content h3{font-family:'Eulyoo1945-SemiBold',serif;font-size:1.1em;font-weight:600;letter-spacing:0.025em;margin:0.6em 0 0.3em;line-height:1.35;text-align:left}
 .reader-content ul,.reader-content ol{padding-left:1.5em;margin-bottom:1em;text-align:left}
 .reader-content li{margin-bottom:0.2em;text-align:left}
 .reader-content li p{margin-bottom:0}
-.reader-content blockquote{font-family:'Eulyoo1945-Regular',serif;font-style:italic;border-left:3px solid #d4d4d8;padding-left:1em;margin:0.5em 0;color:#52525b;text-align:justify;overflow-wrap:break-word;text-justify:inter-ideograph}
+.reader-content blockquote{font-family:'Eulyoo1945-Regular',serif;font-style:italic;border-left:3px solid #d4d4d8;padding-left:1em;margin:0.5em 0;color:#52525b;text-align:justify;overflow-wrap:break-word;word-break:normal;-webkit-hyphens:auto;hyphens:auto;text-justify:inter-ideograph}
 .reader-content hr{border:none;border-top:1px solid #e4e4e7;margin:1em 0}
 .reader-content u{text-decoration:underline}
 .reader-content strong{font-family:'Eulyoo1945-SemiBold',serif;font-weight:700}

@@ -42,7 +42,7 @@ ${bodyTypographyCss}
 </style>
 </head>
 <body>
-<div id="reader-content"></div>
+<div id="reader-content" lang="en"></div>
 <script>
 "use strict";
 (function(){
