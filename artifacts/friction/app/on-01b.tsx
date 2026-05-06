@@ -99,8 +99,9 @@ export default function DividingScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
-  const { id, returnPage } = useLocalSearchParams<{ id: string; returnPage?: string }>();
+  const { id, returnPage, returnBlock } = useLocalSearchParams<{ id: string; returnPage?: string; returnBlock?: string }>();
   const returnPageIndex = returnPage !== undefined ? parseInt(returnPage, 10) : undefined;
+  const returnBlockIndex = returnBlock !== undefined ? parseInt(returnBlock, 10) : undefined;
 
   const articleQuery = useGetArticle(id ?? "");
   const article = id ? articleQuery.data : undefined;
@@ -115,6 +116,10 @@ export default function DividingScreen() {
   const [charCount, setCharCount] = useState(0);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [editorReady, setEditorReady] = useState(false);
+  // `initialized` mirrors initializedRef as state so effects can re-run when
+  // article data finishes loading. initializedRef is still used for synchronous
+  // guards that must not trigger re-renders.
+  const [initialized, setInitialized] = useState(false);
   const titleRef = useRef("");
   const contentRef = useRef("");
   const initializedRef = useRef(false);
@@ -136,6 +141,7 @@ export default function DividingScreen() {
   const pageStripRef = useRef<ScrollView>(null);
   const chipOffsetsRef = useRef<Record<number, number>>({});
   const returnScrollDoneRef = useRef(false);
+  const returnBlockScrollDoneRef = useRef(false);
   // 칩 레이아웃이 완료될 때마다 카운트를 올려 복원 effect를 확정적으로 트리거한다.
   const [chipLayoutCount, setChipLayoutCount] = useState(0);
 
@@ -159,6 +165,22 @@ export default function DividingScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chipLayoutCount]);
 
+  // 마감 화면에서 복귀 시 본문 에디터를 해당 페이지·블록으로 스크롤 + 하이라이트.
+  // editorReady(state)와 initialized(state) 두 조건이 모두 충족된 시점에 최초 1회 실행한다.
+  // 두 값 모두 의존 배열에 포함해 어느 쪽이 늦게 충족되더라도 반드시 재실행된다.
+  useEffect(() => {
+    if (returnPageIndex === undefined || returnBlockIndex === undefined) return;
+    if (returnBlockScrollDoneRef.current) return;
+    if (!editorReady || !initialized) return;
+    returnBlockScrollDoneRef.current = true;
+    // 레이아웃 안정화를 위해 짧게 지연 후 명령을 전달한다.
+    const timer = setTimeout(() => {
+      editorRef.current?.scrollToBlock(returnPageIndex, returnBlockIndex);
+    }, 300);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editorReady, initialized]);
+
   useEffect(() => {
     // Gate initialization on data being NEWER than this component's mount time.
     // This is more reliable than checking isFetching alone, which can be false
@@ -167,6 +189,7 @@ export default function DividingScreen() {
     const isDataFresh = articleQuery.dataUpdatedAt >= mountedAtRef.current;
     if (article && !initializedRef.current && isDataFresh) {
       initializedRef.current = true;
+      setInitialized(true);
       const t = article.title || "";
       let c = article.content || "";
       if (article.pages && Array.isArray(article.pages) && article.pages.length > 0) {

@@ -134,6 +134,9 @@ export default function ClosingScreen() {
   const pendingCoverRef = useRef<ArticleCover | null>(null);
   // 마감→분할 복귀 시 전달할 콘텐츠 페이지 인덱스를 렌더마다 갱신한다.
   const returnPageIdxRef = useRef(0);
+  // 마감 화면은 페이지 단위 스와이프만 지원하므로 블록 인덱스는 항상 0(첫 블록)으로 고정.
+  // 향후 미리보기 내 블록 탭 추적이 구현되면 이 ref를 갱신한다.
+  const returnBlockIdxRef = useRef(0);
 
   const flushCoverSave = useCallback(async () => {
     if (saveCoverTimerRef.current) {
@@ -353,11 +356,12 @@ export default function ClosingScreen() {
         (old: any) => (old ? { ...old, status: "DIVIDING" } : old),
       );
 
-      // 마감 화면에서 보던 콘텐츠 페이지 인덱스를 분할 화면에 전달해
-      // page strip이 해당 위치로 스크롤 복원되도록 한다.
+      // 마감 화면에서 보던 콘텐츠 페이지 인덱스 및 블록 인덱스를 분할 화면에 전달해
+      // page strip과 본문 에디터가 해당 위치로 스크롤 복원되도록 한다.
       const returnPageIdx = returnPageIdxRef.current;
+      const returnBlockIdx = returnBlockIdxRef.current;
       isActionInProgressRef.current = false;
-      router.replace({ pathname: "/on-01b", params: { id, returnPage: String(returnPageIdx) } });
+      router.replace({ pathname: "/on-01b", params: { id, returnPage: String(returnPageIdx), returnBlock: String(returnBlockIdx) } });
 
       // Background transition
       transitionStatus

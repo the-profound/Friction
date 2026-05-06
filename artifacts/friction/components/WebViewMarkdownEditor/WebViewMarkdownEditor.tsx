@@ -91,6 +91,9 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       insertHardBreak() {
         sendCommand({ type: "insertHardBreak" });
       },
+      scrollToBlock(pageIndex: number, blockIndex: number) {
+        sendCommand({ type: "scrollToBlock", pageIndex, blockIndex });
+      },
     }), [sendCommand]);
 
     const handleMessage = useCallback(

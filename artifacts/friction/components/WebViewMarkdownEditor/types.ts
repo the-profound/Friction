@@ -25,7 +25,8 @@ export type RNToWebViewCommand =
   | { type: "setBlockType"; blockType: string }
   | { type: "toggleMark"; mark: string }
   | { type: "insertDivider" }
-  | { type: "insertHardBreak" };
+  | { type: "insertHardBreak" }
+  | { type: "scrollToBlock"; pageIndex: number; blockIndex: number };
 
 export interface OnChangePayload {
   isDirty: boolean;
@@ -76,6 +77,7 @@ export interface WebViewMarkdownEditorRef {
   toggleMark: (mark: string) => void;
   insertDivider: () => void;
   insertHardBreak: () => void;
+  scrollToBlock: (pageIndex: number, blockIndex: number) => void;
 }
 
 export interface WebViewMarkdownEditorProps {

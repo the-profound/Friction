@@ -148,8 +148,8 @@ function RootLayoutNav() {
           <Stack.Screen name="of-02" />
           <Stack.Screen name="of-02-detail" />
           <Stack.Screen name="of-03" />
-          <Stack.Screen name="on-01a" />
-          <Stack.Screen name="on-01b" />
+          <Stack.Screen name="on-01a" options={{ animationTypeForReplace: "pop" }} />
+          <Stack.Screen name="on-01b" options={{ animationTypeForReplace: "pop" }} />
           <Stack.Screen name="on-01c" />
           <Stack.Screen name="on-02" />
           <Stack.Screen name="to-03" />

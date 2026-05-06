@@ -667,6 +667,8 @@ interface Command {
   titleFontSizePx?: number;
   blockType?: string;
   mark?: string;
+  pageIndex?: number;
+  blockIndex?: number;
 }
 
 (function () {
@@ -1087,6 +1089,66 @@ interface Command {
         case "insertHardBreak": {
           if (editor && !editor.isDestroyed) {
             editor.chain().focus().setHardBreak().run();
+          }
+          break;
+        }
+        case "scrollToBlock": {
+          if (editor && !editor.isDestroyed) {
+            const pageIdx = cmd.pageIndex ?? 0;
+            const blockIdx = cmd.blockIndex ?? 0;
+            const doc = editor.state.doc;
+            const pageRanges = getPageRanges(doc);
+            const page = pageRanges[pageIdx] ?? pageRanges[0];
+            if (!page) break;
+
+            // Walk top-level nodes inside the page to find the Nth content block.
+            let blockCount = 0;
+            let targetPos = -1;
+            doc.forEach((node, offset) => {
+              if (targetPos >= 0) return;
+              // Skip nodes outside this page range.
+              if (offset < page.start || offset >= page.end) return;
+              // Skip HR dividers — they are page separators, not content blocks.
+              if (node.type.name === "horizontalRule") return;
+              if (blockCount === blockIdx) {
+                targetPos = offset;
+              } else {
+                blockCount++;
+              }
+            });
+
+            // Fallback: use page start when the specific block isn't found.
+            if (targetPos < 0) {
+              doc.forEach((node, offset) => {
+                if (targetPos >= 0) return;
+                if (offset < page.start || offset >= page.end) return;
+                if (node.type.name !== "horizontalRule") {
+                  targetPos = offset;
+                }
+              });
+            }
+            if (targetPos < 0) targetPos = page.start;
+
+            // Scroll the block DOM element into view.
+            try {
+              const view = editor.view;
+              const resolvedPos = Math.max(1, targetPos + 1);
+              const domInfo = view.domAtPos(resolvedPos);
+              let el: Node | null = domInfo.node;
+              if (el.nodeType === Node.TEXT_NODE) el = el.parentElement;
+              while (el && (el as Element).parentElement !== view.dom) {
+                el = (el as Element).parentElement;
+              }
+              if (el) {
+                (el as Element).scrollIntoView({ behavior: "smooth", block: "center" });
+                // Highlight pulse animation.
+                const blockEl = el as Element;
+                blockEl.classList.add("anchor-highlight");
+                setTimeout(() => {
+                  blockEl.classList.remove("anchor-highlight");
+                }, 1400);
+              }
+            } catch {}
           }
           break;
         }

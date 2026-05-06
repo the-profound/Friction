@@ -172,6 +172,8 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
           editor.chain().focus().setHardBreak().run();
         }
       },
+      scrollToBlock(_pageIndex: number, _blockIndex: number) {
+      },
     }), [editor, requestExportMarkdown, onError]);
 
     const handleTitleInput = useCallback(
