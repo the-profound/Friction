@@ -476,21 +476,25 @@ export default function ClosingScreen() {
       <Stack.Screen options={{ gestureEnabled: false }} />
       <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <Pressable onPress={handleBack} hitSlop={12}>
-          <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-        </Pressable>
+        <View style={styles.headerSide}>
+          <Pressable onPress={handleBack} hitSlop={12}>
+            <Feather name="arrow-left" size={20} color={Colors.zinc600} />
+          </Pressable>
+        </View>
         <WritingStateBar
           current="CLOSING"
           onPress={handleStateBarPress}
           disabled={isExporting}
         />
-        <Pressable onPress={handleExport} hitSlop={12} disabled={isExporting}>
-          {isExporting ? (
-            <ActivityIndicator size="small" color={Colors.zinc400} />
-          ) : (
-            <Text style={styles.exportButton}>내보내기</Text>
-          )}
-        </Pressable>
+        <View style={styles.headerSideRight}>
+          <Pressable onPress={handleExport} hitSlop={12} disabled={isExporting}>
+            {isExporting ? (
+              <ActivityIndicator size="small" color={Colors.zinc400} />
+            ) : (
+              <Text style={styles.exportButton}>내보내기</Text>
+            )}
+          </Pressable>
+        </View>
       </View>
 
       <View style={styles.titleSection}>
@@ -692,6 +696,17 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: Spacing.screenPx,
     paddingVertical: 12,
+  },
+  headerSide: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  headerSideRight: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
   },
   exportButton: {
     ...Typography.bodySemiBold,
