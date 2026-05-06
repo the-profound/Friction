@@ -31,7 +31,7 @@
  *   left:-9999 같은 음수 오프셋 방식은 iOS에서 예기치 않은 터치 영역이
  *   생기거나 레이아웃에 영향을 줄 수 있어 래퍼 클리핑 방식을 사용한다.
  */
-import React, { useRef, useCallback, useEffect, useState, useMemo } from "react";
+import React, { useRef, useCallback, useEffect, useState } from "react";
 import { View, StyleSheet } from "react-native";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { getMeasureHtml } from "./measureHtml";
@@ -74,14 +74,20 @@ export default function WebViewMeasureLayer({ request, onMeasured }: Props) {
   // 준비 전에 렌더링하면 시스템 serif 폰트로 한국어 높이를 측정해 오버플로 오탐이 발생한다.
   const canRender = !!(fonts.regularBase64 && fonts.semiBoldBase64) || !!fonts.error;
 
-  const html = useMemo(
-    () => getMeasureHtml({
+  // 폰트는 사실상 앱 시작 후 한 번 로드되면 변하지 않는다. 그럼에도 base64 로드 직전/직후
+  // 두 번의 useMemo 결과가 달라지면서 WebView 가 통째로 리로드되어 측정 콜드 부트가
+  // 두 번 발생했었다. canRender 가 처음 true 가 된 시점의 HTML 을 ref 에 캡처해
+  // 이후에는 동일 인스턴스를 유지한다. 폰트 base64 가 다시 바뀌어도 (예외적 케이스)
+  // 첫 측정 가능 상태의 HTML 을 그대로 사용해 리로드를 막는다.
+  const stableHtmlRef = useRef<string | null>(null);
+  if (stableHtmlRef.current == null && canRender) {
+    stableHtmlRef.current = getMeasureHtml({
       regularBase64: fonts.regularBase64,
       semiBoldBase64: fonts.semiBoldBase64,
       perfEnabled: isWebViewPerfEnabled(),
-    }),
-    [fonts.regularBase64, fonts.semiBoldBase64],
-  );
+    });
+  }
+  const html = stableHtmlRef.current ?? "";
 
   // 컴포넌트가 unmount 될 때 누적된 측정 지표를 콘솔에 요약 출력한다.
   useEffect(() => {
@@ -89,14 +95,26 @@ export default function WebViewMeasureLayer({ request, onMeasured }: Props) {
   }, []);
 
   // html이 바뀌면 WebView가 리로드되므로 readyRef를 동기적으로 초기화한다.
+  // (위 stableHtmlRef 덕분에 정상 흐름에서는 트리거되지 않지만 안전망으로 유지.)
   const prevHtmlRef = useRef(html);
   if (html !== prevHtmlRef.current) {
     prevHtmlRef.current = html;
     readyRef.current = false;
   }
 
+  // 측정 요청은 last-write-wins 큐로 처리한다. 짧은 간격으로 여러 요청이 들어오면
+  // 가장 최근 요청만 in-flight 로 남기고, 직전 in-flight 결과는 stale 로 간주해 버린다.
+  const lastRequestIdRef = useRef(0);
+  const inFlightRequestIdRef = useRef<number | null>(null);
+
   const sendMeasure = useCallback((req: MeasureRequest) => {
     if (!readyRef.current || !webViewRef.current) {
+      pendingRef.current = req;
+      return;
+    }
+    // 이미 in-flight 인 측정이 있으면 새 요청을 pending 으로 미뤄두고 반환한다.
+    // onMeasured (또는 stale 결과) 도착 시 drain 하여 마지막 큐만 전송한다.
+    if (inFlightRequestIdRef.current != null) {
       pendingRef.current = req;
       return;
     }
@@ -106,8 +124,11 @@ export default function WebViewMeasureLayer({ request, onMeasured }: Props) {
       key: c.key,
       html: c.blocks ? c.blocks.map(blockToHtml).join("") : markdownToHtml(c.content ?? ""),
     }));
+    const requestId = ++lastRequestIdRef.current;
+    inFlightRequestIdRef.current = requestId;
     const cmd = attachPerf("measure", {
       type: "measure",
+      requestId,
       containerWidth,
       fontSizePx: req.fontSize,
       letterSpacingPx: req.letterSpacing,
@@ -146,7 +167,28 @@ export default function WebViewMeasureLayer({ request, onMeasured }: Props) {
         return;
       }
       if (data.type === "onMeasured") {
-        onMeasuredRef.current(data.heights ?? {});
+        // requestId 가 함께 오면 in-flight 와 비교해 stale 결과를 버린다.
+        // 누락된 경우(기존 호환)는 그대로 통과시킨다.
+        let isStale = false;
+        if (typeof data.requestId === "number") {
+          if (data.requestId !== inFlightRequestIdRef.current) {
+            isStale = true;
+          } else {
+            inFlightRequestIdRef.current = null;
+          }
+        } else {
+          inFlightRequestIdRef.current = null;
+        }
+        if (!isStale) {
+          onMeasuredRef.current(data.heights ?? {});
+        }
+        // in-flight 가 비었으니 그동안 큐잉된 마지막 측정 요청을 drain.
+        if (inFlightRequestIdRef.current == null && pendingRef.current) {
+          const next = pendingRef.current;
+          pendingRef.current = null;
+          if (next.candidates.length > 0) sendMeasure(next);
+          else onMeasuredRef.current({});
+        }
       }
     } catch {}
   }, []);

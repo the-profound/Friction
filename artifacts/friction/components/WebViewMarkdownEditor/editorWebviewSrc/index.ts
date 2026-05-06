@@ -717,7 +717,18 @@ interface Command {
   // 항상 에디터의 실제 시각 레이아웃과 정확히 일치한다.
   let overflowAvailableContentHeight: number | null = null;
   let probeTimer: ReturnType<typeof setTimeout> | null = null;
+  let probeRafId: number | null = null;
   const PROBE_DEBOUNCE_MS = 80;
+  // runOverflowProbe 결과(decoration 트랜잭션)는 동일 ranges 면 재dispatch 하지 않는다.
+  // setMarkdown 등 docChanged 후에는 무조건 1회 재dispatch 가 필요하므로 키를 비워둔다.
+  let lastProbeRangesKey: string | null = "";
+  function rangesKey(ranges: OverflowRange[]): string {
+    let k = "";
+    for (const r of ranges) {
+      k += r.pageIndex + ":" + r.startCharOffset + "|";
+    }
+    return k;
+  }
 
   function scheduleOverflowProbe(delay: number = PROBE_DEBOUNCE_MS) {
     // probe 비활성 (작성 탭 등) 일 때는 doc 변경 핫패스에서 빈 ranges 트랜잭션을
@@ -725,7 +736,19 @@ interface Command {
     // 본문이 길수록 비용이 커서 입력 멈춤의 한 원인이 된다.
     if (overflowAvailableContentHeight == null) return;
     if (probeTimer) clearTimeout(probeTimer);
-    probeTimer = setTimeout(runOverflowProbe, delay);
+    if (probeRafId != null) {
+      cancelAnimationFrame(probeRafId);
+      probeRafId = null;
+    }
+    probeTimer = setTimeout(() => {
+      probeTimer = null;
+      // setTimeout 만으로는 한 프레임 내 여러 doc 변경/메트릭 변경을 합치지 못한다.
+      // rAF 한 단계를 더 끼워 한 프레임 내 호출을 1회 측정으로 coalesce.
+      probeRafId = requestAnimationFrame(() => {
+        probeRafId = null;
+        runOverflowProbe();
+      });
+    }, delay);
   }
 
   function runOverflowProbe() {
@@ -837,6 +860,9 @@ interface Command {
     }
 
     if (!editor || editor.isDestroyed) return;
+    const key = rangesKey(ranges);
+    if (key === lastProbeRangesKey) return;
+    lastProbeRangesKey = key;
     const tr = editor.state.tr.setMeta(overflowPluginKey, { ranges });
     editor.view.dispatch(tr);
   }
@@ -882,8 +908,29 @@ interface Command {
     };
   }
 
-  function postSelectionState(ed: Editor) {
-    postToRN({ type: "onSelectionUpdate", payload: getSelectionPayload(ed) });
+  // 선택 변경/마크 토글은 한 프레임 내에 여러 번 발생할 수 있다.
+  // requestAnimationFrame 으로 마지막 상태만 RN 으로 보내고, 직전과 동일한
+  // payload(activeBlock/marks)는 생략해 빠른 드래그·타이핑 중 메시지 폭주를 막는다.
+  let selectionRafId: number | null = null;
+  let lastSelectionPayload: ReturnType<typeof getSelectionPayload> | null = null;
+  function postSelectionState(_ed: Editor) {
+    if (selectionRafId != null) return;
+    selectionRafId = requestAnimationFrame(() => {
+      selectionRafId = null;
+      if (!editor || editor.isDestroyed) return;
+      const payload = getSelectionPayload(editor);
+      if (
+        lastSelectionPayload &&
+        payload.activeBlock === lastSelectionPayload.activeBlock &&
+        payload.isBold === lastSelectionPayload.isBold &&
+        payload.isItalic === lastSelectionPayload.isItalic &&
+        payload.isUnderline === lastSelectionPayload.isUnderline
+      ) {
+        return;
+      }
+      lastSelectionPayload = payload;
+      postToRN({ type: "onSelectionUpdate", payload });
+    });
   }
 
   function setupEditor(placeholder: string, initialMarkdown: string) {
@@ -953,6 +1000,9 @@ interface Command {
           postToRN({ type: "onChange", payload: { isDirty: true, charCount, wordCount } });
         }, CHANGE_THROTTLE_MS);
         postSelectionState(ed);
+        // doc 가 바뀌면 기존 decoration 은 매핑된 좌표가 stale 일 수 있으므로
+        // dedup 키를 무효화해 다음 probe 가 반드시 재dispatch 되도록 한다.
+        lastProbeRangesKey = null;
         // 강조 위치는 시각 레이아웃에 의존하므로 doc 변경 직후 재측정한다.
         scheduleOverflowProbe();
       },

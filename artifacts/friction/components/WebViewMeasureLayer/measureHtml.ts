@@ -66,6 +66,7 @@ if(cmd.type==="measure"){
   var w=cmd.containerWidth||300;
   var gap=cmd.blockGap||0;
   var items=cmd.items||[];
+  var requestId=cmd.requestId;
   var wrap=document.createElement("div");
   wrap.style.cssText="position:absolute;left:0;top:0;pointer-events:none;";
   document.body.appendChild(wrap);
@@ -84,7 +85,7 @@ if(cmd.type==="measure"){
         heights[b.key]=b.el.getBoundingClientRect().height+gap;
       });
       if(wrap.parentNode)wrap.parentNode.removeChild(wrap);
-      postToRN({type:"onMeasured",heights:heights});
+      postToRN({type:"onMeasured",requestId:requestId,heights:heights});
     });
   });
 }

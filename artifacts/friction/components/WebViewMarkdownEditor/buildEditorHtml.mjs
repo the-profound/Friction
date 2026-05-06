@@ -1,4 +1,12 @@
 #!/usr/bin/env node
+/**
+ * ⚠️ 주의: 이 스크립트는 editorHtml.ts 의 <script> 번들만 생성한다.
+ * editorHtml.ts 상단에는 task #492 이후 수동으로 추가된 import / perfEnabled
+ * 옵션 / bodyTypographyCss / perfHeadScript 가 들어있다. 이 스크립트를
+ * 그대로 실행해 editorHtml.ts 를 덮어쓰면 그 수정 사항이 사라진다.
+ * 번들 JS 만 갱신하려면 출력에서 <script>...</script> 구간만 잘라
+ * editorHtml.ts 의 동일 구간에 splice 해야 한다 (task #494 참고).
+ */
 import * as esbuild from "esbuild";
 import { fileURLToPath } from "url";
 import path from "path";
@@ -98,7 +106,7 @@ html,body{height:100%;background:transparent;container-type:inline-size}
 body{padding:16px 0 0;overflow:auto;position:relative}
 `.trim();
 
-const VERSION = "3.16.0";
+const VERSION = "3.16.1";
 
 const tsContent = `import { buildWebViewPerfHeadScript } from "@/lib/webviewPerf";
 
