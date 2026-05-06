@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, FlatList, Pressable, Switch, Alert, TextInput }
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
+import { NavBar } from "@/components/NavBar/NavBar";
 import { useQueryClient } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
@@ -487,7 +488,7 @@ export default function PersonalCollectionDetailScreen() {
       )}
 
       {articlesQuery.isError ? (
-        <View style={styles.emptyContainer}>
+        <View style={[styles.emptyContainer, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}>
           <Feather name="alert-circle" size={36} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>글 목록을 불러오지 못했어요</Text>
           <Pressable style={styles.retryButton} onPress={() => articlesQuery.refetch()}>
@@ -495,7 +496,7 @@ export default function PersonalCollectionDetailScreen() {
           </Pressable>
         </View>
       ) : articles.length === 0 ? (
-        <View style={styles.emptyContainer}>
+        <View style={[styles.emptyContainer, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}>
           <Feather name="file-text" size={36} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>아직 추가된 글이 없어요</Text>
           <Text style={styles.emptySubtitle}>완성된 편지를 이 모음에 추가해보세요</Text>
@@ -507,7 +508,9 @@ export default function PersonalCollectionDetailScreen() {
           renderItem={selectionMode ? renderSelectionItem : renderNormalItem}
           contentContainerStyle={[
             styles.listContent,
-            selectionMode && { paddingBottom: insets.bottom + 80 + 24 },
+            selectionMode
+              ? { paddingBottom: insets.bottom + 80 + 24 }
+              : { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom },
           ]}
           onScrollBeginDrag={selectionMode ? undefined : closeOpenRow}
           showsVerticalScrollIndicator={false}
@@ -642,6 +645,8 @@ export default function PersonalCollectionDetailScreen() {
         onConfirm={handleBulkDeleteConfirm}
         onCancel={() => setShowBulkDeleteConfirm(false)}
       />
+
+      {!selectionMode && <NavBar />}
     </View>
   );
 }

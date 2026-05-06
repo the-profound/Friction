@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { View, Text, StyleSheet, FlatList, Pressable, Alert, Share, TextInput, ActivityIndicator, ScrollView, Platform } from "react-native";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
+import { NavBar } from "@/components/NavBar/NavBar";
 import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
@@ -650,7 +651,7 @@ export default function TeamCollectionDetailScreen() {
             </View>
           )}
           {articlesQuery.isError ? (
-            <View style={styles.emptyContainer}>
+            <View style={[styles.emptyContainer, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}>
               <Feather name="alert-circle" size={36} color={Colors.zinc300} />
               <Text style={styles.emptyTitle}>글 목록을 불러오지 못했어요</Text>
               <Pressable style={styles.retryButton} onPress={() => articlesQuery.refetch()}>
@@ -658,11 +659,11 @@ export default function TeamCollectionDetailScreen() {
               </Pressable>
             </View>
           ) : articlesQuery.isLoading ? (
-            <View style={styles.emptyContainer}>
+            <View style={[styles.emptyContainer, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}>
               <ActivityIndicator size="large" color={Colors.zinc300} />
             </View>
           ) : articleRows.length === 0 ? (
-            <View style={styles.emptyContainer}>
+            <View style={[styles.emptyContainer, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}>
               <Feather name="file-text" size={36} color={Colors.zinc300} />
               <Text style={styles.emptyTitle}>아직 추가된 글이 없어요</Text>
               <Text style={styles.emptySubtitle}>멤버들이 글을 추가하면 여기에 표시됩니다</Text>
@@ -674,7 +675,7 @@ export default function TeamCollectionDetailScreen() {
                 item.type === "header" ? `header-${item.dateKey}` : item.item.id
               }
               renderItem={renderRow}
-              contentContainerStyle={styles.listContent}
+              contentContainerStyle={[styles.listContent, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}
               showsVerticalScrollIndicator={false}
               scrollEnabled={scrollEnabled}
             />
@@ -701,7 +702,7 @@ export default function TeamCollectionDetailScreen() {
             </View>
           )}
           {membersQuery.isError ? (
-            <View style={styles.emptyContainer}>
+            <View style={[styles.emptyContainer, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}>
               <Feather name="alert-circle" size={36} color={Colors.zinc300} />
               <Text style={styles.emptyTitle}>멤버 목록을 불러오지 못했어요</Text>
               <Pressable style={styles.retryButton} onPress={() => membersQuery.refetch()}>
@@ -709,11 +710,11 @@ export default function TeamCollectionDetailScreen() {
               </Pressable>
             </View>
           ) : membersQuery.isLoading ? (
-            <View style={styles.emptyContainer}>
+            <View style={[styles.emptyContainer, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}>
               <ActivityIndicator size="large" color={Colors.zinc300} />
             </View>
           ) : members.length === 0 ? (
-            <View style={styles.emptyContainer}>
+            <View style={[styles.emptyContainer, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}>
               <Feather name="users" size={36} color={Colors.zinc300} />
               <Text style={styles.emptyTitle}>멤버가 없어요</Text>
               <Text style={styles.emptySubtitle}>초대 링크를 공유하여 멤버를 추가하세요</Text>
@@ -723,7 +724,7 @@ export default function TeamCollectionDetailScreen() {
               data={members}
               keyExtractor={(item) => item.id}
               renderItem={renderMemberItem}
-              contentContainerStyle={styles.listContent}
+              contentContainerStyle={[styles.listContent, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}
               showsVerticalScrollIndicator={false}
             />
           )}
@@ -956,6 +957,8 @@ export default function TeamCollectionDetailScreen() {
         onConfirm={handleKickConfirm}
         onCancel={() => setKickTarget(null)}
       />
+
+      <NavBar />
     </View>
   );
 }
