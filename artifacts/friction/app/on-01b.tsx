@@ -49,7 +49,6 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/contexts/ToastContext";
-import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import WebViewMeasureLayer from "@/components/WebViewMeasureLayer";
 import type {
   MeasureRequest,
@@ -100,7 +99,8 @@ export default function DividingScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, returnPage } = useLocalSearchParams<{ id: string; returnPage?: string }>();
+  const returnPageIndex = returnPage !== undefined ? parseInt(returnPage, 10) : undefined;
 
   const articleQuery = useGetArticle(id ?? "");
   const article = id ? articleQuery.data : undefined;
@@ -132,8 +132,12 @@ export default function DividingScreen() {
 
   const [selectionState, setSelectionState] = useState<OnSelectionUpdatePayload>(DEFAULT_SELECTION);
   const [blockTypeSheetVisible, setBlockTypeSheetVisible] = useState(false);
-  const [stepBackConfirmVisible, setStepBackConfirmVisible] = useState(false);
   const [splitting, setSplitting] = useState(false);
+  const pageStripRef = useRef<ScrollView>(null);
+  const chipOffsetsRef = useRef<Record<number, number>>({});
+  const returnScrollDoneRef = useRef(false);
+  // 칩 레이아웃이 완료될 때마다 카운트를 올려 복원 effect를 확정적으로 트리거한다.
+  const [chipLayoutCount, setChipLayoutCount] = useState(0);
 
   // Force a fresh fetch on mount so stale cache never initializes the editor
   // with outdated divider positions.
@@ -143,6 +147,17 @@ export default function DividingScreen() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 마감 화면에서 복귀 시 page strip을 마지막으로 보던 페이지로 스크롤 복원.
+  // chipLayoutCount가 바뀔 때(=칩 레이아웃 완료)마다 확인하여 최초 1회만 실행한다.
+  useEffect(() => {
+    if (returnPageIndex === undefined || returnScrollDoneRef.current) return;
+    const offset = chipOffsetsRef.current[returnPageIndex];
+    if (offset === undefined) return;
+    returnScrollDoneRef.current = true;
+    pageStripRef.current?.scrollTo({ x: Math.max(0, offset - 16), animated: false });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chipLayoutCount]);
 
   useEffect(() => {
     // Gate initialization on data being NEWER than this component's mount time.
@@ -805,8 +820,7 @@ export default function DividingScreen() {
     router.replace("/(tabs)/on");
   }, [id, getEditorContent, markDirty, flush, router, queryClient]);
 
-  const handleConfirmStepBack = useCallback(async () => {
-    setStepBackConfirmVisible(false);
+  const handleStepBack = useCallback(async () => {
     if (isNavigatingRef.current) return;
     isNavigatingRef.current = true;
     setIsNavigating(true);
@@ -896,13 +910,13 @@ export default function DividingScreen() {
   const handleStateBarPress = useCallback((target: WritingStage) => {
     if (target === "DIVIDING") return;
     if (target === "DRAFT") {
-      setStepBackConfirmVisible(true);
+      handleStepBack();
       return;
     }
     if (target === "CLOSING") {
       handleNext();
     }
-  }, [handleNext]);
+  }, [handleNext, handleStepBack]);
 
   useEffect(() => {
     if (Platform.OS !== "android") return;
@@ -992,6 +1006,7 @@ export default function DividingScreen() {
 
         <View style={styles.pageStripWrapper}>
           <ScrollView
+            ref={pageStripRef}
             horizontal
             showsHorizontalScrollIndicator={false}
             style={styles.pageStrip}
@@ -1004,6 +1019,10 @@ export default function DividingScreen() {
               <View
                 key={`page-chip-${idx}`}
                 style={[styles.pageChip, hasWarning && styles.pageChipWarning]}
+                onLayout={(e) => {
+                  chipOffsetsRef.current[idx] = e.nativeEvent.layout.x;
+                  setChipLayoutCount((c) => c + 1);
+                }}
               >
                 {idx > 0 ? (
                   <Pressable
@@ -1075,16 +1094,6 @@ export default function DividingScreen() {
             />
           )}
         </KeyboardAvoidingView>
-
-        <ConfirmModal
-          visible={stepBackConfirmVisible}
-          title="작성 단계로 돌아가기"
-          description="작성 단계로 돌아가겠습니까? 현재 분할 상태는 저장됩니다."
-          confirmLabel="돌아가기"
-          cancelLabel="취소"
-          onConfirm={handleConfirmStepBack}
-          onCancel={() => setStepBackConfirmVisible(false)}
-        />
 
         <BlockTypeSheet
           visible={blockTypeSheetVisible}

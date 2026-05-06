@@ -89,7 +89,6 @@ export default function ClosingScreen() {
   const [cover, setCover] = useState<ArticleCover>(getDefaultCover());
   const [coverEditorVisible, setCoverEditorVisible] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
-  const [stepBackConfirmVisible, setStepBackConfirmVisible] = useState(false);
   const [collectionPickerVisible, setCollectionPickerVisible] = useState(false);
   const [titleEditing, setTitleEditing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -133,6 +132,8 @@ export default function ClosingScreen() {
   }, [article, articleQuery.dataUpdatedAt]);
 
   const pendingCoverRef = useRef<ArticleCover | null>(null);
+  // 마감→분할 복귀 시 전달할 콘텐츠 페이지 인덱스를 렌더마다 갱신한다.
+  const returnPageIdxRef = useRef(0);
 
   const flushCoverSave = useCallback(async () => {
     if (saveCoverTimerRef.current) {
@@ -329,8 +330,7 @@ export default function ClosingScreen() {
     router.replace("/(tabs)/on");
   }, [router, queryClient, flushCoverSave, flushTitleSave]);
 
-  const handleConfirmStepBack = useCallback(async () => {
-    setStepBackConfirmVisible(false);
+  const handleStepBack = useCallback(async () => {
     if (isActionInProgressRef.current) return;
     isActionInProgressRef.current = true;
     Keyboard.dismiss();
@@ -353,8 +353,11 @@ export default function ClosingScreen() {
         (old: any) => (old ? { ...old, status: "DIVIDING" } : old),
       );
 
+      // 마감 화면에서 보던 콘텐츠 페이지 인덱스를 분할 화면에 전달해
+      // page strip이 해당 위치로 스크롤 복원되도록 한다.
+      const returnPageIdx = returnPageIdxRef.current;
       isActionInProgressRef.current = false;
-      router.replace({ pathname: "/on-01b", params: { id } });
+      router.replace({ pathname: "/on-01b", params: { id, returnPage: String(returnPageIdx) } });
 
       // Background transition
       transitionStatus
@@ -390,11 +393,11 @@ export default function ClosingScreen() {
   const handleStateBarPress = useCallback((target: WritingStage) => {
     if (target === "CLOSING") return;
     if (target === "DIVIDING") {
-      setStepBackConfirmVisible(true);
+      handleStepBack();
       return;
     }
     showToast({ message: "분할 단계를 거쳐 작성 단계로 이동할 수 있어요.", type: "info" });
-  }, [showToast]);
+  }, [showToast, handleStepBack]);
 
   useEffect(() => {
     if (Platform.OS !== "android") return;
@@ -416,6 +419,8 @@ export default function ClosingScreen() {
   const isCoverPage = hasCoverPage && clampedPreviewPage === 0;
   const contentPageIndex = hasCoverPage ? clampedPreviewPage - 1 : clampedPreviewPage;
   const currentPage = isCoverPage ? null : (pages[contentPageIndex] ?? null);
+  // 렌더마다 최신 복귀 페이지 인덱스를 ref에 반영한다.
+  returnPageIdxRef.current = isCoverPage ? 0 : Math.max(0, contentPageIndex);
 
   const handlePreviewCardLayout = useCallback((e: LayoutChangeEvent) => {
     const w = e.nativeEvent.layout.width;
@@ -624,16 +629,6 @@ export default function ClosingScreen() {
         destructive
         onConfirm={handleConfirmExport}
         onCancel={() => setConfirmVisible(false)}
-      />
-
-      <ConfirmModal
-        visible={stepBackConfirmVisible}
-        title="분할 단계로 돌아가기"
-        description="분할 단계로 돌아가겠습니까? 표지와 스타일 설정은 유지됩니다."
-        confirmLabel="돌아가기"
-        cancelLabel="취소"
-        onConfirm={handleConfirmStepBack}
-        onCancel={() => setStepBackConfirmVisible(false)}
       />
 
       <MyCollectionsModal
