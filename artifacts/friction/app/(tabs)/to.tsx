@@ -267,7 +267,7 @@ export default function ToScreen() {
         refreshControl={
           <RefreshControl
             refreshing={sendRecordsQuery.isRefetching}
-            onRefresh={() => sendRecordsQuery.refetch()}
+            onRefresh={refetchSendRecords}
             tintColor={Colors.zinc400}
           />
         }

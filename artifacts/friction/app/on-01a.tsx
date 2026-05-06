@@ -87,8 +87,15 @@ export default function DraftScreen() {
     }
   }, [sourceArticleQuery.data]);
 
+  // Skip the mount-time invalidate when the cache was just primed (≤30s old)
+  // by a sibling screen's optimistic setQueryData. This avoids a wasted
+  // network RTT on every in-session navigation while still refreshing on cold
+  // entry (deep links, app resume) where the cache is genuinely stale.
   useEffect(() => {
-    if (id) {
+    if (!id) return;
+    const cached = queryClient.getQueryState([`/api/articles/${id}`]);
+    const fresh = !!cached && Date.now() - cached.dataUpdatedAt < 30_000;
+    if (!fresh) {
       queryClient.invalidateQueries({ queryKey: [`/api/articles/${id}`] });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

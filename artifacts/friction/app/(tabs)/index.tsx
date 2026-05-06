@@ -307,6 +307,10 @@ function CarouselGroup({
   );
 }
 
+// Module-level keyExtractor — stable identity across renders so FlatList
+// can correctly skip per-row reconciliation when only parent state changes.
+const groupKeyExtractor = (group: DateGroup) => group.dateKey;
+
 export default function InboxScreen() {
   const insets = useSafeAreaInsets();
   const navBottom = useNavBarBottomSafeArea();
@@ -365,6 +369,15 @@ export default function InboxScreen() {
   const handleCardPress = useCallback((item: InboxItem) => {
     setTapItem(item);
   }, []);
+
+  // Stable renderItem for the carousel FlatList — avoids re-creating the
+  // function (and triggering row-level reconciliation) on every parent render.
+  const renderGroupItem = useCallback(
+    ({ item: group }: { item: DateGroup }) => (
+      <CarouselGroup group={group} onCardPress={handleCardPress} />
+    ),
+    [handleCardPress],
+  );
 
   const handleModalClose = useCallback(() => {
     setTapItem(null);
@@ -478,10 +491,8 @@ Alert.alert("완료", "수신함에서 삭제되었습니다.");
       ) : (
         <FlatList
           data={groups}
-          keyExtractor={(group) => group.dateKey}
-          renderItem={({ item: group }) => (
-            <CarouselGroup group={group} onCardPress={handleCardPress} />
-          )}
+          keyExtractor={groupKeyExtractor}
+          renderItem={renderGroupItem}
           refreshControl={
             <RefreshControl refreshing={isManualRefreshing} onRefresh={handleRefresh} tintColor={Colors.zinc400} />
           }

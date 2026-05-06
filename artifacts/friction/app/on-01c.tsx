@@ -62,10 +62,13 @@ export default function ClosingScreen() {
   // before initializing title/cover, avoiding stale-cache initialization.
   const mountedAtRef = useRef(Date.now());
 
-  // Force a fresh fetch on mount so stale cache never initializes the screen
-  // with outdated title or cover.
+  // Skip mount-time invalidate when cache is fresh (≤30s) — avoids a wasted
+  // refetch on every 분할→마감 navigation. Cold entries still refresh.
   useEffect(() => {
-    if (id) {
+    if (!id) return;
+    const cached = queryClient.getQueryState([`/api/articles/${id}`]);
+    const fresh = !!cached && Date.now() - cached.dataUpdatedAt < 30_000;
+    if (!fresh) {
       queryClient.invalidateQueries({ queryKey: [`/api/articles/${id}`] });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps

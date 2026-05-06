@@ -145,10 +145,14 @@ export default function DividingScreen() {
   // 칩 레이아웃이 완료될 때마다 카운트를 올려 복원 effect를 확정적으로 트리거한다.
   const [chipLayoutCount, setChipLayoutCount] = useState(0);
 
-  // Force a fresh fetch on mount so stale cache never initializes the editor
-  // with outdated divider positions.
+  // Skip mount-time invalidate when cache is fresh (≤30s) — avoids a wasted
+  // refetch on every 작성→분할 / 마감→분할 navigation. Cold entries still
+  // refresh because dataUpdatedAt is 0 (no cache) or much older.
   useEffect(() => {
-    if (id) {
+    if (!id) return;
+    const cached = queryClient.getQueryState([`/api/articles/${id}`]);
+    const fresh = !!cached && Date.now() - cached.dataUpdatedAt < 30_000;
+    if (!fresh) {
       queryClient.invalidateQueries({ queryKey: [`/api/articles/${id}`] });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

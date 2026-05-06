@@ -430,7 +430,10 @@ export default function OfScreen() {
         ? teamCollectionsQuery.isError
         : sentencesQuery.isError;
 
-  const renderPersonalItem = ({ item }: { item: MyCollection }) => (
+  // useCallback so FlatList sees a stable renderItem prop reference and
+  // skips re-rendering rows when unrelated parent state (e.g., search query)
+  // changes. Same rationale below for renderTeamItem.
+  const renderPersonalItem = useCallback(({ item }: { item: MyCollection }) => (
     <Pressable
       style={styles.collectionCard}
       onPress={() => router.push({ pathname: "/of-01-detail", params: { id: item.id } })}
@@ -444,9 +447,9 @@ export default function OfScreen() {
         {item.isPublic && <Feather name="globe" size={12} color={Colors.zinc400} />}
       </View>
     </Pressable>
-  );
+  ), [router]);
 
-  const renderTeamItem = ({ item }: { item: TeamCollectionWithRole }) => (
+  const renderTeamItem = useCallback(({ item }: { item: TeamCollectionWithRole }) => (
     <Pressable
       style={styles.collectionCard}
       onPress={() => router.push({ pathname: "/of-02-detail", params: { id: item.id } })}
@@ -459,7 +462,7 @@ export default function OfScreen() {
         <Text style={styles.collectionCount}>{item.role === "OWNER" ? "소유자" : "멤버"}</Text>
       </View>
     </Pressable>
-  );
+  ), [router]);
 
   const renderSentenceItem = useCallback(({ item }: { item: StoredSentence }) => (
     <SwipeableRow

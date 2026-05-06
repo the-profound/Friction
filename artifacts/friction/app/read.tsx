@@ -436,21 +436,23 @@ export default function ReadScreen() {
     }
   }, [reading.session.state, articleId, totalPages]);
 
-  // Fire app_backgrounded_during_reading when OS suspends the app mid-read
+  // Fire app_backgrounded_during_reading when OS suspends the app mid-read.
+  // Verbose analytics logs gated behind __DEV__ so production builds stay quiet
+  // and avoid string-formatting cost on every AppState transition.
   useEffect(() => {
-    console.log("[Analytics] AppState listener registered — articleId:", articleId, "state:", reading.session.state);
+    if (__DEV__) console.log("[Analytics] AppState listener registered — articleId:", articleId, "state:", reading.session.state);
     const sub = AppState.addEventListener("change", (nextState) => {
-      console.log("[Analytics] AppState changed →", nextState, "| session:", reading.session.state, "| page:", currentPage, "/", totalPages);
+      if (__DEV__) console.log("[Analytics] AppState changed →", nextState, "| session:", reading.session.state, "| page:", currentPage, "/", totalPages);
       if (
         nextState === "background" &&
         (reading.session.state === "READING" || reading.session.state === "PAUSED")
       ) {
-        console.log("[Analytics] Firing app_backgrounded_during_reading, flushing PostHog…");
+        if (__DEV__) console.log("[Analytics] Firing app_backgrounded_during_reading, flushing PostHog…");
         trackAppBackgroundedDuringReading({ articleId, currentPage, totalPages });
       }
     });
     return () => {
-      console.log("[Analytics] AppState listener removed — articleId:", articleId);
+      if (__DEV__) console.log("[Analytics] AppState listener removed — articleId:", articleId);
       sub.remove();
     };
   }, [articleId, currentPage, totalPages, reading.session.state]);
