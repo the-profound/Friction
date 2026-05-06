@@ -278,7 +278,7 @@ const styles = StyleSheet.create({
     fontFamily: ReaderTokens.fontFamily.serif,
     color: Colors.zinc600,
     fontStyle: "italic",
-    textAlign: "left",
+    textAlign: "justify",
   },
   listItemRow: {
     flexDirection: "row",

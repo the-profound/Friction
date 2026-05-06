@@ -60,7 +60,7 @@ export function buildBodyTypographyCss(opts: BodyTypographyCssOptions): string {
     `${b} ul,${b} ol{padding-left:1.5em;${listMargin};text-align:left}`,
     `${b} li{${liMargin};text-align:left}`,
     `${b} li p{margin-bottom:0}`,
-    `${b} blockquote{font-family:'Eulyoo1945-Regular',serif;font-style:italic;border-left:3px solid #d4d4d8;padding-left:1em;${blockquoteMargin};color:#52525b;text-align:left}`,
+    `${b} blockquote{font-family:'Eulyoo1945-Regular',serif;font-style:italic;border-left:3px solid #d4d4d8;padding-left:1em;${blockquoteMargin};color:#52525b;text-align:justify;overflow-wrap:break-word;text-justify:inter-ideograph}`,
     `${b} hr{border:none;border-top:1px solid #e4e4e7;${hrCss}}`,
     `${b} u{text-decoration:underline${uExtras}}`,
     `${b} strong{font-family:'Eulyoo1945-SemiBold',serif;font-weight:700}`,
