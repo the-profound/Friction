@@ -11,7 +11,7 @@ import {
 import { Feather } from "@expo/vector-icons";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
-import { useListArticles, useListInbox, useGetUser } from "@workspace/api-client-react";
+import { useListArticles, useListInbox, useGetUser, useGetArticle } from "@workspace/api-client-react";
 import type { Article, InboxItem } from "@workspace/api-client-react";
 
 interface SourceArticlePickerSheetProps {
@@ -56,6 +56,13 @@ export default function SourceArticlePickerSheet({
     query: { enabled: visible && activeTab === "written" },
   });
   const userNickname = userQuery.data?.nickname ?? userQuery.data?.email ?? "나";
+
+  // 호출부가 제목을 모를 때(예: 초기 진입) 현재 연결된 원글 제목을 직접 조회한다.
+  const currentSourceArticleQuery = useGetArticle(currentSourceArticleId ?? "", {
+    query: { enabled: visible && !!currentSourceArticleId && !currentSourceArticleTitle },
+  });
+  const resolvedCurrentTitle =
+    currentSourceArticleTitle ?? currentSourceArticleQuery.data?.title ?? null;
 
   const inboxQuery = useListInbox(
     {
@@ -176,7 +183,7 @@ export default function SourceArticlePickerSheet({
             <View style={styles.currentCardLeft}>
               <Text style={styles.currentCardLabel}>현재 연결됨</Text>
               <Text style={styles.currentCardTitle} numberOfLines={1}>
-                {currentSourceArticleTitle ?? currentSourceArticleId}
+                {resolvedCurrentTitle ?? "(제목 없음)"}
               </Text>
             </View>
             <Pressable style={styles.unlinkButton} onPress={handleUnlink}>
