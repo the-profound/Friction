@@ -18,10 +18,12 @@ import {
   useRemoveArticleFromMyCollection,
   useListArticles,
   useListMyCollections,
+  useUpdateArticle,
   getListMyCollectionArticlesQueryKey,
   getGetMyCollectionQueryKey,
 } from "@workspace/api-client-react";
 import type { MyCollectionArticleWithDetails, MyCollection } from "@workspace/api-client-react";
+import SourceArticlePickerSheet from "@/components/SourceArticlePickerSheet/SourceArticlePickerSheet";
 import { MyArticlesPickerBottomSheet } from "@/components/MyArticlesPickerBottomSheet/MyArticlesPickerBottomSheet";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
@@ -52,6 +54,11 @@ export default function PersonalCollectionDetailScreen() {
   const [isDeletingCollection, setIsDeletingCollection] = useState(false);
   const { showToast } = useToast();
 
+  const [longPressTargetArticle, setLongPressTargetArticle] = useState<MyCollectionArticleWithDetails | null>(null);
+  const [isLongPressMenuVisible, setIsLongPressMenuVisible] = useState(false);
+  const [isSourcePickerVisible, setIsSourcePickerVisible] = useState(false);
+  const [longPressSourceTitle, setLongPressSourceTitle] = useState<string | null>(null);
+
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const openRowRef = useRef<SwipeableRowHandle | null>(null);
   const rowRefs = useRef<Map<string, SwipeableRowHandle>>(new Map());
@@ -74,6 +81,7 @@ export default function PersonalCollectionDetailScreen() {
   const deleteCollection = useDeleteMyCollection();
   const addArticle = useAddArticleToMyCollection();
   const removeArticle = useRemoveArticleFromMyCollection();
+  const updateArticle = useUpdateArticle();
 
   const closeOpenRow = useCallback(() => {
     if (openRowRef.current) {
@@ -290,6 +298,57 @@ export default function PersonalCollectionDetailScreen() {
     setIsMoveSheetVisible(true);
   }, [selectedIds]);
 
+  const handleLongPress = useCallback(
+    (item: MyCollectionArticleWithDetails) => {
+      if (item.article?.authorId !== userId) return;
+      setLongPressTargetArticle(item);
+      setLongPressSourceTitle(null);
+      setIsLongPressMenuVisible(true);
+    },
+    [userId],
+  );
+
+  const handleSourceArticleSelect = useCallback(
+    async (articleId: string, articleTitle: string) => {
+      if (!longPressTargetArticle) return;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await updateArticle.mutateAsync({
+          id: longPressTargetArticle.articleId,
+          data: { sourceArticleId: articleId } as any,
+        });
+        setLongPressSourceTitle(articleTitle);
+        queryClient.invalidateQueries({ queryKey: [`/api/articles/${longPressTargetArticle.articleId}`] });
+        if (id) {
+          queryClient.invalidateQueries({ queryKey: getListMyCollectionArticlesQueryKey(id) });
+        }
+        showToast({ message: `'${articleTitle}'을(를) 원글로 연결했어요.`, type: "success" });
+      } catch {
+        Alert.alert("오류", "원글 연결에 실패했습니다.");
+      }
+    },
+    [longPressTargetArticle, updateArticle, queryClient, id, showToast],
+  );
+
+  const handleSourceArticleUnlink = useCallback(async () => {
+    if (!longPressTargetArticle) return;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await updateArticle.mutateAsync({
+        id: longPressTargetArticle.articleId,
+        data: { sourceArticleId: null } as any,
+      });
+      setLongPressSourceTitle(null);
+      queryClient.invalidateQueries({ queryKey: [`/api/articles/${longPressTargetArticle.articleId}`] });
+      if (id) {
+        queryClient.invalidateQueries({ queryKey: getListMyCollectionArticlesQueryKey(id) });
+      }
+      showToast({ message: "원글 연결을 해제했어요.", type: "success" });
+    } catch {
+      Alert.alert("오류", "원글 연결 해제에 실패했습니다.");
+    }
+  }, [longPressTargetArticle, updateArticle, queryClient, id, showToast]);
+
   const handleMorePress = useCallback(() => {
     Alert.alert("모음 관리", undefined, [
       { text: "선택", onPress: enterSelectionMode },
@@ -364,6 +423,8 @@ export default function PersonalCollectionDetailScreen() {
         <Pressable
           style={styles.articleItem}
           onPress={() => router.push({ pathname: "/read", params: { articleId: item.articleId, mode: "re_read" } })}
+          onLongPress={() => handleLongPress(item)}
+          delayLongPress={400}
         >
           <View style={styles.articleInfo}>
             <Text style={styles.articleTitle} numberOfLines={1}>
@@ -377,7 +438,7 @@ export default function PersonalCollectionDetailScreen() {
         </Pressable>
       </SwipeableRow>
     ),
-    [closeOpenRow, handleRemoveArticle, handleSwipeOpen, router, userId, id],
+    [closeOpenRow, handleRemoveArticle, handleSwipeOpen, handleLongPress, router, userId, id],
   );
 
   const renderSelectionItem = useCallback(
@@ -645,6 +706,31 @@ export default function PersonalCollectionDetailScreen() {
         onConfirm={handleBulkDeleteConfirm}
         onCancel={() => setShowBulkDeleteConfirm(false)}
       />
+
+      <ConfirmModal
+        visible={isLongPressMenuVisible}
+        title={longPressTargetArticle?.article?.title ?? "글 설정"}
+        confirmLabel="답장 설정"
+        cancelLabel="닫기"
+        onConfirm={() => {
+          setIsLongPressMenuVisible(false);
+          setIsSourcePickerVisible(true);
+        }}
+        onCancel={() => setIsLongPressMenuVisible(false)}
+        onBackdropPress={() => setIsLongPressMenuVisible(false)}
+      />
+
+      {userId && (
+        <SourceArticlePickerSheet
+          visible={isSourcePickerVisible}
+          onClose={() => setIsSourcePickerVisible(false)}
+          userId={userId}
+          currentSourceArticleId={longPressTargetArticle?.article?.sourceArticleId ?? null}
+          currentSourceArticleTitle={longPressSourceTitle}
+          onSelect={handleSourceArticleSelect}
+          onUnlink={handleSourceArticleUnlink}
+        />
+      )}
 
       {!selectionMode && <NavBar />}
     </View>
