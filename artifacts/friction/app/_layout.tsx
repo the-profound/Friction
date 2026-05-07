@@ -25,8 +25,8 @@ import { setBaseUrl } from "@workspace/api-client-react";
 import { Colors } from "@/constants/tokens";
 import { Platform } from "react-native";
 
-// 웹 개발 환경에서는 로그인 없이 시뮬레이션 (DEV_WEB_BYPASS_USER_ID로 시드된 계정 사용)
-const DEV_WEB_BYPASS = __DEV__ && Platform.OS === "web";
+// 웹 개발 환경 로그인 바이패스 (비활성화: 실제 Supabase 인증 사용)
+const DEV_WEB_BYPASS = false;
 const DEV_WEB_BYPASS_USER_ID = "92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f";
 
 if (process.env.EXPO_PUBLIC_DOMAIN) {
