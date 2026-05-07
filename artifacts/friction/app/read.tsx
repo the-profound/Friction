@@ -213,6 +213,9 @@ export default function ReadScreen() {
   const isOnCoverPage = currentPage === 0;
   const contentPageIndex = Math.max(0, currentPage - 1);
   const isOnLastPage = totalPages > 0 && currentPage >= totalPages - 1;
+  // 모든 글은 표지 페이지를 가진다(명시적 표지가 없으면 기본 표지로 자동 생성).
+  // 페이지 0은 항상 표지 슬롯이므로 빈 슬롯/점프 hack/스와이프 차단이 필요 없다.
+  const hasCover = !!article;
 
 
   const [completionSheetVisible, setCompletionSheetVisible] = useState(false);
@@ -511,21 +514,9 @@ export default function ReadScreen() {
 
   const canNavigate = mode === "re_read" || reading.session.state === "READING";
 
-  const articleCover = useMemo(
-    () => (article?.cover ? resolveArticleCover(article.cover) : null),
-    [article?.cover],
-  );
-  const hasCover = articleCover !== null && articleCover.type !== "default";
   const showingCover = hasCover && currentPage === 0;
   // Whether the current slot shows the title bar at the bottom
-  const showTitleBar = !isOnCoverPage && !showingCover && !!article;
-
-  useLayoutEffect(() => {
-    if (!articleLoading && !hasCover && currentPage === 0 && reading.isSessionHydrated && !reading.isRestoring && totalPages > 1) {
-      jumpToPageRef.current(1);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [articleLoading, hasCover, currentPage, reading.isSessionHydrated, reading.isRestoring, totalPages]);
+  const showTitleBar = !showingCover && !!article;
 
   const handleSwipeLeft = useCallback(() => {
     if (!canNavigate) return;
@@ -548,8 +539,6 @@ export default function ReadScreen() {
 
   const handleSwipeRight = useCallback(() => {
     if (!canNavigate) return;
-    // When there is no cover, page 0 is an empty slot — block navigation back to it
-    if (!hasCover && currentPage <= 1) return;
     const dwellMs = Date.now() - pageEnterTimeRef.current;
     trackPageTurn({
       articleId,
@@ -600,8 +589,6 @@ export default function ReadScreen() {
   useEffect(() => { isOnLastPageRef.current = isOnLastPage; }, [isOnLastPage]);
   const hasCoverRef = useRef(hasCover);
   useEffect(() => { hasCoverRef.current = hasCover; }, [hasCover]);
-  const jumpToPageRef = useRef(reading.jumpToPage);
-  useLayoutEffect(() => { jumpToPageRef.current = reading.jumpToPage; });
 
   // Animated style for the row container
   const rowAnimStyle = useAnimatedStyle(() => ({
@@ -632,7 +619,7 @@ export default function ReadScreen() {
   gestureState.current = {
     canNavigate,
     isOnLastPage,
-    atBoundaryLeft: currentPage === 0 || (!hasCover && currentPage <= 1),
+    atBoundaryLeft: currentPage === 0,
     containerWidth: layout.containerWidth,
     isTextSelecting: isTextSelectingRef.current,
     isDragging: isDraggingRef.current,
@@ -1124,11 +1111,10 @@ export default function ReadScreen() {
                     // Render a small window around currentPage. We keep the
                     // immediate neighbours mounted so swipes show pre-rendered
                     // content, and unmount everything else to bound memory.
-                    const minIdx = hasCover ? 0 : 1;
-                    const start = Math.max(minIdx, currentPage - 1);
+                    const start = Math.max(0, currentPage - 1);
                     const end = Math.min(totalPages - 1, currentPage + 1);
                     for (let pageIdx = start; pageIdx <= end; pageIdx++) {
-                      const isCover = pageIdx === 0 && hasCover;
+                      const isCover = pageIdx === 0;
                       const cIdx = pageIdx - 1;
                       const node = isCover ? (
                         <CoverPage
