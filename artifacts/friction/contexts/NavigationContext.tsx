@@ -52,10 +52,15 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
   const [headerScrolled, setHeaderScrolled] = useState(false);
 
   const lastSyncRef = useRef({ tab: "IN" as MainTabKey, ofSub: "personal" as OfSubTabKey, toSub: "neighbors" as ToSubTabKey });
+  const pathnameRef = useRef<string>("");
 
   const segments = useSegments();
   const pathname = usePathname();
   const globalParams = useGlobalSearchParams<{ subTab?: string }>();
+
+  useEffect(() => {
+    pathnameRef.current = pathname;
+  }, [pathname]);
 
   useEffect(() => {
     let detectedTab: MainTabKey | undefined;
@@ -141,13 +146,21 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
   const setOfSubTab = useCallback((subTab: OfSubTabKey) => {
     setOfSubTabState(subTab);
     lastSyncRef.current = { ...lastSyncRef.current, ofSub: subTab };
-    router.setParams({ subTab });
+    if (pathnameRef.current === "/of") {
+      router.setParams({ subTab });
+    } else {
+      router.navigate({ pathname: "/(tabs)/of", params: { subTab } } as Href);
+    }
   }, []);
 
   const setToSubTab = useCallback((subTab: ToSubTabKey) => {
     setToSubTabState(subTab);
     lastSyncRef.current = { ...lastSyncRef.current, toSub: subTab };
-    router.setParams({ subTab });
+    if (pathnameRef.current === "/to") {
+      router.setParams({ subTab });
+    } else {
+      router.navigate({ pathname: "/(tabs)/to", params: { subTab } } as Href);
+    }
   }, []);
 
   const goBackToMainLayer = useCallback(() => {
