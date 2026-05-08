@@ -83,7 +83,7 @@ export function SendInline({
   const [recipientPickerVisible, setRecipientPickerVisible] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
 
-  const [segmentTab, setSegmentTab] = useState<SegmentTab>("neighbor");
+  const [segmentTab, setSegmentTab] = useState<SegmentTab>("collection");
   const [pendingRecipient, setPendingRecipient] = useState<Recipient>(null);
 
   const articlesQuery = useListArticles({ authorId: userId, status: "LETTER" as const });
@@ -280,10 +280,10 @@ export function SendInline({
 
   const openRecipientPicker = useCallback(() => {
     setPendingRecipient(selectedRecipient);
-    if (selectedRecipient?.type === "collection") {
-      setSegmentTab("collection");
-    } else {
+    if (selectedRecipient?.type === "neighbor") {
       setSegmentTab("neighbor");
+    } else {
+      setSegmentTab("collection");
     }
     setRecipientPickerVisible(true);
   }, [selectedRecipient]);
@@ -430,19 +430,6 @@ export function SendInline({
       >
         <View style={styles.segmentRow}>
           <Pressable
-            style={[styles.segmentButton, segmentTab === "neighbor" && styles.segmentButtonActive]}
-            onPress={() => setSegmentTab("neighbor")}
-          >
-            <Text
-              style={[
-                styles.segmentButtonText,
-                segmentTab === "neighbor" && styles.segmentButtonTextActive,
-              ]}
-            >
-              이웃
-            </Text>
-          </Pressable>
-          <Pressable
             style={[styles.segmentButton, segmentTab === "collection" && styles.segmentButtonActive]}
             onPress={() => setSegmentTab("collection")}
           >
@@ -453,6 +440,19 @@ export function SendInline({
               ]}
             >
               모음
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.segmentButton, segmentTab === "neighbor" && styles.segmentButtonActive]}
+            onPress={() => setSegmentTab("neighbor")}
+          >
+            <Text
+              style={[
+                styles.segmentButtonText,
+                segmentTab === "neighbor" && styles.segmentButtonTextActive,
+              ]}
+            >
+              이웃
             </Text>
           </Pressable>
         </View>
