@@ -82,10 +82,12 @@
     "expo-asset": "^12.0.13",
     "expo-clipboard": "~8.0.8",
     "expo-file-system": "^19.0.22",
+    "expo-media-library": "^18.2.1",
     "expo-secure-store": "^15.0.8",
     "marked": "^17.0.5",
     "posthog-react-native": "^4.43.13",
     "react-native-url-polyfill": "^3.0.0",
+    "react-native-view-shot": "^4.0.3",
     "react-native-webview": "^13.16.1",
     "turndown": "^7.2.2"
   }

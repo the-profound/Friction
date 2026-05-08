@@ -9,6 +9,7 @@ interface CoverPageProps {
   authorName?: string;
   containerWidth: number;
   containerHeight: number;
+  onImageLoad?: () => void;
 }
 
 export default function CoverPage({
@@ -17,6 +18,7 @@ export default function CoverPage({
   authorName,
   containerWidth,
   containerHeight,
+  onImageLoad,
 }: CoverPageProps) {
   const dynamicStyles = useMemo(() => {
     const titleSize = readerFontSize(6.5, containerWidth);
@@ -94,6 +96,7 @@ export default function CoverPage({
         source={{ uri: cover.imageUrl }}
         style={dynamicStyles.imageWrapper}
         resizeMode="cover"
+        onLoadEnd={onImageLoad}
       >
         <View style={dynamicStyles.imageOverlay}>
           {content}

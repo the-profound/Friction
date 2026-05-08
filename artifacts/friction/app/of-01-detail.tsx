@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef } from "react";
 import { View, Text, StyleSheet, FlatList, Pressable, Switch, Alert, TextInput } from "react-native";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
+import SaveAsPhotosModal from "@/components/SaveAsPhotos/SaveAsPhotosModal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { NavBar } from "@/components/NavBar/NavBar";
@@ -58,6 +59,7 @@ export default function PersonalCollectionDetailScreen() {
   const [isLongPressMenuVisible, setIsLongPressMenuVisible] = useState(false);
   const [isSourcePickerVisible, setIsSourcePickerVisible] = useState(false);
   const [longPressSourceTitle, setLongPressSourceTitle] = useState<string | null>(null);
+  const [isSaveAsPhotosVisible, setIsSaveAsPhotosVisible] = useState(false);
 
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const openRowRef = useRef<SwipeableRowHandle | null>(null);
@@ -707,18 +709,39 @@ export default function PersonalCollectionDetailScreen() {
         onCancel={() => setShowBulkDeleteConfirm(false)}
       />
 
-      <ConfirmModal
+      <BottomSheet
         visible={isLongPressMenuVisible}
+        onClose={() => setIsLongPressMenuVisible(false)}
         title={longPressTargetArticle?.article?.title ?? "글 설정"}
-        confirmLabel="답장 설정"
-        cancelLabel="닫기"
-        onConfirm={() => {
-          setIsLongPressMenuVisible(false);
-          setIsSourcePickerVisible(true);
-        }}
-        onCancel={() => setIsLongPressMenuVisible(false)}
-        onBackdropPress={() => setIsLongPressMenuVisible(false)}
-      />
+        snapPoints={[0.35]}
+      >
+        <View style={styles.actionSheetContent}>
+          <Pressable
+            style={styles.actionSheetItem}
+            onPress={() => {
+              setIsLongPressMenuVisible(false);
+              setIsSourcePickerVisible(true);
+            }}
+          >
+            <Text style={styles.actionSheetItemText}>답장 설정</Text>
+          </Pressable>
+          <Pressable
+            style={styles.actionSheetItem}
+            onPress={() => {
+              setIsLongPressMenuVisible(false);
+              setIsSaveAsPhotosVisible(true);
+            }}
+          >
+            <Text style={styles.actionSheetItemText}>사진으로 저장</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.actionSheetItem, styles.actionSheetCancelItem]}
+            onPress={() => setIsLongPressMenuVisible(false)}
+          >
+            <Text style={styles.actionSheetCancelText}>닫기</Text>
+          </Pressable>
+        </View>
+      </BottomSheet>
 
       {userId && (
         <SourceArticlePickerSheet
@@ -729,6 +752,14 @@ export default function PersonalCollectionDetailScreen() {
           currentSourceArticleTitle={longPressSourceTitle}
           onSelect={handleSourceArticleSelect}
           onUnlink={handleSourceArticleUnlink}
+        />
+      )}
+
+      {longPressTargetArticle && (
+        <SaveAsPhotosModal
+          visible={isSaveAsPhotosVisible}
+          articleId={longPressTargetArticle.articleId}
+          onClose={() => setIsSaveAsPhotosVisible(false)}
         />
       )}
 
@@ -1014,5 +1045,28 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.zinc900,
     flex: 1,
+  },
+  actionSheetContent: {
+    paddingTop: 4,
+    gap: 2,
+  },
+  actionSheetItem: {
+    paddingVertical: 16,
+    paddingHorizontal: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.zinc100,
+  },
+  actionSheetItemText: {
+    ...Typography.body,
+    fontSize: 16,
+    color: Colors.zinc900,
+  },
+  actionSheetCancelItem: {
+    borderBottomWidth: 0,
+  },
+  actionSheetCancelText: {
+    ...Typography.body,
+    fontSize: 16,
+    color: Colors.zinc400,
   },
 });

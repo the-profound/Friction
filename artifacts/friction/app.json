@@ -15,7 +15,10 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.friction.app"
+      "bundleIdentifier": "com.friction.app",
+      "infoPlist": {
+        "NSPhotoLibraryAddUsageDescription": "글을 이미지로 저장하려면 사진첩 접근 권한이 필요합니다."
+      }
     },
     "android": {
       "softwareKeyboardLayoutMode": "adjustResize",
@@ -38,6 +41,14 @@
             "./node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Feather.ttf",
             "./node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/MaterialCommunityIcons.ttf"
           ]
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "글을 이미지로 저장하려면 사진첩 접근 권한이 필요합니다.",
+          "savePhotosPermission": "글을 이미지로 저장하려면 사진첩 접근 권한이 필요합니다.",
+          "isAccessMediaLocationEnabled": false
         }
       ],
       "expo-web-browser",
