@@ -1323,10 +1323,17 @@ interface Command {
             }
 
             if (targetEl) {
-              targetEl.scrollIntoView({ behavior: "smooth", block: "start" });
+              // Use explicit scrollTo with an absolute position instead of
+              // scrollIntoView so the scroll is synchronous and predictable on
+              // Android WebView (smooth scroll + concurrent DOM mutation causes
+              // Android to abort the animation mid-way).
+              const rect = targetEl.getBoundingClientRect();
+              const targetTop = rect.top + window.scrollY;
+              window.scrollTo({ top: Math.max(0, targetTop - 24), behavior: "instant" });
             }
-            // Defer overlay one frame so it's positioned after smooth scroll begins.
-            requestAnimationFrame(() => showPageOverlay(firstEl, lastEl));
+            // Call showPageOverlay directly — instant scroll is already reflected
+            // in the DOM, so getBoundingClientRect() returns the correct position.
+            showPageOverlay(firstEl, lastEl);
           };
 
           attemptScroll(8); // ~8 * 150ms = up to 1.2s of retries

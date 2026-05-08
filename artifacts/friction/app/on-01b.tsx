@@ -178,9 +178,11 @@ export default function DividingScreen() {
     if (!editorReady || !initialized) return;
     returnBlockScrollDoneRef.current = true;
     // 레이아웃 안정화를 위해 짧게 지연 후 명령을 전달한다.
+    // Android는 폰트 렌더링·레이아웃 재계산이 더 오래 걸리므로 더 긴 지연을 사용한다.
+    const delay = Platform.OS === "android" ? 600 : 300;
     const timer = setTimeout(() => {
       editorRef.current?.scrollToBlock(returnPageIndex, returnBlockIndex);
-    }, 300);
+    }, delay);
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editorReady, initialized]);
