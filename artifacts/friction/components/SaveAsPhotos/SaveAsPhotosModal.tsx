@@ -194,7 +194,20 @@ export default function SaveAsPhotosModal({
 
     try {
       const MediaLibrary = await import("expo-media-library");
-      const { status } = await MediaLibrary.requestPermissionsAsync();
+      const current = await MediaLibrary.getPermissionsAsync(true);
+      if (current.canAskAgain === false) {
+        showToast({
+          message: "설정에서 사진첩 권한을 허용해주세요",
+          type: "error",
+          duration: 4000,
+        });
+        const { Linking } = await import("react-native");
+        await Linking.openSettings();
+        onClose();
+        resetState();
+        return;
+      }
+      const { status } = await MediaLibrary.requestPermissionsAsync(true);
       if (status !== "granted") {
         showToast({
           message: "사진첩 접근 권한이 없어요",
