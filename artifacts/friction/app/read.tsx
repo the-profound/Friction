@@ -1286,7 +1286,7 @@ export default function ReadScreen() {
                 onPress={() => setPickerTab("list")}
               >
                 <Text style={[styles.pickerTabText, pickerTab === "list" && styles.pickerTabTextActive]}>
-                  내 모음
+                  내 폴더
                 </Text>
               </Pressable>
               <Pressable
@@ -1294,7 +1294,7 @@ export default function ReadScreen() {
                 onPress={() => setPickerTab("create")}
               >
                 <Text style={[styles.pickerTabText, pickerTab === "create" && styles.pickerTabTextActive]}>
-                  새 모음에 추가
+                  새 폴더에 추가
                 </Text>
               </Pressable>
             </View>
@@ -1304,9 +1304,13 @@ export default function ReadScreen() {
                 data={
                   (collectionsQuery.data ?? [])
                     .filter((c: { id: string; name: string; isArchive?: boolean }) => !c.isArchive)
-                    .map((c: { id: string; name: string; articleCount?: number }) => ({
-                      id: c.id, name: c.name, articleCount: c.articleCount,
+                    .map((c: { id: string; name: string; articleCount?: number; isImpression?: boolean }) => ({
+                      id: c.id, name: c.name, articleCount: c.articleCount, isImpression: c.isImpression ?? false,
                     }))
+                    .sort((a, b) => {
+                      if (a.isImpression !== b.isImpression) return a.isImpression ? -1 : 1;
+                      return (b.articleCount ?? 0) - (a.articleCount ?? 0);
+                    })
                 }
                 keyExtractor={(item) => item.id}
                 renderItem={({ item }) => {
