@@ -7,6 +7,7 @@ export default function TabLayout() {
   return (
     <>
       <Tabs
+        initialRouteName="on"
         screenOptions={{
           headerShown: false,
           tabBarStyle: { display: "none" },

@@ -5,7 +5,7 @@ import type { MainTabKey, OfSubTabKey, ToSubTabKey } from "@/constants/tokens";
 import type { NavContextValue, NavLayer } from "@/types/navigation";
 
 const TAB_ROUTES: Record<MainTabKey, Href> = {
-  IN: "/(tabs)" as Href,
+  IN: "/(tabs)/index" as Href,
   ON: "/(tabs)/on" as Href,
   AR: "/(tabs)/archive" as Href,
   OF: "/(tabs)/of" as Href,
@@ -46,14 +46,14 @@ const TO_SUB_TABS = new Set<string>(["neighbors", "history", "send"]);
 const NavigationContext = createContext<NavContextValue | null>(null);
 
 export function NavigationProvider({ children }: { children: React.ReactNode }) {
-  const [activeTab, setActiveTabState] = useState<MainTabKey>("IN");
-  const [prevMainTab, setPrevMainTab] = useState<MainTabKey>("IN");
+  const [activeTab, setActiveTabState] = useState<MainTabKey>("ON");
+  const [prevMainTab, setPrevMainTab] = useState<MainTabKey>("ON");
   const [layer, setLayer] = useState<NavLayer>("main");
   const [ofSubTab, setOfSubTabState] = useState<OfSubTabKey>("group");
   const [toSubTab, setToSubTabState] = useState<ToSubTabKey>("neighbors");
   const [headerScrolled, setHeaderScrolled] = useState(false);
 
-  const lastSyncRef = useRef({ tab: "IN" as MainTabKey, ofSub: "group" as OfSubTabKey, toSub: "neighbors" as ToSubTabKey });
+  const lastSyncRef = useRef({ tab: "ON" as MainTabKey, ofSub: "group" as OfSubTabKey, toSub: "neighbors" as ToSubTabKey });
   const pathnameRef = useRef<string>("");
 
   const segments = useSegments();

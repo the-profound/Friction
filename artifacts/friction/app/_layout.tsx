@@ -89,7 +89,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     if (!isAuthed && !inBypassRoute) {
       router.replace("/login");
     } else if (isAuthed && segments[0] === "login") {
-      router.replace("/(tabs)");
+      router.replace("/(tabs)/on");
     }
   }, [isAuthed, isLoading, inBypassRoute, segments, router]);
 
