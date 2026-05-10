@@ -198,7 +198,7 @@ export const Shadows = {
   }),
   navBarAndroid: Platform.select({
     android: {
-      elevation: 8,
+      elevation: 4,
     },
     default: {},
   }),
