@@ -472,7 +472,7 @@ export default function ArchiveScreen() {
           renderItem={renderPersonalItem}
           numColumns={2}
           columnWrapperStyle={styles.gridRow}
-          contentContainerStyle={[styles.gridContent, { paddingBottom: navBottom }]}
+          contentContainerStyle={[styles.gridContent, { paddingBottom: navBottom, paddingTop: impressionCollection ? 0 : 12 }]}
           refreshControl={<RefreshControl refreshing={isManualRefreshing} onRefresh={handleRefresh} tintColor={Colors.zinc400} />}
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={
@@ -810,7 +810,6 @@ const styles = StyleSheet.create({
   },
   gridContent: {
     paddingHorizontal: Spacing.screenPx,
-    paddingTop: 8,
     gap: 12,
   },
   gridRow: {
