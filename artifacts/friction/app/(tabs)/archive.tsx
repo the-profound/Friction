@@ -87,6 +87,19 @@ export default function ArchiveScreen() {
     });
   }, [myCollections, searchQuery]);
 
+  const impressionCollection = useMemo(() => {
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const found = myCollections.find((c) => c.isImpression);
+      return found && found.name.toLowerCase().includes(q) ? found : null;
+    }
+    return myCollections.find((c) => c.isImpression) ?? null;
+  }, [myCollections, searchQuery]);
+
+  const regularCollections = useMemo(() => {
+    return filteredMyCollections.filter((c) => !c.isImpression);
+  }, [filteredMyCollections]);
+
   const filteredSentences = useMemo(() => {
     if (!searchQuery.trim()) return sentences;
     const q = searchQuery.toLowerCase();
@@ -413,12 +426,13 @@ export default function ArchiveScreen() {
     }
 
     if (activeSubTab === "personal") {
-      return filteredMyCollections.length === 0 ? (
+      const hasContent = impressionCollection !== null || regularCollections.length > 0;
+      return !hasContent ? (
         renderEmptyPersonal()
       ) : (
         <FlatList
           key="archive-personal-grid"
-          data={filteredMyCollections}
+          data={regularCollections}
           keyExtractor={(item) => item.id}
           renderItem={renderPersonalItem}
           numColumns={2}
@@ -426,6 +440,23 @@ export default function ArchiveScreen() {
           contentContainerStyle={[styles.gridContent, { paddingBottom: navBottom }]}
           refreshControl={<RefreshControl refreshing={isManualRefreshing} onRefresh={handleRefresh} tintColor={Colors.zinc400} />}
           showsVerticalScrollIndicator={false}
+          ListHeaderComponent={
+            impressionCollection ? (
+              <Pressable
+                style={styles.impressionCard}
+                onPress={() => router.push({ pathname: "/of-01-detail", params: { id: impressionCollection.id, name: impressionCollection.name } })}
+              >
+                <View style={styles.collectionIcon}>
+                  <Feather name="folder" size={20} color={Colors.zinc500} />
+                </View>
+                <Text style={styles.collectionName} numberOfLines={1}>{impressionCollection.name}</Text>
+                <View style={styles.collectionMeta}>
+                  <Text style={styles.collectionCount}>{impressionCollection.articleCount ?? 0}편</Text>
+                  {impressionCollection.isPublic && <Feather name="globe" size={12} color={Colors.zinc400} />}
+                </View>
+              </Pressable>
+            ) : null
+          }
         />
       );
     }
@@ -756,6 +787,15 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 8,
     minHeight: 110,
+  },
+  impressionCard: {
+    width: '100%',
+    backgroundColor: Colors.zinc50,
+    borderRadius: 16,
+    padding: 16,
+    gap: 8,
+    minHeight: 110,
+    marginBottom: 12,
   },
   collectionIcon: {
     width: 36,
