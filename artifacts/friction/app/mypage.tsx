@@ -136,19 +136,6 @@ export default function MyPageScreen() {
           />
         </Section>
 
-        <Section title="계정">
-          <SettingRow
-            label="로그아웃"
-            onPress={handleLogout}
-          />
-          <SettingRow
-            label="탈퇴하기"
-            onPress={() => setDeleteModalVisible(true)}
-            textStyle={styles.destructiveText}
-            isLast
-          />
-        </Section>
-
         <Section title="정책">
           <SettingRow
             label="이용약관"
@@ -169,6 +156,19 @@ export default function MyPageScreen() {
             label="피드백 보내기"
             onPress={() => openUrl(FEEDBACK_URL)}
             showChevron
+            isLast
+          />
+        </Section>
+
+        <Section title="계정">
+          <SettingRow
+            label="로그아웃"
+            onPress={handleLogout}
+          />
+          <SettingRow
+            label="탈퇴하기"
+            onPress={() => setDeleteModalVisible(true)}
+            textStyle={styles.destructiveText}
             isLast
           />
         </Section>
