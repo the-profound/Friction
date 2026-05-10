@@ -34,7 +34,7 @@ const DELIVERY_BADGE_COLORS = {
   scheduled: { bg: "#FEF9C3", text: "#92400E" },
 };
 
-export default function ArticleListItem({
+function ArticleListItem({
   title,
   onPress,
   preview,
@@ -94,6 +94,8 @@ export default function ArticleListItem({
     </ScalePressable>
   );
 }
+
+export default React.memo(ArticleListItem);
 
 function formatDate(date: Date): string {
   const m = (date.getMonth() + 1).toString();

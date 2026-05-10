@@ -12,6 +12,7 @@ import { useListArticles, useDeleteArticle, useCreateArticle } from "@workspace/
 import type { Article, ArticleCover } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
 import type { ArticleStatus } from "@/lib/policies";
+import { LIST_PERF_PRESET } from "@/lib/listPerf";
 import { useQueryClient } from "@tanstack/react-query";
 
 type SortMode = "latest" | "oldest" | "status";
@@ -203,6 +204,7 @@ export default function MemoCollectionScreen() {
         </View>
       ) : (
         <FlatList
+          {...LIST_PERF_PRESET}
           data={sortedArticles}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}

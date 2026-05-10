@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import RefreshableEmpty from "@/components/RefreshableEmpty";
 import { Colors, Spacing, Typography } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
+import { LIST_PERF_PRESET } from "@/lib/listPerf";
 import { formatDeliveryTime } from "@/lib/deliverySync";
 import { useListSendRecords } from "@workspace/api-client-react";
 import type { SendRecordWithDetails } from "@workspace/api-client-react";
@@ -120,6 +121,7 @@ export default function MyPageSendRecordsScreen() {
 
     return (
       <FlatList
+        {...LIST_PERF_PRESET}
         data={sortedRecords}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}

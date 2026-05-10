@@ -15,6 +15,7 @@ import { Feather, AntDesign } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
+import { LIST_PERF_PRESET } from "@/lib/listPerf";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import {
@@ -376,6 +377,7 @@ export default function SentenceCollectionScreen() {
         </View>
       ) : (
         <FlatList
+          {...LIST_PERF_PRESET}
           data={sentences}
           keyExtractor={(item) => item.id}
           renderItem={selectionMode ? renderSelectionItem : renderNormalItem}

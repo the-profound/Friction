@@ -24,6 +24,7 @@ import {
 } from "@/lib/useScreenFocused";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRealtimeChannel } from "@/lib/useRealtimeChannel";
+import { LIST_PERF_PRESET } from "@/lib/listPerf";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import RefreshableEmpty from "@/components/RefreshableEmpty";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
@@ -471,6 +472,7 @@ export function NeighborsInline({
           </RefreshableEmpty>
         ) : (
           <FlatList
+            {...LIST_PERF_PRESET}
             data={neighbors}
             keyExtractor={(item) => item.id}
             renderItem={renderNeighborItem}
@@ -510,6 +512,7 @@ export function NeighborsInline({
           </RefreshableEmpty>
         ) : (
           <FlatList
+            {...LIST_PERF_PRESET}
             data={pendingRequests}
             keyExtractor={(item) => item.id}
             renderItem={renderRequestItem}
@@ -548,6 +551,7 @@ export function NeighborsInline({
         </RefreshableEmpty>
       ) : (
         <FlatList
+          {...LIST_PERF_PRESET}
           data={sentRequests}
           keyExtractor={(item) => item.id}
           renderItem={renderSentRequestItem}

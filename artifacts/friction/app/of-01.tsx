@@ -6,6 +6,7 @@ import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
+import { LIST_PERF_PRESET } from "@/lib/listPerf";
 import { useToast } from "@/contexts/ToastContext";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import {
@@ -143,6 +144,7 @@ export default function PersonalCollectionListScreen() {
     }
     return (
       <FlatList
+        {...LIST_PERF_PRESET}
         data={data}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}

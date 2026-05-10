@@ -36,7 +36,7 @@ const DEFAULT_BG = Colors.zinc50;
 const DEFAULT_TEXT = Colors.zinc900;
 const READ_TEXT = Colors.zinc400;
 
-export default function ArticleCardItem({
+function ArticleCardItem({
   title,
   authorName,
   collectionName,
@@ -140,6 +140,8 @@ export default function ArticleCardItem({
     </ScalePressable>
   );
 }
+
+export default React.memo(ArticleCardItem);
 
 const CARD_W = Sizing.cardSlotW;
 const CARD_H = CARD_W * Sizing.cardRatio;

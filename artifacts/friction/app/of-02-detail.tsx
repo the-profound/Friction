@@ -11,6 +11,7 @@ import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
 import { useToast } from "@/contexts/ToastContext";
+import { LIST_PERF_PRESET } from "@/lib/listPerf";
 import {
   useGetTeamCollection,
   useUpdateTeamCollection,
@@ -671,6 +672,7 @@ export default function TeamCollectionDetailScreen() {
             </View>
           ) : (
             <FlatList
+              {...LIST_PERF_PRESET}
               data={articleRows}
               keyExtractor={(item) =>
                 item.type === "header" ? `header-${item.dateKey}` : item.item.id
@@ -722,6 +724,7 @@ export default function TeamCollectionDetailScreen() {
             </View>
           ) : (
             <FlatList
+              {...LIST_PERF_PRESET}
               data={members}
               keyExtractor={(item) => item.id}
               renderItem={renderMemberItem}

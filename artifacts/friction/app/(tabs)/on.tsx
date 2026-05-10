@@ -34,6 +34,7 @@ import type { Article, MyCollection } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
 import { useToast } from "@/contexts/ToastContext";
 import type { ArticleStatus } from "@/lib/policies";
+import { LIST_PERF_PRESET } from "@/lib/listPerf";
 
 type TopTab = "memo" | "my_article";
 type FilterMode = "all" | "DRAFT" | "DIVIDING" | "CLOSING";
@@ -677,6 +678,7 @@ export default function OnScreen() {
         </RefreshableEmpty>
       ) : (
         <FlatList
+          {...LIST_PERF_PRESET}
           data={listData}
           keyExtractor={keyExtractor}
           renderItem={renderItem}

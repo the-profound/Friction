@@ -12,6 +12,7 @@ import { Feather } from "@expo/vector-icons";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useListArticles, useListInbox, useGetUser, useGetArticle } from "@workspace/api-client-react";
+import { LIST_PERF_PRESET } from "@/lib/listPerf";
 import type { Article, InboxItem } from "@workspace/api-client-react";
 
 interface SourceArticlePickerSheetProps {
@@ -239,6 +240,7 @@ export default function SourceArticlePickerSheet({
             </View>
           ) : (
             <FlatList
+              {...LIST_PERF_PRESET}
               data={inboxItems}
               keyExtractor={(item) => item.id}
               renderItem={renderInboxItem}
@@ -253,6 +255,7 @@ export default function SourceArticlePickerSheet({
           </View>
         ) : (
           <FlatList
+            {...LIST_PERF_PRESET}
             data={myArticleItems}
             keyExtractor={(item) => item.id}
             renderItem={renderMyArticleItem}

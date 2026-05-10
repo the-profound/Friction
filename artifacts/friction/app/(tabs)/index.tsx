@@ -30,6 +30,7 @@ import type { InboxItem } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
 import { isQueryStale } from "@/lib/useScreenFocused";
 import { useRealtimeChannel } from "@/lib/useRealtimeChannel";
+import { LIST_PERF_PRESET } from "@/lib/listPerf";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const CARD_W = Sizing.cardSlotW;
@@ -522,6 +523,7 @@ Alert.alert("완료", "수신함에서 삭제되었습니다.");
         </ScrollView>
       ) : (
         <FlatList
+          {...LIST_PERF_PRESET}
           data={groups}
           keyExtractor={groupKeyExtractor}
           renderItem={renderGroupItem}

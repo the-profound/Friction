@@ -32,6 +32,7 @@ import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import { isQueryStale } from "@/lib/useScreenFocused";
 import { useQueryClient } from "@tanstack/react-query";
+import { LIST_PERF_PRESET } from "@/lib/listPerf";
 
 type GroupFilter = "all" | "my" | "joined";
 
@@ -290,6 +291,7 @@ export default function OfScreen() {
       renderEmptyTeam()
     ) : (
       <FlatList
+        {...LIST_PERF_PRESET}
         key="of-group-grid"
         data={filteredTeamCollectionsForGrid}
         keyExtractor={(item) => item.id}

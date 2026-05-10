@@ -6,6 +6,7 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
+import { LIST_PERF_PRESET } from "@/lib/listPerf";
 import {
   useListTeamCollections,
   useCreateTeamCollection,
@@ -275,6 +276,7 @@ export default function TeamCollectionListScreen() {
         renderEmpty()
       ) : (
         <FlatList
+          {...LIST_PERF_PRESET}
           data={filteredCollections}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}

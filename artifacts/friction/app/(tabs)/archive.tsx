@@ -38,6 +38,7 @@ import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
 import { isQueryStale } from "@/lib/useScreenFocused";
 import { useQueryClient } from "@tanstack/react-query";
+import { LIST_PERF_PRESET } from "@/lib/listPerf";
 
 type ArchiveSubTab = "personal" | "sentence";
 
@@ -483,6 +484,7 @@ export default function ArchiveScreen() {
         renderEmptyPersonal()
       ) : (
         <FlatList
+          {...LIST_PERF_PRESET}
           key="archive-personal-grid"
           data={regularCollectionsForGrid}
           keyExtractor={(item) => item.id}
@@ -537,6 +539,7 @@ export default function ArchiveScreen() {
       renderEmptySentence()
     ) : (
       <FlatList
+        {...LIST_PERF_PRESET}
         key="archive-sentence-list"
         data={filteredSentences}
         keyExtractor={(item) => item.id}
