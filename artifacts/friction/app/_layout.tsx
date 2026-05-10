@@ -47,7 +47,22 @@ SplashScreen.preventAutoHideAsync();
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
+      // Treat cached data as fresh for 30s — avoids refetch spinners during quick tab switches.
       staleTime: 30_000,
+      // Keep inactive query cache around for 5 minutes so brief tab departures
+      // (e.g. checking another app) don't drop data and force a full reload.
+      gcTime: 5 * 60_000,
+      // Retry once on failure — covers transient mobile network blips without
+      // burning battery on infinite retry loops when the server is truly down.
+      retry: 1,
+      // After the device regains connectivity, always refetch so stale cached
+      // data from before the disconnect is replaced with the latest server state.
+      refetchOnReconnect: "always",
+    },
+    mutations: {
+      // Never auto-retry mutations — they may be non-idempotent (e.g. send letter,
+      // create collection); the user should explicitly retry from the UI instead.
+      retry: 0,
     },
   },
 });
