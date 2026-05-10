@@ -92,6 +92,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
       router.replace("/(tabs)/on");
     } else if (
       isAuthed &&
+      Platform.OS !== "web" &&
       segments[0] === "(tabs)" &&
       (segments[1] == null || segments[1] === "index")
     ) {
