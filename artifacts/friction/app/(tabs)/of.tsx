@@ -303,7 +303,7 @@ export default function OfScreen() {
         showsVerticalScrollIndicator={false}
         ListFooterComponent={
           lastSingleTeamCollection ? (
-            <View style={styles.centeredCardRow}>
+            <View style={[styles.gridRow, { flexDirection: 'row' }]}>
               <ScalePressable
                 style={[styles.collectionCard, { flex: 0, width: teamCardWidth }]}
                 onPress={() => router.push({ pathname: "/of-02-detail", params: { id: lastSingleTeamCollection.id } })}
@@ -316,6 +316,7 @@ export default function OfScreen() {
                   <Text style={styles.collectionCount}>{lastSingleTeamCollection.role === "OWNER" ? "소유자" : "멤버"}</Text>
                 </View>
               </ScalePressable>
+              <View style={{ flex: 0, width: teamCardWidth }} />
             </View>
           ) : null
         }
@@ -544,9 +545,6 @@ const styles = StyleSheet.create({
   },
   gridRow: {
     gap: 12,
-  },
-  centeredCardRow: {
-    alignItems: 'center',
   },
   collectionCard: {
     flex: 1,
