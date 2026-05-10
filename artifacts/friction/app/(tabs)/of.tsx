@@ -709,7 +709,7 @@ export default function OfScreen() {
         </View>
       ) : (
         <PageHeader
-          title="보관함"
+          title="단체 모음"
           showAdd={ofSubTab !== "sentence"}
           onAddPress={handleAdd}
           showSearch
