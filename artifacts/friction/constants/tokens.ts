@@ -191,7 +191,7 @@ export const Shadows = {
     ios: {
       shadowColor: "#000",
       shadowOffset: { width: 0, height: 0 },
-      shadowOpacity: 0.1,
+      shadowOpacity: 0.13,
       shadowRadius: 10,
     },
     default: {},
