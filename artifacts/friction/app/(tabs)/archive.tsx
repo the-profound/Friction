@@ -847,7 +847,6 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 8,
     minHeight: 110,
-    marginBottom: 12,
   },
   collectionIcon: {
     width: 36,
