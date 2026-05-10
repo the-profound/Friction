@@ -589,20 +589,22 @@ export default function ArchiveScreen() {
       {!selectionMode && (
         <View style={styles.subTabBar}>
           <ScalePressable
-            style={[styles.subTab, activeSubTab === "personal" && styles.subTabActive]}
+            style={[styles.subTabItem, { paddingLeft: 16, paddingRight: 8 }]}
             onPress={() => { setActiveSubTab("personal"); setSearchQuery(""); setSearchActive(false); }}
           >
             <Text style={[styles.subTabText, activeSubTab === "personal" && styles.subTabTextActive]}>
               폴더
             </Text>
+            {activeSubTab === "personal" && <View style={styles.subTabUnderline} />}
           </ScalePressable>
           <ScalePressable
-            style={[styles.subTab, activeSubTab === "sentence" && styles.subTabActive]}
+            style={[styles.subTabItem, { paddingLeft: 8, paddingRight: 16 }]}
             onPress={() => { setActiveSubTab("sentence"); setSearchQuery(""); setSearchActive(false); exitSelectionMode(); }}
           >
             <Text style={[styles.subTabText, activeSubTab === "sentence" && styles.subTabTextActive]}>
               수집한 문장
             </Text>
+            {activeSubTab === "sentence" && <View style={styles.subTabUnderline} />}
           </ScalePressable>
         </View>
       )}
@@ -799,27 +801,32 @@ const styles = StyleSheet.create({
   },
   subTabBar: {
     flexDirection: "row",
-    paddingHorizontal: Spacing.screenPx,
-    gap: 8,
-    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.zinc100,
+    marginBottom: 8,
   },
-  subTab: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: Colors.zinc50,
-  },
-  subTabActive: {
-    backgroundColor: Colors.zinc900,
+  subTabItem: {
+    flex: 1,
+    paddingHorizontal: 0,
+    paddingTop: 12,
+    paddingBottom: 0,
+    alignItems: "center",
   },
   subTabText: {
-    ...Typography.caption,
-    fontSize: 13,
-    color: Colors.zinc500,
+    ...Typography.body,
+    fontSize: 15,
+    color: Colors.zinc400,
+    paddingBottom: 10,
   },
   subTabTextActive: {
-    color: Colors.white,
-    fontWeight: "600",
+    ...Typography.bodySemiBold,
+    color: Colors.zinc900,
+  },
+  subTabUnderline: {
+    height: 1.5,
+    alignSelf: "stretch",
+    backgroundColor: Colors.zinc900,
+    borderRadius: 1,
   },
   gridContent: {
     paddingHorizontal: Spacing.screenPx,

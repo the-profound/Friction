@@ -592,22 +592,22 @@ export default function OnScreen() {
       {!selectionMode && (
         <View style={styles.topTabBar}>
           <ScalePressable
-            style={styles.topTabItem}
+            style={[styles.topTabItem, { paddingLeft: 16, paddingRight: 8 }]}
             onPress={() => switchTopTab("memo")}
           >
             <Text style={[styles.topTabText, topTab === "memo" && styles.topTabTextActive]}>
               메모
             </Text>
-            {topTab === "memo" && <View style={[styles.topTabUnderline, { marginLeft: 16, marginRight: 8 }]} />}
+            {topTab === "memo" && <View style={styles.topTabUnderline} />}
           </ScalePressable>
           <ScalePressable
-            style={styles.topTabItem}
+            style={[styles.topTabItem, { paddingLeft: 8, paddingRight: 16 }]}
             onPress={() => switchTopTab("my_article")}
           >
             <Text style={[styles.topTabText, topTab === "my_article" && styles.topTabTextActive]}>
               편지
             </Text>
-            {topTab === "my_article" && <View style={[styles.topTabUnderline, { marginLeft: 8, marginRight: 16 }]} />}
+            {topTab === "my_article" && <View style={styles.topTabUnderline} />}
           </ScalePressable>
         </View>
       )}
@@ -835,11 +835,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     borderBottomWidth: 1,
     borderBottomColor: Colors.zinc100,
+    marginBottom: 8,
   },
   topTabItem: {
     flex: 1,
     paddingHorizontal: 0,
-    paddingTop: 0,
+    paddingTop: 12,
     paddingBottom: 0,
     alignItems: "center",
   },
@@ -856,7 +857,6 @@ const styles = StyleSheet.create({
   topTabUnderline: {
     height: 1.5,
     alignSelf: "stretch",
-    marginHorizontal: 0,
     backgroundColor: Colors.zinc900,
     borderRadius: 1,
   },
