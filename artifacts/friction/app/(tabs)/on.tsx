@@ -336,6 +336,8 @@ Alert.alert("오류", "메모 생성에 실패했습니다.");
           searchActive={searchActive}
           showKebab
           onKebabPress={enterSelectionMode}
+          showProfile
+          onProfilePress={() => router.push("/mypage" as never)}
         />
       )}
 

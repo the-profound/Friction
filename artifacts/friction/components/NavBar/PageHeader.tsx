@@ -11,9 +11,11 @@ interface PageHeaderProps {
   showSearch?: boolean;
   showAdd?: boolean;
   showKebab?: boolean;
+  showProfile?: boolean;
   onSearchPress?: () => void;
   onAddPress?: () => void;
   onKebabPress?: () => void;
+  onProfilePress?: () => void;
   searchActive?: boolean;
   addDisabled?: boolean;
   rightText?: string;
@@ -25,9 +27,11 @@ export function PageHeader({
   showSearch = false,
   showAdd = false,
   showKebab = false,
+  showProfile = false,
   onSearchPress,
   onAddPress,
   onKebabPress,
+  onProfilePress,
   searchActive = false,
   addDisabled = false,
   rightText,
@@ -62,6 +66,17 @@ export function PageHeader({
         {showKebab && (
           <Pressable style={styles.actionButton} onPress={onKebabPress} hitSlop={8}>
             <Feather name="more-vertical" size={20} color={Colors.zinc700} />
+          </Pressable>
+        )}
+        {showProfile && (
+          <Pressable
+            style={styles.profileButton}
+            onPress={onProfilePress}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="마이페이지"
+          >
+            <Feather name="user" size={16} color={Colors.zinc700} />
           </Pressable>
         )}
       </View>
@@ -108,5 +123,15 @@ const styles = StyleSheet.create({
     ...Typography.body,
     fontSize: 15,
     color: Colors.zinc600,
+  },
+  profileButton: {
+    width: Sizing.searchButtonSize,
+    height: Sizing.searchButtonSize,
+    borderRadius: Sizing.searchButtonSize / 2,
+    backgroundColor: Colors.zinc100,
+    borderWidth: 1.5,
+    borderColor: Colors.zinc200,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
