@@ -153,6 +153,9 @@ function RootLayoutNav() {
           <Stack.Screen name="on-01c" />
           <Stack.Screen name="on-02" />
           <Stack.Screen name="to-03" />
+          <Stack.Screen name="mypage" />
+          <Stack.Screen name="mypage-neighbors" />
+          <Stack.Screen name="mypage-sendrecords" />
           <Stack.Screen name="settings" options={{ presentation: "card" }} />
           <Stack.Screen name="terms" options={{ presentation: "card" }} />
           <Stack.Screen name="login" options={{ headerShown: false }} />
