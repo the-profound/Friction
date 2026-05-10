@@ -1427,6 +1427,59 @@ interface Command {
       swipeDismissed = false;
     }, { passive: true });
 
+    // ── Selection handle drag detection ──
+    // When the user drags an OS selection handle (the blue teardrop), the
+    // WebView's own scroll fires before the selection can expand, collapsing
+    // it. We detect: active selection + touch movement > DRAG_THRESHOLD, then
+    // post onSelHandleDragStart so the native side can temporarily disable
+    // WebView scrollEnabled. On touch end/cancel we post onSelHandleDragEnd.
+    var selHandleHasActiveSelection = false;
+    var selHandleDragStartX = 0;
+    var selHandleDragStartY = 0;
+    var selHandleDragging = false;
+    var SEL_HANDLE_DRAG_THRESHOLD = 6;
+
+    document.addEventListener("selectionchange", function () {
+      var sel = window.getSelection();
+      selHandleHasActiveSelection = !!(sel && sel.rangeCount > 0 && !sel.isCollapsed);
+    });
+
+    document.addEventListener("touchstart", function (e) {
+      var t = e.touches[0];
+      if (t) {
+        selHandleDragStartX = t.clientX;
+        selHandleDragStartY = t.clientY;
+      }
+      selHandleDragging = false;
+    }, { passive: true });
+
+    document.addEventListener("touchmove", function (e) {
+      if (selHandleDragging) return;
+      if (!selHandleHasActiveSelection) return;
+      var t = e.touches[0];
+      if (!t) return;
+      var dx = t.clientX - selHandleDragStartX;
+      var dy = t.clientY - selHandleDragStartY;
+      if (Math.sqrt(dx * dx + dy * dy) > SEL_HANDLE_DRAG_THRESHOLD) {
+        selHandleDragging = true;
+        postToRN({ type: "onSelHandleDragStart" });
+      }
+    }, { passive: true });
+
+    document.addEventListener("touchend", function () {
+      if (selHandleDragging) {
+        selHandleDragging = false;
+        postToRN({ type: "onSelHandleDragEnd" });
+      }
+    }, { passive: true });
+
+    document.addEventListener("touchcancel", function () {
+      if (selHandleDragging) {
+        selHandleDragging = false;
+        postToRN({ type: "onSelHandleDragEnd" });
+      }
+    }, { passive: true });
+
     // While an hr-control panel is active, intercept touches outside any
     // .hr-wrapper so the text editor cannot gain focus and the keyboard
     // stays dismissed. preventDefault() on touchstart suppresses the

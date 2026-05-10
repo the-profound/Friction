@@ -63,7 +63,9 @@ export type WebViewToRNEvent =
   | { type: "onSwipeDownToDismiss" }
   | { type: "onSourceArticleSlotTap" }
   | { type: "onTextSelect"; text: string; isEmpty: boolean }
-  | { type: "onSelectionUpdate"; payload: OnSelectionUpdatePayload };
+  | { type: "onSelectionUpdate"; payload: OnSelectionUpdatePayload }
+  | { type: "onSelHandleDragStart" }
+  | { type: "onSelHandleDragEnd" };
 
 export interface WebViewMarkdownEditorRef {
   setMarkdown: (markdown: string) => void;
