@@ -1358,7 +1358,7 @@ export default function ReadScreen() {
               <View style={styles.pickerCreateForm}>
                 <TextInput
                   style={styles.pickerCreateInput}
-                  placeholder="모음 이름"
+                  placeholder="폴더 이름"
                   placeholderTextColor={Colors.zinc400}
                   value={newCollectionName}
                   onChangeText={setNewCollectionName}
