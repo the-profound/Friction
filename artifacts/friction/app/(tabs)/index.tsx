@@ -495,8 +495,6 @@ Alert.alert("완료", "수신함에서 삭제되었습니다.");
         showSearch
         onSearchPress={handleSearchPress}
         searchActive={searchActive}
-        showProfile
-        onProfilePress={() => router.push("/mypage" as never)}
       />
 
       {searchActive && (
