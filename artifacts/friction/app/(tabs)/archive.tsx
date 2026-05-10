@@ -258,8 +258,10 @@ export default function ArchiveScreen() {
       ? `> ${sentence.text.trim()}\n>\n> <${sentence.articleTitle}>${page !== undefined ? `, ${page + 1}면` : ""}`
       : `> ${sentence.text.trim()}\n`;
     try {
+      const rawText = sentence.text.trim();
+      const truncated = rawText.length > 50 ? rawText.slice(0, 50) + "…" : rawText;
       const article = await createArticle.mutateAsync({
-        data: { authorId: userId, title: "", content: quoteBlock },
+        data: { authorId: userId, title: `문장 수집 - ${truncated}`, content: quoteBlock },
       });
       setSelectedSentence(null);
       router.push({ pathname: "/on-01a", params: { id: article.id } });
