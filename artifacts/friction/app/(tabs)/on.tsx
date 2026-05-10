@@ -712,12 +712,12 @@ const styles = StyleSheet.create({
   filterBar: {
     flexDirection: "row",
     paddingHorizontal: Spacing.screenPx,
-    gap: 12,
+    gap: 8,
     paddingVertical: 8,
   },
   filterChip: {
-    paddingHorizontal: 18,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
     borderRadius: 16,
     backgroundColor: Colors.zinc50,
   },
