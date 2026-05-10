@@ -76,7 +76,7 @@ export default function ArticleListItem({
             {deliveryBadge && (
               <View style={[styles.badge, { backgroundColor: DELIVERY_BADGE_COLORS[deliveryBadge].bg }]}>
                 <Text style={[styles.badgeText, { color: DELIVERY_BADGE_COLORS[deliveryBadge].text }]}>
-                  {deliveryBadge === "sent" ? "발신 됨" : "발신 예정"}
+                  {deliveryBadge === "sent" ? "발신됨" : "발신 예정"}
                 </Text>
               </View>
             )}

@@ -913,6 +913,75 @@ export async function seedDevData(): Promise<void> {
 
       logger.info("Dev seed data (v5) inserted successfully");
     }
+    // -----------------------------------------------------------------------
+    // v6 sentinel: send_records for QA badge verification
+    // Check for 하윤's send record on a1000001.
+    // -----------------------------------------------------------------------
+    const { rows: sentinelV6 } = await client.query(`
+      SELECT id FROM send_records
+      WHERE sender_id = '54cbadb0-eab9-4f69-8c32-90a9e00d7908'
+        AND article_id = 'a1000001-0000-4000-a000-000000000001'
+      LIMIT 1
+    `);
+    if (sentinelV6.length > 0) {
+      logger.info("Dev seed data already present (v6), skipping");
+    } else {
+      logger.info("Inserting dev seed data (v6)…");
+
+      // Send records for 하윤 (54cbadb0):
+      //   a1000001 → 서준, deliverySlot past → isDelivered=true → [발신됨]
+      //   a1000011 → 민지, deliverySlot past → isDelivered=true → [발신됨]
+      //   a1000020 → 서준, deliverySlot future → isDelivered=false → [발신 예정]
+      //
+      // Send records for 민지/dev (92d8bf9b):
+      //   a1000010 → 하윤, deliverySlot past → isDelivered=true → [발신됨]
+      //   a1000017 → 하윤, deliverySlot past → isDelivered=true → [발신됨]
+      //   a1000022 → 서준, deliverySlot future → isDelivered=false → [발신 예정]
+      await client.query(`
+        INSERT INTO send_records
+          (id, sender_id, recipient_id, article_id, inbox_id, team_collection_id, target_type, delivery_slot, sent_at)
+        VALUES
+          (gen_random_uuid(),
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
+            'a1000001-0000-4000-a000-000000000001',
+            NULL, NULL, 'person',
+            '2026-04-27 09:00:00+00', '2026-04-26 21:00:00+00'),
+          (gen_random_uuid(),
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            'a1000011-0000-4000-a000-000000000011',
+            NULL, NULL, 'person',
+            '2026-04-28 21:00:00+00', '2026-04-28 10:00:00+00'),
+          (gen_random_uuid(),
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
+            'a1000020-0000-4000-a000-000000000020',
+            NULL, NULL, 'person',
+            NOW() + interval '7 days', '2026-05-01 00:00:00+00'),
+          (gen_random_uuid(),
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
+            'a1000010-0000-4000-a000-000000000010',
+            NULL, NULL, 'person',
+            '2026-04-28 09:00:00+00', '2026-04-28 08:00:00+00'),
+          (gen_random_uuid(),
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
+            'a1000017-0000-4000-a000-000000000017',
+            NULL, NULL, 'person',
+            '2026-04-30 09:00:00+00', '2026-04-30 02:00:00+00'),
+          (gen_random_uuid(),
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
+            'a1000022-0000-4000-a000-000000000022',
+            NULL, NULL, 'person',
+            NOW() + interval '7 days', '2026-05-01 03:00:00+00')
+        ON CONFLICT DO NOTHING
+      `);
+
+      logger.info("Dev seed data (v6) inserted successfully");
+    }
   } catch (err) {
     logger.error({ err }, "Seed data error");
     throw err;
