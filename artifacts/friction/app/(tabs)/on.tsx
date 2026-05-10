@@ -671,7 +671,7 @@ const styles = StyleSheet.create({
   },
   topTabItem: {
     paddingHorizontal: Spacing.screenPx + 8,
-    paddingTop: 10,
+    paddingTop: 0,
     paddingBottom: 0,
     alignItems: "center",
   },
