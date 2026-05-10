@@ -487,7 +487,7 @@ export default function ArchiveScreen() {
             onPress={() => { setActiveSubTab("personal"); setSearchQuery(""); setSearchActive(false); }}
           >
             <Text style={[styles.subTabText, activeSubTab === "personal" && styles.subTabTextActive]}>
-              개인 모음
+              폴더
             </Text>
           </Pressable>
           <Pressable
@@ -495,7 +495,7 @@ export default function ArchiveScreen() {
             onPress={() => { setActiveSubTab("sentence"); setSearchQuery(""); setSearchActive(false); exitSelectionMode(); }}
           >
             <Text style={[styles.subTabText, activeSubTab === "sentence" && styles.subTabTextActive]}>
-              문장 모음
+              수집한 문장
             </Text>
           </Pressable>
         </View>
@@ -548,7 +548,7 @@ export default function ArchiveScreen() {
       <BottomSheet
         visible={createSheetVisible}
         onClose={() => setCreateSheetVisible(false)}
-        title="새 개인 모음"
+        title="새 폴더"
         snapPoints={[0.65, 0.95]}
         keyboardAware
       >

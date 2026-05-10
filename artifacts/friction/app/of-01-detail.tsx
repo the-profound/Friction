@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef } from "react";
-import { View, Text, StyleSheet, FlatList, Pressable, Switch, Alert, TextInput } from "react-native";
+import { View, Text, StyleSheet, FlatList, Pressable, Alert, TextInput } from "react-native";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import SaveAsPhotosModal from "@/components/SaveAsPhotos/SaveAsPhotosModal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -154,20 +154,6 @@ export default function PersonalCollectionDetailScreen() {
       Alert.alert("오류", "삭제에 실패했습니다.");
     }
   }, [id, selectedIds, removeArticle, queryClient, exitSelectionMode]);
-
-  const handleTogglePublic = useCallback(
-    async (value: boolean) => {
-      if (!id) return;
-      try {
-        await updateCollection.mutateAsync({ id, data: { isPublic: value } });
-        collectionQuery.refetch();
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "설정 변경에 실패했습니다.";
-        Alert.alert("오류", msg);
-      }
-    },
-    [id, updateCollection, collectionQuery],
-  );
 
   const handleOpenEdit = useCallback(() => {
     if (!collection) return;
@@ -501,7 +487,7 @@ export default function PersonalCollectionDetailScreen() {
               <Feather name="arrow-left" size={20} color={Colors.zinc600} />
             </Pressable>
             <Text style={styles.headerTitle} numberOfLines={1}>
-              {collection?.name ?? "개인 모음"}
+              {collection?.name ?? "폴더"}
             </Text>
             <View style={styles.headerRight}>
               <Pressable hitSlop={12} onPress={isArchive ? enterSelectionMode : handleMorePress}>
@@ -517,24 +503,6 @@ export default function PersonalCollectionDetailScreen() {
           <Text style={styles.descText}>{collection.description}</Text>
         </View>
       ) : null}
-
-      {!selectionMode && !isArchive && (
-        <View style={styles.metaSection}>
-          <View style={styles.visibilityRow}>
-            <Text style={styles.visibilityLabel}>공개 설정</Text>
-            <Switch
-              value={collection?.isPublic ?? false}
-              onValueChange={handleTogglePublic}
-              trackColor={{ false: Colors.zinc200, true: Colors.zinc900 }}
-            />
-          </View>
-          <Text style={styles.visibilityHint}>
-            {collection?.isPublic
-              ? "다른 사람이 이 모음을 구독할 수 있어요"
-              : "나만 볼 수 있는 모음이에요"}
-          </Text>
-        </View>
-      )}
 
       {!selectionMode && (
         <View style={styles.sectionHeader}>
@@ -807,28 +775,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.zinc500,
     lineHeight: 20,
-  },
-  metaSection: {
-    paddingHorizontal: Spacing.screenPx,
-    paddingVertical: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.zinc100,
-  },
-  visibilityRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  visibilityLabel: {
-    ...Typography.bodySemiBold,
-    fontSize: 15,
-    color: Colors.zinc900,
-  },
-  visibilityHint: {
-    ...Typography.body,
-    fontSize: 13,
-    color: Colors.zinc500,
-    marginTop: 4,
   },
   sectionHeader: {
     flexDirection: "row",

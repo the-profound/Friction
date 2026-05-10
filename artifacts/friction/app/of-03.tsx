@@ -271,7 +271,7 @@ export default function SentenceCollectionScreen() {
             <Pressable onPress={() => router.back()} hitSlop={12}>
               <Feather name="arrow-left" size={20} color={Colors.zinc600} />
             </Pressable>
-            <Text style={styles.headerTitle}>문장 모음</Text>
+            <Text style={styles.headerTitle}>수집한 문장</Text>
             <Pressable onPress={enterSelectionMode} hitSlop={12}>
               <Feather name="more-vertical" size={20} color={Colors.zinc600} />
             </Pressable>

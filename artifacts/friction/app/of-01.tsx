@@ -164,7 +164,7 @@ export default function PersonalCollectionListScreen() {
         <Pressable onPress={() => router.back()} hitSlop={12}>
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
         </Pressable>
-        <Text style={styles.headerTitle}>개인 모음</Text>
+        <Text style={styles.headerTitle}>폴더</Text>
         <Pressable hitSlop={12} onPress={() => { setNewName(""); setNewDescription(""); setNewIsPublic(false); setCreateSheetVisible(true); }}>
           <Feather name="plus" size={20} color={Colors.zinc600} />
         </Pressable>
@@ -196,7 +196,7 @@ export default function PersonalCollectionListScreen() {
       <BottomSheet
         visible={createSheetVisible}
         onClose={() => setCreateSheetVisible(false)}
-        title="새 개인 모음"
+        title="새 폴더"
         snapPoints={[0.45]}
         keyboardAware
       >
