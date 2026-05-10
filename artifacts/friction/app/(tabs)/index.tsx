@@ -26,7 +26,7 @@ import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import DotIndicator from "@/components/DotIndicator/DotIndicator";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import { useQueryClient } from "@tanstack/react-query";
-import { useListInbox, useMarkInboxOpened, useDeleteInboxItem, getListInboxQueryKey } from "@workspace/api-client-react";
+import { useListInbox, useMarkInboxOpened, useDeleteInboxItem, getListInboxQueryKey, useGetUser } from "@workspace/api-client-react";
 import type { InboxItem } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
 import { isQueryStale } from "@/lib/useScreenFocused";
@@ -322,6 +322,9 @@ export default function InboxScreen() {
   const [tapItem, setTapItem] = useState<InboxItem | null>(null);
   const [sourcePromptItem, setSourcePromptItem] = useState<InboxItem | null>(null);
 
+  const { data: userProfile } = useGetUser(userId);
+  const userInitial = userProfile?.nickname ? userProfile.nickname.charAt(0).toUpperCase() : undefined;
+
   const { data: inboxData, isLoading, refetch } = useListInbox(
     // isRead=false tells the server to return only unread items, keeping the
     // response payload small as read letters accumulate over time.
@@ -495,6 +498,9 @@ Alert.alert("완료", "수신함에서 삭제되었습니다.");
         showSearch
         onSearchPress={handleSearchPress}
         searchActive={searchActive}
+        showProfile
+        onProfilePress={() => router.push("/mypage" as never)}
+        userInitial={userInitial}
       />
 
       {searchActive && (
