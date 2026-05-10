@@ -281,7 +281,7 @@ export default function ClosingScreen() {
       try {
         await finalizeExport(collection.id);
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "모음 저장에 실패했습니다.";
+        const msg = e instanceof Error ? e.message : "폴더 저장에 실패했습니다.";
         Alert.alert("저장 실패", msg);
       } finally {
         isActionInProgressRef.current = false;
@@ -300,7 +300,7 @@ export default function ClosingScreen() {
           data: { ownerId: userId, name, description, isPublic: false },
         });
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "모음 생성에 실패했습니다.";
+        const msg = e instanceof Error ? e.message : "폴더 생성에 실패했습니다.";
         Alert.alert("생성 실패", msg);
         isActionInProgressRef.current = false;
         return;
@@ -309,7 +309,7 @@ export default function ClosingScreen() {
       try {
         await finalizeExport(created.id);
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "모음 저장에 실패했습니다.";
+        const msg = e instanceof Error ? e.message : "폴더 저장에 실패했습니다.";
         Alert.alert("저장 실패", msg);
       } finally {
         isActionInProgressRef.current = false;

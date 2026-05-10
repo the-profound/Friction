@@ -189,7 +189,7 @@ export default function PersonalCollectionDetailScreen() {
       setDeleteConfirmVisible(false);
       queryClient.invalidateQueries({ queryKey: ["/api/my-collections"] });
       router.back();
-      showToast({ message: "모음을 삭제했어요.", type: "success" });
+      showToast({ message: "폴더를 삭제했어요.", type: "success" });
     } catch (e: unknown) {
       setDeleteConfirmVisible(false);
       const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";
@@ -343,11 +343,11 @@ export default function PersonalCollectionDetailScreen() {
       { text: "선택", onPress: enterSelectionMode },
     ];
     if (!isImpression) {
-      options.push({ text: "모음 이름 변경", onPress: handleOpenEdit });
-      options.push({ text: "모음 삭제", style: "destructive", onPress: () => setDeleteConfirmVisible(true) });
+      options.push({ text: "폴더 이름 변경", onPress: handleOpenEdit });
+      options.push({ text: "폴더 삭제", style: "destructive", onPress: () => setDeleteConfirmVisible(true) });
     }
     options.push({ text: "닫기", style: "cancel" });
-    Alert.alert("모음 관리", undefined, options);
+    Alert.alert("폴더 관리", undefined, options);
   }, [enterSelectionMode, handleOpenEdit, isImpression]);
 
   const alreadyAddedIds = articles.map((a) => a.articleId);
@@ -466,7 +466,7 @@ export default function PersonalCollectionDetailScreen() {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyTitle}>모음을 찾을 수 없어요</Text>
+          <Text style={styles.emptyTitle}>폴더를 찾을 수 없어요</Text>
         </View>
       </View>
     );
@@ -534,7 +534,7 @@ export default function PersonalCollectionDetailScreen() {
         <View style={[styles.emptyContainer, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}>
           <Feather name="file-text" size={36} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>아직 추가된 글이 없어요</Text>
-          <Text style={styles.emptySubtitle}>완성된 편지를 이 모음에 추가해보세요</Text>
+          <Text style={styles.emptySubtitle}>완성된 편지를 이 폴더에 추가해보세요</Text>
         </View>
       ) : (
         <FlatList
@@ -589,14 +589,14 @@ export default function PersonalCollectionDetailScreen() {
       <BottomSheet
         visible={editSheetVisible}
         onClose={() => setEditSheetVisible(false)}
-        title="모음 수정"
+        title="폴더 수정"
         snapPoints={[0.45]}
         keyboardAware
       >
         <View style={styles.editForm}>
           <TextInput
             style={styles.editInput}
-            placeholder="모음 이름"
+            placeholder="폴더 이름"
             placeholderTextColor={Colors.zinc400}
             value={editName}
             onChangeText={setEditName}
@@ -661,8 +661,8 @@ export default function PersonalCollectionDetailScreen() {
 
       <ConfirmModal
         visible={deleteConfirmVisible}
-        title="모음 삭제"
-        description={`'${collection?.name ?? ""}'을(를) 삭제할까요?\n모음 안의 글은 삭제되지 않아요.`}
+        title="폴더 삭제"
+        description={`'${collection?.name ?? ""}'을(를) 삭제할까요?\n폴더 안의 글은 삭제되지 않아요.`}
         confirmLabel={isDeletingCollection ? "삭제 중..." : "삭제"}
         cancelLabel="취소"
         destructive

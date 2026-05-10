@@ -110,7 +110,7 @@ export default function MyCollectionsModal({
     <BottomSheet
       visible={visible}
       onClose={handleClose}
-      title="보관할 모음 선택"
+      title="보관할 폴더 선택"
       snapPoints={[0.75]}
       keyboardAware
     >
@@ -122,7 +122,7 @@ export default function MyCollectionsModal({
               onPress={() => setActiveTab("list")}
             >
               <Text style={[styles.tabText, activeTab === "list" && styles.tabTextActive]}>
-                내 모음
+                내 폴더
               </Text>
             </Pressable>
             <Pressable
@@ -130,7 +130,7 @@ export default function MyCollectionsModal({
               onPress={() => setActiveTab("create")}
             >
               <Text style={[styles.tabText, activeTab === "create" && styles.tabTextActive]}>
-                새 모음에 추가
+                새 폴더에 추가
               </Text>
             </Pressable>
           </View>
@@ -140,12 +140,12 @@ export default function MyCollectionsModal({
           isLoading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="small" color={Colors.zinc400} />
-              <Text style={styles.loadingText}>모음 불러오는 중...</Text>
+              <Text style={styles.loadingText}>폴더 불러오는 중...</Text>
             </View>
           ) : collections.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>보관할 모음이 없어요</Text>
-              <Text style={styles.emptySubtext}>새 모음에 추가 탭에서 만들어보세요</Text>
+              <Text style={styles.emptyText}>보관할 폴더가 없어요</Text>
+              <Text style={styles.emptySubtext}>새 폴더에 추가 탭에서 만들어보세요</Text>
             </View>
           ) : (
             <FlatList
@@ -161,7 +161,7 @@ export default function MyCollectionsModal({
           <View style={styles.createForm}>
             <TextInput
               style={styles.createInput}
-              placeholder="모음 이름"
+              placeholder="폴더 이름"
               placeholderTextColor={Colors.zinc400}
               value={newName}
               onChangeText={setNewName}

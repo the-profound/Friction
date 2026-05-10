@@ -1349,8 +1349,8 @@ export default function ReadScreen() {
                 contentContainerStyle={styles.pickerListContent}
                 ListEmptyComponent={
                   <View style={styles.pickerEmpty}>
-                    <Text style={styles.pickerEmptyText}>보관할 모음이 없어요</Text>
-                    <Text style={styles.pickerEmptySubtext}>새 모음에 추가 탭에서 만들어보세요</Text>
+                    <Text style={styles.pickerEmptyText}>보관할 폴더가 없어요</Text>
+                    <Text style={styles.pickerEmptySubtext}>새 폴더에 추가 탭에서 만들어보세요</Text>
                   </View>
                 }
               />
@@ -1395,7 +1395,7 @@ export default function ReadScreen() {
                       setPickerTab("list");
                       setCollectionPickerMode(false);
                     } catch (e: unknown) {
-                      const msg = e instanceof Error ? e.message : "모음 생성에 실패했습니다.";
+                      const msg = e instanceof Error ? e.message : "폴더 생성에 실패했습니다.";
                       Alert.alert("생성 실패", msg);
                     } finally {
                       setIsCreatingCollection(false);

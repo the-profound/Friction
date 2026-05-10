@@ -211,7 +211,7 @@ export default function ArchiveScreen() {
       setCreateSheetVisible(false);
       router.push({ pathname: "/of-01-detail", params: { id: newMyCollection.id, name: newName.trim() } });
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "모음 생성에 실패했습니다.";
+      const msg = e instanceof Error ? e.message : "폴더 생성에 실패했습니다.";
       Alert.alert("오류", msg);
     }
   }, [newName, newDescription, userId, isCreating, createMyCollection, myCollectionsQuery, router]);
@@ -419,10 +419,10 @@ export default function ArchiveScreen() {
       contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
     >
       <Feather name="folder" size={40} color={Colors.zinc300} />
-      <Text style={styles.emptyTitle}>내 모음이 없어요</Text>
+      <Text style={styles.emptyTitle}>내 폴더가 없어요</Text>
       <Text style={styles.emptySubtitle}>완성된 편지를 모아두는 나만의 공간을 만들어보세요</Text>
       <Pressable style={styles.emptyButton} onPress={handleAdd}>
-        <Text style={styles.emptyButtonText}>새 모음 만들기</Text>
+        <Text style={styles.emptyButtonText}>새 폴더 만들기</Text>
       </Pressable>
     </RefreshableEmpty>
   );
@@ -573,7 +573,7 @@ export default function ArchiveScreen() {
           <Feather name="search" size={Sizing.searchBarIconSize} color={Colors.searchIcon} />
           <TextInput
             style={styles.searchInput}
-            placeholder={activeSubTab === "personal" ? "모음 이름으로 검색" : "문장 내용으로 검색"}
+            placeholder={activeSubTab === "personal" ? "폴더 이름으로 검색" : "문장 내용으로 검색"}
             placeholderTextColor={Colors.searchPlaceholder}
             value={searchQuery}
             onChangeText={setSearchQuery}

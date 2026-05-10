@@ -55,7 +55,7 @@ export default function PersonalCollectionListScreen() {
       collectionsQuery.refetch();
       router.push({ pathname: "/of-01-detail", params: { id: newCollection.id, name: newName.trim() } });
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "모음 생성에 실패했습니다.";
+      const msg = e instanceof Error ? e.message : "폴더 생성에 실패했습니다.";
       Alert.alert("오류", msg);
     }
   }, [newName, newDescription, newIsPublic, userId, createCollection, collectionsQuery, router]);
@@ -68,7 +68,7 @@ export default function PersonalCollectionListScreen() {
         await deleteCollection.mutateAsync({ id });
         setDeleteTarget(null);
         collectionsQuery.refetch();
-        showToast({ message: "모음을 삭제했어요.", type: "success" });
+        showToast({ message: "폴더를 삭제했어요.", type: "success" });
       } catch (e: unknown) {
         setDeleteTarget(null);
         const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";
@@ -135,7 +135,7 @@ export default function PersonalCollectionListScreen() {
             style={styles.createButton}
             onPress={() => { setNewName(""); setNewDescription(""); setNewIsPublic(activeTab === "public"); setCreateSheetVisible(true); }}
           >
-            <Text style={styles.createButtonText}>새 모음 만들기</Text>
+            <Text style={styles.createButtonText}>새 폴더 만들기</Text>
           </Pressable>
         </View>
       );
@@ -176,7 +176,7 @@ export default function PersonalCollectionListScreen() {
           onPress={() => setActiveTab("mine")}
         >
           <Text style={[styles.tabText, activeTab === "mine" && styles.tabTextActive]}>
-            내 모음 ({privateCollections.length})
+            내 폴더 ({privateCollections.length})
           </Text>
         </Pressable>
         <Pressable
@@ -184,14 +184,14 @@ export default function PersonalCollectionListScreen() {
           onPress={() => setActiveTab("public")}
         >
           <Text style={[styles.tabText, activeTab === "public" && styles.tabTextActive]}>
-            구독 모음 ({publicCollections.length})
+            구독 폴더 ({publicCollections.length})
           </Text>
         </Pressable>
       </View>
 
       {activeTab === "mine"
-        ? renderCollectionList(privateCollections, "folder", "내 모음이 없어요", "새 모음을 만들어 편지를 정리해보세요")
-        : renderCollectionList(publicCollections, "globe", "구독 모음이 없어요", "공개로 설정한 모음이 여기에 표시돼요\n구독 기능은 추후 업데이트 예정이에요")}
+        ? renderCollectionList(privateCollections, "folder", "내 폴더가 없어요", "새 폴더를 만들어 편지를 정리해보세요")
+        : renderCollectionList(publicCollections, "globe", "구독 폴더가 없어요", "공개로 설정한 폴더가 여기에 표시돼요\n구독 기능은 추후 업데이트 예정이에요")}
 
       <BottomSheet
         visible={createSheetVisible}
@@ -203,7 +203,7 @@ export default function PersonalCollectionListScreen() {
         <View style={styles.createForm}>
           <TextInput
             style={styles.createInput}
-            placeholder="모음 이름"
+            placeholder="폴더 이름"
             placeholderTextColor={Colors.zinc400}
             value={newName}
             onChangeText={setNewName}
@@ -222,7 +222,7 @@ export default function PersonalCollectionListScreen() {
             <View style={styles.visibilityLabel}>
               <Feather name={newIsPublic ? "globe" : "lock"} size={16} color={Colors.zinc500} />
               <Text style={styles.visibilityText}>
-                {newIsPublic ? "공개 모음" : "비공개 모음"}
+                {newIsPublic ? "공개 폴더" : "비공개 폴더"}
               </Text>
             </View>
             <Switch
@@ -247,8 +247,8 @@ export default function PersonalCollectionListScreen() {
 
       <ConfirmModal
         visible={deleteTarget !== null}
-        title="모음 삭제"
-        description={`'${deleteTarget?.name ?? ""}'을(를) 삭제할까요?\n모음 안의 글은 삭제되지 않아요.`}
+        title="폴더 삭제"
+        description={`'${deleteTarget?.name ?? ""}'을(를) 삭제할까요?\n폴더 안의 글은 삭제되지 않아요.`}
         confirmLabel={isDeleting ? "삭제 중..." : "삭제"}
         cancelLabel="취소"
         destructive
