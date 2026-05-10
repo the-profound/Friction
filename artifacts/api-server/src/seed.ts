@@ -298,10 +298,9 @@ export async function seedDevData(): Promise<void> {
     //    Each article gets inbox rows for ALL members of its collection,
     //    including the sender (self-inbox) — so visibleAt gating is uniform.
     //
-    //    Delivery slot logic (KST):
-    //      addedAt before 06:00 KST → 06:00 KST same day (UTC: previous day 21:00)
-    //      addedAt 06:00–18:00 KST  → 18:00 KST same day (UTC: same day 09:00)
-    //      addedAt 18:00+ KST       → 06:00 KST next day (UTC: same day 21:00)
+    //    Delivery slot logic (KST, single slot):
+    //      addedAt before 06:00 KST → 06:00 KST same day  (UTC: previous day 21:00)
+    //      addedAt 06:00+ KST       → 06:00 KST next day  (UTC: same day 21:00)
     //
     //    All seeded visibleAt values are in the past (2026-04-27 is today).
     //
@@ -327,17 +326,17 @@ export async function seedDevData(): Promise<void> {
       INSERT INTO inbox
         (id, recipient_id, article_id, sender_id, visible_at, is_read, created_at)
       VALUES
-        -- a1000001 (하윤 notice, addedAt 2026-04-26T21:00Z = KST 06:00 → slot KST 18:00 = UTC 09:00)
+        -- a1000001 (하윤 notice, addedAt 2026-04-26T21:00Z = KST 06:00 → slot KST next 06:00 = UTC 21:00)
         (gen_random_uuid(), '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
           'a1000001-0000-4000-a000-000000000001',
-          '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-04-27 09:00:00+00', FALSE, NOW()),
+          '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-04-27 21:00:00+00', FALSE, NOW()),
         (gen_random_uuid(), '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
           'a1000001-0000-4000-a000-000000000001',
-          '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-04-27 09:00:00+00', FALSE, NOW()),
+          '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-04-27 21:00:00+00', FALSE, NOW()),
         -- self-inbox for sender 하윤
         (gen_random_uuid(), '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
           'a1000001-0000-4000-a000-000000000001',
-          '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-04-27 09:00:00+00', FALSE, NOW()),
+          '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-04-27 21:00:00+00', FALSE, NOW()),
 
         -- a1000002 (서준, addedAt 2026-04-27T10:02Z = KST 19:02 → slot KST next 06:00 = UTC 21:00)
         (gen_random_uuid(), '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
@@ -351,41 +350,41 @@ export async function seedDevData(): Promise<void> {
           'a1000002-0000-4000-a000-000000000002',
           '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-04-27 21:00:00+00', FALSE, NOW()),
 
-        -- a1000003 (서준, addedAt 2026-04-25T21:00Z = KST 06:00 → slot KST 18:00 = UTC 09:00)
+        -- a1000003 (서준, addedAt 2026-04-25T21:00Z = KST 06:00 → slot KST next 06:00 = UTC 21:00)
         (gen_random_uuid(), '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
           'a1000003-0000-4000-a000-000000000003',
-          '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-04-26 09:00:00+00', FALSE, NOW()),
+          '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-04-26 21:00:00+00', FALSE, NOW()),
         (gen_random_uuid(), '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
           'a1000003-0000-4000-a000-000000000003',
-          '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-04-26 09:00:00+00', FALSE, NOW()),
+          '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-04-26 21:00:00+00', FALSE, NOW()),
         -- self-inbox for sender 서준
         (gen_random_uuid(), '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
           'a1000003-0000-4000-a000-000000000003',
-          '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-04-26 09:00:00+00', FALSE, NOW()),
+          '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-04-26 21:00:00+00', FALSE, NOW()),
 
-        -- a1000004 (민지, addedAt 2026-04-25T22:00Z = KST 07:00 → slot KST 18:00 = UTC 09:00)
+        -- a1000004 (민지, addedAt 2026-04-25T22:00Z = KST 07:00 → slot KST next 06:00 = UTC 21:00)
         (gen_random_uuid(), '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
           'a1000004-0000-4000-a000-000000000004',
-          '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-26 09:00:00+00', FALSE, NOW()),
+          '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-26 21:00:00+00', FALSE, NOW()),
         (gen_random_uuid(), '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
           'a1000004-0000-4000-a000-000000000004',
-          '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-26 09:00:00+00', FALSE, NOW()),
+          '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-26 21:00:00+00', FALSE, NOW()),
         -- self-inbox for sender 민지
         (gen_random_uuid(), '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
           'a1000004-0000-4000-a000-000000000004',
-          '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-26 09:00:00+00', FALSE, NOW()),
+          '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-26 21:00:00+00', FALSE, NOW()),
 
-        -- a1000005 (하윤, addedAt 2026-04-25T23:00Z = KST 08:00 → slot KST 18:00 = UTC 09:00)
+        -- a1000005 (하윤, addedAt 2026-04-25T23:00Z = KST 08:00 → slot KST next 06:00 = UTC 21:00)
         (gen_random_uuid(), '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
           'a1000005-0000-4000-a000-000000000005',
-          '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-04-26 09:00:00+00', FALSE, NOW()),
+          '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-04-26 21:00:00+00', FALSE, NOW()),
         (gen_random_uuid(), '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
           'a1000005-0000-4000-a000-000000000005',
-          '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-04-26 09:00:00+00', FALSE, NOW()),
+          '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-04-26 21:00:00+00', FALSE, NOW()),
         -- self-inbox for sender 하윤
         (gen_random_uuid(), '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
           'a1000005-0000-4000-a000-000000000005',
-          '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-04-26 09:00:00+00', FALSE, NOW()),
+          '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-04-26 21:00:00+00', FALSE, NOW()),
 
         -- a1000006 (하윤, addedAt 2026-04-26T09:00Z = KST 18:00 → slot KST next 06:00 = UTC 21:00)
         (gen_random_uuid(), '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
@@ -411,17 +410,17 @@ export async function seedDevData(): Promise<void> {
           'a1000007-0000-4000-a000-000000000007',
           '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-04-26 21:00:00+00', FALSE, NOW()),
 
-        -- a1000008 (민지, addedAt 2026-04-24T21:00Z = KST 06:00 → slot KST 18:00 = UTC 09:00)
+        -- a1000008 (민지, addedAt 2026-04-24T21:00Z = KST 06:00 → slot KST next 06:00 = UTC 21:00)
         (gen_random_uuid(), '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
           'a1000008-0000-4000-a000-000000000008',
-          '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-25 09:00:00+00', FALSE, NOW()),
+          '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-25 21:00:00+00', FALSE, NOW()),
         (gen_random_uuid(), '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
           'a1000008-0000-4000-a000-000000000008',
-          '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-25 09:00:00+00', FALSE, NOW()),
+          '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-25 21:00:00+00', FALSE, NOW()),
         -- self-inbox for sender 민지
         (gen_random_uuid(), '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
           'a1000008-0000-4000-a000-000000000008',
-          '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-25 09:00:00+00', FALSE, NOW()),
+          '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-25 21:00:00+00', FALSE, NOW()),
 
         -- a0000001 (서준, in 서준이네 모임, addedAt 2026-04-23T09:00Z = KST 18:00 → next 06:00 = UTC 21:00)
         (gen_random_uuid(), '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
@@ -595,35 +594,35 @@ export async function seedDevData(): Promise<void> {
       // ---------------------------------------------------------------------
       // v3-3. Inbox entries — 3 members each (하윤·서준·민지), including sender
       //
-      //   Delivery slot logic (KST):
-      //     addedAt 06:00–18:00 KST → 18:00 KST same day  (UTC same day 09:00)
-      //     addedAt 18:00+ KST      → 06:00 KST next day  (UTC same day 21:00)
+      //   Delivery slot logic (KST, single slot):
+      //     addedAt before 06:00 KST → 06:00 KST same day  (UTC prev day 21:00)
+      //     addedAt 06:00+ KST       → 06:00 KST next day  (UTC same day 21:00)
       //
-      //   a1000010: addedAt 08:00 UTC = KST 17:00 → slot KST 18:00 = UTC 09:00 (Apr 28)
+      //   a1000010: addedAt 08:00 UTC = KST 17:00 → slot KST next 06:00 = UTC 21:00 (Apr 28)
       //   a1000011: addedAt 10:00 UTC = KST 19:00 → slot KST next 06:00 = UTC 21:00 (Apr 28)
       //   a1000012: addedAt 12:00 UTC = KST 21:00 → slot KST next 06:00 = UTC 21:00 (Apr 28)
-      //   a1000013: addedAt 01:00 UTC = KST 10:00 → slot KST 18:00 = UTC 09:00 (Apr 29)
-      //   a1000014: addedAt 03:00 UTC = KST 12:00 → slot KST 18:00 = UTC 09:00 (Apr 29)
-      //   a1000015: addedAt 05:00 UTC = KST 14:00 → slot KST 18:00 = UTC 09:00 (Apr 29)
-      //   a1000016: addedAt 00:00 UTC = KST 09:00 → slot KST 18:00 = UTC 09:00 (Apr 30)
-      //   a1000017: addedAt 02:00 UTC = KST 11:00 → slot KST 18:00 = UTC 09:00 (Apr 30)
-      //   a1000018: addedAt Apr30 21:00 UTC = KST May1 06:00 → slot KST 18:00 = UTC May1 09:00
-      //   a1000019: addedAt Apr30 23:00 UTC = KST May1 08:00 → slot KST 18:00 = UTC May1 09:00
+      //   a1000013: addedAt 01:00 UTC = KST 10:00 → slot KST next 06:00 = UTC 21:00 (Apr 29)
+      //   a1000014: addedAt 03:00 UTC = KST 12:00 → slot KST next 06:00 = UTC 21:00 (Apr 29)
+      //   a1000015: addedAt 05:00 UTC = KST 14:00 → slot KST next 06:00 = UTC 21:00 (Apr 29)
+      //   a1000016: addedAt 00:00 UTC = KST 09:00 → slot KST next 06:00 = UTC 21:00 (Apr 30)
+      //   a1000017: addedAt 02:00 UTC = KST 11:00 → slot KST next 06:00 = UTC 21:00 (Apr 30)
+      //   a1000018: addedAt Apr30 21:00 UTC = KST May1 06:00 → slot KST next 06:00 = UTC May1 21:00
+      //   a1000019: addedAt Apr30 23:00 UTC = KST May1 08:00 → slot KST next 06:00 = UTC May1 21:00
       // ---------------------------------------------------------------------
       await client.query(`
         INSERT INTO inbox
           (id, recipient_id, article_id, sender_id, visible_at, is_read, created_at)
         VALUES
-          -- a1000010 (민지 원글, visibleAt Apr 28 09:00 UTC)
+          -- a1000010 (민지 원글, visibleAt Apr 28 21:00 UTC = KST Apr 29 06:00)
           (gen_random_uuid(), '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
             'a1000010-0000-4000-a000-000000000010',
-            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-28 09:00:00+00', FALSE, NOW()),
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-28 21:00:00+00', FALSE, NOW()),
           (gen_random_uuid(), '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
             'a1000010-0000-4000-a000-000000000010',
-            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-28 09:00:00+00', FALSE, NOW()),
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-28 21:00:00+00', FALSE, NOW()),
           (gen_random_uuid(), '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
             'a1000010-0000-4000-a000-000000000010',
-            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-28 09:00:00+00', FALSE, NOW()),
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-28 21:00:00+00', FALSE, NOW()),
 
           -- a1000011 (하윤 답장, visibleAt Apr 28 21:00 UTC)
           (gen_random_uuid(), '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
@@ -647,60 +646,60 @@ export async function seedDevData(): Promise<void> {
             'a1000012-0000-4000-a000-000000000012',
             '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-28 21:00:00+00', FALSE, NOW()),
 
-          -- a1000013 (서준 원글, visibleAt Apr 29 09:00 UTC)
+          -- a1000013 (서준 원글, visibleAt Apr 29 21:00 UTC = KST Apr 30 06:00)
           (gen_random_uuid(), '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
             'a1000013-0000-4000-a000-000000000013',
-            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-04-29 09:00:00+00', FALSE, NOW()),
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-04-29 21:00:00+00', FALSE, NOW()),
           (gen_random_uuid(), '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
             'a1000013-0000-4000-a000-000000000013',
-            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-04-29 09:00:00+00', FALSE, NOW()),
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-04-29 21:00:00+00', FALSE, NOW()),
           (gen_random_uuid(), '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
             'a1000013-0000-4000-a000-000000000013',
-            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-04-29 09:00:00+00', FALSE, NOW()),
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-04-29 21:00:00+00', FALSE, NOW()),
 
-          -- a1000014 (민지 답장, visibleAt Apr 29 09:00 UTC)
+          -- a1000014 (민지 답장, visibleAt Apr 29 21:00 UTC = KST Apr 30 06:00)
           (gen_random_uuid(), '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
             'a1000014-0000-4000-a000-000000000014',
-            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-29 09:00:00+00', FALSE, NOW()),
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-29 21:00:00+00', FALSE, NOW()),
           (gen_random_uuid(), '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
             'a1000014-0000-4000-a000-000000000014',
-            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-29 09:00:00+00', FALSE, NOW()),
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-29 21:00:00+00', FALSE, NOW()),
           (gen_random_uuid(), '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
             'a1000014-0000-4000-a000-000000000014',
-            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-29 09:00:00+00', FALSE, NOW()),
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-29 21:00:00+00', FALSE, NOW()),
 
-          -- a1000015 (서준 재답장, visibleAt Apr 29 09:00 UTC)
+          -- a1000015 (서준 재답장, visibleAt Apr 29 21:00 UTC = KST Apr 30 06:00)
           (gen_random_uuid(), '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
             'a1000015-0000-4000-a000-000000000015',
-            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-04-29 09:00:00+00', FALSE, NOW()),
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-04-29 21:00:00+00', FALSE, NOW()),
           (gen_random_uuid(), '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
             'a1000015-0000-4000-a000-000000000015',
-            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-04-29 09:00:00+00', FALSE, NOW()),
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-04-29 21:00:00+00', FALSE, NOW()),
           (gen_random_uuid(), '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
             'a1000015-0000-4000-a000-000000000015',
-            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-04-29 09:00:00+00', FALSE, NOW()),
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-04-29 21:00:00+00', FALSE, NOW()),
 
-          -- a1000016 (하윤 원글, visibleAt Apr 30 09:00 UTC)
+          -- a1000016 (하윤 원글, visibleAt Apr 30 21:00 UTC = KST May 1 06:00)
           (gen_random_uuid(), '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
             'a1000016-0000-4000-a000-000000000016',
-            '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-04-30 09:00:00+00', FALSE, NOW()),
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-04-30 21:00:00+00', FALSE, NOW()),
           (gen_random_uuid(), '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
             'a1000016-0000-4000-a000-000000000016',
-            '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-04-30 09:00:00+00', FALSE, NOW()),
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-04-30 21:00:00+00', FALSE, NOW()),
           (gen_random_uuid(), '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
             'a1000016-0000-4000-a000-000000000016',
-            '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-04-30 09:00:00+00', FALSE, NOW()),
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-04-30 21:00:00+00', FALSE, NOW()),
 
-          -- a1000017 (민지 답장, visibleAt Apr 30 09:00 UTC)
+          -- a1000017 (민지 답장, visibleAt Apr 30 21:00 UTC = KST May 1 06:00)
           (gen_random_uuid(), '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
             'a1000017-0000-4000-a000-000000000017',
-            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-30 09:00:00+00', FALSE, NOW()),
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-30 21:00:00+00', FALSE, NOW()),
           (gen_random_uuid(), '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
             'a1000017-0000-4000-a000-000000000017',
-            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-30 09:00:00+00', FALSE, NOW()),
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-30 21:00:00+00', FALSE, NOW()),
           (gen_random_uuid(), '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
             'a1000017-0000-4000-a000-000000000017',
-            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-30 09:00:00+00', FALSE, NOW()),
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f', '2026-04-30 21:00:00+00', FALSE, NOW()),
 
           -- a1000018 (민지 원글, visibleAt Apr 30 21:00 UTC = KST May 1 06:00, guaranteed past)
           (gen_random_uuid(), '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
@@ -780,32 +779,32 @@ export async function seedDevData(): Promise<void> {
         ON CONFLICT ON CONSTRAINT team_collection_articles_unique DO NOTHING
       `);
 
-      // v4-3. Inbox entries (visibleAt May 1 09:00 UTC = KST 18:00, guaranteed past)
+      // v4-3. Inbox entries (visibleAt May 1 21:00 UTC = KST May 2 06:00, guaranteed past)
       await client.query(`
         INSERT INTO inbox
           (id, recipient_id, article_id, sender_id, visible_at, is_read, created_at)
         VALUES
-          -- a1000020 (하윤 원글)
+          -- a1000020 (하윤 원글, addedAt KST 09:00 → slot KST next 06:00 = UTC 21:00)
           (gen_random_uuid(), '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
             'a1000020-0000-4000-a000-000000000020',
-            '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-05-01 09:00:00+00', FALSE, NOW()),
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-05-01 21:00:00+00', FALSE, NOW()),
           (gen_random_uuid(), '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
             'a1000020-0000-4000-a000-000000000020',
-            '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-05-01 09:00:00+00', FALSE, NOW()),
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-05-01 21:00:00+00', FALSE, NOW()),
           (gen_random_uuid(), '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
             'a1000020-0000-4000-a000-000000000020',
-            '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-05-01 09:00:00+00', FALSE, NOW()),
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908', '2026-05-01 21:00:00+00', FALSE, NOW()),
 
-          -- a1000021 (서준 원글)
+          -- a1000021 (서준 원글, addedAt KST 10:30 → slot KST next 06:00 = UTC 21:00)
           (gen_random_uuid(), '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
             'a1000021-0000-4000-a000-000000000021',
-            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-05-01 09:00:00+00', FALSE, NOW()),
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-05-01 21:00:00+00', FALSE, NOW()),
           (gen_random_uuid(), '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
             'a1000021-0000-4000-a000-000000000021',
-            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-05-01 09:00:00+00', FALSE, NOW()),
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-05-01 21:00:00+00', FALSE, NOW()),
           (gen_random_uuid(), '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
             'a1000021-0000-4000-a000-000000000021',
-            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-05-01 09:00:00+00', FALSE, NOW())
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda', '2026-05-01 21:00:00+00', FALSE, NOW())
       `);
 
       logger.info("Dev seed data (v4) inserted successfully");
@@ -946,7 +945,7 @@ export async function seedDevData(): Promise<void> {
             '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
             'a1000001-0000-4000-a000-000000000001',
             NULL, NULL, 'person',
-            '2026-04-27 09:00:00+00', '2026-04-26 21:00:00+00'),
+            '2026-04-27 21:00:00+00', '2026-04-26 21:00:00+00'),
           (gen_random_uuid(),
             '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
             '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
@@ -964,13 +963,13 @@ export async function seedDevData(): Promise<void> {
             '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
             'a1000010-0000-4000-a000-000000000010',
             NULL, NULL, 'person',
-            '2026-04-28 09:00:00+00', '2026-04-28 08:00:00+00'),
+            '2026-04-28 21:00:00+00', '2026-04-28 08:00:00+00'),
           (gen_random_uuid(),
             '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
             '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
             'a1000017-0000-4000-a000-000000000017',
             NULL, NULL, 'person',
-            '2026-04-30 09:00:00+00', '2026-04-30 02:00:00+00'),
+            '2026-04-30 21:00:00+00', '2026-04-30 02:00:00+00'),
           (gen_random_uuid(),
             '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
             '05cb0a0b-c73c-4d1c-8410-cee7da564fda',

@@ -55,7 +55,6 @@ interface DateGroup {
 }
 
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
-const AFTERNOON_HOUR_KST = 18;
 
 function getSlotKey(visibleAt: string): string {
   const utcMs = new Date(visibleAt).getTime();
@@ -63,16 +62,14 @@ function getSlotKey(visibleAt: string): string {
   const yyyy = kstDate.getUTCFullYear();
   const mm = String(kstDate.getUTCMonth() + 1).padStart(2, "0");
   const dd = String(kstDate.getUTCDate()).padStart(2, "0");
-  const slot = kstDate.getUTCHours() < AFTERNOON_HOUR_KST ? "am" : "pm";
-  return `${yyyy}-${mm}-${dd}-${slot}`;
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 function formatSlotLabel(slotKey: string): string {
-  const [yyyy, mm, dd, slot] = slotKey.split("-");
+  const [, mm, dd] = slotKey.split("-");
   const month = parseInt(mm, 10);
   const day = parseInt(dd, 10);
-  const period = slot === "am" ? "오전" : "오후";
-  return `${month}월 ${day}일 ${period}`;
+  return `${month}월 ${day}일`;
 }
 
 function groupBySlot(items: InboxItem[]): DateGroup[] {
@@ -88,7 +85,7 @@ function groupBySlot(items: InboxItem[]): DateGroup[] {
   }
 
   return Array.from(map.entries()).map(([dateKey, groupItems]) => {
-    const datePart = dateKey.slice(0, 10);
+    const datePart = dateKey;
     // Sort order within a group: notices → replies → regular letters.
     // Items in the same tier keep their original visibleAt order.
     const ordered = [...groupItems].sort((a, b) => {

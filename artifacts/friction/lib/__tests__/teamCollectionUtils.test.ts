@@ -63,28 +63,41 @@ function indents(rows: TeamArticleListRow[]): boolean[] {
 }
 
 // ---------------------------------------------------------------------------
-// toKstDateKey
+// toKstDateKey — now delegates to toKstCalendarDateKey (pure calendar date, no cutoff)
 // ---------------------------------------------------------------------------
 
 describe("toKstDateKey", () => {
-  it("그룹은 KST 18:00 미만이면 당일", () => {
-    // 2026-04-27 08:59 KST = 2026-04-26 23:59 UTC
+  it("KST 달력 날짜를 반환한다 (컷오프 없음)", () => {
+    // 2026-04-27 08:59 KST = 2026-04-26 23:59 UTC → calendar date 2026-04-27
     expect(toKstDateKey("2026-04-26T23:59:00.000Z")).toBe("2026-04-27");
   });
 
-  it("KST 18:00 이상이면 다음 날 그룹", () => {
-    // 2026-04-27 18:00 KST = 2026-04-27 09:00 UTC
-    expect(toKstDateKey("2026-04-27T09:00:00.000Z")).toBe("2026-04-28");
+  it("KST 18:00 이후에도 당일 날짜를 반환한다 (18:00 컷오프 없음)", () => {
+    // 2026-04-27 18:00 KST = 2026-04-27 09:00 UTC → calendar date 2026-04-27 (not next day)
+    expect(toKstDateKey("2026-04-27T09:00:00.000Z")).toBe("2026-04-27");
   });
 
-  it("KST 정확히 18:00이면 다음 날 그룹", () => {
-    // 2026-04-25 18:00 KST = 2026-04-25 09:00 UTC
-    expect(toKstDateKey("2026-04-25T09:00:00.000Z")).toBe("2026-04-26");
+  it("KST 06:00 슬롯(UTC 전날 21:00)은 해당 KST 달력 날짜를 반환한다", () => {
+    // 2026-04-28 06:00 KST = 2026-04-27 21:00 UTC → calendar date 2026-04-28
+    expect(toKstDateKey("2026-04-27T21:00:00.000Z")).toBe("2026-04-28");
   });
 
-  it("KST 17:59이면 당일 그룹", () => {
-    // 2026-04-25 17:59 KST = 2026-04-25 08:59 UTC
-    expect(toKstDateKey("2026-04-25T08:59:00.000Z")).toBe("2026-04-25");
+  it("KST 05:59이면 당일 날짜를 반환한다", () => {
+    // 2026-04-25 05:59 KST = 2026-04-24 20:59 UTC → calendar date 2026-04-25
+    expect(toKstDateKey("2026-04-24T20:59:00.000Z")).toBe("2026-04-25");
+  });
+
+  it("toKstDateKey와 toKstCalendarDateKey는 항상 같은 결과를 반환한다", () => {
+    const samples = [
+      "2026-04-25T00:00:00.000Z",
+      "2026-04-25T09:00:00.000Z",
+      "2026-04-25T12:00:00.000Z",
+      "2026-04-25T21:00:00.000Z",
+      "2026-04-27T09:00:00.000Z",
+    ];
+    for (const ts of samples) {
+      expect(toKstDateKey(ts)).toBe(toKstCalendarDateKey(ts));
+    }
   });
 });
 
@@ -121,9 +134,8 @@ describe("buildTeamArticleRows — 기본 정렬", () => {
 
 describe("buildTeamArticleRows — 공지 우선", () => {
   it("공지글은 같은 날 최상단에 위치한다", () => {
-    // visibleAt KST 18:00 → 컷오프 없이 당일(4/25) 그룹
     const dateKey = "2026-04-25";
-    const visibleAt = "2026-04-25T09:00:00.000Z"; // KST 18:00 → 달력 기준 당일(4/25) 그룹
+    const visibleAt = "2026-04-25T09:00:00.000Z";
 
     const regular = makeArticle({ visibleAt, addedAt: visibleAt, title: "일반글" });
     const notice = makeArticle({
@@ -155,7 +167,6 @@ describe("buildTeamArticleRows — 공지 우선", () => {
   });
 
   it("공지에 대한 답장은 공지 바로 아래에 들여쓰기로 나타난다", () => {
-    // visibleAt KST 18:00 → 컷오프 없이 당일(4/25) 그룹
     const dateKey = "2026-04-25";
     const visibleAt = "2026-04-25T09:00:00.000Z";
 
@@ -352,6 +363,11 @@ describe("toKstCalendarDateKey", () => {
     // 2026-04-24 23:59 KST = 2026-04-24 14:59 UTC
     expect(toKstCalendarDateKey("2026-04-24T14:59:00.000Z")).toBe("2026-04-24");
   });
+
+  it("KST 06:00 슬롯(UTC 전날 21:00)은 해당 KST 날짜를 반환한다", () => {
+    // 2026-04-28 06:00 KST = 2026-04-27 21:00 UTC
+    expect(toKstCalendarDateKey("2026-04-27T21:00:00.000Z")).toBe("2026-04-28");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -375,7 +391,6 @@ describe("buildTeamArticleRows — addedAt fallback, KST 18:00 이후", () => {
   });
 
   it("visibleAt=null, addedAt KST 18:26인 글은 '내일' 그룹이 아닌 당일 그룹에 배치된다", () => {
-    // 18:00 컷오프가 잘못 적용되면 2026-04-28 그룹으로 넘어가서 diffDays = -1이 됨
     const addedAt = "2026-04-27T09:26:00.000Z"; // 2026-04-27 18:26 KST
 
     const placeholder = makeArticle({
@@ -388,14 +403,12 @@ describe("buildTeamArticleRows — addedAt fallback, KST 18:00 이후", () => {
     const rows = buildTeamArticleRows([placeholder]);
     const header = rows.find((r) => r.type === "header") as Extract<typeof rows[0], { type: "header" }> | undefined;
     expect(header).toBeDefined();
-    // 그룹 dateKey가 addedAt의 KST 달력 날짜와 일치해야 함
     expect(header!.dateKey).toBe("2026-04-27");
-    // 다음 날 그룹(2026-04-28)으로 밀리지 않아야 함
     expect(header!.dateKey).not.toBe("2026-04-28");
   });
 
-  it("visibleAt이 있어도 18:00 컷오프가 적용되지 않고 당일 그룹에 배치된다", () => {
-    // 2026-04-27 18:00 KST = 2026-04-27 09:00 UTC → 컷오프 없이 당일(2026-04-27) 그룹
+  it("visibleAt이 있어도 컷오프가 적용되지 않고 KST 달력 날짜 그룹에 배치된다", () => {
+    // 2026-04-27 18:00 KST = 2026-04-27 09:00 UTC → 당일(2026-04-27) 그룹
     const article = makeArticle({
       visibleAt: "2026-04-27T09:00:00.000Z",
       addedAt: "2026-04-27T09:00:00.000Z",
@@ -406,20 +419,45 @@ describe("buildTeamArticleRows — addedAt fallback, KST 18:00 이후", () => {
     const header = rows.find((r) => r.type === "header") as Extract<typeof rows[0], { type: "header" }> | undefined;
     expect(header).toBeDefined();
     expect(header!.dateKey).toBe("2026-04-27");
-    // 다음 날 그룹으로 밀리지 않아야 함
     expect(header!.dateKey).not.toBe("2026-04-28");
   });
 });
 
 // ---------------------------------------------------------------------------
-// buildTeamArticleRows — visibleAt 정각 18:00 KST 당일 그룹핑 (버그 재현 방지)
+// buildTeamArticleRows — KST 06:00 단일 슬롯 그룹핑 검증
 // ---------------------------------------------------------------------------
 
-describe("buildTeamArticleRows — visibleAt 정각 18:00 KST 당일 그룹", () => {
-  it("visibleAt이 정각 18:00 KST이면 당일 그룹에 배치된다 ('-1일 전' 없음)", () => {
+describe("buildTeamArticleRows — KST 06:00 단일 슬롯 그룹핑", () => {
+  it("06:00 KST (UTC 전날 21:00) 슬롯은 해당 KST 달력 날짜 그룹에 배치된다", () => {
+    // 2026-04-28 06:00:00 KST = 2026-04-27 21:00:00 UTC
+    const article = makeArticle({
+      visibleAt: "2026-04-27T21:00:00.000Z",
+      addedAt: "2026-04-27T21:00:00.000Z",
+      title: "06:00 KST 배달",
+    });
+
+    const rows = buildTeamArticleRows([article]);
+    const header = rows.find((r) => r.type === "header") as Extract<typeof rows[0], { type: "header" }> | undefined;
+    expect(header).toBeDefined();
+    expect(header!.dateKey).toBe("2026-04-28");
+  });
+
+  it("KST 05:59 직전 슬롯은 당일 그룹에 배치된다", () => {
+    // 2026-04-28 05:59 KST = 2026-04-27 20:59 UTC → KST calendar date = 2026-04-28
+    const article = makeArticle({
+      visibleAt: "2026-04-27T20:59:00.000Z",
+      addedAt: "2026-04-27T20:59:00.000Z",
+      title: "05:59 KST",
+    });
+
+    const rows = buildTeamArticleRows([article]);
+    const header = rows.find((r) => r.type === "header") as Extract<typeof rows[0], { type: "header" }> | undefined;
+    expect(header).toBeDefined();
+    expect(header!.dateKey).toBe("2026-04-28");
+  });
+
+  it("visibleAt이 정각 18:00 KST이면 당일 그룹에 배치된다 (18:00 컷오프 제거 검증)", () => {
     // 2026-04-25 18:00:00 KST = 2026-04-25 09:00:00 UTC
-    // 수정 전: toKstDateKey → "2026-04-26"(다음 날), diffDays = -1 → "-1일 전" 버그
-    // 수정 후: toKstCalendarDateKey → "2026-04-25"(당일) → "오늘" 또는 날짜 라벨
     const article = makeArticle({
       visibleAt: "2026-04-25T09:00:00.000Z",
       addedAt: "2026-04-25T09:00:00.000Z",
@@ -429,18 +467,16 @@ describe("buildTeamArticleRows — visibleAt 정각 18:00 KST 당일 그룹", ()
     const rows = buildTeamArticleRows([article]);
     const header = rows.find((r) => r.type === "header") as Extract<typeof rows[0], { type: "header" }> | undefined;
     expect(header).toBeDefined();
-    // 당일(2026-04-25) 그룹에 배치되어야 한다
     expect(header!.dateKey).toBe("2026-04-25");
-    // 다음 날(2026-04-26) 그룹으로 밀리지 않아야 한다
     expect(header!.dateKey).not.toBe("2026-04-26");
   });
 
-  it("어제 18:00 KST에 배달된 글은 어제 그룹에 배치된다", () => {
-    // 2026-04-24 18:00:00 KST = 2026-04-24 09:00:00 UTC
+  it("어제 06:00 KST에 배달된 글은 어제 그룹에 배치된다", () => {
+    // 2026-04-24 06:00:00 KST = 2026-04-23 21:00:00 UTC
     const article = makeArticle({
-      visibleAt: "2026-04-24T09:00:00.000Z",
-      addedAt: "2026-04-24T09:00:00.000Z",
-      title: "어제 18:00 배달",
+      visibleAt: "2026-04-23T21:00:00.000Z",
+      addedAt: "2026-04-23T21:00:00.000Z",
+      title: "어제 06:00 배달",
     });
 
     const rows = buildTeamArticleRows([article]);

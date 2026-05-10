@@ -516,7 +516,11 @@ export default function TeamCollectionDetailScreen() {
                 )}
               </View>
               <Text style={styles.articleDate}>
-                {new Date(item.addedAt).toLocaleDateString("ko-KR")} {new Date(item.addedAt).getHours() < 12 ? "오전" : "오후"}에 수신
+                {(() => {
+                  const raw = item.visibleAt ?? item.addedAt;
+                  const kst = new Date(new Date(raw).getTime() + 9 * 60 * 60 * 1000);
+                  return `${kst.getUTCFullYear()}.${String(kst.getUTCMonth() + 1).padStart(2, "0")}.${String(kst.getUTCDate()).padStart(2, "0")}`;
+                })()}
                 {authorNickname ? `  ·  ${authorNickname}` : ""}
               </Text>
             </View>

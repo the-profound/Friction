@@ -2,31 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, sql } from "drizzle-orm";
 import { db, sendRecordsTable, articlesTable, inboxTable, usersTable, teamCollectionsTable } from "@workspace/db";
 import { SendArticleBody } from "@workspace/api-zod";
-
-function computeDeliverySlot(): Date {
-  const now = new Date();
-  const kstMs = now.getTime() + (9 * 60 * 60 * 1000);
-  const kstDate = new Date(kstMs);
-  const kstHour = kstDate.getUTCHours();
-
-  const todayMidnightKST = new Date(Date.UTC(
-    kstDate.getUTCFullYear(),
-    kstDate.getUTCMonth(),
-    kstDate.getUTCDate(),
-  ));
-
-  if (kstHour < 6) {
-    const slot6KST = new Date(todayMidnightKST.getTime() + 6 * 60 * 60 * 1000);
-    return new Date(slot6KST.getTime() - 9 * 60 * 60 * 1000);
-  } else if (kstHour < 18) {
-    const slot18KST = new Date(todayMidnightKST.getTime() + 18 * 60 * 60 * 1000);
-    return new Date(slot18KST.getTime() - 9 * 60 * 60 * 1000);
-  } else {
-    const tomorrowMidnightKST = new Date(todayMidnightKST.getTime() + 24 * 60 * 60 * 1000);
-    const slot6KST = new Date(tomorrowMidnightKST.getTime() + 6 * 60 * 60 * 1000);
-    return new Date(slot6KST.getTime() - 9 * 60 * 60 * 1000);
-  }
-}
+import { computeDeliverySlot } from "../lib/deliverySlot";
 
 const router: IRouter = Router();
 

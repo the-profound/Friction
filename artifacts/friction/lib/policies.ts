@@ -60,7 +60,7 @@ export const ReadingPolicy = {
 };
 
 export const DeliveryPolicy = {
-  DELIVERY_HOURS_KST: [6, 18] as const,
+  DELIVERY_HOURS_KST: [6] as const,
   TIMEZONE: "Asia/Seoul" as const,
 };
 

@@ -1720,7 +1720,7 @@ export const GetTodayGreetingStatusResponse = zod.object({
   noticeDate: zod
     .date()
     .describe(
-      "The KST notice date (YYYY-MM-DD) the next greeting would be assigned to. Today before 18:00 KST, tomorrow after.",
+      "The KST notice date (YYYY-MM-DD) the next greeting would be assigned to. Today before 06:00 KST, tomorrow after.",
     ),
 });
 
@@ -1963,7 +1963,7 @@ export const ListSendRecordsResponseItem = zod.object({
 export const ListSendRecordsResponse = zod.array(ListSendRecordsResponseItem);
 
 /**
- * Creates SendRecord + Inbox entry. Auto-assigns 06:00 or 18:00 KST delivery slot. Article must be LETTER status.
+ * Creates SendRecord + Inbox entry. Auto-assigns 06:00 KST delivery slot (single daily slot). Article must be LETTER status.
  * @summary Send an article to a recipient
  */
 export const SendArticleBody = zod.object({

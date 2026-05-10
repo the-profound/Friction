@@ -5802,7 +5802,7 @@ export function useListSendRecords<
 }
 
 /**
- * Creates SendRecord + Inbox entry. Auto-assigns 06:00 or 18:00 KST delivery slot. Article must be LETTER status.
+ * Creates SendRecord + Inbox entry. Auto-assigns 06:00 KST delivery slot (single daily slot). Article must be LETTER status.
  * @summary Send an article to a recipient
  */
 export const getSendArticleUrl = () => {

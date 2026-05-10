@@ -1528,7 +1528,7 @@ paths:
       operationId: sendArticle
       tags: [send-records]
       summary: Send an article to a recipient
-      description: "Creates SendRecord + Inbox entry. Auto-assigns 06:00 or 18:00 KST delivery slot. Article must be LETTER status."
+      description: "Creates SendRecord + Inbox entry. Auto-assigns 06:00 KST delivery slot (single daily slot). Article must be LETTER status."
       requestBody:
         required: true
         content:
@@ -2354,7 +2354,7 @@ components:
         noticeDate:
           type: string
           format: date
-          description: The KST notice date (YYYY-MM-DD) the next greeting would be assigned to. Today before 18:00 KST, tomorrow after.
+          description: The KST notice date (YYYY-MM-DD) the next greeting would be assigned to. Today before 06:00 KST, tomorrow after.
       required: [isOwner, alreadySentToday, noticeDate]
 
     # ─── Neighbor ───────────────────────────────────

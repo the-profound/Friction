@@ -2,9 +2,9 @@
  * Team Collection 글 목록 정렬·그루핑 유틸
  *
  * 날짜 그룹핑 정책:
- *   - 단체 모음 글 목록: 순수 KST 달력 날짜 기준 (18:00 컷오프 없음)
- *     → visibleAt / addedAt 모두 toKstCalendarDateKey 사용
- *   - 수신함(index.tsx)만 18:00 컷오프(toKstDateKey) 적용 — 여기서는 사용 안 함
+ *   - 모든 배달 슬롯이 KST 06:00 단일 슬롯으로 통일됨
+ *   - 단체 모음 글 목록: 순수 KST 달력 날짜 기준 (toKstCalendarDateKey 사용)
+ *   - 수신함(index.tsx)도 KST 달력 날짜 기준 단일 그룹 (AM/PM 분리 없음)
  */
 
 import type { TeamCollectionArticleWithDetails } from "@workspace/api-client-react";
@@ -12,21 +12,12 @@ import type { TeamCollectionArticleWithDetails } from "@workspace/api-client-rea
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
 /**
- * ISO 타임스탬프(또는 Date)를 KST 18:00 컷오프 기준으로 YYYY-MM-DD dateKey로 변환
- * visibleAt(배달 슬롯) 전용 — addedAt에는 사용하지 말 것
+ * ISO 타임스탬프(또는 Date)를 KST 달력 날짜(YYYY-MM-DD)로 변환
+ * 단일 슬롯(KST 06:00) 정책에 맞춰 toKstCalendarDateKey와 동일한 순수 KST 달력 날짜를 반환
+ * (기존 18:00 컷오프 제거)
  */
 export function toKstDateKey(ts: string | Date): string {
-  const ms = typeof ts === "string" ? new Date(ts).getTime() : ts.getTime();
-  const kst = new Date(ms + KST_OFFSET_MS);
-  const kstHour = kst.getUTCHours();
-
-  let base = new Date(
-    Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth(), kst.getUTCDate()),
-  );
-  if (kstHour >= 18) {
-    base = new Date(base.getTime() + 24 * 60 * 60 * 1000);
-  }
-  return `${base.getUTCFullYear()}-${String(base.getUTCMonth() + 1).padStart(2, "0")}-${String(base.getUTCDate()).padStart(2, "0")}`;
+  return toKstCalendarDateKey(ts);
 }
 
 /**

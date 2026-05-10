@@ -18,39 +18,21 @@ import {
   AddTeamArticleBody,
 } from "@workspace/api-zod";
 
+import { computeDeliverySlot } from "../lib/deliverySlot";
+
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
 /**
  * Returns the KST date (YYYY-MM-DD) that the next "오늘의 인사" should be assigned to.
- * Before 18:00 KST → today; at/after 18:00 KST → tomorrow.
+ * Before 06:00 KST → today; at/after 06:00 KST → tomorrow.
  * The returned string is shaped to match Postgres `date` columns.
  */
 function computeNoticeDateKST(now: Date = new Date()): string {
   const kst = new Date(now.getTime() + KST_OFFSET_MS);
   const kstHour = kst.getUTCHours();
   const base = new Date(Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth(), kst.getUTCDate()));
-  if (kstHour >= 18) base.setUTCDate(base.getUTCDate() + 1);
+  if (kstHour >= 6) base.setUTCDate(base.getUTCDate() + 1);
   return `${base.getUTCFullYear()}-${String(base.getUTCMonth() + 1).padStart(2, "0")}-${String(base.getUTCDate()).padStart(2, "0")}`;
-}
-
-/**
- * Returns the next regular delivery slot (the same logic the send-records route uses).
- * Notice posts use the same slot logic, so a notice keyed to today (sent before 18:00 KST)
- * lands at 18:00 KST today, and one keyed to tomorrow (sent after 18:00 KST) lands at
- * 06:00 KST tomorrow — matching the "오늘의 인사" date label shown to the OWNER.
- */
-function computeDeliverySlot(now: Date = new Date()): Date {
-  const kst = new Date(now.getTime() + KST_OFFSET_MS);
-  const kstHour = kst.getUTCHours();
-  const todayMidnightKST = new Date(Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth(), kst.getUTCDate()));
-  if (kstHour < 6) {
-    return new Date(todayMidnightKST.getTime() + 6 * 60 * 60 * 1000 - KST_OFFSET_MS);
-  }
-  if (kstHour < 18) {
-    return new Date(todayMidnightKST.getTime() + 18 * 60 * 60 * 1000 - KST_OFFSET_MS);
-  }
-  const tomorrow = new Date(todayMidnightKST.getTime() + 24 * 60 * 60 * 1000);
-  return new Date(tomorrow.getTime() + 6 * 60 * 60 * 1000 - KST_OFFSET_MS);
 }
 
 const router: IRouter = Router();

@@ -11,6 +11,6 @@ export interface TodayGreetingStatus {
   isOwner: boolean;
   /** Whether an "오늘의 인사" has already been sent for this collection on the current notice date window. */
   alreadySentToday: boolean;
-  /** The KST notice date (YYYY-MM-DD) the next greeting would be assigned to. Today before 18:00 KST, tomorrow after. */
+  /** The KST notice date (YYYY-MM-DD) the next greeting would be assigned to. Today before 06:00 KST, tomorrow after. */
   noticeDate: Date;
 }

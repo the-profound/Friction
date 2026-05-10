@@ -1,7 +1,7 @@
 import { DeliveryPolicy } from "./policies";
 import type { ArticleStatus } from "./policies";
 
-export type DeliverySlot = 6 | 18;
+export type DeliverySlot = 6;
 
 export interface DeliverySlotInfo {
   slot: DeliverySlot;
@@ -15,7 +15,7 @@ export interface SendGuardResult {
 
 export function getNextDeliverySlot(now: Date = new Date()): DeliverySlotInfo {
   const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
-  const [morning, evening] = DeliveryPolicy.DELIVERY_HOURS_KST;
+  const [morning] = DeliveryPolicy.DELIVERY_HOURS_KST;
 
   const kstMs = now.getTime() + KST_OFFSET_MS;
   const kstDate = new Date(kstMs);
@@ -24,26 +24,15 @@ export function getNextDeliverySlot(now: Date = new Date()): DeliverySlotInfo {
   const kstMonth = kstDate.getUTCMonth();
   const kstDay = kstDate.getUTCDate();
 
-  let targetHour: DeliverySlot;
-  let targetDay = kstDay;
-
-  if (kstHour < morning) {
-    targetHour = morning as DeliverySlot;
-  } else if (kstHour < evening) {
-    targetHour = evening as DeliverySlot;
-  } else {
-    targetHour = morning as DeliverySlot;
-    targetDay = kstDay + 1;
-  }
-
-  const kstTarget = Date.UTC(kstYear, kstMonth, targetDay, targetHour, 0, 0, 0);
+  const targetDay = kstHour < morning ? kstDay : kstDay + 1;
+  const kstTarget = Date.UTC(kstYear, kstMonth, targetDay, morning, 0, 0, 0);
   const visibleAt = new Date(kstTarget - KST_OFFSET_MS);
 
-  return { slot: targetHour, visibleAt };
+  return { slot: morning, visibleAt };
 }
 
-export function formatDeliverySlot(slot: DeliverySlot): string {
-  return slot === 6 ? "오전 6시" : "오후 6시";
+export function formatDeliverySlot(_slot: DeliverySlot): string {
+  return "오전 6시";
 }
 
 export function formatDeliveryTime(visibleAt: Date): string {
