@@ -238,6 +238,8 @@ export default function ReadScreen() {
     }
   }, [completionSheetVisible]);
   const [showSelectionPill, setShowSelectionPill] = useState(false);
+  const showSelectionPillRef = useRef(false);
+  const selectionPillDismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectionPillText, setSelectionPillText] = useState("");
   const [bottomBarHeight, setBottomBarHeight] = useState(70);
 
@@ -756,7 +758,7 @@ export default function ReadScreen() {
   const tapGesture = useMemo(() => Gesture.Tap()
     .runOnJS(true)
     .onEnd((_e, success) => {
-      if (success && isTextSelectingRef.current) {
+      if (success && isTextSelectingRef.current && !showSelectionPillRef.current) {
         setClearSelectionSignal((n) => n + 1);
       }
     }), []);
@@ -864,13 +866,38 @@ export default function ReadScreen() {
   }, [isDeleting, isListEntry, reading, router, clearActiveSession, queryClient, readingMemo, articleId, promptOrContinue]);
 
   const handleTextSelect = useCallback((text: string, isEmpty: boolean) => {
-    isTextSelectingRef.current = !isEmpty;
     if (!isEmpty && text) {
+      if (selectionPillDismissTimer.current) {
+        clearTimeout(selectionPillDismissTimer.current);
+        selectionPillDismissTimer.current = null;
+      }
+      isTextSelectingRef.current = true;
+      showSelectionPillRef.current = true;
       setSelectionPillText(text);
       setShowSelectionPill(true);
     } else {
-      setShowSelectionPill(false);
+      if (showSelectionPillRef.current) {
+        if (selectionPillDismissTimer.current) {
+          clearTimeout(selectionPillDismissTimer.current);
+        }
+        selectionPillDismissTimer.current = setTimeout(() => {
+          selectionPillDismissTimer.current = null;
+          isTextSelectingRef.current = false;
+          showSelectionPillRef.current = false;
+          setShowSelectionPill(false);
+        }, 400);
+      } else {
+        isTextSelectingRef.current = false;
+      }
     }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (selectionPillDismissTimer.current) {
+        clearTimeout(selectionPillDismissTimer.current);
+      }
+    };
   }, []);
 
   const handleCollectSentence = useCallback((text: string) => {
@@ -1197,6 +1224,12 @@ export default function ReadScreen() {
             <Pressable
               style={styles.selectionPillButton}
               onPress={() => {
+                if (selectionPillDismissTimer.current) {
+                  clearTimeout(selectionPillDismissTimer.current);
+                  selectionPillDismissTimer.current = null;
+                }
+                showSelectionPillRef.current = false;
+                isTextSelectingRef.current = false;
                 const t = selectionPillText;
                 setShowSelectionPill(false);
                 setSelectionPillText("");
@@ -1210,6 +1243,12 @@ export default function ReadScreen() {
             <Pressable
               style={styles.selectionPillButton}
               onPress={() => {
+                if (selectionPillDismissTimer.current) {
+                  clearTimeout(selectionPillDismissTimer.current);
+                  selectionPillDismissTimer.current = null;
+                }
+                showSelectionPillRef.current = false;
+                isTextSelectingRef.current = false;
                 const t = selectionPillText;
                 setShowSelectionPill(false);
                 setSelectionPillText("");
