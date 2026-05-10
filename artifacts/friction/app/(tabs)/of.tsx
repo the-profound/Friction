@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useMemo, useRef, useEffect } from "react";
+import React, { useCallback, useState, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -9,9 +9,9 @@ import {
   ScrollView,
   useWindowDimensions,
   Alert,
-  Animated,
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
+import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -61,20 +61,6 @@ export default function OfScreen() {
   const [isJoinLoading, setIsJoinLoading] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [groupFilter, setGroupFilter] = useState<GroupFilter>("all");
-
-  const searchAnim = useRef(new Animated.Value(0)).current;
-  const searchInputRef = useRef<TextInput>(null);
-
-  useEffect(() => {
-    Animated.timing(searchAnim, {
-      toValue: searchActive ? 1 : 0,
-      duration: 200,
-      useNativeDriver: false,
-    }).start();
-    if (searchActive) {
-      setTimeout(() => searchInputRef.current?.focus(), 50);
-    }
-  }, [searchActive]);
 
   const teamCollectionsQuery = useListTeamCollections({ userId });
   const createTeamCollection = useCreateTeamCollection();
@@ -360,31 +346,12 @@ export default function OfScreen() {
         ))}
       </View>
 
-      <Animated.View
-        style={{
-          height: searchAnim.interpolate({ inputRange: [0, 1], outputRange: [0, Sizing.searchBarHeight + 8] }),
-          opacity: searchAnim,
-          overflow: "hidden",
-        }}
-      >
-        <View style={styles.searchBar}>
-          <Feather name="search" size={Sizing.searchBarIconSize} color={Colors.searchIcon} />
-          <TextInput
-            ref={searchInputRef}
-            style={styles.searchInput}
-            placeholder="단체 모음 이름으로 검색"
-            placeholderTextColor={Colors.searchPlaceholder}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            returnKeyType="search"
-          />
-          {searchQuery.length > 0 && (
-            <ScalePressable onPress={() => setSearchQuery("")} hitSlop={8}>
-              <Feather name="x" size={16} color={Colors.searchIcon} />
-            </ScalePressable>
-          )}
-        </View>
-      </Animated.View>
+      <AnimatedSearchBar
+        active={searchActive}
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+        placeholder="단체 모음 이름으로 검색"
+      />
 
       {renderContent()}
 
@@ -567,23 +534,6 @@ const styles = StyleSheet.create({
   filterChipTextActive: {
     color: Colors.white,
     fontWeight: "600",
-  },
-  searchBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Colors.searchBarBg,
-    marginHorizontal: Spacing.screenPx,
-    borderRadius: Sizing.searchBarHeight / 2,
-    height: Sizing.searchBarHeight,
-    paddingHorizontal: 16,
-    gap: 10,
-    marginBottom: 8,
-  },
-  searchInput: {
-    flex: 1,
-    ...Typography.body,
-    fontSize: 15,
-    color: Colors.zinc900,
   },
   gridContent: {
     paddingHorizontal: Spacing.screenPx,

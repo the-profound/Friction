@@ -5,11 +5,10 @@ import {
   StyleSheet,
   FlatList,
   RefreshControl,
-  TextInput,
   Alert,
-  Animated,
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
+import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -97,20 +96,6 @@ export default function OnScreen() {
 
   const [searchActive, setSearchActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-
-  const searchAnim = useRef(new Animated.Value(0)).current;
-  const searchInputRef = useRef<TextInput>(null);
-
-  useEffect(() => {
-    Animated.timing(searchAnim, {
-      toValue: searchActive ? 1 : 0,
-      duration: 200,
-      useNativeDriver: false,
-    }).start();
-    if (searchActive) {
-      setTimeout(() => searchInputRef.current?.focus(), 50);
-    }
-  }, [searchActive]);
 
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -626,31 +611,12 @@ export default function OnScreen() {
       )}
 
       {!selectionMode && (
-        <Animated.View
-          style={{
-            height: searchAnim.interpolate({ inputRange: [0, 1], outputRange: [0, Sizing.searchBarHeight + 8] }),
-            opacity: searchAnim,
-            overflow: "hidden",
-          }}
-        >
-          <View style={styles.searchBar}>
-            <Feather name="search" size={Sizing.searchBarIconSize} color={Colors.searchIcon} />
-            <TextInput
-              ref={searchInputRef}
-              style={styles.searchInput}
-              placeholder="제목으로 검색"
-              placeholderTextColor={Colors.searchPlaceholder}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              returnKeyType="search"
-            />
-            {searchQuery.length > 0 && (
-              <ScalePressable onPress={() => setSearchQuery("")} hitSlop={8}>
-                <Feather name="x" size={16} color={Colors.zinc400} />
-              </ScalePressable>
-            )}
-          </View>
-        </Animated.View>
+        <AnimatedSearchBar
+          active={searchActive}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="제목으로 검색"
+        />
       )}
 
       {!selectionMode && topTab === "memo" && (
@@ -888,23 +854,6 @@ const styles = StyleSheet.create({
     width: "100%",
     backgroundColor: Colors.zinc900,
     borderRadius: 1,
-  },
-  searchBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Colors.searchBarBg,
-    marginHorizontal: Spacing.screenPx,
-    borderRadius: Sizing.searchBarHeight / 2,
-    height: Sizing.searchBarHeight,
-    paddingHorizontal: 16,
-    gap: 10,
-    marginBottom: 8,
-  },
-  searchInput: {
-    flex: 1,
-    ...Typography.searchInput,
-    color: Colors.searchText,
-    padding: 0,
   },
   filterBar: {
     flexDirection: "row",
