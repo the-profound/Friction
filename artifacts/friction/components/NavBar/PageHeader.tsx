@@ -74,9 +74,9 @@ export function PageHeader({
             onPress={onProfilePress}
             hitSlop={8}
             accessibilityRole="button"
-            accessibilityLabel="마이페이지"
+            accessibilityLabel="설정과 활동"
           >
-            <Feather name="settings" size={16} color={Colors.zinc700} />
+            <Feather name="menu" size={16} color={Colors.zinc700} />
           </Pressable>
         )}
       </View>
