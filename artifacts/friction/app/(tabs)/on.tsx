@@ -130,12 +130,19 @@ export default function OnScreen() {
     );
   }, [articles]);
 
+  const displayedMyArticles = useMemo(() => {
+    const trimmed = searchQuery.trim();
+    if (!trimmed) return myLetterArticles;
+    const q = trimmed.toLowerCase();
+    return myLetterArticles.filter((a) => (a.title ?? "").toLowerCase().includes(q));
+  }, [myLetterArticles, searchQuery]);
+
   const listData = useMemo((): ListItem[] => {
     if (topTab === "my_article") {
-      return myLetterArticles.map((a) => ({ type: "my_article", article: a }));
+      return displayedMyArticles.map((a) => ({ type: "my_article", article: a }));
     }
     return displayedArticles.map((a) => ({ type: "memo", article: a }));
-  }, [topTab, displayedArticles, myLetterArticles]);
+  }, [topTab, displayedArticles, displayedMyArticles]);
 
   const closeOpenRow = useCallback(() => {
     if (openRowRef.current) {
@@ -391,13 +398,16 @@ export default function OnScreen() {
     !hasMemos;
 
   const showSearchEmpty =
-    topTab === "memo" &&
     !isLoading &&
     searchQuery.trim().length > 0 &&
-    displayedArticles.length === 0;
+    ((topTab === "memo" && displayedArticles.length === 0) ||
+      (topTab === "my_article" && displayedMyArticles.length === 0));
 
   const showMyArticleEmpty =
-    topTab === "my_article" && !isLoading && myLetterArticles.length === 0;
+    topTab === "my_article" &&
+    !isLoading &&
+    searchQuery.trim().length === 0 &&
+    myLetterArticles.length === 0;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -410,7 +420,7 @@ export default function OnScreen() {
       ) : (
         <PageHeader
           title="기록함"
-          showSearch={topTab === "memo"}
+          showSearch
           onSearchPress={handleSearchPress}
           searchActive={searchActive}
           showKebab={topTab === "memo"}
@@ -443,7 +453,7 @@ export default function OnScreen() {
         </View>
       )}
 
-      {!selectionMode && topTab === "memo" && searchActive && (
+      {!selectionMode && searchActive && (
         <View style={styles.searchBar}>
           <Feather name="search" size={Sizing.searchBarIconSize} color={Colors.searchIcon} />
           <TextInput
