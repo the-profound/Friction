@@ -26,6 +26,7 @@ import {
   useCreateMyCollection,
   useDeleteStoredSentence,
   useToggleStoredSentenceFavorite,
+  useCreateArticle,
   getListMyCollectionsQueryKey,
   getListStoredSentencesQueryKey,
 } from "@workspace/api-client-react";
@@ -68,6 +69,7 @@ export default function ArchiveScreen() {
   const createMyCollection = useCreateMyCollection();
   const deleteSentence = useDeleteStoredSentence();
   const toggleFavorite = useToggleStoredSentenceFavorite();
+  const createArticle = useCreateArticle();
 
   const myCollections = (myCollectionsQuery.data ?? []) as MyCollection[];
   const sentences = (sentencesQuery.data ?? []) as StoredSentence[];
@@ -240,6 +242,23 @@ export default function ArchiveScreen() {
       Alert.alert("오류", "즐겨찾기 변경에 실패했어요");
     }
   }, [toggleFavorite, sentencesQuery, selectedSentence]);
+
+  const handleSentenceQuoteAsMemo = useCallback(async (sentence: StoredSentence) => {
+    const position = sentence.position as { page?: number } | null;
+    const page = position && typeof position.page === "number" ? position.page : undefined;
+    const quoteBlock = sentence.articleTitle
+      ? `> ${sentence.text.trim()}\n>\n> <${sentence.articleTitle}>${page !== undefined ? `, ${page + 1}면` : ""}`
+      : `> ${sentence.text.trim()}\n`;
+    try {
+      const article = await createArticle.mutateAsync({
+        data: { authorId: userId, title: "", content: quoteBlock },
+      });
+      setSelectedSentence(null);
+      router.push({ pathname: "/on-01a", params: { id: article.id } });
+    } catch {
+      Alert.alert("오류", "메모 생성에 실패했습니다.");
+    }
+  }, [createArticle, userId, router]);
 
   const handleSentenceDeleteConfirm = useCallback(async () => {
     if (!sentenceDeleteTarget || deleteSentence.isPending) return;
@@ -649,6 +668,13 @@ export default function ArchiveScreen() {
                   {selectedSentence.isFavorite ? "즐겨찾기 해제" : "즐겨찾기 추가"}
                 </Text>
               </Pressable>
+              <Pressable
+                style={styles.sentenceSheetRow}
+                onPress={() => handleSentenceQuoteAsMemo(selectedSentence)}
+              >
+                <Feather name="edit" size={18} color={Colors.zinc700} />
+                <Text style={styles.sentenceSheetActionLabel}>인용해서 메모 작성</Text>
+              </Pressable>
               {selectedSentence.articleId && (
                 <Pressable
                   style={styles.sentenceSheetRow}
@@ -670,12 +696,6 @@ export default function ArchiveScreen() {
               >
                 <Feather name="trash-2" size={18} color="#DC2626" />
                 <Text style={[styles.sentenceSheetActionLabel, { color: "#DC2626" }]}>삭제</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.sentenceSheetRow, styles.sentenceSheetCancel]}
-                onPress={() => setSelectedSentence(null)}
-              >
-                <Text style={styles.sentenceSheetCancelLabel}>닫기</Text>
               </Pressable>
             </View>
           </View>
@@ -1010,18 +1030,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 4,
   },
-  sentenceSheetCancel: {
-    justifyContent: "center",
-    marginTop: 4,
-  },
   sentenceSheetActionLabel: {
     ...Typography.body,
     fontSize: 15,
     color: Colors.zinc800,
-  },
-  sentenceSheetCancelLabel: {
-    ...Typography.body,
-    fontSize: 15,
-    color: Colors.zinc400,
   },
 });

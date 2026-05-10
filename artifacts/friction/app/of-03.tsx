@@ -21,6 +21,7 @@ import {
   useListStoredSentences,
   useDeleteStoredSentence,
   useToggleStoredSentenceFavorite,
+  useCreateArticle,
 } from "@workspace/api-client-react";
 import type { StoredSentence } from "@workspace/api-client-react";
 
@@ -63,6 +64,7 @@ export default function SentenceCollectionScreen() {
 
   const deleteSentence = useDeleteStoredSentence();
   const toggleFavorite = useToggleStoredSentenceFavorite();
+  const createArticle = useCreateArticle();
 
   const selectedCount = selectedIds.size;
 
@@ -171,6 +173,25 @@ export default function SentenceCollectionScreen() {
       }
     },
     [deleteSentence, sentencesQuery, allSentencesQuery],
+  );
+
+  const handleQuoteAsMemo = useCallback(
+    async (sentence: StoredSentence) => {
+      const page = getSentencePage(sentence);
+      const quoteBlock = sentence.articleTitle
+        ? `> ${sentence.text.trim()}\n>\n> <${sentence.articleTitle}>${page !== undefined ? `, ${page + 1}면` : ""}`
+        : `> ${sentence.text.trim()}\n`;
+      try {
+        const article = await createArticle.mutateAsync({
+          data: { authorId: userId, title: "", content: quoteBlock },
+        });
+        setSelectedSentence(null);
+        router.push({ pathname: "/on-01a", params: { id: article.id } });
+      } catch {
+        Alert.alert("오류", "메모 생성에 실패했습니다.");
+      }
+    },
+    [createArticle, userId, router],
   );
 
   const renderNormalItem = useCallback(
@@ -422,6 +443,7 @@ export default function SentenceCollectionScreen() {
             onToggleFavorite={() =>
               handleToggleFavorite(selectedSentence.id, selectedSentence.isFavorite)
             }
+            onQuoteAsMemo={() => handleQuoteAsMemo(selectedSentence)}
             onDelete={() => {
               setDeleteTarget(selectedSentence.id);
               setSelectedSentence(null);
@@ -433,7 +455,6 @@ export default function SentenceCollectionScreen() {
                 params: { articleId: selectedSentence.articleId, mode: "re_read" },
               });
             }}
-            onClose={() => setSelectedSentence(null)}
           />
         )}
       </BottomSheet>
@@ -445,18 +466,18 @@ interface SentenceDetailSheetProps {
   sentence: StoredSentence;
   onCopy: () => void;
   onToggleFavorite: () => void;
+  onQuoteAsMemo: () => void;
   onDelete: () => void;
   onGoToSource: () => void;
-  onClose: () => void;
 }
 
 function SentenceDetailSheet({
   sentence,
   onCopy,
   onToggleFavorite,
+  onQuoteAsMemo,
   onDelete,
   onGoToSource,
-  onClose,
 }: SentenceDetailSheetProps) {
   const page = getSentencePage(sentence);
 
@@ -492,6 +513,11 @@ function SentenceDetailSheet({
           </Text>
         </Pressable>
 
+        <Pressable style={sheet.actionRow} onPress={onQuoteAsMemo}>
+          <Feather name="edit" size={18} color={Colors.zinc700} />
+          <Text style={sheet.actionLabel}>인용해서 메모 작성</Text>
+        </Pressable>
+
         {sentence.articleId && (
           <Pressable style={sheet.actionRow} onPress={onGoToSource}>
             <Feather name="external-link" size={18} color={Colors.zinc700} />
@@ -504,10 +530,6 @@ function SentenceDetailSheet({
         <Pressable style={sheet.actionRow} onPress={onDelete}>
           <Feather name="trash-2" size={18} color="#DC2626" />
           <Text style={[sheet.actionLabel, { color: "#DC2626" }]}>삭제</Text>
-        </Pressable>
-
-        <Pressable style={[sheet.actionRow, sheet.cancelRow]} onPress={onClose}>
-          <Text style={sheet.cancelLabel}>닫기</Text>
         </Pressable>
       </View>
     </View>
@@ -748,16 +770,5 @@ const sheet = StyleSheet.create({
     ...Typography.body,
     fontSize: 16,
     color: Colors.zinc800,
-  },
-  cancelRow: {
-    justifyContent: "center",
-    marginTop: 4,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.zinc100,
-  },
-  cancelLabel: {
-    ...Typography.body,
-    fontSize: 15,
-    color: Colors.zinc500,
   },
 });
