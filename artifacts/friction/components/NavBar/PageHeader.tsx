@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: Spacing.screenPx,
-    paddingBottom: 10,
+    paddingBottom: 15,
     backgroundColor: Colors.white,
   },
   title: {
