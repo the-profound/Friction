@@ -160,10 +160,9 @@ export default function ReadScreen() {
   const mode: ReadingMode = (params.mode as ReadingMode) ?? "basic";
   const entrySource = params.entrySource as "list" | "inbox" | undefined;
   const teamCollectionId = params.teamCollectionId;
-  // True when the user opens an article for the first time via a collection
-  // article list rather than via the inbox. In this case the completion CTA's
-  // secondary action is labeled "보관 안 함"; via the inbox path it is "나가기".
-  // In both cases the underlying action is non-destructive (no permanent delete).
+  // True when the user opens an article via a collection article list rather
+  // than via the inbox. Used in handleCommitAndSkip to determine whether to
+  // invalidate the inbox query after skipping (inbox path only).
   const isListEntry =
     entrySource === "list" ||
     (mode === "basic" && !inboxId && entrySource !== "inbox");
@@ -1258,8 +1257,8 @@ export default function ReadScreen() {
             setCompletionSheetVisible(false);
           }
         }}
-        snapPoints={collectionPickerMode ? [0.75] : (mode === "re_read" ? [0.28] : [0.5])}
-        enableDragDown={mode === "re_read" && !collectionPickerMode}
+        snapPoints={collectionPickerMode ? [0.75] : [0.5]}
+        enableDragDown={false}
         dismissable={true}
         keyboardAware={collectionPickerMode && pickerTab === "create"}
       >
@@ -1278,7 +1277,7 @@ export default function ReadScreen() {
               }}
             >
               <Feather name="chevron-left" size={18} color={Colors.zinc600} />
-              <Text style={styles.pickerBackText}>보관할 모음 선택</Text>
+              <Text style={styles.pickerBackText}>보관할 폴더 선택</Text>
             </Pressable>
 
             <View style={styles.pickerTabBar}>
@@ -1413,79 +1412,57 @@ export default function ReadScreen() {
         <View style={styles.completionContent}>
           <Text style={dynamicStyles.completionText}>글을 끝까지 다 읽었습니다.</Text>
 
-          {mode === "re_read" ? (
-            <>
-              <Pressable
-                style={[styles.completionButton, styles.completionButtonSecondary]}
-                onPress={() => {
-                  setCompletionSheetVisible(false);
-                  reading.restartReading();
-                }}
-              >
-                <Text style={dynamicStyles.completionButtonSecondaryText}>다시 읽기</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.completionButton, styles.completionButtonSecondary]}
-                onPress={async () => {
+          <Pressable
+            style={styles.collectionSelector}
+            onPress={() => setCollectionPickerMode(true)}
+            disabled={isSaving}
+          >
+            <Feather name="folder" size={16} color={Colors.zinc500} />
+            <Text style={styles.collectionSelectorText} numberOfLines={1}>
+              {(collectionsQuery.data ?? []).find((c: { id: string; name: string }) => c.id === selectedCollectionId)?.name ?? "보관함"}
+            </Text>
+            <Feather name="chevron-right" size={16} color={Colors.zinc400} />
+          </Pressable>
+
+          <Pressable
+            style={[styles.completionButton, (isSaving || !isCollectionsReady) && styles.completionButtonDisabled]}
+            onPress={handleCommitAndSave}
+            disabled={isSaving}
+          >
+            <Text style={dynamicStyles.completionButtonText}>
+              {isSaving ? "저장 중..." : !isCollectionsReady ? "불러오는 중..." : "보관하기"}
+            </Text>
+          </Pressable>
+
+          <Pressable
+            style={[
+              styles.completionButton,
+              styles.completionButtonSecondary,
+              isDeleting && styles.completionButtonDisabled,
+            ]}
+            onPress={mode === "re_read"
+              ? async () => {
                   setCompletionSheetVisible(false);
                   await readingMemo.cleanup();
                   router.back();
-                }}
-              >
-                <Text style={dynamicStyles.completionButtonSecondaryText}>나가기</Text>
-              </Pressable>
-            </>
-          ) : (
-            <>
-              <Pressable
-                style={styles.collectionSelector}
-                onPress={() => setCollectionPickerMode(true)}
-                disabled={isSaving}
-              >
-                <Feather name="folder" size={16} color={Colors.zinc500} />
-                <Text style={styles.collectionSelectorText} numberOfLines={1}>
-                  {(collectionsQuery.data ?? []).find((c: { id: string; name: string }) => c.id === selectedCollectionId)?.name ?? "보관함"}
-                </Text>
-                <Feather name="chevron-right" size={16} color={Colors.zinc400} />
-              </Pressable>
+                }
+              : handleCommitAndSkip}
+            disabled={mode !== "re_read" && isDeleting}
+          >
+            <Text style={dynamicStyles.completionButtonSecondaryText}>
+              {mode !== "re_read" && isDeleting ? "처리 중..." : "나가기"}
+            </Text>
+          </Pressable>
 
-              <Pressable
-                style={[styles.completionButton, (isSaving || !isCollectionsReady) && styles.completionButtonDisabled]}
-                onPress={handleCommitAndSave}
-                disabled={isSaving}
-              >
-                <Text style={dynamicStyles.completionButtonText}>
-                  {isSaving ? "저장 중..." : !isCollectionsReady ? "불러오는 중..." : "보관하기"}
-                </Text>
-              </Pressable>
-
-              <Pressable
-                style={[
-                  styles.completionButton,
-                  styles.completionButtonSecondary,
-                  isDeleting && styles.completionButtonDisabled,
-                ]}
-                onPress={handleCommitAndSkip}
-                disabled={isDeleting}
-              >
-                <Text style={dynamicStyles.completionButtonSecondaryText}>
-                  {isDeleting
-                    ? "처리 중..."
-                    : (isListEntry ? "보관 안 함" : "나가기")}
-                </Text>
-              </Pressable>
-
-              <Pressable
-                style={styles.completionButtonTertiary}
-                onPress={() => {
-                  setCompletionSheetVisible(false);
-                  reading.restartReading();
-                }}
-              >
-                <Text style={dynamicStyles.completionButtonTertiaryText}>다시 읽기</Text>
-              </Pressable>
-            </>
-          )}
+          <Pressable
+            style={styles.completionButtonTertiary}
+            onPress={() => {
+              setCompletionSheetVisible(false);
+              reading.restartReading();
+            }}
+          >
+            <Text style={dynamicStyles.completionButtonTertiaryText}>다시 읽기</Text>
+          </Pressable>
         </View>
         )}
       </BottomSheet>
