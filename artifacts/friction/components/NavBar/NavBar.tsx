@@ -34,7 +34,8 @@ export function NavBar() {
 
   return (
     <View style={[styles.container, { bottom: Spacing.navBarBottom + insets.bottom }]} pointerEvents="box-none">
-      <View style={[styles.dock, Shadows.navBar]}>
+      <View style={[styles.dockShadow, Shadows.navBarIos]}>
+      <View style={[styles.dock, Shadows.navBarAndroid]}>
         <Animated.View
           style={[styles.layerAbsolute, { opacity: mainOpacity, transform: [{ scale: mainScale }] }]}
           pointerEvents={nav.layer === "main" ? "auto" : "none"}
@@ -70,6 +71,7 @@ export function NavBar() {
             />
           ))}
         </Animated.View>
+      </View>
       </View>
     </View>
   );
@@ -121,6 +123,9 @@ const styles = StyleSheet.create({
     right: 0,
     alignItems: "center",
     zIndex: Sizing.navBarZIndex,
+  },
+  dockShadow: {
+    borderRadius: Sizing.navBarRadius,
   },
   dock: {
     width: Sizing.navBarWidth,

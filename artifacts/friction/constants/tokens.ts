@@ -187,13 +187,16 @@ export const Animation = {
 } as const;
 
 export const Shadows = {
-  navBar: Platform.select({
+  navBarIos: Platform.select({
     ios: {
       shadowColor: "#000",
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.13,
       shadowRadius: 12,
     },
+    default: {},
+  }),
+  navBarAndroid: Platform.select({
     android: {
       elevation: 8,
     },
