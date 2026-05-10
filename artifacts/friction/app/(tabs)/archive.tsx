@@ -555,7 +555,7 @@ export default function ArchiveScreen() {
         <View style={styles.createForm}>
           <TextInput
             style={styles.createInput}
-            placeholder="모음 이름"
+            placeholder="폴더 이름"
             placeholderTextColor={Colors.zinc400}
             value={newName}
             onChangeText={setNewName}
