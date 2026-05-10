@@ -88,7 +88,7 @@ export default function PersonalCollectionListScreen() {
       delayLongPress={1000}
     >
       <View style={styles.collectionIcon}>
-        <Feather name="folder" size={20} color={Colors.zinc500} />
+        <Feather name={item.isImpression ? "heart" : "folder"} size={20} color={Colors.zinc500} />
       </View>
       <View style={styles.collectionInfo}>
         <Text style={styles.collectionName} numberOfLines={1}>{item.name}</Text>

@@ -466,7 +466,7 @@ export default function ArchiveScreen() {
                 onPress={() => router.push({ pathname: "/of-01-detail", params: { id: impressionCollection.id, name: impressionCollection.name } })}
               >
                 <View style={styles.collectionIcon}>
-                  <Feather name="folder" size={20} color={Colors.zinc500} />
+                  <Feather name="heart" size={20} color={Colors.zinc500} />
                 </View>
                 <Text style={styles.collectionName} numberOfLines={1}>{impressionCollection.name}</Text>
                 <View style={styles.collectionMeta}>
