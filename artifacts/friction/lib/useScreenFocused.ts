@@ -91,5 +91,6 @@ export function isQueryStale(
 ): boolean {
   const state = queryClient.getQueryState(queryKey);
   if (!state?.dataUpdatedAt) return true;
+  if (state.isInvalidated) return true;
   return Date.now() - state.dataUpdatedAt > thresholdMs;
 }

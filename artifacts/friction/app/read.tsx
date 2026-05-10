@@ -66,6 +66,7 @@ import {
   useMarkInboxOthersRead,
   getGetUserRecentCollectionQueryKey,
   getListInboxQueryKey,
+  getListStoredSentencesQueryKey,
 } from "@workspace/api-client-react";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import { useUser } from "@/contexts/UserContext";
@@ -909,7 +910,7 @@ export default function ReadScreen() {
           },
         },
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/stored-sentences"] });
+      queryClient.invalidateQueries({ queryKey: getListStoredSentencesQueryKey({ userId }) });
       trackSentenceCollected({ articleId, page: contentPageIndex, textLength: selectedText.length });
       setSentencePopupVisible(false);
       setSelectedText("");
