@@ -713,7 +713,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     paddingHorizontal: Spacing.screenPx,
     gap: 8,
-    paddingTop: 12,
+    paddingTop: 16,
     paddingBottom: 8,
   },
   filterChip: {
