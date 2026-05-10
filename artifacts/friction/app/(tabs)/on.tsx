@@ -417,9 +417,6 @@ export default function OnScreen() {
       ) : (
         <PageHeader
           title="기록함"
-          showAdd
-          onAddPress={handleNewMemo}
-          addDisabled={createArticle.isPending}
           showSearch
           onSearchPress={handleSearchPress}
           searchActive={searchActive}

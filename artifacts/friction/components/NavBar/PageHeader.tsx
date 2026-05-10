@@ -65,7 +65,7 @@ export function PageHeader({
         )}
         {showKebab && (
           <Pressable style={styles.actionButton} onPress={onKebabPress} hitSlop={8}>
-            <Feather name="more-vertical" size={20} color={Colors.zinc700} />
+            <Feather name="check-square" size={20} color={Colors.zinc700} />
           </Pressable>
         )}
         {showProfile && (
