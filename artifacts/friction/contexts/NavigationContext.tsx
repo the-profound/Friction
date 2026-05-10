@@ -5,7 +5,7 @@ import type { MainTabKey, OfSubTabKey, ToSubTabKey } from "@/constants/tokens";
 import type { NavContextValue, NavLayer } from "@/types/navigation";
 
 const TAB_ROUTES: Record<MainTabKey, Href> = {
-  IN: "/(tabs)/index" as Href,
+  IN: "/(tabs)/" as Href,
   ON: "/(tabs)/on" as Href,
   AR: "/(tabs)/archive" as Href,
   OF: "/(tabs)/of" as Href,
