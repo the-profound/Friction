@@ -90,6 +90,12 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
       router.replace("/login");
     } else if (isAuthed && segments[0] === "login") {
       router.replace("/(tabs)/on");
+    } else if (
+      isAuthed &&
+      segments[0] === "(tabs)" &&
+      (segments[1] == null || segments[1] === "index")
+    ) {
+      router.replace("/(tabs)/on");
     }
   }, [isAuthed, isLoading, inBypassRoute, segments, router]);
 
