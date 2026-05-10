@@ -237,7 +237,6 @@ export default function ArchiveScreen() {
       if (selectedSentence?.id === id) {
         setSelectedSentence((prev) => prev ? { ...prev, isFavorite: !currentFav } : null);
       }
-      Alert.alert("완료", currentFav ? "즐겨찾기를 해제했어요" : "즐겨찾기에 추가했어요");
     } catch {
       Alert.alert("오류", "즐겨찾기 변경에 실패했어요");
     }
@@ -364,7 +363,7 @@ export default function ArchiveScreen() {
           hitSlop={8}
           style={styles.sentenceStarBtn}
         >
-          <Feather name="star" size={16} color={item.isFavorite ? "#F59E0B" : Colors.zinc300} />
+          <Feather name="star" size={22} color={item.isFavorite ? "#F59E0B" : Colors.zinc300} />
         </Pressable>
       </Pressable>
     </SwipeableRow>
@@ -661,7 +660,7 @@ export default function ArchiveScreen() {
               >
                 <Feather
                   name="star"
-                  size={18}
+                  size={22}
                   color={selectedSentence.isFavorite ? "#F59E0B" : Colors.zinc700}
                 />
                 <Text style={[styles.sentenceSheetActionLabel, selectedSentence.isFavorite && { color: "#F59E0B" }]}>

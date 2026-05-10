@@ -135,7 +135,6 @@ export default function SentenceCollectionScreen() {
             prev ? { ...prev, isFavorite: !currentFav } : null,
           );
         }
-        Alert.alert("완료", currentFav ? "즐겨찾기를 해제했어요" : "즐겨찾기에 추가했어요");
       } catch {
         Alert.alert("오류", "즐겨찾기 변경에 실패했어요");
       }
@@ -232,7 +231,7 @@ export default function SentenceCollectionScreen() {
             >
               <Feather
                 name="star"
-                size={18}
+                size={22}
                 color={item.isFavorite ? "#F59E0B" : Colors.zinc300}
               />
             </Pressable>
@@ -505,7 +504,7 @@ function SentenceDetailSheet({
         <Pressable style={sheet.actionRow} onPress={onToggleFavorite}>
           <Feather
             name="star"
-            size={18}
+            size={22}
             color={sentence.isFavorite ? "#F59E0B" : Colors.zinc700}
           />
           <Text style={[sheet.actionLabel, sentence.isFavorite && { color: "#F59E0B" }]}>
