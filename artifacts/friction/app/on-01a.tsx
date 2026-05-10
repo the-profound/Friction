@@ -546,6 +546,7 @@ export default function DraftScreen() {
                 style={styles.sourceArticleRow}
                 onPress={() => setPickerVisible(true)}
                 hitSlop={4}
+              contentStyle={styles.sourceArticleRowContent}
               >
                 <Text style={styles.sourceArticleText} numberOfLines={1}>
                   {sourceArticleId
@@ -626,11 +627,12 @@ const styles = StyleSheet.create({
     height: 22,
   },
   sourceArticleRow: {
+    paddingBottom: 8,
+  },
+  sourceArticleRowContent: {
     flexDirection: "row",
     alignItems: "center",
-    paddingBottom: 8,
-    gap: 4,
-  },
+    gap: 4,},
   sourceArticleText: {
     flex: 1,
     fontSize: 13,

@@ -63,7 +63,11 @@ export function NavBar() {
           ]}
           pointerEvents={nav.layer === "sub" ? "auto" : "none"}
         >
-          <ScalePressable style={styles.backButton} onPress={nav.goBackToMainLayer}>
+          <ScalePressable
+            style={styles.backButton}
+            contentStyle={styles.backButtonContent}
+            onPress={nav.goBackToMainLayer}
+          >
             <Feather name="chevron-left" size={Sizing.backButtonIconSize} color={Colors.backButtonIcon} />
           </ScalePressable>
           {subItems.map((item) => (
@@ -96,6 +100,7 @@ function TabItem({
   return (
     <ScalePressable
       style={[styles.tabItem, { flex: 1 }]}
+      contentStyle={styles.tabItemContent}
       onPress={onPress}
       accessibilityRole="tab"
       accessibilityLabel={`${label} 탭`}
@@ -156,10 +161,12 @@ const styles = StyleSheet.create({
   },
   tabItem: {
     flex: 1,
+    minHeight: Sizing.touchTargetMin,
+  },
+  tabItemContent: {
     alignItems: "center",
     justifyContent: "center",
     gap: 2,
-    minHeight: Sizing.touchTargetMin,
   },
   tabLabel: {
     ...Typography.tabLabel,
@@ -169,6 +176,8 @@ const styles = StyleSheet.create({
     height: Sizing.backButtonH,
     borderRadius: Sizing.navBarRadius,
     backgroundColor: Colors.backButtonBg,
+  },
+  backButtonContent: {
     alignItems: "center",
     justifyContent: "center",
   },

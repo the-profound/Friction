@@ -308,7 +308,7 @@ export function SendInline({
       <ScrollView style={styles.content} contentContainerStyle={styles.contentInner}>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>편지 선택</Text>
-          <ScalePressable style={styles.selectButton} onPress={() => setLetterPickerVisible(true)}>
+          <ScalePressable style={styles.selectButton} contentStyle={styles.selectButtonContent} onPress={() => setLetterPickerVisible(true)}>
             <Feather
               name="file-text"
               size={18}
@@ -325,7 +325,7 @@ export function SendInline({
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>받는 사람/모음</Text>
-          <ScalePressable style={styles.selectButton} onPress={openRecipientPicker}>
+          <ScalePressable style={styles.selectButton} contentStyle={styles.selectButtonContent} onPress={openRecipientPicker}>
             <Feather
               name={selectedRecipient?.type === "collection" ? "users" : "user"}
               size={18}
@@ -352,6 +352,7 @@ export function SendInline({
         <SubmitButton
           style={styles.sendButton}
           disabledStyle={styles.sendButtonDisabled}
+          contentStyle={styles.sendButtonContentGap}
           textStyle={styles.sendButtonText}
           disabledTextStyle={styles.sendButtonTextDisabled}
           onPress={() => {
@@ -432,6 +433,7 @@ export function SendInline({
         <View style={styles.segmentRow}>
           <ScalePressable
             style={[styles.segmentButton, segmentTab === "collection" && styles.segmentButtonActive]}
+            contentStyle={styles.segmentButtonContent}
             onPress={() => setSegmentTab("collection")}
           >
             <Text
@@ -445,6 +447,7 @@ export function SendInline({
           </ScalePressable>
           <ScalePressable
             style={[styles.segmentButton, segmentTab === "neighbor" && styles.segmentButtonActive]}
+            contentStyle={styles.segmentButtonContent}
             onPress={() => setSegmentTab("neighbor")}
           >
             <Text
@@ -570,6 +573,7 @@ export function SendInline({
             styles.confirmPickerButton,
             !pendingRecipient && styles.confirmPickerButtonDisabled,
           ]}
+          contentStyle={styles.confirmPickerButtonContent}
           disabled={!pendingRecipient}
           onPress={handleConfirmRecipient}
         >
@@ -634,13 +638,15 @@ const styles = StyleSheet.create({
     color: Colors.zinc900,
   },
   selectButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
     backgroundColor: Colors.zinc50,
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderRadius: 12,
+  },
+  selectButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
   selectButtonText: {
     ...Typography.body,
@@ -674,13 +680,12 @@ const styles = StyleSheet.create({
     borderTopColor: Colors.zinc100,
   },
   sendButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
     backgroundColor: Colors.zinc900,
     paddingVertical: 16,
     borderRadius: 12,
+  },
+  sendButtonContentGap: {
+    gap: 8,
   },
   sendButtonDisabled: {
     backgroundColor: Colors.zinc100,
@@ -704,6 +709,8 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 8,
     borderRadius: 8,
+  },
+  segmentButtonContent: {
     alignItems: "center",
   },
   segmentButtonActive: {
@@ -743,6 +750,8 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     backgroundColor: Colors.zinc900,
     borderRadius: 12,
+  },
+  confirmPickerButtonContent: {
     alignItems: "center",
   },
   confirmPickerButtonDisabled: {

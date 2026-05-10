@@ -56,7 +56,9 @@ export default function SendHistoryScreen() {
       ? (item.collectionName ?? "단체 모음")
       : (item.recipient?.nickname ?? "알 수 없음");
     return (
-      <ScalePressable style={styles.recordItem} onPress={() => handleRecordPress(item.articleId)}>
+      <ScalePressable style={styles.recordItem} onPress={() => handleRecordPress(item.articleId)}
+      contentStyle={styles.recordItemContent}
+      >
         <View style={styles.recordInfo}>
           <View style={styles.recordTitleRow}>
             <Text style={styles.recordTitle} numberOfLines={1}>
@@ -194,14 +196,15 @@ const styles = StyleSheet.create({
     color: Colors.zinc500,
   },
   recordItem: {
-    flexDirection: "row",
-    alignItems: "center",
     paddingVertical: 14,
     paddingHorizontal: Spacing.screenPx,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
-    gap: 12,
   },
+  recordItemContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,},
   recordInfo: {
     flex: 1,
     gap: 2,

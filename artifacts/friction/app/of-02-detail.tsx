@@ -493,6 +493,7 @@ export default function TeamCollectionDetailScreen() {
               rowBg ? { backgroundColor: rowBg } : undefined,
             ]}
             onPress={() => handleArticleNavigate(item)}
+          contentStyle={styles.articleItemContent}
           >
             <View style={styles.articleInfo}>
               <View style={styles.articleTitleRow}>
@@ -553,6 +554,7 @@ export default function TeamCollectionDetailScreen() {
         style={styles.memberItem}
         onPress={() => handleMemberPress(item)}
         disabled={isSelf}
+      contentStyle={styles.memberItemContent}
       >
         <View style={styles.memberAvatar}>
           <Text style={styles.memberAvatarText}>
@@ -651,6 +653,7 @@ export default function TeamCollectionDetailScreen() {
                     },
                   })
                 }
+              contentStyle={styles.addButtonContent}
               >
                 <Feather name="send" size={16} color={Colors.zinc600} />
                 <Text style={styles.addButtonText}>내 편지 보내기</Text>
@@ -696,6 +699,7 @@ export default function TeamCollectionDetailScreen() {
               <ScalePressable
                 style={styles.addButton}
                 onPress={() => { setInviteQuery(""); setDebouncedInviteQuery(""); setInviteSheetVisible(true); }}
+              contentStyle={styles.addButtonContent}
               >
                 <Feather name="user-plus" size={16} color={Colors.zinc600} />
                 <Text style={styles.addButtonText}>멤버 초대</Text>
@@ -703,6 +707,7 @@ export default function TeamCollectionDetailScreen() {
               <ScalePressable
                 style={[styles.addButton, { marginLeft: 8 }]}
                 onPress={handleShareInvite}
+              contentStyle={styles.addButtonContent}
               >
                 <Feather name="share-2" size={16} color={Colors.zinc600} />
                 <Text style={styles.addButtonText}>초대 링크</Text>
@@ -750,6 +755,7 @@ export default function TeamCollectionDetailScreen() {
             <ScalePressable
               style={styles.manageSheetRow}
               onPress={() => { setManageSheetVisible(false); handleOpenEdit(); }}
+            contentStyle={styles.manageSheetRowContent}
             >
               <Feather name="edit-2" size={18} color={Colors.zinc700} />
               <Text style={styles.manageSheetLabel}>이름/설명 수정</Text>
@@ -758,6 +764,7 @@ export default function TeamCollectionDetailScreen() {
           <ScalePressable
             style={styles.manageSheetRow}
             onPress={() => { setManageSheetVisible(false); handleShareInvite(); }}
+          contentStyle={styles.manageSheetRowContent}
           >
             <Feather name="share-2" size={18} color={Colors.zinc700} />
             <Text style={styles.manageSheetLabel}>초대 링크 공유</Text>
@@ -766,6 +773,7 @@ export default function TeamCollectionDetailScreen() {
             <ScalePressable
               style={styles.manageSheetRow}
               onPress={() => { setManageSheetVisible(false); setDeleteConfirmVisible(true); }}
+            contentStyle={styles.manageSheetRowContent}
             >
               <Feather name="trash-2" size={18} color="#DC2626" />
               <Text style={[styles.manageSheetLabel, { color: "#DC2626" }]}>모음 삭제</Text>
@@ -803,6 +811,7 @@ export default function TeamCollectionDetailScreen() {
             style={[styles.formButton, (!editName.trim() || updateCollection.isPending) && styles.formButtonDisabled]}
             onPress={handleSaveEdit}
             disabled={!editName.trim() || updateCollection.isPending}
+          contentStyle={styles.formButtonContent}
           >
             <Text style={styles.formButtonText}>{updateCollection.isPending ? "저장 중..." : "저장"}</Text>
           </ScalePressable>
@@ -855,6 +864,7 @@ export default function TeamCollectionDetailScreen() {
                   style={[styles.inviteResultItem, addMember.isPending && { opacity: 0.5 }]}
                   onPress={() => handleInviteUserTap(user)}
                   disabled={addMember.isPending}
+                contentStyle={styles.inviteResultItemContent}
                 >
                   <View style={styles.inviteAvatar}>
                     <Text style={styles.inviteAvatarText}>
@@ -929,6 +939,7 @@ export default function TeamCollectionDetailScreen() {
                   style={styles.profileActionButton}
                   onPress={handleSendNeighborRequest}
                   disabled={createNeighborRequest.isPending}
+                contentStyle={styles.profileActionButtonContent}
                 >
                   {createNeighborRequest.isPending ? (
                     <ActivityIndicator size="small" color={Colors.zinc400} />
@@ -946,6 +957,7 @@ export default function TeamCollectionDetailScreen() {
                     setMemberTarget(null);
                     setKickTarget({ id: memberTarget.id, nickname: memberTarget.nickname });
                   }}
+                contentStyle={styles.profileActionButtonContent}
                 >
                   <Feather name="user-x" size={16} color="#DC2626" />
                   <Text style={[styles.profileActionText, styles.profileKickText]}>추방하기</Text>
@@ -1036,14 +1048,15 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   addButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
     paddingHorizontal: 12,
     paddingVertical: 6,
     backgroundColor: Colors.zinc50,
     borderRadius: 8,
   },
+  addButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,},
   addButtonText: {
     ...Typography.caption,
     fontSize: 13,
@@ -1063,14 +1076,15 @@ const styles = StyleSheet.create({
     color: Colors.noticeAccent,
   },
   articleItem: {
-    flexDirection: "row",
-    alignItems: "center",
     paddingVertical: 14,
     paddingHorizontal: Spacing.screenPx,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
     backgroundColor: Colors.white,
   },
+  articleItemContent: {
+    flexDirection: "row",
+    alignItems: "center",},
   articleItemIndent: {
     paddingLeft: Spacing.screenPx + 20,
   },
@@ -1140,14 +1154,15 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
   },
   memberItem: {
-    flexDirection: "row",
-    alignItems: "center",
     paddingVertical: 14,
     paddingHorizontal: Spacing.screenPx,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
-    gap: 12,
   },
+  memberItemContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,},
   memberAvatar: {
     width: 40,
     height: 40,
@@ -1239,9 +1254,10 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.zinc900,
     borderRadius: 12,
     paddingVertical: 14,
-    alignItems: "center",
     marginTop: 4,
   },
+  formButtonContent: {
+    alignItems: "center",},
   formButtonDisabled: {
     backgroundColor: Colors.zinc300,
   },
@@ -1285,14 +1301,15 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   profileActionButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
     paddingVertical: 14,
     borderRadius: 12,
     backgroundColor: Colors.zinc100,
   },
+  profileActionButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,},
   profileActionText: {
     ...Typography.bodySemiBold,
     fontSize: 15,
@@ -1308,14 +1325,15 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   manageSheetRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
     paddingHorizontal: 4,
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
   },
+  manageSheetRowContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,},
   manageSheetLabel: {
     ...Typography.body,
     fontSize: 16,
@@ -1342,13 +1360,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   inviteResultItem: {
-    flexDirection: "row",
-    alignItems: "center",
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
-    gap: 12,
   },
+  inviteResultItemContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,},
   inviteAvatar: {
     width: 40,
     height: 40,

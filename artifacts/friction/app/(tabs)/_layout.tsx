@@ -54,6 +54,7 @@ export default function TabLayout() {
       {showRecordFab && activeTab === "ON" && (
         <ScalePressable
           style={[styles.fab, { bottom: fabBottom }]}
+          contentStyle={styles.fabContent}
           onPress={handleNewMemo}
           accessibilityRole="button"
           accessibilityLabel="메모 추가"
@@ -73,13 +74,15 @@ const styles = StyleSheet.create({
     height: 52,
     borderRadius: 26,
     backgroundColor: Colors.zinc900,
-    alignItems: "center",
-    justifyContent: "center",
     zIndex: Sizing.navBarZIndex + 1,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.18,
     shadowRadius: 6,
     elevation: 4,
+  },
+  fabContent: {
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

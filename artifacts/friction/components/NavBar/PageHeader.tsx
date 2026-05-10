@@ -57,13 +57,19 @@ export function PageHeader({
           </ScalePressable>
         )}
         {showAdd && (
-          <ScalePressable style={[styles.actionButton, addDisabled && styles.actionButtonDisabled]} onPress={addDisabled ? undefined : onAddPress} hitSlop={8}>
+          <ScalePressable
+            style={[styles.actionButton, addDisabled && styles.actionButtonDisabled]}
+            contentStyle={styles.actionButtonContent}
+            onPress={addDisabled ? undefined : onAddPress}
+            hitSlop={8}
+          >
             <Feather name="plus" size={Sizing.plusIconSize} color={addDisabled ? Colors.zinc300 : Colors.zinc700} />
           </ScalePressable>
         )}
         {showHistory && (
           <ScalePressable
             style={styles.actionButton}
+            contentStyle={styles.actionButtonContent}
             onPress={onHistoryPress}
             hitSlop={8}
             accessibilityRole="button"
@@ -75,6 +81,7 @@ export function PageHeader({
         {!searchLast && showSearch && (
           <ScalePressable
             style={[styles.actionButton, searchActive && styles.actionButtonActive]}
+            contentStyle={styles.actionButtonContent}
             onPress={onSearchPress}
             hitSlop={8}
           >
@@ -82,13 +89,19 @@ export function PageHeader({
           </ScalePressable>
         )}
         {showKebab && (
-          <ScalePressable style={styles.actionButton} onPress={onKebabPress} hitSlop={8}>
+          <ScalePressable
+            style={styles.actionButton}
+            contentStyle={styles.actionButtonContent}
+            onPress={onKebabPress}
+            hitSlop={8}
+          >
             <Feather name="check-square" size={20} color={Colors.zinc700} />
           </ScalePressable>
         )}
         {searchLast && showSearch && (
           <ScalePressable
             style={[styles.actionButton, searchActive && styles.actionButtonActive]}
+            contentStyle={styles.actionButtonContent}
             onPress={onSearchPress}
             hitSlop={8}
           >
@@ -98,6 +111,7 @@ export function PageHeader({
         {showProfile && (
           <ScalePressable
             style={styles.profileButton}
+            contentStyle={styles.actionButtonContent}
             onPress={onProfilePress}
             hitSlop={8}
             accessibilityRole="button"
@@ -133,6 +147,8 @@ const styles = StyleSheet.create({
     height: Sizing.searchButtonSize,
     borderRadius: Sizing.searchButtonSize / 2,
     backgroundColor: Colors.searchBgInactive,
+  },
+  actionButtonContent: {
     alignItems: "center",
     justifyContent: "center",
   },
@@ -158,7 +174,5 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.zinc100,
     borderWidth: 1.5,
     borderColor: Colors.zinc200,
-    alignItems: "center",
-    justifyContent: "center",
   },
 });

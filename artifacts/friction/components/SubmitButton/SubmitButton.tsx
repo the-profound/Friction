@@ -21,11 +21,18 @@ export type SubmitButtonProps = {
   pendingLabel?: string;
   style?: StyleProp<ViewStyle>;
   disabledStyle?: StyleProp<ViewStyle>;
+  contentStyle?: StyleProp<ViewStyle>;
   textStyle?: StyleProp<TextStyle>;
   disabledTextStyle?: StyleProp<TextStyle>;
   renderIcon?: (state: SubmitButtonState) => React.ReactNode;
   hitSlop?: PressableProps["hitSlop"];
   testID?: string;
+};
+
+const DEFAULT_CONTENT_STYLE: ViewStyle = {
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "center",
 };
 
 export default function SubmitButton({
@@ -36,6 +43,7 @@ export default function SubmitButton({
   pendingLabel,
   style,
   disabledStyle,
+  contentStyle,
   textStyle,
   disabledTextStyle,
   renderIcon,
@@ -61,6 +69,7 @@ export default function SubmitButton({
       onPress={handlePress}
       disabled={effectivelyDisabled}
       style={[style, effectivelyDisabled && disabledStyle]}
+      contentStyle={[DEFAULT_CONTENT_STYLE, contentStyle]}
       hitSlop={hitSlop}
       testID={testID}
     >

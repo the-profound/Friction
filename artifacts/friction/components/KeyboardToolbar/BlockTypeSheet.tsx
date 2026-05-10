@@ -53,6 +53,7 @@ export default function BlockTypeSheet({
                 onSelect(item.key);
                 onClose();
               }}
+            contentStyle={styles.rowContent}
             >
               <Text style={[styles.label, isActive && styles.activeLabel]}>
                 {item.label}
@@ -73,13 +74,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   row: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
   },
+  rowContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",},
   activeRow: {
     backgroundColor: "transparent",
   },

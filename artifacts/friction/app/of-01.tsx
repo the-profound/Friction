@@ -88,6 +88,7 @@ export default function PersonalCollectionListScreen() {
       onPress={() => router.push({ pathname: "/of-01-detail", params: { id: item.id, name: item.name } })}
       onLongPress={() => { if (!item.isImpression) setDeleteTarget({ id: item.id, name: item.name }); }}
       delayLongPress={1000}
+    contentStyle={styles.collectionItemContent}
     >
       <View style={styles.collectionIcon}>
         <Feather name={item.isImpression ? "heart" : "folder"} size={20} color={Colors.zinc500} />
@@ -311,14 +312,15 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   collectionItem: {
-    flexDirection: "row",
-    alignItems: "center",
     paddingVertical: 14,
     paddingHorizontal: Spacing.screenPx,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
-    gap: 12,
   },
+  collectionItemContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,},
   collectionIcon: {
     width: 40,
     height: 40,

@@ -1,5 +1,5 @@
 import React from "react";
-import { Pressable, StyleSheet, type PressableProps, type PressableStateCallbackType } from "react-native";
+import { Pressable, StyleSheet, type PressableProps, type PressableStateCallbackType, type StyleProp, type ViewStyle } from "react-native";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -9,6 +9,7 @@ import Animated, {
 
 export interface ScalePressableProps extends PressableProps {
   scaleTo?: number;
+  contentStyle?: StyleProp<ViewStyle>;
 }
 
 const PRESS_DURATION = 80;
@@ -20,6 +21,7 @@ export default function ScalePressable({
   onPressIn,
   onPressOut,
   style,
+  contentStyle,
   children,
   ...rest
 }: ScalePressableProps) {
@@ -51,7 +53,7 @@ export default function ScalePressable({
       {...rest}
     >
       {(state: PressableStateCallbackType) => (
-        <Animated.View style={[styles.inner, animatedStyle]}>
+        <Animated.View style={[styles.inner, contentStyle, animatedStyle]}>
           {typeof children === "function" ? children(state) : children}
         </Animated.View>
       )}

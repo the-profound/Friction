@@ -309,7 +309,12 @@ export default function BottomSheet({
                 {closeButton ? <View style={styles.titleSpacer} /> : null}
                 {title && <Text style={[styles.title, titleStyle]}>{title}</Text>}
                 {closeButton && (
-                  <ScalePressable onPress={close} style={styles.closeButton} hitSlop={16}>
+                  <ScalePressable
+                    onPress={close}
+                    style={styles.closeButton}
+                    contentStyle={styles.closeButtonContent}
+                    hitSlop={16}
+                  >
                     <Feather name="x" size={20} color={Colors.zinc500} />
                   </ScalePressable>
                 )}
@@ -385,6 +390,8 @@ const styles = StyleSheet.create({
   closeButton: {
     width: 28,
     height: 28,
+  },
+  closeButtonContent: {
     alignItems: "center",
     justifyContent: "center",
   },

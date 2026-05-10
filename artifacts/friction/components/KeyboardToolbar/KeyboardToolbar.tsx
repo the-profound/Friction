@@ -41,6 +41,7 @@ export default function KeyboardToolbar({
     <View style={styles.container}>
       <ScalePressable
         style={styles.button}
+        contentStyle={styles.buttonContent}
         onPress={onFormatPress}
         hitSlop={8}
       >
@@ -49,6 +50,7 @@ export default function KeyboardToolbar({
 
       <ScalePressable
         style={styles.button}
+        contentStyle={styles.buttonContent}
         onPress={onBoldPress}
         hitSlop={8}
       >
@@ -59,6 +61,7 @@ export default function KeyboardToolbar({
 
       <ScalePressable
         style={styles.button}
+        contentStyle={styles.buttonContent}
         onPress={onItalicPress}
         hitSlop={8}
       >
@@ -69,6 +72,7 @@ export default function KeyboardToolbar({
 
       <ScalePressable
         style={styles.button}
+        contentStyle={styles.buttonContent}
         onPress={onUnderlinePress}
         hitSlop={8}
       >
@@ -80,6 +84,7 @@ export default function KeyboardToolbar({
       {onInsertDivider != null && (
         <ScalePressable
           style={styles.button}
+          contentStyle={styles.buttonContent}
           onPress={onInsertDivider}
           hitSlop={8}
         >
@@ -90,6 +95,7 @@ export default function KeyboardToolbar({
       {onShiftEnter != null && (
         <ScalePressable
           style={styles.button}
+          contentStyle={styles.buttonContent}
           onPress={onShiftEnter}
           hitSlop={8}
         >
@@ -111,9 +117,11 @@ const styles = StyleSheet.create({
   },
   button: {
     flex: 1,
+    height: 44,
+  },
+  buttonContent: {
     alignItems: "center",
     justifyContent: "center",
-    height: 44,
   },
   buttonText: {
     color: "#a1a1aa",

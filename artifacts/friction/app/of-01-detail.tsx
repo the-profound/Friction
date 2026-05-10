@@ -419,6 +419,7 @@ export default function PersonalCollectionDetailScreen() {
           onPress={() => router.push({ pathname: "/read", params: { articleId: item.articleId, mode: "re_read" } })}
           onLongPress={() => handleLongPress(item)}
           delayLongPress={400}
+        contentStyle={styles.articleItemContent}
         >
           <View style={styles.articleInfo}>
             <Text style={styles.articleTitle} numberOfLines={1}>
@@ -442,6 +443,7 @@ export default function PersonalCollectionDetailScreen() {
         <ScalePressable
           style={styles.selectionRow}
           onPress={() => toggleSelect(item.articleId)}
+        contentStyle={styles.selectionRowContent}
         >
           <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
             {isSelected && <Feather name="check" size={14} color={Colors.white} />}
@@ -516,7 +518,9 @@ export default function PersonalCollectionDetailScreen() {
             편지 목록 ({articles.length})
           </Text>
           {!isArchive && (
-            <ScalePressable style={styles.addArticleButton} onPress={() => setShowPicker(true)}>
+            <ScalePressable style={styles.addArticleButton} onPress={() => setShowPicker(true)}
+            contentStyle={styles.addArticleButtonContent}
+            >
               <Feather name="plus" size={16} color={Colors.zinc600} />
               <Text style={styles.addArticleText}>편지 추가</Text>
             </ScalePressable>
@@ -563,6 +567,7 @@ export default function PersonalCollectionDetailScreen() {
               style={[styles.bulkActionButton, styles.bulkDeleteButton, (selectedCount === 0 || isBulkDeleting || isBulkMoving) && styles.bulkActionButtonDisabled]}
               onPress={handleBulkDeletePress}
               disabled={selectedCount === 0 || isBulkDeleting || isBulkMoving}
+            contentStyle={styles.bulkActionButtonContent}
             >
               <Text style={styles.bulkDeleteText}>
                 {isBulkDeleting ? "삭제 중..." : "삭제"}
@@ -572,6 +577,7 @@ export default function PersonalCollectionDetailScreen() {
               style={[styles.bulkActionButton, styles.bulkMoveButton, (selectedCount === 0 || isBulkDeleting || isBulkMoving) && styles.bulkActionButtonDisabled]}
               onPress={handleBulkMovePress}
               disabled={selectedCount === 0 || isBulkDeleting || isBulkMoving}
+            contentStyle={styles.bulkActionButtonContent}
             >
               <Text style={styles.bulkMoveText}>
                 {isBulkMoving ? "이동 중..." : "이동"}
@@ -646,6 +652,7 @@ export default function PersonalCollectionDetailScreen() {
                 <ScalePressable
                   style={styles.moveCollectionItem}
                   onPress={() => handleMoveArticle(coll.id)}
+                contentStyle={styles.moveCollectionItemContent}
                 >
                   <View style={styles.moveCollectionIcon}>
                     <Feather name="folder" size={18} color={Colors.zinc500} />
@@ -796,14 +803,15 @@ const styles = StyleSheet.create({
     color: Colors.zinc900,
   },
   addArticleButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
     paddingHorizontal: 12,
     paddingVertical: 6,
     backgroundColor: Colors.zinc50,
     borderRadius: 8,
   },
+  addArticleButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,},
   addArticleText: {
     ...Typography.caption,
     fontSize: 13,
@@ -814,14 +822,15 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   articleItem: {
-    flexDirection: "row",
-    alignItems: "center",
     paddingVertical: 14,
     paddingHorizontal: Spacing.screenPx,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
     backgroundColor: Colors.white,
   },
+  articleItemContent: {
+    flexDirection: "row",
+    alignItems: "center",},
   articleInfo: {
     flex: 1,
     gap: 2,
@@ -900,11 +909,12 @@ const styles = StyleSheet.create({
     color: Colors.white,
   },
   selectionRow: {
-    flexDirection: "row",
-    alignItems: "center",
     paddingLeft: Spacing.screenPx,
     backgroundColor: Colors.white,
   },
+  selectionRowContent: {
+    flexDirection: "row",
+    alignItems: "center",},
   checkbox: {
     width: 22,
     height: 22,
@@ -939,9 +949,10 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 52,
     borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
   },
+  bulkActionButtonContent: {
+    alignItems: "center",
+    justifyContent: "center",},
   bulkActionButtonDisabled: {
     backgroundColor: Colors.zinc200,
   },
@@ -977,14 +988,15 @@ const styles = StyleSheet.create({
     color: Colors.zinc400,
   },
   moveCollectionItem: {
-    flexDirection: "row",
-    alignItems: "center",
     paddingVertical: 16,
     paddingHorizontal: Spacing.screenPx,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
-    gap: 12,
   },
+  moveCollectionItemContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,},
   moveCollectionIcon: {
     width: 36,
     height: 36,

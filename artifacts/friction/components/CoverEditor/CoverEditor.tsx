@@ -135,6 +135,7 @@ export default function CoverEditor({
                 local.type === t.key && styles.typeChipActive,
               ]}
               onPress={() => update({ type: t.key })}
+            contentStyle={styles.typeChipContent}
             >
               <Feather
                 name={t.icon}
@@ -163,6 +164,7 @@ export default function CoverEditor({
                 local.align === a.key && styles.alignChipActive,
               ]}
               onPress={() => update({ align: a.key })}
+            contentStyle={styles.alignChipContent}
             >
               <Feather
                 name={a.icon}
@@ -185,6 +187,7 @@ export default function CoverEditor({
                 local.textColor === c.color && styles.colorChipActive,
               ]}
               onPress={() => update({ textColor: c.color })}
+            contentStyle={styles.colorChipContent}
             >
               {local.textColor === c.color && (
                 <Feather
@@ -211,6 +214,7 @@ export default function CoverEditor({
                     local.bgColor === c.color && styles.colorChipActive,
                   ]}
                   onPress={() => update({ bgColor: c.color })}
+                contentStyle={styles.colorChipContent}
                 >
                   {local.bgColor === c.color && (
                     <Feather
@@ -239,6 +243,7 @@ export default function CoverEditor({
                     style={[styles.imageButton, styles.imageButtonSecondary]}
                     onPress={pickAndUpload}
                     disabled={isUploading}
+                  contentStyle={styles.imageButtonContent}
                   >
                     {isUploading ? (
                       <ActivityIndicator size="small" color={Colors.zinc600} />
@@ -253,6 +258,7 @@ export default function CoverEditor({
                     style={[styles.imageButton, styles.imageButtonDanger]}
                     onPress={handleRemoveImage}
                     disabled={isUploading}
+                  contentStyle={styles.imageButtonContent}
                   >
                     <Feather name="trash-2" size={15} color="#dc2626" />
                     <Text style={styles.imageButtonDangerLabel}>이미지 제거</Text>
@@ -264,6 +270,7 @@ export default function CoverEditor({
                 style={[styles.imagePickerButton, isUploading && styles.imagePickerButtonDisabled]}
                 onPress={pickAndUpload}
                 disabled={isUploading}
+              contentStyle={styles.imagePickerButtonContent}
               >
                 {isUploading ? (
                   <ActivityIndicator size="small" color={Colors.zinc600} />
@@ -311,14 +318,15 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   typeChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: Colors.zinc100,
   },
+  typeChipContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,},
   typeChipActive: {
     backgroundColor: Colors.zinc900,
   },
@@ -335,9 +343,10 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 12,
     backgroundColor: Colors.zinc100,
-    alignItems: "center",
-    justifyContent: "center",
   },
+  alignChipContent: {
+    alignItems: "center",
+    justifyContent: "center",},
   alignChipActive: {
     backgroundColor: Colors.zinc200,
     borderWidth: 2,
@@ -352,9 +361,10 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
   },
+  colorChipContent: {
+    alignItems: "center",
+    justifyContent: "center",},
   colorChipLight: {
     borderWidth: 1,
     borderColor: Colors.zinc200,
@@ -373,10 +383,11 @@ const styles = StyleSheet.create({
     borderStyle: "dashed",
     borderRadius: 12,
     padding: 20,
-    alignItems: "center",
-    gap: 8,
     backgroundColor: Colors.zinc50,
   },
+  imagePickerButtonContent: {
+    alignItems: "center",
+    gap: 8,},
   imagePickerButtonDisabled: {
     opacity: 0.6,
   },
@@ -402,13 +413,14 @@ const styles = StyleSheet.create({
   },
   imageButton: {
     flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
     paddingVertical: 10,
     borderRadius: 10,
   },
+  imageButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,},
   imageButtonSecondary: {
     backgroundColor: Colors.zinc100,
   },

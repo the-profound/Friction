@@ -416,6 +416,7 @@ export default function OnScreen() {
             <ScalePressable
               style={styles.selectionRow}
               onPress={() => toggleSelect(item.article.id)}
+            contentStyle={styles.selectionRowContent}
             >
               <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
                 {isSelected && <Feather name="check" size={14} color={Colors.white} />}
@@ -481,6 +482,7 @@ export default function OnScreen() {
             <ScalePressable
               style={styles.selectionRow}
               onPress={() => toggleSelect(item.article.id)}
+            contentStyle={styles.selectionRowContent}
             >
               <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
                 {isSelected && <Feather name="check" size={14} color={Colors.white} />}
@@ -608,6 +610,7 @@ export default function OnScreen() {
             <ScalePressable
               style={[styles.topTabItem, { paddingLeft: 16, paddingRight: 8 }]}
               onPress={() => switchTopTab("memo")}
+            contentStyle={styles.topTabItemContent}
             >
               <Text
                 style={[styles.topTabText, topTab === "memo" && styles.topTabTextActive]}
@@ -623,6 +626,7 @@ export default function OnScreen() {
             <ScalePressable
               style={[styles.topTabItem, { paddingLeft: 8, paddingRight: 16 }]}
               onPress={() => switchTopTab("my_article")}
+            contentStyle={styles.topTabItemContent}
             >
               <Text
                 style={[styles.topTabText, topTab === "my_article" && styles.topTabTextActive]}
@@ -690,7 +694,9 @@ export default function OnScreen() {
           <Text style={styles.emptySubtitle}>
             떠오르는 생각을 기록하고{"\n"}편지로 완성할 수 있어요
           </Text>
-          <ScalePressable style={styles.createButton} onPress={handleNewMemo}>
+          <ScalePressable style={styles.createButton} onPress={handleNewMemo}
+          contentStyle={styles.createButtonContent}
+          >
             <Feather name="edit-3" size={16} color={Colors.white} />
             <Text style={styles.createButtonText}>새 메모</Text>
           </ScalePressable>
@@ -734,6 +740,7 @@ export default function OnScreen() {
             style={[styles.bulkDeleteButton, selectedCount === 0 && styles.bulkDeleteButtonDisabled]}
             onPress={handleBulkDeletePress}
             disabled={selectedCount === 0 || isBulkDeleting}
+          contentStyle={styles.bulkDeleteButtonContent}
           >
             {isBulkDeleting ? (
               <Text style={styles.bulkDeleteText}>삭제 중...</Text>
@@ -791,6 +798,7 @@ export default function OnScreen() {
                   <ScalePressable
                     style={[styles.archiveItem, isSelected && styles.archiveItemSelected]}
                     onPress={() => setSelectedCollectionId(item.id)}
+                  contentStyle={styles.archiveItemContent}
                   >
                     <View style={styles.archiveItemLeft}>
                       <Feather
@@ -823,6 +831,7 @@ export default function OnScreen() {
             ]}
             onPress={handleArchiveConfirm}
             disabled={!selectedCollectionId || isArchiving}
+          contentStyle={styles.archiveConfirmButtonContent}
           >
             <Text style={styles.archiveConfirmButtonText}>
               {isArchiving ? "보관 중..." : "보관하기"}
@@ -860,8 +869,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     paddingTop: 12,
     paddingBottom: 0,
-    alignItems: "center",
   },
+  topTabItemContent: {
+    alignItems: "center",},
   topTabText: {
     ...Typography.body,
     fontSize: 15,
@@ -935,25 +945,27 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   createButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
     backgroundColor: Colors.zinc900,
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 12,
     marginTop: 8,
   },
+  createButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,},
   createButtonText: {
     ...Typography.bodySemiBold,
     fontSize: 15,
     color: Colors.white,
   },
   selectionRow: {
-    flexDirection: "row",
-    alignItems: "center",
     paddingLeft: Spacing.screenPx,
   },
+  selectionRowContent: {
+    flexDirection: "row",
+    alignItems: "center",},
   checkbox: {
     width: 22,
     height: 22,
@@ -984,9 +996,10 @@ const styles = StyleSheet.create({
     height: 52,
     backgroundColor: "#DC2626",
     borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
   },
+  bulkDeleteButtonContent: {
+    alignItems: "center",
+    justifyContent: "center",},
   bulkDeleteButtonDisabled: {
     backgroundColor: Colors.zinc200,
   },
@@ -1025,13 +1038,14 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.zinc100,
   },
   archiveItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
     paddingVertical: 14,
     paddingHorizontal: 4,
     borderRadius: 8,
   },
+  archiveItemContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",},
   archiveItemSelected: {
     backgroundColor: Colors.zinc50,
   },
@@ -1065,9 +1079,10 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.zinc900,
     paddingVertical: 14,
     borderRadius: 12,
-    alignItems: "center",
     marginTop: 12,
   },
+  archiveConfirmButtonContent: {
+    alignItems: "center",},
   archiveConfirmButtonDisabled: {
     opacity: 0.4,
   },

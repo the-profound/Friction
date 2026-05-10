@@ -512,7 +512,9 @@ export default function ClosingScreen() {
             textAlignVertical="top"
           />
         ) : (
-          <ScalePressable style={styles.titleRow} onPress={() => setTitleEditing(true)}>
+          <ScalePressable style={styles.titleRow} onPress={() => setTitleEditing(true)}
+          contentStyle={styles.titleRowContent}
+          >
             <Text style={styles.titleText}>
               {title || "제목 없음"}
             </Text>
@@ -525,6 +527,7 @@ export default function ClosingScreen() {
         <ScalePressable
           style={styles.coverActionButton}
           onPress={() => setCoverEditorVisible(true)}
+        contentStyle={styles.coverActionButtonContent}
         >
           <Feather name="image" size={16} color={Colors.zinc600} />
           <Text style={styles.coverActionLabel}>
@@ -620,6 +623,7 @@ export default function ClosingScreen() {
             style={[styles.pageNavButton, clampedPreviewPage === 0 && styles.pageNavButtonDisabled]}
             onPress={() => setPreviewPage((p) => Math.max(0, p - 1))}
             disabled={clampedPreviewPage === 0}
+          contentStyle={styles.pageNavButtonContent}
           >
             <Feather
               name="chevron-left"
@@ -637,6 +641,7 @@ export default function ClosingScreen() {
             ]}
             onPress={() => setPreviewPage((p) => Math.min(totalVirtualPages - 1, p + 1))}
             disabled={clampedPreviewPage >= totalVirtualPages - 1}
+          contentStyle={styles.pageNavButtonContent}
           >
             <Feather
               name="chevron-right"
@@ -721,10 +726,11 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.zinc100,
   },
   titleRow: {
+  },
+  titleRowContent: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 8,
-  },
+    gap: 8,},
   titleText: {
     ...Typography.bodySemiBold,
     fontSize: 18,
@@ -748,11 +754,12 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.zinc100,
   },
   coverActionButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
     paddingVertical: 6,
   },
+  coverActionButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,},
   coverActionLabel: {
     ...Typography.bodySemiBold,
     fontSize: 14,
@@ -820,9 +827,10 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 20,
     backgroundColor: Colors.zinc50,
-    alignItems: "center",
-    justifyContent: "center",
   },
+  pageNavButtonContent: {
+    alignItems: "center",
+    justifyContent: "center",},
   pageNavButtonDisabled: {
     opacity: 0.5,
   },

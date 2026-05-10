@@ -185,6 +185,7 @@ export default function TeamCollectionListScreen() {
   const renderItem = ({ item }: { item: TeamCollectionWithRole }) => (
     <ScalePressable
       style={styles.collectionItem}
+      contentStyle={styles.collectionItemContent}
       onPress={() => router.push({ pathname: "/of-02-detail", params: { id: item.id } })}
       onLongPress={() => item.role === "OWNER" ? handleDelete(item.id, item.name) : undefined}
       delayLongPress={1000}
@@ -298,7 +299,7 @@ export default function TeamCollectionListScreen() {
         snapPoints={[0.28]}
       >
         <View style={styles.actionSheetContent}>
-          <ScalePressable style={styles.actionSheetRow} onPress={handleOpenCreate}>
+          <ScalePressable style={styles.actionSheetRow} contentStyle={styles.actionSheetRowContent} onPress={handleOpenCreate}>
             <View style={styles.actionSheetIcon}>
               <Feather name="plus-circle" size={20} color={Colors.zinc700} />
             </View>
@@ -307,7 +308,7 @@ export default function TeamCollectionListScreen() {
               <Text style={styles.actionSheetDesc}>직접 단체 모음을 만들어요</Text>
             </View>
           </ScalePressable>
-          <ScalePressable style={styles.actionSheetRow} onPress={handleOpenJoin}>
+          <ScalePressable style={styles.actionSheetRow} contentStyle={styles.actionSheetRowContent} onPress={handleOpenJoin}>
             <View style={styles.actionSheetIcon}>
               <Feather name="log-in" size={20} color={Colors.zinc700} />
             </View>
@@ -376,6 +377,7 @@ export default function TeamCollectionListScreen() {
             />
             <ScalePressable
               style={styles.joinBackButton}
+              contentStyle={styles.joinBackButtonContent}
               onPress={() => { setJoinStep("code"); setJoinError(null); }}
             >
               <Text style={styles.joinBackText}>다른 코드 입력</Text>
@@ -470,12 +472,14 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   collectionItem: {
-    flexDirection: "row",
-    alignItems: "center",
     paddingVertical: 14,
     paddingHorizontal: Spacing.screenPx,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
+  },
+  collectionItemContent: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
   },
   collectionIcon: {
@@ -595,9 +599,11 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   actionSheetRow: {
+    paddingVertical: 14,
+  },
+  actionSheetRowContent: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 14,
     gap: 14,
   },
   actionSheetIcon: {
@@ -668,8 +674,10 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   joinBackButton: {
-    alignItems: "center",
     paddingVertical: 10,
+  },
+  joinBackButtonContent: {
+    alignItems: "center",
   },
   joinBackText: {
     ...Typography.body,

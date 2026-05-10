@@ -15,7 +15,9 @@ export default function MyPageNeighborsScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <ScalePressable style={styles.backButton} onPress={() => router.back()} hitSlop={8}>
+        <ScalePressable style={styles.backButton} onPress={() => router.back()} hitSlop={8}
+        contentStyle={styles.backButtonContent}
+        >
           <Feather name="chevron-left" size={24} color={Colors.zinc700} />
         </ScalePressable>
         <Text style={styles.headerTitle}>이웃 목록</Text>
@@ -41,9 +43,10 @@ const styles = StyleSheet.create({
   backButton: {
     width: 36,
     height: 36,
-    alignItems: "center",
-    justifyContent: "center",
   },
+  backButtonContent: {
+    alignItems: "center",
+    justifyContent: "center",},
   headerTitle: {
     flex: 1,
     textAlign: "center",

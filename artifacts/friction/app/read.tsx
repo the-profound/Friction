@@ -1072,7 +1072,9 @@ export default function ReadScreen() {
       />
       {(mode === "re_read" || (mode === "basic" && reading.canExit)) && (
         <View style={styles.header}>
-          <ScalePressable onPress={handleBack} hitSlop={12} style={styles.backButton}>
+          <ScalePressable onPress={handleBack} hitSlop={12} style={styles.backButton}
+          contentStyle={styles.backButtonContent}
+          >
             <Feather name="arrow-left" size={20} color={Colors.zinc600} />
           </ScalePressable>
         </View>
@@ -1233,6 +1235,7 @@ export default function ReadScreen() {
                 handleCollectSentence(t);
                 setClearSelectionSignal((n) => n + 1);
               }}
+            contentStyle={styles.selectionPillButtonContent}
             >
               <Feather name="bookmark" size={14} color={Colors.zinc200} />
               <Text style={styles.selectionPillButtonText}>수집</Text>
@@ -1252,6 +1255,7 @@ export default function ReadScreen() {
                 handleMemoSentence(t);
                 setClearSelectionSignal((n) => n + 1);
               }}
+            contentStyle={styles.selectionPillButtonContent}
             >
               <Feather name="edit-3" size={14} color={Colors.zinc200} />
               <Text style={styles.selectionPillButtonText}>메모</Text>
@@ -1274,6 +1278,7 @@ export default function ReadScreen() {
           onPress={handleOpenMemo}
           hitSlop={16}
           style={styles.bottomMemoButton}
+        contentStyle={styles.bottomMemoButtonContent}
         >
           <Feather name="edit-3" size={20} color={Colors.zinc600} />
         </ScalePressable>
@@ -1311,6 +1316,7 @@ export default function ReadScreen() {
                   setCollectionPickerMode(false);
                 }
               }}
+            contentStyle={styles.pickerBackRowContent}
             >
               <Feather name="chevron-left" size={18} color={Colors.zinc600} />
               <Text style={styles.pickerBackText}>보관할 폴더 선택</Text>
@@ -1364,6 +1370,7 @@ export default function ReadScreen() {
                         );
                         setCollectionPickerMode(false);
                       }}
+                    contentStyle={styles.pickerItemContent}
                     >
                       <View style={styles.pickerItemLeft}>
                         <Feather name={item.isImpression ? "heart" : "folder"} size={18} color={isSelected ? Colors.zinc900 : Colors.zinc500} />
@@ -1438,6 +1445,7 @@ export default function ReadScreen() {
                     }
                   }}
                   disabled={!newCollectionName.trim() || isCreatingCollection}
+                contentStyle={styles.pickerCreateButtonContent}
                 >
                   {isCreatingCollection ? (
                     <ActivityIndicator size="small" color={Colors.white} />
@@ -1456,6 +1464,7 @@ export default function ReadScreen() {
             style={styles.collectionSelector}
             onPress={() => setCollectionPickerMode(true)}
             disabled={isSaving}
+          contentStyle={styles.collectionSelectorContent}
           >
             <Feather name="folder" size={16} color={Colors.zinc500} />
             <Text style={styles.collectionSelectorText} numberOfLines={1}>
@@ -1468,6 +1477,7 @@ export default function ReadScreen() {
             style={[styles.completionButton, (isSaving || !isCollectionsReady) && styles.completionButtonDisabled]}
             onPress={handleCommitAndSave}
             disabled={isSaving}
+          contentStyle={styles.completionButtonContent}
           >
             <Text style={dynamicStyles.completionButtonText}>
               {isSaving ? "저장 중..." : !isCollectionsReady ? "불러오는 중..." : "보관하기"}
@@ -1488,6 +1498,7 @@ export default function ReadScreen() {
                 }
               : handleCommitAndSkip}
             disabled={mode !== "re_read" && isDeleting}
+          contentStyle={styles.completionButtonContent}
           >
             <Text style={dynamicStyles.completionButtonSecondaryText}>
               {mode !== "re_read" && isDeleting ? "처리 중..." : "나가기"}
@@ -1500,6 +1511,7 @@ export default function ReadScreen() {
               setCompletionSheetVisible(false);
               reading.restartReading();
             }}
+          contentStyle={styles.completionButtonTertiaryContent}
           >
             <Text style={dynamicStyles.completionButtonTertiaryText}>다시 읽기</Text>
           </ScalePressable>
@@ -1524,10 +1536,13 @@ export default function ReadScreen() {
             <ScalePressable
               style={[styles.sentenceButton, styles.sentenceButtonCancel]}
               onPress={handleCancelSentence}
+            contentStyle={styles.sentenceButtonContent}
             >
               <Text style={dynamicStyles.sentenceButtonCancelText}>취소</Text>
             </ScalePressable>
-            <ScalePressable style={styles.sentenceButton} onPress={handleSaveSentence}>
+            <ScalePressable style={styles.sentenceButton} onPress={handleSaveSentence}
+            contentStyle={styles.sentenceButtonContent}
+            >
               <Feather name="bookmark" size={16} color={Colors.white} />
               <Text style={dynamicStyles.sentenceButtonText}>저장</Text>
             </ScalePressable>
@@ -1668,9 +1683,10 @@ const styles = StyleSheet.create({
   backButton: {
     width: 36,
     height: 36,
-    alignItems: "center",
-    justifyContent: "center",
   },
+  backButtonContent: {
+    alignItems: "center",
+    justifyContent: "center",},
   titleBar: {
     alignItems: "center",
     paddingHorizontal: Spacing.screenPx,
@@ -1716,16 +1732,17 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   completionButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
     backgroundColor: Colors.zinc900,
     borderRadius: 12,
     paddingVertical: 14,
     paddingHorizontal: 24,
-    gap: 8,
     width: "100%",
   },
+  completionButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,},
   completionButtonSecondary: {
     backgroundColor: Colors.zinc100,
   },
@@ -1742,14 +1759,15 @@ const styles = StyleSheet.create({
   },
   sentenceButton: {
     flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
     backgroundColor: Colors.zinc900,
     borderRadius: 10,
     paddingVertical: 12,
-    gap: 6,
   },
+  sentenceButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,},
   sentenceButtonCancel: {
     backgroundColor: Colors.zinc100,
   },
@@ -1758,9 +1776,6 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   collectionSelector: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
     paddingVertical: 12,
     paddingHorizontal: 14,
     borderRadius: 10,
@@ -1769,6 +1784,10 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.zinc50,
     marginBottom: 4,
   },
+  collectionSelectorContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,},
   collectionSelectorText: {
     flex: 1,
     fontSize: 14,
@@ -1776,8 +1795,6 @@ const styles = StyleSheet.create({
     color: Colors.zinc700,
   },
   completionButtonTertiary: {
-    alignItems: "center",
-    justifyContent: "center",
     paddingVertical: 14,
     paddingHorizontal: 24,
     width: "100%",
@@ -1785,6 +1802,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.zinc200,
   },
+  completionButtonTertiaryContent: {
+    alignItems: "center",
+    justifyContent: "center",},
   coverPageContainer: {
     flex: 1,
     justifyContent: "flex-end",
@@ -1829,9 +1849,10 @@ const styles = StyleSheet.create({
   bottomMemoButton: {
     width: 40,
     height: 40,
-    alignItems: "center",
-    justifyContent: "center",
   },
+  bottomMemoButtonContent: {
+    alignItems: "center",
+    justifyContent: "center",},
   selectionPillWrap: {
     position: "absolute",
     left: 0,
@@ -1862,14 +1883,15 @@ const styles = StyleSheet.create({
     }),
   },
   selectionPillButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
     backgroundColor: Colors.zinc700,
     borderRadius: 6,
     paddingHorizontal: 16,
     paddingVertical: 8,
   },
+  selectionPillButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,},
   selectionPillButtonText: {
     fontSize: 12,
     fontFamily: ReaderTokens.fontFamily.sansSemiBold,
@@ -1899,12 +1921,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   pickerBackRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
     paddingBottom: 12,
     marginBottom: 4,
   },
+  pickerBackRowContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,},
   pickerBackText: {
     fontSize: 15,
     fontFamily: "Pretendard",
@@ -1938,13 +1961,14 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   pickerItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
     paddingVertical: 14,
     paddingHorizontal: 4,
     borderRadius: 8,
   },
+  pickerItemContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",},
   pickerItemSelected: {
     backgroundColor: Colors.zinc50,
   },
@@ -2014,9 +2038,10 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.zinc900,
     borderRadius: 12,
     paddingVertical: 14,
-    alignItems: "center",
     marginTop: 4,
   },
+  pickerCreateButtonContent: {
+    alignItems: "center",},
   pickerCreateButtonDisabled: {
     backgroundColor: Colors.zinc300,
   },

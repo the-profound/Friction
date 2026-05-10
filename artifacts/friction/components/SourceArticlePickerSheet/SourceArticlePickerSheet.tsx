@@ -140,6 +140,7 @@ export default function SourceArticlePickerSheet({
         <ScalePressable
           style={[styles.listItem, isSelected && styles.listItemSelected]}
           onPress={() => handleSelect(item.article?.id ?? item.articleId, title)}
+        contentStyle={styles.listItemRow}
         >
           <View style={styles.listItemContent}>
             <Text style={styles.listItemTitle} numberOfLines={1}>
@@ -165,6 +166,7 @@ export default function SourceArticlePickerSheet({
         <ScalePressable
           style={[styles.listItem, isSelected && styles.listItemSelected]}
           onPress={() => handleSelect(item.id, item.title)}
+        contentStyle={styles.listItemRow}
         >
           <View style={styles.listItemContent}>
             <Text style={styles.listItemTitle} numberOfLines={1}>
@@ -386,12 +388,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listItem: {
-    flexDirection: "row",
-    alignItems: "center",
     paddingVertical: 12,
     paddingHorizontal: 4,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
+  },
+  listItemRow: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
   listItemSelected: {

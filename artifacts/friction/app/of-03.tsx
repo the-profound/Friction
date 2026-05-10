@@ -215,6 +215,7 @@ export default function SentenceCollectionScreen() {
           onPress={() => setSelectedSentence(item)}
           onLongPress={() => handleCopy(item.text)}
           delayLongPress={1000}
+        contentStyle={styles.sentenceItemContent}
         >
           <View style={styles.sentenceContent}>
             <Text style={styles.sentenceText} numberOfLines={3}>
@@ -263,6 +264,7 @@ export default function SentenceCollectionScreen() {
         <ScalePressable
           style={styles.selectionRow}
           onPress={() => toggleSelect(item.id)}
+        contentStyle={styles.selectionRowContent}
         >
           <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
             {isSelected && <Feather name="check" size={14} color={Colors.white} />}
@@ -317,6 +319,7 @@ export default function SentenceCollectionScreen() {
           <ScalePressable
             style={[styles.filterChip, filter === "all" && styles.filterChipActive]}
             onPress={() => setFilter("all")}
+          contentStyle={styles.filterChipContent}
           >
             <Text
               style={[
@@ -330,6 +333,7 @@ export default function SentenceCollectionScreen() {
           <ScalePressable
             style={[styles.filterChip, filter === "favorites" && styles.filterChipActive]}
             onPress={() => setFilter("favorites")}
+          contentStyle={styles.filterChipContent}
           >
             <Feather
               name="star"
@@ -407,6 +411,7 @@ export default function SentenceCollectionScreen() {
             ]}
             onPress={handleBulkDeletePress}
             disabled={selectedCount === 0 || isBulkDeleting}
+          contentStyle={styles.bulkDeleteButtonContent}
           >
             {isBulkDeleting ? (
               <Text style={styles.bulkDeleteText}>삭제 중...</Text>
@@ -578,14 +583,15 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   filterChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: Colors.zinc50,
   },
+  filterChipContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,},
   filterChipActive: {
     backgroundColor: Colors.zinc900,
   },
@@ -602,23 +608,25 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   sentenceItem: {
-    flexDirection: "row",
-    alignItems: "flex-start",
     paddingVertical: 16,
     paddingHorizontal: Spacing.screenPx,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
-    gap: 8,
   },
+  sentenceItemContent: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,},
   selectionRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
     paddingVertical: 16,
     paddingHorizontal: Spacing.screenPx,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
-    gap: 12,
   },
+  selectionRowContent: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,},
   checkbox: {
     width: 22,
     height: 22,
@@ -721,6 +729,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#EF4444",
     borderRadius: 12,
     paddingVertical: 14,
+  },
+  bulkDeleteButtonContent: {
     alignItems: "center",
     justifyContent: "center",
   },

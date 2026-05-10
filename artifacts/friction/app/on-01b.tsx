@@ -1028,6 +1028,7 @@ export default function DividingScreen() {
                 ? "분량을 초과한 페이지만 다시 나눕니다. 다른 페이지 분할은 그대로 유지됩니다."
                 : "초과된 페이지가 없어 자동 분할을 사용할 수 없습니다."
             }
+          contentStyle={styles.autoSplitButtonContent}
           >
             <Feather name="scissors" size={14} color={Colors.zinc600} />
             <Text style={styles.autoSplitText}>{splitting ? "분할 중…" : "자동분할"}</Text>
@@ -1071,6 +1072,7 @@ export default function DividingScreen() {
                     hitSlop={6}
                     style={styles.chipMergeButton}
                     accessibilityLabel={`페이지 ${idx + 1} 이전 페이지와 합치기`}
+                  contentStyle={styles.chipMergeButtonContent}
                   >
                     <Feather name="x" size={12} color={Colors.zinc600} />
                   </ScalePressable>
@@ -1083,6 +1085,7 @@ export default function DividingScreen() {
                   hitSlop={6}
                   style={[styles.chipSplitButton, splitting && styles.chipSplitButtonDisabled]}
                   accessibilityLabel={`페이지 ${idx + 1} 나누기`}
+                contentStyle={styles.chipSplitButtonContent}
                 >
                   <Feather name="scissors" size={11} color={Colors.zinc600} />
                   <Text style={styles.chipSplitText}>나누기</Text>
@@ -1193,15 +1196,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   autoSplitButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.zinc200,
   },
+  autoSplitButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,},
   autoSplitButtonDisabled: {
     opacity: 0.5,
   },
@@ -1288,10 +1292,11 @@ const styles = StyleSheet.create({
     width: 18,
     height: 18,
     borderRadius: 9,
-    alignItems: "center",
-    justifyContent: "center",
     backgroundColor: Colors.zinc200,
   },
+  chipMergeButtonContent: {
+    alignItems: "center",
+    justifyContent: "center",},
   chipPageNumber: {
     ...Typography.caption,
     fontSize: 12,
@@ -1304,14 +1309,15 @@ const styles = StyleSheet.create({
     color: Colors.zinc500,
   },
   chipSplitButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
     paddingHorizontal: 6,
     paddingVertical: 3,
     borderRadius: 10,
     backgroundColor: Colors.zinc200,
   },
+  chipSplitButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,},
   chipSplitButtonDisabled: {
     opacity: 0.5,
   },

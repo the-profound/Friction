@@ -339,6 +339,7 @@ export default function ArchiveScreen() {
       <ScalePressable
         style={styles.collectionCard}
         onPress={() => router.push({ pathname: "/of-01-detail", params: { id: item.id, name: item.name } })}
+      contentStyle={styles.collectionCardContent}
       >
         <View style={styles.collectionIcon}>
           <Feather name="folder" size={20} color={Colors.zinc500} />
@@ -374,6 +375,7 @@ export default function ArchiveScreen() {
           closeSentenceOpenRow();
           setSelectedSentence(item);
         }}
+      contentStyle={styles.sentenceItemRow}
       >
         <View style={styles.sentenceItemContent}>
           <Text style={styles.sentenceText} numberOfLines={2}>
@@ -410,6 +412,7 @@ export default function ArchiveScreen() {
       <ScalePressable
         style={styles.selectionRow}
         onPress={() => toggleSelect(item.id)}
+      contentStyle={styles.selectionRowContent}
       >
         <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
           {isSelected && <Feather name="check" size={14} color={Colors.white} />}
@@ -500,6 +503,7 @@ export default function ArchiveScreen() {
                 <ScalePressable
                   style={[styles.collectionCard, { flex: 0, width: collectionCardWidth }]}
                   onPress={() => router.push({ pathname: "/of-01-detail", params: { id: lastSingleCollection.id, name: lastSingleCollection.name } })}
+                contentStyle={styles.collectionCardContent}
                 >
                   <View style={styles.collectionIcon}>
                     <Feather name="folder" size={20} color={Colors.zinc500} />
@@ -519,6 +523,7 @@ export default function ArchiveScreen() {
               <ScalePressable
                 style={styles.impressionCard}
                 onPress={() => router.push({ pathname: "/of-01-detail", params: { id: impressionCollection.id, name: impressionCollection.name } })}
+              contentStyle={styles.impressionCardContent}
               >
                 <View style={styles.collectionIcon}>
                   <Feather name="heart" size={20} color={Colors.zinc500} />
@@ -593,6 +598,7 @@ export default function ArchiveScreen() {
             <ScalePressable
               style={[styles.subTabItem, { paddingLeft: 16, paddingRight: 8 }]}
               onPress={() => { setActiveSubTab("personal"); setSearchQuery(""); setSearchActive(false); }}
+            contentStyle={styles.subTabItemContent}
             >
               <Text style={[styles.subTabText, activeSubTab === "personal" && styles.subTabTextActive]}>
                 폴더
@@ -604,6 +610,7 @@ export default function ArchiveScreen() {
             <ScalePressable
               style={[styles.subTabItem, { paddingLeft: 8, paddingRight: 16 }]}
               onPress={() => { setActiveSubTab("sentence"); setSearchQuery(""); setSearchActive(false); exitSelectionMode(); }}
+            contentStyle={styles.subTabItemContent}
             >
               <Text style={[styles.subTabText, activeSubTab === "sentence" && styles.subTabTextActive]}>
                 수집한 문장
@@ -636,6 +643,7 @@ export default function ArchiveScreen() {
             ]}
             onPress={handleBulkDeletePress}
             disabled={selectedCount === 0 || isBulkDeleting}
+          contentStyle={styles.bulkDeleteButtonContent}
           >
             <Text style={styles.bulkDeleteText}>
               {isBulkDeleting
@@ -704,6 +712,7 @@ export default function ArchiveScreen() {
               <ScalePressable
                 style={styles.sentenceSheetRow}
                 onPress={() => handleSentenceCopy(selectedSentence.text)}
+              contentStyle={styles.sentenceSheetRowContent}
               >
                 <Feather name="copy" size={18} color={Colors.zinc700} />
                 <Text style={styles.sentenceSheetActionLabel}>복사하기</Text>
@@ -711,6 +720,7 @@ export default function ArchiveScreen() {
               <ScalePressable
                 style={styles.sentenceSheetRow}
                 onPress={() => handleSentenceToggleFavorite(selectedSentence.id, selectedSentence.isFavorite)}
+              contentStyle={styles.sentenceSheetRowContent}
               >
                 {selectedSentence.isFavorite ? (
                   <AntDesign name="star" size={22} color="#F59E0B" />
@@ -724,6 +734,7 @@ export default function ArchiveScreen() {
               <ScalePressable
                 style={styles.sentenceSheetRow}
                 onPress={() => handleSentenceQuoteAsMemo(selectedSentence)}
+              contentStyle={styles.sentenceSheetRowContent}
               >
                 <Feather name="edit" size={18} color={Colors.zinc700} />
                 <Text style={styles.sentenceSheetActionLabel}>인용해서 메모 작성</Text>
@@ -735,6 +746,7 @@ export default function ArchiveScreen() {
                     setSelectedSentence(null);
                     router.push({ pathname: "/read", params: { articleId: selectedSentence.articleId, mode: "re_read" } });
                   }}
+                contentStyle={styles.sentenceSheetRowContent}
                 >
                   <Feather name="external-link" size={18} color={Colors.zinc700} />
                   <Text style={styles.sentenceSheetActionLabel}>원본으로 이동</Text>
@@ -746,6 +758,7 @@ export default function ArchiveScreen() {
                   setSentenceDeleteTarget(selectedSentence.id);
                   setSelectedSentence(null);
                 }}
+              contentStyle={styles.sentenceSheetRowContent}
               >
                 <Feather name="trash-2" size={18} color="#DC2626" />
                 <Text style={[styles.sentenceSheetActionLabel, { color: "#DC2626" }]}>삭제</Text>
@@ -814,8 +827,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     paddingTop: 12,
     paddingBottom: 0,
-    alignItems: "center",
   },
+  subTabItemContent: {
+    alignItems: "center",},
   subTabText: {
     ...Typography.body,
     fontSize: 15,
@@ -847,17 +861,19 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.zinc50,
     borderRadius: 16,
     padding: 16,
-    gap: 8,
     minHeight: 110,
   },
+  collectionCardContent: {
+    gap: 8,},
   impressionCard: {
     width: '100%',
     backgroundColor: Colors.zinc50,
     borderRadius: 16,
     padding: 16,
-    gap: 8,
     minHeight: 110,
   },
+  impressionCardContent: {
+    gap: 8,},
   collectionIcon: {
     width: 36,
     height: 36,
@@ -886,12 +902,14 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   sentenceItem: {
-    flexDirection: "row",
-    alignItems: "center",
     paddingVertical: 14,
     paddingHorizontal: Spacing.screenPx,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
+  },
+  sentenceItemRow: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
   },
   sentenceItemContent: {
@@ -923,14 +941,15 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   selectionRow: {
-    flexDirection: "row",
-    alignItems: "center",
     paddingVertical: 14,
     paddingHorizontal: Spacing.screenPx,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
-    gap: 12,
   },
+  selectionRowContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,},
   checkbox: {
     width: 22,
     height: 22,
@@ -959,8 +978,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#EF4444",
     borderRadius: 12,
     paddingVertical: 14,
-    alignItems: "center",
   },
+  bulkDeleteButtonContent: {
+    alignItems: "center",},
   bulkDeleteButtonDisabled: {
     backgroundColor: Colors.zinc200,
   },
@@ -1065,12 +1085,13 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   sentenceSheetRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
     paddingVertical: 12,
     paddingHorizontal: 4,
   },
+  sentenceSheetRowContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,},
   sentenceSheetActionLabel: {
     ...Typography.body,
     fontSize: 15,

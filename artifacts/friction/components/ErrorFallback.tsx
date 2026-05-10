@@ -71,6 +71,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
               backgroundColor: theme.backgroundSecondary,
             },
           ]}
+        contentStyle={styles.topButtonContent}
         >
           <Feather name="alert-circle" size={20} color={theme.text} />
         </ScalePressable>
@@ -127,6 +128,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
                   accessibilityLabel="Close error details"
                   accessibilityRole="button"
                   style={styles.closeButton}
+                contentStyle={styles.closeButtonContent}
                 >
                   <Feather name="x" size={24} color={theme.text} />
                 </ScalePressable>
@@ -201,11 +203,12 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
     zIndex: 10,
   },
+  topButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",},
   button: {
     paddingVertical: 16,
     borderRadius: 8,
@@ -252,9 +255,10 @@ const styles = StyleSheet.create({
   closeButton: {
     width: 44,
     height: 44,
-    alignItems: "center",
-    justifyContent: "center",
   },
+  closeButtonContent: {
+    alignItems: "center",
+    justifyContent: "center",},
   modalScrollView: {
     flex: 1,
   },

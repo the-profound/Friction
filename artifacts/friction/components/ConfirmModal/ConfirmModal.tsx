@@ -97,7 +97,11 @@ export default function ConfirmModal({
 
             {isNewLayout ? (
               <View style={styles.actionRow}>
-                <ScalePressable style={styles.actionButton} onPress={displayActionButton.onPress}>
+                <ScalePressable
+                  style={styles.actionButton}
+                  contentStyle={styles.actionButtonContent}
+                  onPress={displayActionButton.onPress}
+                >
                   <Text style={styles.actionButtonEmoji}>{displayActionButton.emoji}</Text>
                   <Text style={styles.actionButtonLabel}>{displayActionButton.label}</Text>
                 </ScalePressable>
@@ -108,6 +112,7 @@ export default function ConfirmModal({
                       styles.deleteButton,
                       displayDeleteButton.disabled && styles.deleteButtonDisabled,
                     ]}
+                    contentStyle={styles.deleteButtonContent}
                     onPress={displayDeleteButton.onPress}
                   >
                     <Feather name="trash-2" size={20} color={Colors.white} />
@@ -118,12 +123,14 @@ export default function ConfirmModal({
               <View style={styles.buttons}>
                 <ScalePressable
                   style={[styles.button, styles.cancelButton]}
+                  contentStyle={styles.buttonContent}
                   onPress={onCancel}
                 >
                   <Text style={styles.cancelText}>{displayCancelLabel}</Text>
                 </ScalePressable>
                 <ScalePressable
                   style={[styles.button, displayDestructive ? styles.destructiveButton : styles.confirmButton]}
+                  contentStyle={styles.buttonContent}
                   onPress={onConfirm}
                 >
                   <Text style={[styles.confirmText, displayDestructive && styles.destructiveText]}>
@@ -193,13 +200,15 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: Colors.zinc100,
+  },
+  actionButtonContent: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: Colors.zinc100,
   },
   actionButtonEmoji: {
     fontSize: 18,
@@ -214,6 +223,8 @@ const styles = StyleSheet.create({
     height: 52,
     borderRadius: 12,
     backgroundColor: "#DC2626",
+  },
+  deleteButtonContent: {
     alignItems: "center",
     justifyContent: "center",
   },
@@ -229,6 +240,8 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 14,
     borderRadius: 12,
+  },
+  buttonContent: {
     alignItems: "center",
   },
   cancelButton: {

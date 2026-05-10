@@ -186,12 +186,14 @@ export default function LoginScreen() {
         <View style={styles.tabRow}>
           <ScalePressable
             style={[styles.tab, mode === "login" && styles.tabActive]}
+            contentStyle={styles.tabContent}
             onPress={() => switchMode("login")}
           >
             <Text style={[styles.tabText, mode === "login" && styles.tabTextActive]}>로그인</Text>
           </ScalePressable>
           <ScalePressable
             style={[styles.tab, mode === "signup" && styles.tabActive]}
+            contentStyle={styles.tabContent}
             onPress={() => switchMode("signup")}
           >
             <Text style={[styles.tabText, mode === "signup" && styles.tabTextActive]}>회원가입</Text>
@@ -208,6 +210,7 @@ export default function LoginScreen() {
             </Text>
             <ScalePressable
               style={styles.button}
+              contentStyle={styles.buttonContent}
               onPress={() => switchMode("login")}
             >
               <Text style={styles.buttonText}>로그인 화면으로</Text>
@@ -252,6 +255,7 @@ export default function LoginScreen() {
               />
               <ScalePressable
                 style={styles.eyeButton}
+                contentStyle={styles.eyeButtonContent}
                 onPress={() => setShowPassword((v) => !v)}
                 accessibilityRole="button"
                 accessibilityLabel={showPassword ? "비밀번호 숨기기" : "비밀번호 보기"}
@@ -270,6 +274,7 @@ export default function LoginScreen() {
                 !canSubmitLogin && styles.buttonDisabled,
                 pressed && styles.buttonPressed,
               ]}
+              contentStyle={styles.buttonContent}
               onPress={handleLogin}
               disabled={!canSubmitLogin}
               accessibilityRole="button"
@@ -320,6 +325,7 @@ export default function LoginScreen() {
               />
               <ScalePressable
                 style={styles.eyeButton}
+                contentStyle={styles.eyeButtonContent}
                 onPress={() => setShowPassword((v) => !v)}
                 accessibilityRole="button"
                 accessibilityLabel={showPassword ? "비밀번호 숨기기" : "비밀번호 보기"}
@@ -348,6 +354,7 @@ export default function LoginScreen() {
               />
               <ScalePressable
                 style={styles.eyeButton}
+                contentStyle={styles.eyeButtonContent}
                 onPress={() => setShowPasswordConfirm((v) => !v)}
                 accessibilityRole="button"
                 accessibilityLabel={showPasswordConfirm ? "비밀번호 숨기기" : "비밀번호 보기"}
@@ -368,6 +375,7 @@ export default function LoginScreen() {
                 !canSubmitSignupStep1 && styles.buttonDisabled,
                 pressed && styles.buttonPressed,
               ]}
+              contentStyle={styles.buttonContent}
               onPress={handleSignUpStep1}
               disabled={!canSubmitSignupStep1}
               accessibilityRole="button"
@@ -380,6 +388,7 @@ export default function LoginScreen() {
           <View style={styles.formContainer}>
             <ScalePressable
               style={styles.backRow}
+              contentStyle={styles.backRowContent}
               onPress={() => {
                 setSignupStep(1);
                 setErrorMessage(null);
@@ -464,6 +473,7 @@ export default function LoginScreen() {
                 !canSubmitSignupStep2 && styles.buttonDisabled,
                 pressed && styles.buttonPressed,
               ]}
+              contentStyle={styles.buttonContent}
               onPress={handleSignUpStep2}
               disabled={!canSubmitSignupStep2}
               accessibilityRole="button"
@@ -520,8 +530,10 @@ const styles = StyleSheet.create({
   tab: {
     flex: 1,
     paddingVertical: 10,
-    alignItems: "center",
     borderRadius: 11,
+  },
+  tabContent: {
+    alignItems: "center",
   },
   tabActive: {
     backgroundColor: Colors.white,
@@ -578,6 +590,8 @@ const styles = StyleSheet.create({
   eyeButton: {
     paddingHorizontal: 14,
     height: "100%",
+  },
+  eyeButtonContent: {
     alignItems: "center",
     justifyContent: "center",
   },
@@ -598,9 +612,11 @@ const styles = StyleSheet.create({
     height: 52,
     backgroundColor: Colors.zinc900,
     borderRadius: 14,
+    marginTop: 4,
+  },
+  buttonContent: {
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 4,
   },
   buttonDisabled: {
     opacity: 0.45,
@@ -637,10 +653,12 @@ const styles = StyleSheet.create({
     color: Colors.zinc700,
   },
   backRow: {
+    alignSelf: "flex-start",
+  },
+  backRowContent: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    alignSelf: "flex-start",
   },
   backRowText: {
     ...Typography.caption,

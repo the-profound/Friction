@@ -221,6 +221,7 @@ export default function OfScreen() {
       <ScalePressable
         style={styles.collectionCard}
         onPress={() => router.push({ pathname: "/of-02-detail", params: { id: item.id } })}
+      contentStyle={styles.collectionCardContent}
       >
         <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: "#bf6f78", alignItems: "center", justifyContent: "center" }}>
           <Feather name="users" size={18} color="#FFFFFF" />
@@ -307,6 +308,7 @@ export default function OfScreen() {
               <ScalePressable
                 style={[styles.collectionCard, { flex: 0, width: teamCardWidth }]}
                 onPress={() => router.push({ pathname: "/of-02-detail", params: { id: lastSingleTeamCollection.id } })}
+              contentStyle={styles.collectionCardContent}
               >
                 <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: "#bf6f78", alignItems: "center", justifyContent: "center" }}>
                   <Feather name="users" size={18} color="#FFFFFF" />
@@ -364,7 +366,9 @@ export default function OfScreen() {
         snapPoints={[0.28]}
       >
         <View style={styles.actionSheetContent}>
-          <ScalePressable style={styles.actionSheetRow} onPress={handleOpenCreate}>
+          <ScalePressable style={styles.actionSheetRow} onPress={handleOpenCreate}
+          contentStyle={styles.actionSheetRowContent}
+          >
             <View style={styles.actionSheetIcon}>
               <Feather name="plus-circle" size={20} color={Colors.zinc700} />
             </View>
@@ -373,7 +377,9 @@ export default function OfScreen() {
               <Text style={styles.actionSheetDesc}>직접 단체 모음을 만들어요</Text>
             </View>
           </ScalePressable>
-          <ScalePressable style={styles.actionSheetRow} onPress={handleOpenJoin}>
+          <ScalePressable style={styles.actionSheetRow} onPress={handleOpenJoin}
+          contentStyle={styles.actionSheetRowContent}
+          >
             <View style={styles.actionSheetIcon}>
               <Feather name="log-in" size={20} color={Colors.zinc700} />
             </View>
@@ -460,6 +466,7 @@ export default function OfScreen() {
               <ScalePressable
                 style={styles.joinBackButton}
                 onPress={() => { setJoinStep("code"); setJoinError(null); }}
+              contentStyle={styles.joinBackButtonContent}
               >
                 <Text style={styles.joinBackText}>다른 코드 입력</Text>
               </ScalePressable>
@@ -551,9 +558,10 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.zinc50,
     borderRadius: 16,
     padding: 16,
-    gap: 8,
     minHeight: 110,
   },
+  collectionCardContent: {
+    gap: 8,},
   collectionName: {
     ...Typography.bodySemiBold,
     fontSize: 14,
@@ -612,12 +620,13 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   actionSheetRow: {
-    flexDirection: "row",
-    alignItems: "center",
     paddingVertical: 14,
     paddingHorizontal: 4,
-    gap: 14,
   },
+  actionSheetRowContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,},
   actionSheetIcon: {
     width: 36,
     height: 36,
@@ -725,9 +734,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   joinBackButton: {
-    alignItems: "center",
     paddingVertical: 12,
   },
+  joinBackButtonContent: {
+    alignItems: "center",},
   joinBackText: {
     ...Typography.body,
     fontSize: 14,

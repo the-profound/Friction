@@ -81,6 +81,7 @@ export function MyArticlesPickerBottomSheet({
                 style={[styles.item, isSelected && styles.itemSelected]}
                 onPress={() => !isAdded && toggleSelect(item.id)}
                 disabled={isAdded}
+              contentStyle={styles.itemRow}
               >
                 <View style={styles.itemContent}>
                   <Text style={[styles.itemTitle, isAdded && styles.itemDisabled]} numberOfLines={1}>
@@ -105,7 +106,7 @@ export function MyArticlesPickerBottomSheet({
         </ScrollView>
       )}
       {selected.size > 0 && (
-        <ScalePressable style={styles.confirmButton} onPress={handleConfirm}>
+        <ScalePressable style={styles.confirmButton} contentStyle={styles.confirmButtonContent} onPress={handleConfirm}>
           <Text style={styles.confirmButtonText}>
             {selected.size}개 추가
           </Text>
@@ -124,12 +125,14 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   item: {
-    flexDirection: "row",
-    alignItems: "center",
     paddingVertical: 14,
     paddingHorizontal: 4,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
+  },
+  itemRow: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   itemSelected: {
     backgroundColor: Colors.zinc50,
@@ -178,6 +181,8 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     backgroundColor: Colors.zinc900,
     borderRadius: 12,
+  },
+  confirmButtonContent: {
     alignItems: "center",
   },
   confirmButtonText: {

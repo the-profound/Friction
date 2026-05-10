@@ -272,7 +272,9 @@ export function NeighborsInline({
   }, []);
 
   const renderNeighborItem = ({ item }: { item: NeighborWithUser }) => (
-    <ScalePressable style={styles.neighborItem} onPress={() => handleNeighborPress(item)}>
+    <ScalePressable style={styles.neighborItem} onPress={() => handleNeighborPress(item)}
+    contentStyle={styles.neighborItemContent}
+    >
       <View style={styles.avatarCircle}>
         <Feather name="user" size={18} color={Colors.zinc500} />
       </View>
@@ -374,6 +376,7 @@ export function NeighborsInline({
         }
         delayLongPress={1000}
         disabled={isDisabled}
+      contentStyle={styles.searchResultItemContent}
       >
         <View style={styles.avatarCircle}>
           <Feather name="user" size={18} color={Colors.zinc500} />
@@ -700,6 +703,7 @@ export function NeighborsInline({
         onPress={() => setAddSheetVisible(true)}
         accessibilityRole="button"
         accessibilityLabel="이웃 추가"
+      contentStyle={styles.fabContent}
       >
         <Feather name="user-plus" size={20} color={Colors.white} />
       </ScalePressable>
@@ -766,14 +770,15 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.navBarPaddingBottom,
   },
   neighborItem: {
-    flexDirection: "row",
-    alignItems: "center",
     paddingVertical: 14,
     paddingHorizontal: Spacing.screenPx,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
-    gap: 12,
   },
+  neighborItemContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,},
   deleteButton: {
     padding: 4,
     marginLeft: 2,
@@ -862,13 +867,15 @@ const styles = StyleSheet.create({
     height: 52,
     borderRadius: 26,
     backgroundColor: Colors.zinc900,
-    alignItems: "center",
-    justifyContent: "center",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.18,
     shadowRadius: 6,
     elevation: 4,
+  },
+  fabContent: {
+    alignItems: "center",
+    justifyContent: "center",
   },
   searchContent: {
     flex: 1,
@@ -907,13 +914,14 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   searchResultItem: {
-    flexDirection: "row",
-    alignItems: "center",
     paddingVertical: 12,
-    gap: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
   },
+  searchResultItemContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,},
   searchResultDisabled: {
     opacity: 0.6,
   },
