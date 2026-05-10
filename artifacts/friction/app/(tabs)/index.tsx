@@ -320,6 +320,22 @@ export default function InboxScreen() {
   const [searchActive, setSearchActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [tapItem, setTapItem] = useState<InboxItem | null>(null);
+
+  const searchAnim = useRef(new Animated.Value(0)).current;
+  const searchInputRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    Animated.timing(searchAnim, {
+      toValue: searchActive ? 1 : 0,
+      duration: 200,
+      useNativeDriver: false,
+    }).start();
+    if (searchActive) {
+      const t = setTimeout(() => searchInputRef.current?.focus(), 50);
+      return () => clearTimeout(t);
+    }
+  }, [searchActive]);
+
   const [sourcePromptItem, setSourcePromptItem] = useState<InboxItem | null>(null);
 
   const { data: inboxData, isLoading, refetch } = useListInbox(
@@ -497,16 +513,22 @@ Alert.alert("완료", "수신함에서 삭제되었습니다.");
         searchActive={searchActive}
       />
 
-      {searchActive && (
+      <Animated.View
+        style={{
+          height: searchAnim.interpolate({ inputRange: [0, 1], outputRange: [0, Sizing.searchBarHeight + 8] }),
+          opacity: searchAnim,
+          overflow: "hidden",
+        }}
+      >
         <View style={styles.searchBar}>
           <Feather name="search" size={Sizing.searchBarIconSize} color={Colors.searchIcon} />
           <TextInput
+            ref={searchInputRef}
             style={styles.searchInput}
             placeholder="제목, 이웃 이름으로 검색"
             placeholderTextColor={Colors.searchPlaceholder}
             value={searchQuery}
             onChangeText={setSearchQuery}
-            autoFocus
             returnKeyType="search"
           />
           {searchQuery.length > 0 && (
@@ -515,7 +537,7 @@ Alert.alert("완료", "수신함에서 삭제되었습니다.");
             </Pressable>
           )}
         </View>
-      )}
+      </Animated.View>
 
       {isLoading ? (
         <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
