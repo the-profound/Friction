@@ -7,6 +7,7 @@ import {
   RefreshControl,
   Alert,
   ScrollView,
+  Platform,
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar";
@@ -904,6 +905,7 @@ const styles = StyleSheet.create({
   filterChipTextActive: {
     color: Colors.white,
     fontWeight: "600",
+    fontFamily: Platform.select({ ios: "Pretendard-SemiBold", default: "Pretendard-SemiBold" }),
   },
   listContent: {
     paddingBottom: 0,
