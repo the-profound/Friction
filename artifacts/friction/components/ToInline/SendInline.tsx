@@ -254,7 +254,7 @@ export function SendInline({
         if (e instanceof ApiError) {
           const errorData = e.data as { error?: string } | null;
           if (e.status === 400 && errorData?.error === "Article already in collection") {
-            msg = "이미 모음에 전송된 글입니다.";
+            msg = "이미 모음에 전송된 편지입니다.";
           } else if (e.status === 409 && errorData?.error === "Today's greeting was already sent") {
             msg = "이미 오늘의 인사를 보낸 모임입니다.";
           }
@@ -393,7 +393,7 @@ export function SendInline({
           <View style={styles.pickerEmpty}>
             <Feather name="file-text" size={32} color={Colors.zinc300} />
             <Text style={styles.pickerEmptyTitle}>완성된 편지가 없어요</Text>
-            <Text style={styles.pickerEmptySub}>LETTER 상태의 글만 보낼 수 있어요</Text>
+            <Text style={styles.pickerEmptySub}>LETTER 상태의 편지만 보낼 수 있어요</Text>
           </View>
         ) : (
           <ScrollView nestedScrollEnabled style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 24 }}>
@@ -596,7 +596,7 @@ export function SendInline({
 
       <ConfirmModal
         visible={noticePromptVisible}
-        title={`이 글을 ${noticeDateLabel} <오늘의 인사>로\n설정하시겠습니까?`}
+        title={`이 편지를 ${noticeDateLabel} <오늘의 인사>로\n설정하시겠습니까?`}
         description={"(수신자의 수신함 맨 앞에 표시됩니다.)"}
         confirmLabel="예"
         cancelLabel="아니오"

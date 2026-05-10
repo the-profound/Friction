@@ -58,12 +58,12 @@ export function MyArticlesPickerBottomSheet({
   const letterArticles = articles.filter((a) => a.status === "LETTER");
 
   return (
-    <BottomSheet visible={visible} onClose={onClose} title="내 글 선택" snapPoints={[0.65]}>
+    <BottomSheet visible={visible} onClose={onClose} title="내 편지 선택" snapPoints={[0.65]}>
       {letterArticles.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Feather name="file-text" size={32} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>완성된 편지가 없어요</Text>
-          <Text style={styles.emptySubtitle}>LETTER 상태의 글만 추가할 수 있어요</Text>
+          <Text style={styles.emptySubtitle}>LETTER 상태의 편지만 추가할 수 있어요</Text>
         </View>
       ) : (
         <ScrollView

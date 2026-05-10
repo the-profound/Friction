@@ -41,7 +41,7 @@ router.post("/my-collections", async (req, res) => {
     return;
   }
   const { ownerId, name, description, isPublic, isImpression, coverImageUrl } = parsed.data;
-  const resolvedName = isImpression ? "인상깊은 글" : name;
+  const resolvedName = isImpression ? "인상깊은 편지" : name;
 
   const [collection] = await db.insert(myCollectionsTable).values({
     ownerId,
@@ -96,7 +96,7 @@ router.patch("/my-collections/:id", async (req, res) => {
     return;
   }
   if (existing.isImpression && parsed.data.name !== undefined) {
-    res.status(403).json({ error: "인상깊은 글 폴더의 이름은 변경할 수 없습니다." });
+    res.status(403).json({ error: "인상깊은 편지 폴더의 이름은 변경할 수 없습니다." });
     return;
   }
 
@@ -128,7 +128,7 @@ router.delete("/my-collections/:id", async (req, res) => {
     return;
   }
   if (existing.isImpression) {
-    res.status(403).json({ error: "인상깊은 글 폴더는 삭제할 수 없습니다." });
+    res.status(403).json({ error: "인상깊은 편지 폴더는 삭제할 수 없습니다." });
     return;
   }
   await db.delete(myCollectionArticlesTable).where(eq(myCollectionArticlesTable.myCollectionId, req.params.id));

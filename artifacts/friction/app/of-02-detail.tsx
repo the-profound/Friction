@@ -367,9 +367,9 @@ export default function TeamCollectionDetailScreen() {
       try {
         await removeArticle.mutateAsync({ teamId: id, articleId });
         articlesQuery.refetch();
-        Alert.alert("완료", "글을 제거했어요.");
+        Alert.alert("완료", "편지를 제거했어요.");
       } catch {
-        Alert.alert("오류", "글 제거에 실패했습니다.");
+        Alert.alert("오류", "편지 제거에 실패했습니다.");
       }
     },
     [id, removeArticle, articlesQuery],
@@ -421,7 +421,7 @@ export default function TeamCollectionDetailScreen() {
     const canDelete = isOwner || item.article?.authorId === userId;
     if (!canDelete) {
       closeOpenRow();
-      showToast({ message: "모음장과 작성자만 글을 삭제할 수 있습니다.", type: "info" });
+      showToast({ message: "모음장과 작성자만 편지를 삭제할 수 있습니다.", type: "info" });
       return;
     }
     setDeleteArticleTarget(item.articleId);
@@ -461,7 +461,7 @@ export default function TeamCollectionDetailScreen() {
               styles.deletedPlaceholder,
             ]}
           >
-            <Text style={styles.deletedPlaceholderText}>(삭제된 글입니다.)</Text>
+            <Text style={styles.deletedPlaceholderText}>(삭제된 편지입니다.)</Text>
           </View>
         );
       }
@@ -506,12 +506,12 @@ export default function TeamCollectionDetailScreen() {
                 )}
                 {isMyArticle && (
                   <View style={styles.myArticleBadge}>
-                    <Text style={styles.myArticleBadgeText}>내 글</Text>
+                    <Text style={styles.myArticleBadgeText}>내 편지</Text>
                   </View>
                 )}
                 {showUnread && (
                   <View style={styles.unreadBadge}>
-                    <Text style={styles.unreadBadgeText}>새 글</Text>
+                    <Text style={styles.unreadBadgeText}>새 편지</Text>
                   </View>
                 )}
               </View>
@@ -621,7 +621,7 @@ export default function TeamCollectionDetailScreen() {
           onPress={() => setActiveTab("articles")}
         >
           <Text style={[styles.tabText, activeTab === "articles" && styles.tabTextActive]}>
-            글 목록 ({articles.filter((a) => !a.isDeletedPlaceholder).length})
+            편지 목록 ({articles.filter((a) => !a.isDeletedPlaceholder).length})
           </Text>
         </ScalePressable>
         <ScalePressable
@@ -653,14 +653,14 @@ export default function TeamCollectionDetailScreen() {
                 }
               >
                 <Feather name="send" size={16} color={Colors.zinc600} />
-                <Text style={styles.addButtonText}>내 글 보내기</Text>
+                <Text style={styles.addButtonText}>내 편지 보내기</Text>
               </ScalePressable>
             </View>
           )}
           {articlesQuery.isError ? (
             <View style={[styles.emptyContainer, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}>
               <Feather name="alert-circle" size={36} color={Colors.zinc300} />
-              <Text style={styles.emptyTitle}>글 목록을 불러오지 못했어요</Text>
+              <Text style={styles.emptyTitle}>편지 목록을 불러오지 못했어요</Text>
               <ScalePressable style={styles.retryButton} onPress={() => articlesQuery.refetch()}>
                 <Text style={styles.retryButtonText}>다시 시도</Text>
               </ScalePressable>
@@ -672,8 +672,8 @@ export default function TeamCollectionDetailScreen() {
           ) : articleRows.length === 0 ? (
             <View style={[styles.emptyContainer, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}>
               <Feather name="file-text" size={36} color={Colors.zinc300} />
-              <Text style={styles.emptyTitle}>아직 추가된 글이 없어요</Text>
-              <Text style={styles.emptySubtitle}>멤버들이 글을 추가하면 여기에 표시됩니다</Text>
+              <Text style={styles.emptyTitle}>아직 추가된 편지가 없어요</Text>
+              <Text style={styles.emptySubtitle}>멤버들이 편지를 추가하면 여기에 표시됩니다</Text>
             </View>
           ) : (
             <FlatList
@@ -889,8 +889,8 @@ export default function TeamCollectionDetailScreen() {
 
       <ConfirmModal
         visible={deleteArticleTarget !== null}
-        title="글 삭제"
-        description="이 글을 단체 모음에서 제거하시겠어요?"
+        title="편지 삭제"
+        description="이 편지를 단체 모음에서 제거하시겠어요?"
         confirmLabel="삭제"
         cancelLabel="취소"
         destructive

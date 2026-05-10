@@ -18,18 +18,63 @@ export async function seedDevData(): Promise<void> {
   const client = await pool.connect();
   try {
     // -----------------------------------------------------------------------
+    // Always-run migration (ALL environments): rename impression folder rows
+    // still carrying the old name "인상깊은 글" to "인상깊은 편지".
+    //
+    // Conflict scenario: a user may simultaneously have
+    //   (A) is_impression=true,  name='인상깊은 글'   ← needs rename
+    //   (B) is_impression=false, name='인상깊은 편지' ← blocks rename (unique)
+    //
+    // Two-step, fully transactional:
+    //   Step 1 — Move any blocking regular folder out of the way by appending
+    //             " (기존)" so the unique constraint cannot fire.
+    //   Step 2 — Rename every remaining impression "인상깊은 글" row.
+    //
+    // Idempotent — safe to run multiple times.
+    // -----------------------------------------------------------------------
+    try {
+      await client.query("BEGIN");
+      // Step 1: clear the path for conflict owners
+      await client.query(`
+        UPDATE my_collections
+        SET name = '인상깊은 편지 (기존)', updated_at = NOW()
+        WHERE is_impression = false
+          AND name = '인상깊은 편지'
+          AND EXISTS (
+            SELECT 1 FROM my_collections mc2
+            WHERE mc2.owner_id = my_collections.owner_id
+              AND mc2.is_impression = true
+              AND mc2.name = '인상깊은 글'
+          )
+      `);
+      // Step 2: rename all remaining impression "인상깊은 글" rows
+      const renameResult = await client.query(`
+        UPDATE my_collections
+        SET name = '인상깊은 편지', updated_at = NOW()
+        WHERE is_impression = true
+          AND name = '인상깊은 글'
+      `);
+      await client.query("COMMIT");
+      if (renameResult.rowCount && renameResult.rowCount > 0) {
+        console.log(`[seed] Renamed ${renameResult.rowCount} impression folder(s) from '인상깊은 글' to '인상깊은 편지'.`);
+      }
+    } catch (e) {
+      await client.query("ROLLBACK");
+      console.warn("[seed] impression folder rename migration failed:", e);
+    }
+
     // Always-run backfill (ALL environments): create/promote the
-    // "인상깊은 글" impression folder for every user who does not yet have
+    // "인상깊은 편지" impression folder for every user who does not yet have
     // one.  Idempotent — safe to run multiple times.
     //
-    // Step 1: if a user already has a regular folder named "인상깊은 글"
+    // Step 1: if a user already has a regular folder named "인상깊은 편지"
     //   but no impression folder yet, promote that folder in place.
     // Step 2: for users who still have no impression folder, insert one.
     // -----------------------------------------------------------------------
     await client.query(`
       UPDATE my_collections
       SET is_impression = true, updated_at = NOW()
-      WHERE name = '인상깊은 글'
+      WHERE name = '인상깊은 편지'
         AND is_impression = false
         AND NOT EXISTS (
           SELECT 1 FROM my_collections mc2
@@ -38,7 +83,7 @@ export async function seedDevData(): Promise<void> {
     `);
     await client.query(`
       INSERT INTO my_collections (id, owner_id, name, is_impression, is_public, created_at, updated_at)
-      SELECT gen_random_uuid(), u.id, '인상깊은 글', true, false, NOW(), NOW()
+      SELECT gen_random_uuid(), u.id, '인상깊은 편지', true, false, NOW(), NOW()
       FROM users u
       WHERE NOT EXISTS (
         SELECT 1 FROM my_collections mc

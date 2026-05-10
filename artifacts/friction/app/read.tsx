@@ -794,7 +794,7 @@ export default function ReadScreen() {
         } else {
           try {
             const newCol = await createCollection.mutateAsync({
-              data: { ownerId: userId, name: "인상깊은 글", isImpression: true },
+              data: { ownerId: userId, name: "인상깊은 편지", isImpression: true },
             });
             targetCollectionId = newCol.id;
           } catch {
@@ -1450,7 +1450,7 @@ export default function ReadScreen() {
           </View>
         ) : (
         <View style={styles.completionContent}>
-          <Text style={dynamicStyles.completionText}>글을 끝까지 다 읽었습니다.</Text>
+          <Text style={dynamicStyles.completionText}>편지를 끝까지 다 읽었습니다.</Text>
 
           <ScalePressable
             style={styles.collectionSelector}
@@ -1555,10 +1555,10 @@ export default function ReadScreen() {
 
       <ConfirmModal
         visible={!!duplicatePrompt}
-        title="같은 글이 더 있어요"
+        title="같은 편지가 더 있어요"
         description={
           duplicatePrompt
-            ? `수신함에 같은 글이 ${duplicatePrompt.count}개 더 있어요. 모두 미보관 읽음 처리할까요?`
+            ? `수신함에 같은 편지가 ${duplicatePrompt.count}개 더 있어요. 모두 미보관 읽음 처리할까요?`
             : ""
         }
         confirmLabel={isMarkingOthers ? "처리 중..." : "네, 모두 읽음"}

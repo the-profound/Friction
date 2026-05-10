@@ -264,7 +264,7 @@ export default function DraftScreen() {
         setSourceArticleTitle(articleTitle);
         invalidateArticleDetail(queryClient, id);
       } catch {
-        Alert.alert("오류", "원글 연결에 실패했습니다.");
+        Alert.alert("오류", "답장 대상 편지 연결에 실패했습니다.");
       }
     },
     [id, updateArticle, queryClient],
@@ -281,7 +281,7 @@ export default function DraftScreen() {
       setSourceArticleTitle(null);
       invalidateArticleDetail(queryClient, id);
     } catch {
-      Alert.alert("오류", "원글 연결 해제에 실패했습니다.");
+      Alert.alert("오류", "답장 대상 편지 연결 해제에 실패했습니다.");
     }
   }, [id, updateArticle, queryClient]);
 
@@ -550,7 +550,7 @@ export default function DraftScreen() {
                 <Text style={styles.sourceArticleText} numberOfLines={1}>
                   {sourceArticleId
                     ? `⤷ ${sourceArticleTitle ?? "로딩 중..."} 의 답장`
-                    : "⤷ 이 글을 답장으로 설정"}
+                    : "⤷ 이 편지를 답장으로 설정"}
                 </Text>
                 <Text style={styles.sourceArticleGear}>⚙️</Text>
               </ScalePressable>
@@ -558,7 +558,7 @@ export default function DraftScreen() {
             sourceArticleSlotText={
               sourceArticleId
                 ? `⤷ ${sourceArticleTitle ?? "로딩 중..."} 의 답장 ⚙️`
-                : "⤷ 이 글을 답장으로 설정 ⚙️"
+                : "⤷ 이 편지를 답장으로 설정 ⚙️"
             }
             onSourceArticleSlotTap={() => setPickerVisible(true)}
           />

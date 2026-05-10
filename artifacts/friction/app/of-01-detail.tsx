@@ -213,7 +213,7 @@ export default function PersonalCollectionDetailScreen() {
         }
         await invalidateMyCollectionDetail(queryClient, id);
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "글 추가에 실패했습니다.";
+        const msg = e instanceof Error ? e.message : "편지 추가에 실패했습니다.";
         Alert.alert("오류", msg);
       }
     },
@@ -227,9 +227,9 @@ export default function PersonalCollectionDetailScreen() {
         await removeArticle.mutateAsync({ collectionId: id, articleId });
         articlesQuery.refetch();
         collectionQuery.refetch();
-        Alert.alert("완료", "글을 제거했어요.");
+        Alert.alert("완료", "편지를 제거했어요.");
       } catch {
-        Alert.alert("오류", "글 제거에 실패했습니다.");
+        Alert.alert("오류", "편지 제거에 실패했습니다.");
       }
     },
     [id, removeArticle, articlesQuery, collectionQuery],
@@ -257,11 +257,11 @@ export default function PersonalCollectionDetailScreen() {
         setIsBulkMoveMode(false);
         exitSelectionMode();
         if (failCount === 0) {
-          Alert.alert("완료", "글을 이동했어요.");
+          Alert.alert("완료", "편지를 이동했어요.");
         } else if (failCount < ids.length) {
           Alert.alert("오류", `일부 이동에 실패했습니다. (${failCount}개)`);
         } else {
-          Alert.alert("오류", "글 이동에 실패했습니다.");
+          Alert.alert("오류", "편지 이동에 실패했습니다.");
         }
         return;
       }
@@ -274,9 +274,9 @@ export default function PersonalCollectionDetailScreen() {
         await removeArticle.mutateAsync({ collectionId: id, articleId });
         await addArticle.mutateAsync({ id: targetCollectionId, data: { articleId } });
         await invalidateMyCollectionDetail(queryClient, id);
-        Alert.alert("완료", "글을 이동했어요.");
+        Alert.alert("완료", "편지를 이동했어요.");
       } catch {
-        Alert.alert("오류", "글 이동에 실패했습니다.");
+        Alert.alert("오류", "편지 이동에 실패했습니다.");
         articlesQuery.refetch();
       }
     },
@@ -313,9 +313,9 @@ export default function PersonalCollectionDetailScreen() {
         if (id) {
           queryClient.invalidateQueries({ queryKey: getListMyCollectionArticlesQueryKey(id) });
         }
-        showToast({ message: `'${articleTitle}'을(를) 원글로 연결했어요.`, type: "success" });
+        showToast({ message: `'${articleTitle}'을(를) 답장 대상 편지로 연결했어요.`, type: "success" });
       } catch {
-        Alert.alert("오류", "원글 연결에 실패했습니다.");
+        Alert.alert("오류", "답장 대상 편지 연결에 실패했습니다.");
       }
     },
     [longPressTargetArticle, updateArticle, queryClient, id, showToast],
@@ -334,9 +334,9 @@ export default function PersonalCollectionDetailScreen() {
       if (id) {
         queryClient.invalidateQueries({ queryKey: getListMyCollectionArticlesQueryKey(id) });
       }
-      showToast({ message: "원글 연결을 해제했어요.", type: "success" });
+      showToast({ message: "답장 대상 편지 연결을 해제했어요.", type: "success" });
     } catch {
-      Alert.alert("오류", "원글 연결 해제에 실패했습니다.");
+      Alert.alert("오류", "답장 대상 편지 연결 해제에 실패했습니다.");
     }
   }, [longPressTargetArticle, updateArticle, queryClient, id, showToast]);
 
@@ -513,12 +513,12 @@ export default function PersonalCollectionDetailScreen() {
       {!selectionMode && (
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>
-            글 목록 ({articles.length})
+            편지 목록 ({articles.length})
           </Text>
           {!isArchive && (
             <ScalePressable style={styles.addArticleButton} onPress={() => setShowPicker(true)}>
               <Feather name="plus" size={16} color={Colors.zinc600} />
-              <Text style={styles.addArticleText}>글 추가</Text>
+              <Text style={styles.addArticleText}>편지 추가</Text>
             </ScalePressable>
           )}
         </View>
@@ -527,7 +527,7 @@ export default function PersonalCollectionDetailScreen() {
       {articlesQuery.isError ? (
         <View style={[styles.emptyContainer, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}>
           <Feather name="alert-circle" size={36} color={Colors.zinc300} />
-          <Text style={styles.emptyTitle}>글 목록을 불러오지 못했어요</Text>
+          <Text style={styles.emptyTitle}>편지 목록을 불러오지 못했어요</Text>
           <ScalePressable style={styles.retryButton} onPress={() => articlesQuery.refetch()}>
             <Text style={styles.retryButtonText}>다시 시도</Text>
           </ScalePressable>
@@ -535,7 +535,7 @@ export default function PersonalCollectionDetailScreen() {
       ) : articles.length === 0 ? (
         <View style={[styles.emptyContainer, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}>
           <Feather name="file-text" size={36} color={Colors.zinc300} />
-          <Text style={styles.emptyTitle}>아직 추가된 글이 없어요</Text>
+          <Text style={styles.emptyTitle}>아직 추가된 편지가 없어요</Text>
           <Text style={styles.emptySubtitle}>완성된 편지를 이 폴더에 추가해보세요</Text>
         </View>
       ) : (
@@ -665,7 +665,7 @@ export default function PersonalCollectionDetailScreen() {
       <ConfirmModal
         visible={deleteConfirmVisible}
         title="폴더 삭제"
-        description={`'${collection?.name ?? ""}'을(를) 삭제할까요?\n폴더 안의 글은 삭제되지 않아요.`}
+        description={`'${collection?.name ?? ""}'을(를) 삭제할까요?\n폴더 안의 편지는 삭제되지 않아요.`}
         confirmLabel={isDeletingCollection ? "삭제 중..." : "삭제"}
         cancelLabel="취소"
         destructive
@@ -676,7 +676,7 @@ export default function PersonalCollectionDetailScreen() {
       <ConfirmModal
         visible={showBulkDeleteConfirm}
         title={`${selectedCount}개를 삭제할까요?`}
-        description="선택한 글이 이 보관함에서 제거됩니다."
+        description="선택한 편지가 이 보관함에서 제거됩니다."
         confirmLabel="삭제"
         cancelLabel="취소"
         destructive
@@ -687,7 +687,7 @@ export default function PersonalCollectionDetailScreen() {
       <BottomSheet
         visible={isLongPressMenuVisible}
         onClose={() => setIsLongPressMenuVisible(false)}
-        title={longPressTargetArticle?.article?.title ?? "글 설정"}
+        title={longPressTargetArticle?.article?.title ?? "편지 설정"}
         snapPoints={[0.35]}
       >
         <View style={styles.actionSheetContent}>

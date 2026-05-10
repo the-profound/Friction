@@ -563,10 +563,10 @@ export default function InboxScreen() {
 
       <ConfirmModal
         visible={sourcePromptItem !== null}
-        title="원글을 먼저 읽어보시겠어요?"
-        description="맥락 파악을 위해 원글을 먼저 읽는 것을 추천합니다."
+        title="원래 편지를 먼저 읽어보시겠어요?"
+        description="맥락 파악을 위해 원래 편지를 먼저 읽는 것을 추천합니다."
         cancelLabel="건너뛰고 답장 읽기"
-        confirmLabel="원글 먼저 읽기"
+        confirmLabel="원래 편지 먼저 읽기"
         onCancel={handleSkipToReply}
         onConfirm={handleReadSourceFirst}
         onBackdropPress={handleSourcePromptClose}

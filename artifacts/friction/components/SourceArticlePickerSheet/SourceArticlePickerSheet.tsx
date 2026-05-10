@@ -187,7 +187,7 @@ export default function SourceArticlePickerSheet({
     <BottomSheet
       visible={visible}
       onClose={onClose}
-      title="원글 연결 설정"
+      title="답장 대상 편지 설정"
       closeButton
       snapPoints={[0.75]}
       keyboardAware
@@ -228,7 +228,7 @@ export default function SourceArticlePickerSheet({
             <Text
               style={[styles.tabText, activeTab === "inbox" && styles.tabTextActive]}
             >
-              수신한 글
+              수신한 편지
             </Text>
           </ScalePressable>
           <ScalePressable
@@ -238,7 +238,7 @@ export default function SourceArticlePickerSheet({
             <Text
               style={[styles.tabText, activeTab === "myArticles" && styles.tabTextActive]}
             >
-              내가 쓴 글
+              내가 쓴 편지
             </Text>
           </ScalePressable>
         </View>
@@ -250,7 +250,7 @@ export default function SourceArticlePickerSheet({
         ) : activeTab === "inbox" ? (
           inboxItems.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>수신한 글이 없습니다.</Text>
+              <Text style={styles.emptyText}>수신한 편지가 없습니다.</Text>
             </View>
           ) : (
             <FlatList
@@ -265,7 +265,7 @@ export default function SourceArticlePickerSheet({
           )
         ) : myArticleItems.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>작성한 글이 없습니다.</Text>
+            <Text style={styles.emptyText}>작성한 편지가 없습니다.</Text>
           </View>
         ) : (
           <FlatList

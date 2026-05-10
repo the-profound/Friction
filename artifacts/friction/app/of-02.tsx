@@ -226,7 +226,7 @@ export default function TeamCollectionListScreen() {
       <View style={styles.emptyContainer}>
         <Feather name="users" size={40} color={Colors.zinc300} />
         <Text style={styles.emptyTitle}>단체 모음이 없어요</Text>
-        <Text style={styles.emptySubtitle}>함께 글을 나눌 모임을 만들어보세요</Text>
+        <Text style={styles.emptySubtitle}>함께 편지를 나눌 모임을 만들어보세요</Text>
         <ScalePressable style={styles.createButton} onPress={handleOpenCreate}>
           <Text style={styles.createButtonText}>새 단체 모음 만들기</Text>
         </ScalePressable>

@@ -186,7 +186,7 @@ export default function SaveAsPhotosModal({
     }
 
     if (!article || totalPageCount === 0) {
-      finishWithError("글 데이터를 불러오지 못했어요");
+      finishWithError("편지 데이터를 불러오지 못했어요");
       return;
     }
 
@@ -231,7 +231,7 @@ export default function SaveAsPhotosModal({
     if (!visible || phase !== "idle") return;
     if (articleQuery.isLoading) return;
     if (articleQuery.isError || !article) {
-      finishWithError("글 데이터를 불러오지 못했어요");
+      finishWithError("편지 데이터를 불러오지 못했어요");
       return;
     }
     if (authorId && authorQuery.isLoading) return;

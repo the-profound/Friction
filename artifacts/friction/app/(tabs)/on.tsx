@@ -672,7 +672,7 @@ export default function OnScreen() {
           contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
         >
           <Feather name="book-open" size={40} color={Colors.zinc300} />
-          <Text style={styles.emptyTitle}>아직 내보낸 글이 없어요</Text>
+          <Text style={styles.emptyTitle}>아직 내보낸 편지가 없어요</Text>
           <Text style={styles.emptySubtitle}>
             메모를 완성해 편지로 내보내면{"\n"}여기에 모아볼 수 있어요
           </Text>
@@ -730,7 +730,7 @@ export default function OnScreen() {
       <ConfirmModal
         visible={deleteTargetId !== null}
         title="삭제하시겠습니까?"
-        description={deleteTargetType === "my_article" ? "이 글은 영구적으로 삭제됩니다." : "이 메모는 영구적으로 삭제됩니다."}
+        description={deleteTargetType === "my_article" ? "이 편지는 영구적으로 삭제됩니다." : "이 메모는 영구적으로 삭제됩니다."}
         confirmLabel="삭제"
         cancelLabel="취소"
         destructive
@@ -815,7 +815,7 @@ export default function OnScreen() {
       <ConfirmModal
         visible={showBulkDeleteConfirm}
         title={`${selectedCount}개를 삭제할까요?`}
-        description={topTab === "my_article" ? "선택한 글이 영구적으로 삭제됩니다." : "선택한 메모가 영구적으로 삭제됩니다."}
+        description={topTab === "my_article" ? "선택한 편지가 영구적으로 삭제됩니다." : "선택한 메모가 영구적으로 삭제됩니다."}
         confirmLabel="삭제"
         cancelLabel="취소"
         destructive

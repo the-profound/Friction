@@ -251,7 +251,7 @@ export default function PersonalCollectionListScreen() {
       <ConfirmModal
         visible={deleteTarget !== null}
         title="폴더 삭제"
-        description={`'${deleteTarget?.name ?? ""}'을(를) 삭제할까요?\n폴더 안의 글은 삭제되지 않아요.`}
+        description={`'${deleteTarget?.name ?? ""}'을(를) 삭제할까요?\n폴더 안의 편지는 삭제되지 않아요.`}
         confirmLabel={isDeleting ? "삭제 중..." : "삭제"}
         cancelLabel="취소"
         destructive
