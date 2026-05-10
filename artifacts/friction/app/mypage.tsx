@@ -92,7 +92,7 @@ export default function MyPageScreen() {
         <Pressable style={styles.backButton} onPress={() => router.back()} hitSlop={8}>
           <Feather name="chevron-left" size={24} color={Colors.zinc700} />
         </Pressable>
-        <Text style={styles.headerTitle}>설정과 활동</Text>
+        <Text style={styles.headerTitle}>설정 및 활동</Text>
         <View style={styles.headerSpacer} />
       </View>
 
