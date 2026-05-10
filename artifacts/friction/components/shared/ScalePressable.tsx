@@ -69,6 +69,40 @@ export function extractOuterStyle(style: PressableProps["style"]): FlatStyle {
   return outer;
 }
 
+/**
+ * Computes the style to pass to the inner Pressable by stripping out any
+ * OUTER_LAYOUT_KEYS that have already been hoisted to the Animated.View
+ * wrapper. This breaks the circular flex/height dependency that causes Yoga
+ * to resolve the Pressable's height to ~0 in row containers.
+ *
+ * For function styles the wrapper is preserved so pressed-state visuals
+ * (opacity, background changes) still work correctly — only the flat keys
+ * in OUTER_LAYOUT_KEYS are omitted from the returned object/array.
+ */
+export function computeInnerStyle(style: PressableProps["style"]): PressableProps["style"] {
+  if (style == null) return style;
+
+  if (typeof style === "function") {
+    return (state: Parameters<StyleFn>[0]): StyleProp<ViewStyle> => {
+      const resolved = (style as StyleFn)(state);
+      return stripOuterKeys(resolved);
+    };
+  }
+
+  return stripOuterKeys(style);
+}
+
+function stripOuterKeys(style: StyleProp<ViewStyle>): StyleProp<ViewStyle> {
+  const flat = (StyleSheet.flatten(style) ?? {}) as FlatStyle;
+  const inner: FlatStyle = {};
+  for (const [key, value] of Object.entries(flat)) {
+    if (!OUTER_LAYOUT_KEYS.has(key)) {
+      inner[key] = value;
+    }
+  }
+  return inner as ViewStyle;
+}
+
 export default function ScalePressable({
   scaleTo = 0.95,
   onPressIn,
@@ -101,10 +135,27 @@ export default function ScalePressable({
   // toggles and a new function is passed by the caller).
   const outerStyle = useMemo(() => extractOuterStyle(style), [style]);
 
+  // Strip OUTER_LAYOUT_KEYS from the inner Pressable's style so that
+  // hoisted layout props (e.g. flex: 1) don't create a circular height
+  // dependency inside the Animated.View wrapper.
+  //
+  // When the caller passes a function style (pressed-state callback), we must
+  // compose a new function rather than placing the callback inside an array,
+  // because Pressable only accepts a function OR an array of objects — not an
+  // array containing a function.
+  const innerStyle = useMemo<PressableProps["style"]>(() => {
+    const stripped = computeInnerStyle(style);
+    if (typeof stripped === "function") {
+      const fn = stripped as StyleFn;
+      return (state: Parameters<StyleFn>[0]) => [styles.innerBase, fn(state)];
+    }
+    return [styles.innerBase, stripped];
+  }, [style]);
+
   return (
-    <Animated.View style={[outerStyle, animatedStyle]}>
+    <Animated.View style={[outerStyle, animatedStyle, styles.wrapper]}>
       <Pressable
-        style={style}
+        style={innerStyle}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         {...rest}
@@ -114,3 +165,12 @@ export default function ScalePressable({
     </Animated.View>
   );
 }
+
+export const styles = StyleSheet.create({
+  wrapper: {
+    overflow: "visible",
+  },
+  innerBase: {
+    alignSelf: "stretch",
+  },
+});

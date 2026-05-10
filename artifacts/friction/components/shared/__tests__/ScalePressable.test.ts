@@ -9,7 +9,12 @@ vi.mock("react-native", () => {
     if (typeof style === "object") return style as Record<string, unknown>;
     return {};
   };
-  return { StyleSheet: { flatten } };
+  return {
+    StyleSheet: {
+      flatten,
+      create: <T extends Record<string, unknown>>(s: T): T => s,
+    },
+  };
 });
 
 vi.mock("react-native-reanimated", () => ({
@@ -25,7 +30,7 @@ vi.mock("react", () => ({
   createElement: () => null,
 }));
 
-const { extractOuterStyle, OUTER_LAYOUT_KEYS } = await import("../ScalePressable");
+const { extractOuterStyle, computeInnerStyle, OUTER_LAYOUT_KEYS } = await import("../ScalePressable");
 
 describe("ScalePressable.extractOuterStyle", () => {
   it("hoists flex layout props to the outer wrapper", () => {
@@ -100,5 +105,87 @@ describe("ScalePressable.extractOuterStyle", () => {
     expect(OUTER_LAYOUT_KEYS.has("justifyContent")).toBe(false);
     expect(OUTER_LAYOUT_KEYS.has("alignItems")).toBe(false);
     expect(OUTER_LAYOUT_KEYS.has("padding")).toBe(false);
+  });
+});
+
+describe("ScalePressable.computeInnerStyle", () => {
+  it("removes OUTER_LAYOUT_KEYS from plain object styles", () => {
+    const inner = computeInnerStyle({ flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: "center" });
+    expect(inner).not.toHaveProperty("flex");
+    expect(inner).toMatchObject({ paddingVertical: 14, borderRadius: 12, alignItems: "center" });
+  });
+
+  it("removes width and height from plain object styles", () => {
+    const inner = computeInnerStyle({ width: 52, height: 52, borderRadius: 12, backgroundColor: "#DC2626" });
+    expect(inner).not.toHaveProperty("width");
+    expect(inner).not.toHaveProperty("height");
+    expect(inner).toMatchObject({ borderRadius: 12, backgroundColor: "#DC2626" });
+  });
+
+  it("removes position and absolute coords from plain object styles", () => {
+    const inner = computeInnerStyle({ position: "absolute", top: 0, left: 0, backgroundColor: "red" });
+    expect(inner).not.toHaveProperty("position");
+    expect(inner).not.toHaveProperty("top");
+    expect(inner).not.toHaveProperty("left");
+    expect(inner).toMatchObject({ backgroundColor: "red" });
+  });
+
+  it("preserves visual and inner-layout props intact", () => {
+    const style = {
+      backgroundColor: "#F4F4F5",
+      borderRadius: 12,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 14,
+      gap: 8,
+    };
+    const inner = computeInnerStyle(style);
+    expect(inner).toMatchObject(style);
+  });
+
+  it("returns null/undefined as-is", () => {
+    expect(computeInnerStyle(null)).toBeNull();
+    expect(computeInnerStyle(undefined)).toBeUndefined();
+  });
+
+  it("wraps function styles so OUTER_LAYOUT_KEYS are absent from resolved result", () => {
+    const styleFn = ({ pressed }: { pressed: boolean }) => ({
+      flex: 1,
+      paddingVertical: 14,
+      opacity: pressed ? 0.5 : 1,
+    });
+    const innerFn = computeInnerStyle(styleFn) as typeof styleFn;
+    expect(typeof innerFn).toBe("function");
+
+    const resolvedUnpressed = innerFn({ pressed: false });
+    expect(resolvedUnpressed).not.toHaveProperty("flex");
+    expect(resolvedUnpressed).toMatchObject({ paddingVertical: 14, opacity: 1 });
+
+    const resolvedPressed = innerFn({ pressed: true });
+    expect(resolvedPressed).not.toHaveProperty("flex");
+    expect(resolvedPressed).toMatchObject({ paddingVertical: 14, opacity: 0.5 });
+  });
+
+  it("ConfirmModal button pattern: flex:1 removed, visual props preserved", () => {
+    const buttonStyle = [
+      { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: "center" },
+      { backgroundColor: "#18181B" },
+    ];
+    const inner = computeInnerStyle(buttonStyle);
+    expect(inner).not.toHaveProperty("flex");
+    expect(inner).toMatchObject({ paddingVertical: 14, borderRadius: 12, alignItems: "center", backgroundColor: "#18181B" });
+  });
+});
+
+describe("ScalePressable styles: wrapper overflow", () => {
+  it("actual wrapper style exported from ScalePressable has overflow:visible", async () => {
+    const { styles } = await import("../ScalePressable");
+    expect(styles.wrapper).toHaveProperty("overflow", "visible");
+  });
+
+  it("actual innerBase style exported from ScalePressable has alignSelf:stretch", async () => {
+    const { styles } = await import("../ScalePressable");
+    expect(styles.innerBase).toHaveProperty("alignSelf", "stretch");
   });
 });
