@@ -1330,7 +1330,7 @@ export default function ReadScreen() {
                       }}
                     >
                       <View style={styles.pickerItemLeft}>
-                        <Feather name="folder" size={18} color={isSelected ? Colors.zinc900 : Colors.zinc500} />
+                        <Feather name={item.isImpression ? "heart" : "folder"} size={18} color={isSelected ? Colors.zinc900 : Colors.zinc500} />
                         <Text style={[styles.pickerItemName, isSelected && styles.pickerItemNameSelected]} numberOfLines={1}>
                           {item.name}
                         </Text>
