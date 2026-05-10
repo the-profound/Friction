@@ -57,7 +57,12 @@ export default function ToScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <PageHeader title="발신함" showSearch={false} />
+      <PageHeader
+        title="발신함"
+        showSearch={false}
+        showHistory
+        onHistoryPress={() => router.push("/mypage-sendrecords")}
+      />
       <SendInline
         targetGroup={params.targetGroup}
         targetGroupName={params.targetGroupName}

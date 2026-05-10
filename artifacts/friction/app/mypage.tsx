@@ -127,11 +127,6 @@ export default function MyPageScreen() {
             label="이웃 목록"
             onPress={() => router.push("/mypage-neighbors" as never)}
             showChevron
-          />
-          <SettingRow
-            label="발신 목록"
-            onPress={() => router.push("/mypage-sendrecords" as never)}
-            showChevron
             isLast
           />
         </Section>

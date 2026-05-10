@@ -13,10 +13,12 @@ interface PageHeaderProps {
   showAdd?: boolean;
   showKebab?: boolean;
   showProfile?: boolean;
+  showHistory?: boolean;
   onSearchPress?: () => void;
   onAddPress?: () => void;
   onKebabPress?: () => void;
   onProfilePress?: () => void;
+  onHistoryPress?: () => void;
   searchActive?: boolean;
   addDisabled?: boolean;
   rightText?: string;
@@ -29,10 +31,12 @@ export function PageHeader({
   showAdd = false,
   showKebab = false,
   showProfile = false,
+  showHistory = false,
   onSearchPress,
   onAddPress,
   onKebabPress,
   onProfilePress,
+  onHistoryPress,
   searchActive = false,
   addDisabled = false,
   rightText,
@@ -53,6 +57,17 @@ export function PageHeader({
         {showAdd && (
           <ScalePressable style={[styles.actionButton, addDisabled && styles.actionButtonDisabled]} onPress={addDisabled ? undefined : onAddPress} hitSlop={8}>
             <Feather name="plus" size={Sizing.plusIconSize} color={addDisabled ? Colors.zinc300 : Colors.zinc700} />
+          </ScalePressable>
+        )}
+        {showHistory && (
+          <ScalePressable
+            style={styles.actionButton}
+            onPress={onHistoryPress}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="발신 기록"
+          >
+            <Feather name="clock" size={Sizing.searchIconSize} color={Colors.zinc700} />
           </ScalePressable>
         )}
         {showSearch && (

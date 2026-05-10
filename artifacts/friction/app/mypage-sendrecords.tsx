@@ -144,7 +144,7 @@ export default function MyPageSendRecordsScreen() {
         <ScalePressable style={styles.backButton} onPress={() => router.back()} hitSlop={8}>
           <Feather name="chevron-left" size={24} color={Colors.zinc700} />
         </ScalePressable>
-        <Text style={styles.headerTitle}>발신 목록</Text>
+        <Text style={styles.headerTitle}>발신 기록</Text>
         <View style={styles.headerSpacer} />
       </View>
       {renderContent()}
