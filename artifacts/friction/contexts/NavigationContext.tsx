@@ -7,6 +7,7 @@ import type { NavContextValue, NavLayer } from "@/types/navigation";
 const TAB_ROUTES: Record<MainTabKey, Href> = {
   IN: "/(tabs)" as Href,
   ON: "/(tabs)/on" as Href,
+  AR: "/(tabs)/archive" as Href,
   OF: "/(tabs)/of" as Href,
   TO: "/(tabs)/to" as Href,
 };
@@ -14,6 +15,7 @@ const TAB_ROUTES: Record<MainTabKey, Href> = {
 const SEGMENT_TO_TAB: Record<string, MainTabKey> = {
   index: "IN",
   on: "ON",
+  archive: "AR",
   of: "OF",
   to: "TO",
 };
