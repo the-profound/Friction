@@ -37,13 +37,6 @@ import { isQueryStale } from "@/lib/useScreenFocused";
 import { useQueryClient } from "@tanstack/react-query";
 
 type ArchiveSubTab = "personal" | "sentence";
-type PersonalFilter = "all" | "my" | "subscribed";
-
-const PERSONAL_FILTER_OPTIONS: { key: PersonalFilter; label: string }[] = [
-  { key: "all", label: "전체" },
-  { key: "my", label: "내 모음" },
-  { key: "subscribed", label: "구독 모음" },
-];
 
 export default function ArchiveScreen() {
   const insets = useSafeAreaInsets();
@@ -58,7 +51,6 @@ export default function ArchiveScreen() {
   const [createSheetVisible, setCreateSheetVisible] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
-  const [personalFilter, setPersonalFilter] = useState<PersonalFilter>("all");
 
   const [selectedSentence, setSelectedSentence] = useState<StoredSentence | null>(null);
   const [sentenceDeleteTarget, setSentenceDeleteTarget] = useState<string | null>(null);
@@ -84,11 +76,6 @@ export default function ArchiveScreen() {
 
   const filteredMyCollections = useMemo(() => {
     let list = myCollections;
-    if (personalFilter === "my") {
-      list = myCollections.filter((c) => !c.isPublic);
-    } else if (personalFilter === "subscribed") {
-      list = myCollections.filter((c) => c.isPublic);
-    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       list = list.filter((c) => c.name.toLowerCase().includes(q));
@@ -98,7 +85,7 @@ export default function ArchiveScreen() {
       if (!a.isArchive && b.isArchive) return 1;
       return 0;
     });
-  }, [myCollections, searchQuery, personalFilter]);
+  }, [myCollections, searchQuery]);
 
   const filteredSentences = useMemo(() => {
     if (!searchQuery.trim()) return sentences;
@@ -377,38 +364,20 @@ export default function ArchiveScreen() {
     );
   }, [selectedIds, toggleSelect]);
 
-  const renderEmptyPersonal = () => {
-    if (personalFilter === "subscribed") {
-      return (
-        <RefreshableEmpty
-          refreshing={isManualRefreshing}
-          onRefresh={handleRefresh}
-          contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
-        >
-          <Feather name="globe" size={40} color={Colors.zinc300} />
-          <Text style={styles.emptyTitle}>구독 모음이 없어요</Text>
-          <Text style={styles.emptySubtitle}>공개로 설정한 모음이 여기에 표시돼요{"\n"}구독 기능은 추후 업데이트 예정이에요</Text>
-          <Pressable style={styles.emptyButton} onPress={handleAdd}>
-            <Text style={styles.emptyButtonText}>새 모음 만들기</Text>
-          </Pressable>
-        </RefreshableEmpty>
-      );
-    }
-    return (
-      <RefreshableEmpty
-        refreshing={isManualRefreshing}
-        onRefresh={handleRefresh}
-        contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
-      >
-        <Feather name="folder" size={40} color={Colors.zinc300} />
-        <Text style={styles.emptyTitle}>내 모음이 없어요</Text>
-        <Text style={styles.emptySubtitle}>완성된 편지를 모아두는 나만의 공간을 만들어보세요</Text>
-        <Pressable style={styles.emptyButton} onPress={handleAdd}>
-          <Text style={styles.emptyButtonText}>새 모음 만들기</Text>
-        </Pressable>
-      </RefreshableEmpty>
-    );
-  };
+  const renderEmptyPersonal = () => (
+    <RefreshableEmpty
+      refreshing={isManualRefreshing}
+      onRefresh={handleRefresh}
+      contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
+    >
+      <Feather name="folder" size={40} color={Colors.zinc300} />
+      <Text style={styles.emptyTitle}>내 모음이 없어요</Text>
+      <Text style={styles.emptySubtitle}>완성된 편지를 모아두는 나만의 공간을 만들어보세요</Text>
+      <Pressable style={styles.emptyButton} onPress={handleAdd}>
+        <Text style={styles.emptyButtonText}>새 모음 만들기</Text>
+      </Pressable>
+    </RefreshableEmpty>
+  );
 
   const renderEmptySentence = () => (
     <RefreshableEmpty
@@ -532,21 +501,6 @@ export default function ArchiveScreen() {
         </View>
       )}
 
-      {!selectionMode && !searchActive && activeSubTab === "personal" && (
-        <View style={styles.filterBar}>
-          {PERSONAL_FILTER_OPTIONS.map((opt) => (
-            <Pressable
-              key={opt.key}
-              style={[styles.filterChip, personalFilter === opt.key && styles.filterChipActive]}
-              onPress={() => setPersonalFilter(opt.key)}
-            >
-              <Text style={[styles.filterChipText, personalFilter === opt.key && styles.filterChipTextActive]}>
-                {opt.label}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      )}
 
       {!selectionMode && searchActive && (
         <View style={styles.searchBar}>
@@ -767,30 +721,6 @@ const styles = StyleSheet.create({
     color: Colors.zinc500,
   },
   subTabTextActive: {
-    color: Colors.white,
-    fontWeight: "600",
-  },
-  filterBar: {
-    flexDirection: "row",
-    paddingHorizontal: Spacing.screenPx,
-    gap: 8,
-    paddingVertical: 8,
-  },
-  filterChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: Colors.zinc50,
-  },
-  filterChipActive: {
-    backgroundColor: Colors.zinc900,
-  },
-  filterChipText: {
-    ...Typography.caption,
-    fontSize: 13,
-    color: Colors.zinc500,
-  },
-  filterChipTextActive: {
     color: Colors.white,
     fontWeight: "600",
   },
