@@ -598,16 +598,16 @@ export default function OnScreen() {
             <Text style={[styles.topTabText, topTab === "memo" && styles.topTabTextActive]}>
               메모
             </Text>
-            {topTab === "memo" && <View style={styles.topTabUnderline} />}
+            {topTab === "memo" && <View style={[styles.topTabUnderline, { marginLeft: 16, marginRight: 8 }]} />}
           </ScalePressable>
           <ScalePressable
             style={styles.topTabItem}
             onPress={() => switchTopTab("my_article")}
           >
             <Text style={[styles.topTabText, topTab === "my_article" && styles.topTabTextActive]}>
-              내 글
+              편지
             </Text>
-            {topTab === "my_article" && <View style={styles.topTabUnderline} />}
+            {topTab === "my_article" && <View style={[styles.topTabUnderline, { marginLeft: 8, marginRight: 16 }]} />}
           </ScalePressable>
         </View>
       )}
@@ -837,7 +837,8 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.zinc100,
   },
   topTabItem: {
-    paddingHorizontal: Spacing.screenPx + 8,
+    flex: 1,
+    paddingHorizontal: 0,
     paddingTop: 0,
     paddingBottom: 0,
     alignItems: "center",
@@ -853,8 +854,9 @@ const styles = StyleSheet.create({
     color: Colors.zinc900,
   },
   topTabUnderline: {
-    height: 2,
-    width: "100%",
+    height: 1.5,
+    alignSelf: "stretch",
+    marginHorizontal: 0,
     backgroundColor: Colors.zinc900,
     borderRadius: 1,
   },
