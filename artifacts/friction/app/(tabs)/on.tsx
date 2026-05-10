@@ -19,10 +19,20 @@ import ArticleListItem from "@/components/ArticleListItem/ArticleListItem";
 import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import RefreshableEmpty from "@/components/RefreshableEmpty";
+import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import { useQueryClient } from "@tanstack/react-query";
-import { useListArticles, useCreateArticle, useDeleteArticle, getGetArticleQueryKey, useListSendRecords } from "@workspace/api-client-react";
-import type { Article } from "@workspace/api-client-react";
+import {
+  useListArticles,
+  useCreateArticle,
+  useDeleteArticle,
+  getGetArticleQueryKey,
+  useListSendRecords,
+  useListMyCollections,
+  useAddArticleToMyCollection,
+} from "@workspace/api-client-react";
+import type { Article, MyCollection } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
+import { useToast } from "@/contexts/ToastContext";
 import type { ArticleStatus } from "@/lib/policies";
 
 type TopTab = "memo" | "my_article";
@@ -72,11 +82,17 @@ export default function OnScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { userId } = useUser();
+  const { showToast } = useToast();
 
   const [topTab, setTopTab] = useState<TopTab>("memo");
   const [filter, setFilter] = useState<FilterMode>("all");
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [deleteTargetType, setDeleteTargetType] = useState<"memo" | "my_article">("memo");
+
+  const [archiveSheetVisible, setArchiveSheetVisible] = useState(false);
+  const [archiveArticleId, setArchiveArticleId] = useState<string | null>(null);
+  const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
+  const [isArchiving, setIsArchiving] = useState(false);
 
   const [searchActive, setSearchActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -112,6 +128,8 @@ export default function OnScreen() {
 
   const createArticle = useCreateArticle();
   const deleteArticle = useDeleteArticle();
+  const collectionsQuery = useListMyCollections({ ownerId: userId });
+  const addToCollection = useAddArticleToMyCollection();
 
   useEffect(() => {
     if (!articles) return;
@@ -146,6 +164,17 @@ export default function OnScreen() {
       (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
     );
   }, [articles]);
+
+  const sortedCollections = useMemo(() => {
+    const list = (collectionsQuery.data ?? []) as MyCollection[];
+    return [...list]
+      .filter((c) => !c.isArchive)
+      .sort((a, b) => {
+        if (a.isImpression && !b.isImpression) return -1;
+        if (!a.isImpression && b.isImpression) return 1;
+        return (b.articleCount ?? 0) - (a.articleCount ?? 0);
+      });
+  }, [collectionsQuery.data]);
 
   const displayedMyArticles = useMemo(() => {
     const trimmed = searchQuery.trim();
@@ -242,6 +271,60 @@ export default function OnScreen() {
     },
     [closeOpenRow, router],
   );
+
+  const handleSendAction = useCallback(
+    (articleId: string) => {
+      closeOpenRow();
+      router.push({ pathname: "/(tabs)/to", params: { prefillArticleId: articleId } });
+    },
+    [closeOpenRow, router],
+  );
+
+  const handleArchiveAction = useCallback(
+    (articleId: string) => {
+      closeOpenRow();
+      setArchiveArticleId(articleId);
+      setSelectedCollectionId(null);
+      setArchiveSheetVisible(true);
+    },
+    [closeOpenRow],
+  );
+
+  const handleArchiveConfirm = useCallback(async () => {
+    if (!archiveArticleId || !selectedCollectionId || isArchiving) return;
+    setIsArchiving(true);
+    const collectionId = selectedCollectionId;
+    const collectionName =
+      sortedCollections.find((c) => c.id === collectionId)?.name ?? "폴더";
+    try {
+      await addToCollection.mutateAsync({
+        id: collectionId,
+        data: { articleId: archiveArticleId },
+      });
+      await collectionsQuery.refetch();
+      setArchiveSheetVisible(false);
+      setArchiveArticleId(null);
+      setSelectedCollectionId(null);
+      showToast({
+        message: "보관했어요",
+        type: "success",
+        duration: 4000,
+        action: {
+          label: "폴더 보기",
+          onPress: () =>
+            router.push({
+              pathname: "/of-01-detail",
+              params: { id: collectionId, name: collectionName },
+            }),
+        },
+      });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "보관에 실패했습니다.";
+      Alert.alert("오류", msg);
+    } finally {
+      setIsArchiving(false);
+    }
+  }, [archiveArticleId, selectedCollectionId, isArchiving, addToCollection, sortedCollections, collectionsQuery, showToast, router]);
 
   const handleDeletePress = useCallback((articleId: string, type: "memo" | "my_article" = "memo") => {
     setDeleteTargetType(type);
@@ -344,7 +427,23 @@ export default function OnScreen() {
                 rowRefs.current.delete(item.article.id);
               }
             }}
-            onDeletePress={() => handleDeletePress(item.article.id, "my_article")}
+            actions={[
+              {
+                label: "발신",
+                color: "#3B82F6",
+                onPress: () => handleSendAction(item.article.id),
+              },
+              {
+                label: "보관",
+                color: "#10B981",
+                onPress: () => handleArchiveAction(item.article.id),
+              },
+              {
+                label: "삭제",
+                color: "#EF4444",
+                onPress: () => handleDeletePress(item.article.id, "my_article"),
+              },
+            ]}
             onSwipeOpen={() => handleSwipeOpen(item.article.id)}
             onScrollLock={(locked) => setScrollEnabled(!locked)}
           >
@@ -429,6 +528,8 @@ export default function OnScreen() {
       handleMemoPress,
       handleMyArticlePress,
       handleDeletePress,
+      handleSendAction,
+      handleArchiveAction,
       handleSwipeOpen,
       userId,
       deliveryStatusMap,
@@ -645,6 +746,80 @@ export default function OnScreen() {
         onCancel={handleDeleteCancel}
       />
 
+      <BottomSheet
+        visible={archiveSheetVisible}
+        onClose={() => {
+          setArchiveSheetVisible(false);
+          setArchiveArticleId(null);
+          setSelectedCollectionId(null);
+        }}
+        snapPoints={[0.6]}
+        enableDragDown
+        dismissable
+      >
+        <View style={styles.archiveSheetContainer}>
+          <Text style={styles.archiveSheetTitle}>보관할 폴더 선택</Text>
+          {collectionsQuery.isLoading ? (
+            <View style={styles.archiveSheetEmpty}>
+              <Text style={styles.archiveSheetEmptyText}>불러오는 중...</Text>
+            </View>
+          ) : sortedCollections.length === 0 ? (
+            <View style={styles.archiveSheetEmpty}>
+              <Text style={styles.archiveSheetEmptyText}>보관할 폴더가 없어요</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={sortedCollections}
+              keyExtractor={(c) => c.id}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.archiveSheetList}
+              ItemSeparatorComponent={() => <View style={styles.archiveSeparator} />}
+              renderItem={({ item }) => {
+                const isSelected = item.id === selectedCollectionId;
+                return (
+                  <Pressable
+                    style={[styles.archiveItem, isSelected && styles.archiveItemSelected]}
+                    onPress={() => setSelectedCollectionId(item.id)}
+                  >
+                    <View style={styles.archiveItemLeft}>
+                      <Feather
+                        name={item.isImpression ? "heart" : "folder"}
+                        size={18}
+                        color={isSelected ? Colors.zinc900 : Colors.zinc500}
+                      />
+                      <Text
+                        style={[styles.archiveItemName, isSelected && styles.archiveItemNameSelected]}
+                        numberOfLines={1}
+                      >
+                        {item.name}
+                      </Text>
+                    </View>
+                    <View style={styles.archiveItemRight}>
+                      {item.articleCount !== undefined && (
+                        <Text style={styles.archiveItemCount}>{item.articleCount}편</Text>
+                      )}
+                      {isSelected && <Feather name="check" size={16} color={Colors.zinc900} />}
+                    </View>
+                  </Pressable>
+                );
+              }}
+            />
+          )}
+          <Pressable
+            style={[
+              styles.archiveConfirmButton,
+              (!selectedCollectionId || isArchiving) && styles.archiveConfirmButtonDisabled,
+            ]}
+            onPress={handleArchiveConfirm}
+            disabled={!selectedCollectionId || isArchiving}
+          >
+            <Text style={styles.archiveConfirmButtonText}>
+              {isArchiving ? "보관 중..." : "보관하기"}
+            </Text>
+          </Pressable>
+        </View>
+      </BottomSheet>
+
       <ConfirmModal
         visible={showBulkDeleteConfirm}
         title={`${selectedCount}개를 삭제할까요?`}
@@ -836,5 +1011,86 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.18,
     shadowRadius: 6,
     elevation: 4,
+  },
+  archiveSheetContainer: {
+    flex: 1,
+    paddingHorizontal: Spacing.screenPx,
+    paddingBottom: 16,
+  },
+  archiveSheetTitle: {
+    ...Typography.bodySemiBold,
+    fontSize: 16,
+    color: Colors.zinc900,
+    textAlign: "center",
+    paddingVertical: 12,
+  },
+  archiveSheetEmpty: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  archiveSheetEmptyText: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc500,
+  },
+  archiveSheetList: {
+    paddingVertical: 4,
+  },
+  archiveSeparator: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: Colors.zinc100,
+  },
+  archiveItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+    borderRadius: 8,
+  },
+  archiveItemSelected: {
+    backgroundColor: Colors.zinc50,
+  },
+  archiveItemLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+  },
+  archiveItemName: {
+    ...Typography.body,
+    fontSize: 15,
+    color: Colors.zinc600,
+    flex: 1,
+  },
+  archiveItemNameSelected: {
+    ...Typography.bodySemiBold,
+    color: Colors.zinc900,
+  },
+  archiveItemRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  archiveItemCount: {
+    ...Typography.body,
+    fontSize: 13,
+    color: Colors.zinc400,
+  },
+  archiveConfirmButton: {
+    backgroundColor: Colors.zinc900,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+    marginTop: 12,
+  },
+  archiveConfirmButtonDisabled: {
+    opacity: 0.4,
+  },
+  archiveConfirmButtonText: {
+    ...Typography.bodySemiBold,
+    fontSize: 15,
+    color: Colors.white,
   },
 });
