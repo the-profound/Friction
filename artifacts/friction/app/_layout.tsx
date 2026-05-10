@@ -5,7 +5,7 @@ import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter, usePathname, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -79,6 +79,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   const { session, isLoading } = useAuth();
   const router = useRouter();
   const segments = useSegments();
+  const hasRedirectedRef = useRef(false);
 
   const inBypassRoute = segments[0] != null && AUTH_BYPASS_ROUTES.has(segments[0] as string);
   const isAuthed = DEV_WEB_BYPASS || !!session;
@@ -89,13 +90,16 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     if (!isAuthed && !inBypassRoute) {
       router.replace("/login");
     } else if (isAuthed && segments[0] === "login") {
+      hasRedirectedRef.current = true;
       router.replace("/(tabs)/on");
     } else if (
       isAuthed &&
       Platform.OS !== "web" &&
       segments[0] === "(tabs)" &&
-      (segments[1] == null || segments[1] === "index")
+      (segments[1] == null || segments[1] === "index") &&
+      !hasRedirectedRef.current
     ) {
+      hasRedirectedRef.current = true;
       router.replace("/(tabs)/on");
     }
   }, [isAuthed, isLoading, inBypassRoute, segments, router]);
