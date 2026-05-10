@@ -508,7 +508,7 @@ export default function ArchiveScreen() {
           showsVerticalScrollIndicator={false}
           ListFooterComponent={
             lastSingleCollection ? (
-              <View style={styles.centeredCardRow}>
+              <View style={[styles.gridRow, { flexDirection: 'row' }]}>
                 <ScalePressable
                   style={[styles.collectionCard, { flex: 0, width: collectionCardWidth }]}
                   onPress={() => router.push({ pathname: "/of-01-detail", params: { id: lastSingleCollection.id, name: lastSingleCollection.name } })}
@@ -522,6 +522,7 @@ export default function ArchiveScreen() {
                     {lastSingleCollection.isPublic && <Feather name="globe" size={12} color={Colors.zinc400} />}
                   </View>
                 </ScalePressable>
+                <View style={{ flex: 0, width: collectionCardWidth }} />
               </View>
             ) : null
           }
@@ -873,9 +874,6 @@ const styles = StyleSheet.create({
   },
   gridRow: {
     gap: 12,
-  },
-  centeredCardRow: {
-    alignItems: 'center',
   },
   collectionCard: {
     flex: 1,
