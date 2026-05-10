@@ -20,7 +20,7 @@ import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/Swip
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import RefreshableEmpty from "@/components/RefreshableEmpty";
 import { useQueryClient } from "@tanstack/react-query";
-import { useListArticles, useCreateArticle, useDeleteArticle, getGetArticleQueryKey } from "@workspace/api-client-react";
+import { useListArticles, useCreateArticle, useDeleteArticle, getGetArticleQueryKey, useListSendRecords } from "@workspace/api-client-react";
 import type { Article } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
 import type { ArticleStatus } from "@/lib/policies";
@@ -92,6 +92,22 @@ export default function OnScreen() {
   const { data: articles, isLoading, refetch, isRefetching } = useListArticles({
     authorId: userId,
   });
+
+  const { data: sendRecords } = useListSendRecords({ senderId: userId });
+
+  const deliveryStatusMap = useMemo((): Map<string, "sent" | "scheduled"> => {
+    const map = new Map<string, "sent" | "scheduled">();
+    if (!sendRecords) return map;
+    for (const record of sendRecords) {
+      const existing = map.get(record.articleId);
+      if (record.isDelivered) {
+        map.set(record.articleId, "sent");
+      } else if (existing !== "sent") {
+        map.set(record.articleId, "scheduled");
+      }
+    }
+    return map;
+  }, [sendRecords]);
 
   const createArticle = useCreateArticle();
   const deleteArticle = useDeleteArticle();
@@ -323,6 +339,7 @@ export default function OnScreen() {
             preview={item.article.content?.substring(0, 60) || ""}
             rightMeta={formatRelativeDate(item.article.updatedAt)}
             timestamp={new Date(item.article.updatedAt)}
+            deliveryBadge={deliveryStatusMap.get(item.article.id)}
             onPress={() => handleMyArticlePress(item.article)}
           />
         );
@@ -399,6 +416,7 @@ export default function OnScreen() {
       handleDeletePress,
       handleSwipeOpen,
       userId,
+      deliveryStatusMap,
     ],
   );
 

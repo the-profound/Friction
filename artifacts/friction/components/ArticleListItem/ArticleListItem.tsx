@@ -15,6 +15,7 @@ interface ArticleListItemProps {
   author?: Author;
   timestamp?: Date;
   statusBadge?: ArticleStatus;
+  deliveryBadge?: "sent" | "scheduled";
   isRead?: boolean;
   rightMeta?: string;
   coverImageUrl?: string;
@@ -27,6 +28,11 @@ const STATUS_BADGE_COLORS: Record<ArticleStatus, { bg: string; text: string }> =
   LETTER: { bg: "#D1FAE5", text: "#059669" },
 };
 
+const DELIVERY_BADGE_COLORS = {
+  sent: { bg: "#DBEAFE", text: "#1D4ED8" },
+  scheduled: { bg: "#FEF9C3", text: "#92400E" },
+};
+
 export default function ArticleListItem({
   title,
   onPress,
@@ -34,6 +40,7 @@ export default function ArticleListItem({
   author,
   timestamp,
   statusBadge,
+  deliveryBadge,
   isRead,
   rightMeta,
   coverImageUrl,
@@ -63,6 +70,13 @@ export default function ArticleListItem({
               <View style={[styles.badge, { backgroundColor: STATUS_BADGE_COLORS[statusBadge].bg }]}>
                 <Text style={[styles.badgeText, { color: STATUS_BADGE_COLORS[statusBadge].text }]}>
                   {statusBadge === "DRAFT" ? "작성 중" : statusBadge === "DIVIDING" ? "분할 중" : statusBadge === "CLOSING" ? "마감 중" : "완성"}
+                </Text>
+              </View>
+            )}
+            {deliveryBadge && (
+              <View style={[styles.badge, { backgroundColor: DELIVERY_BADGE_COLORS[deliveryBadge].bg }]}>
+                <Text style={[styles.badgeText, { color: DELIVERY_BADGE_COLORS[deliveryBadge].text }]}>
+                  {deliveryBadge === "sent" ? "발신 됨" : "발신 예정"}
                 </Text>
               </View>
             )}
