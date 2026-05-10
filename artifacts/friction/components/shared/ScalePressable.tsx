@@ -20,7 +20,7 @@ const EASING = Easing.inOut(Easing.ease);
 // that flex parents (e.g. a row NavBar or a column form) size the element
 // correctly. Visual props (background, border, padding) and internal layout
 // props (flexDirection, alignItems) stay exclusively on the Pressable.
-const OUTER_LAYOUT_KEYS = new Set<string>([
+export const OUTER_LAYOUT_KEYS = new Set<string>([
   "flex",
   "flexGrow",
   "flexShrink",
@@ -54,7 +54,7 @@ type FlatStyle = Partial<Record<string, unknown>>;
  */
 type StyleFn = (state: Parameters<Extract<PressableProps["style"], (...args: unknown[]) => unknown>>[0]) => StyleProp<ViewStyle>;
 
-function extractOuterStyle(style: PressableProps["style"]): FlatStyle {
+export function extractOuterStyle(style: PressableProps["style"]): FlatStyle {
   const base: StyleProp<ViewStyle> =
     typeof style === "function"
       ? (style as StyleFn)({ pressed: false } as Parameters<StyleFn>[0])
