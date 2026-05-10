@@ -42,7 +42,7 @@ const GROUP_FILTER_OPTIONS: { key: GroupFilter; label: string }[] = [
 ];
 
 export default function OfScreen() {
-  const { height: windowH } = useWindowDimensions();
+  const { height: windowH, width: windowWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const navBottom = useNavBarBottomSafeArea();
   const router = useRouter();
@@ -94,16 +94,17 @@ export default function OfScreen() {
     return list.filter((c) => c.name.toLowerCase().includes(q));
   }, [teamCollections, searchQuery, groupFilter]);
 
-  type DummyItem = { id: '__dummy__'; isDummy: true };
-  type TeamCollectionOrDummy = TeamCollectionWithRole | DummyItem;
+  const isOddTeam = filteredTeamCollections.length % 2 !== 0;
 
-  const filteredTeamCollectionsWithDummy = useMemo<TeamCollectionOrDummy[]>(() => {
-    const list: TeamCollectionOrDummy[] = [...filteredTeamCollections];
-    if (list.length % 2 !== 0) {
-      list.push({ id: '__dummy__', isDummy: true });
-    }
-    return list;
-  }, [filteredTeamCollections]);
+  const filteredTeamCollectionsForGrid = useMemo<TeamCollectionWithRole[]>(() => {
+    return isOddTeam ? filteredTeamCollections.slice(0, -1) : filteredTeamCollections;
+  }, [filteredTeamCollections, isOddTeam]);
+
+  const lastSingleTeamCollection = useMemo<TeamCollectionWithRole | null>(() => {
+    return isOddTeam ? filteredTeamCollections[filteredTeamCollections.length - 1] ?? null : null;
+  }, [filteredTeamCollections, isOddTeam]);
+
+  const teamCardWidth = (windowWidth - Spacing.screenPx * 2 - 12) / 2;
 
   const handleSearch = useCallback(() => {
     setSearchActive((prev) => {
@@ -228,22 +229,18 @@ export default function OfScreen() {
     }, [refetchTeams, queryClient, userId]),
   );
 
-  const renderTeamItem = useCallback(({ item }: { item: TeamCollectionOrDummy }) => {
-    if ('isDummy' in item && item.isDummy) {
-      return <View style={[styles.collectionCard, { backgroundColor: 'transparent' }]} pointerEvents="none" />;
-    }
-    const col = item as TeamCollectionWithRole;
+  const renderTeamItem = useCallback(({ item }: { item: TeamCollectionWithRole }) => {
     return (
       <ScalePressable
         style={styles.collectionCard}
-        onPress={() => router.push({ pathname: "/of-02-detail", params: { id: col.id } })}
+        onPress={() => router.push({ pathname: "/of-02-detail", params: { id: item.id } })}
       >
         <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: "#bf6f78", alignItems: "center", justifyContent: "center" }}>
           <Feather name="users" size={18} color="#FFFFFF" />
         </View>
-        <Text style={styles.collectionName} numberOfLines={1}>{col.name}</Text>
+        <Text style={styles.collectionName} numberOfLines={1}>{item.name}</Text>
         <View style={styles.collectionMeta}>
-          <Text style={styles.collectionCount}>{col.role === "OWNER" ? "소유자" : "멤버"}</Text>
+          <Text style={styles.collectionCount}>{item.role === "OWNER" ? "소유자" : "멤버"}</Text>
         </View>
       </ScalePressable>
     );
@@ -308,7 +305,7 @@ export default function OfScreen() {
     ) : (
       <FlatList
         key="of-group-grid"
-        data={filteredTeamCollectionsWithDummy}
+        data={filteredTeamCollectionsForGrid}
         keyExtractor={(item) => item.id}
         renderItem={renderTeamItem}
         numColumns={2}
@@ -316,6 +313,24 @@ export default function OfScreen() {
         contentContainerStyle={[styles.gridContent, { paddingBottom: navBottom }]}
         refreshControl={<RefreshControl refreshing={isManualRefreshing} onRefresh={handleRefresh} tintColor={Colors.zinc400} />}
         showsVerticalScrollIndicator={false}
+        ListFooterComponent={
+          lastSingleTeamCollection ? (
+            <View style={styles.centeredCardRow}>
+              <ScalePressable
+                style={[styles.collectionCard, { flex: 0, width: teamCardWidth }]}
+                onPress={() => router.push({ pathname: "/of-02-detail", params: { id: lastSingleTeamCollection.id } })}
+              >
+                <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: "#bf6f78", alignItems: "center", justifyContent: "center" }}>
+                  <Feather name="users" size={18} color="#FFFFFF" />
+                </View>
+                <Text style={styles.collectionName} numberOfLines={1}>{lastSingleTeamCollection.name}</Text>
+                <View style={styles.collectionMeta}>
+                  <Text style={styles.collectionCount}>{lastSingleTeamCollection.role === "OWNER" ? "소유자" : "멤버"}</Text>
+                </View>
+              </ScalePressable>
+            </View>
+          ) : null
+        }
       />
     );
   };
@@ -577,6 +592,9 @@ const styles = StyleSheet.create({
   },
   gridRow: {
     gap: 12,
+  },
+  centeredCardRow: {
+    alignItems: 'center',
   },
   collectionCard: {
     flex: 1,

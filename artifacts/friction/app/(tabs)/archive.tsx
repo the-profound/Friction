@@ -9,6 +9,7 @@ import {
   Platform,
   Alert,
   Animated,
+  useWindowDimensions,
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -41,6 +42,7 @@ import { useQueryClient } from "@tanstack/react-query";
 type ArchiveSubTab = "personal" | "sentence";
 
 export default function ArchiveScreen() {
+  const { width: windowWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const navBottom = useNavBarBottomSafeArea();
   const router = useRouter();
@@ -118,16 +120,17 @@ export default function ArchiveScreen() {
     return filteredMyCollections.filter((c) => !c.isImpression);
   }, [filteredMyCollections]);
 
-  type DummyItem = { id: '__dummy__'; isDummy: true };
-  type CollectionOrDummy = (typeof regularCollections)[number] | DummyItem;
+  const isOddPersonal = regularCollections.length % 2 !== 0;
 
-  const regularCollectionsWithDummy = useMemo<CollectionOrDummy[]>(() => {
-    const list: CollectionOrDummy[] = [...regularCollections];
-    if (list.length % 2 !== 0) {
-      list.push({ id: '__dummy__', isDummy: true });
-    }
-    return list;
-  }, [regularCollections]);
+  const regularCollectionsForGrid = useMemo<MyCollection[]>(() => {
+    return isOddPersonal ? regularCollections.slice(0, -1) : regularCollections;
+  }, [regularCollections, isOddPersonal]);
+
+  const lastSingleCollection = useMemo<MyCollection | null>(() => {
+    return isOddPersonal ? regularCollections[regularCollections.length - 1] ?? null : null;
+  }, [regularCollections, isOddPersonal]);
+
+  const collectionCardWidth = (windowWidth - Spacing.screenPx * 2 - 12) / 2;
 
   const filteredSentences = useMemo(() => {
     if (!searchQuery.trim()) return sentences;
@@ -344,23 +347,19 @@ export default function ArchiveScreen() {
       ? myCollectionsQuery.isError
       : sentencesQuery.isError;
 
-  const renderPersonalItem = useCallback(({ item }: { item: CollectionOrDummy }) => {
-    if ('isDummy' in item && item.isDummy) {
-      return <View style={[styles.collectionCard, { backgroundColor: 'transparent' }]} pointerEvents="none" />;
-    }
-    const col = item as MyCollection;
+  const renderPersonalItem = useCallback(({ item }: { item: MyCollection }) => {
     return (
       <ScalePressable
         style={styles.collectionCard}
-        onPress={() => router.push({ pathname: "/of-01-detail", params: { id: col.id, name: col.name } })}
+        onPress={() => router.push({ pathname: "/of-01-detail", params: { id: item.id, name: item.name } })}
       >
         <View style={styles.collectionIcon}>
           <Feather name="folder" size={20} color={Colors.zinc500} />
         </View>
-        <Text style={styles.collectionName} numberOfLines={1}>{col.name}</Text>
+        <Text style={styles.collectionName} numberOfLines={1}>{item.name}</Text>
         <View style={styles.collectionMeta}>
-          <Text style={styles.collectionCount}>{col.articleCount ?? 0}편</Text>
-          {col.isPublic && <Feather name="globe" size={12} color={Colors.zinc400} />}
+          <Text style={styles.collectionCount}>{item.articleCount ?? 0}편</Text>
+          {item.isPublic && <Feather name="globe" size={12} color={Colors.zinc400} />}
         </View>
       </ScalePressable>
     );
@@ -499,7 +498,7 @@ export default function ArchiveScreen() {
       ) : (
         <FlatList
           key="archive-personal-grid"
-          data={regularCollectionsWithDummy}
+          data={regularCollectionsForGrid}
           keyExtractor={(item) => item.id}
           renderItem={renderPersonalItem}
           numColumns={2}
@@ -507,6 +506,25 @@ export default function ArchiveScreen() {
           contentContainerStyle={[styles.gridContent, { paddingBottom: navBottom, paddingTop: impressionCollection ? 0 : 12 }]}
           refreshControl={<RefreshControl refreshing={isManualRefreshing} onRefresh={handleRefresh} tintColor={Colors.zinc400} />}
           showsVerticalScrollIndicator={false}
+          ListFooterComponent={
+            lastSingleCollection ? (
+              <View style={styles.centeredCardRow}>
+                <ScalePressable
+                  style={[styles.collectionCard, { flex: 0, width: collectionCardWidth }]}
+                  onPress={() => router.push({ pathname: "/of-01-detail", params: { id: lastSingleCollection.id, name: lastSingleCollection.name } })}
+                >
+                  <View style={styles.collectionIcon}>
+                    <Feather name="folder" size={20} color={Colors.zinc500} />
+                  </View>
+                  <Text style={styles.collectionName} numberOfLines={1}>{lastSingleCollection.name}</Text>
+                  <View style={styles.collectionMeta}>
+                    <Text style={styles.collectionCount}>{lastSingleCollection.articleCount ?? 0}편</Text>
+                    {lastSingleCollection.isPublic && <Feather name="globe" size={12} color={Colors.zinc400} />}
+                  </View>
+                </ScalePressable>
+              </View>
+            ) : null
+          }
           ListHeaderComponent={
             impressionCollection ? (
               <ScalePressable
@@ -855,6 +873,9 @@ const styles = StyleSheet.create({
   },
   gridRow: {
     gap: 12,
+  },
+  centeredCardRow: {
+    alignItems: 'center',
   },
   collectionCard: {
     flex: 1,
