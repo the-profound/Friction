@@ -103,6 +103,17 @@ export default function ArchiveScreen() {
     return filteredMyCollections.filter((c) => !c.isImpression);
   }, [filteredMyCollections]);
 
+  type DummyItem = { id: '__dummy__'; isDummy: true };
+  type CollectionOrDummy = (typeof regularCollections)[number] | DummyItem;
+
+  const regularCollectionsWithDummy = useMemo<CollectionOrDummy[]>(() => {
+    const list: CollectionOrDummy[] = [...regularCollections];
+    if (list.length % 2 !== 0) {
+      list.push({ id: '__dummy__', isDummy: true });
+    }
+    return list;
+  }, [regularCollections]);
+
   const filteredSentences = useMemo(() => {
     if (!searchQuery.trim()) return sentences;
     const q = searchQuery.toLowerCase();
@@ -318,21 +329,27 @@ export default function ArchiveScreen() {
       ? myCollectionsQuery.isError
       : sentencesQuery.isError;
 
-  const renderPersonalItem = useCallback(({ item }: { item: MyCollection }) => (
-    <Pressable
-      style={styles.collectionCard}
-      onPress={() => router.push({ pathname: "/of-01-detail", params: { id: item.id, name: item.name } })}
-    >
-      <View style={styles.collectionIcon}>
-        <Feather name="folder" size={20} color={Colors.zinc500} />
-      </View>
-      <Text style={styles.collectionName} numberOfLines={1}>{item.name}</Text>
-      <View style={styles.collectionMeta}>
-        <Text style={styles.collectionCount}>{item.articleCount ?? 0}편</Text>
-        {item.isPublic && <Feather name="globe" size={12} color={Colors.zinc400} />}
-      </View>
-    </Pressable>
-  ), [router]);
+  const renderPersonalItem = useCallback(({ item }: { item: CollectionOrDummy }) => {
+    if ('isDummy' in item && item.isDummy) {
+      return <View style={[styles.collectionCard, { backgroundColor: 'transparent' }]} pointerEvents="none" />;
+    }
+    const col = item as MyCollection;
+    return (
+      <Pressable
+        style={styles.collectionCard}
+        onPress={() => router.push({ pathname: "/of-01-detail", params: { id: col.id, name: col.name } })}
+      >
+        <View style={styles.collectionIcon}>
+          <Feather name="folder" size={20} color={Colors.zinc500} />
+        </View>
+        <Text style={styles.collectionName} numberOfLines={1}>{col.name}</Text>
+        <View style={styles.collectionMeta}>
+          <Text style={styles.collectionCount}>{col.articleCount ?? 0}편</Text>
+          {col.isPublic && <Feather name="globe" size={12} color={Colors.zinc400} />}
+        </View>
+      </Pressable>
+    );
+  }, [router]);
 
   const renderSentenceItem = useCallback(({ item }: { item: StoredSentence }) => (
     <SwipeableRow
@@ -467,7 +484,7 @@ export default function ArchiveScreen() {
       ) : (
         <FlatList
           key="archive-personal-grid"
-          data={regularCollections}
+          data={regularCollectionsWithDummy}
           keyExtractor={(item) => item.id}
           renderItem={renderPersonalItem}
           numColumns={2}
