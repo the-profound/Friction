@@ -167,6 +167,7 @@ const styles = StyleSheet.create({
   container: {
     overflow: "hidden",
     position: "relative",
+    flex: 1,
   },
   actionsContainer: {
     position: "absolute",
@@ -174,9 +175,11 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     flexDirection: "row",
+    alignItems: "stretch",
   },
   actionButton: {
     flex: 1,
+    alignSelf: "stretch",
     justifyContent: "center",
     alignItems: "center",
   },

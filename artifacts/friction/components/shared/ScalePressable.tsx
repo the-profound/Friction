@@ -172,5 +172,6 @@ export const styles = StyleSheet.create({
   },
   innerBase: {
     alignSelf: "stretch",
+    flex: 1,
   },
 });
