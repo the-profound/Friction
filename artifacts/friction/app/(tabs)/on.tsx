@@ -34,6 +34,12 @@ const FILTER_OPTIONS: { key: FilterMode; label: string }[] = [
   { key: "CLOSING", label: "마감 중" },
 ];
 
+type ListItem =
+  | { type: "memo"; article: Article }
+  | { type: "my_article"; article: Article }
+  | { type: "section_header"; title: string; count: number }
+  | { type: "my_article_empty" };
+
 function getScreenForStatus(status: ArticleStatus): string {
   switch (status) {
     case "DRAFT":
@@ -117,6 +123,28 @@ export default function OnScreen() {
     return sortedArticles.filter((a) => (a.title ?? "").toLowerCase().includes(q));
   }, [sortedArticles, searchQuery]);
 
+  const myLetterArticles = useMemo(() => {
+    if (!articles) return [];
+    return [...articles.filter((a) => a.status === "LETTER")].sort(
+      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+    );
+  }, [articles]);
+
+  const listData = useMemo((): ListItem[] => {
+    const items: ListItem[] = displayedArticles.map((a) => ({ type: "memo", article: a }));
+    if (!selectionMode) {
+      items.push({ type: "section_header", title: "내 글", count: myLetterArticles.length });
+      if (myLetterArticles.length === 0) {
+        items.push({ type: "my_article_empty" });
+      } else {
+        for (const a of myLetterArticles) {
+          items.push({ type: "my_article", article: a });
+        }
+      }
+    }
+    return items;
+  }, [displayedArticles, myLetterArticles, selectionMode]);
+
   const closeOpenRow = useCallback(() => {
     if (openRowRef.current) {
       openRowRef.current.close();
@@ -159,7 +187,7 @@ export default function OnScreen() {
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
       router.push({ pathname: "/on-01a", params: { id: article.id } });
     } catch {
-Alert.alert("오류", "메모 생성에 실패했습니다.");
+      Alert.alert("오류", "메모 생성에 실패했습니다.");
     }
   }, [createArticle, userId, router, queryClient, closeOpenRow]);
 
@@ -171,12 +199,20 @@ Alert.alert("오류", "메모 생성에 실패했습니다.");
     });
   }, [closeOpenRow]);
 
-  const handleArticlePress = useCallback(
+  const handleMemoPress = useCallback(
     (article: Article) => {
       closeOpenRow();
       if (article.status === "LETTER") return;
       const screen = getScreenForStatus(article.status as ArticleStatus);
       router.push({ pathname: screen as never, params: { id: article.id } });
+    },
+    [closeOpenRow, router],
+  );
+
+  const handleMyArticlePress = useCallback(
+    (article: Article) => {
+      closeOpenRow();
+      router.push({ pathname: "/read" as never, params: { articleId: article.id, mode: "re_read" } });
     },
     [closeOpenRow, router],
   );
@@ -246,69 +282,121 @@ Alert.alert("오류", "메모 생성에 실패했습니다.");
     setShowBulkDeleteConfirm(false);
   }, []);
 
-  const renderNormalItem = useCallback(
-    ({ item }: { item: Article }) => (
-      <SwipeableRow
-        ref={(r) => {
-          if (r) {
-            rowRefs.current.set(item.id, r);
-          } else {
-            rowRefs.current.delete(item.id);
-          }
-        }}
-        onDeletePress={() => handleDeletePress(item.id)}
-        onSwipeOpen={() => handleSwipeOpen(item.id)}
-        onScrollLock={(locked) => setScrollEnabled(!locked)}
-      >
-        <ArticleListItem
-          title={item.title || "제목 없음"}
-          preview={item.content?.substring(0, 60) || ""}
-          author={
-            item.authorId !== userId && item.authorNickname
-              ? { name: item.authorNickname }
-              : undefined
-          }
-          statusBadge={item.status as ArticleStatus}
-          timestamp={new Date(item.updatedAt)}
-          rightMeta={formatRelativeDate(item.updatedAt)}
-          onPress={() => handleArticlePress(item)}
-        />
-      </SwipeableRow>
-    ),
-    [handleArticlePress, handleDeletePress, handleSwipeOpen, userId],
-  );
-
-  const renderSelectionItem = useCallback(
-    ({ item }: { item: Article }) => {
-      const isSelected = selectedIds.has(item.id);
-      return (
-        <Pressable
-          style={styles.selectionRow}
-          onPress={() => toggleSelect(item.id)}
-        >
-          <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
-            {isSelected && <Feather name="check" size={14} color={Colors.white} />}
+  const renderItem = useCallback(
+    ({ item }: { item: ListItem }) => {
+      if (item.type === "section_header") {
+        return (
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionHeaderText}>{item.title}</Text>
+            {item.count > 0 && (
+              <View style={styles.sectionBadge}>
+                <Text style={styles.sectionBadgeText}>{item.count}</Text>
+              </View>
+            )}
           </View>
-          <View style={styles.selectionItemContent}>
+        );
+      }
+
+      if (item.type === "my_article_empty") {
+        return (
+          <View style={styles.myArticleEmpty}>
+            <Feather name="book-open" size={28} color={Colors.zinc300} />
+            <Text style={styles.myArticleEmptyText}>내보낸 글이 없어요</Text>
+          </View>
+        );
+      }
+
+      if (item.type === "my_article") {
+        return (
+          <ArticleListItem
+            title={item.article.title || "제목 없음"}
+            preview={item.article.content?.substring(0, 60) || ""}
+            rightMeta={formatRelativeDate(item.article.updatedAt)}
+            timestamp={new Date(item.article.updatedAt)}
+            onPress={() => handleMyArticlePress(item.article)}
+          />
+        );
+      }
+
+      if (item.type === "memo") {
+        if (selectionMode) {
+          const isSelected = selectedIds.has(item.article.id);
+          return (
+            <Pressable
+              style={styles.selectionRow}
+              onPress={() => toggleSelect(item.article.id)}
+            >
+              <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+                {isSelected && <Feather name="check" size={14} color={Colors.white} />}
+              </View>
+              <View style={styles.selectionItemContent}>
+                <ArticleListItem
+                  title={item.article.title || "제목 없음"}
+                  preview={item.article.content?.substring(0, 60) || ""}
+                  author={
+                    item.article.authorId !== userId && item.article.authorNickname
+                      ? { name: item.article.authorNickname }
+                      : undefined
+                  }
+                  statusBadge={item.article.status as ArticleStatus}
+                  timestamp={new Date(item.article.updatedAt)}
+                  rightMeta={formatRelativeDate(item.article.updatedAt)}
+                  onPress={() => toggleSelect(item.article.id)}
+                />
+              </View>
+            </Pressable>
+          );
+        }
+
+        return (
+          <SwipeableRow
+            ref={(r) => {
+              if (r) {
+                rowRefs.current.set(item.article.id, r);
+              } else {
+                rowRefs.current.delete(item.article.id);
+              }
+            }}
+            onDeletePress={() => handleDeletePress(item.article.id)}
+            onSwipeOpen={() => handleSwipeOpen(item.article.id)}
+            onScrollLock={(locked) => setScrollEnabled(!locked)}
+          >
             <ArticleListItem
-              title={item.title || "제목 없음"}
-              preview={item.content?.substring(0, 60) || ""}
+              title={item.article.title || "제목 없음"}
+              preview={item.article.content?.substring(0, 60) || ""}
               author={
-                item.authorId !== userId && item.authorNickname
-                  ? { name: item.authorNickname }
+                item.article.authorId !== userId && item.article.authorNickname
+                  ? { name: item.article.authorNickname }
                   : undefined
               }
-              statusBadge={item.status as ArticleStatus}
-              timestamp={new Date(item.updatedAt)}
-              rightMeta={formatRelativeDate(item.updatedAt)}
-              onPress={() => toggleSelect(item.id)}
+              statusBadge={item.article.status as ArticleStatus}
+              timestamp={new Date(item.article.updatedAt)}
+              rightMeta={formatRelativeDate(item.article.updatedAt)}
+              onPress={() => handleMemoPress(item.article)}
             />
-          </View>
-        </Pressable>
-      );
+          </SwipeableRow>
+        );
+      }
+
+      return null;
     },
-    [selectedIds, toggleSelect, userId],
+    [
+      selectionMode,
+      selectedIds,
+      toggleSelect,
+      handleMemoPress,
+      handleMyArticlePress,
+      handleDeletePress,
+      handleSwipeOpen,
+      userId,
+    ],
   );
+
+  const keyExtractor = useCallback((item: ListItem) => {
+    if (item.type === "section_header") return `header-${item.title}`;
+    if (item.type === "my_article_empty") return "my_article_empty";
+    return `${item.type}-${item.article.id}`;
+  }, []);
 
   const listFooter = useCallback(
     () => <Pressable style={styles.listFooterTouchArea} onPress={closeOpenRow} />,
@@ -316,6 +404,7 @@ Alert.alert("오류", "메모 생성에 실패했습니다.");
   );
 
   const selectedCount = selectedIds.size;
+  const hasMemos = sortedArticles.length > 0;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -389,7 +478,7 @@ Alert.alert("오류", "메모 생성에 실패했습니다.");
           <Feather name="search" size={40} color={Colors.zinc300} />
           <Text style={styles.emptySubtitle}>검색 결과가 없습니다</Text>
         </View>
-      ) : sortedArticles.length === 0 ? (
+      ) : !hasMemos && myLetterArticles.length === 0 ? (
         <RefreshableEmpty
           refreshing={isRefetching}
           onRefresh={refetch}
@@ -407,9 +496,9 @@ Alert.alert("오류", "메모 생성에 실패했습니다.");
         </RefreshableEmpty>
       ) : (
         <FlatList
-          data={displayedArticles}
-          keyExtractor={(item) => item.id}
-          renderItem={selectionMode ? renderSelectionItem : renderNormalItem}
+          data={listData}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
           refreshControl={
             !selectionMode ? (
               <RefreshControl refreshing={isRefetching} onRefresh={refetch} />
@@ -420,6 +509,16 @@ Alert.alert("오류", "메모 생성에 실패했습니다.");
             { paddingBottom: selectionMode ? insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + 80 : navBottom + 64 },
           ]}
           onScrollBeginDrag={selectionMode ? undefined : closeOpenRow}
+          ListHeaderComponent={
+            !selectionMode && hasMemos ? (
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionHeaderText}>메모</Text>
+                <View style={styles.sectionBadge}>
+                  <Text style={styles.sectionBadgeText}>{sortedArticles.length}</Text>
+                </View>
+              </View>
+            ) : null
+          }
           ListFooterComponent={selectionMode ? undefined : listFooter}
           scrollEnabled={scrollEnabled}
         />
@@ -525,6 +624,45 @@ const styles = StyleSheet.create({
   filterChipTextActive: {
     color: Colors.white,
     fontWeight: "600",
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: Spacing.screenPx,
+    paddingVertical: 10,
+    paddingTop: 16,
+    backgroundColor: Colors.white,
+    gap: 6,
+  },
+  sectionHeaderText: {
+    ...Typography.bodySemiBold,
+    fontSize: 13,
+    color: Colors.zinc500,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  sectionBadge: {
+    backgroundColor: Colors.zinc100,
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  sectionBadgeText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Colors.zinc500,
+  },
+  myArticleEmpty: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: Spacing.screenPx,
+    paddingVertical: 20,
+  },
+  myArticleEmptyText: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc400,
   },
   listContent: {
     paddingBottom: 0,
