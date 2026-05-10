@@ -79,6 +79,17 @@ export default function OfScreen() {
     return list.filter((c) => c.name.toLowerCase().includes(q));
   }, [teamCollections, searchQuery, groupFilter]);
 
+  type DummyItem = { id: '__dummy__'; isDummy: true };
+  type TeamCollectionOrDummy = TeamCollectionWithRole | DummyItem;
+
+  const filteredTeamCollectionsWithDummy = useMemo<TeamCollectionOrDummy[]>(() => {
+    const list: TeamCollectionOrDummy[] = [...filteredTeamCollections];
+    if (list.length % 2 !== 0) {
+      list.push({ id: '__dummy__', isDummy: true });
+    }
+    return list;
+  }, [filteredTeamCollections]);
+
   const handleSearch = useCallback(() => {
     setSearchActive((prev) => {
       if (prev) setSearchQuery("");
@@ -202,20 +213,26 @@ export default function OfScreen() {
     }, [refetchTeams, queryClient, userId]),
   );
 
-  const renderTeamItem = useCallback(({ item }: { item: TeamCollectionWithRole }) => (
-    <Pressable
-      style={styles.collectionCard}
-      onPress={() => router.push({ pathname: "/of-02-detail", params: { id: item.id } })}
-    >
-      <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: "#bf6f78", alignItems: "center", justifyContent: "center" }}>
-        <Feather name="users" size={18} color="#FFFFFF" />
-      </View>
-      <Text style={styles.collectionName} numberOfLines={1}>{item.name}</Text>
-      <View style={styles.collectionMeta}>
-        <Text style={styles.collectionCount}>{item.role === "OWNER" ? "소유자" : "멤버"}</Text>
-      </View>
-    </Pressable>
-  ), [router]);
+  const renderTeamItem = useCallback(({ item }: { item: TeamCollectionOrDummy }) => {
+    if ('isDummy' in item && item.isDummy) {
+      return <View style={[styles.collectionCard, { backgroundColor: 'transparent' }]} pointerEvents="none" />;
+    }
+    const col = item as TeamCollectionWithRole;
+    return (
+      <Pressable
+        style={styles.collectionCard}
+        onPress={() => router.push({ pathname: "/of-02-detail", params: { id: col.id } })}
+      >
+        <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: "#bf6f78", alignItems: "center", justifyContent: "center" }}>
+          <Feather name="users" size={18} color="#FFFFFF" />
+        </View>
+        <Text style={styles.collectionName} numberOfLines={1}>{col.name}</Text>
+        <View style={styles.collectionMeta}>
+          <Text style={styles.collectionCount}>{col.role === "OWNER" ? "소유자" : "멤버"}</Text>
+        </View>
+      </Pressable>
+    );
+  }, [router]);
 
   const renderEmptyTeam = () => {
     if (groupFilter === "joined") {
@@ -276,7 +293,7 @@ export default function OfScreen() {
     ) : (
       <FlatList
         key="of-group-grid"
-        data={filteredTeamCollections}
+        data={filteredTeamCollectionsWithDummy}
         keyExtractor={(item) => item.id}
         renderItem={renderTeamItem}
         numColumns={2}
