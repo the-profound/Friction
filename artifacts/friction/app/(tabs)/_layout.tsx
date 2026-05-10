@@ -1,7 +1,6 @@
 import { Tabs, useRouter } from "expo-router";
 import React, { useCallback } from "react";
 import { Alert, StyleSheet } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -10,11 +9,11 @@ import ScalePressable from "@/components/shared/ScalePressable";
 import { Colors, Sizing, Spacing } from "@/constants/tokens";
 import { useNavigation } from "@/contexts/NavigationContext";
 import { useUser } from "@/contexts/UserContext";
+import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { useCreateArticle } from "@workspace/api-client-react";
 import { invalidateArticleLists } from "@/lib/queryInvalidation";
 
 export default function TabLayout() {
-  const insets = useSafeAreaInsets();
   const { showRecordFab, activeTab } = useNavigation();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -34,7 +33,7 @@ export default function TabLayout() {
     }
   }, [createArticle, userId, queryClient, router]);
 
-  const fabBottom = insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + 12;
+  const fabBottom = useNavBarBottomSafeArea(8);
 
   return (
     <>

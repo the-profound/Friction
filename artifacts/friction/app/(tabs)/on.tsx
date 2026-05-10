@@ -720,7 +720,7 @@ export default function OnScreen() {
           }
           contentContainerStyle={[
             styles.listContent,
-            { paddingBottom: selectionMode ? insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + 80 : navBottom + 64 },
+            { paddingBottom: selectionMode ? insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + 80 : navBottom + 52 },
           ]}
           onScrollBeginDrag={selectionMode ? undefined : closeOpenRow}
           ListFooterComponent={selectionMode ? undefined : listFooter}
