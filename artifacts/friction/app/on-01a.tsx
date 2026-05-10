@@ -38,7 +38,7 @@ export default function DraftScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, source } = useLocalSearchParams<{ id: string; source?: string }>();
   const { userId } = useUser();
   const { showToast } = useToast();
   const editorLayout = useEditorLayout();
@@ -399,7 +399,14 @@ export default function DraftScreen() {
     const currentTitle = titleRef.current.trim();
     const currentContent = content.trim();
 
-    if (!currentTitle && !currentContent) {
+    if (source === "quote") {
+      if (!currentTitle) {
+        isNavigatingRef.current = false;
+        setIsNavigating(false);
+        showToast({ message: "제목을 입력해주세요.", type: "info" });
+        return;
+      }
+    } else if (!currentTitle && !currentContent) {
       if (id) {
         try {
           await deleteArticle.mutateAsync({ id });
@@ -425,8 +432,12 @@ export default function DraftScreen() {
     queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
     isNavigatingRef.current = false;
     setIsNavigating(false);
-    router.back();
-  }, [flush, router, queryClient, getEditorContent, markDirty, id, deleteArticle]);
+    if (source === "quote") {
+      router.replace("/(tabs)/archive");
+    } else {
+      router.back();
+    }
+  }, [flush, router, queryClient, getEditorContent, markDirty, id, deleteArticle, source, showToast]);
 
   const handleStateBarPress = useCallback((target: WritingStage) => {
     if (target === "DRAFT") return;

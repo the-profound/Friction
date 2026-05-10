@@ -186,7 +186,7 @@ export default function SentenceCollectionScreen() {
           data: { authorId: userId, title: "", content: quoteBlock },
         });
         setSelectedSentence(null);
-        router.push({ pathname: "/on-01a", params: { id: article.id } });
+        router.push({ pathname: "/on-01a", params: { id: article.id, source: "quote" } });
       } catch {
         Alert.alert("오류", "메모 생성에 실패했습니다.");
       }
