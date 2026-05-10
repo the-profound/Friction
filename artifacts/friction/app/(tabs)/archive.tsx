@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
-import { Feather } from "@expo/vector-icons";
+import { Feather, AntDesign } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
@@ -60,6 +60,7 @@ export default function ArchiveScreen() {
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [sentenceScrollEnabled, setSentenceScrollEnabled] = useState(true);
+  const [favOverrides, setFavOverrides] = useState<Map<string, boolean>>(new Map());
   const sentenceOpenRowRef = useRef<SwipeableRowHandle | null>(null);
   const sentenceRowRefs = useRef<Map<string, SwipeableRowHandle>>(new Map());
 
@@ -231,15 +232,23 @@ export default function ArchiveScreen() {
 
   const handleSentenceToggleFavorite = useCallback(async (id: string, currentFav: boolean) => {
     if (toggleFavorite.isPending) return;
-    try {
-      await toggleFavorite.mutateAsync({ id, data: { isFavorite: !currentFav } });
-      sentencesQuery.refetch();
-      if (selectedSentence?.id === id) {
-        setSelectedSentence((prev) => prev ? { ...prev, isFavorite: !currentFav } : null);
-      }
-    } catch {
-      Alert.alert("오류", "즐겨찾기 변경에 실패했어요");
+    const newFav = !currentFav;
+    setFavOverrides((prev) => new Map(prev).set(id, newFav));
+    if (selectedSentence?.id === id) {
+      setSelectedSentence((prev) => prev ? { ...prev, isFavorite: newFav } : null);
     }
+    try {
+      await toggleFavorite.mutateAsync({ id, data: { isFavorite: newFav } });
+    } catch {
+      setFavOverrides((prev) => { const next = new Map(prev); next.delete(id); return next; });
+      if (selectedSentence?.id === id) {
+        setSelectedSentence((prev) => prev ? { ...prev, isFavorite: currentFav } : null);
+      }
+      Alert.alert("오류", "즐겨찾기 변경에 실패했어요");
+      return;
+    }
+    await sentencesQuery.refetch();
+    setFavOverrides((prev) => { const next = new Map(prev); next.delete(id); return next; });
   }, [toggleFavorite, sentencesQuery, selectedSentence]);
 
   const handleSentenceQuoteAsMemo = useCallback(async (sentence: StoredSentence) => {
@@ -355,19 +364,25 @@ export default function ArchiveScreen() {
           ) : null}
           <View style={styles.sentenceMeta}>
             <Text style={styles.sentenceDate}>{new Date(item.createdAt).toLocaleDateString("ko-KR")}</Text>
-            {item.isFavorite && <Feather name="star" size={12} color="#F59E0B" />}
+            {(favOverrides.has(item.id) ? favOverrides.get(item.id) : item.isFavorite) && (
+              <AntDesign name="star" size={12} color="#F59E0B" />
+            )}
           </View>
         </View>
         <Pressable
-          onPress={() => handleSentenceToggleFavorite(item.id, item.isFavorite)}
+          onPress={() => handleSentenceToggleFavorite(item.id, favOverrides.has(item.id) ? favOverrides.get(item.id)! : item.isFavorite)}
           hitSlop={8}
           style={styles.sentenceStarBtn}
         >
-          <Feather name="star" size={22} color={item.isFavorite ? "#F59E0B" : Colors.zinc300} />
+          {(favOverrides.has(item.id) ? favOverrides.get(item.id) : item.isFavorite) ? (
+            <AntDesign name="star" size={22} color="#F59E0B" />
+          ) : (
+            <Feather name="star" size={22} color={Colors.zinc300} />
+          )}
         </Pressable>
       </Pressable>
     </SwipeableRow>
-  ), [handleSentenceToggleFavorite, closeSentenceOpenRow, handleSentenceSwipeOpen]);
+  ), [handleSentenceToggleFavorite, closeSentenceOpenRow, handleSentenceSwipeOpen, favOverrides]);
 
   const renderSentenceSelectionItem = useCallback(({ item }: { item: StoredSentence }) => {
     const isSelected = selectedIds.has(item.id);
@@ -388,7 +403,7 @@ export default function ArchiveScreen() {
           ) : null}
           <View style={styles.sentenceMeta}>
             <Text style={styles.sentenceDate}>{new Date(item.createdAt).toLocaleDateString("ko-KR")}</Text>
-            {item.isFavorite && <Feather name="star" size={12} color="#F59E0B" />}
+            {item.isFavorite && <AntDesign name="star" size={12} color="#F59E0B" />}
           </View>
         </View>
       </Pressable>
@@ -658,11 +673,11 @@ export default function ArchiveScreen() {
                 style={styles.sentenceSheetRow}
                 onPress={() => handleSentenceToggleFavorite(selectedSentence.id, selectedSentence.isFavorite)}
               >
-                <Feather
-                  name="star"
-                  size={22}
-                  color={selectedSentence.isFavorite ? "#F59E0B" : Colors.zinc700}
-                />
+                {selectedSentence.isFavorite ? (
+                  <AntDesign name="star" size={22} color="#F59E0B" />
+                ) : (
+                  <Feather name="star" size={22} color={Colors.zinc700} />
+                )}
                 <Text style={[styles.sentenceSheetActionLabel, selectedSentence.isFavorite && { color: "#F59E0B" }]}>
                   {selectedSentence.isFavorite ? "즐겨찾기 해제" : "즐겨찾기 추가"}
                 </Text>

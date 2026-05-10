@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { Feather } from "@expo/vector-icons";
+import { Feather, AntDesign } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
@@ -46,6 +46,7 @@ export default function SentenceCollectionScreen() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [favOverrides, setFavOverrides] = useState<Map<string, boolean>>(new Map());
 
   const allSentencesQuery = useListStoredSentences({ userId });
   const allSentences = (allSentencesQuery.data ?? []) as StoredSentence[];
@@ -126,18 +127,27 @@ export default function SentenceCollectionScreen() {
 
   const handleToggleFavorite = useCallback(
     async (id: string, currentFav: boolean) => {
+      const newFav = !currentFav;
+      setFavOverrides((prev) => new Map(prev).set(id, newFav));
+      if (selectedSentence?.id === id) {
+        setSelectedSentence((prev) =>
+          prev ? { ...prev, isFavorite: newFav } : null,
+        );
+      }
       try {
-        await toggleFavorite.mutateAsync({ id, data: { isFavorite: !currentFav } });
-        sentencesQuery.refetch();
-        allSentencesQuery.refetch();
+        await toggleFavorite.mutateAsync({ id, data: { isFavorite: newFav } });
+      } catch {
+        setFavOverrides((prev) => { const next = new Map(prev); next.delete(id); return next; });
         if (selectedSentence?.id === id) {
           setSelectedSentence((prev) =>
-            prev ? { ...prev, isFavorite: !currentFav } : null,
+            prev ? { ...prev, isFavorite: currentFav } : null,
           );
         }
-      } catch {
         Alert.alert("오류", "즐겨찾기 변경에 실패했어요");
+        return;
       }
+      await Promise.all([sentencesQuery.refetch(), allSentencesQuery.refetch()]);
+      setFavOverrides((prev) => { const next = new Map(prev); next.delete(id); return next; });
     },
     [toggleFavorite, sentencesQuery, allSentencesQuery, selectedSentence],
   );
@@ -226,20 +236,20 @@ export default function SentenceCollectionScreen() {
             </Pressable>
             <Pressable
               style={styles.actionBtn}
-              onPress={() => handleToggleFavorite(item.id, item.isFavorite)}
+              onPress={() => handleToggleFavorite(item.id, favOverrides.has(item.id) ? favOverrides.get(item.id)! : item.isFavorite)}
               hitSlop={8}
             >
-              <Feather
-                name="star"
-                size={22}
-                color={item.isFavorite ? "#F59E0B" : Colors.zinc300}
-              />
+              {(favOverrides.has(item.id) ? favOverrides.get(item.id) : item.isFavorite) ? (
+                <AntDesign name="star" size={22} color="#F59E0B" />
+              ) : (
+                <Feather name="star" size={22} color={Colors.zinc300} />
+              )}
             </Pressable>
           </View>
         </Pressable>
       );
     },
-    [handleCopy, handleToggleFavorite],
+    [handleCopy, handleToggleFavorite, favOverrides],
   );
 
   const renderSelectionItem = useCallback(
@@ -502,11 +512,11 @@ function SentenceDetailSheet({
         </Pressable>
 
         <Pressable style={sheet.actionRow} onPress={onToggleFavorite}>
-          <Feather
-            name="star"
-            size={22}
-            color={sentence.isFavorite ? "#F59E0B" : Colors.zinc700}
-          />
+          {sentence.isFavorite ? (
+            <AntDesign name="star" size={22} color="#F59E0B" />
+          ) : (
+            <Feather name="star" size={22} color={Colors.zinc700} />
+          )}
           <Text style={[sheet.actionLabel, sentence.isFavorite && { color: "#F59E0B" }]}>
             {sentence.isFavorite ? "즐겨찾기 해제" : "즐겨찾기 추가"}
           </Text>
