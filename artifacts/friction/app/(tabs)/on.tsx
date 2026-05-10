@@ -670,7 +670,7 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.zinc100,
   },
   topTabItem: {
-    paddingHorizontal: Spacing.screenPx,
+    paddingHorizontal: Spacing.screenPx + 8,
     paddingTop: 10,
     paddingBottom: 0,
     alignItems: "center",
@@ -712,12 +712,12 @@ const styles = StyleSheet.create({
   filterBar: {
     flexDirection: "row",
     paddingHorizontal: Spacing.screenPx,
-    gap: 8,
+    gap: 12,
     paddingVertical: 8,
   },
   filterChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
     borderRadius: 16,
     backgroundColor: Colors.zinc50,
   },
