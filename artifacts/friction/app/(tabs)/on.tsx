@@ -76,6 +76,7 @@ export default function OnScreen() {
   const [topTab, setTopTab] = useState<TopTab>("memo");
   const [filter, setFilter] = useState<FilterMode>("all");
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [deleteTargetType, setDeleteTargetType] = useState<"memo" | "my_article">("memo");
 
   const [searchActive, setSearchActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -242,7 +243,8 @@ export default function OnScreen() {
     [closeOpenRow, router],
   );
 
-  const handleDeletePress = useCallback((articleId: string) => {
+  const handleDeletePress = useCallback((articleId: string, type: "memo" | "my_article" = "memo") => {
+    setDeleteTargetType(type);
     setDeleteTargetId(articleId);
   }, []);
 
@@ -334,14 +336,27 @@ export default function OnScreen() {
         }
 
         return (
-          <ArticleListItem
-            title={item.article.title || "제목 없음"}
-            preview={item.article.content?.substring(0, 60) || ""}
-            rightMeta={formatRelativeDate(item.article.updatedAt)}
-            timestamp={new Date(item.article.updatedAt)}
-            deliveryBadge={deliveryStatusMap.get(item.article.id)}
-            onPress={() => handleMyArticlePress(item.article)}
-          />
+          <SwipeableRow
+            ref={(r) => {
+              if (r) {
+                rowRefs.current.set(item.article.id, r);
+              } else {
+                rowRefs.current.delete(item.article.id);
+              }
+            }}
+            onDeletePress={() => handleDeletePress(item.article.id, "my_article")}
+            onSwipeOpen={() => handleSwipeOpen(item.article.id)}
+            onScrollLock={(locked) => setScrollEnabled(!locked)}
+          >
+            <ArticleListItem
+              title={item.article.title || "제목 없음"}
+              preview={item.article.content?.substring(0, 60) || ""}
+              rightMeta={formatRelativeDate(item.article.updatedAt)}
+              timestamp={new Date(item.article.updatedAt)}
+              deliveryBadge={deliveryStatusMap.get(item.article.id)}
+              onPress={() => handleMyArticlePress(item.article)}
+            />
+          </SwipeableRow>
         );
       }
 
@@ -622,7 +637,7 @@ export default function OnScreen() {
       <ConfirmModal
         visible={deleteTargetId !== null}
         title="삭제하시겠습니까?"
-        description="이 메모는 영구적으로 삭제됩니다."
+        description={deleteTargetType === "my_article" ? "이 글은 영구적으로 삭제됩니다." : "이 메모는 영구적으로 삭제됩니다."}
         confirmLabel="삭제"
         cancelLabel="취소"
         destructive
