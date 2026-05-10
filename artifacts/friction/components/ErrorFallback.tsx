@@ -4,13 +4,13 @@ import React, { useState } from "react";
 import {
   Modal,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
   useColorScheme,
 } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export type ErrorFallbackProps = {
@@ -60,21 +60,20 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       {__DEV__ ? (
-        <Pressable
+        <ScalePressable
           onPress={() => setIsModalVisible(true)}
           accessibilityLabel="View error details"
           accessibilityRole="button"
-          style={({ pressed }) => [
+          style={[
             styles.topButton,
             {
               top: insets.top + 16,
               backgroundColor: theme.backgroundSecondary,
-              opacity: pressed ? 0.8 : 1,
             },
           ]}
         >
           <Feather name="alert-circle" size={20} color={theme.text} />
-        </Pressable>
+        </ScalePressable>
       ) : null}
 
       <View style={styles.content}>
@@ -86,21 +85,14 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
           Please reload the app to continue.
         </Text>
 
-        <Pressable
+        <ScalePressable
           onPress={handleRestart}
-          style={({ pressed }) => [
-            styles.button,
-            {
-              backgroundColor: theme.link,
-              opacity: pressed ? 0.9 : 1,
-              transform: [{ scale: pressed ? 0.98 : 1 }],
-            },
-          ]}
+          style={[styles.button, { backgroundColor: theme.link }]}
         >
           <Text style={[styles.buttonText, { color: theme.buttonText }]}>
             Try Again
           </Text>
-        </Pressable>
+        </ScalePressable>
       </View>
 
       {__DEV__ ? (
@@ -130,17 +122,14 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
                 <Text style={[styles.modalTitle, { color: theme.text }]}>
                   Error Details
                 </Text>
-                <Pressable
+                <ScalePressable
                   onPress={() => setIsModalVisible(false)}
                   accessibilityLabel="Close error details"
                   accessibilityRole="button"
-                  style={({ pressed }) => [
-                    styles.closeButton,
-                    { opacity: pressed ? 0.6 : 1 },
-                  ]}
+                  style={styles.closeButton}
                 >
                   <Feather name="x" size={24} color={theme.text} />
-                </Pressable>
+                </ScalePressable>
               </View>
 
               <ScrollView

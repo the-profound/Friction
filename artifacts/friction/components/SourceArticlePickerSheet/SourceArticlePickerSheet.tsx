@@ -3,11 +3,11 @@ import {
   View,
   Text,
   StyleSheet,
-  Pressable,
   TextInput,
   FlatList,
   ActivityIndicator,
 } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 import { Feather } from "@expo/vector-icons";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
@@ -122,7 +122,7 @@ export default function SourceArticlePickerSheet({
       const senderName = item.sender?.nickname ?? item.sender?.email ?? "알 수 없음";
       const isSelected = item.article?.id === currentSourceArticleId;
       return (
-        <Pressable
+        <ScalePressable
           style={[styles.listItem, isSelected && styles.listItemSelected]}
           onPress={() => handleSelect(item.article?.id ?? item.articleId, title)}
         >
@@ -137,7 +137,7 @@ export default function SourceArticlePickerSheet({
           {isSelected && (
             <Feather name="check" size={16} color={Colors.zinc700} />
           )}
-        </Pressable>
+        </ScalePressable>
       );
     },
     [currentSourceArticleId, handleSelect],
@@ -147,7 +147,7 @@ export default function SourceArticlePickerSheet({
     ({ item }: { item: Article }) => {
       const isSelected = item.id === currentSourceArticleId;
       return (
-        <Pressable
+        <ScalePressable
           style={[styles.listItem, isSelected && styles.listItemSelected]}
           onPress={() => handleSelect(item.id, item.title)}
         >
@@ -162,7 +162,7 @@ export default function SourceArticlePickerSheet({
           {isSelected && (
             <Feather name="check" size={16} color={Colors.zinc700} />
           )}
-        </Pressable>
+        </ScalePressable>
       );
     },
     [currentSourceArticleId, handleSelect, userNickname],
@@ -186,9 +186,9 @@ export default function SourceArticlePickerSheet({
                 {resolvedCurrentTitle ?? "(제목 없음)"}
               </Text>
             </View>
-            <Pressable style={styles.unlinkButton} onPress={handleUnlink}>
+            <ScalePressable style={styles.unlinkButton} onPress={handleUnlink}>
               <Text style={styles.unlinkButtonText}>연결 해제</Text>
-            </Pressable>
+            </ScalePressable>
           </View>
         )}
 
@@ -206,7 +206,7 @@ export default function SourceArticlePickerSheet({
         </View>
 
         <View style={styles.tabRow}>
-          <Pressable
+          <ScalePressable
             style={[styles.tab, activeTab === "received" && styles.tabActive]}
             onPress={() => setActiveTab("received")}
           >
@@ -215,8 +215,8 @@ export default function SourceArticlePickerSheet({
             >
               수신한 글
             </Text>
-          </Pressable>
-          <Pressable
+          </ScalePressable>
+          <ScalePressable
             style={[styles.tab, activeTab === "written" && styles.tabActive]}
             onPress={() => setActiveTab("written")}
           >
@@ -225,7 +225,7 @@ export default function SourceArticlePickerSheet({
             >
               내가 쓴 글
             </Text>
-          </Pressable>
+          </ScalePressable>
         </View>
 
         {isLoading ? (

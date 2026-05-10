@@ -1,7 +1,8 @@
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { NeighborsInline } from "@/components/ToInline/NeighborsInline";
@@ -14,9 +15,9 @@ export default function MyPageNeighborsScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <Pressable style={styles.backButton} onPress={() => router.back()} hitSlop={8}>
+        <ScalePressable style={styles.backButton} onPress={() => router.back()} hitSlop={8}>
           <Feather name="chevron-left" size={24} color={Colors.zinc700} />
-        </Pressable>
+        </ScalePressable>
         <Text style={styles.headerTitle}>이웃 목록</Text>
         <View style={styles.headerSpacer} />
       </View>

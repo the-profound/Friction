@@ -3,12 +3,12 @@ import { useRouter } from "expo-router";
 import React, { useMemo } from "react";
 import {
   FlatList,
-  Pressable,
   RefreshControl,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import RefreshableEmpty from "@/components/RefreshableEmpty";
@@ -45,7 +45,7 @@ export default function MyPageSendRecordsScreen() {
       ? (item.collectionName ?? "단체 모음")
       : (item.recipient?.nickname ?? "알 수 없음");
     return (
-      <Pressable style={styles.listItem} onPress={() => handleArticlePress(item.articleId)}>
+      <ScalePressable style={styles.listItem} onPress={() => handleArticlePress(item.articleId)}>
         <View style={styles.listItemInfo}>
           <View style={styles.recordTitleRow}>
             <Text style={[styles.listItemTitle, styles.recordTitleFlex]} numberOfLines={1}>
@@ -77,7 +77,7 @@ export default function MyPageSendRecordsScreen() {
           </Text>
         </View>
         <Feather name="chevron-right" size={16} color={Colors.zinc300} />
-      </Pressable>
+      </ScalePressable>
     );
   };
 
@@ -96,10 +96,10 @@ export default function MyPageSendRecordsScreen() {
           <Feather name="alert-circle" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>불러오기 실패</Text>
           <Text style={styles.emptySubtitle}>네트워크를 확인하고 다시 시도해주세요</Text>
-          <Pressable style={styles.actionButton} onPress={() => sendRecordsQuery.refetch()}>
+          <ScalePressable style={styles.actionButton} onPress={() => sendRecordsQuery.refetch()}>
             <Feather name="refresh-cw" size={16} color={Colors.white} />
             <Text style={styles.actionButtonText}>다시 시도</Text>
-          </Pressable>
+          </ScalePressable>
         </View>
       );
     }
@@ -139,9 +139,9 @@ export default function MyPageSendRecordsScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <Pressable style={styles.backButton} onPress={() => router.back()} hitSlop={8}>
+        <ScalePressable style={styles.backButton} onPress={() => router.back()} hitSlop={8}>
           <Feather name="chevron-left" size={24} color={Colors.zinc700} />
-        </Pressable>
+        </ScalePressable>
         <Text style={styles.headerTitle}>발신 목록</Text>
         <View style={styles.headerSpacer} />
       </View>

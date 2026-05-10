@@ -1,12 +1,12 @@
 import React, { useCallback, useRef } from "react";
 import {
-  Pressable,
   Text,
   StyleProp,
   ViewStyle,
   TextStyle,
-  PressableProps,
+  type PressableProps,
 } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 
 export type SubmitButtonState = {
   pending: boolean;
@@ -57,7 +57,7 @@ export default function SubmitButton({
   }, [onPress, effectivelyDisabled]);
 
   return (
-    <Pressable
+    <ScalePressable
       onPress={handlePress}
       disabled={effectivelyDisabled}
       style={[style, effectivelyDisabled && disabledStyle]}
@@ -68,6 +68,6 @@ export default function SubmitButton({
       <Text style={[textStyle, effectivelyDisabled && disabledTextStyle]}>
         {currentLabel}
       </Text>
-    </Pressable>
+    </ScalePressable>
   );
 }

@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Pressable,
   Alert,
   ActivityIndicator,
   Keyboard,
@@ -12,6 +11,7 @@ import {
   BackHandler,
   Platform,
 } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams, Stack } from "expo-router";
@@ -477,9 +477,9 @@ export default function ClosingScreen() {
       <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <View style={styles.headerSide}>
-          <Pressable onPress={handleBack} hitSlop={12}>
+          <ScalePressable onPress={handleBack} hitSlop={12}>
             <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-          </Pressable>
+          </ScalePressable>
         </View>
         <WritingStateBar
           current="CLOSING"
@@ -487,13 +487,13 @@ export default function ClosingScreen() {
           disabled={isExporting}
         />
         <View style={styles.headerSideRight}>
-          <Pressable onPress={handleExport} hitSlop={12} disabled={isExporting}>
+          <ScalePressable onPress={handleExport} hitSlop={12} disabled={isExporting}>
             {isExporting ? (
               <ActivityIndicator size="small" color={Colors.zinc400} />
             ) : (
               <Text style={styles.exportButton}>내보내기</Text>
             )}
-          </Pressable>
+          </ScalePressable>
         </View>
       </View>
 
@@ -511,17 +511,17 @@ export default function ClosingScreen() {
             textAlignVertical="top"
           />
         ) : (
-          <Pressable style={styles.titleRow} onPress={() => setTitleEditing(true)}>
+          <ScalePressable style={styles.titleRow} onPress={() => setTitleEditing(true)}>
             <Text style={styles.titleText}>
               {title || "제목 없음"}
             </Text>
             <Feather name="edit-2" size={14} color={Colors.zinc400} />
-          </Pressable>
+          </ScalePressable>
         )}
       </View>
 
       <View style={styles.coverActionSection}>
-        <Pressable
+        <ScalePressable
           style={styles.coverActionButton}
           onPress={() => setCoverEditorVisible(true)}
         >
@@ -530,7 +530,7 @@ export default function ClosingScreen() {
             {cover.type === "default" ? "표지 만들기" : "표지 수정"}
           </Text>
           <Feather name="chevron-right" size={16} color={Colors.zinc400} />
-        </Pressable>
+        </ScalePressable>
       </View>
 
       <GestureDetector gesture={swipeGesture}>
@@ -615,7 +615,7 @@ export default function ClosingScreen() {
 
       {totalVirtualPages > 1 && (
         <View style={[styles.pageNav, { paddingBottom: insets.bottom + 16 }]}>
-          <Pressable
+          <ScalePressable
             style={[styles.pageNavButton, clampedPreviewPage === 0 && styles.pageNavButtonDisabled]}
             onPress={() => setPreviewPage((p) => Math.max(0, p - 1))}
             disabled={clampedPreviewPage === 0}
@@ -625,11 +625,11 @@ export default function ClosingScreen() {
               size={20}
               color={clampedPreviewPage === 0 ? Colors.zinc300 : Colors.zinc600}
             />
-          </Pressable>
+          </ScalePressable>
           <Text style={styles.pageNavText}>
             {isCoverPage ? "표지" : `${Math.max(0, contentPageIndex) + 1} / ${pages.length}`}
           </Text>
-          <Pressable
+          <ScalePressable
             style={[
               styles.pageNavButton,
               clampedPreviewPage >= totalVirtualPages - 1 && styles.pageNavButtonDisabled,
@@ -642,7 +642,7 @@ export default function ClosingScreen() {
               size={20}
               color={clampedPreviewPage >= totalVirtualPages - 1 ? Colors.zinc300 : Colors.zinc600}
             />
-          </Pressable>
+          </ScalePressable>
         </View>
       )}
 

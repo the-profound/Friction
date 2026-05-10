@@ -1,5 +1,6 @@
 import React from "react";
-import { View, Text, StyleSheet, Pressable, Image } from "react-native";
+import { View, Text, StyleSheet, Image } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 import { Colors, Typography, Spacing } from "../../constants/tokens";
 import type { ArticleStatus } from "../../lib/policies";
 
@@ -46,7 +47,7 @@ export default function ArticleListItem({
   coverImageUrl,
 }: ArticleListItemProps) {
   return (
-    <Pressable
+    <ScalePressable
       onPress={onPress}
       style={({ pressed }) => [styles.container, pressed && styles.pressed]}
     >
@@ -90,7 +91,7 @@ export default function ArticleListItem({
           />
         ) : null}
       </View>
-    </Pressable>
+    </ScalePressable>
   );
 }
 

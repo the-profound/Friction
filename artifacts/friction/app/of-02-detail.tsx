@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
-import { View, Text, StyleSheet, FlatList, Pressable, Alert, Share, TextInput, ActivityIndicator, ScrollView, Platform } from "react-native";
+import { View, Text, StyleSheet, FlatList, Alert, Share, TextInput, ActivityIndicator, ScrollView, Platform } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import { NavBar } from "@/components/NavBar/NavBar";
 import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
@@ -483,7 +484,7 @@ export default function TeamCollectionDetailScreen() {
           onSwipeOpen={() => handleSwipeOpen(item.id)}
           onScrollLock={(locked) => setScrollEnabled(!locked)}
         >
-          <Pressable
+          <ScalePressable
             style={[
               styles.articleItem,
               indent && styles.articleItemIndent,
@@ -518,7 +519,7 @@ export default function TeamCollectionDetailScreen() {
               </Text>
             </View>
             <Feather name="chevron-right" size={16} color={Colors.zinc300} />
-          </Pressable>
+          </ScalePressable>
         </SwipeableRow>
       );
     },
@@ -542,7 +543,7 @@ export default function TeamCollectionDetailScreen() {
   const renderMemberItem = ({ item }: { item: TeamMemberWithUser }) => {
     const isSelf = item.userId === userId;
     return (
-      <Pressable
+      <ScalePressable
         style={styles.memberItem}
         onPress={() => handleMemberPress(item)}
         disabled={isSelf}
@@ -567,7 +568,7 @@ export default function TeamCollectionDetailScreen() {
           </Text>
         </View>
         {!isSelf && <Feather name="chevron-right" size={16} color={Colors.zinc300} />}
-      </Pressable>
+      </ScalePressable>
     );
   };
 
@@ -584,13 +585,13 @@ export default function TeamCollectionDetailScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
+        <ScalePressable onPress={() => router.back()} hitSlop={12}>
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-        </Pressable>
+        </ScalePressable>
         <Text style={styles.headerTitle} numberOfLines={1}>
           {collection?.name ?? "단체 모음"}
         </Text>
-        <Pressable
+        <ScalePressable
           hitSlop={12}
           onPress={() => {
             if (manageSheetVisible) return;
@@ -599,7 +600,7 @@ export default function TeamCollectionDetailScreen() {
           }}
         >
           <Feather name="more-horizontal" size={20} color={Colors.zinc600} />
-        </Pressable>
+        </ScalePressable>
       </View>
 
       {collection?.description ? (
@@ -609,29 +610,29 @@ export default function TeamCollectionDetailScreen() {
       ) : null}
 
       <View style={styles.tabBar}>
-        <Pressable
+        <ScalePressable
           style={[styles.tab, activeTab === "articles" && styles.tabActive]}
           onPress={() => setActiveTab("articles")}
         >
           <Text style={[styles.tabText, activeTab === "articles" && styles.tabTextActive]}>
             글 목록 ({articles.filter((a) => !a.isDeletedPlaceholder).length})
           </Text>
-        </Pressable>
-        <Pressable
+        </ScalePressable>
+        <ScalePressable
           style={[styles.tab, activeTab === "members" && styles.tabActive]}
           onPress={() => setActiveTab("members")}
         >
           <Text style={[styles.tabText, activeTab === "members" && styles.tabTextActive]}>
             멤버 ({members.length})
           </Text>
-        </Pressable>
+        </ScalePressable>
       </View>
 
       {activeTab === "articles" ? (
         <View style={styles.contentArea}>
           {isMember && (
             <View style={styles.articleActions}>
-              <Pressable
+              <ScalePressable
                 style={styles.addButton}
                 onPress={() =>
                   router.push({
@@ -647,16 +648,16 @@ export default function TeamCollectionDetailScreen() {
               >
                 <Feather name="send" size={16} color={Colors.zinc600} />
                 <Text style={styles.addButtonText}>내 글 보내기</Text>
-              </Pressable>
+              </ScalePressable>
             </View>
           )}
           {articlesQuery.isError ? (
             <View style={[styles.emptyContainer, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}>
               <Feather name="alert-circle" size={36} color={Colors.zinc300} />
               <Text style={styles.emptyTitle}>글 목록을 불러오지 못했어요</Text>
-              <Pressable style={styles.retryButton} onPress={() => articlesQuery.refetch()}>
+              <ScalePressable style={styles.retryButton} onPress={() => articlesQuery.refetch()}>
                 <Text style={styles.retryButtonText}>다시 시도</Text>
-              </Pressable>
+              </ScalePressable>
             </View>
           ) : articlesQuery.isLoading ? (
             <View style={[styles.emptyContainer, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}>
@@ -685,29 +686,29 @@ export default function TeamCollectionDetailScreen() {
         <View style={styles.contentArea}>
           {isOwner && (
             <View style={styles.articleActions}>
-              <Pressable
+              <ScalePressable
                 style={styles.addButton}
                 onPress={() => { setInviteQuery(""); setDebouncedInviteQuery(""); setInviteSheetVisible(true); }}
               >
                 <Feather name="user-plus" size={16} color={Colors.zinc600} />
                 <Text style={styles.addButtonText}>멤버 초대</Text>
-              </Pressable>
-              <Pressable
+              </ScalePressable>
+              <ScalePressable
                 style={[styles.addButton, { marginLeft: 8 }]}
                 onPress={handleShareInvite}
               >
                 <Feather name="share-2" size={16} color={Colors.zinc600} />
                 <Text style={styles.addButtonText}>초대 링크</Text>
-              </Pressable>
+              </ScalePressable>
             </View>
           )}
           {membersQuery.isError ? (
             <View style={[styles.emptyContainer, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}>
               <Feather name="alert-circle" size={36} color={Colors.zinc300} />
               <Text style={styles.emptyTitle}>멤버 목록을 불러오지 못했어요</Text>
-              <Pressable style={styles.retryButton} onPress={() => membersQuery.refetch()}>
+              <ScalePressable style={styles.retryButton} onPress={() => membersQuery.refetch()}>
                 <Text style={styles.retryButtonText}>다시 시도</Text>
-              </Pressable>
+              </ScalePressable>
             </View>
           ) : membersQuery.isLoading ? (
             <View style={[styles.emptyContainer, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}>
@@ -738,29 +739,29 @@ export default function TeamCollectionDetailScreen() {
       >
         <View style={styles.manageSheetContent}>
           {isOwner && (
-            <Pressable
+            <ScalePressable
               style={styles.manageSheetRow}
               onPress={() => { setManageSheetVisible(false); handleOpenEdit(); }}
             >
               <Feather name="edit-2" size={18} color={Colors.zinc700} />
               <Text style={styles.manageSheetLabel}>이름/설명 수정</Text>
-            </Pressable>
+            </ScalePressable>
           )}
-          <Pressable
+          <ScalePressable
             style={styles.manageSheetRow}
             onPress={() => { setManageSheetVisible(false); handleShareInvite(); }}
           >
             <Feather name="share-2" size={18} color={Colors.zinc700} />
             <Text style={styles.manageSheetLabel}>초대 링크 공유</Text>
-          </Pressable>
+          </ScalePressable>
           {isOwner && (
-            <Pressable
+            <ScalePressable
               style={styles.manageSheetRow}
               onPress={() => { setManageSheetVisible(false); setDeleteConfirmVisible(true); }}
             >
               <Feather name="trash-2" size={18} color="#DC2626" />
               <Text style={[styles.manageSheetLabel, { color: "#DC2626" }]}>모음 삭제</Text>
-            </Pressable>
+            </ScalePressable>
           )}
         </View>
       </BottomSheet>
@@ -790,13 +791,13 @@ export default function TeamCollectionDetailScreen() {
             multiline
             textAlignVertical="top"
           />
-          <Pressable
+          <ScalePressable
             style={[styles.formButton, (!editName.trim() || updateCollection.isPending) && styles.formButtonDisabled]}
             onPress={handleSaveEdit}
             disabled={!editName.trim() || updateCollection.isPending}
           >
             <Text style={styles.formButtonText}>{updateCollection.isPending ? "저장 중..." : "저장"}</Text>
-          </Pressable>
+          </ScalePressable>
         </View>
       </BottomSheet>
 
@@ -841,7 +842,7 @@ export default function TeamCollectionDetailScreen() {
           ) : (
             <ScrollView style={styles.inviteResultList} keyboardShouldPersistTaps="handled">
               {(inviteSearchResults.data ?? []).map((user) => (
-                <Pressable
+                <ScalePressable
                   key={user.id}
                   style={[styles.inviteResultItem, addMember.isPending && { opacity: 0.5 }]}
                   onPress={() => handleInviteUserTap(user)}
@@ -857,7 +858,7 @@ export default function TeamCollectionDetailScreen() {
                     <Text style={styles.inviteEmail} numberOfLines={1}>{user.email}</Text>
                   </View>
                   <Feather name="user-plus" size={18} color={Colors.zinc400} />
-                </Pressable>
+                </ScalePressable>
               ))}
             </ScrollView>
           )}
@@ -916,7 +917,7 @@ export default function TeamCollectionDetailScreen() {
                   <Text style={[styles.profileActionText, { color: Colors.zinc500 }]}>이웃 신청 중입니다</Text>
                 </View>
               ) : (
-                <Pressable
+                <ScalePressable
                   style={styles.profileActionButton}
                   onPress={handleSendNeighborRequest}
                   disabled={createNeighborRequest.isPending}
@@ -927,11 +928,11 @@ export default function TeamCollectionDetailScreen() {
                     <Feather name="user-plus" size={16} color={Colors.zinc700} />
                   )}
                   <Text style={styles.profileActionText}>이웃 신청하기</Text>
-                </Pressable>
+                </ScalePressable>
               )}
 
               {isOwner && (
-                <Pressable
+                <ScalePressable
                   style={[styles.profileActionButton, styles.profileKickButton]}
                   onPress={() => {
                     setMemberTarget(null);
@@ -940,7 +941,7 @@ export default function TeamCollectionDetailScreen() {
                 >
                   <Feather name="user-x" size={16} color="#DC2626" />
                   <Text style={[styles.profileActionText, styles.profileKickText]}>추방하기</Text>
-                </Pressable>
+                </ScalePressable>
               )}
             </View>
           </View>

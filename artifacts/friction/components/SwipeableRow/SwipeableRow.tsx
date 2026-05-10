@@ -7,8 +7,8 @@ import {
   View,
   StyleSheet,
   Text,
-  Pressable,
 } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 
 const BUTTON_WIDTH = 80;
 const SWIPE_THRESHOLD = 40;
@@ -138,13 +138,13 @@ const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
       <View style={styles.container}>
         <View style={[styles.actionsContainer, { width: totalWidth }]}>
           {resolvedActions.map((action, index) => (
-            <Pressable
+            <ScalePressable
               key={index}
               style={[styles.actionButton, { backgroundColor: action.color, width: BUTTON_WIDTH }]}
               onPress={action.onPress}
             >
               <Text style={styles.actionButtonText}>{action.label}</Text>
-            </Pressable>
+            </ScalePressable>
           ))}
         </View>
         <Animated.View

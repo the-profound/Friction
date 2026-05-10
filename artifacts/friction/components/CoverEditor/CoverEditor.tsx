@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert, Image } from "react-native";
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Alert, Image } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "../../constants/tokens";
@@ -127,7 +128,7 @@ export default function CoverEditor({
         <Text style={styles.sectionLabel}>표지 타입</Text>
         <View style={styles.chipRow}>
           {COVER_TYPES.map((t) => (
-            <Pressable
+            <ScalePressable
               key={t.key}
               style={[
                 styles.typeChip,
@@ -148,14 +149,14 @@ export default function CoverEditor({
               >
                 {t.label}
               </Text>
-            </Pressable>
+            </ScalePressable>
           ))}
         </View>
 
         <Text style={styles.sectionLabel}>텍스트 정렬</Text>
         <View style={styles.chipRow}>
           {TEXT_ALIGNS.map((a) => (
-            <Pressable
+            <ScalePressable
               key={a.key}
               style={[
                 styles.alignChip,
@@ -168,14 +169,14 @@ export default function CoverEditor({
                 size={18}
                 color={local.align === a.key ? Colors.zinc900 : Colors.zinc400}
               />
-            </Pressable>
+            </ScalePressable>
           ))}
         </View>
 
         <Text style={styles.sectionLabel}>텍스트 색상</Text>
         <View style={styles.colorRow}>
           {TEXT_COLORS.map((c) => (
-            <Pressable
+            <ScalePressable
               key={c.key}
               style={[
                 styles.colorChip,
@@ -192,7 +193,7 @@ export default function CoverEditor({
                   color={LIGHT_COLORS.has(c.color) ? Colors.zinc700 : Colors.white}
                 />
               )}
-            </Pressable>
+            </ScalePressable>
           ))}
         </View>
 
@@ -201,7 +202,7 @@ export default function CoverEditor({
             <Text style={styles.sectionLabel}>배경 색상</Text>
             <View style={styles.colorRow}>
               {BG_COLORS.map((c) => (
-                <Pressable
+                <ScalePressable
                   key={c.key}
                   style={[
                     styles.colorChip,
@@ -218,7 +219,7 @@ export default function CoverEditor({
                       color={LIGHT_COLORS.has(c.color) ? Colors.zinc700 : Colors.white}
                     />
                   )}
-                </Pressable>
+                </ScalePressable>
               ))}
             </View>
           </>
@@ -234,7 +235,7 @@ export default function CoverEditor({
                   resizeMode="cover"
                 />
                 <View style={styles.imageActions}>
-                  <Pressable
+                  <ScalePressable
                     style={[styles.imageButton, styles.imageButtonSecondary]}
                     onPress={pickAndUpload}
                     disabled={isUploading}
@@ -247,19 +248,19 @@ export default function CoverEditor({
                     <Text style={styles.imageButtonSecondaryLabel}>
                       {isUploading ? "업로드 중..." : "이미지 변경"}
                     </Text>
-                  </Pressable>
-                  <Pressable
+                  </ScalePressable>
+                  <ScalePressable
                     style={[styles.imageButton, styles.imageButtonDanger]}
                     onPress={handleRemoveImage}
                     disabled={isUploading}
                   >
                     <Feather name="trash-2" size={15} color="#dc2626" />
                     <Text style={styles.imageButtonDangerLabel}>이미지 제거</Text>
-                  </Pressable>
+                  </ScalePressable>
                 </View>
               </>
             ) : (
-              <Pressable
+              <ScalePressable
                 style={[styles.imagePickerButton, isUploading && styles.imagePickerButtonDisabled]}
                 onPress={pickAndUpload}
                 disabled={isUploading}
@@ -275,7 +276,7 @@ export default function CoverEditor({
                 {!isUploading && (
                   <Text style={styles.imagePickerHint}>카메라 롤에서 사진을 선택합니다</Text>
                 )}
-              </Pressable>
+              </ScalePressable>
             )}
           </View>
         )}

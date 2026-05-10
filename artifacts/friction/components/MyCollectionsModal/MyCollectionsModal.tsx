@@ -3,11 +3,11 @@ import {
   View,
   Text,
   StyleSheet,
-  Pressable,
   FlatList,
   ActivityIndicator,
   TextInput,
 } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 import { Feather } from "@expo/vector-icons";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
@@ -78,7 +78,7 @@ export default function MyCollectionsModal({
     ({ item }: { item: CollectionItem }) => {
       const isSelected = item.id === selectedCollectionId;
       return (
-        <Pressable
+        <ScalePressable
           style={[styles.item, isSelected && styles.itemSelected]}
           onPress={() => handleSelect(item)}
         >
@@ -100,7 +100,7 @@ export default function MyCollectionsModal({
               <Feather name="check" size={16} color={Colors.zinc900} />
             )}
           </View>
-        </Pressable>
+        </ScalePressable>
       );
     },
     [selectedCollectionId, handleSelect],
@@ -117,22 +117,22 @@ export default function MyCollectionsModal({
       <View style={styles.container}>
         {onCreateAndSelect && (
           <View style={styles.tabBar}>
-            <Pressable
+            <ScalePressable
               style={[styles.tab, activeTab === "list" && styles.tabActive]}
               onPress={() => setActiveTab("list")}
             >
               <Text style={[styles.tabText, activeTab === "list" && styles.tabTextActive]}>
                 내 폴더
               </Text>
-            </Pressable>
-            <Pressable
+            </ScalePressable>
+            <ScalePressable
               style={[styles.tab, activeTab === "create" && styles.tabActive]}
               onPress={() => setActiveTab("create")}
             >
               <Text style={[styles.tabText, activeTab === "create" && styles.tabTextActive]}>
                 새 폴더에 추가
               </Text>
-            </Pressable>
+            </ScalePressable>
           </View>
         )}
 
@@ -176,7 +176,7 @@ export default function MyCollectionsModal({
               multiline
               textAlignVertical="top"
             />
-            <Pressable
+            <ScalePressable
               style={[styles.confirmButton, (!newName.trim() || isCreating) && styles.confirmDisabled]}
               onPress={handleCreate}
               disabled={!newName.trim() || isCreating}
@@ -186,7 +186,7 @@ export default function MyCollectionsModal({
               ) : (
                 <Text style={styles.confirmButtonText}>만들기</Text>
               )}
-            </Pressable>
+            </ScalePressable>
           </View>
         )}
       </View>

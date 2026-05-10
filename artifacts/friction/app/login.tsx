@@ -7,13 +7,13 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Colors, Spacing, Typography } from "@/constants/tokens";
@@ -184,18 +184,18 @@ export default function LoginScreen() {
         </View>
 
         <View style={styles.tabRow}>
-          <Pressable
+          <ScalePressable
             style={[styles.tab, mode === "login" && styles.tabActive]}
             onPress={() => switchMode("login")}
           >
             <Text style={[styles.tabText, mode === "login" && styles.tabTextActive]}>로그인</Text>
-          </Pressable>
-          <Pressable
+          </ScalePressable>
+          <ScalePressable
             style={[styles.tab, mode === "signup" && styles.tabActive]}
             onPress={() => switchMode("signup")}
           >
             <Text style={[styles.tabText, mode === "signup" && styles.tabTextActive]}>회원가입</Text>
-          </Pressable>
+          </ScalePressable>
         </View>
 
         {signupDone ? (
@@ -206,12 +206,12 @@ export default function LoginScreen() {
               <Text style={styles.confirmEmail}>{email.trim()}</Text>
               {"\n"}으로 인증 메일을 보냈어요.{"\n"}메일 내 링크를 클릭하면 가입이 완료됩니다.
             </Text>
-            <Pressable
+            <ScalePressable
               style={styles.button}
               onPress={() => switchMode("login")}
             >
               <Text style={styles.buttonText}>로그인 화면으로</Text>
-            </Pressable>
+            </ScalePressable>
           </View>
         ) : mode === "login" ? (
           <View style={styles.formContainer}>
@@ -250,21 +250,21 @@ export default function LoginScreen() {
                 returnKeyType="done"
                 editable={!isLoading}
               />
-              <Pressable
+              <ScalePressable
                 style={styles.eyeButton}
                 onPress={() => setShowPassword((v) => !v)}
                 accessibilityRole="button"
                 accessibilityLabel={showPassword ? "비밀번호 숨기기" : "비밀번호 보기"}
               >
                 <Feather name={showPassword ? "eye-off" : "eye"} size={20} color={Colors.zinc400} />
-              </Pressable>
+              </ScalePressable>
             </View>
 
             {errorMessage ? (
               <Text style={styles.errorText}>{errorMessage}</Text>
             ) : null}
 
-            <Pressable
+            <ScalePressable
               style={({ pressed }) => [
                 styles.button,
                 !canSubmitLogin && styles.buttonDisabled,
@@ -280,7 +280,7 @@ export default function LoginScreen() {
               ) : (
                 <Text style={styles.buttonText}>로그인</Text>
               )}
-            </Pressable>
+            </ScalePressable>
           </View>
         ) : signupStep === 1 ? (
           <View style={styles.formContainer}>
@@ -318,14 +318,14 @@ export default function LoginScreen() {
                 returnKeyType="next"
                 editable={!isLoading}
               />
-              <Pressable
+              <ScalePressable
                 style={styles.eyeButton}
                 onPress={() => setShowPassword((v) => !v)}
                 accessibilityRole="button"
                 accessibilityLabel={showPassword ? "비밀번호 숨기기" : "비밀번호 보기"}
               >
                 <Feather name={showPassword ? "eye-off" : "eye"} size={20} color={Colors.zinc400} />
-              </Pressable>
+              </ScalePressable>
             </View>
 
             <View style={styles.passwordContainer}>
@@ -346,14 +346,14 @@ export default function LoginScreen() {
                 returnKeyType="done"
                 editable={!isLoading}
               />
-              <Pressable
+              <ScalePressable
                 style={styles.eyeButton}
                 onPress={() => setShowPasswordConfirm((v) => !v)}
                 accessibilityRole="button"
                 accessibilityLabel={showPasswordConfirm ? "비밀번호 숨기기" : "비밀번호 보기"}
               >
                 <Feather name={showPasswordConfirm ? "eye-off" : "eye"} size={20} color={Colors.zinc400} />
-              </Pressable>
+              </ScalePressable>
             </View>
 
             <Text style={styles.hint}>비밀번호는 6자 이상이어야 합니다.</Text>
@@ -362,7 +362,7 @@ export default function LoginScreen() {
               <Text style={styles.errorText}>{errorMessage}</Text>
             ) : null}
 
-            <Pressable
+            <ScalePressable
               style={({ pressed }) => [
                 styles.button,
                 !canSubmitSignupStep1 && styles.buttonDisabled,
@@ -374,11 +374,11 @@ export default function LoginScreen() {
               accessibilityLabel="다음"
             >
               <Text style={styles.buttonText}>다음</Text>
-            </Pressable>
+            </ScalePressable>
           </View>
         ) : (
           <View style={styles.formContainer}>
-            <Pressable
+            <ScalePressable
               style={styles.backRow}
               onPress={() => {
                 setSignupStep(1);
@@ -387,7 +387,7 @@ export default function LoginScreen() {
             >
               <Feather name="arrow-left" size={16} color={Colors.zinc500} />
               <Text style={styles.backRowText}>이전 단계로</Text>
-            </Pressable>
+            </ScalePressable>
 
             <TextInput
               style={styles.input}
@@ -408,7 +408,7 @@ export default function LoginScreen() {
 
             <View style={styles.agreementBox}>
               <View style={styles.checkRow}>
-                <Pressable
+                <ScalePressable
                   onPress={() => setAgreedTerms((v) => !v)}
                   accessibilityRole="checkbox"
                   accessibilityState={{ checked: agreedTerms }}
@@ -417,7 +417,7 @@ export default function LoginScreen() {
                   <View style={[styles.checkbox, agreedTerms && styles.checkboxChecked]}>
                     {agreedTerms && <Feather name="check" size={13} color={Colors.white} />}
                   </View>
-                </Pressable>
+                </ScalePressable>
                 <Text style={styles.checkLabel} onPress={() => setAgreedTerms((v) => !v)}>
                   {"(필수) "}
                   <Text
@@ -431,7 +431,7 @@ export default function LoginScreen() {
               </View>
 
               <View style={styles.checkRow}>
-                <Pressable
+                <ScalePressable
                   onPress={() => setAgreedPrivacy((v) => !v)}
                   accessibilityRole="checkbox"
                   accessibilityState={{ checked: agreedPrivacy }}
@@ -440,7 +440,7 @@ export default function LoginScreen() {
                   <View style={[styles.checkbox, agreedPrivacy && styles.checkboxChecked]}>
                     {agreedPrivacy && <Feather name="check" size={13} color={Colors.white} />}
                   </View>
-                </Pressable>
+                </ScalePressable>
                 <Text style={styles.checkLabel} onPress={() => setAgreedPrivacy((v) => !v)}>
                   {"(필수) "}
                   <Text
@@ -458,7 +458,7 @@ export default function LoginScreen() {
               <Text style={styles.errorText}>{errorMessage}</Text>
             ) : null}
 
-            <Pressable
+            <ScalePressable
               style={({ pressed }) => [
                 styles.button,
                 !canSubmitSignupStep2 && styles.buttonDisabled,
@@ -474,7 +474,7 @@ export default function LoginScreen() {
               ) : (
                 <Text style={styles.buttonText}>가입 완료</Text>
               )}
-            </Pressable>
+            </ScalePressable>
           </View>
         )}
       </ScrollView>

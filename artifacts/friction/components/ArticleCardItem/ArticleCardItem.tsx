@@ -3,9 +3,9 @@ import {
   View,
   Text,
   StyleSheet,
-  Pressable,
   ImageBackground,
 } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 import { Colors, Typography, Sizing, ReaderTokens, readerFontSize, readerLetterSpacing } from "../../constants/tokens";
 import type { ArticleCover } from "@workspace/api-client-react";
 
@@ -93,13 +93,9 @@ export default function ArticleCardItem({
     ) : null;
 
   return (
-    <Pressable
+    <ScalePressable
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.card,
-        !isActive && styles.inactive,
-        pressed && styles.pressed,
-      ]}
+      style={[styles.card, !isActive && styles.inactive]}
     >
       {coverType === "image" && cover?.imageUrl ? (
         <ImageBackground
@@ -141,7 +137,7 @@ export default function ArticleCardItem({
           ) : null}
         </View>
       )}
-    </Pressable>
+    </ScalePressable>
   );
 }
 

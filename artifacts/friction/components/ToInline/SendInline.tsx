@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 import { Feather } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -307,7 +308,7 @@ export function SendInline({
       <ScrollView style={styles.content} contentContainerStyle={styles.contentInner}>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>편지 선택</Text>
-          <Pressable style={styles.selectButton} onPress={() => setLetterPickerVisible(true)}>
+          <ScalePressable style={styles.selectButton} onPress={() => setLetterPickerVisible(true)}>
             <Feather
               name="file-text"
               size={18}
@@ -319,12 +320,12 @@ export function SendInline({
               {selectedArticle?.title ?? "보낼 편지를 선택하세요"}
             </Text>
             <Feather name="chevron-right" size={18} color={Colors.zinc400} />
-          </Pressable>
+          </ScalePressable>
         </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>받는 사람/모음</Text>
-          <Pressable style={styles.selectButton} onPress={openRecipientPicker}>
+          <ScalePressable style={styles.selectButton} onPress={openRecipientPicker}>
             <Feather
               name={selectedRecipient?.type === "collection" ? "users" : "user"}
               size={18}
@@ -336,7 +337,7 @@ export function SendInline({
               {recipientDisplayName ?? "받는 사람/모음을 선택하세요"}
             </Text>
             <Feather name="chevron-right" size={18} color={Colors.zinc400} />
-          </Pressable>
+          </ScalePressable>
         </View>
 
         <View style={styles.deliveryInfo}>
@@ -384,9 +385,9 @@ export function SendInline({
           <View style={styles.pickerEmpty}>
             <Feather name="alert-circle" size={32} color={Colors.zinc300} />
             <Text style={styles.pickerEmptyTitle}>불러오기 실패</Text>
-            <Pressable onPress={() => articlesQuery.refetch()}>
+            <ScalePressable onPress={() => articlesQuery.refetch()}>
               <Text style={[styles.pickerEmptySub, { color: Colors.zinc900 }]}>다시 시도</Text>
-            </Pressable>
+            </ScalePressable>
           </View>
         ) : articles.length === 0 ? (
           <View style={styles.pickerEmpty}>
@@ -397,7 +398,7 @@ export function SendInline({
         ) : (
           <ScrollView nestedScrollEnabled style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 24 }}>
             {articles.map((article) => (
-              <Pressable
+              <ScalePressable
                 key={article.id}
                 style={[
                   styles.pickerItem,
@@ -416,7 +417,7 @@ export function SendInline({
                     {article.content.substring(0, 60)}
                   </Text>
                 )}
-              </Pressable>
+              </ScalePressable>
             ))}
           </ScrollView>
         )}
@@ -429,7 +430,7 @@ export function SendInline({
         snapPoints={[0.85]}
       >
         <View style={styles.segmentRow}>
-          <Pressable
+          <ScalePressable
             style={[styles.segmentButton, segmentTab === "collection" && styles.segmentButtonActive]}
             onPress={() => setSegmentTab("collection")}
           >
@@ -441,8 +442,8 @@ export function SendInline({
             >
               모음
             </Text>
-          </Pressable>
-          <Pressable
+          </ScalePressable>
+          <ScalePressable
             style={[styles.segmentButton, segmentTab === "neighbor" && styles.segmentButtonActive]}
             onPress={() => setSegmentTab("neighbor")}
           >
@@ -454,7 +455,7 @@ export function SendInline({
             >
               이웃
             </Text>
-          </Pressable>
+          </ScalePressable>
         </View>
 
         <View style={styles.recipientListArea}>
@@ -467,9 +468,9 @@ export function SendInline({
               <View style={styles.pickerEmpty}>
                 <Feather name="alert-circle" size={32} color={Colors.zinc300} />
                 <Text style={styles.pickerEmptyTitle}>불러오기 실패</Text>
-                <Pressable onPress={() => neighborsQuery.refetch()}>
+                <ScalePressable onPress={() => neighborsQuery.refetch()}>
                   <Text style={[styles.pickerEmptySub, { color: Colors.zinc900 }]}>다시 시도</Text>
-                </Pressable>
+                </ScalePressable>
               </View>
             ) : neighbors.length === 0 ? (
               <View style={styles.pickerEmpty}>
@@ -484,7 +485,7 @@ export function SendInline({
                     pendingRecipient?.type === "neighbor" &&
                     pendingRecipient.data.id === neighbor.id;
                   return (
-                    <Pressable
+                    <ScalePressable
                       key={neighbor.id}
                       style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
                       onPress={() => setPendingRecipient({ type: "neighbor", data: neighbor })}
@@ -501,7 +502,7 @@ export function SendInline({
                         </View>
                         {isSelected && <Feather name="check" size={18} color={Colors.zinc900} />}
                       </View>
-                    </Pressable>
+                    </ScalePressable>
                   );
                 })}
               </ScrollView>
@@ -514,9 +515,9 @@ export function SendInline({
             <View style={styles.pickerEmpty}>
               <Feather name="alert-circle" size={32} color={Colors.zinc300} />
               <Text style={styles.pickerEmptyTitle}>불러오기 실패</Text>
-              <Pressable onPress={() => teamCollectionsQuery.refetch()}>
+              <ScalePressable onPress={() => teamCollectionsQuery.refetch()}>
                 <Text style={[styles.pickerEmptySub, { color: Colors.zinc900 }]}>다시 시도</Text>
-              </Pressable>
+              </ScalePressable>
             </View>
           ) : teamCollections.length === 0 ? (
             <View style={styles.pickerEmpty}>
@@ -531,7 +532,7 @@ export function SendInline({
                   pendingRecipient?.type === "collection" &&
                   pendingRecipient.data.id === col.id;
                 return (
-                  <Pressable
+                  <ScalePressable
                     key={col.id}
                     style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
                     onPress={() =>
@@ -557,14 +558,14 @@ export function SendInline({
                       </View>
                       {isSelected && <Feather name="check" size={18} color={Colors.zinc900} />}
                     </View>
-                  </Pressable>
+                  </ScalePressable>
                 );
               })}
             </ScrollView>
           )}
         </View>
 
-        <Pressable
+        <ScalePressable
           style={[
             styles.confirmPickerButton,
             !pendingRecipient && styles.confirmPickerButtonDisabled,
@@ -580,7 +581,7 @@ export function SendInline({
           >
             선택 완료
           </Text>
-        </Pressable>
+        </ScalePressable>
       </BottomSheet>
 
       <ConfirmModal

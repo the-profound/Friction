@@ -1,5 +1,6 @@
 import React, { useRef } from "react";
 import { View, Text, StyleSheet, Modal, Pressable } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, ZIndex, Spacing } from "../../constants/tokens";
 
@@ -96,13 +97,13 @@ export default function ConfirmModal({
 
             {isNewLayout ? (
               <View style={styles.actionRow}>
-                <Pressable style={styles.actionButton} onPress={displayActionButton.onPress}>
+                <ScalePressable style={styles.actionButton} onPress={displayActionButton.onPress}>
                   <Text style={styles.actionButtonEmoji}>{displayActionButton.emoji}</Text>
                   <Text style={styles.actionButtonLabel}>{displayActionButton.label}</Text>
-                </Pressable>
+                </ScalePressable>
 
                 {displayDeleteButton && (
-                  <Pressable
+                  <ScalePressable
                     style={[
                       styles.deleteButton,
                       displayDeleteButton.disabled && styles.deleteButtonDisabled,
@@ -110,25 +111,25 @@ export default function ConfirmModal({
                     onPress={displayDeleteButton.onPress}
                   >
                     <Feather name="trash-2" size={20} color={Colors.white} />
-                  </Pressable>
+                  </ScalePressable>
                 )}
               </View>
             ) : (
               <View style={styles.buttons}>
-                <Pressable
+                <ScalePressable
                   style={[styles.button, styles.cancelButton]}
                   onPress={onCancel}
                 >
                   <Text style={styles.cancelText}>{displayCancelLabel}</Text>
-                </Pressable>
-                <Pressable
+                </ScalePressable>
+                <ScalePressable
                   style={[styles.button, displayDestructive ? styles.destructiveButton : styles.confirmButton]}
                   onPress={onConfirm}
                 >
                   <Text style={[styles.confirmText, displayDestructive && styles.destructiveText]}>
                     {displayConfirmLabel}
                   </Text>
-                </Pressable>
+                </ScalePressable>
               </View>
             )}
           </Pressable>

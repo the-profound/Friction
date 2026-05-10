@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Pressable,
   FlatList,
   TextInput,
   ActivityIndicator,
@@ -14,6 +13,7 @@ import {
   useWindowDimensions,
   type LayoutChangeEvent,
 } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 import {
   trackPageTurn,
   trackReadingStart,
@@ -1075,9 +1075,9 @@ export default function ReadScreen() {
       />
       {(mode === "re_read" || (mode === "basic" && reading.canExit)) && (
         <View style={styles.header}>
-          <Pressable onPress={handleBack} hitSlop={12} style={styles.backButton}>
+          <ScalePressable onPress={handleBack} hitSlop={12} style={styles.backButton}>
             <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-          </Pressable>
+          </ScalePressable>
         </View>
       )}
 
@@ -1221,7 +1221,7 @@ export default function ReadScreen() {
           pointerEvents="box-none"
         >
           <View style={styles.selectionPill}>
-            <Pressable
+            <ScalePressable
               style={styles.selectionPillButton}
               onPress={() => {
                 if (selectionPillDismissTimer.current) {
@@ -1239,8 +1239,8 @@ export default function ReadScreen() {
             >
               <Feather name="bookmark" size={14} color={Colors.zinc200} />
               <Text style={styles.selectionPillButtonText}>수집</Text>
-            </Pressable>
-            <Pressable
+            </ScalePressable>
+            <ScalePressable
               style={styles.selectionPillButton}
               onPress={() => {
                 if (selectionPillDismissTimer.current) {
@@ -1258,7 +1258,7 @@ export default function ReadScreen() {
             >
               <Feather name="edit-3" size={14} color={Colors.zinc200} />
               <Text style={styles.selectionPillButtonText}>메모</Text>
-            </Pressable>
+            </ScalePressable>
           </View>
         </View>
       )}
@@ -1273,13 +1273,13 @@ export default function ReadScreen() {
         <View style={styles.bottomProgressContainer}>
           <ProgressIndicator type="linear" progress={reading.progress} size="small" />
         </View>
-        <Pressable
+        <ScalePressable
           onPress={handleOpenMemo}
           hitSlop={16}
           style={styles.bottomMemoButton}
         >
           <Feather name="edit-3" size={20} color={Colors.zinc600} />
-        </Pressable>
+        </ScalePressable>
       </View>
 
       <BottomSheet
@@ -1303,7 +1303,7 @@ export default function ReadScreen() {
       >
         {collectionPickerMode ? (
           <View style={styles.pickerContainer}>
-            <Pressable
+            <ScalePressable
               style={styles.pickerBackRow}
               onPress={() => {
                 if (pickerTab === "create") {
@@ -1317,25 +1317,25 @@ export default function ReadScreen() {
             >
               <Feather name="chevron-left" size={18} color={Colors.zinc600} />
               <Text style={styles.pickerBackText}>보관할 폴더 선택</Text>
-            </Pressable>
+            </ScalePressable>
 
             <View style={styles.pickerTabBar}>
-              <Pressable
+              <ScalePressable
                 style={[styles.pickerTab, pickerTab === "list" && styles.pickerTabActive]}
                 onPress={() => setPickerTab("list")}
               >
                 <Text style={[styles.pickerTabText, pickerTab === "list" && styles.pickerTabTextActive]}>
                   내 폴더
                 </Text>
-              </Pressable>
-              <Pressable
+              </ScalePressable>
+              <ScalePressable
                 style={[styles.pickerTab, pickerTab === "create" && styles.pickerTabActive]}
                 onPress={() => setPickerTab("create")}
               >
                 <Text style={[styles.pickerTabText, pickerTab === "create" && styles.pickerTabTextActive]}>
                   새 폴더에 추가
                 </Text>
-              </Pressable>
+              </ScalePressable>
             </View>
 
             {pickerTab === "list" ? (
@@ -1355,7 +1355,7 @@ export default function ReadScreen() {
                 renderItem={({ item }) => {
                   const isSelected = item.id === selectedCollectionId;
                   return (
-                    <Pressable
+                    <ScalePressable
                       style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
                       onPress={() => {
                         setSelectedCollectionId(item.id);
@@ -1380,7 +1380,7 @@ export default function ReadScreen() {
                         )}
                         {isSelected && <Feather name="check" size={16} color={Colors.zinc900} />}
                       </View>
-                    </Pressable>
+                    </ScalePressable>
                   );
                 }}
                 ItemSeparatorComponent={() => <View style={styles.pickerSeparator} />}
@@ -1412,7 +1412,7 @@ export default function ReadScreen() {
                   multiline
                   textAlignVertical="top"
                 />
-                <Pressable
+                <ScalePressable
                   style={[styles.pickerCreateButton, (!newCollectionName.trim() || isCreatingCollection) && styles.pickerCreateButtonDisabled]}
                   onPress={async () => {
                     if (!newCollectionName.trim()) return;
@@ -1447,7 +1447,7 @@ export default function ReadScreen() {
                   ) : (
                     <Text style={styles.pickerCreateButtonText}>만들기</Text>
                   )}
-                </Pressable>
+                </ScalePressable>
               </View>
             )}
           </View>
@@ -1455,7 +1455,7 @@ export default function ReadScreen() {
         <View style={styles.completionContent}>
           <Text style={dynamicStyles.completionText}>글을 끝까지 다 읽었습니다.</Text>
 
-          <Pressable
+          <ScalePressable
             style={styles.collectionSelector}
             onPress={() => setCollectionPickerMode(true)}
             disabled={isSaving}
@@ -1465,9 +1465,9 @@ export default function ReadScreen() {
               {(collectionsQuery.data ?? []).find((c: { id: string; name: string }) => c.id === selectedCollectionId)?.name ?? "보관함"}
             </Text>
             <Feather name="chevron-right" size={16} color={Colors.zinc400} />
-          </Pressable>
+          </ScalePressable>
 
-          <Pressable
+          <ScalePressable
             style={[styles.completionButton, (isSaving || !isCollectionsReady) && styles.completionButtonDisabled]}
             onPress={handleCommitAndSave}
             disabled={isSaving}
@@ -1475,9 +1475,9 @@ export default function ReadScreen() {
             <Text style={dynamicStyles.completionButtonText}>
               {isSaving ? "저장 중..." : !isCollectionsReady ? "불러오는 중..." : "보관하기"}
             </Text>
-          </Pressable>
+          </ScalePressable>
 
-          <Pressable
+          <ScalePressable
             style={[
               styles.completionButton,
               styles.completionButtonSecondary,
@@ -1495,9 +1495,9 @@ export default function ReadScreen() {
             <Text style={dynamicStyles.completionButtonSecondaryText}>
               {mode !== "re_read" && isDeleting ? "처리 중..." : "나가기"}
             </Text>
-          </Pressable>
+          </ScalePressable>
 
-          <Pressable
+          <ScalePressable
             style={styles.completionButtonTertiary}
             onPress={() => {
               setCompletionSheetVisible(false);
@@ -1505,7 +1505,7 @@ export default function ReadScreen() {
             }}
           >
             <Text style={dynamicStyles.completionButtonTertiaryText}>다시 읽기</Text>
-          </Pressable>
+          </ScalePressable>
         </View>
         )}
       </BottomSheet>
@@ -1524,16 +1524,16 @@ export default function ReadScreen() {
             &ldquo;{selectedText}&rdquo;
           </Text>
           <View style={styles.sentenceActions}>
-            <Pressable
+            <ScalePressable
               style={[styles.sentenceButton, styles.sentenceButtonCancel]}
               onPress={handleCancelSentence}
             >
               <Text style={dynamicStyles.sentenceButtonCancelText}>취소</Text>
-            </Pressable>
-            <Pressable style={styles.sentenceButton} onPress={handleSaveSentence}>
+            </ScalePressable>
+            <ScalePressable style={styles.sentenceButton} onPress={handleSaveSentence}>
               <Feather name="bookmark" size={16} color={Colors.white} />
               <Text style={dynamicStyles.sentenceButtonText}>저장</Text>
-            </Pressable>
+            </ScalePressable>
           </View>
         </View>
       </BottomSheet>

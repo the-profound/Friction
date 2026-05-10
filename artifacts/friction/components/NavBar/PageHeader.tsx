@@ -1,7 +1,8 @@
 import { Feather } from "@expo/vector-icons";
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import ScalePressable from "@/components/shared/ScalePressable";
 
 import { Colors, Shadows, Sizing, Spacing, Typography } from "@/constants/tokens";
 import { useNavigation } from "@/contexts/NavigationContext";
@@ -45,31 +46,31 @@ export function PageHeader({
       <Text style={styles.title}>{title}</Text>
       <View style={styles.actions}>
         {rightText && (
-          <Pressable onPress={onRightTextPress} hitSlop={8} style={styles.rightTextButton}>
+          <ScalePressable onPress={onRightTextPress} hitSlop={8} style={styles.rightTextButton}>
             <Text style={styles.rightText}>{rightText}</Text>
-          </Pressable>
+          </ScalePressable>
         )}
         {showAdd && (
-          <Pressable style={[styles.actionButton, addDisabled && styles.actionButtonDisabled]} onPress={addDisabled ? undefined : onAddPress} hitSlop={8}>
+          <ScalePressable style={[styles.actionButton, addDisabled && styles.actionButtonDisabled]} onPress={addDisabled ? undefined : onAddPress} hitSlop={8}>
             <Feather name="plus" size={Sizing.plusIconSize} color={addDisabled ? Colors.zinc300 : Colors.zinc700} />
-          </Pressable>
+          </ScalePressable>
         )}
         {showSearch && (
-          <Pressable
+          <ScalePressable
             style={[styles.actionButton, searchActive && styles.actionButtonActive]}
             onPress={onSearchPress}
             hitSlop={8}
           >
             <Feather name="search" size={Sizing.searchIconSize} color={Colors.zinc700} />
-          </Pressable>
+          </ScalePressable>
         )}
         {showKebab && (
-          <Pressable style={styles.actionButton} onPress={onKebabPress} hitSlop={8}>
+          <ScalePressable style={styles.actionButton} onPress={onKebabPress} hitSlop={8}>
             <Feather name="check-square" size={20} color={Colors.zinc700} />
-          </Pressable>
+          </ScalePressable>
         )}
         {showProfile && (
-          <Pressable
+          <ScalePressable
             style={styles.profileButton}
             onPress={onProfilePress}
             hitSlop={8}
@@ -77,7 +78,7 @@ export function PageHeader({
             accessibilityLabel="설정 및 활동"
           >
             <Feather name="menu" size={16} color={Colors.zinc700} />
-          </Pressable>
+          </ScalePressable>
         )}
       </View>
     </View>

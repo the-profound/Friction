@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useMemo, useRef } from "react";
-import { View, Text, StyleSheet, FlatList, Pressable, RefreshControl, Alert } from "react-native";
+import { View, Text, StyleSheet, FlatList, RefreshControl, Alert } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -145,15 +146,15 @@ export default function MemoCollectionScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
+        <ScalePressable onPress={() => router.back()} hitSlop={12}>
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-        </Pressable>
+        </ScalePressable>
         <Text style={styles.headerTitle}>메모 모음</Text>
         <View style={{ width: 20 }} />
       </View>
       <View style={styles.sortBar}>
         {SORT_OPTIONS.map((opt) => (
-          <Pressable
+          <ScalePressable
             key={opt.key}
             style={[styles.sortChip, sortMode === opt.key && styles.sortChipActive]}
             onPress={() => {
@@ -166,7 +167,7 @@ export default function MemoCollectionScreen() {
             >
               {opt.label}
             </Text>
-          </Pressable>
+          </ScalePressable>
         ))}
       </View>
 

@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Pressable,
   FlatList,
   RefreshControl,
   TextInput,
@@ -11,6 +10,7 @@ import {
   Alert,
   Animated,
 } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Feather, AntDesign } from "@expo/vector-icons";
@@ -350,7 +350,7 @@ export default function ArchiveScreen() {
     }
     const col = item as MyCollection;
     return (
-      <Pressable
+      <ScalePressable
         style={styles.collectionCard}
         onPress={() => router.push({ pathname: "/of-01-detail", params: { id: col.id, name: col.name } })}
       >
@@ -362,7 +362,7 @@ export default function ArchiveScreen() {
           <Text style={styles.collectionCount}>{col.articleCount ?? 0}편</Text>
           {col.isPublic && <Feather name="globe" size={12} color={Colors.zinc400} />}
         </View>
-      </Pressable>
+      </ScalePressable>
     );
   }, [router]);
 
@@ -382,7 +382,7 @@ export default function ArchiveScreen() {
       onSwipeOpen={() => handleSentenceSwipeOpen(item.id)}
       onScrollLock={(locked) => setSentenceScrollEnabled(!locked)}
     >
-      <Pressable
+      <ScalePressable
         style={styles.sentenceItem}
         onPress={() => {
           closeSentenceOpenRow();
@@ -403,7 +403,7 @@ export default function ArchiveScreen() {
             )}
           </View>
         </View>
-        <Pressable
+        <ScalePressable
           onPress={() => handleSentenceToggleFavorite(item.id, favOverrides.has(item.id) ? favOverrides.get(item.id)! : item.isFavorite)}
           hitSlop={8}
           style={styles.sentenceStarBtn}
@@ -413,15 +413,15 @@ export default function ArchiveScreen() {
           ) : (
             <Feather name="star" size={22} color={Colors.zinc300} />
           )}
-        </Pressable>
-      </Pressable>
+        </ScalePressable>
+      </ScalePressable>
     </SwipeableRow>
   ), [handleSentenceToggleFavorite, closeSentenceOpenRow, handleSentenceSwipeOpen, favOverrides]);
 
   const renderSentenceSelectionItem = useCallback(({ item }: { item: StoredSentence }) => {
     const isSelected = selectedIds.has(item.id);
     return (
-      <Pressable
+      <ScalePressable
         style={styles.selectionRow}
         onPress={() => toggleSelect(item.id)}
       >
@@ -440,7 +440,7 @@ export default function ArchiveScreen() {
             {item.isFavorite && <AntDesign name="star" size={12} color="#F59E0B" />}
           </View>
         </View>
-      </Pressable>
+      </ScalePressable>
     );
   }, [selectedIds, toggleSelect]);
 
@@ -453,9 +453,9 @@ export default function ArchiveScreen() {
       <Feather name="folder" size={40} color={Colors.zinc300} />
       <Text style={styles.emptyTitle}>내 폴더가 없어요</Text>
       <Text style={styles.emptySubtitle}>완성된 편지를 모아두는 나만의 공간을 만들어보세요</Text>
-      <Pressable style={styles.emptyButton} onPress={handleAdd}>
+      <ScalePressable style={styles.emptyButton} onPress={handleAdd}>
         <Text style={styles.emptyButtonText}>새 폴더 만들기</Text>
-      </Pressable>
+      </ScalePressable>
     </RefreshableEmpty>
   );
 
@@ -485,9 +485,9 @@ export default function ArchiveScreen() {
         <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
           <Feather name="alert-circle" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>불러오기에 실패했어요</Text>
-          <Pressable style={styles.emptyButton} onPress={handleRefresh}>
+          <ScalePressable style={styles.emptyButton} onPress={handleRefresh}>
             <Text style={styles.emptyButtonText}>다시 시도</Text>
-          </Pressable>
+          </ScalePressable>
         </View>
       );
     }
@@ -509,7 +509,7 @@ export default function ArchiveScreen() {
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={
             impressionCollection ? (
-              <Pressable
+              <ScalePressable
                 style={styles.impressionCard}
                 onPress={() => router.push({ pathname: "/of-01-detail", params: { id: impressionCollection.id, name: impressionCollection.name } })}
               >
@@ -521,7 +521,7 @@ export default function ArchiveScreen() {
                   <Text style={styles.collectionCount}>{impressionCollection.articleCount ?? 0}편</Text>
                   {impressionCollection.isPublic && <Feather name="globe" size={12} color={Colors.zinc400} />}
                 </View>
-              </Pressable>
+              </ScalePressable>
             ) : null
           }
         />
@@ -557,9 +557,9 @@ export default function ArchiveScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {isSentenceSelectionMode ? (
         <View style={styles.selectionHeader}>
-          <Pressable onPress={exitSelectionMode} hitSlop={12}>
+          <ScalePressable onPress={exitSelectionMode} hitSlop={12}>
             <Text style={styles.selectionCancelText}>취소</Text>
-          </Pressable>
+          </ScalePressable>
           <Text style={styles.selectionHeaderTitle}>
             {selectedCount > 0 ? `${selectedCount}개 선택` : "문장 선택"}
           </Text>
@@ -580,22 +580,22 @@ export default function ArchiveScreen() {
 
       {!selectionMode && (
         <View style={styles.subTabBar}>
-          <Pressable
+          <ScalePressable
             style={[styles.subTab, activeSubTab === "personal" && styles.subTabActive]}
             onPress={() => { setActiveSubTab("personal"); setSearchQuery(""); setSearchActive(false); }}
           >
             <Text style={[styles.subTabText, activeSubTab === "personal" && styles.subTabTextActive]}>
               폴더
             </Text>
-          </Pressable>
-          <Pressable
+          </ScalePressable>
+          <ScalePressable
             style={[styles.subTab, activeSubTab === "sentence" && styles.subTabActive]}
             onPress={() => { setActiveSubTab("sentence"); setSearchQuery(""); setSearchActive(false); exitSelectionMode(); }}
           >
             <Text style={[styles.subTabText, activeSubTab === "sentence" && styles.subTabTextActive]}>
               수집한 문장
             </Text>
-          </Pressable>
+          </ScalePressable>
         </View>
       )}
 
@@ -620,9 +620,9 @@ export default function ArchiveScreen() {
               returnKeyType="search"
             />
             {searchQuery.length > 0 && (
-              <Pressable onPress={() => setSearchQuery("")} hitSlop={8}>
+              <ScalePressable onPress={() => setSearchQuery("")} hitSlop={8}>
                 <Feather name="x" size={16} color={Colors.searchIcon} />
-              </Pressable>
+              </ScalePressable>
             )}
           </View>
         </Animated.View>
@@ -632,7 +632,7 @@ export default function ArchiveScreen() {
 
       {isSentenceSelectionMode && (
         <View style={[styles.selectionBar, { paddingBottom: insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + 12 }]}>
-          <Pressable
+          <ScalePressable
             style={[
               styles.bulkDeleteButton,
               (selectedCount === 0 || isBulkDeleting) && styles.bulkDeleteButtonDisabled,
@@ -647,7 +647,7 @@ export default function ArchiveScreen() {
                   ? `${selectedCount}개 선택 삭제`
                   : "선택 삭제"}
             </Text>
-          </Pressable>
+          </ScalePressable>
         </View>
       )}
 
@@ -704,14 +704,14 @@ export default function ArchiveScreen() {
             </Text>
             <View style={styles.sentenceSheetDivider} />
             <View style={styles.sentenceSheetActions}>
-              <Pressable
+              <ScalePressable
                 style={styles.sentenceSheetRow}
                 onPress={() => handleSentenceCopy(selectedSentence.text)}
               >
                 <Feather name="copy" size={18} color={Colors.zinc700} />
                 <Text style={styles.sentenceSheetActionLabel}>복사하기</Text>
-              </Pressable>
-              <Pressable
+              </ScalePressable>
+              <ScalePressable
                 style={styles.sentenceSheetRow}
                 onPress={() => handleSentenceToggleFavorite(selectedSentence.id, selectedSentence.isFavorite)}
               >
@@ -723,16 +723,16 @@ export default function ArchiveScreen() {
                 <Text style={[styles.sentenceSheetActionLabel, selectedSentence.isFavorite && { color: "#F59E0B" }]}>
                   {selectedSentence.isFavorite ? "즐겨찾기 해제" : "즐겨찾기 추가"}
                 </Text>
-              </Pressable>
-              <Pressable
+              </ScalePressable>
+              <ScalePressable
                 style={styles.sentenceSheetRow}
                 onPress={() => handleSentenceQuoteAsMemo(selectedSentence)}
               >
                 <Feather name="edit" size={18} color={Colors.zinc700} />
                 <Text style={styles.sentenceSheetActionLabel}>인용해서 메모 작성</Text>
-              </Pressable>
+              </ScalePressable>
               {selectedSentence.articleId && (
-                <Pressable
+                <ScalePressable
                   style={styles.sentenceSheetRow}
                   onPress={() => {
                     setSelectedSentence(null);
@@ -741,9 +741,9 @@ export default function ArchiveScreen() {
                 >
                   <Feather name="external-link" size={18} color={Colors.zinc700} />
                   <Text style={styles.sentenceSheetActionLabel}>원본으로 이동</Text>
-                </Pressable>
+                </ScalePressable>
               )}
-              <Pressable
+              <ScalePressable
                 style={styles.sentenceSheetRow}
                 onPress={() => {
                   setSentenceDeleteTarget(selectedSentence.id);
@@ -752,7 +752,7 @@ export default function ArchiveScreen() {
               >
                 <Feather name="trash-2" size={18} color="#DC2626" />
                 <Text style={[styles.sentenceSheetActionLabel, { color: "#DC2626" }]}>삭제</Text>
-              </Pressable>
+              </ScalePressable>
             </View>
           </View>
         )}

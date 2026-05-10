@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
-import { View, Text, StyleSheet, Pressable, Alert, ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, BackHandler } from "react-native";
+import { View, Text, StyleSheet, Alert, ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, BackHandler } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams, Stack } from "expo-router";
@@ -491,18 +492,18 @@ export default function DraftScreen() {
       <Stack.Screen options={{ gestureEnabled: false }} />
       <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <Pressable onPress={handleBack} hitSlop={12}>
+        <ScalePressable onPress={handleBack} hitSlop={12}>
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-        </Pressable>
+        </ScalePressable>
         <WritingStateBar
           current="DRAFT"
           onPress={handleStateBarPress}
           disabled={isNavigating}
         />
         {keyboardVisible ? (
-          <Pressable onPress={handleDismissKeyboard} hitSlop={12}>
+          <ScalePressable onPress={handleDismissKeyboard} hitSlop={12}>
             <MaterialCommunityIcons name="keyboard-off-outline" size={22} color={Colors.zinc600} />
-          </Pressable>
+          </ScalePressable>
         ) : isNavigating ? (
           <ActivityIndicator size="small" color={Colors.zinc400} />
         ) : (
@@ -539,7 +540,7 @@ export default function DraftScreen() {
             bodyLetterSpacing={editorLayout.bodyLetterSpacing}
             titleFontSize={editorLayout.titleFontSize}
             belowTitleSlot={
-              <Pressable
+              <ScalePressable
                 style={styles.sourceArticleRow}
                 onPress={() => setPickerVisible(true)}
                 hitSlop={4}
@@ -550,7 +551,7 @@ export default function DraftScreen() {
                     : "⤷ 이 글을 답장으로 설정"}
                 </Text>
                 <Text style={styles.sourceArticleGear}>⚙️</Text>
-              </Pressable>
+              </ScalePressable>
             }
             sourceArticleSlotText={
               sourceArticleId

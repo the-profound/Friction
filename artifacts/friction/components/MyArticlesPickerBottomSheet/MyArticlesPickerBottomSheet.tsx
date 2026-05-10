@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
+import { View, Text, StyleSheet, ScrollView } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
@@ -75,7 +76,7 @@ export function MyArticlesPickerBottomSheet({
             const isAdded = alreadyAdded.includes(item.id);
             const isSelected = selected.has(item.id);
             return (
-              <Pressable
+              <ScalePressable
                 key={item.id}
                 style={[styles.item, isSelected && styles.itemSelected]}
                 onPress={() => !isAdded && toggleSelect(item.id)}
@@ -98,17 +99,17 @@ export function MyArticlesPickerBottomSheet({
                     {isSelected && <Feather name="check" size={14} color={Colors.white} />}
                   </View>
                 )}
-              </Pressable>
+              </ScalePressable>
             );
           })}
         </ScrollView>
       )}
       {selected.size > 0 && (
-        <Pressable style={styles.confirmButton} onPress={handleConfirm}>
+        <ScalePressable style={styles.confirmButton} onPress={handleConfirm}>
           <Text style={styles.confirmButtonText}>
             {selected.size}개 추가
           </Text>
-        </Pressable>
+        </ScalePressable>
       )}
     </BottomSheet>
   );

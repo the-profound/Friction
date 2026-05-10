@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from "react";
-import { View, Text, StyleSheet, FlatList, Pressable, Alert, RefreshControl, TextInput, Switch } from "react-native";
+import { View, Text, StyleSheet, FlatList, Alert, RefreshControl, TextInput, Switch } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -81,7 +82,7 @@ export default function PersonalCollectionListScreen() {
   );
 
   const renderItem = ({ item }: { item: MyCollection }) => (
-    <Pressable
+    <ScalePressable
       style={styles.collectionItem}
       onPress={() => router.push({ pathname: "/of-01-detail", params: { id: item.id, name: item.name } })}
       onLongPress={() => { if (!item.isImpression) setDeleteTarget({ id: item.id, name: item.name }); }}
@@ -101,7 +102,7 @@ export default function PersonalCollectionListScreen() {
         {item.isPublic && <Feather name="globe" size={12} color={Colors.zinc400} />}
         <Feather name="chevron-right" size={16} color={Colors.zinc300} />
       </View>
-    </Pressable>
+    </ScalePressable>
   );
 
   type FeatherIconName = React.ComponentProps<typeof Feather>["name"];
@@ -119,9 +120,9 @@ export default function PersonalCollectionListScreen() {
         <View style={styles.emptyContainer}>
           <Feather name="alert-circle" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>불러오기에 실패했어요</Text>
-          <Pressable style={styles.createButton} onPress={() => collectionsQuery.refetch()}>
+          <ScalePressable style={styles.createButton} onPress={() => collectionsQuery.refetch()}>
             <Text style={styles.createButtonText}>다시 시도</Text>
-          </Pressable>
+          </ScalePressable>
         </View>
       );
     }
@@ -131,12 +132,12 @@ export default function PersonalCollectionListScreen() {
           <Feather name={emptyIcon} size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>{emptyTitle}</Text>
           <Text style={styles.emptySubtitle}>{emptySubtitle}</Text>
-          <Pressable
+          <ScalePressable
             style={styles.createButton}
             onPress={() => { setNewName(""); setNewDescription(""); setNewIsPublic(activeTab === "public"); setCreateSheetVisible(true); }}
           >
             <Text style={styles.createButtonText}>새 폴더 만들기</Text>
-          </Pressable>
+          </ScalePressable>
         </View>
       );
     }
@@ -161,32 +162,32 @@ export default function PersonalCollectionListScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
+        <ScalePressable onPress={() => router.back()} hitSlop={12}>
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-        </Pressable>
+        </ScalePressable>
         <Text style={styles.headerTitle}>폴더</Text>
-        <Pressable hitSlop={12} onPress={() => { setNewName(""); setNewDescription(""); setNewIsPublic(false); setCreateSheetVisible(true); }}>
+        <ScalePressable hitSlop={12} onPress={() => { setNewName(""); setNewDescription(""); setNewIsPublic(false); setCreateSheetVisible(true); }}>
           <Feather name="plus" size={20} color={Colors.zinc600} />
-        </Pressable>
+        </ScalePressable>
       </View>
 
       <View style={styles.tabBar}>
-        <Pressable
+        <ScalePressable
           style={[styles.tab, activeTab === "mine" && styles.tabActive]}
           onPress={() => setActiveTab("mine")}
         >
           <Text style={[styles.tabText, activeTab === "mine" && styles.tabTextActive]}>
             내 폴더 ({privateCollections.length})
           </Text>
-        </Pressable>
-        <Pressable
+        </ScalePressable>
+        <ScalePressable
           style={[styles.tab, activeTab === "public" && styles.tabActive]}
           onPress={() => setActiveTab("public")}
         >
           <Text style={[styles.tabText, activeTab === "public" && styles.tabTextActive]}>
             구독 폴더 ({publicCollections.length})
           </Text>
-        </Pressable>
+        </ScalePressable>
       </View>
 
       {activeTab === "mine"

@@ -1,5 +1,6 @@
 import React, { useMemo, useCallback } from "react";
-import { View, Text, StyleSheet, SectionList, Pressable, RefreshControl } from "react-native";
+import { View, Text, StyleSheet, SectionList, RefreshControl } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -55,7 +56,7 @@ export default function SendHistoryScreen() {
       ? (item.collectionName ?? "단체 모음")
       : (item.recipient?.nickname ?? "알 수 없음");
     return (
-      <Pressable style={styles.recordItem} onPress={() => handleRecordPress(item.articleId)}>
+      <ScalePressable style={styles.recordItem} onPress={() => handleRecordPress(item.articleId)}>
         <View style={styles.recordInfo}>
           <View style={styles.recordTitleRow}>
             <Text style={styles.recordTitle} numberOfLines={1}>
@@ -77,7 +78,7 @@ export default function SendHistoryScreen() {
           </Text>
         </View>
         <Feather name="chevron-right" size={16} color={Colors.zinc300} />
-      </Pressable>
+      </ScalePressable>
     );
   };
 
@@ -90,9 +91,9 @@ export default function SendHistoryScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
+        <ScalePressable onPress={() => router.back()} hitSlop={12}>
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-        </Pressable>
+        </ScalePressable>
         <Text style={styles.headerTitle}>발신 기록</Text>
         <View style={{ width: 20 }} />
       </View>
@@ -106,9 +107,9 @@ export default function SendHistoryScreen() {
           <Feather name="alert-circle" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>불러오기 실패</Text>
           <Text style={styles.emptySubtitle}>네트워크를 확인하고 다시 시도해주세요</Text>
-          <Pressable style={styles.retryButton} onPress={() => sendRecordsQuery.refetch()}>
+          <ScalePressable style={styles.retryButton} onPress={() => sendRecordsQuery.refetch()}>
             <Text style={styles.retryButtonText}>다시 시도</Text>
-          </Pressable>
+          </ScalePressable>
         </View>
       ) : sendRecords.length === 0 ? (
         <View style={styles.emptyContainer}>

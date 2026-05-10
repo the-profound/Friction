@@ -4,12 +4,12 @@ import {
   Text,
   StyleSheet,
   FlatList,
-  Pressable,
   RefreshControl,
   TextInput,
   Alert,
   Animated,
 } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -413,7 +413,7 @@ export default function OnScreen() {
         if (selectionMode) {
           const isSelected = selectedIds.has(item.article.id);
           return (
-            <Pressable
+            <ScalePressable
               style={styles.selectionRow}
               onPress={() => toggleSelect(item.article.id)}
             >
@@ -429,7 +429,7 @@ export default function OnScreen() {
                   onPress={() => toggleSelect(item.article.id)}
                 />
               </View>
-            </Pressable>
+            </ScalePressable>
           );
         }
 
@@ -478,7 +478,7 @@ export default function OnScreen() {
         if (selectionMode) {
           const isSelected = selectedIds.has(item.article.id);
           return (
-            <Pressable
+            <ScalePressable
               style={styles.selectionRow}
               onPress={() => toggleSelect(item.article.id)}
             >
@@ -500,7 +500,7 @@ export default function OnScreen() {
                   onPress={() => toggleSelect(item.article.id)}
                 />
               </View>
-            </Pressable>
+            </ScalePressable>
           );
         }
 
@@ -556,7 +556,7 @@ export default function OnScreen() {
   }, []);
 
   const listFooter = useCallback(
-    () => <Pressable style={styles.listFooterTouchArea} onPress={closeOpenRow} />,
+    () => <ScalePressable style={styles.listFooterTouchArea} onPress={closeOpenRow} />,
     [closeOpenRow],
   );
 
@@ -604,7 +604,7 @@ export default function OnScreen() {
 
       {!selectionMode && (
         <View style={styles.topTabBar}>
-          <Pressable
+          <ScalePressable
             style={styles.topTabItem}
             onPress={() => switchTopTab("memo")}
           >
@@ -612,8 +612,8 @@ export default function OnScreen() {
               메모
             </Text>
             {topTab === "memo" && <View style={styles.topTabUnderline} />}
-          </Pressable>
-          <Pressable
+          </ScalePressable>
+          <ScalePressable
             style={styles.topTabItem}
             onPress={() => switchTopTab("my_article")}
           >
@@ -621,7 +621,7 @@ export default function OnScreen() {
               내 글
             </Text>
             {topTab === "my_article" && <View style={styles.topTabUnderline} />}
-          </Pressable>
+          </ScalePressable>
         </View>
       )}
 
@@ -645,9 +645,9 @@ export default function OnScreen() {
               returnKeyType="search"
             />
             {searchQuery.length > 0 && (
-              <Pressable onPress={() => setSearchQuery("")} hitSlop={8}>
+              <ScalePressable onPress={() => setSearchQuery("")} hitSlop={8}>
                 <Feather name="x" size={16} color={Colors.zinc400} />
-              </Pressable>
+              </ScalePressable>
             )}
           </View>
         </Animated.View>
@@ -656,7 +656,7 @@ export default function OnScreen() {
       {!selectionMode && topTab === "memo" && (
         <View style={styles.filterBar}>
           {FILTER_OPTIONS.map((opt) => (
-            <Pressable
+            <ScalePressable
               key={opt.key}
               style={[styles.filterChip, filter === opt.key && styles.filterChipActive]}
               onPress={() => {
@@ -667,7 +667,7 @@ export default function OnScreen() {
               <Text style={[styles.filterChipText, filter === opt.key && styles.filterChipTextActive]}>
                 {opt.label}
               </Text>
-            </Pressable>
+            </ScalePressable>
           ))}
         </View>
       )}
@@ -692,10 +692,10 @@ export default function OnScreen() {
           <Text style={styles.emptySubtitle}>
             떠오르는 생각을 기록하고{"\n"}편지로 완성할 수 있어요
           </Text>
-          <Pressable style={styles.createButton} onPress={handleNewMemo}>
+          <ScalePressable style={styles.createButton} onPress={handleNewMemo}>
             <Feather name="edit-3" size={16} color={Colors.white} />
             <Text style={styles.createButtonText}>새 메모</Text>
-          </Pressable>
+          </ScalePressable>
         </RefreshableEmpty>
       ) : showMyArticleEmpty ? (
         <RefreshableEmpty
@@ -731,7 +731,7 @@ export default function OnScreen() {
 
       {selectionMode && (
         <View style={[styles.selectionBar, { paddingBottom: insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + 12 }]}>
-          <Pressable
+          <ScalePressable
             style={[styles.bulkDeleteButton, selectedCount === 0 && styles.bulkDeleteButtonDisabled]}
             onPress={handleBulkDeletePress}
             disabled={selectedCount === 0 || isBulkDeleting}
@@ -743,19 +743,19 @@ export default function OnScreen() {
                 {selectedCount > 0 ? `${selectedCount}개 선택 삭제` : "선택 삭제"}
               </Text>
             )}
-          </Pressable>
+          </ScalePressable>
         </View>
       )}
 
       {!selectionMode && topTab === "memo" && (
-        <Pressable
+        <ScalePressable
           style={[styles.fab, { bottom: insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + Spacing.xl }]}
           onPress={handleNewMemo}
           accessibilityRole="button"
           accessibilityLabel="메모 추가"
         >
           <Feather name="edit-3" size={20} color={Colors.white} />
-        </Pressable>
+        </ScalePressable>
       )}
 
       <ConfirmModal
@@ -800,7 +800,7 @@ export default function OnScreen() {
               renderItem={({ item }) => {
                 const isSelected = item.id === selectedCollectionId;
                 return (
-                  <Pressable
+                  <ScalePressable
                     style={[styles.archiveItem, isSelected && styles.archiveItemSelected]}
                     onPress={() => setSelectedCollectionId(item.id)}
                   >
@@ -823,12 +823,12 @@ export default function OnScreen() {
                       )}
                       {isSelected && <Feather name="check" size={16} color={Colors.zinc900} />}
                     </View>
-                  </Pressable>
+                  </ScalePressable>
                 );
               }}
             />
           )}
-          <Pressable
+          <ScalePressable
             style={[
               styles.archiveConfirmButton,
               (!selectedCollectionId || isArchiving) && styles.archiveConfirmButtonDisabled,
@@ -839,7 +839,7 @@ export default function OnScreen() {
             <Text style={styles.archiveConfirmButtonText}>
               {isArchiving ? "보관 중..." : "보관하기"}
             </Text>
-          </Pressable>
+          </ScalePressable>
         </View>
       </BottomSheet>
 

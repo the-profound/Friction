@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Pressable,
   FlatList,
   RefreshControl,
   TextInput,
@@ -12,6 +11,7 @@ import {
   Alert,
   Animated,
 } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -234,7 +234,7 @@ export default function OfScreen() {
     }
     const col = item as TeamCollectionWithRole;
     return (
-      <Pressable
+      <ScalePressable
         style={styles.collectionCard}
         onPress={() => router.push({ pathname: "/of-02-detail", params: { id: col.id } })}
       >
@@ -245,7 +245,7 @@ export default function OfScreen() {
         <View style={styles.collectionMeta}>
           <Text style={styles.collectionCount}>{col.role === "OWNER" ? "소유자" : "멤버"}</Text>
         </View>
-      </Pressable>
+      </ScalePressable>
     );
   }, [router]);
 
@@ -260,9 +260,9 @@ export default function OfScreen() {
           <Feather name="user-check" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>참여 중인 모음이 없어요</Text>
           <Text style={styles.emptySubtitle}>초대 코드를 입력하면 단체 모음에 참여할 수 있어요</Text>
-          <Pressable style={styles.emptyButton} onPress={handleOpenJoin}>
+          <ScalePressable style={styles.emptyButton} onPress={handleOpenJoin}>
             <Text style={styles.emptyButtonText}>초대 코드로 참여</Text>
-          </Pressable>
+          </ScalePressable>
         </RefreshableEmpty>
       );
     }
@@ -275,9 +275,9 @@ export default function OfScreen() {
         <Feather name="users" size={40} color={Colors.zinc300} />
         <Text style={styles.emptyTitle}>단체 모음이 없어요</Text>
         <Text style={styles.emptySubtitle}>함께 글을 나눌 모임을 만들어보세요</Text>
-        <Pressable style={styles.emptyButton} onPress={handleOpenCreate}>
+        <ScalePressable style={styles.emptyButton} onPress={handleOpenCreate}>
           <Text style={styles.emptyButtonText}>새 단체 모음 만들기</Text>
-        </Pressable>
+        </ScalePressable>
       </RefreshableEmpty>
     );
   };
@@ -296,9 +296,9 @@ export default function OfScreen() {
         <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
           <Feather name="alert-circle" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>불러오기에 실패했어요</Text>
-          <Pressable style={styles.emptyButton} onPress={handleRefresh}>
+          <ScalePressable style={styles.emptyButton} onPress={handleRefresh}>
             <Text style={styles.emptyButtonText}>다시 시도</Text>
-          </Pressable>
+          </ScalePressable>
         </View>
       );
     }
@@ -333,7 +333,7 @@ export default function OfScreen() {
 
       <View style={styles.filterBar}>
         {GROUP_FILTER_OPTIONS.map((opt) => (
-          <Pressable
+          <ScalePressable
             key={opt.key}
             style={[styles.filterChip, groupFilter === opt.key && styles.filterChipActive]}
             onPress={() => setGroupFilter(opt.key)}
@@ -341,7 +341,7 @@ export default function OfScreen() {
             <Text style={[styles.filterChipText, groupFilter === opt.key && styles.filterChipTextActive]}>
               {opt.label}
             </Text>
-          </Pressable>
+          </ScalePressable>
         ))}
       </View>
 
@@ -364,9 +364,9 @@ export default function OfScreen() {
             returnKeyType="search"
           />
           {searchQuery.length > 0 && (
-            <Pressable onPress={() => setSearchQuery("")} hitSlop={8}>
+            <ScalePressable onPress={() => setSearchQuery("")} hitSlop={8}>
               <Feather name="x" size={16} color={Colors.searchIcon} />
-            </Pressable>
+            </ScalePressable>
           )}
         </View>
       </Animated.View>
@@ -379,7 +379,7 @@ export default function OfScreen() {
         snapPoints={[0.28]}
       >
         <View style={styles.actionSheetContent}>
-          <Pressable style={styles.actionSheetRow} onPress={handleOpenCreate}>
+          <ScalePressable style={styles.actionSheetRow} onPress={handleOpenCreate}>
             <View style={styles.actionSheetIcon}>
               <Feather name="plus-circle" size={20} color={Colors.zinc700} />
             </View>
@@ -387,8 +387,8 @@ export default function OfScreen() {
               <Text style={styles.actionSheetLabel}>새로 만들기</Text>
               <Text style={styles.actionSheetDesc}>직접 단체 모음을 만들어요</Text>
             </View>
-          </Pressable>
-          <Pressable style={styles.actionSheetRow} onPress={handleOpenJoin}>
+          </ScalePressable>
+          <ScalePressable style={styles.actionSheetRow} onPress={handleOpenJoin}>
             <View style={styles.actionSheetIcon}>
               <Feather name="log-in" size={20} color={Colors.zinc700} />
             </View>
@@ -396,7 +396,7 @@ export default function OfScreen() {
               <Text style={styles.actionSheetLabel}>기존 모음에 참가하기</Text>
               <Text style={styles.actionSheetDesc}>초대 코드로 참여해요</Text>
             </View>
-          </Pressable>
+          </ScalePressable>
         </View>
       </BottomSheet>
 
@@ -472,12 +472,12 @@ export default function OfScreen() {
                 label="참가하기"
                 pendingLabel="참가 중..."
               />
-              <Pressable
+              <ScalePressable
                 style={styles.joinBackButton}
                 onPress={() => { setJoinStep("code"); setJoinError(null); }}
               >
                 <Text style={styles.joinBackText}>다른 코드 입력</Text>
-              </Pressable>
+              </ScalePressable>
             </View>
           </View>
         ) : null}

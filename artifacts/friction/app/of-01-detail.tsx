@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useRef } from "react";
-import { View, Text, StyleSheet, FlatList, Pressable, Alert, TextInput } from "react-native";
+import { View, Text, StyleSheet, FlatList, Alert, TextInput } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import SaveAsPhotosModal from "@/components/SaveAsPhotos/SaveAsPhotosModal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -412,7 +413,7 @@ export default function PersonalCollectionDetailScreen() {
         onSwipeOpen={() => handleSwipeOpen(item.articleId)}
         onScrollLock={(locked) => setScrollEnabled(!locked)}
       >
-        <Pressable
+        <ScalePressable
           style={styles.articleItem}
           onPress={() => router.push({ pathname: "/read", params: { articleId: item.articleId, mode: "re_read" } })}
           onLongPress={() => handleLongPress(item)}
@@ -427,7 +428,7 @@ export default function PersonalCollectionDetailScreen() {
             </Text>
           </View>
           <Feather name="chevron-right" size={16} color={Colors.zinc300} />
-        </Pressable>
+        </ScalePressable>
       </SwipeableRow>
     ),
     [closeOpenRow, handleRemoveArticle, handleSwipeOpen, handleLongPress, router, userId, id],
@@ -437,7 +438,7 @@ export default function PersonalCollectionDetailScreen() {
     ({ item }: { item: MyCollectionArticleWithDetails }) => {
       const isSelected = selectedIds.has(item.articleId);
       return (
-        <Pressable
+        <ScalePressable
           style={styles.selectionRow}
           onPress={() => toggleSelect(item.articleId)}
         >
@@ -456,7 +457,7 @@ export default function PersonalCollectionDetailScreen() {
               </View>
             </View>
           </View>
-        </Pressable>
+        </ScalePressable>
       );
     },
     [selectedIds, toggleSelect],
@@ -481,22 +482,22 @@ export default function PersonalCollectionDetailScreen() {
             <Text style={styles.headerTitle} numberOfLines={1}>
               {selectedCount > 0 ? `${selectedCount}개 선택됨` : "선택"}
             </Text>
-            <Pressable hitSlop={12} onPress={exitSelectionMode}>
+            <ScalePressable hitSlop={12} onPress={exitSelectionMode}>
               <Text style={styles.cancelText}>취소</Text>
-            </Pressable>
+            </ScalePressable>
           </>
         ) : (
           <>
-            <Pressable onPress={() => router.back()} hitSlop={12}>
+            <ScalePressable onPress={() => router.back()} hitSlop={12}>
               <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-            </Pressable>
+            </ScalePressable>
             <Text style={styles.headerTitle} numberOfLines={1}>
               {collection?.name ?? initialName ?? "폴더"}
             </Text>
             <View style={styles.headerRight}>
-              <Pressable hitSlop={12} onPress={isArchive ? enterSelectionMode : handleMorePress}>
+              <ScalePressable hitSlop={12} onPress={isArchive ? enterSelectionMode : handleMorePress}>
                 <Feather name="more-vertical" size={20} color={Colors.zinc600} />
-              </Pressable>
+              </ScalePressable>
             </View>
           </>
         )}
@@ -514,10 +515,10 @@ export default function PersonalCollectionDetailScreen() {
             글 목록 ({articles.length})
           </Text>
           {!isArchive && (
-            <Pressable style={styles.addArticleButton} onPress={() => setShowPicker(true)}>
+            <ScalePressable style={styles.addArticleButton} onPress={() => setShowPicker(true)}>
               <Feather name="plus" size={16} color={Colors.zinc600} />
               <Text style={styles.addArticleText}>글 추가</Text>
-            </Pressable>
+            </ScalePressable>
           )}
         </View>
       )}
@@ -526,9 +527,9 @@ export default function PersonalCollectionDetailScreen() {
         <View style={[styles.emptyContainer, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}>
           <Feather name="alert-circle" size={36} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>글 목록을 불러오지 못했어요</Text>
-          <Pressable style={styles.retryButton} onPress={() => articlesQuery.refetch()}>
+          <ScalePressable style={styles.retryButton} onPress={() => articlesQuery.refetch()}>
             <Text style={styles.retryButtonText}>다시 시도</Text>
-          </Pressable>
+          </ScalePressable>
         </View>
       ) : articles.length === 0 ? (
         <View style={[styles.emptyContainer, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}>
@@ -556,7 +557,7 @@ export default function PersonalCollectionDetailScreen() {
       {selectionMode && (
         <View style={[styles.selectionBar, { paddingBottom: insets.bottom + 12 }]}>
           <View style={styles.selectionBarButtons}>
-            <Pressable
+            <ScalePressable
               style={[styles.bulkActionButton, styles.bulkDeleteButton, (selectedCount === 0 || isBulkDeleting || isBulkMoving) && styles.bulkActionButtonDisabled]}
               onPress={handleBulkDeletePress}
               disabled={selectedCount === 0 || isBulkDeleting || isBulkMoving}
@@ -564,8 +565,8 @@ export default function PersonalCollectionDetailScreen() {
               <Text style={styles.bulkDeleteText}>
                 {isBulkDeleting ? "삭제 중..." : "삭제"}
               </Text>
-            </Pressable>
-            <Pressable
+            </ScalePressable>
+            <ScalePressable
               style={[styles.bulkActionButton, styles.bulkMoveButton, (selectedCount === 0 || isBulkDeleting || isBulkMoving) && styles.bulkActionButtonDisabled]}
               onPress={handleBulkMovePress}
               disabled={selectedCount === 0 || isBulkDeleting || isBulkMoving}
@@ -573,7 +574,7 @@ export default function PersonalCollectionDetailScreen() {
               <Text style={styles.bulkMoveText}>
                 {isBulkMoving ? "이동 중..." : "이동"}
               </Text>
-            </Pressable>
+            </ScalePressable>
           </View>
         </View>
       )}
@@ -640,7 +641,7 @@ export default function PersonalCollectionDetailScreen() {
               data={otherCollections}
               keyExtractor={(c) => c.id}
               renderItem={({ item: coll }) => (
-                <Pressable
+                <ScalePressable
                   style={styles.moveCollectionItem}
                   onPress={() => handleMoveArticle(coll.id)}
                 >
@@ -651,7 +652,7 @@ export default function PersonalCollectionDetailScreen() {
                     {coll.name}
                   </Text>
                   <Feather name="chevron-right" size={16} color={Colors.zinc300} />
-                </Pressable>
+                </ScalePressable>
               )}
               showsVerticalScrollIndicator={false}
             />
@@ -688,7 +689,7 @@ export default function PersonalCollectionDetailScreen() {
         snapPoints={[0.35]}
       >
         <View style={styles.actionSheetContent}>
-          <Pressable
+          <ScalePressable
             style={styles.actionSheetItem}
             onPress={() => {
               setIsLongPressMenuVisible(false);
@@ -696,8 +697,8 @@ export default function PersonalCollectionDetailScreen() {
             }}
           >
             <Text style={styles.actionSheetItemText}>답장 설정</Text>
-          </Pressable>
-          <Pressable
+          </ScalePressable>
+          <ScalePressable
             style={styles.actionSheetItem}
             onPress={() => {
               setIsLongPressMenuVisible(false);
@@ -705,13 +706,13 @@ export default function PersonalCollectionDetailScreen() {
             }}
           >
             <Text style={styles.actionSheetItemText}>사진으로 저장</Text>
-          </Pressable>
-          <Pressable
+          </ScalePressable>
+          <ScalePressable
             style={[styles.actionSheetItem, styles.actionSheetCancelItem]}
             onPress={() => setIsLongPressMenuVisible(false)}
           >
             <Text style={styles.actionSheetCancelText}>닫기</Text>
-          </Pressable>
+          </ScalePressable>
         </View>
       </BottomSheet>
 

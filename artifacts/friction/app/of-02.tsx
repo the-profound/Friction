@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from "react";
-import { View, Text, StyleSheet, FlatList, Pressable, Alert, RefreshControl, TextInput } from "react-native";
+import { View, Text, StyleSheet, FlatList, Alert, RefreshControl, TextInput } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -181,7 +182,7 @@ export default function TeamCollectionListScreen() {
   }, [joinPreview, userId, addMember, collectionsQuery]);
 
   const renderItem = ({ item }: { item: TeamCollectionWithRole }) => (
-    <Pressable
+    <ScalePressable
       style={styles.collectionItem}
       onPress={() => router.push({ pathname: "/of-02-detail", params: { id: item.id } })}
       onLongPress={() => item.role === "OWNER" ? handleDelete(item.id, item.name) : undefined}
@@ -204,7 +205,7 @@ export default function TeamCollectionListScreen() {
         </View>
         <Feather name="chevron-right" size={16} color={Colors.zinc300} />
       </View>
-    </Pressable>
+    </ScalePressable>
   );
 
   const renderEmpty = () => {
@@ -214,9 +215,9 @@ export default function TeamCollectionListScreen() {
           <Feather name="user-check" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>참여 중인 모음이 없어요</Text>
           <Text style={styles.emptySubtitle}>초대 코드를 입력하면 단체 모음에 참여할 수 있어요</Text>
-          <Pressable style={styles.createButton} onPress={handleOpenJoin}>
+          <ScalePressable style={styles.createButton} onPress={handleOpenJoin}>
             <Text style={styles.createButtonText}>초대 코드로 참여</Text>
-          </Pressable>
+          </ScalePressable>
         </View>
       );
     }
@@ -225,9 +226,9 @@ export default function TeamCollectionListScreen() {
         <Feather name="users" size={40} color={Colors.zinc300} />
         <Text style={styles.emptyTitle}>단체 모음이 없어요</Text>
         <Text style={styles.emptySubtitle}>함께 글을 나눌 모임을 만들어보세요</Text>
-        <Pressable style={styles.createButton} onPress={handleOpenCreate}>
+        <ScalePressable style={styles.createButton} onPress={handleOpenCreate}>
           <Text style={styles.createButtonText}>새 단체 모음 만들기</Text>
-        </Pressable>
+        </ScalePressable>
       </View>
     );
   };
@@ -235,18 +236,18 @@ export default function TeamCollectionListScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
+        <ScalePressable onPress={() => router.back()} hitSlop={12}>
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-        </Pressable>
+        </ScalePressable>
         <Text style={styles.headerTitle}>단체 모음</Text>
-        <Pressable hitSlop={12} onPress={() => setActionSheetVisible(true)}>
+        <ScalePressable hitSlop={12} onPress={() => setActionSheetVisible(true)}>
           <Feather name="plus" size={20} color={Colors.zinc600} />
-        </Pressable>
+        </ScalePressable>
       </View>
 
       <View style={styles.tabBar}>
         {tabs.map((tab) => (
-          <Pressable
+          <ScalePressable
             key={tab.key}
             style={[styles.tab, activeTab === tab.key && styles.tabActive]}
             onPress={() => setActiveTab(tab.key)}
@@ -254,7 +255,7 @@ export default function TeamCollectionListScreen() {
             <Text style={[styles.tabText, activeTab === tab.key && styles.tabTextActive]}>
               {tab.label}
             </Text>
-          </Pressable>
+          </ScalePressable>
         ))}
       </View>
 
@@ -266,9 +267,9 @@ export default function TeamCollectionListScreen() {
         <View style={styles.emptyContainer}>
           <Feather name="alert-circle" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>불러오기에 실패했어요</Text>
-          <Pressable style={styles.createButton} onPress={() => collectionsQuery.refetch()}>
+          <ScalePressable style={styles.createButton} onPress={() => collectionsQuery.refetch()}>
             <Text style={styles.createButtonText}>다시 시도</Text>
-          </Pressable>
+          </ScalePressable>
         </View>
       ) : filteredCollections.length === 0 ? (
         renderEmpty()
@@ -295,7 +296,7 @@ export default function TeamCollectionListScreen() {
         snapPoints={[0.28]}
       >
         <View style={styles.actionSheetContent}>
-          <Pressable style={styles.actionSheetRow} onPress={handleOpenCreate}>
+          <ScalePressable style={styles.actionSheetRow} onPress={handleOpenCreate}>
             <View style={styles.actionSheetIcon}>
               <Feather name="plus-circle" size={20} color={Colors.zinc700} />
             </View>
@@ -303,8 +304,8 @@ export default function TeamCollectionListScreen() {
               <Text style={styles.actionSheetLabel}>새로 만들기</Text>
               <Text style={styles.actionSheetDesc}>직접 단체 모음을 만들어요</Text>
             </View>
-          </Pressable>
-          <Pressable style={styles.actionSheetRow} onPress={handleOpenJoin}>
+          </ScalePressable>
+          <ScalePressable style={styles.actionSheetRow} onPress={handleOpenJoin}>
             <View style={styles.actionSheetIcon}>
               <Feather name="log-in" size={20} color={Colors.zinc700} />
             </View>
@@ -312,7 +313,7 @@ export default function TeamCollectionListScreen() {
               <Text style={styles.actionSheetLabel}>기존 모음에 참가하기</Text>
               <Text style={styles.actionSheetDesc}>초대 코드로 참여해요</Text>
             </View>
-          </Pressable>
+          </ScalePressable>
         </View>
       </BottomSheet>
 
@@ -371,12 +372,12 @@ export default function TeamCollectionListScreen() {
               label="참가하기"
               pendingLabel="참가 중..."
             />
-            <Pressable
+            <ScalePressable
               style={styles.joinBackButton}
               onPress={() => { setJoinStep("code"); setJoinError(null); }}
             >
               <Text style={styles.joinBackText}>다른 코드 입력</Text>
-            </Pressable>
+            </ScalePressable>
           </View>
         ) : null}
       </BottomSheet>

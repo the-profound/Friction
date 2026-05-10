@@ -8,7 +8,6 @@ import {
   RefreshControl,
   ScrollView,
   TextInput,
-  Pressable,
   Platform,
   Animated,
   PanResponder,
@@ -16,6 +15,7 @@ import {
   NativeSyntheticEvent,
   NativeScrollEvent,
 } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -532,9 +532,9 @@ Alert.alert("완료", "수신함에서 삭제되었습니다.");
             returnKeyType="search"
           />
           {searchQuery.length > 0 && (
-            <Pressable onPress={() => setSearchQuery("")} hitSlop={8}>
+            <ScalePressable onPress={() => setSearchQuery("")} hitSlop={8}>
               <Feather name="x" size={16} color={Colors.zinc400} />
-            </Pressable>
+            </ScalePressable>
           )}
         </View>
       </Animated.View>

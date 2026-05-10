@@ -1,5 +1,6 @@
 import React from "react";
-import { View, Text, Pressable, StyleSheet, ScrollView, Platform } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Platform } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import { Colors, Typography } from "@/constants/tokens";
 
@@ -45,13 +46,9 @@ export default function BlockTypeSheet({
         {BLOCK_TYPES.map((item) => {
           const isActive = item.key === activeBlock;
           return (
-            <Pressable
+            <ScalePressable
               key={item.key}
-              style={({ pressed }) => [
-                styles.row,
-                isActive && styles.activeRow,
-                pressed && styles.pressedRow,
-              ]}
+              style={[styles.row, isActive && styles.activeRow]}
               onPress={() => {
                 onSelect(item.key);
                 onClose();
@@ -63,7 +60,7 @@ export default function BlockTypeSheet({
               {isActive && (
                 <Text style={styles.checkmark}>✓</Text>
               )}
-            </Pressable>
+            </ScalePressable>
           );
         })}
       </ScrollView>

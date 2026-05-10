@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from "react";
-import { View, Text, StyleSheet, Animated, Pressable } from "react-native";
+import { View, Text, StyleSheet, Animated } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors, Typography, ZIndex, Spacing } from "../../constants/tokens";
@@ -59,7 +60,7 @@ function ToastItem({
         {toast.message}
       </Text>
       {toast.action && (
-        <Pressable
+        <ScalePressable
           onPress={() => {
             toast.action!.onPress();
             onDismiss();
@@ -67,7 +68,7 @@ function ToastItem({
           hitSlop={8}
         >
           <Text style={[styles.actionLabel, { color: config.iconColor }]}>{toast.action.label}</Text>
-        </Pressable>
+        </ScalePressable>
       )}
     </Animated.View>
   );

@@ -1,6 +1,7 @@
 import React from "react";
-import { View, Text, Pressable, StyleSheet, Platform } from "react-native";
+import { View, Text, StyleSheet, Platform } from "react-native";
 import { Feather } from "@expo/vector-icons";
+import ScalePressable from "@/components/shared/ScalePressable";
 import type { OnSelectionUpdatePayload } from "@/components/WebViewMarkdownEditor/types";
 
 interface KeyboardToolbarProps {
@@ -38,15 +39,15 @@ export default function KeyboardToolbar({
 
   return (
     <View style={styles.container}>
-      <Pressable
+      <ScalePressable
         style={styles.button}
         onPress={onFormatPress}
         hitSlop={8}
       >
         <Text style={[styles.buttonText, styles.activeText]}>{blockLabel}</Text>
-      </Pressable>
+      </ScalePressable>
 
-      <Pressable
+      <ScalePressable
         style={styles.button}
         onPress={onBoldPress}
         hitSlop={8}
@@ -54,9 +55,9 @@ export default function KeyboardToolbar({
         <Text style={[styles.buttonText, styles.boldLabel, isBold && styles.activeText]}>
           B
         </Text>
-      </Pressable>
+      </ScalePressable>
 
-      <Pressable
+      <ScalePressable
         style={styles.button}
         onPress={onItalicPress}
         hitSlop={8}
@@ -64,9 +65,9 @@ export default function KeyboardToolbar({
         <Text style={[styles.buttonText, styles.italicLabel, isItalic && styles.activeText]}>
           I
         </Text>
-      </Pressable>
+      </ScalePressable>
 
-      <Pressable
+      <ScalePressable
         style={styles.button}
         onPress={onUnderlinePress}
         hitSlop={8}
@@ -74,26 +75,26 @@ export default function KeyboardToolbar({
         <Text style={[styles.buttonText, styles.underlineLabel, isUnderline && styles.activeText]}>
           U
         </Text>
-      </Pressable>
+      </ScalePressable>
 
       {onInsertDivider != null && (
-        <Pressable
+        <ScalePressable
           style={styles.button}
           onPress={onInsertDivider}
           hitSlop={8}
         >
           <Feather name="scissors" size={16} color="#a1a1aa" />
-        </Pressable>
+        </ScalePressable>
       )}
 
       {onShiftEnter != null && (
-        <Pressable
+        <ScalePressable
           style={styles.button}
           onPress={onShiftEnter}
           hitSlop={8}
         >
           <Feather name="corner-down-left" size={18} color="#a1a1aa" />
-        </Pressable>
+        </ScalePressable>
       )}
     </View>
   );

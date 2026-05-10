@@ -4,13 +4,13 @@ import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
 import React, { useState, useRef } from "react";
 import {
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
   Alert,
 } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -89,9 +89,9 @@ export default function MyPageScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <Pressable style={styles.backButton} onPress={() => router.back()} hitSlop={8}>
+        <ScalePressable style={styles.backButton} onPress={() => router.back()} hitSlop={8}>
           <Feather name="chevron-left" size={24} color={Colors.zinc700} />
-        </Pressable>
+        </ScalePressable>
         <Text style={styles.headerTitle}>설정 및 활동</Text>
         <View style={styles.headerSpacer} />
       </View>
@@ -110,9 +110,9 @@ export default function MyPageScreen() {
           ) : userError ? (
             <View style={styles.errorRow}>
               <Text style={styles.errorText}>정보를 불러오지 못했습니다.</Text>
-              <Pressable style={styles.retryButton} onPress={() => refetchUser()}>
+              <ScalePressable style={styles.retryButton} onPress={() => refetchUser()}>
                 <Text style={styles.retryText}>다시 시도</Text>
-              </Pressable>
+              </ScalePressable>
             </View>
           ) : (
             <>
@@ -215,7 +215,7 @@ function SettingRow({
   isLast?: boolean;
 }) {
   return (
-    <Pressable
+    <ScalePressable
       style={({ pressed }) => [
         styles.row,
         !isLast && styles.rowBorder,
@@ -229,7 +229,7 @@ function SettingRow({
       {showChevron && (
         <Feather name="chevron-right" size={18} color={Colors.zinc400} />
       )}
-    </Pressable>
+    </ScalePressable>
   );
 }
 

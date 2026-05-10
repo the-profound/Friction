@@ -1,6 +1,7 @@
 import React from "react";
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import { View, Text, StyleSheet } from "react-native";
 import { Colors, Typography } from "@/constants/tokens";
+import ScalePressable from "@/components/shared/ScalePressable";
 
 export type WritingStage = "DRAFT" | "DIVIDING" | "CLOSING";
 
@@ -39,7 +40,7 @@ export default function WritingStateBar({
         const isDirectlyReachable = distance === 1;
 
         return (
-          <Pressable
+          <ScalePressable
             key={stage}
             style={[
               styles.tab,
@@ -63,7 +64,7 @@ export default function WritingStateBar({
             >
               {label}
             </Text>
-          </Pressable>
+          </ScalePressable>
         );
       })}
     </View>

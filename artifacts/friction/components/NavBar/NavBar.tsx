@@ -1,11 +1,12 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useEffect, useRef } from "react";
-import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
+import { Animated, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Animation, Colors, Shadows, Sizing, Spacing, TabConfig, Typography } from "@/constants/tokens";
 import { useNavigation } from "@/contexts/NavigationContext";
 import type { OfSubTabKey } from "@/constants/tokens";
+import ScalePressable from "@/components/shared/ScalePressable";
 
 type FeatherIconName = React.ComponentProps<typeof Feather>["name"];
 
@@ -58,9 +59,9 @@ export function NavBar() {
           ]}
           pointerEvents={nav.layer === "sub" ? "auto" : "none"}
         >
-          <Pressable style={styles.backButton} onPress={nav.goBackToMainLayer}>
+          <ScalePressable style={styles.backButton} onPress={nav.goBackToMainLayer}>
             <Feather name="chevron-left" size={Sizing.backButtonIconSize} color={Colors.backButtonIcon} />
-          </Pressable>
+          </ScalePressable>
           {subItems.map((item) => (
             <TabItem
               key={item.key}
@@ -89,8 +90,8 @@ function TabItem({
   onPress: () => void;
 }) {
   return (
-    <Pressable
-      style={styles.tabItem}
+    <ScalePressable
+      style={[styles.tabItem, { flex: 1 }]}
       onPress={onPress}
       accessibilityRole="tab"
       accessibilityLabel={`${label} 탭`}
@@ -112,7 +113,7 @@ function TabItem({
       >
         {label}
       </Text>
-    </Pressable>
+    </ScalePressable>
   );
 }
 

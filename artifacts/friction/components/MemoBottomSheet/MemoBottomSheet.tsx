@@ -1,5 +1,6 @@
 import React, { useRef, useCallback, useEffect, useState } from "react";
-import { View, Text, StyleSheet, Pressable, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import WebViewMarkdownEditor from "@/components/WebViewMarkdownEditor/WebViewMarkdownEditorCompat";
 import type {
@@ -130,13 +131,13 @@ export default function MemoBottomSheet({
             {saveIndicatorText ? (
               <Text style={styles.saveState}>{saveIndicatorText}</Text>
             ) : null}
-            <Pressable
+            <ScalePressable
               onPress={handleClose}
               style={styles.closeButton}
               hitSlop={12}
             >
               <Text style={styles.closeButtonText}>닫기</Text>
-            </Pressable>
+            </ScalePressable>
           </View>
         </View>
 

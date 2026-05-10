@@ -4,11 +4,11 @@ import {
   Text,
   StyleSheet,
   FlatList,
-  Pressable,
   RefreshControl,
   Platform,
   Alert,
 } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Feather, AntDesign } from "@expo/vector-icons";
@@ -209,7 +209,7 @@ export default function SentenceCollectionScreen() {
     ({ item }: { item: StoredSentence }) => {
       const page = getSentencePage(item);
       return (
-        <Pressable
+        <ScalePressable
           style={styles.sentenceItem}
           onPress={() => setSelectedSentence(item)}
           onLongPress={() => handleCopy(item.text)}
@@ -229,14 +229,14 @@ export default function SentenceCollectionScreen() {
             </View>
           </View>
           <View style={styles.rightActions}>
-            <Pressable
+            <ScalePressable
               style={styles.actionBtn}
               onPress={() => handleCopy(item.text)}
               hitSlop={8}
             >
               <Feather name="copy" size={16} color={Colors.zinc400} />
-            </Pressable>
-            <Pressable
+            </ScalePressable>
+            <ScalePressable
               style={styles.actionBtn}
               onPress={() => handleToggleFavorite(item.id, favOverrides.has(item.id) ? favOverrides.get(item.id)! : item.isFavorite)}
               hitSlop={8}
@@ -246,9 +246,9 @@ export default function SentenceCollectionScreen() {
               ) : (
                 <Feather name="star" size={22} color={Colors.zinc300} />
               )}
-            </Pressable>
+            </ScalePressable>
           </View>
-        </Pressable>
+        </ScalePressable>
       );
     },
     [handleCopy, handleToggleFavorite, favOverrides],
@@ -259,7 +259,7 @@ export default function SentenceCollectionScreen() {
       const isSelected = selectedIds.has(item.id);
       const page = getSentencePage(item);
       return (
-        <Pressable
+        <ScalePressable
           style={styles.selectionRow}
           onPress={() => toggleSelect(item.id)}
         >
@@ -279,7 +279,7 @@ export default function SentenceCollectionScreen() {
               )}
             </View>
           </View>
-        </Pressable>
+        </ScalePressable>
       );
     },
     [selectedIds, toggleSelect],
@@ -290,9 +290,9 @@ export default function SentenceCollectionScreen() {
       <View style={styles.header}>
         {selectionMode ? (
           <>
-            <Pressable onPress={exitSelectionMode} hitSlop={12}>
+            <ScalePressable onPress={exitSelectionMode} hitSlop={12}>
               <Text style={styles.cancelText}>취소</Text>
-            </Pressable>
+            </ScalePressable>
             <Text style={styles.headerTitle}>
               {selectedCount > 0 ? `${selectedCount}개 선택` : "문장 선택"}
             </Text>
@@ -300,20 +300,20 @@ export default function SentenceCollectionScreen() {
           </>
         ) : (
           <>
-            <Pressable onPress={() => router.back()} hitSlop={12}>
+            <ScalePressable onPress={() => router.back()} hitSlop={12}>
               <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-            </Pressable>
+            </ScalePressable>
             <Text style={styles.headerTitle}>수집한 문장</Text>
-            <Pressable onPress={enterSelectionMode} hitSlop={12}>
+            <ScalePressable onPress={enterSelectionMode} hitSlop={12}>
               <Feather name="more-vertical" size={20} color={Colors.zinc600} />
-            </Pressable>
+            </ScalePressable>
           </>
         )}
       </View>
 
       {!selectionMode && (
         <View style={styles.filterBar}>
-          <Pressable
+          <ScalePressable
             style={[styles.filterChip, filter === "all" && styles.filterChipActive]}
             onPress={() => setFilter("all")}
           >
@@ -325,8 +325,8 @@ export default function SentenceCollectionScreen() {
             >
               전체 ({totalCount})
             </Text>
-          </Pressable>
-          <Pressable
+          </ScalePressable>
+          <ScalePressable
             style={[styles.filterChip, filter === "favorites" && styles.filterChipActive]}
             onPress={() => setFilter("favorites")}
           >
@@ -343,7 +343,7 @@ export default function SentenceCollectionScreen() {
             >
               즐겨찾기 ({favCount})
             </Text>
-          </Pressable>
+          </ScalePressable>
         </View>
       )}
 
@@ -355,12 +355,12 @@ export default function SentenceCollectionScreen() {
         <View style={styles.centerContainer}>
           <Feather name="alert-circle" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>불러오기에 실패했어요</Text>
-          <Pressable
+          <ScalePressable
             style={styles.retryButton}
             onPress={() => sentencesQuery.refetch()}
           >
             <Text style={styles.retryButtonText}>다시 시도</Text>
-          </Pressable>
+          </ScalePressable>
         </View>
       ) : sentences.length === 0 ? (
         <View style={styles.centerContainer}>
@@ -398,7 +398,7 @@ export default function SentenceCollectionScreen() {
 
       {selectionMode && (
         <View style={[styles.selectionBar, { paddingBottom: insets.bottom + 12 }]}>
-          <Pressable
+          <ScalePressable
             style={[
               styles.bulkDeleteButton,
               (selectedCount === 0 || isBulkDeleting) && styles.bulkDeleteButtonDisabled,
@@ -413,7 +413,7 @@ export default function SentenceCollectionScreen() {
                 {selectedCount > 0 ? `${selectedCount}개 선택 삭제` : "선택 삭제"}
               </Text>
             )}
-          </Pressable>
+          </ScalePressable>
         </View>
       )}
 
@@ -508,12 +508,12 @@ function SentenceDetailSheet({
       <View style={sheet.divider} />
 
       <View style={sheet.actions}>
-        <Pressable style={sheet.actionRow} onPress={onCopy}>
+        <ScalePressable style={sheet.actionRow} onPress={onCopy}>
           <Feather name="copy" size={18} color={Colors.zinc700} />
           <Text style={sheet.actionLabel}>복사하기</Text>
-        </Pressable>
+        </ScalePressable>
 
-        <Pressable style={sheet.actionRow} onPress={onToggleFavorite}>
+        <ScalePressable style={sheet.actionRow} onPress={onToggleFavorite}>
           {sentence.isFavorite ? (
             <AntDesign name="star" size={22} color="#F59E0B" />
           ) : (
@@ -522,26 +522,26 @@ function SentenceDetailSheet({
           <Text style={[sheet.actionLabel, sentence.isFavorite && { color: "#F59E0B" }]}>
             {sentence.isFavorite ? "즐겨찾기 해제" : "즐겨찾기 추가"}
           </Text>
-        </Pressable>
+        </ScalePressable>
 
-        <Pressable style={sheet.actionRow} onPress={onQuoteAsMemo}>
+        <ScalePressable style={sheet.actionRow} onPress={onQuoteAsMemo}>
           <Feather name="edit" size={18} color={Colors.zinc700} />
           <Text style={sheet.actionLabel}>인용해서 메모 작성</Text>
-        </Pressable>
+        </ScalePressable>
 
         {sentence.articleId && (
-          <Pressable style={sheet.actionRow} onPress={onGoToSource}>
+          <ScalePressable style={sheet.actionRow} onPress={onGoToSource}>
             <Feather name="external-link" size={18} color={Colors.zinc700} />
             <Text style={sheet.actionLabel}>
               {page !== undefined ? `원본으로 이동 (${page + 1}페이지)` : "원본으로 이동"}
             </Text>
-          </Pressable>
+          </ScalePressable>
         )}
 
-        <Pressable style={sheet.actionRow} onPress={onDelete}>
+        <ScalePressable style={sheet.actionRow} onPress={onDelete}>
           <Feather name="trash-2" size={18} color="#DC2626" />
           <Text style={[sheet.actionLabel, { color: "#DC2626" }]}>삭제</Text>
-        </Pressable>
+        </ScalePressable>
       </View>
     </View>
   );

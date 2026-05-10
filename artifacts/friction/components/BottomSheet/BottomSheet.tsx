@@ -13,6 +13,7 @@ import {
   type TextStyle,
   type KeyboardEvent,
 } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, ZIndex, Spacing } from "../../constants/tokens";
@@ -308,9 +309,9 @@ export default function BottomSheet({
                 {closeButton ? <View style={styles.titleSpacer} /> : null}
                 {title && <Text style={[styles.title, titleStyle]}>{title}</Text>}
                 {closeButton && (
-                  <Pressable onPress={close} style={styles.closeButton} hitSlop={16}>
+                  <ScalePressable onPress={close} style={styles.closeButton} hitSlop={16}>
                     <Feather name="x" size={20} color={Colors.zinc500} />
-                  </Pressable>
+                  </ScalePressable>
                 )}
               </View>
             )}

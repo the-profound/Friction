@@ -3,13 +3,13 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Pressable,
   RefreshControl,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -271,7 +271,7 @@ export function NeighborsInline({
   }, []);
 
   const renderNeighborItem = ({ item }: { item: NeighborWithUser }) => (
-    <Pressable style={styles.neighborItem} onPress={() => handleNeighborPress(item)}>
+    <ScalePressable style={styles.neighborItem} onPress={() => handleNeighborPress(item)}>
       <View style={styles.avatarCircle}>
         <Feather name="user" size={18} color={Colors.zinc500} />
       </View>
@@ -279,17 +279,17 @@ export function NeighborsInline({
         <Text style={styles.neighborName}>{item.user?.nickname ?? "이름 없음"}</Text>
         <Text style={styles.neighborSub}>{item.user?.email ?? ""}</Text>
       </View>
-      <Pressable
+      <ScalePressable
         style={styles.deleteButton}
         onPress={(e) => {
-          e.stopPropagation?.();
+          e.stopPropagation();
           setDeleteTarget({ id: item.id, name: item.user?.nickname ?? "이름 없음" });
         }}
         hitSlop={8}
       >
         <Feather name="trash-2" size={16} color="#ef4444" />
-      </Pressable>
-    </Pressable>
+      </ScalePressable>
+    </ScalePressable>
   );
 
   const renderRequestItem = ({ item }: { item: NeighborRequestWithUser }) => (
@@ -337,14 +337,14 @@ export function NeighborsInline({
         <Text style={styles.neighborName}>{item.recipient?.nickname ?? "알 수 없음"}</Text>
         <Text style={styles.neighborSub}>보낸 이웃 요청</Text>
       </View>
-      <Pressable
+      <ScalePressable
         style={styles.rejectButton}
         onPress={() =>
           setCancelTarget({ id: item.id, name: item.recipient?.nickname ?? "알 수 없음" })
         }
       >
         <Text style={styles.rejectText}>취소</Text>
-      </Pressable>
+      </ScalePressable>
     </View>
   );
 
@@ -363,7 +363,7 @@ export function NeighborsInline({
     };
 
     return (
-      <Pressable
+      <ScalePressable
         style={[styles.searchResultItem, isDisabled && styles.searchResultDisabled]}
         onPress={handlePress}
         onLongPress={
@@ -394,14 +394,14 @@ export function NeighborsInline({
         ) : (
           <Feather name="user-plus" size={18} color={Colors.zinc400} />
         )}
-      </Pressable>
+      </ScalePressable>
     );
   };
 
   return (
     <View style={styles.container}>
       <View style={styles.sectionTabBar}>
-        <Pressable
+        <ScalePressable
           style={[styles.sectionTab, activeSection === "neighbors" && styles.sectionTabActive]}
           onPress={() => setActiveSection("neighbors")}
         >
@@ -413,8 +413,8 @@ export function NeighborsInline({
           >
             이웃 ({neighbors.length})
           </Text>
-        </Pressable>
-        <Pressable
+        </ScalePressable>
+        <ScalePressable
           style={[styles.sectionTab, activeSection === "requests" && styles.sectionTabActive]}
           onPress={() => setActiveSection("requests")}
         >
@@ -426,8 +426,8 @@ export function NeighborsInline({
           >
             받은 요청 ({pendingRequests.length})
           </Text>
-        </Pressable>
-        <Pressable
+        </ScalePressable>
+        <ScalePressable
           style={[styles.sectionTab, activeSection === "sent" && styles.sectionTabActive]}
           onPress={() => setActiveSection("sent")}
         >
@@ -439,7 +439,7 @@ export function NeighborsInline({
           >
             보낸 요청 ({sentRequests.length})
           </Text>
-        </Pressable>
+        </ScalePressable>
       </View>
 
       {activeSection === "neighbors" ? (
@@ -452,9 +452,9 @@ export function NeighborsInline({
             <Feather name="alert-circle" size={40} color={Colors.zinc300} />
             <Text style={styles.emptyTitle}>불러오기 실패</Text>
             <Text style={styles.emptySubtitle}>네트워크를 확인하고 다시 시도해주세요</Text>
-            <Pressable style={styles.addButton} onPress={() => neighborsQuery.refetch()}>
+            <ScalePressable style={styles.addButton} onPress={() => neighborsQuery.refetch()}>
               <Text style={styles.addButtonText}>다시 시도</Text>
-            </Pressable>
+            </ScalePressable>
           </View>
         ) : neighbors.length === 0 ? (
           <RefreshableEmpty
@@ -465,9 +465,9 @@ export function NeighborsInline({
             <Feather name="users" size={40} color={Colors.zinc300} />
             <Text style={styles.emptyTitle}>아직 이웃이 없어요</Text>
             <Text style={styles.emptySubtitle}>닉네임으로 이웃을 찾아보세요</Text>
-            <Pressable style={styles.addButton} onPress={() => setAddSheetVisible(true)}>
+            <ScalePressable style={styles.addButton} onPress={() => setAddSheetVisible(true)}>
               <Text style={styles.addButtonText}>이웃 추가</Text>
-            </Pressable>
+            </ScalePressable>
           </RefreshableEmpty>
         ) : (
           <FlatList
@@ -494,9 +494,9 @@ export function NeighborsInline({
           <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
             <Feather name="alert-circle" size={40} color={Colors.zinc300} />
             <Text style={styles.emptyTitle}>불러오기 실패</Text>
-            <Pressable style={styles.addButton} onPress={() => requestsQuery.refetch()}>
+            <ScalePressable style={styles.addButton} onPress={() => requestsQuery.refetch()}>
               <Text style={styles.addButtonText}>다시 시도</Text>
-            </Pressable>
+            </ScalePressable>
           </View>
         ) : pendingRequests.length === 0 ? (
           <RefreshableEmpty
@@ -532,9 +532,9 @@ export function NeighborsInline({
         <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
           <Feather name="alert-circle" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>불러오기 실패</Text>
-          <Pressable style={styles.addButton} onPress={() => sentRequestsQuery.refetch()}>
+          <ScalePressable style={styles.addButton} onPress={() => sentRequestsQuery.refetch()}>
             <Text style={styles.addButtonText}>다시 시도</Text>
-          </Pressable>
+          </ScalePressable>
         </View>
       ) : sentRequests.length === 0 ? (
         <RefreshableEmpty
@@ -584,9 +584,9 @@ export function NeighborsInline({
               returnKeyType="search"
             />
             {searchQuery.length > 0 && (
-              <Pressable onPress={() => setSearchQuery("")} hitSlop={8}>
+              <ScalePressable onPress={() => setSearchQuery("")} hitSlop={8}>
                 <Feather name="x" size={16} color={Colors.zinc400} />
-              </Pressable>
+              </ScalePressable>
             )}
           </View>
 
@@ -686,14 +686,14 @@ export function NeighborsInline({
         )}
       </BottomSheet>
 
-      <Pressable
+      <ScalePressable
         style={[styles.fab, { bottom: insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + Spacing.xl }]}
         onPress={() => setAddSheetVisible(true)}
         accessibilityRole="button"
         accessibilityLabel="이웃 추가"
       >
         <Feather name="user-plus" size={20} color={Colors.white} />
-      </Pressable>
+      </ScalePressable>
     </View>
   );
 }

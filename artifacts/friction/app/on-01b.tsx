@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Pressable,
   Alert,
   ActivityIndicator,
   Keyboard,
@@ -12,6 +11,7 @@ import {
   ScrollView,
   BackHandler,
 } from "react-native";
+import ScalePressable from "@/components/shared/ScalePressable";
 import WritingStateBar, { type WritingStage } from "@/components/WritingStateBar/WritingStateBar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams, Stack } from "expo-router";
@@ -993,18 +993,18 @@ export default function DividingScreen() {
       <Stack.Screen options={{ gestureEnabled: false }} />
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.header}>
-          <Pressable onPress={handleBack} hitSlop={12}>
+          <ScalePressable onPress={handleBack} hitSlop={12}>
             <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-          </Pressable>
+          </ScalePressable>
           <WritingStateBar
             current="DIVIDING"
             onPress={handleStateBarPress}
             disabled={isNavigating}
           />
           {keyboardVisible ? (
-            <Pressable onPress={handleDismissKeyboard} hitSlop={12}>
+            <ScalePressable onPress={handleDismissKeyboard} hitSlop={12}>
               <MaterialCommunityIcons name="keyboard-off-outline" size={22} color={Colors.zinc600} />
-            </Pressable>
+            </ScalePressable>
           ) : isNavigating ? (
             <ActivityIndicator size="small" color={Colors.zinc400} />
           ) : (
@@ -1015,7 +1015,7 @@ export default function DividingScreen() {
         <View style={styles.toolbar}>
           <Text style={styles.pageCountLabel}>{pages.length}페이지</Text>
           <View style={styles.toolbarSpacer} />
-          <Pressable
+          <ScalePressable
             style={[
               styles.autoSplitButton,
               (splitting || !hasOverflowPages) && styles.autoSplitButtonDisabled,
@@ -1031,7 +1031,7 @@ export default function DividingScreen() {
           >
             <Feather name="scissors" size={14} color={Colors.zinc600} />
             <Text style={styles.autoSplitText}>{splitting ? "분할 중…" : "자동분할"}</Text>
-          </Pressable>
+          </ScalePressable>
         </View>
 
         {warnings.length > 0 ? (
@@ -1066,18 +1066,18 @@ export default function DividingScreen() {
                 }}
               >
                 {idx > 0 ? (
-                  <Pressable
+                  <ScalePressable
                     onPress={() => handleMergeWithPrevious(idx)}
                     hitSlop={6}
                     style={styles.chipMergeButton}
                     accessibilityLabel={`페이지 ${idx + 1} 이전 페이지와 합치기`}
                   >
                     <Feather name="x" size={12} color={Colors.zinc600} />
-                  </Pressable>
+                  </ScalePressable>
                 ) : null}
                 <Text style={styles.chipPageNumber}>{idx + 1}쪽</Text>
                 <Text style={styles.chipCharCount}>{p.charCount}자</Text>
-                <Pressable
+                <ScalePressable
                   onPress={() => handleSplitPage(idx)}
                   disabled={splitting}
                   hitSlop={6}
@@ -1086,7 +1086,7 @@ export default function DividingScreen() {
                 >
                   <Feather name="scissors" size={11} color={Colors.zinc600} />
                   <Text style={styles.chipSplitText}>나누기</Text>
-                </Pressable>
+                </ScalePressable>
               </View>
             );
           })}
