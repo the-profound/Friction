@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useEffect, useRef } from "react";
-import { Animated, StyleSheet, Text, View } from "react-native";
+import { Animated, Platform, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Animation, Colors, Shadows, Sizing, Spacing, TabConfig, Typography } from "@/constants/tokens";
@@ -13,6 +13,10 @@ type FeatherIconName = React.ComponentProps<typeof Feather>["name"];
 export function NavBar() {
   const insets = useSafeAreaInsets();
   const nav = useNavigation();
+  const { width: screenWidth } = useWindowDimensions();
+  const dockWidth = Platform.OS === "web"
+    ? Sizing.navBarWidth
+    : Math.min(screenWidth - 48, 340);
   const layerAnim = useRef(new Animated.Value(nav.layer === "main" ? 0 : 1)).current;
 
   useEffect(() => {
@@ -35,10 +39,10 @@ export function NavBar() {
 
   return (
     <View style={[styles.container, { bottom: Spacing.navBarBottom + insets.bottom }]} pointerEvents="box-none">
-      <View style={[styles.dockShadow, Shadows.navBarIos]}>
-      <View style={[styles.dock, Shadows.navBarAndroid]}>
+      <View style={[styles.dockShadow, Shadows.navBarIos, { width: dockWidth }]}>
+      <View style={[styles.dock, Shadows.navBarAndroid, { width: dockWidth }]}>
         <Animated.View
-          style={[styles.layerAbsolute, { opacity: mainOpacity, transform: [{ scale: mainScale }] }]}
+          style={[styles.layerAbsolute, { width: dockWidth, height: Sizing.navBarHeight, opacity: mainOpacity, transform: [{ scale: mainScale }] }]}
           pointerEvents={nav.layer === "main" ? "auto" : "none"}
         >
           {TabConfig.mainTabs.map((tab) => (
@@ -55,7 +59,7 @@ export function NavBar() {
         <Animated.View
           style={[
             styles.layerAbsolute,
-            { opacity: subOpacity, transform: [{ scale: subScale }, { translateY: subTranslateY }] },
+            { width: dockWidth, height: Sizing.navBarHeight, opacity: subOpacity, transform: [{ scale: subScale }, { translateY: subTranslateY }] },
           ]}
           pointerEvents={nav.layer === "sub" ? "auto" : "none"}
         >
@@ -110,6 +114,8 @@ function TabItem({
           styles.tabLabel,
           { color: active ? Colors.tabActive : Colors.tabInactiveAlt },
         ]}
+        allowFontScaling={false}
+        numberOfLines={1}
       >
         {label}
       </Text>

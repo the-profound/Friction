@@ -6,6 +6,7 @@ import {
   FlatList,
   RefreshControl,
   Alert,
+  ScrollView,
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar";
@@ -595,7 +596,11 @@ export default function OnScreen() {
             style={[styles.topTabItem, { paddingLeft: 16, paddingRight: 8 }]}
             onPress={() => switchTopTab("memo")}
           >
-            <Text style={[styles.topTabText, topTab === "memo" && styles.topTabTextActive]}>
+            <Text
+              style={[styles.topTabText, topTab === "memo" && styles.topTabTextActive]}
+              allowFontScaling={false}
+              numberOfLines={1}
+            >
               메모
             </Text>
             {topTab === "memo" && <View style={styles.topTabUnderline} />}
@@ -604,7 +609,11 @@ export default function OnScreen() {
             style={[styles.topTabItem, { paddingLeft: 8, paddingRight: 16 }]}
             onPress={() => switchTopTab("my_article")}
           >
-            <Text style={[styles.topTabText, topTab === "my_article" && styles.topTabTextActive]}>
+            <Text
+              style={[styles.topTabText, topTab === "my_article" && styles.topTabTextActive]}
+              allowFontScaling={false}
+              numberOfLines={1}
+            >
               편지
             </Text>
             {topTab === "my_article" && <View style={styles.topTabUnderline} />}
@@ -622,7 +631,11 @@ export default function OnScreen() {
       )}
 
       {!selectionMode && topTab === "memo" && (
-        <View style={styles.filterBar}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterBar}
+        >
           {FILTER_OPTIONS.map((opt) => (
             <ScalePressable
               key={opt.key}
@@ -637,7 +650,7 @@ export default function OnScreen() {
               </Text>
             </ScalePressable>
           ))}
-        </View>
+        </ScrollView>
       )}
 
       {isLoading ? (
@@ -855,8 +868,11 @@ const styles = StyleSheet.create({
     color: Colors.zinc900,
   },
   topTabUnderline: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
     height: 1.5,
-    alignSelf: "stretch",
     backgroundColor: Colors.zinc900,
     borderRadius: 1,
   },
