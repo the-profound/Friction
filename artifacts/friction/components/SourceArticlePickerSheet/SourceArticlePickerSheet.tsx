@@ -24,7 +24,7 @@ interface SourceArticlePickerSheetProps {
   onUnlink: () => void;
 }
 
-type TabKey = "received" | "written";
+type TabKey = "inbox" | "myArticles";
 
 export default function SourceArticlePickerSheet({
   visible,
@@ -35,7 +35,7 @@ export default function SourceArticlePickerSheet({
   onSelect,
   onUnlink,
 }: SourceArticlePickerSheetProps) {
-  const [activeTab, setActiveTab] = useState<TabKey>("received");
+  const [activeTab, setActiveTab] = useState<TabKey>("inbox");
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
 
@@ -43,7 +43,7 @@ export default function SourceArticlePickerSheet({
     if (!visible) {
       setSearchQuery("");
       setDebouncedQuery("");
-      setActiveTab("received");
+      setActiveTab("inbox");
     }
   }, [visible]);
 
@@ -53,7 +53,7 @@ export default function SourceArticlePickerSheet({
   }, [searchQuery]);
 
   const userQuery = useGetUser(userId, {
-    query: { enabled: visible && activeTab === "written" },
+    query: { enabled: visible && activeTab === "myArticles" },
   });
   const userNickname = userQuery.data?.nickname ?? userQuery.data?.email ?? "나";
 
@@ -69,7 +69,7 @@ export default function SourceArticlePickerSheet({
       recipientId: userId,
       ...(debouncedQuery ? { titleQuery: debouncedQuery } : {}),
     },
-    { query: { enabled: visible && activeTab === "received" } },
+    { query: { enabled: visible && activeTab === "inbox" } },
   );
 
   const myArticlesQuery = useListArticles(
@@ -78,7 +78,7 @@ export default function SourceArticlePickerSheet({
       status: "LETTER",
       ...(debouncedQuery ? { titleQuery: debouncedQuery } : {}),
     },
-    { query: { enabled: visible && activeTab === "written" } },
+    { query: { enabled: visible && activeTab === "myArticles" } },
   );
 
   const handleSelect = useCallback(
@@ -95,7 +95,7 @@ export default function SourceArticlePickerSheet({
   }, [onUnlink, onClose]);
 
   const now = new Date();
-  const receivedItems: InboxItem[] = inboxQuery.data
+  const inboxItems: InboxItem[] = inboxQuery.data
     ? [...inboxQuery.data]
         // Guard: only show items that are actually visible (visibleAt <= now).
         // The server already applies this filter, but we re-apply client-side
@@ -106,17 +106,17 @@ export default function SourceArticlePickerSheet({
         )
     : [];
 
-  const writtenItems: Article[] = myArticlesQuery.data
+  const myArticleItems: Article[] = myArticlesQuery.data
     ? [...myArticlesQuery.data].sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       )
     : [];
 
   const isLoading =
-    (activeTab === "received" && inboxQuery.isLoading) ||
-    (activeTab === "written" && myArticlesQuery.isLoading);
+    (activeTab === "inbox" && inboxQuery.isLoading) ||
+    (activeTab === "myArticles" && myArticlesQuery.isLoading);
 
-  const renderReceivedItem = useCallback(
+  const renderInboxItem = useCallback(
     ({ item }: { item: InboxItem }) => {
       const title = item.article?.title ?? "(제목 없음)";
       const senderName = item.sender?.nickname ?? item.sender?.email ?? "알 수 없음";
@@ -143,7 +143,7 @@ export default function SourceArticlePickerSheet({
     [currentSourceArticleId, handleSelect],
   );
 
-  const renderWrittenItem = useCallback(
+  const renderMyArticleItem = useCallback(
     ({ item }: { item: Article }) => {
       const isSelected = item.id === currentSourceArticleId;
       return (
@@ -207,21 +207,21 @@ export default function SourceArticlePickerSheet({
 
         <View style={styles.tabRow}>
           <ScalePressable
-            style={[styles.tab, activeTab === "received" && styles.tabActive]}
-            onPress={() => setActiveTab("received")}
+            style={[styles.tab, activeTab === "inbox" && styles.tabActive]}
+            onPress={() => setActiveTab("inbox")}
           >
             <Text
-              style={[styles.tabText, activeTab === "received" && styles.tabTextActive]}
+              style={[styles.tabText, activeTab === "inbox" && styles.tabTextActive]}
             >
               수신한 글
             </Text>
           </ScalePressable>
           <ScalePressable
-            style={[styles.tab, activeTab === "written" && styles.tabActive]}
-            onPress={() => setActiveTab("written")}
+            style={[styles.tab, activeTab === "myArticles" && styles.tabActive]}
+            onPress={() => setActiveTab("myArticles")}
           >
             <Text
-              style={[styles.tabText, activeTab === "written" && styles.tabTextActive]}
+              style={[styles.tabText, activeTab === "myArticles" && styles.tabTextActive]}
             >
               내가 쓴 글
             </Text>
@@ -232,30 +232,30 @@ export default function SourceArticlePickerSheet({
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="small" color={Colors.zinc400} />
           </View>
-        ) : activeTab === "received" ? (
-          receivedItems.length === 0 ? (
+        ) : activeTab === "inbox" ? (
+          inboxItems.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>수신한 글이 없습니다.</Text>
             </View>
           ) : (
             <FlatList
-              data={receivedItems}
+              data={inboxItems}
               keyExtractor={(item) => item.id}
-              renderItem={renderReceivedItem}
+              renderItem={renderInboxItem}
               style={styles.list}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             />
           )
-        ) : writtenItems.length === 0 ? (
+        ) : myArticleItems.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>작성한 글이 없습니다.</Text>
           </View>
         ) : (
           <FlatList
-            data={writtenItems}
+            data={myArticleItems}
             keyExtractor={(item) => item.id}
-            renderItem={renderWrittenItem}
+            renderItem={renderMyArticleItem}
             style={styles.list}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
