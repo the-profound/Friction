@@ -126,6 +126,7 @@ const styles = StyleSheet.create({
   },
   dockShadow: {
     borderRadius: Sizing.navBarRadius,
+    backgroundColor: Colors.navBarBg,
   },
   dock: {
     width: Sizing.navBarWidth,

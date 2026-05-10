@@ -190,9 +190,9 @@ export const Shadows = {
   navBarIos: Platform.select({
     ios: {
       shadowColor: "#000",
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.13,
-      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0.1,
+      shadowRadius: 10,
     },
     default: {},
   }),
