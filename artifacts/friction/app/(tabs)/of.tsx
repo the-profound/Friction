@@ -297,8 +297,6 @@ export default function OfScreen() {
         showSearch
         onSearchPress={handleSearch}
         searchActive={searchActive}
-        showProfile
-        onProfilePress={() => router.push("/mypage" as never)}
       />
 
       {!searchActive && (
