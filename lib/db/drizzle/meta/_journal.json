@@ -85,6 +85,13 @@
       "when": 1746835200000,
       "tag": "0013_add_favorited_at_to_stored_sentences",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1746921600000,
+      "tag": "0014_backfill_favorited_at_for_existing_favorites",
+      "breakpoints": true
     }
   ]
 }
