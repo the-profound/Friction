@@ -15,5 +15,6 @@ export interface CreateMyCollectionBody {
   name: string;
   description?: string | null;
   isPublic?: boolean;
+  isImpression?: boolean;
   coverImageUrl?: string | null;
 }

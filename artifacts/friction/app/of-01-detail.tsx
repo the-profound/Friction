@@ -67,6 +67,7 @@ export default function PersonalCollectionDetailScreen() {
 
   const collectionQuery = useGetMyCollection(id ?? "");
   const collection = collectionQuery.data;
+  const isImpression = collection?.isImpression ?? false;
 
   const articlesQuery = useListMyCollectionArticles(id ?? "");
   const articles = (articlesQuery.data ?? []) as MyCollectionArticleWithDetails[];
@@ -338,13 +339,16 @@ export default function PersonalCollectionDetailScreen() {
   }, [longPressTargetArticle, updateArticle, queryClient, id, showToast]);
 
   const handleMorePress = useCallback(() => {
-    Alert.alert("모음 관리", undefined, [
+    const options: Parameters<typeof Alert.alert>[2] = [
       { text: "선택", onPress: enterSelectionMode },
-      { text: "모음 이름 변경", onPress: handleOpenEdit },
-      { text: "모음 삭제", style: "destructive", onPress: () => setDeleteConfirmVisible(true) },
-      { text: "닫기", style: "cancel" },
-    ]);
-  }, [enterSelectionMode, handleOpenEdit]);
+    ];
+    if (!isImpression) {
+      options.push({ text: "모음 이름 변경", onPress: handleOpenEdit });
+      options.push({ text: "모음 삭제", style: "destructive", onPress: () => setDeleteConfirmVisible(true) });
+    }
+    options.push({ text: "닫기", style: "cancel" });
+    Alert.alert("모음 관리", undefined, options);
+  }, [enterSelectionMode, handleOpenEdit, isImpression]);
 
   const alreadyAddedIds = articles.map((a) => a.articleId);
 

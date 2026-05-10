@@ -470,7 +470,10 @@ export default function ReadScreen() {
     if (reading.session.state === "COMPLETED_READY") {
       const recentId = recentCollectionQuery.data?.recentSavedCollectionId;
       const collections = collectionsQuery.data;
-      if (recentId && collections?.some((c: { id: string }) => c.id === recentId)) {
+      const impressionCol = collections?.find((c: { isImpression?: boolean }) => c.isImpression);
+      if (impressionCol) {
+        setSelectedCollectionId(impressionCol.id);
+      } else if (recentId && collections?.some((c: { id: string }) => c.id === recentId)) {
         setSelectedCollectionId(recentId);
       } else if (collections && collections.length > 0) {
         setSelectedCollectionId(collections[0].id);
@@ -782,12 +785,15 @@ export default function ReadScreen() {
       let targetCollectionId: string | undefined = selectedCollectionId;
       if (!targetCollectionId) {
         const collections = collectionsQuery.data;
-        if (collections && collections.length > 0) {
+        const impressionCol = collections?.find((c: { isImpression?: boolean }) => c.isImpression);
+        if (impressionCol) {
+          targetCollectionId = impressionCol.id;
+        } else if (collections && collections.length > 0) {
           targetCollectionId = collections[0].id;
         } else {
           try {
             const newCol = await createCollection.mutateAsync({
-              data: { ownerId: userId, name: "보관함" },
+              data: { ownerId: userId, name: "인상깊은 글", isImpression: true },
             });
             targetCollectionId = newCol.id;
           } catch {

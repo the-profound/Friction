@@ -1027,6 +1027,7 @@ export const ListMyCollectionsResponseItem = zod.object({
   description: zod.string().nullish(),
   isPublic: zod.boolean(),
   isArchive: zod.boolean(),
+  isImpression: zod.boolean(),
   coverImageUrl: zod.string().nullish(),
   articleCount: zod.number().optional(),
   createdAt: zod.date(),
@@ -1046,6 +1047,7 @@ export const CreateMyCollectionBody = zod.object({
   name: zod.string().min(1).max(createMyCollectionBodyNameMax),
   description: zod.string().nullish(),
   isPublic: zod.boolean().optional(),
+  isImpression: zod.boolean().optional(),
   coverImageUrl: zod.string().nullish(),
 });
 
@@ -1063,6 +1065,7 @@ export const GetMyCollectionResponse = zod.object({
   description: zod.string().nullish(),
   isPublic: zod.boolean(),
   isArchive: zod.boolean(),
+  isImpression: zod.boolean(),
   coverImageUrl: zod.string().nullish(),
   articleCount: zod.number().optional(),
   createdAt: zod.date(),
@@ -1092,6 +1095,7 @@ export const UpdateMyCollectionResponse = zod.object({
   description: zod.string().nullish(),
   isPublic: zod.boolean(),
   isArchive: zod.boolean(),
+  isImpression: zod.boolean(),
   coverImageUrl: zod.string().nullish(),
   articleCount: zod.number().optional(),
   createdAt: zod.date(),

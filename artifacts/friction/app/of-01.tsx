@@ -84,7 +84,7 @@ export default function PersonalCollectionListScreen() {
     <Pressable
       style={styles.collectionItem}
       onPress={() => router.push({ pathname: "/of-01-detail", params: { id: item.id, name: item.name } })}
-      onLongPress={() => setDeleteTarget({ id: item.id, name: item.name })}
+      onLongPress={() => { if (!item.isImpression) setDeleteTarget({ id: item.id, name: item.name }); }}
       delayLongPress={1000}
     >
       <View style={styles.collectionIcon}>

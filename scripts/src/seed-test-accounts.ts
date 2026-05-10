@@ -316,7 +316,7 @@ async function seedRelationalData(ids: Ids) {
       `);
     }
 
-    // ── my_collections: minji 기록함 (archive) + 일반 모음 ──
+    // ── my_collections: minji 기록함 (archive) + 인상깊은 글 (impression) + 일반 모음 ──
     const archiveRes = await tx.execute<IdRow>(sql`
       WITH ins AS (
         INSERT INTO my_collections (owner_id, name, is_archive, is_public)
@@ -331,6 +331,18 @@ async function seedRelationalData(ids: Ids) {
       SELECT id FROM my_collections WHERE owner_id = ${ids.minji}::uuid AND is_archive = true
       LIMIT 1
     `);
+
+    // 모든 테스트 계정에 인상깊은 글 폴더 생성 (멱등)
+    for (const acc of TEST_ACCOUNTS) {
+      const uid = ids[acc.key];
+      await tx.execute(sql`
+        INSERT INTO my_collections (owner_id, name, is_impression, is_public)
+        SELECT ${uid}::uuid, '인상깊은 글', true, false
+        WHERE NOT EXISTS (
+          SELECT 1 FROM my_collections WHERE owner_id = ${uid}::uuid AND is_impression = true
+        )
+      `);
+    }
     const archiveId = firstId(archiveRes);
 
     const collRes = await tx.execute<IdRow>(sql`

@@ -13,12 +13,14 @@ export const myCollectionsTable = pgTable("my_collections", {
   description: text("description"),
   isPublic: boolean("is_public").notNull().default(false),
   isArchive: boolean("is_archive").notNull().default(false),
+  isImpression: boolean("is_impression").notNull().default(false),
   coverImageUrl: text("cover_image_url"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (t) => [
   unique("my_collections_owner_name_unique").on(t.ownerId, t.name),
   uniqueIndex("my_collections_owner_archive_unique").on(t.ownerId).where(sql`${t.isArchive} = true`),
+  uniqueIndex("my_collections_owner_impression_unique").on(t.ownerId).where(sql`${t.isImpression} = true`),
 ]);
 
 export const insertMyCollectionSchema = createInsertSchema(myCollectionsTable).omit({ id: true, createdAt: true, updatedAt: true });

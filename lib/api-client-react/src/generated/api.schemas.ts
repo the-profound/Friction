@@ -189,6 +189,7 @@ export interface MyCollection {
   description?: string | null;
   isPublic: boolean;
   isArchive: boolean;
+  isImpression: boolean;
   coverImageUrl?: string | null;
   articleCount?: number;
   createdAt: string;
@@ -204,6 +205,7 @@ export interface CreateMyCollectionBody {
   name: string;
   description?: string | null;
   isPublic?: boolean;
+  isImpression?: boolean;
   coverImageUrl?: string | null;
 }
 

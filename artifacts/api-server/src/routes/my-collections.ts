@@ -20,6 +20,7 @@ router.get("/my-collections", async (req, res) => {
       description: myCollectionsTable.description,
       isPublic: myCollectionsTable.isPublic,
       isArchive: myCollectionsTable.isArchive,
+      isImpression: myCollectionsTable.isImpression,
       coverImageUrl: myCollectionsTable.coverImageUrl,
       createdAt: myCollectionsTable.createdAt,
       updatedAt: myCollectionsTable.updatedAt,
@@ -39,13 +40,15 @@ router.post("/my-collections", async (req, res) => {
     res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
     return;
   }
-  const { ownerId, name, description, isPublic, coverImageUrl } = parsed.data;
+  const { ownerId, name, description, isPublic, isImpression, coverImageUrl } = parsed.data;
+  const resolvedName = isImpression ? "인상깊은 글" : name;
 
   const [collection] = await db.insert(myCollectionsTable).values({
     ownerId,
-    name,
+    name: resolvedName,
     description: description ?? null,
     isPublic: isPublic ?? false,
+    isImpression: isImpression ?? false,
     coverImageUrl: coverImageUrl ?? null,
   }).returning();
   res.status(201).json({ ...collection, articleCount: 0 });
@@ -60,6 +63,7 @@ router.get("/my-collections/:id", async (req, res) => {
       description: myCollectionsTable.description,
       isPublic: myCollectionsTable.isPublic,
       isArchive: myCollectionsTable.isArchive,
+      isImpression: myCollectionsTable.isImpression,
       coverImageUrl: myCollectionsTable.coverImageUrl,
       createdAt: myCollectionsTable.createdAt,
       updatedAt: myCollectionsTable.updatedAt,
@@ -84,6 +88,18 @@ router.patch("/my-collections/:id", async (req, res) => {
     return;
   }
 
+  const [existing] = await db.select({ id: myCollectionsTable.id, isImpression: myCollectionsTable.isImpression })
+    .from(myCollectionsTable)
+    .where(eq(myCollectionsTable.id, req.params.id));
+  if (!existing) {
+    res.status(404).json({ error: "Collection not found" });
+    return;
+  }
+  if (existing.isImpression && parsed.data.name !== undefined) {
+    res.status(403).json({ error: "인상깊은 글 폴더의 이름은 변경할 수 없습니다." });
+    return;
+  }
+
   const updates: Record<string, unknown> = {};
   if (parsed.data.name !== undefined) updates.name = parsed.data.name;
   if (parsed.data.description !== undefined) updates.description = parsed.data.description;
@@ -104,6 +120,17 @@ router.patch("/my-collections/:id", async (req, res) => {
 });
 
 router.delete("/my-collections/:id", async (req, res) => {
+  const [existing] = await db.select({ id: myCollectionsTable.id, isImpression: myCollectionsTable.isImpression })
+    .from(myCollectionsTable)
+    .where(eq(myCollectionsTable.id, req.params.id));
+  if (!existing) {
+    res.status(404).json({ error: "Collection not found" });
+    return;
+  }
+  if (existing.isImpression) {
+    res.status(403).json({ error: "인상깊은 글 폴더는 삭제할 수 없습니다." });
+    return;
+  }
   await db.delete(myCollectionArticlesTable).where(eq(myCollectionArticlesTable.myCollectionId, req.params.id));
   const [deleted] = await db.delete(myCollectionsTable).where(eq(myCollectionsTable.id, req.params.id)).returning();
   if (!deleted) {
