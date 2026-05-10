@@ -11,7 +11,7 @@ import {
 import ScalePressable from "@/components/shared/ScalePressable";
 import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
@@ -35,6 +35,7 @@ import { invalidateArticleLists } from "@/lib/queryInvalidation";
 import type { Article, MyCollection } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
 import { useToast } from "@/contexts/ToastContext";
+import { useNavigation } from "@/contexts/NavigationContext";
 import type { ArticleStatus } from "@/lib/policies";
 import { LIST_PERF_PRESET } from "@/lib/listPerf";
 
@@ -86,6 +87,7 @@ export default function OnScreen() {
   const queryClient = useQueryClient();
   const { userId } = useUser();
   const { showToast } = useToast();
+  const { setShowRecordFab } = useNavigation();
 
   const [topTab, setTopTab] = useState<TopTab>("memo");
   const [filter, setFilter] = useState<FilterMode>("all");
@@ -140,6 +142,15 @@ export default function OnScreen() {
       queryClient.setQueryData(getGetArticleQueryKey(article.id), article);
     }
   }, [articles, queryClient]);
+
+  useFocusEffect(
+    useCallback(() => {
+      setShowRecordFab(topTab === "memo" && !selectionMode);
+      return () => {
+        setShowRecordFab(false);
+      };
+    }, [topTab, selectionMode, setShowRecordFab])
+  );
 
   const filteredArticles = useMemo(() => {
     if (!articles) return [];
@@ -729,17 +740,6 @@ export default function OnScreen() {
         </View>
       )}
 
-      {!selectionMode && topTab === "memo" && (
-        <ScalePressable
-          style={[styles.fab, { bottom: insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight }]}
-          onPress={handleNewMemo}
-          accessibilityRole="button"
-          accessibilityLabel="메모 추가"
-        >
-          <Feather name="edit-3" size={20} color={Colors.white} />
-        </ScalePressable>
-      )}
-
       <ConfirmModal
         visible={deleteTargetId !== null}
         title="삭제하시겠습니까?"
@@ -988,21 +988,6 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 16,
     color: Colors.white,
-  },
-  fab: {
-    position: "absolute",
-    right: Spacing.screenPx,
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: Colors.zinc900,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.18,
-    shadowRadius: 6,
-    elevation: 4,
   },
   archiveSheetContainer: {
     flex: 1,

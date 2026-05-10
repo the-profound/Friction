@@ -9,6 +9,7 @@ export interface NavState {
   ofSubTab: OfSubTabKey;
   toSubTab: ToSubTabKey;
   headerScrolled: boolean;
+  showRecordFab: boolean;
 }
 
 export interface NavActions {
@@ -17,6 +18,7 @@ export interface NavActions {
   setToSubTab: (subTab: ToSubTabKey) => void;
   goBackToMainLayer: () => void;
   setHeaderScrolled: (scrolled: boolean) => void;
+  setShowRecordFab: (show: boolean) => void;
 }
 
 export interface NavContextValue extends NavState, NavActions {}

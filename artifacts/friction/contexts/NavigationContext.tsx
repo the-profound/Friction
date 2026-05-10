@@ -52,6 +52,7 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
   const [ofSubTab, setOfSubTabState] = useState<OfSubTabKey>("group");
   const [toSubTab, setToSubTabState] = useState<ToSubTabKey>("neighbors");
   const [headerScrolled, setHeaderScrolled] = useState(false);
+  const [showRecordFab, setShowRecordFab] = useState(false);
 
   const lastSyncRef = useRef({ tab: "ON" as MainTabKey, ofSub: "group" as OfSubTabKey, toSub: "neighbors" as ToSubTabKey });
   const pathnameRef = useRef<string>("");
@@ -161,11 +162,13 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
       ofSubTab,
       toSubTab,
       headerScrolled,
+      showRecordFab,
       setActiveTab,
       setOfSubTab,
       setToSubTab,
       goBackToMainLayer,
       setHeaderScrolled,
+      setShowRecordFab,
     }),
     [
       activeTab,
@@ -174,11 +177,13 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
       ofSubTab,
       toSubTab,
       headerScrolled,
+      showRecordFab,
       setActiveTab,
       setOfSubTab,
       setToSubTab,
       goBackToMainLayer,
       setHeaderScrolled,
+      setShowRecordFab,
     ]
   );
 
