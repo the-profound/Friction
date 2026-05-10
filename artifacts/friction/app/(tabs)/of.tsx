@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useMemo, useRef } from "react";
+import React, { useCallback, useState, useMemo } from "react";
 import {
   View,
   Text,
@@ -9,54 +9,30 @@ import {
   TextInput,
   ScrollView,
   useWindowDimensions,
-  Platform,
   Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import * as Clipboard from "expo-clipboard";
 import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { PageHeader } from "@/components/NavBar/PageHeader";
-import { useNavigation } from "@/contexts/NavigationContext";
 import { useUser } from "@/contexts/UserContext";
-import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import RefreshableEmpty from "@/components/RefreshableEmpty";
 import {
-  useListMyCollections,
   useListTeamCollections,
-  useListStoredSentences,
-  useCreateMyCollection,
   useCreateTeamCollection,
-  useDeleteStoredSentence,
-  useToggleStoredSentenceFavorite,
   useAddTeamMember,
   getTeamCollection,
-  getListMyCollectionsQueryKey,
   getListTeamCollectionsQueryKey,
-  getListStoredSentencesQueryKey,
 } from "@workspace/api-client-react";
-import type {
-  MyCollection,
-  TeamCollection,
-  TeamCollectionWithRole,
-  StoredSentence,
-} from "@workspace/api-client-react";
+import type { TeamCollection, TeamCollectionWithRole } from "@workspace/api-client-react";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
-import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
 import { isQueryStale } from "@/lib/useScreenFocused";
 import { useQueryClient } from "@tanstack/react-query";
 
-type PersonalFilter = "all" | "my" | "subscribed";
 type GroupFilter = "all" | "my" | "joined";
-
-const PERSONAL_FILTER_OPTIONS: { key: PersonalFilter; label: string }[] = [
-  { key: "all", label: "전체" },
-  { key: "my", label: "내 모음" },
-  { key: "subscribed", label: "구독 모음" },
-];
 
 const GROUP_FILTER_OPTIONS: { key: GroupFilter; label: string }[] = [
   { key: "all", label: "전체" },
@@ -69,7 +45,6 @@ export default function OfScreen() {
   const insets = useSafeAreaInsets();
   const navBottom = useNavBarBottomSafeArea();
   const router = useRouter();
-  const { ofSubTab } = useNavigation();
   const { userId } = useUser();
   const queryClient = useQueryClient();
   const [searchActive, setSearchActive] = useState(false);
@@ -84,70 +59,13 @@ export default function OfScreen() {
   const [joinPreview, setJoinPreview] = useState<TeamCollection | null>(null);
   const [isJoinLoading, setIsJoinLoading] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
-  const [selectedSentence, setSelectedSentence] = useState<StoredSentence | null>(null);
-  const [sentenceDeleteTarget, setSentenceDeleteTarget] = useState<string | null>(null);
-
-  const [selectionMode, setSelectionMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
-  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
-
-  const [sentenceScrollEnabled, setSentenceScrollEnabled] = useState(true);
-  const sentenceOpenRowRef = useRef<SwipeableRowHandle | null>(null);
-  const sentenceRowRefs = useRef<Map<string, SwipeableRowHandle>>(new Map());
-
-  const closeSentenceOpenRow = useCallback(() => {
-    if (sentenceOpenRowRef.current) {
-      sentenceOpenRowRef.current.close();
-      sentenceOpenRowRef.current = null;
-    }
-  }, []);
-
-  const handleSentenceSwipeOpen = useCallback((id: string) => {
-    const currentOpen = sentenceOpenRowRef.current;
-    const newRef = sentenceRowRefs.current.get(id) ?? null;
-    if (currentOpen && currentOpen !== newRef) {
-      currentOpen.close();
-    }
-    sentenceOpenRowRef.current = newRef;
-  }, []);
-
-  const myCollectionsQuery = useListMyCollections({ ownerId: userId });
-  const teamCollectionsQuery = useListTeamCollections({ userId });
-  const sentencesQuery = useListStoredSentences({ userId });
-
-  const createMyCollection = useCreateMyCollection();
-  const createTeamCollection = useCreateTeamCollection();
-  const deleteSentence = useDeleteStoredSentence();
-  const toggleFavorite = useToggleStoredSentenceFavorite();
-  const addTeamMember = useAddTeamMember();
-
-  const myCollections = (myCollectionsQuery.data ?? []) as MyCollection[];
-  const teamCollections = (teamCollectionsQuery.data ?? []) as TeamCollectionWithRole[];
-  const sentences = (sentencesQuery.data ?? []) as StoredSentence[];
-
-  const [personalFilter, setPersonalFilter] = useState<PersonalFilter>("all");
   const [groupFilter, setGroupFilter] = useState<GroupFilter>("all");
 
-  const selectedCount = selectedIds.size;
+  const teamCollectionsQuery = useListTeamCollections({ userId });
+  const createTeamCollection = useCreateTeamCollection();
+  const addTeamMember = useAddTeamMember();
 
-  const filteredMyCollections = useMemo(() => {
-    let list = myCollections;
-    if (personalFilter === "my") {
-      list = myCollections.filter((c) => !c.isPublic);
-    } else if (personalFilter === "subscribed") {
-      list = myCollections.filter((c) => c.isPublic);
-    }
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      list = list.filter((c) => c.name.toLowerCase().includes(q));
-    }
-    return [...list].sort((a, b) => {
-      if (a.isArchive && !b.isArchive) return -1;
-      if (!a.isArchive && b.isArchive) return 1;
-      return 0;
-    });
-  }, [myCollections, searchQuery, personalFilter]);
+  const teamCollections = (teamCollectionsQuery.data ?? []) as TeamCollectionWithRole[];
 
   const filteredTeamCollections = useMemo(() => {
     let list = teamCollections;
@@ -161,65 +79,6 @@ export default function OfScreen() {
     return list.filter((c) => c.name.toLowerCase().includes(q));
   }, [teamCollections, searchQuery, groupFilter]);
 
-  const filteredSentences = useMemo(() => {
-    if (!searchQuery.trim()) return sentences;
-    const q = searchQuery.toLowerCase();
-    return sentences.filter((s) => s.text.toLowerCase().includes(q));
-  }, [sentences, searchQuery]);
-
-  const enterSelectionMode = useCallback(() => {
-    setSelectedIds(new Set());
-    setSelectionMode(true);
-    setSearchActive(false);
-    setSearchQuery("");
-  }, []);
-
-  const exitSelectionMode = useCallback(() => {
-    setSelectionMode(false);
-    setSelectedIds(new Set());
-  }, []);
-
-  const toggleSelect = useCallback((id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }, []);
-
-  const handleBulkDeletePress = useCallback(() => {
-    if (selectedIds.size === 0) return;
-    setShowBulkDeleteConfirm(true);
-  }, [selectedIds]);
-
-  const handleBulkDeleteConfirm = useCallback(async () => {
-    setShowBulkDeleteConfirm(false);
-    setIsBulkDeleting(true);
-    const ids = Array.from(selectedIds);
-    let failCount = 0;
-    for (const id of ids) {
-      try {
-        await deleteSentence.mutateAsync({ id });
-      } catch {
-        failCount++;
-      }
-    }
-    await sentencesQuery.refetch();
-    setIsBulkDeleting(false);
-    exitSelectionMode();
-    if (failCount === 0) {
-      Alert.alert("완료", `${ids.length}개 문장을 삭제했어요.`);
-    } else if (failCount < ids.length) {
-      Alert.alert("오류", `일부 삭제에 실패했어요. (${failCount}개)`);
-    } else {
-      Alert.alert("오류", "삭제에 실패했어요.");
-    }
-  }, [selectedIds, deleteSentence, sentencesQuery, exitSelectionMode]);
-
   const handleSearch = useCallback(() => {
     setSearchActive((prev) => {
       if (prev) setSearchQuery("");
@@ -228,18 +87,8 @@ export default function OfScreen() {
   }, []);
 
   const handleAdd = useCallback(() => {
-    if (ofSubTab === "sentence") {
-      Alert.alert("알림", "읽기 화면에서 문장을 길게 눌러 수집할 수 있어요");
-      return;
-    }
-    if (ofSubTab === "group") {
-      setActionSheetVisible(true);
-      return;
-    }
-    setNewName("");
-    setNewDescription("");
-    setCreateSheetVisible(true);
-  }, [ofSubTab]);
+    setActionSheetVisible(true);
+  }, []);
 
   const handleOpenCreate = useCallback(() => {
     setActionSheetVisible(false);
@@ -312,7 +161,7 @@ export default function OfScreen() {
     }
   }, [joinPreview, userId, addTeamMember, teamCollectionsQuery]);
 
-  const isCreating = createMyCollection.isPending || createTeamCollection.isPending;
+  const isCreating = createTeamCollection.isPending;
 
   const handleCreateConfirm = useCallback(async () => {
     if (!newName.trim()) {
@@ -321,141 +170,45 @@ export default function OfScreen() {
     }
     if (isCreating) return;
     try {
-      if (ofSubTab === "personal") {
-        const newMyCollection = await createMyCollection.mutateAsync({
-          data: { ownerId: userId, name: newName.trim(), description: newDescription.trim() },
-        });
-        myCollectionsQuery.refetch();
-        setCreateSheetVisible(false);
-        router.push({ pathname: "/of-01-detail", params: { id: newMyCollection.id } });
-      } else {
-        const newTeamCollection = await createTeamCollection.mutateAsync({
-          data: { creatorId: userId, name: newName.trim(), description: newDescription.trim() },
-        });
-        teamCollectionsQuery.refetch();
-        setCreateSheetVisible(false);
-        router.push({ pathname: "/of-02-detail", params: { id: newTeamCollection.id } });
-      }
+      const newTeamCollection = await createTeamCollection.mutateAsync({
+        data: { creatorId: userId, name: newName.trim(), description: newDescription.trim() },
+      });
+      teamCollectionsQuery.refetch();
+      setCreateSheetVisible(false);
+      router.push({ pathname: "/of-02-detail", params: { id: newTeamCollection.id } });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "모음 생성에 실패했습니다.";
       Alert.alert("오류", msg);
     }
-  }, [ofSubTab, newName, newDescription, userId, isCreating, createMyCollection, createTeamCollection, myCollectionsQuery, teamCollectionsQuery, router]);
-
-  const handleSentenceCopy = useCallback(async (text: string) => {
-    try {
-      if (Platform.OS === "web") {
-        await navigator.clipboard.writeText(text);
-      } else {
-        await Clipboard.setStringAsync(text);
-      }
-      Alert.alert("완료", "문장을 복사했어요");
-      setSelectedSentence(null);
-    } catch {
-      Alert.alert("오류", "복사에 실패했어요");
-    }
-  }, []);
-
-  const handleSentenceToggleFavorite = useCallback(async (id: string, currentFav: boolean) => {
-    if (toggleFavorite.isPending) return;
-    try {
-      await toggleFavorite.mutateAsync({ id, data: { isFavorite: !currentFav } });
-      sentencesQuery.refetch();
-      if (selectedSentence?.id === id) {
-        setSelectedSentence((prev) => prev ? { ...prev, isFavorite: !currentFav } : null);
-      }
-      Alert.alert("완료", currentFav ? "즐겨찾기를 해제했어요" : "즐겨찾기에 추가했어요");
-    } catch {
-      Alert.alert("오류", "즐겨찾기 변경에 실패했어요");
-    }
-  }, [toggleFavorite, sentencesQuery, selectedSentence]);
-
-  const handleSentenceDeleteConfirm = useCallback(async () => {
-    if (!sentenceDeleteTarget || deleteSentence.isPending) return;
-    const id = sentenceDeleteTarget;
-    setSentenceDeleteTarget(null);
-    try {
-      await deleteSentence.mutateAsync({ id });
-      sentencesQuery.refetch();
-      Alert.alert("완료", "문장을 삭제했어요");
-    } catch {
-      Alert.alert("오류", "삭제에 실패했어요");
-    }
-  }, [sentenceDeleteTarget, deleteSentence, sentencesQuery]);
+  }, [newName, newDescription, userId, isCreating, createTeamCollection, teamCollectionsQuery, router]);
 
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
 
   const handleRefresh = useCallback(async () => {
     setIsManualRefreshing(true);
     try {
-      if (ofSubTab === "personal") await myCollectionsQuery.refetch();
-      else if (ofSubTab === "group") await teamCollectionsQuery.refetch();
-      else await sentencesQuery.refetch();
+      await teamCollectionsQuery.refetch();
     } finally {
       setIsManualRefreshing(false);
     }
-  }, [ofSubTab, myCollectionsQuery, teamCollectionsQuery, sentencesQuery]);
+  }, [teamCollectionsQuery]);
 
-  // Refetch on focus ONLY if cached data is stale (older than the global
-  // staleTime / FOCUS_STALE_THRESHOLD_MS). Fresh data is shown immediately
-  // without a loading indicator or scroll-position jump.
-  const refetchPersonal = myCollectionsQuery.refetch;
   const refetchTeams = teamCollectionsQuery.refetch;
-  const refetchSentences = sentencesQuery.refetch;
   useFocusEffect(
     useCallback(() => {
-      if (isQueryStale(queryClient, getListMyCollectionsQueryKey({ ownerId: userId }))) {
-        refetchPersonal();
-      }
       if (isQueryStale(queryClient, getListTeamCollectionsQueryKey({ userId }))) {
         refetchTeams();
       }
-      if (isQueryStale(queryClient, getListStoredSentencesQueryKey({ userId }))) {
-        refetchSentences();
-      }
-    }, [refetchPersonal, refetchTeams, refetchSentences, queryClient, userId]),
+    }, [refetchTeams, queryClient, userId]),
   );
-
-  const isLoading =
-    ofSubTab === "personal"
-      ? myCollectionsQuery.isLoading
-      : ofSubTab === "group"
-        ? teamCollectionsQuery.isLoading
-        : sentencesQuery.isLoading;
-
-  const isError =
-    ofSubTab === "personal"
-      ? myCollectionsQuery.isError
-      : ofSubTab === "group"
-        ? teamCollectionsQuery.isError
-        : sentencesQuery.isError;
-
-  // useCallback so FlatList sees a stable renderItem prop reference and
-  // skips re-rendering rows when unrelated parent state (e.g., search query)
-  // changes. Same rationale below for renderTeamItem.
-  const renderPersonalItem = useCallback(({ item }: { item: MyCollection }) => (
-    <Pressable
-      style={styles.collectionCard}
-      onPress={() => router.push({ pathname: "/of-01-detail", params: { id: item.id } })}
-    >
-      <View style={styles.collectionIcon}>
-        <Feather name="folder" size={20} color={Colors.zinc500} />
-      </View>
-      <Text style={styles.collectionName} numberOfLines={1}>{item.name}</Text>
-      <View style={styles.collectionMeta}>
-        <Text style={styles.collectionCount}>{item.articleCount ?? 0}편</Text>
-        {item.isPublic && <Feather name="globe" size={12} color={Colors.zinc400} />}
-      </View>
-    </Pressable>
-  ), [router]);
 
   const renderTeamItem = useCallback(({ item }: { item: TeamCollectionWithRole }) => (
     <Pressable
       style={styles.collectionCard}
       onPress={() => router.push({ pathname: "/of-02-detail", params: { id: item.id } })}
     >
-      <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: "#bf6f78", alignItems: "center", justifyContent: "center" }}>
-        <Feather name="users" size={20} color="#FFFFFF" />
+      <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: "#bf6f78", alignItems: "center", justifyContent: "center" }}>
+        <Feather name="users" size={18} color="#FFFFFF" />
       </View>
       <Text style={styles.collectionName} numberOfLines={1}>{item.name}</Text>
       <View style={styles.collectionMeta}>
@@ -463,111 +216,6 @@ export default function OfScreen() {
       </View>
     </Pressable>
   ), [router]);
-
-  const renderSentenceItem = useCallback(({ item }: { item: StoredSentence }) => (
-    <SwipeableRow
-      ref={(r) => {
-        if (r) {
-          sentenceRowRefs.current.set(item.id, r);
-        } else {
-          sentenceRowRefs.current.delete(item.id);
-        }
-      }}
-      onDeletePress={() => {
-        closeSentenceOpenRow();
-        setSentenceDeleteTarget(item.id);
-      }}
-      onSwipeOpen={() => handleSentenceSwipeOpen(item.id)}
-      onScrollLock={(locked) => setSentenceScrollEnabled(!locked)}
-    >
-      <Pressable
-        style={styles.sentenceItem}
-        onPress={() => {
-          closeSentenceOpenRow();
-          setSelectedSentence(item);
-        }}
-      >
-        <View style={styles.sentenceItemContent}>
-          <Text style={styles.sentenceText} numberOfLines={2}>
-            &ldquo;{item.text}&rdquo;
-          </Text>
-          {item.articleTitle ? (
-            <Text style={styles.sentenceSource} numberOfLines={1}>{item.articleTitle}</Text>
-          ) : null}
-          <View style={styles.sentenceMeta}>
-            <Text style={styles.sentenceDate}>{new Date(item.createdAt).toLocaleDateString("ko-KR")}</Text>
-            {item.isFavorite && <Feather name="star" size={12} color="#F59E0B" />}
-          </View>
-        </View>
-        <Pressable
-          onPress={() => handleSentenceToggleFavorite(item.id, item.isFavorite)}
-          hitSlop={8}
-          style={styles.sentenceStarBtn}
-        >
-          <Feather name="star" size={16} color={item.isFavorite ? "#F59E0B" : Colors.zinc300} />
-        </Pressable>
-      </Pressable>
-    </SwipeableRow>
-  ), [handleSentenceToggleFavorite, closeSentenceOpenRow, handleSentenceSwipeOpen]);
-
-  const renderSentenceSelectionItem = useCallback(({ item }: { item: StoredSentence }) => {
-    const isSelected = selectedIds.has(item.id);
-    return (
-      <Pressable
-        style={styles.selectionRow}
-        onPress={() => toggleSelect(item.id)}
-      >
-        <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
-          {isSelected && <Feather name="check" size={14} color={Colors.white} />}
-        </View>
-        <View style={styles.sentenceItemContent}>
-          <Text style={styles.sentenceText} numberOfLines={2}>
-            &ldquo;{item.text}&rdquo;
-          </Text>
-          {item.articleTitle ? (
-            <Text style={styles.sentenceSource} numberOfLines={1}>{item.articleTitle}</Text>
-          ) : null}
-          <View style={styles.sentenceMeta}>
-            <Text style={styles.sentenceDate}>{new Date(item.createdAt).toLocaleDateString("ko-KR")}</Text>
-            {item.isFavorite && <Feather name="star" size={12} color="#F59E0B" />}
-          </View>
-        </View>
-      </Pressable>
-    );
-  }, [selectedIds, toggleSelect]);
-
-  const renderEmptyPersonal = () => {
-    if (personalFilter === "subscribed") {
-      return (
-        <RefreshableEmpty
-          refreshing={isManualRefreshing}
-          onRefresh={handleRefresh}
-          contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
-        >
-          <Feather name="globe" size={40} color={Colors.zinc300} />
-          <Text style={styles.emptyTitle}>구독 모음이 없어요</Text>
-          <Text style={styles.emptySubtitle}>공개로 설정한 모음이 여기에 표시돼요{"\n"}구독 기능은 추후 업데이트 예정이에요</Text>
-          <Pressable style={styles.emptyButton} onPress={handleAdd}>
-            <Text style={styles.emptyButtonText}>새 모음 만들기</Text>
-          </Pressable>
-        </RefreshableEmpty>
-      );
-    }
-    return (
-      <RefreshableEmpty
-        refreshing={isManualRefreshing}
-        onRefresh={handleRefresh}
-        contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
-      >
-        <Feather name="folder" size={40} color={Colors.zinc300} />
-        <Text style={styles.emptyTitle}>내 모음이 없어요</Text>
-        <Text style={styles.emptySubtitle}>완성된 편지를 모아두는 나만의 공간을 만들어보세요</Text>
-        <Pressable style={styles.emptyButton} onPress={handleAdd}>
-          <Text style={styles.emptyButtonText}>새 모음 만들기</Text>
-        </Pressable>
-      </RefreshableEmpty>
-    );
-  };
 
   const renderEmptyTeam = () => {
     if (groupFilter === "joined") {
@@ -602,20 +250,8 @@ export default function OfScreen() {
     );
   };
 
-  const renderEmptySentence = () => (
-    <RefreshableEmpty
-      refreshing={isManualRefreshing}
-      onRefresh={handleRefresh}
-      contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
-    >
-      <Feather name="bookmark" size={40} color={Colors.zinc300} />
-      <Text style={styles.emptyTitle}>수집한 문장이 없어요</Text>
-      <Text style={styles.emptySubtitle}>읽기 화면에서 마음에 드는 문장을{"\n"}길게 눌러 수집해보세요</Text>
-    </RefreshableEmpty>
-  );
-
   const renderContent = () => {
-    if (isLoading) {
+    if (teamCollectionsQuery.isLoading) {
       return (
         <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
           <Text style={styles.loadingText}>불러오는 중...</Text>
@@ -623,7 +259,7 @@ export default function OfScreen() {
       );
     }
 
-    if (isError) {
+    if (teamCollectionsQuery.isError) {
       return (
         <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
           <Feather name="alert-circle" size={40} color={Colors.zinc300} />
@@ -635,108 +271,35 @@ export default function OfScreen() {
       );
     }
 
-    switch (ofSubTab) {
-      case "personal":
-        return filteredMyCollections.length === 0 ? (
-          renderEmptyPersonal()
-        ) : (
-          <FlatList
-            key="of-personal-grid"
-            data={filteredMyCollections}
-            keyExtractor={(item) => item.id}
-            renderItem={renderPersonalItem}
-            numColumns={2}
-            columnWrapperStyle={styles.gridRow}
-            contentContainerStyle={[styles.gridContent, { paddingBottom: navBottom }]}
-            refreshControl={<RefreshControl refreshing={isManualRefreshing} onRefresh={handleRefresh} tintColor={Colors.zinc400} />}
-            showsVerticalScrollIndicator={false}
-          />
-        );
-      case "group":
-        return filteredTeamCollections.length === 0 ? (
-          renderEmptyTeam()
-        ) : (
-          <FlatList
-            key="of-group-grid"
-            data={filteredTeamCollections}
-            keyExtractor={(item) => item.id}
-            renderItem={renderTeamItem}
-            numColumns={2}
-            columnWrapperStyle={styles.gridRow}
-            contentContainerStyle={[styles.gridContent, { paddingBottom: navBottom }]}
-            refreshControl={<RefreshControl refreshing={isManualRefreshing} onRefresh={handleRefresh} tintColor={Colors.zinc400} />}
-            showsVerticalScrollIndicator={false}
-          />
-        );
-      case "sentence":
-        return filteredSentences.length === 0 ? (
-          renderEmptySentence()
-        ) : (
-          <FlatList
-            key="of-sentence-list"
-            data={filteredSentences}
-            keyExtractor={(item) => item.id}
-            renderItem={selectionMode ? renderSentenceSelectionItem : renderSentenceItem}
-            contentContainerStyle={[
-              styles.listContent,
-              { paddingBottom: selectionMode ? insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + 80 : navBottom },
-            ]}
-            refreshControl={
-              !selectionMode ? (
-                <RefreshControl refreshing={isManualRefreshing} onRefresh={handleRefresh} tintColor={Colors.zinc400} />
-              ) : undefined
-            }
-            scrollEnabled={selectionMode || sentenceScrollEnabled}
-            showsVerticalScrollIndicator={false}
-          />
-        );
-    }
+    return filteredTeamCollections.length === 0 ? (
+      renderEmptyTeam()
+    ) : (
+      <FlatList
+        key="of-group-grid"
+        data={filteredTeamCollections}
+        keyExtractor={(item) => item.id}
+        renderItem={renderTeamItem}
+        numColumns={2}
+        columnWrapperStyle={styles.gridRow}
+        contentContainerStyle={[styles.gridContent, { paddingBottom: navBottom }]}
+        refreshControl={<RefreshControl refreshing={isManualRefreshing} onRefresh={handleRefresh} tintColor={Colors.zinc400} />}
+        showsVerticalScrollIndicator={false}
+      />
+    );
   };
-
-  const isSentenceSelectionMode = ofSubTab === "sentence" && selectionMode;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      {isSentenceSelectionMode ? (
-        <View style={styles.selectionHeader}>
-          <Pressable onPress={exitSelectionMode} hitSlop={12}>
-            <Text style={styles.selectionCancelText}>취소</Text>
-          </Pressable>
-          <Text style={styles.selectionHeaderTitle}>
-            {selectedCount > 0 ? `${selectedCount}개 선택` : "문장 선택"}
-          </Text>
-          <View style={{ width: 44 }} />
-        </View>
-      ) : (
-        <PageHeader
-          title="단체 모음"
-          showAdd={ofSubTab !== "sentence"}
-          onAddPress={handleAdd}
-          showSearch
-          onSearchPress={handleSearch}
-          searchActive={searchActive}
-          showKebab={ofSubTab === "sentence"}
-          onKebabPress={enterSelectionMode}
-        />
-      )}
+      <PageHeader
+        title="단체 모음"
+        showAdd
+        onAddPress={handleAdd}
+        showSearch
+        onSearchPress={handleSearch}
+        searchActive={searchActive}
+      />
 
-      {!selectionMode && !searchActive && ofSubTab === "personal" && (
-        <View style={styles.filterBar}>
-          {PERSONAL_FILTER_OPTIONS.map((opt) => (
-            <Pressable
-              key={opt.key}
-              style={[styles.filterChip, personalFilter === opt.key && styles.filterChipActive]}
-              onPress={() => setPersonalFilter(opt.key)}
-            >
-              <Text style={[styles.filterChipText, personalFilter === opt.key && styles.filterChipTextActive]}>
-                {opt.label}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      )}
-
-      {!selectionMode && !searchActive && ofSubTab === "group" && (
+      {!searchActive && (
         <View style={styles.filterBar}>
           {GROUP_FILTER_OPTIONS.map((opt) => (
             <Pressable
@@ -752,18 +315,12 @@ export default function OfScreen() {
         </View>
       )}
 
-      {!selectionMode && searchActive && (
+      {searchActive && (
         <View style={styles.searchBar}>
           <Feather name="search" size={Sizing.searchBarIconSize} color={Colors.searchIcon} />
           <TextInput
             style={styles.searchInput}
-            placeholder={
-              ofSubTab === "personal"
-                ? "모음 이름으로 검색"
-                : ofSubTab === "group"
-                  ? "단체 모음 이름으로 검색"
-                  : "문장 내용으로 검색"
-            }
+            placeholder="단체 모음 이름으로 검색"
             placeholderTextColor={Colors.searchPlaceholder}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -779,27 +336,6 @@ export default function OfScreen() {
       )}
 
       {renderContent()}
-
-      {isSentenceSelectionMode && (
-        <View style={[styles.selectionBar, { paddingBottom: insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + 12 }]}>
-          <Pressable
-            style={[
-              styles.bulkDeleteButton,
-              (selectedCount === 0 || isBulkDeleting) && styles.bulkDeleteButtonDisabled,
-            ]}
-            onPress={handleBulkDeletePress}
-            disabled={selectedCount === 0 || isBulkDeleting}
-          >
-            <Text style={styles.bulkDeleteText}>
-              {isBulkDeleting
-                ? "삭제 중..."
-                : selectedCount > 0
-                  ? `${selectedCount}개 선택 삭제`
-                  : "선택 삭제"}
-            </Text>
-          </Pressable>
-        </View>
-      )}
 
       <BottomSheet
         visible={actionSheetVisible}
@@ -914,7 +450,7 @@ export default function OfScreen() {
       <BottomSheet
         visible={createSheetVisible}
         onClose={() => setCreateSheetVisible(false)}
-        title={ofSubTab === "personal" ? "새 개인 모음" : "새 단체 모음"}
+        title="새 단체 모음"
         snapPoints={[0.65, 0.95]}
         keyboardAware
       >
@@ -948,96 +484,6 @@ export default function OfScreen() {
           />
         </View>
       </BottomSheet>
-
-      <BottomSheet
-        visible={selectedSentence !== null}
-        onClose={() => setSelectedSentence(null)}
-        snapPoints={[0.55]}
-      >
-        {selectedSentence && (
-          <View style={styles.sentenceSheetContainer}>
-            <Text style={styles.sentenceSheetQuote}>
-              &ldquo;{selectedSentence.text}&rdquo;
-            </Text>
-            <Text style={styles.sentenceSheetDate}>
-              {new Date(selectedSentence.createdAt).toLocaleDateString("ko-KR")}
-            </Text>
-            <View style={styles.sentenceSheetDivider} />
-            <View style={styles.sentenceSheetActions}>
-              <Pressable
-                style={styles.sentenceSheetRow}
-                onPress={() => handleSentenceCopy(selectedSentence.text)}
-              >
-                <Feather name="copy" size={18} color={Colors.zinc700} />
-                <Text style={styles.sentenceSheetActionLabel}>복사하기</Text>
-              </Pressable>
-              <Pressable
-                style={styles.sentenceSheetRow}
-                onPress={() => handleSentenceToggleFavorite(selectedSentence.id, selectedSentence.isFavorite)}
-              >
-                <Feather
-                  name="star"
-                  size={18}
-                  color={selectedSentence.isFavorite ? "#F59E0B" : Colors.zinc700}
-                />
-                <Text style={[styles.sentenceSheetActionLabel, selectedSentence.isFavorite && { color: "#F59E0B" }]}>
-                  {selectedSentence.isFavorite ? "즐겨찾기 해제" : "즐겨찾기 추가"}
-                </Text>
-              </Pressable>
-              {selectedSentence.articleId && (
-                <Pressable
-                  style={styles.sentenceSheetRow}
-                  onPress={() => {
-                    setSelectedSentence(null);
-                    router.push({ pathname: "/read", params: { articleId: selectedSentence.articleId, mode: "re_read" } });
-                  }}
-                >
-                  <Feather name="external-link" size={18} color={Colors.zinc700} />
-                  <Text style={styles.sentenceSheetActionLabel}>원본으로 이동</Text>
-                </Pressable>
-              )}
-              <Pressable
-                style={styles.sentenceSheetRow}
-                onPress={() => {
-                  setSentenceDeleteTarget(selectedSentence.id);
-                  setSelectedSentence(null);
-                }}
-              >
-                <Feather name="trash-2" size={18} color="#DC2626" />
-                <Text style={[styles.sentenceSheetActionLabel, { color: "#DC2626" }]}>삭제</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.sentenceSheetRow, styles.sentenceSheetCancel]}
-                onPress={() => setSelectedSentence(null)}
-              >
-                <Text style={styles.sentenceSheetCancelLabel}>닫기</Text>
-              </Pressable>
-            </View>
-          </View>
-        )}
-      </BottomSheet>
-
-      <ConfirmModal
-        visible={sentenceDeleteTarget !== null}
-        title="문장 삭제"
-        description="이 문장을 삭제하시겠어요?"
-        confirmLabel="삭제"
-        cancelLabel="취소"
-        destructive
-        onConfirm={handleSentenceDeleteConfirm}
-        onCancel={() => setSentenceDeleteTarget(null)}
-      />
-
-      <ConfirmModal
-        visible={showBulkDeleteConfirm}
-        title="문장 삭제"
-        description={`선택한 ${selectedCount}개 문장을 삭제하시겠어요?`}
-        confirmLabel="삭제"
-        cancelLabel="취소"
-        destructive
-        onConfirm={handleBulkDeleteConfirm}
-        onCancel={() => setShowBulkDeleteConfirm(false)}
-      />
     </View>
   );
 }
@@ -1046,25 +492,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.white,
-  },
-  selectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.screenPx,
-    paddingTop: 50,
-    paddingBottom: 20,
-    backgroundColor: Colors.white,
-  },
-  selectionHeaderTitle: {
-    ...Typography.bodySemiBold,
-    fontSize: 17,
-    color: Colors.zinc900,
-  },
-  selectionCancelText: {
-    ...Typography.body,
-    fontSize: 15,
-    color: Colors.zinc500,
   },
   filterBar: {
     flexDirection: "row",
@@ -1103,21 +530,17 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    ...Typography.searchInput,
-    color: Colors.searchText,
-    padding: 0,
+    ...Typography.body,
+    fontSize: 15,
+    color: Colors.zinc900,
   },
   gridContent: {
     paddingHorizontal: Spacing.screenPx,
     paddingTop: 8,
-    paddingBottom: Spacing.navBarPaddingBottom,
+    gap: 12,
   },
   gridRow: {
     gap: 12,
-    marginBottom: 12,
-  },
-  listContent: {
-    paddingBottom: Spacing.navBarPaddingBottom,
   },
   collectionCard: {
     flex: 1,
@@ -1125,20 +548,13 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     gap: 8,
-    maxWidth: "48%",
-  },
-  collectionIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: Colors.zinc100,
-    alignItems: "center",
-    justifyContent: "center",
+    minHeight: 110,
   },
   collectionName: {
     ...Typography.bodySemiBold,
-    fontSize: 15,
+    fontSize: 14,
     color: Colors.zinc900,
+    flex: 1,
   },
   collectionMeta: {
     flexDirection: "row",
@@ -1148,125 +564,34 @@ const styles = StyleSheet.create({
   collectionCount: {
     ...Typography.caption,
     fontSize: 12,
-    color: Colors.zinc500,
-  },
-  sentenceItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 14,
-    paddingHorizontal: Spacing.screenPx,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.zinc100,
-    gap: 8,
-  },
-  selectionRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    paddingVertical: 14,
-    paddingHorizontal: Spacing.screenPx,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.zinc100,
-    gap: 12,
-  },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 1.5,
-    borderColor: Colors.zinc300,
-    backgroundColor: Colors.white,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 2,
-    flexShrink: 0,
-  },
-  checkboxSelected: {
-    backgroundColor: Colors.zinc900,
-    borderColor: Colors.zinc900,
-  },
-  sentenceItemContent: {
-    flex: 1,
-  },
-  sentenceStarBtn: {
-    padding: 4,
-  },
-  sentenceText: {
-    ...Typography.body,
-    fontSize: 14,
-    color: Colors.zinc700,
-    fontStyle: "italic",
-    lineHeight: 22,
-  },
-  sentenceMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 6,
-  },
-  sentenceDate: {
-    ...Typography.caption,
-    fontSize: 12,
     color: Colors.zinc400,
-  },
-  sentenceSource: {
-    ...Typography.caption,
-    fontSize: 12,
-    color: Colors.zinc400,
-    marginTop: 4,
-  },
-  selectionBar: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: Spacing.screenPx,
-    paddingTop: 12,
-    backgroundColor: Colors.white,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.zinc100,
-  },
-  bulkDeleteButton: {
-    backgroundColor: "#EF4444",
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  bulkDeleteButtonDisabled: {
-    opacity: 0.4,
-  },
-  bulkDeleteText: {
-    ...Typography.bodySemiBold,
-    fontSize: 15,
-    color: Colors.white,
   },
   emptyContainer: {
     flex: 1,
-    justifyContent: "center",
     alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: Spacing.screenPx,
-    paddingBottom: Spacing.navBarPaddingBottom,
     gap: 8,
   },
   emptyTitle: {
     ...Typography.bodySemiBold,
-    fontSize: 18,
+    fontSize: 17,
     color: Colors.zinc900,
     marginTop: 12,
   },
   emptySubtitle: {
     ...Typography.body,
     fontSize: 14,
-    color: Colors.zinc500,
+    color: Colors.zinc400,
     textAlign: "center",
-    lineHeight: 22,
+    lineHeight: 20,
   },
   emptyButton: {
-    marginTop: 16,
+    marginTop: 8,
     paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingVertical: 10,
     backgroundColor: Colors.zinc900,
-    borderRadius: 12,
+    borderRadius: 20,
   },
   emptyButtonText: {
     ...Typography.bodySemiBold,
@@ -1276,7 +601,40 @@ const styles = StyleSheet.create({
   loadingText: {
     ...Typography.body,
     fontSize: 14,
-    color: Colors.zinc500,
+    color: Colors.zinc400,
+  },
+  actionSheetContent: {
+    paddingVertical: 8,
+    gap: 4,
+  },
+  actionSheetRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+    gap: 14,
+  },
+  actionSheetIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: Colors.zinc100,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  actionSheetTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  actionSheetLabel: {
+    ...Typography.bodySemiBold,
+    fontSize: 15,
+    color: Colors.zinc900,
+  },
+  actionSheetDesc: {
+    ...Typography.caption,
+    fontSize: 13,
+    color: Colors.zinc400,
   },
   createForm: {
     paddingVertical: 12,
@@ -1310,120 +668,32 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.white,
   },
-  sentenceSheetContainer: {
-    paddingTop: 4,
-    paddingBottom: 16,
-  },
-  sentenceSheetQuote: {
-    ...Typography.body,
-    fontSize: 16,
-    color: Colors.zinc800,
-    fontStyle: "italic",
-    lineHeight: 26,
-    paddingHorizontal: Spacing.screenPx,
-    marginBottom: 10,
-  },
-  sentenceSheetDate: {
-    ...Typography.caption,
-    fontSize: 12,
-    color: Colors.zinc400,
-    paddingHorizontal: Spacing.screenPx,
-    marginBottom: 12,
-  },
-  sentenceSheetDivider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: Colors.zinc100,
-    marginBottom: 4,
-  },
-  sentenceSheetActions: {
-    paddingHorizontal: Spacing.screenPx,
-  },
-  sentenceSheetRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    paddingVertical: 14,
-  },
-  sentenceSheetActionLabel: {
-    ...Typography.body,
-    fontSize: 16,
-    color: Colors.zinc800,
-  },
-  sentenceSheetCancel: {
-    justifyContent: "center",
-    marginTop: 4,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.zinc100,
-  },
-  sentenceSheetCancelLabel: {
-    ...Typography.body,
-    fontSize: 15,
-    color: Colors.zinc500,
-  },
-  actionSheetContent: {
-    paddingVertical: 8,
-    gap: 4,
-  },
-  actionSheetRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 14,
-    gap: 14,
-  },
-  actionSheetIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: Colors.zinc50,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  actionSheetTextWrap: {
-    flex: 1,
-    gap: 2,
-  },
-  actionSheetLabel: {
-    ...Typography.bodySemiBold,
-    fontSize: 16,
-    color: Colors.zinc900,
-  },
-  actionSheetDesc: {
-    ...Typography.body,
-    fontSize: 13,
-    color: Colors.zinc500,
-  },
   joinHint: {
     ...Typography.body,
     fontSize: 14,
     color: Colors.zinc500,
   },
   joinErrorText: {
-    ...Typography.body,
+    ...Typography.caption,
     fontSize: 13,
-    color: "#DC2626",
-    marginTop: -4,
+    color: "#EF4444",
   },
   joinPreviewContainer: {
-    paddingVertical: 8,
-    gap: 12,
+    flex: 1,
+    gap: 16,
   },
   joinPreviewScroll: {
-    borderRadius: 16,
+    flexGrow: 0,
   },
   joinPreviewCard: {
-    backgroundColor: Colors.zinc50,
-    borderRadius: 16,
-    padding: 20,
     alignItems: "center",
+    paddingVertical: 16,
     gap: 8,
   },
-  joinPreviewActions: {
-    gap: 0,
-  },
   joinPreviewIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
+    width: 64,
+    height: 64,
+    borderRadius: 20,
     backgroundColor: "#EDE9FE",
     alignItems: "center",
     justifyContent: "center",
@@ -1431,30 +701,32 @@ const styles = StyleSheet.create({
   },
   joinPreviewName: {
     ...Typography.bodySemiBold,
-    fontSize: 18,
+    fontSize: 20,
     color: Colors.zinc900,
     textAlign: "center",
   },
   joinPreviewDesc: {
     ...Typography.body,
     fontSize: 14,
-    color: Colors.zinc600,
+    color: Colors.zinc500,
     textAlign: "center",
+    lineHeight: 20,
   },
   joinPreviewOwner: {
-    ...Typography.body,
+    ...Typography.caption,
     fontSize: 13,
     color: Colors.zinc400,
-    textAlign: "center",
-    marginTop: 4,
+  },
+  joinPreviewActions: {
+    gap: 8,
   },
   joinBackButton: {
     alignItems: "center",
-    paddingVertical: 10,
+    paddingVertical: 12,
   },
   joinBackText: {
     ...Typography.body,
     fontSize: 14,
-    color: Colors.zinc500,
+    color: Colors.zinc400,
   },
 });

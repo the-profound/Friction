@@ -31,17 +31,17 @@ const DETAIL_ROUTE_MAP: Record<string, DetailRouteInfo> = {
   "on-01b": { tab: "ON" },
   "on-01c": { tab: "ON" },
   "on-02": { tab: "ON" },
-  "of-01": { tab: "OF", ofSubTab: "personal" },
-  "of-01-detail": { tab: "OF", ofSubTab: "personal" },
+  "of-01": { tab: "AR" },
+  "of-01-detail": { tab: "AR" },
   "of-02": { tab: "OF", ofSubTab: "group" },
   "of-02-detail": { tab: "OF", ofSubTab: "group" },
-  "of-03": { tab: "OF", ofSubTab: "sentence" },
-  "to-03": { tab: "TO" },
+  "of-03": { tab: "AR" },
+  "to-03": { tab: "TO", toSubTab: "history" },
   "read": { tab: "IN" },
 };
 
-const OF_SUB_TABS = new Set<string>(["personal", "group", "sentence"]);
-const TO_SUB_TABS = new Set<string>(["send"]);
+const OF_SUB_TABS = new Set<string>(["group"]);
+const TO_SUB_TABS = new Set<string>(["neighbors", "history", "send"]);
 
 const NavigationContext = createContext<NavContextValue | null>(null);
 
@@ -49,11 +49,11 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
   const [activeTab, setActiveTabState] = useState<MainTabKey>("IN");
   const [prevMainTab, setPrevMainTab] = useState<MainTabKey>("IN");
   const [layer, setLayer] = useState<NavLayer>("main");
-  const [ofSubTab, setOfSubTabState] = useState<OfSubTabKey>("personal");
-  const [toSubTab, setToSubTabState] = useState<ToSubTabKey>("send");
+  const [ofSubTab, setOfSubTabState] = useState<OfSubTabKey>("group");
+  const [toSubTab, setToSubTabState] = useState<ToSubTabKey>("neighbors");
   const [headerScrolled, setHeaderScrolled] = useState(false);
 
-  const lastSyncRef = useRef({ tab: "IN" as MainTabKey, ofSub: "personal" as OfSubTabKey, toSub: "send" as ToSubTabKey });
+  const lastSyncRef = useRef({ tab: "IN" as MainTabKey, ofSub: "group" as OfSubTabKey, toSub: "neighbors" as ToSubTabKey });
   const pathnameRef = useRef<string>("");
 
   const segments = useSegments();
@@ -98,9 +98,9 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
 
     if (!tabChanged && !ofSubChanged && !toSubChanged) return;
 
-    if (detectedTab === "OF") {
+    if (detectedTab === "TO") {
       setActiveTabState((prev) => {
-        if (prev !== "OF") {
+        if (prev !== "TO") {
           setPrevMainTab(prev);
         }
         return detectedTab;
@@ -128,9 +128,9 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
   }, [segments, pathname, globalParams.subTab]);
 
   const setActiveTab = useCallback((tab: MainTabKey) => {
-    if (tab === "OF") {
+    if (tab === "TO") {
       setActiveTabState((prev) => {
-        if (prev !== "OF") {
+        if (prev !== "TO") {
           setPrevMainTab(prev);
         }
         return tab;
