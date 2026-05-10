@@ -2023,6 +2023,11 @@ components:
           nullable: true
         isFavorite:
           type: boolean
+        favoritedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp when the sentence was last marked as favorite. Null if not favorited.
         createdAt:
           type: string
           format: date-time
@@ -2030,7 +2035,7 @@ components:
           type: string
           nullable: true
           description: Title of the source article (joined from articles table). May be null if the article is missing.
-      required: [id, userId, articleId, text, isFavorite, createdAt, articleTitle]
+      required: [id, userId, articleId, text, isFavorite, favoritedAt, createdAt, articleTitle]
 
     CreateStoredSentenceBody:
       type: object

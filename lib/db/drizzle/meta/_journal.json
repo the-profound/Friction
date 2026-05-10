@@ -78,6 +78,13 @@
       "when": 1746057600000,
       "tag": "0010_add_inbox_recipient_article_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1746835200000,
+      "tag": "0013_add_favorited_at_to_stored_sentences",
+      "breakpoints": true
     }
   ]
 }

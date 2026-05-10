@@ -12,6 +12,7 @@ export const storedSentencesTable = pgTable("stored_sentences", {
   text: text("text").notNull(),
   position: jsonb("position"),
   isFavorite: boolean("is_favorite").notNull().default(false),
+  favoritedAt: timestamp("favorited_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -248,6 +248,8 @@ export interface StoredSentence {
   text: string;
   position?: StoredSentencePosition;
   isFavorite: boolean;
+  /** Timestamp when the sentence was last marked as favorite. Null if not favorited. */
+  favoritedAt: string | null;
   createdAt: string;
   /** Title of the source article (joined from articles table). May be null if the article is missing. */
   articleTitle: string | null;

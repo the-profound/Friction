@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { db, storedSentencesTable, articlesTable } from "@workspace/db";
 import { CreateStoredSentenceBody, ToggleStoredSentenceFavoriteBody } from "@workspace/api-zod";
 
@@ -12,6 +12,7 @@ const sentenceSelect = {
   text: storedSentencesTable.text,
   position: storedSentencesTable.position,
   isFavorite: storedSentencesTable.isFavorite,
+  favoritedAt: storedSentencesTable.favoritedAt,
   createdAt: storedSentencesTable.createdAt,
   articleTitle: articlesTable.title,
 };
@@ -32,7 +33,12 @@ router.get("/stored-sentences", async (req, res) => {
     .select(sentenceSelect)
     .from(storedSentencesTable)
     .leftJoin(articlesTable, eq(storedSentencesTable.articleId, articlesTable.id))
-    .where(and(...conditions));
+    .where(and(...conditions))
+    .orderBy(
+      desc(storedSentencesTable.isFavorite),
+      sql`${storedSentencesTable.favoritedAt} DESC NULLS LAST`,
+      desc(storedSentencesTable.createdAt),
+    );
 
   res.json(sentences);
 });
@@ -97,7 +103,10 @@ router.patch("/stored-sentences/:id/favorite", async (req, res) => {
   }
 
   const [updated] = await db.update(storedSentencesTable)
-    .set({ isFavorite: parsed.data.isFavorite })
+    .set({
+      isFavorite: parsed.data.isFavorite,
+      favoritedAt: parsed.data.isFavorite ? new Date() : null,
+    })
     .where(eq(storedSentencesTable.id, req.params.id))
     .returning({ id: storedSentencesTable.id });
 
