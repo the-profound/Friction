@@ -98,18 +98,8 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
 
     if (!tabChanged && !ofSubChanged && !toSubChanged) return;
 
-    if (detectedTab === "TO") {
-      setActiveTabState((prev) => {
-        if (prev !== "TO") {
-          setPrevMainTab(prev);
-        }
-        return detectedTab;
-      });
-      setLayer("sub");
-    } else {
-      setActiveTabState(detectedTab);
-      setLayer("main");
-    }
+    setActiveTabState(detectedTab);
+    setLayer("main");
 
     if (detectedOfSubTab) {
       setOfSubTabState(detectedOfSubTab);
@@ -128,18 +118,8 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
   }, [segments, pathname, globalParams.subTab]);
 
   const setActiveTab = useCallback((tab: MainTabKey) => {
-    if (tab === "TO") {
-      setActiveTabState((prev) => {
-        if (prev !== "TO") {
-          setPrevMainTab(prev);
-        }
-        return tab;
-      });
-      setLayer("sub");
-    } else {
-      setActiveTabState(tab);
-      setLayer("main");
-    }
+    setActiveTabState(tab);
+    setLayer("main");
     lastSyncRef.current = { ...lastSyncRef.current, tab };
     setHeaderScrolled(false);
     router.navigate(TAB_ROUTES[tab]);

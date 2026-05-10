@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Animation, Colors, Shadows, Sizing, Spacing, TabConfig, Typography } from "@/constants/tokens";
 import { useNavigation } from "@/contexts/NavigationContext";
-import type { MainTabKey, OfSubTabKey, ToSubTabKey } from "@/constants/tokens";
+import type { OfSubTabKey } from "@/constants/tokens";
 
 type FeatherIconName = React.ComponentProps<typeof Feather>["name"];
 
@@ -28,11 +28,9 @@ export function NavBar() {
   const subScale = layerAnim.interpolate({ inputRange: [0, 1], outputRange: [Animation.subTabScaleFrom, 1] });
   const subTranslateY = layerAnim.interpolate({ inputRange: [0, 1], outputRange: [Animation.subTabTranslateYFrom, 0] });
 
-  const subItems = nav.activeTab === "OF" ? TabConfig.ofSubTabs : TabConfig.toSubTabs;
-  const activeSubTab = nav.activeTab === "OF" ? nav.ofSubTab : nav.toSubTab;
-  const onSubTabPress = nav.activeTab === "OF"
-    ? (key: string) => nav.setOfSubTab(key as OfSubTabKey)
-    : (key: string) => nav.setToSubTab(key as ToSubTabKey);
+  const subItems = TabConfig.ofSubTabs;
+  const activeSubTab = nav.ofSubTab;
+  const onSubTabPress = (key: string) => nav.setOfSubTab(key as OfSubTabKey);
 
   return (
     <View style={[styles.container, { bottom: Spacing.navBarBottom + insets.bottom }]} pointerEvents="box-none">
