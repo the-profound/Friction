@@ -36,12 +36,12 @@ const DETAIL_ROUTE_MAP: Record<string, DetailRouteInfo> = {
   "of-02": { tab: "OF", ofSubTab: "group" },
   "of-02-detail": { tab: "OF", ofSubTab: "group" },
   "of-03": { tab: "OF", ofSubTab: "sentence" },
-  "to-03": { tab: "TO", toSubTab: "history" },
+  "to-03": { tab: "TO" },
   "read": { tab: "IN" },
 };
 
 const OF_SUB_TABS = new Set<string>(["personal", "group", "sentence"]);
-const TO_SUB_TABS = new Set<string>(["neighbors", "history", "send"]);
+const TO_SUB_TABS = new Set<string>(["send"]);
 
 const NavigationContext = createContext<NavContextValue | null>(null);
 
@@ -50,10 +50,10 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
   const [prevMainTab, setPrevMainTab] = useState<MainTabKey>("IN");
   const [layer, setLayer] = useState<NavLayer>("main");
   const [ofSubTab, setOfSubTabState] = useState<OfSubTabKey>("personal");
-  const [toSubTab, setToSubTabState] = useState<ToSubTabKey>("neighbors");
+  const [toSubTab, setToSubTabState] = useState<ToSubTabKey>("send");
   const [headerScrolled, setHeaderScrolled] = useState(false);
 
-  const lastSyncRef = useRef({ tab: "IN" as MainTabKey, ofSub: "personal" as OfSubTabKey, toSub: "neighbors" as ToSubTabKey });
+  const lastSyncRef = useRef({ tab: "IN" as MainTabKey, ofSub: "personal" as OfSubTabKey, toSub: "send" as ToSubTabKey });
   const pathnameRef = useRef<string>("");
 
   const segments = useSegments();
@@ -98,9 +98,9 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
 
     if (!tabChanged && !ofSubChanged && !toSubChanged) return;
 
-    if (detectedTab === "OF" || detectedTab === "TO") {
+    if (detectedTab === "OF") {
       setActiveTabState((prev) => {
-        if (prev !== "OF" && prev !== "TO") {
+        if (prev !== "OF") {
           setPrevMainTab(prev);
         }
         return detectedTab;
@@ -128,9 +128,9 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
   }, [segments, pathname, globalParams.subTab]);
 
   const setActiveTab = useCallback((tab: MainTabKey) => {
-    if (tab === "OF" || tab === "TO") {
+    if (tab === "OF") {
       setActiveTabState((prev) => {
-        if (prev !== "OF" && prev !== "TO") {
+        if (prev !== "OF") {
           setPrevMainTab(prev);
         }
         return tab;

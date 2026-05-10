@@ -122,6 +122,20 @@ export default function MyPageScreen() {
           )}
         </Section>
 
+        <Section title="활동">
+          <SettingRow
+            label="이웃 목록"
+            onPress={() => router.push("/mypage-neighbors" as never)}
+            showChevron
+          />
+          <SettingRow
+            label="발신 목록"
+            onPress={() => router.push("/mypage-sendrecords" as never)}
+            showChevron
+            isLast
+          />
+        </Section>
+
         <Section title="계정">
           <SettingRow
             label="로그아웃"
