@@ -23,6 +23,7 @@ interface PageHeaderProps {
   addDisabled?: boolean;
   rightText?: string;
   onRightTextPress?: () => void;
+  searchLast?: boolean;
 }
 
 export function PageHeader({
@@ -41,6 +42,7 @@ export function PageHeader({
   addDisabled = false,
   rightText,
   onRightTextPress,
+  searchLast = false,
 }: PageHeaderProps) {
   const insets = useSafeAreaInsets();
   const { headerScrolled } = useNavigation();
@@ -70,7 +72,7 @@ export function PageHeader({
             <Feather name="clock" size={Sizing.searchIconSize} color={Colors.zinc700} />
           </ScalePressable>
         )}
-        {showSearch && (
+        {!searchLast && showSearch && (
           <ScalePressable
             style={[styles.actionButton, searchActive && styles.actionButtonActive]}
             onPress={onSearchPress}
@@ -82,6 +84,15 @@ export function PageHeader({
         {showKebab && (
           <ScalePressable style={styles.actionButton} onPress={onKebabPress} hitSlop={8}>
             <Feather name="check-square" size={20} color={Colors.zinc700} />
+          </ScalePressable>
+        )}
+        {searchLast && showSearch && (
+          <ScalePressable
+            style={[styles.actionButton, searchActive && styles.actionButtonActive]}
+            onPress={onSearchPress}
+            hitSlop={8}
+          >
+            <Feather name="search" size={Sizing.searchIconSize} color={Colors.zinc700} />
           </ScalePressable>
         )}
         {showProfile && (

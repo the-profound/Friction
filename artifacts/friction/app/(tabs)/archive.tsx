@@ -583,6 +583,7 @@ export default function ArchiveScreen() {
           searchActive={searchActive}
           showKebab={activeSubTab === "sentence"}
           onKebabPress={enterSelectionMode}
+          searchLast={activeSubTab === "sentence"}
         />
       )}
 
