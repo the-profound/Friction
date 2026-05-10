@@ -718,7 +718,7 @@ export default function OnScreen() {
 
       {!selectionMode && topTab === "memo" && (
         <ScalePressable
-          style={[styles.fab, { bottom: insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + Spacing.xl }]}
+          style={[styles.fab, { bottom: insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + Spacing.sm }]}
           onPress={handleNewMemo}
           accessibilityRole="button"
           accessibilityLabel="메모 추가"
