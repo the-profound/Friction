@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useMemo, useRef } from "react";
+import React, { useCallback, useState, useMemo, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   TextInput,
   Platform,
   Alert,
+  Animated,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
@@ -63,6 +64,20 @@ export default function ArchiveScreen() {
   const [favOverrides, setFavOverrides] = useState<Map<string, boolean>>(new Map());
   const sentenceOpenRowRef = useRef<SwipeableRowHandle | null>(null);
   const sentenceRowRefs = useRef<Map<string, SwipeableRowHandle>>(new Map());
+
+  const searchAnim = useRef(new Animated.Value(0)).current;
+  const searchInputRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    Animated.timing(searchAnim, {
+      toValue: searchActive ? 1 : 0,
+      duration: 200,
+      useNativeDriver: false,
+    }).start();
+    if (searchActive) {
+      setTimeout(() => searchInputRef.current?.focus(), 50);
+    }
+  }, [searchActive]);
 
   const myCollectionsQuery = useListMyCollections({ ownerId: userId });
   const sentencesQuery = useListStoredSentences({ userId });
@@ -585,24 +600,32 @@ export default function ArchiveScreen() {
       )}
 
 
-      {!selectionMode && searchActive && (
-        <View style={styles.searchBar}>
-          <Feather name="search" size={Sizing.searchBarIconSize} color={Colors.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder={activeSubTab === "personal" ? "폴더 이름으로 검색" : "문장 내용으로 검색"}
-            placeholderTextColor={Colors.searchPlaceholder}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            autoFocus
-            returnKeyType="search"
-          />
-          {searchQuery.length > 0 && (
-            <Pressable onPress={() => setSearchQuery("")} hitSlop={8}>
-              <Feather name="x" size={16} color={Colors.searchIcon} />
-            </Pressable>
-          )}
-        </View>
+      {!selectionMode && (
+        <Animated.View
+          style={{
+            height: searchAnim.interpolate({ inputRange: [0, 1], outputRange: [0, Sizing.searchBarHeight + 8] }),
+            opacity: searchAnim,
+            overflow: "hidden",
+          }}
+        >
+          <View style={styles.searchBar}>
+            <Feather name="search" size={Sizing.searchBarIconSize} color={Colors.searchIcon} />
+            <TextInput
+              ref={searchInputRef}
+              style={styles.searchInput}
+              placeholder={activeSubTab === "personal" ? "폴더 이름으로 검색" : "문장 내용으로 검색"}
+              placeholderTextColor={Colors.searchPlaceholder}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              returnKeyType="search"
+            />
+            {searchQuery.length > 0 && (
+              <Pressable onPress={() => setSearchQuery("")} hitSlop={8}>
+                <Feather name="x" size={16} color={Colors.searchIcon} />
+              </Pressable>
+            )}
+          </View>
+        </Animated.View>
       )}
 
       {renderContent()}

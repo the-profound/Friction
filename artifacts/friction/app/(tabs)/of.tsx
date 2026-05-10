@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useMemo } from "react";
+import React, { useCallback, useState, useMemo, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   ScrollView,
   useWindowDimensions,
   Alert,
+  Animated,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
@@ -60,6 +61,20 @@ export default function OfScreen() {
   const [isJoinLoading, setIsJoinLoading] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [groupFilter, setGroupFilter] = useState<GroupFilter>("all");
+
+  const searchAnim = useRef(new Animated.Value(0)).current;
+  const searchInputRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    Animated.timing(searchAnim, {
+      toValue: searchActive ? 1 : 0,
+      duration: 200,
+      useNativeDriver: false,
+    }).start();
+    if (searchActive) {
+      setTimeout(() => searchInputRef.current?.focus(), 50);
+    }
+  }, [searchActive]);
 
   const teamCollectionsQuery = useListTeamCollections({ userId });
   const createTeamCollection = useCreateTeamCollection();
@@ -316,32 +331,36 @@ export default function OfScreen() {
         searchActive={searchActive}
       />
 
-      {!searchActive && (
-        <View style={styles.filterBar}>
-          {GROUP_FILTER_OPTIONS.map((opt) => (
-            <Pressable
-              key={opt.key}
-              style={[styles.filterChip, groupFilter === opt.key && styles.filterChipActive]}
-              onPress={() => setGroupFilter(opt.key)}
-            >
-              <Text style={[styles.filterChipText, groupFilter === opt.key && styles.filterChipTextActive]}>
-                {opt.label}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      )}
+      <View style={styles.filterBar}>
+        {GROUP_FILTER_OPTIONS.map((opt) => (
+          <Pressable
+            key={opt.key}
+            style={[styles.filterChip, groupFilter === opt.key && styles.filterChipActive]}
+            onPress={() => setGroupFilter(opt.key)}
+          >
+            <Text style={[styles.filterChipText, groupFilter === opt.key && styles.filterChipTextActive]}>
+              {opt.label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
 
-      {searchActive && (
+      <Animated.View
+        style={{
+          height: searchAnim.interpolate({ inputRange: [0, 1], outputRange: [0, Sizing.searchBarHeight + 8] }),
+          opacity: searchAnim,
+          overflow: "hidden",
+        }}
+      >
         <View style={styles.searchBar}>
           <Feather name="search" size={Sizing.searchBarIconSize} color={Colors.searchIcon} />
           <TextInput
+            ref={searchInputRef}
             style={styles.searchInput}
             placeholder="단체 모음 이름으로 검색"
             placeholderTextColor={Colors.searchPlaceholder}
             value={searchQuery}
             onChangeText={setSearchQuery}
-            autoFocus
             returnKeyType="search"
           />
           {searchQuery.length > 0 && (
@@ -350,7 +369,7 @@ export default function OfScreen() {
             </Pressable>
           )}
         </View>
-      )}
+      </Animated.View>
 
       {renderContent()}
 
