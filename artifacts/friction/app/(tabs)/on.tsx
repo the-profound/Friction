@@ -25,6 +25,7 @@ import type { Article } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
 import type { ArticleStatus } from "@/lib/policies";
 
+type TopTab = "memo" | "my_article";
 type FilterMode = "all" | "DRAFT" | "DIVIDING" | "CLOSING";
 
 const FILTER_OPTIONS: { key: FilterMode; label: string }[] = [
@@ -36,9 +37,7 @@ const FILTER_OPTIONS: { key: FilterMode; label: string }[] = [
 
 type ListItem =
   | { type: "memo"; article: Article }
-  | { type: "my_article"; article: Article }
-  | { type: "section_header"; title: string; count: number }
-  | { type: "my_article_empty" };
+  | { type: "my_article"; article: Article };
 
 function getScreenForStatus(status: ArticleStatus): string {
   switch (status) {
@@ -74,6 +73,7 @@ export default function OnScreen() {
   const queryClient = useQueryClient();
   const { userId } = useUser();
 
+  const [topTab, setTopTab] = useState<TopTab>("memo");
   const [filter, setFilter] = useState<FilterMode>("all");
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
@@ -131,19 +131,11 @@ export default function OnScreen() {
   }, [articles]);
 
   const listData = useMemo((): ListItem[] => {
-    const items: ListItem[] = displayedArticles.map((a) => ({ type: "memo", article: a }));
-    if (!selectionMode) {
-      items.push({ type: "section_header", title: "내 글", count: myLetterArticles.length });
-      if (myLetterArticles.length === 0) {
-        items.push({ type: "my_article_empty" });
-      } else {
-        for (const a of myLetterArticles) {
-          items.push({ type: "my_article", article: a });
-        }
-      }
+    if (topTab === "my_article") {
+      return myLetterArticles.map((a) => ({ type: "my_article", article: a }));
     }
-    return items;
-  }, [displayedArticles, myLetterArticles, selectionMode]);
+    return displayedArticles.map((a) => ({ type: "memo", article: a }));
+  }, [topTab, displayedArticles, myLetterArticles]);
 
   const closeOpenRow = useCallback(() => {
     if (openRowRef.current) {
@@ -151,6 +143,16 @@ export default function OnScreen() {
       openRowRef.current = null;
     }
   }, []);
+
+  const switchTopTab = useCallback((tab: TopTab) => {
+    closeOpenRow();
+    setTopTab(tab);
+    setFilter("all");
+    setSearchActive(false);
+    setSearchQuery("");
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  }, [closeOpenRow]);
 
   const enterSelectionMode = useCallback(() => {
     closeOpenRow();
@@ -284,28 +286,6 @@ export default function OnScreen() {
 
   const renderItem = useCallback(
     ({ item }: { item: ListItem }) => {
-      if (item.type === "section_header") {
-        return (
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionHeaderText}>{item.title}</Text>
-            {item.count > 0 && (
-              <View style={styles.sectionBadge}>
-                <Text style={styles.sectionBadgeText}>{item.count}</Text>
-              </View>
-            )}
-          </View>
-        );
-      }
-
-      if (item.type === "my_article_empty") {
-        return (
-          <View style={styles.myArticleEmpty}>
-            <Feather name="book-open" size={28} color={Colors.zinc300} />
-            <Text style={styles.myArticleEmptyText}>내보낸 글이 없어요</Text>
-          </View>
-        );
-      }
-
       if (item.type === "my_article") {
         return (
           <ArticleListItem
@@ -393,8 +373,6 @@ export default function OnScreen() {
   );
 
   const keyExtractor = useCallback((item: ListItem) => {
-    if (item.type === "section_header") return `header-${item.title}`;
-    if (item.type === "my_article_empty") return "my_article_empty";
     return `${item.type}-${item.article.id}`;
   }, []);
 
@@ -405,6 +383,21 @@ export default function OnScreen() {
 
   const selectedCount = selectedIds.size;
   const hasMemos = sortedArticles.length > 0;
+
+  const showMemoEmpty =
+    topTab === "memo" &&
+    !isLoading &&
+    searchQuery.trim().length === 0 &&
+    !hasMemos;
+
+  const showSearchEmpty =
+    topTab === "memo" &&
+    !isLoading &&
+    searchQuery.trim().length > 0 &&
+    displayedArticles.length === 0;
+
+  const showMyArticleEmpty =
+    topTab === "my_article" && !isLoading && myLetterArticles.length === 0;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -417,17 +410,40 @@ export default function OnScreen() {
       ) : (
         <PageHeader
           title="기록함"
-          showSearch
+          showSearch={topTab === "memo"}
           onSearchPress={handleSearchPress}
           searchActive={searchActive}
-          showKebab
+          showKebab={topTab === "memo"}
           onKebabPress={enterSelectionMode}
           showProfile
           onProfilePress={() => router.push("/mypage" as never)}
         />
       )}
 
-      {!selectionMode && searchActive && (
+      {!selectionMode && (
+        <View style={styles.topTabBar}>
+          <Pressable
+            style={styles.topTabItem}
+            onPress={() => switchTopTab("memo")}
+          >
+            <Text style={[styles.topTabText, topTab === "memo" && styles.topTabTextActive]}>
+              메모
+            </Text>
+            {topTab === "memo" && <View style={styles.topTabUnderline} />}
+          </Pressable>
+          <Pressable
+            style={styles.topTabItem}
+            onPress={() => switchTopTab("my_article")}
+          >
+            <Text style={[styles.topTabText, topTab === "my_article" && styles.topTabTextActive]}>
+              내 글
+            </Text>
+            {topTab === "my_article" && <View style={styles.topTabUnderline} />}
+          </Pressable>
+        </View>
+      )}
+
+      {!selectionMode && topTab === "memo" && searchActive && (
         <View style={styles.searchBar}>
           <Feather name="search" size={Sizing.searchBarIconSize} color={Colors.searchIcon} />
           <TextInput
@@ -447,7 +463,7 @@ export default function OnScreen() {
         </View>
       )}
 
-      {!selectionMode && (
+      {!selectionMode && topTab === "memo" && (
         <View style={styles.filterBar}>
           {FILTER_OPTIONS.map((opt) => (
             <Pressable
@@ -470,12 +486,12 @@ export default function OnScreen() {
         <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
           <Text style={styles.emptySubtitle}>불러오는 중...</Text>
         </View>
-      ) : searchQuery.trim().length > 0 && displayedArticles.length === 0 ? (
+      ) : showSearchEmpty ? (
         <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
           <Feather name="search" size={40} color={Colors.zinc300} />
           <Text style={styles.emptySubtitle}>검색 결과가 없습니다</Text>
         </View>
-      ) : !hasMemos && myLetterArticles.length === 0 ? (
+      ) : showMemoEmpty ? (
         <RefreshableEmpty
           refreshing={isRefetching}
           onRefresh={refetch}
@@ -490,6 +506,18 @@ export default function OnScreen() {
             <Feather name="edit-3" size={16} color={Colors.white} />
             <Text style={styles.createButtonText}>새 메모</Text>
           </Pressable>
+        </RefreshableEmpty>
+      ) : showMyArticleEmpty ? (
+        <RefreshableEmpty
+          refreshing={isRefetching}
+          onRefresh={refetch}
+          contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
+        >
+          <Feather name="book-open" size={40} color={Colors.zinc300} />
+          <Text style={styles.emptyTitle}>아직 내보낸 글이 없어요</Text>
+          <Text style={styles.emptySubtitle}>
+            메모를 완성해 편지로 내보내면{"\n"}여기에 모아볼 수 있어요
+          </Text>
         </RefreshableEmpty>
       ) : (
         <FlatList
@@ -506,16 +534,6 @@ export default function OnScreen() {
             { paddingBottom: selectionMode ? insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + 80 : navBottom + 64 },
           ]}
           onScrollBeginDrag={selectionMode ? undefined : closeOpenRow}
-          ListHeaderComponent={
-            !selectionMode && hasMemos ? (
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionHeaderText}>메모</Text>
-                <View style={styles.sectionBadge}>
-                  <Text style={styles.sectionBadgeText}>{sortedArticles.length}</Text>
-                </View>
-              </View>
-            ) : null
-          }
           ListFooterComponent={selectionMode ? undefined : listFooter}
           scrollEnabled={scrollEnabled}
         />
@@ -539,7 +557,7 @@ export default function OnScreen() {
         </View>
       )}
 
-      {!selectionMode && (
+      {!selectionMode && topTab === "memo" && (
         <Pressable
           style={[styles.fab, { bottom: insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + Spacing.xl }]}
           onPress={handleNewMemo}
@@ -579,6 +597,33 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.white,
+  },
+  topTabBar: {
+    flexDirection: "row",
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.zinc100,
+  },
+  topTabItem: {
+    paddingHorizontal: Spacing.screenPx,
+    paddingTop: 10,
+    paddingBottom: 0,
+    alignItems: "center",
+  },
+  topTabText: {
+    ...Typography.body,
+    fontSize: 15,
+    color: Colors.zinc400,
+    paddingBottom: 10,
+  },
+  topTabTextActive: {
+    ...Typography.bodySemiBold,
+    color: Colors.zinc900,
+  },
+  topTabUnderline: {
+    height: 2,
+    width: "100%",
+    backgroundColor: Colors.zinc900,
+    borderRadius: 1,
   },
   searchBar: {
     flexDirection: "row",
@@ -621,45 +666,6 @@ const styles = StyleSheet.create({
   filterChipTextActive: {
     color: Colors.white,
     fontWeight: "600",
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: Spacing.screenPx,
-    paddingVertical: 10,
-    paddingTop: 16,
-    backgroundColor: Colors.white,
-    gap: 6,
-  },
-  sectionHeaderText: {
-    ...Typography.bodySemiBold,
-    fontSize: 13,
-    color: Colors.zinc500,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  sectionBadge: {
-    backgroundColor: Colors.zinc100,
-    borderRadius: 10,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-  },
-  sectionBadgeText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: Colors.zinc500,
-  },
-  myArticleEmpty: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: Spacing.screenPx,
-    paddingVertical: 20,
-  },
-  myArticleEmptyText: {
-    ...Typography.body,
-    fontSize: 14,
-    color: Colors.zinc400,
   },
   listContent: {
     paddingBottom: 0,
