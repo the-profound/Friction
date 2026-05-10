@@ -193,7 +193,7 @@ export default function ArchiveScreen() {
       });
       myCollectionsQuery.refetch();
       setCreateSheetVisible(false);
-      router.push({ pathname: "/of-01-detail", params: { id: newMyCollection.id } });
+      router.push({ pathname: "/of-01-detail", params: { id: newMyCollection.id, name: newName.trim() } });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "모음 생성에 실패했습니다.";
       Alert.alert("오류", msg);
@@ -279,7 +279,7 @@ export default function ArchiveScreen() {
   const renderPersonalItem = useCallback(({ item }: { item: MyCollection }) => (
     <Pressable
       style={styles.collectionCard}
-      onPress={() => router.push({ pathname: "/of-01-detail", params: { id: item.id } })}
+      onPress={() => router.push({ pathname: "/of-01-detail", params: { id: item.id, name: item.name } })}
     >
       <View style={styles.collectionIcon}>
         <Feather name="folder" size={20} color={Colors.zinc500} />

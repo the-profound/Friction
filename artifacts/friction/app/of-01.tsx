@@ -53,7 +53,7 @@ export default function PersonalCollectionListScreen() {
       setNewDescription("");
       setNewIsPublic(false);
       collectionsQuery.refetch();
-      router.push({ pathname: "/of-01-detail", params: { id: newCollection.id } });
+      router.push({ pathname: "/of-01-detail", params: { id: newCollection.id, name: newName.trim() } });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "모음 생성에 실패했습니다.";
       Alert.alert("오류", msg);
@@ -83,7 +83,7 @@ export default function PersonalCollectionListScreen() {
   const renderItem = ({ item }: { item: MyCollection }) => (
     <Pressable
       style={styles.collectionItem}
-      onPress={() => router.push({ pathname: "/of-01-detail", params: { id: item.id } })}
+      onPress={() => router.push({ pathname: "/of-01-detail", params: { id: item.id, name: item.name } })}
       onLongPress={() => setDeleteTarget({ id: item.id, name: item.name })}
       delayLongPress={1000}
     >

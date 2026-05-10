@@ -35,7 +35,7 @@ export default function PersonalCollectionDetailScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { userId } = useUser();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, name: initialName } = useLocalSearchParams<{ id: string; name?: string }>();
 
   const [showPicker, setShowPicker] = useState(false);
   const [editSheetVisible, setEditSheetVisible] = useState(false);
@@ -487,7 +487,7 @@ export default function PersonalCollectionDetailScreen() {
               <Feather name="arrow-left" size={20} color={Colors.zinc600} />
             </Pressable>
             <Text style={styles.headerTitle} numberOfLines={1}>
-              {collection?.name ?? "폴더"}
+              {collection?.name ?? initialName ?? "폴더"}
             </Text>
             <View style={styles.headerRight}>
               <Pressable hitSlop={12} onPress={isArchive ? enterSelectionMode : handleMorePress}>
