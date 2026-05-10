@@ -18,6 +18,7 @@ import RefreshableEmpty from "@/components/RefreshableEmpty";
 import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
 import { Colors, Spacing, Typography } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
+import { useToast } from "@/contexts/ToastContext";
 import { formatDeliveryTime } from "@/lib/deliverySync";
 import {
   useListSendRecords,
@@ -31,6 +32,7 @@ export default function MyPageSendRecordsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { userId } = useUser();
+  const { showToast } = useToast();
 
   const sendRecordsQuery = useListSendRecords({ senderId: userId });
   const sendRecords = (sendRecordsQuery.data ?? []) as SendRecordWithDetails[];
@@ -118,23 +120,38 @@ export default function MyPageSendRecordsScreen() {
   const handleArchiveConfirm = useCallback(async () => {
     if (!archiveArticleId || !selectedCollectionId || isArchiving) return;
     setIsArchiving(true);
+    const collectionId = selectedCollectionId;
+    const collectionName =
+      sortedCollections.find((c) => c.id === collectionId)?.name ?? "폴더";
     try {
       await addToCollection.mutateAsync({
-        id: selectedCollectionId,
+        id: collectionId,
         data: { articleId: archiveArticleId },
       });
       await collectionsQuery.refetch();
       setArchiveSheetVisible(false);
       setArchiveArticleId(null);
       setSelectedCollectionId(null);
-      Alert.alert("완료", "폴더에 보관했어요");
+      showToast({
+        message: "보관했어요",
+        type: "success",
+        duration: 4000,
+        action: {
+          label: "폴더 보기",
+          onPress: () =>
+            router.push({
+              pathname: "/of-01-detail",
+              params: { id: collectionId, name: collectionName },
+            }),
+        },
+      });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "보관에 실패했습니다.";
       Alert.alert("오류", msg);
     } finally {
       setIsArchiving(false);
     }
-  }, [archiveArticleId, selectedCollectionId, isArchiving, addToCollection]);
+  }, [archiveArticleId, selectedCollectionId, isArchiving, addToCollection, sortedCollections, showToast, router]);
 
   const handleDeleteAction = useCallback(
     (recordId: string) => {
