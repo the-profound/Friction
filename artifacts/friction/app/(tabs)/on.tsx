@@ -294,6 +294,29 @@ export default function OnScreen() {
   const renderItem = useCallback(
     ({ item }: { item: ListItem }) => {
       if (item.type === "my_article") {
+        if (selectionMode) {
+          const isSelected = selectedIds.has(item.article.id);
+          return (
+            <Pressable
+              style={styles.selectionRow}
+              onPress={() => toggleSelect(item.article.id)}
+            >
+              <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+                {isSelected && <Feather name="check" size={14} color={Colors.white} />}
+              </View>
+              <View style={styles.selectionItemContent}>
+                <ArticleListItem
+                  title={item.article.title || "제목 없음"}
+                  preview={item.article.content?.substring(0, 60) || ""}
+                  rightMeta={formatRelativeDate(item.article.updatedAt)}
+                  timestamp={new Date(item.article.updatedAt)}
+                  onPress={() => toggleSelect(item.article.id)}
+                />
+              </View>
+            </Pressable>
+          );
+        }
+
         return (
           <ArticleListItem
             title={item.article.title || "제목 없음"}
@@ -423,7 +446,7 @@ export default function OnScreen() {
           showSearch
           onSearchPress={handleSearchPress}
           searchActive={searchActive}
-          showKebab={topTab === "memo"}
+          showKebab
           onKebabPress={enterSelectionMode}
           showProfile
           onProfilePress={() => router.push("/mypage" as never)}
@@ -592,7 +615,7 @@ export default function OnScreen() {
       <ConfirmModal
         visible={showBulkDeleteConfirm}
         title={`${selectedCount}개를 삭제할까요?`}
-        description="선택한 메모가 영구적으로 삭제됩니다."
+        description={topTab === "my_article" ? "선택한 글이 영구적으로 삭제됩니다." : "선택한 메모가 영구적으로 삭제됩니다."}
         confirmLabel="삭제"
         cancelLabel="취소"
         destructive
