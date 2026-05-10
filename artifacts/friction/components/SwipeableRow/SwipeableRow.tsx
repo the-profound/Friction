@@ -140,9 +140,10 @@ const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
           {resolvedActions.map((action, index) => (
             <ScalePressable
               key={index}
-              style={[styles.actionButton, { backgroundColor: action.color, width: BUTTON_WIDTH }]}
+              style={[styles.actionButton, { width: BUTTON_WIDTH }]}
               onPress={action.onPress}
             >
+              <View style={[StyleSheet.absoluteFillObject, { backgroundColor: action.color }]} />
               <Text style={styles.actionButtonText}>{action.label}</Text>
             </ScalePressable>
           ))}

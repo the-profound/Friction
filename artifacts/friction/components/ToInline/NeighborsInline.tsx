@@ -402,44 +402,41 @@ export function NeighborsInline({
   return (
     <View style={styles.container}>
       <View style={styles.sectionTabBar}>
-        <ScalePressable
-          style={[styles.sectionTab, activeSection === "neighbors" && styles.sectionTabActive]}
-          onPress={() => setActiveSection("neighbors")}
-        >
-          <Text
-            style={[
-              styles.sectionTabText,
-              activeSection === "neighbors" && styles.sectionTabTextActive,
-            ]}
-          >
-            이웃 ({neighbors.length})
-          </Text>
+        <ScalePressable onPress={() => setActiveSection("neighbors")}>
+          <View style={[styles.sectionTab, activeSection === "neighbors" && styles.sectionTabActive]}>
+            <Text
+              style={[
+                styles.sectionTabText,
+                activeSection === "neighbors" && styles.sectionTabTextActive,
+              ]}
+            >
+              이웃 ({neighbors.length})
+            </Text>
+          </View>
         </ScalePressable>
-        <ScalePressable
-          style={[styles.sectionTab, activeSection === "requests" && styles.sectionTabActive]}
-          onPress={() => setActiveSection("requests")}
-        >
-          <Text
-            style={[
-              styles.sectionTabText,
-              activeSection === "requests" && styles.sectionTabTextActive,
-            ]}
-          >
-            받은 요청 ({pendingRequests.length})
-          </Text>
+        <ScalePressable onPress={() => setActiveSection("requests")}>
+          <View style={[styles.sectionTab, activeSection === "requests" && styles.sectionTabActive]}>
+            <Text
+              style={[
+                styles.sectionTabText,
+                activeSection === "requests" && styles.sectionTabTextActive,
+              ]}
+            >
+              받은 요청 ({pendingRequests.length})
+            </Text>
+          </View>
         </ScalePressable>
-        <ScalePressable
-          style={[styles.sectionTab, activeSection === "sent" && styles.sectionTabActive]}
-          onPress={() => setActiveSection("sent")}
-        >
-          <Text
-            style={[
-              styles.sectionTabText,
-              activeSection === "sent" && styles.sectionTabTextActive,
-            ]}
-          >
-            보낸 요청 ({sentRequests.length})
-          </Text>
+        <ScalePressable onPress={() => setActiveSection("sent")}>
+          <View style={[styles.sectionTab, activeSection === "sent" && styles.sectionTabActive]}>
+            <Text
+              style={[
+                styles.sectionTabText,
+                activeSection === "sent" && styles.sectionTabTextActive,
+              ]}
+            >
+              보낸 요청 ({sentRequests.length})
+            </Text>
+          </View>
         </ScalePressable>
       </View>
 
@@ -453,8 +450,10 @@ export function NeighborsInline({
             <Feather name="alert-circle" size={40} color={Colors.zinc300} />
             <Text style={styles.emptyTitle}>불러오기 실패</Text>
             <Text style={styles.emptySubtitle}>네트워크를 확인하고 다시 시도해주세요</Text>
-            <ScalePressable style={styles.addButton} onPress={() => neighborsQuery.refetch()}>
-              <Text style={styles.addButtonText}>다시 시도</Text>
+            <ScalePressable onPress={() => neighborsQuery.refetch()}>
+              <View style={styles.addButton}>
+                <Text style={styles.addButtonText}>다시 시도</Text>
+              </View>
             </ScalePressable>
           </View>
         ) : neighbors.length === 0 ? (
@@ -466,8 +465,10 @@ export function NeighborsInline({
             <Feather name="users" size={40} color={Colors.zinc300} />
             <Text style={styles.emptyTitle}>아직 이웃이 없어요</Text>
             <Text style={styles.emptySubtitle}>닉네임으로 이웃을 찾아보세요</Text>
-            <ScalePressable style={styles.addButton} onPress={() => setAddSheetVisible(true)}>
-              <Text style={styles.addButtonText}>이웃 추가</Text>
+            <ScalePressable onPress={() => setAddSheetVisible(true)}>
+              <View style={styles.addButton}>
+                <Text style={styles.addButtonText}>이웃 추가</Text>
+              </View>
             </ScalePressable>
           </RefreshableEmpty>
         ) : (
@@ -496,8 +497,10 @@ export function NeighborsInline({
           <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
             <Feather name="alert-circle" size={40} color={Colors.zinc300} />
             <Text style={styles.emptyTitle}>불러오기 실패</Text>
-            <ScalePressable style={styles.addButton} onPress={() => requestsQuery.refetch()}>
-              <Text style={styles.addButtonText}>다시 시도</Text>
+            <ScalePressable onPress={() => requestsQuery.refetch()}>
+              <View style={styles.addButton}>
+                <Text style={styles.addButtonText}>다시 시도</Text>
+              </View>
             </ScalePressable>
           </View>
         ) : pendingRequests.length === 0 ? (
@@ -535,8 +538,10 @@ export function NeighborsInline({
         <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
           <Feather name="alert-circle" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>불러오기 실패</Text>
-          <ScalePressable style={styles.addButton} onPress={() => sentRequestsQuery.refetch()}>
-            <Text style={styles.addButtonText}>다시 시도</Text>
+          <ScalePressable onPress={() => sentRequestsQuery.refetch()}>
+            <View style={styles.addButton}>
+              <Text style={styles.addButtonText}>다시 시도</Text>
+            </View>
           </ScalePressable>
         </View>
       ) : sentRequests.length === 0 ? (

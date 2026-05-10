@@ -603,32 +603,36 @@ export default function OnScreen() {
 
       {!selectionMode && (
         <View style={styles.topTabBar}>
-          <ScalePressable
-            style={[styles.topTabItem, { paddingLeft: 16, paddingRight: 8 }]}
-            onPress={() => switchTopTab("memo")}
-          >
-            <Text
-              style={[styles.topTabText, topTab === "memo" && styles.topTabTextActive]}
-              allowFontScaling={false}
-              numberOfLines={1}
+          <View style={{ flex: 1 }}>
+            <ScalePressable
+              style={[styles.topTabItem, { paddingLeft: 16, paddingRight: 8 }]}
+              onPress={() => switchTopTab("memo")}
             >
-              메모
-            </Text>
-            {topTab === "memo" && <View style={styles.topTabUnderline} />}
-          </ScalePressable>
-          <ScalePressable
-            style={[styles.topTabItem, { paddingLeft: 8, paddingRight: 16 }]}
-            onPress={() => switchTopTab("my_article")}
-          >
-            <Text
-              style={[styles.topTabText, topTab === "my_article" && styles.topTabTextActive]}
-              allowFontScaling={false}
-              numberOfLines={1}
+              <Text
+                style={[styles.topTabText, topTab === "memo" && styles.topTabTextActive]}
+                allowFontScaling={false}
+                numberOfLines={1}
+              >
+                메모
+              </Text>
+              {topTab === "memo" && <View style={styles.topTabUnderline} />}
+            </ScalePressable>
+          </View>
+          <View style={{ flex: 1 }}>
+            <ScalePressable
+              style={[styles.topTabItem, { paddingLeft: 8, paddingRight: 16 }]}
+              onPress={() => switchTopTab("my_article")}
             >
-              편지
-            </Text>
-            {topTab === "my_article" && <View style={styles.topTabUnderline} />}
-          </ScalePressable>
+              <Text
+                style={[styles.topTabText, topTab === "my_article" && styles.topTabTextActive]}
+                allowFontScaling={false}
+                numberOfLines={1}
+              >
+                편지
+              </Text>
+              {topTab === "my_article" && <View style={styles.topTabUnderline} />}
+            </ScalePressable>
+          </View>
         </View>
       )}
 
@@ -650,15 +654,16 @@ export default function OnScreen() {
           {FILTER_OPTIONS.map((opt) => (
             <ScalePressable
               key={opt.key}
-              style={[styles.filterChip, filter === opt.key && styles.filterChipActive]}
               onPress={() => {
                 closeOpenRow();
                 setFilter(opt.key);
               }}
             >
-              <Text style={[styles.filterChipText, filter === opt.key && styles.filterChipTextActive]}>
-                {opt.label}
-              </Text>
+              <View style={[styles.filterChip, filter === opt.key && styles.filterChipActive]}>
+                <Text style={[styles.filterChipText, filter === opt.key && styles.filterChipTextActive]}>
+                  {opt.label}
+                </Text>
+              </View>
             </ScalePressable>
           ))}
         </ScrollView>
@@ -851,7 +856,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   topTabItem: {
-    flex: 1,
     paddingHorizontal: 0,
     paddingTop: 12,
     paddingBottom: 0,

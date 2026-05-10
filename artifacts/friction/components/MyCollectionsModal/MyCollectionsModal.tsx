@@ -117,21 +117,19 @@ export default function MyCollectionsModal({
       <View style={styles.container}>
         {onCreateAndSelect && (
           <View style={styles.tabBar}>
-            <ScalePressable
-              style={[styles.tab, activeTab === "list" && styles.tabActive]}
-              onPress={() => setActiveTab("list")}
-            >
-              <Text style={[styles.tabText, activeTab === "list" && styles.tabTextActive]}>
-                내 폴더
-              </Text>
+            <ScalePressable onPress={() => setActiveTab("list")}>
+              <View style={[styles.tab, activeTab === "list" && styles.tabActive]}>
+                <Text style={[styles.tabText, activeTab === "list" && styles.tabTextActive]}>
+                  내 폴더
+                </Text>
+              </View>
             </ScalePressable>
-            <ScalePressable
-              style={[styles.tab, activeTab === "create" && styles.tabActive]}
-              onPress={() => setActiveTab("create")}
-            >
-              <Text style={[styles.tabText, activeTab === "create" && styles.tabTextActive]}>
-                새 폴더에 추가
-              </Text>
+            <ScalePressable onPress={() => setActiveTab("create")}>
+              <View style={[styles.tab, activeTab === "create" && styles.tabActive]}>
+                <Text style={[styles.tabText, activeTab === "create" && styles.tabTextActive]}>
+                  새 폴더에 추가
+                </Text>
+              </View>
             </ScalePressable>
           </View>
         )}
@@ -177,15 +175,16 @@ export default function MyCollectionsModal({
               textAlignVertical="top"
             />
             <ScalePressable
-              style={[styles.confirmButton, (!newName.trim() || isCreating) && styles.confirmDisabled]}
               onPress={handleCreate}
               disabled={!newName.trim() || isCreating}
             >
-              {isCreating ? (
-                <ActivityIndicator size="small" color={Colors.white} />
-              ) : (
-                <Text style={styles.confirmButtonText}>만들기</Text>
-              )}
+              <View style={[styles.confirmButton, (!newName.trim() || isCreating) && styles.confirmDisabled]}>
+                {isCreating ? (
+                  <ActivityIndicator size="small" color={Colors.white} />
+                ) : (
+                  <Text style={styles.confirmButtonText}>만들기</Text>
+                )}
+              </View>
             </ScalePressable>
           </View>
         )}

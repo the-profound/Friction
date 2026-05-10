@@ -42,11 +42,7 @@ export default function WritingStateBar({
         return (
           <ScalePressable
             key={stage}
-            style={[
-              styles.tab,
-              isCurrent && styles.tabActive,
-              isIndirectlyReachable && styles.tabIndirect,
-            ]}
+            style={isIndirectlyReachable ? { opacity: 0.4 } : undefined}
             onPress={() => !isCurrent && !disabled && onPress(stage)}
             disabled={disabled}
             hitSlop={6}
@@ -54,16 +50,18 @@ export default function WritingStateBar({
             accessibilityLabel={`${label} 단계로 이동`}
             accessibilityState={{ selected: isCurrent, disabled: disabled }}
           >
-            <Text
-              style={[
-                styles.tabText,
-                isCurrent && styles.tabTextActive,
-                isDirectlyReachable && styles.tabTextReachable,
-                isIndirectlyReachable && styles.tabTextIndirect,
-              ]}
-            >
-              {label}
-            </Text>
+            <View style={[styles.tab, isCurrent && styles.tabActive]}>
+              <Text
+                style={[
+                  styles.tabText,
+                  isCurrent && styles.tabTextActive,
+                  isDirectlyReachable && styles.tabTextReachable,
+                  isIndirectlyReachable && styles.tabTextIndirect,
+                ]}
+              >
+                {label}
+              </Text>
+            </View>
           </ScalePressable>
         );
       })}

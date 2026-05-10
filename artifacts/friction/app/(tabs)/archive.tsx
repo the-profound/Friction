@@ -589,24 +589,28 @@ export default function ArchiveScreen() {
 
       {!selectionMode && (
         <View style={styles.subTabBar}>
-          <ScalePressable
-            style={[styles.subTabItem, { paddingLeft: 16, paddingRight: 8 }]}
-            onPress={() => { setActiveSubTab("personal"); setSearchQuery(""); setSearchActive(false); }}
-          >
-            <Text style={[styles.subTabText, activeSubTab === "personal" && styles.subTabTextActive]}>
-              폴더
-            </Text>
-            {activeSubTab === "personal" && <View style={styles.subTabUnderline} />}
-          </ScalePressable>
-          <ScalePressable
-            style={[styles.subTabItem, { paddingLeft: 8, paddingRight: 16 }]}
-            onPress={() => { setActiveSubTab("sentence"); setSearchQuery(""); setSearchActive(false); exitSelectionMode(); }}
-          >
-            <Text style={[styles.subTabText, activeSubTab === "sentence" && styles.subTabTextActive]}>
-              수집한 문장
-            </Text>
-            {activeSubTab === "sentence" && <View style={styles.subTabUnderline} />}
-          </ScalePressable>
+          <View style={{ flex: 1 }}>
+            <ScalePressable
+              style={[styles.subTabItem, { paddingLeft: 16, paddingRight: 8 }]}
+              onPress={() => { setActiveSubTab("personal"); setSearchQuery(""); setSearchActive(false); }}
+            >
+              <Text style={[styles.subTabText, activeSubTab === "personal" && styles.subTabTextActive]}>
+                폴더
+              </Text>
+              {activeSubTab === "personal" && <View style={styles.subTabUnderline} />}
+            </ScalePressable>
+          </View>
+          <View style={{ flex: 1 }}>
+            <ScalePressable
+              style={[styles.subTabItem, { paddingLeft: 8, paddingRight: 16 }]}
+              onPress={() => { setActiveSubTab("sentence"); setSearchQuery(""); setSearchActive(false); exitSelectionMode(); }}
+            >
+              <Text style={[styles.subTabText, activeSubTab === "sentence" && styles.subTabTextActive]}>
+                수집한 문장
+              </Text>
+              {activeSubTab === "sentence" && <View style={styles.subTabUnderline} />}
+            </ScalePressable>
+          </View>
         </View>
       )}
 
@@ -807,7 +811,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   subTabItem: {
-    flex: 1,
     paddingHorizontal: 0,
     paddingTop: 12,
     paddingBottom: 0,
@@ -824,8 +827,11 @@ const styles = StyleSheet.create({
     color: Colors.zinc900,
   },
   subTabUnderline: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
     height: 1.5,
-    alignSelf: "stretch",
     backgroundColor: Colors.zinc900,
     borderRadius: 1,
   },
