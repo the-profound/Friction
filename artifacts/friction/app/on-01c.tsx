@@ -37,9 +37,11 @@ import {
   useListMyCollections,
   useCreateMyCollection,
   TransitionArticleBodyTargetStatus,
+  getGetArticleQueryKey,
 } from "@workspace/api-client-react";
 import type { ArticleCover } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { invalidateArticleLists, invalidateArticleAndLists, invalidateArticleDetail, invalidateMyCollections } from "@/lib/queryInvalidation";
 import { useToast } from "@/contexts/ToastContext";
 
 export default function ClosingScreen() {
@@ -67,10 +69,10 @@ export default function ClosingScreen() {
   // refetch on every 분할→마감 navigation. Cold entries still refresh.
   useEffect(() => {
     if (!id) return;
-    const cached = queryClient.getQueryState([`/api/articles/${id}`]);
+    const cached = queryClient.getQueryState(getGetArticleQueryKey(id));
     const fresh = !!cached && Date.now() - cached.dataUpdatedAt < 30_000;
     if (!fresh) {
-      queryClient.invalidateQueries({ queryKey: [`/api/articles/${id}`] });
+      invalidateArticleDetail(queryClient, id);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -259,14 +261,14 @@ export default function ClosingScreen() {
         id: articleId,
         data: { myCollectionId: collectionId },
       });
-      queryClient.setQueryData([`/api/articles/${articleId}`], updated);
+      queryClient.setQueryData(getGetArticleQueryKey(articleId), updated);
       trackArticlePublished({
         articleId,
         charCount: pages.reduce((sum, p) => sum + p.length, 0),
         pageCount: pages.length,
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/my-collections"] });
+      invalidateArticleLists(queryClient);
+      invalidateMyCollections(queryClient);
       router.dismissAll();
       router.push({ pathname: "/of-01" });
     },
@@ -335,7 +337,7 @@ export default function ClosingScreen() {
     Keyboard.dismiss();
     await flushTitleSave();
     await flushCoverSave();
-    queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+    invalidateArticleLists(queryClient);
     isActionInProgressRef.current = false;
     router.replace("/(tabs)/on");
   }, [router, queryClient, flushCoverSave, flushTitleSave]);
@@ -360,7 +362,7 @@ export default function ClosingScreen() {
       // Optimistic navigation. updatedAt bump lets on-01b's freshness gate
       // accept this cache immediately, avoiding a needless refetch wait.
       queryClient.setQueryData(
-        [`/api/articles/${id}`],
+        getGetArticleQueryKey(id),
         (old: any) => (old ? { ...old, status: "DIVIDING" } : old),
         { updatedAt: Date.now() },
       );
@@ -379,12 +381,11 @@ export default function ClosingScreen() {
           data: { targetStatus: TransitionArticleBodyTargetStatus.DIVIDING },
         })
         .then(() => {
-          queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+          invalidateArticleLists(queryClient);
         })
         .catch(() => {
           showToast({ message: "상태 전환에 실패했어요. 새로고침해주세요.", type: "error" });
-          queryClient.invalidateQueries({ queryKey: [`/api/articles/${id}`] });
-          queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+          invalidateArticleAndLists(queryClient, id);
         });
     } catch (e: unknown) {
       isActionInProgressRef.current = false;

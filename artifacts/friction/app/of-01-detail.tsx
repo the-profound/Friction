@@ -23,8 +23,12 @@ import {
   useListMyCollections,
   useUpdateArticle,
   getListMyCollectionArticlesQueryKey,
-  getGetMyCollectionQueryKey,
 } from "@workspace/api-client-react";
+import {
+  invalidateMyCollections,
+  invalidateMyCollectionDetail,
+  invalidateArticleDetail,
+} from "@/lib/queryInvalidation";
 import type { MyCollectionArticleWithDetails, MyCollection } from "@workspace/api-client-react";
 import SourceArticlePickerSheet from "@/components/SourceArticlePickerSheet/SourceArticlePickerSheet";
 import { MyArticlesPickerBottomSheet } from "@/components/MyArticlesPickerBottomSheet/MyArticlesPickerBottomSheet";
@@ -145,8 +149,7 @@ export default function PersonalCollectionDetailScreen() {
         failCount++;
       }
     }
-    await queryClient.invalidateQueries({ queryKey: getListMyCollectionArticlesQueryKey(id) });
-    await queryClient.invalidateQueries({ queryKey: getGetMyCollectionQueryKey(id) });
+    await invalidateMyCollectionDetail(queryClient, id);
     setIsBulkDeleting(false);
     exitSelectionMode();
     if (failCount === 0) {
@@ -189,7 +192,7 @@ export default function PersonalCollectionDetailScreen() {
     try {
       await deleteCollection.mutateAsync({ id });
       setDeleteConfirmVisible(false);
-      queryClient.invalidateQueries({ queryKey: ["/api/my-collections"] });
+      invalidateMyCollections(queryClient);
       router.back();
       showToast({ message: "폴더를 삭제했어요.", type: "success" });
     } catch (e: unknown) {
@@ -208,8 +211,7 @@ export default function PersonalCollectionDetailScreen() {
         for (const articleId of articleIds) {
           await addArticle.mutateAsync({ id, data: { articleId } });
         }
-        await queryClient.invalidateQueries({ queryKey: getListMyCollectionArticlesQueryKey(id) });
-        await queryClient.invalidateQueries({ queryKey: getGetMyCollectionQueryKey(id) });
+        await invalidateMyCollectionDetail(queryClient, id);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "글 추가에 실패했습니다.";
         Alert.alert("오류", msg);
@@ -250,8 +252,7 @@ export default function PersonalCollectionDetailScreen() {
             failCount++;
           }
         }
-        await queryClient.invalidateQueries({ queryKey: getListMyCollectionArticlesQueryKey(id) });
-        await queryClient.invalidateQueries({ queryKey: getGetMyCollectionQueryKey(id) });
+        await invalidateMyCollectionDetail(queryClient, id);
         setIsBulkMoving(false);
         setIsBulkMoveMode(false);
         exitSelectionMode();
@@ -272,8 +273,7 @@ export default function PersonalCollectionDetailScreen() {
       try {
         await removeArticle.mutateAsync({ collectionId: id, articleId });
         await addArticle.mutateAsync({ id: targetCollectionId, data: { articleId } });
-        await queryClient.invalidateQueries({ queryKey: getListMyCollectionArticlesQueryKey(id) });
-        await queryClient.invalidateQueries({ queryKey: getGetMyCollectionQueryKey(id) });
+        await invalidateMyCollectionDetail(queryClient, id);
         Alert.alert("완료", "글을 이동했어요.");
       } catch {
         Alert.alert("오류", "글 이동에 실패했습니다.");
@@ -309,7 +309,7 @@ export default function PersonalCollectionDetailScreen() {
           data: { sourceArticleId: articleId } as any,
         });
         setLongPressSourceTitle(articleTitle);
-        queryClient.invalidateQueries({ queryKey: [`/api/articles/${longPressTargetArticle.articleId}`] });
+        invalidateArticleDetail(queryClient, longPressTargetArticle.articleId);
         if (id) {
           queryClient.invalidateQueries({ queryKey: getListMyCollectionArticlesQueryKey(id) });
         }
@@ -330,7 +330,7 @@ export default function PersonalCollectionDetailScreen() {
         data: { sourceArticleId: null } as any,
       });
       setLongPressSourceTitle(null);
-      queryClient.invalidateQueries({ queryKey: [`/api/articles/${longPressTargetArticle.articleId}`] });
+      invalidateArticleDetail(queryClient, longPressTargetArticle.articleId);
       if (id) {
         queryClient.invalidateQueries({ queryKey: getListMyCollectionArticlesQueryKey(id) });
       }

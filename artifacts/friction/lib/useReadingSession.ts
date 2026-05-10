@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useUpsertReadingRecord, useCreateUserArticleRead, useMarkInboxRead, useGetReadingRecord, useDeleteReadingRecord, getGetReadingRecordQueryKey, getListTeamArticlesQueryKey } from "@workspace/api-client-react";
+import { useUpsertReadingRecord, useCreateUserArticleRead, useMarkInboxRead, useGetReadingRecord, useDeleteReadingRecord, getGetReadingRecordQueryKey } from "@workspace/api-client-react";
+import { invalidateTeamArticles, patchInboxItemInCache } from "./queryInvalidation";
 import type { ReadingMode } from "./policies";
 import {
   createInitialSession,
@@ -194,12 +195,18 @@ export function useReadingSession({
       });
 
       if (inboxIdRef.current) {
-        await markInboxReadMutation.mutateAsync({ id: inboxIdRef.current });
-        queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+        const inboxId = inboxIdRef.current;
+        // Optimistically mark this inbox row as read so the inbox list 화면
+        // 으로 돌아갔을 때 다시 fetch 하느라 스피너가 뜨지 않는다.
+        patchInboxItemInCache(queryClient, inboxId, {
+          isRead: true,
+          openedAt: new Date().toISOString(),
+        });
+        await markInboxReadMutation.mutateAsync({ id: inboxId });
       }
 
       if (teamCollectionIdRef.current) {
-        queryClient.invalidateQueries({ queryKey: getListTeamArticlesQueryKey(teamCollectionIdRef.current) });
+        invalidateTeamArticles(queryClient, teamCollectionIdRef.current);
       }
 
       setSession((s) => ({ ...s, state: "COMPLETED_COMMITTED" as ReadingSessionState }));

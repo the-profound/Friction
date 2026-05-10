@@ -19,8 +19,10 @@ import {
   useTransitionArticleStatus,
   TransitionArticleBodyTargetStatus,
   ApiError,
+  getGetArticleQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { invalidateArticleLists, invalidateArticleDetail } from "@/lib/queryInvalidation";
 import { useUser } from "@/contexts/UserContext";
 import { useToast } from "@/contexts/ToastContext";
 import SourceArticlePickerSheet from "@/components/SourceArticlePickerSheet/SourceArticlePickerSheet";
@@ -94,10 +96,10 @@ export default function DraftScreen() {
   // entry (deep links, app resume) where the cache is genuinely stale.
   useEffect(() => {
     if (!id) return;
-    const cached = queryClient.getQueryState([`/api/articles/${id}`]);
+    const cached = queryClient.getQueryState(getGetArticleQueryKey(id));
     const fresh = !!cached && Date.now() - cached.dataUpdatedAt < 30_000;
     if (!fresh) {
-      queryClient.invalidateQueries({ queryKey: [`/api/articles/${id}`] });
+      invalidateArticleDetail(queryClient, id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -260,7 +262,7 @@ export default function DraftScreen() {
         });
         setSourceArticleId(articleId);
         setSourceArticleTitle(articleTitle);
-        queryClient.invalidateQueries({ queryKey: [`/api/articles/${id}`] });
+        invalidateArticleDetail(queryClient, id);
       } catch {
         Alert.alert("오류", "원글 연결에 실패했습니다.");
       }
@@ -277,7 +279,7 @@ export default function DraftScreen() {
       });
       setSourceArticleId(null);
       setSourceArticleTitle(null);
-      queryClient.invalidateQueries({ queryKey: [`/api/articles/${id}`] });
+      invalidateArticleDetail(queryClient, id);
     } catch {
       Alert.alert("오류", "원글 연결 해제에 실패했습니다.");
     }
@@ -335,7 +337,7 @@ export default function DraftScreen() {
     // immediately — without it, setQueryData leaves dataUpdatedAt at the last
     // network fetch time and the next screen blocks on a needless refetch.
     queryClient.setQueryData(
-      [`/api/articles/${id}`],
+      getGetArticleQueryKey(id),
       (old: unknown) => {
         if (!old || typeof old !== "object") return old;
         return { ...old, title: currentTitle, content, status: "DIVIDING" };
@@ -363,10 +365,10 @@ export default function DraftScreen() {
           console.warn("[on-01a] background status transition failed:", e);
         })
         .finally(() => {
-          queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+          invalidateArticleLists(queryClient);
         });
     } else {
-      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+      invalidateArticleLists(queryClient);
     }
   }, [flush, id, router, transitionStatus, queryClient, getEditorContent, markDirty, article, showToast]);
 
@@ -414,7 +416,7 @@ export default function DraftScreen() {
         } catch {
           Alert.alert("오류", "빈 메모 삭제에 실패했습니다.");
         }
-        queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+        invalidateArticleLists(queryClient);
       }
       isNavigatingRef.current = false;
       setIsNavigating(false);
@@ -430,7 +432,7 @@ export default function DraftScreen() {
       Alert.alert("오류", "저장에 실패했습니다. 내용을 확인해주세요.");
       return;
     }
-    queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+    invalidateArticleLists(queryClient);
     isNavigatingRef.current = false;
     setIsNavigating(false);
     if (source === "quote") {

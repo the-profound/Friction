@@ -9,6 +9,7 @@ import ArticleListItem from "@/components/ArticleListItem/ArticleListItem";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
 import { useListArticles, useDeleteArticle, useCreateArticle } from "@workspace/api-client-react";
+import { invalidateArticleLists } from "@/lib/queryInvalidation";
 import type { Article, ArticleCover } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
 import type { ArticleStatus } from "@/lib/policies";
@@ -95,7 +96,7 @@ export default function MemoCollectionScreen() {
     closeOpenRow();
     try {
       await deleteArticle.mutateAsync({ id: articleId });
-      await queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+      await invalidateArticleLists(queryClient);
       Alert.alert("완료", "삭제했어요.");
     } catch {
       Alert.alert("오류", "삭제에 실패했습니다.");

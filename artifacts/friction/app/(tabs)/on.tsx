@@ -30,6 +30,7 @@ import {
   useListMyCollections,
   useAddArticleToMyCollection,
 } from "@workspace/api-client-react";
+import { invalidateArticleLists } from "@/lib/queryInvalidation";
 import type { Article, MyCollection } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
 import { useToast } from "@/contexts/ToastContext";
@@ -240,7 +241,7 @@ export default function OnScreen() {
       const article = await createArticle.mutateAsync({
         data: { authorId: userId, title: "" },
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+      invalidateArticleLists(queryClient);
       router.push({ pathname: "/on-01a", params: { id: article.id } });
     } catch {
       Alert.alert("오류", "메모 생성에 실패했습니다.");
@@ -344,7 +345,7 @@ export default function OnScreen() {
     closeOpenRow();
     try {
       await deleteArticle.mutateAsync({ id });
-      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+      invalidateArticleLists(queryClient);
       Alert.alert("완료", "삭제했어요.");
     } catch {
       Alert.alert("오류", "삭제에 실패했습니다.");
@@ -377,7 +378,7 @@ export default function OnScreen() {
         failCount++;
       }
     }
-    await queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+    await invalidateArticleLists(queryClient);
     setIsBulkDeleting(false);
     exitSelectionMode();
     if (failCount === 0) {

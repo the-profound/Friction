@@ -68,6 +68,7 @@ import {
   getListInboxQueryKey,
   getListStoredSentencesQueryKey,
 } from "@workspace/api-client-react";
+import { invalidateInbox, invalidateMyCollections, invalidateRecentCollection } from "@/lib/queryInvalidation";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import { useUser } from "@/contexts/UserContext";
 import { useActiveReading } from "@/contexts/ActiveReadingContext";
@@ -341,10 +342,8 @@ export default function ReadScreen() {
         articleId,
         params: { recipientId: userId, ...(inboxId ? { exceptInboxId: inboxId } : {}) },
       });
-      queryClient.invalidateQueries({
-        queryKey: getListInboxQueryKey({ recipientId: userId, isRead: false } as Parameters<typeof getListInboxQueryKey>[0]),
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+      // unread 필터로 분기된 캐시 + 전체 inbox 캐시 모두 한 번에 무효화.
+      invalidateInbox(queryClient);
     } catch (e) {
       console.warn("[markInboxOthersRead] failed (non-fatal):", e);
     } finally {
@@ -810,15 +809,13 @@ export default function ReadScreen() {
             id: targetCollectionId,
             data: { articleId },
           });
-          queryClient.invalidateQueries({ queryKey: ["/api/my-collections"] });
+          invalidateMyCollections(queryClient);
           try {
             await updateRecentCollection.mutateAsync({
               id: userId,
               data: { collectionId: targetCollectionId },
             });
-            queryClient.invalidateQueries({
-              queryKey: getGetUserRecentCollectionQueryKey(userId),
-            });
+            invalidateRecentCollection(queryClient, userId);
           } catch (e) {
             console.warn("[handleCommitAndSave] recent collection update failed (non-fatal):", e);
           }
@@ -829,7 +826,7 @@ export default function ReadScreen() {
 
       setCompletionSheetVisible(false);
       trackArticleAction({ articleId, action: "save", msSinceComplete: Date.now() - completionTimeRef.current });
-      queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+      invalidateInbox(queryClient);
       clearActiveSession();
       await readingMemo.cleanup();
       router.back();
@@ -849,7 +846,7 @@ export default function ReadScreen() {
         trackArticleAction({ articleId, action: "skip", msSinceComplete: Date.now() - completionTimeRef.current });
         if (!isListEntry) {
           // 수신함 경로: 읽기 완료 후 수신함 목록 갱신
-          queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+          invalidateInbox(queryClient);
         }
         clearActiveSession();
         await readingMemo.cleanup();
@@ -1422,11 +1419,11 @@ export default function ReadScreen() {
                         data: { ownerId: userId, name: newCollectionName.trim(), description: newCollectionDesc.trim() || undefined },
                       });
                       setSelectedCollectionId(newCol.id);
-                      queryClient.invalidateQueries({ queryKey: ["/api/my-collections"] });
+                      invalidateMyCollections(queryClient);
                       updateRecentCollection.mutate(
                         { id: userId, data: { collectionId: newCol.id } },
                         {
-                          onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetUserRecentCollectionQueryKey(userId) }),
+                          onSuccess: () => invalidateRecentCollection(queryClient, userId),
                         },
                       );
                       setNewCollectionName("");

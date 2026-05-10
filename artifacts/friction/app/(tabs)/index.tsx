@@ -26,6 +26,7 @@ import DotIndicator from "@/components/DotIndicator/DotIndicator";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import { useQueryClient } from "@tanstack/react-query";
 import { useListInbox, useMarkInboxOpened, useDeleteInboxItem, getListInboxQueryKey } from "@workspace/api-client-react";
+import { patchInboxItemInCache, removeInboxItemFromCache } from "@/lib/queryInvalidation";
 import type { InboxItem } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
 import { isQueryStale } from "@/lib/useScreenFocused";
@@ -387,9 +388,13 @@ export default function InboxScreen() {
 
   const navigateToReply = useCallback(async (item: InboxItem) => {
     if (!item.openedAt) {
+      // 낙관적 업데이트: openedAt 만 즉시 캐시에 반영하고, invalidate 로 인한
+      // 재요청+로딩 깜빡임을 생략한다. 서버 호출이 실패해도 다음 focus 시
+      // refetch 가 다시 정상화한다.
+      const openedAt = new Date().toISOString();
+      patchInboxItemInCache(queryClient, item.id, { openedAt });
       try {
         await markOpened.mutateAsync({ id: item.id });
-        queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
       } catch (e: unknown) {
         console.warn("Failed to mark inbox opened:", e instanceof Error ? e.message : e);
       }
@@ -458,8 +463,9 @@ export default function InboxScreen() {
     setTapItem(null);
     try {
       await deleteInboxItem.mutateAsync({ id: item.id });
-      queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
-Alert.alert("완료", "수신함에서 삭제되었습니다.");
+      // 낙관적 제거 — 캐시에서 곧장 빼서 목록이 다시 fetch 되며 깜빡이지 않게 한다.
+      removeInboxItemFromCache(queryClient, item.id);
+      Alert.alert("완료", "수신함에서 삭제되었습니다.");
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";
       Alert.alert("오류", msg);

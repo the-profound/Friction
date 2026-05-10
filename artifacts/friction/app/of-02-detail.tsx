@@ -32,6 +32,7 @@ import {
   getGetTeamCollectionQueryKey,
   getListInboxQueryKey,
 } from "@workspace/api-client-react";
+import { invalidateTeamCollections } from "@/lib/queryInvalidation";
 import type {
   TeamMemberWithUser,
   TeamCollectionArticleWithDetails,
@@ -299,7 +300,7 @@ export default function TeamCollectionDetailScreen() {
     if (!id || deleteCollection.isPending) return;
     try {
       await deleteCollection.mutateAsync({ id });
-      queryClient.invalidateQueries({ queryKey: ["/api/team-collections"] });
+      invalidateTeamCollections(queryClient);
       router.back();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";

@@ -46,8 +46,10 @@ import {
   useTransitionArticleStatus,
   TransitionArticleBodyTargetStatus,
   ApiError,
+  getGetArticleQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { invalidateArticleLists, invalidateArticleAndLists, invalidateArticleDetail } from "@/lib/queryInvalidation";
 import { useToast } from "@/contexts/ToastContext";
 import WebViewMeasureLayer from "@/components/WebViewMeasureLayer";
 import type {
@@ -150,10 +152,10 @@ export default function DividingScreen() {
   // refresh because dataUpdatedAt is 0 (no cache) or much older.
   useEffect(() => {
     if (!id) return;
-    const cached = queryClient.getQueryState([`/api/articles/${id}`]);
+    const cached = queryClient.getQueryState(getGetArticleQueryKey(id));
     const fresh = !!cached && Date.now() - cached.dataUpdatedAt < 30_000;
     if (!fresh) {
-      queryClient.invalidateQueries({ queryKey: [`/api/articles/${id}`] });
+      invalidateArticleDetail(queryClient, id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -770,7 +772,7 @@ export default function DividingScreen() {
     // stale-state flash. updatedAt bump lets on-01c's freshness gate accept
     // this cache without blocking on a refetch.
     queryClient.setQueryData(
-      [`/api/articles/${id}`],
+      getGetArticleQueryKey(id),
       (old: unknown) => {
         if (!old || typeof old !== "object") return old;
         return {
@@ -824,7 +826,7 @@ export default function DividingScreen() {
         : Promise.resolve();
 
     Promise.all([layoutWidthSave, statusChange]).finally(() => {
-      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+      invalidateArticleLists(queryClient);
     });
   }, [getEditorContent, markDirty, flush, hasRedWarnings, id, router, updateArticle, transitionStatus, queryClient, containerWidth, article, showToast]);
 
@@ -851,7 +853,7 @@ export default function DividingScreen() {
       Alert.alert("오류", "저장에 실패했습니다. 다시 시도해주세요.");
       return;
     }
-    queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+    invalidateArticleLists(queryClient);
     isNavigatingRef.current = false;
     setIsNavigating(false);
     router.replace("/(tabs)/on");
@@ -886,7 +888,7 @@ export default function DividingScreen() {
       return;
     }
     queryClient.setQueryData(
-      [`/api/articles/${id}`],
+      getGetArticleQueryKey(id),
       (old: any) => {
         if (!old || typeof old !== "object") return old;
         return { ...old, title: titleRef.current, content: cur, status: "DRAFT" };
@@ -902,12 +904,10 @@ export default function DividingScreen() {
       id,
       data: { targetStatus: TransitionArticleBodyTargetStatus.DRAFT },
     }).then(() => {
-      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
-      queryClient.invalidateQueries({ queryKey: [`/api/articles/${id}`] });
+      invalidateArticleAndLists(queryClient, id);
     }).catch(() => {
       showToast({ message: "상태 전환에 실패했어요. 새로고침해주세요.", type: "error" });
-      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
-      queryClient.invalidateQueries({ queryKey: [`/api/articles/${id}`] });
+      invalidateArticleAndLists(queryClient, id);
     });
   }, [id, getEditorContent, markDirty, flush, transitionStatus, queryClient, router, showToast]);
 
