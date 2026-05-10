@@ -20,7 +20,7 @@ import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/Swip
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import RefreshableEmpty from "@/components/RefreshableEmpty";
 import { useQueryClient } from "@tanstack/react-query";
-import { useListArticles, useCreateArticle, useDeleteArticle, getGetArticleQueryKey, useGetUser } from "@workspace/api-client-react";
+import { useListArticles, useCreateArticle, useDeleteArticle, getGetArticleQueryKey } from "@workspace/api-client-react";
 import type { Article } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
 import type { ArticleStatus } from "@/lib/policies";
@@ -88,9 +88,6 @@ export default function OnScreen() {
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const openRowRef = useRef<SwipeableRowHandle | null>(null);
   const rowRefs = useRef<Map<string, SwipeableRowHandle>>(new Map());
-
-  const { data: userProfile } = useGetUser(userId);
-  const userInitial = userProfile?.nickname ? userProfile.nickname.charAt(0).toUpperCase() : undefined;
 
   const { data: articles, isLoading, refetch, isRefetching } = useListArticles({
     authorId: userId,
@@ -427,7 +424,6 @@ export default function OnScreen() {
           onKebabPress={enterSelectionMode}
           showProfile
           onProfilePress={() => router.push("/mypage" as never)}
-          userInitial={userInitial}
         />
       )}
 

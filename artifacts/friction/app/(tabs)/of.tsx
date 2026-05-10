@@ -25,7 +25,6 @@ import {
   useAddTeamMember,
   getTeamCollection,
   getListTeamCollectionsQueryKey,
-  useGetUser,
 } from "@workspace/api-client-react";
 import type { TeamCollection, TeamCollectionWithRole } from "@workspace/api-client-react";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
@@ -61,9 +60,6 @@ export default function OfScreen() {
   const [isJoinLoading, setIsJoinLoading] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [groupFilter, setGroupFilter] = useState<GroupFilter>("all");
-
-  const { data: userProfile } = useGetUser(userId);
-  const userInitial = userProfile?.nickname ? userProfile.nickname.charAt(0).toUpperCase() : undefined;
 
   const teamCollectionsQuery = useListTeamCollections({ userId });
   const createTeamCollection = useCreateTeamCollection();
@@ -303,7 +299,6 @@ export default function OfScreen() {
         searchActive={searchActive}
         showProfile
         onProfilePress={() => router.push("/mypage" as never)}
-        userInitial={userInitial}
       />
 
       {!searchActive && (

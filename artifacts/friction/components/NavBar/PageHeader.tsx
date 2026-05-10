@@ -20,7 +20,6 @@ interface PageHeaderProps {
   addDisabled?: boolean;
   rightText?: string;
   onRightTextPress?: () => void;
-  userInitial?: string;
 }
 
 export function PageHeader({
@@ -37,7 +36,6 @@ export function PageHeader({
   addDisabled = false,
   rightText,
   onRightTextPress,
-  userInitial,
 }: PageHeaderProps) {
   const insets = useSafeAreaInsets();
   const { headerScrolled } = useNavigation();
@@ -78,11 +76,7 @@ export function PageHeader({
             accessibilityRole="button"
             accessibilityLabel="마이페이지"
           >
-            {userInitial ? (
-              <Text style={styles.profileInitial}>{userInitial}</Text>
-            ) : (
-              <Feather name="user" size={16} color={Colors.zinc700} />
-            )}
+            <Feather name="settings" size={16} color={Colors.zinc700} />
           </Pressable>
         )}
       </View>
@@ -139,11 +133,5 @@ const styles = StyleSheet.create({
     borderColor: Colors.zinc200,
     alignItems: "center",
     justifyContent: "center",
-  },
-  profileInitial: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: Colors.zinc600,
-    lineHeight: 17,
   },
 });
