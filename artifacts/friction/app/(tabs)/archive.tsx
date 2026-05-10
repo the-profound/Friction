@@ -603,7 +603,7 @@ export default function ArchiveScreen() {
       {!selectionMode && (
         <Animated.View
           style={{
-            height: searchAnim.interpolate({ inputRange: [0, 1], outputRange: [0, Sizing.searchBarHeight + 8] }),
+            height: searchAnim.interpolate({ inputRange: [0, 1], outputRange: [0, Sizing.searchBarHeight + 16] }),
             opacity: searchAnim,
             overflow: "hidden",
           }}
@@ -840,6 +840,7 @@ const styles = StyleSheet.create({
     height: Sizing.searchBarHeight,
     paddingHorizontal: 16,
     gap: 10,
+    marginTop: 8,
     marginBottom: 8,
   },
   searchInput: {
