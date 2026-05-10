@@ -11,6 +11,8 @@ export interface TeamCollection {
   name: string;
   description?: string | null;
   creatorId: string;
+  /** Nickname of the collection creator (joined from users table). May be null if user is missing. */
+  creatorNickname?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

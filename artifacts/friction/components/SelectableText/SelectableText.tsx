@@ -20,7 +20,7 @@ interface CaretPositionResult {
   offset: number;
 }
 
-interface DocumentWithCaretAPIs extends Document {
+interface DocumentWithCaretAPIs extends Omit<Document, "caretPositionFromPoint" | "caretRangeFromPoint"> {
   caretPositionFromPoint?: (x: number, y: number) => CaretPositionResult | null;
   caretRangeFromPoint?: (x: number, y: number) => Range | null;
 }

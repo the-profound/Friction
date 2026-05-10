@@ -309,6 +309,8 @@ export interface TeamCollection {
   name: string;
   description?: string | null;
   creatorId: string;
+  /** Nickname of the collection creator (joined from users table). May be null if user is missing. */
+  creatorNickname?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -403,6 +405,14 @@ export interface TeamCollectionArticleWithDetails {
   isRead?: boolean;
   /** Timestamp at which the requesting user first completed this article, or null if never. Only present when the listTeamArticles request includes userId. */
   completedAt?: string | null;
+  /** Shortcut to article.sourceArticleId for threading. Null when the article has no source. */
+  sourceArticleId?: string | null;
+  /** True when the sourceArticleId belongs to another article already in this collection (used for reply threading). */
+  parentInThisCollection?: boolean;
+  /** True when the underlying article has been soft-deleted. The row remains so reply threads stay intact. */
+  isDeletedPlaceholder?: boolean;
+  /** The inbox visibleAt of the requesting user for this article. Null when no requester userId is provided or when there is no inbox row. */
+  visibleAt?: string | null;
 }
 
 export interface AddTeamMemberBody {

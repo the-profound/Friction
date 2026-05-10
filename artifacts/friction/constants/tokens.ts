@@ -255,6 +255,8 @@ export const TabConfig = {
   ],
   toSubTabs: [
     { key: "send" as const, label: "보내기", icon: "truck" as const },
+    { key: "history" as const, label: "보낸 기록", icon: "clock" as const },
+    { key: "neighbors" as const, label: "이웃", icon: "users" as const },
   ],
 } as const;
 

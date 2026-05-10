@@ -1216,6 +1216,12 @@ export const ListStoredSentencesResponseItem = zod.object({
   text: zod.string(),
   position: zod.object({}).passthrough().nullish(),
   isFavorite: zod.boolean(),
+  favoritedAt: zod
+    .date()
+    .nullable()
+    .describe(
+      "Timestamp when the sentence was last marked as favorite. Null if not favorited.",
+    ),
   createdAt: zod.date(),
   articleTitle: zod
     .string()
@@ -1253,6 +1259,12 @@ export const GetStoredSentenceResponse = zod.object({
   text: zod.string(),
   position: zod.object({}).passthrough().nullish(),
   isFavorite: zod.boolean(),
+  favoritedAt: zod
+    .date()
+    .nullable()
+    .describe(
+      "Timestamp when the sentence was last marked as favorite. Null if not favorited.",
+    ),
   createdAt: zod.date(),
   articleTitle: zod
     .string()
@@ -1287,6 +1299,12 @@ export const ToggleStoredSentenceFavoriteResponse = zod.object({
   text: zod.string(),
   position: zod.object({}).passthrough().nullish(),
   isFavorite: zod.boolean(),
+  favoritedAt: zod
+    .date()
+    .nullable()
+    .describe(
+      "Timestamp when the sentence was last marked as favorite. Null if not favorited.",
+    ),
   createdAt: zod.date(),
   articleTitle: zod
     .string()
@@ -1440,6 +1458,12 @@ export const GetTeamCollectionResponse = zod.object({
   name: zod.string(),
   description: zod.string().nullish(),
   creatorId: zod.string().uuid(),
+  creatorNickname: zod
+    .string()
+    .nullish()
+    .describe(
+      "Nickname of the collection creator (joined from users table). May be null if user is missing.",
+    ),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -1463,6 +1487,12 @@ export const UpdateTeamCollectionResponse = zod.object({
   name: zod.string(),
   description: zod.string().nullish(),
   creatorId: zod.string().uuid(),
+  creatorNickname: zod
+    .string()
+    .nullish()
+    .describe(
+      "Nickname of the collection creator (joined from users table). May be null if user is missing.",
+    ),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -1610,6 +1640,31 @@ export const ListTeamArticlesResponseItem = zod.object({
     .nullish()
     .describe(
       "Timestamp at which the requesting user first completed this article, or null if never. Only present when the listTeamArticles request includes userId.",
+    ),
+  sourceArticleId: zod
+    .string()
+    .uuid()
+    .nullish()
+    .describe(
+      "Shortcut to article.sourceArticleId for threading. Null when the article has no source.",
+    ),
+  parentInThisCollection: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when the sourceArticleId belongs to another article already in this collection (used for reply threading).",
+    ),
+  isDeletedPlaceholder: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when the underlying article has been soft-deleted. The row remains so reply threads stay intact.",
+    ),
+  visibleAt: zod
+    .date()
+    .nullish()
+    .describe(
+      "The inbox visibleAt of the requesting user for this article. Null when no requester userId is provided or when there is no inbox row.",
     ),
 });
 export const ListTeamArticlesResponse = zod.array(ListTeamArticlesResponseItem);

@@ -111,7 +111,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
       isAuthed &&
       Platform.OS !== "web" &&
       segments[0] === "(tabs)" &&
-      (segments[1] == null || segments[1] === "index") &&
+      (segments[1] == null || (segments[1] as string) === "index") &&
       !hasRedirectedRef.current
     ) {
       hasRedirectedRef.current = true;
@@ -249,7 +249,7 @@ export default function RootLayout() {
   if (!fontsLoaded && !fontError) return null;
 
   return (
-    <PostHogProvider client={posthog} autocapture>
+    <PostHogProvider client={posthog ?? undefined} autocapture>
       <SafeAreaProvider>
         <ErrorBoundary>
           <QueryClientProvider client={queryClient}>

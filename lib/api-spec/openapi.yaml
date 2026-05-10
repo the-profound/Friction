@@ -2147,6 +2147,10 @@ components:
         creatorId:
           type: string
           format: uuid
+        creatorNickname:
+          type: string
+          nullable: true
+          description: Nickname of the collection creator (joined from users table). May be null if user is missing.
         createdAt:
           type: string
           format: date-time
@@ -2298,6 +2302,22 @@ components:
           format: date-time
           nullable: true
           description: Timestamp at which the requesting user first completed this article, or null if never. Only present when the listTeamArticles request includes userId.
+        sourceArticleId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Shortcut to article.sourceArticleId for threading. Null when the article has no source.
+        parentInThisCollection:
+          type: boolean
+          description: True when the sourceArticleId belongs to another article already in this collection (used for reply threading).
+        isDeletedPlaceholder:
+          type: boolean
+          description: True when the underlying article has been soft-deleted. The row remains so reply threads stay intact.
+        visibleAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: The inbox visibleAt of the requesting user for this article. Null when no requester userId is provided or when there is no inbox row.
       required: [id, teamCollectionId, articleId, addedBy, addedAt]
 
     AddTeamMemberBody:

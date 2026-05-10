@@ -81,7 +81,7 @@ export default function DraftScreen() {
   const [pickerVisible, setPickerVisible] = useState(false);
 
   const sourceArticleQuery = useGetArticle(sourceArticleId ?? "", {
-    query: { enabled: !!sourceArticleId },
+    query: { queryKey: getGetArticleQueryKey(sourceArticleId ?? ""), enabled: !!sourceArticleId },
   });
 
   useEffect(() => {

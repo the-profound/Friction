@@ -11,7 +11,16 @@ import ScalePressable from "@/components/shared/ScalePressable";
 import { Feather } from "@expo/vector-icons";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
-import { useListArticles, useListInbox, useGetUser, useGetArticle } from "@workspace/api-client-react";
+import {
+  useListArticles,
+  useListInbox,
+  useGetUser,
+  useGetArticle,
+  getGetUserQueryKey,
+  getGetArticleQueryKey,
+  getListInboxQueryKey,
+  getListArticlesQueryKey,
+} from "@workspace/api-client-react";
 import { LIST_PERF_PRESET } from "@/lib/listPerf";
 import type { Article, InboxItem } from "@workspace/api-client-react";
 
@@ -54,32 +63,37 @@ export default function SourceArticlePickerSheet({
   }, [searchQuery]);
 
   const userQuery = useGetUser(userId, {
-    query: { enabled: visible && activeTab === "myArticles" },
+    query: { queryKey: getGetUserQueryKey(userId), enabled: visible && activeTab === "myArticles" },
   });
   const userNickname = userQuery.data?.nickname ?? userQuery.data?.email ?? "나";
 
   // 호출부가 제목을 모를 때(예: 초기 진입) 현재 연결된 원글 제목을 직접 조회한다.
   const currentSourceArticleQuery = useGetArticle(currentSourceArticleId ?? "", {
-    query: { enabled: visible && !!currentSourceArticleId && !currentSourceArticleTitle },
+    query: {
+      queryKey: getGetArticleQueryKey(currentSourceArticleId ?? ""),
+      enabled: visible && !!currentSourceArticleId && !currentSourceArticleTitle,
+    },
   });
   const resolvedCurrentTitle =
     currentSourceArticleTitle ?? currentSourceArticleQuery.data?.title ?? null;
 
+  const inboxParams = {
+    recipientId: userId,
+    ...(debouncedQuery ? { titleQuery: debouncedQuery } : {}),
+  };
   const inboxQuery = useListInbox(
-    {
-      recipientId: userId,
-      ...(debouncedQuery ? { titleQuery: debouncedQuery } : {}),
-    },
-    { query: { enabled: visible && activeTab === "inbox" } },
+    inboxParams,
+    { query: { queryKey: getListInboxQueryKey(inboxParams), enabled: visible && activeTab === "inbox" } },
   );
 
+  const myArticlesParams = {
+    authorId: userId,
+    status: "LETTER" as const,
+    ...(debouncedQuery ? { titleQuery: debouncedQuery } : {}),
+  };
   const myArticlesQuery = useListArticles(
-    {
-      authorId: userId,
-      status: "LETTER",
-      ...(debouncedQuery ? { titleQuery: debouncedQuery } : {}),
-    },
-    { query: { enabled: visible && activeTab === "myArticles" } },
+    myArticlesParams,
+    { query: { queryKey: getListArticlesQueryKey(myArticlesParams), enabled: visible && activeTab === "myArticles" } },
   );
 
   const handleSelect = useCallback(

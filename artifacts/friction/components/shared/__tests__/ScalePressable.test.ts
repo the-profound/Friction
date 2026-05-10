@@ -69,7 +69,7 @@ describe("ScalePressable.extractOuterStyle", () => {
   });
 
   it("flattens style arrays before extraction (NavBar tabItem pattern)", () => {
-    const tabItemStyle = { alignItems: "center", justifyContent: "center", gap: 2 };
+    const tabItemStyle = { alignItems: "center" as const, justifyContent: "center" as const, gap: 2 };
     const out = extractOuterStyle([tabItemStyle, { flex: 1 }]);
     expect(out).toEqual({ flex: 1 });
   });

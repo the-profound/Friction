@@ -10,7 +10,7 @@ export let posthog: PostHog | null = null;
 if (token) {
   posthog = new PostHog(token, {
     host,
-    captureNativeAppLifecycleEvents: true,
+    captureAppLifecycleEvents: true,
   });
 } else if (__DEV__) {
   console.warn("[PostHog] EXPO_PUBLIC_POSTHOG_TOKEN is not set. Analytics disabled.");

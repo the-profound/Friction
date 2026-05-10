@@ -137,6 +137,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: Platform.OS === "web",
   },
   global: {
-    fetch: (...args: Parameters<typeof fetch>) => fetch(...args),
+    fetch: ((...args: Parameters<typeof fetch>) => fetch(...args)) as typeof fetch,
   },
 });
