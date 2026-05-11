@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Keyboard, StyleSheet, Text, TouchableWithoutFeedback, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ScalePressable from "@/components/shared/ScalePressable";
 
@@ -48,80 +48,82 @@ export function PageHeader({
   const { headerScrolled } = useNavigation();
 
   return (
-    <View style={[styles.container, { paddingTop: 50 }, headerScrolled && Shadows.headerScrolled]}>
-      <Text style={styles.title}>{title}</Text>
-      <View style={styles.actions}>
-        {rightText && (
-          <ScalePressable onPress={onRightTextPress} hitSlop={8} style={styles.rightTextButton}>
-            <Text style={styles.rightText}>{rightText}</Text>
-          </ScalePressable>
-        )}
-        {showAdd && (
-          <ScalePressable
-            style={[styles.actionButton, addDisabled && styles.actionButtonDisabled]}
-            contentStyle={styles.actionButtonContent}
-            onPress={addDisabled ? undefined : onAddPress}
-            hitSlop={8}
-          >
-            <Feather name="plus" size={Sizing.plusIconSize} color={addDisabled ? Colors.zinc300 : Colors.zinc700} />
-          </ScalePressable>
-        )}
-        {showHistory && (
-          <ScalePressable
-            style={styles.actionButton}
-            contentStyle={styles.actionButtonContent}
-            onPress={onHistoryPress}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="발신 기록"
-          >
-            <Feather name="clock" size={Sizing.searchIconSize} color={Colors.zinc700} />
-          </ScalePressable>
-        )}
-        {!searchLast && showSearch && (
-          <ScalePressable
-            style={[styles.actionButton, searchActive && styles.actionButtonActive]}
-            contentStyle={styles.actionButtonContent}
-            onPress={onSearchPress}
-            hitSlop={8}
-          >
-            <Feather name="search" size={Sizing.searchIconSize} color={Colors.zinc700} />
-          </ScalePressable>
-        )}
-        {showKebab && (
-          <ScalePressable
-            style={styles.actionButton}
-            contentStyle={styles.actionButtonContent}
-            onPress={onKebabPress}
-            hitSlop={8}
-          >
-            <Feather name="check-square" size={20} color={Colors.zinc700} />
-          </ScalePressable>
-        )}
-        {searchLast && showSearch && (
-          <ScalePressable
-            style={[styles.actionButton, searchActive && styles.actionButtonActive]}
-            contentStyle={styles.actionButtonContent}
-            onPress={onSearchPress}
-            hitSlop={8}
-          >
-            <Feather name="search" size={Sizing.searchIconSize} color={Colors.zinc700} />
-          </ScalePressable>
-        )}
-        {showProfile && (
-          <ScalePressable
-            style={styles.profileButton}
-            contentStyle={styles.actionButtonContent}
-            onPress={onProfilePress}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="설정 및 활동"
-          >
-            <Feather name="menu" size={16} color={Colors.zinc700} />
-          </ScalePressable>
-        )}
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+      <View style={[styles.container, { paddingTop: 50 }, headerScrolled && Shadows.headerScrolled]}>
+        <Text style={styles.title}>{title}</Text>
+        <View style={styles.actions}>
+          {rightText && (
+            <ScalePressable onPress={onRightTextPress} hitSlop={8} style={styles.rightTextButton}>
+              <Text style={styles.rightText}>{rightText}</Text>
+            </ScalePressable>
+          )}
+          {showAdd && (
+            <ScalePressable
+              style={[styles.actionButton, addDisabled && styles.actionButtonDisabled]}
+              contentStyle={styles.actionButtonContent}
+              onPress={addDisabled ? undefined : onAddPress}
+              hitSlop={8}
+            >
+              <Feather name="plus" size={Sizing.plusIconSize} color={addDisabled ? Colors.zinc300 : Colors.zinc700} />
+            </ScalePressable>
+          )}
+          {showHistory && (
+            <ScalePressable
+              style={styles.actionButton}
+              contentStyle={styles.actionButtonContent}
+              onPress={onHistoryPress}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="발신 기록"
+            >
+              <Feather name="clock" size={Sizing.searchIconSize} color={Colors.zinc700} />
+            </ScalePressable>
+          )}
+          {!searchLast && showSearch && (
+            <ScalePressable
+              style={[styles.actionButton, searchActive && styles.actionButtonActive]}
+              contentStyle={styles.actionButtonContent}
+              onPress={onSearchPress}
+              hitSlop={8}
+            >
+              <Feather name="search" size={Sizing.searchIconSize} color={Colors.zinc700} />
+            </ScalePressable>
+          )}
+          {showKebab && (
+            <ScalePressable
+              style={styles.actionButton}
+              contentStyle={styles.actionButtonContent}
+              onPress={onKebabPress}
+              hitSlop={8}
+            >
+              <Feather name="check-square" size={20} color={Colors.zinc700} />
+            </ScalePressable>
+          )}
+          {searchLast && showSearch && (
+            <ScalePressable
+              style={[styles.actionButton, searchActive && styles.actionButtonActive]}
+              contentStyle={styles.actionButtonContent}
+              onPress={onSearchPress}
+              hitSlop={8}
+            >
+              <Feather name="search" size={Sizing.searchIconSize} color={Colors.zinc700} />
+            </ScalePressable>
+          )}
+          {showProfile && (
+            <ScalePressable
+              style={styles.profileButton}
+              contentStyle={styles.actionButtonContent}
+              onPress={onProfilePress}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="설정 및 활동"
+            >
+              <Feather name="menu" size={16} color={Colors.zinc700} />
+            </ScalePressable>
+          )}
+        </View>
       </View>
-    </View>
+    </TouchableWithoutFeedback>
   );
 }
 

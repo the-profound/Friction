@@ -44,6 +44,8 @@ export default function AnimatedSearchBar({
     if (active) {
       const t = setTimeout(() => inputRef.current?.focus(), 50);
       return () => clearTimeout(t);
+    } else {
+      inputRef.current?.blur();
     }
   }, [active, progress]);
 
