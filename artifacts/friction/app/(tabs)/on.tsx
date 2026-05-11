@@ -6,8 +6,6 @@ import {
   FlatList,
   RefreshControl,
   Alert,
-  ScrollView,
-  Platform,
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar";
@@ -659,27 +657,22 @@ export default function OnScreen() {
       )}
 
       {!selectionMode && topTab === "memo" && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterBar}
-        >
+        <View style={styles.filterBar}>
           {FILTER_OPTIONS.map((opt) => (
             <ScalePressable
               key={opt.key}
+              style={[styles.filterChip, filter === opt.key && styles.filterChipActive]}
               onPress={() => {
                 closeOpenRow();
                 setFilter(opt.key);
               }}
             >
-              <View style={[styles.filterChip, filter === opt.key && styles.filterChipActive]}>
-                <Text style={[styles.filterChipText, filter === opt.key && styles.filterChipTextActive]}>
-                  {opt.label}
-                </Text>
-              </View>
+              <Text style={[styles.filterChipText, filter === opt.key && styles.filterChipTextActive]}>
+                {opt.label}
+              </Text>
             </ScalePressable>
           ))}
-        </ScrollView>
+        </View>
       )}
 
       {isLoading ? (
@@ -926,8 +919,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     paddingHorizontal: Spacing.screenPx,
     gap: 8,
-    paddingTop: 16,
-    paddingBottom: 8,
+    paddingVertical: 8,
   },
   filterChip: {
     paddingHorizontal: 14,
@@ -946,7 +938,6 @@ const styles = StyleSheet.create({
   filterChipTextActive: {
     color: Colors.white,
     fontWeight: "600",
-    fontFamily: Platform.select({ ios: "Pretendard-SemiBold", default: "Pretendard-SemiBold" }),
   },
   listContent: {
     paddingBottom: 0,
