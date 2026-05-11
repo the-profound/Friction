@@ -571,6 +571,14 @@ export default function OnScreen() {
     searchQuery.trim().length === 0 &&
     !hasMemos;
 
+  const showFilterEmpty =
+    topTab === "memo" &&
+    !isLoading &&
+    searchQuery.trim().length === 0 &&
+    filter !== "all" &&
+    displayedArticles.length === 0 &&
+    hasMemos;
+
   const showSearchEmpty =
     !isLoading &&
     searchQuery.trim().length > 0 &&
@@ -696,6 +704,29 @@ export default function OnScreen() {
           </Text>
           <ScalePressable style={styles.createButton} onPress={handleNewMemo}
           contentStyle={styles.createButtonContent}
+          >
+            <Feather name="edit-3" size={16} color={Colors.white} />
+            <Text style={styles.createButtonText}>새 메모</Text>
+          </ScalePressable>
+        </RefreshableEmpty>
+      ) : showFilterEmpty ? (
+        <RefreshableEmpty
+          refreshing={isRefetching}
+          onRefresh={refetch}
+          contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
+        >
+          <Feather name="edit-3" size={40} color={Colors.zinc300} />
+          <Text style={styles.emptyTitle}>
+            {filter === "DRAFT"
+              ? "작성 중인 메모가 없어요"
+              : filter === "DIVIDING"
+                ? "분할 중인 메모가 없어요"
+                : "마감 중인 메모가 없어요"}
+          </Text>
+          <ScalePressable
+            style={styles.createButton}
+            onPress={handleNewMemo}
+            contentStyle={styles.createButtonContent}
           >
             <Feather name="edit-3" size={16} color={Colors.white} />
             <Text style={styles.createButtonText}>새 메모</Text>
