@@ -443,8 +443,8 @@ export default function OnScreen() {
             }}
             actions={[
               {
-                label: "발신",
-                color: "#3B82F6",
+                label: "보내기",
+                color: Colors.zinc900,
                 onPress: () => handleSendAction(item.article.id),
               },
               {
