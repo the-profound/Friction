@@ -970,6 +970,7 @@ export default function ReadScreen() {
           fontWeight: "600" as const,
           fontFamily: ReaderTokens.fontFamily.sansSemiBold,
           color: Colors.zinc900,
+          textAlign: "center",
           marginBottom: 8,
         },
         completionButtonText: {
@@ -1724,7 +1725,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   completionContent: {
-    alignItems: "center",
     paddingVertical: 16,
     gap: 12,
   },
@@ -1782,7 +1782,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.zinc200,
     backgroundColor: Colors.zinc50,
-    marginBottom: 4,
   },
   collectionSelectorContent: {
     flexDirection: "row",
