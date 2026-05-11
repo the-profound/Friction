@@ -1742,7 +1742,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,},
+    gap: 8,
+    flexGrow: 0,
+  },
   completionButtonSecondary: {
     backgroundColor: Colors.zinc100,
   },
@@ -1786,7 +1788,9 @@ const styles = StyleSheet.create({
   collectionSelectorContent: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,},
+    gap: 8,
+    flexGrow: 0,
+  },
   collectionSelectorText: {
     flex: 1,
     fontSize: 14,
@@ -1803,7 +1807,9 @@ const styles = StyleSheet.create({
   },
   completionButtonTertiaryContent: {
     alignItems: "center",
-    justifyContent: "center",},
+    justifyContent: "center",
+    flexGrow: 0,
+  },
   coverPageContainer: {
     flex: 1,
     justifyContent: "flex-end",

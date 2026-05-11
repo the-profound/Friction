@@ -985,7 +985,9 @@ const styles = StyleSheet.create({
   createButtonContent: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,},
+    gap: 6,
+    flexGrow: 0,
+  },
   createButtonText: {
     ...Typography.bodySemiBold,
     fontSize: 15,
