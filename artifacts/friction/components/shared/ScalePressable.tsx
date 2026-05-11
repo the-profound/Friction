@@ -64,6 +64,7 @@ export default function ScalePressable({
 export const styles = StyleSheet.create({
   inner: {
     flexShrink: 0,
+    flexGrow: 1,
     alignSelf: "stretch",
     overflow: "visible",
   },

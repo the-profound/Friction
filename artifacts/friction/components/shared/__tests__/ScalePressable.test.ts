@@ -50,9 +50,10 @@ describe("ScalePressable styles: inner animation wrapper", () => {
     expect(styles.inner).toHaveProperty("alignSelf", "stretch");
   });
 
-  it("inner style has flexShrink:0 and no flex so padding-only buttons do not collapse in Yoga", async () => {
+  it("inner style has flexShrink:0 and flexGrow:1 so fixed-size buttons fill their height", async () => {
     const { styles } = await import("../ScalePressable");
     expect(styles.inner).toHaveProperty("flexShrink", 0);
+    expect(styles.inner).toHaveProperty("flexGrow", 1);
     expect((styles.inner as Record<string, unknown>)["flex"]).toBeUndefined();
   });
 });
