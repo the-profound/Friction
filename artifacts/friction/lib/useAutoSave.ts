@@ -59,6 +59,10 @@ export function useAutoSave({
   onSaveRef.current = onSave;
   const queueKey = storageKey ? `autosave_queue_${storageKey}` : null;
 
+  // Tracks the currently in-flight save promise so flush() can await it
+  // instead of starting a concurrent save that races with the existing one.
+  const activeSaveRef = useRef<Promise<void> | null>(null);
+
   const doSave = useCallback(async () => {
     if (savingRef.current) return;
 
@@ -68,35 +72,42 @@ export function useAutoSave({
     savingRef.current = true;
     setStatus("saving");
 
-    try {
-      await onSaveRef.current(data);
-      if (id >= latestCompletedRef.current) {
-        latestCompletedRef.current = id;
-        retryCountRef.current = 0;
-        if (queueKey) persistQueue(queueKey, null);
-        if (requestIdRef.current === id) {
-          isDirtyRef.current = false;
-          setIsDirty(false);
-          setStatus("saved");
+    const run = async () => {
+      try {
+        await onSaveRef.current(data);
+        if (id >= latestCompletedRef.current) {
+          latestCompletedRef.current = id;
+          retryCountRef.current = 0;
+          if (queueKey) persistQueue(queueKey, null);
+          if (requestIdRef.current === id) {
+            isDirtyRef.current = false;
+            setIsDirty(false);
+            setStatus("saved");
+          }
         }
-      }
-    } catch {
-      if (id >= latestCompletedRef.current) {
-        if (queueKey) persistQueue(queueKey, data);
-        retryCountRef.current++;
-        if (retryCountRef.current <= maxRetries) {
-          const delay = Math.min(1000 * Math.pow(2, retryCountRef.current - 1), 10000);
-          retryTimerRef.current = setTimeout(() => {
-            savingRef.current = false;
-            doSave();
-          }, delay);
-          return;
+      } catch {
+        if (id >= latestCompletedRef.current) {
+          if (queueKey) persistQueue(queueKey, data);
+          retryCountRef.current++;
+          if (retryCountRef.current <= maxRetries) {
+            const delay = Math.min(1000 * Math.pow(2, retryCountRef.current - 1), 10000);
+            retryTimerRef.current = setTimeout(() => {
+              savingRef.current = false;
+              doSave();
+            }, delay);
+            return;
+          }
+          setStatus("error");
         }
-        setStatus("error");
+      } finally {
+        savingRef.current = false;
+        if (activeSaveRef.current === p) activeSaveRef.current = null;
       }
-    } finally {
-      savingRef.current = false;
-    }
+    };
+
+    const p = run();
+    activeSaveRef.current = p;
+    await p;
   }, [maxRetries, queueKey]);
 
   useEffect(() => {
@@ -156,10 +167,24 @@ export function useAutoSave({
       clearTimeout(retryTimerRef.current);
       retryTimerRef.current = null;
     }
+
+    // If a save is already in-flight, wait for it to complete rather than
+    // force-resetting savingRef and launching a concurrent save. A concurrent
+    // save can race: if the second save fails while the first already succeeded,
+    // retryCountRef ends up > 0 and flush incorrectly returns { ok: false }
+    // even though the data was persisted — causing a spurious "저장 실패" alert.
+    if (activeSaveRef.current) {
+      await activeSaveRef.current;
+    }
+
+    // After awaiting any in-flight save, reset state so doSave can proceed.
     savingRef.current = false;
+
     // Use isDirtyRef (updated synchronously) instead of isDirty state so that
     // flush() called immediately after markDirty() correctly detects pending changes.
     if (isDirtyRef.current || status === "error") {
+      // Fresh explicit flush: reset retry count so failures are counted from 0.
+      retryCountRef.current = 0;
       await doSave();
     }
     return { ok: savingRef.current === false && retryCountRef.current === 0 };
