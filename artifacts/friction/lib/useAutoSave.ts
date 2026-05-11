@@ -177,17 +177,42 @@ export function useAutoSave({
       await activeSaveRef.current;
     }
 
-    // After awaiting any in-flight save, reset state so doSave can proceed.
+    // After awaiting any in-flight save, allow doSave to proceed.
     savingRef.current = false;
 
-    // Use isDirtyRef (updated synchronously) instead of isDirty state so that
-    // flush() called immediately after markDirty() correctly detects pending changes.
-    if (isDirtyRef.current || status === "error") {
-      // Fresh explicit flush: reset retry count so failures are counted from 0.
-      retryCountRef.current = 0;
-      await doSave();
+    if (!isDirtyRef.current && status !== "error") {
+      return { ok: retryCountRef.current === 0 };
     }
-    return { ok: savingRef.current === false && retryCountRef.current === 0 };
+
+    // Flush retries synchronously (up to FLUSH_MAX_ATTEMPTS) with a short
+    // delay between attempts. This means a brief network blip (< ~2 s) won't
+    // surface a "저장 실패" alert to the user — the background auto-retry
+    // logic inside doSave already handles longer outages separately.
+    const FLUSH_MAX_ATTEMPTS = 3;
+    const FLUSH_RETRY_DELAY_MS = 600;
+
+    for (let attempt = 0; attempt < FLUSH_MAX_ATTEMPTS; attempt++) {
+      retryCountRef.current = 0;
+      savingRef.current = false;
+      await doSave();
+
+      if (retryCountRef.current === 0) {
+        return { ok: true };
+      }
+
+      // Cancel the background retry timer doSave scheduled — we'll retry
+      // directly in the next loop iteration instead.
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+
+      if (attempt < FLUSH_MAX_ATTEMPTS - 1) {
+        await new Promise<void>((resolve) => setTimeout(resolve, FLUSH_RETRY_DELAY_MS));
+      }
+    }
+
+    return { ok: false };
   }, [status, doSave]);
 
   const retry = useCallback(async () => {
