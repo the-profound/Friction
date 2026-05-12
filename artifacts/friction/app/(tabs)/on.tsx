@@ -10,7 +10,7 @@ import {
 import ScalePressable from "@/components/shared/ScalePressable";
 import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter, useFocusEffect } from "expo-router";
+import { useRouter, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
@@ -88,6 +88,8 @@ export default function OnScreen() {
   const { showToast } = useToast();
   const { setShowRecordFab } = useNavigation();
 
+  const { tab: tabParam } = useLocalSearchParams<{ tab?: string }>();
+
   const [topTab, setTopTab] = useState<TopTab>("memo");
   const [filter, setFilter] = useState<FilterMode>("all");
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
@@ -141,6 +143,12 @@ export default function OnScreen() {
       queryClient.setQueryData(getGetArticleQueryKey(article.id), article);
     }
   }, [articles, queryClient]);
+
+  useEffect(() => {
+    if (tabParam === "my_article") {
+      setTopTab("my_article");
+    }
+  }, [tabParam]);
 
   useFocusEffect(
     useCallback(() => {

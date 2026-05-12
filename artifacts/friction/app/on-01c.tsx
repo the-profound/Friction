@@ -22,11 +22,9 @@ import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import CoverPreview from "@/components/CoverPreview/CoverPreview";
 import CoverEditor from "@/components/CoverEditor/CoverEditor";
 import WebViewMarkdownReader from "@/components/WebViewMarkdownReader";
-import MyCollectionsModal from "@/components/MyCollectionsModal/MyCollectionsModal";
 import { resolveArticleCover, getDefaultCover } from "@/utils/articleCover";
 import { canStepBack } from "@/lib/articleStatusCycle";
 import WritingStateBar, { type WritingStage } from "@/components/WritingStateBar/WritingStateBar";
-import { useUser } from "@/contexts/UserContext";
 import { trackArticlePublished } from "@/lib/analytics";
 import {
   useGetArticle,
@@ -34,14 +32,12 @@ import {
   useUpdateArticle,
   useTransitionArticleStatus,
   useFinalizeArticle,
-  useListMyCollections,
-  useCreateMyCollection,
   TransitionArticleBodyTargetStatus,
   getGetArticleQueryKey,
 } from "@workspace/api-client-react";
 import type { ArticleCover } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { invalidateArticleLists, invalidateArticleAndLists, invalidateArticleDetail, invalidateMyCollections } from "@/lib/queryInvalidation";
+import { invalidateArticleLists, invalidateArticleAndLists, invalidateArticleDetail } from "@/lib/queryInvalidation";
 import { useToast } from "@/contexts/ToastContext";
 
 export default function ClosingScreen() {
@@ -50,8 +46,6 @@ export default function ClosingScreen() {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { userId } = useUser();
-
   const articleQuery = useGetArticle(id ?? "");
   const article = id ? articleQuery.data : undefined;
   const articleLoading = id ? articleQuery.isLoading : false;
@@ -80,14 +74,6 @@ export default function ClosingScreen() {
   const updateArticle = useUpdateArticle();
   const transitionStatus = useTransitionArticleStatus();
   const finalizeArticle = useFinalizeArticle();
-  const createMyCollection = useCreateMyCollection();
-
-  const myCollectionsQuery = useListMyCollections({ ownerId: userId });
-  const myCollections = (myCollectionsQuery.data ?? []).map((c) => ({
-    id: c.id,
-    name: c.name,
-    articleCount: (c as { articleCount?: number }).articleCount,
-  }));
 
   const [title, setTitle] = useState("");
   const [pages, setPages] = useState<string[]>([]);
@@ -95,7 +81,6 @@ export default function ClosingScreen() {
   const [cover, setCover] = useState<ArticleCover>(getDefaultCover());
   const [coverEditorVisible, setCoverEditorVisible] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
-  const [collectionPickerVisible, setCollectionPickerVisible] = useState(false);
   const [titleEditing, setTitleEditing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const isActionInProgressRef = useRef(false);
@@ -207,6 +192,26 @@ export default function ClosingScreen() {
     setConfirmVisible(true);
   }, [title, pages, showToast]);
 
+  const finalizeExport = useCallback(
+    async () => {
+      const articleId = exportedArticleIdRef.current;
+      if (!articleId) return;
+      const updated = await finalizeArticle.mutateAsync({
+        id: articleId,
+        data: {},
+      });
+      queryClient.setQueryData(getGetArticleQueryKey(articleId), updated);
+      trackArticlePublished({
+        articleId,
+        charCount: pages.reduce((sum, p) => sum + p.length, 0),
+        pageCount: pages.length,
+      });
+      invalidateArticleLists(queryClient);
+      router.replace({ pathname: "/(tabs)/on", params: { tab: "my_article" } });
+    },
+    [pages, finalizeArticle, queryClient, router],
+  );
+
   const handleConfirmExport = useCallback(async () => {
     setConfirmVisible(false);
     if (isActionInProgressRef.current) return;
@@ -239,7 +244,7 @@ export default function ClosingScreen() {
         data: patchData,
       });
       exportedArticleIdRef.current = id!;
-      setCollectionPickerVisible(true);
+      await finalizeExport();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "내보내기에 실패했습니다.";
       Alert.alert("내보내기 실패", msg);
@@ -247,78 +252,7 @@ export default function ClosingScreen() {
       setIsExporting(false);
       isActionInProgressRef.current = false;
     }
-  }, [id, title, pages, cover, updateArticle]);
-
-  // Step 1(C) + Step 4(D) — 단일 finalize 호출:
-  // 기존 refetchArticle → transition → addArticleToMyCollection 3-step를 서버
-  // 트랜잭션 한 번으로 압축한다. 클라이언트는 article?.status를 알고 있으므로
-  // 별도 GET 재확인 없이 바로 finalize를 호출한다.
-  const finalizeExport = useCallback(
-    async (collectionId: string) => {
-      const articleId = exportedArticleIdRef.current;
-      if (!articleId) return;
-      const updated = await finalizeArticle.mutateAsync({
-        id: articleId,
-        data: { myCollectionId: collectionId },
-      });
-      queryClient.setQueryData(getGetArticleQueryKey(articleId), updated);
-      trackArticlePublished({
-        articleId,
-        charCount: pages.reduce((sum, p) => sum + p.length, 0),
-        pageCount: pages.length,
-      });
-      invalidateArticleLists(queryClient);
-      invalidateMyCollections(queryClient);
-      router.dismissAll();
-      router.push({ pathname: "/of-01" });
-    },
-    [pages, finalizeArticle, queryClient, router],
-  );
-
-  const handleCollectionSelect = useCallback(
-    async (collection: { id: string; name: string }) => {
-      if (isActionInProgressRef.current) return;
-      isActionInProgressRef.current = true;
-      setCollectionPickerVisible(false);
-      try {
-        await finalizeExport(collection.id);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "폴더 저장에 실패했습니다.";
-        Alert.alert("저장 실패", msg);
-      } finally {
-        isActionInProgressRef.current = false;
-      }
-    },
-    [finalizeExport],
-  );
-
-  const handleCreateAndSelect = useCallback(
-    async (name: string, description: string) => {
-      if (isActionInProgressRef.current) return;
-      isActionInProgressRef.current = true;
-      let created: { id: string };
-      try {
-        created = await createMyCollection.mutateAsync({
-          data: { ownerId: userId, name, description, isPublic: false },
-        });
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "폴더 생성에 실패했습니다.";
-        Alert.alert("생성 실패", msg);
-        isActionInProgressRef.current = false;
-        return;
-      }
-      setCollectionPickerVisible(false);
-      try {
-        await finalizeExport(created.id);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "폴더 저장에 실패했습니다.";
-        Alert.alert("저장 실패", msg);
-      } finally {
-        isActionInProgressRef.current = false;
-      }
-    },
-    [userId, createMyCollection, finalizeExport],
-  );
+  }, [id, title, pages, cover, updateArticle, finalizeExport]);
 
   const flushTitleSave = useCallback(async () => {
     if (!id) return;
@@ -673,14 +607,6 @@ export default function ClosingScreen() {
         onCancel={() => setConfirmVisible(false)}
       />
 
-      <MyCollectionsModal
-        visible={collectionPickerVisible}
-        onClose={() => setCollectionPickerVisible(false)}
-        collections={myCollections}
-        onSelect={handleCollectionSelect}
-        onCreateAndSelect={handleCreateAndSelect}
-        isLoading={myCollectionsQuery.isLoading}
-      />
     </View>
     </>
   );

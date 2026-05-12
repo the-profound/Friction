@@ -510,7 +510,8 @@ export const FinalizeArticleBody = zod.object({
   myCollectionId: zod
     .string()
     .uuid()
-    .describe("Personal collection to add the finalized article to."),
+    .describe("Personal collection to add the finalized article to.")
+    .optional(),
 });
 
 export const FinalizeArticleResponse = zod.object({

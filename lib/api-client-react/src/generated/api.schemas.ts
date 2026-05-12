@@ -154,7 +154,7 @@ export interface TransitionArticleBody {
 
 export interface FinalizeArticleBody {
   /** Personal collection to add the finalized article to. */
-  myCollectionId: string;
+  myCollectionId?: string;
 }
 
 export interface InboxItem {

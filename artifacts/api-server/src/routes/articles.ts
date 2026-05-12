@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, exists, ilike, ne } from "drizzle-orm";
+import { and, eq, ilike, ne } from "drizzle-orm";
 import { db, articlesTable, myCollectionArticlesTable, myCollectionsTable, usersTable, type ArticleStatus } from "@workspace/db";
 import { CreateArticleBody, UpdateArticleBody, TransitionArticleStatusBody, FinalizeArticleBody, ReadingMemoQueryParams } from "@workspace/api-zod";
 import { ObjectStorageService } from "../lib/objectStorage";
@@ -50,17 +50,6 @@ router.get("/articles", async (req, res) => {
   if (authorId) conditions.push(eq(articlesTable.authorId, authorId as string));
   if (status) conditions.push(eq(articlesTable.status, status as ArticleStatus));
   if (titleQuery) conditions.push(ilike(articlesTable.title, `%${titleQuery as string}%`));
-
-  if (status === "LETTER" && authorId) {
-    conditions.push(
-      exists(
-        db
-          .select({ id: myCollectionArticlesTable.id })
-          .from(myCollectionArticlesTable)
-          .where(eq(myCollectionArticlesTable.articleId, articlesTable.id)),
-      ),
-    );
-  }
 
   const baseQuery = db
     .select({
@@ -322,11 +311,6 @@ router.post("/articles/:id/finalize", async (req, res) => {
         return { status: 404, body: { error: "Article not found" } } as const;
       }
 
-      const [collection] = await tx.select().from(myCollectionsTable).where(eq(myCollectionsTable.id, myCollectionId));
-      if (!collection) {
-        return { status: 404, body: { error: "Collection not found" } } as const;
-      }
-
       let updatedArticle = article;
       if (article.status === "CLOSING") {
         const [updated] = await tx
@@ -344,20 +328,27 @@ router.post("/articles/:id/finalize", async (req, res) => {
         } as const;
       }
 
-      const existingLink = await tx
-        .select({ id: myCollectionArticlesTable.id })
-        .from(myCollectionArticlesTable)
-        .where(
-          and(
-            eq(myCollectionArticlesTable.myCollectionId, myCollectionId),
-            eq(myCollectionArticlesTable.articleId, articleId),
-          ),
-        );
-      if (existingLink.length === 0) {
-        await tx.insert(myCollectionArticlesTable).values({
-          myCollectionId,
-          articleId,
-        });
+      if (myCollectionId) {
+        const [collection] = await tx.select().from(myCollectionsTable).where(eq(myCollectionsTable.id, myCollectionId));
+        if (!collection) {
+          return { status: 404, body: { error: "Collection not found" } } as const;
+        }
+
+        const existingLink = await tx
+          .select({ id: myCollectionArticlesTable.id })
+          .from(myCollectionArticlesTable)
+          .where(
+            and(
+              eq(myCollectionArticlesTable.myCollectionId, myCollectionId),
+              eq(myCollectionArticlesTable.articleId, articleId),
+            ),
+          );
+        if (existingLink.length === 0) {
+          await tx.insert(myCollectionArticlesTable).values({
+            myCollectionId,
+            articleId,
+          });
+        }
       }
 
       return { status: 200, body: updatedArticle } as const;
