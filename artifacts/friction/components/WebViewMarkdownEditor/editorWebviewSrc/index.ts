@@ -1416,6 +1416,7 @@ interface Command {
       if (swipeDismissed) return;
       if (!keyboardOpen) return;
       if (window.scrollY > 0) return;
+      if (selHandleHasActiveSelection || selHandleDragging) return;
       const dy = e.touches[0].clientY - swipeStartY;
       if (dy > SWIPE_THRESHOLD) {
         swipeDismissed = true;
