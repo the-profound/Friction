@@ -56,6 +56,9 @@ export function canTransitionForward(
       return { allowed: true, target };
 
     case "DIVIDING":
+      if (!input.title.trim()) {
+        return { allowed: false, reason: "제목이 비어있습니다." };
+      }
       if (input.pages.length < 1) {
         return { allowed: false, reason: "최소 1개 이상의 페이지가 필요합니다." };
       }

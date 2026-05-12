@@ -273,6 +273,7 @@ export default function DividingScreen() {
   const handleSave = useCallback(
     async (data: { title: string; content: string }) => {
       if (!id) return;
+      if (!data.title.trim()) return;
       const pgs = splitContentToPages(data.content).map((p) => p.content);
       await updateArticle.mutateAsync({
         id,
@@ -723,14 +724,6 @@ export default function DividingScreen() {
     Keyboard.dismiss();
 
     const cur = await getEditorContent();
-    markDirty(titleRef.current, cur);
-    const flushResult = await flush();
-    if (!flushResult.ok) {
-      isNavigatingRef.current = false;
-      setIsNavigating(false);
-      Alert.alert("저장 실패", "저장이 완료되지 않았습니다. 다시 시도해주세요.");
-      return;
-    }
 
     const pgs = splitContentToPages(cur);
     const liveBaseWarnings = validatePages(pgs);
@@ -757,6 +750,15 @@ export default function DividingScreen() {
       isNavigatingRef.current = false;
       setIsNavigating(false);
       showToast({ message: result.reason, type: "info" });
+      return;
+    }
+
+    markDirty(titleRef.current, cur);
+    const flushResult = await flush();
+    if (!flushResult.ok) {
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
+      Alert.alert("저장 실패", "저장이 완료되지 않았습니다. 다시 시도해주세요.");
       return;
     }
 
