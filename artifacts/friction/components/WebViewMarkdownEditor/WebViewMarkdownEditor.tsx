@@ -142,10 +142,10 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
               onSelectionUpdate?.(data.payload);
               break;
             case "onSelHandleDragStart":
-              webViewRef.current?.setNativeProps({ scrollEnabled: false });
+              bridge.injectRaw(`(function(){try{document.documentElement.style.overflow='hidden';document.body.style.overflow='hidden';}catch(e){}})();true;`);
               break;
             case "onSelHandleDragEnd":
-              webViewRef.current?.setNativeProps({ scrollEnabled: true });
+              bridge.injectRaw(`(function(){try{document.documentElement.style.overflow='';document.body.style.overflow='';}catch(e){}})();true;`);
               break;
           }
         });
