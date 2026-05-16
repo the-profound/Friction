@@ -23,6 +23,7 @@ import {
   useListMyCollections,
   useUpdateArticle,
   getListMyCollectionArticlesQueryKey,
+  useGetUser,
 } from "@workspace/api-client-react";
 import {
   invalidateMyCollections,
@@ -70,6 +71,10 @@ export default function PersonalCollectionDetailScreen() {
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const openRowRef = useRef<SwipeableRowHandle | null>(null);
   const rowRefs = useRef<Map<string, SwipeableRowHandle>>(new Map());
+
+  const currentUserQuery = useGetUser(userId);
+  const currentUserNickname = currentUserQuery.data?.nickname;
+  const isOperator = currentUserNickname?.startsWith("[운영진]") ?? false;
 
   const collectionQuery = useGetMyCollection(id ?? "");
   const collection = collectionQuery.data;
@@ -291,12 +296,12 @@ export default function PersonalCollectionDetailScreen() {
 
   const handleLongPress = useCallback(
     (item: MyCollectionArticleWithDetails) => {
-      if (item.article?.authorId !== userId) return;
+      if (item.article?.authorId !== userId && !isOperator) return;
       setLongPressTargetArticle(item);
       setLongPressSourceTitle(null);
       setIsLongPressMenuVisible(true);
     },
-    [userId],
+    [userId, isOperator],
   );
 
   const handleSourceArticleSelect = useCallback(
@@ -698,15 +703,17 @@ export default function PersonalCollectionDetailScreen() {
         snapPoints={[0.35]}
       >
         <View style={styles.actionSheetContent}>
-          <ScalePressable
-            style={styles.actionSheetItem}
-            onPress={() => {
-              setIsLongPressMenuVisible(false);
-              setIsSourcePickerVisible(true);
-            }}
-          >
-            <Text style={styles.actionSheetItemText}>답장 설정</Text>
-          </ScalePressable>
+          {longPressTargetArticle?.article?.authorId === userId && (
+            <ScalePressable
+              style={styles.actionSheetItem}
+              onPress={() => {
+                setIsLongPressMenuVisible(false);
+                setIsSourcePickerVisible(true);
+              }}
+            >
+              <Text style={styles.actionSheetItemText}>답장 설정</Text>
+            </ScalePressable>
+          )}
           <ScalePressable
             style={styles.actionSheetItem}
             onPress={() => {
