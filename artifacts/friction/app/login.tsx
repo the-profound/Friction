@@ -183,14 +183,16 @@ export default function LoginScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.header}>
-          <Image
-            source={require("../assets/images/splash-icon.png")}
-            style={styles.logo}
-            resizeMode="contain"
-          />
-          <Text style={styles.subtitle}>읽고, 나누고, 연결하세요</Text>
-        </View>
+        {!(mode === "signup" && signupStep === 2) && (
+          <View style={styles.header}>
+            <Image
+              source={require("../assets/images/splash-icon.png")}
+              style={styles.logo}
+              resizeMode="contain"
+            />
+            <Text style={styles.subtitle}>읽고, 나누고, 연결하세요</Text>
+          </View>
+        )}
 
         <View style={styles.tabRow}>
           <ScalePressable
