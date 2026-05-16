@@ -170,21 +170,18 @@ export default function LoginScreen() {
         contentContainerStyle={[
           styles.container,
           { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 },
-          mode === "signup" && signupStep === 2 && styles.containerTopAligned,
         ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {!(mode === "signup" && signupStep === 2) && (
-          <View style={styles.header}>
-            <Image
-              source={require("../assets/images/splash-icon.png")}
-              style={styles.logo}
-              resizeMode="contain"
-            />
-            <Text style={styles.subtitle}>읽고, 나누고, 연결하세요</Text>
-          </View>
-        )}
+        <View style={styles.header}>
+          <Image
+            source={require("../assets/images/splash-icon.png")}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+          <Text style={styles.subtitle}>읽고, 나누고, 연결하세요</Text>
+        </View>
 
         <View style={styles.tabRow}>
           <ScalePressable
@@ -506,9 +503,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: Spacing.screenPx,
     gap: 0,
-  },
-  containerTopAligned: {
-    justifyContent: "flex-start",
   },
   header: {
     alignItems: "center",

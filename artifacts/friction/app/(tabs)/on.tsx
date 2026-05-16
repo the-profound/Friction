@@ -457,7 +457,7 @@ export default function OnScreen() {
               },
               {
                 label: "보관",
-                color: Colors.zinc500,
+                color: "#10B981",
                 onPress: () => handleArchiveAction(item.article.id),
               },
               {

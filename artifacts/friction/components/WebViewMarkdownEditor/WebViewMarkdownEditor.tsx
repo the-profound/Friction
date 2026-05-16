@@ -44,6 +44,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
   ) {
     const webViewRef = useRef<WebView>(null);
     const mountedAtRef = useRef<number>(Date.now());
+    const [scrollLocked, setScrollLocked] = useState(false);
 
     const bridgeRef = useRef<WebViewBridge | null>(null);
     if (bridgeRef.current == null) {
@@ -142,10 +143,10 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
               onSelectionUpdate?.(data.payload);
               break;
             case "onSelHandleDragStart":
-              bridge.injectRaw(`(function(){try{document.documentElement.style.overflow='hidden';document.body.style.overflow='hidden';}catch(e){}})();true;`);
+              setScrollLocked(true);
               break;
             case "onSelHandleDragEnd":
-              bridge.injectRaw(`(function(){try{document.documentElement.style.overflow='';document.body.style.overflow='';}catch(e){}})();true;`);
+              setScrollLocked(false);
               break;
           }
         });
@@ -258,6 +259,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
           allowFileAccess={false}
           allowUniversalAccessFromFileURLs={false}
           mediaPlaybackRequiresUserAction
+          scrollEnabled={!scrollLocked}
           bounces={false}
           keyboardDisplayRequiresUserAction={false}
           hideKeyboardAccessoryView={Platform.OS === "ios"}
