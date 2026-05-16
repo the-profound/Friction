@@ -1,10 +1,11 @@
 import { Feather } from "@expo/vector-icons";
 import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   ActivityIndicator,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -32,6 +33,7 @@ export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { signInWithPassword, signUp } = useAuth();
+  const scrollRef = useRef<ScrollView>(null);
 
   const [mode, setMode] = useState<Mode>("login");
   const [signupStep, setSignupStep] = useState<SignupStep>(1);
@@ -109,7 +111,12 @@ export default function LoginScreen() {
       return;
     }
     setErrorMessage(null);
+    Keyboard.dismiss();
     setSignupStep(2);
+    // 키보드가 내려가면서 레이아웃이 재계산된 후 스크롤을 맨 위로 초기화한다.
+    setTimeout(() => {
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+    }, 50);
   }
 
   async function handleSignUpStep2() {
@@ -167,6 +174,7 @@ export default function LoginScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={[
           styles.container,
           { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 },
