@@ -178,6 +178,7 @@ export default function LoginScreen() {
         contentContainerStyle={[
           styles.container,
           { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 },
+          mode === "signup" && signupStep === 2 && styles.containerTopAligned,
         ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -511,6 +512,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: Spacing.screenPx,
     gap: 0,
+  },
+  containerTopAligned: {
+    justifyContent: "flex-start",
   },
   header: {
     alignItems: "center",
