@@ -41,7 +41,7 @@ export default function PersonalCollectionDetailScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { userId, nickname } = useUser();
-  const isAdmin = (nickname ?? "").startsWith("운영진");
+  const isAdmin = (nickname ?? "").startsWith("[운영진]");
   const { id, name: initialName } = useLocalSearchParams<{ id: string; name?: string }>();
 
   const [showPicker, setShowPicker] = useState(false);
