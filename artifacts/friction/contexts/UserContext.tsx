@@ -5,6 +5,7 @@ import { customFetch } from "@workspace/api-client-react";
 
 interface UserContextValue {
   userId: string;
+  nickname: string | undefined;
 }
 
 const UserContext = createContext<UserContextValue | null>(null);
@@ -88,7 +89,17 @@ export function UserProvider({
       });
   }, [session, overrideUserId, showToast]);
 
-  const value = useMemo(() => ({ userId: resolvedUserId }), [resolvedUserId]);
+  const resolvedNickname = overrideUserId
+    ? undefined
+    : (() => {
+        const raw = session?.user?.user_metadata?.nickname;
+        return typeof raw === "string" && raw.trim().length > 0 ? raw.trim() : undefined;
+      })();
+
+  const value = useMemo(
+    () => ({ userId: resolvedUserId, nickname: resolvedNickname }),
+    [resolvedUserId, resolvedNickname],
+  );
 
   return (
     <UserContext.Provider value={value}>

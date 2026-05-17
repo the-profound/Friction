@@ -40,7 +40,8 @@ export default function PersonalCollectionDetailScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { userId } = useUser();
+  const { userId, nickname } = useUser();
+  const isAdmin = (nickname ?? "").startsWith("운영진");
   const { id, name: initialName } = useLocalSearchParams<{ id: string; name?: string }>();
 
   const [showPicker, setShowPicker] = useState(false);
@@ -291,12 +292,12 @@ export default function PersonalCollectionDetailScreen() {
 
   const handleLongPress = useCallback(
     (item: MyCollectionArticleWithDetails) => {
-      if (item.article?.authorId !== userId) return;
+      if (item.article?.authorId !== userId && !isAdmin) return;
       setLongPressTargetArticle(item);
       setLongPressSourceTitle(null);
       setIsLongPressMenuVisible(true);
     },
-    [userId],
+    [userId, isAdmin],
   );
 
   const handleSourceArticleSelect = useCallback(
@@ -698,15 +699,17 @@ export default function PersonalCollectionDetailScreen() {
         snapPoints={[0.35]}
       >
         <View style={styles.actionSheetContent}>
-          <ScalePressable
-            style={styles.actionSheetItem}
-            onPress={() => {
-              setIsLongPressMenuVisible(false);
-              setIsSourcePickerVisible(true);
-            }}
-          >
-            <Text style={styles.actionSheetItemText}>답장 설정</Text>
-          </ScalePressable>
+          {longPressTargetArticle?.article?.authorId === userId && (
+            <ScalePressable
+              style={styles.actionSheetItem}
+              onPress={() => {
+                setIsLongPressMenuVisible(false);
+                setIsSourcePickerVisible(true);
+              }}
+            >
+              <Text style={styles.actionSheetItemText}>답장 설정</Text>
+            </ScalePressable>
+          )}
           <ScalePressable
             style={styles.actionSheetItem}
             onPress={() => {
