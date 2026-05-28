@@ -412,127 +412,16 @@ function IPhoneShell({ children }: { children: React.ReactNode }) {
 }
 
 /* ─────────────────────────────────────────────
-   Root component: fills the reserved 1920×1080 canvas frame
+   Root component — phone only, no decoration
 ───────────────────────────────────────────── */
 export function FrictionNavBar() {
   const [activeTab, setActiveTab] = useState<TabKey>("IN");
 
   return (
-    <div
-      style={{
-        width: 1920,
-        height: 1080,
-        background: "#F0EDE8",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontFamily: "'Pretendard', 'Apple SD Gothic Neo', sans-serif",
-        position: "relative",
-        overflow: "hidden",
-      }}
-    >
-      {/* Subtle grid pattern */}
-      <div style={{
-        position: "absolute",
-        inset: 0,
-        backgroundImage: "radial-gradient(circle, rgba(0,0,0,0.06) 1px, transparent 1px)",
-        backgroundSize: "32px 32px",
-        pointerEvents: "none",
-      }} />
-
-      {/* Brand watermark */}
-      <div style={{
-        position: "absolute",
-        top: 48,
-        left: 60,
-        display: "flex",
-        flexDirection: "column",
-        gap: 6,
-      }}>
-        <span style={{
-          fontSize: 13,
-          fontWeight: 200,
-          letterSpacing: "0.18em",
-          color: "rgba(0,0,0,0.35)",
-          textTransform: "uppercase",
-        }}>
-          Friction 1.0.0
-        </span>
-        <span style={{
-          fontSize: 22,
-          fontWeight: 700,
-          letterSpacing: -0.5,
-          color: "rgba(0,0,0,0.65)",
-        }}>
-          하단 네비게이션
-        </span>
-      </div>
-
-      {/* Tab labels on the right */}
-      <div style={{
-        position: "absolute",
-        right: 60,
-        top: "50%",
-        transform: "translateY(-50%)",
-        display: "flex",
-        flexDirection: "column",
-        gap: 10,
-        alignItems: "flex-end",
-      }}>
-        {TABS.map((tab) => (
-          <div
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              cursor: "pointer",
-              opacity: activeTab === tab.key ? 1 : 0.38,
-              transition: "opacity 0.18s ease",
-            }}
-          >
-            <span style={{
-              fontSize: 14,
-              fontWeight: activeTab === tab.key ? 600 : 400,
-              color: "#1a1a1e",
-              letterSpacing: -0.2,
-            }}>
-              {tab.label}
-            </span>
-            <div style={{
-              width: 28,
-              height: 28,
-              borderRadius: "50%",
-              background: activeTab === tab.key ? C.zinc900 : "transparent",
-              border: `1.5px solid ${activeTab === tab.key ? C.zinc900 : "rgba(0,0,0,0.2)"}`,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              transition: "background 0.18s ease, border-color 0.18s ease",
-            }}>
-              <FeatherIcon
-                name={tab.icon}
-                size={13}
-                color={activeTab === tab.key ? "#fff" : C.zinc500}
-              />
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* The iPhone */}
-      <IPhoneShell>
-        <ScreenContent activeTab={activeTab} />
-        <NavBar activeTab={activeTab} onTabPress={setActiveTab} />
-        <Fab visible={activeTab === "ON"} />
-      </IPhoneShell>
-    </div>
+    <IPhoneShell>
+      <ScreenContent activeTab={activeTab} />
+      <NavBar activeTab={activeTab} onTabPress={setActiveTab} />
+      <Fab visible={activeTab === "ON"} />
+    </IPhoneShell>
   );
 }
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-(FrictionNavBar as any).__mockupMeta = {
-  width: 1920,
-  height: 1080,
-};
