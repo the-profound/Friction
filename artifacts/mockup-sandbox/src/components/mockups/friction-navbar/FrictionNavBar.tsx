@@ -32,6 +32,10 @@ const FAB_SIZE    = 52;
 const FAB_BOTTOM  = NAV_BOTTOM + 8;
 const STATUS_H    = 44; // mock status-bar height
 
+const EXP_W   = SCREEN_W - 32;                  // 361 — expanded card width
+const EXP_H   = EXP_W * (CARD_H / CARD_W);      // ~578 — proportional height
+const EXP_TOP = STATUS_H + 12;                   // 56px — just below status bar
+
 /* ─── Tabs ───────────────────────────────────────────────────── */
 const TABS = [
   { key: "IN", label: "수신",  icon: "inbox"     },
@@ -289,7 +293,7 @@ function DotIndicator({ total, activeIndex }: { total: number; activeIndex: numb
 }
 
 /* ─── Carousel group ──────────────────────────────────────────── */
-function CarouselGroup({ group }: { group: MockGroup }) {
+function CarouselGroup({ group, onCardTap }: { group: MockGroup; onCardTap?: (card: MockCard) => void }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const translateX = useRef(getBaseX(0));
   const trackRef = useRef<HTMLDivElement>(null);
@@ -334,11 +338,15 @@ function CarouselGroup({ group }: { group: MockGroup }) {
 
   function onPointerUp(e: React.PointerEvent) {
     if (!dragState.current.isDown) return;
+    const wasDragging = dragState.current.dragging;
     dragState.current.isDown = false;
     const dx = e.clientX - dragState.current.startX;
     let next = activeIndex;
     if (Math.abs(dx) >= 48) next = dx < 0 ? activeIndex + 1 : activeIndex - 1;
     snapTo(next);
+    if (!wasDragging) {
+      onCardTap?.(group.cards[activeIndex]);
+    }
     setTimeout(() => { dragState.current.dragging = false; }, 60);
   }
 
@@ -393,6 +401,19 @@ function CarouselGroup({ group }: { group: MockGroup }) {
 
 /* ─── Inbox screen ────────────────────────────────────────────── */
 function InboxScreen({ navBottom }: { navBottom: number }) {
+  const [expandedCard, setExpandedCard] = useState<MockCard | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
+
+  function openCard(card: MockCard) {
+    setExpandedCard(card);
+    requestAnimationFrame(() => requestAnimationFrame(() => setIsOpen(true)));
+  }
+
+  function closeCard() {
+    setIsOpen(false);
+    setTimeout(() => setExpandedCard(null), 400);
+  }
+
   return (
     <div style={{ position: "absolute", inset: 0, background: C.white, display: "flex", flexDirection: "column" }}>
       {/* Status-bar placeholder */}
@@ -422,9 +443,88 @@ function InboxScreen({ navBottom }: { navBottom: number }) {
       {/* Scrollable list */}
       <div style={{ flex: 1, overflowY: "auto", paddingBottom: navBottom }}>
         {MOCK_GROUPS.map((group) => (
-          <CarouselGroup key={group.date} group={group} />
+          <CarouselGroup key={group.date} group={group} onCardTap={openCard} />
         ))}
       </div>
+
+      {/* ── Expanded card overlay ── */}
+      {expandedCard && (
+        <div style={{ position: "absolute", inset: 0, zIndex: 100, pointerEvents: "auto" }}>
+          {/* Dim backdrop — click to close */}
+          <div
+            onClick={closeCard}
+            style={{
+              position: "absolute", inset: 0,
+              background: "rgba(0,0,0,0.62)",
+              opacity: isOpen ? 1 : 0,
+              transition: "opacity 0.38s ease-in-out",
+            }}
+          />
+
+          {/* Expanded card */}
+          <div
+            style={{
+              position: "absolute",
+              top: EXP_TOP,
+              left: 16,
+              width: EXP_W,
+              height: EXP_H,
+              borderRadius: 20,
+              overflow: "hidden",
+              background: expandedCard.bg,
+              transform: isOpen
+                ? "scale(1) translateY(0px)"
+                : "scale(0.84) translateY(72px)",
+              opacity: isOpen ? 1 : 0,
+              transition: "transform 0.42s cubic-bezier(0.34,1.02,0.64,1), opacity 0.28s ease-in-out",
+              pointerEvents: "none",
+            }}
+          >
+            {expandedCard.image && (
+              <img
+                src={expandedCard.image}
+                alt=""
+                style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center", display: "block" }}
+              />
+            )}
+            {expandedCard.image && (
+              <div style={{ position: "absolute", inset: 0, background: "linear-gradient(160deg, rgba(0,0,0,0.52) 0%, rgba(0,0,0,0.18) 55%, rgba(0,0,0,0.44) 100%)" }} />
+            )}
+            <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", justifyContent: "flex-start", padding: 24 }}>
+              <span style={{
+                fontSize: TITLE_SIZE * 1.15,
+                lineHeight: `${TITLE_SIZE * 1.15 * 1.25}px`,
+                fontFamily: "'Noto Sans KR', sans-serif",
+                fontWeight: 700,
+                color: expandedCard.textColor,
+                letterSpacing: `${-0.02 * TITLE_SIZE * 1.15}px`,
+                WebkitLineClamp: 5, overflow: "hidden", display: "-webkit-box", WebkitBoxOrient: "vertical",
+                marginBottom: 12,
+              } as React.CSSProperties}>
+                {expandedCard.title}
+              </span>
+              <span style={{ display: "block", fontSize: AUTHOR_SIZE * 1.1, fontFamily: "'Noto Sans KR', sans-serif", fontWeight: 400, color: expandedCard.textColor, opacity: 0.75 }}>
+                {expandedCard.author}
+              </span>
+              {expandedCard.collection && (
+                <span style={{ display: "block", fontSize: AUTHOR_SIZE * 0.95, fontFamily: "'Noto Sans KR', sans-serif", fontWeight: 300, color: expandedCard.textColor, opacity: 0.5, marginTop: 3 }}>
+                  {expandedCard.collection}
+                </span>
+              )}
+            </div>
+            {(expandedCard.isNotice || expandedCard.isReply) && (
+              <div style={{ position: "absolute", bottom: 16, right: 16, display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
+                {expandedCard.isNotice && (
+                  <span style={{ background: C.white, color: C.noticeAccent, fontSize: 13, fontWeight: 600, fontFamily: "'Noto Sans KR', sans-serif", padding: "5px 12px", borderRadius: 999 }}>인사</span>
+                )}
+                {expandedCard.isReply && (
+                  <span style={{ background: C.white, color: C.zinc900, fontSize: 13, fontWeight: 600, fontFamily: "'Noto Sans KR', sans-serif", padding: "5px 12px", borderRadius: 4 }}>답장</span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
