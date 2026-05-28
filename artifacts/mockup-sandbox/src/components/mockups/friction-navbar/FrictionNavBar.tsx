@@ -338,16 +338,18 @@ function CarouselGroup({ group, onCardTap }: { group: MockGroup; onCardTap?: (ca
 
   function onPointerUp(e: React.PointerEvent) {
     if (!dragState.current.isDown) return;
-    const wasDragging = dragState.current.dragging;
     dragState.current.isDown = false;
     const dx = e.clientX - dragState.current.startX;
     let next = activeIndex;
     if (Math.abs(dx) >= 48) next = dx < 0 ? activeIndex + 1 : activeIndex - 1;
     snapTo(next);
-    if (!wasDragging) {
+    setTimeout(() => { dragState.current.dragging = false; }, 60);
+  }
+
+  function onCarouselClick() {
+    if (!dragState.current.dragging) {
       onCardTap?.(group.cards[activeIndex]);
     }
-    setTimeout(() => { dragState.current.dragging = false; }, 60);
   }
 
   return (
@@ -369,12 +371,13 @@ function CarouselGroup({ group, onCardTap }: { group: MockGroup; onCardTap?: (ca
       <div
         style={{
           width: SCREEN_W, height: CARD_H, overflow: "hidden",
-          cursor: group.cards.length > 1 ? "grab" : "default",
+          cursor: "pointer",
           userSelect: "none",
         }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
+        onClick={onCarouselClick}
       >
         <div
           ref={trackRef}
