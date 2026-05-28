@@ -266,8 +266,8 @@ function CarouselGroup({ group }: { group: MockGroup }) {
   const translateX = useRef(getBaseX(0));
   const trackRef = useRef<HTMLDivElement>(null);
 
-  const dragState = useRef<{ startX: number; startTX: number; dragging: boolean }>({
-    startX: 0, startTX: 0, dragging: false,
+  const dragState = useRef<{ startX: number; startTX: number; dragging: boolean; isDown: boolean }>({
+    startX: 0, startTX: 0, dragging: false, isDown: false,
   });
 
   function getBaseX(idx: number) {
@@ -286,11 +286,12 @@ function CarouselGroup({ group }: { group: MockGroup }) {
 
   function onPointerDown(e: React.PointerEvent) {
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    dragState.current = { startX: e.clientX, startTX: translateX.current, dragging: false };
+    dragState.current = { startX: e.clientX, startTX: translateX.current, dragging: false, isDown: true };
     if (trackRef.current) trackRef.current.style.transition = "none";
   }
 
   function onPointerMove(e: React.PointerEvent) {
+    if (!dragState.current.isDown) return;
     const { startX, startTX } = dragState.current;
     const dx = e.clientX - startX;
     if (Math.abs(dx) > 5) dragState.current.dragging = true;
@@ -304,11 +305,11 @@ function CarouselGroup({ group }: { group: MockGroup }) {
   }
 
   function onPointerUp(e: React.PointerEvent) {
+    if (!dragState.current.isDown) return;
+    dragState.current.isDown = false;
     const dx = e.clientX - dragState.current.startX;
-    const vx = 0; // approximate
     let next = activeIndex;
     if (Math.abs(dx) >= 48) next = dx < 0 ? activeIndex + 1 : activeIndex - 1;
-    else if (Math.abs(vx) > 0.5) next = vx < 0 ? activeIndex + 1 : activeIndex - 1;
     snapTo(next);
     setTimeout(() => { dragState.current.dragging = false; }, 60);
   }
