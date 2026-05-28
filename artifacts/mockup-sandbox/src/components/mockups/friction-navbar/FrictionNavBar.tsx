@@ -537,6 +537,64 @@ function InboxScreen({ navBottom }: { navBottom: number }) {
           >
             <ArticleCard card={expanded.card} isActive={true} />
           </div>
+
+          {/* ── Action buttons below the expanded card ── */}
+          <div
+            style={{
+              position: "absolute",
+              top: EXP_TOP + EXP_H + 12,
+              left: 16,
+              width: EXP_W,
+              display: "flex",
+              gap: 8,
+              opacity: isOpen ? 1 : 0,
+              transform: isOpen ? "translateY(0px)" : "translateY(10px)",
+              transition: "opacity 0.3s ease 0.15s, transform 0.3s ease 0.15s",
+              pointerEvents: isOpen ? "auto" : "none",
+            }}
+          >
+            {/* 읽기 button */}
+            <button
+              style={{
+                flex: 1,
+                height: 56,
+                borderRadius: 16,
+                border: "none",
+                background: C.white,
+                cursor: "pointer",
+                fontFamily: "'Noto Sans KR', sans-serif",
+                fontSize: 16,
+                fontWeight: 600,
+                color: C.zinc900,
+                letterSpacing: -0.3,
+              }}
+            >
+              읽기
+            </button>
+
+            {/* 삭제 button — square */}
+            <button
+              style={{
+                width: 56,
+                height: 56,
+                flexShrink: 0,
+                borderRadius: 16,
+                border: "none",
+                background: C.noticeAccent,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <path d="M3.5 5.5h13M7.5 5.5V4a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 .5.5v1.5M5.5 5.5l.9 10a.5.5 0 0 0 .5.5h6.2a.5.5 0 0 0 .5-.5l.9-10" stroke="white" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                <line x1="10" y1="8" x2="10" y2="13" stroke="white" strokeWidth="1.4" strokeLinecap="round"/>
+                <line x1="7.8" y1="8.1" x2="8.2" y2="13.1" stroke="white" strokeWidth="1.4" strokeLinecap="round"/>
+                <line x1="12.2" y1="8.1" x2="11.8" y2="13.1" stroke="white" strokeWidth="1.4" strokeLinecap="round"/>
+              </svg>
+            </button>
+          </div>
         </div>
       )}
     </div>
