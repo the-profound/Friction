@@ -37,7 +37,7 @@ const TABS = [
   { key: "IN", label: "수신",  icon: "inbox"     },
   { key: "SR", label: "연재",  icon: "book-open" },
   { key: "ON", label: "기록",  icon: "edit-3"    },
-  { key: "MO", label: "모임",  icon: "users"     },
+  { key: "MO", label: "모임",  icon: "share-2"   },
   { key: "MY", label: "마이",  icon: "user"      },
 ] as const;
 type TabKey = (typeof TABS)[number]["key"];
@@ -136,6 +136,8 @@ function Icon({ name, size, color }: { name: string; size: number; color: string
       return <svg viewBox="0 0 24 24" style={s} {...p}><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>;
     case "user":
       return <svg viewBox="0 0 24 24" style={s} {...p}><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>;
+    case "share-2":
+      return <svg viewBox="0 0 24 24" style={s} {...p}><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>;
     case "search":
       return <svg viewBox="0 0 24 24" style={s} {...p}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>;
     default:
