@@ -668,23 +668,43 @@ type ExpandedState = {
   origin: { x: number; y: number; w: number; h: number };
 };
 
-function InboxScreen({ navBottom }: { navBottom: number }) {
-  const screenRef = useRef<HTMLDivElement>(null);
+/* ─── Reusable selection-mode (expanded card) ───────────────────── */
+function useExpandedCard(screenRef: React.RefObject<HTMLDivElement | null>) {
   const [expanded, setExpanded] = useState<ExpandedState | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [readPhase, setReadPhase] = useState<ReadPhase>("idle");
   const isReading = readPhase !== "idle";
   const readingTimersRef = useRef<number[]>([]);
+  const closeTimerRef = useRef<number | null>(null);
+  // Synchronous ref lock — guards against same-frame double-trigger races
+  // (state updates batch, so checking `readPhase` alone can race).
+  const isReadingRef = useRef(false);
 
   function clearReadingTimers() {
     readingTimersRef.current.forEach((t) => window.clearTimeout(t));
     readingTimersRef.current = [];
   }
 
+  function clearCloseTimer() {
+    if (closeTimerRef.current !== null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  }
+
+  // Clean up every pending timer when the host screen unmounts.
+  useEffect(() => () => {
+    clearReadingTimers();
+    clearCloseTimer();
+  }, []);
+
   function openCard(card: MockCard, element: HTMLElement | null) {
     if (!element || !screenRef.current) return;
     const cardRect = element.getBoundingClientRect();
     const screenRect = screenRef.current.getBoundingClientRect();
+    clearReadingTimers();
+    clearCloseTimer();
+    isReadingRef.current = false;
     setExpanded({
       card,
       origin: {
@@ -694,27 +714,28 @@ function InboxScreen({ navBottom }: { navBottom: number }) {
         h: cardRect.height,
       },
     });
-    clearReadingTimers();
     setReadPhase("idle");
     requestAnimationFrame(() => requestAnimationFrame(() => setIsOpen(true)));
   }
 
   function closeCard() {
     clearReadingTimers();
+    clearCloseTimer();
+    isReadingRef.current = false;
     setIsOpen(false);
     setReadPhase("idle");
-    setTimeout(() => setExpanded(null), 420);
+    closeTimerRef.current = window.setTimeout(() => {
+      closeTimerRef.current = null;
+      setExpanded(null);
+    }, 420);
   }
 
-  // Clean up any pending timers when the screen unmounts so we never
-  // setState on an unmounted component.
-  useEffect(() => () => clearReadingTimers(), []);
-
   // 읽기 → flip (0.85s) → wax break + flap open (0.6s, simultaneous) →
-  // envelope slides right off-screen (0.7s).
-  // Guard against re-entry while a sequence is already running.
+  // envelope slides right off-screen (0.7s). Guarded against re-entry by both
+  // a synchronous ref lock and the readPhase state.
   function startReading() {
-    if (readPhase !== "idle") return;
+    if (isReadingRef.current || readPhase !== "idle") return;
+    isReadingRef.current = true;
     clearReadingTimers();
     setReadPhase("flipping");
     readingTimersRef.current.push(
@@ -725,35 +746,150 @@ function InboxScreen({ navBottom }: { navBottom: number }) {
     );
   }
 
-  // FLIP transform: at "closed" state, the overlay card sits at the original
-  // card's position with scale 1; at "open" state, it scales up to EXP size at
-  // the target position. The overlay's natural box is CARD_W×CARD_H placed at
-  // (16, EXP_TOP) with transformOrigin top-left.
+  return { expanded, isOpen, readPhase, isReading, openCard, closeCard, startReading };
+}
+
+function ExpandedCardOverlay({
+  expanded, isOpen, readPhase, isReading, onClose, onStartReading,
+}: {
+  expanded: ExpandedState | null;
+  isOpen: boolean;
+  readPhase: ReadPhase;
+  isReading: boolean;
+  onClose: () => void;
+  onStartReading: () => void;
+}) {
+  if (!expanded) return null;
+
+  // FLIP transform: at "closed" state the overlay card sits at the original
+  // card's position with scale 1; at "open" state it scales up to EXP size at
+  // the target position. Natural box is CARD_W×CARD_H placed at (16, EXP_TOP)
+  // with transformOrigin top-left.
   const SCALE = EXP_W / CARD_W;
-  let collapsedTransform = "translate(0px, 0px) scale(1)";
-  if (expanded) {
-    const sx = expanded.origin.w / CARD_W;
-    const sy = expanded.origin.h / CARD_H;
-    const tx = expanded.origin.x - 16;
-    const ty = expanded.origin.y - EXP_TOP;
-    collapsedTransform = `translate(${tx}px, ${ty}px) scale(${sx}, ${sy})`;
-  }
+  const sx = expanded.origin.w / CARD_W;
+  const sy = expanded.origin.h / CARD_H;
+  const tx = expanded.origin.x - 16;
+  const ty = expanded.origin.y - EXP_TOP;
+  const collapsedTransform = `translate(${tx}px, ${ty}px) scale(${sx}, ${sy})`;
 
   return (
-    <div ref={screenRef} style={{ position: "absolute", inset: 0, background: C.white, display: "flex", flexDirection: "column" }}>
-      {/* Status-bar placeholder */}
-      <div style={{ height: STATUS_H, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", paddingLeft: 24, paddingRight: 20, paddingTop: 8 }}>
-        <span style={{ fontSize: 15, fontWeight: 600, fontFamily: "'Noto Sans KR', sans-serif", color: C.zinc900, letterSpacing: -0.3 }}>9:41</span>
-        <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
-          <svg width="17" height="12" viewBox="0 0 17 12" fill={C.zinc900}>
-            <rect x="0" y="3" width="3" height="9" rx="1"/><rect x="4.7" y="2.5" width="3" height="9.5" rx="1"/><rect x="9.4" y="0.5" width="3" height="11.5" rx="1"/><rect x="14" y="0" width="3" height="12" rx="1" opacity="0.28"/>
-          </svg>
-          <div style={{ width: 25, height: 12, border: `1.5px solid ${C.zinc900}`, borderRadius: 3.5, position: "relative", display: "flex", alignItems: "center", padding: "0 1.5px" }}>
-            <div style={{ width: "78%", height: 7, background: C.zinc900, borderRadius: 1.5 }}/>
-            <div style={{ position: "absolute", right: -5, top: "50%", transform: "translateY(-50%)", width: 3, height: 6, background: C.zinc900, borderRadius: 1, opacity: 0.4 }}/>
+    <div style={{ position: "absolute", inset: 0, zIndex: 100 }}>
+      {/* Dim backdrop — click to close */}
+      <div
+        onClick={onClose}
+        style={{
+          position: "absolute", inset: 0,
+          background: "rgba(0,0,0,0.62)",
+          opacity: isOpen ? 1 : 0,
+          transition: "opacity 0.42s ease-in-out",
+        }}
+      />
+
+      {/* The card itself — FLIPs from the source cell to the expanded rect */}
+      <div
+        style={{
+          position: "absolute",
+          top: EXP_TOP, left: 16,
+          width: CARD_W, height: CARD_H,
+          transformOrigin: "top left",
+          transform: isOpen ? `translate(0px, 0px) scale(${SCALE})` : collapsedTransform,
+          transition: "transform 0.42s cubic-bezier(0.34,1.02,0.64,1)",
+          pointerEvents: "none",
+          willChange: "transform",
+          perspective: 1600,
+        }}
+      >
+        <div
+          style={{
+            width: "100%", height: "100%", position: "relative",
+            transformStyle: "preserve-3d",
+            transform: isReading ? "rotateY(180deg)" : "rotateY(0deg)",
+            transition: "transform 0.85s cubic-bezier(0.65, 0, 0.35, 1)",
+          }}
+        >
+          {/* Front face — article card */}
+          <div style={{
+            position: "absolute", inset: 0,
+            backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden",
+          }}>
+            <ArticleCard card={expanded.card} isActive={true} />
+          </div>
+          {/* Back face — letter view (article + envelope on top) */}
+          <div style={{
+            position: "absolute", inset: 0,
+            backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden",
+            transform: "rotateY(180deg)",
+            transformStyle: "preserve-3d",
+          }}>
+            <LetterView card={expanded.card} phase={readPhase} />
           </div>
         </div>
       </div>
+
+      {/* Action buttons below the expanded card */}
+      <div style={{
+        position: "absolute",
+        top: EXP_TOP + EXP_H + 12, left: 16, width: EXP_W,
+        display: "flex", gap: 8,
+        opacity: isOpen && !isReading ? 1 : 0,
+        transform: isOpen && !isReading ? "translateY(0px)" : "translateY(10px)",
+        transition: "opacity 0.25s ease, transform 0.25s ease",
+        pointerEvents: isOpen && !isReading ? "auto" : "none",
+      }}>
+        <button
+          onClick={onStartReading}
+          style={{
+            flex: 1, height: 56, borderRadius: 16, border: "none",
+            background: C.white, cursor: "pointer",
+            fontFamily: "'Noto Sans KR', sans-serif",
+            fontSize: 16, fontWeight: 600, color: C.zinc900, letterSpacing: -0.3,
+          }}
+        >
+          읽기
+        </button>
+        <button style={{
+          width: 56, height: 56, flexShrink: 0, borderRadius: 16, border: "none",
+          background: C.noticeAccent, cursor: "pointer",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M3.5 5.5h13M7.5 5.5V4a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 .5.5v1.5M5.5 5.5l.9 10a.5.5 0 0 0 .5.5h6.2a.5.5 0 0 0 .5-.5l.9-10" stroke="white" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+            <line x1="10" y1="8" x2="10" y2="13" stroke="white" strokeWidth="1.4" strokeLinecap="round"/>
+            <line x1="7.8" y1="8.1" x2="8.2" y2="13.1" stroke="white" strokeWidth="1.4" strokeLinecap="round"/>
+            <line x1="12.2" y1="8.1" x2="11.8" y2="13.1" stroke="white" strokeWidth="1.4" strokeLinecap="round"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Shared status bar ──────────────────────────────────────── */
+function StatusBar() {
+  return (
+    <div style={{ height: STATUS_H, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", paddingLeft: 24, paddingRight: 20, paddingTop: 8 }}>
+      <span style={{ fontSize: 15, fontWeight: 600, fontFamily: "'Noto Sans KR', sans-serif", color: C.zinc900, letterSpacing: -0.3 }}>9:41</span>
+      <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
+        <svg width="17" height="12" viewBox="0 0 17 12" fill={C.zinc900}>
+          <rect x="0" y="3" width="3" height="9" rx="1"/><rect x="4.7" y="2.5" width="3" height="9.5" rx="1"/><rect x="9.4" y="0.5" width="3" height="11.5" rx="1"/><rect x="14" y="0" width="3" height="12" rx="1" opacity="0.28"/>
+        </svg>
+        <div style={{ width: 25, height: 12, border: `1.5px solid ${C.zinc900}`, borderRadius: 3.5, position: "relative", display: "flex", alignItems: "center", padding: "0 1.5px" }}>
+          <div style={{ width: "78%", height: 7, background: C.zinc900, borderRadius: 1.5 }}/>
+          <div style={{ position: "absolute", right: -5, top: "50%", transform: "translateY(-50%)", width: 3, height: 6, background: C.zinc900, borderRadius: 1, opacity: 0.4 }}/>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Inbox screen ───────────────────────────────────────────── */
+function InboxScreen({ navBottom }: { navBottom: number }) {
+  const screenRef = useRef<HTMLDivElement>(null);
+  const exp = useExpandedCard(screenRef);
+
+  return (
+    <div ref={screenRef} style={{ position: "absolute", inset: 0, background: C.white, display: "flex", flexDirection: "column" }}>
+      <StatusBar />
 
       {/* Page header */}
       <div style={{ paddingLeft: 24, paddingRight: 20, paddingTop: 8, paddingBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexShrink: 0 }}>
@@ -771,152 +907,194 @@ function InboxScreen({ navBottom }: { navBottom: number }) {
           <CarouselGroup
             key={group.date}
             group={group}
-            onCardTap={openCard}
-            hiddenCardId={expanded?.card.id ?? null}
+            onCardTap={exp.openCard}
+            hiddenCardId={exp.expanded?.card.id ?? null}
           />
         ))}
       </div>
 
-      {/* ── Expanded card overlay (FLIP animation on the real card) ── */}
-      {expanded && (
-        <div style={{ position: "absolute", inset: 0, zIndex: 100 }}>
-          {/* Dim backdrop — click to close */}
-          <div
-            onClick={closeCard}
-            style={{
-              position: "absolute", inset: 0,
-              background: "rgba(0,0,0,0.62)",
-              opacity: isOpen ? 1 : 0,
-              transition: "opacity 0.42s ease-in-out",
-            }}
-          />
-
-          {/* The card itself — animated from origin rect to expanded rect.
-              An inner flip layer rotates 180° on Y when 읽기 is pressed,
-              revealing the envelope back face. */}
-          <div
-            style={{
-              position: "absolute",
-              top: EXP_TOP,
-              left: 16,
-              width: CARD_W,
-              height: CARD_H,
-              transformOrigin: "top left",
-              transform: isOpen
-                ? `translate(0px, 0px) scale(${SCALE})`
-                : collapsedTransform,
-              transition: "transform 0.42s cubic-bezier(0.34,1.02,0.64,1)",
-              pointerEvents: "none",
-              willChange: "transform",
-              perspective: 1600,
-            }}
-          >
-            <div
-              style={{
-                width: "100%",
-                height: "100%",
-                position: "relative",
-                transformStyle: "preserve-3d",
-                transform: isReading ? "rotateY(180deg)" : "rotateY(0deg)",
-                transition: "transform 0.85s cubic-bezier(0.65, 0, 0.35, 1)",
-              }}
-            >
-              {/* Front face — article card */}
-              <div
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  backfaceVisibility: "hidden",
-                  WebkitBackfaceVisibility: "hidden",
-                }}
-              >
-                <ArticleCard card={expanded.card} isActive={true} />
-              </div>
-              {/* Back face — letter view (article + envelope on top) */}
-              <div
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  backfaceVisibility: "hidden",
-                  WebkitBackfaceVisibility: "hidden",
-                  transform: "rotateY(180deg)",
-                  transformStyle: "preserve-3d",
-                }}
-              >
-                <LetterView card={expanded.card} phase={readPhase} />
-              </div>
-            </div>
-          </div>
-
-          {/* ── Action buttons below the expanded card ── */}
-          <div
-            style={{
-              position: "absolute",
-              top: EXP_TOP + EXP_H + 12,
-              left: 16,
-              width: EXP_W,
-              display: "flex",
-              gap: 8,
-              opacity: isOpen && !isReading ? 1 : 0,
-              transform: isOpen && !isReading ? "translateY(0px)" : "translateY(10px)",
-              transition: "opacity 0.25s ease, transform 0.25s ease",
-              pointerEvents: isOpen && !isReading ? "auto" : "none",
-            }}
-          >
-            {/* 읽기 button */}
-            <button
-              onClick={startReading}
-              style={{
-                flex: 1,
-                height: 56,
-                borderRadius: 16,
-                border: "none",
-                background: C.white,
-                cursor: "pointer",
-                fontFamily: "'Noto Sans KR', sans-serif",
-                fontSize: 16,
-                fontWeight: 600,
-                color: C.zinc900,
-                letterSpacing: -0.3,
-              }}
-            >
-              읽기
-            </button>
-
-            {/* 삭제 button — square */}
-            <button
-              style={{
-                width: 56,
-                height: 56,
-                flexShrink: 0,
-                borderRadius: 16,
-                border: "none",
-                background: C.noticeAccent,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                <path d="M3.5 5.5h13M7.5 5.5V4a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 .5.5v1.5M5.5 5.5l.9 10a.5.5 0 0 0 .5.5h6.2a.5.5 0 0 0 .5-.5l.9-10" stroke="white" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-                <line x1="10" y1="8" x2="10" y2="13" stroke="white" strokeWidth="1.4" strokeLinecap="round"/>
-                <line x1="7.8" y1="8.1" x2="8.2" y2="13.1" stroke="white" strokeWidth="1.4" strokeLinecap="round"/>
-                <line x1="12.2" y1="8.1" x2="11.8" y2="13.1" stroke="white" strokeWidth="1.4" strokeLinecap="round"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-      )}
+      <ExpandedCardOverlay
+        expanded={exp.expanded}
+        isOpen={exp.isOpen}
+        readPhase={exp.readPhase}
+        isReading={exp.isReading}
+        onClose={exp.closeCard}
+        onStartReading={exp.startReading}
+      />
     </div>
   );
 }
 
-/* ─── Placeholder for other tabs ─────────────────────────────── */
+/* ─── My screen — profile + 편지/연재/모임 sub-tabs ───────────── */
+const MY_LETTERS: MockCard[] = [
+  { id: "ml01", author: "나", title: "오늘의 일기",       bg: "#dbe982", textColor: "#3a3a1f" },
+  { id: "ml02", author: "나", title: "도서관에서",         bg: "#a3d175", textColor: "#1a2a14" },
+  { id: "ml03", author: "나", title: "긴 산책",            bg: "#e2e2e5", textColor: "#3a3a40" },
+  { id: "ml04", author: "나", title: "비 내리는 창가",     bg: "#f5cf9e", textColor: "#3a2a1a" },
+  { id: "ml05", author: "나", title: "주말의 단상",        bg: "#dfdde1", textColor: "#3a3540" },
+  { id: "ml06", author: "나", title: "오랜만의 답장",      bg: "#f4a5a5", textColor: "#3a1a1a" },
+  { id: "ml07", author: "나", title: "월요일의 다짐",      bg: "#a8bff0", textColor: "#1a2540" },
+  { id: "ml08", author: "나", title: "서랍을 정리하며",    bg: "#f5a8b8", textColor: "#3a1a25" },
+  { id: "ml09", author: "나", title: "오래된 노래",        bg: "#cba7f5", textColor: "#2a1540" },
+  { id: "ml10", author: "나", title: "퇴근길 단상",        bg: "#1a1612", textColor: "#f0ebe0",
+    image: "https://images.unsplash.com/photo-1538485399081-7191377e8241?w=400&q=80" },
+  { id: "ml11", author: "나", title: "햇살 좋은 날",       bg: "#f4e8d6", textColor: "#3a2e22" },
+  { id: "ml12", author: "나", title: "친구에게",           bg: "#bce5d4", textColor: "#1a3a2e" },
+];
+
+type MyTab = "letters" | "series" | "groups";
+const MY_TABS: { key: MyTab; label: string }[] = [
+  { key: "letters", label: "편지" },
+  { key: "series",  label: "연재" },
+  { key: "groups",  label: "모임" },
+];
+
+function LetterGrid({
+  cards, onCardTap, hiddenCardId,
+}: {
+  cards: MockCard[];
+  onCardTap: (c: MockCard, el: HTMLElement | null) => void;
+  hiddenCardId: string | null;
+}) {
+  const GAP = 4;
+  const PAD = 12;
+  const COLS = 3;
+  const CELL_W = Math.floor((SCREEN_W - PAD * 2 - GAP * (COLS - 1)) / COLS);
+  const CELL_H = Math.floor(CELL_W * (CARD_H / CARD_W));
+  const SCALE = CELL_W / CARD_W;
+  const cellRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  return (
+    <div style={{
+      display: "flex", flexWrap: "wrap", gap: GAP,
+      padding: `0 ${PAD}px`,
+    }}>
+      {cards.map((card, i) => (
+        <div
+          key={card.id}
+          ref={(el) => { cellRefs.current[i] = el; }}
+          onClick={() => onCardTap(card, cellRefs.current[i])}
+          style={{
+            width: CELL_W, height: CELL_H,
+            position: "relative", overflow: "hidden",
+            cursor: "pointer",
+            visibility: hiddenCardId === card.id ? "hidden" : "visible",
+          }}
+        >
+          {/* Full-size ArticleCard scaled down to fit the grid cell */}
+          <div style={{
+            position: "absolute", top: 0, left: 0,
+            width: CARD_W, height: CARD_H,
+            transform: `scale(${SCALE})`,
+            transformOrigin: "top left",
+          }}>
+            <ArticleCard card={card} isActive={true} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MyScreen({ navBottom }: { navBottom: number }) {
+  const screenRef = useRef<HTMLDivElement>(null);
+  const exp = useExpandedCard(screenRef);
+  const [myTab, setMyTab] = useState<MyTab>("letters");
+
+  return (
+    <div ref={screenRef} style={{ position: "absolute", inset: 0, background: C.white, display: "flex", flexDirection: "column" }}>
+      <StatusBar />
+
+      {/* Profile header */}
+      <div style={{
+        padding: "20px 28px 28px",
+        display: "flex", alignItems: "center", gap: 20,
+        flexShrink: 0,
+      }}>
+        <div style={{
+          width: 78, height: 78, borderRadius: "50%",
+          background: C.zinc100, flexShrink: 0,
+          boxShadow: "inset 0 0 0 0.5px rgba(0,0,0,0.05)",
+        }} />
+        <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+          <span style={{
+            fontSize: 24, fontWeight: 800, fontFamily: "'Noto Sans KR', sans-serif",
+            color: C.zinc900, letterSpacing: -0.5, lineHeight: 1.1,
+          }}>
+            사용자명
+          </span>
+          <span style={{
+            fontSize: 15, fontFamily: "'Noto Sans KR', sans-serif",
+            color: C.zinc400, marginTop: 4, letterSpacing: -0.2,
+          }}>
+            @자강두천
+          </span>
+        </div>
+      </div>
+
+      {/* Sub-tabs: 편지 / 연재 / 모임 */}
+      <div style={{
+        display: "flex", borderBottom: `1px solid ${C.zinc100}`,
+        flexShrink: 0,
+      }}>
+        {MY_TABS.map((t) => {
+          const active = myTab === t.key;
+          return (
+            <button
+              key={t.key}
+              onClick={() => setMyTab(t.key)}
+              style={{
+                flex: 1, padding: "12px 0 11px", background: "none", border: "none",
+                cursor: "pointer", fontFamily: "'Noto Sans KR', sans-serif",
+                fontSize: 14, fontWeight: active ? 700 : 500,
+                color: active ? C.zinc900 : C.zinc400,
+                letterSpacing: -0.2,
+                borderBottom: active ? `2px solid ${C.zinc900}` : "2px solid transparent",
+                marginBottom: -1,
+                transition: "color 0.15s ease",
+              }}
+            >
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Tab content */}
+      <div style={{ flex: 1, overflowY: "auto", paddingTop: 12, paddingBottom: navBottom }}>
+        {myTab === "letters" ? (
+          <LetterGrid
+            cards={MY_LETTERS}
+            onCardTap={exp.openCard}
+            hiddenCardId={exp.expanded?.card.id ?? null}
+          />
+        ) : (
+          <div style={{
+            padding: "80px 24px", textAlign: "center",
+            color: C.zinc400, fontSize: 14, fontFamily: "'Noto Sans KR', sans-serif",
+          }}>
+            아직 비어있어요
+          </div>
+        )}
+      </div>
+
+      <ExpandedCardOverlay
+        expanded={exp.expanded}
+        isOpen={exp.isOpen}
+        readPhase={exp.readPhase}
+        isReading={exp.isReading}
+        onClose={exp.closeCard}
+        onStartReading={exp.startReading}
+      />
+    </div>
+  );
+}
+
+/* ─── Placeholder for other (not-yet-built) tabs ─────────────── */
 function PlaceholderScreen({ label }: { label: string }) {
   return (
     <div style={{ position: "absolute", inset: 0, background: C.zinc50, display: "flex", flexDirection: "column" }}>
-      <div style={{ height: STATUS_H, flexShrink: 0 }} />
+      <StatusBar />
       <div style={{ paddingLeft: 24, paddingTop: 8 }}>
         <h1 style={{ margin: 0, fontSize: 28, fontWeight: 900, fontFamily: "'Noto Sans KR', sans-serif", color: C.zinc900, letterSpacing: -0.5 }}>
           {label}
@@ -995,10 +1173,13 @@ export function FrictionNavBar() {
 
   return (
     <div style={{ width: SCREEN_W, height: SCREEN_H, position: "relative", overflow: "hidden", background: C.white }}>
-      {activeTab === "IN"
-        ? <InboxScreen navBottom={navBottom} />
-        : <PlaceholderScreen label={tab.label} />
-      }
+      {activeTab === "IN" ? (
+        <InboxScreen navBottom={navBottom} />
+      ) : activeTab === "MY" ? (
+        <MyScreen navBottom={navBottom} />
+      ) : (
+        <PlaceholderScreen label={tab.label} />
+      )}
       <NavBar activeTab={activeTab} onTabPress={setActiveTab} />
     </div>
   );
