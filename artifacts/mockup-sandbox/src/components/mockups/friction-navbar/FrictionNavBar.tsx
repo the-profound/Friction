@@ -488,7 +488,6 @@ export function FrictionNavBar() {
         : <PlaceholderScreen label={tab.label} />
       }
       <NavBar activeTab={activeTab} onTabPress={setActiveTab} />
-      <Fab visible={activeTab === "ON"} />
     </div>
   );
 }
