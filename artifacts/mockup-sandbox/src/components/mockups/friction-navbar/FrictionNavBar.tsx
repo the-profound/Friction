@@ -412,16 +412,16 @@ function IPhoneShell({ children }: { children: React.ReactNode }) {
 }
 
 /* ─────────────────────────────────────────────
-   Root component — phone only, no decoration
+   Root component — bare screen, no device frame
 ───────────────────────────────────────────── */
 export function FrictionNavBar() {
   const [activeTab, setActiveTab] = useState<TabKey>("IN");
 
   return (
-    <IPhoneShell>
+    <div style={{ width: SCREEN_W, height: SCREEN_H, position: "relative", overflow: "hidden", background: "#FAFAFA" }}>
       <ScreenContent activeTab={activeTab} />
       <NavBar activeTab={activeTab} onTabPress={setActiveTab} />
       <Fab visible={activeTab === "ON"} />
-    </IPhoneShell>
+    </div>
   );
 }
