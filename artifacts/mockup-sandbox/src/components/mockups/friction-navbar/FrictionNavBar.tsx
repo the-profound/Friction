@@ -907,7 +907,7 @@ function InboxScreen({ navBottom }: { navBottom: number }) {
       </div>
 
       {/* Scrollable list */}
-      <div style={{ flex: 1, overflowY: "auto", paddingBottom: navBottom }}>
+      <div className="no-scrollbar" style={{ flex: 1, overflowY: "auto", paddingBottom: navBottom, scrollbarWidth: "none", msOverflowStyle: "none" } as React.CSSProperties}>
         {MOCK_GROUPS.map((group) => (
           <CarouselGroup
             key={group.date}
@@ -1066,7 +1066,7 @@ function MyScreen({ navBottom }: { navBottom: number }) {
       </div>
 
       {/* Tab content */}
-      <div style={{ flex: 1, overflowY: "auto", paddingTop: 12, paddingBottom: navBottom }}>
+      <div className="no-scrollbar" style={{ flex: 1, overflowY: "auto", paddingTop: 12, paddingBottom: navBottom, scrollbarWidth: "none", msOverflowStyle: "none" } as React.CSSProperties}>
         {myTab === "letters" ? (
           <LetterGrid
             cards={MY_LETTERS}
@@ -1178,6 +1178,7 @@ export function FrictionNavBar() {
 
   return (
     <div style={{ width: SCREEN_W, height: SCREEN_H, position: "relative", overflow: "hidden", background: C.white }}>
+      <style>{`.no-scrollbar::-webkit-scrollbar { display: none; width: 0; height: 0; }`}</style>
       {activeTab === "IN" ? (
         <InboxScreen navBottom={navBottom} />
       ) : activeTab === "MY" ? (
