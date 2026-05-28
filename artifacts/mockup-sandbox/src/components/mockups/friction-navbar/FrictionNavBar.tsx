@@ -19,11 +19,11 @@ const C = {
 };
 
 const TABS = [
-  { key: "IN", label: "수신함",   icon: "inbox"   },
-  { key: "AR", label: "보관함",   icon: "archive"  },
-  { key: "ON", label: "기록함",   icon: "edit-3"   },
-  { key: "OF", label: "단체 모음", icon: "users"    },
-  { key: "TO", label: "발신함",   icon: "send"     },
+  { key: "IN", label: "수신",  icon: "inbox"     },
+  { key: "SR", label: "연재",  icon: "book-open" },
+  { key: "ON", label: "기록",  icon: "edit-3"    },
+  { key: "MO", label: "모임",  icon: "users"     },
+  { key: "MY", label: "마이",  icon: "user"      },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
@@ -71,6 +71,20 @@ function FeatherIcon({ name, size, color }: { name: string; size: number; color:
         <svg viewBox="0 0 24 24" style={s} {...shared}>
           <line x1="22" y1="2" x2="11" y2="13" />
           <polygon points="22 2 15 22 11 13 2 9 22 2" />
+        </svg>
+      );
+    case "book-open":
+      return (
+        <svg viewBox="0 0 24 24" style={s} {...shared}>
+          <path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z" />
+          <path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z" />
+        </svg>
+      );
+    case "user":
+      return (
+        <svg viewBox="0 0 24 24" style={s} {...shared}>
+          <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+          <circle cx="12" cy="7" r="4" />
         </svg>
       );
     case "edit":
