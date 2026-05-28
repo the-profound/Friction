@@ -21,8 +21,8 @@ const CARD_GAP      = 12;
 const SNAP_INTERVAL = CARD_W + CARD_GAP; // 312
 const CENTER_OFFSET = (SCREEN_W - CARD_W) / 2; // 46.5
 
-const TITLE_SIZE  = (6.5 / 100) * CARD_W;   // 19.5
-const AUTHOR_SIZE = (3.6 / 100) * CARD_W;   // 10.8
+const TITLE_SIZE  = (9.0 / 100) * CARD_W;   // 27
+const AUTHOR_SIZE = (4.5 / 100) * CARD_W;   // 13.5
 
 const NAV_W  = 300;
 const NAV_H  = 68;
@@ -168,70 +168,71 @@ function ArticleCard({
         transition: "opacity 0.22s ease, transform 0.22s ease",
       }}
     >
-      {/* Badges */}
+      {/* Text content — top-left: title → author → collection */}
+      <div style={{
+        position: "absolute", inset: 0,
+        display: "flex", flexDirection: "column", justifyContent: "flex-start",
+        padding: 20,
+      }}>
+        <span style={{
+          fontSize: TITLE_SIZE,
+          lineHeight: `${TITLE_SIZE * 1.25}px`,
+          fontFamily: "'Noto Sans KR', sans-serif",
+          fontWeight: 700,
+          color: card.textColor,
+          letterSpacing: `${-0.02 * TITLE_SIZE}px`,
+          WebkitLineClamp: 5,
+          overflow: "hidden",
+          display: "-webkit-box",
+          WebkitBoxOrient: "vertical",
+          marginBottom: 10,
+        } as React.CSSProperties}>
+          {card.title}
+        </span>
+        <span style={{
+          display: "block",
+          fontSize: AUTHOR_SIZE,
+          lineHeight: `${AUTHOR_SIZE * 1.6}px`,
+          fontFamily: "'Noto Sans KR', sans-serif",
+          fontWeight: 400,
+          color: card.textColor,
+          opacity: 0.75,
+        }}>
+          {card.author}
+        </span>
+        {card.collection && (
+          <span style={{
+            display: "block",
+            fontSize: AUTHOR_SIZE * 0.85,
+            lineHeight: `${AUTHOR_SIZE * 1.5}px`,
+            fontFamily: "'Noto Sans KR', sans-serif",
+            fontWeight: 300,
+            color: card.textColor,
+            opacity: 0.5,
+            marginTop: 3,
+          }}>
+            {card.collection}
+          </span>
+        )}
+      </div>
+
+      {/* Badges — bottom-right */}
       {(card.isNotice || card.isReply) && (
-        <div style={{ position: "absolute", top: 12, left: 12, display: "flex", flexDirection: "column", gap: 4, zIndex: 2 }}>
+        <div style={{ position: "absolute", bottom: 12, right: 12, display: "flex", flexDirection: "column", gap: 4, zIndex: 2, alignItems: "flex-end" }}>
           {card.isNotice && (
             <span style={{
-              alignSelf: "flex-start", background: C.white, color: C.noticeAccent,
+              background: C.white, color: C.noticeAccent,
               fontSize: 12, fontWeight: 600, fontFamily: "'Noto Sans KR', sans-serif",
               padding: "4px 10px", borderRadius: 999,
             }}>인사</span>
           )}
           {card.isReply && (
             <span style={{
-              alignSelf: "flex-start", background: C.white, color: C.zinc900,
+              background: C.white, color: C.zinc900,
               fontSize: 12, fontWeight: 600, fontFamily: "'Noto Sans KR', sans-serif",
               padding: "4px 10px", borderRadius: 4,
             }}>답장</span>
           )}
-        </div>
-      )}
-
-      {/* Text content — vertically centered */}
-      <div style={{
-        position: "absolute", inset: 0,
-        display: "flex", flexDirection: "column", justifyContent: "center",
-        padding: 20,
-      }}>
-        <span style={{
-          display: "block",
-          fontSize: AUTHOR_SIZE,
-          lineHeight: `${AUTHOR_SIZE * 1.8}px`,
-          fontFamily: "'Noto Sans KR', sans-serif",
-          fontWeight: 300,
-          color: card.textColor,
-          marginBottom: 6,
-        }}>
-          {card.author}
-        </span>
-        <span style={{
-          display: "block",
-          fontSize: TITLE_SIZE,
-          lineHeight: `${TITLE_SIZE * 1.2}px`,
-          fontFamily: "'Noto Sans KR', sans-serif",
-          fontWeight: 700,
-          color: card.textColor,
-          letterSpacing: `${-0.02 * TITLE_SIZE}px`,
-          WebkitLineClamp: 4,
-          overflow: "hidden",
-          display: "-webkit-box",
-          WebkitBoxOrient: "vertical",
-        } as React.CSSProperties}>
-          {card.title}
-        </span>
-      </div>
-
-      {/* Collection tag */}
-      {card.collection && (
-        <div style={{
-          position: "absolute", bottom: 12, left: 12,
-          background: C.white, borderRadius: 999,
-          padding: "4px 10px", zIndex: 2,
-        }}>
-          <span style={{ fontSize: 12, color: C.zinc700, fontFamily: "'Noto Sans KR', sans-serif" }}>
-            {card.collection}
-          </span>
         </div>
       )}
     </div>
