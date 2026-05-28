@@ -575,6 +575,12 @@ function EnvelopeFlap({ isOpen }: { isOpen: boolean }) {
         transition: "transform 0.6s cubic-bezier(0.45, 0, 0.25, 1)",
         transformStyle: "preserve-3d",
         pointerEvents: "none",
+        // Hide own back-face: when this flap is mounted inside the parent
+        // card's back face (rotateY 180 in world space), its own preserve-3d
+        // would otherwise render facing away — leaking through the parent
+        // card's front face.
+        backfaceVisibility: "hidden",
+        WebkitBackfaceVisibility: "hidden",
       }}
     >
       <svg
@@ -606,17 +612,26 @@ function EnvelopeFlap({ isOpen }: { isOpen: boolean }) {
   );
 }
 
-type ReadPhase = "idle" | "mounting" | "flipping" | "opened" | "slid";
+type ReadPhase = "idle" | "flipping" | "opened" | "slid";
 
 function LetterView({ card, phase }: { card: MockCard; phase: ReadPhase }) {
   const flapOpen = phase === "opened" || phase === "slid";
   const isSlid   = phase === "slid";
+  // Every flat-rendered child below gets its own backfaceVisibility:hidden,
+  // because preserve-3d ancestors do NOT propagate the parent card's
+  // back-face hiding. Without these, the envelope/article surfaces would
+  // bleed through the front of the card before the flip crosses 90°.
+  const HIDE_BACKFACE: React.CSSProperties = {
+    backfaceVisibility: "hidden",
+    WebkitBackfaceVisibility: "hidden",
+  };
   return (
     <div
       style={{
         position: "absolute",
         inset: 0,
         transformStyle: "preserve-3d",
+        ...HIDE_BACKFACE,
       }}
     >
       {/* 1. Article first page — stays put */}
@@ -626,6 +641,7 @@ function LetterView({ card, phase }: { card: MockCard; phase: ReadPhase }) {
           inset: 0,
           borderRadius: 16,
           overflow: "hidden",
+          ...HIDE_BACKFACE,
         }}
       >
         <ArticleFirstPage card={card} />
@@ -641,6 +657,7 @@ function LetterView({ card, phase }: { card: MockCard; phase: ReadPhase }) {
             : "translateX(0px)",
           transition: "transform 0.7s cubic-bezier(0.5, 0, 0.55, 1)",
           transformStyle: "preserve-3d",
+          ...HIDE_BACKFACE,
         }}
       >
         {/* Body — clipped to rounded corners (no 3D children inside) */}
@@ -651,6 +668,7 @@ function LetterView({ card, phase }: { card: MockCard; phase: ReadPhase }) {
             borderRadius: 16,
             overflow: "hidden",
             boxShadow: "inset 0 0 0 0.5px rgba(0,0,0,0.06)",
+            ...HIDE_BACKFACE,
           }}
         >
           <EnvelopeBody />
@@ -673,10 +691,7 @@ function useExpandedCard(screenRef: React.RefObject<HTMLDivElement | null>) {
   const [expanded, setExpanded] = useState<ExpandedState | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [readPhase, setReadPhase] = useState<ReadPhase>("idle");
-  // backFaceMounted: LetterView should be in DOM (back face populated)
-  const backFaceMounted = readPhase !== "idle";
-  // isFlipping: rotateY 180° should be applied (transition in progress or done)
-  const isFlipping = readPhase === "flipping" || readPhase === "opened" || readPhase === "slid";
+  const isReading = readPhase !== "idle";
   const readingTimersRef = useRef<number[]>([]);
   const closeTimerRef = useRef<number | null>(null);
   // Synchronous ref lock — guards against same-frame double-trigger races
@@ -735,40 +750,32 @@ function useExpandedCard(screenRef: React.RefObject<HTMLDivElement | null>) {
 
   // 읽기 → flip (0.85s) → wax break + flap open (0.6s, simultaneous) →
   // envelope slides right off-screen (0.7s). Guarded against re-entry by both
-  // a synchronous ref lock and the readPhase state.
+  // a synchronous ref lock and the readPhase state. The front-of-card bleed
+  // through is fixed at the CSS layer (backfaceVisibility on every 3D child
+  // inside LetterView), so no rAF dance is needed here.
   function startReading() {
     if (isReadingRef.current || readPhase !== "idle") return;
     isReadingRef.current = true;
     clearReadingTimers();
-    // Phase 1 — "mounting": mount LetterView on the back face (DOM populated, no flip yet).
-    setReadPhase("mounting");
-    // Phase 2 — "flipping" (one rAF later, ~16ms): browser has committed the mount,
-    // so rotateY transition now starts from a clean state — front face rotates away,
-    // back face (envelope) appears at >90°.
-    const rafId = requestAnimationFrame(() => {
-      setReadPhase("flipping");
-      readingTimersRef.current.push(
-        window.setTimeout(() => setReadPhase("opened"), 850),
-      );
-      readingTimersRef.current.push(
-        window.setTimeout(() => setReadPhase("slid"), 850 + 600),
-      );
-    });
-    // Store the rAF id so it can be cancelled if closeCard is called before it fires.
-    readingTimersRef.current.push(rafId as unknown as number);
+    setReadPhase("flipping");
+    readingTimersRef.current.push(
+      window.setTimeout(() => setReadPhase("opened"), 850),
+    );
+    readingTimersRef.current.push(
+      window.setTimeout(() => setReadPhase("slid"), 850 + 600),
+    );
   }
 
-  return { expanded, isOpen, readPhase, backFaceMounted, isFlipping, openCard, closeCard, startReading };
+  return { expanded, isOpen, readPhase, isReading, openCard, closeCard, startReading };
 }
 
 function ExpandedCardOverlay({
-  expanded, isOpen, readPhase, backFaceMounted, isFlipping, onClose, onStartReading,
+  expanded, isOpen, readPhase, isReading, onClose, onStartReading,
 }: {
   expanded: ExpandedState | null;
   isOpen: boolean;
   readPhase: ReadPhase;
-  backFaceMounted: boolean;
-  isFlipping: boolean;
+  isReading: boolean;
   onClose: () => void;
   onStartReading: () => void;
 }) {
@@ -816,7 +823,7 @@ function ExpandedCardOverlay({
           style={{
             width: "100%", height: "100%", position: "relative",
             transformStyle: "preserve-3d",
-            transform: isFlipping ? "rotateY(180deg)" : "rotateY(0deg)",
+            transform: isReading ? "rotateY(180deg)" : "rotateY(0deg)",
             transition: "transform 0.85s cubic-bezier(0.65, 0, 0.35, 1)",
           }}
         >
@@ -828,18 +835,19 @@ function ExpandedCardOverlay({
             <ArticleCard card={expanded.card} isActive={true} />
           </div>
           {/* Back face — letter view (article + envelope on top).
-              Only mounted once 읽기 is pressed. Reason: <EnvelopeFlap> has its
-              own `transformStyle: preserve-3d` with a rotateY transform, so the
-              parent's `backfaceVisibility: hidden` does NOT propagate to it —
-              the flap would bleed through the front face in selection mode.
-              Mounting on demand also keeps the back face inert until needed. */}
+              Only mounted once 읽기 is pressed. Defense in depth: this wrapper
+              hides its own back face, AND every 3D child inside <LetterView>
+              (the flap, envelope body wrapper, article wrapper) sets its own
+              `backfaceVisibility: hidden` — preserve-3d does NOT propagate
+              the property, so without per-child hiding the envelope would
+              bleed through the front of the card before the flip crosses 90°. */}
           <div style={{
             position: "absolute", inset: 0,
             backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden",
             transform: "rotateY(180deg)",
             transformStyle: "preserve-3d",
           }}>
-            {backFaceMounted && <LetterView card={expanded.card} phase={readPhase} />}
+            {isReading && <LetterView card={expanded.card} phase={readPhase} />}
           </div>
         </div>
       </div>
@@ -849,10 +857,10 @@ function ExpandedCardOverlay({
         position: "absolute",
         top: EXP_TOP + EXP_H + 12, left: 16, width: EXP_W,
         display: "flex", gap: 8,
-        opacity: isOpen && !isFlipping ? 1 : 0,
-        transform: isOpen && !isFlipping ? "translateY(0px)" : "translateY(10px)",
+        opacity: isOpen && !isReading ? 1 : 0,
+        transform: isOpen && !isReading ? "translateY(0px)" : "translateY(10px)",
         transition: "opacity 0.25s ease, transform 0.25s ease",
-        pointerEvents: isOpen && !isFlipping ? "auto" : "none",
+        pointerEvents: isOpen && !isReading ? "auto" : "none",
       }}>
         <button
           onClick={onStartReading}
@@ -935,8 +943,7 @@ function InboxScreen({ navBottom }: { navBottom: number }) {
         expanded={exp.expanded}
         isOpen={exp.isOpen}
         readPhase={exp.readPhase}
-        backFaceMounted={exp.backFaceMounted}
-        isFlipping={exp.isFlipping}
+        isReading={exp.isReading}
         onClose={exp.closeCard}
         onStartReading={exp.startReading}
       />
@@ -1101,8 +1108,7 @@ function MyScreen({ navBottom }: { navBottom: number }) {
         expanded={exp.expanded}
         isOpen={exp.isOpen}
         readPhase={exp.readPhase}
-        backFaceMounted={exp.backFaceMounted}
-        isFlipping={exp.isFlipping}
+        isReading={exp.isReading}
         onClose={exp.closeCard}
         onStartReading={exp.startReading}
       />
