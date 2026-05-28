@@ -49,6 +49,7 @@ interface MockCard {
   title: string;
   bg: string;
   textColor: string;
+  image?: string;
   collection?: string;
   isNotice?: boolean;
   isReply?: boolean;
@@ -71,8 +72,9 @@ const MOCK_GROUPS: MockGroup[] = [
         id: "g1c2",
         author: "김서연",
         title: "비 오는 날의 단상",
-        bg: "#F5F0E8",
-        textColor: "#2a2015",
+        bg: "#1c1814",
+        textColor: "#f5f0e8",
+        image: "https://images.unsplash.com/photo-1534088568595-a066f410bcda?w=600&q=80",
         collection: "봄 편지 모음",
       },
       {
@@ -92,8 +94,9 @@ const MOCK_GROUPS: MockGroup[] = [
         id: "g2c1",
         author: "박민준",
         title: "서울의 밤",
-        bg: "#DDEAF5",
-        textColor: "#1a2c3d",
+        bg: "#0d1117",
+        textColor: "#e8edf5",
+        image: "https://images.unsplash.com/photo-1538485399081-7191377e8241?w=600&q=80",
       },
       {
         id: "g2c2",
@@ -112,8 +115,9 @@ const MOCK_GROUPS: MockGroup[] = [
         id: "g3c1",
         author: "정다은",
         title: "오래된 카페에서",
-        bg: "#F5E8EA",
-        textColor: "#3a1a1d",
+        bg: "#1a1008",
+        textColor: "#f5ede8",
+        image: "https://images.unsplash.com/photo-1445116572660-236099ec97a0?w=600&q=80",
       },
     ],
   },
@@ -168,6 +172,27 @@ function ArticleCard({
         transition: "opacity 0.22s ease, transform 0.22s ease",
       }}
     >
+      {/* Photo background */}
+      {card.image && (
+        <img
+          src={card.image}
+          alt=""
+          style={{
+            position: "absolute", inset: 0,
+            width: "100%", height: "100%",
+            objectFit: "cover", objectPosition: "center",
+            display: "block",
+          }}
+        />
+      )}
+      {/* Gradient overlay — only on photo cards */}
+      {card.image && (
+        <div style={{
+          position: "absolute", inset: 0,
+          background: "linear-gradient(160deg, rgba(0,0,0,0.52) 0%, rgba(0,0,0,0.18) 55%, rgba(0,0,0,0.44) 100%)",
+        }} />
+      )}
+
       {/* Text content — top-left: title → author → collection */}
       <div style={{
         position: "absolute", inset: 0,
