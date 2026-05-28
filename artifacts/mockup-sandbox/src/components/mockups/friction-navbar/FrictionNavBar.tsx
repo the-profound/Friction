@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import waxSealUrl from "@/assets/wax-seal.png";
 
 /* ─── Tokens ─────────────────────────────────────────────────── */
 const C = {
@@ -501,7 +502,7 @@ function EnvelopeBack() {
 
         {/* Wax seal — sits at the flap apex, slightly overlapping body */}
         <img
-          src={`${import.meta.env.BASE_URL}images/wax-seal.png`}
+          src={waxSealUrl}
           alt=""
           draggable={false}
           style={{
