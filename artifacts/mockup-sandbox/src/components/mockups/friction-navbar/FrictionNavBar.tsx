@@ -814,14 +814,19 @@ function ExpandedCardOverlay({
           }}>
             <ArticleCard card={expanded.card} isActive={true} />
           </div>
-          {/* Back face — letter view (article + envelope on top) */}
+          {/* Back face — letter view (article + envelope on top).
+              Only mounted once 읽기 is pressed. Reason: <EnvelopeFlap> has its
+              own `transformStyle: preserve-3d` with a rotateY transform, so the
+              parent's `backfaceVisibility: hidden` does NOT propagate to it —
+              the flap would bleed through the front face in selection mode.
+              Mounting on demand also keeps the back face inert until needed. */}
           <div style={{
             position: "absolute", inset: 0,
             backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden",
             transform: "rotateY(180deg)",
             transformStyle: "preserve-3d",
           }}>
-            <LetterView card={expanded.card} phase={readPhase} />
+            {isReading && <LetterView card={expanded.card} phase={readPhase} />}
           </div>
         </div>
       </div>
