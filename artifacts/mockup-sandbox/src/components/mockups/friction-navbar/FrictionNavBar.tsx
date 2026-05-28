@@ -606,7 +606,7 @@ function EnvelopeFlap({ isOpen }: { isOpen: boolean }) {
   );
 }
 
-type ReadPhase = "idle" | "flipping" | "opened" | "slid";
+type ReadPhase = "idle" | "mounting" | "flipping" | "opened" | "slid";
 
 function LetterView({ card, phase }: { card: MockCard; phase: ReadPhase }) {
   const flapOpen = phase === "opened" || phase === "slid";
@@ -673,7 +673,10 @@ function useExpandedCard(screenRef: React.RefObject<HTMLDivElement | null>) {
   const [expanded, setExpanded] = useState<ExpandedState | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [readPhase, setReadPhase] = useState<ReadPhase>("idle");
-  const isReading = readPhase !== "idle";
+  // backFaceMounted: LetterView should be in DOM (back face populated)
+  const backFaceMounted = readPhase !== "idle";
+  // isFlipping: rotateY 180° should be applied (transition in progress or done)
+  const isFlipping = readPhase === "flipping" || readPhase === "opened" || readPhase === "slid";
   const readingTimersRef = useRef<number[]>([]);
   const closeTimerRef = useRef<number | null>(null);
   // Synchronous ref lock — guards against same-frame double-trigger races
@@ -737,25 +740,35 @@ function useExpandedCard(screenRef: React.RefObject<HTMLDivElement | null>) {
     if (isReadingRef.current || readPhase !== "idle") return;
     isReadingRef.current = true;
     clearReadingTimers();
-    setReadPhase("flipping");
-    readingTimersRef.current.push(
-      window.setTimeout(() => setReadPhase("opened"), 850),
-    );
-    readingTimersRef.current.push(
-      window.setTimeout(() => setReadPhase("slid"), 850 + 600),
-    );
+    // Phase 1 — "mounting": mount LetterView on the back face (DOM populated, no flip yet).
+    setReadPhase("mounting");
+    // Phase 2 — "flipping" (one rAF later, ~16ms): browser has committed the mount,
+    // so rotateY transition now starts from a clean state — front face rotates away,
+    // back face (envelope) appears at >90°.
+    const rafId = requestAnimationFrame(() => {
+      setReadPhase("flipping");
+      readingTimersRef.current.push(
+        window.setTimeout(() => setReadPhase("opened"), 850),
+      );
+      readingTimersRef.current.push(
+        window.setTimeout(() => setReadPhase("slid"), 850 + 600),
+      );
+    });
+    // Store the rAF id so it can be cancelled if closeCard is called before it fires.
+    readingTimersRef.current.push(rafId as unknown as number);
   }
 
-  return { expanded, isOpen, readPhase, isReading, openCard, closeCard, startReading };
+  return { expanded, isOpen, readPhase, backFaceMounted, isFlipping, openCard, closeCard, startReading };
 }
 
 function ExpandedCardOverlay({
-  expanded, isOpen, readPhase, isReading, onClose, onStartReading,
+  expanded, isOpen, readPhase, backFaceMounted, isFlipping, onClose, onStartReading,
 }: {
   expanded: ExpandedState | null;
   isOpen: boolean;
   readPhase: ReadPhase;
-  isReading: boolean;
+  backFaceMounted: boolean;
+  isFlipping: boolean;
   onClose: () => void;
   onStartReading: () => void;
 }) {
@@ -803,7 +816,7 @@ function ExpandedCardOverlay({
           style={{
             width: "100%", height: "100%", position: "relative",
             transformStyle: "preserve-3d",
-            transform: isReading ? "rotateY(180deg)" : "rotateY(0deg)",
+            transform: isFlipping ? "rotateY(180deg)" : "rotateY(0deg)",
             transition: "transform 0.85s cubic-bezier(0.65, 0, 0.35, 1)",
           }}
         >
@@ -826,7 +839,7 @@ function ExpandedCardOverlay({
             transform: "rotateY(180deg)",
             transformStyle: "preserve-3d",
           }}>
-            {isReading && <LetterView card={expanded.card} phase={readPhase} />}
+            {backFaceMounted && <LetterView card={expanded.card} phase={readPhase} />}
           </div>
         </div>
       </div>
@@ -836,10 +849,10 @@ function ExpandedCardOverlay({
         position: "absolute",
         top: EXP_TOP + EXP_H + 12, left: 16, width: EXP_W,
         display: "flex", gap: 8,
-        opacity: isOpen && !isReading ? 1 : 0,
-        transform: isOpen && !isReading ? "translateY(0px)" : "translateY(10px)",
+        opacity: isOpen && !isFlipping ? 1 : 0,
+        transform: isOpen && !isFlipping ? "translateY(0px)" : "translateY(10px)",
         transition: "opacity 0.25s ease, transform 0.25s ease",
-        pointerEvents: isOpen && !isReading ? "auto" : "none",
+        pointerEvents: isOpen && !isFlipping ? "auto" : "none",
       }}>
         <button
           onClick={onStartReading}
@@ -922,7 +935,8 @@ function InboxScreen({ navBottom }: { navBottom: number }) {
         expanded={exp.expanded}
         isOpen={exp.isOpen}
         readPhase={exp.readPhase}
-        isReading={exp.isReading}
+        backFaceMounted={exp.backFaceMounted}
+        isFlipping={exp.isFlipping}
         onClose={exp.closeCard}
         onStartReading={exp.startReading}
       />
@@ -1087,7 +1101,8 @@ function MyScreen({ navBottom }: { navBottom: number }) {
         expanded={exp.expanded}
         isOpen={exp.isOpen}
         readPhase={exp.readPhase}
-        isReading={exp.isReading}
+        backFaceMounted={exp.backFaceMounted}
+        isFlipping={exp.isFlipping}
         onClose={exp.closeCard}
         onStartReading={exp.startReading}
       />
