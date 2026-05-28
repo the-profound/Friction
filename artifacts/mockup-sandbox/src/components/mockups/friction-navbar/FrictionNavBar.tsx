@@ -293,10 +293,19 @@ function DotIndicator({ total, activeIndex }: { total: number; activeIndex: numb
 }
 
 /* ─── Carousel group ──────────────────────────────────────────── */
-function CarouselGroup({ group, onCardTap }: { group: MockGroup; onCardTap?: (card: MockCard) => void }) {
+function CarouselGroup({
+  group,
+  onCardTap,
+  hiddenCardId,
+}: {
+  group: MockGroup;
+  onCardTap?: (card: MockCard, element: HTMLElement | null) => void;
+  hiddenCardId?: string | null;
+}) {
   const [activeIndex, setActiveIndex] = useState(0);
   const translateX = useRef(getBaseX(0));
   const trackRef = useRef<HTMLDivElement>(null);
+  const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   const dragState = useRef<{ startX: number; startTX: number; dragging: boolean; isDown: boolean }>({
     startX: 0, startTX: 0, dragging: false, isDown: false,
@@ -348,7 +357,7 @@ function CarouselGroup({ group, onCardTap }: { group: MockGroup; onCardTap?: (ca
 
   function onCarouselClick() {
     if (!dragState.current.dragging) {
-      onCardTap?.(group.cards[activeIndex]);
+      onCardTap?.(group.cards[activeIndex], cardRefs.current[activeIndex]);
     }
   }
 
@@ -389,7 +398,14 @@ function CarouselGroup({ group, onCardTap }: { group: MockGroup; onCardTap?: (ca
           }}
         >
           {group.cards.map((card, i) => (
-            <div key={card.id} style={{ marginRight: i < group.cards.length - 1 ? CARD_GAP : 0 }}>
+            <div
+              key={card.id}
+              ref={(el) => { cardRefs.current[i] = el; }}
+              style={{
+                marginRight: i < group.cards.length - 1 ? CARD_GAP : 0,
+                visibility: hiddenCardId === card.id ? "hidden" : "visible",
+              }}
+            >
               <ArticleCard card={card} isActive={i === activeIndex} />
             </div>
           ))}
@@ -403,22 +419,53 @@ function CarouselGroup({ group, onCardTap }: { group: MockGroup; onCardTap?: (ca
 }
 
 /* ─── Inbox screen ────────────────────────────────────────────── */
+type ExpandedState = {
+  card: MockCard;
+  origin: { x: number; y: number; w: number; h: number };
+};
+
 function InboxScreen({ navBottom }: { navBottom: number }) {
-  const [expandedCard, setExpandedCard] = useState<MockCard | null>(null);
+  const screenRef = useRef<HTMLDivElement>(null);
+  const [expanded, setExpanded] = useState<ExpandedState | null>(null);
   const [isOpen, setIsOpen] = useState(false);
 
-  function openCard(card: MockCard) {
-    setExpandedCard(card);
+  function openCard(card: MockCard, element: HTMLElement | null) {
+    if (!element || !screenRef.current) return;
+    const cardRect = element.getBoundingClientRect();
+    const screenRect = screenRef.current.getBoundingClientRect();
+    setExpanded({
+      card,
+      origin: {
+        x: cardRect.left - screenRect.left,
+        y: cardRect.top - screenRect.top,
+        w: cardRect.width,
+        h: cardRect.height,
+      },
+    });
     requestAnimationFrame(() => requestAnimationFrame(() => setIsOpen(true)));
   }
 
   function closeCard() {
     setIsOpen(false);
-    setTimeout(() => setExpandedCard(null), 400);
+    setTimeout(() => setExpanded(null), 420);
+  }
+
+  // FLIP transform: at "closed" state, the overlay card sits at the original
+  // card's position with scale 1; at "open" state, it scales up to EXP size at
+  // the target position. The overlay's natural box is CARD_W×CARD_H placed at
+  // (16, EXP_TOP) with transformOrigin top-left.
+  const SCALE = EXP_W / CARD_W;
+  let collapsedTransform = "translate(0px, 0px) scale(1)";
+  if (expanded) {
+    const sx = expanded.origin.w / CARD_W;
+    const sy = expanded.origin.h / CARD_H;
+    const tx = expanded.origin.x - 16;
+    const ty = expanded.origin.y - EXP_TOP;
+    collapsedTransform = `translate(${tx}px, ${ty}px) scale(${sx}, ${sy})`;
   }
 
   return (
-    <div style={{ position: "absolute", inset: 0, background: C.white, display: "flex", flexDirection: "column" }}>
+    <div ref={screenRef} style={{ position: "absolute", inset: 0, background: C.white, display: "flex", flexDirection: "column" }}>
       {/* Status-bar placeholder */}
       <div style={{ height: STATUS_H, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", paddingLeft: 24, paddingRight: 20, paddingTop: 8 }}>
         <span style={{ fontSize: 15, fontWeight: 600, fontFamily: "'Noto Sans KR', sans-serif", color: C.zinc900, letterSpacing: -0.3 }}>9:41</span>
@@ -446,13 +493,18 @@ function InboxScreen({ navBottom }: { navBottom: number }) {
       {/* Scrollable list */}
       <div style={{ flex: 1, overflowY: "auto", paddingBottom: navBottom }}>
         {MOCK_GROUPS.map((group) => (
-          <CarouselGroup key={group.date} group={group} onCardTap={openCard} />
+          <CarouselGroup
+            key={group.date}
+            group={group}
+            onCardTap={openCard}
+            hiddenCardId={expanded?.card.id ?? null}
+          />
         ))}
       </div>
 
-      {/* ── Expanded card overlay ── */}
-      {expandedCard && (
-        <div style={{ position: "absolute", inset: 0, zIndex: 100, pointerEvents: "auto" }}>
+      {/* ── Expanded card overlay (FLIP animation on the real card) ── */}
+      {expanded && (
+        <div style={{ position: "absolute", inset: 0, zIndex: 100 }}>
           {/* Dim backdrop — click to close */}
           <div
             onClick={closeCard}
@@ -460,71 +512,30 @@ function InboxScreen({ navBottom }: { navBottom: number }) {
               position: "absolute", inset: 0,
               background: "rgba(0,0,0,0.62)",
               opacity: isOpen ? 1 : 0,
-              transition: "opacity 0.38s ease-in-out",
+              transition: "opacity 0.42s ease-in-out",
             }}
           />
 
-          {/* Expanded card */}
+          {/* The card itself — same ArticleCard rendering, animated from
+              the origin rect (where it sits in the carousel) to the
+              expanded rect at the top of the screen. */}
           <div
             style={{
               position: "absolute",
               top: EXP_TOP,
               left: 16,
-              width: EXP_W,
-              height: EXP_H,
-              borderRadius: 20,
-              overflow: "hidden",
-              background: expandedCard.bg,
+              width: CARD_W,
+              height: CARD_H,
+              transformOrigin: "top left",
               transform: isOpen
-                ? "scale(1) translateY(0px)"
-                : "scale(0.84) translateY(72px)",
-              opacity: isOpen ? 1 : 0,
-              transition: "transform 0.42s cubic-bezier(0.34,1.02,0.64,1), opacity 0.28s ease-in-out",
+                ? `translate(0px, 0px) scale(${SCALE})`
+                : collapsedTransform,
+              transition: "transform 0.42s cubic-bezier(0.34,1.02,0.64,1)",
               pointerEvents: "none",
+              willChange: "transform",
             }}
           >
-            {expandedCard.image && (
-              <img
-                src={expandedCard.image}
-                alt=""
-                style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center", display: "block" }}
-              />
-            )}
-            {expandedCard.image && (
-              <div style={{ position: "absolute", inset: 0, background: "linear-gradient(160deg, rgba(0,0,0,0.52) 0%, rgba(0,0,0,0.18) 55%, rgba(0,0,0,0.44) 100%)" }} />
-            )}
-            <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", justifyContent: "flex-start", padding: 24 }}>
-              <span style={{
-                fontSize: TITLE_SIZE * 1.15,
-                lineHeight: `${TITLE_SIZE * 1.15 * 1.25}px`,
-                fontFamily: "'Noto Sans KR', sans-serif",
-                fontWeight: 700,
-                color: expandedCard.textColor,
-                letterSpacing: `${-0.02 * TITLE_SIZE * 1.15}px`,
-                WebkitLineClamp: 5, overflow: "hidden", display: "-webkit-box", WebkitBoxOrient: "vertical",
-                marginBottom: 12,
-              } as React.CSSProperties}>
-                {expandedCard.title}
-              </span>
-              <span style={{ display: "block", fontSize: AUTHOR_SIZE * 1.1, fontFamily: "'Noto Sans KR', sans-serif", fontWeight: 400, color: expandedCard.textColor, opacity: 0.75 }}>
-                {expandedCard.author}
-              </span>
-              {expandedCard.collection && (
-                <span style={{ display: "block", fontSize: AUTHOR_SIZE * 0.95, fontFamily: "'Noto Sans KR', sans-serif", fontWeight: 300, color: expandedCard.textColor, opacity: 0.5, marginTop: 3 }}>
-                  {expandedCard.collection}
-                </span>
-              )}
-            </div>
-            {(expandedCard.isNotice || expandedCard.isReply) && (
-              <div style={{ position: "absolute", bottom: 16, right: 16, display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
-                {expandedCard.isNotice && (
-                  <span style={{ background: C.white, color: C.noticeAccent, fontSize: 13, fontWeight: 600, fontFamily: "'Noto Sans KR', sans-serif", padding: "5px 12px", borderRadius: 999 }}>인사</span>
-                )}
-                {expandedCard.isReply && (
-                  <span style={{ background: C.white, color: C.zinc900, fontSize: 13, fontWeight: 600, fontFamily: "'Noto Sans KR', sans-serif", padding: "5px 12px", borderRadius: 4 }}>답장</span>
-                )}
-              </div>
-            )}
+            <ArticleCard card={expanded.card} isActive={true} />
           </div>
         </div>
       )}
