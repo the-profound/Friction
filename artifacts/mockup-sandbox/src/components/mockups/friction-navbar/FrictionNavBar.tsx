@@ -174,14 +174,14 @@ function ArticleCard({
           {card.isNotice && (
             <span style={{
               alignSelf: "flex-start", background: C.white, color: C.noticeAccent,
-              fontSize: 12, fontWeight: 600, fontFamily: "'Pretendard', sans-serif",
+              fontSize: 12, fontWeight: 600, fontFamily: "'Noto Sans KR', sans-serif",
               padding: "4px 10px", borderRadius: 999,
             }}>인사</span>
           )}
           {card.isReply && (
             <span style={{
               alignSelf: "flex-start", background: C.white, color: C.zinc900,
-              fontSize: 12, fontWeight: 600, fontFamily: "'Pretendard', sans-serif",
+              fontSize: 12, fontWeight: 600, fontFamily: "'Noto Sans KR', sans-serif",
               padding: "4px 10px", borderRadius: 4,
             }}>답장</span>
           )}
@@ -198,7 +198,7 @@ function ArticleCard({
           display: "block",
           fontSize: AUTHOR_SIZE,
           lineHeight: `${AUTHOR_SIZE * 1.8}px`,
-          fontFamily: "'Pretendard', 'Apple SD Gothic Neo', sans-serif",
+          fontFamily: "'Noto Sans KR', sans-serif",
           fontWeight: 300,
           color: card.textColor,
           marginBottom: 6,
@@ -209,7 +209,7 @@ function ArticleCard({
           display: "block",
           fontSize: TITLE_SIZE,
           lineHeight: `${TITLE_SIZE * 1.2}px`,
-          fontFamily: "Georgia, 'Times New Roman', serif",
+          fontFamily: "'Noto Sans KR', sans-serif",
           fontWeight: 700,
           color: card.textColor,
           letterSpacing: `${-0.02 * TITLE_SIZE}px`,
@@ -229,7 +229,7 @@ function ArticleCard({
           background: C.white, borderRadius: 999,
           padding: "4px 10px", zIndex: 2,
         }}>
-          <span style={{ fontSize: 12, color: C.zinc700, fontFamily: "'Pretendard', sans-serif" }}>
+          <span style={{ fontSize: 12, color: C.zinc700, fontFamily: "'Noto Sans KR', sans-serif" }}>
             {card.collection}
           </span>
         </div>
@@ -323,10 +323,10 @@ function CarouselGroup({ group }: { group: MockGroup }) {
         height: 52, display: "flex", alignItems: "center", justifyContent: "space-between",
         paddingLeft: 24, paddingRight: 24,
       }}>
-        <span style={{ fontSize: 13, fontWeight: 600, fontFamily: "'Pretendard', sans-serif", color: C.zinc600 }}>
+        <span style={{ fontSize: 13, fontWeight: 600, fontFamily: "'Noto Sans KR', sans-serif", color: C.zinc600 }}>
           {group.date}
         </span>
-        <span style={{ fontSize: 12, fontFamily: "'Pretendard', sans-serif", color: C.zinc400 }}>
+        <span style={{ fontSize: 12, fontFamily: "'Noto Sans KR', sans-serif", color: C.zinc400 }}>
           {group.cards.length}편
         </span>
       </div>
@@ -371,7 +371,7 @@ function InboxScreen({ navBottom }: { navBottom: number }) {
     <div style={{ position: "absolute", inset: 0, background: C.white, display: "flex", flexDirection: "column" }}>
       {/* Status-bar placeholder */}
       <div style={{ height: STATUS_H, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", paddingLeft: 24, paddingRight: 20, paddingTop: 8 }}>
-        <span style={{ fontSize: 15, fontWeight: 600, fontFamily: "'SF Pro Text', '-apple-system', sans-serif", color: C.zinc900, letterSpacing: -0.3 }}>9:41</span>
+        <span style={{ fontSize: 15, fontWeight: 600, fontFamily: "'Noto Sans KR', sans-serif", color: C.zinc900, letterSpacing: -0.3 }}>9:41</span>
         <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
           <svg width="17" height="12" viewBox="0 0 17 12" fill={C.zinc900}>
             <rect x="0" y="3" width="3" height="9" rx="1"/><rect x="4.7" y="2.5" width="3" height="9.5" rx="1"/><rect x="9.4" y="0.5" width="3" height="11.5" rx="1"/><rect x="14" y="0" width="3" height="12" rx="1" opacity="0.28"/>
@@ -385,7 +385,7 @@ function InboxScreen({ navBottom }: { navBottom: number }) {
 
       {/* Page header */}
       <div style={{ paddingLeft: 24, paddingRight: 20, paddingTop: 8, paddingBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexShrink: 0 }}>
-        <h1 style={{ margin: 0, fontSize: 28, fontWeight: 900, fontFamily: "'Pretendard', 'Apple SD Gothic Neo', sans-serif", color: C.zinc900, letterSpacing: -0.5, lineHeight: 1.1 }}>
+        <h1 style={{ margin: 0, fontSize: 28, fontWeight: 900, fontFamily: "'Noto Sans KR', sans-serif", color: C.zinc900, letterSpacing: -0.5, lineHeight: 1.1 }}>
           수신함
         </h1>
         <button style={{ background: "none", border: "none", cursor: "pointer", padding: 4, paddingBottom: 6 }}>
@@ -409,7 +409,7 @@ function PlaceholderScreen({ label }: { label: string }) {
     <div style={{ position: "absolute", inset: 0, background: C.zinc50, display: "flex", flexDirection: "column" }}>
       <div style={{ height: STATUS_H, flexShrink: 0 }} />
       <div style={{ paddingLeft: 24, paddingTop: 8 }}>
-        <h1 style={{ margin: 0, fontSize: 28, fontWeight: 900, fontFamily: "'Pretendard', sans-serif", color: C.zinc900, letterSpacing: -0.5 }}>
+        <h1 style={{ margin: 0, fontSize: 28, fontWeight: 900, fontFamily: "'Noto Sans KR', sans-serif", color: C.zinc900, letterSpacing: -0.5 }}>
           {label}
         </h1>
       </div>
@@ -434,7 +434,7 @@ function TabItem({ tab, active, onPress }: { tab: typeof TABS[number]; active: b
       }}
     >
       <Icon name={tab.icon} size={22} color={active ? C.tabActive : C.tabInactive} />
-      <span style={{ fontSize: 10, fontWeight: 200, fontFamily: "'Pretendard', 'Apple SD Gothic Neo', sans-serif", color: active ? C.tabActive : C.tabInactiveAlt, lineHeight: 1 }}>
+      <span style={{ fontSize: 10, fontWeight: 200, fontFamily: "'Noto Sans KR', sans-serif", color: active ? C.tabActive : C.tabInactiveAlt, lineHeight: 1 }}>
         {tab.label}
       </span>
     </div>
