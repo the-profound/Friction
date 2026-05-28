@@ -418,6 +418,108 @@ function CarouselGroup({
   );
 }
 
+/* ─── Envelope back face (revealed when card flips on 읽기) ─────── */
+function EnvelopeBack() {
+  // The flap covers the LEFT portion of the envelope; its right edge is two
+  // diagonals meeting at the apex (forming a `>` shape). The flap is its own
+  // layer so a future opening animation can rotate it around the left hinge.
+  const FLAP_TIP_X = CARD_W * 0.62;            // ~186 — apex horizontal pos
+  const FLAP_TIP_Y = CARD_H / 2;               // 240 — apex vertical pos
+  const SEAL_SIZE  = 96;
+  return (
+    <div
+      style={{
+        width: CARD_W,
+        height: CARD_H,
+        borderRadius: 16,
+        overflow: "hidden",
+        position: "relative",
+        background: "linear-gradient(135deg, #fefefe 0%, #f1f1f3 100%)",
+        boxShadow: "inset 0 0 0 0.5px rgba(0,0,0,0.06)",
+      }}
+    >
+      {/* Envelope body — faint diagonals from the corners hint at the inner
+          edges of a paper envelope (the lines that converge to the flap tip
+          when viewed from the back). */}
+      <svg
+        width={CARD_W}
+        height={CARD_H}
+        viewBox={`0 0 ${CARD_W} ${CARD_H}`}
+        style={{ position: "absolute", inset: 0, display: "block" }}
+      >
+        {/* Right-side seam: top-right and bottom-right corners converging
+            toward the same apex point as the flap. */}
+        <line
+          x1={CARD_W} y1={0} x2={FLAP_TIP_X} y2={FLAP_TIP_Y}
+          stroke="rgba(0,0,0,0.07)" strokeWidth="0.7"
+        />
+        <line
+          x1={CARD_W} y1={CARD_H} x2={FLAP_TIP_X} y2={FLAP_TIP_Y}
+          stroke="rgba(0,0,0,0.07)" strokeWidth="0.7"
+        />
+      </svg>
+
+      {/* The flap — separate layer for future opening animation.
+          Hinge is on the left edge (transformOrigin: "left center"). */}
+      <div
+        data-role="envelope-flap"
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          width: CARD_W,
+          height: CARD_H,
+          transformOrigin: "left center",
+          // future: transform: isFlapOpen ? "rotateY(-160deg)" : "rotateY(0deg)"
+        }}
+      >
+        <svg
+          width={CARD_W}
+          height={CARD_H}
+          viewBox={`0 0 ${CARD_W} ${CARD_H}`}
+          style={{ position: "absolute", inset: 0, display: "block" }}
+        >
+          <defs>
+            <linearGradient id="flapFill" x1="0%" y1="50%" x2="100%" y2="50%">
+              <stop offset="0%"  stopColor="#ffffff" />
+              <stop offset="70%" stopColor="#f6f6f8" />
+              <stop offset="100%" stopColor="#e6e6ea" />
+            </linearGradient>
+            <filter id="flapShadow" x="-10%" y="-10%" width="120%" height="120%">
+              <feDropShadow dx="2" dy="0" stdDeviation="2" floodOpacity="0.10" />
+            </filter>
+          </defs>
+          {/* Flap triangle — apex on the right (>), hinge on the left edge */}
+          <polygon
+            points={`0,0 ${FLAP_TIP_X},${FLAP_TIP_Y} 0,${CARD_H}`}
+            fill="url(#flapFill)"
+            stroke="rgba(0,0,0,0.08)"
+            strokeWidth="0.6"
+            filter="url(#flapShadow)"
+          />
+        </svg>
+
+        {/* Wax seal — sits at the flap apex, slightly overlapping body */}
+        <img
+          src={`${import.meta.env.BASE_URL}images/wax-seal.png`}
+          alt=""
+          draggable={false}
+          style={{
+            position: "absolute",
+            left: FLAP_TIP_X - SEAL_SIZE / 2,
+            top: FLAP_TIP_Y - SEAL_SIZE / 2,
+            width: SEAL_SIZE,
+            height: SEAL_SIZE,
+            pointerEvents: "none",
+            userSelect: "none",
+            filter: "drop-shadow(0 3px 5px rgba(0,0,0,0.28))",
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 /* ─── Inbox screen ────────────────────────────────────────────── */
 type ExpandedState = {
   card: MockCard;
@@ -428,6 +530,7 @@ function InboxScreen({ navBottom }: { navBottom: number }) {
   const screenRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState<ExpandedState | null>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const [isReading, setIsReading] = useState(false);
 
   function openCard(card: MockCard, element: HTMLElement | null) {
     if (!element || !screenRef.current) return;
@@ -442,12 +545,18 @@ function InboxScreen({ navBottom }: { navBottom: number }) {
         h: cardRect.height,
       },
     });
+    setIsReading(false);
     requestAnimationFrame(() => requestAnimationFrame(() => setIsOpen(true)));
   }
 
   function closeCard() {
     setIsOpen(false);
+    setIsReading(false);
     setTimeout(() => setExpanded(null), 420);
+  }
+
+  function toggleReading() {
+    setIsReading((prev) => !prev);
   }
 
   // FLIP transform: at "closed" state, the overlay card sits at the original
@@ -516,9 +625,9 @@ function InboxScreen({ navBottom }: { navBottom: number }) {
             }}
           />
 
-          {/* The card itself — same ArticleCard rendering, animated from
-              the origin rect (where it sits in the carousel) to the
-              expanded rect at the top of the screen. */}
+          {/* The card itself — animated from origin rect to expanded rect.
+              An inner flip layer rotates 180° on Y when 읽기 is pressed,
+              revealing the envelope back face. */}
           <div
             style={{
               position: "absolute",
@@ -533,9 +642,43 @@ function InboxScreen({ navBottom }: { navBottom: number }) {
               transition: "transform 0.42s cubic-bezier(0.34,1.02,0.64,1)",
               pointerEvents: "none",
               willChange: "transform",
+              perspective: 1600,
             }}
           >
-            <ArticleCard card={expanded.card} isActive={true} />
+            <div
+              style={{
+                width: "100%",
+                height: "100%",
+                position: "relative",
+                transformStyle: "preserve-3d",
+                transform: isReading ? "rotateY(180deg)" : "rotateY(0deg)",
+                transition: "transform 0.85s cubic-bezier(0.65, 0, 0.35, 1)",
+              }}
+            >
+              {/* Front face — article card */}
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  backfaceVisibility: "hidden",
+                  WebkitBackfaceVisibility: "hidden",
+                }}
+              >
+                <ArticleCard card={expanded.card} isActive={true} />
+              </div>
+              {/* Back face — envelope */}
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  backfaceVisibility: "hidden",
+                  WebkitBackfaceVisibility: "hidden",
+                  transform: "rotateY(180deg)",
+                }}
+              >
+                <EnvelopeBack />
+              </div>
+            </div>
           </div>
 
           {/* ── Action buttons below the expanded card ── */}
@@ -555,6 +698,7 @@ function InboxScreen({ navBottom }: { navBottom: number }) {
           >
             {/* 읽기 button */}
             <button
+              onClick={toggleReading}
               style={{
                 flex: 1,
                 height: 56,
