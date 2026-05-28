@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import waxSealUrl from "@/assets/wax-seal.png";
 
 /* ─── Tokens ─────────────────────────────────────────────────── */
@@ -419,103 +419,244 @@ function CarouselGroup({
   );
 }
 
-/* ─── Envelope back face (revealed when card flips on 읽기) ─────── */
-function EnvelopeBack() {
-  // The flap covers the LEFT portion of the envelope; its right edge is two
-  // diagonals meeting at the apex (forming a `>` shape). The flap is its own
-  // layer so a future opening animation can rotate it around the left hinge.
-  const FLAP_TIP_X = CARD_W * 0.62;            // ~186 — apex horizontal pos
-  const FLAP_TIP_Y = CARD_H / 2;               // 240 — apex vertical pos
-  const SEAL_SIZE  = 96;
+/* ─── Letter view: the post-flip composition ───────────────────────
+   Layered, in order from back to front:
+     1. ArticleFirstPage  — the actual letter; stays put when the envelope
+        slides away. Visible through the flap hole the moment the flap opens.
+     2. Envelope body     — a polygon that excludes the flap-shaped wedge on
+        the left so the letter shows through where the flap was.
+     3. Envelope flap     — rotates open around its left hinge (~165°).
+     4. Wax seal          — child of the flap; splits into two halves that
+        rotate apart and fade as the flap unsticks.
+   The envelope body + flap form a sibling group that translates right as a
+   unit, leaving the letter behind. */
+const FLAP_TIP_X = CARD_W * 0.62;
+const FLAP_TIP_Y = CARD_H / 2;
+const SEAL_SIZE  = 96;
+
+function ArticleFirstPage({ card }: { card: MockCard }) {
   return (
     <div
       style={{
-        width: CARD_W,
-        height: CARD_H,
-        borderRadius: 16,
-        overflow: "hidden",
+        width: "100%",
+        height: "100%",
+        background: "#fdfcf8",
+        padding: "44px 32px 32px",
+        boxSizing: "border-box",
+        fontFamily: "'Noto Sans KR', sans-serif",
+        display: "flex",
+        flexDirection: "column",
+        gap: 14,
         position: "relative",
-        background: "linear-gradient(135deg, #fefefe 0%, #f1f1f3 100%)",
-        boxShadow: "inset 0 0 0 0.5px rgba(0,0,0,0.06)",
       }}
     >
-      {/* Envelope body — faint diagonals from the corners hint at the inner
-          edges of a paper envelope (the lines that converge to the flap tip
-          when viewed from the back). */}
+      <div style={{
+        fontSize: 11, color: "#a39788", letterSpacing: 1,
+        textTransform: "uppercase", fontWeight: 500,
+      }}>
+        From. {card.author}
+      </div>
+      <h2 style={{
+        margin: 0, fontSize: 26, fontWeight: 700, color: "#2a2520",
+        letterSpacing: -0.6, lineHeight: 1.3,
+      }}>
+        {card.title}
+      </h2>
+      <div style={{ width: 36, height: 1, background: "#d0c5b8", marginTop: 2, marginBottom: 4 }} />
+      <p style={{
+        margin: 0, fontSize: 14, lineHeight: 1.95, color: "#4a423a",
+        letterSpacing: -0.2, whiteSpace: "pre-line",
+      }}>
+        {`오늘 창밖으로 흩어지는 빗소리를 들으며,
+문득 당신께 편지를 쓰고 싶어졌습니다.
+
+오랜만에 펜을 들었더니, 마음 한구석에
+쌓여 있던 이야기들이 천천히 흘러나옵니다.
+어디서부터 시작해야 할지 모르겠지만,
+이 한 줄 한 줄을 당신께 보냅니다…`}
+      </p>
+    </div>
+  );
+}
+
+function EnvelopeBody() {
+  return (
+    <svg
+      width={CARD_W}
+      height={CARD_H}
+      viewBox={`0 0 ${CARD_W} ${CARD_H}`}
+      style={{ position: "absolute", inset: 0, display: "block" }}
+    >
+      <defs>
+        <linearGradient id="bodyFill" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%"  stopColor="#fefefe" />
+          <stop offset="100%" stopColor="#f1f1f3" />
+        </linearGradient>
+      </defs>
+      {/* Body polygon — outline traces the rectangle but cuts inward along the
+          flap-shaped wedge on the left, so that area shows whatever is behind
+          (the article first page). */}
+      <polygon
+        points={`0,0 ${FLAP_TIP_X},${FLAP_TIP_Y} 0,${CARD_H} ${CARD_W},${CARD_H} ${CARD_W},0`}
+        fill="url(#bodyFill)"
+        stroke="rgba(0,0,0,0.06)"
+        strokeWidth="0.5"
+      />
+      {/* Right-side seams converging toward the flap apex */}
+      <line x1={CARD_W} y1={0}      x2={FLAP_TIP_X} y2={FLAP_TIP_Y}
+            stroke="rgba(0,0,0,0.08)" strokeWidth="0.6" />
+      <line x1={CARD_W} y1={CARD_H} x2={FLAP_TIP_X} y2={FLAP_TIP_Y}
+            stroke="rgba(0,0,0,0.08)" strokeWidth="0.6" />
+    </svg>
+  );
+}
+
+function BrokenWaxSeal({ isBroken }: { isBroken: boolean }) {
+  const halfBase: React.CSSProperties = {
+    position: "absolute",
+    left: FLAP_TIP_X - SEAL_SIZE / 2,
+    top:  FLAP_TIP_Y - SEAL_SIZE / 2,
+    width: SEAL_SIZE,
+    height: SEAL_SIZE,
+    pointerEvents: "none",
+    userSelect: "none",
+    backfaceVisibility: "hidden",
+    WebkitBackfaceVisibility: "hidden",
+    filter: "drop-shadow(0 3px 5px rgba(0,0,0,0.28))",
+    transition:
+      "transform 0.55s cubic-bezier(0.3, 0.6, 0.4, 1), opacity 0.4s ease 0.3s",
+  };
+  return (
+    <>
+      {/* Left half */}
+      <img
+        src={waxSealUrl}
+        alt=""
+        draggable={false}
+        style={{
+          ...halfBase,
+          clipPath: "polygon(0 0, 53% 0, 47% 100%, 0 100%)",
+          transform: isBroken
+            ? "translate(-22px, 16px) rotate(-26deg)"
+            : "translate(0, 0) rotate(0deg)",
+          opacity: isBroken ? 0 : 1,
+        }}
+      />
+      {/* Right half */}
+      <img
+        src={waxSealUrl}
+        alt=""
+        draggable={false}
+        style={{
+          ...halfBase,
+          clipPath: "polygon(53% 0, 100% 0, 100% 100%, 47% 100%)",
+          transform: isBroken
+            ? "translate(22px, 16px) rotate(26deg)"
+            : "translate(0, 0) rotate(0deg)",
+          opacity: isBroken ? 0 : 1,
+        }}
+      />
+    </>
+  );
+}
+
+function EnvelopeFlap({ isOpen }: { isOpen: boolean }) {
+  return (
+    <div
+      data-role="envelope-flap"
+      style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        width: CARD_W,
+        height: CARD_H,
+        transformOrigin: "left center",
+        transform: isOpen ? "rotateY(-168deg)" : "rotateY(0deg)",
+        transition: "transform 0.6s cubic-bezier(0.45, 0, 0.25, 1)",
+        transformStyle: "preserve-3d",
+        pointerEvents: "none",
+      }}
+    >
       <svg
         width={CARD_W}
         height={CARD_H}
         viewBox={`0 0 ${CARD_W} ${CARD_H}`}
         style={{ position: "absolute", inset: 0, display: "block" }}
       >
-        {/* Right-side seam: top-right and bottom-right corners converging
-            toward the same apex point as the flap. */}
-        <line
-          x1={CARD_W} y1={0} x2={FLAP_TIP_X} y2={FLAP_TIP_Y}
-          stroke="rgba(0,0,0,0.07)" strokeWidth="0.7"
-        />
-        <line
-          x1={CARD_W} y1={CARD_H} x2={FLAP_TIP_X} y2={FLAP_TIP_Y}
-          stroke="rgba(0,0,0,0.07)" strokeWidth="0.7"
+        <defs>
+          <linearGradient id="flapFill" x1="0%" y1="50%" x2="100%" y2="50%">
+            <stop offset="0%"  stopColor="#ffffff" />
+            <stop offset="70%" stopColor="#f6f6f8" />
+            <stop offset="100%" stopColor="#e6e6ea" />
+          </linearGradient>
+          <filter id="flapShadow" x="-10%" y="-10%" width="120%" height="120%">
+            <feDropShadow dx="2" dy="0" stdDeviation="2" floodOpacity="0.10" />
+          </filter>
+        </defs>
+        <polygon
+          points={`0,0 ${FLAP_TIP_X},${FLAP_TIP_Y} 0,${CARD_H}`}
+          fill="url(#flapFill)"
+          stroke="rgba(0,0,0,0.08)"
+          strokeWidth="0.6"
+          filter="url(#flapShadow)"
         />
       </svg>
+      <BrokenWaxSeal isBroken={isOpen} />
+    </div>
+  );
+}
 
-      {/* The flap — separate layer for future opening animation.
-          Hinge is on the left edge (transformOrigin: "left center"). */}
+type ReadPhase = "idle" | "flipping" | "opened" | "slid";
+
+function LetterView({ card, phase }: { card: MockCard; phase: ReadPhase }) {
+  const flapOpen = phase === "opened" || phase === "slid";
+  const isSlid   = phase === "slid";
+  return (
+    <div
+      style={{
+        position: "absolute",
+        inset: 0,
+        transformStyle: "preserve-3d",
+      }}
+    >
+      {/* 1. Article first page — stays put */}
       <div
-        data-role="envelope-flap"
         style={{
           position: "absolute",
-          top: 0,
-          left: 0,
-          width: CARD_W,
-          height: CARD_H,
-          transformOrigin: "left center",
-          // future: transform: isFlapOpen ? "rotateY(-160deg)" : "rotateY(0deg)"
+          inset: 0,
+          borderRadius: 16,
+          overflow: "hidden",
         }}
       >
-        <svg
-          width={CARD_W}
-          height={CARD_H}
-          viewBox={`0 0 ${CARD_W} ${CARD_H}`}
-          style={{ position: "absolute", inset: 0, display: "block" }}
-        >
-          <defs>
-            <linearGradient id="flapFill" x1="0%" y1="50%" x2="100%" y2="50%">
-              <stop offset="0%"  stopColor="#ffffff" />
-              <stop offset="70%" stopColor="#f6f6f8" />
-              <stop offset="100%" stopColor="#e6e6ea" />
-            </linearGradient>
-            <filter id="flapShadow" x="-10%" y="-10%" width="120%" height="120%">
-              <feDropShadow dx="2" dy="0" stdDeviation="2" floodOpacity="0.10" />
-            </filter>
-          </defs>
-          {/* Flap triangle — apex on the right (>), hinge on the left edge */}
-          <polygon
-            points={`0,0 ${FLAP_TIP_X},${FLAP_TIP_Y} 0,${CARD_H}`}
-            fill="url(#flapFill)"
-            stroke="rgba(0,0,0,0.08)"
-            strokeWidth="0.6"
-            filter="url(#flapShadow)"
-          />
-        </svg>
+        <ArticleFirstPage card={card} />
+      </div>
 
-        {/* Wax seal — sits at the flap apex, slightly overlapping body */}
-        <img
-          src={waxSealUrl}
-          alt=""
-          draggable={false}
+      {/* 2 + 3. Envelope group (body + flap with wax) — slides right as one */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          transform: isSlid
+            ? `translateX(${SCREEN_W + 40}px)`
+            : "translateX(0px)",
+          transition: "transform 0.7s cubic-bezier(0.5, 0, 0.55, 1)",
+          transformStyle: "preserve-3d",
+        }}
+      >
+        {/* Body — clipped to rounded corners (no 3D children inside) */}
+        <div
           style={{
             position: "absolute",
-            left: FLAP_TIP_X - SEAL_SIZE / 2,
-            top: FLAP_TIP_Y - SEAL_SIZE / 2,
-            width: SEAL_SIZE,
-            height: SEAL_SIZE,
-            pointerEvents: "none",
-            userSelect: "none",
-            filter: "drop-shadow(0 3px 5px rgba(0,0,0,0.28))",
+            inset: 0,
+            borderRadius: 16,
+            overflow: "hidden",
+            boxShadow: "inset 0 0 0 0.5px rgba(0,0,0,0.06)",
           }}
-        />
+        >
+          <EnvelopeBody />
+        </div>
+        {/* Flap (with wax) — needs 3D, kept outside the clipping wrapper */}
+        <EnvelopeFlap isOpen={flapOpen} />
       </div>
     </div>
   );
@@ -531,7 +672,14 @@ function InboxScreen({ navBottom }: { navBottom: number }) {
   const screenRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState<ExpandedState | null>(null);
   const [isOpen, setIsOpen] = useState(false);
-  const [isReading, setIsReading] = useState(false);
+  const [readPhase, setReadPhase] = useState<ReadPhase>("idle");
+  const isReading = readPhase !== "idle";
+  const readingTimersRef = useRef<number[]>([]);
+
+  function clearReadingTimers() {
+    readingTimersRef.current.forEach((t) => window.clearTimeout(t));
+    readingTimersRef.current = [];
+  }
 
   function openCard(card: MockCard, element: HTMLElement | null) {
     if (!element || !screenRef.current) return;
@@ -546,18 +694,35 @@ function InboxScreen({ navBottom }: { navBottom: number }) {
         h: cardRect.height,
       },
     });
-    setIsReading(false);
+    clearReadingTimers();
+    setReadPhase("idle");
     requestAnimationFrame(() => requestAnimationFrame(() => setIsOpen(true)));
   }
 
   function closeCard() {
+    clearReadingTimers();
     setIsOpen(false);
-    setIsReading(false);
+    setReadPhase("idle");
     setTimeout(() => setExpanded(null), 420);
   }
 
-  function toggleReading() {
-    setIsReading((prev) => !prev);
+  // Clean up any pending timers when the screen unmounts so we never
+  // setState on an unmounted component.
+  useEffect(() => () => clearReadingTimers(), []);
+
+  // 읽기 → flip (0.85s) → wax break + flap open (0.6s, simultaneous) →
+  // envelope slides right off-screen (0.7s).
+  // Guard against re-entry while a sequence is already running.
+  function startReading() {
+    if (readPhase !== "idle") return;
+    clearReadingTimers();
+    setReadPhase("flipping");
+    readingTimersRef.current.push(
+      window.setTimeout(() => setReadPhase("opened"), 850),
+    );
+    readingTimersRef.current.push(
+      window.setTimeout(() => setReadPhase("slid"), 850 + 600),
+    );
   }
 
   // FLIP transform: at "closed" state, the overlay card sits at the original
@@ -667,7 +832,7 @@ function InboxScreen({ navBottom }: { navBottom: number }) {
               >
                 <ArticleCard card={expanded.card} isActive={true} />
               </div>
-              {/* Back face — envelope */}
+              {/* Back face — letter view (article + envelope on top) */}
               <div
                 style={{
                   position: "absolute",
@@ -675,9 +840,10 @@ function InboxScreen({ navBottom }: { navBottom: number }) {
                   backfaceVisibility: "hidden",
                   WebkitBackfaceVisibility: "hidden",
                   transform: "rotateY(180deg)",
+                  transformStyle: "preserve-3d",
                 }}
               >
-                <EnvelopeBack />
+                <LetterView card={expanded.card} phase={readPhase} />
               </div>
             </div>
           </div>
@@ -691,15 +857,15 @@ function InboxScreen({ navBottom }: { navBottom: number }) {
               width: EXP_W,
               display: "flex",
               gap: 8,
-              opacity: isOpen ? 1 : 0,
-              transform: isOpen ? "translateY(0px)" : "translateY(10px)",
-              transition: "opacity 0.3s ease 0.15s, transform 0.3s ease 0.15s",
-              pointerEvents: isOpen ? "auto" : "none",
+              opacity: isOpen && !isReading ? 1 : 0,
+              transform: isOpen && !isReading ? "translateY(0px)" : "translateY(10px)",
+              transition: "opacity 0.25s ease, transform 0.25s ease",
+              pointerEvents: isOpen && !isReading ? "auto" : "none",
             }}
           >
             {/* 읽기 button */}
             <button
-              onClick={toggleReading}
+              onClick={startReading}
               style={{
                 flex: 1,
                 height: 56,
