@@ -236,20 +236,6 @@ function ArticleCard({
         }}>
           {card.author}
         </span>
-        {card.collection && (
-          <span style={{
-            display: "block",
-            fontSize: AUTHOR_SIZE * 0.85,
-            lineHeight: `${AUTHOR_SIZE * 1.5}px`,
-            fontFamily: "'Noto Sans KR', sans-serif",
-            fontWeight: 300,
-            color: card.textColor,
-            opacity: 0.5,
-            marginTop: 3,
-          }}>
-            {card.collection}
-          </span>
-        )}
       </div>
 
       {/* Badges — bottom-right */}
