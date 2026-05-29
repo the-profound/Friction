@@ -58,6 +58,7 @@ interface MockCard {
   collection?: string;
   isNotice?: boolean;
   isReply?: boolean;
+  private?: boolean;
 }
 interface MockGroup { date: string; cards: MockCard[] }
 
@@ -247,6 +248,21 @@ function ArticleCard({
           </span>
         )}
       </div>
+
+      {/* 비공개 태그 — bottom-left */}
+      {card.private && (
+        <span style={{
+          position: "absolute", bottom: 14, left: 14,
+          fontSize: 11, fontWeight: 600,
+          fontFamily: "'Noto Sans KR', sans-serif",
+          color: "rgba(255,255,255,0.75)",
+          background: "rgba(0,0,0,0.32)",
+          padding: "3px 9px", borderRadius: 999,
+          zIndex: 2,
+          backdropFilter: "blur(4px)",
+          WebkitBackdropFilter: "blur(4px)",
+        }}>비공개</span>
+      )}
 
       {/* Badges — bottom-right */}
       {(card.isNotice || card.isReply) && (
@@ -985,18 +1001,18 @@ const MY_LETTERS: MockCard[] = [
   { id: "ml01", author: "나", title: "오늘 하루가 유독 길었다",     bg: "#dbe982", textColor: "#3a3a1f" },
   { id: "ml02", author: "나", title: "비가 오는 날 도서관에서",      bg: "#0d1a0e", textColor: "#d6f0d0",
     image: "https://images.unsplash.com/photo-1507842217343-583bb7270b66?w=400&q=80" },
-  { id: "ml03", author: "나", title: "혼자 걷기 좋은 골목길",        bg: "#e2e2e5", textColor: "#3a3a40" },
+  { id: "ml03", author: "나", title: "혼자 걷기 좋은 골목길",        bg: "#e2e2e5", textColor: "#3a3a40", private: true },
   { id: "ml04", author: "나", title: "창가에 빗소리가 들리는 오후",  bg: "#f5cf9e", textColor: "#3a2a1a" },
   { id: "ml05", author: "나", title: "이번 주말엔 아무것도 안 했다", bg: "#141418", textColor: "#e8e4f0",
     image: "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?w=400&q=80" },
-  { id: "ml06", author: "나", title: "오래 미뤄둔 답장을 쓰며",      bg: "#f4a5a5", textColor: "#3a1a1a" },
+  { id: "ml06", author: "나", title: "오래 미뤄둔 답장을 쓰며",      bg: "#f4a5a5", textColor: "#3a1a1a", private: true },
   { id: "ml07", author: "나", title: "월요일 아침에 다짐하는 것들",  bg: "#a8bff0", textColor: "#1a2540" },
-  { id: "ml08", author: "나", title: "서랍 속 오래된 물건들",         bg: "#f5a8b8", textColor: "#3a1a25" },
+  { id: "ml08", author: "나", title: "서랍 속 오래된 물건들",         bg: "#f5a8b8", textColor: "#3a1a25", private: true },
   { id: "ml09", author: "나", title: "어딘가에서 들었던 그 노래",     bg: "#0e0a1a", textColor: "#e8daf8",
     image: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&q=80" },
   { id: "ml10", author: "나", title: "퇴근길에 문득 든 생각",        bg: "#1a1612", textColor: "#f0ebe0",
     image: "https://images.unsplash.com/photo-1538485399081-7191377e8241?w=400&q=80" },
-  { id: "ml11", author: "나", title: "햇살이 좋아서 나온 오후",       bg: "#f4e8d6", textColor: "#3a2e22" },
+  { id: "ml11", author: "나", title: "햇살이 좋아서 나온 오후",       bg: "#f4e8d6", textColor: "#3a2e22", private: true },
   { id: "ml12", author: "나", title: "오랜 친구에게 전하고 싶은 말", bg: "#bce5d4", textColor: "#1a3a2e" },
 ];
 
