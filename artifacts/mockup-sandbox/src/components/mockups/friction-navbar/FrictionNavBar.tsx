@@ -1074,6 +1074,70 @@ function SeriesList() {
   );
 }
 
+/* ─── Groups mock data ───────────────────────────────────────── */
+type GroupItem = { id: string; title: string; members: number; letters: number };
+const MY_GROUPS: GroupItem[] = [
+  { id: "g01", title: "글 쓰는 사람들",     members: 12, letters: 47 },
+  { id: "g02", title: "새벽 독서 모임",     members: 6,  letters: 23 },
+  { id: "g03", title: "서울 산문 클럽",     members: 18, letters: 91 },
+  { id: "g04", title: "조용한 편지 교환",   members: 4,  letters: 16 },
+];
+
+function GroupsList() {
+  return (
+    <div style={{ display: "flex", flexDirection: "column" }}>
+      {MY_GROUPS.map((g, i) => (
+        <div
+          key={g.id}
+          style={{
+            display: "flex", alignItems: "center",
+            padding: "16px 20px",
+            borderBottom: i < MY_GROUPS.length - 1 ? `1px solid ${C.zinc100}` : "none",
+            gap: 14, cursor: "pointer",
+          }}
+        >
+          {/* 모임 아이콘 */}
+          <div style={{
+            width: 44, height: 44, borderRadius: 12,
+            background: C.zinc100,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            flexShrink: 0,
+          }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+              stroke={C.zinc500} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 00-3-3.87"/>
+              <path d="M16 3.13a4 4 0 010 7.75"/>
+            </svg>
+          </div>
+
+          {/* 텍스트 */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontSize: 15, fontWeight: 600, color: C.zinc900,
+              fontFamily: "'Noto Sans KR', sans-serif", letterSpacing: -0.3,
+              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              marginBottom: 4,
+            }}>
+              {g.title}
+            </div>
+            <div style={{
+              display: "flex", gap: 10, alignItems: "center",
+              fontSize: 12, color: C.zinc400,
+              fontFamily: "'Noto Sans KR', sans-serif",
+            }}>
+              <span>참여자 {g.members}명</span>
+              <span style={{ width: 2, height: 2, borderRadius: "50%", background: C.zinc300, flexShrink: 0 }} />
+              <span>편지 {g.letters}개</span>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 type MyTab = "letters" | "series" | "groups" | "archive";
 const MY_TABS: { key: MyTab; label: string }[] = [
   { key: "letters", label: "편지" },
@@ -1202,6 +1266,8 @@ function MyScreen({ navBottom }: { navBottom: number }) {
           />
         ) : myTab === "series" ? (
           <SeriesList />
+        ) : myTab === "groups" ? (
+          <GroupsList />
         ) : (
           <div style={{
             padding: "80px 24px", textAlign: "center",
