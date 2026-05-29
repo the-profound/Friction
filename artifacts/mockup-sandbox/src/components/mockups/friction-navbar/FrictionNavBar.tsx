@@ -33,7 +33,7 @@ const FAB_SIZE    = 52;
 const FAB_BOTTOM  = NAV_BOTTOM + 8;
 const STATUS_H    = 44; // mock status-bar height
 
-const EXP_W   = SCREEN_W;                        // full screen width when expanded
+const EXP_W   = SCREEN_W - 32;                  // 361 — expanded card width
 const EXP_H   = EXP_W * (CARD_H / CARD_W);      // ~578 — proportional height
 const EXP_TOP = STATUS_H + 12;                   // 56px — just below status bar
 
@@ -783,12 +783,12 @@ function ExpandedCardOverlay({
 
   // FLIP transform: at "closed" state the overlay card sits at the original
   // card's position with scale 1; at "open" state it scales up to EXP size at
-  // the target position. Natural box is CARD_W×CARD_H placed at (0, EXP_TOP)
+  // the target position. Natural box is CARD_W×CARD_H placed at (16, EXP_TOP)
   // with transformOrigin top-left.
   const SCALE = EXP_W / CARD_W;
   const sx = expanded.origin.w / CARD_W;
   const sy = expanded.origin.h / CARD_H;
-  const tx = expanded.origin.x;
+  const tx = expanded.origin.x - 16;
   const ty = expanded.origin.y - EXP_TOP;
   const collapsedTransform = `translate(${tx}px, ${ty}px) scale(${sx}, ${sy})`;
 
@@ -799,9 +799,9 @@ function ExpandedCardOverlay({
         onClick={onClose}
         style={{
           position: "absolute", inset: 0,
-          background: isReading ? "rgba(0,0,0,1)" : "rgba(0,0,0,0.62)",
+          background: "rgba(0,0,0,0.62)",
           opacity: isOpen ? 1 : 0,
-          transition: "opacity 0.42s ease-in-out, background 1.5s ease",
+          transition: "opacity 0.42s ease-in-out",
         }}
       />
 
@@ -809,7 +809,7 @@ function ExpandedCardOverlay({
       <div
         style={{
           position: "absolute",
-          top: EXP_TOP, left: 0,
+          top: EXP_TOP, left: 16,
           width: CARD_W, height: CARD_H,
           transformOrigin: "top left",
           transform: isOpen ? `translate(0px, 0px) scale(${SCALE})` : collapsedTransform,
@@ -855,7 +855,7 @@ function ExpandedCardOverlay({
       {/* Action buttons below the expanded card */}
       <div style={{
         position: "absolute",
-        top: EXP_TOP + EXP_H + 12, left: 16, width: SCREEN_W - 32,
+        top: EXP_TOP + EXP_H + 12, left: 16, width: EXP_W,
         display: "flex", gap: 8,
         opacity: isOpen && !isReading ? 1 : 0,
         transform: isOpen && !isReading ? "translateY(0px)" : "translateY(10px)",
