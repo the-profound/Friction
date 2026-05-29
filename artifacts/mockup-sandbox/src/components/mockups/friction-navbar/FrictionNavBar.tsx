@@ -1155,6 +1155,65 @@ function GroupsList() {
   );
 }
 
+/* ─── Archive mock data ──────────────────────────────────────── */
+type ArchiveItem = { id: string; title: string; letters: number };
+const MY_ARCHIVE: ArchiveItem[] = [
+  { id: "a01", title: "2023년 봄",         letters: 18 },
+  { id: "a02", title: "여름 편지들",        letters: 11 },
+  { id: "a03", title: "가을의 기록",        letters: 24 },
+  { id: "a04", title: "오래된 답장 모음",   letters: 7  },
+  { id: "a05", title: "아무에게도 안 보낸", letters: 5  },
+];
+
+function ArchiveList() {
+  return (
+    <div style={{ display: "flex", flexDirection: "column" }}>
+      {MY_ARCHIVE.map((a, i) => (
+        <div
+          key={a.id}
+          style={{
+            display: "flex", alignItems: "center",
+            padding: "16px 20px",
+            borderBottom: i < MY_ARCHIVE.length - 1 ? `1px solid ${C.zinc100}` : "none",
+            gap: 14, cursor: "pointer",
+          }}
+        >
+          {/* 폴더 아이콘 */}
+          <div style={{
+            width: 44, height: 44, borderRadius: 12,
+            background: C.zinc100,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            flexShrink: 0,
+          }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+              stroke={C.zinc500} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+            </svg>
+          </div>
+
+          {/* 텍스트 */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontSize: 15, fontWeight: 600, color: C.zinc900,
+              fontFamily: "'Noto Sans KR', sans-serif", letterSpacing: -0.3,
+              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              marginBottom: 4,
+            }}>
+              {a.title}
+            </div>
+            <div style={{
+              fontSize: 12, color: C.zinc400,
+              fontFamily: "'Noto Sans KR', sans-serif",
+            }}>
+              편지 {a.letters}개
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 type MyTab = "letters" | "series" | "groups" | "archive";
 const MY_TABS: { key: MyTab; label: string }[] = [
   { key: "letters", label: "편지" },
@@ -1285,6 +1344,8 @@ function MyScreen({ navBottom }: { navBottom: number }) {
           <SeriesList />
         ) : myTab === "groups" ? (
           <GroupsList />
+        ) : myTab === "archive" ? (
+          <ArchiveList />
         ) : (
           <div style={{
             padding: "80px 24px", textAlign: "center",
