@@ -207,7 +207,7 @@ function ArticleCard({
         <span style={{
           fontSize: TITLE_SIZE,
           lineHeight: `${TITLE_SIZE * 1.25}px`,
-          fontFamily: "'Noto Serif KR', serif",
+          fontFamily: "'Noto Sans KR', sans-serif",
           fontWeight: 700,
           color: card.textColor,
           letterSpacing: `${-0.02 * TITLE_SIZE}px`,
@@ -223,7 +223,7 @@ function ArticleCard({
           display: "block",
           fontSize: AUTHOR_SIZE,
           lineHeight: `${AUTHOR_SIZE * 1.6}px`,
-          fontFamily: "'Noto Serif KR', serif",
+          fontFamily: "'Noto Sans KR', sans-serif",
           fontWeight: 400,
           color: card.textColor,
           opacity: 0.75,
@@ -235,7 +235,7 @@ function ArticleCard({
             display: "block",
             fontSize: AUTHOR_SIZE * 0.85,
             lineHeight: `${AUTHOR_SIZE * 1.5}px`,
-            fontFamily: "'Noto Serif KR', serif",
+            fontFamily: "'Noto Sans KR', sans-serif",
             fontWeight: 300,
             color: card.textColor,
             opacity: 0.5,
@@ -252,14 +252,14 @@ function ArticleCard({
           {card.isNotice && (
             <span style={{
               background: C.white, color: C.noticeAccent,
-              fontSize: 12, fontWeight: 600, fontFamily: "'Noto Serif KR', serif",
+              fontSize: 12, fontWeight: 600, fontFamily: "'Noto Sans KR', sans-serif",
               padding: "4px 10px", borderRadius: 999,
             }}>인사</span>
           )}
           {card.isReply && (
             <span style={{
               background: C.white, color: C.zinc900,
-              fontSize: 12, fontWeight: 600, fontFamily: "'Noto Serif KR', serif",
+              fontSize: 12, fontWeight: 600, fontFamily: "'Noto Sans KR', sans-serif",
               padding: "4px 10px", borderRadius: 4,
             }}>답장</span>
           )}
@@ -443,7 +443,7 @@ function ArticleFirstPage({ card }: { card: MockCard }) {
         background: "#fdfcf8",
         padding: "44px 32px 32px",
         boxSizing: "border-box",
-        fontFamily: "'Noto Sans KR', sans-serif",
+        fontFamily: "'Noto Serif KR', serif",
         display: "flex",
         flexDirection: "column",
         gap: 14,
