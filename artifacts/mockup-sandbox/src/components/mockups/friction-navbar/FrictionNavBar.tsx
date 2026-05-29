@@ -238,25 +238,6 @@ function ArticleCard({
         </span>
       </div>
 
-      {/* Badges — bottom-right */}
-      {(card.isNotice || card.isReply) && (
-        <div style={{ position: "absolute", bottom: 12, right: 12, display: "flex", flexDirection: "column", gap: 4, zIndex: 2, alignItems: "flex-end" }}>
-          {card.isNotice && (
-            <span style={{
-              background: C.white, color: C.noticeAccent,
-              fontSize: 12, fontWeight: 600, fontFamily: "'Noto Sans KR', sans-serif",
-              padding: "4px 10px", borderRadius: 999,
-            }}>인사</span>
-          )}
-          {card.isReply && (
-            <span style={{
-              background: C.white, color: C.zinc900,
-              fontSize: 12, fontWeight: 600, fontFamily: "'Noto Sans KR', sans-serif",
-              padding: "4px 10px", borderRadius: 4,
-            }}>답장</span>
-          )}
-        </div>
-      )}
     </div>
   );
 }
