@@ -995,11 +995,12 @@ const MY_LETTERS: MockCard[] = [
   { id: "ml12", author: "나", title: "친구에게",           bg: "#bce5d4", textColor: "#1a3a2e" },
 ];
 
-type MyTab = "letters" | "series" | "groups";
+type MyTab = "letters" | "publish" | "groups" | "archive";
 const MY_TABS: { key: MyTab; label: string }[] = [
   { key: "letters", label: "편지" },
-  { key: "series",  label: "연재" },
+  { key: "publish", label: "발행" },
   { key: "groups",  label: "모임" },
+  { key: "archive", label: "보관" },
 ];
 
 function LetterGrid({
