@@ -1546,6 +1546,27 @@ function MyScreen({ navBottom }: { navBottom: number }) {
         </span>
       </div>
 
+      {/* 나의 이웃 버튼 */}
+      <div style={{ padding: "0 20px 20px", flexShrink: 0 }}>
+        <button style={{
+          width: "100%", height: 44, borderRadius: 12,
+          border: `1px solid ${C.zinc200}`,
+          background: C.white, cursor: "pointer",
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+          fontFamily: "'Noto Sans KR', sans-serif",
+          fontSize: 14, fontWeight: 600, color: C.zinc700, letterSpacing: -0.2,
+        }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 00-3-3.87"/>
+            <path d="M16 3.13a4 4 0 010 7.75"/>
+          </svg>
+          나의 이웃
+        </button>
+      </div>
+
       {/* Sub-tabs: 편지 / 연재 / 모임 */}
       <div style={{
         display: "flex", borderBottom: `1px solid ${C.zinc100}`,
