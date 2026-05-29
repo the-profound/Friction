@@ -1354,7 +1354,43 @@ function MyScreen({ navBottom }: { navBottom: number }) {
         ) : myTab === "groups" ? (
           <GroupsList />
         ) : myTab === "archive" ? (
-          <ArchiveList />
+          <>
+            {/* 보관 탭 헤더 */}
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "flex-end",
+              padding: "12px 16px 4px",
+              gap: 4,
+            }}>
+              {/* + 버튼 */}
+              <button style={{
+                width: 36, height: 36, borderRadius: 8, border: "none",
+                background: "transparent", cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                color: C.zinc600,
+              }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19"/>
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+              </button>
+              {/* 케밥 버튼 */}
+              <button style={{
+                width: 36, height: 36, borderRadius: 8, border: "none",
+                background: "transparent", cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                color: C.zinc600,
+              }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="5" r="1" fill="currentColor"/>
+                  <circle cx="12" cy="12" r="1" fill="currentColor"/>
+                  <circle cx="12" cy="19" r="1" fill="currentColor"/>
+                </svg>
+              </button>
+            </div>
+            <ArchiveList />
+          </>
         ) : (
           <div style={{
             padding: "80px 24px", textAlign: "center",
