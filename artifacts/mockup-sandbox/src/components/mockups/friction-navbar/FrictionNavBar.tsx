@@ -1153,13 +1153,13 @@ function GroupsList() {
 }
 
 /* ─── Archive mock data ──────────────────────────────────────── */
-type ArchiveItem = { id: string; title: string; letters: number };
+type ArchiveItem = { id: string; title: string; letters: number; private?: boolean };
 const MY_ARCHIVE: ArchiveItem[] = [
   { id: "a01", title: "2023년 봄",         letters: 18 },
   { id: "a02", title: "여름 편지들",        letters: 11 },
-  { id: "a03", title: "가을의 기록",        letters: 24 },
+  { id: "a03", title: "가을의 기록",        letters: 24, private: true },
   { id: "a04", title: "오래된 답장 모음",   letters: 7  },
-  { id: "a05", title: "아무에게도 안 보낸", letters: 5  },
+  { id: "a05", title: "아무에게도 안 보낸", letters: 5,  private: true },
 ];
 
 function ArchiveList() {
@@ -1205,6 +1205,18 @@ function ArchiveList() {
               편지 {a.letters}개
             </div>
           </div>
+
+          {/* 비공개 태그 */}
+          {a.private && (
+            <span style={{
+              fontSize: 11, fontWeight: 600,
+              fontFamily: "'Noto Sans KR', sans-serif",
+              color: C.zinc500,
+              background: C.zinc100,
+              padding: "3px 8px", borderRadius: 999,
+              whiteSpace: "nowrap", flexShrink: 0,
+            }}>비공개</span>
+          )}
         </div>
       ))}
     </div>
