@@ -1144,7 +1144,7 @@ function GroupsList() {
               background: "#2d7a4f18",
               padding: "3px 8px", borderRadius: 999,
               whiteSpace: "nowrap", flexShrink: 0,
-            }}>활동 중</span>
+            }}>진행 중</span>
           )}
         </div>
       ))}
