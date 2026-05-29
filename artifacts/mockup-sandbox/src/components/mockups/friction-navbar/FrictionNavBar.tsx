@@ -1412,6 +1412,20 @@ function LetterGrid({
           }}>
             <ArticleCard card={card} isActive={true} />
           </div>
+
+          {/* 비공개 태그 — 셀 스케일 밖, 고정 크기 */}
+          {card.private && (
+            <span style={{
+              position: "absolute", bottom: 6, left: 6,
+              fontSize: 11, fontWeight: 600,
+              fontFamily: "'Noto Sans KR', sans-serif",
+              color: C.zinc500,
+              background: C.zinc100,
+              padding: "3px 8px", borderRadius: 999,
+              zIndex: 5,
+              pointerEvents: "none",
+            }}>비공개</span>
+          )}
         </div>
       ))}
     </div>
