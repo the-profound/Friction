@@ -1293,12 +1293,16 @@ function MyScreen({ navBottom }: { navBottom: number }) {
         display: "flex", flexDirection: "column", alignItems: "center", gap: 0,
         flexShrink: 0,
       }}>
-        <div style={{
-          width: 78, height: 78, borderRadius: "50%",
-          background: C.zinc100,
-          boxShadow: "inset 0 0 0 0.5px rgba(0,0,0,0.05)",
-          marginBottom: 14,
-        }} />
+        <img
+          src="https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=200&q=80"
+          alt="프로필"
+          style={{
+            width: 78, height: 78, borderRadius: "50%",
+            objectFit: "cover",
+            boxShadow: "0 0 0 2px rgba(0,0,0,0.06)",
+            marginBottom: 14,
+          }}
+        />
         <span style={{
           fontSize: 20, fontWeight: 800, fontFamily: "'Noto Sans KR', sans-serif",
           color: C.zinc900, letterSpacing: -0.5, lineHeight: 1.2,
