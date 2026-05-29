@@ -60,6 +60,7 @@ interface MockCard {
   isReply?: boolean;
   replyTo?: string;
   sentAt?: string;
+  collectionType?: "series" | "group";
   private?: boolean;
 }
 interface MockGroup { date: string; cards: MockCard[] }
@@ -790,7 +791,7 @@ function useExpandedCard(screenRef: React.RefObject<HTMLDivElement | null>) {
 }
 
 function ExpandedCardOverlay({
-  expanded, isOpen, readPhase, isReading, onClose, onStartReading,
+  expanded, isOpen, readPhase, isReading, onClose, onStartReading, onCollectionTap,
 }: {
   expanded: ExpandedState | null;
   isOpen: boolean;
@@ -798,6 +799,7 @@ function ExpandedCardOverlay({
   isReading: boolean;
   onClose: () => void;
   onStartReading: () => void;
+  onCollectionTap?: (name: string, type: "series" | "group") => void;
 }) {
   if (!expanded) return null;
 
@@ -943,15 +945,41 @@ function ExpandedCardOverlay({
             flexShrink: 0,
           }}>{expanded.card.sentAt}</span>
         )}
-        {/* 발신처 */}
+        {/* 발신처 — 시리즈(layers) 또는 모임(network) 아이콘 + 이름 + 화살표 */}
         {expanded.card.collection && (
           <>
             <span style={{ width: 1, height: 12, background: C.zinc200, margin: "0 10px", flexShrink: 0 }} />
-            <span style={{
-              fontSize: 12, color: C.zinc500,
-              fontFamily: "'Noto Sans KR', sans-serif", fontWeight: 400,
-              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-            }}>{expanded.card.collection}</span>
+            {expanded.card.collectionType === "series" ? (
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                stroke={C.zinc400} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                style={{ flexShrink: 0, marginRight: 4 }}>
+                <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                <path d="M2 17l10 5 10-5"/>
+                <path d="M2 12l10 5 10-5"/>
+              </svg>
+            ) : (
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                stroke={C.zinc400} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                style={{ flexShrink: 0, marginRight: 4 }}>
+                <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+              </svg>
+            )}
+            <button
+              onClick={() => onCollectionTap?.(expanded.card.collection!, expanded.card.collectionType ?? "series")}
+              style={{
+                background: "none", border: "none", padding: 0, cursor: onCollectionTap ? "pointer" : "default",
+                display: "flex", alignItems: "center", gap: 2, minWidth: 0,
+              }}
+            >
+              <span style={{
+                fontSize: 12, color: C.zinc500,
+                fontFamily: "'Noto Sans KR', sans-serif", fontWeight: 400,
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              }}>{expanded.card.collection}</span>
+              <span style={{ fontSize: 11, color: C.zinc400, flexShrink: 0 }}> &gt;</span>
+            </button>
           </>
         )}
         {/* 답장 */}
@@ -1080,33 +1108,33 @@ function InboxScreen({ navBottom }: { navBottom: number }) {
 /* ─── My screen — profile + 편지/연재/모임 sub-tabs ───────────── */
 const MY_LETTERS: MockCard[] = [
   { id: "ml01", author: "공룡", title: "오늘 하루가 유독 길었다",     bg: "#dbe982", textColor: "#3a3a1f",
-    sentAt: "5월 29일", isNotice: true },
+    sentAt: "5월 29일", isNotice: true, collection: "월요일의 단상", collectionType: "series" },
   { id: "ml02", author: "공룡", title: "비가 오는 날 도서관에서",      bg: "#0d1a0e", textColor: "#d6f0d0",
     image: "https://images.unsplash.com/photo-1507842217343-583bb7270b66?w=400&q=80",
-    sentAt: "5월 22일", collection: "당신에게 보내는 계절" },
+    sentAt: "5월 22일", collection: "당신에게 보내는 계절", collectionType: "series" },
   { id: "ml03", author: "공룡", title: "혼자 걷기 좋은 골목길",        bg: "#e2e2e5", textColor: "#3a3a40",
-    sentAt: "5월 18일", private: true },
+    sentAt: "5월 18일", collection: "느린 오후", collectionType: "series", private: true },
   { id: "ml04", author: "공룡", title: "창가에 빗소리가 들리는 오후",  bg: "#f5cf9e", textColor: "#3a2a1a",
-    sentAt: "5월 14일", collection: "월요일의 단상" },
+    sentAt: "5월 14일", collection: "월요일의 단상", collectionType: "series" },
   { id: "ml05", author: "공룡", title: "이번 주말엔 아무것도 안 했다", bg: "#141418", textColor: "#e8e4f0",
     image: "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?w=400&q=80",
-    sentAt: "5월 11일" },
+    sentAt: "5월 11일", collection: "새벽 독서 모임", collectionType: "group" },
   { id: "ml06", author: "공룡", title: "오래 미뤄둔 답장을 쓰며",      bg: "#f4a5a5", textColor: "#3a1a1a",
-    sentAt: "5월 9일", replyTo: "이수현", private: true },
+    sentAt: "5월 9일", replyTo: "이수현", collection: "글 쓰는 사람들", collectionType: "group", private: true },
   { id: "ml07", author: "공룡", title: "월요일 아침에 다짐하는 것들",  bg: "#a8bff0", textColor: "#1a2540",
-    sentAt: "5월 5일", collection: "월요일의 단상" },
+    sentAt: "5월 5일", collection: "월요일의 단상", collectionType: "series" },
   { id: "ml08", author: "공룡", title: "서랍 속 오래된 물건들",         bg: "#f5a8b8", textColor: "#3a1a25",
-    sentAt: "4월 28일", private: true },
+    sentAt: "4월 28일", collection: "조용한 편지 교환", collectionType: "group", private: true },
   { id: "ml09", author: "공룡", title: "어딘가에서 들었던 그 노래",     bg: "#0e0a1a", textColor: "#e8daf8",
     image: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&q=80",
-    sentAt: "4월 21일" },
+    sentAt: "4월 21일", collection: "밤의 독서 노트", collectionType: "series" },
   { id: "ml10", author: "공룡", title: "퇴근길에 문득 든 생각",        bg: "#1a1612", textColor: "#f0ebe0",
     image: "https://images.unsplash.com/photo-1538485399081-7191377e8241?w=400&q=80",
-    sentAt: "4월 17일", replyTo: "박지안" },
+    sentAt: "4월 17일", replyTo: "박지안", collection: "서울 산문 클럽", collectionType: "group" },
   { id: "ml11", author: "공룡", title: "햇살이 좋아서 나온 오후",       bg: "#f4e8d6", textColor: "#3a2e22",
-    sentAt: "4월 12일", private: true },
+    sentAt: "4월 12일", collection: "서울 산책 일기", collectionType: "series", private: true },
   { id: "ml12", author: "공룡", title: "오랜 친구에게 전하고 싶은 말", bg: "#bce5d4", textColor: "#1a3a2e",
-    sentAt: "4월 8일", collection: "글 쓰는 사람들" },
+    sentAt: "4월 8일", collection: "글 쓰는 사람들", collectionType: "group" },
 ];
 
 /* ─── Series mock data ───────────────────────────────────────── */
@@ -1511,6 +1539,7 @@ function MyScreen({ navBottom }: { navBottom: number }) {
   const screenRef = useRef<HTMLDivElement>(null);
   const exp = useExpandedCard(screenRef);
   const [myTab, setMyTab] = useState<MyTab>("letters");
+  const [collectionDetail, setCollectionDetail] = useState<{ name: string; type: "series" | "group" } | null>(null);
 
   return (
     <div ref={screenRef} style={{ position: "absolute", inset: 0, background: C.white, display: "flex", flexDirection: "column" }}>
@@ -1626,7 +1655,65 @@ function MyScreen({ navBottom }: { navBottom: number }) {
         isReading={exp.isReading}
         onClose={exp.closeCard}
         onStartReading={exp.startReading}
+        onCollectionTap={(name, type) => { exp.closeCard(); setCollectionDetail({ name, type }); }}
       />
+
+      {/* 시리즈/모임 상세 페이지 (빈 페이지) */}
+      {collectionDetail && (
+        <div style={{
+          position: "absolute", inset: 0, background: C.white,
+          display: "flex", flexDirection: "column", zIndex: 200,
+        }}>
+          <StatusBar />
+          {/* 헤더 */}
+          <div style={{
+            height: 52, display: "flex", alignItems: "center", paddingLeft: 8,
+            borderBottom: `1px solid ${C.zinc100}`, flexShrink: 0,
+          }}>
+            <button
+              onClick={() => setCollectionDetail(null)}
+              style={{
+                background: "none", border: "none", padding: "8px 12px",
+                cursor: "pointer", display: "flex", alignItems: "center", gap: 6,
+                color: C.zinc600,
+              }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6"/>
+              </svg>
+            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              {collectionDetail.type === "series" ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                  stroke={C.zinc500} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                  <path d="M2 17l10 5 10-5"/>
+                  <path d="M2 12l10 5 10-5"/>
+                </svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                  stroke={C.zinc500} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                  <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+                  <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                </svg>
+              )}
+              <span style={{
+                fontSize: 16, fontWeight: 700, color: C.zinc900,
+                fontFamily: "'Noto Sans KR', sans-serif", letterSpacing: -0.3,
+              }}>{collectionDetail.name}</span>
+            </div>
+          </div>
+          {/* 빈 콘텐츠 영역 */}
+          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <span style={{
+              fontSize: 13, color: C.zinc400,
+              fontFamily: "'Noto Sans KR', sans-serif",
+            }}>준비 중입니다</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
