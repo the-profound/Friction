@@ -998,10 +998,10 @@ const MY_LETTERS: MockCard[] = [
 ];
 
 /* ─── Series mock data ───────────────────────────────────────── */
-type SeriesItem = { id: string; title: string; subscribers: number; letters: number };
+type SeriesItem = { id: string; title: string; subscribers: number; letters: number; active?: boolean };
 const MY_SERIES: SeriesItem[] = [
-  { id: "s01", title: "월요일의 단상",         subscribers: 128, letters: 24 },
-  { id: "s02", title: "당신에게 보내는 계절",   subscribers: 74,  letters: 11 },
+  { id: "s01", title: "월요일의 단상",         subscribers: 128, letters: 24, active: true },
+  { id: "s02", title: "당신에게 보내는 계절",   subscribers: 74,  letters: 11, active: true },
   { id: "s03", title: "느린 오후",             subscribers: 312, letters: 38 },
   { id: "s04", title: "서울 산책 일기",         subscribers: 59,  letters: 7  },
   { id: "s05", title: "밤의 독서 노트",         subscribers: 203, letters: 19 },
@@ -1057,11 +1057,17 @@ function SeriesList() {
             </div>
           </div>
 
-          {/* Chevron */}
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-            stroke={C.zinc300} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="9 18 15 12 9 6"/>
-          </svg>
+          {/* 연재 중 태그 */}
+          {s.active && (
+            <span style={{
+              fontSize: 11, fontWeight: 600,
+              fontFamily: "'Noto Sans KR', sans-serif",
+              color: C.noticeAccent,
+              background: `${C.noticeAccent}18`,
+              padding: "3px 8px", borderRadius: 999,
+              whiteSpace: "nowrap", flexShrink: 0,
+            }}>연재 중</span>
+          )}
         </div>
       ))}
     </div>
