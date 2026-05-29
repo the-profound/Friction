@@ -58,6 +58,8 @@ interface MockCard {
   collection?: string;
   isNotice?: boolean;
   isReply?: boolean;
+  replyTo?: string;
+  sentAt?: string;
   private?: boolean;
 }
 interface MockGroup { date: string; cards: MockCard[] }
@@ -875,12 +877,12 @@ function ExpandedCardOverlay({
         </div>
       </div>
 
-      {/* 비공개 태그 — 확장 카드 좌측 하단, 크기 고정 */}
+      {/* 비공개 태그 — 위치 자체가 ease in out으로 이동 */}
       {expanded.card.private && (
         <span style={{
           position: "absolute",
-          top: EXP_TOP + EXP_H - 40,
-          left: 30,
+          top: isOpen ? EXP_TOP + EXP_H - 40 : expanded.origin.y + expanded.origin.h - 28,
+          left: isOpen ? 30 : expanded.origin.x + 6,
           fontSize: 11, fontWeight: 600,
           fontFamily: "'Noto Sans KR', sans-serif",
           color: C.zinc500,
@@ -888,8 +890,12 @@ function ExpandedCardOverlay({
           padding: "3px 8px", borderRadius: 999,
           zIndex: 101,
           pointerEvents: "none",
-          opacity: isOpen && !isReading ? 1 : 0,
-          transition: "opacity 0.25s ease",
+          opacity: isReading ? 0 : 1,
+          transition: [
+            "top 0.42s cubic-bezier(0.34,1.02,0.64,1)",
+            "left 0.42s cubic-bezier(0.34,1.02,0.64,1)",
+            "opacity 0.3s ease",
+          ].join(", "),
         }}>비공개</span>
       )}
 
@@ -915,10 +921,67 @@ function ExpandedCardOverlay({
         </div>
       </div>
 
-      {/* Action buttons below the expanded card */}
+      {/* 정보 카드 — 확장 카드 아래, 액션 버튼 위 */}
       <div style={{
         position: "absolute",
         top: EXP_TOP + EXP_H + 12, left: 16, width: EXP_W,
+        height: 56, borderRadius: 16,
+        background: C.white,
+        display: "flex", alignItems: "center",
+        padding: "0 18px", gap: 0,
+        opacity: isOpen && !isReading ? 1 : 0,
+        transform: isOpen && !isReading ? "translateY(0px)" : "translateY(10px)",
+        transition: "opacity 0.25s ease 0.05s, transform 0.25s ease 0.05s",
+        pointerEvents: "none",
+        overflow: "hidden",
+      }}>
+        {/* 날짜 */}
+        {expanded.card.sentAt && (
+          <span style={{
+            fontSize: 12, color: C.zinc500,
+            fontFamily: "'Noto Sans KR', sans-serif", fontWeight: 400,
+            flexShrink: 0,
+          }}>{expanded.card.sentAt}</span>
+        )}
+        {/* 발신처 */}
+        {expanded.card.collection && (
+          <>
+            <span style={{ width: 1, height: 12, background: C.zinc200, margin: "0 10px", flexShrink: 0 }} />
+            <span style={{
+              fontSize: 12, color: C.zinc500,
+              fontFamily: "'Noto Sans KR', sans-serif", fontWeight: 400,
+              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            }}>{expanded.card.collection}</span>
+          </>
+        )}
+        {/* 답장 */}
+        {expanded.card.replyTo && (
+          <>
+            <span style={{ width: 1, height: 12, background: C.zinc200, margin: "0 10px", flexShrink: 0 }} />
+            <span style={{
+              fontSize: 12, color: C.zinc500,
+              fontFamily: "'Noto Sans KR', sans-serif", fontWeight: 400,
+              flexShrink: 0,
+            }}>{expanded.card.replyTo} 글의 답장</span>
+          </>
+        )}
+        {/* 인사 */}
+        {expanded.card.isNotice && (
+          <>
+            <span style={{ width: 1, height: 12, background: C.zinc200, margin: "0 10px", flexShrink: 0 }} />
+            <span style={{
+              fontSize: 12, fontWeight: 600, color: C.noticeAccent,
+              fontFamily: "'Noto Sans KR', sans-serif",
+              flexShrink: 0,
+            }}>인사</span>
+          </>
+        )}
+      </div>
+
+      {/* Action buttons below the expanded card */}
+      <div style={{
+        position: "absolute",
+        top: EXP_TOP + EXP_H + 76, left: 16, width: EXP_W,
         display: "flex", gap: 8,
         opacity: isOpen && !isReading ? 1 : 0,
         transform: isOpen && !isReading ? "translateY(0px)" : "translateY(10px)",
@@ -1016,22 +1079,34 @@ function InboxScreen({ navBottom }: { navBottom: number }) {
 
 /* ─── My screen — profile + 편지/연재/모임 sub-tabs ───────────── */
 const MY_LETTERS: MockCard[] = [
-  { id: "ml01", author: "나", title: "오늘 하루가 유독 길었다",     bg: "#dbe982", textColor: "#3a3a1f" },
+  { id: "ml01", author: "나", title: "오늘 하루가 유독 길었다",     bg: "#dbe982", textColor: "#3a3a1f",
+    sentAt: "5월 29일", isNotice: true },
   { id: "ml02", author: "나", title: "비가 오는 날 도서관에서",      bg: "#0d1a0e", textColor: "#d6f0d0",
-    image: "https://images.unsplash.com/photo-1507842217343-583bb7270b66?w=400&q=80" },
-  { id: "ml03", author: "나", title: "혼자 걷기 좋은 골목길",        bg: "#e2e2e5", textColor: "#3a3a40", private: true },
-  { id: "ml04", author: "나", title: "창가에 빗소리가 들리는 오후",  bg: "#f5cf9e", textColor: "#3a2a1a" },
+    image: "https://images.unsplash.com/photo-1507842217343-583bb7270b66?w=400&q=80",
+    sentAt: "5월 22일", collection: "당신에게 보내는 계절" },
+  { id: "ml03", author: "나", title: "혼자 걷기 좋은 골목길",        bg: "#e2e2e5", textColor: "#3a3a40",
+    sentAt: "5월 18일", private: true },
+  { id: "ml04", author: "나", title: "창가에 빗소리가 들리는 오후",  bg: "#f5cf9e", textColor: "#3a2a1a",
+    sentAt: "5월 14일", collection: "월요일의 단상" },
   { id: "ml05", author: "나", title: "이번 주말엔 아무것도 안 했다", bg: "#141418", textColor: "#e8e4f0",
-    image: "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?w=400&q=80" },
-  { id: "ml06", author: "나", title: "오래 미뤄둔 답장을 쓰며",      bg: "#f4a5a5", textColor: "#3a1a1a", private: true },
-  { id: "ml07", author: "나", title: "월요일 아침에 다짐하는 것들",  bg: "#a8bff0", textColor: "#1a2540" },
-  { id: "ml08", author: "나", title: "서랍 속 오래된 물건들",         bg: "#f5a8b8", textColor: "#3a1a25", private: true },
+    image: "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?w=400&q=80",
+    sentAt: "5월 11일" },
+  { id: "ml06", author: "나", title: "오래 미뤄둔 답장을 쓰며",      bg: "#f4a5a5", textColor: "#3a1a1a",
+    sentAt: "5월 9일", replyTo: "이수현", private: true },
+  { id: "ml07", author: "나", title: "월요일 아침에 다짐하는 것들",  bg: "#a8bff0", textColor: "#1a2540",
+    sentAt: "5월 5일", collection: "월요일의 단상" },
+  { id: "ml08", author: "나", title: "서랍 속 오래된 물건들",         bg: "#f5a8b8", textColor: "#3a1a25",
+    sentAt: "4월 28일", private: true },
   { id: "ml09", author: "나", title: "어딘가에서 들었던 그 노래",     bg: "#0e0a1a", textColor: "#e8daf8",
-    image: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&q=80" },
+    image: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&q=80",
+    sentAt: "4월 21일" },
   { id: "ml10", author: "나", title: "퇴근길에 문득 든 생각",        bg: "#1a1612", textColor: "#f0ebe0",
-    image: "https://images.unsplash.com/photo-1538485399081-7191377e8241?w=400&q=80" },
-  { id: "ml11", author: "나", title: "햇살이 좋아서 나온 오후",       bg: "#f4e8d6", textColor: "#3a2e22", private: true },
-  { id: "ml12", author: "나", title: "오랜 친구에게 전하고 싶은 말", bg: "#bce5d4", textColor: "#1a3a2e" },
+    image: "https://images.unsplash.com/photo-1538485399081-7191377e8241?w=400&q=80",
+    sentAt: "4월 17일", replyTo: "박지안" },
+  { id: "ml11", author: "나", title: "햇살이 좋아서 나온 오후",       bg: "#f4e8d6", textColor: "#3a2e22",
+    sentAt: "4월 12일", private: true },
+  { id: "ml12", author: "나", title: "오랜 친구에게 전하고 싶은 말", bg: "#bce5d4", textColor: "#1a3a2e",
+    sentAt: "4월 8일", collection: "글 쓰는 사람들" },
 ];
 
 /* ─── Series mock data ───────────────────────────────────────── */
