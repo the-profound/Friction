@@ -1108,12 +1108,9 @@ function GroupsList() {
           }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
               stroke={C.zinc500} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="5" r="2"/>
-              <circle cx="5" cy="19" r="2"/>
-              <circle cx="19" cy="19" r="2"/>
-              <line x1="12" y1="7" x2="5" y2="17"/>
-              <line x1="12" y1="7" x2="19" y2="17"/>
-              <line x1="7" y1="19" x2="17" y2="19"/>
+              <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
             </svg>
           </div>
 
