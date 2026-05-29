@@ -40,7 +40,7 @@ const EXP_TOP = STATUS_H + 12;                   // 56px — just below status b
 /* ─── Tabs ───────────────────────────────────────────────────── */
 const TABS = [
   { key: "IN", label: "수신",  icon: "inbox"     },
-  { key: "SR", label: "연재",  icon: "book-open" },
+  { key: "SR", label: "시리즈", icon: "book-open" },
   { key: "ON", label: "기록",  icon: "edit-3"    },
   { key: "MO", label: "모임",  icon: "share-2"   },
   { key: "MY", label: "마이",  icon: "user"      },
@@ -995,10 +995,10 @@ const MY_LETTERS: MockCard[] = [
   { id: "ml12", author: "나", title: "친구에게",           bg: "#bce5d4", textColor: "#1a3a2e" },
 ];
 
-type MyTab = "letters" | "publish" | "groups" | "archive";
+type MyTab = "letters" | "series" | "groups" | "archive";
 const MY_TABS: { key: MyTab; label: string }[] = [
   { key: "letters", label: "편지" },
-  { key: "publish", label: "발행" },
+  { key: "series",  label: "시리즈" },
   { key: "groups",  label: "모임" },
   { key: "archive", label: "보관" },
 ];
