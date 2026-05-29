@@ -22,7 +22,7 @@ const CARD_GAP      = 12;
 const SNAP_INTERVAL = CARD_W + CARD_GAP; // 312
 const CENTER_OFFSET = (SCREEN_W - CARD_W) / 2; // 46.5
 
-const TITLE_SIZE  = (9.0 / 100) * CARD_W;   // 27
+const TITLE_SIZE  = (13.5 / 100) * CARD_W;  // 40.5 (1.5× original 27)
 const AUTHOR_SIZE = (4.5 / 100) * CARD_W;   // 13.5
 
 const NAV_W  = 300;
