@@ -40,7 +40,7 @@ const EXP_TOP = STATUS_H + 12;                   // 56px — just below status b
 /* ─── Tabs ───────────────────────────────────────────────────── */
 const TABS = [
   { key: "IN", label: "수신",  icon: "inbox"     },
-  { key: "SR", label: "시리즈", icon: "book-open" },
+  { key: "SR", label: "시리즈", icon: "layers" },
   { key: "ON", label: "기록",  icon: "edit-3"    },
   { key: "MO", label: "모임",  icon: "share-2"   },
   { key: "MY", label: "마이",  icon: "user"      },
@@ -137,6 +137,8 @@ function Icon({ name, size, color }: { name: string; size: number; color: string
       return <svg viewBox="0 0 24 24" style={s} {...p}><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>;
     case "book-open":
       return <svg viewBox="0 0 24 24" style={s} {...p}><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>;
+    case "layers":
+      return <svg viewBox="0 0 24 24" style={s} {...p}><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>;
     case "edit-3":
       return <svg viewBox="0 0 24 24" style={s} {...p}><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>;
     case "edit":
