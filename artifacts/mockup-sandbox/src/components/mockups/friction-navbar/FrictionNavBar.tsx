@@ -1075,9 +1075,9 @@ function SeriesList() {
 }
 
 /* ─── Groups mock data ───────────────────────────────────────── */
-type GroupItem = { id: string; title: string; members: number; letters: number };
+type GroupItem = { id: string; title: string; members: number; letters: number; active?: boolean };
 const MY_GROUPS: GroupItem[] = [
-  { id: "g01", title: "글 쓰는 사람들",     members: 12, letters: 47 },
+  { id: "g01", title: "글 쓰는 사람들",     members: 12, letters: 47, active: true },
   { id: "g02", title: "새벽 독서 모임",     members: 6,  letters: 23 },
   { id: "g03", title: "서울 산문 클럽",     members: 18, letters: 91 },
   { id: "g04", title: "조용한 편지 교환",   members: 4,  letters: 16 },
@@ -1132,6 +1132,18 @@ function GroupsList() {
               <span>편지 {g.letters}개</span>
             </div>
           </div>
+
+          {/* 활동 중 태그 */}
+          {g.active && (
+            <span style={{
+              fontSize: 11, fontWeight: 600,
+              fontFamily: "'Noto Sans KR', sans-serif",
+              color: "#2d7a4f",
+              background: "#2d7a4f18",
+              padding: "3px 8px", borderRadius: 999,
+              whiteSpace: "nowrap", flexShrink: 0,
+            }}>활동 중</span>
+          )}
         </div>
       ))}
     </div>
