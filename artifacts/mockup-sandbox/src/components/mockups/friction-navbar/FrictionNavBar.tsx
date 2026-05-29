@@ -801,7 +801,7 @@ function ExpandedCardOverlay({
           position: "absolute", inset: 0,
           background: isReading ? "rgba(0,0,0,1)" : "rgba(0,0,0,0.62)",
           opacity: isOpen ? 1 : 0,
-          transition: "opacity 0.42s ease-in-out, background 0.6s ease",
+          transition: "opacity 0.42s ease-in-out, background 1.5s ease",
         }}
       />
 
