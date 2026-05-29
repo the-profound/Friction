@@ -1033,29 +1033,28 @@ function MyScreen({ navBottom }: { navBottom: number }) {
 
       {/* Profile header */}
       <div style={{
-        padding: "20px 28px 28px",
-        display: "flex", alignItems: "center", gap: 20,
+        padding: "24px 28px 28px",
+        display: "flex", flexDirection: "column", alignItems: "center", gap: 0,
         flexShrink: 0,
       }}>
         <div style={{
           width: 78, height: 78, borderRadius: "50%",
-          background: C.zinc100, flexShrink: 0,
+          background: C.zinc100,
           boxShadow: "inset 0 0 0 0.5px rgba(0,0,0,0.05)",
+          marginBottom: 14,
         }} />
-        <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-          <span style={{
-            fontSize: 24, fontWeight: 800, fontFamily: "'Noto Sans KR', sans-serif",
-            color: C.zinc900, letterSpacing: -0.5, lineHeight: 1.1,
-          }}>
-            사용자명
-          </span>
-          <span style={{
-            fontSize: 15, fontFamily: "'Noto Sans KR', sans-serif",
-            color: C.zinc400, marginTop: 4, letterSpacing: -0.2,
-          }}>
-            @자강두천
-          </span>
-        </div>
+        <span style={{
+          fontSize: 20, fontWeight: 800, fontFamily: "'Noto Sans KR', sans-serif",
+          color: C.zinc900, letterSpacing: -0.5, lineHeight: 1.2,
+        }}>
+          사용자명
+        </span>
+        <span style={{
+          fontSize: 12, fontFamily: "'Noto Sans KR', sans-serif",
+          color: C.zinc400, marginTop: 4, letterSpacing: -0.1,
+        }}>
+          @자강두천
+        </span>
       </div>
 
       {/* Sub-tabs: 편지 / 연재 / 모임 */}
