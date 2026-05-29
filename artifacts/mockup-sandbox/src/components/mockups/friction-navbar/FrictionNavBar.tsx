@@ -1163,8 +1163,8 @@ const MY_ARCHIVE: ArchiveItem[] = [
 ];
 
 function ArchiveList() {
-  const [editTarget, setEditTarget] = React.useState<ArchiveItem | null>(null);
-  const longPressTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [editTarget, setEditTarget] = useState<ArchiveItem | null>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function startPress(a: ArchiveItem) {
     longPressTimer.current = setTimeout(() => setEditTarget(a), 500);
