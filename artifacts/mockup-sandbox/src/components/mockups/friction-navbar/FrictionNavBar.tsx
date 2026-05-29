@@ -1163,63 +1163,169 @@ const MY_ARCHIVE: ArchiveItem[] = [
 ];
 
 function ArchiveList() {
+  const [editTarget, setEditTarget] = React.useState<ArchiveItem | null>(null);
+  const longPressTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function startPress(a: ArchiveItem) {
+    longPressTimer.current = setTimeout(() => setEditTarget(a), 500);
+  }
+  function cancelPress() {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+  }
+
   return (
-    <div style={{ display: "flex", flexDirection: "column" }}>
-      {MY_ARCHIVE.map((a, i) => (
-        <div
-          key={a.id}
-          style={{
-            display: "flex", alignItems: "center",
-            padding: "16px 20px",
-            borderBottom: i < MY_ARCHIVE.length - 1 ? `1px solid ${C.zinc100}` : "none",
-            gap: 14, cursor: "pointer",
-          }}
-        >
-          {/* 폴더 아이콘 */}
+    <>
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        {MY_ARCHIVE.map((a, i) => (
+          <div
+            key={a.id}
+            onMouseDown={() => startPress(a)}
+            onMouseUp={cancelPress}
+            onMouseLeave={cancelPress}
+            onTouchStart={() => startPress(a)}
+            onTouchEnd={cancelPress}
+            style={{
+              display: "flex", alignItems: "center",
+              padding: "16px 20px",
+              borderBottom: i < MY_ARCHIVE.length - 1 ? `1px solid ${C.zinc100}` : "none",
+              gap: 14, cursor: "pointer",
+              userSelect: "none",
+            }}
+          >
+            {/* 폴더 아이콘 */}
+            <div style={{
+              width: 44, height: 44, borderRadius: 12,
+              background: C.zinc100,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              flexShrink: 0,
+            }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                stroke={C.zinc500} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+              </svg>
+            </div>
+
+            {/* 텍스트 */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontSize: 15, fontWeight: 600, color: C.zinc900,
+                fontFamily: "'Noto Sans KR', sans-serif", letterSpacing: -0.3,
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                marginBottom: 4,
+              }}>
+                {a.title}
+              </div>
+              <div style={{
+                fontSize: 12, color: C.zinc400,
+                fontFamily: "'Noto Sans KR', sans-serif",
+              }}>
+                편지 {a.letters}개
+              </div>
+            </div>
+
+            {/* 비공개 태그 */}
+            {a.private && (
+              <span style={{
+                fontSize: 11, fontWeight: 600,
+                fontFamily: "'Noto Sans KR', sans-serif",
+                color: C.zinc500,
+                background: C.zinc100,
+                padding: "3px 8px", borderRadius: 999,
+                whiteSpace: "nowrap", flexShrink: 0,
+              }}>비공개</span>
+            )}
+          </div>
+        ))}
+
+        {/* + 버튼 */}
+        <div style={{
+          display: "flex", alignItems: "center",
+          padding: "16px 20px", gap: 14, cursor: "pointer",
+        }}>
           <div style={{
             width: 44, height: 44, borderRadius: 12,
             background: C.zinc100,
             display: "flex", alignItems: "center", justifyContent: "center",
             flexShrink: 0,
           }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-              stroke={C.zinc500} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+              stroke={C.zinc400} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
             </svg>
           </div>
-
-          {/* 텍스트 */}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{
-              fontSize: 15, fontWeight: 600, color: C.zinc900,
-              fontFamily: "'Noto Sans KR', sans-serif", letterSpacing: -0.3,
-              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-              marginBottom: 4,
-            }}>
-              {a.title}
-            </div>
-            <div style={{
-              fontSize: 12, color: C.zinc400,
-              fontFamily: "'Noto Sans KR', sans-serif",
-            }}>
-              편지 {a.letters}개
-            </div>
-          </div>
-
-          {/* 비공개 태그 */}
-          {a.private && (
-            <span style={{
-              fontSize: 11, fontWeight: 600,
-              fontFamily: "'Noto Sans KR', sans-serif",
-              color: C.zinc500,
-              background: C.zinc100,
-              padding: "3px 8px", borderRadius: 999,
-              whiteSpace: "nowrap", flexShrink: 0,
-            }}>비공개</span>
-          )}
+          <span style={{
+            fontSize: 14, color: C.zinc400,
+            fontFamily: "'Noto Sans KR', sans-serif",
+          }}>새 폴더 추가</span>
         </div>
-      ))}
-    </div>
+      </div>
+
+      {/* 롱프레스 바텀시트 */}
+      {editTarget && (
+        <div
+          onClick={() => setEditTarget(null)}
+          style={{
+            position: "absolute", inset: 0,
+            background: "rgba(0,0,0,0.35)",
+            display: "flex", alignItems: "flex-end",
+            zIndex: 200,
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: "100%",
+              background: "#fff",
+              borderRadius: "20px 20px 0 0",
+              padding: "20px 0 32px",
+            }}
+          >
+            {/* 핸들 */}
+            <div style={{
+              width: 36, height: 4, borderRadius: 2,
+              background: C.zinc200, margin: "0 auto 20px",
+            }} />
+            {/* 제목 */}
+            <div style={{
+              fontSize: 13, fontWeight: 700, color: C.zinc400,
+              fontFamily: "'Noto Sans KR', sans-serif",
+              padding: "0 24px 12px",
+              letterSpacing: 0.2,
+            }}>
+              {editTarget.title}
+            </div>
+            {[
+              { label: "이름 변경",   icon: "M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" },
+              { label: editTarget.private ? "공개로 전환" : "비공개로 전환", icon: "M17 1l4 4-4 4M3 11V9a4 4 0 014-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 01-4 4H3" },
+              { label: "폴더 삭제",   icon: "M3 6h18M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2", danger: true },
+            ].map(item => (
+              <div
+                key={item.label}
+                onClick={() => setEditTarget(null)}
+                style={{
+                  display: "flex", alignItems: "center",
+                  padding: "14px 24px", gap: 16, cursor: "pointer",
+                }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                  stroke={(item as any).danger ? "#e53935" : C.zinc600}
+                  strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d={item.icon}/>
+                </svg>
+                <span style={{
+                  fontSize: 15, fontFamily: "'Noto Sans KR', sans-serif",
+                  color: (item as any).danger ? "#e53935" : C.zinc800,
+                  fontWeight: 500,
+                }}>
+                  {item.label}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -1358,43 +1464,7 @@ function MyScreen({ navBottom }: { navBottom: number }) {
         ) : myTab === "groups" ? (
           <GroupsList />
         ) : myTab === "archive" ? (
-          <>
-            {/* 보관 탭 헤더 */}
-            <div style={{
-              display: "flex", alignItems: "center", justifyContent: "flex-end",
-              padding: "12px 16px 4px",
-              gap: 4,
-            }}>
-              {/* + 버튼 */}
-              <button style={{
-                width: 36, height: 36, borderRadius: 8, border: "none",
-                background: "transparent", cursor: "pointer",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                color: C.zinc600,
-              }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19"/>
-                  <line x1="5" y1="12" x2="19" y2="12"/>
-                </svg>
-              </button>
-              {/* 케밥 버튼 */}
-              <button style={{
-                width: 36, height: 36, borderRadius: 8, border: "none",
-                background: "transparent", cursor: "pointer",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                color: C.zinc600,
-              }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="5" r="1" fill="currentColor"/>
-                  <circle cx="12" cy="12" r="1" fill="currentColor"/>
-                  <circle cx="12" cy="19" r="1" fill="currentColor"/>
-                </svg>
-              </button>
-            </div>
-            <ArchiveList />
-          </>
+          <ArchiveList />
         ) : (
           <div style={{
             padding: "80px 24px", textAlign: "center",
