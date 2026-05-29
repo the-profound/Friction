@@ -785,23 +785,28 @@ function ExpandedCardOverlay({
   // card's position with scale 1; at "open" state it scales up to EXP size at
   // the target position. Natural box is CARD_W×CARD_H placed at (16, EXP_TOP)
   // with transformOrigin top-left.
-  const SCALE = EXP_W / CARD_W;
+  const SCALE      = EXP_W / CARD_W;
+  const READ_SCALE = SCREEN_W / CARD_W;   // full-width, no side margins
   const sx = expanded.origin.w / CARD_W;
   const sy = expanded.origin.h / CARD_H;
   const tx = expanded.origin.x - 16;
   const ty = expanded.origin.y - EXP_TOP;
   const collapsedTransform = `translate(${tx}px, ${ty}px) scale(${sx}, ${sy})`;
+  // When reading: shift 16px left so the card fills the full screen width edge-to-edge.
+  const openedTransform = isReading
+    ? `translate(-16px, 0px) scale(${READ_SCALE})`
+    : `translate(0px, 0px) scale(${SCALE})`;
 
   return (
     <div style={{ position: "absolute", inset: 0, zIndex: 100 }}>
-      {/* Dim backdrop — click to close */}
+      {/* Backdrop — dims on open, goes fully black over 1.5 s once reading starts */}
       <div
         onClick={onClose}
         style={{
           position: "absolute", inset: 0,
-          background: "rgba(0,0,0,0.62)",
+          background: isReading ? "rgba(0,0,0,1)" : "rgba(0,0,0,0.62)",
           opacity: isOpen ? 1 : 0,
-          transition: "opacity 0.42s ease-in-out",
+          transition: "opacity 0.42s ease-in-out, background 1.5s ease-in-out",
         }}
       />
 
@@ -812,7 +817,7 @@ function ExpandedCardOverlay({
           top: EXP_TOP, left: 16,
           width: CARD_W, height: CARD_H,
           transformOrigin: "top left",
-          transform: isOpen ? `translate(0px, 0px) scale(${SCALE})` : collapsedTransform,
+          transform: isOpen ? openedTransform : collapsedTransform,
           transition: "transform 0.42s cubic-bezier(0.34,1.02,0.64,1)",
           pointerEvents: "none",
           willChange: "transform",
@@ -849,6 +854,28 @@ function ExpandedCardOverlay({
           }}>
             {isReading && <LetterView card={expanded.card} phase={readPhase} />}
           </div>
+        </div>
+      </div>
+
+      {/* FAB — 기록 아이콘, 우하단 고정, 읽기 시작 후 표시 */}
+      <div style={{
+        position: "absolute", bottom: 40, right: 24,
+        opacity: isReading ? 1 : 0,
+        transform: isReading ? "scale(1) translateY(0px)" : "scale(0.8) translateY(12px)",
+        transition: "opacity 0.35s ease 0.2s, transform 0.35s cubic-bezier(0.34,1.4,0.64,1) 0.2s",
+        pointerEvents: "none",
+      }}>
+        <div style={{
+          width: 56, height: 56, borderRadius: "50%",
+          background: C.white,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          boxShadow: "0 4px 20px rgba(0,0,0,0.45)",
+        }}>
+          {/* 기록 (펜) 아이콘 */}
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+            <path d="M15.5 3.5a2.121 2.121 0 0 1 3 3L7 18l-4 1 1-4L15.5 3.5z"
+              stroke={C.zinc900} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
         </div>
       </div>
 
