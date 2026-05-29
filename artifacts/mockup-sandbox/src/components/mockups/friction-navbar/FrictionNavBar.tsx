@@ -202,7 +202,7 @@ function ArticleCard({
       <div style={{
         position: "absolute", inset: 0,
         display: "flex", flexDirection: "column", justifyContent: "flex-start",
-        padding: 28,
+        padding: 24,
       }}>
         <span style={{
           fontSize: TITLE_SIZE,
