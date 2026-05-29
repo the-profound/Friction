@@ -997,6 +997,77 @@ const MY_LETTERS: MockCard[] = [
   { id: "ml12", author: "나", title: "친구에게",           bg: "#bce5d4", textColor: "#1a3a2e" },
 ];
 
+/* ─── Series mock data ───────────────────────────────────────── */
+type SeriesItem = { id: string; title: string; subscribers: number; letters: number };
+const MY_SERIES: SeriesItem[] = [
+  { id: "s01", title: "월요일의 단상",         subscribers: 128, letters: 24 },
+  { id: "s02", title: "당신에게 보내는 계절",   subscribers: 74,  letters: 11 },
+  { id: "s03", title: "느린 오후",             subscribers: 312, letters: 38 },
+  { id: "s04", title: "서울 산책 일기",         subscribers: 59,  letters: 7  },
+  { id: "s05", title: "밤의 독서 노트",         subscribers: 203, letters: 19 },
+];
+
+function SeriesList() {
+  return (
+    <div style={{ display: "flex", flexDirection: "column" }}>
+      {MY_SERIES.map((s, i) => (
+        <div
+          key={s.id}
+          style={{
+            display: "flex", alignItems: "center",
+            padding: "16px 20px",
+            borderBottom: i < MY_SERIES.length - 1 ? `1px solid ${C.zinc100}` : "none",
+            gap: 14,
+            cursor: "pointer",
+          }}
+        >
+          {/* Layers icon */}
+          <div style={{
+            width: 44, height: 44, borderRadius: 12,
+            background: C.zinc100,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            flexShrink: 0,
+          }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+              stroke={C.zinc500} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+              <polyline points="2 17 12 22 22 17"/>
+              <polyline points="2 12 12 17 22 12"/>
+            </svg>
+          </div>
+
+          {/* Text */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontSize: 15, fontWeight: 600, color: C.zinc900,
+              fontFamily: "'Noto Sans KR', sans-serif", letterSpacing: -0.3,
+              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              marginBottom: 4,
+            }}>
+              {s.title}
+            </div>
+            <div style={{
+              display: "flex", gap: 10, alignItems: "center",
+              fontSize: 12, color: C.zinc400,
+              fontFamily: "'Noto Sans KR', sans-serif",
+            }}>
+              <span>구독자 {s.subscribers.toLocaleString()}명</span>
+              <span style={{ width: 2, height: 2, borderRadius: "50%", background: C.zinc300, flexShrink: 0 }} />
+              <span>편지 {s.letters}개</span>
+            </div>
+          </div>
+
+          {/* Chevron */}
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+            stroke={C.zinc300} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 type MyTab = "letters" | "series" | "groups" | "archive";
 const MY_TABS: { key: MyTab; label: string }[] = [
   { key: "letters", label: "편지" },
@@ -1123,6 +1194,8 @@ function MyScreen({ navBottom }: { navBottom: number }) {
             onCardTap={exp.openCard}
             hiddenCardId={exp.expanded?.card.id ?? null}
           />
+        ) : myTab === "series" ? (
+          <SeriesList />
         ) : (
           <div style={{
             padding: "80px 24px", textAlign: "center",
