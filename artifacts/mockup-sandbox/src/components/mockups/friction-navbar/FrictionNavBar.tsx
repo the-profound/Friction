@@ -249,21 +249,6 @@ function ArticleCard({
         )}
       </div>
 
-      {/* 비공개 태그 — bottom-left */}
-      {card.private && (
-        <span style={{
-          position: "absolute", bottom: 14, left: 14,
-          fontSize: 11, fontWeight: 600,
-          fontFamily: "'Noto Sans KR', sans-serif",
-          color: "rgba(255,255,255,0.75)",
-          background: "rgba(0,0,0,0.32)",
-          padding: "3px 9px", borderRadius: 999,
-          zIndex: 2,
-          backdropFilter: "blur(4px)",
-          WebkitBackdropFilter: "blur(4px)",
-        }}>비공개</span>
-      )}
-
       {/* Badges — bottom-right */}
       {(card.isNotice || card.isReply) && (
         <div style={{ position: "absolute", bottom: 12, right: 12, display: "flex", flexDirection: "column", gap: 4, zIndex: 2, alignItems: "flex-end" }}>
@@ -423,9 +408,24 @@ function CarouselGroup({
               style={{
                 marginRight: i < group.cards.length - 1 ? CARD_GAP : 0,
                 visibility: hiddenCardId === card.id ? "hidden" : "visible",
+                position: "relative",
+                width: CARD_W,
+                height: CARD_H,
               }}
             >
               <ArticleCard card={card} isActive={i === activeIndex} />
+              {card.private && (
+                <span style={{
+                  position: "absolute", bottom: 12, left: 10,
+                  fontSize: 11, fontWeight: 600,
+                  fontFamily: "'Noto Sans KR', sans-serif",
+                  color: C.zinc500,
+                  background: C.zinc100,
+                  padding: "3px 8px", borderRadius: 999,
+                  zIndex: 5,
+                  pointerEvents: "none",
+                }}>비공개</span>
+              )}
             </div>
           ))}
         </div>
@@ -874,6 +874,24 @@ function ExpandedCardOverlay({
           </div>
         </div>
       </div>
+
+      {/* 비공개 태그 — 확장 카드 좌측 하단, 크기 고정 */}
+      {expanded.card.private && (
+        <span style={{
+          position: "absolute",
+          top: EXP_TOP + EXP_H - 40,
+          left: 30,
+          fontSize: 11, fontWeight: 600,
+          fontFamily: "'Noto Sans KR', sans-serif",
+          color: C.zinc500,
+          background: C.zinc100,
+          padding: "3px 8px", borderRadius: 999,
+          zIndex: 101,
+          pointerEvents: "none",
+          opacity: isOpen && !isReading ? 1 : 0,
+          transition: "opacity 0.25s ease",
+        }}>비공개</span>
+      )}
 
       {/* FAB — 기록 아이콘, 우하단 고정, 읽기 시작 후 표시 */}
       <div style={{
