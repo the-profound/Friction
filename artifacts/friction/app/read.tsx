@@ -225,6 +225,7 @@ export default function ReadScreen() {
   const [clearSelectionSignal, setClearSelectionSignal] = useState(0);
   const [memoSheetVisible, setMemoSheetVisible] = useState(false);
   const [memoAppendContent, setMemoAppendContent] = useState<string | undefined>(undefined);
+  const [pendingCompletionAfterMemo, setPendingCompletionAfterMemo] = useState(false);
   const [collectionPickerMode, setCollectionPickerMode] = useState(false);
   const [pickerTab, setPickerTab] = useState<"list" | "create">("list");
   const [newCollectionName, setNewCollectionName] = useState("");
@@ -390,6 +391,9 @@ export default function ReadScreen() {
     }, [showToast]),
   });
 
+  const memoContentRef = useRef(readingMemo.memoContent);
+  useEffect(() => { memoContentRef.current = readingMemo.memoContent; }, [readingMemo.memoContent]);
+
   const handleOpenMemo = useCallback(() => {
     setMemoSheetVisible(true);
   }, []);
@@ -481,9 +485,19 @@ export default function ReadScreen() {
       } else {
         setSelectedCollectionId(undefined);
       }
-      setCompletionSheetVisible(true);
+      // 완독 후 저장/보관 시트 바로 대신 읽기 메모를 먼저 띄운다.
+      // 메모가 비어 있을 때만 기본 질문 블록을 삽입한다.
+      // setMemoAppendContent 는 WebView 가 이미 로드된 경우에도
+      // setMarkdown 커맨드로 내용을 주입해주는 유일한 채널이다.
+      const DEFAULT_QUESTION = "Q. 작성자가 하고자 하는 말은 무엇이었나요?\n\n";
+      if (!memoContentRef.current.trim()) {
+        readingMemo.updateMemoContent(DEFAULT_QUESTION);
+        setMemoAppendContent(DEFAULT_QUESTION);
+      }
+      setPendingCompletionAfterMemo(true);
+      setMemoSheetVisible(true);
     }
-  }, [reading.session.state, recentCollectionQuery.data, collectionsQuery.data]);
+  }, [reading.session.state, recentCollectionQuery.data, collectionsQuery.data, readingMemo.updateMemoContent]);
 
   useEffect(() => {
     if (reading.session.state === "COMPLETED_COMMITTED") {
@@ -1559,6 +1573,11 @@ export default function ReadScreen() {
           setMemoSheetVisible(false);
           setMemoAppendContent(undefined);
           readingMemo.closeWithBackgroundSave();
+          // 완독 후 자동 열린 메모였으면 닫힐 때 저장/보관 시트를 띄운다.
+          if (pendingCompletionAfterMemo) {
+            setPendingCompletionAfterMemo(false);
+            setCompletionSheetVisible(true);
+          }
         }}
         initialContent={readingMemo.memoContent}
         appendContent={memoAppendContent}

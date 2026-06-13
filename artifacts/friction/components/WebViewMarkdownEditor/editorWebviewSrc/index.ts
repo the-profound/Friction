@@ -1,4 +1,4 @@
-import { Editor, Extension } from "@tiptap/core";
+import { Editor, Extension, Node } from "@tiptap/core";
 import { Document } from "@tiptap/extension-document";
 import { Paragraph } from "@tiptap/extension-paragraph";
 import { Text } from "@tiptap/extension-text";
@@ -417,6 +417,18 @@ const HorizontalRuleWithControls = HorizontalRule.extend({
   },
 });
 
+const QuestionBlock = Node.create({
+  name: "questionBlock",
+  group: "block",
+  content: "block+",
+  parseHTML() {
+    return [{ tag: "div.tiptap-question-block" }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ["div", { ...HTMLAttributes, class: "tiptap-question-block" }, 0];
+  },
+});
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -511,10 +523,31 @@ function markdownToHtml(md: string): string {
         continue;
       }
 
+      if (/^Q\.\s+/.test(line)) {
+        const questionLines: string[] = [];
+        while (
+          i < lines.length &&
+          lines[i].trim() !== "" &&
+          !/^(#{1,3})\s+/.test(lines[i]) &&
+          !/^>\s?/.test(lines[i]) &&
+          !/^[-*]\s+/.test(lines[i]) &&
+          !/^\d+\.\s+/.test(lines[i]) &&
+          !/^(-{3,}|\*{3,}|_{3,})\s*$/.test(lines[i])
+        ) {
+          questionLines.push(lines[i]);
+          i++;
+        }
+        const firstText = questionLines[0].replace(/^Q\.\s+/, "");
+        const allText = [firstText, ...questionLines.slice(1)].join(" ");
+        blocks.push(`<div class="tiptap-question-block"><p>${renderInline(allText)}</p></div>`);
+        continue;
+      }
+
       const paraLines: string[] = [];
       while (
         i < lines.length &&
         lines[i].trim() !== "" &&
+        !/^Q\.\s+/.test(lines[i]) &&
         !/^(#{1,3})\s+/.test(lines[i]) &&
         !/^>\s?/.test(lines[i]) &&
         !/^[-*]\s+/.test(lines[i]) &&
@@ -609,6 +642,14 @@ function htmlToMarkdown(html: string): string {
           out += `${marker}${liContent.trim()}\n`;
         });
         return out + (depth === 0 ? "\n" : "");
+      }
+      if (tag === "div" && el.classList.contains("tiptap-question-block")) {
+        let inner = "";
+        for (const child of Array.from(el.children)) {
+          inner += blockMd(child as HTMLElement, depth);
+        }
+        const text = inner.replace(/\n+$/, "").trim();
+        return `Q. ${text}\n\n`;
       }
       if (tag === "blockquote") {
         let inner = "";
@@ -978,6 +1019,7 @@ interface Command {
         BulletList,
         OrderedList,
         ListItem,
+        QuestionBlock,
         UndoRedo,
         HardBreak,
         Placeholder.configure({ placeholder }),
