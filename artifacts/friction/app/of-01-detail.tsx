@@ -384,9 +384,8 @@ export default function PersonalCollectionDetailScreen() {
                   onPress: () => {
                     closeOpenRow();
                     router.push({
-                      pathname: "/(tabs)/to",
+                      pathname: "/to-send",
                       params: {
-                        subTab: "send",
                         articleId: item.articleId,
                       },
                     });

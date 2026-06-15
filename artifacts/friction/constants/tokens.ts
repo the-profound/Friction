@@ -248,7 +248,7 @@ export const TabConfig = {
     { key: "AR" as const, label: "보관함", icon: "archive" as const },
     { key: "ON" as const, label: "기록함", icon: "edit-3" as const },
     { key: "OF" as const, label: "단체 모음", icon: "users" as const },
-    { key: "TO" as const, label: "발신함", icon: "send" as const },
+    { key: "TO" as const, label: "마이", icon: "user" as const },
   ],
   ofSubTabs: [
     { key: "group" as const, label: "단체 모음", icon: "share-2" as const },

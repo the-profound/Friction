@@ -296,7 +296,7 @@ export default function OnScreen() {
   const handleSendAction = useCallback(
     (articleId: string) => {
       closeOpenRow();
-      router.push({ pathname: "/(tabs)/to", params: { prefillArticleId: articleId } });
+      router.push({ pathname: "/to-send", params: { prefillArticleId: articleId } });
     },
     [closeOpenRow, router],
   );
