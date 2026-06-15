@@ -51,9 +51,9 @@ export default function SendHistoryScreen() {
 
   const renderItem = ({ item }: { item: SendRecordWithDetails }) => {
     const isGroup = item.targetType === "group";
-    const targetLabel = isGroup ? "단체 모음" : "개인";
+    const targetLabel = isGroup ? "모임" : "개인";
     const recipientDisplay = isGroup
-      ? (item.collectionName ?? "단체 모음")
+      ? (item.collectionName ?? "모임")
       : (item.recipient?.nickname ?? "알 수 없음");
     return (
       <ScalePressable style={styles.recordItem} onPress={() => handleRecordPress(item.articleId)}

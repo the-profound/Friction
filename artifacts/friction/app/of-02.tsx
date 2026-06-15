@@ -58,7 +58,7 @@ export default function TeamCollectionListScreen() {
   );
 
   const tabs: { key: MiniTab; label: string }[] = [
-    { key: "mine", label: "나의 단체 모음" },
+    { key: "mine", label: "나의 모임" },
     { key: "joined", label: "참여 중" },
   ];
 
@@ -84,14 +84,14 @@ export default function TeamCollectionListScreen() {
       collectionsQuery.refetch();
       router.push({ pathname: "/of-02-detail", params: { id: newCollection.id } });
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "단체 모음 생성에 실패했습니다.";
+      const msg = e instanceof Error ? e.message : "모임 생성에 실패했습니다.";
       Alert.alert("오류", msg);
     }
   }, [newName, newDescription, userId, createCollection, collectionsQuery, router]);
 
   const handleDelete = useCallback(
     (id: string, name: string) => {
-      Alert.alert("단체 모음 삭제", `'${name}'을(를) 삭제하시겠어요?`, [
+      Alert.alert("모임 삭제", `'${name}'을(를) 삭제하시겠어요?`, [
         { text: "취소", style: "cancel" },
         {
           text: "삭제",
@@ -216,7 +216,7 @@ export default function TeamCollectionListScreen() {
         <View style={styles.emptyContainer}>
           <Feather name="user-check" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>참여 중인 모음이 없어요</Text>
-          <Text style={styles.emptySubtitle}>초대 코드를 입력하면 단체 모음에 참여할 수 있어요</Text>
+          <Text style={styles.emptySubtitle}>초대 코드를 입력하면 모임에 참여할 수 있어요</Text>
           <ScalePressable style={styles.createButton} onPress={handleOpenJoin}>
             <Text style={styles.createButtonText}>초대 코드로 참여</Text>
           </ScalePressable>
@@ -226,10 +226,10 @@ export default function TeamCollectionListScreen() {
     return (
       <View style={styles.emptyContainer}>
         <Feather name="users" size={40} color={Colors.zinc300} />
-        <Text style={styles.emptyTitle}>단체 모음이 없어요</Text>
+        <Text style={styles.emptyTitle}>모임이 없어요</Text>
         <Text style={styles.emptySubtitle}>함께 편지를 나눌 모임을 만들어보세요</Text>
         <ScalePressable style={styles.createButton} onPress={handleOpenCreate}>
-          <Text style={styles.createButtonText}>새 단체 모음 만들기</Text>
+          <Text style={styles.createButtonText}>새 모임 만들기</Text>
         </ScalePressable>
       </View>
     );
@@ -241,7 +241,7 @@ export default function TeamCollectionListScreen() {
         <ScalePressable onPress={() => router.back()} hitSlop={12}>
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
         </ScalePressable>
-        <Text style={styles.headerTitle}>단체 모음</Text>
+        <Text style={styles.headerTitle}>모임</Text>
         <ScalePressable hitSlop={12} onPress={() => setActionSheetVisible(true)}>
           <Feather name="plus" size={20} color={Colors.zinc600} />
         </ScalePressable>
@@ -305,7 +305,7 @@ export default function TeamCollectionListScreen() {
             </View>
             <View style={styles.actionSheetTextWrap}>
               <Text style={styles.actionSheetLabel}>새로 만들기</Text>
-              <Text style={styles.actionSheetDesc}>직접 단체 모음을 만들어요</Text>
+              <Text style={styles.actionSheetDesc}>직접 모임을 만들어요</Text>
             </View>
           </ScalePressable>
           <ScalePressable style={styles.actionSheetRow} contentStyle={styles.actionSheetRowContent} onPress={handleOpenJoin}>
@@ -389,7 +389,7 @@ export default function TeamCollectionListScreen() {
       <BottomSheet
         visible={createSheetVisible}
         onClose={() => setCreateSheetVisible(false)}
-        title="새 단체 모음"
+        title="새 모임"
         snapPoints={[0.45]}
         keyboardAware
       >

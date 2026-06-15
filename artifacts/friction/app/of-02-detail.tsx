@@ -310,7 +310,7 @@ export default function TeamCollectionDetailScreen() {
 
   const handleShareInvite = useCallback(async () => {
     if (!id || !collection) return;
-    const message = `"${collection.name}" 단체 모음에 참여하세요! 초대 코드: ${id}`;
+    const message = `"${collection.name}" 모임에 참여하세요! 초대 코드: ${id}`;
     if (Platform.OS === "web") {
       try {
         if (typeof navigator !== "undefined" && navigator.share) {
@@ -597,7 +597,7 @@ export default function TeamCollectionDetailScreen() {
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
         </ScalePressable>
         <Text style={styles.headerTitle} numberOfLines={1}>
-          {collection?.name ?? "단체 모음"}
+          {collection?.name ?? "모임"}
         </Text>
         <ScalePressable
           hitSlop={12}
@@ -884,7 +884,7 @@ export default function TeamCollectionDetailScreen() {
 
       <ConfirmModal
         visible={deleteConfirmVisible}
-        title="단체 모음 삭제"
+        title="모임 삭제"
         description={`'${collection?.name ?? ""}'을(를) 삭제하시겠어요?`}
         confirmLabel="삭제"
         cancelLabel="취소"
@@ -899,7 +899,7 @@ export default function TeamCollectionDetailScreen() {
       <ConfirmModal
         visible={deleteArticleTarget !== null}
         title="편지 삭제"
-        description="이 편지를 단체 모음에서 제거하시겠어요?"
+        description="이 편지를 모임에서 제거하시겠어요?"
         confirmLabel="삭제"
         cancelLabel="취소"
         destructive

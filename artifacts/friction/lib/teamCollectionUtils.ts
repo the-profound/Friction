@@ -3,7 +3,7 @@
  *
  * 날짜 그룹핑 정책:
  *   - 모든 배달 슬롯이 KST 06:00 단일 슬롯으로 통일됨
- *   - 단체 모음 글 목록: 순수 KST 달력 날짜 기준 (toKstCalendarDateKey 사용)
+ *   - 모임 글 목록: 순수 KST 달력 날짜 기준 (toKstCalendarDateKey 사용)
  *   - 수신함(index.tsx)도 KST 달력 날짜 기준 단일 그룹 (AM/PM 분리 없음)
  */
 

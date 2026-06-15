@@ -525,8 +525,8 @@ export function SendInline({
           ) : teamCollections.length === 0 ? (
             <View style={styles.pickerEmpty}>
               <Feather name="users" size={32} color={Colors.zinc300} />
-              <Text style={styles.pickerEmptyTitle}>단체 모음이 없어요</Text>
-              <Text style={styles.pickerEmptySub}>단체 모음을 먼저 만들어주세요</Text>
+              <Text style={styles.pickerEmptyTitle}>모임이 없어요</Text>
+              <Text style={styles.pickerEmptySub}>모임을 먼저 만들어주세요</Text>
             </View>
           ) : (
             <ScrollView nestedScrollEnabled style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 8 }}>

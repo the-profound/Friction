@@ -244,7 +244,7 @@ export default function OfScreen() {
         >
           <Feather name="user-check" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>참여 중인 모음이 없어요</Text>
-          <Text style={styles.emptySubtitle}>초대 코드를 입력하면 단체 모음에 참여할 수 있어요</Text>
+          <Text style={styles.emptySubtitle}>초대 코드를 입력하면 모임에 참여할 수 있어요</Text>
           <ScalePressable style={styles.emptyButton} onPress={handleOpenJoin}>
             <Text style={styles.emptyButtonText}>초대 코드로 참여</Text>
           </ScalePressable>
@@ -258,10 +258,10 @@ export default function OfScreen() {
         contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
       >
         <Feather name="users" size={40} color={Colors.zinc300} />
-        <Text style={styles.emptyTitle}>단체 모음이 없어요</Text>
+        <Text style={styles.emptyTitle}>모임이 없어요</Text>
         <Text style={styles.emptySubtitle}>함께 편지를 나눌 모임을 만들어보세요</Text>
         <ScalePressable style={styles.emptyButton} onPress={handleOpenCreate}>
-          <Text style={styles.emptyButtonText}>새 단체 모음 만들기</Text>
+          <Text style={styles.emptyButtonText}>새 모임 만들기</Text>
         </ScalePressable>
       </RefreshableEmpty>
     );
@@ -329,7 +329,7 @@ export default function OfScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <PageHeader
-        title="단체 모음"
+        title="모임"
         showAdd
         onAddPress={handleAdd}
         showSearch
@@ -355,7 +355,7 @@ export default function OfScreen() {
         active={searchActive}
         value={searchQuery}
         onChangeText={setSearchQuery}
-        placeholder="단체 모음 이름으로 검색"
+        placeholder="모임 이름으로 검색"
       />
 
       {renderContent()}
@@ -374,7 +374,7 @@ export default function OfScreen() {
             </View>
             <View style={styles.actionSheetTextWrap}>
               <Text style={styles.actionSheetLabel}>새로 만들기</Text>
-              <Text style={styles.actionSheetDesc}>직접 단체 모음을 만들어요</Text>
+              <Text style={styles.actionSheetDesc}>직접 모임을 만들어요</Text>
             </View>
           </ScalePressable>
           <ScalePressable style={styles.actionSheetRow} onPress={handleOpenJoin}
@@ -478,7 +478,7 @@ export default function OfScreen() {
       <BottomSheet
         visible={createSheetVisible}
         onClose={() => setCreateSheetVisible(false)}
-        title="새 단체 모음"
+        title="새 모임"
         snapPoints={[0.65, 0.95]}
         keyboardAware
       >

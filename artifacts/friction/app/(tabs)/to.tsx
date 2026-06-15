@@ -289,7 +289,7 @@ export default function MyScreen() {
           ListHeaderComponent={ListHeader}
           ListEmptyComponent={renderEmpty(
             "참여 중인 모임이 없어요",
-            "단체 모음 탭에서 모임을 만들거나 참여해보세요",
+            "모임 탭에서 모임을 만들거나 참여해보세요",
           )}
           contentContainerStyle={contentPadding}
           showsVerticalScrollIndicator={false}

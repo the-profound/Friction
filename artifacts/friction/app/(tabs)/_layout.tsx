@@ -47,7 +47,7 @@ export default function TabLayout() {
         <Tabs.Screen name="index" options={{ title: "수신함" }} />
         <Tabs.Screen name="archive" options={{ title: "보관함" }} />
         <Tabs.Screen name="on" options={{ title: "기록함" }} />
-        <Tabs.Screen name="of" options={{ title: "단체 모음" }} />
+        <Tabs.Screen name="of" options={{ title: "모임" }} />
         <Tabs.Screen name="to" options={{ title: "마이" }} />
       </Tabs>
       <NavBar />
