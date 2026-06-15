@@ -1,0 +1,1 @@
+- [Friction app testing](friction-app-testing.md) — (tabs) routes are blank when logged out; preview is Supabase-auth-gated, seeded users cannot log in.
