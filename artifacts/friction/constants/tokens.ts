@@ -245,9 +245,9 @@ export const ZIndex = {
 export const TabConfig = {
   mainTabs: [
     { key: "IN" as const, label: "수신함", icon: "inbox" as const },
-    { key: "AR" as const, label: "보관함", icon: "archive" as const },
-    { key: "ON" as const, label: "기록함", icon: "edit-3" as const },
     { key: "OF" as const, label: "모임", icon: "users" as const },
+    { key: "ON" as const, label: "기록함", icon: "edit-3" as const },
+    { key: "AR" as const, label: "보관함", icon: "archive" as const },
     { key: "TO" as const, label: "마이", icon: "user" as const },
   ],
   ofSubTabs: [
