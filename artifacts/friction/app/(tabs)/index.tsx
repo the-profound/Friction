@@ -24,6 +24,7 @@ import { PageHeader } from "@/components/NavBar/PageHeader";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import DotIndicator from "@/components/DotIndicator/DotIndicator";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
+import CardSelectOverlay, { type OriginLayout } from "@/components/CardSelectOverlay/CardSelectOverlay";
 import { useQueryClient } from "@tanstack/react-query";
 import { useListInbox, useMarkInboxOpened, useDeleteInboxItem, getListInboxQueryKey } from "@workspace/api-client-react";
 import { patchInboxItemInCache, removeInboxItemFromCache } from "@/lib/queryInvalidation";
@@ -116,12 +117,17 @@ function groupBySlot(items: InboxItem[]): DateGroup[] {
 function CarouselGroup({
   group,
   onCardPress,
+  hiddenCardId,
 }: {
   group: DateGroup;
-  onCardPress: (item: InboxItem) => void;
+  onCardPress: (item: InboxItem, layout: OriginLayout) => void;
+  hiddenCardId?: string | null;
 }) {
   const itemCount = group.items.length;
   const [activeIndex, setActiveIndex] = useState(0);
+
+  // Refs for each card slot — used to call measureInWindow on press
+  const cardSlotRefs = useRef<(View | null)[]>([]);
 
   // ── Web: PanResponder state ─────────────────────────────────────────────
   const activeIndexRef = useRef(0);
@@ -231,9 +237,13 @@ function CarouselGroup({
   const cards = group.items.map((item, index) => (
     <View
       key={item.id}
+      ref={(ref) => { cardSlotRefs.current[index] = ref; }}
       style={[
         styles.cardSlot,
         index < group.items.length - 1 && { marginRight: CARD_GAP },
+        // While this card is zoomed into selection mode, leave its slot empty
+        // (the real card is rendered by CardSelectOverlay).
+        item.id === hiddenCardId && styles.cardSlotHidden,
       ]}
     >
       <ArticleCardItem
@@ -241,7 +251,14 @@ function CarouselGroup({
         onPress={() => {
           // On web: block the click that fires after a mouse drag swipe
           if (Platform.OS === "web" && swipedRef.current) return;
-          onCardPress(item);
+          const slotRef = cardSlotRefs.current[index];
+          if (slotRef) {
+            slotRef.measureInWindow((x, y, width, height) => {
+              onCardPress(item, { x, y, width, height });
+            });
+          } else {
+            onCardPress(item, { x: 0, y: 0, width: CARD_W, height: CARD_H });
+          }
         }}
         authorName={item.sender?.nickname ?? item.sender?.id}
         collectionName={item.collectionName}
@@ -318,6 +335,7 @@ export default function InboxScreen() {
   const [searchActive, setSearchActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [tapItem, setTapItem] = useState<InboxItem | null>(null);
+  const [tapItemOrigin, setTapItemOrigin] = useState<OriginLayout | null>(null);
 
   const [sourcePromptItem, setSourcePromptItem] = useState<InboxItem | null>(null);
 
@@ -366,7 +384,8 @@ export default function InboxScreen() {
     });
   }, []);
 
-  const handleCardPress = useCallback((item: InboxItem) => {
+  const handleCardPress = useCallback((item: InboxItem, layout: OriginLayout) => {
+    setTapItemOrigin(layout);
     setTapItem(item);
   }, []);
 
@@ -374,13 +393,18 @@ export default function InboxScreen() {
   // function (and triggering row-level reconciliation) on every parent render.
   const renderGroupItem = useCallback(
     ({ item: group }: { item: DateGroup }) => (
-      <CarouselGroup group={group} onCardPress={handleCardPress} />
+      <CarouselGroup
+        group={group}
+        onCardPress={handleCardPress}
+        hiddenCardId={tapItem?.id ?? null}
+      />
     ),
-    [handleCardPress],
+    [handleCardPress, tapItem?.id],
   );
 
   const handleModalClose = useCallback(() => {
     setTapItem(null);
+    setTapItemOrigin(null);
   }, []);
 
   const navigateToReply = useCallback(async (item: InboxItem) => {
@@ -453,6 +477,17 @@ export default function InboxScreen() {
     if (!item) return;
     await navigateToReply(item);
   }, [sourcePromptItem, navigateToReply]);
+
+  const handleReadSourceFromCarousel = useCallback(async (articleId: string, inboxId?: string) => {
+    router.push({
+      pathname: "/read",
+      params: {
+        articleId,
+        ...(inboxId ? { inboxId } : {}),
+        mode: "basic",
+      },
+    });
+  }, [router]);
 
   const handleDelete = useCallback(async () => {
     if (!tapItem) return;
@@ -528,6 +563,7 @@ export default function InboxScreen() {
         <FlatList
           {...LIST_PERF_PRESET}
           data={groups}
+          extraData={tapItem?.id ?? null}
           keyExtractor={groupKeyExtractor}
           renderItem={renderGroupItem}
           refreshControl={
@@ -546,19 +582,13 @@ export default function InboxScreen() {
         />
       )}
 
-      <ConfirmModal
-        visible={tapItem !== null}
-        title={tapItem?.article?.title ?? "제목 없음"}
-        description={tapItem?.sender?.nickname ?? tapItem?.sender?.id ?? ""}
-        onCancel={handleModalClose}
-        actionButton={{
-          emoji: "📖",
-          label: "읽기",
-          onPress: handleRead,
-        }}
-        deleteButton={{
-          onPress: handleDelete,
-        }}
+      <CardSelectOverlay
+        item={tapItem}
+        originLayout={tapItemOrigin}
+        onClose={handleModalClose}
+        onRead={handleRead}
+        onReadSource={handleReadSourceFromCarousel}
+        inboxData={inboxData as InboxItem[] | undefined}
       />
 
       <ConfirmModal
@@ -622,6 +652,9 @@ const styles = StyleSheet.create({
   },
   cardSlot: {
     width: CARD_W,
+  },
+  cardSlotHidden: {
+    opacity: 0,
   },
   emptyContainer: {
     flexGrow: 1,
