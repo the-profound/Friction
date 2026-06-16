@@ -50,6 +50,7 @@ interface CardSelectOverlayProps {
   onRead: () => void;
   onReadSource: (articleId: string, inboxId?: string) => void;
   inboxData?: InboxItem[];
+  onNavigateToCollection?: (collectionId: string) => void;
 }
 
 export default function CardSelectOverlay({
@@ -59,6 +60,7 @@ export default function CardSelectOverlay({
   onRead,
   onReadSource,
   inboxData,
+  onNavigateToCollection,
 }: CardSelectOverlayProps) {
   const insets = useSafeAreaInsets();
   const topInset = Platform.OS === "web" ? 67 : insets.top;
@@ -263,7 +265,7 @@ export default function CardSelectOverlay({
 
   const dateLabel = displayItem ? formatDate(displayItem.visibleAt) : "";
   const collectionName = displayItem?.collectionName ?? null;
-  const infoText = collectionName ? `${dateLabel}  ·  ${collectionName}` : dateLabel;
+  const sourceTeamCollectionId = displayItem?.sourceTeamCollectionId ?? null;
   const readButtonLabel = hasThread && threadFocus === 0 ? "원래 편지 읽기" : "읽기";
 
   return (
@@ -328,11 +330,30 @@ export default function CardSelectOverlay({
         pointerEvents={rendered ? "auto" : "none"}
         {...panResponder.panHandlers}
       >
-        {infoText ? (
+        {dateLabel ? (
           <View style={styles.infoBar}>
             <Text style={styles.infoText} numberOfLines={1}>
-              {infoText}
+              {dateLabel}
             </Text>
+            {collectionName ? (
+              sourceTeamCollectionId && onNavigateToCollection ? (
+                <Pressable
+                  onPress={() => {
+                    requestClose();
+                    onNavigateToCollection(sourceTeamCollectionId);
+                  }}
+                  hitSlop={6}
+                >
+                  <Text style={[styles.infoText, styles.infoTextTappable]} numberOfLines={1}>
+                    {collectionName}
+                  </Text>
+                </Pressable>
+              ) : (
+                <Text style={styles.infoText} numberOfLines={1}>
+                  {collectionName}
+                </Text>
+              )
+            ) : null}
           </View>
         ) : null}
 
@@ -452,7 +473,11 @@ export default function CardSelectOverlay({
         ]}
         pointerEvents={rendered ? "auto" : "none"}
       >
-        <ScalePressable style={styles.ctaButton} onPress={handleReadPress}>
+        <ScalePressable
+          style={styles.ctaButton}
+          contentStyle={styles.ctaButtonContent}
+          onPress={handleReadPress}
+        >
           <Text style={styles.ctaLabel} numberOfLines={1}>
             {readButtonLabel}
           </Text>
@@ -482,12 +507,18 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 16,
     marginBottom: 10,
+    gap: 2,
   },
   infoText: {
     ...Typography.caption,
     fontSize: 13,
+    fontWeight: "600",
     color: Colors.zinc500,
-    textAlign: "center",
+    textAlign: "left",
+  },
+  infoTextTappable: {
+    color: Colors.zinc700,
+    textDecorationLine: "underline",
   },
   threadSection: {
     backgroundColor: "rgba(255,255,255,0.92)",
@@ -558,9 +589,11 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 18,
     backgroundColor: Colors.noticeAccent,
+  },
+  ctaButtonContent: {
     justifyContent: "center",
     alignItems: "center",
-    flexDirection: "row",
+    flex: 1,
   },
   ctaLabel: {
     ...Typography.bodySemiBold,

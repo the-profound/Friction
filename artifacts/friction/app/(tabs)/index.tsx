@@ -407,6 +407,10 @@ export default function InboxScreen() {
     setTapItemOrigin(null);
   }, []);
 
+  const handleNavigateToCollection = useCallback((collectionId: string) => {
+    router.push({ pathname: "/of-02-detail", params: { id: collectionId } });
+  }, [router]);
+
   const navigateToReply = useCallback(async (item: InboxItem) => {
     if (!item.openedAt) {
       // 낙관적 업데이트: openedAt 만 즉시 캐시에 반영하고, invalidate 로 인한
@@ -589,6 +593,7 @@ export default function InboxScreen() {
         onRead={handleRead}
         onReadSource={handleReadSourceFromCarousel}
         inboxData={inboxData as InboxItem[] | undefined}
+        onNavigateToCollection={handleNavigateToCollection}
       />
 
       <ConfirmModal
