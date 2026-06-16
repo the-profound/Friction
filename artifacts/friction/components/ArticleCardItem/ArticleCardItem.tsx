@@ -6,7 +6,7 @@ import {
   ImageBackground,
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
-import { Colors, Sizing, ReaderTokens, readerFontSize } from "../../constants/tokens";
+import { Colors, Sizing, ReaderTokens } from "../../constants/tokens";
 import type { ArticleCover } from "@workspace/api-client-react";
 
 interface ArticleCardItemProps {
@@ -20,8 +20,6 @@ interface ArticleCardItemProps {
 }
 
 const DEFAULT_BG = Colors.zinc50;
-const DEFAULT_TEXT = Colors.zinc900;
-const READ_TEXT = Colors.zinc400;
 
 function ArticleCardItem({
   title,
@@ -32,9 +30,7 @@ function ArticleCardItem({
   isRead = false,
   isActive = true,
 }: ArticleCardItemProps) {
-  const textColor = isRead
-    ? READ_TEXT
-    : cover?.textColor ?? DEFAULT_TEXT;
+  const textColor = cover?.textColor ?? Colors.zinc900;
 
   const coverType = cover?.type ?? "default";
 
@@ -105,9 +101,9 @@ export default React.memo(ArticleCardItem);
 const CARD_W = Sizing.cardSlotW;
 const CARD_H = CARD_W * Sizing.cardRatio;
 
-const TITLE_SIZE = readerFontSize(6.5, CARD_W);
-const AUTHOR_SIZE = readerFontSize(3.2, CARD_W);
-const COLLECTION_SIZE = readerFontSize(2.8, CARD_W);
+const TITLE_SIZE = 32;
+const AUTHOR_SIZE = 24;
+const COLLECTION_SIZE = 16;
 
 const styles = StyleSheet.create({
   card: {
@@ -132,7 +128,7 @@ const styles = StyleSheet.create({
   },
   inner: {
     flex: 1,
-    padding: 20,
+    padding: 24,
     justifyContent: "flex-start",
   },
   title: {
@@ -143,19 +139,18 @@ const styles = StyleSheet.create({
   },
   senderBlock: {
     position: "absolute",
-    bottom: 16,
-    right: 16,
+    bottom: 24,
+    right: 24,
     alignItems: "flex-end",
   },
   author: {
-    fontFamily: ReaderTokens.fontFamily.sans,
+    fontFamily: ReaderTokens.fontFamily.sansBold,
     fontSize: AUTHOR_SIZE,
-    lineHeight: AUTHOR_SIZE * ReaderTokens.lineHeight.relaxed,
+    lineHeight: AUTHOR_SIZE * 1.3,
   },
   collection: {
-    fontFamily: ReaderTokens.fontFamily.sans,
+    fontFamily: ReaderTokens.fontFamily.sansBold,
     fontSize: COLLECTION_SIZE,
-    lineHeight: COLLECTION_SIZE * ReaderTokens.lineHeight.relaxed,
-    opacity: 0.7,
+    lineHeight: COLLECTION_SIZE * 1.3,
   },
 });
