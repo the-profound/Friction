@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -12,8 +12,9 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import ScalePressable from "@/components/shared/ScalePressable";
-import CoverPreview from "@/components/CoverPreview/CoverPreview";
-import { Colors, Spacing, Typography } from "@/constants/tokens";
+import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
+import MyLetterSelectOverlay from "@/components/MyLetterSelectOverlay/MyLetterSelectOverlay";
+import { Colors, Spacing, Typography, Sizing } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { useUser } from "@/contexts/UserContext";
 import {
@@ -22,6 +23,7 @@ import {
   useListTeamCollections,
 } from "@workspace/api-client-react";
 import type { Article, TeamCollectionWithRole } from "@workspace/api-client-react";
+import type { OriginLayout } from "@/components/CardSelectOverlay/CardSelectOverlay";
 
 type MyTab = "letters" | "publications" | "groups";
 
@@ -43,6 +45,9 @@ export default function MyScreen() {
   const { width: windowWidth } = useWindowDimensions();
 
   const [myTab, setMyTab] = useState<MyTab>("letters");
+
+  const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
+  const [selectedOrigin, setSelectedOrigin] = useState<OriginLayout | null>(null);
 
   const userQuery = useGetUser(userId);
   const articlesQuery = useListArticles({ authorId: userId });
@@ -76,15 +81,40 @@ export default function MyScreen() {
     (windowWidth - GRID_PAD * 2 - GRID_GAP * (GRID_COLS - 1)) / GRID_COLS,
   );
 
+  const cellHeight = Math.floor(cellWidth * Sizing.cardRatio);
+
+  const cardSlotRefs = useRef<Map<string, View | null>>(new Map());
+
   const handleLetterPress = useCallback(
     (article: Article) => {
-      router.push({
-        pathname: "/read" as never,
-        params: { articleId: article.id, mode: "re_read" },
-      });
+      const slotRef = cardSlotRefs.current.get(article.id);
+      if (slotRef) {
+        slotRef.measureInWindow((x, y, width, height) => {
+          setSelectedOrigin({ x, y, width, height });
+          setSelectedArticle(article);
+        });
+      } else {
+        setSelectedOrigin({ x: 0, y: 0, width: cellWidth, height: cellHeight });
+        setSelectedArticle(article);
+      }
     },
-    [router],
+    [cellWidth, cellHeight],
   );
+
+  const handleOverlayClose = useCallback(() => {
+    setSelectedArticle(null);
+    setSelectedOrigin(null);
+  }, []);
+
+  const handleOverlayRead = useCallback(() => {
+    if (!selectedArticle) return;
+    const article = selectedArticle;
+    setSelectedArticle(null);
+    router.push({
+      pathname: "/read" as never,
+      params: { articleId: article.id, mode: "re_read" },
+    });
+  }, [selectedArticle, router]);
 
   const handleGroupPress = useCallback(
     (team: TeamCollectionWithRole) => {
@@ -174,23 +204,26 @@ export default function MyScreen() {
   );
 
   const renderLetter = useCallback(
-    ({ item }: { item: Article }) => (
-      <ScalePressable
-        style={[styles.gridCell, { width: cellWidth }]}
-        onPress={() => handleLetterPress(item)}
-        accessibilityRole="button"
-        accessibilityLabel={item.title || "제목 없음"}
-      >
-        <CoverPreview
-          cover={item.cover}
-          title={item.title}
-          author={item.authorNickname ?? displayName}
-          compact
-          borderRadius={4}
-        />
-      </ScalePressable>
-    ),
-    [cellWidth, handleLetterPress, displayName],
+    ({ item }: { item: Article }) => {
+      const isHidden = selectedArticle?.id === item.id;
+      return (
+        <View
+          ref={(ref) => { cardSlotRefs.current.set(item.id, ref); }}
+          style={[styles.gridCell, { width: cellWidth, opacity: isHidden ? 0 : 1 }]}
+          accessibilityRole="button"
+          accessibilityLabel={item.title || "제목 없음"}
+        >
+          <ArticleCardItem
+            title={item.title || "제목 없음"}
+            cover={item.cover}
+            cardWidth={cellWidth}
+            isActive
+            onPress={() => handleLetterPress(item)}
+          />
+        </View>
+      );
+    },
+    [cellWidth, handleLetterPress, selectedArticle?.id],
   );
 
   const renderGroup = useCallback(
@@ -273,6 +306,12 @@ export default function MyScreen() {
           ListEmptyComponent={renderEmpty("아직 보낸 편지가 없어요")}
           contentContainerStyle={[styles.gridContent, contentPadding]}
           showsVerticalScrollIndicator={false}
+        />
+        <MyLetterSelectOverlay
+          article={selectedArticle}
+          originLayout={selectedOrigin}
+          onClose={handleOverlayClose}
+          onRead={handleOverlayRead}
         />
       </View>
     );

@@ -17,6 +17,7 @@ interface ArticleCardItemProps {
   cover?: ArticleCover | null;
   isRead?: boolean;
   isActive?: boolean;
+  cardWidth?: number;
 }
 
 const DEFAULT_BG = Colors.zinc50;
@@ -29,44 +30,24 @@ function ArticleCardItem({
   cover,
   isRead = false,
   isActive = true,
+  cardWidth,
 }: ArticleCardItemProps) {
   const textColor = cover?.textColor ?? Colors.zinc900;
+  const w = cardWidth ?? CARD_W;
+  const h = w * Sizing.cardRatio;
 
   const coverType = cover?.type ?? "default";
 
-  const content = (
-    <View style={styles.inner} pointerEvents="none">
-      <Text
-        style={[styles.title, { color: textColor }]}
-        numberOfLines={4}
-      >
-        {title}
-      </Text>
-      <View style={styles.senderBlock}>
-        {authorName ? (
-          <Text
-            style={[styles.author, { color: textColor }]}
-            numberOfLines={1}
-          >
-            {authorName}
-          </Text>
-        ) : null}
-        {collectionName ? (
-          <Text
-            style={[styles.collection, { color: textColor }]}
-            numberOfLines={1}
-          >
-            {collectionName}
-          </Text>
-        ) : null}
-      </View>
-    </View>
-  );
+  const scale = w / CARD_W;
+  const titleSize = Math.max(8, Math.round(TITLE_SIZE * scale));
+  const authorSize = Math.max(6, Math.round(AUTHOR_SIZE * scale));
+  const collectionSize = Math.max(5, Math.round(COLLECTION_SIZE * scale));
+  const pad = Math.max(6, Math.round(24 * scale));
 
   return (
     <ScalePressable
       onPress={onPress}
-      style={[styles.card, !isActive && styles.inactive]}
+      style={[styles.card, { width: w, height: h }, !isActive && styles.inactive]}
     >
       {coverType === "image" && cover?.imageUrl ? (
         <ImageBackground
@@ -75,7 +56,26 @@ function ArticleCardItem({
           resizeMode="cover"
         >
           <View style={styles.imageOverlay} />
-          {content}
+          <View style={[styles.inner, { padding: pad }]} pointerEvents="none">
+            <Text
+              style={[styles.title, { color: textColor, fontSize: titleSize, lineHeight: titleSize * ReaderTokens.lineHeight.tight }]}
+              numberOfLines={4}
+            >
+              {title}
+            </Text>
+            <View style={[styles.senderBlock, { bottom: pad, right: pad }]}>
+              {authorName ? (
+                <Text style={[styles.author, { color: textColor, fontSize: authorSize, lineHeight: authorSize * 1.3 }]} numberOfLines={1}>
+                  {authorName}
+                </Text>
+              ) : null}
+              {collectionName ? (
+                <Text style={[styles.collection, { color: textColor, fontSize: collectionSize, lineHeight: collectionSize * 1.3 }]} numberOfLines={1}>
+                  {collectionName}
+                </Text>
+              ) : null}
+            </View>
+          </View>
         </ImageBackground>
       ) : (
         <View
@@ -89,7 +89,26 @@ function ArticleCardItem({
             },
           ]}
         >
-          {content}
+          <View style={[styles.inner, { padding: pad }]} pointerEvents="none">
+            <Text
+              style={[styles.title, { color: textColor, fontSize: titleSize, lineHeight: titleSize * ReaderTokens.lineHeight.tight }]}
+              numberOfLines={4}
+            >
+              {title}
+            </Text>
+            <View style={[styles.senderBlock, { bottom: pad, right: pad }]}>
+              {authorName ? (
+                <Text style={[styles.author, { color: textColor, fontSize: authorSize, lineHeight: authorSize * 1.3 }]} numberOfLines={1}>
+                  {authorName}
+                </Text>
+              ) : null}
+              {collectionName ? (
+                <Text style={[styles.collection, { color: textColor, fontSize: collectionSize, lineHeight: collectionSize * 1.3 }]} numberOfLines={1}>
+                  {collectionName}
+                </Text>
+              ) : null}
+            </View>
+          </View>
         </View>
       )}
     </ScalePressable>
@@ -107,8 +126,6 @@ const COLLECTION_SIZE = 16;
 
 const styles = StyleSheet.create({
   card: {
-    width: CARD_W,
-    height: CARD_H,
     borderRadius: 16,
     overflow: "hidden",
   },
@@ -128,29 +145,20 @@ const styles = StyleSheet.create({
   },
   inner: {
     flex: 1,
-    padding: 24,
     justifyContent: "flex-start",
   },
   title: {
     fontFamily: ReaderTokens.fontFamily.sansBold,
-    fontSize: TITLE_SIZE,
-    lineHeight: TITLE_SIZE * ReaderTokens.lineHeight.tight,
     alignSelf: "flex-start",
   },
   senderBlock: {
     position: "absolute",
-    bottom: 24,
-    right: 24,
     alignItems: "flex-end",
   },
   author: {
     fontFamily: ReaderTokens.fontFamily.sansBold,
-    fontSize: AUTHOR_SIZE,
-    lineHeight: AUTHOR_SIZE * 1.3,
   },
   collection: {
     fontFamily: ReaderTokens.fontFamily.sansBold,
-    fontSize: COLLECTION_SIZE,
-    lineHeight: COLLECTION_SIZE * 1.3,
   },
 });
