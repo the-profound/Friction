@@ -303,7 +303,7 @@ export default function CardSelectOverlay({
         <ArticleCardItem
           title={displayItem?.article?.title ?? "제목 없음"}
           authorName={displayItem?.sender?.nickname ?? displayItem?.sender?.id}
-          collectionName={null}
+          collectionName={collectionName}
           cover={displayItem?.article?.cover}
           isRead={displayItem?.isRead ?? false}
           isActive
