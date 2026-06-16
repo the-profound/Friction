@@ -265,13 +265,6 @@ function CarouselGroup({
         cover={item.article?.cover}
         isRead={item.isRead}
         isActive={index === activeIndex}
-        noticeDate={
-          item.article?.isNotice === true &&
-          item.article?.noticeDate === group.dateKey.slice(0, 10)
-            ? item.article.noticeDate
-            : null
-        }
-        isReply={item.isReplyToMe === true}
       />
     </View>
   ));

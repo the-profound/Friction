@@ -266,6 +266,7 @@ export default function CardSelectOverlay({
   const dateLabel = displayItem ? formatDate(displayItem.visibleAt) : "";
   const collectionName = displayItem?.collectionName ?? null;
   const sourceTeamCollectionId = displayItem?.sourceTeamCollectionId ?? null;
+  const isNotice = displayItem?.article?.isNotice === true;
   const readButtonLabel = hasThread && threadFocus === 0 ? "원래 편지 읽기" : "읽기";
 
   return (
@@ -307,13 +308,6 @@ export default function CardSelectOverlay({
           isRead={displayItem?.isRead ?? false}
           isActive
           onPress={handleReadPress}
-          noticeDate={
-            displayItem?.article?.isNotice === true &&
-            typeof displayItem?.article?.noticeDate === "string"
-              ? displayItem.article.noticeDate
-              : null
-          }
-          isReply={displayItem?.isReplyToMe === true}
         />
       </Animated.View>
 
@@ -332,28 +326,41 @@ export default function CardSelectOverlay({
       >
         {dateLabel ? (
           <View style={styles.infoBar}>
-            <Text style={styles.infoText} numberOfLines={1}>
-              {dateLabel}
-            </Text>
-            {collectionName ? (
-              sourceTeamCollectionId && onNavigateToCollection ? (
-                <Pressable
-                  onPress={() => {
-                    requestClose();
-                    onNavigateToCollection(sourceTeamCollectionId);
-                  }}
-                  hitSlop={6}
-                >
-                  <Text style={[styles.infoText, styles.infoTextTappable]} numberOfLines={1}>
-                    {collectionName}
+            <View style={styles.infoRow}>
+              <Text style={styles.infoText} numberOfLines={1}>
+                {dateLabel}
+              </Text>
+              {collectionName ? (
+                <>
+                  <Text style={styles.infoSep}>·</Text>
+                  {sourceTeamCollectionId && onNavigateToCollection ? (
+                    <Pressable
+                      onPress={() => {
+                        requestClose();
+                        onNavigateToCollection(sourceTeamCollectionId);
+                      }}
+                      hitSlop={6}
+                    >
+                      <Text style={[styles.infoText, styles.infoTextTappable]} numberOfLines={1}>
+                        {collectionName}
+                      </Text>
+                    </Pressable>
+                  ) : (
+                    <Text style={styles.infoText} numberOfLines={1}>
+                      {collectionName}
+                    </Text>
+                  )}
+                </>
+              ) : null}
+              {isNotice ? (
+                <>
+                  <Text style={styles.infoSep}>·</Text>
+                  <Text style={[styles.infoText, styles.infoTextNotice]} numberOfLines={1}>
+                    오늘의 인사
                   </Text>
-                </Pressable>
-              ) : (
-                <Text style={styles.infoText} numberOfLines={1}>
-                  {collectionName}
-                </Text>
-              )
-            ) : null}
+                </>
+              ) : null}
+            </View>
           </View>
         ) : null}
 
@@ -507,7 +514,12 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 16,
     marginBottom: 10,
-    gap: 2,
+  },
+  infoRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 4,
   },
   infoText: {
     ...Typography.caption,
@@ -516,9 +528,18 @@ const styles = StyleSheet.create({
     color: Colors.zinc500,
     textAlign: "left",
   },
+  infoSep: {
+    ...Typography.caption,
+    fontSize: 13,
+    fontWeight: "600",
+    color: Colors.zinc400,
+  },
   infoTextTappable: {
     color: Colors.zinc700,
     textDecorationLine: "underline",
+  },
+  infoTextNotice: {
+    color: Colors.noticeAccent,
   },
   threadSection: {
     backgroundColor: "rgba(255,255,255,0.92)",
