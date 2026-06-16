@@ -330,6 +330,14 @@ export default function CardSelectOverlay({
               <Text style={styles.infoText} numberOfLines={1}>
                 {dateLabel}
               </Text>
+              {displayItem?.sender ? (
+                <>
+                  <Text style={styles.infoSep}>·</Text>
+                  <Text style={styles.infoText} numberOfLines={1}>
+                    {displayItem.sender.nickname ?? displayItem.sender.id}
+                  </Text>
+                </>
+              ) : null}
               {collectionName ? (
                 <>
                   <Text style={styles.infoSep}>·</Text>
@@ -340,10 +348,12 @@ export default function CardSelectOverlay({
                         onNavigateToCollection(sourceTeamCollectionId);
                       }}
                       hitSlop={6}
+                      style={styles.infoTappableRow}
                     >
                       <Text style={[styles.infoText, styles.infoTextTappable]} numberOfLines={1}>
                         {collectionName}
                       </Text>
+                      <Feather name="chevron-right" size={12} color={Colors.zinc500} />
                     </Pressable>
                   ) : (
                     <Text style={styles.infoText} numberOfLines={1}>
@@ -536,7 +546,11 @@ const styles = StyleSheet.create({
   },
   infoTextTappable: {
     color: Colors.zinc700,
-    textDecorationLine: "underline",
+  },
+  infoTappableRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
   },
   infoTextNotice: {
     color: Colors.noticeAccent,
