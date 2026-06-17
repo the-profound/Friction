@@ -53,7 +53,6 @@ interface CardSelectOverlayProps {
   article?: Article | null;
   authorNameOverride?: string | null;
   collectionNameOverride?: string | null;
-  collectionIdOverride?: string | null;
   dateOverride?: string | Date | null;
   // ── Shared ──────────────────────────────────────────────────────────────
   originLayout: OriginLayout | null;
@@ -69,7 +68,6 @@ export default function CardSelectOverlay({
   article,
   authorNameOverride,
   collectionNameOverride,
-  collectionIdOverride,
   dateOverride,
   originLayout,
   onClose,
@@ -96,7 +94,7 @@ export default function CardSelectOverlay({
   if (originLayout) frozenOrigin.current = originLayout;
   const displayOrigin = frozenOrigin.current;
 
-  const hasThread = !!(displayItem?.replyToArticleId ?? displayArticle?.sourceArticleId);
+  const hasThread = !!(displayItem?.replyToArticleId);
 
   // ── Geometry ────────────────────────────────────────────────────────────
   const reservedBelow = hasThread ? 176 : 64;
@@ -139,9 +137,7 @@ export default function CardSelectOverlay({
   const threadScrollRef = useRef<ScrollView>(null);
 
   const sourceArticleId =
-    (displayItem as { replyToArticleId?: string | null } | null)?.replyToArticleId ??
-    displayArticle?.sourceArticleId ??
-    "";
+    (displayItem as { replyToArticleId?: string | null } | null)?.replyToArticleId ?? "";
   const { data: sourceArticle } = useGetArticle(sourceArticleId, {
     query: {
       queryKey: getGetArticleQueryKey(sourceArticleId),
@@ -149,16 +145,16 @@ export default function CardSelectOverlay({
     },
   });
 
-  // Reset carousel to current letter whenever a new item/article opens
+  // Reset carousel to current letter whenever a new item opens
   useEffect(() => {
-    if (item || article) {
+    if (item) {
       threadFocusRef.current = 1;
       setThreadFocus(1);
       setTimeout(() => {
         threadScrollRef.current?.scrollTo({ x: THREAD_SNAP, animated: false });
       }, 0);
     }
-  }, [item?.id, article?.id]);
+  }, [item?.id]);
 
   // Drive mount + entrance / exit
   useEffect(() => {
@@ -298,8 +294,8 @@ export default function CardSelectOverlay({
   const resolvedCollectionName =
     collectionNameOverride ?? displayItem?.collectionName ?? null;
 
-  const sourceTeamCollectionId = collectionIdOverride ?? displayItem?.sourceTeamCollectionId ?? null;
-  const isNotice = displayItem?.article?.isNotice ?? displayArticle?.isNotice ?? false;
+  const sourceTeamCollectionId = displayItem?.sourceTeamCollectionId ?? null;
+  const isNotice = displayItem?.article?.isNotice === true;
 
   const dateSource =
     displayItem
@@ -496,17 +492,16 @@ export default function CardSelectOverlay({
                     style={[
                       styles.threadCardInner,
                       {
-                        backgroundColor: (() => {
-                          const cover = displayItem?.article?.cover ?? displayArticle?.cover;
-                          return cover?.type === "color" && cover?.bgColor
-                            ? cover.bgColor
-                            : Colors.zinc50;
-                        })(),
+                        backgroundColor:
+                          displayItem?.article?.cover?.type === "color" &&
+                          displayItem?.article?.cover?.bgColor
+                            ? displayItem.article.cover.bgColor
+                            : Colors.zinc50,
                       },
                     ]}
                   >
                     <Text style={styles.threadCardTitle} numberOfLines={3}>
-                      {displayItem?.article?.title ?? displayArticle?.title ?? "제목 없음"}
+                      {displayItem?.article?.title ?? "제목 없음"}
                     </Text>
                   </View>
                   <Text style={styles.threadCardRole} numberOfLines={1}>
