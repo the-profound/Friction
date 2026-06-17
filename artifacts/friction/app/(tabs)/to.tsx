@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import ScalePressable from "@/components/shared/ScalePressable";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
-import MyLetterSelectOverlay from "@/components/MyLetterSelectOverlay/MyLetterSelectOverlay";
+import CardSelectOverlay from "@/components/CardSelectOverlay/CardSelectOverlay";
 import { Colors, Spacing, Typography, Sizing } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { useUser } from "@/contexts/UserContext";
@@ -328,13 +328,13 @@ export default function MyScreen() {
           contentContainerStyle={[styles.gridContent, contentPadding]}
           showsVerticalScrollIndicator={false}
         />
-        <MyLetterSelectOverlay
+        <CardSelectOverlay
           article={selectedArticle}
           originLayout={selectedOrigin}
           onClose={handleOverlayClose}
           onRead={handleOverlayRead}
-          authorName={selectedArticle?.authorNickname ?? user?.nickname ?? null}
-          collectionName={selectedCollectionName}
+          authorNameOverride={selectedArticle?.authorNickname ?? user?.nickname ?? null}
+          collectionNameOverride={selectedCollectionName}
         />
       </View>
     );

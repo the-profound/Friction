@@ -17,7 +17,7 @@ import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { useGetArticle, getGetArticleQueryKey } from "@workspace/api-client-react";
-import type { InboxItem } from "@workspace/api-client-react";
+import type { InboxItem, Article } from "@workspace/api-client-react";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 const CARD_W = Sizing.cardSlotW;
@@ -44,33 +44,51 @@ function formatDate(visibleAt: string | Date): string {
 }
 
 interface CardSelectOverlayProps {
-  item: InboxItem | null;
+  // ── Inbox mode (수신함) ──────────────────────────────────────────────────
+  item?: InboxItem | null;
+  onReadSource?: (articleId: string, inboxId?: string) => void;
+  inboxData?: InboxItem[];
+  onNavigateToCollection?: (collectionId: string) => void;
+  // ── My-tab mode (마이 탭) — used when `item` is omitted ─────────────────
+  article?: Article | null;
+  authorNameOverride?: string | null;
+  collectionNameOverride?: string | null;
+  dateOverride?: string | Date | null;
+  // ── Shared ──────────────────────────────────────────────────────────────
   originLayout: OriginLayout | null;
   onClose: () => void;
   onRead: () => void;
-  onReadSource: (articleId: string, inboxId?: string) => void;
-  inboxData?: InboxItem[];
-  onNavigateToCollection?: (collectionId: string) => void;
 }
 
 export default function CardSelectOverlay({
   item,
-  originLayout,
-  onClose,
-  onRead,
   onReadSource,
   inboxData,
   onNavigateToCollection,
+  article,
+  authorNameOverride,
+  collectionNameOverride,
+  dateOverride,
+  originLayout,
+  onClose,
+  onRead,
 }: CardSelectOverlayProps) {
   const insets = useSafeAreaInsets();
   const topInset = Platform.OS === "web" ? 67 : insets.top;
   const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
 
-  // Freeze last real item/origin so card + geometry don't flash during the
-  // exit (return-to-origin) animation, which runs after `item` becomes null.
-  const frozenItem = useRef(item);
+  // Whether anything is "open" — drives mount/animation trigger
+  const isOpen = !!(item || article);
+
+  // Freeze last real item/article/origin so card + geometry don't flash during
+  // the exit (return-to-origin) animation, which runs after the value becomes null.
+  const frozenItem = useRef(item ?? null);
   if (item) frozenItem.current = item;
   const displayItem = frozenItem.current;
+
+  const frozenArticle = useRef(article ?? null);
+  if (article) frozenArticle.current = article;
+  const displayArticle = frozenArticle.current;
 
   const frozenOrigin = useRef(originLayout);
   if (originLayout) frozenOrigin.current = originLayout;
@@ -78,8 +96,7 @@ export default function CardSelectOverlay({
 
   const hasThread = !!(displayItem?.replyToArticleId);
 
-  // ── Geometry: the SAME card zooms from its list slot into selection mode ──
-  // Reserve vertical room below the card for info bar (+ thread carousel).
+  // ── Geometry ────────────────────────────────────────────────────────────
   const reservedBelow = hasThread ? 176 : 64;
   const cardTopVisual = topInset + (hasThread ? 16 : 28);
   const buttonBlock = 56 + 16 + bottomInset + 16;
@@ -91,8 +108,6 @@ export default function CardSelectOverlay({
   const scaledH = CARD_H * finalScale;
   const finalCenterX = SCREEN_W / 2;
   const finalCenterY = cardTopVisual + scaledH / 2;
-  // Resting (scale=1 reference) box so that, after scaling around the box
-  // center, the visual top lands exactly at `cardTopVisual`.
   const boxLeft = finalCenterX - CARD_W / 2;
   const boxTop = finalCenterY - CARD_H / 2;
 
@@ -109,9 +124,7 @@ export default function CardSelectOverlay({
 
   const detailsTop = cardTopVisual + scaledH + 14;
 
-  // --- Animated values ---
-  // `progress` drives the shared-element zoom: 0 = exactly over the list slot,
-  // 1 = enlarged in selection position.
+  // ── Animated values ─────────────────────────────────────────────────────
   const progress = useRef(new Animated.Value(0)).current;
   const swipeY = useRef(new Animated.Value(0)).current;
 
@@ -145,7 +158,7 @@ export default function CardSelectOverlay({
 
   // Drive mount + entrance / exit
   useEffect(() => {
-    if (item) {
+    if (isOpen) {
       setRendered(true);
       closingRef.current = false;
       swipeY.setValue(0);
@@ -157,11 +170,10 @@ export default function CardSelectOverlay({
         useNativeDriver: false,
       }).start();
     } else if (rendered && !closingRef.current) {
-      // `item` was cleared externally (e.g. read navigation) — hide at once.
       setRendered(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [!!item]);
+  }, [isOpen]);
 
   // Animate the card back to its original slot, then notify the parent.
   const runCloseRef = useRef(() => {});
@@ -220,12 +232,15 @@ export default function CardSelectOverlay({
   ).current;
 
   const handleReadPress = useCallback(() => {
-    if (!displayItem) return;
-    if (hasThread && threadFocusRef.current === 0 && displayItem.replyToArticleId) {
-      const sourceInboxId = inboxData?.find(
-        (it) => it.articleId === displayItem.replyToArticleId,
-      )?.id;
-      onReadSource(displayItem.replyToArticleId, sourceInboxId);
+    if (displayItem) {
+      if (hasThread && threadFocusRef.current === 0 && displayItem.replyToArticleId) {
+        const sourceInboxId = inboxData?.find(
+          (it) => it.articleId === displayItem.replyToArticleId,
+        )?.id;
+        onReadSource?.(displayItem.replyToArticleId, sourceInboxId);
+      } else {
+        onRead();
+      }
     } else {
       onRead();
     }
@@ -241,7 +256,7 @@ export default function CardSelectOverlay({
     [],
   );
 
-  // --- Derived animated styles ---
+  // ── Derived animated styles ──────────────────────────────────────────────
   const scale = progress.interpolate({
     inputRange: [0, 1],
     outputRange: [originScale, finalScale],
@@ -263,10 +278,31 @@ export default function CardSelectOverlay({
     outputRange: [0, 0, 1],
   });
 
-  const dateLabel = displayItem ? formatDate(displayItem.visibleAt) : "";
-  const collectionName = displayItem?.collectionName ?? null;
+  // ── Resolved display values ──────────────────────────────────────────────
+  // Inbox mode: derive from item; My-tab mode: derive from article + overrides
+  const displayTitle = displayItem?.article?.title ?? displayArticle?.title ?? "제목 없음";
+  const displayCover = displayItem?.article?.cover ?? displayArticle?.cover;
+  const displayIsRead = displayItem?.isRead ?? false;
+
+  const resolvedAuthorName =
+    authorNameOverride ??
+    displayItem?.sender?.nickname ??
+    displayItem?.sender?.id ??
+    displayArticle?.authorNickname ??
+    undefined;
+
+  const resolvedCollectionName =
+    collectionNameOverride ?? displayItem?.collectionName ?? null;
+
   const sourceTeamCollectionId = displayItem?.sourceTeamCollectionId ?? null;
   const isNotice = displayItem?.article?.isNotice === true;
+
+  const dateSource =
+    displayItem
+      ? displayItem.visibleAt
+      : dateOverride ?? displayArticle?.updatedAt ?? null;
+  const dateLabel = dateSource ? formatDate(dateSource) : "";
+
   const readButtonLabel = hasThread && threadFocus === 0 ? "원래 편지 읽기" : "읽기";
 
   return (
@@ -301,11 +337,11 @@ export default function CardSelectOverlay({
         {...panResponder.panHandlers}
       >
         <ArticleCardItem
-          title={displayItem?.article?.title ?? "제목 없음"}
-          authorName={displayItem?.sender?.nickname ?? displayItem?.sender?.id}
-          collectionName={collectionName}
-          cover={displayItem?.article?.cover}
-          isRead={displayItem?.isRead ?? false}
+          title={displayTitle}
+          authorName={resolvedAuthorName}
+          collectionName={resolvedCollectionName}
+          cover={displayCover}
+          isRead={displayIsRead}
           isActive
           onPress={handleReadPress}
         />
@@ -330,15 +366,15 @@ export default function CardSelectOverlay({
               <Text style={styles.infoText} numberOfLines={1}>
                 {dateLabel}
               </Text>
-              {displayItem?.sender ? (
+              {resolvedAuthorName ? (
                 <>
                   <Text style={styles.infoSep}>·</Text>
                   <Text style={styles.infoText} numberOfLines={1}>
-                    {displayItem.sender.nickname ?? displayItem.sender.id}
+                    {resolvedAuthorName}
                   </Text>
                 </>
               ) : null}
-              {collectionName ? (
+              {resolvedCollectionName ? (
                 <>
                   <Text style={styles.infoSep}>·</Text>
                   {sourceTeamCollectionId && onNavigateToCollection ? (
@@ -351,13 +387,13 @@ export default function CardSelectOverlay({
                       style={styles.infoTappableRow}
                     >
                       <Text style={[styles.infoText, styles.infoTextTappable]} numberOfLines={1}>
-                        {collectionName}
+                        {resolvedCollectionName}
                       </Text>
                       <Feather name="chevron-right" size={12} color={Colors.zinc500} />
                     </Pressable>
                   ) : (
                     <Text style={styles.infoText} numberOfLines={1}>
-                      {collectionName}
+                      {resolvedCollectionName}
                     </Text>
                   )}
                 </>
