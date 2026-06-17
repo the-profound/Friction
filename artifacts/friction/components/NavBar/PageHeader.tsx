@@ -152,8 +152,7 @@ const styles = StyleSheet.create({
     color: Colors.zinc900,
   },
   titleImage: {
-    height: 28,
-    width: 120,
+    height: 32,
   },
   actions: {
     flexDirection: "row",
