@@ -35,6 +35,8 @@ interface MyLetterSelectOverlayProps {
   originLayout: OriginLayout | null;
   onClose: () => void;
   onRead: () => void;
+  authorName?: string | null;
+  collectionName?: string | null;
 }
 
 export default function MyLetterSelectOverlay({
@@ -42,6 +44,8 @@ export default function MyLetterSelectOverlay({
   originLayout,
   onClose,
   onRead,
+  authorName,
+  collectionName,
 }: MyLetterSelectOverlayProps) {
   const insets = useSafeAreaInsets();
   const topInset = Platform.OS === "web" ? 67 : insets.top;
@@ -218,6 +222,8 @@ export default function MyLetterSelectOverlay({
       >
         <ArticleCardItem
           title={displayArticle?.title ?? "제목 없음"}
+          authorName={authorName ?? displayArticle?.authorNickname ?? undefined}
+          collectionName={collectionName}
           cover={displayArticle?.cover}
           isActive
           onPress={handleReadPress}
@@ -242,11 +248,19 @@ export default function MyLetterSelectOverlay({
               <Text style={styles.infoText} numberOfLines={1}>
                 {dateLabel}
               </Text>
-              {displayArticle?.title ? (
+              {(authorName ?? displayArticle?.authorNickname) ? (
                 <>
                   <Text style={styles.infoSep}>·</Text>
                   <Text style={styles.infoText} numberOfLines={1}>
-                    {displayArticle.title}
+                    {authorName ?? displayArticle?.authorNickname}
+                  </Text>
+                </>
+              ) : null}
+              {collectionName ? (
+                <>
+                  <Text style={styles.infoSep}>·</Text>
+                  <Text style={styles.infoText} numberOfLines={1}>
+                    {collectionName}
                   </Text>
                 </>
               ) : null}

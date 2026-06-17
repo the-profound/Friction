@@ -21,8 +21,9 @@ import {
   useGetUser,
   useListArticles,
   useListTeamCollections,
+  useListSendRecords,
 } from "@workspace/api-client-react";
-import type { Article, TeamCollectionWithRole } from "@workspace/api-client-react";
+import type { Article, TeamCollectionWithRole, SendRecordWithDetails } from "@workspace/api-client-react";
 import type { OriginLayout } from "@/components/CardSelectOverlay/CardSelectOverlay";
 
 type MyTab = "letters" | "publications" | "groups";
@@ -48,10 +49,12 @@ export default function MyScreen() {
 
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
   const [selectedOrigin, setSelectedOrigin] = useState<OriginLayout | null>(null);
+  const [selectedCollectionName, setSelectedCollectionName] = useState<string | null>(null);
 
   const userQuery = useGetUser(userId);
   const articlesQuery = useListArticles({ authorId: userId });
   const teamsQuery = useListTeamCollections({ userId });
+  const sendRecordsQuery = useListSendRecords({ senderId: userId });
 
   const refetchArticles = articlesQuery.refetch;
   const refetchTeams = teamsQuery.refetch;
@@ -61,6 +64,17 @@ export default function MyScreen() {
       refetchTeams();
     }, [refetchArticles, refetchTeams]),
   );
+
+  const collectionNameByArticleId = useMemo<Record<string, string | null>>(() => {
+    const records = (sendRecordsQuery.data ?? []) as SendRecordWithDetails[];
+    const map: Record<string, string | null> = {};
+    for (const r of records) {
+      if (r.articleId && r.collectionName) {
+        map[r.articleId] = r.collectionName;
+      }
+    }
+    return map;
+  }, [sendRecordsQuery.data]);
 
   const user = userQuery.data;
   const displayName = user?.nickname?.trim() || "이름 없음";
@@ -87,23 +101,27 @@ export default function MyScreen() {
 
   const handleLetterPress = useCallback(
     (article: Article) => {
+      const colName = collectionNameByArticleId[article.id] ?? null;
       const slotRef = cardSlotRefs.current.get(article.id);
       if (slotRef) {
         slotRef.measureInWindow((x, y, width, height) => {
           setSelectedOrigin({ x, y, width, height });
           setSelectedArticle(article);
+          setSelectedCollectionName(colName);
         });
       } else {
         setSelectedOrigin({ x: 0, y: 0, width: cellWidth, height: cellHeight });
         setSelectedArticle(article);
+        setSelectedCollectionName(colName);
       }
     },
-    [cellWidth, cellHeight],
+    [cellWidth, cellHeight, collectionNameByArticleId],
   );
 
   const handleOverlayClose = useCallback(() => {
     setSelectedArticle(null);
     setSelectedOrigin(null);
+    setSelectedCollectionName(null);
   }, []);
 
   const handleOverlayRead = useCallback(() => {
@@ -206,6 +224,7 @@ export default function MyScreen() {
   const renderLetter = useCallback(
     ({ item }: { item: Article }) => {
       const isHidden = selectedArticle?.id === item.id;
+      const itemCollectionName = collectionNameByArticleId[item.id] ?? null;
       return (
         <View
           ref={(ref) => { cardSlotRefs.current.set(item.id, ref); }}
@@ -215,6 +234,8 @@ export default function MyScreen() {
         >
           <ArticleCardItem
             title={item.title || "제목 없음"}
+            authorName={item.authorNickname ?? user?.nickname ?? undefined}
+            collectionName={itemCollectionName}
             cover={item.cover}
             cardWidth={cellWidth}
             isActive
@@ -223,7 +244,7 @@ export default function MyScreen() {
         </View>
       );
     },
-    [cellWidth, handleLetterPress, selectedArticle?.id],
+    [cellWidth, handleLetterPress, selectedArticle?.id, collectionNameByArticleId, user?.nickname],
   );
 
   const renderGroup = useCallback(
@@ -312,6 +333,8 @@ export default function MyScreen() {
           originLayout={selectedOrigin}
           onClose={handleOverlayClose}
           onRead={handleOverlayRead}
+          authorName={selectedArticle?.authorNickname ?? user?.nickname ?? null}
+          collectionName={selectedCollectionName}
         />
       </View>
     );

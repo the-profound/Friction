@@ -44,10 +44,12 @@ function ArticleCardItem({
   const collectionSize = Math.max(5, Math.round(COLLECTION_SIZE * scale));
   const pad = Math.max(6, Math.round(24 * scale));
 
+  const borderRadius = Math.max(8, Math.round(16 * scale));
+
   return (
     <ScalePressable
       onPress={onPress}
-      style={[styles.card, { width: w, height: h }, !isActive && styles.inactive]}
+      style={[styles.card, { width: w, height: h, borderRadius }, !isActive && styles.inactive]}
     >
       {coverType === "image" && cover?.imageUrl ? (
         <ImageBackground
@@ -126,7 +128,6 @@ const COLLECTION_SIZE = 16;
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 16,
     overflow: "hidden",
   },
   inactive: {
