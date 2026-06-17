@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import React from "react";
-import { Keyboard, StyleSheet, Text, TouchableWithoutFeedback, View } from "react-native";
+import { Image, ImageSourcePropType, Keyboard, StyleSheet, Text, TouchableWithoutFeedback, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ScalePressable from "@/components/shared/ScalePressable";
 
@@ -9,6 +9,7 @@ import { useNavigation } from "@/contexts/NavigationContext";
 
 interface PageHeaderProps {
   title: string;
+  titleImage?: ImageSourcePropType;
   showSearch?: boolean;
   showAdd?: boolean;
   showKebab?: boolean;
@@ -28,6 +29,7 @@ interface PageHeaderProps {
 
 export function PageHeader({
   title,
+  titleImage,
   showSearch = false,
   showAdd = false,
   showKebab = false,
@@ -50,7 +52,16 @@ export function PageHeader({
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
       <View style={[styles.container, { paddingTop: 50 }, headerScrolled && Shadows.headerScrolled]}>
-        <Text style={styles.title}>{title}</Text>
+        {titleImage ? (
+          <Image
+            source={titleImage}
+            style={styles.titleImage}
+            resizeMode="contain"
+            accessibilityLabel={title}
+          />
+        ) : (
+          <Text style={styles.title}>{title}</Text>
+        )}
         <View style={styles.actions}>
           {rightText && (
             <ScalePressable onPress={onRightTextPress} hitSlop={8} style={styles.rightTextButton}>
@@ -139,6 +150,10 @@ const styles = StyleSheet.create({
   title: {
     ...Typography.headerTitle,
     color: Colors.zinc900,
+  },
+  titleImage: {
+    height: 28,
+    width: 120,
   },
   actions: {
     flexDirection: "row",
