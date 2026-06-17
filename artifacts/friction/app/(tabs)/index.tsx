@@ -475,17 +475,6 @@ export default function InboxScreen() {
     await navigateToReply(item);
   }, [sourcePromptItem, navigateToReply]);
 
-  const handleReadSourceFromCarousel = useCallback(async (articleId: string, inboxId?: string) => {
-    router.push({
-      pathname: "/read",
-      params: {
-        articleId,
-        ...(inboxId ? { inboxId } : {}),
-        mode: "basic",
-      },
-    });
-  }, [router]);
-
   const handleDelete = useCallback(async () => {
     if (!tapItem) return;
     const item = tapItem;
@@ -581,12 +570,15 @@ export default function InboxScreen() {
       )}
 
       <CardSelectOverlay
-        item={tapItem}
+        article={tapItem?.article ?? null}
         originLayout={tapItemOrigin}
         onClose={handleModalClose}
         onRead={handleRead}
-        onReadSource={handleReadSourceFromCarousel}
-        inboxData={inboxData as InboxItem[] | undefined}
+        authorName={tapItem?.sender?.nickname ?? tapItem?.sender?.id ?? null}
+        collectionName={tapItem?.collectionName ?? null}
+        collectionId={tapItem?.sourceTeamCollectionId ?? null}
+        date={tapItem?.visibleAt ?? null}
+        isNotice={tapItem?.article?.isNotice ?? false}
         onNavigateToCollection={handleNavigateToCollection}
       />
 

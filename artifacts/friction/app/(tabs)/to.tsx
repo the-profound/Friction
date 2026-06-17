@@ -50,6 +50,8 @@ export default function MyScreen() {
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
   const [selectedOrigin, setSelectedOrigin] = useState<OriginLayout | null>(null);
   const [selectedCollectionName, setSelectedCollectionName] = useState<string | null>(null);
+  const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
+  const [selectedDateOverride, setSelectedDateOverride] = useState<string | null>(null);
 
   const userQuery = useGetUser(userId);
   const articlesQuery = useListArticles({ authorId: userId });
@@ -58,34 +60,54 @@ export default function MyScreen() {
 
   const refetchArticles = articlesQuery.refetch;
   const refetchTeams = teamsQuery.refetch;
+  const refetchSendRecords = sendRecordsQuery.refetch;
   useFocusEffect(
     useCallback(() => {
       refetchArticles();
       refetchTeams();
-    }, [refetchArticles, refetchTeams]),
+      refetchSendRecords();
+    }, [refetchArticles, refetchTeams, refetchSendRecords]),
   );
 
-  const collectionNameByArticleId = useMemo<Record<string, string | null>>(() => {
+  const sendRecordByArticleId = useMemo<
+    Record<string, { name: string | null; id: string | null; deliverySlot: string | null }>
+  >(() => {
     const records = (sendRecordsQuery.data ?? []) as SendRecordWithDetails[];
-    const map: Record<string, string | null> = {};
+    const map: Record<string, { name: string | null; id: string | null; deliverySlot: string | null }> = {};
     for (const r of records) {
-      if (r.articleId && r.collectionName) {
-        map[r.articleId] = r.collectionName;
+      if (r.articleId) {
+        map[r.articleId] = {
+          name: r.collectionName ?? null,
+          id: r.collectionId ?? null,
+          deliverySlot: r.deliverySlot ?? null,
+        };
       }
     }
     return map;
   }, [sendRecordsQuery.data]);
+
+  const collectionNameByArticleId = useMemo<Record<string, string | null>>(() => {
+    const result: Record<string, string | null> = {};
+    for (const [articleId, rec] of Object.entries(sendRecordByArticleId)) {
+      result[articleId] = rec.name;
+    }
+    return result;
+  }, [sendRecordByArticleId]);
 
   const user = userQuery.data;
   const displayName = user?.nickname?.trim() || "이름 없음";
   const handle = user?.nickname?.trim() ? `@${user.nickname.trim()}` : "";
 
   const letters = useMemo<Article[]>(() => {
-    const list = (articlesQuery.data ?? []).filter((a) => a.status === "LETTER");
-    return [...list].sort(
-      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+    const list = (articlesQuery.data ?? []).filter(
+      (a) => a.status === "LETTER" && sendRecordByArticleId[a.id] !== undefined,
     );
-  }, [articlesQuery.data]);
+    return [...list].sort((a, b) => {
+      const slotA = sendRecordByArticleId[a.id]?.deliverySlot ?? "";
+      const slotB = sendRecordByArticleId[b.id]?.deliverySlot ?? "";
+      return slotB.localeCompare(slotA);
+    });
+  }, [articlesQuery.data, sendRecordByArticleId]);
 
   const teams = useMemo<TeamCollectionWithRole[]>(() => {
     return (teamsQuery.data ?? []) as TeamCollectionWithRole[];
@@ -101,28 +123,44 @@ export default function MyScreen() {
 
   const handleLetterPress = useCallback(
     (article: Article) => {
-      const colName = collectionNameByArticleId[article.id] ?? null;
+      const rec = sendRecordByArticleId[article.id];
+      const colName = rec?.name ?? null;
+      const colId = rec?.id ?? null;
+      const deliverySlot = rec?.deliverySlot ?? null;
       const slotRef = cardSlotRefs.current.get(article.id);
       if (slotRef) {
         slotRef.measureInWindow((x, y, width, height) => {
           setSelectedOrigin({ x, y, width, height });
           setSelectedArticle(article);
           setSelectedCollectionName(colName);
+          setSelectedCollectionId(colId);
+          setSelectedDateOverride(deliverySlot);
         });
       } else {
         setSelectedOrigin({ x: 0, y: 0, width: cellWidth, height: cellHeight });
         setSelectedArticle(article);
         setSelectedCollectionName(colName);
+        setSelectedCollectionId(colId);
+        setSelectedDateOverride(deliverySlot);
       }
     },
-    [cellWidth, cellHeight, collectionNameByArticleId],
+    [cellWidth, cellHeight, sendRecordByArticleId],
   );
 
   const handleOverlayClose = useCallback(() => {
     setSelectedArticle(null);
     setSelectedOrigin(null);
     setSelectedCollectionName(null);
+    setSelectedCollectionId(null);
+    setSelectedDateOverride(null);
   }, []);
+
+  const handleNavigateToCollection = useCallback(
+    (id: string) => {
+      router.push({ pathname: "/of-02-detail", params: { id } });
+    },
+    [router],
+  );
 
   const handleOverlayRead = useCallback(() => {
     if (!selectedArticle) return;
@@ -333,8 +371,12 @@ export default function MyScreen() {
           originLayout={selectedOrigin}
           onClose={handleOverlayClose}
           onRead={handleOverlayRead}
-          authorNameOverride={selectedArticle?.authorNickname ?? user?.nickname ?? null}
-          collectionNameOverride={selectedCollectionName}
+          authorName={selectedArticle?.authorNickname ?? user?.nickname ?? null}
+          collectionName={selectedCollectionName}
+          collectionId={selectedCollectionId}
+          date={selectedDateOverride}
+          isNotice={selectedArticle?.isNotice ?? false}
+          onNavigateToCollection={handleNavigateToCollection}
         />
       </View>
     );

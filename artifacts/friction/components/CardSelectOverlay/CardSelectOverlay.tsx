@@ -7,7 +7,6 @@ import {
   Pressable,
   Animated,
   PanResponder,
-  ScrollView,
   Dimensions,
   Platform,
 } from "react-native";
@@ -16,17 +15,12 @@ import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import ScalePressable from "@/components/shared/ScalePressable";
-import { useGetArticle, getGetArticleQueryKey } from "@workspace/api-client-react";
-import type { InboxItem, Article } from "@workspace/api-client-react";
+import type { Article } from "@workspace/api-client-react";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 const CARD_W = Sizing.cardSlotW;
 const CARD_H = Sizing.cardH;
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
-
-const THREAD_CARD_W = Math.floor((SCREEN_W - Spacing.screenPx * 2 - Spacing.cardGap) / 2);
-const THREAD_CARD_H = 100;
-const THREAD_SNAP = THREAD_CARD_W + Spacing.cardGap;
 
 export interface OriginLayout {
   x: number;
@@ -44,31 +38,26 @@ function formatDate(visibleAt: string | Date): string {
 }
 
 interface CardSelectOverlayProps {
-  // ── Inbox mode (수신함) ──────────────────────────────────────────────────
-  item?: InboxItem | null;
-  onReadSource?: (articleId: string, inboxId?: string) => void;
-  inboxData?: InboxItem[];
-  onNavigateToCollection?: (collectionId: string) => void;
-  // ── My-tab mode (마이 탭) — used when `item` is omitted ─────────────────
-  article?: Article | null;
-  authorNameOverride?: string | null;
-  collectionNameOverride?: string | null;
-  dateOverride?: string | Date | null;
-  // ── Shared ──────────────────────────────────────────────────────────────
+  article: Article | null;
+  authorName?: string | null;
+  collectionName?: string | null;
+  collectionId?: string | null;
+  date?: string | Date | null;
+  isNotice?: boolean;
+  onNavigateToCollection?: (id: string) => void;
   originLayout: OriginLayout | null;
   onClose: () => void;
   onRead: () => void;
 }
 
 export default function CardSelectOverlay({
-  item,
-  onReadSource,
-  inboxData,
-  onNavigateToCollection,
   article,
-  authorNameOverride,
-  collectionNameOverride,
-  dateOverride,
+  authorName,
+  collectionName,
+  collectionId,
+  date,
+  isNotice,
+  onNavigateToCollection,
   originLayout,
   onClose,
   onRead,
@@ -77,14 +66,7 @@ export default function CardSelectOverlay({
   const topInset = Platform.OS === "web" ? 67 : insets.top;
   const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
 
-  // Whether anything is "open" — drives mount/animation trigger
-  const isOpen = !!(item || article);
-
-  // Freeze last real item/article/origin so card + geometry don't flash during
-  // the exit (return-to-origin) animation, which runs after the value becomes null.
-  const frozenItem = useRef(item ?? null);
-  if (item) frozenItem.current = item;
-  const displayItem = frozenItem.current;
+  const isOpen = !!article;
 
   const frozenArticle = useRef(article ?? null);
   if (article) frozenArticle.current = article;
@@ -94,11 +76,9 @@ export default function CardSelectOverlay({
   if (originLayout) frozenOrigin.current = originLayout;
   const displayOrigin = frozenOrigin.current;
 
-  const hasThread = !!(displayItem?.replyToArticleId);
-
   // ── Geometry ────────────────────────────────────────────────────────────
-  const reservedBelow = hasThread ? 176 : 64;
-  const cardTopVisual = topInset + (hasThread ? 16 : 28);
+  const reservedBelow = 64;
+  const cardTopVisual = topInset + 28;
   const buttonBlock = 56 + 16 + bottomInset + 16;
   const availableH = SCREEN_H - cardTopVisual - buttonBlock - reservedBelow;
   const maxScaleH = availableH / CARD_H;
@@ -130,31 +110,6 @@ export default function CardSelectOverlay({
 
   const [rendered, setRendered] = useState(false);
   const closingRef = useRef(false);
-
-  // Thread carousel: 0 = source, 1 = current letter
-  const [threadFocus, setThreadFocus] = useState(1);
-  const threadFocusRef = useRef(1);
-  const threadScrollRef = useRef<ScrollView>(null);
-
-  const sourceArticleId =
-    (displayItem as { replyToArticleId?: string | null } | null)?.replyToArticleId ?? "";
-  const { data: sourceArticle } = useGetArticle(sourceArticleId, {
-    query: {
-      queryKey: getGetArticleQueryKey(sourceArticleId),
-      enabled: !!sourceArticleId,
-    },
-  });
-
-  // Reset carousel to current letter whenever a new item opens
-  useEffect(() => {
-    if (item) {
-      threadFocusRef.current = 1;
-      setThreadFocus(1);
-      setTimeout(() => {
-        threadScrollRef.current?.scrollTo({ x: THREAD_SNAP, animated: false });
-      }, 0);
-    }
-  }, [item?.id]);
 
   // Drive mount + entrance / exit
   useEffect(() => {
@@ -231,31 +186,6 @@ export default function CardSelectOverlay({
     }),
   ).current;
 
-  const handleReadPress = useCallback(() => {
-    if (displayItem) {
-      if (hasThread && threadFocusRef.current === 0 && displayItem.replyToArticleId) {
-        const sourceInboxId = inboxData?.find(
-          (it) => it.articleId === displayItem.replyToArticleId,
-        )?.id;
-        onReadSource?.(displayItem.replyToArticleId, sourceInboxId);
-      } else {
-        onRead();
-      }
-    } else {
-      onRead();
-    }
-  }, [displayItem, hasThread, onRead, onReadSource, inboxData]);
-
-  const handleThreadScroll = useCallback(
-    (e: { nativeEvent: { contentOffset: { x: number } } }) => {
-      const idx = Math.round(e.nativeEvent.contentOffset.x / THREAD_SNAP);
-      const clamped = Math.max(0, Math.min(idx, 1));
-      threadFocusRef.current = clamped;
-      setThreadFocus(clamped);
-    },
-    [],
-  );
-
   // ── Derived animated styles ──────────────────────────────────────────────
   const scale = progress.interpolate({
     inputRange: [0, 1],
@@ -278,32 +208,8 @@ export default function CardSelectOverlay({
     outputRange: [0, 0, 1],
   });
 
-  // ── Resolved display values ──────────────────────────────────────────────
-  // Inbox mode: derive from item; My-tab mode: derive from article + overrides
-  const displayTitle = displayItem?.article?.title ?? displayArticle?.title ?? "제목 없음";
-  const displayCover = displayItem?.article?.cover ?? displayArticle?.cover;
-  const displayIsRead = displayItem?.isRead ?? false;
-
-  const resolvedAuthorName =
-    authorNameOverride ??
-    displayItem?.sender?.nickname ??
-    displayItem?.sender?.id ??
-    displayArticle?.authorNickname ??
-    undefined;
-
-  const resolvedCollectionName =
-    collectionNameOverride ?? displayItem?.collectionName ?? null;
-
-  const sourceTeamCollectionId = displayItem?.sourceTeamCollectionId ?? null;
-  const isNotice = displayItem?.article?.isNotice === true;
-
-  const dateSource =
-    displayItem
-      ? displayItem.visibleAt
-      : dateOverride ?? displayArticle?.updatedAt ?? null;
-  const dateLabel = dateSource ? formatDate(dateSource) : "";
-
-  const readButtonLabel = hasThread && threadFocus === 0 ? "원래 편지 읽기" : "읽기";
+  const dateLabel = date ? formatDate(date) : "";
+  const canTapCollection = !!(collectionId && onNavigateToCollection);
 
   return (
     <Modal
@@ -337,17 +243,17 @@ export default function CardSelectOverlay({
         {...panResponder.panHandlers}
       >
         <ArticleCardItem
-          title={displayTitle}
-          authorName={resolvedAuthorName}
-          collectionName={resolvedCollectionName}
-          cover={displayCover}
-          isRead={displayIsRead}
+          title={displayArticle?.title ?? "제목 없음"}
+          authorName={authorName ?? undefined}
+          collectionName={collectionName ?? undefined}
+          cover={displayArticle?.cover}
+          isRead={false}
           isActive
-          onPress={handleReadPress}
+          onPress={onRead}
         />
       </Animated.View>
 
-      {/* ── Details (info bar + thread carousel) ──────────────────────── */}
+      {/* ── Details (info bar) ─────────────────────────────────────────── */}
       <Animated.View
         style={[
           styles.detailsContainer,
@@ -366,34 +272,34 @@ export default function CardSelectOverlay({
               <Text style={styles.infoText} numberOfLines={1}>
                 {dateLabel}
               </Text>
-              {resolvedAuthorName ? (
+              {authorName ? (
                 <>
                   <Text style={styles.infoSep}>·</Text>
                   <Text style={styles.infoText} numberOfLines={1}>
-                    {resolvedAuthorName}
+                    {authorName}
                   </Text>
                 </>
               ) : null}
-              {resolvedCollectionName ? (
+              {collectionName ? (
                 <>
                   <Text style={styles.infoSep}>·</Text>
-                  {sourceTeamCollectionId && onNavigateToCollection ? (
+                  {canTapCollection ? (
                     <Pressable
                       onPress={() => {
                         requestClose();
-                        onNavigateToCollection(sourceTeamCollectionId);
+                        onNavigateToCollection!(collectionId!);
                       }}
                       hitSlop={6}
                       style={styles.infoTappableRow}
                     >
                       <Text style={[styles.infoText, styles.infoTextTappable]} numberOfLines={1}>
-                        {resolvedCollectionName}
+                        {collectionName}
                       </Text>
                       <Feather name="chevron-right" size={12} color={Colors.zinc500} />
                     </Pressable>
                   ) : (
                     <Text style={styles.infoText} numberOfLines={1}>
-                      {resolvedCollectionName}
+                      {collectionName}
                     </Text>
                   )}
                 </>
@@ -407,109 +313,6 @@ export default function CardSelectOverlay({
                 </>
               ) : null}
             </View>
-          </View>
-        ) : null}
-
-        {hasThread ? (
-          <View style={styles.threadSection}>
-            <Text style={styles.threadLabel}>편지 흐름</Text>
-            <ScrollView
-              ref={threadScrollRef}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              snapToInterval={THREAD_SNAP}
-              snapToAlignment="start"
-              decelerationRate="fast"
-              scrollEventThrottle={16}
-              onScroll={handleThreadScroll}
-              contentContainerStyle={styles.threadTrack}
-            >
-              {/* Source article */}
-              <View style={[styles.threadSlot, { marginRight: Spacing.cardGap }]}>
-                {sourceArticle ? (
-                  <ScalePressable
-                    style={[
-                      styles.threadCard,
-                      threadFocus === 0 && styles.threadCardFocused,
-                    ]}
-                    onPress={() => {
-                      threadFocusRef.current = 0;
-                      setThreadFocus(0);
-                      threadScrollRef.current?.scrollTo({ x: 0, animated: true });
-                    }}
-                  >
-                    <View
-                      style={[
-                        styles.threadCardInner,
-                        {
-                          backgroundColor:
-                            sourceArticle.cover?.type === "color" &&
-                            sourceArticle.cover?.bgColor
-                              ? sourceArticle.cover.bgColor
-                              : Colors.zinc100,
-                        },
-                      ]}
-                    >
-                      <Text style={styles.threadCardTitle} numberOfLines={3}>
-                        {sourceArticle.title}
-                      </Text>
-                      {displayItem?.hasReadSourceArticle === false && (
-                        <View style={styles.lockOverlay} pointerEvents="none">
-                          <Feather name="lock" size={18} color={Colors.zinc500} />
-                        </View>
-                      )}
-                    </View>
-                    <Text style={styles.threadCardRole} numberOfLines={1}>
-                      원래 편지
-                    </Text>
-                  </ScalePressable>
-                ) : (
-                  <View style={styles.threadCard}>
-                    <View style={[styles.threadCardInner, styles.threadCardPlaceholder]}>
-                      <Feather name="file-text" size={22} color={Colors.zinc300} />
-                    </View>
-                  </View>
-                )}
-              </View>
-
-              {/* Current letter */}
-              <View style={styles.threadSlot}>
-                <ScalePressable
-                  style={[
-                    styles.threadCard,
-                    threadFocus === 1 && styles.threadCardFocused,
-                  ]}
-                  onPress={() => {
-                    threadFocusRef.current = 1;
-                    setThreadFocus(1);
-                    threadScrollRef.current?.scrollTo({
-                      x: THREAD_SNAP,
-                      animated: true,
-                    });
-                  }}
-                >
-                  <View
-                    style={[
-                      styles.threadCardInner,
-                      {
-                        backgroundColor:
-                          displayItem?.article?.cover?.type === "color" &&
-                          displayItem?.article?.cover?.bgColor
-                            ? displayItem.article.cover.bgColor
-                            : Colors.zinc50,
-                      },
-                    ]}
-                  >
-                    <Text style={styles.threadCardTitle} numberOfLines={3}>
-                      {displayItem?.article?.title ?? "제목 없음"}
-                    </Text>
-                  </View>
-                  <Text style={styles.threadCardRole} numberOfLines={1}>
-                    이 편지
-                  </Text>
-                </ScalePressable>
-              </View>
-            </ScrollView>
           </View>
         ) : null}
       </Animated.View>
@@ -529,10 +332,10 @@ export default function CardSelectOverlay({
         <ScalePressable
           style={styles.ctaButton}
           contentStyle={styles.ctaButtonContent}
-          onPress={handleReadPress}
+          onPress={onRead}
         >
           <Text style={styles.ctaLabel} numberOfLines={1}>
-            {readButtonLabel}
+            읽기
           </Text>
         </ScalePressable>
       </Animated.View>
@@ -590,65 +393,6 @@ const styles = StyleSheet.create({
   },
   infoTextNotice: {
     color: Colors.noticeAccent,
-  },
-  threadSection: {
-    backgroundColor: "rgba(255,255,255,0.92)",
-    borderRadius: 12,
-    paddingTop: 12,
-    paddingBottom: 10,
-    paddingHorizontal: 14,
-  },
-  threadLabel: {
-    ...Typography.caption,
-    fontSize: 11,
-    color: Colors.zinc400,
-    marginBottom: 10,
-  },
-  threadTrack: {
-    flexDirection: "row",
-  },
-  threadSlot: {
-    width: THREAD_CARD_W,
-  },
-  threadCard: {
-    width: THREAD_CARD_W,
-    borderRadius: 10,
-    overflow: "hidden",
-    borderWidth: 2,
-    borderColor: Colors.transparent,
-  },
-  threadCardFocused: {
-    borderColor: Colors.noticeAccent,
-  },
-  threadCardInner: {
-    width: THREAD_CARD_W,
-    height: THREAD_CARD_H,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 10,
-  },
-  threadCardPlaceholder: {
-    backgroundColor: Colors.zinc100,
-  },
-  threadCardTitle: {
-    ...Typography.caption,
-    fontSize: 11,
-    color: Colors.zinc700,
-    textAlign: "center",
-    lineHeight: 16,
-  },
-  lockOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(255,255,255,0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  threadCardRole: {
-    ...Typography.caption,
-    fontSize: 11,
-    color: Colors.zinc400,
-    textAlign: "center",
-    marginTop: 6,
   },
   ctaWrapper: {
     position: "absolute",
