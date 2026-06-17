@@ -153,6 +153,7 @@ const styles = StyleSheet.create({
   },
   titleImage: {
     height: 32,
+    width: 96,
   },
   actions: {
     flexDirection: "row",
