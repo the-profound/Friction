@@ -50,6 +50,7 @@ export default function MyScreen() {
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
   const [selectedOrigin, setSelectedOrigin] = useState<OriginLayout | null>(null);
   const [selectedCollectionName, setSelectedCollectionName] = useState<string | null>(null);
+  const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
 
   const userQuery = useGetUser(userId);
   const articlesQuery = useListArticles({ authorId: userId });
@@ -65,12 +66,12 @@ export default function MyScreen() {
     }, [refetchArticles, refetchTeams]),
   );
 
-  const collectionNameByArticleId = useMemo<Record<string, string | null>>(() => {
+  const collectionNameByArticleId = useMemo<Record<string, { name: string | null; id: string | null }>>(() => {
     const records = (sendRecordsQuery.data ?? []) as SendRecordWithDetails[];
-    const map: Record<string, string | null> = {};
+    const map: Record<string, { name: string | null; id: string | null }> = {};
     for (const r of records) {
-      if (r.articleId && r.collectionName) {
-        map[r.articleId] = r.collectionName;
+      if (r.articleId) {
+        map[r.articleId] = { name: r.collectionName ?? null, id: r.collectionId ?? null };
       }
     }
     return map;
@@ -101,18 +102,22 @@ export default function MyScreen() {
 
   const handleLetterPress = useCallback(
     (article: Article) => {
-      const colName = collectionNameByArticleId[article.id] ?? null;
+      const colEntry = collectionNameByArticleId[article.id] ?? null;
+      const colName = colEntry?.name ?? null;
+      const colId = colEntry?.id ?? null;
       const slotRef = cardSlotRefs.current.get(article.id);
       if (slotRef) {
         slotRef.measureInWindow((x, y, width, height) => {
           setSelectedOrigin({ x, y, width, height });
           setSelectedArticle(article);
           setSelectedCollectionName(colName);
+          setSelectedCollectionId(colId);
         });
       } else {
         setSelectedOrigin({ x: 0, y: 0, width: cellWidth, height: cellHeight });
         setSelectedArticle(article);
         setSelectedCollectionName(colName);
+        setSelectedCollectionId(colId);
       }
     },
     [cellWidth, cellHeight, collectionNameByArticleId],
@@ -122,7 +127,15 @@ export default function MyScreen() {
     setSelectedArticle(null);
     setSelectedOrigin(null);
     setSelectedCollectionName(null);
+    setSelectedCollectionId(null);
   }, []);
+
+  const handleNavigateToCollection = useCallback(
+    (collectionId: string) => {
+      router.push({ pathname: "/of-02-detail", params: { id: collectionId } });
+    },
+    [router],
+  );
 
   const handleOverlayRead = useCallback(() => {
     if (!selectedArticle) return;
@@ -224,7 +237,7 @@ export default function MyScreen() {
   const renderLetter = useCallback(
     ({ item }: { item: Article }) => {
       const isHidden = selectedArticle?.id === item.id;
-      const itemCollectionName = collectionNameByArticleId[item.id] ?? null;
+      const itemCollectionName = collectionNameByArticleId[item.id]?.name ?? null;
       return (
         <View
           ref={(ref) => { cardSlotRefs.current.set(item.id, ref); }}
@@ -335,6 +348,9 @@ export default function MyScreen() {
           onRead={handleOverlayRead}
           authorNameOverride={selectedArticle?.authorNickname ?? user?.nickname ?? null}
           collectionNameOverride={selectedCollectionName}
+          collectionIdOverride={selectedCollectionId}
+          onNavigateToCollection={handleNavigateToCollection}
+          dateOverride={selectedArticle?.letterAt ?? selectedArticle?.updatedAt ?? null}
         />
       </View>
     );
