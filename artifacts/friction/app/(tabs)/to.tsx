@@ -502,7 +502,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: Spacing.screenPx,
-    paddingBottom: 20,
+    paddingBottom: 12,
     gap: 0,
   },
   statItem: {
@@ -530,7 +530,7 @@ const styles = StyleSheet.create({
   actionRow: {
     flexDirection: "row",
     paddingHorizontal: 10,
-    paddingBottom: 20,
+    paddingBottom: 12,
     gap: 8,
   },
   actionButton: {
@@ -558,6 +558,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.zinc100,
     paddingHorizontal: GRID_PAD,
+    marginBottom: 12,
   },
   subTabItem: {
     flex: 1,
