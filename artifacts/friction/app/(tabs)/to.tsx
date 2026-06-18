@@ -381,6 +381,7 @@ export default function MyScreen() {
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <PageHeader
           title="마이"
+          hideTitle
           showProfile
           onProfilePress={() => router.push("/mypage" as never)}
         />
@@ -417,6 +418,7 @@ export default function MyScreen() {
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <PageHeader
           title="마이"
+          hideTitle
           showProfile
           onProfilePress={() => router.push("/mypage" as never)}
         />
@@ -441,6 +443,7 @@ export default function MyScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <PageHeader
         title="마이"
+        hideTitle
         showProfile
         onProfilePress={() => router.push("/mypage" as never)}
       />
@@ -554,6 +557,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     borderBottomWidth: 1,
     borderBottomColor: Colors.zinc100,
+    paddingHorizontal: GRID_PAD,
   },
   subTabItem: {
     flex: 1,
@@ -584,7 +588,7 @@ const styles = StyleSheet.create({
   },
   gridContent: {
     paddingHorizontal: GRID_PAD,
-    paddingTop: 12,
+    paddingTop: 4,
   },
   gridRow: {
     gap: GRID_GAP,

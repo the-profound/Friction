@@ -9,6 +9,7 @@ import { useNavigation } from "@/contexts/NavigationContext";
 
 interface PageHeaderProps {
   title: string;
+  hideTitle?: boolean;
   titleImage?: ImageSourcePropType;
   showSearch?: boolean;
   showAdd?: boolean;
@@ -29,6 +30,7 @@ interface PageHeaderProps {
 
 export function PageHeader({
   title,
+  hideTitle = false,
   titleImage,
   showSearch = false,
   showAdd = false,
@@ -52,7 +54,9 @@ export function PageHeader({
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
       <View style={[styles.container, { paddingTop: 50 }, headerScrolled && Shadows.headerScrolled]}>
-        {titleImage ? (
+        {hideTitle ? (
+          <View />
+        ) : titleImage ? (
           <Image
             source={titleImage}
             style={styles.titleImage}
