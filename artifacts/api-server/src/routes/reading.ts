@@ -75,6 +75,19 @@ router.post("/user-article-reads", async (req, res) => {
   res.status(201).json(read);
 });
 
+router.get("/user-article-reads", async (req, res) => {
+  const { userId } = req.query;
+  if (!userId || typeof userId !== "string") {
+    res.status(400).json({ error: "userId is required" });
+    return;
+  }
+
+  const records = await db.select().from(userArticleReadsTable)
+    .where(eq(userArticleReadsTable.userId, userId));
+
+  res.json(records);
+});
+
 router.get("/user-article-reads/check", async (req, res) => {
   const { userId, articleId } = req.query;
   if (!userId || !articleId || typeof userId !== "string" || typeof articleId !== "string") {

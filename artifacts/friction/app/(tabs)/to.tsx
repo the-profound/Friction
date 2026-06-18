@@ -22,6 +22,8 @@ import {
   useListArticles,
   useListTeamCollections,
   useListSendRecords,
+  useListNeighbors,
+  useListUserArticleReads,
 } from "@workspace/api-client-react";
 import type { Article, TeamCollectionWithRole, SendRecordWithDetails } from "@workspace/api-client-react";
 import type { OriginLayout } from "@/components/CardSelectOverlay/CardSelectOverlay";
@@ -57,16 +59,22 @@ export default function MyScreen() {
   const articlesQuery = useListArticles({ authorId: userId });
   const teamsQuery = useListTeamCollections({ userId });
   const sendRecordsQuery = useListSendRecords({ senderId: userId });
+  const neighborsQuery = useListNeighbors({ userId });
+  const userReadsQuery = useListUserArticleReads({ userId });
 
   const refetchArticles = articlesQuery.refetch;
   const refetchTeams = teamsQuery.refetch;
   const refetchSendRecords = sendRecordsQuery.refetch;
+  const refetchNeighbors = neighborsQuery.refetch;
+  const refetchUserReads = userReadsQuery.refetch;
   useFocusEffect(
     useCallback(() => {
       refetchArticles();
       refetchTeams();
       refetchSendRecords();
-    }, [refetchArticles, refetchTeams, refetchSendRecords]),
+      refetchNeighbors();
+      refetchUserReads();
+    }, [refetchArticles, refetchTeams, refetchSendRecords, refetchNeighbors, refetchUserReads]),
   );
 
   const sendRecordByArticleId = useMemo<
@@ -112,6 +120,10 @@ export default function MyScreen() {
   const teams = useMemo<TeamCollectionWithRole[]>(() => {
     return (teamsQuery.data ?? []) as TeamCollectionWithRole[];
   }, [teamsQuery.data]);
+
+  const neighborCount = (neighborsQuery.data ?? []).length;
+  const readCount = (userReadsQuery.data ?? []).length;
+  const sentLetterCount = letters.length;
 
   const cellWidth = Math.floor(
     (windowWidth - GRID_PAD * 2 - GRID_GAP * (GRID_COLS - 1)) / GRID_COLS,
@@ -213,16 +225,41 @@ export default function MyScreen() {
           ) : null}
         </View>
 
-        <View style={styles.neighborWrap}>
+        <View style={styles.statsRow}>
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>{sentLetterCount}</Text>
+            <Text style={styles.statLabel}>발신한 편지</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>{neighborCount}</Text>
+            <Text style={styles.statLabel}>이웃</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>{readCount}</Text>
+            <Text style={styles.statLabel}>완독한 편지</Text>
+          </View>
+        </View>
+
+        <View style={styles.actionRow}>
           <ScalePressable
-            style={styles.neighborButton}
-            contentStyle={styles.neighborButtonContent}
+            style={styles.actionButton}
+            contentStyle={styles.actionButtonContent}
             onPress={() => router.push("/mypage-neighbors" as never)}
             accessibilityRole="button"
-            accessibilityLabel="나의 이웃"
+            accessibilityLabel="이웃 관리"
           >
-            <Feather name="users" size={16} color={Colors.zinc700} />
-            <Text style={styles.neighborButtonText}>나의 이웃</Text>
+            <Text style={styles.actionButtonText}>이웃 관리</Text>
+          </ScalePressable>
+          <ScalePressable
+            style={styles.actionButton}
+            contentStyle={styles.actionButtonContent}
+            onPress={() => router.push("/activity" as never)}
+            accessibilityRole="button"
+            accessibilityLabel="활동 내역"
+          >
+            <Text style={styles.actionButtonText}>활동 내역</Text>
           </ScalePressable>
         </View>
 
@@ -256,7 +293,7 @@ export default function MyScreen() {
         </View>
       </View>
     ),
-    [user?.avatarUrl, displayName, handle, myTab, router],
+    [user?.avatarUrl, displayName, handle, myTab, router, sentLetterCount, neighborCount, readCount],
   );
 
   const renderLetter = useCallback(
@@ -445,7 +482,7 @@ const styles = StyleSheet.create({
   profileSection: {
     alignItems: "center",
     paddingHorizontal: Spacing.screenPx,
-    paddingBottom: 24,
+    paddingBottom: 20,
   },
   avatar: {
     width: 78,
@@ -470,24 +507,57 @@ const styles = StyleSheet.create({
     color: Colors.zinc400,
     marginTop: 4,
   },
-  neighborWrap: {
+  statsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: Spacing.screenPx,
     paddingBottom: 20,
+    gap: 0,
   },
-  neighborButton: {
-    height: 44,
+  statItem: {
+    flex: 1,
+    alignItems: "center",
+    gap: 4,
+  },
+  statNumber: {
+    ...Typography.bodySemiBold,
+    fontSize: 20,
+    color: Colors.zinc900,
+    letterSpacing: -0.5,
+  },
+  statLabel: {
+    ...Typography.caption,
+    fontSize: 11,
+    color: Colors.zinc400,
+    letterSpacing: -0.1,
+  },
+  statDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: Colors.zinc100,
+  },
+  actionRow: {
+    flexDirection: "row",
+    paddingHorizontal: 10,
+    paddingBottom: 20,
+    gap: 8,
+  },
+  actionButton: {
+    flex: 1,
+    height: 38,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.zinc200,
     backgroundColor: Colors.white,
   },
-  neighborButtonContent: {
+  actionButtonContent: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
   },
-  neighborButtonText: {
+  actionButtonText: {
     ...Typography.bodySemiBold,
     fontSize: 14,
     color: Colors.zinc700,
