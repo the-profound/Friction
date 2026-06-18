@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -21,12 +21,22 @@ const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 const CARD_W = Sizing.cardSlotW;
 const CARD_H = Sizing.cardH;
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+const CAROUSEL_SNAP_THRESHOLD = CARD_W * 0.28;
+const CAROUSEL_FLING_VX = 0.45;
 
 export interface OriginLayout {
   x: number;
   y: number;
   width: number;
   height: number;
+}
+
+export interface AdjacentMeta {
+  authorName?: string | null;
+  collectionName?: string | null;
+  collectionId?: string | null;
+  date?: string | Date | null;
+  isNotice?: boolean;
 }
 
 function formatDate(visibleAt: string | Date): string {
@@ -48,6 +58,10 @@ interface CardSelectOverlayProps {
   originLayout: OriginLayout | null;
   onClose: () => void;
   onRead: () => void;
+  adjacentArticle?: Article | null;
+  adjacentMeta?: AdjacentMeta;
+  adjacentPosition?: "left" | "right";
+  onReadAdjacent?: () => void;
 }
 
 export default function CardSelectOverlay({
@@ -61,13 +75,25 @@ export default function CardSelectOverlay({
   originLayout,
   onClose,
   onRead,
+  adjacentArticle,
+  adjacentMeta,
+  adjacentPosition,
+  onReadAdjacent,
 }: CardSelectOverlayProps) {
   const insets = useSafeAreaInsets();
   const topInset = Platform.OS === "web" ? 67 : insets.top;
   const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
 
   const isOpen = !!article;
+  const hasAdjacent = !!adjacentArticle;
 
+  // mainCardIndex: which slot in the 2-card track holds the tapped (main) card
+  // adjacentPosition='left'  → adjacent is slot 0, main is slot 1
+  // adjacentPosition='right' → main is slot 0, adjacent is slot 1
+  const mainCardIndex = adjacentPosition === "left" ? 1 : 0;
+  const adjacentCardIndex = adjacentPosition === "left" ? 0 : 1;
+
+  // ── Frozen refs (keep last non-null values for close animation) ──────────
   const frozenArticle = useRef(article ?? null);
   if (article) frozenArticle.current = article;
   const displayArticle = frozenArticle.current;
@@ -76,7 +102,15 @@ export default function CardSelectOverlay({
   if (originLayout) frozenOrigin.current = originLayout;
   const displayOrigin = frozenOrigin.current;
 
-  // ── Geometry ────────────────────────────────────────────────────────────
+  const frozenAdjacent = useRef(adjacentArticle ?? null);
+  if (adjacentArticle) frozenAdjacent.current = adjacentArticle;
+  const displayAdjacent = frozenAdjacent.current;
+
+  const frozenAdjacentMeta = useRef<AdjacentMeta | undefined>(adjacentMeta);
+  if (adjacentMeta) frozenAdjacentMeta.current = adjacentMeta;
+  const displayAdjacentMeta = frozenAdjacentMeta.current;
+
+  // ── Geometry ─────────────────────────────────────────────────────────────
   const reservedBelow = 64;
   const cardTopVisual = topInset + 28;
   const buttonBlock = 56 + 16 + bottomInset + 16;
@@ -104,16 +138,65 @@ export default function CardSelectOverlay({
 
   const detailsTop = cardTopVisual + scaledH + 14;
 
-  // ── Animated values ─────────────────────────────────────────────────────
+  // ── Animated values ───────────────────────────────────────────────────────
   const progress = useRef(new Animated.Value(0)).current;
   const swipeY = useRef(new Animated.Value(0)).current;
+  const carouselX = useRef(new Animated.Value(0)).current;
+  const detailsFade = useRef(new Animated.Value(1)).current;
 
+  // ── Carousel state ────────────────────────────────────────────────────────
   const [rendered, setRendered] = useState(false);
   const closingRef = useRef(false);
+  const [activeCardIsMain, setActiveCardIsMain] = useState(true);
+  const carouselIndexRef = useRef(mainCardIndex);
+  const mainCardIndexRef = useRef(mainCardIndex);
+  const hasAdjacentRef = useRef(hasAdjacent);
+  const gestureDirRef = useRef<null | "h" | "v">(null);
 
-  // Drive mount + entrance / exit
+  // Keep refs up to date each render
+  mainCardIndexRef.current = mainCardIndex;
+  hasAdjacentRef.current = hasAdjacent;
+
+  // ── Derived animated styles ───────────────────────────────────────────────
+  const scale = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [originScale, finalScale],
+  });
+  const cardTranslateX = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [startTx, 0],
+  });
+  const cardTranslateY = Animated.add(
+    progress.interpolate({ inputRange: [0, 1], outputRange: [startTy, 0] }),
+    swipeY,
+  );
+  const backdropOpacity = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
+  const progressDetailsOpacity = useMemo(
+    () =>
+      progress.interpolate({
+        inputRange: [0, 0.55, 1],
+        outputRange: [0, 0, 1],
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+  const finalDetailsOpacity = useMemo(
+    () => Animated.multiply(progressDetailsOpacity, detailsFade),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  // ── Mount / entrance / exit ───────────────────────────────────────────────
   useEffect(() => {
     if (isOpen) {
+      const initIdx = adjacentPosition === "left" ? 1 : 0;
+      carouselIndexRef.current = initIdx;
+      carouselX.setValue(-initIdx * CARD_W);
+      detailsFade.setValue(1);
+      setActiveCardIsMain(true);
       setRendered(true);
       closingRef.current = false;
       swipeY.setValue(0);
@@ -128,13 +211,20 @@ export default function CardSelectOverlay({
       setRendered(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+  }, [isOpen, adjacentPosition]);
 
-  // Animate the card back to its original slot, then notify the parent.
+  // ── Close animation ───────────────────────────────────────────────────────
   const runCloseRef = useRef(() => {});
   runCloseRef.current = () => {
     if (closingRef.current) return;
     closingRef.current = true;
+
+    // If carousel is on adjacent card, snap back to main instantly before closing
+    if (hasAdjacentRef.current && carouselIndexRef.current !== mainCardIndexRef.current) {
+      carouselX.setValue(-mainCardIndexRef.current * CARD_W);
+      carouselIndexRef.current = mainCardIndexRef.current;
+    }
+
     Animated.parallel([
       Animated.timing(progress, {
         toValue: 0,
@@ -154,8 +244,135 @@ export default function CardSelectOverlay({
   };
   const requestClose = useCallback(() => runCloseRef.current(), []);
 
-  // Swipe-down to dismiss (returns the card to its slot)
-  const panResponder = useRef(
+  // ── Combined pan responder (card area: horizontal carousel + vertical dismiss) ──
+  const cardPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, g) => {
+        if (
+          hasAdjacentRef.current &&
+          Math.abs(g.dx) > 6 &&
+          Math.abs(g.dx) >= Math.abs(g.dy)
+        ) {
+          return true;
+        }
+        if (g.dy > 8 && Math.abs(g.dy) > Math.abs(g.dx)) {
+          return true;
+        }
+        return false;
+      },
+      onPanResponderGrant: () => {
+        gestureDirRef.current = null;
+      },
+      onPanResponderMove: (_, g) => {
+        if (!gestureDirRef.current) {
+          if (
+            hasAdjacentRef.current &&
+            Math.abs(g.dx) > Math.abs(g.dy) &&
+            Math.abs(g.dx) > 4
+          ) {
+            gestureDirRef.current = "h";
+            Animated.timing(detailsFade, {
+              toValue: 0,
+              duration: 120,
+              useNativeDriver: false,
+            }).start();
+          } else if (Math.abs(g.dy) > 4) {
+            gestureDirRef.current = "v";
+          }
+        }
+
+        if (gestureDirRef.current === "h") {
+          const baseX = -carouselIndexRef.current * CARD_W;
+          const raw = baseX + g.dx;
+          const maxX = 0;
+          const minX = -CARD_W;
+          const rubber =
+            raw > maxX
+              ? maxX + (raw - maxX) * 0.3
+              : raw < minX
+                ? minX + (raw - minX) * 0.3
+                : raw;
+          carouselX.setValue(rubber);
+        } else if (gestureDirRef.current === "v") {
+          if (g.dy > 0) swipeY.setValue(g.dy);
+        }
+      },
+      onPanResponderRelease: (_, g) => {
+        if (gestureDirRef.current === "h") {
+          const { dx, vx } = g;
+          let newIdx = carouselIndexRef.current;
+          if (Math.abs(vx) > CAROUSEL_FLING_VX) {
+            newIdx = vx < 0 ? 1 : 0;
+          } else if (Math.abs(dx) >= CAROUSEL_SNAP_THRESHOLD) {
+            newIdx = dx < 0 ? 1 : 0;
+          }
+          newIdx = Math.max(0, Math.min(1, newIdx));
+          const changed = newIdx !== carouselIndexRef.current;
+          carouselIndexRef.current = newIdx;
+
+          Animated.spring(carouselX, {
+            toValue: -newIdx * CARD_W,
+            useNativeDriver: false,
+            tension: 100,
+            friction: 20,
+            overshootClamping: true,
+          }).start(() => {
+            if (changed) {
+              setActiveCardIsMain(newIdx === mainCardIndexRef.current);
+            }
+            Animated.timing(detailsFade, {
+              toValue: 1,
+              duration: 150,
+              useNativeDriver: false,
+            }).start();
+          });
+        } else if (gestureDirRef.current === "v") {
+          if (g.dy > 80 || g.vy > 0.8) {
+            runCloseRef.current();
+          } else {
+            Animated.spring(swipeY, {
+              toValue: 0,
+              useNativeDriver: false,
+              tension: 200,
+              friction: 20,
+            }).start();
+          }
+        } else {
+          Animated.spring(swipeY, {
+            toValue: 0,
+            useNativeDriver: false,
+            tension: 200,
+            friction: 20,
+          }).start();
+        }
+        gestureDirRef.current = null;
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(swipeY, {
+          toValue: 0,
+          useNativeDriver: false,
+          tension: 200,
+          friction: 20,
+        }).start();
+        Animated.spring(carouselX, {
+          toValue: -carouselIndexRef.current * CARD_W,
+          useNativeDriver: false,
+          tension: 100,
+          friction: 20,
+        }).start();
+        Animated.timing(detailsFade, {
+          toValue: 1,
+          duration: 150,
+          useNativeDriver: false,
+        }).start();
+        gestureDirRef.current = null;
+      },
+    }),
+  ).current;
+
+  // ── Vertical-only pan responder for details / CTA (dismiss only) ──────────
+  const detailsPanResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_, g) =>
@@ -186,30 +403,43 @@ export default function CardSelectOverlay({
     }),
   ).current;
 
-  // ── Derived animated styles ──────────────────────────────────────────────
-  const scale = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [originScale, finalScale],
-  });
-  const cardTranslateX = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [startTx, 0],
-  });
-  const cardTranslateY = Animated.add(
-    progress.interpolate({ inputRange: [0, 1], outputRange: [startTy, 0] }),
-    swipeY,
-  );
-  const backdropOpacity = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 1],
-  });
-  const detailsOpacity = progress.interpolate({
-    inputRange: [0, 0.55, 1],
-    outputRange: [0, 0, 1],
-  });
+  // ── Active card info (switches on carousel snap) ──────────────────────────
+  const activeAuthorName = activeCardIsMain
+    ? authorName
+    : displayAdjacentMeta?.authorName;
+  const activeCollectionName = activeCardIsMain
+    ? collectionName
+    : displayAdjacentMeta?.collectionName;
+  const activeCollectionId = activeCardIsMain
+    ? collectionId
+    : displayAdjacentMeta?.collectionId;
+  const activeDate = activeCardIsMain ? date : displayAdjacentMeta?.date;
+  const activeIsNotice = activeCardIsMain
+    ? isNotice
+    : displayAdjacentMeta?.isNotice;
 
-  const dateLabel = date ? formatDate(date) : "";
-  const canTapCollection = !!(collectionId && onNavigateToCollection);
+  const dateLabel = activeDate ? formatDate(activeDate) : "";
+  const canTapCollection = !!(activeCollectionId && onNavigateToCollection);
+
+  const handleRead = activeCardIsMain ? onRead : (onReadAdjacent ?? onRead);
+
+  // ── Build carousel cards ──────────────────────────────────────────────────
+  // Slot 0 is the LEFT card, slot 1 is the RIGHT card.
+  const card0Article = adjacentCardIndex === 0 ? displayAdjacent : displayArticle;
+  const card0Author = adjacentCardIndex === 0
+    ? displayAdjacentMeta?.authorName
+    : authorName;
+  const card0Collection = adjacentCardIndex === 0
+    ? displayAdjacentMeta?.collectionName
+    : collectionName;
+
+  const card1Article = adjacentCardIndex === 1 ? displayAdjacent : displayArticle;
+  const card1Author = adjacentCardIndex === 1
+    ? displayAdjacentMeta?.authorName
+    : authorName;
+  const card1Collection = adjacentCardIndex === 1
+    ? displayAdjacentMeta?.collectionName
+    : collectionName;
 
   return (
     <Modal
@@ -219,20 +449,21 @@ export default function CardSelectOverlay({
       statusBarTranslucent
       onRequestClose={requestClose}
     >
-      {/* ── Dark backdrop ─────────────────────────────────────────────── */}
+      {/* ── Dark backdrop ──────────────────────────────────────────────── */}
       <Animated.View
         style={[StyleSheet.absoluteFill, styles.backdrop, { opacity: backdropOpacity }]}
       >
         <Pressable style={StyleSheet.absoluteFill} onPress={requestClose} />
       </Animated.View>
 
-      {/* ── The selected card itself, zooming from its list slot ──────── */}
+      {/* ── Card container (zooms from list slot, hosts carousel track) ── */}
       <Animated.View
         style={[
           styles.cardContainer,
           {
             left: boxLeft,
             top: boxTop,
+            overflow: "hidden",
             transform: [
               { translateX: cardTranslateX },
               { translateY: cardTranslateY },
@@ -240,17 +471,51 @@ export default function CardSelectOverlay({
             ],
           },
         ]}
-        {...panResponder.panHandlers}
+        {...cardPanResponder.panHandlers}
       >
-        <ArticleCardItem
-          title={displayArticle?.title ?? "제목 없음"}
-          authorName={authorName ?? undefined}
-          collectionName={collectionName ?? undefined}
-          cover={displayArticle?.cover}
-          isRead={false}
-          isActive
-          onPress={onRead}
-        />
+        {hasAdjacent ? (
+          <Animated.View
+            style={[
+              styles.carouselTrack,
+              { transform: [{ translateX: carouselX }] },
+            ]}
+          >
+            {/* Slot 0 */}
+            <View style={styles.carouselSlot}>
+              <ArticleCardItem
+                title={card0Article?.title ?? "제목 없음"}
+                authorName={card0Author ?? undefined}
+                collectionName={card0Collection ?? undefined}
+                cover={card0Article?.cover}
+                isRead={false}
+                isActive
+                onPress={handleRead}
+              />
+            </View>
+            {/* Slot 1 */}
+            <View style={styles.carouselSlot}>
+              <ArticleCardItem
+                title={card1Article?.title ?? "제목 없음"}
+                authorName={card1Author ?? undefined}
+                collectionName={card1Collection ?? undefined}
+                cover={card1Article?.cover}
+                isRead={false}
+                isActive
+                onPress={handleRead}
+              />
+            </View>
+          </Animated.View>
+        ) : (
+          <ArticleCardItem
+            title={displayArticle?.title ?? "제목 없음"}
+            authorName={authorName ?? undefined}
+            collectionName={collectionName ?? undefined}
+            cover={displayArticle?.cover}
+            isRead={false}
+            isActive
+            onPress={onRead}
+          />
+        )}
       </Animated.View>
 
       {/* ── Details (info bar) ─────────────────────────────────────────── */}
@@ -259,12 +524,12 @@ export default function CardSelectOverlay({
           styles.detailsContainer,
           {
             top: detailsTop,
-            opacity: detailsOpacity,
+            opacity: finalDetailsOpacity,
             transform: [{ translateY: swipeY }],
           },
         ]}
         pointerEvents={rendered ? "auto" : "none"}
-        {...panResponder.panHandlers}
+        {...detailsPanResponder.panHandlers}
       >
         {dateLabel ? (
           <View style={styles.infoBar}>
@@ -272,47 +537,75 @@ export default function CardSelectOverlay({
               <Text style={styles.infoText} numberOfLines={1}>
                 {dateLabel}
               </Text>
-              {authorName ? (
+              {activeAuthorName ? (
                 <>
                   <Text style={styles.infoSep}>·</Text>
                   <Text style={styles.infoText} numberOfLines={1}>
-                    {authorName}
+                    {activeAuthorName}
                   </Text>
                 </>
               ) : null}
-              {collectionName ? (
+              {activeCollectionName ? (
                 <>
                   <Text style={styles.infoSep}>·</Text>
                   {canTapCollection ? (
                     <Pressable
                       onPress={() => {
                         requestClose();
-                        onNavigateToCollection!(collectionId!);
+                        onNavigateToCollection!(activeCollectionId!);
                       }}
                       hitSlop={6}
                       style={styles.infoTappableRow}
                     >
-                      <Text style={[styles.infoText, styles.infoTextTappable]} numberOfLines={1}>
-                        {collectionName}
+                      <Text
+                        style={[styles.infoText, styles.infoTextTappable]}
+                        numberOfLines={1}
+                      >
+                        {activeCollectionName}
                       </Text>
-                      <Feather name="chevron-right" size={12} color={Colors.zinc500} />
+                      <Feather
+                        name="chevron-right"
+                        size={12}
+                        color={Colors.zinc500}
+                      />
                     </Pressable>
                   ) : (
                     <Text style={styles.infoText} numberOfLines={1}>
-                      {collectionName}
+                      {activeCollectionName}
                     </Text>
                   )}
                 </>
               ) : null}
-              {isNotice ? (
+              {activeIsNotice ? (
                 <>
                   <Text style={styles.infoSep}>·</Text>
-                  <Text style={[styles.infoText, styles.infoTextNotice]} numberOfLines={1}>
+                  <Text
+                    style={[styles.infoText, styles.infoTextNotice]}
+                    numberOfLines={1}
+                  >
                     오늘의 인사
                   </Text>
                 </>
               ) : null}
             </View>
+          </View>
+        ) : null}
+
+        {/* Dot indicator for carousel */}
+        {hasAdjacent ? (
+          <View style={styles.dotsRow}>
+            {[0, 1].map((slot) => {
+              const activeSlot = activeCardIsMain ? mainCardIndex : adjacentCardIndex;
+              return (
+                <View
+                  key={slot}
+                  style={[
+                    styles.dot,
+                    slot === activeSlot ? styles.dotActive : styles.dotInactive,
+                  ]}
+                />
+              );
+            })}
           </View>
         ) : null}
       </Animated.View>
@@ -323,7 +616,7 @@ export default function CardSelectOverlay({
           styles.ctaWrapper,
           {
             bottom: bottomInset + 16,
-            opacity: detailsOpacity,
+            opacity: finalDetailsOpacity,
             transform: [{ translateY: swipeY }],
           },
         ]}
@@ -332,7 +625,7 @@ export default function CardSelectOverlay({
         <ScalePressable
           style={styles.ctaButton}
           contentStyle={styles.ctaButtonContent}
-          onPress={onRead}
+          onPress={handleRead}
         >
           <Text style={styles.ctaLabel} numberOfLines={1}>
             읽기
@@ -349,6 +642,15 @@ const styles = StyleSheet.create({
   },
   cardContainer: {
     position: "absolute",
+    width: CARD_W,
+    height: CARD_H,
+  },
+  carouselTrack: {
+    flexDirection: "row",
+    width: CARD_W * 2,
+    height: CARD_H,
+  },
+  carouselSlot: {
     width: CARD_W,
     height: CARD_H,
   },
@@ -393,6 +695,23 @@ const styles = StyleSheet.create({
   },
   infoTextNotice: {
     color: Colors.noticeAccent,
+  },
+  dotsRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 6,
+    marginBottom: 10,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  dotActive: {
+    backgroundColor: Colors.zinc700,
+  },
+  dotInactive: {
+    backgroundColor: Colors.zinc300,
   },
   ctaWrapper: {
     position: "absolute",

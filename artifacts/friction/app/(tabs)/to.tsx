@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { PageHeader } from "@/components/NavBar/PageHeader";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
-import CardSelectOverlay from "@/components/CardSelectOverlay/CardSelectOverlay";
+import CardSelectOverlay, { type AdjacentMeta } from "@/components/CardSelectOverlay/CardSelectOverlay";
 import { Colors, Spacing, Typography, Sizing } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { useUser } from "@/contexts/UserContext";
@@ -25,6 +25,7 @@ import {
   useListSendRecords,
   useListNeighbors,
   useListUserArticleReads,
+  useGetArticle,
 } from "@workspace/api-client-react";
 import type { Article, TeamCollectionWithRole, SendRecordWithDetails } from "@workspace/api-client-react";
 import type { OriginLayout } from "@/components/CardSelectOverlay/CardSelectOverlay";
@@ -182,6 +183,42 @@ export default function MyScreen() {
     router.push({
       pathname: "/read" as never,
       params: { articleId: article.id, mode: "re_read" },
+    });
+  }, [selectedArticle, router]);
+
+  // ── Carousel adjacent article logic (마이 탭) ─────────────────────────────
+  // If a sent letter is a reply (has sourceArticleId), the source article
+  // appears on the LEFT as the adjacent card.
+  const sourceArticleIdForAdj = selectedArticle?.sourceArticleId ?? "";
+  const sourceArticleForAdjQuery = useGetArticle(sourceArticleIdForAdj);
+  const sourceArticleForAdj = sourceArticleForAdjQuery.data ?? null;
+
+  const overlayAdjacentArticle = selectedArticle?.sourceArticleId
+    ? sourceArticleForAdj
+    : null;
+
+  const overlayAdjacentMeta = useMemo((): AdjacentMeta | undefined => {
+    if (!selectedArticle?.sourceArticleId || !sourceArticleForAdj) return undefined;
+    return {
+      authorName: sourceArticleForAdj.authorNickname ?? null,
+      collectionName: null,
+      collectionId: null,
+      date: sourceArticleForAdj.letterAt ?? null,
+      isNotice: sourceArticleForAdj.isNotice ?? false,
+    };
+  }, [selectedArticle?.sourceArticleId, sourceArticleForAdj]);
+
+  const handleReadAdjacent = useCallback(() => {
+    if (!selectedArticle?.sourceArticleId) return;
+    const articleId = selectedArticle.sourceArticleId;
+    setSelectedArticle(null);
+    setSelectedOrigin(null);
+    setSelectedCollectionName(null);
+    setSelectedCollectionId(null);
+    setSelectedDateOverride(null);
+    router.push({
+      pathname: "/read" as never,
+      params: { articleId, mode: "re_read" },
     });
   }, [selectedArticle, router]);
 
@@ -408,6 +445,10 @@ export default function MyScreen() {
           date={selectedDateOverride}
           isNotice={selectedArticle?.isNotice ?? false}
           onNavigateToCollection={handleNavigateToCollection}
+          adjacentArticle={overlayAdjacentArticle}
+          adjacentMeta={overlayAdjacentMeta}
+          adjacentPosition={selectedArticle?.sourceArticleId ? "left" : undefined}
+          onReadAdjacent={handleReadAdjacent}
         />
       </View>
     );

@@ -24,9 +24,9 @@ import { PageHeader } from "@/components/NavBar/PageHeader";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import DotIndicator from "@/components/DotIndicator/DotIndicator";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
-import CardSelectOverlay, { type OriginLayout } from "@/components/CardSelectOverlay/CardSelectOverlay";
+import CardSelectOverlay, { type OriginLayout, type AdjacentMeta } from "@/components/CardSelectOverlay/CardSelectOverlay";
 import { useQueryClient } from "@tanstack/react-query";
-import { useListInbox, useMarkInboxOpened, useDeleteInboxItem, getListInboxQueryKey } from "@workspace/api-client-react";
+import { useListInbox, useMarkInboxOpened, useDeleteInboxItem, getListInboxQueryKey, useGetArticle } from "@workspace/api-client-react";
 import { patchInboxItemInCache, removeInboxItemFromCache } from "@/lib/queryInvalidation";
 import type { InboxItem } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
@@ -499,6 +499,77 @@ export default function InboxScreen() {
     }
   }, [refetch]);
 
+  // ── Carousel adjacent article logic ──────────────────────────────────────
+  // Case A: tapItem is a reply (has replyToArticleId) → source article on the LEFT
+  // Case B: tapItem is an original → find reply in inboxData for the RIGHT
+  const sourceArticleId = tapItem?.replyToArticleId ?? "";
+  const sourceArticleQuery = useGetArticle(sourceArticleId);
+  const sourceArticle = sourceArticleQuery.data ?? null;
+
+  const replyInboxItem = useMemo(() => {
+    if (!tapItem || tapItem.replyToArticleId) return null;
+    return (
+      (inboxData as InboxItem[] | undefined)?.find(
+        (it) => it.replyToArticleId === tapItem.articleId,
+      ) ?? null
+    );
+  }, [tapItem, inboxData]);
+
+  const sourceInboxItem = useMemo(() => {
+    if (!tapItem?.replyToArticleId) return null;
+    return (
+      (inboxData as InboxItem[] | undefined)?.find(
+        (it) => it.articleId === tapItem.replyToArticleId,
+      ) ?? null
+    );
+  }, [tapItem, inboxData]);
+
+  const overlayAdjacentArticle = tapItem?.replyToArticleId
+    ? sourceArticle
+    : (replyInboxItem?.article ?? null);
+
+  const overlayAdjacentPosition: "left" | "right" | undefined =
+    tapItem?.replyToArticleId
+      ? "left"
+      : replyInboxItem
+        ? "right"
+        : undefined;
+
+  const overlayAdjacentMeta = useMemo((): AdjacentMeta | undefined => {
+    if (tapItem?.replyToArticleId) {
+      return {
+        authorName:
+          sourceInboxItem?.sender?.nickname ??
+          sourceArticle?.authorNickname ??
+          null,
+        collectionName: sourceInboxItem?.collectionName ?? null,
+        collectionId: sourceInboxItem?.sourceTeamCollectionId ?? null,
+        date: sourceInboxItem?.visibleAt ?? null,
+        isNotice: sourceArticle?.isNotice ?? false,
+      };
+    }
+    if (replyInboxItem) {
+      return {
+        authorName: replyInboxItem.sender?.nickname ?? null,
+        collectionName: replyInboxItem.collectionName ?? null,
+        collectionId: replyInboxItem.sourceTeamCollectionId ?? null,
+        date: replyInboxItem.visibleAt ?? null,
+        isNotice: replyInboxItem.article?.isNotice ?? false,
+      };
+    }
+    return undefined;
+  }, [tapItem, sourceInboxItem, sourceArticle, replyInboxItem]);
+
+  const handleReadAdjacent = useCallback(async () => {
+    if (tapItem?.replyToArticleId && sourceInboxItem) {
+      setTapItem(null);
+      await navigateToReply(sourceInboxItem);
+    } else if (!tapItem?.replyToArticleId && replyInboxItem) {
+      setTapItem(null);
+      await navigateToReply(replyInboxItem);
+    }
+  }, [tapItem, sourceInboxItem, replyInboxItem, navigateToReply]);
+
   // Refetch the inbox when this tab regains focus ONLY if the cached data
   // is stale (older than FOCUS_STALE_THRESHOLD_MS / the global staleTime).
   // Skipping the refetch when data is fresh avoids the full-screen loading
@@ -580,6 +651,10 @@ export default function InboxScreen() {
         date={tapItem?.visibleAt ?? null}
         isNotice={tapItem?.article?.isNotice ?? false}
         onNavigateToCollection={handleNavigateToCollection}
+        adjacentArticle={overlayAdjacentArticle}
+        adjacentMeta={overlayAdjacentMeta}
+        adjacentPosition={overlayAdjacentPosition}
+        onReadAdjacent={handleReadAdjacent}
       />
 
       <ConfirmModal
