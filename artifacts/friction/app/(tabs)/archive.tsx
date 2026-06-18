@@ -580,7 +580,7 @@ export default function ArchiveScreen() {
         </View>
       ) : (
         <PageHeader
-          title="보관함"
+          title="보관"
           showAdd={activeSubTab !== "sentence"}
           onAddPress={handleAdd}
           showSearch

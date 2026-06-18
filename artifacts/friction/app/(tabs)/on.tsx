@@ -607,7 +607,7 @@ export default function OnScreen() {
         />
       ) : (
         <PageHeader
-          title="기록함"
+          title="기록"
           showSearch
           onSearchPress={handleSearchPress}
           searchActive={searchActive}
