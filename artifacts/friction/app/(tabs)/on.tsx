@@ -613,8 +613,6 @@ export default function OnScreen() {
           searchActive={searchActive}
           showKebab
           onKebabPress={enterSelectionMode}
-          showProfile
-          onProfilePress={() => router.push("/mypage" as never)}
         />
       )}
 

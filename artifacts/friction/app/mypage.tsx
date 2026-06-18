@@ -218,6 +218,7 @@ function SettingRow({
         !isLast && styles.rowBorder,
         pressed && styles.rowPressed,
       ]}
+      contentStyle={styles.rowContent}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
@@ -310,6 +311,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xl,
     paddingVertical: 15,
     minHeight: 52,
+  },
+  rowContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flex: 1,
   },
   infoRow: {
     gap: 12,

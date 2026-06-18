@@ -12,6 +12,7 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import ScalePressable from "@/components/shared/ScalePressable";
+import { PageHeader } from "@/components/NavBar/PageHeader";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import CardSelectOverlay from "@/components/CardSelectOverlay/CardSelectOverlay";
 import { Colors, Spacing, Typography, Sizing } from "@/constants/tokens";
@@ -194,19 +195,6 @@ export default function MyScreen() {
   const ListHeader = useMemo(
     () => (
       <View>
-        <View style={styles.topBar}>
-          <ScalePressable
-            style={styles.settingsButton}
-            contentStyle={styles.settingsButtonContent}
-            onPress={() => router.push("/mypage" as never)}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="설정 및 활동"
-          >
-            <Feather name="settings" size={22} color={Colors.zinc700} />
-          </ScalePressable>
-        </View>
-
         <View style={styles.profileSection}>
           {user?.avatarUrl ? (
             <Image source={{ uri: user.avatarUrl }} style={styles.avatar} />
@@ -391,6 +379,11 @@ export default function MyScreen() {
   if (myTab === "letters") {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
+        <PageHeader
+          title="마이"
+          showProfile
+          onProfilePress={() => router.push("/mypage" as never)}
+        />
         <FlatList
           key="my-letters"
           data={letters}
@@ -422,6 +415,11 @@ export default function MyScreen() {
   if (myTab === "groups") {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
+        <PageHeader
+          title="마이"
+          showProfile
+          onProfilePress={() => router.push("/mypage" as never)}
+        />
         <FlatList
           key="my-groups"
           data={teams}
@@ -441,6 +439,11 @@ export default function MyScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      <PageHeader
+        title="마이"
+        showProfile
+        onProfilePress={() => router.push("/mypage" as never)}
+      />
       <FlatList
         key="my-publications"
         data={[]}
@@ -462,22 +465,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.white,
-  },
-  topBar: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    alignItems: "center",
-    paddingHorizontal: Spacing.screenPx,
-    paddingTop: 8,
-    height: 44,
-  },
-  settingsButton: {
-    width: 36,
-    height: 36,
-  },
-  settingsButtonContent: {
-    alignItems: "center",
-    justifyContent: "center",
   },
   profileSection: {
     alignItems: "center",
