@@ -24,15 +24,21 @@ import { PageHeader } from "@/components/NavBar/PageHeader";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import DotIndicator from "@/components/DotIndicator/DotIndicator";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
-import CardSelectOverlay, { type OriginLayout, type AdjacentMeta } from "@/components/CardSelectOverlay/CardSelectOverlay";
+import CardSelectOverlay, { type OriginLayout, type ChainArticleMeta } from "@/components/CardSelectOverlay/CardSelectOverlay";
 import { useQueryClient } from "@tanstack/react-query";
-import { useListInbox, useMarkInboxOpened, useDeleteInboxItem, getListInboxQueryKey, useGetArticle } from "@workspace/api-client-react";
+import { useListInbox, useMarkInboxOpened, useDeleteInboxItem, getListInboxQueryKey, getArticle, getGetArticleQueryKey } from "@workspace/api-client-react";
 import { patchInboxItemInCache, removeInboxItemFromCache } from "@/lib/queryInvalidation";
-import type { InboxItem } from "@workspace/api-client-react";
+import type { InboxItem, Article } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
 import { isQueryStale } from "@/lib/useScreenFocused";
 import { useRealtimeChannel } from "@/lib/useRealtimeChannel";
 import { LIST_PERF_PRESET } from "@/lib/listPerf";
+
+/** Recursively collect all inbox descendants of rootArticleId (oldest → newest BFS). */
+function findAllDescendants(rootArticleId: string, allItems: InboxItem[]): InboxItem[] {
+  const direct = allItems.filter((it) => (it as any).replyToArticleId === rootArticleId);
+  return direct.flatMap((it) => [it, ...findAllDescendants(it.articleId, allItems)]);
+}
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const CARD_W = Sizing.cardSlotW;
@@ -428,19 +434,29 @@ export default function InboxScreen() {
     });
   }, [markOpened, router, queryClient]);
 
-  const handleRead = useCallback(async () => {
-    if (!tapItem) return;
-    const item = tapItem;
+  const handleRead = useCallback(async (chainIdx: number) => {
+    // Look up which article and inbox item correspond to the active carousel slot.
+    // chainArticles / inboxItemByArticleId are captured via refs so the callback
+    // stays stable even after setTapItem(null) clears the overlay.
+    const article = chainArticlesRef.current[chainIdx];
+    const inboxItem = article
+      ? inboxItemByArticleIdRef.current.get(article.id) ?? null
+      : null;
     setTapItem(null);
-    // 답장(`replyToArticleId` 보유)이고 아직 원글을 읽지 않은 경우, 원글 먼저 읽기
-    // 안내 모달을 띄운다. 그 외에는 기존 흐름을 그대로 수행한다.
-    const isReply = item.isReplyToMe === true || !!item.replyToArticleId;
-    if (isReply && item.hasReadSourceArticle === false) {
-      setSourcePromptItem(item);
-      return;
+    if (inboxItem) {
+      const isReply = inboxItem.isReplyToMe === true || !!inboxItem.replyToArticleId;
+      if (isReply && inboxItem.hasReadSourceArticle === false) {
+        setSourcePromptItem(inboxItem);
+        return;
+      }
+      await navigateToReply(inboxItem);
+    } else if (article) {
+      router.push({
+        pathname: "/read",
+        params: { articleId: article.id, mode: "re_read" },
+      });
     }
-    await navigateToReply(item);
-  }, [tapItem, navigateToReply]);
+  }, [navigateToReply, router]);
 
   const handleSourcePromptClose = useCallback(() => {
     setSourcePromptItem(null);
@@ -499,76 +515,138 @@ export default function InboxScreen() {
     }
   }, [refetch]);
 
-  // ── Carousel adjacent article logic ──────────────────────────────────────
-  // Case A: tapItem is a reply (has replyToArticleId) → source article on the LEFT
-  // Case B: tapItem is an original → find reply in inboxData for the RIGHT
-  const sourceArticleId = tapItem?.replyToArticleId ?? "";
-  const sourceArticleQuery = useGetArticle(sourceArticleId);
-  const sourceArticle = sourceArticleQuery.data ?? null;
+  // ── Ancestor chain — truly recursive fetch ───────────────────────────────
+  // Each tap starts a new traversal: follow InboxItem.replyToArticleId, then
+  // recursively follow Article.sourceArticleId until the root. Results are
+  // accumulated in state so each discovered slot is shown immediately as a
+  // skeleton and replaced with the real article once it loads.
 
-  const replyInboxItem = useMemo(() => {
-    if (!tapItem || tapItem.replyToArticleId) return null;
-    return (
-      (inboxData as InboxItem[] | undefined)?.find(
-        (it) => it.replyToArticleId === tapItem.articleId,
-      ) ?? null
-    );
-  }, [tapItem, inboxData]);
+  interface AncestorSlot { id: string; article: Article | null }
+  const [ancestorChain, setAncestorChain] = useState<AncestorSlot[]>([]);
 
-  const sourceInboxItem = useMemo(() => {
-    if (!tapItem?.replyToArticleId) return null;
-    return (
-      (inboxData as InboxItem[] | undefined)?.find(
-        (it) => it.articleId === tapItem.replyToArticleId,
-      ) ?? null
-    );
-  }, [tapItem, inboxData]);
+  useEffect(() => {
+    const startId = (tapItem as any)?.replyToArticleId as string | null | undefined;
+    if (!startId) {
+      setAncestorChain([]);
+      return;
+    }
+    let cancelled = false;
+    setAncestorChain([{ id: startId, article: null }]);
 
-  const overlayAdjacentArticle = tapItem?.replyToArticleId
-    ? sourceArticle
-    : (replyInboxItem?.article ?? null);
+    async function traverse(id: string) {
+      if (cancelled) return;
+      let article: Article | null = null;
+      try {
+        article = await queryClient.fetchQuery({
+          queryKey: getGetArticleQueryKey(id),
+          queryFn: () => getArticle(id),
+          staleTime: 5 * 60 * 1000,
+        }) as Article;
+      } catch {
+        return;
+      }
+      if (cancelled || !article) return;
 
-  const overlayAdjacentPosition: "left" | "right" | undefined =
-    tapItem?.replyToArticleId
-      ? "left"
-      : replyInboxItem
-        ? "right"
-        : undefined;
+      setAncestorChain((prev) => {
+        const idx = prev.findIndex((s) => s.id === id);
+        if (idx === -1) return prev;
+        const next = [...prev];
+        next[idx] = { id, article };
+        return next;
+      });
 
-  const overlayAdjacentMeta = useMemo((): AdjacentMeta | undefined => {
-    if (tapItem?.replyToArticleId) {
+      const nextId = (article as any).sourceArticleId as string | null | undefined;
+      if (nextId && !cancelled) {
+        setAncestorChain((prev) => [{ id: nextId, article: null }, ...prev]);
+        await traverse(nextId);
+      }
+    }
+
+    traverse(startId);
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [(tapItem as any)?.replyToArticleId]);
+
+  // ── Fast lookup: articleId → InboxItem ───────────────────────────────────
+  const inboxItemByArticleId = useMemo(() => {
+    const map = new Map<string, InboxItem>();
+    for (const item of (inboxData as InboxItem[] | undefined) ?? []) {
+      if (item.articleId) map.set(item.articleId, item);
+    }
+    return map;
+  }, [inboxData]);
+
+  // ── Build full ordered chain ──────────────────────────────────────────────
+  // Layout: [oldest ancestor … immediate parent] → tapped → [descendants…]
+  // Null entries in articles[] = still-loading skeleton slots.
+  const { chainArticles, chainMetas, chainInitialIndex } = useMemo(() => {
+    if (!tapItem?.article) {
       return {
-        authorName:
-          sourceInboxItem?.sender?.nickname ??
-          sourceArticle?.authorNickname ??
-          null,
-        collectionName: sourceInboxItem?.collectionName ?? null,
-        collectionId: sourceInboxItem?.sourceTeamCollectionId ?? null,
-        date: sourceInboxItem?.visibleAt ?? null,
-        isNotice: sourceArticle?.isNotice ?? false,
+        chainArticles: [] as (Article | null)[],
+        chainMetas: [] as ChainArticleMeta[],
+        chainInitialIndex: 0,
       };
     }
-    if (replyInboxItem) {
-      return {
-        authorName: replyInboxItem.sender?.nickname ?? null,
-        collectionName: replyInboxItem.collectionName ?? null,
-        collectionId: replyInboxItem.sourceTeamCollectionId ?? null,
-        date: replyInboxItem.visibleAt ?? null,
-        isNotice: replyInboxItem.article?.isNotice ?? false,
-      };
-    }
-    return undefined;
-  }, [tapItem, sourceInboxItem, sourceArticle, replyInboxItem]);
 
-  const handleReadAdjacent = useCallback(async () => {
-    if (tapItem?.replyToArticleId && sourceInboxItem) {
-      setTapItem(null);
-      await navigateToReply(sourceInboxItem);
-    } else if (!tapItem?.replyToArticleId && replyInboxItem) {
-      setTapItem(null);
-      await navigateToReply(replyInboxItem);
+    const artList: (Article | null)[] = [];
+    const metaList: ChainArticleMeta[] = [];
+
+    // Ancestors — oldest first (ancestorChain is ordered oldest→newest)
+    for (const slot of ancestorChain) {
+      const inboxItem = slot.article ? inboxItemByArticleId.get(slot.article.id) : null;
+      artList.push(slot.article);
+      metaList.push(
+        slot.article
+          ? {
+              authorName:
+                inboxItem?.sender?.nickname ??
+                (slot.article as any).authorNickname ??
+                null,
+              collectionName: inboxItem?.collectionName ?? null,
+              collectionId: (inboxItem as any)?.sourceTeamCollectionId ?? null,
+              date: inboxItem?.visibleAt ?? null,
+              isNotice: (slot.article as any).isNotice ?? false,
+            }
+          : {},
+      );
     }
-  }, [tapItem, sourceInboxItem, replyInboxItem, navigateToReply]);
+
+    const initIdx = artList.length; // tapped article goes here
+
+    // Tapped article
+    artList.push(tapItem.article);
+    metaList.push({
+      authorName: tapItem.sender?.nickname ?? tapItem.sender?.id ?? null,
+      collectionName: tapItem.collectionName ?? null,
+      collectionId: (tapItem as any).sourceTeamCollectionId ?? null,
+      date: tapItem.visibleAt ?? null,
+      isNotice: (tapItem.article as any).isNotice ?? false,
+    });
+
+    // Descendants — recursively collected from all inbox data
+    const allInboxItems = (inboxData as InboxItem[] | undefined) ?? [];
+    const descendants = findAllDescendants(tapItem.articleId, allInboxItems);
+    for (const desc of descendants) {
+      if (!desc.article) continue;
+      artList.push(desc.article);
+      metaList.push({
+        authorName: desc.sender?.nickname ?? null,
+        collectionName: desc.collectionName ?? null,
+        collectionId: (desc as any).sourceTeamCollectionId ?? null,
+        date: desc.visibleAt ?? null,
+        isNotice: (desc.article as any).isNotice ?? false,
+      });
+    }
+
+    return { chainArticles: artList, chainMetas: metaList, chainInitialIndex: initIdx };
+  }, [tapItem, ancestorChain, inboxItemByArticleId, inboxData]);
+
+  // Stable refs so the handleRead callback can read the latest chain
+  // even after tapItem has been cleared (setTapItem(null)).
+  const chainArticlesRef = useRef<(Article | null)[]>([]);
+  const inboxItemByArticleIdRef = useRef<Map<string, InboxItem>>(new Map());
+  chainArticlesRef.current = chainArticles;
+  inboxItemByArticleIdRef.current = inboxItemByArticleId;
 
   // Refetch the inbox when this tab regains focus ONLY if the cached data
   // is stale (older than FOCUS_STALE_THRESHOLD_MS / the global staleTime).
@@ -641,20 +719,13 @@ export default function InboxScreen() {
       )}
 
       <CardSelectOverlay
-        article={tapItem?.article ?? null}
+        articles={chainArticles}
+        metas={chainMetas}
+        initialIndex={chainInitialIndex}
         originLayout={tapItemOrigin}
         onClose={handleModalClose}
         onRead={handleRead}
-        authorName={tapItem?.sender?.nickname ?? tapItem?.sender?.id ?? null}
-        collectionName={tapItem?.collectionName ?? null}
-        collectionId={tapItem?.sourceTeamCollectionId ?? null}
-        date={tapItem?.visibleAt ?? null}
-        isNotice={tapItem?.article?.isNotice ?? false}
         onNavigateToCollection={handleNavigateToCollection}
-        adjacentArticle={overlayAdjacentArticle}
-        adjacentMeta={overlayAdjacentMeta}
-        adjacentPosition={overlayAdjacentPosition}
-        onReadAdjacent={handleReadAdjacent}
       />
 
       <ConfirmModal

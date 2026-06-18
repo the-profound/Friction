@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -14,10 +14,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { PageHeader } from "@/components/NavBar/PageHeader";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
-import CardSelectOverlay, { type AdjacentMeta } from "@/components/CardSelectOverlay/CardSelectOverlay";
+import CardSelectOverlay, { type ChainArticleMeta } from "@/components/CardSelectOverlay/CardSelectOverlay";
 import { Colors, Spacing, Typography, Sizing } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { useUser } from "@/contexts/UserContext";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetUser,
   useListArticles,
@@ -25,10 +26,12 @@ import {
   useListSendRecords,
   useListNeighbors,
   useListUserArticleReads,
-  useGetArticle,
+  getArticle,
+  getGetArticleQueryKey,
 } from "@workspace/api-client-react";
 import type { Article, TeamCollectionWithRole, SendRecordWithDetails } from "@workspace/api-client-react";
 import type { OriginLayout } from "@/components/CardSelectOverlay/CardSelectOverlay";
+
 
 type MyTab = "letters" | "publications" | "groups";
 
@@ -47,6 +50,7 @@ export default function MyScreen() {
   const navBottom = useNavBarBottomSafeArea();
   const router = useRouter();
   const { userId } = useUser();
+  const queryClient = useQueryClient();
   const { width: windowWidth } = useWindowDimensions();
 
   const [myTab, setMyTab] = useState<MyTab>("letters");
@@ -176,41 +180,101 @@ export default function MyScreen() {
     [router],
   );
 
-  const handleOverlayRead = useCallback(() => {
-    if (!selectedArticle) return;
-    const article = selectedArticle;
-    setSelectedArticle(null);
-    router.push({
-      pathname: "/read" as never,
-      params: { articleId: article.id, mode: "re_read" },
+  // ── Article chain for the My-tab overlay (recursive ancestor traversal) ──
+  // Follow selectedArticle.sourceArticleId → Article.sourceArticleId → …
+  // until null, collecting ancestors oldest→newest with skeleton placeholders.
+  // Navigating to recipients' replies from the My tab is out of scope.
+
+  interface ToAncestorSlot { id: string; article: Article | null }
+  const [toAncestorChain, setToAncestorChain] = useState<ToAncestorSlot[]>([]);
+
+  useEffect(() => {
+    const startId = selectedArticle?.sourceArticleId;
+    if (!startId) {
+      setToAncestorChain([]);
+      return;
+    }
+    let cancelled = false;
+    setToAncestorChain([{ id: startId, article: null }]);
+
+    async function traverse(id: string) {
+      if (cancelled) return;
+      let article: Article | null = null;
+      try {
+        article = await queryClient.fetchQuery({
+          queryKey: getGetArticleQueryKey(id),
+          queryFn: () => getArticle(id),
+          staleTime: 5 * 60 * 1000,
+        }) as Article;
+      } catch {
+        return;
+      }
+      if (cancelled || !article) return;
+
+      setToAncestorChain((prev) => {
+        const idx = prev.findIndex((s) => s.id === id);
+        if (idx === -1) return prev;
+        const next = [...prev];
+        next[idx] = { id, article };
+        return next;
+      });
+
+      const nextId = (article as any).sourceArticleId as string | null | undefined;
+      if (nextId && !cancelled) {
+        setToAncestorChain((prev) => [{ id: nextId, article: null }, ...prev]);
+        await traverse(nextId);
+      }
+    }
+
+    traverse(startId);
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedArticle?.sourceArticleId]);
+
+  const { toChainArticles, toChainMetas, toChainInitialIndex } = useMemo(() => {
+    if (!selectedArticle) {
+      return {
+        toChainArticles: [] as (Article | null)[],
+        toChainMetas: [] as ChainArticleMeta[],
+        toChainInitialIndex: 0,
+      };
+    }
+
+    const artList: (Article | null)[] = [];
+    const metaList: ChainArticleMeta[] = [];
+
+    // Ancestors — oldest first (toAncestorChain is ordered oldest→newest)
+    for (const slot of toAncestorChain) {
+      artList.push(slot.article);
+      metaList.push(
+        slot.article
+          ? {
+              authorName: (slot.article as any).authorNickname ?? null,
+              collectionName: null,
+              collectionId: null,
+              date: slot.article.letterAt ?? null,
+              isNotice: (slot.article as any).isNotice ?? false,
+            }
+          : {},
+      );
+    }
+
+    const initIdx = artList.length; // selectedArticle goes here
+    artList.push(selectedArticle);
+    metaList.push({
+      authorName: (selectedArticle as any).authorNickname ?? user?.nickname ?? null,
+      collectionName: selectedCollectionName,
+      collectionId: selectedCollectionId,
+      date: selectedDateOverride,
+      isNotice: (selectedArticle as any).isNotice ?? false,
     });
-  }, [selectedArticle, router]);
 
-  // ── Carousel adjacent article logic (마이 탭) ─────────────────────────────
-  // If a sent letter is a reply (has sourceArticleId), the source article
-  // appears on the LEFT as the adjacent card.
-  const sourceArticleIdForAdj = selectedArticle?.sourceArticleId ?? "";
-  const sourceArticleForAdjQuery = useGetArticle(sourceArticleIdForAdj);
-  const sourceArticleForAdj = sourceArticleForAdjQuery.data ?? null;
+    return { toChainArticles: artList, toChainMetas: metaList, toChainInitialIndex: initIdx };
+  }, [selectedArticle, toAncestorChain, selectedCollectionName, selectedCollectionId, selectedDateOverride, user?.nickname]);
 
-  const overlayAdjacentArticle = selectedArticle?.sourceArticleId
-    ? sourceArticleForAdj
-    : null;
-
-  const overlayAdjacentMeta = useMemo((): AdjacentMeta | undefined => {
-    if (!selectedArticle?.sourceArticleId || !sourceArticleForAdj) return undefined;
-    return {
-      authorName: sourceArticleForAdj.authorNickname ?? null,
-      collectionName: null,
-      collectionId: null,
-      date: sourceArticleForAdj.letterAt ?? null,
-      isNotice: sourceArticleForAdj.isNotice ?? false,
-    };
-  }, [selectedArticle?.sourceArticleId, sourceArticleForAdj]);
-
-  const handleReadAdjacent = useCallback(() => {
-    if (!selectedArticle?.sourceArticleId) return;
-    const articleId = selectedArticle.sourceArticleId;
+  const handleOverlayRead = useCallback((chainIdx: number) => {
+    const article = toChainArticles[chainIdx];
+    if (!article) return; // still loading
     setSelectedArticle(null);
     setSelectedOrigin(null);
     setSelectedCollectionName(null);
@@ -218,9 +282,9 @@ export default function MyScreen() {
     setSelectedDateOverride(null);
     router.push({
       pathname: "/read" as never,
-      params: { articleId, mode: "re_read" },
+      params: { articleId: article.id, mode: "re_read" },
     });
-  }, [selectedArticle, router]);
+  }, [toChainArticles, router]);
 
   const handleGroupPress = useCallback(
     (team: TeamCollectionWithRole) => {
@@ -435,20 +499,13 @@ export default function MyScreen() {
           showsVerticalScrollIndicator={false}
         />
         <CardSelectOverlay
-          article={selectedArticle}
+          articles={toChainArticles}
+          metas={toChainMetas}
+          initialIndex={toChainInitialIndex}
           originLayout={selectedOrigin}
           onClose={handleOverlayClose}
           onRead={handleOverlayRead}
-          authorName={selectedArticle?.authorNickname ?? user?.nickname ?? null}
-          collectionName={selectedCollectionName}
-          collectionId={selectedCollectionId}
-          date={selectedDateOverride}
-          isNotice={selectedArticle?.isNotice ?? false}
           onNavigateToCollection={handleNavigateToCollection}
-          adjacentArticle={overlayAdjacentArticle}
-          adjacentMeta={overlayAdjacentMeta}
-          adjacentPosition={selectedArticle?.sourceArticleId ? "left" : undefined}
-          onReadAdjacent={handleReadAdjacent}
         />
       </View>
     );
