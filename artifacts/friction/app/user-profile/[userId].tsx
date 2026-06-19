@@ -29,6 +29,7 @@ import {
   useListNeighbors,
   useListNeighborRequests,
   useCreateNeighborRequest,
+  useDeleteNeighborRequest,
   useRemoveNeighbor,
   getArticle,
   getGetArticleQueryKey,
@@ -80,8 +81,10 @@ export default function UserProfileScreen() {
   const sentRequestsQuery = useListNeighborRequests({ requesterId: currentUserId });
 
   const createNeighborRequest = useCreateNeighborRequest();
+  const deleteNeighborRequest = useDeleteNeighborRequest();
   const removeNeighbor = useRemoveNeighbor();
   const [optimisticPending, setOptimisticPending] = useState(false);
+  const [cancelConfirmVisible, setCancelConfirmVisible] = useState(false);
 
   const refetchArticles = articlesQuery.refetch;
   const refetchTeams = teamsQuery.refetch;
@@ -156,6 +159,11 @@ export default function UserProfileScreen() {
     return list.some((r) => r.recipientId === profileUserId);
   }, [sentRequestsQuery.data, profileUserId, optimisticPending]);
 
+  const pendingRequestId = useMemo<string | null>(() => {
+    const list = (sentRequestsQuery.data ?? []) as NeighborRequestWithUser[];
+    return list.find((r) => r.recipientId === profileUserId)?.id ?? null;
+  }, [sentRequestsQuery.data, profileUserId]);
+
   useEffect(() => {
     // Clear the optimistic flag once the server-side request is confirmed
     // (so we don't keep showing pending after the relationship resolves).
@@ -193,6 +201,19 @@ export default function UserProfileScreen() {
       }
     }
   }, [profileUserId, currentUserId, createNeighborRequest, sentRequestsQuery, neighborsQuery]);
+
+  const handleCancelNeighborRequest = useCallback(async () => {
+    if (!pendingRequestId || deleteNeighborRequest.isPending) return;
+    setCancelConfirmVisible(false);
+    try {
+      await deleteNeighborRequest.mutateAsync({ id: pendingRequestId });
+      setOptimisticPending(false);
+      sentRequestsQuery.refetch();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "취소에 실패했습니다.";
+      Alert.alert("오류", msg);
+    }
+  }, [pendingRequestId, deleteNeighborRequest, sentRequestsQuery]);
 
   const handleRemoveNeighborConfirm = useCallback(async () => {
     if (!existingNeighbor || removeNeighbor.isPending) return;
@@ -401,9 +422,15 @@ export default function UserProfileScreen() {
               <Text style={styles.actionButtonText}>이웃 맺음</Text>
             </ScalePressable>
           ) : isPending ? (
-            <View style={[styles.actionButton, styles.actionButtonDisabled, styles.actionButtonContent]}>
-              <Text style={[styles.actionButtonText, { color: Colors.zinc400 }]}>요청 중</Text>
-            </View>
+            <ScalePressable
+              style={styles.actionButton}
+              contentStyle={styles.actionButtonContent}
+              onPress={() => setCancelConfirmVisible(true)}
+              accessibilityRole="button"
+              accessibilityLabel="이웃 신청 취소"
+            >
+              <Text style={styles.actionButtonText}>이웃 신청 취소</Text>
+            </ScalePressable>
           ) : (
             <ScalePressable
               style={styles.actionButton}
@@ -411,9 +438,9 @@ export default function UserProfileScreen() {
               onPress={handleSendNeighborRequest}
               disabled={createNeighborRequest.isPending}
               accessibilityRole="button"
-              accessibilityLabel="이웃 요청"
+              accessibilityLabel="이웃 신청"
             >
-              <Text style={styles.actionButtonText}>이웃 요청</Text>
+              <Text style={styles.actionButtonText}>이웃 신청</Text>
             </ScalePressable>
           )}
           <ScalePressable
@@ -620,6 +647,15 @@ export default function UserProfileScreen() {
           onConfirm={handleRemoveNeighborConfirm}
           onCancel={() => setRemoveConfirmVisible(false)}
         />
+        <ConfirmModal
+          visible={cancelConfirmVisible}
+          title="이웃 신청 취소"
+          description="이웃 신청을 취소할까요?"
+          confirmLabel="취소하기"
+          cancelLabel="돌아가기"
+          onConfirm={handleCancelNeighborRequest}
+          onCancel={() => setCancelConfirmVisible(false)}
+        />
       </View>
     );
   }
@@ -650,6 +686,15 @@ export default function UserProfileScreen() {
           onConfirm={handleRemoveNeighborConfirm}
           onCancel={() => setRemoveConfirmVisible(false)}
         />
+        <ConfirmModal
+          visible={cancelConfirmVisible}
+          title="이웃 신청 취소"
+          description="이웃 신청을 취소할까요?"
+          confirmLabel="취소하기"
+          cancelLabel="돌아가기"
+          onConfirm={handleCancelNeighborRequest}
+          onCancel={() => setCancelConfirmVisible(false)}
+        />
       </View>
     );
   }
@@ -679,6 +724,15 @@ export default function UserProfileScreen() {
         destructive
         onConfirm={handleRemoveNeighborConfirm}
         onCancel={() => setRemoveConfirmVisible(false)}
+      />
+      <ConfirmModal
+        visible={cancelConfirmVisible}
+        title="이웃 신청 취소"
+        description="이웃 신청을 취소할까요?"
+        confirmLabel="취소하기"
+        cancelLabel="돌아가기"
+        onConfirm={handleCancelNeighborRequest}
+        onCancel={() => setCancelConfirmVisible(false)}
       />
     </View>
   );
