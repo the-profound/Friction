@@ -6,7 +6,6 @@ import {
   FlatList,
   Image,
   Alert,
-  ActivityIndicator,
   useWindowDimensions,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
@@ -399,12 +398,10 @@ export default function UserProfileScreen() {
               accessibilityRole="button"
               accessibilityLabel="이웃 맺음"
             >
-              <Feather name="check" size={15} color={Colors.zinc700} />
               <Text style={styles.actionButtonText}>이웃 맺음</Text>
             </ScalePressable>
           ) : isPending ? (
             <View style={[styles.actionButton, styles.actionButtonDisabled, styles.actionButtonContent]}>
-              <Feather name="clock" size={15} color={Colors.zinc400} />
               <Text style={[styles.actionButtonText, { color: Colors.zinc400 }]}>요청 중</Text>
             </View>
           ) : (
@@ -416,11 +413,6 @@ export default function UserProfileScreen() {
               accessibilityRole="button"
               accessibilityLabel="이웃 요청"
             >
-              {createNeighborRequest.isPending ? (
-                <ActivityIndicator size="small" color={Colors.zinc400} />
-              ) : (
-                <Feather name="user-plus" size={15} color={Colors.zinc700} />
-              )}
               <Text style={styles.actionButtonText}>이웃 요청</Text>
             </ScalePressable>
           )}
@@ -431,7 +423,6 @@ export default function UserProfileScreen() {
             accessibilityRole="button"
             accessibilityLabel="편지 발신"
           >
-            <Feather name="send" size={15} color={Colors.zinc700} />
             <Text style={styles.actionButtonText}>편지 발신</Text>
           </ScalePressable>
         </View>
@@ -808,12 +799,12 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.zinc900,
   },
   gridContent: {
-    paddingHorizontal: GRID_PAD,
     paddingTop: 4,
   },
   gridRow: {
     gap: GRID_GAP,
     marginBottom: GRID_GAP,
+    paddingHorizontal: GRID_PAD,
   },
   gridCell: {
     overflow: "hidden",

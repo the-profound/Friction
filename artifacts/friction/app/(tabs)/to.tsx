@@ -686,12 +686,12 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.zinc900,
   },
   gridContent: {
-    paddingHorizontal: GRID_PAD,
     paddingTop: 4,
   },
   gridRow: {
     gap: GRID_GAP,
     marginBottom: GRID_GAP,
+    paddingHorizontal: GRID_PAD,
   },
   gridCell: {
     overflow: "hidden",
