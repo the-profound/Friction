@@ -293,97 +293,6 @@ export default function MyScreen() {
     [router],
   );
 
-  const ListHeader = useMemo(
-    () => (
-      <View>
-        <View style={styles.profileSection}>
-          {user?.avatarUrl ? (
-            <Image source={{ uri: user.avatarUrl }} style={styles.avatar} />
-          ) : (
-            <View style={[styles.avatar, styles.avatarFallback]}>
-              <Feather name="user" size={34} color={Colors.zinc500} />
-            </View>
-          )}
-          <Text style={styles.profileName} numberOfLines={1}>
-            {displayName}
-          </Text>
-          {handle ? (
-            <Text style={styles.profileHandle} numberOfLines={1}>
-              {handle}
-            </Text>
-          ) : null}
-        </View>
-
-        <View style={styles.statsRow}>
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{sentLetterCount}</Text>
-            <Text style={styles.statLabel}>발신한 편지</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{neighborCount}</Text>
-            <Text style={styles.statLabel}>이웃</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{readCount}</Text>
-            <Text style={styles.statLabel}>완독한 편지</Text>
-          </View>
-        </View>
-
-        <View style={styles.actionRow}>
-          <ScalePressable
-            style={styles.actionButton}
-            contentStyle={styles.actionButtonContent}
-            onPress={() => router.push("/mypage-neighbors" as never)}
-            accessibilityRole="button"
-            accessibilityLabel="이웃 관리"
-          >
-            <Text style={styles.actionButtonText}>이웃 관리</Text>
-          </ScalePressable>
-          <ScalePressable
-            style={styles.actionButton}
-            contentStyle={styles.actionButtonContent}
-            onPress={() => router.push("/activity" as never)}
-            accessibilityRole="button"
-            accessibilityLabel="프로필 관리"
-          >
-            <Text style={styles.actionButtonText}>프로필 관리</Text>
-          </ScalePressable>
-        </View>
-
-        <View style={styles.subTabBar}>
-          {MY_TABS.map((t) => {
-            const active = myTab === t.key;
-            return (
-              <ScalePressable
-                key={t.key}
-                style={styles.subTabItem}
-                contentStyle={styles.subTabItemContent}
-                onPress={() => setMyTab(t.key)}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: active }}
-              >
-                <Text
-                  style={[styles.subTabText, active && styles.subTabTextActive]}
-                  allowFontScaling={false}
-                >
-                  {t.label}
-                </Text>
-                <View
-                  style={[
-                    styles.subTabUnderline,
-                    active && styles.subTabUnderlineActive,
-                  ]}
-                />
-              </ScalePressable>
-            );
-          })}
-        </View>
-      </View>
-    ),
-    [user?.avatarUrl, displayName, handle, myTab, router, sentLetterCount, neighborCount, readCount],
-  );
 
   const renderLetter = useCallback(
     ({ item }: { item: Article }) => {
@@ -477,66 +386,6 @@ export default function MyScreen() {
 
   const contentPadding = { paddingBottom: navBottom + 24 };
 
-  if (myTab === "letters") {
-    return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <PageHeader
-          title="마이"
-          hideTitle
-          showProfile
-          onProfilePress={() => router.push("/mypage" as never)}
-        />
-        <FlatList
-          key="my-letters"
-          data={letters}
-          keyExtractor={(item) => item.id}
-          renderItem={renderLetter}
-          numColumns={GRID_COLS}
-          columnWrapperStyle={styles.gridRow}
-          ListHeaderComponent={ListHeader}
-          ListEmptyComponent={renderEmpty("아직 보낸 편지가 없어요")}
-          contentContainerStyle={[styles.gridContent, contentPadding]}
-          showsVerticalScrollIndicator={false}
-        />
-        <CardSelectOverlay
-          articles={toChainArticles}
-          metas={toChainMetas}
-          initialIndex={toChainInitialIndex}
-          originLayout={selectedOrigin}
-          onClose={handleOverlayClose}
-          onRead={handleOverlayRead}
-          onNavigateToCollection={handleNavigateToCollection}
-        />
-      </View>
-    );
-  }
-
-  if (myTab === "groups") {
-    return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <PageHeader
-          title="마이"
-          hideTitle
-          showProfile
-          onProfilePress={() => router.push("/mypage" as never)}
-        />
-        <FlatList
-          key="my-groups"
-          data={teams}
-          keyExtractor={(item) => item.id}
-          renderItem={renderGroup}
-          ListHeaderComponent={ListHeader}
-          ListEmptyComponent={renderEmpty(
-            "참여 중인 모임이 없어요",
-            "모임 탭에서 모임을 만들거나 참여해보세요",
-          )}
-          contentContainerStyle={contentPadding}
-          showsVerticalScrollIndicator={false}
-        />
-      </View>
-    );
-  }
-
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <PageHeader
@@ -545,18 +394,145 @@ export default function MyScreen() {
         showProfile
         onProfilePress={() => router.push("/mypage" as never)}
       />
-      <FlatList
-        key="my-publications"
-        data={[]}
-        keyExtractor={() => "none"}
-        renderItem={null}
-        ListHeaderComponent={ListHeader}
-        ListEmptyComponent={renderEmpty(
-          "아직 비어있어요",
-          "간행물 기능은 곧 만나볼 수 있어요",
-        )}
-        contentContainerStyle={contentPadding}
-        showsVerticalScrollIndicator={false}
+
+      {/* Fixed header — lives outside FlatList so it never re-layouts on tab switch */}
+      <View>
+        <View style={styles.profileSection}>
+          {user?.avatarUrl ? (
+            <Image source={{ uri: user.avatarUrl }} style={styles.avatar} />
+          ) : (
+            <View style={[styles.avatar, styles.avatarFallback]}>
+              <Feather name="user" size={34} color={Colors.zinc500} />
+            </View>
+          )}
+          <Text style={styles.profileName} numberOfLines={1}>
+            {displayName}
+          </Text>
+          {handle ? (
+            <Text style={styles.profileHandle} numberOfLines={1}>
+              {handle}
+            </Text>
+          ) : null}
+        </View>
+
+        <View style={styles.statsRow}>
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>{sentLetterCount}</Text>
+            <Text style={styles.statLabel}>발신한 편지</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>{neighborCount}</Text>
+            <Text style={styles.statLabel}>이웃</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>{readCount}</Text>
+            <Text style={styles.statLabel}>완독한 편지</Text>
+          </View>
+        </View>
+
+        <View style={styles.actionRow}>
+          <ScalePressable
+            style={styles.actionButton}
+            contentStyle={styles.actionButtonContent}
+            onPress={() => router.push("/mypage-neighbors" as never)}
+            accessibilityRole="button"
+            accessibilityLabel="이웃 관리"
+          >
+            <Text style={styles.actionButtonText}>이웃 관리</Text>
+          </ScalePressable>
+          <ScalePressable
+            style={styles.actionButton}
+            contentStyle={styles.actionButtonContent}
+            onPress={() => router.push("/activity" as never)}
+            accessibilityRole="button"
+            accessibilityLabel="프로필 관리"
+          >
+            <Text style={styles.actionButtonText}>프로필 관리</Text>
+          </ScalePressable>
+        </View>
+
+        <View style={styles.subTabBar}>
+          {MY_TABS.map((t) => {
+            const active = myTab === t.key;
+            return (
+              <ScalePressable
+                key={t.key}
+                style={styles.subTabItem}
+                contentStyle={styles.subTabItemContent}
+                onPress={() => setMyTab(t.key)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: active }}
+              >
+                <Text
+                  style={[styles.subTabText, active && styles.subTabTextActive]}
+                  allowFontScaling={false}
+                >
+                  {t.label}
+                </Text>
+                <View
+                  style={[
+                    styles.subTabUnderline,
+                    active && styles.subTabUnderlineActive,
+                  ]}
+                />
+              </ScalePressable>
+            );
+          })}
+        </View>
+      </View>
+
+      {myTab === "letters" && (
+        <FlatList
+          key="my-letters"
+          data={letters}
+          keyExtractor={(item) => item.id}
+          renderItem={renderLetter}
+          numColumns={GRID_COLS}
+          columnWrapperStyle={styles.gridRow}
+          ListEmptyComponent={renderEmpty("아직 보낸 편지가 없어요")}
+          contentContainerStyle={contentPadding}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
+      {myTab === "groups" && (
+        <FlatList
+          key="my-groups"
+          data={teams}
+          keyExtractor={(item) => item.id}
+          renderItem={renderGroup}
+          ListEmptyComponent={renderEmpty(
+            "참여 중인 모임이 없어요",
+            "모임 탭에서 모임을 만들거나 참여해보세요",
+          )}
+          contentContainerStyle={contentPadding}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
+      {myTab === "publications" && (
+        <FlatList
+          key="my-publications"
+          data={[]}
+          keyExtractor={() => "none"}
+          renderItem={null}
+          ListEmptyComponent={renderEmpty(
+            "아직 비어있어요",
+            "간행물 기능은 곧 만나볼 수 있어요",
+          )}
+          contentContainerStyle={contentPadding}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
+
+      <CardSelectOverlay
+        articles={toChainArticles}
+        metas={toChainMetas}
+        initialIndex={toChainInitialIndex}
+        originLayout={selectedOrigin}
+        onClose={handleOverlayClose}
+        onRead={handleOverlayRead}
+        onNavigateToCollection={handleNavigateToCollection}
       />
     </View>
   );

@@ -389,113 +389,6 @@ export default function UserProfileScreen() {
     [router],
   );
 
-  const ListHeader = useMemo(
-    () => (
-      <View>
-        <View style={styles.profileSection}>
-          {user?.avatarUrl ? (
-            <Image source={{ uri: user.avatarUrl }} style={styles.avatar} />
-          ) : (
-            <View style={[styles.avatar, styles.avatarFallback]}>
-              <Feather name="user" size={34} color={Colors.zinc500} />
-            </View>
-          )}
-          <Text style={styles.profileName} numberOfLines={1}>
-            {displayName}
-          </Text>
-          {handle ? (
-            <Text style={styles.profileHandle} numberOfLines={1}>
-              {handle}
-            </Text>
-          ) : null}
-        </View>
-
-        <View style={styles.actionRow}>
-          {isNeighbor ? (
-            <ScalePressable
-              style={styles.actionButton}
-              contentStyle={styles.actionButtonContent}
-              onPress={() => setRemoveConfirmVisible(true)}
-              accessibilityRole="button"
-              accessibilityLabel="이웃 맺음"
-            >
-              <Text style={styles.actionButtonText}>이웃 맺음</Text>
-            </ScalePressable>
-          ) : isPending ? (
-            <ScalePressable
-              style={styles.actionButton}
-              contentStyle={styles.actionButtonContent}
-              onPress={() => setCancelConfirmVisible(true)}
-              accessibilityRole="button"
-              accessibilityLabel="이웃 신청 취소"
-            >
-              <Text style={styles.actionButtonText}>이웃 신청 취소</Text>
-            </ScalePressable>
-          ) : (
-            <ScalePressable
-              style={styles.actionButton}
-              contentStyle={styles.actionButtonContent}
-              onPress={handleSendNeighborRequest}
-              disabled={createNeighborRequest.isPending}
-              accessibilityRole="button"
-              accessibilityLabel="이웃 신청"
-            >
-              <Text style={styles.actionButtonText}>이웃 신청</Text>
-            </ScalePressable>
-          )}
-          <ScalePressable
-            style={styles.actionButton}
-            contentStyle={styles.actionButtonContent}
-            onPress={handleSendLetter}
-            accessibilityRole="button"
-            accessibilityLabel="편지 발신"
-          >
-            <Text style={styles.actionButtonText}>편지 발신</Text>
-          </ScalePressable>
-        </View>
-
-        <View style={styles.subTabBar}>
-          {PROFILE_TABS.map((t) => {
-            const active = profileTab === t.key;
-            return (
-              <ScalePressable
-                key={t.key}
-                style={styles.subTabItem}
-                contentStyle={styles.subTabItemContent}
-                onPress={() => setProfileTab(t.key)}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: active }}
-              >
-                <Text
-                  style={[styles.subTabText, active && styles.subTabTextActive]}
-                  allowFontScaling={false}
-                >
-                  {t.label}
-                </Text>
-                <View
-                  style={[
-                    styles.subTabUnderline,
-                    active && styles.subTabUnderlineActive,
-                  ]}
-                />
-              </ScalePressable>
-            );
-          })}
-        </View>
-      </View>
-    ),
-    [
-      user?.avatarUrl,
-      displayName,
-      handle,
-      profileTab,
-      isNeighbor,
-      isPending,
-      createNeighborRequest.isPending,
-      handleSendNeighborRequest,
-      handleSendLetter,
-    ],
-  );
 
   const renderLetter = useCallback(
     ({ item }: { item: Article }) => {
@@ -589,7 +482,7 @@ export default function UserProfileScreen() {
 
   const contentPadding = { paddingBottom: navBottom + 24 };
 
-  const Header = (
+  const NavHeader = (
     <View style={styles.header}>
       <ScalePressable onPress={() => router.back()} hitSlop={12}>
         <Feather name="arrow-left" size={20} color={Colors.zinc600} />
@@ -604,7 +497,7 @@ export default function UserProfileScreen() {
   if (!profileUserId) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        {Header}
+        {NavHeader}
         <View style={styles.emptyWrap}>
           <Text style={styles.emptyTitle}>사용자를 찾을 수 없어요</Text>
         </View>
@@ -612,10 +505,105 @@ export default function UserProfileScreen() {
     );
   }
 
-  if (profileTab === "letters") {
-    return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        {Header}
+  return (
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      {NavHeader}
+
+      {/* Fixed header — lives outside FlatList so it never re-layouts on tab switch */}
+      <View>
+        <View style={styles.profileSection}>
+          {user?.avatarUrl ? (
+            <Image source={{ uri: user.avatarUrl }} style={styles.avatar} />
+          ) : (
+            <View style={[styles.avatar, styles.avatarFallback]}>
+              <Feather name="user" size={34} color={Colors.zinc500} />
+            </View>
+          )}
+          <Text style={styles.profileName} numberOfLines={1}>
+            {displayName}
+          </Text>
+          {handle ? (
+            <Text style={styles.profileHandle} numberOfLines={1}>
+              {handle}
+            </Text>
+          ) : null}
+        </View>
+
+        <View style={styles.actionRow}>
+          {isNeighbor ? (
+            <ScalePressable
+              style={styles.actionButton}
+              contentStyle={styles.actionButtonContent}
+              onPress={() => setRemoveConfirmVisible(true)}
+              accessibilityRole="button"
+              accessibilityLabel="이웃 맺음"
+            >
+              <Text style={styles.actionButtonText}>이웃 맺음</Text>
+            </ScalePressable>
+          ) : isPending ? (
+            <ScalePressable
+              style={styles.actionButton}
+              contentStyle={styles.actionButtonContent}
+              onPress={() => setCancelConfirmVisible(true)}
+              accessibilityRole="button"
+              accessibilityLabel="이웃 신청 취소"
+            >
+              <Text style={styles.actionButtonText}>이웃 신청 취소</Text>
+            </ScalePressable>
+          ) : (
+            <ScalePressable
+              style={styles.actionButton}
+              contentStyle={styles.actionButtonContent}
+              onPress={handleSendNeighborRequest}
+              disabled={createNeighborRequest.isPending}
+              accessibilityRole="button"
+              accessibilityLabel="이웃 신청"
+            >
+              <Text style={styles.actionButtonText}>이웃 신청</Text>
+            </ScalePressable>
+          )}
+          <ScalePressable
+            style={styles.actionButton}
+            contentStyle={styles.actionButtonContent}
+            onPress={handleSendLetter}
+            accessibilityRole="button"
+            accessibilityLabel="편지 발신"
+          >
+            <Text style={styles.actionButtonText}>편지 발신</Text>
+          </ScalePressable>
+        </View>
+
+        <View style={styles.subTabBar}>
+          {PROFILE_TABS.map((t) => {
+            const active = profileTab === t.key;
+            return (
+              <ScalePressable
+                key={t.key}
+                style={styles.subTabItem}
+                contentStyle={styles.subTabItemContent}
+                onPress={() => setProfileTab(t.key)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: active }}
+              >
+                <Text
+                  style={[styles.subTabText, active && styles.subTabTextActive]}
+                  allowFontScaling={false}
+                >
+                  {t.label}
+                </Text>
+                <View
+                  style={[
+                    styles.subTabUnderline,
+                    active && styles.subTabUnderlineActive,
+                  ]}
+                />
+              </ScalePressable>
+            );
+          })}
+        </View>
+      </View>
+
+      {profileTab === "letters" && (
         <FlatList
           key="profile-letters"
           data={letters}
@@ -623,97 +611,45 @@ export default function UserProfileScreen() {
           renderItem={renderLetter}
           numColumns={GRID_COLS}
           columnWrapperStyle={styles.gridRow}
-          ListHeaderComponent={ListHeader}
           ListEmptyComponent={renderEmpty("아직 보낸 편지가 없어요")}
-          contentContainerStyle={[styles.gridContent, contentPadding]}
+          contentContainerStyle={contentPadding}
           showsVerticalScrollIndicator={false}
         />
-        <CardSelectOverlay
-          articles={chainArticles}
-          metas={chainMetas}
-          initialIndex={chainInitialIndex}
-          originLayout={selectedOrigin}
-          onClose={handleOverlayClose}
-          onRead={handleOverlayRead}
-          onNavigateToCollection={handleNavigateToCollection}
-        />
-        <ConfirmModal
-          visible={removeConfirmVisible}
-          title="이웃 삭제"
-          description={`'${displayName}'님과의 이웃 관계를 해제하시겠어요?`}
-          confirmLabel="해제"
-          cancelLabel="취소"
-          destructive
-          onConfirm={handleRemoveNeighborConfirm}
-          onCancel={() => setRemoveConfirmVisible(false)}
-        />
-        <ConfirmModal
-          visible={cancelConfirmVisible}
-          title="이웃 신청 취소"
-          description="이웃 신청을 취소할까요?"
-          confirmLabel="취소하기"
-          cancelLabel="돌아가기"
-          onConfirm={handleCancelNeighborRequest}
-          onCancel={() => setCancelConfirmVisible(false)}
-        />
-      </View>
-    );
-  }
-
-  if (profileTab === "groups") {
-    return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        {Header}
+      )}
+      {profileTab === "groups" && (
         <FlatList
           key="profile-groups"
           data={teams}
           keyExtractor={(item) => item.id}
           renderItem={renderGroup}
-          ListHeaderComponent={ListHeader}
+          ListEmptyComponent={renderEmpty("참여 중인 모임이 없어요")}
+          contentContainerStyle={contentPadding}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
+      {profileTab === "publications" && (
+        <FlatList
+          key="profile-publications"
+          data={[]}
+          keyExtractor={() => "none"}
+          renderItem={null}
           ListEmptyComponent={renderEmpty(
-            "참여 중인 모임이 없어요",
+            "아직 비어있어요",
+            "간행물 기능은 곧 만나볼 수 있어요",
           )}
           contentContainerStyle={contentPadding}
           showsVerticalScrollIndicator={false}
         />
-        <ConfirmModal
-          visible={removeConfirmVisible}
-          title="이웃 삭제"
-          description={`'${displayName}'님과의 이웃 관계를 해제하시겠어요?`}
-          confirmLabel="해제"
-          cancelLabel="취소"
-          destructive
-          onConfirm={handleRemoveNeighborConfirm}
-          onCancel={() => setRemoveConfirmVisible(false)}
-        />
-        <ConfirmModal
-          visible={cancelConfirmVisible}
-          title="이웃 신청 취소"
-          description="이웃 신청을 취소할까요?"
-          confirmLabel="취소하기"
-          cancelLabel="돌아가기"
-          onConfirm={handleCancelNeighborRequest}
-          onCancel={() => setCancelConfirmVisible(false)}
-        />
-      </View>
-    );
-  }
+      )}
 
-  return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      {Header}
-      <FlatList
-        key="profile-publications"
-        data={[]}
-        keyExtractor={() => "none"}
-        renderItem={null}
-        ListHeaderComponent={ListHeader}
-        ListEmptyComponent={renderEmpty(
-          "아직 비어있어요",
-          "간행물 기능은 곧 만나볼 수 있어요",
-        )}
-        contentContainerStyle={contentPadding}
-        showsVerticalScrollIndicator={false}
+      <CardSelectOverlay
+        articles={chainArticles}
+        metas={chainMetas}
+        initialIndex={chainInitialIndex}
+        originLayout={selectedOrigin}
+        onClose={handleOverlayClose}
+        onRead={handleOverlayRead}
+        onNavigateToCollection={handleNavigateToCollection}
       />
       <ConfirmModal
         visible={removeConfirmVisible}
