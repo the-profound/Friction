@@ -250,6 +250,7 @@ export default function CardSelectOverlay({
     Animated.parallel([
       Animated.timing(progress, { toValue: 0, duration: 240, useNativeDriver: false }),
       Animated.timing(swipeY, { toValue: 0, duration: 200, useNativeDriver: false }),
+      Animated.timing(sidePeekFade, { toValue: 0, duration: 100, useNativeDriver: false }),
     ]).start(() => {
       setRendered(false);
       closingRef.current = false;
