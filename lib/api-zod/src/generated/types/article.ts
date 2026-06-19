@@ -14,6 +14,8 @@ export interface Article {
   authorId: string;
   /** Author's nickname. Populated by listArticles when joining users; may be null on other endpoints. */
   authorNickname?: string | null;
+  /** Name of the collection this article belongs to (team collection preferred, personal collection fallback). Populated by getArticle; may be null on other endpoints. */
+  collectionName?: string | null;
   title: string;
   content: string;
   status: ArticleStatus;

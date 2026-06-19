@@ -7,6 +7,6 @@
  */
 
 export interface FinalizeArticleBody {
-  /** Personal collection to add the finalized article to. */
+  /** Optional personal collection to add the finalized article to. When omitted, the article is finalized without being added to a collection. */
   myCollectionId?: string;
 }

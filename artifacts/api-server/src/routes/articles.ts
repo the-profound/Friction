@@ -1,8 +1,32 @@
 import { Router, type IRouter } from "express";
-import { and, eq, ilike, ne } from "drizzle-orm";
+import { and, eq, ilike, ne, sql } from "drizzle-orm";
 import { db, articlesTable, myCollectionArticlesTable, myCollectionsTable, usersTable, type ArticleStatus } from "@workspace/db";
 import { CreateArticleBody, UpdateArticleBody, TransitionArticleStatusBody, FinalizeArticleBody, ReadingMemoQueryParams } from "@workspace/api-zod";
 import { ObjectStorageService } from "../lib/objectStorage";
+
+// Resolves a display collection name for a standalone article fetched via
+// getArticle. Team-collection membership is preferred (matches the chain
+// delivery context); personal-collection membership is the fallback.
+const articleCollectionNameSubquery = sql<string | null>`(
+  COALESCE(
+    (
+      SELECT tc.name
+      FROM team_collection_articles tca
+      JOIN team_collections tc ON tca.team_collection_id = tc.id
+      WHERE tca.article_id = ${articlesTable.id}
+      ORDER BY tca.added_at ASC
+      LIMIT 1
+    ),
+    (
+      SELECT mc.name
+      FROM my_collection_articles mca
+      JOIN my_collections mc ON mca.my_collection_id = mc.id
+      WHERE mca.article_id = ${articlesTable.id}
+      ORDER BY mca.added_at ASC
+      LIMIT 1
+    )
+  )
+)`;
 
 const FORWARD_TRANSITIONS: Record<string, string> = {
   DRAFT: "DIVIDING",
@@ -128,12 +152,24 @@ router.post("/articles", async (req, res) => {
 });
 
 router.get("/articles/:id", async (req, res) => {
-  const [article] = await db.select().from(articlesTable).where(eq(articlesTable.id, req.params.id));
-  if (!article) {
+  const [row] = await db
+    .select({
+      article: articlesTable,
+      authorNickname: usersTable.nickname,
+      collectionName: articleCollectionNameSubquery,
+    })
+    .from(articlesTable)
+    .leftJoin(usersTable, eq(usersTable.id, articlesTable.authorId))
+    .where(eq(articlesTable.id, req.params.id));
+  if (!row) {
     res.status(404).json({ error: "Article not found" });
     return;
   }
-  res.json(article);
+  res.json({
+    ...row.article,
+    authorNickname: row.authorNickname ?? null,
+    collectionName: row.collectionName ?? null,
+  });
 });
 
 router.patch("/articles/:id", async (req, res) => {

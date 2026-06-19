@@ -97,6 +97,8 @@ export interface Article {
   authorId: string;
   /** Author's nickname. Populated by listArticles when joining users; may be null on other endpoints. */
   authorNickname?: string | null;
+  /** Name of the collection this article belongs to (team collection preferred, personal collection fallback). Populated by getArticle; may be null on other endpoints. */
+  collectionName?: string | null;
   title: string;
   content: string;
   status: ArticleStatus;
@@ -153,7 +155,7 @@ export interface TransitionArticleBody {
 }
 
 export interface FinalizeArticleBody {
-  /** Personal collection to add the finalized article to. */
+  /** Optional personal collection to add the finalized article to. When omitted, the article is finalized without being added to a collection. */
   myCollectionId?: string;
 }
 

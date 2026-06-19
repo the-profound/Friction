@@ -1696,6 +1696,10 @@ components:
           type: string
           nullable: true
           description: Author's nickname. Populated by listArticles when joining users; may be null on other endpoints.
+        collectionName:
+          type: string
+          nullable: true
+          description: Name of the collection this article belongs to (team collection preferred, personal collection fallback). Populated by getArticle; may be null on other endpoints.
         title:
           type: string
         content:
@@ -1823,8 +1827,7 @@ components:
         myCollectionId:
           type: string
           format: uuid
-          description: Personal collection to add the finalized article to.
-      required: [myCollectionId]
+          description: Optional personal collection to add the finalized article to. When omitted, the article is finalized without being added to a collection.
 
     # ─── Inbox ──────────────────────────────────────
     InboxItem:

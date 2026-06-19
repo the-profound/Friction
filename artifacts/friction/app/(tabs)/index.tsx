@@ -600,12 +600,12 @@ export default function InboxScreen() {
           ? {
               authorName:
                 inboxItem?.sender?.nickname ??
-                (slot.article as any).authorNickname ??
+                slot.article.authorNickname ??
                 null,
-              collectionName: inboxItem?.collectionName ?? null,
-              collectionId: (inboxItem as any)?.sourceTeamCollectionId ?? null,
-              date: inboxItem?.visibleAt ?? null,
-              isNotice: (slot.article as any).isNotice ?? false,
+              collectionName: inboxItem?.collectionName ?? slot.article.collectionName ?? null,
+              collectionId: inboxItem?.sourceTeamCollectionId ?? null,
+              date: inboxItem?.visibleAt ?? slot.article.createdAt ?? null,
+              isNotice: slot.article.isNotice ?? false,
             }
           : {},
       );
@@ -618,9 +618,9 @@ export default function InboxScreen() {
     metaList.push({
       authorName: tapItem.sender?.nickname ?? tapItem.sender?.id ?? null,
       collectionName: tapItem.collectionName ?? null,
-      collectionId: (tapItem as any).sourceTeamCollectionId ?? null,
+      collectionId: tapItem.sourceTeamCollectionId ?? null,
       date: tapItem.visibleAt ?? null,
-      isNotice: (tapItem.article as any).isNotice ?? false,
+      isNotice: tapItem.article?.isNotice ?? false,
     });
 
     // Descendants — recursively collected from all inbox data
@@ -630,11 +630,11 @@ export default function InboxScreen() {
       if (!desc.article) continue;
       artList.push(desc.article);
       metaList.push({
-        authorName: desc.sender?.nickname ?? null,
-        collectionName: desc.collectionName ?? null,
-        collectionId: (desc as any).sourceTeamCollectionId ?? null,
-        date: desc.visibleAt ?? null,
-        isNotice: (desc.article as any).isNotice ?? false,
+        authorName: desc.sender?.nickname ?? desc.article.authorNickname ?? null,
+        collectionName: desc.collectionName ?? desc.article.collectionName ?? null,
+        collectionId: desc.sourceTeamCollectionId ?? null,
+        date: desc.visibleAt ?? desc.article.createdAt ?? null,
+        isNotice: desc.article.isNotice ?? false,
       });
     }
 
