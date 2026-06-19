@@ -136,6 +136,7 @@ export default function CardSelectOverlay({
   const swipeY = useRef(new Animated.Value(0)).current;
   const carouselX = useRef(new Animated.Value(0)).current;
   const detailsFade = useRef(new Animated.Value(1)).current;
+  const sidePeekFade = useRef(new Animated.Value(0)).current;
 
   // ── Carousel state ────────────────────────────────────────────────────────
   const [rendered, setRendered] = useState(false);
@@ -188,6 +189,7 @@ export default function CardSelectOverlay({
       activeIndexRef.current = initialIndex;
       carouselX.setValue(-initialIndex * SLOT_W);
       detailsFade.setValue(1);
+      sidePeekFade.setValue(0);
       setActiveIndex(initialIndex);
       setRendered(true);
       closingRef.current = false;
@@ -198,7 +200,13 @@ export default function CardSelectOverlay({
         tension: 70,
         friction: 12,
         useNativeDriver: false,
-      }).start();
+      }).start(() => {
+        Animated.timing(sidePeekFade, {
+          toValue: 1,
+          duration: 180,
+          useNativeDriver: false,
+        }).start();
+      });
     } else {
       openedRef.current = false;
       if (rendered && !closingRef.current) {
@@ -372,10 +380,11 @@ export default function CardSelectOverlay({
           <Animated.View style={[styles.carouselTrack, { width: trackW, transform: [{ translateX: carouselX }] }]}>
             {displayArticles.map((art, i) => {
               const meta = displayMetas[i] ?? {};
+              const slotOpacity = i === initialIndex ? 1 : sidePeekFade;
               return (
-                <View
+                <Animated.View
                   key={art?.id ?? `loading-${i}`}
-                  style={[styles.carouselSlot, i < displayArticles.length - 1 && { marginRight: OVERLAY_GAP }]}
+                  style={[styles.carouselSlot, i < displayArticles.length - 1 && { marginRight: OVERLAY_GAP }, { opacity: slotOpacity }]}
                 >
                   {art == null ? (
                     <SkeletonCard />
@@ -390,7 +399,7 @@ export default function CardSelectOverlay({
                       onPress={handleRead}
                     />
                   )}
-                </View>
+                </Animated.View>
               );
             })}
           </Animated.View>
