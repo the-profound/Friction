@@ -192,8 +192,6 @@ const styles = StyleSheet.create({
     width: Sizing.searchButtonSize,
     height: Sizing.searchButtonSize,
     borderRadius: Sizing.searchButtonSize / 2,
-    backgroundColor: Colors.zinc100,
-    borderWidth: 1.5,
-    borderColor: Colors.zinc200,
+    backgroundColor: Colors.searchBgInactive,
   },
 });

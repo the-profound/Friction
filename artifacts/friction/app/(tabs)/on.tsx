@@ -611,6 +611,7 @@ export default function OnScreen() {
           showSearch
           onSearchPress={handleSearchPress}
           searchActive={searchActive}
+          searchLast
           showKebab
           onKebabPress={enterSelectionMode}
         />
