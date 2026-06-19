@@ -217,11 +217,8 @@ export default function TeamCollectionDetailScreen() {
 
   const handleMemberPress = useCallback((item: TeamMemberWithUser) => {
     if (item.userId === userId) return;
-    setMemberTarget({
-      id: item.userId,
-      nickname: item.user?.nickname ?? "이름 없음",
-    });
-  }, [userId]);
+    router.push(`/user-profile/${item.userId}` as never);
+  }, [userId, router]);
 
   const handleSendNeighborRequest = useCallback(async () => {
     if (!memberTarget || createNeighborRequest.isPending) return;

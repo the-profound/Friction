@@ -602,6 +602,7 @@ export default function InboxScreen() {
                 inboxItem?.sender?.nickname ??
                 slot.article.authorNickname ??
                 null,
+              authorId: inboxItem?.sender?.id ?? null,
               collectionName: inboxItem?.collectionName ?? slot.article.collectionName ?? null,
               collectionId: inboxItem?.sourceTeamCollectionId ?? null,
               date: inboxItem?.visibleAt ?? slot.article.createdAt ?? null,
@@ -617,6 +618,7 @@ export default function InboxScreen() {
     artList.push(tapItem.article);
     metaList.push({
       authorName: tapItem.sender?.nickname ?? tapItem.sender?.id ?? null,
+      authorId: tapItem.sender?.id ?? null,
       collectionName: tapItem.collectionName ?? null,
       collectionId: tapItem.sourceTeamCollectionId ?? null,
       date: tapItem.visibleAt ?? null,
@@ -631,6 +633,7 @@ export default function InboxScreen() {
       artList.push(desc.article);
       metaList.push({
         authorName: desc.sender?.nickname ?? desc.article.authorNickname ?? null,
+        authorId: desc.sender?.id ?? null,
         collectionName: desc.collectionName ?? desc.article.collectionName ?? null,
         collectionId: desc.sourceTeamCollectionId ?? null,
         date: desc.visibleAt ?? desc.article.createdAt ?? null,
@@ -726,6 +729,7 @@ export default function InboxScreen() {
         onClose={handleModalClose}
         onRead={handleRead}
         onNavigateToCollection={handleNavigateToCollection}
+        onNavigateToAuthor={(authorId) => router.push(`/user-profile/${authorId}` as never)}
       />
 
       <ConfirmModal

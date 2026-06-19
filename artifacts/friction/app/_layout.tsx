@@ -181,6 +181,7 @@ function RootLayoutNav() {
           <Stack.Screen name="to-03" />
           <Stack.Screen name="to-send" options={{ presentation: "modal" }} />
           <Stack.Screen name="mypage" />
+          <Stack.Screen name="user-profile/[userId]" />
           <Stack.Screen name="mypage-neighbors" />
           <Stack.Screen name="mypage-sendrecords" />
           <Stack.Screen name="settings" options={{ presentation: "card" }} />

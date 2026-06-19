@@ -16,5 +16,14 @@ unauthenticated. Don't chase a non-bug.
 **How to apply:** to visually verify a logged-in tab screen you need real
 Supabase credentials. The dev DB seed (`artifacts/api-server/src/seed.ts`)
 inserts `users` rows but NOT matching Supabase auth accounts, so seeded users
-can't log in. Lean on `pnpm typecheck` (in `artifacts/friction`) plus pattern
-parity with sibling screens for confidence when auth login isn't available.
+can't log in. Lean on pattern parity with sibling screens for confidence when
+auth login isn't available.
+
+**tsc is NOT a clean gate here:** `npx tsc --noEmit` reports many *pre-existing*
+errors the codebase tolerates — `Article` lacks `authorNickname`/`isNotice`,
+`SendRecordWithDetails` lacks `collectionName`/`collectionId`, and `ApiError` is
+a class in `custom-fetch.d.ts` but is NOT re-exported from
+`@workspace/api-client-react`'s index (so importing it errors). Metro bundles
+fine regardless. To verify a new screen compiles, check the **Metro web bundle**
+("Web Bundled … N modules" with no error) rather than tsc. Match sibling-file
+patterns (e.g. `(slot.article as any).authorNickname`) instead of "fixing" these.

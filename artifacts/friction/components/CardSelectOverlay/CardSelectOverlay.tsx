@@ -39,6 +39,7 @@ export interface OriginLayout {
 
 export interface ChainArticleMeta {
   authorName?: string | null;
+  authorId?: string | null;
   collectionName?: string | null;
   collectionId?: string | null;
   date?: string | Date | null;
@@ -71,6 +72,8 @@ interface CardSelectOverlayProps {
   /** Called with the active carousel index when the user taps 읽기. */
   onRead: (index: number) => void;
   onNavigateToCollection?: (id: string) => void;
+  /** Called with the author's user id when the user taps the author name. */
+  onNavigateToAuthor?: (authorId: string) => void;
 }
 
 export default function CardSelectOverlay({
@@ -81,6 +84,7 @@ export default function CardSelectOverlay({
   onClose,
   onRead,
   onNavigateToCollection,
+  onNavigateToAuthor,
 }: CardSelectOverlayProps) {
   const insets = useSafeAreaInsets();
   const topInset = Platform.OS === "web" ? 67 : insets.top;
@@ -339,9 +343,10 @@ export default function CardSelectOverlay({
 
   // ── Active card info ──────────────────────────────────────────────────────
   const activeMeta = displayMetas[activeIndex] ?? {};
-  const { authorName, collectionName, collectionId, date, isNotice } = activeMeta;
+  const { authorName, authorId, collectionName, collectionId, date, isNotice } = activeMeta;
   const dateLabel = date ? formatDate(date) : "";
   const canTapCollection = !!(collectionId && onNavigateToCollection);
+  const canTapAuthor = !!(authorId && onNavigateToAuthor);
   const handleRead = useCallback(() => onRead(activeIndexRef.current), [onRead]);
 
   // ── Skeleton card (for loading slots) ────────────────────────────────────
@@ -430,7 +435,17 @@ export default function CardSelectOverlay({
             <View style={styles.infoRow}>
               <Text style={styles.infoText} numberOfLines={1}>{dateLabel}</Text>
               {authorName ? (
-                <><Text style={styles.infoSep}>·</Text><Text style={styles.infoText} numberOfLines={1}>{authorName}</Text></>
+                <>
+                  <Text style={styles.infoSep}>·</Text>
+                  {canTapAuthor ? (
+                    <Pressable onPress={() => { requestClose(); onNavigateToAuthor!(authorId!); }} hitSlop={6} style={styles.infoTappableRow}>
+                      <Text style={[styles.infoText, styles.infoTextTappable]} numberOfLines={1}>{authorName}</Text>
+                      <Feather name="chevron-right" size={12} color={Colors.zinc500} />
+                    </Pressable>
+                  ) : (
+                    <Text style={styles.infoText} numberOfLines={1}>{authorName}</Text>
+                  )}
+                </>
               ) : null}
               {collectionName ? (
                 <>
