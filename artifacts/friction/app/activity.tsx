@@ -24,7 +24,7 @@ export default function ActivityScreen() {
           <Feather name="arrow-left" size={22} color={Colors.zinc700} />
         </ScalePressable>
         <Text style={styles.title} allowFontScaling={false}>
-          활동 내역
+          프로필 관리
         </Text>
         <View style={styles.backButton} />
       </View>
@@ -33,7 +33,7 @@ export default function ActivityScreen() {
         <Feather name="clock" size={48} color={Colors.zinc300} />
         <Text style={styles.emptyTitle}>준비 중이에요</Text>
         <Text style={styles.emptySubtitle}>
-          활동 내역 기능은 곧 만나볼 수 있어요
+          프로필 관리 기능은 곧 만나볼 수 있어요
         </Text>
       </View>
     </View>

@@ -346,9 +346,9 @@ export default function MyScreen() {
             contentStyle={styles.actionButtonContent}
             onPress={() => router.push("/activity" as never)}
             accessibilityRole="button"
-            accessibilityLabel="활동 내역"
+            accessibilityLabel="프로필 관리"
           >
-            <Text style={styles.actionButtonText}>활동 내역</Text>
+            <Text style={styles.actionButtonText}>프로필 관리</Text>
           </ScalePressable>
         </View>
 
