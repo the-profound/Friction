@@ -124,15 +124,6 @@ export default function MyPageScreen() {
           )}
         </Section>
 
-        <Section title="활동">
-          <SettingRow
-            label="이웃 목록"
-            onPress={() => router.push("/mypage-neighbors" as never)}
-            showChevron
-            isLast
-          />
-        </Section>
-
         <Section title="정책">
           <SettingRow
             label="이용약관"
