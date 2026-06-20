@@ -674,7 +674,7 @@ export default function ReadScreen() {
       setMemoTitle("〈" + (article?.title ?? "") + "〉을 읽고");
       setQuestionBlockPhase(true);
       qPhaseScale.value = 1;
-      qPhaseScale.value = withSpring(0.7, { damping: 18, stiffness: 160 });
+      qPhaseScale.value = withSpring(0.7, { damping: 22, stiffness: 280, overshootClamping: true });
     }
   }, [reading.session.state, recentCollectionQuery.data, collectionsQuery.data]);
 
@@ -1435,7 +1435,7 @@ export default function ReadScreen() {
                       .join("\n\n");
                     if (qaContent) setMemoFreeMemo(qaContent);
                     setQuestionBlockAnswers(Array(QUESTION_BLOCK_QUESTIONS.length).fill(""));
-                    qPhaseScale.value = withSpring(1, { damping: 18, stiffness: 160 });
+                    qPhaseScale.value = withSpring(1, { damping: 22, stiffness: 280, overshootClamping: true });
                     setQuestionBlockPhase(false);
                     setMemoSheetVisible(true);
                   } else {
@@ -1451,7 +1451,7 @@ export default function ReadScreen() {
                       .join("\n\n");
                     if (qaContent) setMemoFreeMemo(qaContent);
                     setQuestionBlockAnswers(Array(QUESTION_BLOCK_QUESTIONS.length).fill(""));
-                    qPhaseScale.value = withSpring(1, { damping: 18, stiffness: 160 });
+                    qPhaseScale.value = withSpring(1, { damping: 22, stiffness: 280, overshootClamping: true });
                     setQuestionBlockPhase(false);
                     setMemoSheetVisible(true);
                   } else {
