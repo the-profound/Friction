@@ -155,6 +155,15 @@ export default function LoginScreen() {
     }
   }
 
+  async function handleDevLogin() {
+    setIsLoading(true);
+    try {
+      await signInWithPassword("minji@test.com", "00000000");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   const canSubmitLogin = email.trim().length > 0 && password.length > 0 && !isLoading;
   const canSubmitSignupStep1 =
     email.trim().length > 0 && password.length > 0 && passwordConfirm.length > 0 && !isLoading;
@@ -488,6 +497,14 @@ export default function LoginScreen() {
           </View>
         )}
       </ScrollView>
+      <ScalePressable
+        style={[styles.devButton, { bottom: insets.bottom + 12 }]}
+        contentStyle={styles.devButtonContent}
+        onPress={handleDevLogin}
+        disabled={isLoading}
+      >
+        <Text style={styles.devButtonText}>minji</Text>
+      </ScalePressable>
     </KeyboardAvoidingView>
   );
 }
@@ -699,5 +716,19 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     color: Colors.zinc900,
     textDecorationLine: "underline",
+  },
+  devButton: {
+    position: "absolute",
+    alignSelf: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  devButtonContent: {
+    alignItems: "center",
+  },
+  devButtonText: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc300,
   },
 });
