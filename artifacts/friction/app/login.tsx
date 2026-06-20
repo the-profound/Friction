@@ -164,6 +164,15 @@ export default function LoginScreen() {
     }
   }
 
+  async function handleHyeonjunLogin() {
+    setIsLoading(true);
+    try {
+      await signInWithPassword("mrglassjelly@gmail.com", "rhdckdrud1emd");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   const canSubmitLogin = email.trim().length > 0 && password.length > 0 && !isLoading;
   const canSubmitSignupStep1 =
     email.trim().length > 0 && password.length > 0 && passwordConfirm.length > 0 && !isLoading;
@@ -497,14 +506,24 @@ export default function LoginScreen() {
           </View>
         )}
       </ScrollView>
-      <ScalePressable
-        style={[styles.devButton, { bottom: insets.bottom + 12 }]}
-        contentStyle={styles.devButtonContent}
-        onPress={handleDevLogin}
-        disabled={isLoading}
-      >
-        <Text style={styles.devButtonText}>minji</Text>
-      </ScalePressable>
+      <View style={[styles.devButtonRow, { bottom: insets.bottom + 12 }]}>
+        <ScalePressable
+          style={styles.devButton}
+          contentStyle={styles.devButtonContent}
+          onPress={handleDevLogin}
+          disabled={isLoading}
+        >
+          <Text style={styles.devButtonText}>민지</Text>
+        </ScalePressable>
+        <ScalePressable
+          style={styles.devButton}
+          contentStyle={styles.devButtonContent}
+          onPress={handleHyeonjunLogin}
+          disabled={isLoading}
+        >
+          <Text style={styles.devButtonText}>현준</Text>
+        </ScalePressable>
+      </View>
     </KeyboardAvoidingView>
   );
 }
@@ -717,9 +736,12 @@ const styles = StyleSheet.create({
     color: Colors.zinc900,
     textDecorationLine: "underline",
   },
-  devButton: {
+  devButtonRow: {
     position: "absolute",
     alignSelf: "center",
+    flexDirection: "row",
+  },
+  devButton: {
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
@@ -729,6 +751,6 @@ const styles = StyleSheet.create({
   devButtonText: {
     ...Typography.caption,
     fontSize: 12,
-    color: Colors.zinc300,
+    color: Colors.zinc900,
   },
 });
