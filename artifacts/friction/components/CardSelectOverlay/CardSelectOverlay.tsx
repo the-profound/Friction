@@ -10,7 +10,9 @@ import {
   Dimensions,
   Platform,
   ActivityIndicator,
+  ScrollView,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
@@ -106,6 +108,36 @@ export default function CardSelectOverlay({
   const frozenOrigin = useRef(originLayout);
   if (originLayout) frozenOrigin.current = originLayout;
   const displayOrigin = frozenOrigin.current;
+
+  // ── Info bar scroll state ─────────────────────────────────────────────────
+  const [infoBarOverflowing, setInfoBarOverflowing] = useState(false);
+  const [infoBarAtEnd, setInfoBarAtEnd] = useState(false);
+  const infoScrollX = useRef(0);
+  const infoContentW = useRef(0);
+  const infoViewW = useRef(0);
+
+  const handleInfoContentSizeChange = useCallback((contentW: number) => {
+    infoContentW.current = contentW;
+    const overflows = contentW > infoViewW.current + 1;
+    setInfoBarOverflowing(overflows);
+    if (!overflows) setInfoBarAtEnd(false);
+    else setInfoBarAtEnd(infoScrollX.current + infoViewW.current >= contentW - 1);
+  }, []);
+
+  const handleInfoLayout = useCallback((viewW: number) => {
+    infoViewW.current = viewW;
+    const overflows = infoContentW.current > viewW + 1;
+    setInfoBarOverflowing(overflows);
+    if (!overflows) setInfoBarAtEnd(false);
+    else setInfoBarAtEnd(infoScrollX.current + viewW >= infoContentW.current - 1);
+  }, []);
+
+  const handleInfoScroll = useCallback((x: number) => {
+    infoScrollX.current = x;
+    setInfoBarAtEnd(x + infoViewW.current >= infoContentW.current - 1);
+  }, []);
+
+  const showGradient = infoBarOverflowing && !infoBarAtEnd;
 
   // ── Geometry ─────────────────────────────────────────────────────────────
   const reservedBelow = 64;
@@ -432,38 +464,56 @@ export default function CardSelectOverlay({
       >
         {dateLabel ? (
           <View style={styles.infoBar}>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoText} numberOfLines={1}>{dateLabel}</Text>
-              {authorName ? (
-                <>
-                  <Text style={styles.infoSep}>·</Text>
-                  {canTapAuthor ? (
-                    <Pressable onPress={() => { requestClose(); onNavigateToAuthor!(authorId!); }} hitSlop={6} style={styles.infoTappableRow}>
-                      <Text style={[styles.infoText, styles.infoTextTappable]} numberOfLines={1}>{authorName}</Text>
-                      <Feather name="chevron-right" size={12} color={Colors.zinc500} />
-                    </Pressable>
-                  ) : (
-                    <Text style={styles.infoText} numberOfLines={1}>{authorName}</Text>
-                  )}
-                </>
-              ) : null}
-              {collectionName ? (
-                <>
-                  <Text style={styles.infoSep}>·</Text>
-                  {canTapCollection ? (
-                    <Pressable onPress={() => { requestClose(); onNavigateToCollection!(collectionId!); }} hitSlop={6} style={styles.infoTappableRow}>
-                      <Text style={[styles.infoText, styles.infoTextTappable]} numberOfLines={1}>{collectionName}</Text>
-                      <Feather name="chevron-right" size={12} color={Colors.zinc500} />
-                    </Pressable>
-                  ) : (
-                    <Text style={styles.infoText} numberOfLines={1}>{collectionName}</Text>
-                  )}
-                </>
-              ) : null}
-              {isNotice ? (
-                <><Text style={styles.infoSep}>·</Text><Text style={[styles.infoText, styles.infoTextNotice]} numberOfLines={1}>오늘의 인사</Text></>
-              ) : null}
-            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              onLayout={(e) => handleInfoLayout(e.nativeEvent.layout.width)}
+              onContentSizeChange={(w) => handleInfoContentSizeChange(w)}
+              onScroll={(e) => handleInfoScroll(e.nativeEvent.contentOffset.x)}
+              scrollEventThrottle={16}
+            >
+              <View style={styles.infoRow}>
+                <Text style={styles.infoText}>{dateLabel}</Text>
+                {isNotice ? (
+                  <Text style={[styles.infoText, styles.infoTextNotice]}> 오늘의 인사</Text>
+                ) : null}
+                {authorName ? (
+                  <>
+                    <Text style={styles.infoSep}>·</Text>
+                    {canTapAuthor ? (
+                      <Pressable onPress={() => { requestClose(); onNavigateToAuthor!(authorId!); }} hitSlop={6} style={styles.infoTappableRow}>
+                        <Text style={styles.infoText}>{authorName}</Text>
+                        <Feather name="chevron-right" size={12} color={Colors.zinc700} />
+                      </Pressable>
+                    ) : (
+                      <Text style={styles.infoText}>{authorName}</Text>
+                    )}
+                  </>
+                ) : null}
+                {collectionName ? (
+                  <>
+                    <Text style={styles.infoSep}>·</Text>
+                    {canTapCollection ? (
+                      <Pressable onPress={() => { requestClose(); onNavigateToCollection!(collectionId!); }} hitSlop={6} style={styles.infoTappableRow}>
+                        <Text style={styles.infoText}>{collectionName}</Text>
+                        <Feather name="chevron-right" size={12} color={Colors.zinc700} />
+                      </Pressable>
+                    ) : (
+                      <Text style={styles.infoText}>{collectionName}</Text>
+                    )}
+                  </>
+                ) : null}
+              </View>
+            </ScrollView>
+            {showGradient ? (
+              <LinearGradient
+                colors={["rgba(255,255,255,0)", "rgba(255,255,255,0.92)"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.infoBarGradient}
+                pointerEvents="none"
+              />
+            ) : null}
           </View>
         ) : null}
 
@@ -514,11 +564,20 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 16,
     marginBottom: 10,
+    overflow: "hidden",
   },
-  infoRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 4 },
-  infoText: { ...Typography.caption, fontSize: 13, fontWeight: "600", color: Colors.zinc500 },
-  infoSep: { ...Typography.caption, fontSize: 13, fontWeight: "600", color: Colors.zinc400 },
-  infoTextTappable: { color: Colors.zinc700 },
+  infoRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  infoBarGradient: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    width: 48,
+    borderTopRightRadius: 12,
+    borderBottomRightRadius: 12,
+  },
+  infoText: { ...Typography.caption, fontSize: 13, fontWeight: "600", color: Colors.zinc700 },
+  infoSep: { ...Typography.caption, fontSize: 13, fontWeight: "600", color: Colors.zinc500, marginHorizontal: 4 },
   infoTappableRow: { flexDirection: "row", alignItems: "center", gap: 2 },
   infoTextNotice: { color: Colors.noticeAccent },
   dotsRow: { flexDirection: "row", justifyContent: "center", gap: 6, marginBottom: 10 },
