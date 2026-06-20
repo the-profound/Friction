@@ -1404,56 +1404,6 @@ export default function ReadScreen() {
               </View>
             </Animated.View>
 
-            {/* Question block — fixed at the bottom of the reading area,
-                just above the progress bar. Fades + slides in as qPhaseScale goes 1 → 0.7. */}
-            <Animated.View
-              style={[{ position: "absolute", left: 16, right: 16, bottom: 16 }, questionBlockPosStyle]}
-              pointerEvents={questionBlockPhase ? "auto" : "none"}
-            >
-              <QuestionBlockCard
-                questionIndex={questionBlockIndex}
-                answers={questionBlockAnswers}
-                onAnswerChange={(index, value) => {
-                  setQuestionBlockAnswers(prev => {
-                    const copy = [...prev];
-                    copy[index] = value;
-                    return copy;
-                  });
-                }}
-                onNext={() => {
-                  if (questionBlockIndex >= QUESTION_BLOCK_QUESTIONS.length - 1) {
-                    const qaContent = QUESTION_BLOCK_QUESTIONS
-                      .map((q, i) => ({ q, a: questionBlockAnswers[i]?.trim() ?? "" }))
-                      .filter(({ a }) => a.length > 0)
-                      .map(({ q, a }) => `${q}\n${a}`)
-                      .join("\n\n");
-                    if (qaContent) setMemoFreeMemo(qaContent);
-                    setQuestionBlockAnswers(Array(QUESTION_BLOCK_QUESTIONS.length).fill(""));
-                    qPhaseScale.value = withSpring(1, { damping: 22, stiffness: 280, overshootClamping: true });
-                    setQuestionBlockPhase(false);
-                    setMemoSheetVisible(true);
-                  } else {
-                    setQuestionBlockIndex(i => i + 1);
-                  }
-                }}
-                onSkip={() => {
-                  if (questionBlockIndex >= QUESTION_BLOCK_QUESTIONS.length - 1) {
-                    const qaContent = QUESTION_BLOCK_QUESTIONS
-                      .map((q, i) => ({ q, a: questionBlockAnswers[i]?.trim() ?? "" }))
-                      .filter(({ a }) => a.length > 0)
-                      .map(({ q, a }) => `${q}\n${a}`)
-                      .join("\n\n");
-                    if (qaContent) setMemoFreeMemo(qaContent);
-                    setQuestionBlockAnswers(Array(QUESTION_BLOCK_QUESTIONS.length).fill(""));
-                    qPhaseScale.value = withSpring(1, { damping: 22, stiffness: 280, overshootClamping: true });
-                    setQuestionBlockPhase(false);
-                    setMemoSheetVisible(true);
-                  } else {
-                    setQuestionBlockIndex(i => i + 1);
-                  }
-                }}
-              />
-            </Animated.View>
           </View>
         </GestureDetector>
       ) : (
@@ -1461,6 +1411,62 @@ export default function ReadScreen() {
           <Text style={styles.emptyTitle}>페이지가 없습니다</Text>
         </View>
       )}
+
+      {/* ── Question block — fixed above the progress bar ─────────────────
+          Rendered outside GestureDetector so bottom is relative to the outer
+          container. bottomBarHeight + 16 puts the card's bottom edge 16px
+          above the progress bar. */}
+      <Animated.View
+        style={[
+          { position: "absolute", left: 16, right: 16, bottom: bottomBarHeight + 16, zIndex: 10 },
+          questionBlockPosStyle,
+        ]}
+        pointerEvents={questionBlockPhase ? "auto" : "none"}
+      >
+        <QuestionBlockCard
+          questionIndex={questionBlockIndex}
+          answers={questionBlockAnswers}
+          onAnswerChange={(index, value) => {
+            setQuestionBlockAnswers(prev => {
+              const copy = [...prev];
+              copy[index] = value;
+              return copy;
+            });
+          }}
+          onNext={() => {
+            if (questionBlockIndex >= QUESTION_BLOCK_QUESTIONS.length - 1) {
+              const qaContent = QUESTION_BLOCK_QUESTIONS
+                .map((q, i) => ({ q, a: questionBlockAnswers[i]?.trim() ?? "" }))
+                .filter(({ a }) => a.length > 0)
+                .map(({ q, a }) => `${q}\n${a}`)
+                .join("\n\n");
+              if (qaContent) setMemoFreeMemo(qaContent);
+              setQuestionBlockAnswers(Array(QUESTION_BLOCK_QUESTIONS.length).fill(""));
+              qPhaseScale.value = withSpring(1, { damping: 22, stiffness: 280, overshootClamping: true });
+              setQuestionBlockPhase(false);
+              setMemoSheetVisible(true);
+            } else {
+              setQuestionBlockIndex(i => i + 1);
+            }
+          }}
+          onSkip={() => {
+            if (questionBlockIndex >= QUESTION_BLOCK_QUESTIONS.length - 1) {
+              const qaContent = QUESTION_BLOCK_QUESTIONS
+                .map((q, i) => ({ q, a: questionBlockAnswers[i]?.trim() ?? "" }))
+                .filter(({ a }) => a.length > 0)
+                .map(({ q, a }) => `${q}\n${a}`)
+                .join("\n\n");
+              if (qaContent) setMemoFreeMemo(qaContent);
+              setQuestionBlockAnswers(Array(QUESTION_BLOCK_QUESTIONS.length).fill(""));
+              qPhaseScale.value = withSpring(1, { damping: 22, stiffness: 280, overshootClamping: true });
+              setQuestionBlockPhase(false);
+              setMemoSheetVisible(true);
+            } else {
+              setQuestionBlockIndex(i => i + 1);
+            }
+          }}
+        />
+      </Animated.View>
 
       {/* ── Selection pill overlay — fixed above the bottom bar ─────────── */}
       {showSelectionPill && (
