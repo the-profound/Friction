@@ -10,6 +10,8 @@ import {
   Alert,
   AppState,
   Platform,
+  ScrollView,
+  Pressable,
   useWindowDimensions,
   type LayoutChangeEvent,
 } from "react-native";
@@ -73,7 +75,6 @@ import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import { useUser } from "@/contexts/UserContext";
 import { useActiveReading } from "@/contexts/ActiveReadingContext";
 import type { ReadingMode } from "@/lib/policies";
-import MemoBottomSheet from "@/components/MemoBottomSheet/MemoBottomSheet";
 import { useToast } from "@/contexts/ToastContext";
 
 function computeReaderLayout(availableWidth: number, availableHeight: number, overrideContainerWidth?: number): ReaderLayout {
@@ -139,6 +140,132 @@ function computeReaderLayout(availableWidth: number, availableHeight: number, ov
     titleBarHeight,
   };
 }
+
+/* ─── 질문 블록 질문 데이터 ────────────────────────────────────────── */
+const QUESTION_BLOCK_QUESTIONS = [
+  "작성자가 하고자 하는 말은 무엇이었나요?",
+  "이 글을 읽고 떠오르는 다른 글이나 경험이 있다면 무엇인가요?",
+  "이 글을 읽기 전과 읽은 후, 당신의 생각이 가장 크게 바뀐 지점은 어디인가요?",
+];
+
+/* ─── QuestionBlockCard ────────────────────────────────────────────── */
+function QuestionBlockCard({
+  questionIndex,
+  onNext,
+  onSkip,
+}: {
+  questionIndex: number;
+  onNext: () => void;
+  onSkip: () => void;
+}) {
+  const [answers, setAnswers] = useState<string[]>(["", "", ""]);
+  const q = QUESTION_BLOCK_QUESTIONS[questionIndex];
+
+  return (
+    <View style={qbStyles.card}>
+      <View style={qbStyles.headerRow}>
+        <Text style={qbStyles.questionText}>{q}</Text>
+        {questionIndex === 0 && (
+          <Pressable style={qbStyles.iconBtn} hitSlop={8}>
+            <Feather name="refresh-cw" size={13} color={Colors.noticeAccent} />
+          </Pressable>
+        )}
+        <Pressable style={qbStyles.iconBtn} onPress={onSkip} hitSlop={8}>
+          <Feather name="x" size={13} color={Colors.zinc400} />
+        </Pressable>
+      </View>
+      <TextInput
+        style={qbStyles.answerInput}
+        value={answers[questionIndex]}
+        onChangeText={(t) => {
+          const copy = [...answers];
+          copy[questionIndex] = t;
+          setAnswers(copy);
+        }}
+        placeholder="생각을 기록하세요..."
+        placeholderTextColor={Colors.zinc400}
+        multiline
+        textAlignVertical="top"
+      />
+      <View style={qbStyles.checkRow}>
+        <Pressable style={qbStyles.checkBtn} onPress={onNext} hitSlop={8}>
+          <Feather name="check" size={13} color="#16a34a" />
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+const qbStyles = StyleSheet.create({
+  card: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    ...Platform.select({
+      web: {
+        boxShadow: "0 -2px 20px rgba(0,0,0,0.10), 0 4px 16px rgba(0,0,0,0.08)",
+      } as object,
+      default: {
+        elevation: 6,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.10,
+        shadowRadius: 12,
+      },
+    }),
+    borderWidth: 1,
+    borderColor: Colors.zinc100,
+    padding: 14,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+    marginBottom: 10,
+  },
+  questionText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "Pretendard-SemiBold",
+    fontWeight: "600",
+    color: Colors.zinc700,
+    lineHeight: 20,
+  },
+  iconBtn: {
+    padding: 2,
+    marginTop: 1,
+    flexShrink: 0,
+  },
+  answerInput: {
+    width: "100%",
+    borderWidth: 0,
+    backgroundColor: Colors.zinc50,
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 13,
+    fontFamily: "Eulyoo1945-Regular",
+    color: Colors.zinc700,
+    lineHeight: 22,
+    minHeight: 88,
+    textAlignVertical: "top",
+  },
+  checkRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    marginTop: 8,
+  },
+  checkBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 999,
+    backgroundColor: "rgba(22,163,74,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(22,163,74,0.28)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});
+
+
 
 export default function ReadScreen() {
   const insets = useSafeAreaInsets();
@@ -226,6 +353,10 @@ export default function ReadScreen() {
   const [memoSheetVisible, setMemoSheetVisible] = useState(false);
   const [memoAppendContent, setMemoAppendContent] = useState<string | undefined>(undefined);
   const [pendingCompletionAfterMemo, setPendingCompletionAfterMemo] = useState(false);
+  const [questionBlockPhase, setQuestionBlockPhase] = useState(false);
+  const [questionBlockIndex, setQuestionBlockIndex] = useState(0);
+  const [memoFreeMemo, setMemoFreeMemo] = useState("");
+  const [memoTitle, setMemoTitle] = useState("");
   const [collectionPickerMode, setCollectionPickerMode] = useState(false);
   const [pickerTab, setPickerTab] = useState<"list" | "create">("list");
   const [newCollectionName, setNewCollectionName] = useState("");
@@ -275,6 +406,48 @@ export default function ReadScreen() {
       ),
     [pageListSize.width, pageListSize.height, screenWidth, effectiveLayoutWidth],
   );
+
+  // Question-block-phase entrance animations
+  const qPhaseScale = useSharedValue(1);
+
+  // Card wrapper: scale + translateY so the card moves up and shrinks without
+  // any layout change (transform-only → no tree remount, no pop).
+  const cardAnimStyle = useAnimatedStyle(() => {
+    "worklet";
+    const s = qPhaseScale.value;
+    const containerH = pageListSize.height;
+    const frameH = layout.frameHeight;
+    // progress: 0 when s==1 (normal reading), 1 when s==0.7 (question phase)
+    const progress = Math.max(0, Math.min(1, (1 - s) / 0.3));
+    // Desired card-top at full progress = 24px from container top.
+    // Card visual top (before translateY) at scale s = (containerH - frameH*s) / 2
+    // translateY needed so visual top = 24:
+    //   translateY = (24 - (containerH - frameH*s)/2) * progress
+    // Simplified (derivation shows it's linear in progress):
+    //   translateY = progress * (24 - containerH/2 + frameH * 0.35)
+    const translateY = progress * (24 - containerH / 2 + frameH * 0.35);
+    return {
+      transform: [{ scale: s }, { translateY }],
+    };
+  });
+
+  // Question block: absolutely positioned just below the card's visual bottom.
+  const questionBlockPosStyle = useAnimatedStyle(() => {
+    "worklet";
+    const s = qPhaseScale.value;
+    const containerH = pageListSize.height;
+    const frameH = layout.frameHeight;
+    const progress = Math.max(0, Math.min(1, (1 - s) / 0.3));
+    const translateY = progress * (24 - containerH / 2 + frameH * 0.35);
+    // Card visual bottom = containerH/2 + translateY + frameH*s/2
+    const cardVisualBottom = containerH / 2 + translateY + frameH * s / 2;
+    return {
+      top: cardVisualBottom + 12,
+      opacity: progress,
+      transform: [{ translateY: (1 - progress) * 40 }],
+    };
+  });
+
   const createSentence = useCreateStoredSentence();
   const collectionsQuery = useListMyCollections({ ownerId: userId });
   const addToCollection = useAddArticleToMyCollection();
@@ -485,19 +658,15 @@ export default function ReadScreen() {
       } else {
         setSelectedCollectionId(undefined);
       }
-      // 완독 후 저장/보관 시트 바로 대신 읽기 메모를 먼저 띄운다.
-      // 메모가 비어 있을 때만 기본 질문 블록을 삽입한다.
-      // setMemoAppendContent 는 WebView 가 이미 로드된 경우에도
-      // setMarkdown 커맨드로 내용을 주입해주는 유일한 채널이다.
-      const DEFAULT_QUESTION = "Q. 작성자가 하고자 하는 말은 무엇이었나요?\n\n";
-      if (!memoContentRef.current.trim()) {
-        readingMemo.updateMemoContent(DEFAULT_QUESTION);
-        setMemoAppendContent(DEFAULT_QUESTION);
-      }
+      // 완독 후 질문 블록 → 메모 → 저장/보관 순서의 3단계 흐름.
       setPendingCompletionAfterMemo(true);
-      setMemoSheetVisible(true);
+      setQuestionBlockIndex(0);
+      setMemoTitle("〈" + (article?.title ?? "") + "〉을 읽고");
+      setQuestionBlockPhase(true);
+      qPhaseScale.value = 1;
+      qPhaseScale.value = withSpring(0.7, { damping: 18, stiffness: 160 });
     }
-  }, [reading.session.state, recentCollectionQuery.data, collectionsQuery.data, readingMemo.updateMemoContent]);
+  }, [reading.session.state, recentCollectionQuery.data, collectionsQuery.data]);
 
   useEffect(() => {
     if (reading.session.state === "COMPLETED_COMMITTED") {
@@ -530,7 +699,9 @@ export default function ReadScreen() {
     router.back();
   }, [mode, isListEntry, reading, router, readingMemo]);
 
-  const canNavigate = mode === "re_read" || reading.session.state === "READING";
+  const canNavigate = questionBlockPhase
+    ? true
+    : (mode === "re_read" || reading.session.state === "READING");
 
   const showingCover = hasCover && currentPage === 0;
   // Whether the current slot shows the title bar at the bottom
@@ -633,6 +804,7 @@ export default function ReadScreen() {
     isTextSelecting: false,
     isDragging: false,
     isCommitting: false,
+    questionBlockPhase: false,
   });
   gestureState.current = {
     canNavigate,
@@ -642,6 +814,7 @@ export default function ReadScreen() {
     isTextSelecting: isTextSelectingRef.current,
     isDragging: isDraggingRef.current,
     isCommitting: false, // updated inline
+    questionBlockPhase,
   };
   const isCommittingRef = useRef(false);
 
@@ -729,8 +902,10 @@ export default function ReadScreen() {
       // Boundary checks
       if (goingNext && gs.isOnLastPage) {
         translateXSV.value = withSpring(baseline, snapConfig);
-        // Trigger completion (no swipe animation needed)
-        runOnJS(handleSwipeLeftRef.current)();
+        // Trigger completion (no swipe animation needed) — skip if in question block phase
+        if (!gs.questionBlockPhase) {
+          runOnJS(handleSwipeLeftRef.current)();
+        }
         return;
       }
       if (!goingNext && gs.atBoundaryLeft) {
@@ -1096,127 +1271,163 @@ export default function ReadScreen() {
       )}
 
       {totalPages > 0 ? (
+        /* ── Unified reading layout: always one GestureDetector.
+           In question-block phase the card scales+translates up via transform
+           (no tree remount → smooth animation), and the question block is
+           absolutely positioned just below the card's visual bottom. ── */
         <GestureDetector gesture={combinedGesture}>
           <View
             style={[styles.pageListContainer, Platform.OS === "web" ? { touchAction: "none" } as object : undefined]}
             onLayout={handlePageListLayout}
           >
-            <View
-              style={[
-                styles.readerShadowWrapper,
-                {
-                  width: layout.frameWidth,
-                  height: layout.frameHeight,
-                },
-              ]}
-            >
-            <View
-              style={[
-                styles.readerFrame,
-                {
-                  width: layout.frameWidth,
-                  height: layout.frameHeight,
-                  backgroundColor: ReaderTokens.bodyBg,
-                },
-              ]}
-            >
-              {/* Scale-transform wrapper */}
-              <View style={{
-                position: "absolute",
-                left: (layout.frameWidth - layout.containerWidth) / 2,
-                top: (layout.frameHeight - layout.containerHeight) / 2,
-                width: layout.containerWidth,
-                height: layout.containerHeight,
-                transform: [{ scale: layout.scaleFactor }],
-                overflow: "hidden",
-              }}>
-                {/* Windowed page slots, absolutely positioned at left = pageIndex * W.
-                    Each slot is keyed by its absolute page index, so when currentPage
-                    changes from N to N+1 the WebView the user is looking at keeps
-                    the same React identity (and the same DOM content) — only the
-                    off-screen edge slot is mounted/unmounted. translateX slides the
-                    whole row; baseline = -currentPage * W so no snap-back is needed
-                    after a page turn (the animation lands exactly on the new
-                    baseline). This eliminates the flicker that happened when the
-                    "current slot" WebView received a new markdown prop and had to
-                    re-inject content via the JS bridge. */}
-                <Animated.View
-                  style={[
-                    {
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: layout.containerWidth,
-                      height: layout.containerHeight,
-                    },
-                    rowAnimStyle,
-                  ]}
-                  pointerEvents="box-none"
-                >
-                  {(() => {
-                    const slots: React.ReactNode[] = [];
-                    // Render a small window around currentPage. We keep the
-                    // immediate neighbours mounted so swipes show pre-rendered
-                    // content, and unmount everything else to bound memory.
-                    const start = Math.max(0, currentPage - 1);
-                    const end = Math.min(totalPages - 1, currentPage + 1);
-                    for (let pageIdx = start; pageIdx <= end; pageIdx++) {
-                      const isCover = pageIdx === 0;
-                      const cIdx = pageIdx - 1;
-                      const node = isCover ? (
-                        <CoverPage
-                          cover={cover}
-                          title={article?.title ?? ""}
-                          authorName={authorName}
-                          containerWidth={layout.containerWidth}
-                          containerHeight={layout.containerHeight}
-                        />
-                      ) : (cIdx >= 0 && cIdx < contentPages.length ? (
-                        <PageView
-                          content={contentPages[cIdx]}
-                          onTextSelect={handleTextSelect}
-                          onDragStateChange={handleDragStateChange}
-                          bottomInset={insets.bottom}
-                          layout={layout}
-                          clearSignal={clearSelectionSignal}
-                        />
-                      ) : null);
-                      if (!node) continue;
-                      slots.push(
-                        <View
-                          key={`page-${pageIdx}`}
-                          style={{
-                            position: "absolute",
-                            top: 0,
-                            left: pageIdx * layout.containerWidth,
-                            width: layout.containerWidth,
-                            height: layout.containerHeight,
-                          }}
-                        >
-                          {node}
-                        </View>,
-                      );
-                    }
-                    return slots;
-                  })()}
-                </Animated.View>
+            {/* Card wrapper: scale + translateY animation (transform-only) */}
+            <Animated.View style={cardAnimStyle}>
+              <View
+                style={[
+                  styles.readerShadowWrapper,
+                  {
+                    width: layout.frameWidth,
+                    height: layout.frameHeight,
+                  },
+                ]}
+              >
+              <View
+                style={[
+                  styles.readerFrame,
+                  {
+                    width: layout.frameWidth,
+                    height: layout.frameHeight,
+                    backgroundColor: ReaderTokens.bodyBg,
+                  },
+                ]}
+              >
+                {/* Scale-transform wrapper */}
+                <View style={{
+                  position: "absolute",
+                  left: (layout.frameWidth - layout.containerWidth) / 2,
+                  top: (layout.frameHeight - layout.containerHeight) / 2,
+                  width: layout.containerWidth,
+                  height: layout.containerHeight,
+                  transform: [{ scale: layout.scaleFactor }],
+                  overflow: "hidden",
+                }}>
+                  {/* Windowed page slots, absolutely positioned at left = pageIndex * W.
+                      Each slot is keyed by its absolute page index, so when currentPage
+                      changes from N to N+1 the WebView the user is looking at keeps
+                      the same React identity (and the same DOM content) — only the
+                      off-screen edge slot is mounted/unmounted. translateX slides the
+                      whole row; baseline = -currentPage * W so no snap-back is needed
+                      after a page turn (the animation lands exactly on the new
+                      baseline). This eliminates the flicker that happened when the
+                      "current slot" WebView received a new markdown prop and had to
+                      re-inject content via the JS bridge. */}
+                  <Animated.View
+                    style={[
+                      {
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: layout.containerWidth,
+                        height: layout.containerHeight,
+                      },
+                      rowAnimStyle,
+                    ]}
+                    pointerEvents="box-none"
+                  >
+                    {(() => {
+                      const slots: React.ReactNode[] = [];
+                      // Render a small window around currentPage. We keep the
+                      // immediate neighbours mounted so swipes show pre-rendered
+                      // content, and unmount everything else to bound memory.
+                      const start = Math.max(0, currentPage - 1);
+                      const end = Math.min(totalPages - 1, currentPage + 1);
+                      for (let pageIdx = start; pageIdx <= end; pageIdx++) {
+                        const isCover = pageIdx === 0;
+                        const cIdx = pageIdx - 1;
+                        const node = isCover ? (
+                          <CoverPage
+                            cover={cover}
+                            title={article?.title ?? ""}
+                            authorName={authorName}
+                            containerWidth={layout.containerWidth}
+                            containerHeight={layout.containerHeight}
+                          />
+                        ) : (cIdx >= 0 && cIdx < contentPages.length ? (
+                          <PageView
+                            content={contentPages[cIdx]}
+                            onTextSelect={handleTextSelect}
+                            onDragStateChange={handleDragStateChange}
+                            bottomInset={insets.bottom}
+                            layout={layout}
+                            clearSignal={clearSelectionSignal}
+                          />
+                        ) : null);
+                        if (!node) continue;
+                        slots.push(
+                          <View
+                            key={`page-${pageIdx}`}
+                            style={{
+                              position: "absolute",
+                              top: 0,
+                              left: pageIdx * layout.containerWidth,
+                              width: layout.containerWidth,
+                              height: layout.containerHeight,
+                            }}
+                          >
+                            {node}
+                          </View>,
+                        );
+                      }
+                      return slots;
+                    })()}
+                  </Animated.View>
 
-                {/* Title bar: fixed overlay at bottom of scale wrapper.
-                    Lives OUTSIDE the 3-slot animated row so it never causes
-                    layout shifts when article data loads or page changes. */}
-                {showTitleBar && (
-                  <View style={[styles.titleBar, { position: "absolute", bottom: 0, left: 0, right: 0 }]} pointerEvents="none">
-                    <Text style={dynamicStyles.articleTitle} numberOfLines={1}>{article!.title.replace(/[\r\n]+/g, " ")}</Text>
-                    {mode === "re_read" && (
-                      <View style={styles.modeBadge}>
-                        <Text style={dynamicStyles.modeBadgeText}>다시읽기</Text>
-                      </View>
-                    )}
-                  </View>
-                )}
+                  {/* Title bar: fixed overlay at bottom of scale wrapper.
+                      Lives OUTSIDE the 3-slot animated row so it never causes
+                      layout shifts when article data loads or page changes. */}
+                  {showTitleBar && (
+                    <View style={[styles.titleBar, { position: "absolute", bottom: 0, left: 0, right: 0 }]} pointerEvents="none">
+                      <Text style={dynamicStyles.articleTitle} numberOfLines={1}>{article!.title.replace(/[\r\n]+/g, " ")}</Text>
+                      {mode === "re_read" && (
+                        <View style={styles.modeBadge}>
+                          <Text style={dynamicStyles.modeBadgeText}>다시읽기</Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+                </View>
               </View>
-            </View>
-            </View>
+              </View>
+            </Animated.View>
+
+            {/* Question block — absolutely positioned just below the card's
+                visual bottom. Fades + slides in as qPhaseScale goes 1 → 0.7. */}
+            <Animated.View
+              style={[{ position: "absolute", left: 16, right: 16 }, questionBlockPosStyle]}
+              pointerEvents={questionBlockPhase ? "auto" : "none"}
+            >
+              <QuestionBlockCard
+                questionIndex={questionBlockIndex}
+                onNext={() => {
+                  if (questionBlockIndex >= QUESTION_BLOCK_QUESTIONS.length - 1) {
+                    qPhaseScale.value = withSpring(1, { damping: 18, stiffness: 160 });
+                    setQuestionBlockPhase(false);
+                    setMemoSheetVisible(true);
+                  } else {
+                    setQuestionBlockIndex(i => i + 1);
+                  }
+                }}
+                onSkip={() => {
+                  if (questionBlockIndex >= QUESTION_BLOCK_QUESTIONS.length - 1) {
+                    qPhaseScale.value = withSpring(1, { damping: 18, stiffness: 160 });
+                    setQuestionBlockPhase(false);
+                    setMemoSheetVisible(true);
+                  } else {
+                    setQuestionBlockIndex(i => i + 1);
+                  }
+                }}
+              />
+            </Animated.View>
           </View>
         </GestureDetector>
       ) : (
@@ -1565,28 +1776,70 @@ export default function ReadScreen() {
         </View>
       </BottomSheet>
 
-      <MemoBottomSheet
+      {/* ── 읽기 후 메모 시트 (질문 블록 → 메모 → 저장/보관 흐름) ─── */}
+      <BottomSheet
         visible={memoSheetVisible}
         onClose={() => {
-          // 낙관적 닫기: 시트를 즉시 닫고 저장은 백그라운드에서 진행한다.
-          // 실패 시 useReadingMemo가 자동 1회 재시도 후 onSaveError 토스트로 알린다.
           setMemoSheetVisible(false);
           setMemoAppendContent(undefined);
           readingMemo.closeWithBackgroundSave();
-          // 완독 후 자동 열린 메모였으면 닫힐 때 저장/보관 시트를 띄운다.
           if (pendingCompletionAfterMemo) {
             setPendingCompletionAfterMemo(false);
             setCompletionSheetVisible(true);
           }
         }}
-        initialContent={readingMemo.memoContent}
-        appendContent={memoAppendContent}
-        initialTitle={readingMemo.memoTitle}
-        defaultTitlePlaceholder={readingMemo.defaultMemoTitle}
-        onTitleChange={readingMemo.updateMemoTitle}
-        saveState={readingMemo.saveState}
-        onContentChange={readingMemo.updateMemoContent}
-      />
+        snapPoints={[0.82]}
+        enableDragDown={false}
+        dismissable={false}
+        keyboardAware
+      >
+        {/* title row */}
+        <View style={newMemoStyles.titleRow}>
+          <TextInput
+            style={newMemoStyles.titleInput}
+            value={memoTitle}
+            onChangeText={setMemoTitle}
+            placeholder="제목"
+            placeholderTextColor={Colors.zinc400}
+            returnKeyType="done"
+          />
+          <Pressable
+            onPress={() => {
+              setMemoSheetVisible(false);
+              setMemoAppendContent(undefined);
+              readingMemo.closeWithBackgroundSave();
+              if (pendingCompletionAfterMemo) {
+                setPendingCompletionAfterMemo(false);
+                setCompletionSheetVisible(true);
+              }
+            }}
+            hitSlop={8}
+          >
+            <Text style={newMemoStyles.closeText}>닫기</Text>
+          </Pressable>
+        </View>
+
+        {/* divider */}
+        <View style={newMemoStyles.divider} />
+
+        {/* scrollable memo area */}
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={newMemoStyles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <TextInput
+            style={newMemoStyles.freeMemoInput}
+            value={memoFreeMemo}
+            onChangeText={setMemoFreeMemo}
+            placeholder="자유롭게 메모하세요..."
+            placeholderTextColor={Colors.zinc400}
+            multiline
+            textAlignVertical="top"
+          />
+        </ScrollView>
+      </BottomSheet>
 
       <ConfirmModal
         visible={!!duplicatePrompt}
@@ -1605,6 +1858,59 @@ export default function ReadScreen() {
     </View>
   );
 }
+
+const newMemoStyles = StyleSheet.create({
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 18,
+    paddingTop: 6,
+    paddingBottom: 8,
+  },
+  titleInput: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: "Pretendard-SemiBold",
+    fontWeight: "700",
+    color: Colors.zinc800,
+    marginRight: 12,
+    padding: 0,
+  },
+  closeText: {
+    fontSize: 14,
+    fontFamily: "Pretendard",
+    color: Colors.zinc400,
+    flexShrink: 0,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: Colors.zinc100,
+    marginHorizontal: 16,
+  },
+  scrollContent: {
+    padding: 16,
+    paddingBottom: 32,
+  },
+  freeMemoContainer: {
+    marginTop: 12,
+  },
+  freeMemoSeparator: {
+    height: 1,
+    backgroundColor: Colors.zinc100,
+    marginBottom: 12,
+  },
+  freeMemoInput: {
+    fontSize: 14,
+    fontFamily: "Eulyoo1945-Regular",
+    color: Colors.zinc700,
+    lineHeight: 26,
+    minHeight: 80,
+    textAlignVertical: "top",
+    backgroundColor: "transparent",
+    padding: 0,
+  },
+});
 
 interface ReaderLayout {
   containerWidth: number;
