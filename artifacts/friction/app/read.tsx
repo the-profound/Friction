@@ -441,18 +441,12 @@ export default function ReadScreen() {
     };
   });
 
-  // Question block: absolutely positioned just below the card's visual bottom.
+  // Question block: fade + slide animation only — position is fixed via JSX style.
   const questionBlockPosStyle = useAnimatedStyle(() => {
     "worklet";
     const s = qPhaseScale.value;
-    const containerH = containerHSV.value;
-    const frameH = frameHSV.value;
     const progress = Math.max(0, Math.min(1, (1 - s) / 0.3));
-    const translateY = progress * (24 - containerH / 2 + frameH * 0.35);
-    // Card visual bottom = containerH/2 + translateY + frameH*s/2
-    const cardVisualBottom = containerH / 2 + translateY + frameH * s / 2;
     return {
-      top: cardVisualBottom + 36,
       opacity: progress,
       transform: [{ translateY: (1 - progress) * 40 }],
     };
@@ -1410,10 +1404,10 @@ export default function ReadScreen() {
               </View>
             </Animated.View>
 
-            {/* Question block — absolutely positioned just below the card's
-                visual bottom. Fades + slides in as qPhaseScale goes 1 → 0.7. */}
+            {/* Question block — fixed at the bottom of the reading area,
+                just above the progress bar. Fades + slides in as qPhaseScale goes 1 → 0.7. */}
             <Animated.View
-              style={[{ position: "absolute", left: 16, right: 16 }, questionBlockPosStyle]}
+              style={[{ position: "absolute", left: 16, right: 16, bottom: 16 }, questionBlockPosStyle]}
               pointerEvents={questionBlockPhase ? "auto" : "none"}
             >
               <QuestionBlockCard
