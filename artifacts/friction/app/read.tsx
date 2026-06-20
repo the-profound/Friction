@@ -452,7 +452,7 @@ export default function ReadScreen() {
     // Card visual bottom = containerH/2 + translateY + frameH*s/2
     const cardVisualBottom = containerH / 2 + translateY + frameH * s / 2;
     return {
-      top: cardVisualBottom + 12,
+      top: cardVisualBottom + 36,
       opacity: progress,
       transform: [{ translateY: (1 - progress) * 40 }],
     };
