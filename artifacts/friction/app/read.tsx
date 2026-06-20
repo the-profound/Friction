@@ -151,14 +151,17 @@ const QUESTION_BLOCK_QUESTIONS = [
 /* ─── QuestionBlockCard ────────────────────────────────────────────── */
 function QuestionBlockCard({
   questionIndex,
+  answers,
+  onAnswerChange,
   onNext,
   onSkip,
 }: {
   questionIndex: number;
+  answers: string[];
+  onAnswerChange: (index: number, value: string) => void;
   onNext: () => void;
   onSkip: () => void;
 }) {
-  const [answers, setAnswers] = useState<string[]>(["", "", ""]);
   const q = QUESTION_BLOCK_QUESTIONS[questionIndex];
 
   return (
@@ -177,11 +180,7 @@ function QuestionBlockCard({
       <TextInput
         style={qbStyles.answerInput}
         value={answers[questionIndex]}
-        onChangeText={(t) => {
-          const copy = [...answers];
-          copy[questionIndex] = t;
-          setAnswers(copy);
-        }}
+        onChangeText={(t) => onAnswerChange(questionIndex, t)}
         placeholder="생각을 기록하세요..."
         placeholderTextColor={Colors.zinc400}
         multiline
@@ -355,6 +354,9 @@ export default function ReadScreen() {
   const [pendingCompletionAfterMemo, setPendingCompletionAfterMemo] = useState(false);
   const [questionBlockPhase, setQuestionBlockPhase] = useState(false);
   const [questionBlockIndex, setQuestionBlockIndex] = useState(0);
+  const [questionBlockAnswers, setQuestionBlockAnswers] = useState<string[]>(
+    () => Array(QUESTION_BLOCK_QUESTIONS.length).fill(""),
+  );
   const [memoFreeMemo, setMemoFreeMemo] = useState("");
   const [memoTitle, setMemoTitle] = useState("");
   const [collectionPickerMode, setCollectionPickerMode] = useState(false);
@@ -1416,8 +1418,23 @@ export default function ReadScreen() {
             >
               <QuestionBlockCard
                 questionIndex={questionBlockIndex}
+                answers={questionBlockAnswers}
+                onAnswerChange={(index, value) => {
+                  setQuestionBlockAnswers(prev => {
+                    const copy = [...prev];
+                    copy[index] = value;
+                    return copy;
+                  });
+                }}
                 onNext={() => {
                   if (questionBlockIndex >= QUESTION_BLOCK_QUESTIONS.length - 1) {
+                    const qaContent = QUESTION_BLOCK_QUESTIONS
+                      .map((q, i) => ({ q, a: questionBlockAnswers[i]?.trim() ?? "" }))
+                      .filter(({ a }) => a.length > 0)
+                      .map(({ q, a }) => `${q}\n${a}`)
+                      .join("\n\n");
+                    if (qaContent) setMemoFreeMemo(qaContent);
+                    setQuestionBlockAnswers(Array(QUESTION_BLOCK_QUESTIONS.length).fill(""));
                     qPhaseScale.value = withSpring(1, { damping: 18, stiffness: 160 });
                     setQuestionBlockPhase(false);
                     setMemoSheetVisible(true);
@@ -1427,6 +1444,13 @@ export default function ReadScreen() {
                 }}
                 onSkip={() => {
                   if (questionBlockIndex >= QUESTION_BLOCK_QUESTIONS.length - 1) {
+                    const qaContent = QUESTION_BLOCK_QUESTIONS
+                      .map((q, i) => ({ q, a: questionBlockAnswers[i]?.trim() ?? "" }))
+                      .filter(({ a }) => a.length > 0)
+                      .map(({ q, a }) => `${q}\n${a}`)
+                      .join("\n\n");
+                    if (qaContent) setMemoFreeMemo(qaContent);
+                    setQuestionBlockAnswers(Array(QUESTION_BLOCK_QUESTIONS.length).fill(""));
                     qPhaseScale.value = withSpring(1, { damping: 18, stiffness: 160 });
                     setQuestionBlockPhase(false);
                     setMemoSheetVisible(true);
@@ -1790,6 +1814,7 @@ export default function ReadScreen() {
         onClose={() => {
           setMemoSheetVisible(false);
           setMemoAppendContent(undefined);
+          setMemoFreeMemo("");
           readingMemo.closeWithBackgroundSave();
           if (pendingCompletionAfterMemo) {
             setPendingCompletionAfterMemo(false);
@@ -1815,6 +1840,7 @@ export default function ReadScreen() {
             onPress={() => {
               setMemoSheetVisible(false);
               setMemoAppendContent(undefined);
+              setMemoFreeMemo("");
               readingMemo.closeWithBackgroundSave();
               if (pendingCompletionAfterMemo) {
                 setPendingCompletionAfterMemo(false);
