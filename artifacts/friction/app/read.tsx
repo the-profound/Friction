@@ -409,14 +409,22 @@ export default function ReadScreen() {
 
   // Question-block-phase entrance animations
   const qPhaseScale = useSharedValue(1);
+  // Shared values for layout dimensions — worklets must only read shared values,
+  // not capture plain JS objects from the closure (Reanimated 4 restriction).
+  const containerHSV = useSharedValue(pageListSize.height);
+  const frameHSV = useSharedValue(layout.frameHeight);
+  useLayoutEffect(() => {
+    containerHSV.value = pageListSize.height;
+    frameHSV.value = layout.frameHeight;
+  }, [pageListSize.height, layout.frameHeight]);
 
   // Card wrapper: scale + translateY so the card moves up and shrinks without
   // any layout change (transform-only → no tree remount, no pop).
   const cardAnimStyle = useAnimatedStyle(() => {
     "worklet";
     const s = qPhaseScale.value;
-    const containerH = pageListSize.height;
-    const frameH = layout.frameHeight;
+    const containerH = containerHSV.value;
+    const frameH = frameHSV.value;
     // progress: 0 when s==1 (normal reading), 1 when s==0.7 (question phase)
     const progress = Math.max(0, Math.min(1, (1 - s) / 0.3));
     // Desired card-top at full progress = 24px from container top.
@@ -435,8 +443,8 @@ export default function ReadScreen() {
   const questionBlockPosStyle = useAnimatedStyle(() => {
     "worklet";
     const s = qPhaseScale.value;
-    const containerH = pageListSize.height;
-    const frameH = layout.frameHeight;
+    const containerH = containerHSV.value;
+    const frameH = frameHSV.value;
     const progress = Math.max(0, Math.min(1, (1 - s) / 0.3));
     const translateY = progress * (24 - containerH / 2 + frameH * 0.35);
     // Card visual bottom = containerH/2 + translateY + frameH*s/2
