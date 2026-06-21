@@ -172,7 +172,6 @@ export default function CardSelectOverlay({
   const swipeY = useRef(new Animated.Value(0)).current;
   const carouselX = useRef(new Animated.Value(0)).current;
   const detailsFade = useRef(new Animated.Value(1)).current;
-  const sidePeekFade = useRef(new Animated.Value(0)).current;
 
   // ── Carousel state ────────────────────────────────────────────────────────
   const [rendered, setRendered] = useState(false);
@@ -225,7 +224,6 @@ export default function CardSelectOverlay({
       activeIndexRef.current = initialIndex;
       carouselX.setValue(-initialIndex * SLOT_W);
       detailsFade.setValue(1);
-      sidePeekFade.setValue(0);
       setActiveIndex(initialIndex);
       setRendered(true);
       closingRef.current = false;
@@ -236,13 +234,7 @@ export default function CardSelectOverlay({
         tension: 70,
         friction: 12,
         useNativeDriver: false,
-      }).start(() => {
-        Animated.timing(sidePeekFade, {
-          toValue: 1,
-          duration: 180,
-          useNativeDriver: false,
-        }).start();
-      });
+      }).start();
     } else {
       openedRef.current = false;
       if (rendered && !closingRef.current) {
@@ -277,21 +269,31 @@ export default function CardSelectOverlay({
     if (closingRef.current) return;
     closingRef.current = true;
     openedRef.current = false;
-    // Snap back to the tapped article before closing
     const initIdx = prevInitialIndexRef.current;
+
+    const runCloseParallel = () => {
+      Animated.parallel([
+        Animated.timing(progress, { toValue: 0, duration: 240, useNativeDriver: false }),
+        Animated.timing(swipeY, { toValue: 0, duration: 200, useNativeDriver: false }),
+      ]).start(() => {
+        setRendered(false);
+        closingRef.current = false;
+        onClose();
+      });
+    };
+
     if (activeIndexRef.current !== initIdx) {
-      carouselX.setValue(-initIdx * SLOT_W);
-      activeIndexRef.current = initIdx;
+      Animated.timing(carouselX, {
+        toValue: -initIdx * SLOT_W,
+        duration: 180,
+        useNativeDriver: false,
+      }).start(() => {
+        activeIndexRef.current = initIdx;
+        runCloseParallel();
+      });
+    } else {
+      runCloseParallel();
     }
-    Animated.parallel([
-      Animated.timing(progress, { toValue: 0, duration: 240, useNativeDriver: false }),
-      Animated.timing(swipeY, { toValue: 0, duration: 200, useNativeDriver: false }),
-      Animated.timing(sidePeekFade, { toValue: 0, duration: 100, useNativeDriver: false }),
-    ]).start(() => {
-      setRendered(false);
-      closingRef.current = false;
-      onClose();
-    });
   };
   const requestClose = useCallback(() => runCloseRef.current(), []);
 
@@ -336,10 +338,11 @@ export default function CardSelectOverlay({
           newIdx = Math.max(0, Math.min(n - 1, newIdx));
           const changed = newIdx !== activeIndexRef.current;
           activeIndexRef.current = newIdx;
-          Animated.spring(carouselX, { toValue: -newIdx * SLOT_W, useNativeDriver: false, tension: 100, friction: 20, overshootClamping: true }).start(() => {
-            if (changed) setActiveIndex(newIdx);
-            Animated.timing(detailsFade, { toValue: 1, duration: 150, useNativeDriver: false }).start();
-          });
+          if (changed) setActiveIndex(newIdx);
+          Animated.spring(carouselX, { toValue: -newIdx * SLOT_W, useNativeDriver: false, tension: 100, friction: 20, overshootClamping: true }).start();
+          setTimeout(() => {
+            Animated.timing(detailsFade, { toValue: 1, duration: 120, useNativeDriver: false }).start();
+          }, 80);
         } else if (gestureDirRef.current === "v") {
           if (g.dy > 80 || g.vy > 0.8) runCloseRef.current();
           else Animated.spring(swipeY, { toValue: 0, useNativeDriver: false, tension: 200, friction: 20 }).start();
@@ -351,7 +354,7 @@ export default function CardSelectOverlay({
       onPanResponderTerminate: () => {
         Animated.spring(swipeY, { toValue: 0, useNativeDriver: false, tension: 200, friction: 20 }).start();
         Animated.spring(carouselX, { toValue: -activeIndexRef.current * SLOT_W, useNativeDriver: false, tension: 100, friction: 20 }).start();
-        Animated.timing(detailsFade, { toValue: 1, duration: 150, useNativeDriver: false }).start();
+        Animated.timing(detailsFade, { toValue: 1, duration: 120, useNativeDriver: false }).start();
         gestureDirRef.current = null;
       },
     }),
@@ -418,7 +421,7 @@ export default function CardSelectOverlay({
           <Animated.View style={[styles.carouselTrack, { width: trackW, transform: [{ translateX: carouselX }] }]}>
             {displayArticles.map((art, i) => {
               const meta = displayMetas[i] ?? {};
-              const slotOpacity = i === initialIndex ? 1 : sidePeekFade;
+              const slotOpacity = i === initialIndex ? 1 : progressDetailsOpacity;
               return (
                 <Animated.View
                   key={art?.id ?? `loading-${i}`}
