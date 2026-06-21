@@ -5,19 +5,19 @@ import type { MainTabKey, OfSubTabKey, ToSubTabKey } from "@/constants/tokens";
 import type { NavContextValue, NavLayer } from "@/types/navigation";
 
 const TAB_ROUTES: Record<MainTabKey, Href> = {
-  IN: "/(tabs)/inbox" as Href,
+  IN: "/(tabs)/" as Href,
   ON: "/(tabs)/on" as Href,
   AR: "/(tabs)/archive" as Href,
   OF: "/(tabs)/of" as Href,
-  TO: "/(tabs)/my" as Href,
+  TO: "/(tabs)/to" as Href,
 };
 
 const SEGMENT_TO_TAB: Record<string, MainTabKey> = {
-  inbox: "IN",
+  index: "IN",
   on: "ON",
   archive: "AR",
   of: "OF",
-  my: "TO",
+  to: "TO",
 };
 
 interface DetailRouteInfo {
@@ -139,10 +139,10 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
   const setToSubTab = useCallback((subTab: ToSubTabKey) => {
     setToSubTabState(subTab);
     lastSyncRef.current = { ...lastSyncRef.current, toSub: subTab };
-    if (pathnameRef.current === "/my") {
+    if (pathnameRef.current === "/to") {
       router.setParams({ subTab });
     } else {
-      router.navigate({ pathname: "/(tabs)/my", params: { subTab } } as Href);
+      router.navigate({ pathname: "/(tabs)/to", params: { subTab } } as Href);
     }
   }, []);
 

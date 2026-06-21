@@ -38,17 +38,17 @@ export default function TabLayout() {
   return (
     <>
       <Tabs
-        initialRouteName="inbox"
+        initialRouteName="index"
         screenOptions={{
           headerShown: false,
           tabBarStyle: { display: "none" },
         }}
       >
-        <Tabs.Screen name="inbox" options={{ title: "수신" }} />
+        <Tabs.Screen name="index" options={{ title: "수신" }} />
         <Tabs.Screen name="of" options={{ title: "모임" }} />
         <Tabs.Screen name="on" options={{ title: "기록" }} />
         <Tabs.Screen name="archive" options={{ title: "보관" }} />
-        <Tabs.Screen name="my" options={{ title: "마이" }} />
+        <Tabs.Screen name="to" options={{ title: "마이" }} />
       </Tabs>
       <NavBar />
       {showRecordFab && activeTab === "ON" && (
