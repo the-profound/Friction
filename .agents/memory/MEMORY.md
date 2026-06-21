@@ -1,2 +1,3 @@
 - [Friction app testing](friction-app-testing.md) — (tabs) routes are blank when logged out; preview is Supabase-auth-gated, seeded users cannot log in.
 - [Friction dev workflow](friction-dev-workflow.md) — openapi.yaml is SSOT (run codegen); api-server has no hot-reload (restart workflow); types need `tsc --build` but runtime bundles src; known baseline tsc errors.
+- [Friction reader page-turn](friction-reader-pager.md) — WebViews ignore RN zIndex when overlapping; use side-by-side pager. Reader padding token is shared SSOT across 4 screens (pagination coupling, no scroll).

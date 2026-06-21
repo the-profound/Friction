@@ -345,14 +345,12 @@ export default function ReadScreen() {
   const hasCover = !!article;
 
 
-  const [completionSheetVisible, setCompletionSheetVisible] = useState(false);
+  const [finishOverlayVisible, setFinishOverlayVisible] = useState(false);
   const [sentencePopupVisible, setSentencePopupVisible] = useState(false);
   const [selectedText, setSelectedText] = useState("");
   const [clearSelectionSignal, setClearSelectionSignal] = useState(0);
   const [memoSheetVisible, setMemoSheetVisible] = useState(false);
   const [memoAppendContent, setMemoAppendContent] = useState<string | undefined>(undefined);
-  const [pendingCompletionAfterMemo, setPendingCompletionAfterMemo] = useState(false);
-  const [questionBlockPhase, setQuestionBlockPhase] = useState(false);
   const [questionBlockIndex, setQuestionBlockIndex] = useState(0);
   const [questionBlockAnswers, setQuestionBlockAnswers] = useState<string[]>(
     () => Array(QUESTION_BLOCK_QUESTIONS.length).fill(""),
@@ -365,18 +363,17 @@ export default function ReadScreen() {
   const [newCollectionDesc, setNewCollectionDesc] = useState("");
   const [isCreatingCollection, setIsCreatingCollection] = useState(false);
   useEffect(() => {
-    if (!completionSheetVisible) {
+    if (!finishOverlayVisible) {
       setCollectionPickerMode(false);
       setPickerTab("list");
       setNewCollectionName("");
       setNewCollectionDesc("");
     }
-  }, [completionSheetVisible]);
+  }, [finishOverlayVisible]);
   const [showSelectionPill, setShowSelectionPill] = useState(false);
   const showSelectionPillRef = useRef(false);
   const selectionPillDismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectionPillText, setSelectionPillText] = useState("");
-  const [bottomBarHeight, setBottomBarHeight] = useState(70);
 
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | undefined>(undefined);
   const [pageListSize, setPageListSize] = useState({ width: 0, height: 0 });
@@ -409,8 +406,19 @@ export default function ReadScreen() {
     [pageListSize.width, pageListSize.height, screenWidth, effectiveLayoutWidth],
   );
 
-  // Question-block-phase entrance animations
-  const qPhaseScale = useSharedValue(1);
+  // Entry/exit black overlay animation — starts opaque (value=1) so the
+  // reader "fades in" on mount, and fades back to opaque when exiting.
+  const overlayOpacity = useSharedValue(1);
+  const overlayAnimStyle = useAnimatedStyle(() => ({
+    opacity: overlayOpacity.value,
+  }));
+
+  // Last-page [ < ] button fade-in
+  const lastPageBtnOpacity = useSharedValue(mode === "re_read" ? 1 : 0);
+  const lastPageBtnAnimStyle = useAnimatedStyle(() => ({
+    opacity: lastPageBtnOpacity.value,
+  }));
+
   // Shared values for layout dimensions — worklets must only read shared values,
   // not capture plain JS objects from the closure (Reanimated 4 restriction).
   const containerHSV = useSharedValue(pageListSize.height);
@@ -420,37 +428,9 @@ export default function ReadScreen() {
     frameHSV.value = layout.frameHeight;
   }, [pageListSize.height, layout.frameHeight]);
 
-  // Card wrapper: scale + translateY so the card moves up and shrinks without
-  // any layout change (transform-only → no tree remount, no pop).
-  const cardAnimStyle = useAnimatedStyle(() => {
-    "worklet";
-    const s = qPhaseScale.value;
-    const containerH = containerHSV.value;
-    const frameH = frameHSV.value;
-    // progress: 0 when s==1 (normal reading), 1 when s==0.7 (question phase)
-    const progress = Math.max(0, Math.min(1, (1 - s) / 0.3));
-    // Desired card-top at full progress = 24px from container top.
-    // Card visual top (before translateY) at scale s = (containerH - frameH*s) / 2
-    // translateY needed so visual top = 24:
-    //   translateY = (24 - (containerH - frameH*s)/2) * progress
-    // Simplified (derivation shows it's linear in progress):
-    //   translateY = progress * (24 - containerH/2 + frameH * 0.35)
-    const translateY = progress * (24 - containerH / 2 + frameH * 0.35);
-    return {
-      transform: [{ scale: s }, { translateY }],
-    };
-  });
-
-  // Question block: fade + slide animation only — position is fixed via JSX style.
-  const questionBlockPosStyle = useAnimatedStyle(() => {
-    "worklet";
-    const s = qPhaseScale.value;
-    const progress = Math.max(0, Math.min(1, (1 - s) / 0.3));
-    return {
-      opacity: progress,
-      transform: [{ translateY: (1 - progress) * 40 }],
-    };
-  });
+  const cardAnimStyle = useAnimatedStyle(() => ({
+    transform: [],
+  }));
 
   const createSentence = useCreateStoredSentence();
   const collectionsQuery = useListMyCollections({ ownerId: userId });
@@ -575,6 +555,27 @@ export default function ReadScreen() {
     setMemoSheetVisible(true);
   }, []);
 
+  // Entry animation: fade in reader only once, when content is actually ready.
+  // Using [] would fire immediately during the loading state (before the overlay
+  // is rendered), so the 400ms animation finishes before content appears.
+  const hasStartedEntryFadeRef = useRef(false);
+  useEffect(() => {
+    if (!articleLoading && !reading.isRestoring && reading.isSessionHydrated && !hasStartedEntryFadeRef.current) {
+      hasStartedEntryFadeRef.current = true;
+      overlayOpacity.value = withTiming(0, { duration: 400, easing: Easing.out(Easing.ease) });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [articleLoading, reading.isRestoring, reading.isSessionHydrated]);
+
+  // Last-page [ < ] button: fade in when last page reached; re_read always shows
+  useEffect(() => {
+    if (mode === "re_read") {
+      lastPageBtnOpacity.value = 1;
+      return;
+    }
+    lastPageBtnOpacity.value = withTiming(isOnLastPage ? 1 : 0, { duration: 300, easing: Easing.out(Easing.ease) });
+  }, [isOnLastPage, mode]);
+
   useEffect(() => {
     if (mode === "basic" && articleId) {
       setActiveSession({ articleId, inboxId, mode });
@@ -662,13 +663,11 @@ export default function ReadScreen() {
       } else {
         setSelectedCollectionId(undefined);
       }
-      // 완독 후 질문 블록 → 메모 → 저장/보관 순서의 3단계 흐름.
-      setPendingCompletionAfterMemo(true);
       setQuestionBlockIndex(0);
+      setMemoFreeMemo("");
+      setQuestionBlockAnswers(Array(QUESTION_BLOCK_QUESTIONS.length).fill(""));
       setMemoTitle("〈" + (article?.title ?? "") + "〉을 읽고");
-      setQuestionBlockPhase(true);
-      qPhaseScale.value = 1;
-      qPhaseScale.value = withSpring(0.7, { damping: 22, stiffness: 280, overshootClamping: true });
+      setFinishOverlayVisible(true);
     }
   }, [reading.session.state, recentCollectionQuery.data, collectionsQuery.data]);
 
@@ -700,16 +699,14 @@ export default function ReadScreen() {
       reading.pause();
     }
     await readingMemo.cleanup();
-    router.back();
-  }, [mode, isListEntry, reading, router, readingMemo]);
+    overlayOpacity.value = withTiming(1, { duration: 350, easing: Easing.in(Easing.ease) }, (finished) => {
+      if (finished) runOnJS(router.back)();
+    });
+  }, [mode, isListEntry, reading, router, readingMemo, overlayOpacity]);
 
-  const canNavigate = questionBlockPhase
-    ? true
-    : (mode === "re_read" || reading.session.state === "READING");
+  const canNavigate = mode === "re_read" || reading.session.state === "READING";
 
   const showingCover = hasCover && currentPage === 0;
-  // Whether the current slot shows the title bar at the bottom
-  const showTitleBar = !showingCover && !!article;
 
   const handleSwipeLeft = useCallback(() => {
     if (!canNavigate) return;
@@ -761,19 +758,18 @@ export default function ReadScreen() {
   }, []);
 
   // ── Reanimated shared values ──────────────────────────────────────────────
-  // translateXSV positions the row of absolute-positioned page slots so that
-  // `currentPage` sits at viewport center. Baseline = -currentPage * W; gesture
-  // adds a delta on top. Because each slot is keyed by its absolute page index
-  // (and absolutely positioned at left = pageIndex * W), the WebView that the
-  // user is actually looking at during a swipe is the *same* React instance
-  // before and after the page turn — no re-injection, no snap-back, no flash.
-  const translateXSV = useSharedValue(-currentPage * layout.containerWidth);
-  // baselineXSV mirrors -currentPage * W so the gesture worklet can compute
-  // absolute targets without reading JS-side state.
-  const baselineXSV = useSharedValue(-currentPage * layout.containerWidth);
+  // Individual page-turn animation (replaces shared row translateX).
+  // pageTurnSV: 0 = no movement; –W = page fully turned (always moves negative).
+  // containerWidthSV: synced copy of layout.containerWidth for worklet reads.
+  const pageTurnSV = useSharedValue(0);
+  const currentPageSV = useSharedValue(currentPage);
+  const containerWidthSV = useSharedValue(layout.containerWidth);
 
   const containerWidthRef = useRef(layout.containerWidth);
-  useEffect(() => { containerWidthRef.current = layout.containerWidth; }, [layout.containerWidth]);
+  useEffect(() => {
+    containerWidthRef.current = layout.containerWidth;
+    containerWidthSV.value = layout.containerWidth;
+  }, [layout.containerWidth, containerWidthSV]);
   const canNavigateRef = useRef(canNavigate);
   useEffect(() => { canNavigateRef.current = canNavigate; }, [canNavigate]);
   const currentPageRef = useRef(currentPage);
@@ -783,21 +779,24 @@ export default function ReadScreen() {
   const hasCoverRef = useRef(hasCover);
   useEffect(() => { hasCoverRef.current = hasCover; }, [hasCover]);
 
-  // Animated style for the row container
-  const rowAnimStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateXSV.value }],
-  }));
-
-  // Sync baseline + translateX whenever currentPage / W changes externally
-  // (e.g. jumpToPage, layout change). After a successful gesture commit the
-  // animation already lands on the new baseline so this is a no-op there.
+  // Reset animation state after every page-turn commit (currentPage or layout change).
   useLayoutEffect(() => {
-    const W = layout.containerWidth;
-    const target = -currentPage * W;
-    baselineXSV.value = target;
-    translateXSV.value = target;
+    currentPageSV.value = currentPage;
+    pageTurnSV.value = 0;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, layout.containerWidth]);
+
+  // Side-by-side pager: prev/current/next are laid out adjacently at
+  // left = relPos * W (–W, 0, +W) and ALL slots slide together by pageTurnSV.
+  // Because pages never overlap, each WebView (page + background + text) moves
+  // as one solid sheet — like a real sheet of paper sliding across.
+  //   pageTurnSV  0 → –W : forward turn (next comes into view from the right)
+  //   pageTurnSV  0 → +W : backward turn (prev comes into view from the left)
+  // z-index is intentionally NOT used: native WebViews do not honour RN z-index
+  // when overlapping, which was the root cause of the text-overlap bug.
+  const pageSlideAnimStyle = useAnimatedStyle(() => {
+    return { transform: [{ translateX: pageTurnSV.value }] };
+  });
 
   // ── Gesture state ref (always fresh, avoids stale closure in useMemo) ────
   const gestureState = useRef({
@@ -808,7 +807,6 @@ export default function ReadScreen() {
     isTextSelecting: false,
     isDragging: false,
     isCommitting: false,
-    questionBlockPhase: false,
   });
   gestureState.current = {
     canNavigate,
@@ -818,7 +816,6 @@ export default function ReadScreen() {
     isTextSelecting: isTextSelectingRef.current,
     isDragging: isDraggingRef.current,
     isCommitting: false, // updated inline
-    questionBlockPhase,
   };
   const isCommittingRef = useRef(false);
 
@@ -828,14 +825,41 @@ export default function ReadScreen() {
   useEffect(() => {
     finishPageTurnRef.current = (direction: -1 | 1) => {
       isCommittingRef.current = false;
+      // pageTurnSV is reset by useLayoutEffect after currentPage changes
       if (direction === -1) handleSwipeLeftRef.current();
       else handleSwipeRightRef.current();
-      // translateXSV resets in useLayoutEffect after currentPage changes
     };
   }, []);
   useEffect(() => {
     openMemoRef.current = () => handleOpenMemo();
   }, [handleOpenMemo]);
+
+  // Trigger the leftward page-turn animation then call reading.nextPage()
+  // Used by both the gesture handler (extra left swipe on last page) and
+  // the floating [ < ] button on last page in normal read mode.
+  const triggerLastPageTransitionRef = useRef(() => {});
+  useEffect(() => {
+    triggerLastPageTransitionRef.current = () => {
+      // Forward turn: slide everything left so the finish overlay scrolls in.
+      pageTurnSV.value = withTiming(-containerWidthRef.current, {
+        duration: 240,
+        easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
+      }, () => {
+        runOnJS(handleSwipeLeftRef.current)();
+      });
+    };
+  });
+
+  // Floating [ < ] button handler:
+  //   - re_read mode or finish overlay visible → fade out and go back
+  //   - normal read mode, last page → left-slide into finish overlay
+  const handleFloatingBackBtn = useCallback(() => {
+    if (mode === "re_read" || reading.session.state !== "READING" || !isOnLastPage) {
+      handleBack();
+      return;
+    }
+    triggerLastPageTransitionRef.current();
+  }, [mode, reading.session.state, isOnLastPage, handleBack]);
 
   const snapConfig = { damping: 18, stiffness: 280, mass: 0.8 };
 
@@ -873,12 +897,19 @@ export default function ReadScreen() {
       if (dx < 0 && gs.isOnLastPage) return;  // no next on last page
       if (dx > 0 && gs.atBoundaryLeft) return; // no prev at start
 
-      translateXSV.value = baselineXSV.value + dx;
+      const W = gs.containerWidth || 300;
+      if (dx < 0) {
+        // Forward swipe: slide the whole strip left (next enters from the right).
+        pageTurnSV.value = Math.max(dx, -W);
+      } else if (dx > 0) {
+        // Backward swipe: slide the whole strip right (prev enters from the left).
+        pageTurnSV.value = Math.min(dx, W);
+      }
     })
     .onEnd((e) => {
       if (isCommittingRef.current) return;
       if (isDraggingRef.current || isTextSelectingRef.current) {
-        translateXSV.value = withSpring(baselineXSV.value, snapConfig);
+        pageTurnSV.value = withSpring(0, snapConfig);
         return;
       }
 
@@ -887,17 +918,16 @@ export default function ReadScreen() {
       const dy = e.translationY;
       const absDx = Math.abs(dx);
       const W = gs.containerWidth || 300;
-      const baseline = baselineXSV.value;
 
       // Upward swipe → open memo sheet
       if (dy < -50 && Math.abs(dy) > absDx * 1.5) {
-        translateXSV.value = withSpring(baseline, snapConfig);
+        pageTurnSV.value = withSpring(0, snapConfig);
         runOnJS(openMemoRef.current)();
         return;
       }
 
       if (!gs.canNavigate) {
-        translateXSV.value = withSpring(baseline, snapConfig);
+        pageTurnSV.value = withSpring(0, snapConfig);
         return;
       }
 
@@ -905,15 +935,18 @@ export default function ReadScreen() {
 
       // Boundary checks
       if (goingNext && gs.isOnLastPage) {
-        translateXSV.value = withSpring(baseline, snapConfig);
-        // Trigger completion (no swipe animation needed) — skip if in question block phase
-        if (!gs.questionBlockPhase) {
+        // Last page extra swipe → animate into finish overlay (forward direction).
+        isCommittingRef.current = true;
+        pageTurnSV.value = withTiming(-W, {
+          duration: 240,
+          easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
+        }, () => {
           runOnJS(handleSwipeLeftRef.current)();
-        }
+        });
         return;
       }
       if (!goingNext && gs.atBoundaryLeft) {
-        translateXSV.value = withSpring(baseline, snapConfig);
+        pageTurnSV.value = withSpring(0, snapConfig);
         return;
       }
 
@@ -922,17 +955,15 @@ export default function ReadScreen() {
       const shouldCommit = absDx > THRESHOLD || Math.abs(e.velocityX) > VELOCITY_THRESHOLD;
 
       if (!shouldCommit) {
-        translateXSV.value = withSpring(baseline, snapConfig);
+        pageTurnSV.value = withSpring(0, snapConfig);
         return;
       }
 
       const direction: -1 | 1 = goingNext ? -1 : 1;
       isCommittingRef.current = true;
 
-      // Animate the row to the new page's absolute baseline. After this lands,
-      // useLayoutEffect (currentPage dep) will re-set translateX to the same
-      // value, so there is no visible snap when React commits the new window.
-      translateXSV.value = withTiming(baseline + direction * W, {
+      // Forward → slide strip left (–W); backward → slide strip right (+W).
+      pageTurnSV.value = withTiming(direction === -1 ? -W : W, {
         duration: 240,
         easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
       }, () => {
@@ -940,9 +971,9 @@ export default function ReadScreen() {
       });
     })
     .onFinalize(() => {
-      // If gesture is cancelled externally, snap back to baseline
+      // If gesture is cancelled externally, snap back to rest position.
       if (!isCommittingRef.current) {
-        translateXSV.value = withSpring(baselineXSV.value, snapConfig);
+        pageTurnSV.value = withSpring(0, snapConfig);
       }
     });
   }, []);
@@ -1017,12 +1048,14 @@ export default function ReadScreen() {
         }
       }
 
-      setCompletionSheetVisible(false);
+      setFinishOverlayVisible(false);
       trackArticleAction({ articleId, action: "save", msSinceComplete: Date.now() - completionTimeRef.current });
       invalidateInbox(queryClient);
       clearActiveSession();
       await readingMemo.cleanup();
-      router.back();
+      overlayOpacity.value = withTiming(1, { duration: 350, easing: Easing.in(Easing.ease) }, (finished) => {
+        if (finished) runOnJS(router.back)();
+      });
       Alert.alert("완료", "보관함에 저장됐어요");
     } finally {
       setIsSaving(false);
@@ -1034,7 +1067,7 @@ export default function ReadScreen() {
     setIsDeleting(true);
     try {
       const result = await reading.commitCompletion();
-      setCompletionSheetVisible(false);
+      setFinishOverlayVisible(false);
       if (result.success) {
         trackArticleAction({ articleId, action: "skip", msSinceComplete: Date.now() - completionTimeRef.current });
         if (!isListEntry) {
@@ -1044,7 +1077,9 @@ export default function ReadScreen() {
         clearActiveSession();
         await readingMemo.cleanup();
         promptOrContinue(() => {
-          router.back();
+          overlayOpacity.value = withTiming(1, { duration: 350, easing: Easing.in(Easing.ease) }, (finished) => {
+            if (finished) runOnJS(router.back)();
+          });
           Alert.alert("완료", "읽기를 완료했어요");
         });
       } else {
@@ -1252,39 +1287,28 @@ export default function ReadScreen() {
           <ProgressIndicator type="spinner" size="large" />
           <Text style={styles.loadingText}>불러오는 중...</Text>
         </View>
+        {/* Keep black overlay visible while loading so there's no background flash */}
+        <Animated.View style={[styles.blackOverlay, overlayAnimStyle]} pointerEvents="none" />
       </View>
     );
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={styles.container}>
       <Stack.Screen
         options={{
           headerShown: false,
           gestureEnabled: false,
         }}
       />
-      {(mode === "re_read" || (mode === "basic" && reading.canExit)) && (
-        <View style={styles.header}>
-          <ScalePressable onPress={handleBack} hitSlop={12} style={styles.backButton}
-          contentStyle={styles.backButtonContent}
-          >
-            <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-          </ScalePressable>
-        </View>
-      )}
 
       {totalPages > 0 ? (
-        /* ── Unified reading layout: always one GestureDetector.
-           In question-block phase the card scales+translates up via transform
-           (no tree remount → smooth animation), and the question block is
-           absolutely positioned just below the card's visual bottom. ── */
         <GestureDetector gesture={combinedGesture}>
           <View
             style={[styles.pageListContainer, Platform.OS === "web" ? { touchAction: "none" } as object : undefined]}
             onLayout={handlePageListLayout}
           >
-            {/* Card wrapper: scale + translateY animation (transform-only) */}
+            {/* Card: shadow wrapper gives floating-paper feel */}
             <Animated.View style={cardAnimStyle}>
               <View
                 style={[
@@ -1301,7 +1325,6 @@ export default function ReadScreen() {
                   {
                     width: layout.frameWidth,
                     height: layout.frameHeight,
-                    backgroundColor: ReaderTokens.bodyBg,
                   },
                 ]}
               >
@@ -1315,39 +1338,32 @@ export default function ReadScreen() {
                   transform: [{ scale: layout.scaleFactor }],
                   overflow: "hidden",
                 }}>
-                  {/* Windowed page slots, absolutely positioned at left = pageIndex * W.
-                      Each slot is keyed by its absolute page index, so when currentPage
-                      changes from N to N+1 the WebView the user is looking at keeps
-                      the same React identity (and the same DOM content) — only the
-                      off-screen edge slot is mounted/unmounted. translateX slides the
-                      whole row; baseline = -currentPage * W so no snap-back is needed
-                      after a page turn (the animation lands exactly on the new
-                      baseline). This eliminates the flicker that happened when the
-                      "current slot" WebView received a new markdown prop and had to
-                      re-inject content via the JS bridge. */}
-                  <Animated.View
-                    style={[
-                      {
-                        position: "absolute",
-                        top: 0,
-                        left: 0,
-                        width: layout.containerWidth,
-                        height: layout.containerHeight,
-                      },
-                      rowAnimStyle,
-                    ]}
+                  {/* Windowed page slots — each gets its own Animated.View with
+                      direction-aware z-index and translateX for the overlay effect:
+                      forward → current on top slides left, next already underneath;
+                      backward → prev slides in from left on top, current stays. */}
+                  <View
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: layout.containerWidth,
+                      height: layout.containerHeight,
+                    }}
                     pointerEvents="box-none"
                   >
                     {(() => {
                       const slots: React.ReactNode[] = [];
-                      // Render a small window around currentPage. We keep the
-                      // immediate neighbours mounted so swipes show pre-rendered
-                      // content, and unmount everything else to bound memory.
                       const start = Math.max(0, currentPage - 1);
                       const end = Math.min(totalPages - 1, currentPage + 1);
                       for (let pageIdx = start; pageIdx <= end; pageIdx++) {
                         const isCover = pageIdx === 0;
                         const cIdx = pageIdx - 1;
+                        // Side-by-side layout: each slot is parked adjacently at
+                        // left = relPos * W (prev –W, current 0, next +W) and the
+                        // whole strip slides together via pageSlideAnimStyle, so a
+                        // page's background + text always move as one solid sheet.
+                        const relPos = pageIdx - currentPage;
                         const node = isCover ? (
                           <CoverPage
                             cover={cover}
@@ -1368,42 +1384,36 @@ export default function ReadScreen() {
                         ) : null);
                         if (!node) continue;
                         slots.push(
-                          <View
+                          <Animated.View
                             key={`page-${pageIdx}`}
-                            style={{
-                              position: "absolute",
-                              top: 0,
-                              left: pageIdx * layout.containerWidth,
-                              width: layout.containerWidth,
-                              height: layout.containerHeight,
-                            }}
+                            style={[
+                              {
+                                position: "absolute",
+                                top: 0,
+                                left: relPos * layout.containerWidth,
+                                width: layout.containerWidth,
+                                height: layout.containerHeight,
+                                backgroundColor: ReaderTokens.bodyBg,
+                              },
+                              pageSlideAnimStyle,
+                            ]}
                           >
                             {node}
-                          </View>,
+                          </Animated.View>,
                         );
                       }
                       return slots;
                     })()}
-                  </Animated.View>
-
-                  {/* Title bar: fixed overlay at bottom of scale wrapper.
-                      Lives OUTSIDE the 3-slot animated row so it never causes
-                      layout shifts when article data loads or page changes. */}
-                  {showTitleBar && (
-                    <View style={[styles.titleBar, { position: "absolute", bottom: 0, left: 0, right: 0 }]} pointerEvents="none">
-                      <Text style={dynamicStyles.articleTitle} numberOfLines={1}>{article!.title.replace(/[\r\n]+/g, " ")}</Text>
-                      {mode === "re_read" && (
-                        <View style={styles.modeBadge}>
-                          <Text style={dynamicStyles.modeBadgeText}>다시읽기</Text>
-                        </View>
-                      )}
-                    </View>
-                  )}
+                  </View>
                 </View>
               </View>
               </View>
             </Animated.View>
 
+            {/* Progress bar below card */}
+            <View style={styles.progressBarContainer}>
+              <ProgressIndicator type="linear" progress={reading.progress} size="small" />
+            </View>
           </View>
         </GestureDetector>
       ) : (
@@ -1412,68 +1422,34 @@ export default function ReadScreen() {
         </View>
       )}
 
-      {/* ── Question block — fixed above the progress bar ─────────────────
-          Rendered outside GestureDetector so bottom is relative to the outer
-          container. bottomBarHeight + 16 puts the card's bottom edge 16px
-          above the progress bar. */}
+      {/* ── Floating chevron-left button — top left ──────────────────────── */}
       <Animated.View
-        style={[
-          { position: "absolute", left: 16, right: 16, bottom: bottomBarHeight + 16, zIndex: 10 },
-          questionBlockPosStyle,
-        ]}
-        pointerEvents={questionBlockPhase ? "auto" : "none"}
+        style={[styles.floatingBackBtn, { top: insets.top + 12 }, lastPageBtnAnimStyle]}
+        pointerEvents={isOnLastPage || mode === "re_read" ? "auto" : "none"}
       >
-        <QuestionBlockCard
-          questionIndex={questionBlockIndex}
-          answers={questionBlockAnswers}
-          onAnswerChange={(index, value) => {
-            setQuestionBlockAnswers(prev => {
-              const copy = [...prev];
-              copy[index] = value;
-              return copy;
-            });
-          }}
-          onNext={() => {
-            if (questionBlockIndex >= QUESTION_BLOCK_QUESTIONS.length - 1) {
-              const qaContent = QUESTION_BLOCK_QUESTIONS
-                .map((q, i) => ({ q, a: questionBlockAnswers[i]?.trim() ?? "" }))
-                .filter(({ a }) => a.length > 0)
-                .map(({ q, a }) => `${q}\n${a}`)
-                .join("\n\n");
-              if (qaContent) setMemoFreeMemo(qaContent);
-              setQuestionBlockAnswers(Array(QUESTION_BLOCK_QUESTIONS.length).fill(""));
-              qPhaseScale.value = withSpring(1, { damping: 22, stiffness: 280, overshootClamping: true });
-              setQuestionBlockPhase(false);
-              setMemoSheetVisible(true);
-            } else {
-              setQuestionBlockIndex(i => i + 1);
-            }
-          }}
-          onSkip={() => {
-            if (questionBlockIndex >= QUESTION_BLOCK_QUESTIONS.length - 1) {
-              const qaContent = QUESTION_BLOCK_QUESTIONS
-                .map((q, i) => ({ q, a: questionBlockAnswers[i]?.trim() ?? "" }))
-                .filter(({ a }) => a.length > 0)
-                .map(({ q, a }) => `${q}\n${a}`)
-                .join("\n\n");
-              if (qaContent) setMemoFreeMemo(qaContent);
-              setQuestionBlockAnswers(Array(QUESTION_BLOCK_QUESTIONS.length).fill(""));
-              qPhaseScale.value = withSpring(1, { damping: 22, stiffness: 280, overshootClamping: true });
-              setQuestionBlockPhase(false);
-              setMemoSheetVisible(true);
-            } else {
-              setQuestionBlockIndex(i => i + 1);
-            }
-          }}
-        />
+        <Pressable onPress={handleFloatingBackBtn} hitSlop={16}>
+          <Feather name="chevron-left" size={28} color={Colors.zinc700} />
+        </Pressable>
       </Animated.View>
 
-      {/* ── Selection pill overlay — fixed above the bottom bar ─────────── */}
+      {/* ── Memo FAB — bottom right ─────────────────────────────────────── */}
+      {!finishOverlayVisible && (
+        <ScalePressable
+          onPress={handleOpenMemo}
+          hitSlop={8}
+          style={[styles.memoFab, { bottom: insets.bottom + 24 }]}
+          contentStyle={styles.memoFabContent}
+        >
+          <Feather name="edit-3" size={20} color={Colors.zinc600} />
+        </ScalePressable>
+      )}
+
+      {/* ── Selection pill overlay ─────────────────────────────────────── */}
       {showSelectionPill && (
         <View
           style={[
             styles.selectionPillWrap,
-            { bottom: insets.bottom + bottomBarHeight + Math.max(0, (pageListSize.height - layout.frameHeight) / 2) + layout.titleBarHeight + 12 },
+            { bottom: insets.bottom + 80 + Math.max(0, (pageListSize.height - layout.frameHeight) / 2) },
           ]}
           pointerEvents="box-none"
         >
@@ -1522,261 +1498,6 @@ export default function ReadScreen() {
         </View>
       )}
 
-      <View
-        style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}
-        onLayout={(e) => {
-          const h = e.nativeEvent.layout.height;
-          setBottomBarHeight((prev) => (prev === h ? prev : h));
-        }}
-      >
-        <View style={styles.bottomProgressContainer}>
-          <ProgressIndicator type="linear" progress={reading.progress} size="small" />
-        </View>
-        <ScalePressable
-          onPress={handleOpenMemo}
-          hitSlop={16}
-          style={styles.bottomMemoButton}
-        contentStyle={styles.bottomMemoButtonContent}
-        >
-          <Feather name="edit-3" size={20} color={Colors.zinc600} />
-        </ScalePressable>
-      </View>
-
-      <BottomSheet
-        visible={completionSheetVisible}
-        onClose={() => {
-          if (collectionPickerMode) {
-            setCollectionPickerMode(false);
-            return;
-          }
-          if (mode === "re_read") {
-            setCompletionSheetVisible(false);
-          } else {
-            reading.continueReading();
-            setCompletionSheetVisible(false);
-          }
-        }}
-        snapPoints={collectionPickerMode ? [0.75] : [0.5]}
-        enableDragDown={false}
-        dismissable={true}
-        keyboardAware={collectionPickerMode && pickerTab === "create"}
-      >
-        {collectionPickerMode ? (
-          <View style={styles.pickerContainer}>
-            <ScalePressable
-              style={styles.pickerBackRow}
-              onPress={() => {
-                if (pickerTab === "create") {
-                  setPickerTab("list");
-                  setNewCollectionName("");
-                  setNewCollectionDesc("");
-                } else {
-                  setCollectionPickerMode(false);
-                }
-              }}
-            contentStyle={styles.pickerBackRowContent}
-            >
-              <Feather name="chevron-left" size={18} color={Colors.zinc600} />
-              <Text style={styles.pickerBackText}>보관할 폴더 선택</Text>
-            </ScalePressable>
-
-            <View style={styles.pickerTabBar}>
-              <ScalePressable
-                style={[styles.pickerTab, pickerTab === "list" && styles.pickerTabActive]}
-                onPress={() => setPickerTab("list")}
-              >
-                <Text style={[styles.pickerTabText, pickerTab === "list" && styles.pickerTabTextActive]}>
-                  내 폴더
-                </Text>
-              </ScalePressable>
-              <ScalePressable
-                style={[styles.pickerTab, pickerTab === "create" && styles.pickerTabActive]}
-                onPress={() => setPickerTab("create")}
-              >
-                <Text style={[styles.pickerTabText, pickerTab === "create" && styles.pickerTabTextActive]}>
-                  새 폴더에 추가
-                </Text>
-              </ScalePressable>
-            </View>
-
-            {pickerTab === "list" ? (
-              <FlatList
-                data={
-                  (collectionsQuery.data ?? [])
-                    .filter((c: { id: string; name: string; isArchive?: boolean }) => !c.isArchive)
-                    .map((c: { id: string; name: string; articleCount?: number; isImpression?: boolean }) => ({
-                      id: c.id, name: c.name, articleCount: c.articleCount, isImpression: c.isImpression ?? false,
-                    }))
-                    .sort((a, b) => {
-                      if (a.isImpression !== b.isImpression) return a.isImpression ? -1 : 1;
-                      return (b.articleCount ?? 0) - (a.articleCount ?? 0);
-                    })
-                }
-                keyExtractor={(item) => item.id}
-                renderItem={({ item }) => {
-                  const isSelected = item.id === selectedCollectionId;
-                  return (
-                    <ScalePressable
-                      style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
-                      onPress={() => {
-                        setSelectedCollectionId(item.id);
-                        updateRecentCollection.mutate(
-                          { id: userId, data: { collectionId: item.id } },
-                          {
-                            onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetUserRecentCollectionQueryKey(userId) }),
-                          },
-                        );
-                        setCollectionPickerMode(false);
-                      }}
-                    contentStyle={styles.pickerItemContent}
-                    >
-                      <View style={styles.pickerItemLeft}>
-                        <Feather name={item.isImpression ? "heart" : "folder"} size={18} color={isSelected ? Colors.zinc900 : Colors.zinc500} />
-                        <Text style={[styles.pickerItemName, isSelected && styles.pickerItemNameSelected]} numberOfLines={1}>
-                          {item.name}
-                        </Text>
-                      </View>
-                      <View style={styles.pickerItemRight}>
-                        {item.articleCount !== undefined && (
-                          <Text style={styles.pickerItemCount}>{item.articleCount}편</Text>
-                        )}
-                        {isSelected && <Feather name="check" size={16} color={Colors.zinc900} />}
-                      </View>
-                    </ScalePressable>
-                  );
-                }}
-                ItemSeparatorComponent={() => <View style={styles.pickerSeparator} />}
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.pickerListContent}
-                ListEmptyComponent={
-                  <View style={styles.pickerEmpty}>
-                    <Text style={styles.pickerEmptyText}>보관할 폴더가 없어요</Text>
-                    <Text style={styles.pickerEmptySubtext}>새 폴더에 추가 탭에서 만들어보세요</Text>
-                  </View>
-                }
-              />
-            ) : (
-              <View style={styles.pickerCreateForm}>
-                <TextInput
-                  style={styles.pickerCreateInput}
-                  placeholder="폴더 이름"
-                  placeholderTextColor={Colors.zinc400}
-                  value={newCollectionName}
-                  onChangeText={setNewCollectionName}
-                  autoFocus
-                />
-                <TextInput
-                  style={[styles.pickerCreateInput, styles.pickerCreateInputMulti]}
-                  placeholder="설명 (선택사항)"
-                  placeholderTextColor={Colors.zinc400}
-                  value={newCollectionDesc}
-                  onChangeText={setNewCollectionDesc}
-                  multiline
-                  textAlignVertical="top"
-                />
-                <ScalePressable
-                  style={[styles.pickerCreateButton, (!newCollectionName.trim() || isCreatingCollection) && styles.pickerCreateButtonDisabled]}
-                  onPress={async () => {
-                    if (!newCollectionName.trim()) return;
-                    setIsCreatingCollection(true);
-                    try {
-                      const newCol = await createCollection.mutateAsync({
-                        data: { ownerId: userId, name: newCollectionName.trim(), description: newCollectionDesc.trim() || undefined },
-                      });
-                      setSelectedCollectionId(newCol.id);
-                      invalidateMyCollections(queryClient);
-                      updateRecentCollection.mutate(
-                        { id: userId, data: { collectionId: newCol.id } },
-                        {
-                          onSuccess: () => invalidateRecentCollection(queryClient, userId),
-                        },
-                      );
-                      setNewCollectionName("");
-                      setNewCollectionDesc("");
-                      setPickerTab("list");
-                      setCollectionPickerMode(false);
-                    } catch (e: unknown) {
-                      const msg = e instanceof Error ? e.message : "폴더 생성에 실패했습니다.";
-                      Alert.alert("생성 실패", msg);
-                    } finally {
-                      setIsCreatingCollection(false);
-                    }
-                  }}
-                  disabled={!newCollectionName.trim() || isCreatingCollection}
-                contentStyle={styles.pickerCreateButtonContent}
-                >
-                  {isCreatingCollection ? (
-                    <ActivityIndicator size="small" color={Colors.white} />
-                  ) : (
-                    <Text style={styles.pickerCreateButtonText}>만들기</Text>
-                  )}
-                </ScalePressable>
-              </View>
-            )}
-          </View>
-        ) : (
-        <View style={styles.completionContent}>
-          <Text style={dynamicStyles.completionText}>편지를 끝까지 다 읽었습니다.</Text>
-
-          <ScalePressable
-            style={styles.collectionSelector}
-            onPress={() => setCollectionPickerMode(true)}
-            disabled={isSaving}
-          contentStyle={styles.collectionSelectorContent}
-          >
-            <Feather name="folder" size={16} color={Colors.zinc500} />
-            <Text style={styles.collectionSelectorText} numberOfLines={1}>
-              {(collectionsQuery.data ?? []).find((c: { id: string; name: string }) => c.id === selectedCollectionId)?.name ?? "보관함"}
-            </Text>
-            <Feather name="chevron-right" size={16} color={Colors.zinc400} />
-          </ScalePressable>
-
-          <ScalePressable
-            style={[styles.completionButton, (isSaving || !isCollectionsReady) && styles.completionButtonDisabled]}
-            onPress={handleCommitAndSave}
-            disabled={isSaving}
-          contentStyle={styles.completionButtonContent}
-          >
-            <Text style={dynamicStyles.completionButtonText}>
-              {isSaving ? "저장 중..." : !isCollectionsReady ? "불러오는 중..." : "보관하기"}
-            </Text>
-          </ScalePressable>
-
-          <ScalePressable
-            style={[
-              styles.completionButton,
-              styles.completionButtonSecondary,
-              isDeleting && styles.completionButtonDisabled,
-            ]}
-            onPress={mode === "re_read"
-              ? async () => {
-                  setCompletionSheetVisible(false);
-                  await readingMemo.cleanup();
-                  router.back();
-                }
-              : handleCommitAndSkip}
-            disabled={mode !== "re_read" && isDeleting}
-          contentStyle={styles.completionButtonContent}
-          >
-            <Text style={dynamicStyles.completionButtonSecondaryText}>
-              {mode !== "re_read" && isDeleting ? "처리 중..." : "나가기"}
-            </Text>
-          </ScalePressable>
-
-          <ScalePressable
-            style={styles.completionButtonTertiary}
-            onPress={() => {
-              setCompletionSheetVisible(false);
-              reading.restartReading();
-            }}
-          contentStyle={styles.completionButtonTertiaryContent}
-          >
-            <Text style={dynamicStyles.completionButtonTertiaryText}>다시 읽기</Text>
-          </ScalePressable>
-        </View>
-        )}
-      </BottomSheet>
-
       <BottomSheet
         visible={sentencePopupVisible}
         onClose={handleCancelSentence}
@@ -1808,25 +1529,19 @@ export default function ReadScreen() {
         </View>
       </BottomSheet>
 
-      {/* ── 읽기 후 메모 시트 (질문 블록 → 메모 → 저장/보관 흐름) ─── */}
+      {/* ── 읽기 중 메모 시트 (스와이프업 / FAB으로 열림) ─── */}
       <BottomSheet
         visible={memoSheetVisible}
         onClose={() => {
           setMemoSheetVisible(false);
           setMemoAppendContent(undefined);
-          setMemoFreeMemo("");
           readingMemo.closeWithBackgroundSave();
-          if (pendingCompletionAfterMemo) {
-            setPendingCompletionAfterMemo(false);
-            setCompletionSheetVisible(true);
-          }
         }}
         snapPoints={[0.82]}
         enableDragDown={false}
         dismissable={false}
         keyboardAware
       >
-        {/* title row */}
         <View style={newMemoStyles.titleRow}>
           <TextInput
             style={newMemoStyles.titleInput}
@@ -1840,23 +1555,14 @@ export default function ReadScreen() {
             onPress={() => {
               setMemoSheetVisible(false);
               setMemoAppendContent(undefined);
-              setMemoFreeMemo("");
               readingMemo.closeWithBackgroundSave();
-              if (pendingCompletionAfterMemo) {
-                setPendingCompletionAfterMemo(false);
-                setCompletionSheetVisible(true);
-              }
             }}
             hitSlop={8}
           >
             <Text style={newMemoStyles.closeText}>닫기</Text>
           </Pressable>
         </View>
-
-        {/* divider */}
         <View style={newMemoStyles.divider} />
-
-        {/* scrollable memo area */}
         <ScrollView
           style={{ flex: 1 }}
           contentContainerStyle={newMemoStyles.scrollContent}
@@ -1874,6 +1580,95 @@ export default function ReadScreen() {
           />
         </ScrollView>
       </BottomSheet>
+
+      {/* ── 마무리 화면 — 전체 화면 오버레이 ─────────────────────────── */}
+      {finishOverlayVisible && (
+        <FinishOverlay
+          insets={insets}
+          questionBlockIndex={questionBlockIndex}
+          questionBlockAnswers={questionBlockAnswers}
+          onAnswerChange={(index, value) => {
+            setQuestionBlockAnswers(prev => {
+              const copy = [...prev];
+              copy[index] = value;
+              return copy;
+            });
+          }}
+          onNextQuestion={() => setQuestionBlockIndex(i => Math.min(i + 1, QUESTION_BLOCK_QUESTIONS.length - 1))}
+          onSkipQuestion={() => setQuestionBlockIndex(i => Math.min(i + 1, QUESTION_BLOCK_QUESTIONS.length - 1))}
+          memoTitle={memoTitle}
+          onMemoTitleChange={setMemoTitle}
+          memoContent={memoFreeMemo}
+          onMemoContentChange={setMemoFreeMemo}
+          collectionsData={collectionsQuery.data ?? []}
+          selectedCollectionId={selectedCollectionId}
+          onSelectCollection={(id) => {
+            setSelectedCollectionId(id);
+            updateRecentCollection.mutate(
+              { id: userId, data: { collectionId: id } },
+              { onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetUserRecentCollectionQueryKey(userId) }) },
+            );
+          }}
+          onPickerModeChange={setCollectionPickerMode}
+          pickerMode={collectionPickerMode}
+          pickerTab={pickerTab}
+          onPickerTabChange={setPickerTab}
+          newCollectionName={newCollectionName}
+          onNewCollectionNameChange={setNewCollectionName}
+          newCollectionDesc={newCollectionDesc}
+          onNewCollectionDescChange={setNewCollectionDesc}
+          isCreatingCollection={isCreatingCollection}
+          onCreateCollection={async () => {
+            if (!newCollectionName.trim()) return;
+            setIsCreatingCollection(true);
+            try {
+              const newCol = await createCollection.mutateAsync({
+                data: { ownerId: userId, name: newCollectionName.trim(), description: newCollectionDesc.trim() || undefined },
+              });
+              setSelectedCollectionId(newCol.id);
+              invalidateMyCollections(queryClient);
+              updateRecentCollection.mutate(
+                { id: userId, data: { collectionId: newCol.id } },
+                { onSuccess: () => invalidateRecentCollection(queryClient, userId) },
+              );
+              setNewCollectionName("");
+              setNewCollectionDesc("");
+              setPickerTab("list");
+              setCollectionPickerMode(false);
+            } catch (e: unknown) {
+              const msg = e instanceof Error ? e.message : "폴더 생성에 실패했습니다.";
+              Alert.alert("생성 실패", msg);
+            } finally {
+              setIsCreatingCollection(false);
+            }
+          }}
+          isSaving={isSaving}
+          isDeleting={isDeleting}
+          isCollectionsReady={isCollectionsReady}
+          isReRead={mode === "re_read"}
+          onSave={handleCommitAndSave}
+          onExit={mode === "re_read"
+            ? async () => {
+                setFinishOverlayVisible(false);
+                await readingMemo.cleanup();
+                overlayOpacity.value = withTiming(1, { duration: 350, easing: Easing.in(Easing.ease) }, (finished) => {
+                  if (finished) runOnJS(router.back)();
+                });
+              }
+            : handleCommitAndSkip}
+          onRestartReading={() => {
+            setFinishOverlayVisible(false);
+            reading.restartReading();
+          }}
+          dynamicStyles={dynamicStyles}
+        />
+      )}
+
+      {/* ── 진입/퇴장 검은 오버레이 ──────────────────────────────────── */}
+      <Animated.View
+        style={[styles.blackOverlay, overlayAnimStyle]}
+        pointerEvents="none"
+      />
 
       <ConfirmModal
         visible={!!duplicatePrompt}
@@ -1943,6 +1738,338 @@ const newMemoStyles = StyleSheet.create({
     textAlignVertical: "top",
     backgroundColor: "transparent",
     padding: 0,
+  },
+});
+
+/* ─── FinishOverlay — 마무리 화면 (그림자 없는 전체 화면) ──────────── */
+interface FinishOverlayProps {
+  insets: { top: number; bottom: number; left: number; right: number };
+  questionBlockIndex: number;
+  questionBlockAnswers: string[];
+  onAnswerChange: (index: number, value: string) => void;
+  onNextQuestion: () => void;
+  onSkipQuestion: () => void;
+  memoTitle: string;
+  onMemoTitleChange: (v: string) => void;
+  memoContent: string;
+  onMemoContentChange: (v: string) => void;
+  collectionsData: { id: string; name: string; articleCount?: number; isImpression?: boolean; isArchive?: boolean }[];
+  selectedCollectionId: string | undefined;
+  onSelectCollection: (id: string) => void;
+  onPickerModeChange: (v: boolean) => void;
+  pickerMode: boolean;
+  pickerTab: "list" | "create";
+  onPickerTabChange: (v: "list" | "create") => void;
+  newCollectionName: string;
+  onNewCollectionNameChange: (v: string) => void;
+  newCollectionDesc: string;
+  onNewCollectionDescChange: (v: string) => void;
+  isCreatingCollection: boolean;
+  onCreateCollection: () => void;
+  isSaving: boolean;
+  isDeleting: boolean;
+  isCollectionsReady: boolean;
+  isReRead: boolean;
+  onSave: () => void;
+  onExit: () => void;
+  onRestartReading: () => void;
+  dynamicStyles: {
+    completionButtonText: object;
+    completionButtonSecondaryText: object;
+    completionButtonTertiaryText: object;
+    [key: string]: object;
+  };
+}
+
+function FinishOverlay({
+  insets,
+  questionBlockIndex,
+  questionBlockAnswers,
+  onAnswerChange,
+  onNextQuestion,
+  onSkipQuestion,
+  memoTitle,
+  onMemoTitleChange,
+  memoContent,
+  onMemoContentChange,
+  collectionsData,
+  selectedCollectionId,
+  onSelectCollection,
+  onPickerModeChange,
+  pickerMode,
+  pickerTab,
+  onPickerTabChange,
+  newCollectionName,
+  onNewCollectionNameChange,
+  newCollectionDesc,
+  onNewCollectionDescChange,
+  isCreatingCollection,
+  onCreateCollection,
+  isSaving,
+  isDeleting,
+  isCollectionsReady,
+  isReRead,
+  onSave,
+  onExit,
+  onRestartReading,
+  dynamicStyles,
+}: FinishOverlayProps) {
+  const selectedColName = collectionsData.find(c => c.id === selectedCollectionId)?.name ?? "보관함";
+  const visibleCollections = collectionsData
+    .filter(c => !c.isArchive)
+    .map(c => ({ id: c.id, name: c.name, articleCount: c.articleCount, isImpression: c.isImpression ?? false }))
+    .sort((a, b) => {
+      if (a.isImpression !== b.isImpression) return a.isImpression ? -1 : 1;
+      return (b.articleCount ?? 0) - (a.articleCount ?? 0);
+    });
+
+  return (
+    <View style={[finishStyles.overlay, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+      {pickerMode ? (
+        /* ── 폴더 선택 모드 ── */
+        <View style={finishStyles.pickerContainer}>
+          <ScalePressable
+            style={styles.pickerBackRow}
+            onPress={() => {
+              if (pickerTab === "create") {
+                onPickerTabChange("list");
+                onNewCollectionNameChange("");
+                onNewCollectionDescChange("");
+              } else {
+                onPickerModeChange(false);
+              }
+            }}
+            contentStyle={styles.pickerBackRowContent}
+          >
+            <Feather name="chevron-left" size={18} color={Colors.zinc600} />
+            <Text style={styles.pickerBackText}>보관할 폴더 선택</Text>
+          </ScalePressable>
+
+          <View style={styles.pickerTabBar}>
+            <ScalePressable
+              style={[styles.pickerTab, pickerTab === "list" && styles.pickerTabActive]}
+              onPress={() => onPickerTabChange("list")}
+            >
+              <Text style={[styles.pickerTabText, pickerTab === "list" && styles.pickerTabTextActive]}>내 폴더</Text>
+            </ScalePressable>
+            <ScalePressable
+              style={[styles.pickerTab, pickerTab === "create" && styles.pickerTabActive]}
+              onPress={() => onPickerTabChange("create")}
+            >
+              <Text style={[styles.pickerTabText, pickerTab === "create" && styles.pickerTabTextActive]}>새 폴더에 추가</Text>
+            </ScalePressable>
+          </View>
+
+          {pickerTab === "list" ? (
+            <FlatList
+              data={visibleCollections}
+              keyExtractor={item => item.id}
+              renderItem={({ item }) => {
+                const isSelected = item.id === selectedCollectionId;
+                return (
+                  <ScalePressable
+                    style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
+                    onPress={() => { onSelectCollection(item.id); onPickerModeChange(false); }}
+                    contentStyle={styles.pickerItemContent}
+                  >
+                    <View style={styles.pickerItemLeft}>
+                      <Feather name={item.isImpression ? "heart" : "folder"} size={18} color={isSelected ? Colors.zinc900 : Colors.zinc500} />
+                      <Text style={[styles.pickerItemName, isSelected && styles.pickerItemNameSelected]} numberOfLines={1}>{item.name}</Text>
+                    </View>
+                    <View style={styles.pickerItemRight}>
+                      {item.articleCount !== undefined && <Text style={styles.pickerItemCount}>{item.articleCount}편</Text>}
+                      {isSelected && <Feather name="check" size={16} color={Colors.zinc900} />}
+                    </View>
+                  </ScalePressable>
+                );
+              }}
+              ItemSeparatorComponent={() => <View style={styles.pickerSeparator} />}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.pickerListContent}
+              ListEmptyComponent={
+                <View style={styles.pickerEmpty}>
+                  <Text style={styles.pickerEmptyText}>보관할 폴더가 없어요</Text>
+                  <Text style={styles.pickerEmptySubtext}>새 폴더에 추가 탭에서 만들어보세요</Text>
+                </View>
+              }
+            />
+          ) : (
+            <View style={styles.pickerCreateForm}>
+              <TextInput
+                style={styles.pickerCreateInput}
+                placeholder="폴더 이름"
+                placeholderTextColor={Colors.zinc400}
+                value={newCollectionName}
+                onChangeText={onNewCollectionNameChange}
+                autoFocus
+              />
+              <TextInput
+                style={[styles.pickerCreateInput, styles.pickerCreateInputMulti]}
+                placeholder="설명 (선택사항)"
+                placeholderTextColor={Colors.zinc400}
+                value={newCollectionDesc}
+                onChangeText={onNewCollectionDescChange}
+                multiline
+                textAlignVertical="top"
+              />
+              <ScalePressable
+                style={[styles.pickerCreateButton, (!newCollectionName.trim() || isCreatingCollection) && styles.pickerCreateButtonDisabled]}
+                onPress={onCreateCollection}
+                disabled={!newCollectionName.trim() || isCreatingCollection}
+                contentStyle={styles.pickerCreateButtonContent}
+              >
+                {isCreatingCollection
+                  ? <ActivityIndicator size="small" color={Colors.white} />
+                  : <Text style={styles.pickerCreateButtonText}>만들기</Text>
+                }
+              </ScalePressable>
+            </View>
+          )}
+        </View>
+      ) : (
+        /* ── 마무리 화면 메인 ── */
+        <ScrollView
+          style={finishStyles.scrollArea}
+          contentContainerStyle={finishStyles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* 질문 블록 */}
+          <QuestionBlockCard
+            questionIndex={questionBlockIndex}
+            answers={questionBlockAnswers}
+            onAnswerChange={onAnswerChange}
+            onNext={onNextQuestion}
+            onSkip={onSkipQuestion}
+          />
+
+          {/* 메모 쓰기 영역 */}
+          <View style={finishStyles.memoSection}>
+            <TextInput
+              style={finishStyles.memoTitleInput}
+              value={memoTitle}
+              onChangeText={onMemoTitleChange}
+              placeholder="메모 제목"
+              placeholderTextColor={Colors.zinc400}
+              returnKeyType="done"
+            />
+            <View style={finishStyles.memoDivider} />
+            <TextInput
+              style={finishStyles.memoBodyInput}
+              value={memoContent}
+              onChangeText={onMemoContentChange}
+              placeholder="자유롭게 메모하세요..."
+              placeholderTextColor={Colors.zinc400}
+              multiline
+              textAlignVertical="top"
+            />
+          </View>
+
+          {/* 액션 버튼들 */}
+          <View style={finishStyles.actionSection}>
+            {/* 폴더 선택 */}
+            <ScalePressable
+              style={styles.collectionSelector}
+              onPress={() => onPickerModeChange(true)}
+              disabled={isSaving}
+              contentStyle={styles.collectionSelectorContent}
+            >
+              <Feather name="folder" size={16} color={Colors.zinc500} />
+              <Text style={styles.collectionSelectorText} numberOfLines={1}>{selectedColName}</Text>
+              <Feather name="chevron-right" size={16} color={Colors.zinc400} />
+            </ScalePressable>
+
+            <ScalePressable
+              style={[styles.completionButton, (isSaving || !isCollectionsReady) && styles.completionButtonDisabled]}
+              onPress={onSave}
+              disabled={isSaving}
+              contentStyle={styles.completionButtonContent}
+            >
+              <Text style={dynamicStyles.completionButtonText}>
+                {isSaving ? "저장 중..." : !isCollectionsReady ? "불러오는 중..." : "보관"}
+              </Text>
+            </ScalePressable>
+
+            <ScalePressable
+              style={[styles.completionButton, styles.completionButtonSecondary, isDeleting && styles.completionButtonDisabled]}
+              onPress={onExit}
+              disabled={!isReRead && isDeleting}
+              contentStyle={styles.completionButtonContent}
+            >
+              <Text style={dynamicStyles.completionButtonSecondaryText}>
+                {!isReRead && isDeleting ? "처리 중..." : "나가기"}
+              </Text>
+            </ScalePressable>
+
+            <ScalePressable
+              style={styles.completionButtonTertiary}
+              onPress={onRestartReading}
+              contentStyle={styles.completionButtonTertiaryContent}
+            >
+              <Text style={dynamicStyles.completionButtonTertiaryText}>다시 읽기</Text>
+            </ScalePressable>
+          </View>
+        </ScrollView>
+      )}
+    </View>
+  );
+}
+
+const finishStyles = StyleSheet.create({
+  overlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: ReaderTokens.bodyBg,
+    zIndex: 50,
+  },
+  pickerContainer: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+  scrollArea: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 32,
+    gap: 20,
+  },
+  memoSection: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.zinc100,
+    padding: 14,
+  },
+  memoTitleInput: {
+    fontSize: 15,
+    fontFamily: "Pretendard-SemiBold",
+    fontWeight: "700",
+    color: Colors.zinc800,
+    padding: 0,
+    marginBottom: 8,
+  },
+  memoDivider: {
+    height: 1,
+    backgroundColor: Colors.zinc100,
+    marginBottom: 10,
+  },
+  memoBodyInput: {
+    fontSize: 14,
+    fontFamily: "Eulyoo1945-Regular",
+    color: Colors.zinc700,
+    lineHeight: 26,
+    minHeight: 120,
+    textAlignVertical: "top",
+    padding: 0,
+  },
+  actionSection: {
+    gap: 10,
   },
 });
 
@@ -2033,32 +2160,51 @@ const styles = StyleSheet.create({
     backgroundColor: ReaderTokens.bodyBg,
     overflow: "hidden",
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: Spacing.screenPx,
-    paddingVertical: 12,
-    gap: 12,
+  floatingBackBtn: {
+    position: "absolute",
+    left: Spacing.screenPx,
+    zIndex: 30,
   },
-  backButton: {
-    width: 36,
-    height: 36,
+  memoFab: {
+    position: "absolute",
+    right: 20,
+    zIndex: 30,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.10,
+        shadowRadius: 8,
+      },
+      android: { elevation: 3 },
+      default: {},
+    }),
   },
-  backButtonContent: {
+  memoFabContent: {
+    flex: 1,
     alignItems: "center",
-    justifyContent: "center",},
-  titleBar: {
-    alignItems: "center",
-    paddingHorizontal: Spacing.screenPx,
-    paddingBottom: 12,
-    paddingTop: 8,
-    width: "100%",
+    justifyContent: "center",
   },
-  modeBadge: {
-    backgroundColor: Colors.zinc100,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+  progressBarContainer: {
+    width: "80%",
+    alignSelf: "center",
+    marginTop: 14,
+  },
+  blackOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "#000",
+    zIndex: 999,
+    pointerEvents: "none",
   },
   pageContainer: {
     overflow: "hidden",
