@@ -461,7 +461,7 @@ export default function CardSelectOverlay({
 
       {/* Details (info bar) */}
       <Animated.View
-        style={[styles.detailsContainer, { top: detailsTop, opacity: finalDetailsOpacity, transform: [{ translateY: swipeY }] }]}
+        style={[styles.detailsContainer, { top: detailsTop, left: boxLeft, right: boxLeft, opacity: finalDetailsOpacity, transform: [{ translateY: swipeY }] }]}
         pointerEvents={rendered ? "auto" : "none"}
         {...detailsPanResponder.panHandlers}
       >
@@ -531,7 +531,7 @@ export default function CardSelectOverlay({
 
       {/* CTA button */}
       <Animated.View
-        style={[styles.ctaWrapper, { bottom: bottomInset + 16, opacity: finalDetailsOpacity, transform: [{ translateY: swipeY }] }]}
+        style={[styles.ctaWrapper, { bottom: bottomInset + 16, left: boxLeft, right: boxLeft, opacity: finalDetailsOpacity, transform: [{ translateY: swipeY }] }]}
         pointerEvents={rendered ? "auto" : "none"}
       >
         <ScalePressable style={styles.ctaButton} contentStyle={styles.ctaButtonContent} onPress={handleRead}>
@@ -560,9 +560,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  detailsContainer: { position: "absolute", left: Spacing.screenPx, right: Spacing.screenPx },
+  detailsContainer: { position: "absolute" },
   infoBar: {
-    backgroundColor: "rgba(255,255,255,0.92)",
+    backgroundColor: "#ffffff",
     borderRadius: 12,
     paddingVertical: 10,
     paddingHorizontal: 16,
@@ -587,7 +587,7 @@ const styles = StyleSheet.create({
   dot: { width: 6, height: 6, borderRadius: 3 },
   dotActive: { backgroundColor: Colors.zinc700 },
   dotInactive: { backgroundColor: Colors.zinc300 },
-  ctaWrapper: { position: "absolute", left: Spacing.screenPx, right: Spacing.screenPx },
+  ctaWrapper: { position: "absolute" },
   ctaButton: { width: "100%", height: 56, borderRadius: 18, backgroundColor: Colors.noticeAccent },
   ctaButtonContent: { justifyContent: "center", alignItems: "center", flex: 1 },
   ctaLabel: { ...Typography.bodySemiBold, fontSize: 17, letterSpacing: 0.5, color: Colors.white, textAlign: "center" },
