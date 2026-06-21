@@ -141,7 +141,7 @@ export default function CardSelectOverlay({
 
   // ── Geometry ─────────────────────────────────────────────────────────────
   const reservedBelow = 64;
-  const cardTopVisual = topInset + 28;
+  const cardTopVisual = topInset + 8;
   const buttonBlock = 56 + 16 + bottomInset + 16;
   const availableH = SCREEN_H - cardTopVisual - buttonBlock - reservedBelow;
   const maxScaleH = availableH / CARD_H;
