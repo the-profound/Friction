@@ -287,13 +287,19 @@ export default function CardSelectOverlay({
     };
 
     if (activeIndexRef.current !== initIdx) {
-      Animated.timing(carouselX, {
-        toValue: -initIdx * SLOT_W,
-        duration: 180,
-        useNativeDriver: false,
-      }).start(() => {
+      Animated.parallel([
+        Animated.timing(carouselX, {
+          toValue: -initIdx * SLOT_W,
+          duration: 180,
+          useNativeDriver: false,
+        }),
+        Animated.timing(progress, { toValue: 0, duration: 240, useNativeDriver: false }),
+        Animated.timing(swipeY, { toValue: 0, duration: 200, useNativeDriver: false }),
+      ]).start(() => {
         activeIndexRef.current = initIdx;
-        runCloseParallel();
+        setRendered(false);
+        closingRef.current = false;
+        onClose();
       });
     } else {
       runCloseParallel();
