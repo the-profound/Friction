@@ -547,6 +547,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: Spacing.screenPx,
     paddingBottom: 20,
+    marginTop: -57,
   },
   avatar: {
     width: 78,
