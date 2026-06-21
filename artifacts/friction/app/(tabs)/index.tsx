@@ -602,9 +602,9 @@ export default function InboxScreen() {
                 inboxItem?.sender?.nickname ??
                 slot.article.authorNickname ??
                 null,
-              authorId: inboxItem?.sender?.id ?? null,
+              authorId: inboxItem?.sender?.id ?? slot.article.authorId ?? null,
               collectionName: inboxItem?.collectionName ?? slot.article.collectionName ?? null,
-              collectionId: inboxItem?.sourceTeamCollectionId ?? null,
+              collectionId: inboxItem?.sourceTeamCollectionId ?? slot.article.collectionId ?? null,
               date: inboxItem?.visibleAt ?? slot.article.createdAt ?? null,
               isNotice: slot.article.isNotice ?? false,
             }

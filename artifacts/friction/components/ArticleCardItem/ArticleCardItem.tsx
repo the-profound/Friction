@@ -49,7 +49,8 @@ function ArticleCardItem({
   return (
     <ScalePressable
       onPress={onPress}
-      style={[styles.card, { width: w, height: h, borderRadius }, !isActive && styles.inactive]}
+      style={[styles.card, { width: w, height: h }, !isActive && styles.inactive]}
+      animatedBorderRadius={borderRadius}
     >
       {coverType === "image" && cover?.imageUrl ? (
         <ImageBackground
@@ -127,9 +128,7 @@ const AUTHOR_SIZE = 24;
 const COLLECTION_SIZE = 16;
 
 const styles = StyleSheet.create({
-  card: {
-    overflow: "hidden",
-  },
+  card: {},
   inactive: {
     opacity: Colors.cardInactiveOpacity,
     transform: [{ scale: 0.97 }],

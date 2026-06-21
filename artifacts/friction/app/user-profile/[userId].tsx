@@ -346,8 +346,9 @@ export default function UserProfileScreen() {
         slot.article
           ? {
               authorName: (slot.article as any).authorNickname ?? null,
-              collectionName: null,
-              collectionId: null,
+              authorId: slot.article.authorId ?? null,
+              collectionName: slot.article.collectionName ?? null,
+              collectionId: slot.article.collectionId ?? null,
               date: slot.article.letterAt ?? null,
               isNotice: (slot.article as any).isNotice ?? false,
             }

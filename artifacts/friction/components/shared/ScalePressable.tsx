@@ -10,6 +10,12 @@ import Animated, {
 export interface ScalePressableProps extends PressableProps {
   scaleTo?: number;
   contentStyle?: StyleProp<ViewStyle>;
+  /**
+   * When provided, borderRadius is applied to the inner Animated.View and
+   * scaled proportionally with the press animation so corners stay visually
+   * consistent as the card shrinks.
+   */
+  animatedBorderRadius?: number;
 }
 
 const PRESS_DURATION = 80;
@@ -23,12 +29,16 @@ export default function ScalePressable({
   style,
   contentStyle,
   children,
+  animatedBorderRadius,
   ...rest
 }: ScalePressableProps) {
   const scale = useSharedValue(1);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
+    ...(animatedBorderRadius !== undefined
+      ? { borderRadius: animatedBorderRadius * scale.value }
+      : {}),
   }));
 
   const handlePressIn = (
@@ -53,7 +63,7 @@ export default function ScalePressable({
       {...rest}
     >
       {(state: PressableStateCallbackType) => (
-        <Animated.View style={[styles.inner, contentStyle, animatedStyle]}>
+        <Animated.View style={[styles.inner, animatedBorderRadius !== undefined && styles.innerClipped, contentStyle, animatedStyle]}>
           {typeof children === "function" ? children(state) : children}
         </Animated.View>
       )}
@@ -67,5 +77,8 @@ export const styles = StyleSheet.create({
     flexGrow: 1,
     alignSelf: "stretch",
     overflow: "visible",
+  },
+  innerClipped: {
+    overflow: "hidden",
   },
 });

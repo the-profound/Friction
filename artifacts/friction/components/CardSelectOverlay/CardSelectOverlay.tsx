@@ -141,17 +141,21 @@ export default function CardSelectOverlay({
 
   // ── Geometry ─────────────────────────────────────────────────────────────
   const reservedBelow = 64;
-  const cardTopVisual = topInset + 8;
+  const cardTopVisual = topInset + Math.round(SCREEN_H * 0.025);
   const buttonBlock = 56 + 16 + bottomInset + 16;
   const availableH = SCREEN_H - cardTopVisual - buttonBlock - reservedBelow;
   const maxScaleH = availableH / CARD_H;
   const maxScaleW = (SCREEN_W - 48) / CARD_W;
-  const finalScale = Math.max(1.0, Math.min(1.18, maxScaleW, maxScaleH));
+  const finalScale = Math.max(1.0, Math.min(1.1, maxScaleW, maxScaleH));
 
+  const scaledW = CARD_W * finalScale;
   const scaledH = CARD_H * finalScale;
   const finalCenterX = SCREEN_W / 2;
   const finalCenterY = cardTopVisual + scaledH / 2;
-  const boxLeft = finalCenterX - CARD_W / 2;
+  // Card container stays at CARD_W center — scale transform expands symmetrically from here
+  const cardBoxLeft = finalCenterX - CARD_W / 2;
+  // Info bar & CTA use the visually scaled width so they align with the expanded card
+  const infoBoxLeft = finalCenterX - scaledW / 2;
   const boxTop = finalCenterY - CARD_H / 2;
 
   const originScale =
@@ -410,7 +414,7 @@ export default function CardSelectOverlay({
         style={[
           styles.cardContainer,
           {
-            left: boxLeft,
+            left: cardBoxLeft,
             top: boxTop,
             transform: [{ translateX: cardTranslateX }, { translateY: cardTranslateY }, { scale }],
           },
@@ -437,7 +441,7 @@ export default function CardSelectOverlay({
                       cover={art.cover}
                       isRead={false}
                       isActive
-                      onPress={handleRead}
+                      onPress={() => {}}
                     />
                   )}
                 </Animated.View>
@@ -454,14 +458,14 @@ export default function CardSelectOverlay({
             cover={displayArticles[0].cover}
             isRead={false}
             isActive
-            onPress={handleRead}
+            onPress={() => {}}
           />
         )}
       </Animated.View>
 
       {/* Details (info bar) */}
       <Animated.View
-        style={[styles.detailsContainer, { top: detailsTop, left: boxLeft, right: boxLeft, opacity: finalDetailsOpacity, transform: [{ translateY: swipeY }] }]}
+        style={[styles.detailsContainer, { top: detailsTop, left: infoBoxLeft, right: infoBoxLeft, opacity: finalDetailsOpacity, transform: [{ translateY: swipeY }] }]}
         pointerEvents={rendered ? "auto" : "none"}
         {...detailsPanResponder.panHandlers}
       >
@@ -531,7 +535,7 @@ export default function CardSelectOverlay({
 
       {/* CTA button */}
       <Animated.View
-        style={[styles.ctaWrapper, { bottom: bottomInset + 16, left: boxLeft, right: boxLeft, opacity: finalDetailsOpacity, transform: [{ translateY: swipeY }] }]}
+        style={[styles.ctaWrapper, { bottom: bottomInset + 16, left: infoBoxLeft, right: infoBoxLeft, opacity: finalDetailsOpacity, transform: [{ translateY: swipeY }] }]}
         pointerEvents={rendered ? "auto" : "none"}
       >
         <ScalePressable style={styles.ctaButton} contentStyle={styles.ctaButtonContent} onPress={handleRead}>

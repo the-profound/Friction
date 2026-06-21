@@ -28,6 +28,17 @@ const articleCollectionNameSubquery = sql<string | null>`(
   )
 )`;
 
+// Resolves the team-collection id an article was delivered through, used for
+// navigation to the collection detail. Only team collections are navigable, so
+// personal-only / 1:1 articles resolve to NULL (name may still display).
+const articleCollectionIdSubquery = sql<string | null>`(
+  SELECT tca.team_collection_id
+  FROM team_collection_articles tca
+  WHERE tca.article_id = ${articlesTable.id}
+  ORDER BY tca.added_at ASC
+  LIMIT 1
+)`;
+
 const FORWARD_TRANSITIONS: Record<string, string> = {
   DRAFT: "DIVIDING",
   DIVIDING: "CLOSING",
@@ -157,6 +168,7 @@ router.get("/articles/:id", async (req, res) => {
       article: articlesTable,
       authorNickname: usersTable.nickname,
       collectionName: articleCollectionNameSubquery,
+      collectionId: articleCollectionIdSubquery,
     })
     .from(articlesTable)
     .leftJoin(usersTable, eq(usersTable.id, articlesTable.authorId))
@@ -169,6 +181,7 @@ router.get("/articles/:id", async (req, res) => {
     ...row.article,
     authorNickname: row.authorNickname ?? null,
     collectionName: row.collectionName ?? null,
+    collectionId: row.collectionId ?? null,
   });
 });
 

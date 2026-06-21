@@ -143,6 +143,13 @@ export const ListArticlesResponseItem = zod.object({
     .describe(
       "Name of the collection this article belongs to (team collection preferred, personal collection fallback). Populated by getArticle; may be null on other endpoints.",
     ),
+  collectionId: zod
+    .string()
+    .uuid()
+    .nullish()
+    .describe(
+      "ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints.",
+    ),
   title: zod.string(),
   content: zod.string(),
   status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
@@ -230,6 +237,13 @@ export const ReadingMemoResponse = zod.object({
     .describe(
       "Name of the collection this article belongs to (team collection preferred, personal collection fallback). Populated by getArticle; may be null on other endpoints.",
     ),
+  collectionId: zod
+    .string()
+    .uuid()
+    .nullish()
+    .describe(
+      "ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints.",
+    ),
   title: zod.string(),
   content: zod.string(),
   status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
@@ -297,6 +311,13 @@ export const GetArticleResponse = zod.object({
     .nullish()
     .describe(
       "Name of the collection this article belongs to (team collection preferred, personal collection fallback). Populated by getArticle; may be null on other endpoints.",
+    ),
+  collectionId: zod
+    .string()
+    .uuid()
+    .nullish()
+    .describe(
+      "ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints.",
     ),
   title: zod.string(),
   content: zod.string(),
@@ -402,6 +423,13 @@ export const UpdateArticleResponse = zod.object({
     .describe(
       "Name of the collection this article belongs to (team collection preferred, personal collection fallback). Populated by getArticle; may be null on other endpoints.",
     ),
+  collectionId: zod
+    .string()
+    .uuid()
+    .nullish()
+    .describe(
+      "ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints.",
+    ),
   title: zod.string(),
   content: zod.string(),
   status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
@@ -482,6 +510,13 @@ export const TransitionArticleStatusResponse = zod.object({
     .describe(
       "Name of the collection this article belongs to (team collection preferred, personal collection fallback). Populated by getArticle; may be null on other endpoints.",
     ),
+  collectionId: zod
+    .string()
+    .uuid()
+    .nullish()
+    .describe(
+      "ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints.",
+    ),
   title: zod.string(),
   content: zod.string(),
   status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
@@ -560,6 +595,13 @@ export const FinalizeArticleResponse = zod.object({
     .nullish()
     .describe(
       "Name of the collection this article belongs to (team collection preferred, personal collection fallback). Populated by getArticle; may be null on other endpoints.",
+    ),
+  collectionId: zod
+    .string()
+    .uuid()
+    .nullish()
+    .describe(
+      "ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints.",
     ),
   title: zod.string(),
   content: zod.string(),
@@ -652,6 +694,13 @@ export const ListInboxResponseItem = zod.object({
         .nullish()
         .describe(
           "Name of the collection this article belongs to (team collection preferred, personal collection fallback). Populated by getArticle; may be null on other endpoints.",
+        ),
+      collectionId: zod
+        .string()
+        .uuid()
+        .nullish()
+        .describe(
+          "ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints.",
         ),
       title: zod.string(),
       content: zod.string(),
@@ -761,6 +810,13 @@ export const GetInboxItemResponse = zod.object({
         .nullish()
         .describe(
           "Name of the collection this article belongs to (team collection preferred, personal collection fallback). Populated by getArticle; may be null on other endpoints.",
+        ),
+      collectionId: zod
+        .string()
+        .uuid()
+        .nullish()
+        .describe(
+          "ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints.",
         ),
       title: zod.string(),
       content: zod.string(),
@@ -877,6 +933,13 @@ export const MarkInboxOpenedResponse = zod.object({
         .describe(
           "Name of the collection this article belongs to (team collection preferred, personal collection fallback). Populated by getArticle; may be null on other endpoints.",
         ),
+      collectionId: zod
+        .string()
+        .uuid()
+        .nullish()
+        .describe(
+          "ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints.",
+        ),
       title: zod.string(),
       content: zod.string(),
       status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
@@ -985,6 +1048,13 @@ export const MarkInboxReadResponse = zod.object({
         .nullish()
         .describe(
           "Name of the collection this article belongs to (team collection preferred, personal collection fallback). Populated by getArticle; may be null on other endpoints.",
+        ),
+      collectionId: zod
+        .string()
+        .uuid()
+        .nullish()
+        .describe(
+          "ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints.",
         ),
       title: zod.string(),
       content: zod.string(),
@@ -1199,6 +1269,13 @@ export const ListMyCollectionArticlesResponseItem = zod.object({
         .nullish()
         .describe(
           "Name of the collection this article belongs to (team collection preferred, personal collection fallback). Populated by getArticle; may be null on other endpoints.",
+        ),
+      collectionId: zod
+        .string()
+        .uuid()
+        .nullish()
+        .describe(
+          "ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints.",
         ),
       title: zod.string(),
       content: zod.string(),
@@ -1658,6 +1735,13 @@ export const ListTeamArticlesResponseItem = zod.object({
         .describe(
           "Name of the collection this article belongs to (team collection preferred, personal collection fallback). Populated by getArticle; may be null on other endpoints.",
         ),
+      collectionId: zod
+        .string()
+        .uuid()
+        .nullish()
+        .describe(
+          "ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints.",
+        ),
       title: zod.string(),
       content: zod.string(),
       status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
@@ -1983,6 +2067,13 @@ export const ListSendRecordsResponseItem = zod.object({
         .describe(
           "Name of the collection this article belongs to (team collection preferred, personal collection fallback). Populated by getArticle; may be null on other endpoints.",
         ),
+      collectionId: zod
+        .string()
+        .uuid()
+        .nullish()
+        .describe(
+          "ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints.",
+        ),
       title: zod.string(),
       content: zod.string(),
       status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
@@ -2087,6 +2178,13 @@ export const GetSendRecordResponse = zod.object({
         .nullish()
         .describe(
           "Name of the collection this article belongs to (team collection preferred, personal collection fallback). Populated by getArticle; may be null on other endpoints.",
+        ),
+      collectionId: zod
+        .string()
+        .uuid()
+        .nullish()
+        .describe(
+          "ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints.",
         ),
       title: zod.string(),
       content: zod.string(),

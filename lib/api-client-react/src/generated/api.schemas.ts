@@ -99,6 +99,8 @@ export interface Article {
   authorNickname?: string | null;
   /** Name of the collection this article belongs to (team collection preferred, personal collection fallback). Populated by getArticle; may be null on other endpoints. */
   collectionName?: string | null;
+  /** ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints. */
+  collectionId?: string | null;
   title: string;
   content: string;
   status: ArticleStatus;
