@@ -561,7 +561,9 @@ export default function DraftScreen() {
         ) : isNavigating ? (
           <ActivityIndicator size="small" color={Colors.zinc400} />
         ) : (
-          <View style={styles.headerRight} />
+          <ScalePressable onPress={handleInsertImage} disabled={isImageUploading} hitSlop={12}>
+            <Feather name="image" size={20} color={isImageUploading ? Colors.zinc300 : Colors.zinc600} />
+          </ScalePressable>
         )}
       </View>
 
