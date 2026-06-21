@@ -487,10 +487,6 @@ export default function UserProfileScreen() {
       <ScalePressable onPress={() => router.back()} hitSlop={12}>
         <Feather name="arrow-left" size={20} color={Colors.zinc600} />
       </ScalePressable>
-      <Text style={styles.headerTitle} numberOfLines={1}>
-        {displayName}
-      </Text>
-      <View style={styles.headerSpacer} />
     </View>
   );
 
@@ -685,17 +681,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: Spacing.screenPx,
     paddingVertical: 12,
-  },
-  headerTitle: {
-    ...Typography.bodySemiBold,
-    fontSize: 17,
-    color: Colors.zinc900,
-    flex: 1,
-    textAlign: "center",
-    marginHorizontal: 8,
-  },
-  headerSpacer: {
-    width: 20,
   },
   profileSection: {
     alignItems: "center",
