@@ -1523,7 +1523,7 @@ export default function ReadScreen() {
       )}
 
       <View
-        style={[styles.bottomBar, { paddingBottom: insets.bottom + 16, paddingHorizontal: Math.max(0, (pageListSize.width - layout.frameWidth) / 2) }]}
+        style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}
         onLayout={(e) => {
           const h = e.nativeEvent.layout.height;
           setBottomBarHeight((prev) => (prev === h ? prev : h));
@@ -2053,7 +2053,6 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     paddingTop: 8,
     width: "100%",
-    backgroundColor: ReaderTokens.bodyBg,
   },
   modeBadge: {
     backgroundColor: Colors.zinc100,
