@@ -180,6 +180,13 @@ export default function MyScreen() {
     [router],
   );
 
+  const handleNavigateToAuthor = useCallback(
+    (id: string) => {
+      router.push(`/user-profile/${id}` as never);
+    },
+    [router],
+  );
+
   // ── Article chain for the My-tab overlay (recursive ancestor traversal) ──
   // Follow selectedArticle.sourceArticleId → Article.sourceArticleId → …
   // until null, collecting ancestors oldest→newest with skeleton placeholders.
@@ -249,11 +256,12 @@ export default function MyScreen() {
       metaList.push(
         slot.article
           ? {
-              authorName: (slot.article as any).authorNickname ?? null,
-              collectionName: null,
-              collectionId: null,
-              date: slot.article.letterAt ?? null,
-              isNotice: (slot.article as any).isNotice ?? false,
+              authorName: slot.article.authorNickname ?? null,
+              authorId: slot.article.authorId ?? null,
+              collectionName: slot.article.collectionName ?? null,
+              collectionId: slot.article.collectionId ?? null,
+              date: slot.article.letterAt ?? slot.article.createdAt ?? null,
+              isNotice: slot.article.isNotice ?? false,
             }
           : {},
       );
@@ -262,11 +270,12 @@ export default function MyScreen() {
     const initIdx = artList.length; // selectedArticle goes here
     artList.push(selectedArticle);
     metaList.push({
-      authorName: (selectedArticle as any).authorNickname ?? user?.nickname ?? null,
+      authorName: selectedArticle.authorNickname ?? user?.nickname ?? null,
+      authorId: selectedArticle.authorId ?? null,
       collectionName: selectedCollectionName,
       collectionId: selectedCollectionId,
       date: selectedDateOverride,
-      isNotice: (selectedArticle as any).isNotice ?? false,
+      isNotice: selectedArticle.isNotice ?? false,
     });
 
     return { toChainArticles: artList, toChainMetas: metaList, toChainInitialIndex: initIdx };
@@ -533,6 +542,7 @@ export default function MyScreen() {
         onClose={handleOverlayClose}
         onRead={handleOverlayRead}
         onNavigateToCollection={handleNavigateToCollection}
+        onNavigateToAuthor={handleNavigateToAuthor}
       />
     </View>
   );

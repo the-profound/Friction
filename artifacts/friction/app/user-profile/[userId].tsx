@@ -359,11 +359,12 @@ export default function UserProfileScreen() {
     const initIdx = artList.length;
     artList.push(selectedArticle);
     metaList.push({
-      authorName: (selectedArticle as any).authorNickname ?? user?.nickname ?? null,
+      authorName: selectedArticle.authorNickname ?? user?.nickname ?? null,
+      authorId: selectedArticle.authorId ?? null,
       collectionName: selectedCollectionName,
       collectionId: selectedCollectionId,
       date: selectedDateOverride,
-      isNotice: (selectedArticle as any).isNotice ?? false,
+      isNotice: selectedArticle.isNotice ?? false,
     });
 
     return { chainArticles: artList, chainMetas: metaList, chainInitialIndex: initIdx };
@@ -647,6 +648,7 @@ export default function UserProfileScreen() {
         onClose={handleOverlayClose}
         onRead={handleOverlayRead}
         onNavigateToCollection={handleNavigateToCollection}
+        onNavigateToAuthor={(id) => router.push(`/user-profile/${id}` as never)}
       />
       <ConfirmModal
         visible={removeConfirmVisible}

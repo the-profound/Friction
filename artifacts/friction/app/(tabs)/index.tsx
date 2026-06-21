@@ -602,7 +602,7 @@ export default function InboxScreen() {
                 inboxItem?.sender?.nickname ??
                 slot.article.authorNickname ??
                 null,
-              authorId: inboxItem?.sender?.id ?? slot.article.authorId ?? null,
+              authorId: inboxItem?.sender?.id ?? inboxItem?.senderId ?? slot.article.authorId ?? null,
               collectionName: inboxItem?.collectionName ?? slot.article.collectionName ?? null,
               collectionId: inboxItem?.sourceTeamCollectionId ?? slot.article.collectionId ?? null,
               date: inboxItem?.visibleAt ?? slot.article.createdAt ?? null,
@@ -618,9 +618,9 @@ export default function InboxScreen() {
     artList.push(tapItem.article);
     metaList.push({
       authorName: tapItem.sender?.nickname ?? tapItem.sender?.id ?? null,
-      authorId: tapItem.sender?.id ?? null,
-      collectionName: tapItem.collectionName ?? null,
-      collectionId: tapItem.sourceTeamCollectionId ?? null,
+      authorId: tapItem.sender?.id ?? tapItem.senderId ?? null,
+      collectionName: tapItem.collectionName ?? tapItem.article?.collectionName ?? null,
+      collectionId: tapItem.sourceTeamCollectionId ?? tapItem.article?.collectionId ?? null,
       date: tapItem.visibleAt ?? null,
       isNotice: tapItem.article?.isNotice ?? false,
     });
@@ -633,9 +633,9 @@ export default function InboxScreen() {
       artList.push(desc.article);
       metaList.push({
         authorName: desc.sender?.nickname ?? desc.article.authorNickname ?? null,
-        authorId: desc.sender?.id ?? null,
+        authorId: desc.sender?.id ?? desc.senderId ?? desc.article?.authorId ?? null,
         collectionName: desc.collectionName ?? desc.article.collectionName ?? null,
-        collectionId: desc.sourceTeamCollectionId ?? null,
+        collectionId: desc.sourceTeamCollectionId ?? desc.article?.collectionId ?? null,
         date: desc.visibleAt ?? desc.article.createdAt ?? null,
         isNotice: desc.article.isNotice ?? false,
       });
