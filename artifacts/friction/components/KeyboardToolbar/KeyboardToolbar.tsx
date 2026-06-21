@@ -13,6 +13,7 @@ interface KeyboardToolbarProps {
   onDismissKeyboard?: () => void;
   onInsertDivider?: () => void;
   onShiftEnter?: () => void;
+  onInsertImage?: () => void;
 }
 
 const BLOCK_LABELS: Record<string, string> = {
@@ -33,6 +34,7 @@ export default function KeyboardToolbar({
   onUnderlinePress,
   onInsertDivider,
   onShiftEnter,
+  onInsertImage,
 }: KeyboardToolbarProps) {
   const { activeBlock, isBold, isItalic, isUnderline } = selectionState;
   const blockLabel = BLOCK_LABELS[activeBlock] ?? "본문";
@@ -100,6 +102,17 @@ export default function KeyboardToolbar({
           hitSlop={8}
         >
           <Feather name="corner-down-left" size={18} color="#a1a1aa" />
+        </ScalePressable>
+      )}
+
+      {onInsertImage != null && (
+        <ScalePressable
+          style={styles.button}
+          contentStyle={styles.buttonContent}
+          onPress={onInsertImage}
+          hitSlop={8}
+        >
+          <Feather name="image" size={18} color="#a1a1aa" />
         </ScalePressable>
       )}
     </View>

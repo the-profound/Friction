@@ -429,6 +429,34 @@ const QuestionBlock = Node.create({
   },
 });
 
+const InlineImage = Node.create({
+  name: "inlineImage",
+  group: "block",
+  atom: true,
+  addAttributes() {
+    return {
+      src: { default: null },
+      alt: { default: "" },
+      "data-autosplit": { default: null },
+    };
+  },
+  parseHTML() {
+    return [{ tag: 'img[data-inline="true"]' }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    const attrs: Record<string, string> = {
+      "data-inline": "true",
+      class: "tiptap-inline-image",
+      src: HTMLAttributes.src ?? "",
+      alt: HTMLAttributes.alt ?? "",
+    };
+    if (HTMLAttributes["data-autosplit"]) {
+      attrs["data-autosplit"] = HTMLAttributes["data-autosplit"];
+    }
+    return ["img", attrs];
+  },
+});
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -443,6 +471,30 @@ function renderInline(text: string): string {
   out = out.replace(/(^|[^_])_([^_\n]+?)_(?!_)/g, "$1<em>$2</em>");
   out = out.replace(/&lt;u&gt;([\s\S]*?)&lt;\/u&gt;/g, "<u>$1</u>");
   return out;
+}
+
+// 마크다운 텍스트에서 이미지 마커를 기준으로 텍스트/이미지 세그먼트로 분리한다.
+// 이미지는 블록 레벨 노드이므로 단락 안에 섞여있을 때 별도 블록으로 분리해야 한다.
+type MdSegment =
+  | { type: "text"; content: string }
+  | { type: "image"; url: string; alt: string };
+
+function splitByImages(text: string): MdSegment[] {
+  const result: MdSegment[] = [];
+  const re = /!\[([^\]]*)\]\(([^)]+)\)/g;
+  let lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > lastIndex) {
+      result.push({ type: "text", content: text.slice(lastIndex, m.index) });
+    }
+    result.push({ type: "image", alt: m[1], url: m[2] });
+    lastIndex = re.lastIndex;
+  }
+  if (lastIndex < text.length) {
+    result.push({ type: "text", content: text.slice(lastIndex) });
+  }
+  return result;
 }
 
 function markdownToHtml(md: string): string {
@@ -557,10 +609,28 @@ function markdownToHtml(md: string): string {
         paraLines.push(lines[i]);
         i++;
       }
-      const inner = paraLines
-        .map((l, idx) => (idx === 0 ? renderInline(l) : "<br>" + renderInline(l)))
-        .join("");
-      blocks.push(`<p>${inner}</p>`);
+      // 단락 내 이미지 마커를 블록 레벨로 분리한다.
+      // 이미지가 없으면 기존 경로(inline br 유지)로 처리한다.
+      const paraContent = paraLines.join(" ");
+      const segments = splitByImages(paraContent);
+      const hasImages = segments.some((s) => s.type === "image");
+      if (!hasImages) {
+        const inner = paraLines
+          .map((l, idx) => (idx === 0 ? renderInline(l) : "<br>" + renderInline(l)))
+          .join("");
+        blocks.push(`<p>${inner}</p>`);
+      } else {
+        for (const seg of segments) {
+          if (seg.type === "image") {
+            blocks.push(
+              `<img data-inline="true" class="tiptap-inline-image" src="${escapeHtml(seg.url)}" alt="${escapeHtml(seg.alt)}" />`
+            );
+          } else {
+            const trimmed = seg.content.trim();
+            if (trimmed) blocks.push(`<p>${renderInline(trimmed)}</p>`);
+          }
+        }
+      }
     }
 
     // 마지막 블록이 단락(<p>)이 아닌 경우(예: blockquote, 리스트, 헤딩으로 문서가
@@ -594,6 +664,11 @@ function htmlToMarkdown(html: string): string {
       if (tag === "em" || tag === "i") return `*${inner}*`;
       if (tag === "u") return `<u>${inner}</u>`;
       if (tag === "br") return "  \n";
+      if (tag === "img" && el.getAttribute("data-inline") === "true") {
+        const src = el.getAttribute("src") || "";
+        const alt = el.getAttribute("alt") || "";
+        return `![${alt}](${src})`;
+      }
       return inner;
     }
 
@@ -607,6 +682,11 @@ function htmlToMarkdown(html: string): string {
 
     function blockMd(el: HTMLElement, depth: number): string {
       const tag = el.tagName.toLowerCase();
+      if (tag === "img" && el.getAttribute("data-inline") === "true") {
+        const src = el.getAttribute("src") || "";
+        const alt = el.getAttribute("alt") || "";
+        return `![${alt}](${src})\n\n`;
+      }
       if (tag === "hr") return `---\n\n`;
       if (tag === "h1") return `# ${childrenToInline(el)}\n\n`;
       if (tag === "h2") return `## ${childrenToInline(el)}\n\n`;
@@ -721,6 +801,7 @@ interface Command {
   mark?: string;
   pageIndex?: number;
   blockIndex?: number;
+  url?: string;
 }
 
 (function () {
@@ -1020,6 +1101,7 @@ interface Command {
         OrderedList,
         ListItem,
         QuestionBlock,
+        InlineImage,
         UndoRedo,
         HardBreak,
         Placeholder.configure({ placeholder }),
@@ -1146,7 +1228,7 @@ interface Command {
             }
             postToRN({
               type: "onExportMarkdown",
-              payload: { requestId: cmd.requestId, markdown, isDirty: false },
+              payload: { requestId: cmd.requestId, markdown, isDirty: false, docVersion: docChangeCounter },
             });
           }
           break;
@@ -1282,6 +1364,138 @@ interface Command {
           if (editor && !editor.isDestroyed) {
             editor.chain().focus().setHardBreak().run();
           }
+          break;
+        }
+        case "insertImage": {
+          if (editor && !editor.isDestroyed && cmd.url) {
+            editor.chain().focus().insertContent({
+              type: "inlineImage",
+              attrs: { src: cmd.url, alt: "" },
+            }).run();
+          }
+          break;
+        }
+        case "autoSplitImages": {
+          if (!editor || editor.isDestroyed) {
+            postToRN({ type: "onAutoSplitComplete", payload: { hadConsecutiveImages: false } });
+            break;
+          }
+
+          const { state } = editor;
+          const { doc, schema: sc } = state;
+
+          const _isHR = (n: PMNode) => n.type.name === "horizontalRule";
+          const _isImg = (n: PMNode) => n.type.name === "inlineImage";
+          const _isEmptyPara = (n: PMNode) =>
+            n.type.name === "paragraph" && n.content.size === 0;
+
+          const original: PMNode[] = [];
+          doc.forEach((n) => original.push(n));
+
+          if (!original.some((n) => _isImg(n) && !n.attrs["data-autosplit"])) {
+            postToRN({ type: "onAutoSplitComplete", payload: { hadConsecutiveImages: false } });
+            break;
+          }
+
+          const prevSigOrig = (idx: number): PMNode | null => {
+            for (let j = idx - 1; j >= 0; j--) {
+              if (!_isEmptyPara(original[j])) return original[j];
+            }
+            return null;
+          };
+          const nextSigOrig = (idx: number): PMNode | null => {
+            for (let j = idx + 1; j < original.length; j++) {
+              if (!_isEmptyPara(original[j])) return original[j];
+            }
+            return null;
+          };
+
+          let hadConsecutive = false;
+          const result: PMNode[] = [];
+
+          const resultLastSig = (): PMNode | null => {
+            for (let j = result.length - 1; j >= 0; j--) {
+              if (!_isEmptyPara(result[j])) return result[j];
+            }
+            return null;
+          };
+
+          for (let i = 0; i < original.length; i++) {
+            const node = original[i];
+
+            if (!_isImg(node) || node.attrs["data-autosplit"]) {
+              result.push(node);
+              continue;
+            }
+
+            const origPrev = prevSigOrig(i);
+            const origNext = nextSigOrig(i);
+            const resLastSig = resultLastSig();
+
+            const needHRBefore =
+              origPrev !== null && (resLastSig === null || !_isHR(resLastSig));
+            const needHRAfter = origNext !== null && !_isHR(origNext);
+            const consecutiveAfter = origNext !== null && _isImg(origNext);
+
+            if (consecutiveAfter) hadConsecutive = true;
+
+            if (needHRBefore) {
+              while (result.length > 0 && _isEmptyPara(result[result.length - 1])) {
+                result.pop();
+              }
+              result.push(sc.nodes.horizontalRule.create());
+            }
+
+            result.push(
+              sc.nodes.inlineImage.create({ ...node.attrs, "data-autosplit": "1" })
+            );
+
+            if (needHRAfter) {
+              result.push(sc.nodes.horizontalRule.create());
+              if (consecutiveAfter) {
+                result.push(sc.nodes.paragraph.create());
+                result.push(sc.nodes.horizontalRule.create());
+              }
+            }
+          }
+
+          const lastNode = result[result.length - 1];
+          if (!lastNode || lastNode.type.name !== "paragraph") {
+            result.push(sc.nodes.paragraph.create());
+          }
+
+          // [Fix 5] 파괴적 변환 직전 현재 마크다운을 localStorage에 스냅샷한다.
+          // replaceWith 후 어떤 이유로든 복구가 필요할 때 사용할 수 있다.
+          try {
+            const snapshotMd = htmlToMarkdown(editor.getHTML());
+            localStorage.setItem(
+              "friction_autosplit_snapshot",
+              JSON.stringify({ markdown: snapshotMd, ts: Date.now() }),
+            );
+          } catch {}
+
+          // [Fix 3] replaceWith 후 ProseMirror가 커서 위치로 스크롤 점프하면
+          // 텍스트가 뷰포트 위로 사라져 보이는 착시가 발생한다.
+          // dispatch 전 스크롤 위치를 저장하고, 다음 프레임에서 복원한다.
+          const savedScrollTop =
+            (window.scrollY !== undefined ? window.scrollY : 0) ||
+            document.documentElement.scrollTop ||
+            0;
+
+          // [Fix 4] 다음 requestExportMarkdown이 반드시 최신 HTML을 재직렬화하도록
+          // dispatch 직전에 export 캐시를 강제 무효화한다.
+          lastExportedDocVersion = -1;
+
+          const autoTr = state.tr.replaceWith(0, doc.content.size, result);
+          autoTr.setMeta("autoSplit", true);
+          editor.view.dispatch(autoTr);
+
+          // [Fix 3 continued] 스크롤 위치 복원 (다음 프레임에서 실행).
+          requestAnimationFrame(() => {
+            window.scrollTo({ top: savedScrollTop, behavior: "instant" });
+          });
+
+          postToRN({ type: "onAutoSplitComplete", payload: { hadConsecutiveImages: hadConsecutive } });
           break;
         }
         case "scrollToBlock": {

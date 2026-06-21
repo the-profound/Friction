@@ -172,6 +172,11 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
           editor.chain().focus().setHardBreak().run();
         }
       },
+      insertImage(_url: string) {
+      },
+      autoSplitImages() {
+        return Promise.resolve({ hadConsecutiveImages: false });
+      },
       scrollToBlock(_pageIndex: number, _blockIndex: number) {
       },
     }), [editor, requestExportMarkdown, onError]);

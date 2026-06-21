@@ -26,6 +26,8 @@ export type RNToWebViewCommand =
   | { type: "toggleMark"; mark: string }
   | { type: "insertDivider" }
   | { type: "insertHardBreak" }
+  | { type: "insertImage"; url: string }
+  | { type: "autoSplitImages" }
   | { type: "scrollToBlock"; pageIndex: number; blockIndex: number };
 
 export interface OnChangePayload {
@@ -38,6 +40,7 @@ export interface OnExportMarkdownPayload {
   requestId: string;
   markdown: string;
   isDirty: boolean;
+  docVersion?: number;
 }
 
 export interface OnErrorPayload {
@@ -65,7 +68,8 @@ export type WebViewToRNEvent =
   | { type: "onTextSelect"; text: string; isEmpty: boolean }
   | { type: "onSelectionUpdate"; payload: OnSelectionUpdatePayload }
   | { type: "onSelHandleDragStart" }
-  | { type: "onSelHandleDragEnd" };
+  | { type: "onSelHandleDragEnd" }
+  | { type: "onAutoSplitComplete"; payload: { hadConsecutiveImages: boolean } };
 
 export interface WebViewMarkdownEditorRef {
   setMarkdown: (markdown: string) => void;
@@ -79,6 +83,8 @@ export interface WebViewMarkdownEditorRef {
   toggleMark: (mark: string) => void;
   insertDivider: () => void;
   insertHardBreak: () => void;
+  insertImage: (url: string) => void;
+  autoSplitImages: () => Promise<{ hadConsecutiveImages: boolean }>;
   scrollToBlock: (pageIndex: number, blockIndex: number) => void;
 }
 

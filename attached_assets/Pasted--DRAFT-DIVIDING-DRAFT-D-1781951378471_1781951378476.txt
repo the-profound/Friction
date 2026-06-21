@@ -1,0 +1,63 @@
+# 작업: "작성 중 글이 사라지는" 버그 수정 (DRAFT → DIVIDING 전환)
+
+## 증상
+사용자가 글을 쓰고 사진을 첨부한 뒤, 분할선이 생기는 단계(DRAFT→DIVIDING) 
+전환 시 글이 사라진다. 새 메모 에디터(TipTap 기반 WebView)에서 발생.
+관련 파일: index.ts(WebView 에디터), on-01a.tsx(작성), on-01b.tsx(검토/분할).
+
+## 중요한 전제 — 두 종류의 "사라짐"을 분리해서 다뤄라
+1) 보이기만 사라짐(데이터는 살아있음) = 스크롤 점프 문제
+2) 실제로 사라짐(데이터 손실) = stale `pages` 문제
+두 가지를 한 번에 "고쳤다"고 가정하지 말고, 각각 따로 수정하고 따로 검증하라.
+
+## 진단 (우선순위)
+- [실제 데이터 손실, 최우선] handleNext의 optimistic cache가 `pages`를 갱신하지 않음.
+  on-01a.tsx(약 385~391줄)에서 queryClient.setQueryData로 content/status는 갱신하지만
+  `pages` 필드를 그대로 둠. 그 결과 on-01b.tsx(약 206~208줄)가 새 `content` 대신
+  서버에 남은 구버전 `pages`를 읽어 글/이미지가 누락됨.
+  DRAFT→DIVIDING→DRAFT→DIVIDING 왕복 시 재현됨.
+- [착시, 데이터 안전] replaceWith(0, doc.content.size, result) 후 ProseMirror가
+  커서를 position 0으로 옮기며 스크롤이 이미지/분할선 구간으로 점프 → 텍스트가
+  뷰포트 위로 사라져 보임. 데이터는 정상.
+- [드문 레이스] requestExportMarkdown(index.ts 1216~1235)의 캐시가 디바운스(400ms)
+  타이머와 autoSplitImages dispatch 사이 타이밍에 따라 구버전 마크다운을 export할 수 있음.
+
+## 수정 (이 순서로, 각 단계 후 빌드/동작 확인)
+
+### 1) [핫픽스] pages 캐시 초기화
+on-01a.tsx handleNext의 optimistic update에서 `pages: []`를 명시해
+on-01b가 새 `content`로 fallback하게 하라.
+주의: 이 optimistic 값이 이후 서버 refetch로 정상 pages에 덮어쓰여지는지 확인.
+반대 방향(정상 pages가 빈 배열로 덮이는) 회귀가 없어야 함.
+
+### 2) [근본 수정] 문서의 단일 진실(Single Source of Truth) 확립
+현재 문서가 `content`와 `pages` 두 표현을 동시에 갖고, on-01b가 둘 중 하나를
+"골라 쓰는" 구조가 버그의 근본 원인이다. 다음 중 하나로 리팩터하라(권장: 전자):
+ - on-01b는 항상 `content`에서 렌더 시점에 분할하고, `pages`는 표시용 파생값으로만
+   사용한다(입력 소스로 쓰지 않음). 또는
+ - content→pages 변환을 단 한 곳(서버 또는 단일 클라 함수)에서만 수행해 둘이
+   절대 divergence하지 않게 한다.
+
+### 3) [UX] 스크롤/선택 보존
+index.ts에서 replaceWith 트랜잭션 시 selection을 매핑해 보존하거나,
+scrollIntoView를 억제(setMeta)하고 이전 scrollTop을 복원해 스크롤 점프를 제거하라.
+
+### 4) [보험] export 레이스 차단
+autoSplitImages 직후 getEditorContent() 호출 전에 lastExportedDocVersion을 강제
+무효화(예: -1)하여 항상 최신 마크다운을 재계산하도록 하라.
+
+### 5) [방어선] 파괴적 전환 전 스냅샷
+autoSplitImages / replaceWith 직전 현재 content를 로컬(localStorage 등)에 백업해
+어떤 실패에도 복구 경로를 남겨라.
+
+## 검증
+- 로깅 추가: handleNext와 on-01b 로드 시점에 content.length / 이미지 수 / pages.length를
+  기록해 어느 전환에서 데이터가 줄어드는지 추적.
+- 재현 테스트: "글+사진 작성 → 다음(DIVIDING) → 뒤로(DRAFT) → 다시 다음" 왕복에서
+  글/이미지가 보존되는지 확인.
+- 단위 테스트: markdownToHtml/splitByImages 라운드트립(텍스트+이미지 혼합)으로
+  이미지 전용 줄이 손실 없이 분리되는지 검증.
+
+## 제약
+- 데이터 손실 가능성이 있는 변경은 먼저 설명하고 진행하라.
+- 1)과 2)는 별개 커밋으로 분리하라. 각 수정의 효과를 독립적으로 검증할 수 있어야 한다.

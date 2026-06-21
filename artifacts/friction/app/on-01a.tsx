@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
-import { View, Text, StyleSheet, Alert, ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, BackHandler } from "react-native";
+import { View, Text, StyleSheet, Alert, ActionSheetIOS, ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, BackHandler } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -12,6 +12,7 @@ import { canTransitionForward } from "@/lib/articleStatusCycle";
 import type { ArticleStatus } from "@/lib/policies";
 import WebViewMarkdownEditor from "@/components/WebViewMarkdownEditor/WebViewMarkdownEditorCompat";
 import type { WebViewMarkdownEditorRef, OnChangePayload, OnExportMarkdownPayload, OnSelectionUpdatePayload } from "@/components/WebViewMarkdownEditor/types";
+import { useInlineImageUpload } from "@/lib/useImageUpload";
 import {
   useGetArticle,
   useUpdateArticle,
@@ -74,6 +75,7 @@ export default function DraftScreen() {
   } | null>(null);
   const exportDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const exportPendingRef = useRef(false);
+  const lastSeenDocVersionRef = useRef(-1);
   const EXPORT_DEBOUNCE_MS = 1200;
 
   const [sourceArticleId, setSourceArticleId] = useState<string | null>(null);
@@ -163,6 +165,11 @@ export default function DraftScreen() {
   }, [editorReady]);
 
   const handleExportMarkdown = useCallback((payload: OnExportMarkdownPayload) => {
+    // [A] stale 응답 폐기: 이미 더 새로운 docVersion 의 응답을 처리했다면
+    // 오래된 응답이 contentRef 를 오염시키지 않도록 즉시 버린다.
+    const incomingVer = payload.docVersion ?? 0;
+    if (incomingVer < lastSeenDocVersionRef.current) return;
+    lastSeenDocVersionRef.current = incomingVer;
     contentRef.current = payload.markdown;
     if (pendingExportRef.current?.requestId === payload.requestId) {
       pendingExportRef.current.resolve(payload.markdown);
@@ -252,6 +259,43 @@ export default function DraftScreen() {
     editorRef.current?.toggleMark("underline");
   }, []);
 
+  const handleImageUploadSuccess = useCallback((imageUrl: string) => {
+    editorRef.current?.insertImage(imageUrl);
+  }, []);
+
+  const handleImageUploadError = useCallback((err: Error) => {
+    showToast({ message: err.message, type: "error" });
+  }, [showToast]);
+
+  const { pickAndUpload: pickInlineImage, isUploading: isImageUploading } = useInlineImageUpload({
+    onSuccess: handleImageUploadSuccess,
+    onError: handleImageUploadError,
+  });
+
+  const handleInsertImage = useCallback(() => {
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ["취소", "카메라로 촬영", "갤러리에서 선택"],
+          cancelButtonIndex: 0,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 1) {
+            pickInlineImage("camera");
+          } else if (buttonIndex === 2) {
+            pickInlineImage("gallery");
+          }
+        },
+      );
+    } else {
+      Alert.alert("사진 추가", "사진을 어떻게 추가할까요?", [
+        { text: "취소", style: "cancel" },
+        { text: "카메라로 촬영", onPress: () => pickInlineImage("camera") },
+        { text: "갤러리에서 선택", onPress: () => pickInlineImage("gallery") },
+      ]);
+    }
+  }, [pickInlineImage]);
+
   const handleSourceArticleSelect = useCallback(
     async (articleId: string, articleTitle: string) => {
       if (!id) return;
@@ -300,6 +344,14 @@ export default function DraftScreen() {
       return;
     }
 
+    // 검토 단계 진입 전: 이미지를 단독 페이지(블록)로 자동 분할한다.
+    // autoSplitImages 는 WebView 트랜잭션 완료 후 Promise 를 resolve 하므로
+    // await 하면 편집기 내용이 확정된 뒤 export 가 시작된다.
+    const splitResult = await editorRef.current?.autoSplitImages();
+    if (splitResult?.hadConsecutiveImages) {
+      showToast({ message: "사진 사이에 빈 페이지를 추가했어요.", type: "info" });
+    }
+
     // 디바운스 대기 중이던 본문 export 가 있으면 취소하고, 즉시 1회만 export 한다.
     if (exportDebounceTimerRef.current) {
       clearTimeout(exportDebounceTimerRef.current);
@@ -340,7 +392,7 @@ export default function DraftScreen() {
       getGetArticleQueryKey(id),
       (old: unknown) => {
         if (!old || typeof old !== "object") return old;
-        return { ...old, title: currentTitle, content, status: "DIVIDING" };
+        return { ...old, title: currentTitle, content, status: "DIVIDING", pages: [] };
       },
       { updatedAt: Date.now() },
     );
@@ -578,6 +630,7 @@ export default function DraftScreen() {
             onUnderlinePress={handleToolbarUnderline}
             onInsertDivider={handleInsertDivider}
             onShiftEnter={handleShiftEnter}
+            onInsertImage={isImageUploading ? undefined : handleInsertImage}
           />
         )}
       </KeyboardAvoidingView>

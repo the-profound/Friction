@@ -202,10 +202,11 @@ export default function DividingScreen() {
       initializedRef.current = true;
       setInitialized(true);
       const t = article.title || "";
+      // 항상 article.content를 단일 진실 소스로 사용한다.
+      // pages는 서버에서 파생된 표시용 값이며, optimistic update 시점에
+      // 구버전이 남아 있으면 content와 diverge하여 데이터가 손실될 수 있다.
+      // 렌더링 시점 분할은 splitContentToPages(content)로 직접 파생한다.
       let c = article.content || "";
-      if (article.pages && Array.isArray(article.pages) && article.pages.length > 0) {
-        c = (article.pages as string[]).join(`\n${PAGE_DIVIDER}\n`);
-      }
       setTitle(t);
       titleRef.current = t;
       setContent(c);

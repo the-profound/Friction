@@ -45,6 +45,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
     const webViewRef = useRef<WebView>(null);
     const mountedAtRef = useRef<number>(Date.now());
     const [scrollLocked, setScrollLocked] = useState(false);
+    const autoSplitResolversRef = useRef<Array<(r: { hadConsecutiveImages: boolean }) => void>>([]);
 
     const bridgeRef = useRef<WebViewBridge | null>(null);
     if (bridgeRef.current == null) {
@@ -94,6 +95,15 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       },
       insertHardBreak() {
         sendCommand({ type: "insertHardBreak" });
+      },
+      insertImage(url: string) {
+        sendCommand({ type: "insertImage", url });
+      },
+      autoSplitImages() {
+        return new Promise<{ hadConsecutiveImages: boolean }>((resolve) => {
+          autoSplitResolversRef.current.push(resolve);
+          sendCommand({ type: "autoSplitImages" });
+        });
       },
       scrollToBlock(pageIndex: number, blockIndex: number) {
         sendCommand({ type: "scrollToBlock", pageIndex, blockIndex });
@@ -148,6 +158,11 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
             case "onSelHandleDragEnd":
               setScrollLocked(false);
               break;
+            case "onAutoSplitComplete": {
+              const resolvers = autoSplitResolversRef.current.splice(0);
+              resolvers.forEach((r) => r(data.payload));
+              break;
+            }
           }
         });
       },
