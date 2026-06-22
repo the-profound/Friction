@@ -7,7 +7,7 @@ export type WritingStage = "DRAFT" | "DIVIDING" | "CLOSING";
 
 const TABS: { stage: WritingStage; label: string }[] = [
   { stage: "DRAFT", label: "작성" },
-  { stage: "DIVIDING", label: "분할" },
+  { stage: "DIVIDING", label: "검토" },
   { stage: "CLOSING", label: "마감" },
 ];
 

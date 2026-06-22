@@ -10,6 +10,7 @@ import teamCollectionsRouter from "./team-collections";
 import neighborsRouter from "./neighbors";
 import sendRecordsRouter from "./send-records";
 import storageRouter from "./storage";
+import spellCheckRouter from "./spell-check";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use(teamCollectionsRouter);
 router.use(neighborsRouter);
 router.use(sendRecordsRouter);
 router.use(storageRouter);
+router.use(spellCheckRouter);
 
 export default router;

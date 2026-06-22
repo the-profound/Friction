@@ -542,6 +542,36 @@ export interface SendArticleBody {
   articleId: string;
 }
 
+export interface SpellCheckBody {
+  /** Markdown text to check */
+  text: string;
+}
+
+export type SpellChangeType =
+  (typeof SpellChangeType)[keyof typeof SpellChangeType];
+
+export const SpellChangeType = {
+  맞춤법: "맞춤법",
+  띄어쓰기: "띄어쓰기",
+} as const;
+
+export interface SpellChange {
+  /** Surrounding sentence context (≤30 chars) */
+  context: string;
+  /** The erroneous substring */
+  original: string;
+  /** The corrected substring */
+  replacement: string;
+  type: SpellChangeType;
+  /** One-line explanation (≤30 chars) */
+  reason: string;
+}
+
+export interface SpellCheckResponse {
+  changes?: SpellChange[];
+  error?: string | null;
+}
+
 export type ListArticlesParams = {
   authorId?: string;
   status?: ListArticlesStatus;

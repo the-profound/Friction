@@ -179,6 +179,12 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
       },
       scrollToBlock(_pageIndex: number, _blockIndex: number) {
       },
+      setSpellHighlight(_original: string, _contextHint: string) {
+      },
+      clearSpellHighlight() {
+      },
+      applySpellFix(_original: string, _replacement: string, _contextHint: string) {
+      },
     }), [editor, requestExportMarkdown, onError]);
 
     const handleTitleInput = useCallback(

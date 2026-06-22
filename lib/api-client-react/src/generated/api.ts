@@ -60,6 +60,8 @@ import type {
   RecentSavedCollectionResponse,
   SendArticleBody,
   SendRecordWithDetails,
+  SpellCheckBody,
+  SpellCheckResponse,
   StoredSentence,
   TeamCollection,
   TeamCollectionArticle,
@@ -1456,6 +1458,93 @@ export const useFinalizeArticle = <
   TContext
 > => {
   return useMutation(getFinalizeArticleMutationOptions(options));
+};
+
+/**
+ * LLM-based Korean spell/spacing check. Returns a list of suggested corrections.
+ * @summary Check Korean spelling and spacing
+ */
+export const getSpellCheckUrl = () => {
+  return `/api/spell-check`;
+};
+
+export const spellCheck = async (
+  spellCheckBody: SpellCheckBody,
+  options?: RequestInit,
+): Promise<SpellCheckResponse> => {
+  return customFetch<SpellCheckResponse>(getSpellCheckUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(spellCheckBody),
+  });
+};
+
+export const getSpellCheckMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof spellCheck>>,
+    TError,
+    { data: BodyType<SpellCheckBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof spellCheck>>,
+  TError,
+  { data: BodyType<SpellCheckBody> },
+  TContext
+> => {
+  const mutationKey = ["spellCheck"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof spellCheck>>,
+    { data: BodyType<SpellCheckBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return spellCheck(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SpellCheckMutationResult = NonNullable<
+  Awaited<ReturnType<typeof spellCheck>>
+>;
+export type SpellCheckMutationBody = BodyType<SpellCheckBody>;
+export type SpellCheckMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Check Korean spelling and spacing
+ */
+export const useSpellCheck = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof spellCheck>>,
+    TError,
+    { data: BodyType<SpellCheckBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof spellCheck>>,
+  TError,
+  { data: BodyType<SpellCheckBody> },
+  TContext
+> => {
+  return useMutation(getSpellCheckMutationOptions(options));
 };
 
 /**

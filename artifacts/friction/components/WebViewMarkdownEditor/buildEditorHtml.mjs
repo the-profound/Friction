@@ -100,6 +100,7 @@ html,body{height:100%;background:transparent;container-type:inline-size}
 .ProseMirror strong{font-family:'Eulyoo1945-SemiBold',serif;font-weight:700}
 .ProseMirror em{font-style:italic}
 .ProseMirror .overflow-highlight{background:#fecaca}
+.ProseMirror .spell-highlight{background:rgba(59,130,246,0.15);border-bottom:2px solid #3b82f6;border-radius:1px}
 .tiptap-question-block{background-color:#eff6ff;border-left:4px solid #3b82f6;border-radius:6px;padding:12px 14px;margin:0.5em 0;text-align:left}
 .tiptap-question-block p{margin-bottom:0;font-family:'Eulyoo1945-SemiBold',serif;font-weight:600;color:#1e3a8a;text-align:left}
 @keyframes page-anchor-pulse{0%{opacity:0}25%{opacity:1}75%{opacity:1}100%{opacity:0}}
@@ -108,7 +109,7 @@ html,body{height:100%;background:transparent;container-type:inline-size}
 body{padding:16px 0 0;overflow:auto;position:relative}
 `.trim();
 
-const VERSION = "3.17.0";
+const VERSION = "3.18.0";
 
 const tsContent = `import { buildWebViewPerfHeadScript } from "@/lib/webviewPerf";
 import { buildWebViewBridgeHeadScript } from "@/lib/webViewBridgeShim";

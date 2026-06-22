@@ -28,7 +28,10 @@ export type RNToWebViewCommand =
   | { type: "insertHardBreak" }
   | { type: "insertImage"; url: string }
   | { type: "autoSplitImages" }
-  | { type: "scrollToBlock"; pageIndex: number; blockIndex: number };
+  | { type: "scrollToBlock"; pageIndex: number; blockIndex: number }
+  | { type: "setSpellHighlight"; original: string; contextHint: string; occurrenceIndex: number }
+  | { type: "clearSpellHighlight" }
+  | { type: "applySpellFix"; original: string; replacement: string; contextHint: string; occurrenceIndex: number };
 
 export interface OnChangePayload {
   isDirty: boolean;
@@ -86,6 +89,9 @@ export interface WebViewMarkdownEditorRef {
   insertImage: (url: string) => void;
   autoSplitImages: () => Promise<{ hadConsecutiveImages: boolean }>;
   scrollToBlock: (pageIndex: number, blockIndex: number) => void;
+  setSpellHighlight: (original: string, contextHint: string, occurrenceIndex: number) => void;
+  clearSpellHighlight: () => void;
+  applySpellFix: (original: string, replacement: string, contextHint: string, occurrenceIndex: number) => void;
 }
 
 export interface WebViewMarkdownEditorProps {

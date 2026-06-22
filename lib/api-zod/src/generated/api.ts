@@ -650,6 +650,31 @@ export const FinalizeArticleResponse = zod.object({
 });
 
 /**
+ * LLM-based Korean spell/spacing check. Returns a list of suggested corrections.
+ * @summary Check Korean spelling and spacing
+ */
+export const SpellCheckBody = zod.object({
+  text: zod.string().describe("Markdown text to check"),
+});
+
+export const SpellCheckResponse = zod.object({
+  changes: zod
+    .array(
+      zod.object({
+        context: zod
+          .string()
+          .describe("Surrounding sentence context (≤30 chars)"),
+        original: zod.string().describe("The erroneous substring"),
+        replacement: zod.string().describe("The corrected substring"),
+        type: zod.enum(["맞춤법", "띄어쓰기"]),
+        reason: zod.string().describe("One-line explanation (≤30 chars)"),
+      }),
+    )
+    .optional(),
+  error: zod.string().nullish(),
+});
+
+/**
  * Only returns items where visible_at <= now
  * @summary List inbox items for a user
  */

@@ -25,6 +25,52 @@ interface OverflowRange {
 
 const overflowPluginKey = new PluginKey<DecorationSet>("overflow-highlights");
 
+// ─── Spell Highlight Plugin ───────────────────────────────────────────────────
+// Persistent Decoration.inline for the currently-reviewed spell suggestion.
+// Stored in plugin state so it tracks doc changes via ProseMirror mapping.
+const spellHighlightPluginKey = new PluginKey<{ from: number; to: number } | null>("spell-highlight");
+
+const SpellHighlightExtension = Extension.create({
+  name: "spellHighlight",
+  addProseMirrorPlugins() {
+    return [
+      new Plugin<{ from: number; to: number } | null>({
+        key: spellHighlightPluginKey,
+        state: {
+          init: () => null,
+          apply(tr, prev) {
+            const meta = tr.getMeta(spellHighlightPluginKey) as
+              | { from: number; to: number }
+              | "clear"
+              | undefined;
+            if (meta === "clear") return null;
+            if (meta && typeof meta === "object") return meta;
+            if (tr.docChanged && prev) {
+              const from = tr.mapping.map(prev.from);
+              const to = tr.mapping.map(prev.to);
+              return from < to ? { from, to } : null;
+            }
+            return prev;
+          },
+        },
+        props: {
+          decorations(state) {
+            const range = spellHighlightPluginKey.getState(state);
+            if (!range) return DecorationSet.empty;
+            try {
+              return DecorationSet.create(state.doc, [
+                Decoration.inline(range.from, range.to, { class: "spell-highlight" }),
+              ]);
+            } catch {
+              return DecorationSet.empty;
+            }
+          },
+        },
+      }),
+    ];
+  },
+});
+
 // 페이지 경계: doc 의 직접 자식 중 horizontalRule 노드를 페이지 구분자로 사용한다.
 // page N 의 컨텐츠 범위 = [start, end) (HR 노드 자체는 제외)
 function getPageRanges(doc: PMNode): { start: number; end: number }[] {
@@ -802,6 +848,124 @@ interface Command {
   pageIndex?: number;
   blockIndex?: number;
   url?: string;
+  original?: string;
+  replacement?: string;
+  contextHint?: string;
+  occurrenceIndex?: number;
+}
+
+// ─── Spell range finder (boundary-safe) ──────────────────────────────────────
+// Maps (original, contextHint, occurrenceIndex) → { from, to } PM position range.
+//
+// Design invariant: matches are only found WITHIN a single block node. No match
+// may span a paragraph/heading/list-item boundary. This prevents accidental
+// cross-node replacements that would structurally alter the document.
+//
+// Position mapping: text-node walking inside each block gives exact PM positions.
+// Joining only within-block text nodes (not across blocks) makes indexOf safe.
+
+interface TextSegment {
+  text: string;
+  pmStart: number; // PM position of the first character of this segment
+}
+
+interface BlockCandidate {
+  segs: TextSegment[];
+  blockText: string;
+  localOffset: number; // offset of `original` within blockText
+}
+
+// Walk a single block node's text nodes and collect segments with exact PM positions.
+function collectBlockSegments(blockNode: PMNode, blockOffset: number): TextSegment[] {
+  const segs: TextSegment[] = [];
+  blockNode.nodesBetween(0, blockNode.content.size, (node, pos) => {
+    if (node.isText && node.text) {
+      // pos is relative to blockNode; PM position = blockOffset + 1 (opener) + pos
+      segs.push({ text: node.text, pmStart: blockOffset + 1 + pos });
+    }
+    return true;
+  });
+  return segs;
+}
+
+// Map a within-block character offset to a PM position using the block's segments.
+function localOffsetToPmPos(segs: TextSegment[], offset: number): number {
+  let rem = offset;
+  for (const seg of segs) {
+    if (rem <= seg.text.length) return seg.pmStart + rem;
+    rem -= seg.text.length;
+  }
+  if (segs.length === 0) return 0;
+  const last = segs[segs.length - 1];
+  return last.pmStart + last.text.length;
+}
+
+// occurrenceIndex: 0-based index among all within-block occurrences of `original`.
+// Disambiguation priority:
+//  1. contextHint found inside a block → prefer occurrences in that block.
+//     If the context window uniquely identifies one occurrence, use it.
+//  2. occurrenceIndex as tiebreaker (clamped to available count).
+function spellFindRange(
+  doc: PMNode,
+  original: string,
+  contextHint: string,
+  occurrenceIndex = 0,
+): { from: number; to: number } | null {
+  if (!original) return null;
+
+  // Collect all within-block occurrences
+  const candidates: BlockCandidate[] = [];
+
+  doc.forEach((blockNode, blockOffset) => {
+    // Skip non-content nodes (e.g. horizontalRule)
+    if (!blockNode.isTextblock && blockNode.content.size === 0) return;
+    const segs = collectBlockSegments(blockNode, blockOffset);
+    if (segs.length === 0) return;
+    const blockText = segs.map((s) => s.text).join("");
+    let si = 0;
+    while (true) {
+      const idx = blockText.indexOf(original, si);
+      if (idx < 0) break;
+      candidates.push({ segs, blockText, localOffset: idx });
+      si = idx + 1;
+    }
+  });
+
+  if (candidates.length === 0) return null;
+
+  let chosen: BlockCandidate;
+
+  if (candidates.length === 1) {
+    chosen = candidates[0];
+  } else {
+    // Try to use contextHint to narrow down candidates
+    let resolved: BlockCandidate | null = null;
+
+    if (contextHint) {
+      // Find candidates whose blockText contains contextHint
+      const inCtx = candidates.filter((c) => {
+        const ctxPos = c.blockText.indexOf(contextHint);
+        if (ctxPos < 0) return false;
+        const ctxEnd = ctxPos + contextHint.length;
+        // The occurrence must start inside the context window
+        return c.localOffset >= ctxPos && c.localOffset + original.length <= ctxEnd;
+      });
+
+      if (inCtx.length === 1) {
+        resolved = inCtx[0];
+      } else if (inCtx.length > 1) {
+        // Multiple inside window: use occurrenceIndex within this subset
+        resolved = inCtx[Math.min(occurrenceIndex, inCtx.length - 1)];
+      }
+      // inCtx.length === 0 → contextHint doesn't narrow; fall through to occurrenceIndex
+    }
+
+    chosen = resolved ?? candidates[Math.min(occurrenceIndex, candidates.length - 1)];
+  }
+
+  const from = localOffsetToPmPos(chosen.segs, chosen.localOffset);
+  const to = localOffsetToPmPos(chosen.segs, chosen.localOffset + original.length);
+  return from < to ? { from, to } : null;
 }
 
 (function () {
@@ -1106,6 +1270,7 @@ interface Command {
         HardBreak,
         Placeholder.configure({ placeholder }),
         OverflowDecorationExtension,
+        SpellHighlightExtension,
         SelectionStabilityExtension,
       ],
       content: initialHtml,
@@ -1593,6 +1758,58 @@ interface Command {
           };
 
           attemptScroll(8); // ~8 * 150ms = up to 1.2s of retries
+          break;
+        }
+        case "setSpellHighlight": {
+          if (editor && !editor.isDestroyed) {
+            const range = spellFindRange(
+              editor.state.doc,
+              cmd.original || "",
+              cmd.contextHint || "",
+              cmd.occurrenceIndex ?? 0,
+            );
+            // Always dispatch — set range if found, clear if not found so no
+            // stale range from a previous item persists in plugin state.
+            editor.view.dispatch(
+              editor.state.tr.setMeta(spellHighlightPluginKey, range ?? "clear"),
+            );
+          }
+          break;
+        }
+        case "clearSpellHighlight": {
+          if (editor && !editor.isDestroyed) {
+            editor.view.dispatch(
+              editor.state.tr.setMeta(spellHighlightPluginKey, "clear"),
+            );
+          }
+          break;
+        }
+        case "applySpellFix": {
+          if (editor && !editor.isDestroyed) {
+            // Always re-resolve from cmd.original/contextHint/occurrenceIndex.
+            // Do NOT use plugin state — it may hold a range from a different
+            // suggestion if the previous setSpellHighlight failed.
+            const range = spellFindRange(
+              editor.state.doc,
+              cmd.original || "",
+              cmd.contextHint || "",
+              cmd.occurrenceIndex ?? 0,
+            );
+            // Clear highlight regardless of whether fix succeeds
+            editor.view.dispatch(
+              editor.state.tr.setMeta(spellHighlightPluginKey, "clear"),
+            );
+            if (range) {
+              try {
+                const repNode = cmd.replacement
+                  ? editor.state.schema.text(cmd.replacement)
+                  : null;
+                editor.view.dispatch(
+                  editor.state.tr.replaceWith(range.from, range.to, repNode ? [repNode] : []),
+                );
+              } catch {}
+            }
+          }
           break;
         }
       }

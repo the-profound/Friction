@@ -108,6 +108,15 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       scrollToBlock(pageIndex: number, blockIndex: number) {
         sendCommand({ type: "scrollToBlock", pageIndex, blockIndex });
       },
+      setSpellHighlight(original: string, contextHint: string, occurrenceIndex: number) {
+        sendCommand({ type: "setSpellHighlight", original, contextHint, occurrenceIndex });
+      },
+      clearSpellHighlight() {
+        sendCommand({ type: "clearSpellHighlight" });
+      },
+      applySpellFix(original: string, replacement: string, contextHint: string, occurrenceIndex: number) {
+        sendCommand({ type: "applySpellFix", original, replacement, contextHint, occurrenceIndex });
+      },
     }), [bridge, sendCommand]);
 
     const handleMessage = useCallback(

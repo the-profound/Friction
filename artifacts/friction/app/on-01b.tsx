@@ -47,6 +47,8 @@ import {
   TransitionArticleBodyTargetStatus,
   ApiError,
   getGetArticleQueryKey,
+  type SpellChange,
+  spellCheck as apiSpellCheck,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateArticleLists, invalidateArticleAndLists, invalidateArticleDetail } from "@/lib/queryInvalidation";
@@ -141,6 +143,17 @@ export default function DividingScreen() {
   const [blockTypeSheetVisible, setBlockTypeSheetVisible] = useState(false);
   const [splitting, setSplitting] = useState(false);
   const pageStripRef = useRef<ScrollView>(null);
+
+  type SpellState =
+    | { status: "idle" }
+    | { status: "loading" }
+    | { status: "reviewing"; items: SpellChange[]; index: number; occurrenceIndices: number[] }
+    | { status: "done" }
+    | { status: "empty" }
+    | { status: "error"; message: string };
+  const [spellState, setSpellState] = useState<SpellState>({ status: "idle" });
+  const spellAppliedCountRef = useRef<Record<string, number>>({});
+  const [spellTabVisible, setSpellTabVisible] = useState(false);
   const chipOffsetsRef = useRef<Record<number, number>>({});
   const returnScrollDoneRef = useRef(false);
   const returnBlockScrollDoneRef = useRef(false);
@@ -834,6 +847,13 @@ export default function DividingScreen() {
   }, [getEditorContent, markDirty, flush, hasRedWarnings, id, router, updateArticle, transitionStatus, queryClient, containerWidth, article, showToast]);
 
   const handleBack = useCallback(async () => {
+    if (spellTabVisible) {
+      editorRef.current?.clearSpellHighlight();
+      setSpellTabVisible(false);
+      setSpellState({ status: "idle" });
+      spellAppliedCountRef.current = {};
+      return;
+    }
     if (isNavigatingRef.current) return;
     isNavigatingRef.current = true;
     setIsNavigating(true);
@@ -913,6 +933,86 @@ export default function DividingScreen() {
       invalidateArticleAndLists(queryClient, id);
     });
   }, [id, getEditorContent, markDirty, flush, transitionStatus, queryClient, router, showToast]);
+
+  const handleRunSpellCheck = useCallback(async () => {
+    setSpellTabVisible(true);
+    setSpellState({ status: "loading" });
+    spellAppliedCountRef.current = {};
+    editorRef.current?.blur();
+    Keyboard.dismiss();
+    try {
+      const text = await getEditorContent();
+      const result = await apiSpellCheck({ text });
+      if (result.error) {
+        setSpellState({ status: "error", message: result.error });
+        return;
+      }
+      const changes = result.changes ?? [];
+      if (changes.length === 0) {
+        setSpellState({ status: "empty" });
+      } else {
+        const counts: Record<string, number> = {};
+        const occurrenceIndices = changes.map((c) => {
+          const idx = counts[c.original] ?? 0;
+          counts[c.original] = idx + 1;
+          return idx;
+        });
+        setSpellState({ status: "reviewing", items: changes, index: 0, occurrenceIndices });
+        editorRef.current?.setSpellHighlight(changes[0].original, changes[0].context ?? "", occurrenceIndices[0]);
+      }
+    } catch (e: any) {
+      setSpellState({ status: "error", message: e?.message ?? "오류가 발생했습니다." });
+    }
+  }, [getEditorContent]);
+
+  const handleSpellSkip = useCallback(() => {
+    setSpellState((prev) => {
+      if (prev.status !== "reviewing") return prev;
+      const next = prev.index + 1;
+      if (next >= prev.items.length) {
+        editorRef.current?.clearSpellHighlight();
+        return { status: "done" };
+      }
+      const nextItem = prev.items[next];
+      const baseIdx = prev.occurrenceIndices[next];
+      const applied = spellAppliedCountRef.current[nextItem.original] ?? 0;
+      const effectiveIdx = Math.max(0, baseIdx - applied);
+      editorRef.current?.setSpellHighlight(nextItem.original, nextItem.context ?? "", effectiveIdx);
+      return { status: "reviewing", items: prev.items, index: next, occurrenceIndices: prev.occurrenceIndices };
+    });
+  }, []);
+
+  const handleSpellApply = useCallback(() => {
+    setSpellState((prev) => {
+      if (prev.status !== "reviewing") return prev;
+      const item = prev.items[prev.index];
+      const baseIdx = prev.occurrenceIndices[prev.index];
+      const applied = spellAppliedCountRef.current[item.original] ?? 0;
+      const effectiveIdx = Math.max(0, baseIdx - applied);
+      editorRef.current?.applySpellFix(item.original, item.replacement, item.context ?? "", effectiveIdx);
+      spellAppliedCountRef.current = {
+        ...spellAppliedCountRef.current,
+        [item.original]: applied + 1,
+      };
+      const next = prev.index + 1;
+      if (next >= prev.items.length) {
+        return { status: "done" };
+      }
+      const nextItem = prev.items[next];
+      const nextBase = prev.occurrenceIndices[next];
+      const nextApplied = spellAppliedCountRef.current[nextItem.original] ?? 0;
+      const nextEffective = Math.max(0, nextBase - nextApplied);
+      editorRef.current?.setSpellHighlight(nextItem.original, nextItem.context ?? "", nextEffective);
+      return { status: "reviewing", items: prev.items, index: next, occurrenceIndices: prev.occurrenceIndices };
+    });
+  }, []);
+
+  const handleCloseSpellTab = useCallback(() => {
+    editorRef.current?.clearSpellHighlight();
+    setSpellTabVisible(false);
+    setSpellState({ status: "idle" });
+    spellAppliedCountRef.current = {};
+  }, []);
 
   const handleSelectionUpdate = useCallback((payload: OnSelectionUpdatePayload) => {
     setSelectionState(payload);
@@ -1018,6 +1118,20 @@ export default function DividingScreen() {
         <View style={styles.toolbar}>
           <Text style={styles.pageCountLabel}>{pages.length}페이지</Text>
           <View style={styles.toolbarSpacer} />
+          <ScalePressable
+            style={[
+              styles.autoSplitButton,
+              spellTabVisible && styles.autoSplitButtonDisabled,
+            ]}
+            onPress={handleRunSpellCheck}
+            disabled={spellTabVisible || spellState.status === "loading"}
+            contentStyle={styles.autoSplitButtonContent}
+          >
+            <Feather name="check-circle" size={14} color={Colors.zinc600} />
+            <Text style={styles.autoSplitText}>
+              {spellState.status === "loading" ? "검사 중…" : "맞춤법 검사"}
+            </Text>
+          </ScalePressable>
           <ScalePressable
             style={[
               styles.autoSplitButton,
@@ -1148,6 +1262,99 @@ export default function DividingScreen() {
             />
           )}
         </KeyboardAvoidingView>
+
+        {spellTabVisible && (
+          <View style={styles.spellPanel}>
+            <View style={styles.spellPanelHeader}>
+              <Text style={styles.spellPanelTitle}>
+                {spellState.status === "reviewing"
+                  ? `맞춤법 검사 (${spellState.index + 1}/${spellState.items.length})`
+                  : "맞춤법 검사"}
+              </Text>
+              <ScalePressable onPress={handleCloseSpellTab} hitSlop={12}>
+                <Feather name="x" size={18} color={Colors.zinc500} />
+              </ScalePressable>
+            </View>
+
+            {spellState.status === "loading" && (
+              <View style={styles.spellCenter}>
+                <ActivityIndicator size="small" color={Colors.zinc400} />
+                <Text style={styles.spellHintText}>검사 중…</Text>
+              </View>
+            )}
+
+            {spellState.status === "empty" && (
+              <View style={styles.spellCenter}>
+                <Feather name="check-circle" size={28} color="#22c55e" />
+                <Text style={styles.spellHintText}>맞춤법 오류가 없어요.</Text>
+              </View>
+            )}
+
+            {spellState.status === "done" && (
+              <View style={styles.spellCenter}>
+                <Feather name="check-circle" size={28} color="#22c55e" />
+                <Text style={styles.spellHintText}>검사 완료</Text>
+              </View>
+            )}
+
+            {spellState.status === "error" && (
+              <View style={styles.spellCenter}>
+                <Feather name="alert-circle" size={28} color="#ef4444" />
+                <Text style={[styles.spellHintText, { color: "#b91c1c" }]}>{spellState.message}</Text>
+                <ScalePressable onPress={handleRunSpellCheck} style={styles.spellRetryBtn}>
+                  <Text style={styles.spellRetryBtnText}>다시 시도</Text>
+                </ScalePressable>
+              </View>
+            )}
+
+            {spellState.status === "reviewing" && (() => {
+              const item = spellState.items[spellState.index];
+              const ctx = item.context ?? "";
+              const origIdx = ctx.indexOf(item.original);
+              const ctxBefore = origIdx >= 0 ? ctx.slice(0, origIdx) : ctx;
+              const ctxAfter  = origIdx >= 0 ? ctx.slice(origIdx + item.original.length) : "";
+              const hasCtx    = origIdx >= 0;
+              return (
+                <View style={styles.spellCard}>
+                  {ctx.length > 0 && (
+                    <View style={styles.spellContextBox}>
+                      <Text style={styles.spellContextText} numberOfLines={2}>
+                        {hasCtx ? (
+                          <>
+                            <Text>{ctxBefore}</Text>
+                            <Text style={styles.spellContextHighlight}>{item.original}</Text>
+                            <Text>{ctxAfter}</Text>
+                          </>
+                        ) : ctx}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={styles.spellTypeBadge}>
+                    <Text style={styles.spellTypeBadgeText}>{item.type}</Text>
+                  </View>
+                  <View style={styles.spellTextRow}>
+                    <View style={[styles.spellTextBubble, styles.spellTextBubbleOriginal]}>
+                      <Text style={styles.spellOriginalText}>{item.original}</Text>
+                    </View>
+                    <Feather name="arrow-right" size={14} color={Colors.zinc400} />
+                    <View style={[styles.spellTextBubble, styles.spellTextBubbleReplacement]}>
+                      <Text style={styles.spellReplacementText}>{item.replacement}</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.spellReasonText} numberOfLines={2}>{item.reason}</Text>
+                  <View style={styles.spellActions}>
+                    <ScalePressable style={styles.spellSkipButton} onPress={handleSpellSkip}>
+                      <Text style={styles.spellSkipText}>건너뛰기</Text>
+                    </ScalePressable>
+                    <ScalePressable style={styles.spellApplyButton} onPress={handleSpellApply}>
+                      <Text style={styles.spellApplyText}>적용</Text>
+                    </ScalePressable>
+                  </View>
+                </View>
+              );
+            })()}
+          </View>
+        )}
 
         <BlockTypeSheet
           visible={blockTypeSheetVisible}
@@ -1328,5 +1535,160 @@ const styles = StyleSheet.create({
     ...Typography.caption,
     fontSize: 11,
     color: Colors.zinc700,
+  },
+  spellPanel: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: Colors.white,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.zinc200,
+    paddingBottom: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  spellPanelHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: Spacing.screenPx,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.zinc100,
+  },
+  spellPanelTitle: {
+    ...Typography.caption,
+    fontSize: 13,
+    fontWeight: "600",
+    color: Colors.zinc700,
+  },
+  spellCenter: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 24,
+    gap: 8,
+  },
+  spellHintText: {
+    ...Typography.caption,
+    fontSize: 13,
+    color: Colors.zinc500,
+    textAlign: "center",
+  },
+  spellRetryBtn: {
+    marginTop: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: Colors.zinc100,
+  },
+  spellRetryBtnText: {
+    ...Typography.caption,
+    fontSize: 13,
+    color: Colors.zinc700,
+    fontWeight: "600",
+  },
+  spellCard: {
+    paddingHorizontal: Spacing.screenPx,
+    paddingTop: 14,
+    gap: 10,
+  },
+  spellContextBox: {
+    backgroundColor: Colors.zinc50 ?? "#fafafa",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderLeftWidth: 2,
+    borderLeftColor: Colors.zinc200,
+  },
+  spellContextText: {
+    ...Typography.caption,
+    fontSize: 13,
+    color: Colors.zinc500,
+    lineHeight: 20,
+  },
+  spellContextHighlight: {
+    color: "#b91c1c",
+    fontWeight: "600",
+    textDecorationLine: "underline",
+  },
+  spellTypeBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: Colors.zinc100,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  spellTypeBadgeText: {
+    ...Typography.caption,
+    fontSize: 11,
+    color: Colors.zinc600,
+    fontWeight: "600",
+  },
+  spellTextRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  spellTextBubble: {
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  spellTextBubbleOriginal: {
+    backgroundColor: "#fef2f2",
+  },
+  spellTextBubbleReplacement: {
+    backgroundColor: "#eff6ff",
+  },
+  spellOriginalText: {
+    ...Typography.body,
+    fontSize: 14,
+    color: "#b91c1c",
+    fontWeight: "600",
+  },
+  spellReplacementText: {
+    ...Typography.body,
+    fontSize: 14,
+    color: "#1d4ed8",
+    fontWeight: "600",
+  },
+  spellReasonText: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc500,
+  },
+  spellActions: {
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "flex-end",
+    paddingTop: 2,
+  },
+  spellSkipButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
+  },
+  spellSkipText: {
+    ...Typography.caption,
+    fontSize: 13,
+    color: Colors.zinc600,
+  },
+  spellApplyButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#3b82f6",
+  },
+  spellApplyText: {
+    ...Typography.caption,
+    fontSize: 13,
+    color: Colors.white,
+    fontWeight: "600",
   },
 });

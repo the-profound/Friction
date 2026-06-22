@@ -28,6 +28,8 @@ tags:
     description: Neighbor relationship operations
   - name: send-records
     description: Send record operations
+  - name: spell-check
+    description: Korean spell-check operations
 
 paths:
   /healthz:
@@ -415,6 +417,39 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Article or collection not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ─── Spell Check ─────────────────────────────────
+  /spell-check:
+    post:
+      operationId: spellCheck
+      tags: [spell-check]
+      summary: Check Korean spelling and spacing
+      description: LLM-based Korean spell/spacing check. Returns a list of suggested corrections.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpellCheckBody"
+      responses:
+        "200":
+          description: Spell check result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpellCheckResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: LLM error
           content:
             application/json:
               schema:
@@ -2553,3 +2588,44 @@ components:
           type: string
           format: uuid
       required: [senderId, recipientId, articleId]
+
+    # ─── SpellCheck ─────────────────────────────────
+    SpellCheckBody:
+      type: object
+      properties:
+        text:
+          type: string
+          description: Markdown text to check
+      required: [text]
+
+    SpellChange:
+      type: object
+      properties:
+        context:
+          type: string
+          description: Surrounding sentence context (≤30 chars)
+        original:
+          type: string
+          description: The erroneous substring
+        replacement:
+          type: string
+          description: The corrected substring
+        type:
+          type: string
+          enum: [맞춤법, 띄어쓰기]
+        reason:
+          type: string
+          description: One-line explanation (≤30 chars)
+      required: [context, original, replacement, type, reason]
+
+    SpellCheckResponse:
+      type: object
+      properties:
+        changes:
+          type: array
+          items:
+            $ref: "#/components/schemas/SpellChange"
+        error:
+          type: string
+          nullable: true
+      required: []
