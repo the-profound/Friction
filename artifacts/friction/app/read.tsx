@@ -30,7 +30,6 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
   withTiming,
-  withSequence,
   runOnJS,
   Easing,
 } from "react-native-reanimated";
@@ -407,9 +406,9 @@ export default function ReadScreen() {
     [pageListSize.width, pageListSize.height, screenWidth, effectiveLayoutWidth],
   );
 
-  // Entry black overlay animation — starts transparent (value=0); on content
-  // ready it plays transparent→black→transparent (2s total). No exit overlay.
-  const overlayOpacity = useSharedValue(0);
+  // Entry/exit black overlay animation — starts opaque (value=1) so the
+  // reader "fades in" on mount, and fades back to opaque when exiting.
+  const overlayOpacity = useSharedValue(1);
   const overlayAnimStyle = useAnimatedStyle(() => ({
     opacity: overlayOpacity.value,
   }));
@@ -556,15 +555,14 @@ export default function ReadScreen() {
     setMemoSheetVisible(true);
   }, []);
 
-  // Entry animation: once content is ready, play transparent→black(1s)→transparent(1s).
+  // Entry animation: fade in reader only once, when content is actually ready.
+  // Using [] would fire immediately during the loading state (before the overlay
+  // is rendered), so the 400ms animation finishes before content appears.
   const hasStartedEntryFadeRef = useRef(false);
   useEffect(() => {
     if (!articleLoading && !reading.isRestoring && reading.isSessionHydrated && !hasStartedEntryFadeRef.current) {
       hasStartedEntryFadeRef.current = true;
-      overlayOpacity.value = withSequence(
-        withTiming(1, { duration: 1000, easing: Easing.in(Easing.ease) }),
-        withTiming(0, { duration: 1000, easing: Easing.out(Easing.ease) }),
-      );
+      overlayOpacity.value = withTiming(0, { duration: 400, easing: Easing.out(Easing.ease) });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [articleLoading, reading.isRestoring, reading.isSessionHydrated]);
@@ -701,8 +699,10 @@ export default function ReadScreen() {
       reading.pause();
     }
     await readingMemo.cleanup();
-    router.back();
-  }, [mode, isListEntry, reading, router, readingMemo]);
+    overlayOpacity.value = withTiming(1, { duration: 350, easing: Easing.in(Easing.ease) }, (finished) => {
+      if (finished) runOnJS(router.back)();
+    });
+  }, [mode, isListEntry, reading, router, readingMemo, overlayOpacity]);
 
   const canNavigate = mode === "re_read" || reading.session.state === "READING";
 
@@ -1053,7 +1053,9 @@ export default function ReadScreen() {
       invalidateInbox(queryClient);
       clearActiveSession();
       await readingMemo.cleanup();
-      router.back();
+      overlayOpacity.value = withTiming(1, { duration: 350, easing: Easing.in(Easing.ease) }, (finished) => {
+        if (finished) runOnJS(router.back)();
+      });
       Alert.alert("완료", "보관함에 저장됐어요");
     } finally {
       setIsSaving(false);
@@ -1075,7 +1077,9 @@ export default function ReadScreen() {
         clearActiveSession();
         await readingMemo.cleanup();
         promptOrContinue(() => {
-          router.back();
+          overlayOpacity.value = withTiming(1, { duration: 350, easing: Easing.in(Easing.ease) }, (finished) => {
+            if (finished) runOnJS(router.back)();
+          });
           Alert.alert("완료", "읽기를 완료했어요");
         });
       } else {
@@ -1647,7 +1651,9 @@ export default function ReadScreen() {
             ? async () => {
                 setFinishOverlayVisible(false);
                 await readingMemo.cleanup();
-                router.back();
+                overlayOpacity.value = withTiming(1, { duration: 350, easing: Easing.in(Easing.ease) }, (finished) => {
+                  if (finished) runOnJS(router.back)();
+                });
               }
             : handleCommitAndSkip}
           onRestartReading={() => {
