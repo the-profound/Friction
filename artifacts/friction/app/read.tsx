@@ -77,6 +77,10 @@ import { useActiveReading } from "@/contexts/ActiveReadingContext";
 import type { ReadingMode } from "@/lib/policies";
 import { useToast } from "@/contexts/ToastContext";
 
+// Horizontal padding on each side of the reader card so the drop-shadow is
+// visible left and right. Must match pageListContainer.paddingHorizontal below.
+const READER_SIDE_PAD = 14;
+
 function computeReaderLayout(availableWidth: number, availableHeight: number, overrideContainerWidth?: number): ReaderLayout {
   const widthFromHeight = availableHeight * ReaderTokens.aspectRatio;
   const heightFromWidth = availableWidth / ReaderTokens.aspectRatio;
@@ -399,7 +403,9 @@ export default function ReadScreen() {
   const layout = useMemo(
     () =>
       computeReaderLayout(
-        pageListSize.width > 0 ? pageListSize.width : screenWidth,
+        // Subtract side padding so the card is narrower than the container,
+        // leaving READER_SIDE_PAD px on each side for the shadow to show.
+        (pageListSize.width > 0 ? pageListSize.width : screenWidth) - 2 * READER_SIDE_PAD,
         pageListSize.height > 0 ? pageListSize.height : screenWidth / ReaderTokens.aspectRatio,
         effectiveLayoutWidth,
       ),
@@ -417,6 +423,11 @@ export default function ReadScreen() {
   const lastPageBtnOpacity = useSharedValue(mode === "re_read" ? 1 : 0);
   const lastPageBtnAnimStyle = useAnimatedStyle(() => ({
     opacity: lastPageBtnOpacity.value,
+  }));
+
+  const progressBarOpacity = useSharedValue(1);
+  const progressBarAnimStyle = useAnimatedStyle(() => ({
+    opacity: progressBarOpacity.value,
   }));
 
   // Shared values for layout dimensions — worklets must only read shared values,
@@ -758,12 +769,22 @@ export default function ReadScreen() {
   }, []);
 
   // ── Reanimated shared values ──────────────────────────────────────────────
-  // Individual page-turn animation (replaces shared row translateX).
-  // pageTurnSV: 0 = no movement; –W = page fully turned (always moves negative).
-  // containerWidthSV: synced copy of layout.containerWidth for worklet reads.
-  const pageTurnSV = useSharedValue(0);
+  // Overlay-style pager: each slot has its own translateX SV so only the
+  // moving page animates; the stationary page stays at 0.
+  //
+  // Render order (bottom → top): [next, current, prev]
+  //   Forward swipe (dx < 0): current slides 0 → –W (out left), next stays at 0 below.
+  //   Backward swipe (dx > 0): prev slides –W → 0 (in from left on top), current stays at 0.
+  //
+  // Overlay SVs block underlying WebView bleed-through while the bottom slot is
+  // exposed. z-index is NOT used (native WebViews ignore RN z-index).
+  const currentSlotSV = useSharedValue(0);
+  const prevSlotSV = useSharedValue(0); // reset to -W in useLayoutEffect
   const currentPageSV = useSharedValue(currentPage);
   const containerWidthSV = useSharedValue(layout.containerWidth);
+
+  // Tracks which direction the active swipe is going (JS-thread safe, runOnJS:true).
+  const activeSwipeRef = useRef<'forward' | 'backward' | null>(null);
 
   const containerWidthRef = useRef(layout.containerWidth);
   useEffect(() => {
@@ -779,29 +800,81 @@ export default function ReadScreen() {
   const hasCoverRef = useRef(hasCover);
   useEffect(() => { hasCoverRef.current = hasCover; }, [hasCover]);
 
-  // Reset animation state after every page-turn commit (currentPage or layout change).
+  // Reset all slot SVs after every page-turn commit (currentPage or layout change).
   useLayoutEffect(() => {
     currentPageSV.value = currentPage;
-    pageTurnSV.value = 0;
+    currentSlotSV.value = 0;
+    prevSlotSV.value = -(layout.containerWidth + PARK_EXTRA); // park prev far off-screen left
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, layout.containerWidth]);
 
-  // Side-by-side pager: prev/current/next are laid out adjacently at
-  // left = relPos * W (–W, 0, +W) and ALL slots slide together by pageTurnSV.
-  // Because pages never overlap, each WebView (page + background + text) moves
-  // as one solid sheet — like a real sheet of paper sliding across.
-  //   pageTurnSV  0 → –W : forward turn (next comes into view from the right)
-  //   pageTurnSV  0 → +W : backward turn (prev comes into view from the left)
-  // z-index is intentionally NOT used: native WebViews do not honour RN z-index
-  // when overlapping, which was the root cause of the text-overlap bug.
-  const pageSlideAnimStyle = useAnimatedStyle(() => {
-    return { transform: [{ translateX: pageTurnSV.value }] };
+  // Forward swipe: current slides left and tilts slightly clockwise (positive rotateZ).
+  // Backward swipe: prev slides in from left, starting tilted and settling to flat.
+  const MAX_ROTATE_DEG = 4;
+  // Park prev slot this many px BEYOND -W so the bottom corner (which protrudes
+  // inward under CCW rotation) stays fully off-screen.
+  // Geometry: with -4° rotation the bottom-right corner protrudes ~H*sin(4°) ≈ H*0.07
+  // inward, PLUS the container is offset 14px from the screen edge.
+  // 120 px covers any phone in typical portrait use.
+  const PARK_EXTRA = 120;
+  const currentSlotAnimStyle = useAnimatedStyle(() => {
+    const W = containerWidthSV.value || 300;
+    // Only rotate while actually sliding out (not at rest position 0).
+    const slideOut = -currentSlotSV.value; // 0 at rest, W when fully out
+    const rotation = slideOut > 0.5 ? -(Math.min(1, slideOut / W) * MAX_ROTATE_DEG) : 0;
+    return {
+      transform: [
+        { translateX: currentSlotSV.value },
+        { rotateZ: `${rotation}deg` },
+      ],
+    };
   });
-
+  const prevSlotAnimStyle = useAnimatedStyle(() => {
+    const W = containerWidthSV.value || 300;
+    // Continuous rotation, no guard. Card is parked at -(W + PARK_EXTRA) — far
+    // enough off-screen that the bottom-right corner (most protruding corner under
+    // CCW rotation) stays invisible. As the card enters the viewport (slideIn→0)
+    // rotation is near -4°; by the time it is fully in (slideIn=W) rotation is 0°.
+    const slideIn = prevSlotSV.value + W; // –PARK_EXTRA when parked, W when fully in
+    const rotation = (slideIn / W - 1) * MAX_ROTATE_DEG;
+    // (slideIn/W − 1): parked ≈ −1.4 → screen-entry ≈ −1 → fully in = 0
+    return {
+      transform: [
+        { translateX: prevSlotSV.value },
+        { rotateZ: `${rotation}deg` },
+      ],
+    };
+  });
+  // Shadow opacity for the CURRENT card: 0 at rest (only `next` casts a shadow,
+  // so the resting stack shows exactly one shadow), growing to 1 as the card is
+  // swiped out — proportional to the same factor that drives its 0°→-4° rotation.
+  // Mimics lifting a sheet of paper: the more it lifts, the darker its shadow.
+  const currentShadowStyle = useAnimatedStyle(() => {
+    const W = containerWidthSV.value || 300;
+    const slideOut = -currentSlotSV.value; // 0 at rest, W when fully out
+    const progress = Math.min(1, Math.max(0, slideOut / W));
+    return { opacity: progress };
+  });
+  // Shadow opacity for the PREV card (backward swipe): strong while it is lifted
+  // off-screen / sliding in, fading to 0 as it settles flat at rest — so once it
+  // becomes the new resting page it adds no second shadow over `next`.
+  const prevShadowStyle = useAnimatedStyle(() => {
+    const W = containerWidthSV.value || 300;
+    const slideIn = prevSlotSV.value + W; // –PARK_EXTRA parked → W fully in
+    const progress = Math.min(1, Math.max(0, 1 - slideIn / W));
+    return { opacity: progress };
+  });
   // ── Gesture state ref (always fresh, avoids stale closure in useMemo) ────
+  const isAtEnd = currentPage >= totalPages; // on the completion card (past all real pages)
+
+  useEffect(() => {
+    progressBarOpacity.value = withTiming(isAtEnd ? 0 : 1, { duration: 250, easing: Easing.out(Easing.ease) });
+  }, [isAtEnd]);
+
   const gestureState = useRef({
     canNavigate: false,
     isOnLastPage: false,
+    isAtEnd: false,
     atBoundaryLeft: true,
     containerWidth: 300,
     isTextSelecting: false,
@@ -811,6 +884,7 @@ export default function ReadScreen() {
   gestureState.current = {
     canNavigate,
     isOnLastPage,
+    isAtEnd,
     atBoundaryLeft: currentPage === 0,
     containerWidth: layout.containerWidth,
     isTextSelecting: isTextSelectingRef.current,
@@ -825,7 +899,8 @@ export default function ReadScreen() {
   useEffect(() => {
     finishPageTurnRef.current = (direction: -1 | 1) => {
       isCommittingRef.current = false;
-      // pageTurnSV is reset by useLayoutEffect after currentPage changes
+      activeSwipeRef.current = null;
+      // Slot SVs are reset by useLayoutEffect after currentPage changes
       if (direction === -1) handleSwipeLeftRef.current();
       else handleSwipeRightRef.current();
     };
@@ -840,8 +915,9 @@ export default function ReadScreen() {
   const triggerLastPageTransitionRef = useRef(() => {});
   useEffect(() => {
     triggerLastPageTransitionRef.current = () => {
-      // Forward turn: slide everything left so the finish overlay scrolls in.
-      pageTurnSV.value = withTiming(-containerWidthRef.current, {
+      // Forward turn: slide current slot left so finish overlay scrolls in.
+      // Park at -(W + PARK_EXTRA) so the rotated corner clears the screen edge.
+      currentSlotSV.value = withTiming(-(containerWidthRef.current + PARK_EXTRA), {
         duration: 240,
         easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
       }, () => {
@@ -894,59 +970,66 @@ export default function ReadScreen() {
       // Only track horizontal movement for page sliding
       if (Math.abs(dy) > Math.abs(dx) * 1.8) return;
 
-      if (dx < 0 && gs.isOnLastPage) return;  // no next on last page
+      if (dx < 0 && gs.isAtEnd) return;  // no next after completion card
       if (dx > 0 && gs.atBoundaryLeft) return; // no prev at start
 
       const W = gs.containerWidth || 300;
       if (dx < 0) {
-        // Forward swipe: slide the whole strip left (next enters from the right).
-        pageTurnSV.value = Math.max(dx, -W);
+        // Forward: current slides left (0 → –(W + PARK_EXTRA)), next slot stays
+        // at 0 below. Clamp at -(W + PARK_EXTRA) so the rotated corner can drag
+        // fully off-screen instead of stopping with the corner still poking out.
+        activeSwipeRef.current = 'forward';
+        currentSlotSV.value = Math.max(dx, -(W + PARK_EXTRA));
       } else if (dx > 0) {
-        // Backward swipe: slide the whole strip right (prev enters from the left).
-        pageTurnSV.value = Math.min(dx, W);
+        // Backward: prev slides from –W toward 0 on top, current stays at 0.
+        activeSwipeRef.current = 'backward';
+        prevSlotSV.value = Math.max(-(W + PARK_EXTRA), dx - W);
       }
     })
     .onEnd((e) => {
       if (isCommittingRef.current) return;
+
+      const gs = gestureState.current;
+      const W = gs.containerWidth || 300;
+
+      const snapForward = () => {
+        currentSlotSV.value = withSpring(0, snapConfig);
+        activeSwipeRef.current = null;
+      };
+      const snapBackward = () => {
+        prevSlotSV.value = withSpring(-(W + PARK_EXTRA), snapConfig);
+        activeSwipeRef.current = null;
+      };
+
       if (isDraggingRef.current || isTextSelectingRef.current) {
-        pageTurnSV.value = withSpring(0, snapConfig);
+        if (activeSwipeRef.current === 'forward') snapForward();
+        else snapBackward();
         return;
       }
 
-      const gs = gestureState.current;
       const dx = e.translationX;
       const dy = e.translationY;
       const absDx = Math.abs(dx);
-      const W = gs.containerWidth || 300;
 
       // Upward swipe → open memo sheet
       if (dy < -50 && Math.abs(dy) > absDx * 1.5) {
-        pageTurnSV.value = withSpring(0, snapConfig);
+        if (activeSwipeRef.current === 'forward') snapForward();
+        else snapBackward();
         runOnJS(openMemoRef.current)();
         return;
       }
 
       if (!gs.canNavigate) {
-        pageTurnSV.value = withSpring(0, snapConfig);
+        if (activeSwipeRef.current === 'forward') snapForward();
+        else snapBackward();
         return;
       }
 
       const goingNext = dx < 0;
 
       // Boundary checks
-      if (goingNext && gs.isOnLastPage) {
-        // Last page extra swipe → animate into finish overlay (forward direction).
-        isCommittingRef.current = true;
-        pageTurnSV.value = withTiming(-W, {
-          duration: 240,
-          easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
-        }, () => {
-          runOnJS(handleSwipeLeftRef.current)();
-        });
-        return;
-      }
       if (!goingNext && gs.atBoundaryLeft) {
-        pageTurnSV.value = withSpring(0, snapConfig);
+        snapBackward();
         return;
       }
 
@@ -955,25 +1038,43 @@ export default function ReadScreen() {
       const shouldCommit = absDx > THRESHOLD || Math.abs(e.velocityX) > VELOCITY_THRESHOLD;
 
       if (!shouldCommit) {
-        pageTurnSV.value = withSpring(0, snapConfig);
+        if (goingNext) snapForward();
+        else snapBackward();
         return;
       }
 
       const direction: -1 | 1 = goingNext ? -1 : 1;
       isCommittingRef.current = true;
 
-      // Forward → slide strip left (–W); backward → slide strip right (+W).
-      pageTurnSV.value = withTiming(direction === -1 ? -W : W, {
-        duration: 240,
-        easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
-      }, () => {
-        runOnJS(finishPageTurnRef.current)(direction);
-      });
+      if (direction === -1) {
+        // Forward: slide current slot fully out to the left, parking at
+        // -(W + PARK_EXTRA) so the rotated corner clears the screen edge.
+        currentSlotSV.value = withTiming(-(W + PARK_EXTRA), {
+          duration: 240,
+          easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
+        }, () => {
+          runOnJS(finishPageTurnRef.current)(direction);
+        });
+      } else {
+        // Backward: slide prev slot fully into position.
+        prevSlotSV.value = withTiming(0, {
+          duration: 240,
+          easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
+        }, () => {
+          runOnJS(finishPageTurnRef.current)(direction);
+        });
+      }
     })
     .onFinalize(() => {
       // If gesture is cancelled externally, snap back to rest position.
       if (!isCommittingRef.current) {
-        pageTurnSV.value = withSpring(0, snapConfig);
+        const W = containerWidthRef.current || 300;
+        if (activeSwipeRef.current === 'forward') {
+          currentSlotSV.value = withSpring(0, snapConfig);
+        } else if (activeSwipeRef.current === 'backward') {
+          prevSlotSV.value = withSpring(-(W + PARK_EXTRA), snapConfig);
+        }
+        activeSwipeRef.current = null;
       }
     });
   }, []);
@@ -1336,12 +1437,14 @@ export default function ReadScreen() {
                   width: layout.containerWidth,
                   height: layout.containerHeight,
                   transform: [{ scale: layout.scaleFactor }],
-                  overflow: "hidden",
                 }}>
-                  {/* Windowed page slots — each gets its own Animated.View with
-                      direction-aware z-index and translateX for the overlay effect:
-                      forward → current on top slides left, next already underneath;
-                      backward → prev slides in from left on top, current stays. */}
+                  {/* Overlay-style page slots — render order is [next, current, prev]
+                      (last rendered = topmost layer). Each slot sits at left:0 and
+                      moves independently:
+                        forward  → current slides 0→–W out left, next stays at 0 below.
+                        backward → prev slides –W→0 in from left on top, current stays.
+                      Opaque overlay Views on the bottom slot block WebView bleed-through
+                      while the moving card exposes what is underneath. */}
                   <View
                     style={{
                       position: "absolute",
@@ -1353,56 +1456,194 @@ export default function ReadScreen() {
                     pointerEvents="box-none"
                   >
                     {(() => {
-                      const slots: React.ReactNode[] = [];
-                      const start = Math.max(0, currentPage - 1);
-                      const end = Math.min(totalPages - 1, currentPage + 1);
-                      for (let pageIdx = start; pageIdx <= end; pageIdx++) {
+                      const W = layout.containerWidth;
+                      const H = layout.containerHeight;
+                      // Positioning-only base, no shadow. Used by the `next` slot,
+                      // which always sits directly beneath `current` at rest — giving
+                      // it a shadow would stack a second shadow under the top card and
+                      // make the combined shadow visibly darker once a slide settles.
+                      const slotBase: object = {
+                        position: "absolute" as const,
+                        top: 0,
+                        left: 0,
+                        width: W,
+                        height: H,
+                      };
+                      // Shadow-only layer placed BEHIND each slot's content. Uses
+                      // boxShadow (not elevation) so it never reorders siblings on
+                      // Android — render order [next, current, prev] is preserved.
+                      // backgroundColor matches the page so the box casts a shadow;
+                      // the opaque slotContent on top hides the box interior, leaving
+                      // only the shadow that radiates past the card edges. Its opacity
+                      // is animated per slot (static 1 for `next`).
+                      const shadowLayer: object = {
+                        position: "absolute" as const,
+                        top: 0,
+                        left: 0,
+                        width: W,
+                        height: H,
+                        backgroundColor: ReaderTokens.bodyBg,
+                        boxShadow: "0px 2px 10px rgba(0,0,0,0.13), 0px 8px 24px rgba(0,0,0,0.09)",
+                      };
+                      // Inner wrapper clips text/WebView content to card bounds.
+                      const slotContent = {
+                        width: W,
+                        height: H,
+                        overflow: "hidden" as const,
+                        backgroundColor: ReaderTokens.bodyBg,
+                      };
+
+                      const makeNode = (pageIdx: number) => {
+                        // Virtual page one past the last: the in-card completion screen.
+                        if (pageIdx === totalPages) {
+                          return (
+                            <FinishOverlay
+                              cardMode
+                              insets={insets}
+                              questionBlockIndex={questionBlockIndex}
+                              questionBlockAnswers={questionBlockAnswers}
+                              onAnswerChange={(index, value) => {
+                                setQuestionBlockAnswers(prev => {
+                                  const copy = [...prev];
+                                  copy[index] = value;
+                                  return copy;
+                                });
+                              }}
+                              onNextQuestion={() => setQuestionBlockIndex(i => Math.min(i + 1, QUESTION_BLOCK_QUESTIONS.length - 1))}
+                              onSkipQuestion={() => setQuestionBlockIndex(i => Math.min(i + 1, QUESTION_BLOCK_QUESTIONS.length - 1))}
+                              memoTitle={memoTitle}
+                              onMemoTitleChange={setMemoTitle}
+                              memoContent={memoFreeMemo}
+                              onMemoContentChange={setMemoFreeMemo}
+                              collectionsData={collectionsQuery.data ?? []}
+                              selectedCollectionId={selectedCollectionId}
+                              onSelectCollection={(id) => {
+                                setSelectedCollectionId(id);
+                                updateRecentCollection.mutate(
+                                  { id: userId, data: { collectionId: id } },
+                                  { onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetUserRecentCollectionQueryKey(userId) }) },
+                                );
+                              }}
+                              onPickerModeChange={setCollectionPickerMode}
+                              pickerMode={collectionPickerMode}
+                              pickerTab={pickerTab}
+                              onPickerTabChange={setPickerTab}
+                              newCollectionName={newCollectionName}
+                              onNewCollectionNameChange={setNewCollectionName}
+                              newCollectionDesc={newCollectionDesc}
+                              onNewCollectionDescChange={setNewCollectionDesc}
+                              isCreatingCollection={isCreatingCollection}
+                              onCreateCollection={async () => {
+                                if (!newCollectionName.trim()) return;
+                                setIsCreatingCollection(true);
+                                try {
+                                  const newCol = await createCollection.mutateAsync({
+                                    data: { ownerId: userId, name: newCollectionName.trim(), description: newCollectionDesc.trim() || undefined },
+                                  });
+                                  setSelectedCollectionId(newCol.id);
+                                  invalidateMyCollections(queryClient);
+                                  updateRecentCollection.mutate(
+                                    { id: userId, data: { collectionId: newCol.id } },
+                                    { onSuccess: () => invalidateRecentCollection(queryClient, userId) },
+                                  );
+                                  setNewCollectionName("");
+                                  setNewCollectionDesc("");
+                                  setPickerTab("list");
+                                  setCollectionPickerMode(false);
+                                } catch (e: unknown) {
+                                  const msg = e instanceof Error ? e.message : "폴더 생성에 실패했습니다.";
+                                  Alert.alert("생성 실패", msg);
+                                } finally {
+                                  setIsCreatingCollection(false);
+                                }
+                              }}
+                              isSaving={isSaving}
+                              isDeleting={isDeleting}
+                              isCollectionsReady={isCollectionsReady}
+                              isReRead={mode === "re_read"}
+                              onSave={handleCommitAndSave}
+                              onExit={mode === "re_read"
+                                ? async () => {
+                                    setFinishOverlayVisible(false);
+                                    await readingMemo.cleanup();
+                                    overlayOpacity.value = withTiming(1, { duration: 350, easing: Easing.in(Easing.ease) }, (finished) => {
+                                      if (finished) runOnJS(router.back)();
+                                    });
+                                  }
+                                : handleCommitAndSkip}
+                              onRestartReading={() => {
+                                setFinishOverlayVisible(false);
+                                reading.restartReading();
+                              }}
+                              dynamicStyles={dynamicStyles}
+                            />
+                          );
+                        }
+                        if (pageIdx < 0 || pageIdx >= totalPages) return null;
                         const isCover = pageIdx === 0;
                         const cIdx = pageIdx - 1;
-                        // Side-by-side layout: each slot is parked adjacently at
-                        // left = relPos * W (prev –W, current 0, next +W) and the
-                        // whole strip slides together via pageSlideAnimStyle, so a
-                        // page's background + text always move as one solid sheet.
-                        const relPos = pageIdx - currentPage;
-                        const node = isCover ? (
-                          <CoverPage
-                            cover={cover}
-                            title={article?.title ?? ""}
-                            authorName={authorName}
-                            containerWidth={layout.containerWidth}
-                            containerHeight={layout.containerHeight}
-                          />
-                        ) : (cIdx >= 0 && cIdx < contentPages.length ? (
-                          <PageView
-                            content={contentPages[cIdx]}
-                            onTextSelect={handleTextSelect}
-                            onDragStateChange={handleDragStateChange}
-                            bottomInset={insets.bottom}
-                            layout={layout}
-                            clearSignal={clearSelectionSignal}
-                          />
-                        ) : null);
-                        if (!node) continue;
-                        slots.push(
-                          <Animated.View
-                            key={`page-${pageIdx}`}
-                            style={[
-                              {
-                                position: "absolute",
-                                top: 0,
-                                left: relPos * layout.containerWidth,
-                                width: layout.containerWidth,
-                                height: layout.containerHeight,
-                                backgroundColor: ReaderTokens.bodyBg,
-                              },
-                              pageSlideAnimStyle,
-                            ]}
-                          >
-                            {node}
-                          </Animated.View>,
-                        );
-                      }
-                      return slots;
+                        if (isCover) {
+                          return (
+                            <CoverPage
+                              cover={cover}
+                              title={article?.title ?? ""}
+                              authorName={authorName}
+                              containerWidth={layout.containerWidth}
+                              containerHeight={layout.containerHeight}
+                            />
+                          );
+                        }
+                        if (cIdx >= 0 && cIdx < contentPages.length) {
+                          return (
+                            <PageView
+                              content={contentPages[cIdx]}
+                              onTextSelect={handleTextSelect}
+                              onDragStateChange={handleDragStateChange}
+                              bottomInset={insets.bottom}
+                              layout={layout}
+                              clearSignal={clearSelectionSignal}
+                            />
+                          );
+                        }
+                        return null;
+                      };
+
+                      const nextNode = makeNode(currentPage + 1);
+                      const currentNode = makeNode(currentPage);
+                      const prevNode = makeNode(currentPage - 1);
+
+                      return (
+                        <>
+                          {/* next — bottom layer, always carries the base shadow
+                              (static, full opacity) so the resting page always casts
+                              exactly one shadow. Rendered even when there is no next
+                              real page so the completion card keeps its shadow. */}
+                          <View key={`page-${currentPage + 1}`} style={slotBase}>
+                            <View style={shadowLayer} />
+                            {nextNode != null && (
+                              <View style={slotContent}>{nextNode}</View>
+                            )}
+                          </View>
+
+                          {/* current — middle layer, slides left + rotates during
+                              forward swipe. Its shadow fades in as it lifts/slides. */}
+                          {currentNode != null && (
+                            <Animated.View key={`page-${currentPage}`} style={[slotBase, currentSlotAnimStyle]}>
+                              <Animated.View style={[shadowLayer, currentShadowStyle]} />
+                              <View style={slotContent}>{currentNode}</View>
+                            </Animated.View>
+                          )}
+
+                          {/* prev — top layer, slides in from left + rotates to flat
+                              during backward swipe. Its shadow fades out as it settles. */}
+                          {prevNode != null && (
+                            <Animated.View key={`page-${currentPage - 1}`} style={[slotBase, prevSlotAnimStyle]}>
+                              <Animated.View style={[shadowLayer, prevShadowStyle]} />
+                              <View style={slotContent}>{prevNode}</View>
+                            </Animated.View>
+                          )}
+                        </>
+                      );
                     })()}
                   </View>
                 </View>
@@ -1411,9 +1652,9 @@ export default function ReadScreen() {
             </Animated.View>
 
             {/* Progress bar below card */}
-            <View style={styles.progressBarContainer}>
+            <Animated.View style={[styles.progressBarContainer, progressBarAnimStyle]}>
               <ProgressIndicator type="linear" progress={reading.progress} size="small" />
-            </View>
+            </Animated.View>
           </View>
         </GestureDetector>
       ) : (
@@ -1433,7 +1674,7 @@ export default function ReadScreen() {
       </Animated.View>
 
       {/* ── Memo FAB — bottom right ─────────────────────────────────────── */}
-      {!finishOverlayVisible && (
+      {!isAtEnd && (
         <ScalePressable
           onPress={handleOpenMemo}
           hitSlop={8}
@@ -1581,88 +1822,8 @@ export default function ReadScreen() {
         </ScrollView>
       </BottomSheet>
 
-      {/* ── 마무리 화면 — 전체 화면 오버레이 ─────────────────────────── */}
-      {finishOverlayVisible && (
-        <FinishOverlay
-          insets={insets}
-          questionBlockIndex={questionBlockIndex}
-          questionBlockAnswers={questionBlockAnswers}
-          onAnswerChange={(index, value) => {
-            setQuestionBlockAnswers(prev => {
-              const copy = [...prev];
-              copy[index] = value;
-              return copy;
-            });
-          }}
-          onNextQuestion={() => setQuestionBlockIndex(i => Math.min(i + 1, QUESTION_BLOCK_QUESTIONS.length - 1))}
-          onSkipQuestion={() => setQuestionBlockIndex(i => Math.min(i + 1, QUESTION_BLOCK_QUESTIONS.length - 1))}
-          memoTitle={memoTitle}
-          onMemoTitleChange={setMemoTitle}
-          memoContent={memoFreeMemo}
-          onMemoContentChange={setMemoFreeMemo}
-          collectionsData={collectionsQuery.data ?? []}
-          selectedCollectionId={selectedCollectionId}
-          onSelectCollection={(id) => {
-            setSelectedCollectionId(id);
-            updateRecentCollection.mutate(
-              { id: userId, data: { collectionId: id } },
-              { onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetUserRecentCollectionQueryKey(userId) }) },
-            );
-          }}
-          onPickerModeChange={setCollectionPickerMode}
-          pickerMode={collectionPickerMode}
-          pickerTab={pickerTab}
-          onPickerTabChange={setPickerTab}
-          newCollectionName={newCollectionName}
-          onNewCollectionNameChange={setNewCollectionName}
-          newCollectionDesc={newCollectionDesc}
-          onNewCollectionDescChange={setNewCollectionDesc}
-          isCreatingCollection={isCreatingCollection}
-          onCreateCollection={async () => {
-            if (!newCollectionName.trim()) return;
-            setIsCreatingCollection(true);
-            try {
-              const newCol = await createCollection.mutateAsync({
-                data: { ownerId: userId, name: newCollectionName.trim(), description: newCollectionDesc.trim() || undefined },
-              });
-              setSelectedCollectionId(newCol.id);
-              invalidateMyCollections(queryClient);
-              updateRecentCollection.mutate(
-                { id: userId, data: { collectionId: newCol.id } },
-                { onSuccess: () => invalidateRecentCollection(queryClient, userId) },
-              );
-              setNewCollectionName("");
-              setNewCollectionDesc("");
-              setPickerTab("list");
-              setCollectionPickerMode(false);
-            } catch (e: unknown) {
-              const msg = e instanceof Error ? e.message : "폴더 생성에 실패했습니다.";
-              Alert.alert("생성 실패", msg);
-            } finally {
-              setIsCreatingCollection(false);
-            }
-          }}
-          isSaving={isSaving}
-          isDeleting={isDeleting}
-          isCollectionsReady={isCollectionsReady}
-          isReRead={mode === "re_read"}
-          onSave={handleCommitAndSave}
-          onExit={mode === "re_read"
-            ? async () => {
-                setFinishOverlayVisible(false);
-                await readingMemo.cleanup();
-                overlayOpacity.value = withTiming(1, { duration: 350, easing: Easing.in(Easing.ease) }, (finished) => {
-                  if (finished) runOnJS(router.back)();
-                });
-              }
-            : handleCommitAndSkip}
-          onRestartReading={() => {
-            setFinishOverlayVisible(false);
-            reading.restartReading();
-          }}
-          dynamicStyles={dynamicStyles}
-        />
-      )}
+      {/* 마무리 화면은 이제 카드 슬롯(makeNode(totalPages)) 안에 인라인으로 렌더됩니다.
+          전체 화면 오버레이는 더 이상 사용하지 않습니다. */}
 
       {/* ── 진입/퇴장 검은 오버레이 ──────────────────────────────────── */}
       <Animated.View
@@ -1741,8 +1902,10 @@ const newMemoStyles = StyleSheet.create({
   },
 });
 
-/* ─── FinishOverlay — 마무리 화면 (그림자 없는 전체 화면) ──────────── */
+/* ─── FinishOverlay — 마무리 화면 ──────────────────────────────────── */
 interface FinishOverlayProps {
+  /** When true, renders flush inside a card slot instead of as a full-screen overlay. */
+  cardMode?: boolean;
   insets: { top: number; bottom: number; left: number; right: number };
   questionBlockIndex: number;
   questionBlockAnswers: string[];
@@ -1782,6 +1945,7 @@ interface FinishOverlayProps {
 }
 
 function FinishOverlay({
+  cardMode = false,
   insets,
   questionBlockIndex,
   questionBlockAnswers,
@@ -1814,6 +1978,23 @@ function FinishOverlay({
   onRestartReading,
   dynamicStyles,
 }: FinishOverlayProps) {
+  // Swipe right on the finish overlay → go back to last letter page
+  const swipeBackGesture = useMemo(() =>
+    Gesture.Pan()
+      .minDistance(8)
+      .runOnJS(true)
+      .onEnd((e) => {
+        if (pickerMode) return; // don't interfere with folder picker scroll
+        const dx = e.translationX;
+        const dy = e.translationY;
+        // Must be clearly rightward and more horizontal than vertical
+        if (dx > 0 && dx > Math.abs(dy) * 1.2 && (dx > 60 || e.velocityX > 400)) {
+          onRestartReading();
+        }
+      }),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [pickerMode]);
+
   const selectedColName = collectionsData.find(c => c.id === selectedCollectionId)?.name ?? "보관함";
   const visibleCollections = collectionsData
     .filter(c => !c.isArchive)
@@ -1823,8 +2004,8 @@ function FinishOverlay({
       return (b.articleCount ?? 0) - (a.articleCount ?? 0);
     });
 
-  return (
-    <View style={[finishStyles.overlay, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+  const innerContent = (
+    <View style={cardMode ? finishStyles.card : [finishStyles.overlay, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       {pickerMode ? (
         /* ── 폴더 선택 모드 ── */
         <View style={finishStyles.pickerContainer}>
@@ -2013,6 +2194,12 @@ function FinishOverlay({
       )}
     </View>
   );
+
+  // In card mode the pager gesture already handles swipe-right (prev page),
+  // so skip the inner GestureDetector wrapper.
+  return cardMode ? innerContent : (
+    <GestureDetector gesture={swipeBackGesture}>{innerContent}</GestureDetector>
+  );
 }
 
 const finishStyles = StyleSheet.create({
@@ -2024,6 +2211,10 @@ const finishStyles = StyleSheet.create({
     bottom: 0,
     backgroundColor: ReaderTokens.bodyBg,
     zIndex: 50,
+  },
+  card: {
+    flex: 1,
+    backgroundColor: ReaderTokens.bodyBg,
   },
   pickerContainer: {
     flex: 1,
@@ -2192,7 +2383,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   progressBarContainer: {
-    width: "80%",
+    width: "90%",
     alignSelf: "center",
     marginTop: 14,
   },
@@ -2324,25 +2515,13 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 14,
   },
   readerShadowWrapper: {
     alignSelf: "center",
-    ...Platform.select({
-      web: {
-        boxShadow: "0 -10px 24px rgba(0,0,0,0.07), 0 10px 24px rgba(0,0,0,0.07)",
-      },
-      default: {
-        elevation: 8,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.12,
-        shadowRadius: 20,
-      },
-    }),
   },
   readerFrame: {
     alignSelf: "center",
-    overflow: "hidden",
     backgroundColor: ReaderTokens.bodyBg,
   },
   bottomBar: {
