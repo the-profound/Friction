@@ -101,7 +101,7 @@ export function createInitialSession(
 
 export function advancePage(session: ReadingSession): ReadingSession {
   const { position } = session;
-  if (position.currentPage >= position.totalPages - 1) {
+  if (position.currentPage >= position.totalPages) {
     return session;
   }
   return {

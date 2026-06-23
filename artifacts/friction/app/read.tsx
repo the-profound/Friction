@@ -339,7 +339,7 @@ export default function ReadScreen() {
   });
 
   const currentPage = totalPages > 0
-    ? Math.min(reading.session.position.currentPage, totalPages - 1)
+    ? Math.min(reading.session.position.currentPage, totalPages)
     : reading.session.position.currentPage;
   const isOnCoverPage = currentPage === 0;
   const contentPageIndex = Math.max(0, currentPage - 1);
@@ -715,7 +715,7 @@ export default function ReadScreen() {
     });
   }, [mode, isListEntry, reading, router, readingMemo, overlayOpacity]);
 
-  const canNavigate = mode === "re_read" || reading.session.state === "READING";
+  const canNavigate = mode === "re_read" || reading.session.state === "READING" || reading.session.state === "COMPLETED_READY";
 
   const showingCover = hasCover && currentPage === 0;
 
@@ -1030,6 +1030,10 @@ export default function ReadScreen() {
       // Boundary checks
       if (!goingNext && gs.atBoundaryLeft) {
         snapBackward();
+        return;
+      }
+      if (goingNext && gs.isAtEnd) {
+        snapForward();
         return;
       }
 

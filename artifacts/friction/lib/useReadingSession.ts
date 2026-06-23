@@ -142,12 +142,12 @@ export function useReadingSession({
     setSession((prev) => {
       const next = advancePage(prev);
       if (next !== prev) {
+        if (next.position.currentPage >= next.position.totalPages && prev.state === "READING") {
+          const completed = markCompletedReady(next);
+          if (completed) return completed;
+        }
         savePosition(next.position.currentPage, 0);
         return next;
-      }
-      if (isLastPage(prev.position.currentPage, prev.position.totalPages) && prev.state === "READING") {
-        const completed = markCompletedReady(prev);
-        if (completed) return completed;
       }
       return prev;
     });
@@ -155,6 +155,19 @@ export function useReadingSession({
 
   const prevPage = useCallback(() => {
     setSession((prev) => {
+      if (prev.position.currentPage >= prev.position.totalPages && prev.state === "COMPLETED_READY") {
+        const restored = {
+          ...prev,
+          state: "READING" as const,
+          position: {
+            ...prev.position,
+            currentPage: prev.position.totalPages - 1,
+            scrollPosition: 0,
+          },
+        };
+        savePosition(restored.position.currentPage, 0);
+        return restored;
+      }
       const next = goToPreviousPage(prev);
       if (next !== prev) {
         savePosition(next.position.currentPage, 0);
