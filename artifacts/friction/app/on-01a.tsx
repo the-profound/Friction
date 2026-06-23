@@ -60,19 +60,11 @@ export default function DraftScreen() {
   const [charCount, setCharCount] = useState(0);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [editorReady, setEditorReady] = useState(false);
-  const [initialized, setInitialized] = useState(false);
   const [selectionState, setSelectionState] = useState<OnSelectionUpdatePayload>(DEFAULT_SELECTION);
   const [blockTypeSheetVisible, setBlockTypeSheetVisible] = useState(false);
   const contentRef = useRef("");
   const titleRef = useRef("");
   const initializedRef = useRef(false);
-  // Set to true when the user makes their first real keystroke so the init
-  // effect never overwrites content even if it re-runs (belt-and-suspenders).
-  const userHasEditedRef = useRef(false);
-  // Raised immediately before a programmatic setMarkdown injection; consumed
-  // by the first isDirty onChange to suppress the spurious autosave it causes.
-  const isInitialInjectionRef = useRef(false);
-  const isWaitingForFreshData = !initialized && articleQuery.isFetching;
   const articleContentRef = useRef("");
   const mountedAtRef = useRef(Date.now());
   const isNavigatingRef = useRef(false);
@@ -115,13 +107,13 @@ export default function DraftScreen() {
   }, []);
 
   useEffect(() => {
-    // Initialize with whatever article data is available, stale or fresh.
-    // Showing cached text immediately is always better than a blank editor;
-    // mount-time invalidation (above) already triggers a background refetch
-    // when the cache is genuinely stale, so fresh data will follow shortly.
-    if (article && !initializedRef.current && !userHasEditedRef.current) {
+    // Allow up to 30s of slack so cache primed via setQueryData (with
+    // updatedAt: Date.now()) on the previous screen passes the gate immediately.
+    // A truly stale cache (older than 30s, e.g. cold entry from inbox) still
+    // waits for the in-flight refetch — preserving the original safety property.
+    const isDataFresh = articleQuery.dataUpdatedAt >= mountedAtRef.current - 30_000;
+    if (article && !initializedRef.current && isDataFresh) {
       initializedRef.current = true;
-      setInitialized(true);
       const t = article.title || "";
       const c = article.content || "";
       setTitle(t);
@@ -130,7 +122,6 @@ export default function DraftScreen() {
       articleContentRef.current = c;
       setCharCount(c.length);
       if (editorReady) {
-        isInitialInjectionRef.current = true;
         editorRef.current?.setMarkdown(c);
         editorRef.current?.setTitle(t);
       }
@@ -151,7 +142,6 @@ export default function DraftScreen() {
 
   const handleEditorReady = useCallback(() => {
     setEditorReady(true);
-    isInitialInjectionRef.current = true;
     editorRef.current?.setMarkdown(articleContentRef.current);
     editorRef.current?.setTitle(titleRef.current);
   }, []);
@@ -208,13 +198,6 @@ export default function DraftScreen() {
       setCharCount(_payload.charCount);
     }
     if (_payload.isDirty) {
-      // 최초 programmatic 주입(setMarkdown)이 유발하는 첫 번째 isDirty 이벤트는
-      // 자동저장을 트리거하지 않는다. 이후 이벤트는 실제 사용자 편집으로 간주한다.
-      if (isInitialInjectionRef.current) {
-        isInitialInjectionRef.current = false;
-        return;
-      }
-      userHasEditedRef.current = true;
       // 매 onChange 마다 export+markDirty 를 즉시 돌리면 본문이 길어질수록
       // editor.getHTML() → htmlToMarkdown → RN 브리지 왕복 → AsyncStorage 직렬화
       // 비용이 입력 한 번마다 누적되어 한글 IME 합성 중에 화면이 멈추는 원인이 된다.
@@ -365,7 +348,6 @@ export default function DraftScreen() {
     // autoSplitImages 는 WebView 트랜잭션 완료 후 Promise 를 resolve 하므로
     // await 하면 편집기 내용이 확정된 뒤 export 가 시작된다.
     const splitResult = await editorRef.current?.autoSplitImages();
-    console.log("[on-01a handleNext] autoSplitImages done:", splitResult);
     if (splitResult?.hadConsecutiveImages) {
       showToast({ message: "사진 사이에 빈 페이지를 추가했어요.", type: "info" });
     }
@@ -377,11 +359,8 @@ export default function DraftScreen() {
     }
     exportPendingRef.current = false;
     const content = await getEditorContent();
-    console.log("[on-01a handleNext] getEditorContent result len=%d preview=%j", content.length, content.slice(0, 120));
     markDirty(titleRef.current, content);
-    console.log("[on-01a handleNext] markDirty called, awaiting flush...");
     const flushResult = await flush();
-    console.log("[on-01a handleNext] flush done:", flushResult);
     if (!flushResult.ok) {
       isNavigatingRef.current = false;
       setIsNavigating(false);
@@ -582,9 +561,7 @@ export default function DraftScreen() {
         ) : isNavigating ? (
           <ActivityIndicator size="small" color={Colors.zinc400} />
         ) : (
-          <ScalePressable onPress={handleInsertImage} disabled={isImageUploading} hitSlop={12}>
-            <Feather name="image" size={20} color={isImageUploading ? Colors.zinc300 : Colors.zinc600} />
-          </ScalePressable>
+          <View style={styles.headerRight} />
         )}
       </View>
 
@@ -593,11 +570,6 @@ export default function DraftScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <View style={[styles.editorInner, { width: editorLayout.safeAreaWidth }]}>
-        {isWaitingForFreshData && (
-          <View style={styles.freshDataOverlay} pointerEvents="none">
-            <ActivityIndicator size="small" color={Colors.zinc400} />
-          </View>
-        )}
         {/*
           본문 텍스트 컬럼은 4개 화면(작성/분할/마감/읽기)이 동일한 정수 픽셀 폭으로
           줄넘김을 결정해야 한다. 컨테이너에 paddingHorizontal을 주는 대신
@@ -730,13 +702,6 @@ const styles = StyleSheet.create({
   editorInner: {
     flex: 1,
     paddingTop: 8,
-  },
-  freshDataOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 10,
-    backgroundColor: "transparent",
   },
   markdownEditorContainer: {
     flex: 1,

@@ -95,8 +95,7 @@ html,body{height:100%;background:transparent;container-type:inline-size}
 @keyframes page-anchor-pulse{0%{opacity:0}25%{opacity:1}75%{opacity:1}100%{opacity:0}}
 .page-anchor-overlay{position:absolute;left:0;width:100%;background:rgba(59,130,246,0.14);border-radius:6px;pointer-events:none;z-index:0;animation:page-anchor-pulse 1.6s ease-in-out forwards}
 #source-article-slot{display:none;width:100%;font-size:13px;color:#a1a1aa;font-family:system-ui,-apple-system,sans-serif;padding:0 0 8px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;-webkit-tap-highlight-color:transparent}
-body{padding:16px 0 0;overflow:auto;position:relative}
-.tiptap-inline-image{display:block;max-width:60%;max-height:280px;margin:12px 0;object-fit:contain}</style>
+body{padding:16px 0 0;overflow:auto;position:relative}</style>
 </head>
 <body>
 <textarea id="title-input" rows="1" placeholder="제목"></textarea>
