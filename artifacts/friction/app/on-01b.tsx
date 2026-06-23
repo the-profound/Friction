@@ -124,11 +124,16 @@ export default function DividingScreen() {
   // article data finishes loading. initializedRef is still used for synchronous
   // guards that must not trigger re-renders.
   const [initialized, setInitialized] = useState(false);
+  const isWaitingForFreshData = !initialized && (articleLoading || articleQuery.isFetching);
   const titleRef = useRef("");
   const contentRef = useRef("");
   const initializedRef = useRef(false);
-  // Capture mount time so we can verify fresh data (dataUpdatedAt >= mountedAt)
-  // before initializing the editor, avoiding stale-cache initialization.
+  // Set to true when the user makes their first real keystroke so the init
+  // effect never overwrites content even if it re-runs (belt-and-suspenders).
+  const userHasEditedRef = useRef(false);
+  // Raised immediately before a programmatic setMarkdown injection; consumed
+  // by the first isDirty onChange to suppress the spurious autosave it causes.
+  const isInitialInjectionRef = useRef(false);
   const mountedAtRef = useRef(Date.now());
   const initialContentRef = useRef("");
   const initialTitleRef = useRef("");
@@ -203,15 +208,11 @@ export default function DividingScreen() {
   }, [editorReady, initialized]);
 
   useEffect(() => {
-    // Gate initialization on data being NEWER than this component's mount time.
-    // This is more reliable than checking isFetching alone, which can be false
-    // for a brief window between mount and when invalidateQueries triggers the
-    // refetch, potentially letting stale cached data initialize the editor.
-    // 30s slack — see on-01a for rationale. Cache primed via optimistic
-    // setQueryData(..., { updatedAt: Date.now() }) on the previous screen
-    // passes immediately; truly stale caches still wait for the refetch.
-    const isDataFresh = articleQuery.dataUpdatedAt >= mountedAtRef.current - 30_000;
-    if (article && !initializedRef.current && isDataFresh) {
+    // Initialize with whatever article data is available, stale or fresh.
+    // Showing cached text immediately is always better than a blank editor;
+    // mount-time invalidation (above) already triggers a background refetch
+    // when the cache is genuinely stale, so fresh data will follow shortly.
+    if (article && !initializedRef.current && !userHasEditedRef.current) {
       initializedRef.current = true;
       setInitialized(true);
       const t = article.title || "";
@@ -228,6 +229,7 @@ export default function DividingScreen() {
       initialTitleRef.current = t;
       setCharCount(c.length);
       if (editorReady) {
+        isInitialInjectionRef.current = true;
         editorRef.current?.setMarkdown(c);
         editorRef.current?.setTitle(t);
       }
@@ -245,6 +247,7 @@ export default function DividingScreen() {
 
   const handleEditorReady = useCallback(() => {
     setEditorReady(true);
+    isInitialInjectionRef.current = true;
     editorRef.current?.setMarkdown(initialContentRef.current);
     editorRef.current?.setTitle(initialTitleRef.current);
   }, []);
@@ -308,6 +311,13 @@ export default function DividingScreen() {
         setCharCount(_payload.charCount);
       }
       if (_payload.isDirty && editorRef.current) {
+        // 최초 programmatic 주입(setMarkdown)이 유발하는 첫 번째 isDirty 이벤트는
+        // 자동저장을 트리거하지 않는다. 이후 이벤트는 실제 사용자 편집으로 간주한다.
+        if (isInitialInjectionRef.current) {
+          isInitialInjectionRef.current = false;
+          return;
+        }
+        userHasEditedRef.current = true;
         const requestId = `autosave_${Date.now()}`;
         pendingExportRef.current = {
           resolve: (md: string) => {
@@ -1228,6 +1238,11 @@ export default function DividingScreen() {
             ±1px 흔들리는 일을 차단한다.
           */}
           <View style={[styles.editorInner, { width: safeAreaWidth }]}>
+            {isWaitingForFreshData && (
+              <View style={styles.freshDataOverlay} pointerEvents="none">
+                <ActivityIndicator size="small" color={Colors.zinc400} />
+              </View>
+            )}
             <View style={[styles.markdownEditorContainer, { width: textColumnWidth, alignSelf: "center" }]}>
               <WebViewMarkdownEditor
                 ref={editorRef}
@@ -1431,6 +1446,13 @@ const styles = StyleSheet.create({
   editorInner: {
     flex: 1,
     paddingTop: 8,
+  },
+  freshDataOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10,
+    backgroundColor: "transparent",
   },
   markdownEditorContainer: {
     flex: 1,

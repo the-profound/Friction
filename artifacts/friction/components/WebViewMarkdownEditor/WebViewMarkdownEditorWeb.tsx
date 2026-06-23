@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useImperativeHandle, forwardRef, useRef } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
+import { Node } from "@tiptap/core";
 import { StarterKit } from "@tiptap/starter-kit";
 import { Placeholder } from "@tiptap/extension-placeholder";
 import { Underline } from "@tiptap/extension-underline";
@@ -13,10 +14,40 @@ import type {
 
 marked.setOptions({ breaks: true, gfm: true } as Parameters<typeof marked.setOptions>[0]);
 
+const InlineImage = Node.create({
+  name: "inlineImage",
+  group: "block",
+  atom: true,
+  addAttributes() {
+    return {
+      src: { default: null },
+      alt: { default: "" },
+    };
+  },
+  parseHTML() {
+    return [{ tag: 'img[data-inline="true"]' }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return [
+      "img",
+      {
+        "data-inline": "true",
+        class: "tiptap-inline-image",
+        src: HTMLAttributes.src ?? "",
+        alt: HTMLAttributes.alt ?? "",
+      },
+    ];
+  },
+});
+
 function markdownToHtml(md: string): string {
   try {
     const result = marked.parse(md || "");
     let html = typeof result === "string" ? result : "";
+    // marked emits standard <img src="..." alt="..."> but the InlineImage TipTap
+    // extension's parseHTML rule matches only img[data-inline="true"]. Rewrite
+    // every <img> tag to add data-inline="true" so the extension recognises it.
+    html = html.replace(/<img\s/g, '<img data-inline="true" ');
     // 마지막 블록이 단락(<p>)이 아닌 경우(예: blockquote, 리스트, 헤딩) 그
     // 아래를 탭/클릭해도 ProseMirror에 커서를 잡을 노드가 없어 입력이
     // 불가능해진다. 항상 빈 단락을 보장한다.
@@ -73,6 +104,7 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
         StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
         Placeholder.configure({ placeholder: placeholder || "여기에 메모를 작성하세요..." }),
         Underline,
+        InlineImage,
       ],
       content: markdownToHtml(initialMarkdown),
       editable,
@@ -172,7 +204,13 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
           editor.chain().focus().setHardBreak().run();
         }
       },
-      insertImage(_url: string) {
+      insertImage(url: string) {
+        if (editor && !editor.isDestroyed && url) {
+          editor.commands.insertContent({
+            type: "inlineImage",
+            attrs: { src: url, alt: "" },
+          });
+        }
       },
       autoSplitImages() {
         return Promise.resolve({ hadConsecutiveImages: false });
@@ -302,5 +340,6 @@ const proseMirrorCss = `
 .ProseMirror code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: #f4f4f5; padding: 0.1em 0.3em; border-radius: 3px; letter-spacing: 0; font-size: 0.9em; }
 .ProseMirror pre { background: #f4f4f5; padding: 0.75em 1em; border-radius: 4px; overflow-x: auto; margin: 0.5em 0; letter-spacing: 0; text-align: left; }
 .ProseMirror pre code { background: none; padding: 0; }
+.tiptap-inline-image { display: block; max-width: 60%; max-height: 280px; margin: 12px 0; object-fit: contain; }
 textarea::placeholder { color: #a1a1aa; }
 `;
