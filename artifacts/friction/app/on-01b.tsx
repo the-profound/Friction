@@ -221,6 +221,7 @@ export default function DividingScreen() {
       // 구버전이 남아 있으면 content와 diverge하여 데이터가 손실될 수 있다.
       // 렌더링 시점 분할은 splitContentToPages(content)로 직접 파생한다.
       let c = article.content || "";
+      console.log("[on-01b init] initializing editor len=%d preview=%j dataUpdatedAt=%d", c.length, c.slice(0, 120), articleQuery.dataUpdatedAt);
       setTitle(t);
       titleRef.current = t;
       setContent(c);

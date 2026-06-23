@@ -47,6 +47,11 @@ export function useAutoSave({
   const latestDataRef = useRef<PendingPayload>({ title: "", content: "" });
   const requestIdRef = useRef(0);
   const latestCompletedRef = useRef(0);
+  // Incremented by markDirty/markTitleDirty on every new dirty call.
+  // doSave snapshots this at save-start; completion only clears isDirtyRef
+  // if the epoch hasn't changed (i.e. no new markDirty was called while the
+  // save was in-flight — which is the root cause of the flush() early-return bug).
+  const dirtyEpochRef = useRef(0);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savingRef = useRef(false);
   const retryCountRef = useRef(0);
@@ -68,9 +73,18 @@ export function useAutoSave({
 
     const data = { ...latestDataRef.current };
     const id = ++requestIdRef.current;
+    // Snapshot the dirty epoch so we can detect if markDirty was called
+    // AFTER this save started (while we were awaiting the network). If it
+    // was, we must NOT clear isDirtyRef — that new dirty data still needs
+    // to be saved. This fixes the flush() early-return race condition:
+    // previously, if markDirty was called and then flush() awaited an
+    // in-flight save, the completing save would reset isDirtyRef=false and
+    // flush() would return early without persisting the latest content.
+    const epochSnapshot = dirtyEpochRef.current;
 
     savingRef.current = true;
     setStatus("saving");
+    console.log("[useAutoSave doSave] id=%d epoch=%d contentLen=%d preview=%j", id, epochSnapshot, data.content.length, data.content.slice(0, 80));
 
     const run = async () => {
       try {
@@ -79,7 +93,8 @@ export function useAutoSave({
           latestCompletedRef.current = id;
           retryCountRef.current = 0;
           if (queueKey) persistQueue(queueKey, null);
-          if (requestIdRef.current === id) {
+          // Only mark clean if no new markDirty was called after this save started.
+          if (requestIdRef.current === id && dirtyEpochRef.current === epochSnapshot) {
             isDirtyRef.current = false;
             setIsDirty(false);
             setStatus("saved");
@@ -126,6 +141,10 @@ export function useAutoSave({
   const markDirty = useCallback(
     (title: string, content: string) => {
       latestDataRef.current = { title, content };
+      // Bump epoch BEFORE setting isDirtyRef so any in-flight doSave that
+      // checks (dirtyEpochRef.current === epochSnapshot) sees the mismatch
+      // and does not clear the dirty flag prematurely.
+      dirtyEpochRef.current++;
       isDirtyRef.current = true;
       setIsDirty(true);
 
@@ -147,6 +166,7 @@ export function useAutoSave({
       const prevContent = latestDataRef.current.content;
       const content = prevContent !== "" ? prevContent : fallbackContent;
       latestDataRef.current = { title, content };
+      dirtyEpochRef.current++;
       isDirtyRef.current = true;
       setIsDirty(true);
 
@@ -173,12 +193,21 @@ export function useAutoSave({
     // save can race: if the second save fails while the first already succeeded,
     // retryCountRef ends up > 0 and flush incorrectly returns { ok: false }
     // even though the data was persisted — causing a spurious "저장 실패" alert.
+    const hadInFlight = !!activeSaveRef.current;
     if (activeSaveRef.current) {
       await activeSaveRef.current;
     }
 
     // After awaiting any in-flight save, allow doSave to proceed.
     savingRef.current = false;
+
+    console.log(
+      "[useAutoSave flush] hadInFlight=%s isDirtyRef=%s status=%s epoch=%d",
+      hadInFlight,
+      isDirtyRef.current,
+      status,
+      dirtyEpochRef.current,
+    );
 
     if (!isDirtyRef.current && status !== "error") {
       return { ok: retryCountRef.current === 0 };

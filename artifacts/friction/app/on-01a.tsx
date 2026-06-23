@@ -365,6 +365,7 @@ export default function DraftScreen() {
     // autoSplitImages 는 WebView 트랜잭션 완료 후 Promise 를 resolve 하므로
     // await 하면 편집기 내용이 확정된 뒤 export 가 시작된다.
     const splitResult = await editorRef.current?.autoSplitImages();
+    console.log("[on-01a handleNext] autoSplitImages done:", splitResult);
     if (splitResult?.hadConsecutiveImages) {
       showToast({ message: "사진 사이에 빈 페이지를 추가했어요.", type: "info" });
     }
@@ -376,8 +377,11 @@ export default function DraftScreen() {
     }
     exportPendingRef.current = false;
     const content = await getEditorContent();
+    console.log("[on-01a handleNext] getEditorContent result len=%d preview=%j", content.length, content.slice(0, 120));
     markDirty(titleRef.current, content);
+    console.log("[on-01a handleNext] markDirty called, awaiting flush...");
     const flushResult = await flush();
+    console.log("[on-01a handleNext] flush done:", flushResult);
     if (!flushResult.ok) {
       isNavigatingRef.current = false;
       setIsNavigating(false);
