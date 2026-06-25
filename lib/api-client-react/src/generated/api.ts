@@ -71,6 +71,7 @@ import type {
   TeamMemberWithUser,
   TodayGreetingStatus,
   ToggleStoredSentenceFavoriteBody,
+  ToggleTeamArticlePinBody,
   TransitionArticleBody,
   UpdateArticleBody,
   UpdateMyCollectionBody,
@@ -5000,6 +5001,121 @@ export const useRemoveTeamArticle = <
   TContext
 > => {
   return useMutation(getRemoveTeamArticleMutationOptions(options));
+};
+
+/**
+ * @summary Pin or unpin an article in a team collection (OWNER only)
+ */
+export const getToggleTeamArticlePinUrl = (
+  teamId: string,
+  articleId: string,
+) => {
+  return `/api/team-collections/${teamId}/articles/${articleId}/pin`;
+};
+
+export const toggleTeamArticlePin = async (
+  teamId: string,
+  articleId: string,
+  toggleTeamArticlePinBody: ToggleTeamArticlePinBody,
+  options?: RequestInit,
+): Promise<TeamCollectionArticle> => {
+  return customFetch<TeamCollectionArticle>(
+    getToggleTeamArticlePinUrl(teamId, articleId),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(toggleTeamArticlePinBody),
+    },
+  );
+};
+
+export const getToggleTeamArticlePinMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof toggleTeamArticlePin>>,
+    TError,
+    {
+      teamId: string;
+      articleId: string;
+      data: BodyType<ToggleTeamArticlePinBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof toggleTeamArticlePin>>,
+  TError,
+  {
+    teamId: string;
+    articleId: string;
+    data: BodyType<ToggleTeamArticlePinBody>;
+  },
+  TContext
+> => {
+  const mutationKey = ["toggleTeamArticlePin"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof toggleTeamArticlePin>>,
+    {
+      teamId: string;
+      articleId: string;
+      data: BodyType<ToggleTeamArticlePinBody>;
+    }
+  > = (props) => {
+    const { teamId, articleId, data } = props ?? {};
+
+    return toggleTeamArticlePin(teamId, articleId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ToggleTeamArticlePinMutationResult = NonNullable<
+  Awaited<ReturnType<typeof toggleTeamArticlePin>>
+>;
+export type ToggleTeamArticlePinMutationBody =
+  BodyType<ToggleTeamArticlePinBody>;
+export type ToggleTeamArticlePinMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Pin or unpin an article in a team collection (OWNER only)
+ */
+export const useToggleTeamArticlePin = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof toggleTeamArticlePin>>,
+    TError,
+    {
+      teamId: string;
+      articleId: string;
+      data: BodyType<ToggleTeamArticlePinBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof toggleTeamArticlePin>>,
+  TError,
+  {
+    teamId: string;
+    articleId: string;
+    data: BodyType<ToggleTeamArticlePinBody>;
+  },
+  TContext
+> => {
+  return useMutation(getToggleTeamArticlePinMutationOptions(options));
 };
 
 /**

@@ -6,6 +6,7 @@ import {
   Modal,
   Pressable,
   Animated,
+  Easing,
   PanResponder,
   Dimensions,
   Platform,
@@ -17,6 +18,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
+import EnvelopeFrontCard from "@/components/EnvelopeCard/EnvelopeFrontCard";
+import {
+  EnvelopePocketFront,
+  EnvelopeFlapClosed,
+  EnvelopeFlapOpen,
+} from "@/components/EnvelopeCard/EnvelopeLayers";
 import ScalePressable from "@/components/shared/ScalePressable";
 import type { Article } from "@workspace/api-client-react";
 
@@ -25,7 +32,6 @@ const CARD_W = Sizing.cardSlotW;
 const CARD_H = Sizing.cardH;
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
-// Gap between adjacent cards — creates the side-peek effect
 const OVERLAY_GAP = 16;
 const SLOT_W = CARD_W + OVERLAY_GAP;
 
@@ -51,6 +57,15 @@ export interface ChainArticleMeta {
 /** @deprecated Use ChainArticleMeta */
 export type AdjacentMeta = ChainArticleMeta;
 
+export interface EnvelopeInfo {
+  senderName?: string | null;
+  senderLocation?: string | null;
+  recipientName?: string | null;
+  onOpen: () => Promise<void>;
+}
+
+type EnvelopePhase = "sealed" | "opening" | "revealed";
+
 function formatDate(visibleAt: string | Date): string {
   const utcMs = new Date(visibleAt).getTime();
   const kstDate = new Date(utcMs + KST_OFFSET_MS);
@@ -60,22 +75,20 @@ function formatDate(visibleAt: string | Date): string {
 }
 
 interface CardSelectOverlayProps {
-  /**
-   * Full article chain, sorted oldest→newest.
-   * A null entry represents a slot that is still loading — rendered as a skeleton.
-   */
   articles: (Article | null)[];
-  /** Per-slot metadata, same length as articles. */
   metas: ChainArticleMeta[];
-  /** Index of the originally-tapped article within articles[]. */
   initialIndex: number;
   originLayout: OriginLayout | null;
   onClose: () => void;
-  /** Called with the active carousel index when the user taps 읽기. */
   onRead: (index: number) => void;
   onNavigateToCollection?: (id: string) => void;
-  /** Called with the author's user id when the user taps the author name. */
   onNavigateToAuthor?: (authorId: string) => void;
+  /**
+   * When provided, the item at initialIndex is a sealed envelope.
+   * The overlay shows the envelope front face first and plays an opening
+   * animation when the user taps "개봉하기".
+   */
+  envelopeInfo?: EnvelopeInfo | null;
 }
 
 export default function CardSelectOverlay({
@@ -87,6 +100,7 @@ export default function CardSelectOverlay({
   onRead,
   onNavigateToCollection,
   onNavigateToAuthor,
+  envelopeInfo,
 }: CardSelectOverlayProps) {
   const insets = useSafeAreaInsets();
   const topInset = Platform.OS === "web" ? 67 : insets.top;
@@ -152,9 +166,7 @@ export default function CardSelectOverlay({
   const scaledH = CARD_H * finalScale;
   const finalCenterX = SCREEN_W / 2;
   const finalCenterY = cardTopVisual + scaledH / 2;
-  // Card container stays at CARD_W center — scale transform expands symmetrically from here
   const cardBoxLeft = finalCenterX - CARD_W / 2;
-  // Info bar & CTA use the visually scaled width so they align with the expanded card
   const infoBoxLeft = finalCenterX - scaledW / 2;
   const boxTop = finalCenterY - CARD_H / 2;
 
@@ -176,6 +188,65 @@ export default function CardSelectOverlay({
   const swipeY = useRef(new Animated.Value(0)).current;
   const carouselX = useRef(new Animated.Value(0)).current;
   const detailsFade = useRef(new Animated.Value(1)).current;
+
+  // ── Envelope animation values ─────────────────────────────────────────────
+  const [envelopePhase, setEnvelopePhase] = useState<EnvelopePhase>("sealed");
+  const [envelopeOpening, setEnvelopeOpening] = useState(false);
+  const ctaButtonOpacity = useRef(new Animated.Value(1)).current;
+  // flipProgress 0→1: 0–0.5 = Layer-1 (back) rotateY 0→−90, 0.5–1 = front stack rotateY 90→0
+  const flipProgress = useRef(new Animated.Value(0)).current;
+  // flapOpenProgress 0→1: top flap (Layer 3) rotateX 0→−168 (lifts up, top-hinged)
+  const flapOpenProgress = useRef(new Animated.Value(0)).current;
+  // envelopeSlideProgress 0→1: entire front stack slides down off screen
+  const envelopeSlideProgress = useRef(new Animated.Value(0)).current;
+  // revealProgress 0→1: inner letter card scales up after envelope has left
+  const revealProgress = useRef(new Animated.Value(0)).current;
+  const letterScale = useRef(new Animated.Value(1)).current;
+  const letterOpacity = useRef(new Animated.Value(0)).current;
+
+  // Interpolated 3-D transforms
+  const frontRotY = flipProgress.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: ["0deg", "-90deg", "-90deg"],
+  });
+  const backRotY = flipProgress.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: ["90deg", "90deg", "0deg"],
+  });
+  const flapRotX = flapOpenProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "-168deg"],
+  });
+  // The flap starts on top of the card (white, covering it). As it rotates open
+  // (rotateX 0deg → -168deg) it passes through -90deg, where it is edge-on to the
+  // viewer and momentarily invisible — exactly aligned with the envelope's top edge.
+  // That crossover (progress = 90/168 ≈ 0.536) is where front/back faces meet in 3D,
+  // so we swap the white top flap for the gray bottom flap at that instant. The swap
+  // is hidden because the flap has zero projected height there.
+  const FLAP_EDGE_ON = 90 / 168; // ≈ 0.5357
+  const flapTopOpacity = flapOpenProgress.interpolate({
+    inputRange: [0, FLAP_EDGE_ON - 0.001, FLAP_EDGE_ON],
+    outputRange: [1, 1, 0],
+  });
+  const flapBottomOpacity = flapOpenProgress.interpolate({
+    inputRange: [0, FLAP_EDGE_ON - 0.001, FLAP_EDGE_ON],
+    outputRange: [0, 0, 1],
+  });
+  // The ONE letter card: tucked inside the envelope small, scales to full size
+  // (1.0) after the envelope body has slid away. revealProgress drives the growth.
+  const innerLetterScale = revealProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.95, 1],
+  });
+  const innerLetterTransY = revealProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [8, 0],
+  });
+  // Front stack slides down off screen after flap opens
+  const envelopeSlideY = envelopeSlideProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, SCREEN_H + CARD_H],
+  });
 
   // ── Carousel state ────────────────────────────────────────────────────────
   const [rendered, setRendered] = useState(false);
@@ -220,7 +291,20 @@ export default function CardSelectOverlay({
   );
 
   // ── Open / close lifecycle ────────────────────────────────────────────────
-  const openedRef = useRef(false); // true while overlay is visible and not closing
+  const openedRef = useRef(false);
+
+  const resetEnvelopeAnim = useCallback(() => {
+    const phase: EnvelopePhase = envelopeInfo ? "sealed" : "revealed";
+    setEnvelopePhase(phase);
+    setEnvelopeOpening(false);
+    ctaButtonOpacity.setValue(1);
+    flipProgress.setValue(0);
+    flapOpenProgress.setValue(0);
+    envelopeSlideProgress.setValue(0);
+    revealProgress.setValue(0);
+    letterScale.setValue(1);
+    letterOpacity.setValue(envelopeInfo ? 0 : 1);
+  }, [envelopeInfo, flipProgress, flapOpenProgress, envelopeSlideProgress, revealProgress, letterScale, letterOpacity]);
 
   useEffect(() => {
     if (isOpen) {
@@ -233,6 +317,7 @@ export default function CardSelectOverlay({
       closingRef.current = false;
       swipeY.setValue(0);
       progress.setValue(0);
+      resetEnvelopeAnim();
       Animated.spring(progress, {
         toValue: 1,
         tension: 70,
@@ -249,9 +334,6 @@ export default function CardSelectOverlay({
   }, [isOpen]);
 
   // ── Adjust carousel position when ancestors are prepended during loading ──
-  // When a new ancestor loads and is prepended to the articles array,
-  // initialIndex increases by 1. We silently shift carouselX so the user
-  // stays on the same card they were viewing.
   const prevInitialIndexRef = useRef(initialIndex);
   useEffect(() => {
     const prev = prevInitialIndexRef.current;
@@ -306,6 +388,59 @@ export default function CardSelectOverlay({
     }
   };
   const requestClose = useCallback(() => runCloseRef.current(), []);
+
+  // ── Envelope opening animation ────────────────────────────────────────────
+  const handleEnvelopeOpen = useCallback(() => {
+    if (envelopeOpening || !envelopeInfo) return;
+    setEnvelopeOpening(true);
+    setEnvelopePhase("opening");
+    Animated.timing(ctaButtonOpacity, { toValue: 0, duration: 200, useNativeDriver: false }).start();
+
+    Animated.sequence([
+      // Phase 1 (620 ms): rotateY flip — Layer 1 (back) turns away, closed front appears
+      Animated.timing(flipProgress, {
+        toValue: 1,
+        duration: 620,
+        easing: Easing.inOut(Easing.quad),
+        useNativeDriver: false,
+      }),
+      // Brief pause so user sees the sealed front + wax seal
+      Animated.delay(280),
+      // Phase 2 (640 ms): top flap (Layer 3) lifts up around its top hinge
+      Animated.timing(flapOpenProgress, {
+        toValue: 1,
+        duration: 1500,
+        easing: Easing.out(Easing.poly(5)),
+        useNativeDriver: false,
+      }),
+      // Brief pause so user sees the open envelope
+      Animated.delay(0),
+      // Phase 3 (480 ms): entire envelope slides down off screen
+      Animated.timing(envelopeSlideProgress, {
+        toValue: 1,
+        duration: 480,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: false,
+      }),
+      // Brief pause before letter scales up
+      Animated.delay(60),
+      // Phase 4 (460 ms): inner letter scales up to full size
+      Animated.timing(revealProgress, {
+        toValue: 1,
+        duration: 460,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }),
+    ]).start(() => {
+      // Phase 4: hand off to the real reading card (identical end state = seamless)
+      letterOpacity.setValue(1);
+      letterScale.setValue(1);
+      setEnvelopePhase("revealed");
+      setEnvelopeOpening(false);
+      // Fire server update — don't await, failure is non-critical
+      envelopeInfo.onOpen().catch(console.warn);
+    });
+  }, [envelopeOpening, envelopeInfo, flipProgress, flapOpenProgress, revealProgress, letterOpacity, letterScale]);
 
   // ── Pan responder (horizontal carousel + vertical dismiss) ────────────────
   const cardPanResponder = useRef(
@@ -394,6 +529,205 @@ export default function CardSelectOverlay({
   const canTapAuthor = !!(authorId && onNavigateToAuthor);
   const handleRead = useCallback(() => onRead(activeIndexRef.current), [onRead]);
 
+  // ── Whether the tapped card is a sealed envelope ──────────────────────────
+  const isEnvelopeSealed = !!envelopeInfo && envelopePhase !== "revealed";
+
+  // ── Envelope overlay — rendered absolutely over the card at initialIndex ──
+  const renderEnvelopeLayer = (slotIndex: number) => {
+    if (!envelopeInfo || slotIndex !== initialIndex) return null;
+    if (envelopePhase === "revealed") return null;
+
+    // The closed flap artwork is full-card sized (triangle base on the card's
+    // top edge). It rotates around that top edge, so the hinge pivot is half the
+    // card height (translateY −FLAP_PIVOT, rotateX, translateY +FLAP_PIVOT).
+    const FLAP_PIVOT = CARD_H / 2;
+
+    // Inside layer renders as two overlapping Views switched by opacity:
+    //   • rounded-top version: visible while closed flap is showing (flapTopOpacity)
+    //   • square-top version:  visible once open flap appears   (flapBottomOpacity)
+    // This avoids animating individual corner radii, which React Native Web
+    // does not reliably support for Animated.Value.
+    const INSIDE_RADIUS = 16;
+
+    const envArticle = displayArticles[initialIndex] ?? null;
+    const envMeta = displayMetas[initialIndex] ?? {};
+
+    return (
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+
+        {/* JSX z-order (bottom → top), per the implementation guide
+            (뒤집어진 이후, 봉투 표지 제외 / from top): 닫힌 봉투 덮개 → 봉투 포켓
+            → 편지 카드 → 열린 봉투 덮개 → 봉투 안쪽. So bottom → top here is:
+              1) 봉투 안쪽 (inside)        — envelope back, gray
+              2) 열린 봉투 덮개 (open flap) — gray inner face, revealed at edge-on
+              3) 편지 카드 (letter card)    — flips with body, scales up, does NOT slide
+              4) 봉투 포켓 (pocket)         — white, V-notch top
+              5) 닫힌 봉투 덮개 (closed flap)— white outer + wax seal, rotates open
+              6) 봉투 표지 (cover)          — flips away at the start, then gone
+            The closed flap rotates (rotateX) and is swapped for the static open
+            flap at the exact edge-on instant (progress ≈ 0.536) where it is flat
+            and invisible, so the swap reads as one continuous flap. The open flap
+            sits below the card, so as the body slides down it never covers it. */}
+
+        {/* 1) 봉투 안쪽 — inner back face (flips + slides). Rendered as a
+            code View (not PNG) so the top border-radius can be animated:
+            full radius while closed flap is showing, snaps to 0 at the
+            open-flap swap so the seam with the open flap is seamless. */}
+        <Animated.View
+          style={[StyleSheet.absoluteFill, { transform: [{ translateY: envelopeSlideY }] }]}
+        >
+          <Animated.View
+            style={[
+              StyleSheet.absoluteFill,
+              { transform: [{ perspective: 1200 }, { rotateY: backRotY }] },
+            ]}
+          >
+            {/* 닫힌 덮개 표시 중: 상단 모서리 둥글게 */}
+            <Animated.View
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: CARD_W,
+                height: CARD_H,
+                backgroundColor: "#f3f3f3",
+                borderRadius: INSIDE_RADIUS,
+                opacity: flapTopOpacity,
+              }}
+            />
+            {/* 열린 덮개 표시 중: 상단 모서리 직각 */}
+            <Animated.View
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: CARD_W,
+                height: CARD_H,
+                backgroundColor: "#f3f3f3",
+                borderBottomLeftRadius: INSIDE_RADIUS,
+                borderBottomRightRadius: INSIDE_RADIUS,
+                opacity: flapBottomOpacity,
+              }}
+            />
+          </Animated.View>
+        </Animated.View>
+
+        {/* 2) 열린 봉투 덮개 — open flap inner face. Static image (drawn in final
+            opened state, no rotateX). Revealed at the edge-on swap. Sits BELOW
+            the card. Shifted up by FLAP_PIVOT so the seal + triangle dangle
+            visibly from the top edge of the inside face. Flips + slides with
+            the envelope body. */}
+        <Animated.View
+          style={[StyleSheet.absoluteFill, { transform: [{ translateY: envelopeSlideY }] }]}
+        >
+          <View style={[StyleSheet.absoluteFill, { transform: [{ translateY: -(CARD_W * (596 / 450)) + 2 }] }]}>
+            <Animated.View
+              style={[
+                StyleSheet.absoluteFill,
+                {
+                  opacity: flapBottomOpacity,
+                  transform: [{ perspective: 1200 }, { rotateY: backRotY }],
+                },
+              ]}
+            >
+              <EnvelopeFlapOpen cardWidth={CARD_W} />
+            </Animated.View>
+          </View>
+        </Animated.View>
+
+        {/* 3) 편지 카드 — the single letter card. Flips in WITH the envelope body
+            (backRotY) but does NOT slide away; once the body has dropped,
+            revealProgress scales it 0.95 → 1.0. */}
+        {envArticle ? (
+          <Animated.View
+            style={[
+              StyleSheet.absoluteFill,
+              { transform: [{ perspective: 1200 }, { rotateY: backRotY }] },
+            ]}
+          >
+            <Animated.View
+              style={[
+                StyleSheet.absoluteFill,
+                { transform: [{ translateY: innerLetterTransY }, { scale: innerLetterScale }] },
+              ]}
+            >
+              <ArticleCardItem
+                title={envArticle.title ?? "제목 없음"}
+                authorName={envMeta.authorName ?? undefined}
+                collectionName={envMeta.collectionName ?? undefined}
+                cover={envArticle.cover}
+                isRead={false}
+                isActive
+                onPress={() => {}}
+              />
+            </Animated.View>
+          </Animated.View>
+        ) : null}
+
+        {/* 4) 봉투 포켓 — front pocket (white, V-notch). Flips + slides. */}
+        <Animated.View
+          style={[StyleSheet.absoluteFill, { transform: [{ translateY: envelopeSlideY }] }]}
+        >
+          <Animated.View
+            style={[
+              StyleSheet.absoluteFill,
+              { transform: [{ perspective: 1200 }, { rotateY: backRotY }] },
+            ]}
+          >
+            <EnvelopePocketFront cardWidth={CARD_W} />
+          </Animated.View>
+        </Animated.View>
+
+        {/* 5) 닫힌 봉투 덮개 — closed flap (white + wax seal). Rotates open around
+            the card's top edge; fades out at the edge-on instant. Shadow marks it
+            as the topmost layer. Flips + slides with the body. */}
+        <Animated.View
+          style={[StyleSheet.absoluteFill, { transform: [{ translateY: envelopeSlideY }] }]}
+        >
+          <Animated.View
+            style={[
+              StyleSheet.absoluteFill,
+              { transform: [{ perspective: 1200 }, { rotateY: backRotY }] },
+            ]}
+          >
+            <Animated.View
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: CARD_W,
+                height: CARD_H,
+                opacity: flapTopOpacity,
+                transform: [
+                  { perspective: 1400 },
+                  { translateY: -FLAP_PIVOT },
+                  { rotateX: flapRotX },
+                  { translateY: FLAP_PIVOT },
+                ],
+              }}
+            >
+              <EnvelopeFlapClosed cardWidth={CARD_W} />
+            </Animated.View>
+          </Animated.View>
+        </Animated.View>
+
+        {/* ══ 6) 봉투 표지 — cover (default face) — flips AWAY ══ */}
+        <Animated.View
+          style={[
+            StyleSheet.absoluteFill,
+            { transform: [{ perspective: 1200 }, { rotateY: frontRotY }] },
+          ]}
+        >
+          <EnvelopeFrontCard
+            senderName={envelopeInfo.senderName}
+            senderLocation={envelopeInfo.senderLocation}
+            recipientName={envelopeInfo.recipientName}
+          />
+        </Animated.View>
+      </View>
+    );
+  };
+
   // ── Skeleton card (for loading slots) ────────────────────────────────────
   const SkeletonCard = () => (
     <View style={styles.skeletonCard}>
@@ -404,6 +738,21 @@ export default function CardSelectOverlay({
   // ── Render ────────────────────────────────────────────────────────────────
   const trackW = SLOT_W * displayArticles.length;
 
+  // Wrap article card at initialIndex in letter reveal animation when envelope
+  const wrapWithLetterAnim = (node: React.ReactNode, slotIndex: number) => {
+    if (!envelopeInfo || slotIndex !== initialIndex) return node;
+    return (
+      <Animated.View
+        style={[
+          StyleSheet.absoluteFill,
+          { opacity: letterOpacity, transform: [{ scale: letterScale }] },
+        ]}
+      >
+        {node}
+      </Animated.View>
+    );
+  };
+
   return (
     <Modal transparent visible={rendered} animationType="none" statusBarTranslucent onRequestClose={requestClose}>
       {/* Dark backdrop */}
@@ -411,11 +760,6 @@ export default function CardSelectOverlay({
         <Pressable style={StyleSheet.absoluteFill} onPress={requestClose} />
       </Animated.View>
 
-      {/*
-        Card container: CARD_W wide, overflow:visible so adjacent card edges
-        peek into view on either side (side-peek effect). The zoom-from-origin
-        animation anchors to the tapped card's slot.
-      */}
       <Animated.View
         style={[
           styles.cardContainer,
@@ -440,15 +784,22 @@ export default function CardSelectOverlay({
                   {art == null ? (
                     <SkeletonCard />
                   ) : (
-                    <ArticleCardItem
-                      title={art.title ?? "제목 없음"}
-                      authorName={meta.authorName ?? undefined}
-                      collectionName={meta.collectionName ?? undefined}
-                      cover={art.cover}
-                      isRead={false}
-                      isActive
-                      onPress={() => {}}
-                    />
+                    <>
+                      {wrapWithLetterAnim(
+                        <ArticleCardItem
+                          title={art.title ?? "제목 없음"}
+                          authorName={meta.authorName ?? undefined}
+                          collectionName={meta.collectionName ?? undefined}
+                          cover={art.cover}
+                          isRead={false}
+                          isActive
+                          isNoticeOfDay={!!(art.isNotice && art.noticeDate)}
+                          onPress={() => {}}
+                        />,
+                        i,
+                      )}
+                      {renderEnvelopeLayer(i)}
+                    </>
                   )}
                 </Animated.View>
               );
@@ -457,22 +808,29 @@ export default function CardSelectOverlay({
         ) : displayArticles[0] == null ? (
           <SkeletonCard />
         ) : (
-          <ArticleCardItem
-            title={displayArticles[0].title ?? "제목 없음"}
-            authorName={displayMetas[0]?.authorName ?? undefined}
-            collectionName={displayMetas[0]?.collectionName ?? undefined}
-            cover={displayArticles[0].cover}
-            isRead={false}
-            isActive
-            onPress={() => {}}
-          />
+          <>
+            {wrapWithLetterAnim(
+              <ArticleCardItem
+                title={displayArticles[0].title ?? "제목 없음"}
+                authorName={displayMetas[0]?.authorName ?? undefined}
+                collectionName={displayMetas[0]?.collectionName ?? undefined}
+                cover={displayArticles[0].cover}
+                isRead={false}
+                isActive
+                isNoticeOfDay={!!(displayArticles[0].isNotice && displayArticles[0].noticeDate)}
+                onPress={() => {}}
+              />,
+              0,
+            )}
+            {renderEnvelopeLayer(0)}
+          </>
         )}
       </Animated.View>
 
-      {/* Details (info bar) */}
+      {/* Details (info bar) — hidden while envelope is sealed */}
       <Animated.View
-        style={[styles.detailsContainer, { top: detailsTop, left: infoBoxLeft, right: infoBoxLeft, opacity: finalDetailsOpacity, transform: [{ translateY: swipeY }] }]}
-        pointerEvents={rendered ? "auto" : "none"}
+        style={[styles.detailsContainer, { top: detailsTop, left: infoBoxLeft, right: infoBoxLeft, opacity: isEnvelopeSealed ? 0 : finalDetailsOpacity, transform: [{ translateY: swipeY }] }]}
+        pointerEvents={rendered && !isEnvelopeSealed ? "auto" : "none"}
         {...detailsPanResponder.panHandlers}
       >
         {dateLabel ? (
@@ -539,14 +897,27 @@ export default function CardSelectOverlay({
         ) : null}
       </Animated.View>
 
-      {/* CTA button */}
+      {/* CTA button — "개봉하기" when sealed, "읽기" when revealed */}
       <Animated.View
         style={[styles.ctaWrapper, { bottom: bottomInset + 16, left: infoBoxLeft, right: infoBoxLeft, opacity: finalDetailsOpacity, transform: [{ translateY: swipeY }] }]}
         pointerEvents={rendered ? "auto" : "none"}
       >
-        <ScalePressable style={styles.ctaButton} contentStyle={styles.ctaButtonContent} onPress={handleRead}>
-          <Text style={styles.ctaLabel} numberOfLines={1}>읽기</Text>
-        </ScalePressable>
+        {isEnvelopeSealed ? (
+          <Animated.View style={{ opacity: ctaButtonOpacity }}>
+            <ScalePressable
+              style={[styles.ctaButton, styles.ctaButtonEnvelope]}
+              contentStyle={styles.ctaButtonContent}
+              onPress={handleEnvelopeOpen}
+              disabled={envelopeOpening}
+            >
+              <Text style={styles.ctaLabel} numberOfLines={1}>개봉하기</Text>
+            </ScalePressable>
+          </Animated.View>
+        ) : (
+          <ScalePressable style={styles.ctaButton} contentStyle={styles.ctaButtonContent} onPress={handleRead}>
+            <Text style={styles.ctaLabel} numberOfLines={1}>읽기</Text>
+          </ScalePressable>
+        )}
       </Animated.View>
     </Modal>
   );
@@ -599,6 +970,8 @@ const styles = StyleSheet.create({
   dotInactive: { backgroundColor: Colors.zinc300 },
   ctaWrapper: { position: "absolute" },
   ctaButton: { width: "100%", height: 56, borderRadius: 18, backgroundColor: Colors.noticeAccent },
-  ctaButtonContent: { justifyContent: "center", alignItems: "center", flex: 1 },
+  ctaButtonEnvelope: { backgroundColor: "#3a342d" },
+  ctaButtonDisabled: { opacity: 0.6 },
+  ctaButtonContent: { flexDirection: "row", justifyContent: "center", alignItems: "center", flex: 1 },
   ctaLabel: { ...Typography.bodySemiBold, fontSize: 17, letterSpacing: 0.5, color: Colors.white, textAlign: "center" },
 });

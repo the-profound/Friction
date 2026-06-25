@@ -78,6 +78,7 @@ export * from "./teamMemberWithUser";
 export * from "./teamMemberWithUserRole";
 export * from "./todayGreetingStatus";
 export * from "./toggleStoredSentenceFavoriteBody";
+export * from "./toggleTeamArticlePinBody";
 export * from "./transitionArticleBody";
 export * from "./transitionArticleBodyTargetStatus";
 export * from "./updateArticleBody";

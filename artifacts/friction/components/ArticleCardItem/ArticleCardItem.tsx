@@ -14,10 +14,12 @@ interface ArticleCardItemProps {
   authorName?: string;
   collectionName?: string | null;
   onPress: () => void;
+  onLongPress?: () => void;
   cover?: ArticleCover | null;
   isRead?: boolean;
   isActive?: boolean;
   cardWidth?: number;
+  isNoticeOfDay?: boolean;
 }
 
 const DEFAULT_BG = Colors.zinc50;
@@ -27,10 +29,12 @@ function ArticleCardItem({
   authorName,
   collectionName,
   onPress,
+  onLongPress,
   cover,
   isRead = false,
   isActive = true,
   cardWidth,
+  isNoticeOfDay = false,
 }: ArticleCardItemProps) {
   const textColor = cover?.textColor ?? Colors.zinc900;
   const w = cardWidth ?? CARD_W;
@@ -46,75 +50,94 @@ function ArticleCardItem({
 
   const borderRadius = Math.max(8, Math.round(16 * scale));
 
+  const tagSize = 8;
+  const tagPadV = 2;
+  const tagPadH = 4;
+
   return (
-    <ScalePressable
-      onPress={onPress}
-      style={[styles.card, { width: w, height: h }, !isActive && styles.inactive]}
-      animatedBorderRadius={borderRadius}
-    >
-      {coverType === "image" && cover?.imageUrl ? (
-        <ImageBackground
-          source={{ uri: cover.imageUrl }}
-          style={styles.backgroundImage}
-          resizeMode="cover"
-        >
-          <View style={styles.imageOverlay} />
-          <View style={[styles.inner, { padding: pad }]} pointerEvents="none">
-            <Text
-              style={[styles.title, { color: textColor, fontSize: titleSize, lineHeight: titleSize * ReaderTokens.lineHeight.tight }]}
-              numberOfLines={4}
-            >
-              {title}
-            </Text>
-            <View style={[styles.senderBlock, { bottom: pad, right: pad }]}>
-              {authorName ? (
-                <Text style={[styles.author, { color: textColor, fontSize: authorSize, lineHeight: authorSize * 1.3 }]} numberOfLines={1}>
-                  {authorName}
-                </Text>
-              ) : null}
-              {collectionName ? (
-                <Text style={[styles.collection, { color: textColor, fontSize: collectionSize, lineHeight: collectionSize * 1.3 }]} numberOfLines={1}>
-                  {collectionName}
-                </Text>
-              ) : null}
+    <View style={[{ width: w, height: h }, !isActive && styles.inactive]}>
+      <ScalePressable
+        onPress={onPress}
+        onLongPress={onLongPress}
+        style={{ width: w, height: h }}
+        animatedBorderRadius={borderRadius}
+      >
+        {coverType === "image" && cover?.imageUrl ? (
+          <ImageBackground
+            source={{ uri: cover.imageUrl }}
+            style={styles.backgroundImage}
+            resizeMode="cover"
+          >
+            <View style={styles.imageOverlay} />
+            <View style={[styles.inner, { padding: pad }]} pointerEvents="none">
+              <Text
+                style={[styles.title, { color: textColor, fontSize: titleSize, lineHeight: titleSize * ReaderTokens.lineHeight.tight }]}
+                numberOfLines={4}
+              >
+                {title}
+              </Text>
+              <View style={[styles.senderBlock, { bottom: pad, right: pad }]}>
+                {authorName ? (
+                  <Text style={[styles.author, { color: textColor, fontSize: authorSize, lineHeight: authorSize * 1.3 }]} numberOfLines={1}>
+                    {authorName}
+                  </Text>
+                ) : null}
+                {collectionName ? (
+                  <Text style={[styles.collection, { color: textColor, fontSize: collectionSize, lineHeight: collectionSize * 1.3 }]} numberOfLines={1}>
+                    {collectionName}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+          </ImageBackground>
+        ) : (
+          <View
+            style={[
+              styles.solidBackground,
+              {
+                backgroundColor:
+                  coverType === "color" && cover?.bgColor
+                    ? cover.bgColor
+                    : DEFAULT_BG,
+              },
+            ]}
+          >
+            <View style={[styles.inner, { padding: pad }]} pointerEvents="none">
+              <Text
+                style={[styles.title, { color: textColor, fontSize: titleSize, lineHeight: titleSize * ReaderTokens.lineHeight.tight }]}
+                numberOfLines={4}
+              >
+                {title}
+              </Text>
+              <View style={[styles.senderBlock, { bottom: pad, right: pad }]}>
+                {authorName ? (
+                  <Text style={[styles.author, { color: textColor, fontSize: authorSize, lineHeight: authorSize * 1.3 }]} numberOfLines={1}>
+                    {authorName}
+                  </Text>
+                ) : null}
+                {collectionName ? (
+                  <Text style={[styles.collection, { color: textColor, fontSize: collectionSize, lineHeight: collectionSize * 1.3 }]} numberOfLines={1}>
+                    {collectionName}
+                  </Text>
+                ) : null}
+              </View>
             </View>
           </View>
-        </ImageBackground>
-      ) : (
+        )}
+      </ScalePressable>
+
+      {isNoticeOfDay && (
         <View
           style={[
-            styles.solidBackground,
-            {
-              backgroundColor:
-                coverType === "color" && cover?.bgColor
-                  ? cover.bgColor
-                  : DEFAULT_BG,
-            },
+            styles.noticeBadge,
+            { bottom: pad, left: pad, paddingVertical: tagPadV, paddingHorizontal: tagPadH, borderRadius: 3 },
           ]}
+          pointerEvents="none"
         >
-          <View style={[styles.inner, { padding: pad }]} pointerEvents="none">
-            <Text
-              style={[styles.title, { color: textColor, fontSize: titleSize, lineHeight: titleSize * ReaderTokens.lineHeight.tight }]}
-              numberOfLines={4}
-            >
-              {title}
-            </Text>
-            <View style={[styles.senderBlock, { bottom: pad, right: pad }]}>
-              {authorName ? (
-                <Text style={[styles.author, { color: textColor, fontSize: authorSize, lineHeight: authorSize * 1.3 }]} numberOfLines={1}>
-                  {authorName}
-                </Text>
-              ) : null}
-              {collectionName ? (
-                <Text style={[styles.collection, { color: textColor, fontSize: collectionSize, lineHeight: collectionSize * 1.3 }]} numberOfLines={1}>
-                  {collectionName}
-                </Text>
-              ) : null}
-            </View>
-          </View>
+          <Text style={[styles.noticeBadgeText, { fontSize: tagSize }]}>오늘의 인사</Text>
         </View>
       )}
-    </ScalePressable>
+    </View>
   );
 }
 
@@ -128,10 +151,8 @@ const AUTHOR_SIZE = 24;
 const COLLECTION_SIZE = 16;
 
 const styles = StyleSheet.create({
-  card: {},
   inactive: {
     opacity: Colors.cardInactiveOpacity,
-    transform: [{ scale: 0.97 }],
   },
   backgroundImage: {
     flex: 1,
@@ -159,6 +180,14 @@ const styles = StyleSheet.create({
     fontFamily: ReaderTokens.fontFamily.sansBold,
   },
   collection: {
+    fontFamily: ReaderTokens.fontFamily.sansBold,
+  },
+  noticeBadge: {
+    position: "absolute",
+    backgroundColor: Colors.noticeAccent,
+  },
+  noticeBadgeText: {
+    color: Colors.white,
     fontFamily: ReaderTokens.fontFamily.sansBold,
   },
 });

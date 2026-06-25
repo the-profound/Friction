@@ -18,6 +18,7 @@ export const inboxTable = pgTable("inbox", {
   visibleAt: timestamp("visible_at", { withTimezone: true }).notNull(),
   openedAt: timestamp("opened_at", { withTimezone: true }),
   isRead: boolean("is_read").notNull().default(false),
+  isEnvelope: boolean("is_envelope").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   unique("inbox_recipient_article_source_unique")

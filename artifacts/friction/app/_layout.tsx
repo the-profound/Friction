@@ -1,5 +1,10 @@
 import "react-native-url-polyfill/auto";
 import { useFonts } from "expo-font";
+import {
+  NotoSerifKR_400Regular,
+  NotoSerifKR_600SemiBold,
+  NotoSerifKR_800ExtraBold,
+} from "@expo-google-fonts/noto-serif-kr";
 import Feather from "@expo/vector-icons/Feather";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -240,6 +245,9 @@ export default function RootLayout() {
     "Pretendard-Black": require("../assets/fonts/Pretendard-Black.otf"),
     "Eulyoo1945-Regular": require("../assets/fonts/Eulyoo1945-Regular.otf"),
     "Eulyoo1945-SemiBold": require("../assets/fonts/Eulyoo1945-SemiBold.otf"),
+    NotoSerifKR_400Regular,
+    NotoSerifKR_600SemiBold,
+    NotoSerifKR_800ExtraBold,
   });
 
   useEffect(() => {

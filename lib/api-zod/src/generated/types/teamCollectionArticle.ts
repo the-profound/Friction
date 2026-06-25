@@ -12,4 +12,6 @@ export interface TeamCollectionArticle {
   articleId: string;
   addedBy: string;
   addedAt: Date;
+  /** Whether this article has been pinned by the collection owner. */
+  isPinned: boolean;
 }

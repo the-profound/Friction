@@ -286,6 +286,18 @@ export const ReaderTokens = {
       ios: "Eulyoo1945-SemiBold",
       default: "Eulyoo1945-SemiBold",
     }),
+    notoSerif: Platform.select({
+      ios: "NotoSerifKR_400Regular",
+      default: "NotoSerifKR_400Regular",
+    }),
+    notoSerifBold: Platform.select({
+      ios: "NotoSerifKR_600SemiBold",
+      default: "NotoSerifKR_600SemiBold",
+    }),
+    notoSerifExtraBold: Platform.select({
+      ios: "NotoSerifKR_800ExtraBold",
+      default: "NotoSerifKR_800ExtraBold",
+    }),
     sans: Platform.select({
       ios: "Pretendard-ExtraLight",
       default: "Pretendard-ExtraLight",

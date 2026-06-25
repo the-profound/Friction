@@ -26,4 +26,6 @@ export interface TeamCollectionArticleWithDetails {
   isDeletedPlaceholder?: boolean;
   /** The inbox visibleAt of the requesting user for this article. Null when no requester userId is provided or when there is no inbox row. */
   visibleAt?: Date | null;
+  /** Whether this article has been pinned by the collection owner. */
+  isPinned: boolean;
 }

@@ -180,6 +180,8 @@ export interface InboxItem {
   hasReadBefore: boolean;
   /** Whether the recipient has previously completed reading the source (parent) article. NULL when this item is not a reply (replyToArticleId is null). */
   hasReadSourceArticle?: boolean | null;
+  /** Whether this inbox item was sent as a sealed envelope. When true and openedAt is null, the recipient sees the envelope front face first. */
+  isEnvelope: boolean;
 }
 
 export interface MarkInboxOthersReadResponse {
@@ -396,6 +398,8 @@ export interface TeamCollectionArticle {
   articleId: string;
   addedBy: string;
   addedAt: string;
+  /** Whether this article has been pinned by the collection owner. */
+  isPinned: boolean;
 }
 
 export interface TeamCollectionArticleWithDetails {
@@ -417,6 +421,14 @@ export interface TeamCollectionArticleWithDetails {
   isDeletedPlaceholder?: boolean;
   /** The inbox visibleAt of the requesting user for this article. Null when no requester userId is provided or when there is no inbox row. */
   visibleAt?: string | null;
+  /** Whether this article has been pinned by the collection owner. */
+  isPinned: boolean;
+}
+
+export interface ToggleTeamArticlePinBody {
+  isPinned: boolean;
+  /** The user making the request. Must be the collection OWNER. */
+  requesterId: string;
 }
 
 export interface AddTeamMemberBody {
@@ -540,6 +552,8 @@ export interface SendArticleBody {
   senderId: string;
   recipientId: string;
   articleId: string;
+  /** When true, the inbox item is created with is_envelope=true so the recipient sees a sealed envelope front face before opening. */
+  isEnvelope?: boolean;
 }
 
 export interface SpellCheckBody {

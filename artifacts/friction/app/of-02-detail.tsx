@@ -11,7 +11,6 @@ import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
 import { useToast } from "@/contexts/ToastContext";
-import { LIST_PERF_PRESET } from "@/lib/listPerf";
 import {
   useGetTeamCollection,
   useUpdateTeamCollection,
@@ -27,6 +26,7 @@ import {
   useListNeighbors,
   useListNeighborRequests,
   useSearchUsersByNickname,
+  useToggleTeamArticlePin,
   getListTeamArticlesQueryKey,
   getListTeamMembersQueryKey,
   getGetTeamCollectionQueryKey,
@@ -46,7 +46,12 @@ import {
   isQueryStale,
 } from "@/lib/useScreenFocused";
 import { useRealtimeChannel } from "@/lib/useRealtimeChannel";
-import { buildTeamArticleRows, type TeamArticleListRow } from "@/lib/teamCollectionUtils";
+import { LIST_PERF_PRESET } from "@/lib/listPerf";
+import { buildTeamArticleSections, type TeamArticleSection } from "@/lib/teamCollectionUtils";
+import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
+import CardSelectOverlay, { type OriginLayout, type ChainArticleMeta } from "@/components/CardSelectOverlay/CardSelectOverlay";
+
+const CAROUSEL_CARD_W = 120;
 
 type DetailTab = "articles" | "members";
 
@@ -74,6 +79,11 @@ export default function TeamCollectionDetailScreen() {
   const openRowRef = useRef<SwipeableRowHandle | null>(null);
   const rowRefs = useRef<Map<string, SwipeableRowHandle>>(new Map());
   const isNavigatingRef = useRef(false);
+  const [tapCard, setTapCard] = useState<TeamCollectionArticleWithDetails | null>(null);
+  const [tapOrigin, setTapOrigin] = useState<OriginLayout | null>(null);
+  const [descExpanded, setDescExpanded] = useState(false);
+  const [descTruncatable, setDescTruncatable] = useState(false);
+  const cardSlotRefs = useRef<Map<string, View | null>>(new Map());
 
   useEffect(() => {
     if (inviteDebounceRef.current) clearTimeout(inviteDebounceRef.current);
@@ -133,6 +143,7 @@ export default function TeamCollectionDetailScreen() {
     },
   );
 
+  const togglePin = useToggleTeamArticlePin();
   const removeArticle = useRemoveTeamArticle();
   const removeMember = useRemoveTeamMember();
   const addMember = useAddTeamMember();
@@ -388,10 +399,28 @@ export default function TeamCollectionDetailScreen() {
     openRowRef.current = newRef;
   }, []);
 
-  const handleArticleNavigate = useCallback((item: TeamCollectionArticleWithDetails) => {
+  const handleArticleNavigate = useCallback((item: TeamCollectionArticleWithDetails, slotKey: string) => {
+    closeOpenRow();
+    const ref = cardSlotRefs.current.get(slotKey);
+    if (ref) {
+      ref.measureInWindow((x, y, width, height) => {
+        setTapOrigin({ x, y, width, height });
+        setTapCard(item);
+      });
+    } else {
+      setTapOrigin(null);
+      setTapCard(item);
+    }
+  }, [closeOpenRow]);
+
+  const handleReadFromOverlay = useCallback(() => {
+    const item = tapCard;
+    if (!item) return;
     if (isNavigatingRef.current) return;
     isNavigatingRef.current = true;
-    closeOpenRow();
+    setTapCard(null);
+    setTapOrigin(null);
+
     const isOwnArticle = item.article?.authorId === userId;
     const hasReadBefore = item.completedAt != null;
 
@@ -412,7 +441,7 @@ export default function TeamCollectionDetailScreen() {
         ? { articleId: item.articleId, inboxId: unreadInboxItem.id, mode: "basic", entrySource: "list", teamCollectionId: id }
         : { articleId: item.articleId, mode: "basic", entrySource: "list", teamCollectionId: id },
     });
-  }, [router, inboxItems, closeOpenRow, userId, id]);
+  }, [tapCard, userId, id, inboxItems, router]);
 
   const handleArticleDeletePress = useCallback((item: TeamCollectionArticleWithDetails) => {
     const canDelete = isOwner || item.article?.authorId === userId;
@@ -432,7 +461,47 @@ export default function TeamCollectionDetailScreen() {
     await handleRemoveArticle(articleId);
   }, [deleteArticleTarget, closeOpenRow, handleRemoveArticle]);
 
-  const articleRows = useMemo(() => buildTeamArticleRows(articles), [articles]);
+  const handleCardLongPress = useCallback((item: TeamCollectionArticleWithDetails) => {
+    if (!isOwner || !id) return;
+    const isPinned = item.isPinned;
+    Alert.alert(
+      "편지 관리",
+      item.article?.title ?? "이 편지를",
+      [
+        { text: "취소", style: "cancel" },
+        {
+          text: isPinned ? "고정 해제" : "고정하기",
+          onPress: async () => {
+            try {
+              await togglePin.mutateAsync({
+                teamId: id,
+                articleId: item.articleId,
+                data: { isPinned: !isPinned, requesterId: userId },
+              });
+              articlesQuery.refetch();
+            } catch {
+              showToast({ message: "고정 설정에 실패했습니다.", type: "error" });
+            }
+          },
+        },
+        {
+          text: "삭제",
+          style: "destructive",
+          onPress: () => handleArticleDeletePress(item),
+        },
+      ],
+    );
+  }, [isOwner, id, userId, togglePin, articlesQuery, showToast, handleArticleDeletePress]);
+
+  const articleSections = useMemo(() => buildTeamArticleSections(articles), [articles]);
+
+  const { ownerNickname, ownerUserId } = useMemo(() => {
+    const owner = members.find((m) => m.role === "OWNER");
+    return {
+      ownerNickname: owner?.user?.nickname ?? null,
+      ownerUserId: owner?.userId ?? null,
+    };
+  }, [members]);
 
   const memberNicknameMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -442,107 +511,21 @@ export default function TeamCollectionDetailScreen() {
     return map;
   }, [members]);
 
-  const isUnread = useCallback((item: TeamCollectionArticleWithDetails): boolean => {
-    return !item.completedAt;
-  }, []);
-
-  const renderArticleRow = useCallback(
-    (item: TeamCollectionArticleWithDetails, indent: boolean, isNoticeOfDay: boolean) => {
-      if (item.isDeletedPlaceholder) {
-        return (
-          <View
-            key={`placeholder-${item.id}`}
-            style={[
-              styles.articleItem,
-              indent && styles.articleItemIndent,
-              styles.deletedPlaceholder,
-            ]}
-          >
-            <Text style={styles.deletedPlaceholderText}>(삭제된 편지입니다.)</Text>
-          </View>
-        );
-      }
-
-      const authorId = item.article?.authorId ?? item.addedBy;
-      const isMyArticle = !!authorId && authorId === userId;
-      const showUnread = !isMyArticle && isUnread(item);
-      const rowBg = isNoticeOfDay ? Colors.noticeAccentSoft : undefined;
-      const authorNickname = authorId ? memberNicknameMap.get(authorId) : undefined;
-
-      return (
-        <SwipeableRow
-          key={item.id}
-          ref={(r) => {
-            if (r) {
-              rowRefs.current.set(item.id, r);
-            } else {
-              rowRefs.current.delete(item.id);
-            }
-          }}
-          onDeletePress={() => handleArticleDeletePress(item)}
-          onSwipeOpen={() => handleSwipeOpen(item.id)}
-          onScrollLock={(locked) => setScrollEnabled(!locked)}
-        >
-          <ScalePressable
-            style={[
-              styles.articleItem,
-              indent && styles.articleItemIndent,
-              rowBg ? { backgroundColor: rowBg } : undefined,
-            ]}
-            onPress={() => handleArticleNavigate(item)}
-          contentStyle={styles.articleItemContent}
-          >
-            <View style={styles.articleInfo}>
-              <View style={styles.articleTitleRow}>
-                <Text style={styles.articleTitle} numberOfLines={1}>
-                  {item.article?.title ?? "제목 없음"}
-                </Text>
-                {isNoticeOfDay && (
-                  <View style={styles.noticeOfDayBadge}>
-                    <Text style={styles.noticeOfDayBadgeText}>오늘의 인사</Text>
-                  </View>
-                )}
-                {isMyArticle && (
-                  <View style={styles.myArticleBadge}>
-                    <Text style={styles.myArticleBadgeText}>내 편지</Text>
-                  </View>
-                )}
-                {showUnread && (
-                  <View style={styles.unreadBadge}>
-                    <Text style={styles.unreadBadgeText}>새 편지</Text>
-                  </View>
-                )}
-              </View>
-              <Text style={styles.articleDate}>
-                {(() => {
-                  const raw = item.visibleAt ?? item.addedAt;
-                  const kst = new Date(new Date(raw).getTime() + 9 * 60 * 60 * 1000);
-                  return `${kst.getUTCFullYear()}.${String(kst.getUTCMonth() + 1).padStart(2, "0")}.${String(kst.getUTCDate()).padStart(2, "0")}`;
-                })()}
-                {authorNickname ? `  ·  ${authorNickname}` : ""}
-              </Text>
-            </View>
-            <Feather name="chevron-right" size={16} color={Colors.zinc300} />
-          </ScalePressable>
-        </SwipeableRow>
-      );
-    },
-    [handleArticleDeletePress, handleSwipeOpen, handleArticleNavigate, isUnread, memberNicknameMap, userId],
-  );
-
-  const renderRow = useCallback(
-    ({ item }: { item: TeamArticleListRow }) => {
-      if (item.type === "header") {
-        return (
-          <View style={styles.dateHeader}>
-            <Text style={styles.dateHeaderText}>{item.label}</Text>
-          </View>
-        );
-      }
-      return renderArticleRow(item.item, item.indent, item.isNoticeOfDay);
-    },
-    [renderArticleRow],
-  );
+  const tapCardMeta = useMemo((): ChainArticleMeta => {
+    if (!tapCard) return {};
+    return {
+      authorName:
+        tapCard.article?.authorNickname ??
+        (tapCard.article?.authorId
+          ? memberNicknameMap.get(tapCard.article.authorId) ?? null
+          : null),
+      authorId: tapCard.article?.authorId ?? null,
+      collectionName: collection?.name ?? null,
+      collectionId: id ?? null,
+      date: tapCard.visibleAt ?? tapCard.addedAt ?? null,
+      isNotice: !!(tapCard.article?.isNotice && tapCard.article?.noticeDate),
+    };
+  }, [tapCard, memberNicknameMap, collection, id]);
 
   const renderMemberItem = ({ item }: { item: TeamMemberWithUser }) => {
     const isSelf = item.userId === userId;
@@ -593,9 +576,6 @@ export default function TeamCollectionDetailScreen() {
         <ScalePressable onPress={() => router.back()} hitSlop={12}>
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
         </ScalePressable>
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          {collection?.name ?? "모임"}
-        </Text>
         <ScalePressable
           hitSlop={12}
           onPress={() => {
@@ -608,54 +588,102 @@ export default function TeamCollectionDetailScreen() {
         </ScalePressable>
       </View>
 
+      <View style={styles.collectionInfoSection}>
+        <Text style={styles.collectionName} numberOfLines={2}>
+          {collection?.name ?? "모임"}
+        </Text>
+        {ownerNickname && ownerUserId ? (
+          <ScalePressable
+            onPress={() => router.push(`/user-profile/${ownerUserId}` as never)}
+            contentStyle={styles.collectionOwnerRow}
+          >
+            <Text style={styles.collectionOwner} numberOfLines={1}>
+              {ownerNickname}
+            </Text>
+            <Feather name="chevron-right" size={13} color={Colors.zinc400} />
+          </ScalePressable>
+        ) : ownerNickname ? (
+          <Text style={styles.collectionOwner} numberOfLines={1}>
+            {ownerNickname}
+          </Text>
+        ) : null}
+        <Text style={styles.collectionStats}>
+          {`참여자 ${members.length}명 | 편지 ${articles.filter((a) => !a.isDeletedPlaceholder).length}개`}
+        </Text>
+      </View>
+
       {collection?.description ? (
         <View style={styles.descSection}>
-          <Text style={styles.descText}>{collection.description}</Text>
+          <Text
+            style={[styles.descText, { position: 'absolute', opacity: 0, top: 0, left: 0, right: 0 }]}
+            pointerEvents="none"
+            onTextLayout={(e) => {
+              setDescTruncatable(e.nativeEvent.lines.length > 2);
+            }}
+          >
+            {collection.description}
+          </Text>
+          <Text
+            style={styles.descText}
+            numberOfLines={descExpanded ? undefined : 2}
+          >
+            {collection.description}
+          </Text>
+          {descTruncatable && !descExpanded && (
+            <ScalePressable onPress={() => setDescExpanded(true)}>
+              <Text style={styles.descMoreText}>더보기</Text>
+            </ScalePressable>
+          )}
+          {descExpanded && (
+            <ScalePressable onPress={() => setDescExpanded(false)}>
+              <Text style={styles.descMoreText}>접기</Text>
+            </ScalePressable>
+          )}
         </View>
       ) : null}
 
       <View style={styles.tabBar}>
-        <ScalePressable
-          style={[styles.tab, activeTab === "articles" && styles.tabActive]}
-          onPress={() => setActiveTab("articles")}
-        >
-          <Text style={[styles.tabText, activeTab === "articles" && styles.tabTextActive]}>
-            편지 목록 ({articles.filter((a) => !a.isDeletedPlaceholder).length})
-          </Text>
-        </ScalePressable>
-        <ScalePressable
-          style={[styles.tab, activeTab === "members" && styles.tabActive]}
-          onPress={() => setActiveTab("members")}
-        >
-          <Text style={[styles.tabText, activeTab === "members" && styles.tabTextActive]}>
-            멤버 ({members.length})
-          </Text>
-        </ScalePressable>
+        <View style={styles.tabCapsules}>
+          <ScalePressable
+            style={[styles.tab, activeTab === "articles" && styles.tabActive]}
+            onPress={() => setActiveTab("articles")}
+          >
+            <Text style={[styles.tabText, activeTab === "articles" && styles.tabTextActive]}>
+              편지 목록 ({articles.filter((a) => !a.isDeletedPlaceholder).length})
+            </Text>
+          </ScalePressable>
+          <ScalePressable
+            style={[styles.tab, activeTab === "members" && styles.tabActive]}
+            onPress={() => setActiveTab("members")}
+          >
+            <Text style={[styles.tabText, activeTab === "members" && styles.tabTextActive]}>
+              멤버 ({members.length})
+            </Text>
+          </ScalePressable>
+        </View>
+        {isMember && (
+          <ScalePressable
+            style={styles.addButton}
+            onPress={() =>
+              router.push({
+                pathname: "/to-send",
+                params: {
+                  targetGroup: id,
+                  targetGroupName: collection?.name ?? "",
+                  returnToId: id,
+                },
+              })
+            }
+            contentStyle={styles.addButtonContent}
+          >
+            <Feather name="send" size={13} color={Colors.zinc600} />
+            <Text style={styles.addButtonText}>편지 발신</Text>
+          </ScalePressable>
+        )}
       </View>
 
       {activeTab === "articles" ? (
         <View style={styles.contentArea}>
-          {isMember && (
-            <View style={styles.articleActions}>
-              <ScalePressable
-                style={styles.addButton}
-                onPress={() =>
-                  router.push({
-                    pathname: "/to-send",
-                    params: {
-                      targetGroup: id,
-                      targetGroupName: collection?.name ?? "",
-                      returnToId: id,
-                    },
-                  })
-                }
-              contentStyle={styles.addButtonContent}
-              >
-                <Feather name="send" size={16} color={Colors.zinc600} />
-                <Text style={styles.addButtonText}>내 편지 보내기</Text>
-              </ScalePressable>
-            </View>
-          )}
           {articlesQuery.isError ? (
             <View style={[styles.emptyContainer, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}>
               <Feather name="alert-circle" size={36} color={Colors.zinc300} />
@@ -668,24 +696,88 @@ export default function TeamCollectionDetailScreen() {
             <View style={[styles.emptyContainer, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}>
               <ActivityIndicator size="large" color={Colors.zinc300} />
             </View>
-          ) : articleRows.length === 0 ? (
+          ) : (articleSections.pinned.length === 0 && articleSections.dateGroups.every((g) => g.items.length === 0)) ? (
             <View style={[styles.emptyContainer, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}>
               <Feather name="file-text" size={36} color={Colors.zinc300} />
               <Text style={styles.emptyTitle}>아직 추가된 편지가 없어요</Text>
               <Text style={styles.emptySubtitle}>멤버들이 편지를 추가하면 여기에 표시됩니다</Text>
             </View>
           ) : (
-            <FlatList
-              {...LIST_PERF_PRESET}
-              data={articleRows}
-              keyExtractor={(item) =>
-                item.type === "header" ? `header-${item.dateKey}` : item.item.id
-              }
-              renderItem={renderRow}
-              contentContainerStyle={[styles.listContent, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}
+            <ScrollView
               showsVerticalScrollIndicator={false}
-              scrollEnabled={scrollEnabled}
-            />
+              contentContainerStyle={{ paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }}
+            >
+              {articleSections.pinned.length > 0 && (
+                <View style={styles.carouselSection}>
+                  <View style={styles.carouselSectionHeader}>
+                    <Feather name="bookmark" size={13} color={Colors.noticeAccent} />
+                    <Text style={styles.carouselSectionLabel}>모음장이 고정한 편지</Text>
+                  </View>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.carouselContent}
+                  >
+                    {articleSections.pinned.map((item) => {
+                    const slotKey = `pinned-${item.id}`;
+                    return (
+                      <View key={slotKey} ref={(r) => { cardSlotRefs.current.set(slotKey, r); }}>
+                        <View style={{ opacity: tapCard?.id === item.id ? 0 : 1 }}>
+                          <ArticleCardItem
+                            title={item.article?.title ?? "제목 없음"}
+                            authorName={item.article?.authorNickname ?? (item.article?.authorId ? memberNicknameMap.get(item.article.authorId) : undefined)}
+                            collectionName={collection?.name ?? null}
+                            onPress={() => handleArticleNavigate(item, slotKey)}
+                            onLongPress={isOwner ? () => handleCardLongPress(item) : undefined}
+                            cover={item.article?.cover}
+                            isRead={item.completedAt != null}
+                            cardWidth={CAROUSEL_CARD_W}
+                            isNoticeOfDay={!!(item.article?.isNotice && item.article?.noticeDate)}
+                          />
+                        </View>
+                      </View>
+                    );
+                  })}
+                  </ScrollView>
+                </View>
+              )}
+
+              {articleSections.dateGroups.map((group) =>
+                group.items.length === 0 ? null : (
+                  <View key={group.dateKey} style={styles.carouselSection}>
+                    <View style={styles.carouselSectionHeader}>
+                      <Text style={styles.carouselDateLabel}>{group.label}</Text>
+                    </View>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.carouselContent}
+                    >
+                      {group.items.map((item) => {
+                        const slotKey = `group-${item.id}`;
+                        return (
+                          <View key={slotKey} ref={(r) => { cardSlotRefs.current.set(slotKey, r); }}>
+                            <View style={{ opacity: tapCard?.id === item.id ? 0 : 1 }}>
+                              <ArticleCardItem
+                                title={item.article?.title ?? "제목 없음"}
+                                authorName={item.article?.authorNickname ?? (item.article?.authorId ? memberNicknameMap.get(item.article.authorId) : undefined)}
+                                collectionName={collection?.name ?? null}
+                                onPress={() => handleArticleNavigate(item, slotKey)}
+                                onLongPress={isOwner ? () => handleCardLongPress(item) : undefined}
+                                cover={item.article?.cover}
+                                isRead={item.completedAt != null}
+                                cardWidth={CAROUSEL_CARD_W}
+                                isNoticeOfDay={!!(item.article?.isNotice && item.article?.noticeDate)}
+                              />
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </ScrollView>
+                  </View>
+                ),
+              )}
+            </ScrollView>
           )}
         </View>
       ) : (
@@ -975,6 +1067,25 @@ export default function TeamCollectionDetailScreen() {
         onCancel={() => setKickTarget(null)}
       />
 
+      <CardSelectOverlay
+        articles={tapCard?.article ? [tapCard.article] : []}
+        metas={[tapCardMeta]}
+        initialIndex={0}
+        originLayout={tapOrigin}
+        onClose={() => { setTapCard(null); setTapOrigin(null); isNavigatingRef.current = false; }}
+        onRead={handleReadFromOverlay}
+        onNavigateToCollection={(colId) => {
+          setTapCard(null);
+          setTapOrigin(null);
+          router.push({ pathname: "/of-02-detail", params: { id: colId } } as never);
+        }}
+        onNavigateToAuthor={(authorId) => {
+          setTapCard(null);
+          setTapOrigin(null);
+          router.push(`/user-profile/${authorId}` as never);
+        }}
+      />
+
       <NavBar />
     </View>
   );
@@ -992,13 +1103,56 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.screenPx,
     paddingVertical: 12,
   },
-  headerTitle: {
-    ...Typography.bodySemiBold,
-    fontSize: 17,
+  collectionInfoSection: {
+    paddingHorizontal: Spacing.screenPx,
+    paddingBottom: 10,
+    gap: 2,
+  },
+  collectionName: {
+    ...Typography.headerTitle,
+    fontSize: 22,
     color: Colors.zinc900,
-    flex: 1,
-    textAlign: "center",
-    marginHorizontal: 8,
+  },
+  collectionOwnerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    alignSelf: "flex-start",
+  },
+  collectionOwner: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc500,
+  },
+  collectionStats: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc400,
+    marginTop: 2,
+  },
+  carouselSection: {
+    marginBottom: 20,
+  },
+  carouselSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: Spacing.screenPx,
+    paddingVertical: 8,
+  },
+  carouselSectionLabel: {
+    ...Typography.dateHeader,
+    fontSize: 13,
+    color: Colors.noticeAccent,
+  },
+  carouselDateLabel: {
+    ...Typography.dateHeader,
+    fontSize: 13,
+    color: Colors.zinc700,
+  },
+  carouselContent: {
+    paddingHorizontal: Spacing.screenPx,
+    gap: Spacing.cardGap,
   },
   descSection: {
     paddingHorizontal: Spacing.screenPx,
@@ -1010,11 +1164,24 @@ const styles = StyleSheet.create({
     color: Colors.zinc500,
     lineHeight: 20,
   },
+  descMoreText: {
+    ...Typography.body,
+    fontSize: 14,
+    fontWeight: "600",
+    color: Colors.zinc700,
+    marginTop: 2,
+  },
   tabBar: {
     flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: Spacing.screenPx,
-    gap: 8,
     marginBottom: 8,
+  },
+  tabCapsules: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
   },
   tab: {
     paddingHorizontal: 14,
@@ -1045,14 +1212,15 @@ const styles = StyleSheet.create({
   },
   addButton: {
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
     backgroundColor: Colors.zinc50,
     borderRadius: 8,
   },
   addButtonContent: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,},
+    gap: 5,
+  },
   addButtonText: {
     ...Typography.caption,
     fontSize: 13,

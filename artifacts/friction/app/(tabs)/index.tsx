@@ -11,6 +11,7 @@ import {
   Animated,
   PanResponder,
   Alert,
+  Pressable,
   NativeSyntheticEvent,
   NativeScrollEvent,
 } from "react-native";
@@ -22,9 +23,10 @@ import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { PageHeader } from "@/components/NavBar/PageHeader";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
+import EnvelopeFrontCard from "@/components/EnvelopeCard/EnvelopeFrontCard";
 import DotIndicator from "@/components/DotIndicator/DotIndicator";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
-import CardSelectOverlay, { type OriginLayout, type ChainArticleMeta } from "@/components/CardSelectOverlay/CardSelectOverlay";
+import CardSelectOverlay, { type OriginLayout, type ChainArticleMeta, type EnvelopeInfo } from "@/components/CardSelectOverlay/CardSelectOverlay";
 import { useQueryClient } from "@tanstack/react-query";
 import { useListInbox, useMarkInboxOpened, useDeleteInboxItem, getListInboxQueryKey, getArticle, getGetArticleQueryKey } from "@workspace/api-client-react";
 import { patchInboxItemInCache, removeInboxItemFromCache } from "@/lib/queryInvalidation";
@@ -124,10 +126,12 @@ function CarouselGroup({
   group,
   onCardPress,
   hiddenCardId,
+  recipientName,
 }: {
   group: DateGroup;
   onCardPress: (item: InboxItem, layout: OriginLayout) => void;
   hiddenCardId?: string | null;
+  recipientName?: string | null;
 }) {
   const itemCount = group.items.length;
   const [activeIndex, setActiveIndex] = useState(0);
@@ -240,40 +244,54 @@ function CarouselGroup({
   );
 
   // ── Shared card list ────────────────────────────────────────────────────
-  const cards = group.items.map((item, index) => (
-    <View
-      key={item.id}
-      ref={(ref) => { cardSlotRefs.current[index] = ref; }}
-      style={[
-        styles.cardSlot,
-        index < group.items.length - 1 && { marginRight: CARD_GAP },
-        // While this card is zoomed into selection mode, leave its slot empty
-        // (the real card is rendered by CardSelectOverlay).
-        item.id === hiddenCardId && styles.cardSlotHidden,
-      ]}
-    >
-      <ArticleCardItem
-        title={item.article?.title ?? "제목 없음"}
-        onPress={() => {
-          // On web: block the click that fires after a mouse drag swipe
-          if (Platform.OS === "web" && swipedRef.current) return;
-          const slotRef = cardSlotRefs.current[index];
-          if (slotRef) {
-            slotRef.measureInWindow((x, y, width, height) => {
-              onCardPress(item, { x, y, width, height });
-            });
-          } else {
-            onCardPress(item, { x: 0, y: 0, width: CARD_W, height: CARD_H });
-          }
-        }}
-        authorName={item.sender?.nickname ?? item.sender?.id}
-        collectionName={item.collectionName}
-        cover={item.article?.cover}
-        isRead={item.isRead}
-        isActive={index === activeIndex}
-      />
-    </View>
-  ));
+  const cards = group.items.map((item, index) => {
+    const isSealed = !!(item as any).isEnvelope && !item.openedAt;
+    const handlePress = () => {
+      if (Platform.OS === "web" && swipedRef.current) return;
+      const slotRef = cardSlotRefs.current[index];
+      if (slotRef) {
+        slotRef.measureInWindow((x, y, width, height) => {
+          onCardPress(item, { x, y, width, height });
+        });
+      } else {
+        onCardPress(item, { x: 0, y: 0, width: CARD_W, height: CARD_H });
+      }
+    };
+    return (
+      <View
+        key={item.id}
+        ref={(ref) => { cardSlotRefs.current[index] = ref; }}
+        style={[
+          styles.cardSlot,
+          index < group.items.length - 1 && { marginRight: CARD_GAP },
+          item.id === hiddenCardId && styles.cardSlotHidden,
+        ]}
+      >
+        {isSealed ? (
+          <EnvelopeFrontCard
+            senderName={item.sender?.nickname ?? item.sender?.id}
+            senderLocation={item.collectionName}
+            recipientName={recipientName}
+            isActive={index === activeIndex}
+            cardWidth={CARD_W}
+          />
+        ) : (
+          <ArticleCardItem
+            title={item.article?.title ?? "제목 없음"}
+            onPress={handlePress}
+            authorName={item.sender?.nickname ?? item.sender?.id}
+            collectionName={item.collectionName}
+            cover={item.article?.cover}
+            isRead={item.isRead}
+            isActive={index === activeIndex}
+          />
+        )}
+        {isSealed ? (
+          <Pressable style={StyleSheet.absoluteFill} onPress={handlePress} />
+        ) : null}
+      </View>
+    );
+  });
 
   return (
     <View style={styles.groupContainer}>
@@ -330,7 +348,7 @@ export default function InboxScreen() {
   const navBottom = useNavBarBottomSafeArea();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { userId } = useUser();
+  const { userId, nickname } = useUser();
   const [searchActive, setSearchActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [tapItem, setTapItem] = useState<InboxItem | null>(null);
@@ -396,9 +414,10 @@ export default function InboxScreen() {
         group={group}
         onCardPress={handleCardPress}
         hiddenCardId={tapItem?.id ?? null}
+        recipientName={nickname}
       />
     ),
-    [handleCardPress, tapItem?.id],
+    [handleCardPress, tapItem?.id, nickname],
   );
 
   const handleModalClose = useCallback(() => {
@@ -730,6 +749,24 @@ export default function InboxScreen() {
         onRead={handleRead}
         onNavigateToCollection={handleNavigateToCollection}
         onNavigateToAuthor={(authorId) => router.push(`/user-profile/${authorId}` as never)}
+        envelopeInfo={
+          tapItem && (tapItem as any).isEnvelope && !tapItem.openedAt
+            ? {
+                senderName: tapItem.sender?.nickname ?? tapItem.sender?.id ?? null,
+                senderLocation: tapItem.collectionName ?? null,
+                recipientName: nickname ?? null,
+                onOpen: async () => {
+                  const openedAt = new Date().toISOString();
+                  patchInboxItemInCache(queryClient, tapItem.id, { openedAt });
+                  try {
+                    await markOpened.mutateAsync({ id: tapItem.id });
+                  } catch (e) {
+                    console.warn("Failed to mark envelope opened:", e instanceof Error ? e.message : e);
+                  }
+                },
+              }
+            : null
+        }
       />
 
       <ConfirmModal

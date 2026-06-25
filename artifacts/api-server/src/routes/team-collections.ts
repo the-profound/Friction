@@ -388,6 +388,7 @@ router.get("/team-collections/:id/articles", async (req, res) => {
       addedBy: teamCollectionArticlesTable.addedBy,
       addedAt: teamCollectionArticlesTable.addedAt,
       deletedAt: teamCollectionArticlesTable.deletedAt,
+      isPinned: teamCollectionArticlesTable.isPinned,
       article: articlesTable,
       completedAt: userArticleReadsTable.completedAt,
       requesterVisibleAt: inboxTable.visibleAt,
@@ -479,6 +480,7 @@ router.get("/team-collections/:id/articles", async (req, res) => {
         : false,
       isDeletedPlaceholder: a.deletedAt != null,
       visibleAt: a.requesterVisibleAt ?? null,
+      isPinned: a.isPinned,
     })),
   );
 });
@@ -646,6 +648,45 @@ router.get("/team-collections/:id/today-greeting-status", async (req, res) => {
     alreadySentToday: existing.length > 0,
     noticeDate,
   });
+});
+
+router.patch("/team-collections/:teamId/articles/:articleId/pin", async (req, res) => {
+  const { teamId, articleId } = req.params;
+  const { isPinned, requesterId } = req.body as { isPinned?: unknown; requesterId?: unknown };
+
+  if (typeof isPinned !== "boolean" || typeof requesterId !== "string" || !UUID_REGEX.test(requesterId)) {
+    res.status(400).json({ error: "isPinned (boolean) and requesterId (uuid) are required" });
+    return;
+  }
+
+  const [membership] = await db
+    .select()
+    .from(teamCollectionMembershipsTable)
+    .where(and(
+      eq(teamCollectionMembershipsTable.teamCollectionId, teamId),
+      eq(teamCollectionMembershipsTable.userId, requesterId),
+    ));
+
+  if (!membership || membership.role !== "OWNER") {
+    res.status(403).json({ error: "Only the collection OWNER can pin articles." });
+    return;
+  }
+
+  const [updated] = await db
+    .update(teamCollectionArticlesTable)
+    .set({ isPinned })
+    .where(and(
+      eq(teamCollectionArticlesTable.teamCollectionId, teamId),
+      eq(teamCollectionArticlesTable.articleId, articleId),
+    ))
+    .returning();
+
+  if (!updated) {
+    res.status(404).json({ error: "Article not in collection" });
+    return;
+  }
+
+  res.json(updated);
 });
 
 router.delete("/team-collections/:teamId/articles/:articleId", async (req, res) => {

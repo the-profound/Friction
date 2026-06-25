@@ -10,4 +10,6 @@ export interface SendArticleBody {
   senderId: string;
   recipientId: string;
   articleId: string;
+  /** When true, the inbox item is created with is_envelope=true so the recipient sees a sealed envelope front face before opening. */
+  isEnvelope?: boolean;
 }

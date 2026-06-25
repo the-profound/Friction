@@ -35,6 +35,7 @@ import { MyArticlesPickerBottomSheet } from "@/components/MyArticlesPickerBottom
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
+import CardSelectOverlay, { type OriginLayout, type ChainArticleMeta } from "@/components/CardSelectOverlay/CardSelectOverlay";
 
 export default function PersonalCollectionDetailScreen() {
   const insets = useSafeAreaInsets();
@@ -69,6 +70,7 @@ export default function PersonalCollectionDetailScreen() {
   const [isSaveAsPhotosVisible, setIsSaveAsPhotosVisible] = useState(false);
 
   const [scrollEnabled, setScrollEnabled] = useState(true);
+  const [tapArticleEntry, setTapArticleEntry] = useState<MyCollectionArticleWithDetails | null>(null);
   const openRowRef = useRef<SwipeableRowHandle | null>(null);
   const rowRefs = useRef<Map<string, SwipeableRowHandle>>(new Map());
 
@@ -353,6 +355,13 @@ export default function PersonalCollectionDetailScreen() {
     Alert.alert("폴더 관리", undefined, options);
   }, [enterSelectionMode, handleOpenEdit, isImpression]);
 
+  const handleReadFromOverlay = useCallback(() => {
+    const item = tapArticleEntry;
+    if (!item) return;
+    setTapArticleEntry(null);
+    router.push({ pathname: "/read", params: { articleId: item.articleId, mode: "re_read" } });
+  }, [tapArticleEntry, router]);
+
   const alreadyAddedIds = articles.map((a) => a.articleId);
 
   const pickerArticles = myArticles.map((a) => ({
@@ -416,7 +425,7 @@ export default function PersonalCollectionDetailScreen() {
       >
         <ScalePressable
           style={styles.articleItem}
-          onPress={() => router.push({ pathname: "/read", params: { articleId: item.articleId, mode: "re_read" } })}
+          onPress={() => { closeOpenRow(); setTapArticleEntry(item); }}
           onLongPress={() => handleLongPress(item)}
           delayLongPress={400}
         contentStyle={styles.articleItemContent}
@@ -746,6 +755,19 @@ export default function PersonalCollectionDetailScreen() {
           onClose={() => setIsSaveAsPhotosVisible(false)}
         />
       )}
+
+      <CardSelectOverlay
+        articles={tapArticleEntry?.article ? [tapArticleEntry.article] : []}
+        metas={[{
+          date: tapArticleEntry?.addedAt ?? null,
+          collectionName: collection?.name ?? null,
+          collectionId: id ?? null,
+        } satisfies ChainArticleMeta]}
+        initialIndex={0}
+        originLayout={null}
+        onClose={() => setTapArticleEntry(null)}
+        onRead={handleReadFromOverlay}
+      />
 
       {!selectionMode && <NavBar />}
     </View>

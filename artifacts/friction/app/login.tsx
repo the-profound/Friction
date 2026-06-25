@@ -173,6 +173,15 @@ export default function LoginScreen() {
     }
   }
 
+  async function handleIlgonLogin() {
+    setIsLoading(true);
+    try {
+      await signInWithPassword("thomthiswld@gmail.com", "Cham1234");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   const canSubmitLogin = email.trim().length > 0 && password.length > 0 && !isLoading;
   const canSubmitSignupStep1 =
     email.trim().length > 0 && password.length > 0 && passwordConfirm.length > 0 && !isLoading;
@@ -522,6 +531,14 @@ export default function LoginScreen() {
           disabled={isLoading}
         >
           <Text style={styles.devButtonText}>현준</Text>
+        </ScalePressable>
+        <ScalePressable
+          style={styles.devButton}
+          contentStyle={styles.devButtonContent}
+          onPress={handleIlgonLogin}
+          disabled={isLoading}
+        >
+          <Text style={styles.devButtonText}>일곤</Text>
         </ScalePressable>
       </View>
     </KeyboardAvoidingView>

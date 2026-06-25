@@ -9,6 +9,12 @@ import {
   Text,
   View,
   Alert,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  TouchableWithoutFeedback,
+  Keyboard,
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -42,6 +48,10 @@ export default function MyPageScreen() {
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const logoutInflightRef = useRef(false);
+
+  const [devModalVisible, setDevModalVisible] = useState(false);
+  const [devPassword, setDevPassword] = useState("");
+  const [devLoading, setDevLoading] = useState(false);
 
   const {
     data: user,
@@ -84,6 +94,34 @@ export default function MyPageScreen() {
     Linking.openURL(url).catch(() => {
       Alert.alert("오류", "링크를 열 수 없습니다.");
     });
+  }
+
+  async function handleDevResealConfirm() {
+    if (devPassword !== "1234") {
+      Alert.alert("오류", "비밀번호가 틀렸습니다.");
+      return;
+    }
+    setDevLoading(true);
+    try {
+      const domain = process.env.EXPO_PUBLIC_DOMAIN ?? "";
+      const base = domain.startsWith("http://") || domain.startsWith("https://")
+        ? domain.replace(/\/+$/, "")
+        : `https://${domain}`.replace(/\/+$/, "");
+      const res = await fetch(`${base}/api/inbox/dev/reseal`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recipientId: userId }),
+      });
+      const data = await res.json();
+      setDevModalVisible(false);
+      setDevPassword("");
+      queryClient.invalidateQueries({ queryKey: ["inbox"] });
+      Alert.alert("완료", `최근 편지 ${data.count}개가 봉투에 담겼습니다.`);
+    } catch {
+      Alert.alert("오류", "요청에 실패했습니다.");
+    } finally {
+      setDevLoading(false);
+    }
   }
 
   return (
@@ -160,6 +198,15 @@ export default function MyPageScreen() {
             isLast
           />
         </Section>
+
+        <Section title="개발자">
+          <SettingRow
+            label="수신함 봉투 시험"
+            onPress={() => { setDevPassword(""); setDevModalVisible(true); }}
+            showChevron
+            isLast
+          />
+        </Section>
       </ScrollView>
 
       <ConfirmModal
@@ -176,6 +223,57 @@ export default function MyPageScreen() {
         onConfirm={isDeleting ? () => {} : handleDeleteConfirm}
         onCancel={isDeleting ? () => {} : () => setDeleteModalVisible(false)}
       />
+
+      {/* 개발자 — 수신함 봉투 시험 비밀번호 모달 */}
+      <Modal
+        visible={devModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => { setDevModalVisible(false); setDevPassword(""); }}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.devOverlay}>
+            <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"}>
+              <View style={styles.devCard}>
+                <Text style={styles.devCardTitle}>🛠 수신함 봉투 시험</Text>
+                <Text style={styles.devCardDesc}>
+                  최근 편지 5개를 봉투 미개봉 상태로 되돌립니다.{"\n"}비밀번호를 입력하세요.
+                </Text>
+                <TextInput
+                  style={styles.devInput}
+                  placeholder="비밀번호"
+                  placeholderTextColor={Colors.zinc400}
+                  value={devPassword}
+                  onChangeText={setDevPassword}
+                  secureTextEntry
+                  autoFocus
+                  returnKeyType="done"
+                  onSubmitEditing={handleDevResealConfirm}
+                />
+                <View style={styles.devButtonRow}>
+                  <ScalePressable
+                    style={styles.devCancelBtn}
+                    contentStyle={styles.devBtnContent}
+                    onPress={() => { setDevModalVisible(false); setDevPassword(""); }}
+                  >
+                    <Text style={styles.devCancelText}>취소</Text>
+                  </ScalePressable>
+                  <ScalePressable
+                    style={[styles.devConfirmBtn, devLoading && styles.devBtnDisabled]}
+                    contentStyle={styles.devBtnContent}
+                    onPress={handleDevResealConfirm}
+                    disabled={devLoading}
+                  >
+                    <Text style={styles.devConfirmText}>
+                      {devLoading ? "처리 중..." : "확인"}
+                    </Text>
+                  </ScalePressable>
+                </View>
+              </View>
+            </KeyboardAvoidingView>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </View>
   );
 }
@@ -368,5 +466,83 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     color: Colors.zinc700,
+  },
+  devOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 32,
+  },
+  devCard: {
+    backgroundColor: Colors.white,
+    borderRadius: 18,
+    padding: 24,
+    width: "100%",
+    gap: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  devCardTitle: {
+    ...Typography.bodySemiBold,
+    fontSize: 17,
+    color: Colors.zinc900,
+    textAlign: "center",
+  },
+  devCardDesc: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc500,
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  devInput: {
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: Colors.zinc900,
+    backgroundColor: Colors.zinc50,
+  },
+  devButtonRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  devBtnContent: {
+    alignItems: "center",
+    justifyContent: "center",
+    flex: 1,
+  },
+  devCancelBtn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 10,
+    backgroundColor: Colors.zinc100,
+  },
+  devCancelText: {
+    ...Typography.bodySemiBold,
+    fontSize: 15,
+    color: Colors.zinc600,
+    textAlign: "center",
+  },
+  devConfirmBtn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 10,
+    backgroundColor: Colors.zinc900,
+  },
+  devConfirmText: {
+    ...Typography.bodySemiBold,
+    fontSize: 15,
+    color: Colors.white,
+    textAlign: "center",
+  },
+  devBtnDisabled: {
+    opacity: 0.5,
   },
 });

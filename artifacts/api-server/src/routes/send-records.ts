@@ -88,7 +88,7 @@ router.post("/send-records", async (req, res) => {
     res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
     return;
   }
-  const { senderId, recipientId, articleId } = parsed.data;
+  const { senderId, recipientId, articleId, isEnvelope } = parsed.data;
 
   const [article] = await db.select().from(articlesTable).where(eq(articlesTable.id, articleId));
   if (!article) {
@@ -110,6 +110,7 @@ router.post("/send-records", async (req, res) => {
         articleId,
         senderId,
         visibleAt: deliverySlot,
+        isEnvelope: isEnvelope ?? false,
       }).returning();
 
       const [sendRecord] = await tx.insert(sendRecordsTable).values({

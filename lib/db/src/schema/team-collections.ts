@@ -1,4 +1,4 @@
-import { pgEnum, pgTable, text, timestamp, unique, uuid, varchar } from "drizzle-orm/pg-core";
+import { boolean, pgEnum, pgTable, text, timestamp, unique, uuid, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -41,6 +41,7 @@ export const teamCollectionArticlesTable = pgTable("team_collection_articles", {
   addedBy: uuid("added_by").notNull().references(() => usersTable.id),
   addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  isPinned: boolean("is_pinned").notNull().default(false),
 }, (t) => [
   unique("team_collection_articles_unique").on(t.teamCollectionId, t.articleId),
 ]);

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, ilike, lte, ne, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, lte, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db, inboxTable, articlesTable, usersTable, userArticleReadsTable } from "@workspace/db";
 
@@ -63,6 +63,7 @@ router.get("/inbox", async (req, res) => {
       visibleAt: inboxTable.visibleAt,
       openedAt: inboxTable.openedAt,
       isRead: inboxTable.isRead,
+      isEnvelope: inboxTable.isEnvelope,
       createdAt: inboxTable.createdAt,
       article: articlesTable,
       sender: usersTable,
@@ -107,6 +108,7 @@ router.get("/inbox/:id", async (req, res) => {
       visibleAt: inboxTable.visibleAt,
       openedAt: inboxTable.openedAt,
       isRead: inboxTable.isRead,
+      isEnvelope: inboxTable.isEnvelope,
       createdAt: inboxTable.createdAt,
       article: articlesTable,
       sender: usersTable,
@@ -204,6 +206,44 @@ router.post("/inbox/article/:articleId/read-others", async (req, res) => {
     .returning({ id: inboxTable.id });
 
   res.json({ updatedCount: updated.length });
+});
+
+// ── DEV: reseal the 5 most-recent inbox letters as sealed envelopes ──────────
+// Matches the same filter as the inbox carousel (isRead=false, visibleAt<=now,
+// senderId != recipientId) then takes the 5 newest by visibleAt.
+router.post("/inbox/dev/reseal", async (req, res) => {
+  const { recipientId } = req.body;
+  if (!recipientId || typeof recipientId !== "string") {
+    res.status(400).json({ error: "recipientId is required" });
+    return;
+  }
+
+  const recent = await db
+    .select({ id: inboxTable.id })
+    .from(inboxTable)
+    .where(
+      and(
+        eq(inboxTable.recipientId, recipientId),
+        eq(inboxTable.isRead, false),
+        lte(inboxTable.visibleAt, new Date()),
+        ne(inboxTable.senderId, inboxTable.recipientId),
+      ),
+    )
+    .orderBy(desc(inboxTable.visibleAt))
+    .limit(5);
+
+  if (recent.length === 0) {
+    res.json({ count: 0 });
+    return;
+  }
+
+  const ids = recent.map((r: { id: string }) => r.id);
+  await db
+    .update(inboxTable)
+    .set({ isEnvelope: true, openedAt: null })
+    .where(inArray(inboxTable.id, ids));
+
+  res.json({ count: ids.length });
 });
 
 export default router;

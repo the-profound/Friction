@@ -27,4 +27,6 @@ export interface InboxItem {
   hasReadBefore: boolean;
   /** Whether the recipient has previously completed reading the source (parent) article. NULL when this item is not a reply (replyToArticleId is null). */
   hasReadSourceArticle?: boolean | null;
+  /** Whether this inbox item was sent as a sealed envelope. When true and openedAt is null, the recipient sees the envelope front face first. */
+  isEnvelope: boolean;
 }

@@ -406,7 +406,7 @@ export default function MyScreen() {
 
       {/* Fixed header — lives outside FlatList so it never re-layouts on tab switch */}
       <View>
-        <View style={styles.profileSection}>
+        <View style={styles.profileSection} pointerEvents="none">
           {user?.avatarUrl ? (
             <Image source={{ uri: user.avatarUrl }} style={styles.avatar} />
           ) : (

@@ -794,6 +794,11 @@ export const ListInboxResponseItem = zod.object({
     .describe(
       "Whether the recipient has previously completed reading the source (parent) article. NULL when this item is not a reply (replyToArticleId is null).",
     ),
+  isEnvelope: zod
+    .boolean()
+    .describe(
+      "Whether this inbox item was sent as a sealed envelope. When true and openedAt is null, the recipient sees the envelope front face first.",
+    ),
 });
 export const ListInboxResponse = zod.array(ListInboxResponseItem);
 
@@ -909,6 +914,11 @@ export const GetInboxItemResponse = zod.object({
     .nullish()
     .describe(
       "Whether the recipient has previously completed reading the source (parent) article. NULL when this item is not a reply (replyToArticleId is null).",
+    ),
+  isEnvelope: zod
+    .boolean()
+    .describe(
+      "Whether this inbox item was sent as a sealed envelope. When true and openedAt is null, the recipient sees the envelope front face first.",
     ),
 });
 
@@ -1032,6 +1042,11 @@ export const MarkInboxOpenedResponse = zod.object({
     .describe(
       "Whether the recipient has previously completed reading the source (parent) article. NULL when this item is not a reply (replyToArticleId is null).",
     ),
+  isEnvelope: zod
+    .boolean()
+    .describe(
+      "Whether this inbox item was sent as a sealed envelope. When true and openedAt is null, the recipient sees the envelope front face first.",
+    ),
 });
 
 /**
@@ -1147,6 +1162,11 @@ export const MarkInboxReadResponse = zod.object({
     .nullish()
     .describe(
       "Whether the recipient has previously completed reading the source (parent) article. NULL when this item is not a reply (replyToArticleId is null).",
+    ),
+  isEnvelope: zod
+    .boolean()
+    .describe(
+      "Whether this inbox item was sent as a sealed envelope. When true and openedAt is null, the recipient sees the envelope front face first.",
     ),
 });
 
@@ -1850,6 +1870,9 @@ export const ListTeamArticlesResponseItem = zod.object({
     .describe(
       "The inbox visibleAt of the requesting user for this article. Null when no requester userId is provided or when there is no inbox row.",
     ),
+  isPinned: zod
+    .boolean()
+    .describe("Whether this article has been pinned by the collection owner."),
 });
 export const ListTeamArticlesResponse = zod.array(ListTeamArticlesResponseItem);
 
@@ -1914,6 +1937,33 @@ export const GetTodayGreetingStatusResponse = zod.object({
 export const RemoveTeamArticleParams = zod.object({
   teamId: zod.coerce.string().uuid(),
   articleId: zod.coerce.string().uuid(),
+});
+
+/**
+ * @summary Pin or unpin an article in a team collection (OWNER only)
+ */
+export const ToggleTeamArticlePinParams = zod.object({
+  teamId: zod.coerce.string().uuid(),
+  articleId: zod.coerce.string().uuid(),
+});
+
+export const ToggleTeamArticlePinBody = zod.object({
+  isPinned: zod.boolean(),
+  requesterId: zod
+    .string()
+    .uuid()
+    .describe("The user making the request. Must be the collection OWNER."),
+});
+
+export const ToggleTeamArticlePinResponse = zod.object({
+  id: zod.string().uuid(),
+  teamCollectionId: zod.string().uuid(),
+  articleId: zod.string().uuid(),
+  addedBy: zod.string().uuid(),
+  addedAt: zod.date(),
+  isPinned: zod
+    .boolean()
+    .describe("Whether this article has been pinned by the collection owner."),
 });
 
 /**
@@ -2167,6 +2217,12 @@ export const SendArticleBody = zod.object({
   senderId: zod.string().uuid(),
   recipientId: zod.string().uuid(),
   articleId: zod.string().uuid(),
+  isEnvelope: zod
+    .boolean()
+    .optional()
+    .describe(
+      "When true, the inbox item is created with is_envelope=true so the recipient sees a sealed envelope front face before opening.",
+    ),
 });
 
 /**

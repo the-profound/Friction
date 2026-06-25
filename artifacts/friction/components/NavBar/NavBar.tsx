@@ -14,10 +14,11 @@ export function NavBar() {
   const insets = useSafeAreaInsets();
   const nav = useNavigation();
   const { width: screenWidth } = useWindowDimensions();
+  const layerAnim = useRef(new Animated.Value(nav.layer === "main" ? 0 : 1)).current;
+
   const dockWidth = Platform.OS === "web"
     ? Sizing.navBarWidth
     : Math.min(screenWidth - 48, 340);
-  const layerAnim = useRef(new Animated.Value(nav.layer === "main" ? 0 : 1)).current;
 
   useEffect(() => {
     Animated.timing(layerAnim, {

@@ -98,6 +98,51 @@ function insertWithReplies(
   }
 }
 
+export type TeamArticleSection = {
+  pinned: TeamCollectionArticleWithDetails[];
+  dateGroups: {
+    dateKey: string;
+    label: string;
+    items: TeamCollectionArticleWithDetails[];
+  }[];
+};
+
+/**
+ * TeamCollectionArticleWithDetails 배열을 캐러셀 렌더링에 맞는 섹션 구조로 변환한다.
+ *
+ * - pinned: is_pinned === true인 비삭제 항목 (addedAt 내림차순)
+ * - dateGroups: 날짜별 그룹 (buildTeamArticleRows와 동일한 정렬·threading 규칙)
+ *   삭제 플레이스홀더는 각 그룹 items에서 제외한다.
+ */
+export function buildTeamArticleSections(
+  articles: TeamCollectionArticleWithDetails[],
+): TeamArticleSection {
+  const pinned = articles
+    .filter((a) => !a.isDeletedPlaceholder && a.isPinned)
+    .sort((a, b) => new Date(b.addedAt).getTime() - new Date(a.addedAt).getTime());
+
+  const rows = buildTeamArticleRows(articles);
+
+  const groupMap = new Map<string, { dateKey: string; label: string; items: TeamCollectionArticleWithDetails[] }>();
+  let currentKey: string | null = null;
+
+  for (const row of rows) {
+    if (row.type === "header") {
+      currentKey = row.dateKey;
+      if (!groupMap.has(currentKey)) {
+        groupMap.set(currentKey, { dateKey: row.dateKey, label: row.label, items: [] });
+      }
+    } else if (currentKey && row.type === "article" && !row.item.isDeletedPlaceholder) {
+      groupMap.get(currentKey)!.items.push(row.item);
+    }
+  }
+
+  return {
+    pinned,
+    dateGroups: Array.from(groupMap.values()),
+  };
+}
+
 export function buildTeamArticleRows(
   articles: TeamCollectionArticleWithDetails[],
 ): TeamArticleListRow[] {

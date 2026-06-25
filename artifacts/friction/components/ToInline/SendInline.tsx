@@ -83,6 +83,8 @@ export function SendInline({
   const [letterPickerVisible, setLetterPickerVisible] = useState(false);
   const [recipientPickerVisible, setRecipientPickerVisible] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
+  const [envelopePromptVisible, setEnvelopePromptVisible] = useState(false);
+  const [pendingIsEnvelope, setPendingIsEnvelope] = useState(false);
 
   const [segmentTab, setSegmentTab] = useState<SegmentTab>("collection");
   const [pendingRecipient, setPendingRecipient] = useState<Recipient>(null);
@@ -183,7 +185,7 @@ export function SendInline({
   }, [selectedRecipient]);
 
   const handleSend = useCallback(
-    async (asNotice = false) => {
+    async (asNotice = false, isEnvelope = false) => {
       if (!selectedArticle || !selectedRecipient) return;
 
       try {
@@ -205,6 +207,7 @@ export function SendInline({
               senderId: userId,
               recipientId: neighbor.neighborUserId,
               articleId: selectedArticle.id,
+              ...(isEnvelope ? { isEnvelope: true } : {}),
             },
           });
           setConfirmVisible(false);
@@ -356,7 +359,10 @@ export function SendInline({
           textStyle={styles.sendButtonText}
           disabledTextStyle={styles.sendButtonTextDisabled}
           onPress={() => {
-            if (canOfferTodayGreeting) {
+            if (selectedRecipient?.type === "neighbor") {
+              setPendingIsEnvelope(false);
+              setEnvelopePromptVisible(true);
+            } else if (canOfferTodayGreeting) {
               setNoticePromptVisible(true);
             } else {
               setConfirmVisible(true);
@@ -589,12 +595,31 @@ export function SendInline({
       </BottomSheet>
 
       <ConfirmModal
+        visible={envelopePromptVisible}
+        title="봉투에 담아 발신할까요?"
+        description={"받는 사람이 봉투를 직접 개봉한 뒤 편지를 읽게 됩니다."}
+        confirmLabel="봉투로 보내기"
+        cancelLabel="그냥 보내기"
+        onConfirm={() => {
+          setPendingIsEnvelope(true);
+          setEnvelopePromptVisible(false);
+          setConfirmVisible(true);
+        }}
+        onCancel={() => {
+          setPendingIsEnvelope(false);
+          setEnvelopePromptVisible(false);
+          setConfirmVisible(true);
+        }}
+        onBackdropPress={() => setEnvelopePromptVisible(false)}
+      />
+
+      <ConfirmModal
         visible={confirmVisible}
         title="보내기"
         description={confirmDescription}
         confirmLabel="보내기"
         cancelLabel="취소"
-        onConfirm={() => handleSend(false)}
+        onConfirm={() => handleSend(false, pendingIsEnvelope)}
         onCancel={() => setConfirmVisible(false)}
       />
 

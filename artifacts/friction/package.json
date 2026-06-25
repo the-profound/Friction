@@ -61,6 +61,7 @@
     "zod-validation-error": "^3.4.0"
   },
   "dependencies": {
+    "@expo-google-fonts/noto-serif-kr": "^0.4.3",
     "@supabase/supabase-js": "^2.103.3",
     "@tiptap/core": "^3.22.0",
     "@tiptap/extension-blockquote": "^3.22.0",
