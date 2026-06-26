@@ -1,0 +1,121 @@
+
+[15:47:59.543] INFO (674): Server listening
+    port: 8080
+[15:48:00.122] INFO (674): request completed
+    req: {
+      "id": 1,
+      "method": "GET",
+      "url": "/"
+    }
+    res: {
+      "statusCode": 404
+    }
+    responseTime: 3
+[15:48:01.339] INFO (674): Dev seed data already present (v2), skipping
+[15:48:01.356] INFO (674): request completed
+    req: {
+      "id": 2,
+      "method": "GET",
+      "url": "/"
+    }
+    res: {
+      "statusCode": 404
+    }
+    responseTime: 1
+[15:48:01.475] INFO (674): Dev seed data already present (v3), skipping
+[15:48:01.612] INFO (674): Dev seed data already present (v4), skipping
+[15:48:01.748] INFO (674): Dev seed data already present (v5), skipping
+[15:48:01.884] INFO (674): Dev seed data already present (v6), skipping
+[15:48:03.387] INFO (674): request completed
+    req: {
+      "id": 3,
+      "method": "GET",
+      "url": "/"
+    }
+    res: {
+      "statusCode": 404
+    }
+    responseTime: 1
+[15:48:05.395] INFO (674): request completed
+    req: {
+      "id": 4,
+      "method": "GET",
+      "url": "/"
+    }
+    res: {
+      "statusCode": 404
+    }
+    responseTime: 0
+[15:48:10.046] INFO (674): request completed
+    req: {
+      "id": 5,
+      "method": "POST",
+      "url": "/api/articles"
+    }
+    res: {
+      "statusCode": 201
+    }
+    responseTime: 439
+[15:48:10.658] INFO (674): request completed
+    req: {
+      "id": 6,
+      "method": "GET",
+      "url": "/api/articles"
+    }
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 409
+[15:48:10.997] INFO (674): request completed
+    req: {
+      "id": 7,
+      "method": "GET",
+      "url": "/api/articles/d31f26d5-9a88-4908-82e7-9e8a3b2b5dea"
+    }
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 141
+[15:48:19.535] INFO (674): request completed
+    req: {
+      "id": 8,
+      "method": "PATCH",
+      "url": "/api/articles/d31f26d5-9a88-4908-82e7-9e8a3b2b5dea"
+    }
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 556
+[15:48:27.250] INFO (674): request completed
+    req: {
+      "id": 9,
+      "method": "PATCH",
+      "url": "/api/articles/d31f26d5-9a88-4908-82e7-9e8a3b2b5dea"
+    }
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 549
+[15:48:28.372] INFO (674): request completed
+    req: {
+      "id": 10,
+      "method": "PATCH",
+      "url": "/api/articles/d31f26d5-9a88-4908-82e7-9e8a3b2b5dea"
+    }
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 549
+[15:48:28.987] INFO (674): request completed
+    req: {
+      "id": 11,
+      "method": "GET",
+      "url": "/api/articles"
+    }
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 410
+^C ELIFECYCLE  Command failed.
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/api-server@0.0.0 dev: `export NODE_ENV=development && pnpm run build && pnpm run start`
+Command failed with signal "SIGINT"
