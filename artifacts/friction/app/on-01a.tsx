@@ -70,10 +70,10 @@ export default function DraftScreen() {
   const serverContentRef = useRef("");
   const isNavigatingRef = useRef(false);
   const [isNavigating, setIsNavigating] = useState(false);
-  const pendingExportRef = useRef<{
-    resolve: (md: string) => void;
-    requestId: string;
-  } | null>(null);
+  // Map-based export tracker: each in-flight requestExportMarkdown has its own
+  // slot, so an autosave export and a getEditorContent() export can never
+  // overwrite each other's resolver (fixes the single-slot clobber race).
+  const pendingExportsRef = useRef<Map<string, (md: string) => void>>(new Map());
   const exportDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const exportPendingRef = useRef(false);
   const lastSeenDocVersionRef = useRef(-1);
@@ -176,11 +176,15 @@ export default function DraftScreen() {
         return;
       }
       const requestId = `export_${Date.now()}`;
-      pendingExportRef.current = { resolve, requestId };
+      pendingExportsRef.current.set(requestId, resolve);
       editorRef.current.requestExportMarkdown(requestId);
       setTimeout(() => {
-        if (pendingExportRef.current?.requestId === requestId) {
-          pendingExportRef.current = null;
+        if (pendingExportsRef.current.has(requestId)) {
+          pendingExportsRef.current.delete(requestId);
+          // Fallback to contentRef — may still be empty for brand-new articles
+          // that haven't had a successful export yet. This is acceptable: if the
+          // WebView didn't respond within 2 s something is seriously wrong, and
+          // the empty-body guard below will surface a toast to the user.
           resolve(contentRef.current);
         }
       }, 2000);
@@ -194,9 +198,10 @@ export default function DraftScreen() {
     if (incomingVer < lastSeenDocVersionRef.current) return;
     lastSeenDocVersionRef.current = incomingVer;
     contentRef.current = payload.markdown;
-    if (pendingExportRef.current?.requestId === payload.requestId) {
-      pendingExportRef.current.resolve(payload.markdown);
-      pendingExportRef.current = null;
+    const cb = pendingExportsRef.current.get(payload.requestId);
+    if (cb) {
+      pendingExportsRef.current.delete(payload.requestId);
+      cb(payload.markdown);
     }
   }, []);
 
@@ -233,13 +238,12 @@ export default function DraftScreen() {
         exportPendingRef.current = false;
         if (!editorRef.current) return;
         const requestId = `autosave_${Date.now()}`;
-        pendingExportRef.current = {
-          resolve: (md: string) => {
-            contentRef.current = md;
-            markDirty(titleRef.current, md);
-          },
-          requestId,
-        };
+        // Map-based: each autosave export gets its own slot so it cannot
+        // clobber a concurrent getEditorContent() resolver.
+        pendingExportsRef.current.set(requestId, (md: string) => {
+          contentRef.current = md;
+          markDirty(titleRef.current, md);
+        });
         editorRef.current.requestExportMarkdown(requestId);
       }, EXPORT_DEBOUNCE_MS);
     }

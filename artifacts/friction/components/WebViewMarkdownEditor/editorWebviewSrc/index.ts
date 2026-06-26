@@ -999,6 +999,11 @@ function spellFindRange(
   let docChangeCounter = 0;
   let lastEmittedCharCount = -1;
   let lastEmittedWordCount = -1;
+  // Tracks whether the next docChanged transaction is from a programmatic
+  // setMarkdown/setContent call (not user input). When true, onUpdate skips
+  // the onChange emission so the RN side doesn't start an autosave debounce
+  // for an unchanged document.
+  let programmaticUpdatePending = false;
 
   // 멱등 처리용 캐시 — 같은 값을 재전송한 경우 비싼 DOM/style 작업을 스킵한다.
   let lastEditable: boolean | null = null;
@@ -1281,6 +1286,19 @@ function spellFindRange(
         // selection/decoration-only 트랜잭션으로는 무효화하지 않는다.
         if (transaction.docChanged) {
           docChangeCounter++;
+          if (programmaticUpdatePending) {
+            // 프로그래매틱 setMarkdown/setContent 로 인한 변경이다.
+            // onChange 를 emit 하지 않으면 RN 측 autosave 디바운스가 시작되지
+            // 않아 실제 사용자 편집과 구분된다.
+            programmaticUpdatePending = false;
+            // 이전 사용자 편집이 남긴 stale 타이머가 있으면 취소한다.
+            if (changeTimer) { clearTimeout(changeTimer); changeTimer = null; }
+            // dedup 키 및 overflow probe 는 정상적으로 갱신한다.
+            lastProbeRangesKey = null;
+            scheduleOverflowProbe();
+            postSelectionState(ed);
+            return;
+          }
           // 사용자 입력으로 인한 변경이 발생하면 setMarkdown guard 도 무효화한다.
           // (이후 동일한 markdown 이 들어와도 setContent 가 다시 실행되도록.)
           lastAppliedMarkdown = null;
@@ -1337,6 +1355,9 @@ function spellFindRange(
           if (!editor) {
             setupEditor(placeholder, initialMarkdown);
           } else {
+            // setContent 는 docChanged 트랜잭션을 발생시켜 onUpdate 를 trigger 한다.
+            // 프로그래매틱 변경임을 표시해 spurious onChange 가 RN 으로 가지 않도록 한다.
+            programmaticUpdatePending = true;
             const html = markdownToHtml(initialMarkdown);
             editor.commands.setContent(html);
           }
@@ -1359,6 +1380,9 @@ function spellFindRange(
             if (lastAppliedMarkdown !== null && next === lastAppliedMarkdown) {
               break;
             }
+            // setContent 는 docChanged 트랜잭션을 발생시켜 onUpdate 를 trigger 한다.
+            // 프로그래매틱 변경임을 표시해 spurious onChange 가 RN 으로 가지 않도록 한다.
+            programmaticUpdatePending = true;
             const html = markdownToHtml(next);
             editor.commands.setContent(html);
             lastAppliedMarkdown = next;
