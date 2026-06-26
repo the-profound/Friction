@@ -204,7 +204,10 @@ router.patch("/articles/:id", async (req, res) => {
 
   const updates: Record<string, unknown> = {};
   if (parsed.data.title !== undefined) updates.title = parsed.data.title;
-  if (parsed.data.content !== undefined) updates.content = parsed.data.content;
+  if (parsed.data.content !== undefined) {
+    updates.content = parsed.data.content;
+    req.log.info({ articleId: req.params.id, contentLen: (parsed.data.content ?? "").length, contentPreview: (parsed.data.content ?? "").slice(0, 80) }, "PATCH content payload");
+  }
   if (parsed.data.pages !== undefined) updates.pages = parsed.data.pages;
   if (parsed.data.layoutWidth !== undefined) updates.layoutWidth = parsed.data.layoutWidth;
   if (parsed.data.style !== undefined) updates.style = parsed.data.style;
