@@ -1,0 +1,45 @@
+[역할] 너는 read-only 진단 엔지니어다. 아래 두 기획안이 "롤백된 baseline"에 충돌 없이 구현될 수 있는지 실제 코드를 근거로 매핑·보고만 한다. 코드 수정·커밋·git 변경은 절대 금지. 진단 결과만 보고하라.
+
+[대상 브랜치] rework/draft-review-rollback (사진 기능/패치 이전으로 롤백된 baseline)
+
+[진단 원칙 — 지난 실수 반복 방지]
+1. 모든 판단에 실제 코드 근거(파일:라인)를 붙인다. 추측 금지. 확인 안 되면 "확인 불가"로 분류.
+2. 에디터는 항상 양쪽을 같이 본다: 네이티브 WebView(editorHtml.ts)와 웹/시뮬레이터(WebViewMarkdownEditorWeb.tsx). 한쪽만 보고 판단 금지.
+3. 변경이 예상되는 지점이 "화면 전용(on-01a/on-01b)"인지 "공유 인프라(editorHtml.ts, WebViewMarkdownEditorWeb.tsx, useAutoSave.ts)"인지 매번 표시하고, 공유면 다른 화면(마감 on-01c, 읽기)에 영향 가는지 확인.
+4. 기능 간 선행 의존성(무엇이 먼저 안정화돼야 하는지) 순서를 명시.
+5. 코드를 고치지 마라. git에 어떤 변경도 만들지 마라. 보고 텍스트만 출력.
+
+────────────────────────
+[A. 작성 단계 기획안 — 구현 가능성]
+A1. 이미지 노드: baseline에 이미지 삽입/노드가 존재하나? insertImage가 실제 구현인가 stub인가? 노드 타입명은? 인라인인가 블록인가? (기획은 "블록 레벨" 요구 → 현재와의 격차)
+A2. 두 에디터 정합성: 이미지 노드 정의·CSS(.tiptap-inline-image 등)가 editorHtml.ts와 WebViewMarkdownEditorWeb.tsx 양쪽에 동일하게 있나? 누락된 쪽은 어디?
+A3. 툴바: 마크다운 툴바 구성 위치/구조 — "미디어 추가" 버튼을 같은 줄에 추가할 수 있는 구조인가?
+A4. 미디어 피커: 카메라/갤러리 선택(expo-image-picker 등) 연동이 이미 있나, 새로 붙여야 하나?
+A5. 표시 크기 스펙: 기획 2-6(block / max-width 60% / max-height 280px / height auto)이 적용될 CSS 지점은 어디인가? 현재 baseline 값은?
+A6. 원본 보존: 이미지를 저장하는 데이터 모델이 "표시 크기는 미리보기, 원본 해상도는 보존"을 지원하나? 마감 뷰에서 원본 크기로 표시할 경로가 있나?
+
+[B. 검토 단계 기획안 — 구현 가능성]
+B1. 단계 enum: 상태 사이클 정의 위치(예: articleStatusCycle.ts)에서 DRAFT/DIVIDING/CLOSING 확인. "UI 라벨만 '검토', 내부 enum DIVIDING 유지"가 라벨/로직 분리 구조상 가능한가?
+B2. HR(분할선) 노드: HorizontalRule 삽입/렌더 상태. 'BTIS051 분할선 활성화' 관련 코드 상태는? 안정적으로 삽입·렌더되나? (자동분할의 선행조건)
+B3. 자동분할 토대: 본문 노드 트리 순회 / 문단 split / HR 형제 삽입 / 노드 attribute 마킹(data-autosplit) 이 현재 에디터(TipTap) 구조에서 기술적으로 가능한가? 트랜잭션 API가 있나?
+B4. 페이지 경계 렌더: 마감/읽기 뷰가 HR(---)을 "페이지 경계"로 렌더하는 모델이 이미 있나, 없나? (B-3: 자동분할이 의미를 가지려면 선행/병행 필요)
+B5. 트랜잭션·자동저장: 자동분할/교정을 "단일 트랜잭션(Undo 1회 원복) + 트랜잭션 완료 후 저장 트리거"로 넣을 수 있나? useAutoSave debounce와 충돌 지점은?
+B6. 맞춤법: (1) 앱 내 "별도 탭(뷰 전환)" 가능 구조인가? (2) 백엔드 경유 LLM 호출 엔드포인트가 있나, Replit AI Integrations 연결 상태는? (3) 문서 직렬화+position map / ProseMirror decoration 하이라이트 / range 부분 치환이 가능한 구조인가?
+
+[C. 토대 안정성 — 지난 버그 영역 (필수)]
+C1. 초기화 게이트: isDataFresh(30초) 게이트 + handleEditorReady → setMarkdown("") 경로가 baseline에 그대로 있나? (작성→검토 "내용을 작성해주세요" 빈 본문 버그의 토대)
+C2. export/저장 경쟁: getEditorContent/requestExportMarkdown, useAutoSave flush 경로에 race 가능성이 남아 있나?
+→ 이 토대 버그가 남아 있으면, 기획 반영 "전에" 먼저 고쳐야 함을 명확히 지적하라.
+
+[D. 공유 파일 / 스코프]
+D1. editorHtml.ts, WebViewMarkdownEditorWeb.tsx, useAutoSave.ts 각각이 작성/검토 외 화면(마감 on-01c, 읽기 등)에서도 import/사용되나?
+D2. 위 A·B의 예상 변경들을 "화면 전용(안전)" vs "공유 인프라(주의 — 타 화면 영향 검토 필요)"로 분류.
+
+────────────────────────
+[보고 형식]
+1. 기능별 판정 표 — | 항목 | 현재 baseline 상태(파일:라인) | 들어갈 수 있나 (✅바로 / ⚠️토대작업 필요 / ❌충돌·재설계) | 근거·비고 |
+2. 토대 버그(C) 잔존 여부 + "기획 반영 전 선행 수정" 필요 목록
+3. 권장 의존성 순서 (예: HR 노드 안정화 → 블록 이미지 노드 → 자동분할 → 페이지 경계 렌더 → 맞춤법)
+4. 공유 파일 영향 맵 (D)
+5. 확인 불가/추가 정보 필요 항목
+※ 다시 강조: 코드 수정·커밋 절대 금지. 진단 보고만 출력.
