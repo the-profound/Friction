@@ -27,6 +27,16 @@ Artifacts (e.g. `artifacts/friction`) consume `@workspace/*` two different ways:
   (root script `typecheck:libs`) to refresh declarations, or `tsc --noEmit` will
   report phantom "Property X does not exist" errors for fields that exist in src.
 
+## WebView 에디터 소스 수정 후 반드시 번들 재빌드
+`components/WebViewMarkdownEditor/editorWebviewSrc/index.ts` 를 수정하면
+반드시 `pnpm run build:editor` 로 `editorHtml.ts` 번들을 재빌드해야 한다.
+소스만 수정하고 번들을 빌드하지 않으면 WebView는 이전 코드를 계속 실행한다.
+Task 브랜치가 소스만 수정하고 머지될 경우 이 단계가 누락되므로, 머지 후 반드시 확인.
+
+**Why:** Task #889 소스 수정 + 머지 후 번들 미재빌드로 인해 programmaticUpdatePending
+fix가 적용되지 않아 본문 저장 버그가 지속됨. `grep programmaticUpdatePending editorHtml.ts`
+count=0 이면 번들이 오래된 것.
+
 ## Pre-existing baselines (not your regression)
 - `lib/api-zod` declaration build fails with TS2308 duplicate-export ambiguity
   (`src/index.ts` does `export * from "./generated/api"` AND `"./generated/types"`,
