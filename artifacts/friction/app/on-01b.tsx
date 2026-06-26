@@ -127,9 +127,8 @@ export default function DividingScreen() {
   const titleRef = useRef("");
   const contentRef = useRef("");
   const initializedRef = useRef(false);
-  // Capture mount time so we can verify fresh data (dataUpdatedAt >= mountedAt)
-  // before initializing the editor, avoiding stale-cache initialization.
-  const mountedAtRef = useRef(Date.now());
+  // C1: tracks last content seen from server; used to detect user edits
+  const serverContentRef = useRef("");
   const initialContentRef = useRef("");
   const initialTitleRef = useRef("");
   const isNavigatingRef = useRef(false);
@@ -203,23 +202,17 @@ export default function DividingScreen() {
   }, [editorReady, initialized]);
 
   useEffect(() => {
-    // Gate initialization on data being NEWER than this component's mount time.
-    // This is more reliable than checking isFetching alone, which can be false
-    // for a brief window between mount and when invalidateQueries triggers the
-    // refetch, potentially letting stale cached data initialize the editor.
-    // 30s slack — see on-01a for rationale. Cache primed via optimistic
-    // setQueryData(..., { updatedAt: Date.now() }) on the previous screen
-    // passes immediately; truly stale caches still wait for the refetch.
-    const isDataFresh = articleQuery.dataUpdatedAt >= mountedAtRef.current - 30_000;
-    if (article && !initializedRef.current && isDataFresh) {
+    if (!article) return;
+    const t = article.title || "";
+    // 항상 article.content를 단일 진실 소스로 사용한다.
+    // pages는 서버에서 파생된 표시용 값이며, optimistic update 시점에
+    // 구버전이 남아 있으면 content와 diverge하여 데이터가 손실될 수 있다.
+    const c = article.content || "";
+    if (!initializedRef.current) {
+      // C1 fix: initialize on first data arrival regardless of cache age.
       initializedRef.current = true;
       setInitialized(true);
-      const t = article.title || "";
-      // 항상 article.content를 단일 진실 소스로 사용한다.
-      // pages는 서버에서 파생된 표시용 값이며, optimistic update 시점에
-      // 구버전이 남아 있으면 content와 diverge하여 데이터가 손실될 수 있다.
-      // 렌더링 시점 분할은 splitContentToPages(content)로 직접 파생한다.
-      let c = article.content || "";
+      serverContentRef.current = c;
       setTitle(t);
       titleRef.current = t;
       setContent(c);
@@ -231,8 +224,24 @@ export default function DividingScreen() {
         editorRef.current?.setMarkdown(c);
         editorRef.current?.setTitle(t);
       }
+      console.log("[on-01 init] on-01b cached?=true dirty?=false injected:", JSON.stringify(c.slice(0, 60)));
+    } else if (contentRef.current === serverContentRef.current) {
+      // Background refetch: re-inject only if content differs and user hasn't edited.
+      if (c !== serverContentRef.current) {
+        serverContentRef.current = c;
+        contentRef.current = c;
+        setContent(c);
+        setTitle(t);
+        titleRef.current = t;
+        setCharCount(c.length);
+        if (editorReady) {
+          editorRef.current?.setMarkdown(c);
+          editorRef.current?.setTitle(t);
+        }
+        console.log("[on-01 init] on-01b re-inject from server dirty?=false injected:", JSON.stringify(c.slice(0, 60)));
+      }
     }
-  }, [article, editorReady, articleQuery.dataUpdatedAt]);
+  }, [article, editorReady]);
 
   useEffect(() => {
     const showSub = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
@@ -245,8 +254,12 @@ export default function DividingScreen() {
 
   const handleEditorReady = useCallback(() => {
     setEditorReady(true);
-    editorRef.current?.setMarkdown(initialContentRef.current);
-    editorRef.current?.setTitle(initialTitleRef.current);
+    // Only inject if article data has already been initialized.
+    // If article hasn't arrived yet, the init useEffect injects when it fires.
+    if (initializedRef.current) {
+      editorRef.current?.setMarkdown(initialContentRef.current);
+      editorRef.current?.setTitle(initialTitleRef.current);
+    }
   }, []);
 
   const getEditorContent = useCallback((): Promise<string> => {

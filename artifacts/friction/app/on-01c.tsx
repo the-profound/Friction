@@ -55,10 +55,6 @@ export default function ClosingScreen() {
     ? (authorQuery.data?.nickname ?? authorQuery.data?.email ?? undefined)
     : undefined;
 
-  // Capture mount time so we can verify fresh data (dataUpdatedAt >= mountedAt)
-  // before initializing title/cover, avoiding stale-cache initialization.
-  const mountedAtRef = useRef(Date.now());
-
   // Skip mount-time invalidate when cache is fresh (≤30s) — avoids a wasted
   // refetch on every 분할→마감 navigation. Cold entries still refresh.
   useEffect(() => {
@@ -104,26 +100,20 @@ export default function ClosingScreen() {
       setPreviewPage(0);
       return incoming;
     });
-    // title·cover는 이 화면에서 편집하므로 최초 1회만 초기화.
-    // Gate initialization on data being NEWER than this component's mount time.
-    // This prevents stale cached data from initializing before the fresh fetch
-    // triggered by invalidateQueries on mount has resolved.
-    // 30s slack — see on-01a for rationale. Lets cache primed via optimistic
-    // setQueryData on the previous screen pass immediately while still waiting
-    // on truly stale caches.
-    const isDataFresh = articleQuery.dataUpdatedAt >= mountedAtRef.current - 30_000;
-    // initialPagesRef도 같은 freshness 게이트를 적용. 그렇지 않으면 stale 캐시의
-    // pages가 스냅샷으로 굳어 fresh fetch가 도착했을 때 "변경됨"으로 오인되어
-    // 페이로드 최소화 효과가 사라진다.
-    if (initialPagesRef.current === null && isDataFresh) {
+    // C1 fix: removed isDataFresh gate — initialize on first data regardless of
+    // cache age. initializedRef ensures title/cover are only set once (user edits
+    // these fields, so we must not overwrite on background refetch).
+    // initialPagesRef also snapshotted on first data to keep diff detection accurate.
+    if (initialPagesRef.current === null) {
       initialPagesRef.current = incoming;
     }
-    if (!initializedRef.current && isDataFresh) {
+    if (!initializedRef.current) {
       initializedRef.current = true;
       setTitle(article.title || "");
       setCover(resolveArticleCover(article.cover));
+      console.log("[on-01 init] on-01c cached?=true dirty?=false title injected:", (article.title || "").slice(0, 30));
     }
-  }, [article, articleQuery.dataUpdatedAt]);
+  }, [article]);
 
   const pendingCoverRef = useRef<ArticleCover | null>(null);
   // 마감→분할 복귀 시 전달할 콘텐츠 페이지 인덱스를 렌더마다 갱신한다.

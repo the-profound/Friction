@@ -80,9 +80,14 @@ export function useAutoSave({
           retryCountRef.current = 0;
           if (queueKey) persistQueue(queueKey, null);
           if (requestIdRef.current === id) {
+            // C2: epoch matches — no new edits arrived during save, safe to clear dirty.
             isDirtyRef.current = false;
             setIsDirty(false);
             setStatus("saved");
+            console.log("[useAutoSave doSave] epoch in:", id, "epoch out:", id, "dirty cleared ✓");
+          } else {
+            // C2: epoch advanced — new markDirty was called during save. Dirty stays true.
+            console.log("[useAutoSave doSave] epoch in:", id, "epoch out:", requestIdRef.current, "dirty kept (new edit during save)");
           }
         }
       } catch {
@@ -181,8 +186,10 @@ export function useAutoSave({
     savingRef.current = false;
 
     if (!isDirtyRef.current && status !== "error") {
+      console.log("[useAutoSave flush] isDirty=false, status:", status, "→ skip save, ok:", retryCountRef.current === 0);
       return { ok: retryCountRef.current === 0 };
     }
+    console.log("[useAutoSave flush] isDirty=true, status:", status, "→ proceeding to save");
 
     // Flush retries synchronously (up to FLUSH_MAX_ATTEMPTS) with a short
     // delay between attempts. This means a brief network blip (< ~2 s) won't

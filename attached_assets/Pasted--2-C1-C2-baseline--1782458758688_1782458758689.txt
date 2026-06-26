@@ -1,0 +1,54 @@
+[역할] 너는 "토대 버그 2건(C1·C2)만" 수정하는 엔지니어다. 기획 기능(이미지·자동분할·맞춤법)은 이번에 절대 손대지 않는다. baseline을 안정화하는 게 유일한 목표다.
+
+[브랜치] rework/draft-review-rollback (롤백된 baseline). 작업·커밋은 이 브랜치에서만. push는 내 지시 후에만.
+
+[수정 대상]
+- C1 (빈 본문 버그): isDataFresh 30초 게이트 + setMarkdown("") 경로. 진단 위치 on-01c.tsx:88–100. ※ 이 게이트 패턴이 on-01a/on-01b 등 다른 화면 데이터 로딩에도 있는지 전부 찾아라.
+- C2 (저장 경쟁): useAutoSave.ts:167 flush ↔ WebViewMarkdownEditorWeb.tsx:110 onChange setTimeout 미동기화.
+
+[원칙 — 지난 실수 반복 방지]
+1. 읽고 나서 고친다. 진단의 파일:라인을 출발점으로 실제 코드를 다시 확인하고, 모든 변경에 근거를 댄다. 추측 금지.
+2. 범위 엄수. C1·C2 외 어떤 기능 추가·리팩터도 금지. 아래 검증을 위한 로그 외에 새 코드 만들지 마라.
+3. 게이트는 한 군데가 아니다. isDataFresh류 게이트가 on-01a/b/c 어디에 있든 "전부" 찾아 일관되게 고쳐라. (한 파일만 고쳤던 지난 실수 반복 금지)
+4. 공유 인프라 주의. editorHtml.ts·WebViewMarkdownEditorWeb.tsx·useAutoSave.ts는 공유 파일이다. 변경 후 작성(on-01a)·검토(on-01b)·마감(on-01c)·읽기(read) 전 화면 회귀를 확인한다.
+5. 최소 변경. 새 타이머·플래그·추상화를 함부로 늘리지 마라. (dirtyEpoch를 잘못 넣어 새 race를 만든 전례 있음) 아래 "동작·불변식"을 만족하는 가장 작은 변경만.
+6. 검증 없이 커밋 금지. 로그로 증명한 뒤 보고. 내가 승인하면 그때 rework 브랜치에 커밋.
+
+────────────────────────
+[Step 1 — 먼저 재현 (고치기 전)]
+ - 30초 이상 지난(또는 cold navigation) 캐시 글을 열고, refetch 완료 전에 바로 "다음(검토)"을 눌러 "내용을 작성해주세요" 빈 본문 모달이 뜨는지 재현하라.
+ - 재현 경로와 그때의 상태(isDataFresh, articleContentRef, setMarkdown 인자)를 로그로 캡처해 보고. (재현 안 되면 어떤 조건에서 되는지 탐색)
+
+[Step 2 — C1 수정: stale-while-revalidate + dirty 가드]
+ 동작:
+ - 캐시된 본문이 있으면 즉시 에디터를 그 내용으로 초기화한다. (절대 setMarkdown("")로 빈 초기화 하지 않는다)
+ - 30초 isDataFresh 게이트를 제거하고 stale-while-revalidate로: 캐시 즉시 표시 → 백그라운드 refetch → 완료 시 "서버 본문이 현재와 다르고 + 사용자가 아직 편집 안 함(dirty=false)"일 때만 re-inject.
+ - 사용자가 입력을 시작했으면(dirty=true) 어떤 refetch 결과도 덮어쓰지 않는다.
+ 불변식(반드시 성립):
+ - (I-1) 캐시/서버에 본문이 있는데 에디터가 빈 채로 초기화되는 경우 = 0.
+ - (I-2) 사용자가 입력 시작한 뒤 그 입력이 refetch로 덮어써지는 경우 = 0.
+ - 게이트를 찾은 모든 화면(on-01a/b/c)에 동일 규칙을 적용.
+
+[Step 3 — C2 수정: flush ↔ onChange 동기화]
+ 동작:
+ - flush()는 onChange의 로컬 setTimeout에 걸려 아직 네이티브로 안 넘어온 마지막 입력을 "먼저 반영한 뒤" 저장하도록 동기화한다.
+ - 진행 중 저장(doSave)이 끝난 뒤, 그 사이 새 편집이 들어왔다면 dirty 플래그를 거짓으로 만들지 않는다. (저장 시작 시점의 버전/epoch를 스냅샷해, 완료 시 버전이 그대로일 때만 dirty 해제)
+ 불변식:
+ - (I-3) 타이핑 직후 즉시 화면 이탈/단계 전환해도 마지막 입력까지 저장된다.
+ - (I-4) 저장 경쟁으로 dirty가 잘못 꺼져 최신 내용이 누락되는 경우 = 0.
+
+[Step 4 — 검증 + 회귀]
+ C1: (a) 30초+ 캐시 글 열기 → 본문 즉시 표시(빈 화면/모달 없음).
+     (b) 입력 후 즉시 "검토" → "내용을 작성해주세요" 없이 본문 갖고 전환.
+     (c) 사용자가 편집 중일 때 refetch 완료 → in-progress 편집 그대로 유지.
+ C2: (d) 타이핑 직후 즉시 이탈/전환 → 재진입 시 마지막 키스트로크까지 보존.
+ 회귀: (e) on-01a·on-01b·on-01c·read 전부 로드·저장·전환 정상.
+ 로그 태그: [on-01 init](cached?/dirty?/injected 인자), [useAutoSave flush](pending onChange flush 여부/epoch), [useAutoSave doSave](epoch in/out).
+
+[Step 5 — 보고 (커밋 전)]
+ A. 변경 파일·라인 요약(+왜).
+ B. 게이트를 찾은 모든 위치(on-01a/b/c)와 각 처리.
+ C. 재현 전/후 결과.
+ D. 검증 a~e 결과(로그 포함).
+ E. 공유 파일 회귀 결과.
+ ※ 위 보고 후 내가 승인하면 rework 브랜치에 커밋. push·main 병합 금지.

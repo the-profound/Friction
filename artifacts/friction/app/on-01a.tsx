@@ -66,7 +66,8 @@ export default function DraftScreen() {
   const titleRef = useRef("");
   const initializedRef = useRef(false);
   const articleContentRef = useRef("");
-  const mountedAtRef = useRef(Date.now());
+  // C1: tracks last content seen from server; used to detect user edits
+  const serverContentRef = useRef("");
   const isNavigatingRef = useRef(false);
   const [isNavigating, setIsNavigating] = useState(false);
   const pendingExportRef = useRef<{
@@ -107,15 +108,15 @@ export default function DraftScreen() {
   }, []);
 
   useEffect(() => {
-    // Allow up to 30s of slack so cache primed via setQueryData (with
-    // updatedAt: Date.now()) on the previous screen passes the gate immediately.
-    // A truly stale cache (older than 30s, e.g. cold entry from inbox) still
-    // waits for the in-flight refetch — preserving the original safety property.
-    const isDataFresh = articleQuery.dataUpdatedAt >= mountedAtRef.current - 30_000;
-    if (article && !initializedRef.current && isDataFresh) {
+    if (!article) return;
+    const t = article.title || "";
+    const c = article.content || "";
+    if (!initializedRef.current) {
+      // C1 fix: initialize on first data arrival regardless of cache age.
+      // Eliminates the setMarkdown("") blank-body path that fired when
+      // handleEditorReady ran before stale-cache data passed the old 30s gate.
       initializedRef.current = true;
-      const t = article.title || "";
-      const c = article.content || "";
+      serverContentRef.current = c;
       setTitle(t);
       titleRef.current = t;
       contentRef.current = c;
@@ -128,8 +129,25 @@ export default function DraftScreen() {
       if (article.sourceArticleId) {
         setSourceArticleId(article.sourceArticleId);
       }
+      console.log("[on-01 init] cached?=true dirty?=false injected:", JSON.stringify(c.slice(0, 60)));
+    } else if (contentRef.current === serverContentRef.current) {
+      // Background refetch: re-inject only when editor content hasn't diverged
+      // from what the server last sent (i.e. user hasn't started editing yet).
+      if (c !== serverContentRef.current) {
+        serverContentRef.current = c;
+        contentRef.current = c;
+        articleContentRef.current = c;
+        setTitle(t);
+        titleRef.current = t;
+        setCharCount(c.length);
+        if (editorReady) {
+          editorRef.current?.setMarkdown(c);
+          editorRef.current?.setTitle(t);
+        }
+        console.log("[on-01 init] re-inject from server dirty?=false injected:", JSON.stringify(c.slice(0, 60)));
+      }
     }
-  }, [article, editorReady, articleQuery.dataUpdatedAt]);
+  }, [article, editorReady]);
 
   useEffect(() => {
     const showSub = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
@@ -142,8 +160,13 @@ export default function DraftScreen() {
 
   const handleEditorReady = useCallback(() => {
     setEditorReady(true);
-    editorRef.current?.setMarkdown(articleContentRef.current);
-    editorRef.current?.setTitle(titleRef.current);
+    // Only inject if article data has already been initialized.
+    // If article hasn't arrived yet, the init useEffect injects when it fires
+    // (editorReady will be true by then). This prevents setMarkdown("") calls.
+    if (initializedRef.current) {
+      editorRef.current?.setMarkdown(articleContentRef.current);
+      editorRef.current?.setTitle(titleRef.current);
+    }
   }, []);
 
   const getEditorContent = useCallback((): Promise<string> => {
