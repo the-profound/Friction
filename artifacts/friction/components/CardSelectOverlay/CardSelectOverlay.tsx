@@ -406,11 +406,11 @@ export default function CardSelectOverlay({
       }),
       // Brief pause so user sees the sealed front + wax seal
       Animated.delay(280),
-      // Phase 2 (640 ms): top flap (Layer 3) lifts up around its top hinge
+      // Phase 2 (1000 ms): top flap (Layer 3) lifts up around its top hinge
       Animated.timing(flapOpenProgress, {
         toValue: 1,
-        duration: 1500,
-        easing: Easing.out(Easing.poly(5)),
+        duration: 1000,
+        easing: Easing.out(Easing.poly(3)),
         useNativeDriver: false,
       }),
       // Brief pause so user sees the open envelope
