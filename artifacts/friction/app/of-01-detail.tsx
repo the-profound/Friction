@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef } from "react";
-import { View, Text, StyleSheet, FlatList, Alert, TextInput } from "react-native";
+import { View, Text, StyleSheet, FlatList, TextInput } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import SaveAsPhotosModal from "@/components/SaveAsPhotos/SaveAsPhotosModal";
@@ -11,6 +11,7 @@ import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
 import { useToast } from "@/contexts/ToastContext";
+import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
 import { LIST_PERF_PRESET } from "@/lib/listPerf";
 import {
   useGetMyCollection,
@@ -61,6 +62,7 @@ export default function PersonalCollectionDetailScreen() {
   const [isBulkMoving, setIsBulkMoving] = useState(false);
 
   const [isDeletingCollection, setIsDeletingCollection] = useState(false);
+  const [moreSheetVisible, setMoreSheetVisible] = useState(false);
   const { showToast } = useToast();
 
   const [longPressTargetArticle, setLongPressTargetArticle] = useState<MyCollectionArticleWithDetails | null>(null);
@@ -156,13 +158,13 @@ export default function PersonalCollectionDetailScreen() {
     setIsBulkDeleting(false);
     exitSelectionMode();
     if (failCount === 0) {
-      Alert.alert("완료", "삭제했어요.");
+      showToast({ message: "삭제했어요.", type: "success" });
     } else if (failCount < ids.length) {
-      Alert.alert("오류", `일부 삭제에 실패했습니다. (${failCount}개)`);
+      showToast({ message: `일부 삭제에 실패했습니다. (${failCount}개)`, type: "error" });
     } else {
-      Alert.alert("오류", "삭제에 실패했습니다.");
+      showToast({ message: "삭제에 실패했습니다.", type: "error" });
     }
-  }, [id, selectedIds, removeArticle, queryClient, exitSelectionMode]);
+  }, [id, selectedIds, removeArticle, queryClient, exitSelectionMode, showToast]);
 
   const handleOpenEdit = useCallback(() => {
     if (!collection) return;
@@ -173,7 +175,7 @@ export default function PersonalCollectionDetailScreen() {
 
   const handleSaveEdit = useCallback(async () => {
     if (!id || !editName.trim()) {
-      Alert.alert("오류", "이름을 입력해주세요.");
+      showToast({ message: "이름을 입력해주세요.", type: "error" });
       return;
     }
     try {
@@ -185,9 +187,9 @@ export default function PersonalCollectionDetailScreen() {
       collectionQuery.refetch();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "수정에 실패했습니다.";
-      Alert.alert("오류", msg);
+      showToast({ message: msg, type: "error" });
     }
-  }, [id, editName, editDescription, updateCollection, collectionQuery]);
+  }, [id, editName, editDescription, updateCollection, collectionQuery, showToast]);
 
   const handleDeleteCollection = useCallback(async () => {
     if (!id || isDeletingCollection) return;
@@ -217,10 +219,10 @@ export default function PersonalCollectionDetailScreen() {
         await invalidateMyCollectionDetail(queryClient, id);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "편지 추가에 실패했습니다.";
-        Alert.alert("오류", msg);
+        showToast({ message: msg, type: "error" });
       }
     },
-    [id, addArticle, queryClient],
+    [id, addArticle, queryClient, showToast],
   );
 
   const handleRemoveArticle = useCallback(
@@ -230,12 +232,12 @@ export default function PersonalCollectionDetailScreen() {
         await removeArticle.mutateAsync({ collectionId: id, articleId });
         articlesQuery.refetch();
         collectionQuery.refetch();
-        Alert.alert("완료", "편지를 제거했어요.");
+        showToast({ message: "편지를 제거했어요.", type: "success" });
       } catch {
-        Alert.alert("오류", "편지 제거에 실패했습니다.");
+        showToast({ message: "편지 제거에 실패했습니다.", type: "error" });
       }
     },
-    [id, removeArticle, articlesQuery, collectionQuery],
+    [id, removeArticle, articlesQuery, collectionQuery, showToast],
   );
 
   const handleMoveArticle = useCallback(
@@ -260,11 +262,11 @@ export default function PersonalCollectionDetailScreen() {
         setIsBulkMoveMode(false);
         exitSelectionMode();
         if (failCount === 0) {
-          Alert.alert("완료", "편지를 이동했어요.");
+          showToast({ message: "편지를 이동했어요.", type: "success" });
         } else if (failCount < ids.length) {
-          Alert.alert("오류", `일부 이동에 실패했습니다. (${failCount}개)`);
+          showToast({ message: `일부 이동에 실패했습니다. (${failCount}개)`, type: "error" });
         } else {
-          Alert.alert("오류", "편지 이동에 실패했습니다.");
+          showToast({ message: "편지 이동에 실패했습니다.", type: "error" });
         }
         return;
       }
@@ -277,13 +279,13 @@ export default function PersonalCollectionDetailScreen() {
         await removeArticle.mutateAsync({ collectionId: id, articleId });
         await addArticle.mutateAsync({ id: targetCollectionId, data: { articleId } });
         await invalidateMyCollectionDetail(queryClient, id);
-        Alert.alert("완료", "편지를 이동했어요.");
+        showToast({ message: "편지를 이동했어요.", type: "success" });
       } catch {
-        Alert.alert("오류", "편지 이동에 실패했습니다.");
+        showToast({ message: "편지 이동에 실패했습니다.", type: "error" });
         articlesQuery.refetch();
       }
     },
-    [id, isBulkMoveMode, selectedIds, moveTargetArticle, removeArticle, addArticle, queryClient, articlesQuery, exitSelectionMode],
+    [id, isBulkMoveMode, selectedIds, moveTargetArticle, removeArticle, addArticle, queryClient, articlesQuery, exitSelectionMode, showToast],
   );
 
   const handleBulkMovePress = useCallback(() => {
@@ -318,7 +320,7 @@ export default function PersonalCollectionDetailScreen() {
         }
         showToast({ message: `'${articleTitle}'을(를) 답장 대상 편지로 연결했어요.`, type: "success" });
       } catch {
-        Alert.alert("오류", "답장 대상 편지 연결에 실패했습니다.");
+        showToast({ message: "답장 대상 편지 연결에 실패했습니다.", type: "error" });
       }
     },
     [longPressTargetArticle, updateArticle, queryClient, id, showToast],
@@ -339,21 +341,13 @@ export default function PersonalCollectionDetailScreen() {
       }
       showToast({ message: "답장 대상 편지 연결을 해제했어요.", type: "success" });
     } catch {
-      Alert.alert("오류", "답장 대상 편지 연결 해제에 실패했습니다.");
+      showToast({ message: "답장 대상 편지 연결 해제에 실패했습니다.", type: "error" });
     }
   }, [longPressTargetArticle, updateArticle, queryClient, id, showToast]);
 
   const handleMorePress = useCallback(() => {
-    const options: Parameters<typeof Alert.alert>[2] = [
-      { text: "선택", onPress: enterSelectionMode },
-    ];
-    if (!isImpression) {
-      options.push({ text: "폴더 이름 변경", onPress: handleOpenEdit });
-      options.push({ text: "폴더 삭제", style: "destructive", onPress: () => setDeleteConfirmVisible(true) });
-    }
-    options.push({ text: "닫기", style: "cancel" });
-    Alert.alert("폴더 관리", undefined, options);
-  }, [enterSelectionMode, handleOpenEdit, isImpression]);
+    setMoreSheetVisible(true);
+  }, []);
 
   const handleReadFromOverlay = useCallback(() => {
     const item = tapArticleEntry;
@@ -770,6 +764,20 @@ export default function PersonalCollectionDetailScreen() {
       />
 
       {!selectionMode && <NavBar />}
+
+      <ActionSheetModal
+        visible={moreSheetVisible}
+        title="폴더 관리"
+        onClose={() => setMoreSheetVisible(false)}
+        actions={[
+          { label: "선택", onPress: () => { setMoreSheetVisible(false); enterSelectionMode(); } },
+          ...(!isImpression ? [
+            { label: "폴더 이름 변경", onPress: () => { setMoreSheetVisible(false); handleOpenEdit(); } },
+            { label: "폴더 삭제", style: "destructive" as const, onPress: () => { setMoreSheetVisible(false); setDeleteConfirmVisible(true); } },
+          ] : []),
+          { label: "취소", style: "cancel" as const, onPress: () => setMoreSheetVisible(false) },
+        ]}
+      />
     </View>
   );
 }

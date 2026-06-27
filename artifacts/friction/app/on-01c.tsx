@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   Keyboard,
   TextInput,
@@ -237,7 +236,7 @@ export default function ClosingScreen() {
       await finalizeExport();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "내보내기에 실패했습니다.";
-      Alert.alert("내보내기 실패", msg);
+      showToast({ message: msg, type: "error" });
     } finally {
       setIsExporting(false);
       isActionInProgressRef.current = false;
@@ -314,7 +313,7 @@ export default function ClosingScreen() {
     } catch (e: unknown) {
       isActionInProgressRef.current = false;
       const msg = e instanceof Error ? e.message : "저장에 실패했습니다.";
-      Alert.alert("오류", msg);
+      showToast({ message: msg, type: "error" });
     }
   }, [id, flushCoverSave, flushTitleSave, transitionStatus, queryClient, router, showToast]);
 

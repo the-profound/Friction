@@ -5,7 +5,6 @@ import {
   StyleSheet,
   FlatList,
   Image,
-  Alert,
   useWindowDimensions,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
@@ -18,6 +17,7 @@ import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import CardSelectOverlay, { type ChainArticleMeta } from "@/components/CardSelectOverlay/CardSelectOverlay";
 import { Colors, Spacing, Typography, Sizing } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
+import { useToast } from "@/contexts/ToastContext";
 import { useUser } from "@/contexts/UserContext";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -60,6 +60,7 @@ export default function UserProfileScreen() {
   const navBottom = useNavBarBottomSafeArea();
   const router = useRouter();
   const { userId: currentUserId } = useUser();
+  const { showToast } = useToast();
   const { userId: profileUserId } = useLocalSearchParams<{ userId: string }>();
   const queryClient = useQueryClient();
   const { width: windowWidth } = useWindowDimensions();
@@ -182,7 +183,7 @@ export default function UserProfileScreen() {
         data: { requesterId: currentUserId, recipientId: profileUserId },
       });
       sentRequestsQuery.refetch();
-      Alert.alert("완료", "이웃 요청을 보냈어요!");
+      showToast({ message: "이웃 요청을 보냈어요!", type: "success" });
     } catch (e: unknown) {
       const isDuplicate =
         e instanceof ApiError &&
@@ -197,10 +198,10 @@ export default function UserProfileScreen() {
       } else {
         setOptimisticPending(false);
         const msg = e instanceof Error ? e.message : "요청에 실패했습니다.";
-        Alert.alert("오류", msg);
+        showToast({ message: msg, type: "error" });
       }
     }
-  }, [profileUserId, currentUserId, createNeighborRequest, sentRequestsQuery, neighborsQuery]);
+  }, [profileUserId, currentUserId, createNeighborRequest, sentRequestsQuery, neighborsQuery, showToast]);
 
   const handleCancelNeighborRequest = useCallback(async () => {
     if (!pendingRequestId || deleteNeighborRequest.isPending) return;
@@ -211,9 +212,9 @@ export default function UserProfileScreen() {
       sentRequestsQuery.refetch();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "취소에 실패했습니다.";
-      Alert.alert("오류", msg);
+      showToast({ message: msg, type: "error" });
     }
-  }, [pendingRequestId, deleteNeighborRequest, sentRequestsQuery]);
+  }, [pendingRequestId, deleteNeighborRequest, sentRequestsQuery, showToast]);
 
   const handleRemoveNeighborConfirm = useCallback(async () => {
     if (!existingNeighbor || removeNeighbor.isPending) return;
@@ -223,9 +224,9 @@ export default function UserProfileScreen() {
       neighborsQuery.refetch();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";
-      Alert.alert("오류", msg);
+      showToast({ message: msg, type: "error" });
     }
-  }, [existingNeighbor, removeNeighbor, neighborsQuery]);
+  }, [existingNeighbor, removeNeighbor, neighborsQuery, showToast]);
 
   const handleSendLetter = useCallback(() => {
     if (!profileUserId) return;

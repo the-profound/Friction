@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Alert, Image } from "react-native";
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Image } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
@@ -8,6 +8,7 @@ import BottomSheet from "../BottomSheet/BottomSheet";
 import CoverPreview from "../CoverPreview/CoverPreview";
 import { getDefaultCover } from "../../utils/articleCover";
 import { useImageUpload } from "../../lib/useImageUpload";
+import { useToast } from "../../contexts/ToastContext";
 import type {
   ArticleCover,
   ArticleCoverType,
@@ -76,6 +77,7 @@ export default function CoverEditor({
   articleId,
 }: CoverEditorProps) {
   const insets = useSafeAreaInsets();
+  const { showToast } = useToast();
   const [local, setLocal] = useState<ArticleCover>(cover);
   const localRef = useRef(local);
   localRef.current = local;
@@ -101,7 +103,7 @@ export default function CoverEditor({
       update({ type: "image", imageUrl });
     },
     onError: (err) => {
-      Alert.alert("업로드 실패", err.message);
+      showToast({ message: err.message, type: "error" });
     },
   });
 

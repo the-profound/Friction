@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   RefreshControl,
   StyleSheet,
@@ -17,6 +16,7 @@ import { Feather } from "@expo/vector-icons";
 import { Colors, Sizing, Spacing, Typography } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { useUser } from "@/contexts/UserContext";
+import { useToast } from "@/contexts/ToastContext";
 import {
   INCOMING_FALLBACK_POLL_INTERVAL_MS,
   useFocusPollingOptions,
@@ -86,6 +86,7 @@ export function NeighborsInline({
   const navBottom = useNavBarBottomSafeArea();
   const { userId } = useUser();
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const [activeSection, setActiveSection] = useState<SectionKey>(initialSection);
   const [addSheetVisible, setAddSheetVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -178,7 +179,7 @@ export function NeighborsInline({
         requestsQuery.refetch();
         neighborsQuery.refetch();
       } catch (e: unknown) {
-        Alert.alert("오류", describeApiError(e, "수락에 실패했습니다."));
+        showToast({ message: describeApiError(e, "수락에 실패했습니다."), type: "error" });
       }
     },
     [acceptRequest, requestsQuery, neighborsQuery],
@@ -190,7 +191,7 @@ export function NeighborsInline({
         await rejectRequest.mutateAsync({ id: requestId });
         requestsQuery.refetch();
       } catch (e: unknown) {
-        Alert.alert("오류", describeApiError(e, "거절에 실패했습니다."));
+        showToast({ message: describeApiError(e, "거절에 실패했습니다."), type: "error" });
       }
     },
     [rejectRequest, requestsQuery],
@@ -206,7 +207,7 @@ export function NeighborsInline({
         });
         searchResults.refetch();
         sentRequestsQuery.refetch();
-        Alert.alert("완료", `${targetUser.nickname}님께 이웃 요청을 보냈어요!`);
+        showToast({ message: `${targetUser.nickname}님께 이웃 요청을 보냈어요!`, type: "success" });
       } catch (e: unknown) {
         const isDuplicate =
           e instanceof ApiError &&
@@ -219,7 +220,7 @@ export function NeighborsInline({
           searchResults.refetch();
           sentRequestsQuery.refetch();
         } else {
-          Alert.alert("오류", describeApiError(e, "요청에 실패했습니다."));
+          showToast({ message: describeApiError(e, "요청에 실패했습니다."), type: "error" });
         }
       } finally {
         setSendingToUserId(null);
@@ -236,7 +237,7 @@ export function NeighborsInline({
         searchResults.refetch();
         sentRequestsQuery.refetch();
       } catch (e: unknown) {
-        Alert.alert("오류", describeApiError(e, "요청 취소에 실패했습니다."));
+        showToast({ message: describeApiError(e, "요청 취소에 실패했습니다."), type: "error" });
       } finally {
         setCancelTarget(null);
       }
@@ -259,11 +260,11 @@ export function NeighborsInline({
       await removeNeighbor.mutateAsync({ id: deleteTarget.id });
       neighborsQuery.refetch();
     } catch (e: unknown) {
-      Alert.alert("오류", describeApiError(e, "삭제에 실패했습니다."));
+      showToast({ message: describeApiError(e, "삭제에 실패했습니다."), type: "error" });
     } finally {
       setDeleteTarget(null);
     }
-  }, [deleteTarget, removeNeighbor, neighborsQuery]);
+  }, [deleteTarget, removeNeighbor, neighborsQuery, showToast]);
 
   const handleAddSheetClose = useCallback(() => {
     setAddSheetVisible(false);

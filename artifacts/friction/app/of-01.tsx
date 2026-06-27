@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from "react";
-import { View, Text, StyleSheet, FlatList, Alert, RefreshControl, TextInput, Switch } from "react-native";
+import { View, Text, StyleSheet, FlatList, RefreshControl, TextInput, Switch } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -43,7 +43,7 @@ export default function PersonalCollectionListScreen() {
 
   const handleCreate = useCallback(async () => {
     if (!newName.trim()) {
-      Alert.alert("오류", "이름을 입력해주세요.");
+      showToast({ message: "이름을 입력해주세요.", type: "error" });
       return;
     }
     try {
@@ -58,9 +58,9 @@ export default function PersonalCollectionListScreen() {
       router.push({ pathname: "/of-01-detail", params: { id: newCollection.id, name: newName.trim() } });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "폴더 생성에 실패했습니다.";
-      Alert.alert("오류", msg);
+      showToast({ message: msg, type: "error" });
     }
-  }, [newName, newDescription, newIsPublic, userId, createCollection, collectionsQuery, router]);
+  }, [newName, newDescription, newIsPublic, userId, createCollection, collectionsQuery, router, showToast]);
 
   const handleDelete = useCallback(
     async (id: string) => {

@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   Keyboard,
   KeyboardAvoidingView,
@@ -785,7 +784,7 @@ export default function DividingScreen() {
     if (!flushResult.ok) {
       isNavigatingRef.current = false;
       setIsNavigating(false);
-      Alert.alert("저장 실패", "저장이 완료되지 않았습니다. 다시 시도해주세요.");
+      showToast({ message: "저장이 완료되지 않았습니다. 다시 시도해주세요.", type: "error" });
       return;
     }
 
@@ -886,7 +885,7 @@ export default function DividingScreen() {
     if (!flushResult.ok) {
       isNavigatingRef.current = false;
       setIsNavigating(false);
-      Alert.alert("오류", "저장에 실패했습니다. 다시 시도해주세요.");
+      showToast({ message: "저장에 실패했습니다. 다시 시도해주세요.", type: "error" });
       return;
     }
     invalidateArticleLists(queryClient);
@@ -920,7 +919,7 @@ export default function DividingScreen() {
     if (!flushResult.ok) {
       isNavigatingRef.current = false;
       setIsNavigating(false);
-      Alert.alert("오류", "저장에 실패했습니다.");
+      showToast({ message: "저장에 실패했습니다.", type: "error" });
       return;
     }
     queryClient.setQueryData(

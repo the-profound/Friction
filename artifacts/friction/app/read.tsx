@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TextInput,
   BackHandler,
-  Alert,
   AppState,
   Platform,
   ScrollView,
@@ -231,6 +230,7 @@ export default function ReadScreen() {
 
 
   const [finishOverlayVisible, setFinishOverlayVisible] = useState(false);
+  const [exitConfirmVisible, setExitConfirmVisible] = useState(false);
   const [sentencePopupVisible, setSentencePopupVisible] = useState(false);
   const [selectedText, setSelectedText] = useState("");
   const [clearSelectionSignal, setClearSelectionSignal] = useState(0);
@@ -566,7 +566,7 @@ export default function ReadScreen() {
     if (mode !== "basic") return;
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
       if (!reading.canExit) {
-        Alert.alert("읽기 중", "완독 후 보관 여부를 선택해주세요.");
+        setExitConfirmVisible(true);
         return true;
       }
       return false;
@@ -577,7 +577,7 @@ export default function ReadScreen() {
 
   const handleBack = useCallback(async () => {
     if (mode === "basic" && !reading.canExit) {
-      Alert.alert("읽기 중", "완독 후 보관 여부를 선택해주세요.");
+      setExitConfirmVisible(true);
       return;
     }
     if (reading.session.state === "READING" || reading.session.state === "PAUSED") {
@@ -1224,14 +1224,14 @@ export default function ReadScreen() {
   const handleCommitAndSave = useCallback(async () => {
     if (isSaving) return;
     if (!isCollectionsReady) {
-      Alert.alert("알림", "보관함 정보를 불러오는 중입니다. 잠시 후 다시 시도해주세요.");
+      showToast({ message: "보관함 정보를 불러오는 중입니다. 잠시 후 다시 시도해주세요.", type: "info" });
       return;
     }
     setIsSaving(true);
     try {
       const result = await reading.commitCompletion();
       if (!result.success) {
-        Alert.alert("오류", result.error ?? "완독 처리에 실패했습니다.");
+        showToast({ message: result.error ?? "완독 처리에 실패했습니다.", type: "error" });
         return;
       }
 
@@ -1250,7 +1250,7 @@ export default function ReadScreen() {
             });
             targetCollectionId = newCol.id;
           } catch {
-            Alert.alert("알림", "완독 기록은 저장했지만 보관함 생성에 실패했습니다.");
+            showToast({ message: "완독 기록은 저장했지만 보관함 생성에 실패했습니다.", type: "info" });
           }
         }
       }
@@ -1272,7 +1272,7 @@ export default function ReadScreen() {
             console.warn("[handleCommitAndSave] recent collection update failed (non-fatal):", e);
           }
         } catch {
-          Alert.alert("알림", "완독 기록은 저장했지만 보관함 추가에 실패했습니다.");
+          showToast({ message: "완독 기록은 저장했지만 보관함 추가에 실패했습니다.", type: "info" });
         }
       }
 
@@ -1285,7 +1285,7 @@ export default function ReadScreen() {
       overlayOpacity.value = withTiming(1, { duration: 350, easing: Easing.in(Easing.ease) }, (finished) => {
         if (finished) runOnJS(router.back)();
       });
-      Alert.alert("완료", "보관함에 저장됐어요");
+      showToast({ message: "보관함에 저장됐어요.", type: "success" });
     } finally {
       setIsSaving(false);
     }
@@ -1310,10 +1310,10 @@ export default function ReadScreen() {
           overlayOpacity.value = withTiming(1, { duration: 350, easing: Easing.in(Easing.ease) }, (finished) => {
             if (finished) runOnJS(router.back)();
           });
-          Alert.alert("완료", "읽기를 완료했어요");
+          showToast({ message: "읽기를 완료했어요.", type: "success" });
         });
       } else {
-        Alert.alert("오류", result.error ?? "완독 처리에 실패했습니다.");
+        showToast({ message: result.error ?? "완독 처리에 실패했습니다.", type: "error" });
       }
     } finally {
       setIsDeleting(false);
@@ -1395,10 +1395,10 @@ export default function ReadScreen() {
       trackSentenceCollected({ articleId, page: contentPageIndex, textLength: selectedText.length });
       setSentencePopupVisible(false);
       setSelectedText("");
-      Alert.alert("저장 완료", "문장이 저장되었습니다.");
+      showToast({ message: "문장이 저장되었습니다.", type: "success" });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "문장 저장에 실패했습니다.";
-      Alert.alert("오류", msg);
+      showToast({ message: msg, type: "error" });
     }
   }, [selectedText, userId, articleId, contentPageIndex, createSentence, queryClient]);
 
@@ -2005,6 +2005,15 @@ export default function ReadScreen() {
       <Animated.View
         style={[styles.blackOverlay, overlayAnimStyle]}
         pointerEvents="none"
+      />
+
+      <ConfirmModal
+        visible={exitConfirmVisible}
+        title="읽기 중"
+        description="완독 후 보관 여부를 선택해주세요."
+        confirmLabel="확인"
+        onConfirm={() => setExitConfirmVisible(false)}
+        onCancel={() => setExitConfirmVisible(false)}
       />
 
       <ConfirmModal

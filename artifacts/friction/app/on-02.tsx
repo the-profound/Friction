@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useRef } from "react";
-import { View, Text, StyleSheet, FlatList, RefreshControl, Alert } from "react-native";
+import { View, Text, StyleSheet, FlatList, RefreshControl } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -12,6 +12,7 @@ import { useListArticles, useDeleteArticle, useCreateArticle } from "@workspace/
 import { invalidateArticleLists } from "@/lib/queryInvalidation";
 import type { Article, ArticleCover } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
+import { useToast } from "@/contexts/ToastContext";
 import type { ArticleStatus } from "@/lib/policies";
 import { LIST_PERF_PRESET } from "@/lib/listPerf";
 import { useQueryClient } from "@tanstack/react-query";
@@ -48,6 +49,7 @@ export default function MemoCollectionScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { userId } = useUser();
+  const { showToast } = useToast();
   const [sortMode, setSortMode] = useState<SortMode>("latest");
 
   const openRowRef = useRef<SwipeableRowHandle | null>(null);
@@ -97,11 +99,11 @@ export default function MemoCollectionScreen() {
     try {
       await deleteArticle.mutateAsync({ id: articleId });
       await invalidateArticleLists(queryClient);
-      Alert.alert("완료", "삭제했어요.");
+      showToast({ message: "삭제했어요.", type: "success" });
     } catch {
-      Alert.alert("오류", "삭제에 실패했습니다.");
+      showToast({ message: "삭제에 실패했습니다.", type: "error" });
     }
-  }, [deleteArticle, queryClient, closeOpenRow]);
+  }, [deleteArticle, queryClient, closeOpenRow, showToast]);
 
   const handleArticlePress = useCallback(
     (article: Article) => {
@@ -192,7 +194,7 @@ export default function MemoCollectionScreen() {
                 });
                 router.push({ pathname: "/on-01a", params: { id: article.id } });
               } catch {
-                Alert.alert("오류", "메모 생성에 실패했습니다.");
+                showToast({ message: "메모 생성에 실패했습니다.", type: "error" });
               }
             }}
             pending={createArticle.isPending}

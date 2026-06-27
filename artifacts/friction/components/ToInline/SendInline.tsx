@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { Feather } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
@@ -199,7 +199,7 @@ export function SendInline({
             isNeighbor,
           );
           if (!guard.allowed) {
-            Alert.alert("보낼 수 없음", guard.reason ?? "");
+            showToast({ message: guard.reason ?? "보낼 수 없습니다.", type: "error" });
             return;
           }
           const result = await sendArticle.mutateAsync({
@@ -262,7 +262,7 @@ export function SendInline({
             msg = "이미 오늘의 인사를 보낸 모임입니다.";
           }
         }
-        Alert.alert("오류", msg);
+        showToast({ message: msg, type: "error" });
       }
     },
     [

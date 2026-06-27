@@ -7,7 +7,6 @@ import {
   RefreshControl,
   TextInput,
   Platform,
-  Alert,
   useWindowDimensions,
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
@@ -20,6 +19,7 @@ import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { PageHeader } from "@/components/NavBar/PageHeader";
 import { useUser } from "@/contexts/UserContext";
+import { useToast } from "@/contexts/ToastContext";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import RefreshableEmpty from "@/components/RefreshableEmpty";
 import {
@@ -48,6 +48,7 @@ export default function ArchiveScreen() {
   const navBottom = useNavBarBottomSafeArea();
   const router = useRouter();
   const { userId } = useUser();
+  const { showToast } = useToast();
   const queryClient = useQueryClient();
 
   const [activeSubTab, setActiveSubTab] = useState<ArchiveSubTab>("personal");
@@ -186,13 +187,13 @@ export default function ArchiveScreen() {
     setIsBulkDeleting(false);
     exitSelectionMode();
     if (failCount === 0) {
-      Alert.alert("완료", `${ids.length}개 문장을 삭제했어요.`);
+      showToast({ message: `${ids.length}개 문장을 삭제했어요.`, type: "success" });
     } else if (failCount < ids.length) {
-      Alert.alert("오류", `일부 삭제에 실패했어요. (${failCount}개)`);
+      showToast({ message: `일부 삭제에 실패했어요. (${failCount}개)`, type: "error" });
     } else {
-      Alert.alert("오류", "삭제에 실패했어요.");
+      showToast({ message: "삭제에 실패했어요.", type: "error" });
     }
-  }, [selectedIds, deleteSentence, sentencesQuery, exitSelectionMode]);
+  }, [selectedIds, deleteSentence, sentencesQuery, exitSelectionMode, showToast]);
 
   const handleSearch = useCallback(() => {
     setSearchActive((prev) => {
@@ -203,19 +204,19 @@ export default function ArchiveScreen() {
 
   const handleAdd = useCallback(() => {
     if (activeSubTab === "sentence") {
-      Alert.alert("알림", "읽기 화면에서 문장을 길게 눌러 수집할 수 있어요");
+      showToast({ message: "읽기 화면에서 문장을 길게 눌러 수집할 수 있어요", type: "info" });
       return;
     }
     setNewName("");
     setNewDescription("");
     setCreateSheetVisible(true);
-  }, [activeSubTab]);
+  }, [activeSubTab, showToast]);
 
   const isCreating = createMyCollection.isPending;
 
   const handleCreateConfirm = useCallback(async () => {
     if (!newName.trim()) {
-      Alert.alert("오류", "이름을 입력해주세요");
+      showToast({ message: "이름을 입력해주세요.", type: "error" });
       return;
     }
     if (isCreating) return;
@@ -228,9 +229,9 @@ export default function ArchiveScreen() {
       router.push({ pathname: "/of-01-detail", params: { id: newMyCollection.id, name: newName.trim() } });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "폴더 생성에 실패했습니다.";
-      Alert.alert("오류", msg);
+      showToast({ message: msg, type: "error" });
     }
-  }, [newName, newDescription, userId, isCreating, createMyCollection, myCollectionsQuery, router]);
+  }, [newName, newDescription, userId, isCreating, createMyCollection, myCollectionsQuery, router, showToast]);
 
   const handleSentenceCopy = useCallback(async (text: string) => {
     try {
@@ -239,12 +240,12 @@ export default function ArchiveScreen() {
       } else {
         await Clipboard.setStringAsync(text);
       }
-      Alert.alert("완료", "문장을 복사했어요");
+      showToast({ message: "문장을 복사했어요.", type: "success" });
       setSelectedSentence(null);
     } catch {
-      Alert.alert("오류", "복사에 실패했어요");
+      showToast({ message: "복사에 실패했어요.", type: "error" });
     }
-  }, []);
+  }, [showToast]);
 
   const handleSentenceToggleFavorite = useCallback(async (id: string, currentFav: boolean) => {
     if (toggleFavorite.isPending) return;
@@ -260,12 +261,12 @@ export default function ArchiveScreen() {
       if (selectedSentence?.id === id) {
         setSelectedSentence((prev) => prev ? { ...prev, isFavorite: currentFav } : null);
       }
-      Alert.alert("오류", "즐겨찾기 변경에 실패했어요");
+      showToast({ message: "즐겨찾기 변경에 실패했어요.", type: "error" });
       return;
     }
     await sentencesQuery.refetch();
     setFavOverrides((prev) => { const next = new Map(prev); next.delete(id); return next; });
-  }, [toggleFavorite, sentencesQuery, selectedSentence]);
+  }, [toggleFavorite, sentencesQuery, selectedSentence, showToast]);
 
   const handleSentenceQuoteAsMemo = useCallback(async (sentence: StoredSentence) => {
     const position = sentence.position as { page?: number } | null;
@@ -282,9 +283,9 @@ export default function ArchiveScreen() {
       setSelectedSentence(null);
       router.push({ pathname: "/on-01a", params: { id: article.id } });
     } catch {
-      Alert.alert("오류", "메모 생성에 실패했습니다.");
+      showToast({ message: "메모 생성에 실패했습니다.", type: "error" });
     }
-  }, [createArticle, userId, router]);
+  }, [createArticle, userId, router, showToast]);
 
   const handleSentenceDeleteConfirm = useCallback(async () => {
     if (!sentenceDeleteTarget || deleteSentence.isPending) return;
@@ -293,11 +294,11 @@ export default function ArchiveScreen() {
     try {
       await deleteSentence.mutateAsync({ id });
       sentencesQuery.refetch();
-      Alert.alert("완료", "문장을 삭제했어요");
+      showToast({ message: "문장을 삭제했어요.", type: "success" });
     } catch {
-      Alert.alert("오류", "삭제에 실패했어요");
+      showToast({ message: "삭제에 실패했어요.", type: "error" });
     }
-  }, [sentenceDeleteTarget, deleteSentence, sentencesQuery]);
+  }, [sentenceDeleteTarget, deleteSentence, sentencesQuery, showToast]);
 
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
 

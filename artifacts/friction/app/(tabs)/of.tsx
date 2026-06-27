@@ -8,7 +8,6 @@ import {
   TextInput,
   ScrollView,
   useWindowDimensions,
-  Alert,
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar";
@@ -19,6 +18,7 @@ import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { PageHeader } from "@/components/NavBar/PageHeader";
 import { useUser } from "@/contexts/UserContext";
+import { useToast } from "@/contexts/ToastContext";
 import RefreshableEmpty from "@/components/RefreshableEmpty";
 import {
   useListTeamCollections,
@@ -48,6 +48,7 @@ export default function OfScreen() {
   const navBottom = useNavBarBottomSafeArea();
   const router = useRouter();
   const { userId } = useUser();
+  const { showToast } = useToast();
   const queryClient = useQueryClient();
   const [searchActive, setSearchActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -162,7 +163,7 @@ export default function OfScreen() {
       setInviteCode("");
       setGroupFilter("joined");
       await teamCollectionsQuery.refetch();
-      Alert.alert("완료", `'${joinPreview.name}' 모음에 참여했어요!`);
+      showToast({ message: `'${joinPreview.name}' 모음에 참여했어요!`, type: "success" });
     } catch (e: unknown) {
       const status = (e as { status?: number }).status;
       if (status === 400) {
@@ -173,13 +174,13 @@ export default function OfScreen() {
     } finally {
       setIsJoinLoading(false);
     }
-  }, [joinPreview, userId, addTeamMember, teamCollectionsQuery]);
+  }, [joinPreview, userId, addTeamMember, teamCollectionsQuery, showToast]);
 
   const isCreating = createTeamCollection.isPending;
 
   const handleCreateConfirm = useCallback(async () => {
     if (!newName.trim()) {
-      Alert.alert("오류", "이름을 입력해주세요");
+      showToast({ message: "이름을 입력해주세요.", type: "error" });
       return;
     }
     if (isCreating) return;
@@ -192,9 +193,9 @@ export default function OfScreen() {
       router.push({ pathname: "/of-02-detail", params: { id: newTeamCollection.id } });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "모음 생성에 실패했습니다.";
-      Alert.alert("오류", msg);
+      showToast({ message: msg, type: "error" });
     }
-  }, [newName, newDescription, userId, isCreating, createTeamCollection, teamCollectionsQuery, router]);
+  }, [newName, newDescription, userId, isCreating, createTeamCollection, teamCollectionsQuery, router, showToast]);
 
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
 

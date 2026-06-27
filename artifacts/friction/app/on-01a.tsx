@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
-import { View, Text, StyleSheet, Alert, ActionSheetIOS, ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, BackHandler } from "react-native";
+import { View, Text, StyleSheet, ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, BackHandler } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -26,6 +26,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { invalidateArticleLists, invalidateArticleDetail } from "@/lib/queryInvalidation";
 import { useUser } from "@/contexts/UserContext";
 import { useToast } from "@/contexts/ToastContext";
+import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
 import SourceArticlePickerSheet from "@/components/SourceArticlePickerSheet/SourceArticlePickerSheet";
 import WritingStateBar, { type WritingStage } from "@/components/WritingStateBar/WritingStateBar";
 import KeyboardToolbar from "@/components/KeyboardToolbar/KeyboardToolbar";
@@ -82,6 +83,7 @@ export default function DraftScreen() {
   const [sourceArticleId, setSourceArticleId] = useState<string | null>(null);
   const [sourceArticleTitle, setSourceArticleTitle] = useState<string | null>(null);
   const [pickerVisible, setPickerVisible] = useState(false);
+  const [imagePickerVisible, setImagePickerVisible] = useState(false);
 
   const sourceArticleQuery = useGetArticle(sourceArticleId ?? "", {
     query: { queryKey: getGetArticleQueryKey(sourceArticleId ?? ""), enabled: !!sourceArticleId },
@@ -300,28 +302,8 @@ export default function DraftScreen() {
   });
 
   const handleInsertImage = useCallback(() => {
-    if (Platform.OS === "ios") {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options: ["취소", "카메라로 촬영", "갤러리에서 선택"],
-          cancelButtonIndex: 0,
-        },
-        (buttonIndex) => {
-          if (buttonIndex === 1) {
-            pickInlineImage("camera");
-          } else if (buttonIndex === 2) {
-            pickInlineImage("gallery");
-          }
-        },
-      );
-    } else {
-      Alert.alert("사진 추가", "사진을 어떻게 추가할까요?", [
-        { text: "취소", style: "cancel" },
-        { text: "카메라로 촬영", onPress: () => pickInlineImage("camera") },
-        { text: "갤러리에서 선택", onPress: () => pickInlineImage("gallery") },
-      ]);
-    }
-  }, [pickInlineImage]);
+    setImagePickerVisible(true);
+  }, []);
 
   const handleSourceArticleSelect = useCallback(
     async (articleId: string, articleTitle: string) => {
@@ -335,10 +317,10 @@ export default function DraftScreen() {
         setSourceArticleTitle(articleTitle);
         invalidateArticleDetail(queryClient, id);
       } catch {
-        Alert.alert("오류", "답장 대상 편지 연결에 실패했습니다.");
+        showToast({ message: "답장 대상 편지 연결에 실패했습니다.", type: "error" });
       }
     },
-    [id, updateArticle, queryClient],
+    [id, updateArticle, queryClient, showToast],
   );
 
   const handleSourceArticleUnlink = useCallback(async () => {
@@ -352,9 +334,9 @@ export default function DraftScreen() {
       setSourceArticleTitle(null);
       invalidateArticleDetail(queryClient, id);
     } catch {
-      Alert.alert("오류", "답장 대상 편지 연결 해제에 실패했습니다.");
+      showToast({ message: "답장 대상 편지 연결 해제에 실패했습니다.", type: "error" });
     }
-  }, [id, updateArticle, queryClient]);
+  }, [id, updateArticle, queryClient, showToast]);
 
   const handleNext = useCallback(async () => {
     if (isNavigatingRef.current) return;
@@ -391,7 +373,7 @@ export default function DraftScreen() {
     if (!flushResult.ok) {
       isNavigatingRef.current = false;
       setIsNavigating(false);
-      Alert.alert("저장 실패", "저장이 완료되지 않았습니다. 다시 시도해주세요.");
+      showToast({ message: "저장이 완료되지 않았습니다. 다시 시도해주세요.", type: "error" });
       return;
     }
 
@@ -493,7 +475,7 @@ export default function DraftScreen() {
         try {
           await deleteArticle.mutateAsync({ id });
         } catch {
-          Alert.alert("오류", "빈 메모 삭제에 실패했습니다.");
+          showToast({ message: "빈 메모 삭제에 실패했습니다.", type: "error" });
         }
         invalidateArticleLists(queryClient);
       }
@@ -508,7 +490,7 @@ export default function DraftScreen() {
     if (!flushResult.ok) {
       isNavigatingRef.current = false;
       setIsNavigating(false);
-      Alert.alert("오류", "저장에 실패했습니다. 내용을 확인해주세요.");
+      showToast({ message: "저장에 실패했습니다. 내용을 확인해주세요.", type: "error" });
       return;
     }
     invalidateArticleLists(queryClient);
@@ -679,6 +661,17 @@ export default function DraftScreen() {
         activeBlock={selectionState.activeBlock}
         onClose={() => setBlockTypeSheetVisible(false)}
         onSelect={handleBlockTypeSelect}
+      />
+
+      <ActionSheetModal
+        visible={imagePickerVisible}
+        title="사진 추가"
+        onClose={() => setImagePickerVisible(false)}
+        actions={[
+          { label: "카메라로 촬영", onPress: () => { setImagePickerVisible(false); pickInlineImage("camera"); } },
+          { label: "갤러리에서 선택", onPress: () => { setImagePickerVisible(false); pickInlineImage("gallery"); } },
+          { label: "취소", style: "cancel", onPress: () => setImagePickerVisible(false) },
+        ]}
       />
       </View>
     </>

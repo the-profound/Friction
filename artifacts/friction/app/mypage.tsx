@@ -8,7 +8,6 @@ import {
   StyleSheet,
   Text,
   View,
-  Alert,
   Modal,
   TextInput,
   KeyboardAvoidingView,
@@ -22,6 +21,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import ProgressIndicator from "@/components/ProgressIndicator/ProgressIndicator";
+import { useToast } from "@/contexts/ToastContext";
 import { Colors, Spacing, Typography } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -44,6 +44,7 @@ export default function MyPageScreen() {
   const { userId } = useUser();
   const { signOut } = useAuth();
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
 
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -69,7 +70,7 @@ export default function MyPageScreen() {
       await signOut();
       queryClient.clear();
     } catch {
-      Alert.alert("오류", "로그아웃에 실패했습니다.");
+      showToast({ message: "로그아웃에 실패했습니다.", type: "error" });
     } finally {
       logoutInflightRef.current = false;
     }
@@ -83,7 +84,7 @@ export default function MyPageScreen() {
       queryClient.clear();
       setDeleteModalVisible(false);
     } catch {
-      Alert.alert("오류", "탈퇴 처리에 실패했습니다. 다시 시도해주세요.");
+      showToast({ message: "탈퇴 처리에 실패했습니다. 다시 시도해주세요.", type: "error" });
       setDeleteModalVisible(false);
     } finally {
       setIsDeleting(false);
@@ -92,13 +93,13 @@ export default function MyPageScreen() {
 
   function openUrl(url: string) {
     Linking.openURL(url).catch(() => {
-      Alert.alert("오류", "링크를 열 수 없습니다.");
+      showToast({ message: "링크를 열 수 없습니다.", type: "error" });
     });
   }
 
   async function handleDevResealConfirm() {
     if (devPassword !== "1234") {
-      Alert.alert("오류", "비밀번호가 틀렸습니다.");
+      showToast({ message: "비밀번호가 틀렸습니다.", type: "error" });
       return;
     }
     setDevLoading(true);
@@ -116,9 +117,9 @@ export default function MyPageScreen() {
       setDevModalVisible(false);
       setDevPassword("");
       queryClient.invalidateQueries({ queryKey: ["inbox"] });
-      Alert.alert("완료", `최근 편지 ${data.count}개가 봉투에 담겼습니다.`);
+      showToast({ message: `최근 편지 ${data.count}개가 봉투에 담겼습니다.`, type: "success" });
     } catch {
-      Alert.alert("오류", "요청에 실패했습니다.");
+      showToast({ message: "요청에 실패했습니다.", type: "error" });
     } finally {
       setDevLoading(false);
     }

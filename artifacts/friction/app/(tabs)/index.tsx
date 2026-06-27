@@ -10,7 +10,6 @@ import {
   Platform,
   Animated,
   PanResponder,
-  Alert,
   Pressable,
   NativeSyntheticEvent,
   NativeScrollEvent,
@@ -32,6 +31,7 @@ import { useListInbox, useMarkInboxOpened, useDeleteInboxItem, getListInboxQuery
 import { patchInboxItemInCache, removeInboxItemFromCache } from "@/lib/queryInvalidation";
 import type { InboxItem, Article } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
+import { useToast } from "@/contexts/ToastContext";
 import { isQueryStale } from "@/lib/useScreenFocused";
 import { useRealtimeChannel } from "@/lib/useRealtimeChannel";
 import { LIST_PERF_PRESET } from "@/lib/listPerf";
@@ -349,6 +349,7 @@ export default function InboxScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { userId, nickname } = useUser();
+  const { showToast } = useToast();
   const [searchActive, setSearchActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [tapItem, setTapItem] = useState<InboxItem | null>(null);
@@ -518,12 +519,12 @@ export default function InboxScreen() {
       await deleteInboxItem.mutateAsync({ id: item.id });
       // 낙관적 제거 — 캐시에서 곧장 빼서 목록이 다시 fetch 되며 깜빡이지 않게 한다.
       removeInboxItemFromCache(queryClient, item.id);
-      Alert.alert("완료", "수신함에서 삭제되었습니다.");
+      showToast({ message: "수신함에서 삭제되었습니다.", type: "success" });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";
-      Alert.alert("오류", msg);
+      showToast({ message: msg, type: "error" });
     }
-  }, [tapItem, deleteInboxItem, queryClient]);
+  }, [tapItem, deleteInboxItem, queryClient, showToast]);
 
   const handleRefresh = useCallback(async () => {
     setIsManualRefreshing(true);

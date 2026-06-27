@@ -1,11 +1,13 @@
 import React, { useState, useCallback } from "react";
-import { View, Text, StyleSheet, FlatList, Alert, RefreshControl, TextInput } from "react-native";
+import { View, Text, StyleSheet, FlatList, RefreshControl, TextInput } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
+import { useToast } from "@/contexts/ToastContext";
+import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import { LIST_PERF_PRESET } from "@/lib/listPerf";
 import {
   useListTeamCollections,
@@ -28,7 +30,9 @@ export default function TeamCollectionListScreen() {
   const router = useRouter();
   const { userId } = useUser();
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState<MiniTab>("mine");
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [actionSheetVisible, setActionSheetVisible] = useState(false);
   const [createSheetVisible, setCreateSheetVisible] = useState(false);
   const [newName, setNewName] = useState("");
@@ -69,7 +73,7 @@ export default function TeamCollectionListScreen() {
 
   const handleCreate = useCallback(async () => {
     if (!newName.trim()) {
-      Alert.alert("오류", "이름을 입력해주세요.");
+      showToast({ message: "이름을 입력해주세요.", type: "error" });
       return;
     }
     if (createCollection.isPending) return;
@@ -85,31 +89,29 @@ export default function TeamCollectionListScreen() {
       router.push({ pathname: "/of-02-detail", params: { id: newCollection.id } });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "모임 생성에 실패했습니다.";
-      Alert.alert("오류", msg);
+      showToast({ message: msg, type: "error" });
     }
-  }, [newName, newDescription, userId, createCollection, collectionsQuery, router]);
+  }, [newName, newDescription, userId, createCollection, collectionsQuery, router, showToast]);
 
   const handleDelete = useCallback(
     (id: string, name: string) => {
-      Alert.alert("모임 삭제", `'${name}'을(를) 삭제하시겠어요?`, [
-        { text: "취소", style: "cancel" },
-        {
-          text: "삭제",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteCollection.mutateAsync({ id });
-              collectionsQuery.refetch();
-            } catch (e: unknown) {
-              const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";
-              Alert.alert("오류", msg);
-            }
-          },
-        },
-      ]);
+      setDeleteTarget({ id, name });
     },
-    [deleteCollection, collectionsQuery],
+    [setDeleteTarget],
   );
+
+  const handleDeleteConfirm = useCallback(async () => {
+    if (!deleteTarget) return;
+    try {
+      await deleteCollection.mutateAsync({ id: deleteTarget.id });
+      collectionsQuery.refetch();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";
+      showToast({ message: msg, type: "error" });
+    } finally {
+      setDeleteTarget(null);
+    }
+  }, [deleteTarget, deleteCollection, collectionsQuery, showToast]);
 
   const handleOpenCreate = useCallback(() => {
     setActionSheetVisible(false);
@@ -169,7 +171,7 @@ export default function TeamCollectionListScreen() {
       setInviteCode("");
       setActiveTab("joined");
       collectionsQuery.refetch();
-      Alert.alert("완료", `'${joinPreview.name}' 모음에 참여했어요!`);
+      showToast({ message: `'${joinPreview.name}' 모음에 참여했어요!`, type: "success" });
     } catch (e: unknown) {
       const status = (e as { status?: number }).status;
       if (status === 400) {
@@ -423,6 +425,16 @@ export default function TeamCollectionListScreen() {
           />
         </View>
       </BottomSheet>
+
+      <ConfirmModal
+        visible={!!deleteTarget}
+        title="모임 삭제"
+        description={deleteTarget ? `'${deleteTarget.name}'을(를) 삭제하시겠어요?` : ""}
+        confirmLabel="삭제"
+        destructive
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </View>
   );
 }

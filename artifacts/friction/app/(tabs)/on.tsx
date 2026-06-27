@@ -5,7 +5,6 @@ import {
   StyleSheet,
   FlatList,
   RefreshControl,
-  Alert,
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar";
@@ -263,9 +262,9 @@ export default function OnScreen() {
       invalidateArticleLists(queryClient);
       router.push({ pathname: "/on-01a", params: { id: article.id } });
     } catch {
-      Alert.alert("오류", "메모 생성에 실패했습니다.");
+      showToast({ message: "메모 생성에 실패했습니다.", type: "error" });
     }
-  }, [createArticle, userId, router, queryClient, closeOpenRow]);
+  }, [createArticle, userId, router, queryClient, closeOpenRow, showToast]);
 
   const handleSearchPress = useCallback(() => {
     closeOpenRow();
@@ -341,7 +340,7 @@ export default function OnScreen() {
       });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "보관에 실패했습니다.";
-      Alert.alert("오류", msg);
+      showToast({ message: msg, type: "error" });
     } finally {
       setIsArchiving(false);
     }
@@ -365,11 +364,11 @@ export default function OnScreen() {
     try {
       await deleteArticle.mutateAsync({ id });
       invalidateArticleLists(queryClient);
-      Alert.alert("완료", "삭제했어요.");
+      showToast({ message: "삭제했어요.", type: "success" });
     } catch {
-      Alert.alert("오류", "삭제에 실패했습니다.");
+      showToast({ message: "삭제에 실패했습니다.", type: "error" });
     }
-  }, [deleteTargetId, deleteArticle, queryClient, closeOpenRow]);
+  }, [deleteTargetId, deleteArticle, queryClient, closeOpenRow, showToast]);
 
   const handleSwipeOpen = useCallback((articleId: string) => {
     const currentOpen = openRowRef.current;
@@ -401,13 +400,13 @@ export default function OnScreen() {
     setIsBulkDeleting(false);
     exitSelectionMode();
     if (failCount === 0) {
-      Alert.alert("완료", "삭제했어요.");
+      showToast({ message: "삭제했어요.", type: "success" });
     } else if (failCount < ids.length) {
-      Alert.alert("오류", `일부 삭제에 실패했습니다. (${failCount}개)`);
+      showToast({ message: `일부 삭제에 실패했습니다. (${failCount}개)`, type: "error" });
     } else {
-      Alert.alert("오류", "삭제에 실패했습니다.");
+      showToast({ message: "삭제에 실패했습니다.", type: "error" });
     }
-  }, [selectedIds, deleteArticle, queryClient, exitSelectionMode]);
+  }, [selectedIds, deleteArticle, queryClient, exitSelectionMode, showToast]);
 
   const handleBulkDeleteCancel = useCallback(() => {
     setShowBulkDeleteConfirm(false);

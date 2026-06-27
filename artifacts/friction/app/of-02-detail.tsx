@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
-import { View, Text, StyleSheet, FlatList, Alert, Share, TextInput, ActivityIndicator, ScrollView, Platform } from "react-native";
+import { View, Text, StyleSheet, FlatList, Share, TextInput, ActivityIndicator, ScrollView, Platform } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import { NavBar } from "@/components/NavBar/NavBar";
@@ -11,6 +11,7 @@ import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
 import { useToast } from "@/contexts/ToastContext";
+import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
 import {
   useGetTeamCollection,
   useUpdateTeamCollection,
@@ -76,6 +77,7 @@ export default function TeamCollectionDetailScreen() {
   const [manageSnapPoint, setManageSnapPoint] = useState(0.28);
   const [memberTarget, setMemberTarget] = useState<{ id: string; nickname: string } | null>(null);
   const [kickTarget, setKickTarget] = useState<{ id: string; nickname: string } | null>(null);
+  const [articleActionTarget, setArticleActionTarget] = useState<TeamCollectionArticleWithDetails | null>(null);
   const openRowRef = useRef<SwipeableRowHandle | null>(null);
   const rowRefs = useRef<Map<string, SwipeableRowHandle>>(new Map());
   const isNavigatingRef = useRef(false);
@@ -241,7 +243,7 @@ export default function TeamCollectionDetailScreen() {
       });
       sentRequestsQuery.refetch();
       setMemberTarget(null);
-      Alert.alert("완료", "이웃 요청을 보냈어요!");
+      showToast({ message: "이웃 요청을 보냈어요!", type: "success" });
     } catch (e: unknown) {
       const isDuplicate =
         e instanceof ApiError &&
@@ -261,10 +263,10 @@ export default function TeamCollectionDetailScreen() {
           return next;
         });
         const msg = e instanceof Error ? e.message : "요청에 실패했습니다.";
-        Alert.alert("오류", msg);
+        showToast({ message: msg, type: "error" });
       }
     }
-  }, [memberTarget, userId, createNeighborRequest, sentRequestsQuery, neighborsQuery]);
+  }, [memberTarget, userId, createNeighborRequest, sentRequestsQuery, neighborsQuery, showToast]);
 
   const handleKickConfirm = useCallback(async () => {
     if (!id || !kickTarget || removeMember.isPending) return;
@@ -275,9 +277,9 @@ export default function TeamCollectionDetailScreen() {
       await queryClient.invalidateQueries({ queryKey: getListTeamMembersQueryKey(id) });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "추방에 실패했습니다.";
-      Alert.alert("오류", msg);
+      showToast({ message: msg, type: "error" });
     }
-  }, [id, kickTarget, removeMember, queryClient]);
+  }, [id, kickTarget, removeMember, queryClient, showToast]);
 
   const handleOpenEdit = useCallback(() => {
     if (!collection) return;
@@ -288,7 +290,7 @@ export default function TeamCollectionDetailScreen() {
 
   const handleSaveEdit = useCallback(async () => {
     if (!id || !editName.trim() || updateCollection.isPending) {
-      if (!editName.trim()) Alert.alert("오류", "이름을 입력해주세요.");
+      if (!editName.trim()) showToast({ message: "이름을 입력해주세요.", type: "error" });
       return;
     }
     try {
@@ -300,9 +302,9 @@ export default function TeamCollectionDetailScreen() {
       collectionQuery.refetch();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "수정에 실패했습니다.";
-      Alert.alert("오류", msg);
+      showToast({ message: msg, type: "error" });
     }
-  }, [id, editName, editDescription, updateCollection, collectionQuery]);
+  }, [id, editName, editDescription, updateCollection, collectionQuery, showToast]);
 
   const handleDeleteCollection = useCallback(async () => {
     if (!id || deleteCollection.isPending) return;
@@ -312,9 +314,9 @@ export default function TeamCollectionDetailScreen() {
       router.back();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";
-      Alert.alert("오류", msg);
+      showToast({ message: msg, type: "error" });
     }
-  }, [id, deleteCollection, router, queryClient]);
+  }, [id, deleteCollection, router, queryClient, showToast]);
 
   const handleShareInvite = useCallback(async () => {
     if (!id || !collection) return;
@@ -325,24 +327,24 @@ export default function TeamCollectionDetailScreen() {
           await navigator.share({ text: message });
         } else {
           await navigator.clipboard.writeText(id);
-          Alert.alert("완료", "초대 코드가 클립보드에 복사되었어요");
+          showToast({ message: "초대 코드가 클립보드에 복사되었어요.", type: "success" });
         }
       } catch {
         try {
           await navigator.clipboard.writeText(id);
-          Alert.alert("완료", "초대 코드가 클립보드에 복사되었어요");
+          showToast({ message: "초대 코드가 클립보드에 복사되었어요.", type: "success" });
         } catch {
-          Alert.alert("오류", "공유에 실패했어요");
+          showToast({ message: "공유에 실패했어요.", type: "error" });
         }
       }
     } else {
       try {
         await Share.share({ message });
       } catch {
-        Alert.alert("오류", "공유에 실패했어요");
+        showToast({ message: "공유에 실패했어요.", type: "error" });
       }
     }
-  }, [id, collection]);
+  }, [id, collection, showToast]);
 
   const handleInviteUserTap = useCallback(async (user: UserSearchResult) => {
     if (!id || addMember.isPending) return;
@@ -375,12 +377,12 @@ export default function TeamCollectionDetailScreen() {
       try {
         await removeArticle.mutateAsync({ teamId: id, articleId });
         articlesQuery.refetch();
-        Alert.alert("완료", "편지를 제거했어요.");
+        showToast({ message: "편지를 제거했어요.", type: "success" });
       } catch {
-        Alert.alert("오류", "편지 제거에 실패했습니다.");
+        showToast({ message: "편지 제거에 실패했습니다.", type: "error" });
       }
     },
-    [id, removeArticle, articlesQuery],
+    [id, removeArticle, articlesQuery, showToast],
   );
 
   const closeOpenRow = useCallback(() => {
@@ -463,35 +465,8 @@ export default function TeamCollectionDetailScreen() {
 
   const handleCardLongPress = useCallback((item: TeamCollectionArticleWithDetails) => {
     if (!isOwner || !id) return;
-    const isPinned = item.isPinned;
-    Alert.alert(
-      "편지 관리",
-      item.article?.title ?? "이 편지를",
-      [
-        { text: "취소", style: "cancel" },
-        {
-          text: isPinned ? "고정 해제" : "고정하기",
-          onPress: async () => {
-            try {
-              await togglePin.mutateAsync({
-                teamId: id,
-                articleId: item.articleId,
-                data: { isPinned: !isPinned, requesterId: userId },
-              });
-              articlesQuery.refetch();
-            } catch {
-              showToast({ message: "고정 설정에 실패했습니다.", type: "error" });
-            }
-          },
-        },
-        {
-          text: "삭제",
-          style: "destructive",
-          onPress: () => handleArticleDeletePress(item),
-        },
-      ],
-    );
-  }, [isOwner, id, userId, togglePin, articlesQuery, showToast, handleArticleDeletePress]);
+    setArticleActionTarget(item);
+  }, [isOwner, id]);
 
   const articleSections = useMemo(() => buildTeamArticleSections(articles), [articles]);
 
@@ -1087,6 +1062,43 @@ export default function TeamCollectionDetailScreen() {
       />
 
       <NavBar />
+
+      <ActionSheetModal
+        visible={!!articleActionTarget}
+        title={articleActionTarget?.article?.title ?? "편지 관리"}
+        onClose={() => setArticleActionTarget(null)}
+        actions={[
+          {
+            label: articleActionTarget?.isPinned ? "고정 해제" : "고정하기",
+            onPress: async () => {
+              if (!articleActionTarget || !id) return;
+              const isPinned = articleActionTarget.isPinned;
+              setArticleActionTarget(null);
+              try {
+                await togglePin.mutateAsync({
+                  teamId: id,
+                  articleId: articleActionTarget.articleId,
+                  data: { isPinned: !isPinned, requesterId: userId },
+                });
+                articlesQuery.refetch();
+              } catch {
+                showToast({ message: "고정 설정에 실패했습니다.", type: "error" });
+              }
+            },
+          },
+          {
+            label: "삭제",
+            style: "destructive",
+            onPress: () => {
+              if (!articleActionTarget) return;
+              const target = articleActionTarget;
+              setArticleActionTarget(null);
+              handleArticleDeletePress(target);
+            },
+          },
+          { label: "취소", style: "cancel", onPress: () => setArticleActionTarget(null) },
+        ]}
+      />
     </View>
   );
 }

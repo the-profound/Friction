@@ -1,6 +1,6 @@
 import { Tabs, useRouter } from "expo-router";
 import React, { useCallback } from "react";
-import { Alert, StyleSheet } from "react-native";
+import { StyleSheet } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -9,6 +9,7 @@ import ScalePressable from "@/components/shared/ScalePressable";
 import { Colors, Sizing, Spacing } from "@/constants/tokens";
 import { useNavigation } from "@/contexts/NavigationContext";
 import { useUser } from "@/contexts/UserContext";
+import { useToast } from "@/contexts/ToastContext";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { useCreateArticle } from "@workspace/api-client-react";
 import { invalidateArticleLists } from "@/lib/queryInvalidation";
@@ -18,6 +19,7 @@ export default function TabLayout() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { userId } = useUser();
+  const { showToast } = useToast();
   const createArticle = useCreateArticle();
 
   const handleNewMemo = useCallback(async () => {
@@ -29,9 +31,9 @@ export default function TabLayout() {
       invalidateArticleLists(queryClient);
       router.push({ pathname: "/on-01a", params: { id: article.id } });
     } catch {
-      Alert.alert("오류", "메모 생성에 실패했습니다.");
+      showToast({ message: "메모 생성에 실패했습니다.", type: "error" });
     }
-  }, [createArticle, userId, queryClient, router]);
+  }, [createArticle, userId, queryClient, router, showToast]);
 
   const fabBottom = useNavBarBottomSafeArea(8);
 
