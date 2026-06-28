@@ -113,6 +113,20 @@
       "when": 1750636800000,
       "tag": "0015_add_is_envelope_to_inbox",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1782000000000,
+      "tag": "0016_add_is_pinned_to_team_collection_articles",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1782691200000,
+      "tag": "0017_add_deleted_at_to_articles",
+      "breakpoints": true
     }
   ]
 }

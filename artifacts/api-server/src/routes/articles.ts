@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, ilike, ne, sql } from "drizzle-orm";
+import { and, eq, ilike, isNull, ne, sql } from "drizzle-orm";
 import { db, articlesTable, myCollectionArticlesTable, myCollectionsTable, usersTable, type ArticleStatus } from "@workspace/db";
 import { CreateArticleBody, UpdateArticleBody, TransitionArticleStatusBody, FinalizeArticleBody, ReadingMemoQueryParams } from "@workspace/api-zod";
 import { ObjectStorageService } from "../lib/objectStorage";
@@ -69,6 +69,7 @@ router.get("/articles/reading-memo", async (req, res) => {
         eq(articlesTable.authorId, userId),
         eq(articlesTable.sourceArticleId, sourceArticleId),
         eq(articlesTable.status, "DRAFT"),
+        isNull(articlesTable.deletedAt),
       ),
     );
 
@@ -86,17 +87,16 @@ router.get("/articles", async (req, res) => {
   if (status) conditions.push(eq(articlesTable.status, status as ArticleStatus));
   if (titleQuery) conditions.push(ilike(articlesTable.title, `%${titleQuery as string}%`));
 
-  const baseQuery = db
+  conditions.push(isNull(articlesTable.deletedAt));
+
+  const rows = await db
     .select({
       article: articlesTable,
       authorNickname: usersTable.nickname,
     })
     .from(articlesTable)
-    .leftJoin(usersTable, eq(usersTable.id, articlesTable.authorId));
-
-  const rows = conditions.length > 0
-    ? await baseQuery.where(and(...conditions))
-    : await baseQuery;
+    .leftJoin(usersTable, eq(usersTable.id, articlesTable.authorId))
+    .where(and(...conditions));
 
   const articles = rows.map((r) => ({
     ...r.article,
@@ -186,7 +186,7 @@ router.get("/articles/:id", async (req, res) => {
 });
 
 router.patch("/articles/:id", async (req, res) => {
-  const [existing] = await db.select().from(articlesTable).where(eq(articlesTable.id, req.params.id));
+  const [existing] = await db.select().from(articlesTable).where(and(eq(articlesTable.id, req.params.id), isNull(articlesTable.deletedAt)));
   if (!existing) {
     res.status(404).json({ error: "Article not found" });
     return;
@@ -257,7 +257,7 @@ router.post("/articles/:id/cover-image", async (req, res) => {
     return;
   }
 
-  const [article] = await db.select().from(articlesTable).where(eq(articlesTable.id, id));
+  const [article] = await db.select().from(articlesTable).where(and(eq(articlesTable.id, id), isNull(articlesTable.deletedAt)));
   if (!article) {
     res.status(404).json({ error: "Article not found" });
     return;
@@ -279,8 +279,12 @@ router.post("/articles/:id/cover-image", async (req, res) => {
 });
 
 router.delete("/articles/:id", async (req, res) => {
-  const [deleted] = await db.delete(articlesTable).where(eq(articlesTable.id, req.params.id)).returning();
-  if (!deleted) {
+  const [updated] = await db
+    .update(articlesTable)
+    .set({ deletedAt: new Date() })
+    .where(and(eq(articlesTable.id, req.params.id), isNull(articlesTable.deletedAt)))
+    .returning({ id: articlesTable.id });
+  if (!updated) {
     res.status(404).json({ error: "Article not found" });
     return;
   }
@@ -295,7 +299,7 @@ router.post("/articles/:id/transition", async (req, res) => {
   }
   const { targetStatus } = parsed.data;
 
-  const [article] = await db.select().from(articlesTable).where(eq(articlesTable.id, req.params.id));
+  const [article] = await db.select().from(articlesTable).where(and(eq(articlesTable.id, req.params.id), isNull(articlesTable.deletedAt)));
   if (!article) {
     res.status(404).json({ error: "Article not found" });
     return;
@@ -358,7 +362,7 @@ router.post("/articles/:id/finalize", async (req, res) => {
 
   try {
     const result = await db.transaction(async (tx) => {
-      const [article] = await tx.select().from(articlesTable).where(eq(articlesTable.id, articleId));
+      const [article] = await tx.select().from(articlesTable).where(and(eq(articlesTable.id, articleId), isNull(articlesTable.deletedAt)));
       if (!article) {
         return { status: 404, body: { error: "Article not found" } } as const;
       }

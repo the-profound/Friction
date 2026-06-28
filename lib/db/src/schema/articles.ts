@@ -25,6 +25,7 @@ export const articlesTable = pgTable(
     noticeDate: date("notice_date"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (t) => [
     uniqueIndex("articles_author_source_unique_idx")
