@@ -1,5 +1,15 @@
-import React, { useState, useCallback, useEffect, useRef } from "react";
-import { View, Text, StyleSheet, ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, BackHandler } from "react-native";
+import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ActivityIndicator,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  BackHandler,
+} from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -8,10 +18,36 @@ import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useAutoSave } from "@/lib/useAutoSave";
 import { useEditorLayout } from "@/lib/useEditorLayout";
-import { canTransitionForward } from "@/lib/articleStatusCycle";
+import {
+  splitContentToPages,
+  splitPageContentForDivision,
+  validatePages,
+  simulateGreedyJobs,
+  resolveBSJob,
+  runGreedy,
+  bsCandidateKey,
+  bsCandidatesForJob,
+  findOverflowBlockIndex,
+  type BSJob,
+  type BSResult,
+  type DivisionWarning,
+} from "@/lib/pageDivision";
+import { parseMarkdownBlocks, type MarkdownBlockType } from "@/utils/markdownParser";
+import { canTransitionForward, canStepBack } from "@/lib/articleStatusCycle";
 import type { ArticleStatus } from "@/lib/policies";
+import { MarkdownPolicy } from "@/lib/policies";
 import WebViewMarkdownEditor from "@/components/WebViewMarkdownEditor/WebViewMarkdownEditorCompat";
-import type { WebViewMarkdownEditorRef, OnChangePayload, OnExportMarkdownPayload, OnSelectionUpdatePayload } from "@/components/WebViewMarkdownEditor/types";
+import type {
+  WebViewMarkdownEditorRef,
+  OnChangePayload,
+  OnExportMarkdownPayload,
+  OnSelectionUpdatePayload,
+} from "@/components/WebViewMarkdownEditor/types";
+import WebViewMeasureLayer from "@/components/WebViewMeasureLayer";
+import type {
+  MeasureRequest,
+  MeasureCandidate,
+} from "@/components/PretextMeasureLayer/PretextMeasureLayer";
 import { useInlineImageUpload } from "@/lib/useImageUpload";
 import {
   useGetArticle,
@@ -19,11 +55,16 @@ import {
   useDeleteArticle,
   useTransitionArticleStatus,
   TransitionArticleBodyTargetStatus,
-  ApiError,
   getGetArticleQueryKey,
+  type SpellChange,
+  spellCheck as apiSpellCheck,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { invalidateArticleLists, invalidateArticleDetail } from "@/lib/queryInvalidation";
+import {
+  invalidateArticleLists,
+  invalidateArticleAndLists,
+  invalidateArticleDetail,
+} from "@/lib/queryInvalidation";
 import { useUser } from "@/contexts/UserContext";
 import { useToast } from "@/contexts/ToastContext";
 import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
@@ -32,6 +73,8 @@ import WritingStateBar, { type WritingStage } from "@/components/WritingStateBar
 import KeyboardToolbar from "@/components/KeyboardToolbar/KeyboardToolbar";
 import BlockTypeSheet from "@/components/KeyboardToolbar/BlockTypeSheet";
 
+const PAGE_DIVIDER = MarkdownPolicy.PAGE_DIVIDER;
+
 const DEFAULT_SELECTION: OnSelectionUpdatePayload = {
   activeBlock: "paragraph",
   isBold: false,
@@ -39,14 +82,52 @@ const DEFAULT_SELECTION: OnSelectionUpdatePayload = {
   isUnderline: false,
 };
 
-export default function DraftScreen() {
+const PAGE_KEY_PREFIX = "page_";
+const EXPORT_DEBOUNCE_MS = 1200;
+
+type EditorMode = "draft" | "dividing";
+
+/**
+ * 작성·분할 통합 화면.
+ *
+ * 작성(과거 on-01a)과 분할(과거 on-01b)을 단일 화면 + 내부 `mode` 상태로 통합했다.
+ * 두 모드는 같은 WebViewMarkdownEditor 인스턴스를 공유하므로 모드 전환 시
+ * 에디터가 언마운트·재마운트되지 않는다. 따라서 화면 이동에 따른 React Query
+ * 캐시 타이밍 문제로 본문이 사라지던 버그(#889, #20)가 원천적으로 발생하지 않는다.
+ *
+ * - draft 모드: 서식 툴바·이미지 업로드·원본 글 연결.
+ * - dividing 모드: 페이지 칩 스트립·경고 배너·맞춤법 패널·자동분할·측정 엔진.
+ *
+ * 서버의 article status(DRAFT ↔ DIVIDING) 전환은 모드 전환에 맞춰 그대로 수행된다.
+ */
+export default function WritingScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { id, source } = useLocalSearchParams<{ id: string; source?: string }>();
+  const { id, source, mode: modeParam, returnPage, returnBlock } = useLocalSearchParams<{
+    id: string;
+    source?: string;
+    mode?: string;
+    returnPage?: string;
+    returnBlock?: string;
+  }>();
+  const returnPageIndex = returnPage !== undefined ? parseInt(returnPage, 10) : undefined;
+  const returnBlockIndex = returnBlock !== undefined ? parseInt(returnBlock, 10) : undefined;
   const { userId } = useUser();
   const { showToast } = useToast();
   const editorLayout = useEditorLayout();
+  const {
+    containerWidth,
+    safeAreaWidth,
+    safeAreaHeight,
+    paddingX,
+    paddingY,
+    textColumnWidth,
+    bodyFontSize,
+    bodyLineHeight,
+    bodyLetterSpacing,
+    titleFontSize,
+  } = editorLayout;
 
   const articleQuery = useGetArticle(id ?? "");
   const article = id ? articleQuery.data : undefined;
@@ -57,29 +138,46 @@ export default function DraftScreen() {
   const transitionStatus = useTransitionArticleStatus();
 
   const editorRef = useRef<WebViewMarkdownEditorRef>(null);
+
+  // ── 모드 ──────────────────────────────────────────────────────────────────
+  const [mode, setMode] = useState<EditorMode>(
+    modeParam === "dividing" ? "dividing" : "draft",
+  );
+  // modeRef: 콜백 안에서 동기적으로 현재 모드를 읽기 위한 미러.
+  const modeRef = useRef<EditorMode>(mode);
+  modeRef.current = mode;
+  const setModeBoth = useCallback((next: EditorMode) => {
+    modeRef.current = next;
+    setMode(next);
+  }, []);
+
+  // ── 공통 상태 ─────────────────────────────────────────────────────────────
   const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
   const [charCount, setCharCount] = useState(0);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [editorReady, setEditorReady] = useState(false);
+  const [initialized, setInitialized] = useState(false);
   const [selectionState, setSelectionState] = useState<OnSelectionUpdatePayload>(DEFAULT_SELECTION);
   const [blockTypeSheetVisible, setBlockTypeSheetVisible] = useState(false);
+  const [isNavigating, setIsNavigating] = useState(false);
+
   const contentRef = useRef("");
   const titleRef = useRef("");
   const initializedRef = useRef(false);
   const articleContentRef = useRef("");
-  // C1: tracks last content seen from server; used to detect user edits
+  // 마지막으로 서버에서 본 content. 사용자 편집 발생 여부 감지에 사용.
   const serverContentRef = useRef("");
   const isNavigatingRef = useRef(false);
-  const [isNavigating, setIsNavigating] = useState(false);
-  // Map-based export tracker: each in-flight requestExportMarkdown has its own
-  // slot, so an autosave export and a getEditorContent() export can never
-  // overwrite each other's resolver (fixes the single-slot clobber race).
+
+  // Map 기반 export 추적: 진행 중인 각 requestExportMarkdown 이 자체 슬롯을 가져
+  // autosave export 와 getEditorContent() export 가 서로의 resolver 를 덮어쓰지 않는다.
   const pendingExportsRef = useRef<Map<string, (md: string) => void>>(new Map());
   const exportDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const exportPendingRef = useRef(false);
   const lastSeenDocVersionRef = useRef(-1);
-  const EXPORT_DEBOUNCE_MS = 1200;
 
+  // ── 원본 글 연결 (draft) ──────────────────────────────────────────────────
   const [sourceArticleId, setSourceArticleId] = useState<string | null>(null);
   const [sourceArticleTitle, setSourceArticleTitle] = useState<string | null>(null);
   const [pickerVisible, setPickerVisible] = useState(false);
@@ -95,10 +193,26 @@ export default function DraftScreen() {
     }
   }, [sourceArticleQuery.data]);
 
-  // Skip the mount-time invalidate when the cache was just primed (≤30s old)
-  // by a sibling screen's optimistic setQueryData. This avoids a wasted
-  // network RTT on every in-session navigation while still refreshing on cold
-  // entry (deep links, app resume) where the cache is genuinely stale.
+  // ── 분할 상태 (dividing) ───────────────────────────────────────────────────
+  const [splitting, setSplitting] = useState(false);
+  const pageStripRef = useRef<ScrollView>(null);
+
+  type SpellState =
+    | { status: "idle" }
+    | { status: "loading" }
+    | { status: "reviewing"; items: SpellChange[]; index: number; occurrenceIndices: number[] }
+    | { status: "done" }
+    | { status: "empty" }
+    | { status: "error"; message: string };
+  const [spellState, setSpellState] = useState<SpellState>({ status: "idle" });
+  const spellAppliedCountRef = useRef<Record<string, number>>({});
+  const [spellTabVisible, setSpellTabVisible] = useState(false);
+  const chipOffsetsRef = useRef<Record<number, number>>({});
+  const returnScrollDoneRef = useRef(false);
+  const returnBlockScrollDoneRef = useRef(false);
+  const [chipLayoutCount, setChipLayoutCount] = useState(0);
+
+  // ── 마운트 시 캐시가 신선하면(≤30s) invalidate 생략 ──────────────────────────
   useEffect(() => {
     if (!id) return;
     const cached = queryClient.getQueryState(getGetArticleQueryKey(id));
@@ -109,21 +223,25 @@ export default function DraftScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── article 데이터 초기화 ──────────────────────────────────────────────────
   useEffect(() => {
     if (!article) return;
     const t = article.title || "";
     const c = article.content || "";
     if (!initializedRef.current) {
-      // C1 fix: initialize on first data arrival regardless of cache age.
-      // Eliminates the setMarkdown("") blank-body path that fired when
-      // handleEditorReady ran before stale-cache data passed the old 30s gate.
       initializedRef.current = true;
+      setInitialized(true);
       serverContentRef.current = c;
       setTitle(t);
       titleRef.current = t;
       contentRef.current = c;
       articleContentRef.current = c;
+      setContent(c);
       setCharCount(c.length);
+      // 초기 모드 결정: mode 파라미터 또는 서버 status(DIVIDING) 기준.
+      const initialMode: EditorMode =
+        modeParam === "dividing" || article.status === "DIVIDING" ? "dividing" : "draft";
+      setModeBoth(initialMode);
       if (editorReady) {
         editorRef.current?.setMarkdown(c);
         editorRef.current?.setTitle(t);
@@ -133,12 +251,12 @@ export default function DraftScreen() {
       }
       console.log("[on-01 init] cached?=true dirty?=false injected:", JSON.stringify(c.slice(0, 60)));
     } else if (contentRef.current === serverContentRef.current) {
-      // Background refetch: re-inject only when editor content hasn't diverged
-      // from what the server last sent (i.e. user hasn't started editing yet).
+      // 백그라운드 refetch: 사용자가 편집하지 않았을 때만 서버 값 재주입.
       if (c !== serverContentRef.current) {
         serverContentRef.current = c;
         contentRef.current = c;
         articleContentRef.current = c;
+        setContent(c);
         setTitle(t);
         titleRef.current = t;
         setCharCount(c.length);
@@ -149,7 +267,7 @@ export default function DraftScreen() {
         console.log("[on-01 init] re-inject from server dirty?=false injected:", JSON.stringify(c.slice(0, 60)));
       }
     }
-  }, [article, editorReady]);
+  }, [article, editorReady, modeParam, setModeBoth]);
 
   useEffect(() => {
     const showSub = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
@@ -160,11 +278,32 @@ export default function DraftScreen() {
     };
   }, []);
 
+  // ── 마감 화면에서 복귀 시 page strip 스크롤 복원 (dividing) ──────────────────
+  useEffect(() => {
+    if (returnPageIndex === undefined || returnScrollDoneRef.current) return;
+    const offset = chipOffsetsRef.current[returnPageIndex];
+    if (offset === undefined) return;
+    returnScrollDoneRef.current = true;
+    pageStripRef.current?.scrollTo({ x: Math.max(0, offset - 16), animated: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chipLayoutCount]);
+
+  // ── 마감 화면에서 복귀 시 본문 에디터 스크롤 + 하이라이트 (dividing) ──────────
+  useEffect(() => {
+    if (returnPageIndex === undefined || returnBlockIndex === undefined) return;
+    if (returnBlockScrollDoneRef.current) return;
+    if (!editorReady || !initialized) return;
+    returnBlockScrollDoneRef.current = true;
+    const delay = Platform.OS === "android" ? 600 : 300;
+    const timer = setTimeout(() => {
+      editorRef.current?.scrollToBlock(returnPageIndex, returnBlockIndex);
+    }, delay);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editorReady, initialized]);
+
   const handleEditorReady = useCallback(() => {
     setEditorReady(true);
-    // Only inject if article data has already been initialized.
-    // If article hasn't arrived yet, the init useEffect injects when it fires
-    // (editorReady will be true by then). This prevents setMarkdown("") calls.
     if (initializedRef.current) {
       editorRef.current?.setMarkdown(articleContentRef.current);
       editorRef.current?.setTitle(titleRef.current);
@@ -183,10 +322,6 @@ export default function DraftScreen() {
       setTimeout(() => {
         if (pendingExportsRef.current.has(requestId)) {
           pendingExportsRef.current.delete(requestId);
-          // Fallback to contentRef — may still be empty for brand-new articles
-          // that haven't had a successful export yet. This is acceptable: if the
-          // WebView didn't respond within 2 s something is seriously wrong, and
-          // the empty-body guard below will surface a toast to the user.
           resolve(contentRef.current);
         }
       }, 2000);
@@ -194,12 +329,17 @@ export default function DraftScreen() {
   }, [editorReady]);
 
   const handleExportMarkdown = useCallback((payload: OnExportMarkdownPayload) => {
-    // [A] stale 응답 폐기: 이미 더 새로운 docVersion 의 응답을 처리했다면
-    // 오래된 응답이 contentRef 를 오염시키지 않도록 즉시 버린다.
+    // stale 응답 폐기: 더 새로운 docVersion 응답을 이미 처리했다면 즉시 버린다.
     const incomingVer = payload.docVersion ?? 0;
     if (incomingVer < lastSeenDocVersionRef.current) return;
     lastSeenDocVersionRef.current = incomingVer;
     contentRef.current = payload.markdown;
+    // 분할 모드에서는 모든 편집 이후 페이지/측정이 즉시 재계산돼야 하므로
+    // content·debouncedContent 를 함께 갱신한다.
+    if (modeRef.current === "dividing") {
+      setContent(payload.markdown);
+      setDebouncedContent(payload.markdown);
+    }
     const cb = pendingExportsRef.current.get(payload.requestId);
     if (cb) {
       pendingExportsRef.current.delete(payload.requestId);
@@ -210,10 +350,19 @@ export default function DraftScreen() {
   const handleSave = useCallback(
     async (data: { title: string; content: string }) => {
       if (!id) return;
-      await updateArticle.mutateAsync({
-        id,
-        data: { title: data.title, content: data.content },
-      });
+      if (modeRef.current === "dividing") {
+        if (!data.title.trim()) return;
+        const pgs = splitContentToPages(data.content).map((p) => p.content);
+        await updateArticle.mutateAsync({
+          id,
+          data: { title: data.title, content: data.content, pages: pgs },
+        });
+      } else {
+        await updateArticle.mutateAsync({
+          id,
+          data: { title: data.title, content: data.content },
+        });
+      }
     },
     [id, updateArticle],
   );
@@ -223,14 +372,25 @@ export default function DraftScreen() {
     storageKey: id ? `draft_${id}` : undefined,
   });
 
-  const handleEditorChange = useCallback((_payload: OnChangePayload) => {
-    if (_payload.charCount !== undefined) {
-      setCharCount(_payload.charCount);
-    }
-    if (_payload.isDirty) {
-      // 매 onChange 마다 export+markDirty 를 즉시 돌리면 본문이 길어질수록
-      // editor.getHTML() → htmlToMarkdown → RN 브리지 왕복 → AsyncStorage 직렬화
-      // 비용이 입력 한 번마다 누적되어 한글 IME 합성 중에 화면이 멈추는 원인이 된다.
+  const handleEditorChange = useCallback(
+    (_payload: OnChangePayload) => {
+      if (_payload.charCount !== undefined) {
+        setCharCount(_payload.charCount);
+      }
+      if (!_payload.isDirty) return;
+
+      if (modeRef.current === "dividing") {
+        // 분할 모드: 즉시 export 하여 페이지 재계산·측정을 트리거한다.
+        if (!editorRef.current) return;
+        const requestId = `autosave_${Date.now()}`;
+        pendingExportsRef.current.set(requestId, (md: string) => {
+          markDirty(titleRef.current, md);
+        });
+        editorRef.current.requestExportMarkdown(requestId);
+        return;
+      }
+
+      // 작성 모드: 매 onChange 마다 export 하면 한글 IME 합성 중 화면이 멈추므로
       // 입력이 잠시 멈춘 뒤 1회만 export 하도록 디바운스한다.
       exportPendingRef.current = true;
       if (exportDebounceTimerRef.current) clearTimeout(exportDebounceTimerRef.current);
@@ -240,29 +400,605 @@ export default function DraftScreen() {
         exportPendingRef.current = false;
         if (!editorRef.current) return;
         const requestId = `autosave_${Date.now()}`;
-        // Map-based: each autosave export gets its own slot so it cannot
-        // clobber a concurrent getEditorContent() resolver.
         pendingExportsRef.current.set(requestId, (md: string) => {
-          contentRef.current = md;
           markDirty(titleRef.current, md);
         });
         editorRef.current.requestExportMarkdown(requestId);
       }, EXPORT_DEBOUNCE_MS);
-    }
-  }, [markDirty]);
+    },
+    [markDirty],
+  );
 
   const handleTitleChange = useCallback(
     (text: string) => {
       setTitle(text);
       titleRef.current = text;
-      // 제목 전용 dirty 경로 사용: latestDataRef 에 본문 문자열을 매번 다시
-      // 싣지 않는다. 본문은 본문 입력 디바운스 경로(또는 flush 시 강제 export)
-      // 에서 갱신되며, 저장 직전 handleNext/handleBack 이 마지막 본문을
-      // markDirty 로 한 번 더 보장한다.
       markTitleDirty(text, contentRef.current);
     },
     [markTitleDirty],
   );
+
+  // ── 분할 측정/검증 (dividing) ──────────────────────────────────────────────
+  const pages = useMemo(() => splitContentToPages(content), [content]);
+
+  const [debouncedContent, setDebouncedContent] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedContent(content), 600);
+    return () => clearTimeout(timer);
+  }, [content]);
+
+  const measurePages = useMemo(() => splitContentToPages(debouncedContent), [debouncedContent]);
+  const baseWarnings = useMemo(() => validatePages(pages), [pages]);
+
+  const pageContentHeight = safeAreaHeight;
+  const blockGap = bodyLineHeight * 0.6;
+  const availableContentHeight = safeAreaHeight - 2 * paddingY - insets.bottom;
+
+  const pageBlockMap = useMemo(() => {
+    const map: Record<number, MarkdownBlockType[]> = {};
+    for (const p of measurePages) {
+      map[p.pageIndex] = parseMarkdownBlocks(p.content);
+    }
+    return map;
+  }, [measurePages]);
+
+  const [blockHeights, setBlockHeights] = useState<Record<string, number>>({});
+
+  const warningRequest = useMemo<MeasureRequest | null>(() => {
+    if (mode !== "dividing") return null;
+    if (measurePages.length === 0) return null;
+    const candidates: MeasureCandidate[] = [];
+    for (const p of measurePages) {
+      const blocks = pageBlockMap[p.pageIndex] ?? [];
+      blocks.forEach((b, bi) => {
+        candidates.push({
+          key: `${PAGE_KEY_PREFIX}${p.pageIndex}_b_${bi}`,
+          blocks: [b],
+        });
+      });
+    }
+    if (candidates.length === 0) return null;
+    return {
+      candidates,
+      width: safeAreaWidth,
+      paddingX,
+      textColumnWidth,
+      blockGap,
+      fontSize: bodyFontSize,
+      lineHeight: bodyLineHeight,
+      letterSpacing: bodyLetterSpacing,
+    };
+  }, [mode, measurePages, pageBlockMap, safeAreaWidth, paddingX, textColumnWidth, blockGap, bodyFontSize, bodyLineHeight, bodyLetterSpacing]);
+
+  const handleWarningMeasured = useCallback((heights: Record<string, number>) => {
+    setBlockHeights((prev) => {
+      const prevKeys = Object.keys(prev);
+      const nextKeys = Object.keys(heights);
+      if (prevKeys.length === nextKeys.length && nextKeys.every((k) => prev[k] === heights[k])) {
+        return prev;
+      }
+      return heights;
+    });
+  }, []);
+
+  const prevPageOverflowInfoRef = useRef<Record<number, { totalHeight: number; overflowBlockIdx: number }>>({});
+
+  const pageOverflowInfo = useMemo(() => {
+    const info: Record<number, { totalHeight: number; overflowBlockIdx: number }> = {};
+    let anyPending = false;
+    const currentPageIndices = new Set(measurePages.map((p) => p.pageIndex));
+    for (const p of measurePages) {
+      const blocks = pageBlockMap[p.pageIndex] ?? [];
+      const heights: number[] = [];
+      let allMeasured = true;
+      for (let bi = 0; bi < blocks.length; bi++) {
+        const h = blockHeights[`${PAGE_KEY_PREFIX}${p.pageIndex}_b_${bi}`];
+        if (h === undefined) {
+          allMeasured = false;
+          break;
+        }
+        heights.push(h);
+      }
+      if (!allMeasured) {
+        anyPending = true;
+        continue;
+      }
+      const blockSum = heights.reduce((a, b) => a + b, 0);
+      const totalHeight = blockSum + 2 * paddingY + insets.bottom;
+      const overflowBlockIdx = findOverflowBlockIndex(heights, availableContentHeight, bodyLineHeight);
+      info[p.pageIndex] = { totalHeight, overflowBlockIdx };
+    }
+    if (anyPending) {
+      const cached: Record<number, { totalHeight: number; overflowBlockIdx: number }> = {};
+      for (const idx of currentPageIndices) {
+        const prev = prevPageOverflowInfoRef.current[idx];
+        if (prev) cached[idx] = prev;
+      }
+      return cached;
+    }
+    prevPageOverflowInfoRef.current = info;
+    return info;
+  }, [measurePages, pageBlockMap, blockHeights, paddingY, insets.bottom, availableContentHeight, bodyLineHeight]);
+
+  const pageHeights = useMemo<Record<number, number>>(() => {
+    const map: Record<number, number> = {};
+    for (const k in pageOverflowInfo) {
+      map[Number(k)] = pageOverflowInfo[Number(k)].totalHeight;
+    }
+    return map;
+  }, [pageOverflowInfo]);
+
+  const [engineRequest, setEngineRequest] = useState<MeasureRequest | null>(null);
+  const engineResolveRef = useRef<((heights: Record<string, number>) => void) | null>(null);
+
+  const measureEngine = useCallback(
+    (candidates: MeasureCandidate[]): Promise<Record<string, number>> => {
+      return new Promise((resolve) => {
+        engineResolveRef.current = resolve;
+        setEngineRequest({
+          candidates,
+          width: safeAreaWidth,
+          paddingX,
+          textColumnWidth,
+          fontSize: bodyFontSize,
+          lineHeight: bodyLineHeight,
+          letterSpacing: bodyLetterSpacing,
+        });
+      });
+    },
+    [safeAreaWidth, paddingX, textColumnWidth, bodyFontSize, bodyLineHeight, bodyLetterSpacing],
+  );
+
+  const handleEngineMeasured = useCallback((heights: Record<string, number>) => {
+    const r = engineResolveRef.current;
+    engineResolveRef.current = null;
+    setEngineRequest(null);
+    if (r) r(heights);
+  }, []);
+
+  const splitThreshold = useMemo(() => {
+    const netH = safeAreaHeight - 2 * paddingY - insets.bottom;
+    return (netH + bodyLineHeight) * 0.92;
+  }, [safeAreaHeight, paddingY, insets.bottom, bodyLineHeight]);
+
+  const heightWarnings = useMemo<DivisionWarning[]>(() => {
+    return measurePages
+      .filter((page) => {
+        const h = pageHeights[page.pageIndex];
+        return h !== undefined && h > pageContentHeight + bodyLineHeight;
+      })
+      .map((page) => ({
+        pageIndex: page.pageIndex,
+        paragraphIndex: -1,
+        level: "red" as const,
+        reason: "이 페이지는 읽기 화면에서 스크롤이 필요할 수 있습니다",
+      }));
+  }, [measurePages, pageHeights, pageContentHeight, bodyLineHeight]);
+
+  const warnings = useMemo(() => [...baseWarnings, ...heightWarnings], [baseWarnings, heightWarnings]);
+
+  const overflowPageIndices = useMemo(() => {
+    const set = new Set<number>();
+    for (const w of heightWarnings) set.add(w.pageIndex);
+    return Array.from(set).sort((a, b) => a - b);
+  }, [heightWarnings]);
+  const hasOverflowPages = overflowPageIndices.length > 0;
+
+  // layoutWidth 선저장 — 분할 모드에서만. on-01c 이동 시 PATCH 중복을 막는다.
+  const savedLayoutWidthRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (mode !== "dividing") return;
+    if (!id || !article || !containerWidth) return;
+    const stored = (article as { layoutWidth?: number | null }).layoutWidth ?? null;
+    if (stored === containerWidth) {
+      savedLayoutWidthRef.current = containerWidth;
+      return;
+    }
+    if (savedLayoutWidthRef.current === containerWidth) return;
+    savedLayoutWidthRef.current = containerWidth;
+    updateArticle
+      .mutateAsync({ id, data: { layoutWidth: containerWidth } })
+      .catch((e: unknown) => {
+        savedLayoutWidthRef.current = null;
+        console.warn("[on-01] background layoutWidth pre-save failed:", e);
+      });
+  }, [mode, id, article, containerWidth, updateArticle]);
+
+  // 오버플로 강조 — 분할 모드에서만 에디터에 안전 영역 높이를 알려준다.
+  // 작성 모드로 돌아오면 null을 보내 빨간 오버플로 배경을 즉시 해제한다.
+  useEffect(() => {
+    if (!editorReady || !editorRef.current) return;
+    editorRef.current.setOverflowProbeConfig(mode === "dividing" ? availableContentHeight : null);
+  }, [mode, editorReady, availableContentHeight]);
+
+  // ── 원본 글 연결 핸들러 (draft) ────────────────────────────────────────────
+  const handleSourceArticleSelect = useCallback(
+    async (articleId: string, articleTitle: string) => {
+      if (!id) return;
+      try {
+        await updateArticle.mutateAsync({ id, data: { sourceArticleId: articleId } });
+        setSourceArticleId(articleId);
+        setSourceArticleTitle(articleTitle);
+        invalidateArticleDetail(queryClient, id);
+      } catch {
+        showToast({ message: "답장 대상 편지 연결에 실패했습니다.", type: "error" });
+      }
+    },
+    [id, updateArticle, queryClient, showToast],
+  );
+
+  const handleSourceArticleUnlink = useCallback(async () => {
+    if (!id) return;
+    try {
+      await updateArticle.mutateAsync({ id, data: { sourceArticleId: null } });
+      setSourceArticleId(null);
+      setSourceArticleTitle(null);
+      invalidateArticleDetail(queryClient, id);
+    } catch {
+      showToast({ message: "답장 대상 편지 연결 해제에 실패했습니다.", type: "error" });
+    }
+  }, [id, updateArticle, queryClient, showToast]);
+
+  // ── 이미지 업로드 (draft) ──────────────────────────────────────────────────
+  const handleImageUploadSuccess = useCallback((imageUrl: string) => {
+    editorRef.current?.insertImage(imageUrl);
+  }, []);
+
+  const handleImageUploadError = useCallback((err: Error) => {
+    showToast({ message: err.message, type: "error" });
+  }, [showToast]);
+
+  const { pickAndUpload: pickInlineImage, isUploading: isImageUploading } = useInlineImageUpload({
+    onSuccess: handleImageUploadSuccess,
+    onError: handleImageUploadError,
+  });
+
+  const handleInsertImage = useCallback(() => {
+    setImagePickerVisible(true);
+  }, []);
+
+  // ── 모드 전환: 작성 → 분할 ─────────────────────────────────────────────────
+  const enterDividingMode = useCallback(async () => {
+    if (isNavigatingRef.current) return;
+    isNavigatingRef.current = true;
+    setIsNavigating(true);
+
+    editorRef.current?.blur();
+    Keyboard.dismiss();
+
+    if (!titleRef.current.trim()) {
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
+      showToast({ message: "제목을 입력해주세요.", type: "info" });
+      return;
+    }
+
+    // 검토 단계 진입 전: 이미지를 단독 페이지(블록)로 자동 분할한다.
+    const splitResult = await editorRef.current?.autoSplitImages();
+    if (splitResult?.hadConsecutiveImages) {
+      showToast({ message: "사진 사이에 빈 페이지를 추가했어요.", type: "info" });
+    }
+
+    if (exportDebounceTimerRef.current) {
+      clearTimeout(exportDebounceTimerRef.current);
+      exportDebounceTimerRef.current = null;
+    }
+    exportPendingRef.current = false;
+    const cur = await getEditorContent();
+    markDirty(titleRef.current, cur);
+    const flushResult = await flush();
+    if (!flushResult.ok) {
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
+      showToast({ message: "저장이 완료되지 않았습니다. 다시 시도해주세요.", type: "error" });
+      return;
+    }
+
+    const currentTitle = titleRef.current;
+    const result = canTransitionForward("DRAFT" as ArticleStatus, {
+      content: cur,
+      title: currentTitle,
+      pages: [],
+      hasRedWarnings: false,
+    });
+    if (!result.allowed) {
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
+      showToast({ message: result.reason, type: "info" });
+      return;
+    }
+
+    // 옵티미스틱 캐시 갱신 — 백그라운드 refetch 가 status 를 되돌리지 않게 한다.
+    if (id) {
+      queryClient.setQueryData(
+        getGetArticleQueryKey(id),
+        (old: unknown) => {
+          if (!old || typeof old !== "object") return old;
+          return { ...old, title: currentTitle, content: cur, status: "DIVIDING", pages: [] };
+        },
+        { updatedAt: Date.now() },
+      );
+    }
+
+    // 에디터를 언마운트하지 않고 모드만 전환한다 — 본문이 절대 사라지지 않는다.
+    // setMarkdown 을 호출하지 않으므로 편집기 내용은 그대로 유지된다.
+    setContent(cur);
+    setDebouncedContent(cur);
+    serverContentRef.current = cur;
+    setModeBoth("dividing");
+    isNavigatingRef.current = false;
+    setIsNavigating(false);
+
+    if (id && article?.status !== "DIVIDING") {
+      transitionStatus
+        .mutateAsync({
+          id,
+          data: { targetStatus: TransitionArticleBodyTargetStatus.DIVIDING },
+        })
+        .catch((e: unknown) => {
+          const status = (e as { status?: number } | null)?.status;
+          if (status === 400) return;
+          console.warn("[on-01] background DIVIDING transition failed:", e);
+        })
+        .finally(() => {
+          invalidateArticleLists(queryClient);
+        });
+    } else {
+      invalidateArticleLists(queryClient);
+    }
+  }, [getEditorContent, markDirty, flush, id, queryClient, transitionStatus, article, showToast, setModeBoth]);
+
+  // ── 모드 전환: 분할 → 작성 (뒤로가기) ──────────────────────────────────────
+  const exitToDraftMode = useCallback(async () => {
+    if (isNavigatingRef.current) return;
+    isNavigatingRef.current = true;
+    setIsNavigating(true);
+
+    editorRef.current?.blur();
+    Keyboard.dismiss();
+
+    // 분할 모드를 떠나므로 진행 중이던 맞춤법 검사 상태/하이라이트를 정리한다.
+    if (spellTabVisible) {
+      editorRef.current?.clearSpellHighlight();
+      setSpellTabVisible(false);
+      setSpellState({ status: "idle" });
+      spellAppliedCountRef.current = {};
+    }
+
+    const result = canStepBack("DIVIDING");
+    if (!result.allowed) {
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
+      return;
+    }
+
+    const cur = await getEditorContent();
+    markDirty(titleRef.current, cur);
+    const flushResult = await flush();
+    if (!flushResult.ok) {
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
+      showToast({ message: "저장에 실패했습니다.", type: "error" });
+      return;
+    }
+
+    if (id) {
+      queryClient.setQueryData(
+        getGetArticleQueryKey(id),
+        (old: unknown) => {
+          if (!old || typeof old !== "object") return old;
+          return { ...old, title: titleRef.current, content: cur, status: "DRAFT" };
+        },
+        { updatedAt: Date.now() },
+      );
+    }
+
+    serverContentRef.current = cur;
+    setModeBoth("draft");
+    isNavigatingRef.current = false;
+    setIsNavigating(false);
+
+    if (id) {
+      transitionStatus
+        .mutateAsync({ id, data: { targetStatus: TransitionArticleBodyTargetStatus.DRAFT } })
+        .then(() => {
+          invalidateArticleAndLists(queryClient, id);
+        })
+        .catch(() => {
+          showToast({ message: "상태 전환에 실패했어요. 새로고침해주세요.", type: "error" });
+          invalidateArticleAndLists(queryClient, id);
+        });
+    }
+  }, [getEditorContent, markDirty, flush, id, queryClient, transitionStatus, showToast, setModeBoth, spellTabVisible]);
+
+  // ── 분할 → 마감 (on-01c 이동) ──────────────────────────────────────────────
+  const handleNextToClosing = useCallback(async () => {
+    if (isNavigatingRef.current) return;
+    isNavigatingRef.current = true;
+    setIsNavigating(true);
+
+    editorRef.current?.blur();
+    Keyboard.dismiss();
+
+    const cur = await getEditorContent();
+
+    const pgs = splitContentToPages(cur);
+    const liveBaseWarnings = validatePages(pgs);
+    const liveHeightWarnings = pgs
+      .filter((p) => {
+        const h = pageHeights[p.pageIndex];
+        return h !== undefined && h > pageContentHeight + bodyLineHeight;
+      })
+      .map((p): DivisionWarning => ({
+        pageIndex: p.pageIndex,
+        paragraphIndex: -1,
+        level: "red",
+        reason: "이 페이지는 읽기 화면에서 스크롤이 필요할 수 있습니다",
+      }));
+    const liveHasRedWarnings = [...liveBaseWarnings, ...liveHeightWarnings].some((w) => w.level === "red");
+    const result = canTransitionForward("DIVIDING" as ArticleStatus, {
+      content: cur,
+      title: titleRef.current,
+      pages: pgs.map((p) => ({ pageIndex: p.pageIndex, content: p.content, charCount: p.charCount })),
+      hasRedWarnings: liveHasRedWarnings,
+    });
+    if (!result.allowed) {
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
+      showToast({ message: result.reason, type: "info" });
+      return;
+    }
+
+    markDirty(titleRef.current, cur);
+    const flushResult = await flush();
+    if (!flushResult.ok) {
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
+      showToast({ message: "저장이 완료되지 않았습니다. 다시 시도해주세요.", type: "error" });
+      return;
+    }
+
+    if (!id) {
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
+      return;
+    }
+
+    const pagesJson = pgs.map((p) => p.content);
+    queryClient.setQueryData(
+      getGetArticleQueryKey(id),
+      (old: unknown) => {
+        if (!old || typeof old !== "object") return old;
+        return {
+          ...old,
+          title: titleRef.current,
+          content: cur,
+          pages: pagesJson,
+          layoutWidth: containerWidth,
+          status: "CLOSING",
+        };
+      },
+      { updatedAt: Date.now() },
+    );
+
+    router.push({ pathname: "/on-01c", params: { id } });
+    isNavigatingRef.current = false;
+    setIsNavigating(false);
+
+    const layoutWidthAlreadySaved = savedLayoutWidthRef.current === containerWidth;
+    const layoutWidthSave = layoutWidthAlreadySaved
+      ? Promise.resolve()
+      : updateArticle
+          .mutateAsync({ id, data: { layoutWidth: containerWidth } })
+          .then(() => {
+            savedLayoutWidthRef.current = containerWidth;
+          })
+          .catch((e: unknown) => {
+            console.warn("[on-01] background layoutWidth save failed:", e);
+          });
+
+    const statusChange =
+      article?.status !== "CLOSING"
+        ? transitionStatus
+            .mutateAsync({ id, data: { targetStatus: TransitionArticleBodyTargetStatus.CLOSING } })
+            .catch((e: unknown) => {
+              const status = (e as { status?: number } | null)?.status;
+              if (status === 400) return;
+              console.warn("[on-01] background CLOSING transition failed:", e);
+            })
+        : Promise.resolve();
+
+    Promise.all([layoutWidthSave, statusChange]).finally(() => {
+      invalidateArticleLists(queryClient);
+    });
+  }, [getEditorContent, markDirty, flush, id, router, updateArticle, transitionStatus, queryClient, containerWidth, article, showToast, pageHeights, pageContentHeight, bodyLineHeight]);
+
+  // ── 작성 모드 뒤로가기 (화면 종료) ─────────────────────────────────────────
+  const handleDraftBack = useCallback(async () => {
+    if (isNavigatingRef.current) return;
+    isNavigatingRef.current = true;
+    setIsNavigating(true);
+
+    editorRef.current?.blur();
+    Keyboard.dismiss();
+
+    if (exportDebounceTimerRef.current) {
+      clearTimeout(exportDebounceTimerRef.current);
+      exportDebounceTimerRef.current = null;
+    }
+    exportPendingRef.current = false;
+    const cur = await getEditorContent();
+    const currentTitle = titleRef.current.trim();
+    const currentContent = cur.trim();
+
+    if (source === "quote") {
+      if (!currentTitle) {
+        isNavigatingRef.current = false;
+        setIsNavigating(false);
+        showToast({ message: "제목을 입력해주세요.", type: "info" });
+        return;
+      }
+    } else if (!currentTitle && !currentContent) {
+      if (id) {
+        try {
+          await deleteArticle.mutateAsync({ id });
+        } catch {
+          showToast({ message: "빈 메모 삭제에 실패했습니다.", type: "error" });
+        }
+        invalidateArticleLists(queryClient);
+      }
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
+      router.back();
+      return;
+    }
+
+    markDirty(titleRef.current, cur);
+    const flushResult = await flush();
+    if (!flushResult.ok) {
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
+      showToast({ message: "저장에 실패했습니다. 내용을 확인해주세요.", type: "error" });
+      return;
+    }
+    invalidateArticleLists(queryClient);
+    isNavigatingRef.current = false;
+    setIsNavigating(false);
+    if (source === "quote") {
+      router.replace("/(tabs)/archive");
+    } else {
+      router.back();
+    }
+  }, [flush, router, queryClient, getEditorContent, markDirty, id, deleteArticle, source, showToast]);
+
+  // ── 헤더/하드웨어 뒤로가기 통합 ────────────────────────────────────────────
+  const handleHeaderBack = useCallback(() => {
+    if (spellTabVisible) {
+      editorRef.current?.clearSpellHighlight();
+      setSpellTabVisible(false);
+      setSpellState({ status: "idle" });
+      spellAppliedCountRef.current = {};
+      return;
+    }
+    if (modeRef.current === "dividing") {
+      exitToDraftMode();
+      return;
+    }
+    handleDraftBack();
+  }, [spellTabVisible, exitToDraftMode, handleDraftBack]);
+
+  const handleDismissKeyboard = useCallback(() => {
+    editorRef.current?.blur();
+    Keyboard.dismiss();
+  }, []);
+
+  const handleInsertDivider = useCallback(() => {
+    editorRef.current?.insertDivider();
+  }, []);
+
+  const handleShiftEnter = useCallback(() => {
+    editorRef.current?.insertHardBreak();
+  }, []);
 
   const handleSelectionUpdate = useCallback((payload: OnSelectionUpdatePayload) => {
     setSelectionState(payload);
@@ -288,229 +1024,275 @@ export default function DraftScreen() {
     editorRef.current?.toggleMark("underline");
   }, []);
 
-  const handleImageUploadSuccess = useCallback((imageUrl: string) => {
-    editorRef.current?.insertImage(imageUrl);
-  }, []);
+  // ── 분할 조작 (dividing) ───────────────────────────────────────────────────
+  const runDivisionEngine = useCallback(
+    async (paragraphs: string[]): Promise<string[] | null> => {
+      if (paragraphs.length < 1) return null;
 
-  const handleImageUploadError = useCallback((err: Error) => {
-    showToast({ message: err.message, type: "error" });
-  }, [showToast]);
+      const paraCandidates: MeasureCandidate[] = paragraphs.map((p, i) => ({
+        key: `para_${i}`,
+        content: p,
+      }));
+      const paraHeightMap = await measureEngine(paraCandidates);
+      const paraHeights: Record<number, number> = {};
+      paragraphs.forEach((_, i) => {
+        paraHeights[i] = paraHeightMap[`para_${i}`] ?? 0;
+      });
 
-  const { pickAndUpload: pickInlineImage, isUploading: isImageUploading } = useInlineImageUpload({
-    onSuccess: handleImageUploadSuccess,
-    onError: handleImageUploadError,
-  });
+      const initialJobs = simulateGreedyJobs(paragraphs, paraHeights, splitThreshold);
+      const splitResults: Record<number, BSResult[]> = {};
+      let pendingJobs: BSJob[] = initialJobs;
 
-  const handleInsertImage = useCallback(() => {
-    setImagePickerVisible(true);
-  }, []);
+      while (pendingJobs.length > 0) {
+        const candidates: MeasureCandidate[] = [];
+        for (const job of pendingJobs) {
+          for (const c of bsCandidatesForJob(job)) {
+            candidates.push({
+              key: bsCandidateKey(job.paraIdx, job.wordOffset, c.count),
+              content: c.content,
+            });
+          }
+        }
+        if (candidates.length === 0) break;
 
-  const handleSourceArticleSelect = useCallback(
-    async (articleId: string, articleTitle: string) => {
-      if (!id) return;
-      try {
-        await updateArticle.mutateAsync({
-          id,
-          data: { sourceArticleId: articleId },
-        });
-        setSourceArticleId(articleId);
-        setSourceArticleTitle(articleTitle);
-        invalidateArticleDetail(queryClient, id);
-      } catch {
-        showToast({ message: "답장 대상 편지 연결에 실패했습니다.", type: "error" });
+        const heights = await measureEngine(candidates);
+
+        const nextPending: BSJob[] = [];
+        for (const job of pendingJobs) {
+          const bsResult = resolveBSJob(job, heights);
+          if (!splitResults[job.paraIdx]) splitResults[job.paraIdx] = [];
+          splitResults[job.paraIdx].push({
+            wordOffset: job.wordOffset,
+            wordCount: bsResult.wordCount,
+          });
+          if (bsResult.hasRemaining) {
+            nextPending.push({
+              paraIdx: job.paraIdx,
+              allWords: job.allWords,
+              wordOffset: bsResult.nextOffset,
+              targetH: splitThreshold,
+            });
+          }
+        }
+        pendingJobs = nextPending;
       }
+
+      return runGreedy(paragraphs, paraHeights, splitResults, splitThreshold);
     },
-    [id, updateArticle, queryClient, showToast],
+    [measureEngine, splitThreshold],
   );
 
-  const handleSourceArticleUnlink = useCallback(async () => {
-    if (!id) return;
-    try {
-      await updateArticle.mutateAsync({
-        id,
-        data: { sourceArticleId: null },
+  const applyEngineResult = useCallback(
+    (engineOutPages: string[]) => {
+      const joined = engineOutPages.join(`\n${PAGE_DIVIDER}\n`);
+      contentRef.current = joined;
+      setContent(joined);
+      setDebouncedContent(joined);
+      if (editorRef.current && editorReady) {
+        editorRef.current.setMarkdown(joined);
+      }
+      markDirty(titleRef.current, joined);
+      flush().catch((err) => {
+        console.warn("[on-01] Immediate flush failed after structural change:", err);
       });
-      setSourceArticleId(null);
-      setSourceArticleTitle(null);
-      invalidateArticleDetail(queryClient, id);
-    } catch {
-      showToast({ message: "답장 대상 편지 연결 해제에 실패했습니다.", type: "error" });
-    }
-  }, [id, updateArticle, queryClient, showToast]);
+    },
+    [editorReady, markDirty, flush],
+  );
 
-  const handleNext = useCallback(async () => {
-    if (isNavigatingRef.current) return;
-    isNavigatingRef.current = true;
-    setIsNavigating(true);
-
-    editorRef.current?.blur();
-    Keyboard.dismiss();
-
-    if (!titleRef.current.trim()) {
-      isNavigatingRef.current = false;
-      setIsNavigating(false);
-      showToast({ message: "제목을 입력해주세요.", type: "info" });
+  const handleAutoSplit = useCallback(async () => {
+    if (splitting) return;
+    if (!hasOverflowPages) return;
+    const cur = await getEditorContent();
+    const rawPages = cur.split(new RegExp(`\n?${PAGE_DIVIDER}\n?`, "m"));
+    const targets = [...overflowPageIndices]
+      .filter((i) => i >= 0 && i < rawPages.length)
+      .sort((a, b) => b - a);
+    if (targets.length === 0) {
+      showToast({ message: "분량을 초과하는 페이지가 없어요.", type: "info" });
       return;
     }
-
-    // 검토 단계 진입 전: 이미지를 단독 페이지(블록)로 자동 분할한다.
-    // autoSplitImages 는 WebView 트랜잭션 완료 후 Promise 를 resolve 하므로
-    // await 하면 편집기 내용이 확정된 뒤 export 가 시작된다.
-    const splitResult = await editorRef.current?.autoSplitImages();
-    if (splitResult?.hadConsecutiveImages) {
-      showToast({ message: "사진 사이에 빈 페이지를 추가했어요.", type: "info" });
-    }
-
-    // 디바운스 대기 중이던 본문 export 가 있으면 취소하고, 즉시 1회만 export 한다.
-    if (exportDebounceTimerRef.current) {
-      clearTimeout(exportDebounceTimerRef.current);
-      exportDebounceTimerRef.current = null;
-    }
-    exportPendingRef.current = false;
-    const content = await getEditorContent();
-    markDirty(titleRef.current, content);
-    const flushResult = await flush();
-    if (!flushResult.ok) {
-      isNavigatingRef.current = false;
-      setIsNavigating(false);
-      showToast({ message: "저장이 완료되지 않았습니다. 다시 시도해주세요.", type: "error" });
-      return;
-    }
-
-    const currentTitle = titleRef.current;
-    const result = canTransitionForward("DRAFT" as ArticleStatus, {
-      content,
-      title: currentTitle,
-      pages: [],
-      hasRedWarnings: false,
-    });
-    if (!result.allowed) {
-      isNavigatingRef.current = false;
-      setIsNavigating(false);
-      showToast({ message: result.reason, type: "info" });
-      return;
-    }
-
-    // Optimistically reflect the new title/content/status in the cache so the
-    // next screen renders immediately with fresh data instead of flashing the
-    // previous version. We pass `{ updatedAt: Date.now() }` so the receiving
-    // screen's freshness gate (dataUpdatedAt vs mountedAt) accepts this cache
-    // immediately — without it, setQueryData leaves dataUpdatedAt at the last
-    // network fetch time and the next screen blocks on a needless refetch.
-    queryClient.setQueryData(
-      getGetArticleQueryKey(id),
-      (old: unknown) => {
-        if (!old || typeof old !== "object") return old;
-        return { ...old, title: currentTitle, content, status: "DIVIDING", pages: [] };
-      },
-      { updatedAt: Date.now() },
-    );
-
-    // Navigate first for a natural, snappy stack-push animation. The body has
-    // already been persisted by flush() above, so on-01b can refetch and render
-    // the saved content. The status transition fires in the background — if it
-    // fails (non-400) we log and surface a toast, but the user keeps moving.
-    router.push({ pathname: "/on-01b", params: { id } });
-    isNavigatingRef.current = false;
-    setIsNavigating(false);
-
-    if (article?.status !== "DIVIDING") {
-      transitionStatus
-        .mutateAsync({
-          id: id!,
-          data: { targetStatus: TransitionArticleBodyTargetStatus.DIVIDING },
-        })
-        .catch((e: unknown) => {
-          const status = (e as { status?: number } | null)?.status;
-          if (status === 400) return;
-          console.warn("[on-01a] background status transition failed:", e);
-        })
-        .finally(() => {
-          invalidateArticleLists(queryClient);
+    setSplitting(true);
+    try {
+      const next = [...rawPages];
+      let appliedAny = false;
+      for (const idx of targets) {
+        const paragraphs = splitPageContentForDivision(next[idx]);
+        if (paragraphs.length < 2) continue;
+        const out = await runDivisionEngine(paragraphs);
+        if (out && out.length > 0) {
+          next.splice(idx, 1, ...out);
+          appliedAny = true;
+        }
+      }
+      if (!appliedAny) {
+        showToast({
+          message: "초과된 페이지를 더 잘게 나눌 수 없어요. 본문을 직접 편집해 주세요.",
+          type: "info",
         });
-    } else {
-      invalidateArticleLists(queryClient);
-    }
-  }, [flush, id, router, transitionStatus, queryClient, getEditorContent, markDirty, article, showToast]);
-
-  const handleDismissKeyboard = useCallback(() => {
-    editorRef.current?.blur();
-    Keyboard.dismiss();
-  }, []);
-
-  const handleInsertDivider = useCallback(() => {
-    editorRef.current?.insertDivider();
-  }, []);
-
-  const handleShiftEnter = useCallback(() => {
-    editorRef.current?.insertHardBreak();
-  }, []);
-
-  const handleBack = useCallback(async () => {
-    if (isNavigatingRef.current) return;
-    isNavigatingRef.current = true;
-    setIsNavigating(true);
-
-    editorRef.current?.blur();
-    Keyboard.dismiss();
-
-    if (exportDebounceTimerRef.current) {
-      clearTimeout(exportDebounceTimerRef.current);
-      exportDebounceTimerRef.current = null;
-    }
-    exportPendingRef.current = false;
-    const content = await getEditorContent();
-    const currentTitle = titleRef.current.trim();
-    const currentContent = content.trim();
-
-    if (source === "quote") {
-      if (!currentTitle) {
-        isNavigatingRef.current = false;
-        setIsNavigating(false);
-        showToast({ message: "제목을 입력해주세요.", type: "info" });
         return;
       }
-    } else if (!currentTitle && !currentContent) {
-      if (id) {
-        try {
-          await deleteArticle.mutateAsync({ id });
-        } catch {
-          showToast({ message: "빈 메모 삭제에 실패했습니다.", type: "error" });
-        }
-        invalidateArticleLists(queryClient);
+      applyEngineResult(next);
+    } finally {
+      setSplitting(false);
+    }
+  }, [splitting, hasOverflowPages, overflowPageIndices, getEditorContent, runDivisionEngine, applyEngineResult, showToast]);
+
+  const handleSplitPage = useCallback(
+    async (pageIndex: number) => {
+      if (splitting) return;
+      const cur = await getEditorContent();
+      const rawPages = cur.split(new RegExp(`\n?${PAGE_DIVIDER}\n?`, "m"));
+      if (pageIndex < 0 || pageIndex >= rawPages.length) return;
+      const paragraphs = splitPageContentForDivision(rawPages[pageIndex]);
+      if (paragraphs.length < 2) {
+        showToast({ message: "이 페이지에는 나눌 수 있는 단락이 부족해요.", type: "info" });
+        return;
       }
-      isNavigatingRef.current = false;
-      setIsNavigating(false);
-      router.back();
-      return;
-    }
+      setSplitting(true);
+      try {
+        const out = await runDivisionEngine(paragraphs);
+        if (out) {
+          const before = rawPages.slice(0, pageIndex);
+          const after = rawPages.slice(pageIndex + 1);
+          const newPages = [...before, ...out, ...after];
+          applyEngineResult(newPages);
+        }
+      } finally {
+        setSplitting(false);
+      }
+    },
+    [splitting, getEditorContent, runDivisionEngine, applyEngineResult, showToast],
+  );
 
-    markDirty(titleRef.current, content);
-    const flushResult = await flush();
-    if (!flushResult.ok) {
-      isNavigatingRef.current = false;
-      setIsNavigating(false);
-      showToast({ message: "저장에 실패했습니다. 내용을 확인해주세요.", type: "error" });
-      return;
-    }
-    invalidateArticleLists(queryClient);
-    isNavigatingRef.current = false;
-    setIsNavigating(false);
-    if (source === "quote") {
-      router.replace("/(tabs)/archive");
-    } else {
-      router.back();
-    }
-  }, [flush, router, queryClient, getEditorContent, markDirty, id, deleteArticle, source, showToast]);
+  const handleMergeWithPrevious = useCallback(
+    async (pageIndex: number) => {
+      if (pageIndex <= 0) return;
+      const cur = await getEditorContent();
+      const parts = cur.split(new RegExp(`\n?${PAGE_DIVIDER}\n?`, "m"));
+      const breakIndex = pageIndex - 1;
+      if (breakIndex < 0 || breakIndex >= parts.length - 1) return;
+      parts[breakIndex] = parts[breakIndex] + "\n\n" + parts[breakIndex + 1];
+      parts.splice(breakIndex + 1, 1);
+      const joined = parts.join(`\n${PAGE_DIVIDER}\n`);
+      contentRef.current = joined;
+      setContent(joined);
+      setDebouncedContent(joined);
+      if (editorRef.current && editorReady) {
+        editorRef.current.setMarkdown(joined);
+      }
+      markDirty(titleRef.current, joined);
+      flush().catch((err) => {
+        console.warn("[on-01] Immediate flush failed after merge:", err);
+      });
+    },
+    [getEditorContent, editorReady, markDirty, flush],
+  );
 
-  const handleStateBarPress = useCallback((target: WritingStage) => {
-    if (target === "DRAFT") return;
-    if (target === "DIVIDING") {
-      handleNext();
-      return;
+  // ── 맞춤법 검사 (dividing) ─────────────────────────────────────────────────
+  const handleRunSpellCheck = useCallback(async () => {
+    setSpellTabVisible(true);
+    setSpellState({ status: "loading" });
+    spellAppliedCountRef.current = {};
+    editorRef.current?.blur();
+    Keyboard.dismiss();
+    try {
+      const text = await getEditorContent();
+      const result = await apiSpellCheck({ text });
+      if (result.error) {
+        setSpellState({ status: "error", message: result.error });
+        return;
+      }
+      const changes = result.changes ?? [];
+      if (changes.length === 0) {
+        setSpellState({ status: "empty" });
+      } else {
+        const counts: Record<string, number> = {};
+        const occurrenceIndices = changes.map((c) => {
+          const idx = counts[c.original] ?? 0;
+          counts[c.original] = idx + 1;
+          return idx;
+        });
+        setSpellState({ status: "reviewing", items: changes, index: 0, occurrenceIndices });
+        editorRef.current?.setSpellHighlight(changes[0].original, changes[0].context ?? "", occurrenceIndices[0]);
+      }
+    } catch (e: any) {
+      setSpellState({ status: "error", message: e?.message ?? "오류가 발생했습니다." });
     }
-    showToast({ message: "분할 단계를 먼저 완료해야 마감 단계로 이동할 수 있어요.", type: "info" });
-  }, [handleNext, showToast]);
+  }, [getEditorContent]);
+
+  const handleSpellSkip = useCallback(() => {
+    setSpellState((prev) => {
+      if (prev.status !== "reviewing") return prev;
+      const next = prev.index + 1;
+      if (next >= prev.items.length) {
+        editorRef.current?.clearSpellHighlight();
+        return { status: "done" };
+      }
+      const nextItem = prev.items[next];
+      const baseIdx = prev.occurrenceIndices[next];
+      const applied = spellAppliedCountRef.current[nextItem.original] ?? 0;
+      const effectiveIdx = Math.max(0, baseIdx - applied);
+      editorRef.current?.setSpellHighlight(nextItem.original, nextItem.context ?? "", effectiveIdx);
+      return { status: "reviewing", items: prev.items, index: next, occurrenceIndices: prev.occurrenceIndices };
+    });
+  }, []);
+
+  const handleSpellApply = useCallback(() => {
+    setSpellState((prev) => {
+      if (prev.status !== "reviewing") return prev;
+      const item = prev.items[prev.index];
+      const baseIdx = prev.occurrenceIndices[prev.index];
+      const applied = spellAppliedCountRef.current[item.original] ?? 0;
+      const effectiveIdx = Math.max(0, baseIdx - applied);
+      editorRef.current?.applySpellFix(item.original, item.replacement, item.context ?? "", effectiveIdx);
+      spellAppliedCountRef.current = {
+        ...spellAppliedCountRef.current,
+        [item.original]: applied + 1,
+      };
+      const next = prev.index + 1;
+      if (next >= prev.items.length) {
+        return { status: "done" };
+      }
+      const nextItem = prev.items[next];
+      const nextBase = prev.occurrenceIndices[next];
+      const nextApplied = spellAppliedCountRef.current[nextItem.original] ?? 0;
+      const nextEffective = Math.max(0, nextBase - nextApplied);
+      editorRef.current?.setSpellHighlight(nextItem.original, nextItem.context ?? "", nextEffective);
+      return { status: "reviewing", items: prev.items, index: next, occurrenceIndices: prev.occurrenceIndices };
+    });
+  }, []);
+
+  const handleCloseSpellTab = useCallback(() => {
+    editorRef.current?.clearSpellHighlight();
+    setSpellTabVisible(false);
+    setSpellState({ status: "idle" });
+    spellAppliedCountRef.current = {};
+  }, []);
+
+  // ── WritingStateBar ────────────────────────────────────────────────────────
+  const handleStateBarPress = useCallback(
+    (target: WritingStage) => {
+      if (modeRef.current === "draft") {
+        if (target === "DRAFT") return;
+        if (target === "DIVIDING") {
+          enterDividingMode();
+          return;
+        }
+        showToast({ message: "분할 단계를 먼저 완료해야 마감 단계로 이동할 수 있어요.", type: "info" });
+        return;
+      }
+      // dividing
+      if (target === "DIVIDING") return;
+      if (target === "DRAFT") {
+        exitToDraftMode();
+        return;
+      }
+      if (target === "CLOSING") {
+        handleNextToClosing();
+      }
+    },
+    [enterDividingMode, exitToDraftMode, handleNextToClosing, showToast],
+  );
 
   useEffect(() => {
     return () => {
@@ -524,18 +1306,15 @@ export default function DraftScreen() {
   useEffect(() => {
     if (Platform.OS !== "android") return;
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-      // 아직 article 데이터가 초기화되지 않았다면 refs가 비어있어
-      // handleBack의 빈 메모 삭제 분기를 잘못 실행할 수 있다.
-      // 이 경우 저장 로직을 건너뛰고 단순히 뒤로 이동한다.
       if (!initializedRef.current) {
         router.back();
         return true;
       }
-      handleBack();
+      handleHeaderBack();
       return true;
     });
     return () => sub.remove();
-  }, [handleBack, router]);
+  }, [handleHeaderBack, router]);
 
   if (!id || articleLoading) {
     return (
@@ -550,129 +1329,311 @@ export default function DraftScreen() {
     );
   }
 
+  const isDividing = mode === "dividing";
+
   return (
     <>
       <Stack.Screen options={{ gestureEnabled: false }} />
       <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <ScalePressable onPress={handleBack} hitSlop={12}>
-          <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-        </ScalePressable>
-        <WritingStateBar
-          current="DRAFT"
-          onPress={handleStateBarPress}
-          disabled={isNavigating}
-        />
-        {keyboardVisible ? (
-          <ScalePressable onPress={handleDismissKeyboard} hitSlop={12}>
-            <MaterialCommunityIcons name="keyboard-off-outline" size={22} color={Colors.zinc600} />
+        <View style={styles.header}>
+          <ScalePressable onPress={handleHeaderBack} hitSlop={12}>
+            <Feather name="arrow-left" size={20} color={Colors.zinc600} />
           </ScalePressable>
-        ) : isNavigating ? (
-          <ActivityIndicator size="small" color={Colors.zinc400} />
-        ) : (
-          <View style={styles.headerRight} />
-        )}
-      </View>
+          <WritingStateBar
+            current={isDividing ? "DIVIDING" : "DRAFT"}
+            onPress={handleStateBarPress}
+            disabled={isNavigating}
+          />
+          {keyboardVisible ? (
+            <ScalePressable onPress={handleDismissKeyboard} hitSlop={12}>
+              <MaterialCommunityIcons name="keyboard-off-outline" size={22} color={Colors.zinc600} />
+            </ScalePressable>
+          ) : isNavigating ? (
+            <ActivityIndicator size="small" color={Colors.zinc400} />
+          ) : (
+            <View style={styles.headerRight} />
+          )}
+        </View>
 
-      <KeyboardAvoidingView
-        style={styles.editorOuter}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >
-        <View style={[styles.editorInner, { width: editorLayout.safeAreaWidth }]}>
-        {/*
-          본문 텍스트 컬럼은 4개 화면(작성/분할/마감/읽기)이 동일한 정수 픽셀 폭으로
-          줄넘김을 결정해야 한다. 컨테이너에 paddingHorizontal을 주는 대신
-          editorLayout.textColumnWidth (= Math.round(safeAreaWidth − 2×paddingX))을
-          그대로 자식 View의 width로 사용해 Yoga 픽셀 스냅이 부모 위치에 따라
-          ±1px 흔들리는 일을 차단한다.
-        */}
-        <View style={[styles.markdownEditorContainer, { width: editorLayout.textColumnWidth, alignSelf: "center" }]}>
-          <WebViewMarkdownEditor
-            ref={editorRef}
-            initialMarkdown={contentRef.current}
-            titleValue={title}
-            placeholder="떠오르는 생각을 자유롭게 적어보세요..."
-            editable
-            onReady={handleEditorReady}
-            onChange={handleEditorChange}
-            onExportMarkdown={handleExportMarkdown}
-            onTitleChange={handleTitleChange}
-            onKeyboardVisibilityChange={setKeyboardVisible}
-            onSelectionUpdate={handleSelectionUpdate}
-            bodyFontSize={editorLayout.bodyFontSize}
-            bodyLetterSpacing={editorLayout.bodyLetterSpacing}
-            titleFontSize={editorLayout.titleFontSize}
-            belowTitleSlot={
+        {isDividing && (
+          <>
+            <View style={styles.toolbar}>
+              <Text style={styles.pageCountLabel}>{pages.length}페이지</Text>
+              <View style={styles.toolbarSpacer} />
               <ScalePressable
-                style={styles.sourceArticleRow}
-                onPress={() => setPickerVisible(true)}
-                hitSlop={4}
-              contentStyle={styles.sourceArticleRowContent}
+                style={[styles.autoSplitButton, spellTabVisible && styles.autoSplitButtonDisabled]}
+                onPress={handleRunSpellCheck}
+                disabled={spellTabVisible || spellState.status === "loading"}
+                contentStyle={styles.autoSplitButtonContent}
               >
-                <Text style={styles.sourceArticleText} numberOfLines={1}>
-                  {sourceArticleId
-                    ? `⤷ ${sourceArticleTitle ?? "로딩 중..."} 의 답장`
-                    : "⤷ 이 편지를 답장으로 설정"}
+                <Feather name="check-circle" size={14} color={Colors.zinc600} />
+                <Text style={styles.autoSplitText}>
+                  {spellState.status === "loading" ? "검사 중…" : "맞춤법 검사"}
                 </Text>
-                <Text style={styles.sourceArticleGear}>⚙️</Text>
               </ScalePressable>
-            }
-            sourceArticleSlotText={
-              sourceArticleId
-                ? `⤷ ${sourceArticleTitle ?? "로딩 중..."} 의 답장 ⚙️`
-                : "⤷ 이 편지를 답장으로 설정 ⚙️"
-            }
-            onSourceArticleSlotTap={() => setPickerVisible(true)}
-          />
-        </View>
-        <View style={styles.editorFooter}>
-          <Text style={styles.charCountText}>{charCount}자</Text>
-        </View>
-        </View>
+              <ScalePressable
+                style={[styles.autoSplitButton, (splitting || !hasOverflowPages) && styles.autoSplitButtonDisabled]}
+                onPress={handleAutoSplit}
+                disabled={splitting || !hasOverflowPages}
+                accessibilityState={{ disabled: splitting || !hasOverflowPages }}
+                accessibilityHint={
+                  hasOverflowPages
+                    ? "분량을 초과한 페이지만 다시 나눕니다. 다른 페이지 분할은 그대로 유지됩니다."
+                    : "초과된 페이지가 없어 자동 분할을 사용할 수 없습니다."
+                }
+                contentStyle={styles.autoSplitButtonContent}
+              >
+                <Feather name="scissors" size={14} color={Colors.zinc600} />
+                <Text style={styles.autoSplitText}>{splitting ? "분할 중…" : "자동분할"}</Text>
+              </ScalePressable>
+            </View>
 
-        {keyboardVisible && Platform.OS !== "web" && selectionState.activeBlock !== "horizontalRule" && (
-          <KeyboardToolbar
-            selectionState={selectionState}
-            onFormatPress={handleToolbarFormat}
-            onBoldPress={handleToolbarBold}
-            onItalicPress={handleToolbarItalic}
-            onUnderlinePress={handleToolbarUnderline}
-            onInsertDivider={handleInsertDivider}
-            onShiftEnter={handleShiftEnter}
-            onInsertImage={isImageUploading ? undefined : handleInsertImage}
+            {warnings.length > 0 ? (
+              <View style={styles.warningBanner}>
+                <Feather name="alert-triangle" size={14} color="#ef4444" />
+                <Text style={styles.warningBannerText} numberOfLines={2}>
+                  {warnings.length === 1
+                    ? warnings[0].reason
+                    : `${warnings.length}개 페이지가 한 페이지 분량을 초과합니다. 자동분할을 사용하거나 본문을 직접 편집해 주세요.`}
+                </Text>
+              </View>
+            ) : null}
+
+            <View style={styles.pageStripWrapper}>
+              <ScrollView
+                ref={pageStripRef}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.pageStrip}
+                contentContainerStyle={styles.pageStripContent}
+              >
+                {pages.map((p) => {
+                  const idx = p.pageIndex;
+                  const hasWarning = warnings.some((w) => w.pageIndex === idx);
+                  return (
+                    <View
+                      key={`page-chip-${idx}`}
+                      style={[styles.pageChip, hasWarning && styles.pageChipWarning]}
+                      onLayout={(e) => {
+                        chipOffsetsRef.current[idx] = e.nativeEvent.layout.x;
+                        setChipLayoutCount((c) => c + 1);
+                      }}
+                    >
+                      {idx > 0 ? (
+                        <ScalePressable
+                          onPress={() => handleMergeWithPrevious(idx)}
+                          hitSlop={6}
+                          style={styles.chipMergeButton}
+                          accessibilityLabel={`페이지 ${idx + 1} 이전 페이지와 합치기`}
+                          contentStyle={styles.chipMergeButtonContent}
+                        >
+                          <Feather name="x" size={12} color={Colors.zinc600} />
+                        </ScalePressable>
+                      ) : null}
+                      <Text style={styles.chipPageNumber}>{idx + 1}쪽</Text>
+                      <Text style={styles.chipCharCount}>{p.charCount}자</Text>
+                      <ScalePressable
+                        onPress={() => handleSplitPage(idx)}
+                        disabled={splitting}
+                        hitSlop={6}
+                        style={[styles.chipSplitButton, splitting && styles.chipSplitButtonDisabled]}
+                        accessibilityLabel={`페이지 ${idx + 1} 나누기`}
+                        contentStyle={styles.chipSplitButtonContent}
+                      >
+                        <Feather name="scissors" size={11} color={Colors.zinc600} />
+                        <Text style={styles.chipSplitText}>나누기</Text>
+                      </ScalePressable>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
+            <WebViewMeasureLayer request={warningRequest} onMeasured={handleWarningMeasured} />
+            <WebViewMeasureLayer request={engineRequest} onMeasured={handleEngineMeasured} />
+          </>
+        )}
+
+        <KeyboardAvoidingView
+          style={styles.editorOuter}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          <View style={[styles.editorInner, { width: safeAreaWidth }]}>
+            {/*
+              본문 텍스트 컬럼은 4개 화면(작성/분할/마감/읽기)이 동일한 정수 픽셀 폭으로
+              줄넘김을 결정해야 한다. textColumnWidth (= Math.round(safeAreaWidth − 2×paddingX))를
+              그대로 자식 View의 width로 사용해 Yoga 픽셀 스냅이 부모 위치에 따라
+              ±1px 흔들리는 일을 차단한다.
+            */}
+            <View style={[styles.markdownEditorContainer, { width: textColumnWidth, alignSelf: "center" }]}>
+              <WebViewMarkdownEditor
+                ref={editorRef}
+                initialMarkdown={contentRef.current}
+                titleValue={title}
+                placeholder="떠오르는 생각을 자유롭게 적어보세요..."
+                editable
+                onReady={handleEditorReady}
+                onChange={handleEditorChange}
+                onExportMarkdown={handleExportMarkdown}
+                onTitleChange={handleTitleChange}
+                onKeyboardVisibilityChange={setKeyboardVisible}
+                onSelectionUpdate={handleSelectionUpdate}
+                bodyFontSize={bodyFontSize}
+                bodyLetterSpacing={bodyLetterSpacing}
+                titleFontSize={titleFontSize}
+                sourceArticleSlotText={
+                  isDividing
+                    ? ""
+                    : sourceArticleId
+                      ? `⤷ ${sourceArticleTitle ?? "로딩 중..."} 의 답장 ⚙️`
+                      : "⤷ 이 편지를 답장으로 설정 ⚙️"
+                }
+                onSourceArticleSlotTap={isDividing ? undefined : () => setPickerVisible(true)}
+              />
+            </View>
+            <View style={styles.editorFooter}>
+              <Text style={styles.charCountText}>{charCount}자</Text>
+            </View>
+          </View>
+
+          {!isDividing && keyboardVisible && Platform.OS !== "web" && selectionState.activeBlock !== "horizontalRule" && (
+            <KeyboardToolbar
+              selectionState={selectionState}
+              onFormatPress={handleToolbarFormat}
+              onBoldPress={handleToolbarBold}
+              onItalicPress={handleToolbarItalic}
+              onUnderlinePress={handleToolbarUnderline}
+              onInsertDivider={handleInsertDivider}
+              onShiftEnter={handleShiftEnter}
+              onInsertImage={isImageUploading ? undefined : handleInsertImage}
+            />
+          )}
+        </KeyboardAvoidingView>
+
+        {isDividing && spellTabVisible && (
+          <View style={styles.spellPanel}>
+            <View style={styles.spellPanelHeader}>
+              <Text style={styles.spellPanelTitle}>
+                {spellState.status === "reviewing"
+                  ? `맞춤법 검사 (${spellState.index + 1}/${spellState.items.length})`
+                  : "맞춤법 검사"}
+              </Text>
+              <ScalePressable onPress={handleCloseSpellTab} hitSlop={12}>
+                <Feather name="x" size={18} color={Colors.zinc500} />
+              </ScalePressable>
+            </View>
+
+            {spellState.status === "loading" && (
+              <View style={styles.spellCenter}>
+                <ActivityIndicator size="small" color={Colors.zinc400} />
+                <Text style={styles.spellHintText}>검사 중…</Text>
+              </View>
+            )}
+
+            {spellState.status === "empty" && (
+              <View style={styles.spellCenter}>
+                <Feather name="check-circle" size={28} color="#22c55e" />
+                <Text style={styles.spellHintText}>맞춤법 오류가 없어요.</Text>
+              </View>
+            )}
+
+            {spellState.status === "done" && (
+              <View style={styles.spellCenter}>
+                <Feather name="check-circle" size={28} color="#22c55e" />
+                <Text style={styles.spellHintText}>검사 완료</Text>
+              </View>
+            )}
+
+            {spellState.status === "error" && (
+              <View style={styles.spellCenter}>
+                <Feather name="alert-circle" size={28} color="#ef4444" />
+                <Text style={[styles.spellHintText, { color: "#b91c1c" }]}>{spellState.message}</Text>
+                <ScalePressable onPress={handleRunSpellCheck} style={styles.spellRetryBtn}>
+                  <Text style={styles.spellRetryBtnText}>다시 시도</Text>
+                </ScalePressable>
+              </View>
+            )}
+
+            {spellState.status === "reviewing" && (() => {
+              const item = spellState.items[spellState.index];
+              const ctx = item.context ?? "";
+              const origIdx = ctx.indexOf(item.original);
+              const ctxBefore = origIdx >= 0 ? ctx.slice(0, origIdx) : ctx;
+              const ctxAfter = origIdx >= 0 ? ctx.slice(origIdx + item.original.length) : "";
+              const hasCtx = origIdx >= 0;
+              return (
+                <View style={styles.spellCard}>
+                  {ctx.length > 0 && (
+                    <View style={styles.spellContextBox}>
+                      <Text style={styles.spellContextText} numberOfLines={2}>
+                        {hasCtx ? (
+                          <>
+                            <Text>{ctxBefore}</Text>
+                            <Text style={styles.spellContextHighlight}>{item.original}</Text>
+                            <Text>{ctxAfter}</Text>
+                          </>
+                        ) : ctx}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={styles.spellTypeBadge}>
+                    <Text style={styles.spellTypeBadgeText}>{item.type}</Text>
+                  </View>
+                  <View style={styles.spellTextRow}>
+                    <View style={[styles.spellTextBubble, styles.spellTextBubbleOriginal]}>
+                      <Text style={styles.spellOriginalText}>{item.original}</Text>
+                    </View>
+                    <Feather name="arrow-right" size={14} color={Colors.zinc400} />
+                    <View style={[styles.spellTextBubble, styles.spellTextBubbleReplacement]}>
+                      <Text style={styles.spellReplacementText}>{item.replacement}</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.spellReasonText} numberOfLines={2}>{item.reason}</Text>
+                  <View style={styles.spellActions}>
+                    <ScalePressable style={styles.spellSkipButton} onPress={handleSpellSkip}>
+                      <Text style={styles.spellSkipText}>건너뛰기</Text>
+                    </ScalePressable>
+                    <ScalePressable style={styles.spellApplyButton} onPress={handleSpellApply}>
+                      <Text style={styles.spellApplyText}>적용</Text>
+                    </ScalePressable>
+                  </View>
+                </View>
+              );
+            })()}
+          </View>
+        )}
+
+        {!isDividing && userId && (
+          <SourceArticlePickerSheet
+            visible={pickerVisible}
+            onClose={() => setPickerVisible(false)}
+            userId={userId}
+            currentSourceArticleId={sourceArticleId}
+            currentSourceArticleTitle={sourceArticleTitle}
+            onSelect={handleSourceArticleSelect}
+            onUnlink={handleSourceArticleUnlink}
           />
         )}
-      </KeyboardAvoidingView>
 
-      {userId && (
-        <SourceArticlePickerSheet
-          visible={pickerVisible}
-          onClose={() => setPickerVisible(false)}
-          userId={userId}
-          currentSourceArticleId={sourceArticleId}
-          currentSourceArticleTitle={sourceArticleTitle}
-          onSelect={handleSourceArticleSelect}
-          onUnlink={handleSourceArticleUnlink}
+        <BlockTypeSheet
+          visible={blockTypeSheetVisible}
+          activeBlock={selectionState.activeBlock}
+          onClose={() => setBlockTypeSheetVisible(false)}
+          onSelect={handleBlockTypeSelect}
         />
-      )}
 
-      <BlockTypeSheet
-        visible={blockTypeSheetVisible}
-        activeBlock={selectionState.activeBlock}
-        onClose={() => setBlockTypeSheetVisible(false)}
-        onSelect={handleBlockTypeSelect}
-      />
-
-      <ActionSheetModal
-        visible={imagePickerVisible}
-        title="사진 추가"
-        onClose={() => setImagePickerVisible(false)}
-        actions={[
-          { label: "카메라로 촬영", onPress: () => { setImagePickerVisible(false); pickInlineImage("camera"); } },
-          { label: "갤러리에서 선택", onPress: () => { setImagePickerVisible(false); pickInlineImage("gallery"); } },
-          { label: "취소", style: "cancel", onPress: () => setImagePickerVisible(false) },
-        ]}
-      />
+        {!isDividing && (
+          <ActionSheetModal
+            visible={imagePickerVisible}
+            title="사진 추가"
+            onClose={() => setImagePickerVisible(false)}
+            actions={[
+              { label: "카메라로 촬영", onPress: () => { setImagePickerVisible(false); pickInlineImage("camera"); } },
+              { label: "갤러리에서 선택", onPress: () => { setImagePickerVisible(false); pickInlineImage("gallery"); } },
+              { label: "취소", style: "cancel", onPress: () => setImagePickerVisible(false) },
+            ]}
+          />
+        )}
       </View>
     </>
   );
@@ -699,13 +1660,51 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
   },
+  pageCountLabel: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc500,
+  },
+  toolbar: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: Spacing.screenPx,
+    paddingVertical: 8,
+    gap: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.zinc100,
+  },
+  toolbarSpacer: {
+    flex: 1,
+  },
+  autoSplitButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
+  },
+  autoSplitButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  autoSplitButtonDisabled: {
+    opacity: 0.5,
+  },
+  autoSplitText: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc600,
+  },
   sourceArticleRow: {
     paddingBottom: 8,
   },
   sourceArticleRowContent: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,},
+    gap: 4,
+  },
   sourceArticleText: {
     flex: 1,
     fontSize: 13,
@@ -738,5 +1737,246 @@ const styles = StyleSheet.create({
     ...Typography.caption,
     fontSize: 12,
     color: Colors.zinc400,
+  },
+  warningBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: Spacing.screenPx,
+    paddingVertical: 8,
+    backgroundColor: "#fef2f2",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#fecaca",
+  },
+  warningBannerText: {
+    ...Typography.caption,
+    flex: 1,
+    fontSize: 12,
+    color: "#b91c1c",
+  },
+  pageStripWrapper: {
+    height: 44,
+    overflow: "hidden",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.zinc100,
+  },
+  pageStrip: {
+    flex: 1,
+  },
+  pageStripContent: {
+    paddingHorizontal: Spacing.screenPx,
+    paddingVertical: 6,
+    gap: 8,
+    alignItems: "flex-start",
+  },
+  pageChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
+    backgroundColor: Colors.zinc50,
+  },
+  pageChipWarning: {
+    borderColor: "#ef4444",
+    backgroundColor: "#fef2f2",
+  },
+  chipMergeButton: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: Colors.zinc200,
+  },
+  chipMergeButtonContent: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  chipPageNumber: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc700,
+    fontWeight: "600",
+  },
+  chipCharCount: {
+    ...Typography.caption,
+    fontSize: 11,
+    color: Colors.zinc500,
+  },
+  chipSplitButton: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 10,
+    backgroundColor: Colors.zinc200,
+  },
+  chipSplitButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
+  chipSplitButtonDisabled: {
+    opacity: 0.5,
+  },
+  chipSplitText: {
+    ...Typography.caption,
+    fontSize: 11,
+    color: Colors.zinc700,
+  },
+  spellPanel: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: Colors.white,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.zinc200,
+    paddingBottom: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  spellPanelHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: Spacing.screenPx,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.zinc100,
+  },
+  spellPanelTitle: {
+    ...Typography.caption,
+    fontSize: 13,
+    fontWeight: "600",
+    color: Colors.zinc700,
+  },
+  spellCenter: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 24,
+    gap: 8,
+  },
+  spellHintText: {
+    ...Typography.caption,
+    fontSize: 13,
+    color: Colors.zinc500,
+    textAlign: "center",
+  },
+  spellRetryBtn: {
+    marginTop: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: Colors.zinc100,
+  },
+  spellRetryBtnText: {
+    ...Typography.caption,
+    fontSize: 13,
+    color: Colors.zinc700,
+    fontWeight: "600",
+  },
+  spellCard: {
+    paddingHorizontal: Spacing.screenPx,
+    paddingTop: 14,
+    gap: 10,
+  },
+  spellContextBox: {
+    backgroundColor: Colors.zinc50 ?? "#fafafa",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderLeftWidth: 2,
+    borderLeftColor: Colors.zinc200,
+  },
+  spellContextText: {
+    ...Typography.caption,
+    fontSize: 13,
+    color: Colors.zinc500,
+    lineHeight: 20,
+  },
+  spellContextHighlight: {
+    color: "#b91c1c",
+    fontWeight: "600",
+    textDecorationLine: "underline",
+  },
+  spellTypeBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: Colors.zinc100,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  spellTypeBadgeText: {
+    ...Typography.caption,
+    fontSize: 11,
+    color: Colors.zinc600,
+    fontWeight: "600",
+  },
+  spellTextRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  spellTextBubble: {
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  spellTextBubbleOriginal: {
+    backgroundColor: "#fef2f2",
+  },
+  spellTextBubbleReplacement: {
+    backgroundColor: "#eff6ff",
+  },
+  spellOriginalText: {
+    ...Typography.body,
+    fontSize: 14,
+    color: "#b91c1c",
+    fontWeight: "600",
+  },
+  spellReplacementText: {
+    ...Typography.body,
+    fontSize: 14,
+    color: "#1d4ed8",
+    fontWeight: "600",
+  },
+  spellReasonText: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc500,
+  },
+  spellActions: {
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "flex-end",
+    paddingTop: 2,
+  },
+  spellSkipButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
+  },
+  spellSkipText: {
+    ...Typography.caption,
+    fontSize: 13,
+    color: Colors.zinc600,
+  },
+  spellApplyButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#3b82f6",
+  },
+  spellApplyText: {
+    ...Typography.caption,
+    fontSize: 13,
+    color: Colors.white,
+    fontWeight: "600",
   },
 });
