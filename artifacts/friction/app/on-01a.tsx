@@ -1278,7 +1278,7 @@ export default function WritingScreen() {
           enterDividingMode();
           return;
         }
-        showToast({ message: "분할 단계를 먼저 완료해야 마감 단계로 이동할 수 있어요.", type: "info" });
+        showToast({ message: "검토 단계를 먼저 완료해야 마감 단계로 이동할 수 있어요.", type: "info" });
         return;
       }
       // dividing

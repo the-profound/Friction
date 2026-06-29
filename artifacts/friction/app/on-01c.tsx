@@ -333,7 +333,7 @@ export default function ClosingScreen() {
       handleStepBack();
       return;
     }
-    showToast({ message: "분할 단계를 거쳐 작성 단계로 이동할 수 있어요.", type: "info" });
+    showToast({ message: "검토 단계를 거쳐 작성 단계로 이동할 수 있어요.", type: "info" });
   }, [showToast, handleStepBack]);
 
   useEffect(() => {

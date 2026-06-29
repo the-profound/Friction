@@ -129,7 +129,7 @@ export function isLetterImmutable(status: ArticleStatus): boolean {
 export function getStatusLabel(status: ArticleStatus): string {
   const labels: Record<ArticleStatus, string> = {
     DRAFT: "작성 중",
-    DIVIDING: "분할 중",
+    DIVIDING: "검토 중",
     CLOSING: "마감 중",
     LETTER: "완성",
   };
@@ -138,7 +138,7 @@ export function getStatusLabel(status: ArticleStatus): string {
 
 export function getNextActionLabel(status: ArticleStatus): string | null {
   const labels: Record<ArticleStatus, string | null> = {
-    DRAFT: "분할하기",
+    DRAFT: "검토하기",
     DIVIDING: "마감하기",
     CLOSING: "완성하기",
     LETTER: null,
@@ -150,7 +150,7 @@ export function getBackActionLabel(status: ArticleStatus): string | null {
   const labels: Record<ArticleStatus, string | null> = {
     DRAFT: null,
     DIVIDING: "작성으로 돌아가기",
-    CLOSING: "분할로 돌아가기",
+    CLOSING: "검토로 돌아가기",
     LETTER: null,
   };
   return labels[status];

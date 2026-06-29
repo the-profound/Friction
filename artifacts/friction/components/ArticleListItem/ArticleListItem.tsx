@@ -70,7 +70,7 @@ function ArticleListItem({
             {statusBadge && (
               <View style={[styles.badge, { backgroundColor: STATUS_BADGE_COLORS[statusBadge].bg }]}>
                 <Text style={[styles.badgeText, { color: STATUS_BADGE_COLORS[statusBadge].text }]}>
-                  {statusBadge === "DRAFT" ? "작성 중" : statusBadge === "DIVIDING" ? "분할 중" : statusBadge === "CLOSING" ? "마감 중" : "완성"}
+                  {statusBadge === "DRAFT" ? "작성 중" : statusBadge === "DIVIDING" ? "검토 중" : statusBadge === "CLOSING" ? "마감 중" : "완성"}
                 </Text>
               </View>
             )}

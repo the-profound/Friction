@@ -43,7 +43,7 @@ type FilterMode = "all" | "DRAFT" | "DIVIDING" | "CLOSING";
 const FILTER_OPTIONS: { key: FilterMode; label: string }[] = [
   { key: "all", label: "전체" },
   { key: "DRAFT", label: "작성 중" },
-  { key: "DIVIDING", label: "분할 중" },
+  { key: "DIVIDING", label: "검토 중" },
   { key: "CLOSING", label: "마감 중" },
 ];
 
@@ -719,7 +719,7 @@ export default function OnScreen() {
             {filter === "DRAFT"
               ? "작성 중인 메모가 없어요"
               : filter === "DIVIDING"
-                ? "분할 중인 메모가 없어요"
+                ? "검토 중인 메모가 없어요"
                 : "마감 중인 메모가 없어요"}
           </Text>
           <ScalePressable

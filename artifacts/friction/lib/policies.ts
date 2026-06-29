@@ -34,7 +34,7 @@ export const ArticlePolicy = {
   statusLabel(status: ArticleStatus): string {
     const labels: Record<ArticleStatus, string> = {
       DRAFT: "작성 중",
-      DIVIDING: "분할 중",
+      DIVIDING: "검토 중",
       CLOSING: "마감 중",
       LETTER: "완성",
     };
