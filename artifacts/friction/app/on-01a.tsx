@@ -949,7 +949,7 @@ export default function WritingScreen() {
       }
       isNavigatingRef.current = false;
       setIsNavigating(false);
-      router.back();
+      router.replace("/(tabs)/on");
       return;
     }
 
@@ -967,7 +967,7 @@ export default function WritingScreen() {
     if (source === "quote") {
       router.replace("/(tabs)/archive");
     } else {
-      router.back();
+      router.replace("/(tabs)/on");
     }
   }, [flush, router, queryClient, getEditorContent, markDirty, id, deleteArticle, source, showToast]);
 
@@ -981,11 +981,11 @@ export default function WritingScreen() {
       return;
     }
     if (modeRef.current === "dividing") {
-      exitToDraftMode();
+      handleDraftBack();
       return;
     }
     handleDraftBack();
-  }, [spellTabVisible, exitToDraftMode, handleDraftBack]);
+  }, [spellTabVisible, handleDraftBack]);
 
   const handleDismissKeyboard = useCallback(() => {
     editorRef.current?.blur();
