@@ -7,6 +7,24 @@ function escapeHtml(s: string): string {
     .replace(/>/g, "&gt;");
 }
 
+function escapeHtmlAttr(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;");
+}
+
+function isSafeImageUrl(url: string): boolean {
+  const trimmed = url.trim().toLowerCase();
+  return (
+    trimmed.startsWith("https://") ||
+    trimmed.startsWith("http://") ||
+    trimmed.startsWith("data:image/")
+  );
+}
+
 /**
  * InlineToken 배열을 HTML 인라인 마크업으로 변환한다.
  * markdownParser가 파싱한 토큰 구조체를 받아 WebView 측정 HTML에 삽입하는 데 사용한다.
@@ -79,6 +97,16 @@ function renderInline(text: string): string {
   return out;
 }
 
+function renderImageLine(line: string): string | null {
+  const m = /^!\[([^\]]*)\]\(([^)]+)\)$/.exec(line.trim());
+  if (!m) return null;
+  const rawSrc = m[2].trim();
+  if (!isSafeImageUrl(rawSrc)) return null;
+  const alt = escapeHtmlAttr(m[1]);
+  const src = escapeHtmlAttr(rawSrc);
+  return `<img data-inline="true" class="tiptap-inline-image" src="${src}" alt="${alt}">`;
+}
+
 export function markdownToHtml(md: string): string {
   try {
     const text = (md || "").replace(/\r\n?/g, "\n");
@@ -126,6 +154,9 @@ export function markdownToHtml(md: string): string {
         continue;
       }
 
+      const imgHtml = renderImageLine(line);
+      if (imgHtml) { blocks.push(imgHtml); i++; continue; }
+
       const paraLines: string[] = [];
       while (
         i < lines.length &&
@@ -134,7 +165,8 @@ export function markdownToHtml(md: string): string {
         !/^>\s?/.test(lines[i]) &&
         !/^[-*]\s+/.test(lines[i]) &&
         !/^\d+\.\s+/.test(lines[i]) &&
-        !/^(-{3,}|\*{3,}|_{3,})\s*$/.test(lines[i])
+        !/^(-{3,}|\*{3,}|_{3,})\s*$/.test(lines[i]) &&
+        !renderImageLine(lines[i])
       ) { paraLines.push(lines[i]); i++; }
       const pInner = paraLines.map((l, idx) => idx === 0 ? renderInline(l) : "<br>" + renderInline(l)).join("");
       blocks.push(`<p>${pInner}</p>`);

@@ -65,5 +65,6 @@ export function buildBodyTypographyCss(opts: BodyTypographyCssOptions): string {
     `${b} u{text-decoration:underline${uExtras}}`,
     `${b} strong{font-family:'Eulyoo1945-SemiBold',serif;font-weight:700}`,
     `${b} em{font-style:italic}`,
+    `${b} img[data-inline="true"],.tiptap-inline-image{display:block;max-width:240px;width:auto;height:auto;border-radius:8px;margin:0.5em 0}`,
   ].join("\n");
 }

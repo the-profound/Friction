@@ -92,6 +92,7 @@ html,body{height:100%;background:transparent;container-type:inline-size}
 .ProseMirror .spell-highlight{background:rgba(59,130,246,0.15);border-bottom:2px solid #3b82f6;border-radius:1px}
 .tiptap-question-block{background-color:#eff6ff;border-left:4px solid #3b82f6;border-radius:6px;padding:12px 14px;margin:0.5em 0;text-align:left}
 .tiptap-question-block p{margin-bottom:0;font-family:'Eulyoo1945-SemiBold',serif;font-weight:600;color:#1e3a8a;text-align:left}
+.tiptap-inline-image{display:block;max-width:240px;width:auto;height:auto;border-radius:8px;margin:0.5em 0}
 @keyframes page-anchor-pulse{0%{opacity:0}25%{opacity:1}75%{opacity:1}100%{opacity:0}}
 .page-anchor-overlay{position:absolute;left:0;width:100%;background:rgba(59,130,246,0.14);border-radius:6px;pointer-events:none;z-index:0;animation:page-anchor-pulse 1.6s ease-in-out forwards}
 #source-article-slot{display:none;width:100%;font-size:13px;color:#a1a1aa;font-family:system-ui,-apple-system,sans-serif;padding:0 0 8px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;-webkit-tap-highlight-color:transparent}
