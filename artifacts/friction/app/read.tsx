@@ -69,6 +69,7 @@ import {
 } from "@workspace/api-client-react";
 import { invalidateInbox, invalidateMyCollections, invalidateRecentCollection } from "@/lib/queryInvalidation";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
+import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
 import { useUser } from "@/contexts/UserContext";
 import { useActiveReading } from "@/contexts/ActiveReadingContext";
 import type { ReadingMode } from "@/lib/policies";
@@ -245,7 +246,8 @@ export default function ReadScreen() {
   const [cardSeq, setCardSeq] = useState(0);
   const [cardNewAnswer, setCardNewAnswer] = useState("");
   const [cardAnimating, setCardAnimating] = useState(false);
-  const [cardExitDir, setCardExitDir] = useState<"left-slide" | "fly" | "right-slide" | null>(null);
+  const [cardExitDir, setCardExitDir] = useState<"up-slide" | "up-fly" | "down-slide" | null>(null);
+  const [cardActionSheetVisible, setCardActionSheetVisible] = useState(false);
   const [cardIncoming, setCardIncoming] = useState<{ question: string; answer: string; fromLeft: boolean } | null>(null);
   const [showSelectionPill, setShowSelectionPill] = useState(false);
   const showSelectionPillRef = useRef(false);
@@ -542,6 +544,7 @@ export default function ReadScreen() {
       cardRotation.value = 0;
       cardAlpha.value = 1;
       incomingCardTX.value = 0;
+      incomingCardTY.value = 0;
       setCardAnimating(true);
       setFinishOverlayVisible(true);
       setTimeout(() => {
@@ -667,6 +670,9 @@ export default function ReadScreen() {
   const cardRotation = useSharedValue(0);
   const cardAlpha = useSharedValue(1);
   const incomingCardTX = useSharedValue(0);
+  const incomingCardTY = useSharedValue(0);
+  // Vertical park distance: card height + buffer to ensure it is fully off-screen
+  const cardRestTY = cardSmallH + 60;
 
   // Tracks which direction the active swipe is going (JS-thread safe, runOnJS:true).
   const activeSwipeRef = useRef<'forward' | 'backward' | null>(null);
@@ -698,6 +704,8 @@ export default function ReadScreen() {
   useEffect(() => { cardNewAnswerRef.current = cardNewAnswer; }, [cardNewAnswer]);
   const cardRestTXRef = useRef(0);
   useEffect(() => { cardRestTXRef.current = cardRestTX; }, [cardRestTX]);
+  const cardRestTYRef = useRef(0);
+  useEffect(() => { cardRestTYRef.current = cardRestTY; }, [cardRestTY]);
   const screenWidthRef = useRef(screenWidth);
   useEffect(() => { screenWidthRef.current = screenWidth; }, [screenWidth]);
   const screenHeightRef = useRef(screenHeight);
@@ -776,7 +784,7 @@ export default function ReadScreen() {
     opacity: cardAlpha.value,
   }));
   const incomingCardAnimStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: incomingCardTX.value }],
+    transform: [{ translateY: incomingCardTY.value }],
   }));
 
 
@@ -834,16 +842,16 @@ export default function ReadScreen() {
   });
 
   // ── 질문 카드 내비게이션 함수 (목업 triggerAdvance/triggerBack 이식) ───────────
-  const afterCardTransition = useCallback((restTX: number) => {
+  const afterCardTransition = useCallback((_restTX: number) => {
     setCardExitDir(null);
     setCardIncoming(null);
     cardTX.value = 0;
     cardTY.value = 0;
     cardRotation.value = 0;
-    incomingCardTX.value = 0;
+    incomingCardTY.value = 0;
     cardAlpha.value = 1;
     setCardAnimating(false);
-  }, [cardTX, cardTY, cardRotation, incomingCardTX, cardAlpha]);
+  }, [cardTX, cardTY, cardRotation, incomingCardTY, cardAlpha]);
 
   const afterCardTransitionRef = useRef(afterCardTransition);
   useEffect(() => { afterCardTransitionRef.current = afterCardTransition; }, [afterCardTransition]);
@@ -853,12 +861,13 @@ export default function ReadScreen() {
     const saved = cardSavedRef.current;
     const seq = cardSeqRef.current;
     const newAns = cardNewAnswerRef.current;
+    const restTY = cardRestTYRef.current;
     const restTX = cardRestTXRef.current;
     const isNewCard = ptr === saved.length;
 
     let nextSaved = saved;
     let nextPtr: number;
-    let exitMode: "left-slide" | "fly";
+    let exitMode: "up-slide" | "up-fly";
     let nextSeq = seq;
 
     if (isNewCard) {
@@ -867,14 +876,14 @@ export default function ReadScreen() {
         const entry = { qIdx: seq % QUESTION_BLOCK_QUESTIONS.length, answer: newAns };
         nextSaved = [...saved, entry];
         nextPtr = nextSaved.length;
-        exitMode = "left-slide";
+        exitMode = "up-slide";
       } else {
         nextPtr = saved.length;
-        exitMode = "fly";
+        exitMode = "up-fly";
       }
     } else {
       nextPtr = ptr + 1;
-      exitMode = "left-slide";
+      exitMode = "up-slide";
     }
 
     const nextQ = nextPtr < nextSaved.length
@@ -885,10 +894,11 @@ export default function ReadScreen() {
     setCardAnimating(true);
     cardAnimatingRef.current = true;
     setCardExitDir(exitMode);
-    setCardIncoming({ question: nextQ, answer: nextAns, fromLeft: false });
 
-    if (exitMode === "left-slide") {
-      incomingCardTX.value = restTX;
+    if (exitMode === "up-slide") {
+      // incoming card 사용: 아래에서 새 카드 올라오고, 현재 카드 위로 나감
+      setCardIncoming({ question: nextQ, answer: nextAns, fromLeft: false });
+      incomingCardTY.value = restTY; // 아래 대기
       requestAnimationFrame(() => {
         setCardSaved(nextSaved);
         cardSavedRef.current = nextSaved;
@@ -898,28 +908,30 @@ export default function ReadScreen() {
         cardSeqRef.current = nextSeq;
         if (isNewCard) { setCardNewAnswer(""); cardNewAnswerRef.current = ""; }
 
-        cardTX.value = withTiming(-restTX, {
-          duration: 420,
+        cardTY.value = withTiming(-restTY, {
+          duration: 380,
           easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
         });
-        incomingCardTX.value = withTiming(0, {
-          duration: 420,
+        incomingCardTY.value = withTiming(0, {
+          duration: 380,
           easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
         }, () => {
           runOnJS(afterCardTransitionRef.current)(restTX);
         });
       });
     } else {
-      // 목업 fly-away: translateX(-200) translateY(-380) rotate(22deg) + fade
-      // 비율로 환산해 화면 크기에 무관하게 동일한 느낌을 유지한다
-      const flyX = -Math.round(screenWidthRef.current * (200 / 390));
-      const flyY = -Math.round(screenHeightRef.current * (380 / 844));
+      // up-fly: 빈 답변 카드가 위로 찢겨 날아가며 사라짐.
+      // incoming card 슬롯을 사용하지 않고 메인 카드 슬롯만 재활용해
+      // "afterCardTransition에서 두 번째 슬라이드"가 발생하는 현상을 방지한다.
+      const flyX = Math.round(screenWidthRef.current * (30 / 390));
+      const flyY = -Math.round(screenHeightRef.current * (420 / 844));
       const flyEasing = Easing.bezier(0.4, 0, 1, 0.55);
-      cardTX.value = withTiming(flyX, { duration: 460, easing: flyEasing });
-      cardTY.value = withTiming(flyY, { duration: 460, easing: flyEasing });
-      cardRotation.value = withTiming(22, { duration: 460, easing: flyEasing });
-      cardAlpha.value = withTiming(0, { duration: 320, easing: flyEasing });
+      cardTX.value = withTiming(flyX, { duration: 420, easing: flyEasing });
+      cardTY.value = withTiming(flyY, { duration: 420, easing: flyEasing });
+      cardRotation.value = withTiming(22, { duration: 420, easing: flyEasing });
+      cardAlpha.value = withTiming(0, { duration: 280, easing: flyEasing });
       setTimeout(() => {
+        // 상태 업데이트 후 메인 카드를 새 질문으로 전환
         setCardSaved(nextSaved);
         cardSavedRef.current = nextSaved;
         setCardPtr(nextPtr);
@@ -928,76 +940,62 @@ export default function ReadScreen() {
         cardSeqRef.current = nextSeq;
         setCardNewAnswer("");
         cardNewAnswerRef.current = "";
-        // 현재 카드는 alpha=0(비가시) 상태 유지 — afterCardTransition에서
-        // cardTX=0, cardAlpha=1을 동시에 적용해 seamless swap
-        cardTX.value = restTX;
-        cardTY.value = 0;
+        setCardExitDir(null);
+        // 메인 카드: 아래에 파킹, 비가시 (alpha=0)
+        cardTX.value = 0;
+        cardTY.value = restTY;
         cardRotation.value = 0;
-        incomingCardTX.value = restTX;
         requestAnimationFrame(() => {
-          // 목업 ENTER_GRID: 0.42s cubic-bezier(0.25,0.46,0.45,0.94)
-          incomingCardTX.value = withTiming(0, {
-            duration: 420,
+          // 새 카드(메인 슬롯)가 아래에서 올라옴
+          cardAlpha.value = 1;
+          cardTY.value = withTiming(0, {
+            duration: 400,
             easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
           }, () => {
-            runOnJS(afterCardTransitionRef.current)(restTX);
+            runOnJS(setCardAnimating)(false);
           });
         });
-      }, 360);
+      }, 320);
     }
-  }, [afterCardTransitionRef, cardTX, cardTY, cardRotation, cardAlpha, incomingCardTX]);
+  }, [afterCardTransitionRef, cardTX, cardTY, cardRotation, cardAlpha, incomingCardTY]);
 
   const triggerCardBack = useCallback(() => {
     const ptr = cardPtrRef.current;
     const saved = cardSavedRef.current;
+    const restTY = cardRestTYRef.current;
     const restTX = cardRestTXRef.current;
 
     if (ptr <= 0) {
-      if (ptr === 0) {
-        // 첫 번째 카드에서 오른쪽 스와이프 → 원 글(article)로 돌아가기
-        // 카드가 오른쪽으로 슬라이드 아웃 후 finishOverlay 닫기
-        setCardAnimating(true);
-        cardAnimatingRef.current = true;
-        cardTX.value = withTiming(restTX, {
-          duration: 420,
-          easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
-        });
-        setTimeout(() => {
-          setFinishOverlayVisible(false);
-          setCardAnimating(false);
-          cardAnimatingRef.current = false;
-          cardTX.value = 0;
-        }, 440);
-      } else {
-        cardTX.value = withSpring(0, { damping: 12, stiffness: 180 });
-      }
+      // 보관된 카드 없음 — snap-back (거부 효과)
+      cardTY.value = withSpring(0, { damping: 12, stiffness: 180 });
       return;
     }
 
     setCardAnimating(true);
     cardAnimatingRef.current = true;
-    setCardExitDir("right-slide");
+    setCardExitDir("down-slide");
 
     const prevCard = saved[ptr - 1];
     const prevQ = QUESTION_BLOCK_QUESTIONS[prevCard.qIdx];
     setCardIncoming({ question: prevQ, answer: prevCard.answer, fromLeft: true });
-    incomingCardTX.value = -restTX;
+    incomingCardTY.value = -restTY; // 위에서 대기
 
     requestAnimationFrame(() => {
       setCardPtr(ptr - 1);
       cardPtrRef.current = ptr - 1;
-      cardTX.value = withTiming(restTX, {
+      // 현재 카드: 아래로 슬라이드 아웃, 이전 카드: 위에서 내려옴
+      cardTY.value = withTiming(restTY, {
         duration: 420,
         easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
       });
-      incomingCardTX.value = withTiming(0, {
+      incomingCardTY.value = withTiming(0, {
         duration: 420,
         easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
       }, () => {
         runOnJS(afterCardTransitionRef.current)(restTX);
       });
     });
-  }, [afterCardTransitionRef, cardTX, incomingCardTX]);
+  }, [afterCardTransitionRef, cardTY, incomingCardTY]);
 
   const triggerCardAdvanceRef = useRef(triggerCardAdvance);
   useEffect(() => { triggerCardAdvanceRef.current = triggerCardAdvance; }, [triggerCardAdvance]);
@@ -1012,30 +1010,71 @@ export default function ReadScreen() {
       .onUpdate((e) => {
         if (cardAnimatingRef.current) return;
         const dx = e.translationX;
-        if (dx < 0) {
-          cardTX.value = dx * 0.14;
-        } else {
-          const ptr = cardPtrRef.current;
-          if (ptr > 0) {
-            cardTX.value = dx * 0.14;
+        const dy = e.translationY;
+        const isVertical = Math.abs(dy) > Math.abs(dx);
+        if (isVertical) {
+          // 상하 스와이프: 카드 Y축 드래그 피드백
+          if (dy < 0) {
+            // 위로 (다음) — 자연스러운 드래그
+            cardTY.value = dy * 0.14;
           } else {
-            cardTX.value = Math.min(dx * 0.25, cardRestTXRef.current * 0.3);
+            // 아래로 (이전) — 보관된 카드 없으면 rubber-band
+            const ptr = cardPtrRef.current;
+            if (ptr > 0) {
+              cardTY.value = dy * 0.14;
+            } else {
+              cardTY.value = Math.min(dy * 0.25, cardRestTYRef.current * 0.3);
+            }
           }
+        } else {
+          // 좌우 스와이프: X축 드래그 피드백 (light)
+          cardTX.value = dx * 0.14;
         }
       })
       .onEnd((e) => {
         if (cardAnimatingRef.current) return;
         const dx = e.translationX;
+        const dy = e.translationY;
         const THRESHOLD = 80;
-        if (dx < -THRESHOLD) {
-          const isNewCard = cardPtrRef.current === cardSavedRef.current.length;
-          const hasAnswer = isNewCard ? cardNewAnswerRef.current.trim().length > 0 : true;
-          triggerCardAdvanceRef.current(hasAnswer);
-        } else if (dx > THRESHOLD) {
-          triggerCardBackRef.current();
+        const isVertical = Math.abs(dy) > Math.abs(dx);
+
+        if (isVertical) {
+          if (dy < -THRESHOLD) {
+            // 아래→위 스와이프: 다음 질문
+            const isNewCard = cardPtrRef.current === cardSavedRef.current.length;
+            const hasAnswer = isNewCard ? cardNewAnswerRef.current.trim().length > 0 : true;
+            triggerCardAdvanceRef.current(hasAnswer);
+          } else if (dy > THRESHOLD) {
+            // 위→아래 스와이프: 이전 질문으로 돌아가기
+            triggerCardBackRef.current();
+          } else {
+            cardTY.value = withSpring(0, { damping: 12, stiffness: 180 });
+          }
         } else {
-          // 목업 SPRING: cubic-bezier(0.34,1.36,0.64,1) 바운스 snap-back
-          cardTX.value = withSpring(0, { damping: 12, stiffness: 180 });
+          if (dx < -THRESHOLD) {
+            // 우→좌 스와이프: 보관/삭제 액션시트 표시
+            if (!finishOverlayVisibleRef.current) return;
+            setCardActionSheetVisible(true);
+            cardTX.value = withSpring(0, { damping: 12, stiffness: 180 });
+          } else if (dx > THRESHOLD) {
+            // 좌→우 스와이프: 카드 오른쪽으로 슬라이드 아웃 → 원 글 복귀
+            if (!finishOverlayVisibleRef.current) return;
+            setCardAnimating(true);
+            cardAnimatingRef.current = true;
+            cardTX.value = withTiming(cardRestTXRef.current, {
+              duration: 420,
+              easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
+            });
+            setTimeout(() => {
+              setFinishOverlayVisible(false);
+              setCardAnimating(false);
+              cardAnimatingRef.current = false;
+              cardTX.value = 0;
+            }, 440);
+          } else {
+            // snap-back
+            cardTX.value = withSpring(0, { damping: 12, stiffness: 180 });
+          }
         }
       }),
     [],
@@ -1901,6 +1940,7 @@ export default function ReadScreen() {
               <View style={floatingCardStyles.gestureLayer}>
                 {/* 현재 카드 */}
                 <Animated.View style={[cardStyle, cardAnimStyle]}>
+                  <SpringCoil width={cardSmallW} />
                   <View style={floatingCardStyles.cardInner}>
                     <Text style={floatingCardStyles.questionText}>{cardCurrentQ}</Text>
                     <TextInput
@@ -1926,6 +1966,7 @@ export default function ReadScreen() {
                 {/* 전환 중 들어오는 카드 */}
                 {cardIncoming !== null && (
                   <Animated.View style={[cardStyle, { zIndex: 9 }, incomingCardAnimStyle]}>
+                    <SpringCoil width={cardSmallW} />
                     <View style={floatingCardStyles.cardInner}>
                       <Text style={floatingCardStyles.questionText}>{cardIncoming.question}</Text>
                       <TextInput
@@ -1957,6 +1998,37 @@ export default function ReadScreen() {
         );
       })()}
 
+      {/* ── 질문 카드 보관/삭제 액션시트 (우 스와이프) ──────────────── */}
+      <ActionSheetModal
+        visible={cardActionSheetVisible}
+        title="이 질문을"
+        actions={[
+          {
+            label: "보관하기",
+            style: "default",
+            onPress: () => {
+              if (!finishOverlayVisible) return;
+              // 보관: 답변 유무에 관계없이 저장 후 다음으로
+              triggerCardAdvanceRef.current(true);
+            },
+          },
+          {
+            label: "삭제하기",
+            style: "destructive",
+            onPress: () => {
+              if (!finishOverlayVisible) return;
+              triggerCardAdvanceRef.current(false);
+            },
+          },
+          {
+            label: "취소",
+            style: "cancel",
+            onPress: () => {},
+          },
+        ]}
+        onClose={() => setCardActionSheetVisible(false)}
+      />
+
       {/* ── 마침 BottomSheet — 저장 / 나가기 ──────────────────────────── */}
       <BottomSheet
         visible={finishSheetVisible}
@@ -1967,7 +2039,7 @@ export default function ReadScreen() {
         title="읽기 완료"
         titleStyle={dynamicStyles.sheetTitle}
         snapPoints={[0.3]}
-        dismissable={false}
+        dismissable={true}
       >
         <View style={finishSheetStyles.content}>
           <ScalePressable
@@ -2108,7 +2180,8 @@ const floatingCardStyles = StyleSheet.create({
   },
   cardInner: {
     flex: 1,
-    padding: 28,
+    paddingHorizontal: 28,
+    paddingTop: 20,
     paddingBottom: 24,
   },
   questionText: {
@@ -2508,5 +2581,53 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Colors.white,
     letterSpacing: 0.3,
+  },
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SpringCoil: 노트 스프링 바인딩 시각 요소
+// ─────────────────────────────────────────────────────────────────────────────
+function SpringCoil({ width }: { width: number }) {
+  const RING_W = 13;
+  const RING_H = 22;
+  const PADDING = 22;
+  const usable = width - PADDING * 2;
+  const count = Math.max(4, Math.floor(usable / (RING_W + 10)));
+  const gap = (usable - count * RING_W) / (count - 1);
+
+  return (
+    <View style={springCoilStyles.bar}>
+      {/* 가로 와이어 라인 */}
+      <View style={[springCoilStyles.wire, { left: PADDING, right: PADDING }]} />
+      {/* 링 목록 */}
+      <View style={[springCoilStyles.rings, { paddingHorizontal: PADDING, gap }]}>
+        {Array.from({ length: count }).map((_, i) => (
+          <View key={i} style={{ width: RING_W, height: RING_H, borderRadius: RING_W / 2, borderWidth: 2, borderColor: "#94a3b8", backgroundColor: Colors.white }} />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+const springCoilStyles = StyleSheet.create({
+  bar: {
+    width: "100%",
+    height: 32,
+    backgroundColor: "#f1f5f9",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#e2e8f0",
+    justifyContent: "center",
+  },
+  wire: {
+    position: "absolute",
+    height: 2,
+    backgroundColor: "#94a3b8",
+    top: "50%",
+    marginTop: -1,
+  },
+  rings: {
+    flexDirection: "row",
+    alignItems: "center",
+    height: "100%",
   },
 });
