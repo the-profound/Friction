@@ -312,8 +312,12 @@ export default function WritingScreen() {
 
   const getEditorContent = useCallback((): Promise<string> => {
     return new Promise((resolve) => {
+      // serverContentRef 는 마지막으로 서버에서 받은 값. contentRef 가 비어있을 경우
+      // (초기 로드 직후 WebView 가 아직 export 를 한 번도 보내지 않은 타이밍 등)를 대비해
+      // 두 번째 폴백으로 사용한다.
+      const bestKnown = contentRef.current || serverContentRef.current;
       if (!editorRef.current || !editorReady) {
-        resolve(contentRef.current);
+        resolve(bestKnown);
         return;
       }
       const requestId = `export_${Date.now()}`;
@@ -322,7 +326,8 @@ export default function WritingScreen() {
       setTimeout(() => {
         if (pendingExportsRef.current.has(requestId)) {
           pendingExportsRef.current.delete(requestId);
-          resolve(contentRef.current);
+          // 타임아웃 시에도 동일한 이중 폴백 사용.
+          resolve(contentRef.current || serverContentRef.current);
         }
       }, 2000);
     });
@@ -658,6 +663,17 @@ export default function WritingScreen() {
   }, []);
 
   // ── 모드 전환: 작성 → 분할 ─────────────────────────────────────────────────
+  //
+  // [검증 시나리오]
+  // (a) 새 메모 첫 작성 후 다음 단계 진입:
+  //     exportDebounceTimer 취소 → getEditorContent() 로 WebView 에서 최신값 획득
+  //     → markDirty(title, cur) 로 latestDataRef 갱신 → flush() 로 서버 저장 완료
+  //     → setQueryData 로 캐시 즉시 갱신 → 에디터 언마운트 없이 dividing 모드 전환.
+  //     결과: 분할 모드에서 콘텐츠 사라짐 없음.
+  // (c) 빠른 타이핑 직후(debounce 미완료) 다음 단계 이동:
+  //     exportDebounceTimerRef 를 명시적으로 취소하므로 오래된 스냅샷을 쓰지 않는다.
+  //     이후 getEditorContent() 가 WebView 에서 현재 커서 위치 기준 최신 마크다운을
+  //     새로 추출하므로 미저장 내용이 누락되지 않는다.
   const enterDividingMode = useCallback(async () => {
     if (isNavigatingRef.current) return;
     isNavigatingRef.current = true;
@@ -679,12 +695,22 @@ export default function WritingScreen() {
       showToast({ message: "사진 사이에 빈 페이지를 추가했어요.", type: "info" });
     }
 
+    // (c) 빠른 타이핑 직후 이동: 진행 중이던 export 디바운스를 취소하고
+    //     WebView 에서 최신 마크다운을 직접 추출한다.
     if (exportDebounceTimerRef.current) {
       clearTimeout(exportDebounceTimerRef.current);
       exportDebounceTimerRef.current = null;
     }
     exportPendingRef.current = false;
     const cur = await getEditorContent();
+    console.log(
+      "[enterDividingMode] content acquired len=%d preview=%j",
+      cur.length,
+      cur.slice(0, 60),
+    );
+
+    // markDirty → flush 순서 보장: latestDataRef 를 최신값으로 갱신한 뒤에야
+    // flush 를 호출해야 최신 콘텐츠가 서버에 저장된다.
     markDirty(titleRef.current, cur);
     const flushResult = await flush();
     if (!flushResult.ok) {
@@ -693,6 +719,7 @@ export default function WritingScreen() {
       showToast({ message: "저장이 완료되지 않았습니다. 다시 시도해주세요.", type: "error" });
       return;
     }
+    console.log("[enterDividingMode] flush ok — saved title=%j contentLen=%d", titleRef.current, cur.length);
 
     const currentTitle = titleRef.current;
     const result = canTransitionForward("DRAFT" as ArticleStatus, {
@@ -708,7 +735,9 @@ export default function WritingScreen() {
       return;
     }
 
-    // 옵티미스틱 캐시 갱신 — 백그라운드 refetch 가 status 를 되돌리지 않게 한다.
+    // 서버 저장 완료 직후 캐시 즉시 갱신 — invalidateQueries 는 목록 동기화 전용.
+    // 이 setQueryData 가 없으면 백그라운드 refetch 가 구 캐시(빈 content)로
+    // initializedRef 패턴을 우회해 에디터를 빈 값으로 덮어쓸 수 있다.
     if (id) {
       queryClient.setQueryData(
         getGetArticleQueryKey(id),
@@ -718,6 +747,7 @@ export default function WritingScreen() {
         },
         { updatedAt: Date.now() },
       );
+      console.log("[enterDividingMode] setQueryData applied — cache now has latest content");
     }
 
     // 에디터를 언마운트하지 않고 모드만 전환한다 — 본문이 절대 사라지지 않는다.
@@ -914,6 +944,15 @@ export default function WritingScreen() {
   }, [getEditorContent, markDirty, flush, id, router, updateArticle, transitionStatus, queryClient, containerWidth, article, showToast, pageHeights, pageContentHeight, bodyLineHeight]);
 
   // ── 작성 모드 뒤로가기 (화면 종료) ─────────────────────────────────────────
+  //
+  // [검증 시나리오]
+  // (b) 작성 중 뒤로가기 후 재진입:
+  //     exportDebounceTimer 취소 → getEditorContent() 로 WebView 최신값 획득
+  //     → markDirty → flush() 로 서버 저장 완료 → router.back().
+  //     재진입 시 서버에 저장된 최신값을 initializedRef 패턴으로 에디터에 주입한다.
+  // (c) 빠른 타이핑 직후 뒤로가기:
+  //     exportDebounceTimerRef 취소 후 WebView 에서 신선한 export 를 기다리므로
+  //     debounce 가 발화되지 않은 최신 내용도 누락 없이 저장된다.
   const handleDraftBack = useCallback(async () => {
     if (isNavigatingRef.current) return;
     isNavigatingRef.current = true;
@@ -922,12 +961,19 @@ export default function WritingScreen() {
     editorRef.current?.blur();
     Keyboard.dismiss();
 
+    // (c) 빠른 타이핑 직후 이동: 진행 중이던 export 디바운스를 취소하고
+    //     WebView 에서 최신 마크다운을 직접 추출한다.
     if (exportDebounceTimerRef.current) {
       clearTimeout(exportDebounceTimerRef.current);
       exportDebounceTimerRef.current = null;
     }
     exportPendingRef.current = false;
     const cur = await getEditorContent();
+    console.log(
+      "[handleDraftBack] content acquired len=%d preview=%j",
+      cur.length,
+      cur.slice(0, 60),
+    );
     const currentTitle = titleRef.current.trim();
     const currentContent = cur.trim();
 
@@ -953,6 +999,8 @@ export default function WritingScreen() {
       return;
     }
 
+    // markDirty → flush 순서 보장: latestDataRef 를 최신값으로 갱신한 뒤에야
+    // flush 를 호출해야 최신 콘텐츠가 서버에 저장된다.
     markDirty(titleRef.current, cur);
     const flushResult = await flush();
     if (!flushResult.ok) {
@@ -960,6 +1008,23 @@ export default function WritingScreen() {
       setIsNavigating(false);
       showToast({ message: "저장에 실패했습니다. 내용을 확인해주세요.", type: "error" });
       return;
+    }
+    console.log("[handleDraftBack] flush ok — saved title=%j contentLen=%d", titleRef.current, cur.length);
+
+    // 서버 저장 완료 직후 article detail 캐시를 최신 title/content 로 즉시 갱신한다.
+    // 이 setQueryData 가 없으면:
+    //   - 캐시의 dataUpdatedAt 이 빈 내용(신규 메모) 기준으로 "신선"하게 남아 있어,
+    //   - 30초 이내 재진입 시 마운트의 freshness 체크가 invalidate 를 생략하고,
+    //   - 에디터가 빈 캐시 데이터로 초기화돼 작성한 내용이 사라져 보인다.
+    if (id) {
+      queryClient.setQueryData(
+        getGetArticleQueryKey(id),
+        (old: unknown) => {
+          if (!old || typeof old !== "object") return old;
+          return { ...old, title: titleRef.current, content: cur };
+        },
+        { updatedAt: Date.now() },
+      );
     }
     invalidateArticleLists(queryClient);
     isNavigatingRef.current = false;
