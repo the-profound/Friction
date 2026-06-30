@@ -9,9 +9,12 @@ import {
   Platform,
   ScrollView,
   Pressable,
+  Keyboard,
   useWindowDimensions,
   type LayoutChangeEvent,
 } from "react-native";
+import MemoPageView, { type MemoPageViewRef } from "@/components/MemoPageView/MemoPageView";
+import MemoToolbar from "@/components/MemoToolbar/MemoToolbar";
 import ScalePressable from "@/components/shared/ScalePressable";
 import {
   trackPageTurn,
@@ -143,6 +146,22 @@ function computeReaderLayout(availableWidth: number, availableHeight: number, ov
   };
 }
 
+/* ─── 메모 페이지 직렬화 헬퍼 ──────────────────────────────────────── */
+function parseMemoPages(content: string): string[] {
+  if (!content) return [""];
+  try {
+    const parsed = JSON.parse(content);
+    if (Array.isArray(parsed) && parsed.every((p) => typeof p === "string")) {
+      return parsed.length > 0 ? parsed : [""];
+    }
+  } catch {}
+  return [content];
+}
+
+function serializeMemoPages(pages: string[]): string {
+  return JSON.stringify(pages);
+}
+
 /* ─── 질문 블록 질문 데이터 ────────────────────────────────────────── */
 const QUESTION_BLOCK_QUESTIONS = [
   "작성자가 하고자 하는 말은 무엇이었나요?",
@@ -235,10 +254,6 @@ export default function ReadScreen() {
   const [sentencePopupVisible, setSentencePopupVisible] = useState(false);
   const [selectedText, setSelectedText] = useState("");
   const [clearSelectionSignal, setClearSelectionSignal] = useState(0);
-  const [memoSheetVisible, setMemoSheetVisible] = useState(false);
-  const [memoAppendContent, setMemoAppendContent] = useState<string | undefined>(undefined);
-  const [memoFreeMemo, setMemoFreeMemo] = useState("");
-  const [memoTitle, setMemoTitle] = useState("");
   const [finishSheetVisible, setFinishSheetVisible] = useState(false);
   // ── 질문 카드 스와이프 상태 (목업 ReaderSwipeNextPreview 로직) ──────────────
   const [cardPtr, setCardPtr] = useState(0);
@@ -420,9 +435,173 @@ export default function ReadScreen() {
   const memoContentRef = useRef(readingMemo.memoContent);
   useEffect(() => { memoContentRef.current = readingMemo.memoContent; }, [readingMemo.memoContent]);
 
-  const handleOpenMemo = useCallback(() => {
-    setMemoSheetVisible(true);
+  // ── 메모 모드 (페이지네이션) ──────────────────────────────────────────────
+  const [isMemoMode, setIsMemoMode] = useState(false);
+  const [memoPages, setMemoPages] = useState<string[]>([""]);
+  const [memoPageIndex, setMemoPageIndex] = useState(0);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const isMemoModeRef = useRef(false);
+  const memoPageIndexRef = useRef(0);
+  const memoPageViewRef = useRef<MemoPageViewRef>(null);
+  const keyboardVisibleRef = useRef(false);
+  const memoSlideX = useSharedValue(layout.containerWidth + 40);
+  const handleNextMemoPageRef = useRef<() => void>(() => {});
+  const handlePrevMemoPageRef = useRef<() => void>(() => {});
+
+  // 3D flip animation state
+  const memoFlipAngle = useSharedValue(0);
+  const memoPagesTotalRef = useRef(1);
+  const memoContainerHeightRef = useRef(600);
+  const memoSwipeDirRef = useRef<"next" | "prev" | null>(null);
+  const [memoSwipeDir, setMemoSwipeDir] = useState<"next" | "prev" | null>(null);
+  const memoFlipAnimRunning = useRef(false);
+
+  const memoAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: memoSlideX.value }],
+  }));
+
+  useEffect(() => { isMemoModeRef.current = isMemoMode; }, [isMemoMode]);
+  useEffect(() => { memoPageIndexRef.current = memoPageIndex; }, [memoPageIndex]);
+  useEffect(() => { memoPagesTotalRef.current = memoPages.length; }, [memoPages.length]);
+  useEffect(() => { memoContainerHeightRef.current = layout.containerHeight; }, [layout.containerHeight]);
+
+  // Keyboard height tracking for toolbar
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+      setKeyboardVisible(true);
+      keyboardVisibleRef.current = true;
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+      setKeyboardVisible(false);
+      keyboardVisibleRef.current = false;
+    });
+    return () => { showSub.remove(); hideSub.remove(); };
   }, []);
+
+  // Sync memo pages from readingMemo.memoContent when not in memo mode
+  useEffect(() => {
+    if (isMemoModeRef.current) return;
+    const pages = parseMemoPages(readingMemo.memoContent);
+    setMemoPages(pages);
+  }, [readingMemo.memoContent]);
+
+  const enterMemoMode = useCallback((appendText?: string) => {
+    const currentContent = memoContentRef.current;
+    const pages = parseMemoPages(currentContent);
+    if (appendText) {
+      // Append text to last page and immediately persist so the quote isn't lost
+      const lastIdx = pages.length - 1;
+      const base = pages[lastIdx] ?? "";
+      pages[lastIdx] = base ? `${base}\n\n${appendText}` : appendText;
+      readingMemo.updateMemoContent(serializeMemoPages(pages));
+    }
+    setMemoPages(pages);
+    setMemoPageIndex(pages.length - 1);
+    setIsMemoMode(true);
+    memoSlideX.value = (layout.containerWidth + 40);
+    requestAnimationFrame(() => {
+      memoSlideX.value = withTiming(0, { duration: 320, easing: Easing.bezier(0.25, 0.46, 0.45, 0.94) });
+    });
+  }, [layout.containerWidth, memoSlideX, readingMemo]);
+
+  const exitMemoMode = useCallback(() => {
+    Keyboard.dismiss();
+    memoSlideX.value = withTiming(layout.containerWidth + 40, {
+      duration: 280,
+      easing: Easing.in(Easing.ease),
+    }, () => {
+      runOnJS(setIsMemoMode)(false);
+    });
+  }, [layout.containerWidth, memoSlideX]);
+
+  const handleMemoPageChange = useCallback((text: string) => {
+    const pageIdx = memoPageIndexRef.current;
+    setMemoPages((prev) => {
+      const next = [...prev];
+      next[pageIdx] = text;
+      readingMemo.updateMemoContent(serializeMemoPages(next));
+      return next;
+    });
+  }, [readingMemo]);
+
+  const handleMemoOverflow = useCallback(() => {
+    const pageIdx = memoPageIndexRef.current;
+    setMemoPages((prev) => {
+      if (pageIdx < prev.length - 1) return prev; // not on last page, no auto-add
+      const next = [...prev, ""];
+      readingMemo.updateMemoContent(serializeMemoPages(next));
+      const newIdx = next.length - 1;
+      setMemoPageIndex(newIdx);
+      memoPageIndexRef.current = newIdx;
+      return next;
+    });
+  }, [readingMemo]);
+
+  const handleNextMemoPage = useCallback(() => {
+    setMemoPages((prev) => {
+      const pageIdx = memoPageIndexRef.current;
+      if (pageIdx < prev.length - 1) {
+        const newIdx = pageIdx + 1;
+        setMemoPageIndex(newIdx);
+        memoPageIndexRef.current = newIdx;
+        return prev;
+      }
+      // Create new page
+      const next = [...prev, ""];
+      readingMemo.updateMemoContent(serializeMemoPages(next));
+      const newIdx = next.length - 1;
+      setMemoPageIndex(newIdx);
+      memoPageIndexRef.current = newIdx;
+      return next;
+    });
+    Keyboard.dismiss();
+  }, [readingMemo]);
+
+  const handlePrevMemoPage = useCallback(() => {
+    const pageIdx = memoPageIndexRef.current;
+    if (pageIdx > 0) {
+      const newIdx = pageIdx - 1;
+      setMemoPageIndex(newIdx);
+      memoPageIndexRef.current = newIdx;
+      Keyboard.dismiss();
+    }
+  }, []);
+
+  useEffect(() => { handleNextMemoPageRef.current = handleNextMemoPage; }, [handleNextMemoPage]);
+  useEffect(() => { handlePrevMemoPageRef.current = handlePrevMemoPage; }, [handlePrevMemoPage]);
+
+  // 플립 완료 Phase2: 새 페이지가 앞에 나타나는 애니메이션 후 정리
+  const completeFlipPhase2 = useCallback(() => {
+    memoSwipeDirRef.current = null;
+    setMemoSwipeDir(null);
+    memoFlipAnimRunning.current = false;
+  }, []);
+
+  // 플립 완료 Phase1: 현재 페이지가 뒤로 사라지면 호출 → 페이지 교체 + 역방향 애니메이션
+  const completeFlipPhase1 = useCallback((targetIdx: number, fromAngle: number) => {
+    setMemoPageIndex(targetIdx);
+    memoPageIndexRef.current = targetIdx;
+    memoFlipAngle.value = fromAngle;
+    memoFlipAngle.value = withTiming(0, { duration: 200, easing: Easing.out(Easing.ease) }, () => {
+      runOnJS(completeFlipPhase2)();
+    });
+  }, [memoFlipAngle, completeFlipPhase2]);
+
+  // 목표 페이지 인덱스 계산 (스와이프 방향 기반)
+  const memoTargetPageIndex = useMemo(() => {
+    if (memoSwipeDir === "next") return Math.min(memoPageIndex + 1, memoPages.length - 1);
+    if (memoSwipeDir === "prev") return Math.max(memoPageIndex - 1, 0);
+    return memoPageIndex;
+  }, [memoSwipeDir, memoPageIndex, memoPages.length]);
+
+  const handleOpenMemo = useCallback(() => {
+    enterMemoMode();
+  }, [enterMemoMode]);
 
   // Entry animation: fade in reader only once, when content is actually ready.
   // Using [] would fire immediately during the loading state (before the overlay
@@ -1118,6 +1297,36 @@ export default function ReadScreen() {
     })
     .onUpdate((e) => {
       if (finishOverlayVisibleRef.current) return;
+      if (isMemoModeRef.current) {
+        // 메모 모드: 키보드 닫힘 + 애니메이션 미진행 시 3D 플립 각도 추적
+        if (!keyboardVisibleRef.current && !memoFlipAnimRunning.current) {
+          const H = memoContainerHeightRef.current || 600;
+          // 스와이프 UP(translationY < 0) → angle 양수 → rotateX 양수 → bottom이 뷰어 쪽으로
+          // → 스프링 노트처럼 페이지가 위 방향으로 넘어가는 시각 효과
+          const angle = (e.translationY / H) * -90;
+          const currentIdx = memoPageIndexRef.current;
+          const total = memoPagesTotalRef.current;
+          if (angle > 0 && currentIdx < total - 1) {
+            // 다음 페이지: bottom이 뷰어 쪽으로 올라옴
+            memoFlipAngle.value = Math.min(85, angle);
+            if (memoSwipeDirRef.current !== "next") {
+              memoSwipeDirRef.current = "next";
+              setMemoSwipeDir("next");
+            }
+          } else if (angle < 0 && currentIdx > 0) {
+            // 이전 페이지: bottom이 화면 쪽으로 내려감
+            memoFlipAngle.value = Math.max(-85, angle);
+            if (memoSwipeDirRef.current !== "prev") {
+              memoSwipeDirRef.current = "prev";
+              setMemoSwipeDir("prev");
+            }
+          } else {
+            // 넘길 페이지 없음 → 고무줄 효과
+            memoFlipAngle.value = angle > 0 ? Math.min(18, angle * 0.18) : Math.max(-18, angle * 0.18);
+          }
+        }
+        return;
+      }
       if (isDraggingRef.current || isTextSelectingRef.current || isCommittingRef.current) return;
       const gs = gestureState.current;
 
@@ -1168,8 +1377,45 @@ export default function ReadScreen() {
       const dy = e.translationY;
       const absDx = Math.abs(dx);
 
-      // Upward swipe → open memo sheet
-      if (dy < -50 && Math.abs(dy) > absDx * 1.5) {
+      // 메모 모드: 가로 페이지 전환 완전 차단
+      // 키보드 닫힘 상태에서만 3D 플립으로 페이지 이동
+      if (isMemoModeRef.current) {
+        if (!keyboardVisibleRef.current && !memoFlipAnimRunning.current) {
+          const currentAngle = memoFlipAngle.value;
+          const dir = memoSwipeDirRef.current;
+          const THRESHOLD = 22; // degrees needed to commit flip
+
+          if (dir && Math.abs(currentAngle) >= THRESHOLD) {
+            // 임계값 이상 → 플립 완료 애니메이션
+            memoFlipAnimRunning.current = true;
+            // next: 제스처가 양수(+85)로 진행됐으므로 +90으로 완료, 새 페이지는 -90에서 시작
+            // prev: 제스처가 음수(-85)로 진행됐으므로 -90으로 완료, 이전 페이지는 +90에서 시작
+            const targetAngle = dir === "next" ? 90 : -90;
+            const comeFromAngle = dir === "next" ? -90 : 90;
+            const targetIdx = dir === "next"
+              ? memoPageIndexRef.current + 1
+              : memoPageIndexRef.current - 1;
+            const _completeFlipPhase1 = completeFlipPhase1;
+            memoFlipAngle.value = withTiming(
+              targetAngle,
+              { duration: 180, easing: Easing.in(Easing.ease) },
+              () => { runOnJS(_completeFlipPhase1)(targetIdx, comeFromAngle); },
+            );
+          } else {
+            // 임계값 미달 → 원래 위치로 스냅백
+            memoFlipAngle.value = withSpring(0, { damping: 20, stiffness: 220 });
+            memoSwipeDirRef.current = null;
+            setMemoSwipeDir(null);
+          }
+        } else if (keyboardVisibleRef.current) {
+          // 키보드 열림 상태에서 스냅백
+          memoFlipAngle.value = withSpring(0, { damping: 20, stiffness: 220 });
+        }
+        return;
+      }
+
+      // Upward swipe → enter memo mode (skip if already in memo mode or finish overlay)
+      if (dy < -50 && Math.abs(dy) > absDx * 1.5 && !isMemoModeRef.current) {
         if (activeSwipeRef.current === 'forward') snapForward();
         else snapBackward();
         runOnJS(openMemoRef.current)();
@@ -1407,15 +1653,9 @@ export default function ReadScreen() {
     const author = authorName ?? "";
     const title = article?.title ?? "";
     const quoteBlock = `> ${text.trim()}\n>\n> ${author}, <${title}>, ${pageNum}면`;
-    const base = readingMemo.memoContent;
-    // 인용구 뒤에 빈 줄(\n\n)을 두어 blockquote를 종료하고, 사용자가 인용구 아래
-    // 빈 영역을 탭했을 때 본문 단락에 커서가 잡히도록 한다.
-    const combined = base ? `${base}\n\n${quoteBlock}\n\n` : `${quoteBlock}\n\n`;
-    readingMemo.updateMemoContent(combined);
-    setMemoAppendContent(combined);
-    setMemoSheetVisible(true);
+    enterMemoMode(quoteBlock);
     trackMemoCreatedDuringReading({ articleId, page: currentPage });
-  }, [currentPage, authorName, article?.title, readingMemo, articleId]);
+  }, [currentPage, authorName, article?.title, enterMemoMode, articleId]);
 
   const handleSaveSentence = useCallback(async () => {
     if (!selectedText) return;
@@ -1731,6 +1971,73 @@ export default function ReadScreen() {
                       );
                     })()}
                   </View>
+
+                  {/* ── 메모 모드 오버레이 — 오른쪽에서 슬라이드인 ──────── */}
+                  {isMemoMode && (
+                    <Animated.View
+                      style={[
+                        {
+                          position: "absolute",
+                          top: 0,
+                          left: 0,
+                          width: layout.containerWidth,
+                          height: layout.containerHeight,
+                          zIndex: 20,
+                        },
+                        memoAnimStyle,
+                      ]}
+                    >
+                      {/* 뒷면 페이지: 플립 중 현재 페이지 아래에 보이는 다음/이전 페이지 */}
+                      {memoSwipeDir !== null && (
+                        <View
+                          style={{
+                            position: "absolute",
+                            top: 0,
+                            left: 0,
+                            width: layout.containerWidth,
+                            height: layout.containerHeight,
+                          }}
+                          pointerEvents="none"
+                        >
+                          <MemoPageView
+                            content={memoPages[memoTargetPageIndex] ?? ""}
+                            pageIndex={memoTargetPageIndex}
+                            totalPages={memoPages.length}
+                            onChange={() => {}}
+                            containerWidth={layout.containerWidth}
+                            containerHeight={layout.containerHeight}
+                            paddingX={layout.paddingX}
+                            paddingY={layout.paddingY}
+                            bodyFontSize={layout.bodyFontSize}
+                            bodyLineHeight={layout.bodyLineHeight}
+                            keyboardVisible={false}
+                            bottomInset={insets.bottom}
+                          />
+                        </View>
+                      )}
+
+                      {/* 앞면 페이지: 3D 플립 애니메이션 적용 */}
+                      <MemoPageView
+                        ref={memoPageViewRef}
+                        flipAngle={memoFlipAngle}
+                        content={memoPages[memoPageIndex] ?? ""}
+                        pageIndex={memoPageIndex}
+                        totalPages={memoPages.length}
+                        onChange={handleMemoPageChange}
+                        onOverflow={handleMemoOverflow}
+                        containerWidth={layout.containerWidth}
+                        containerHeight={layout.containerHeight}
+                        paddingX={layout.paddingX}
+                        paddingY={layout.paddingY}
+                        bodyFontSize={layout.bodyFontSize}
+                        bodyLineHeight={layout.bodyLineHeight}
+                        onFocus={() => {}}
+                        onBlur={() => {}}
+                        keyboardVisible={keyboardVisible}
+                        bottomInset={insets.bottom}
+                      />
+                    </Animated.View>
+                  )}
                 </View>
               </View>
               </View>
@@ -1761,13 +2068,40 @@ export default function ReadScreen() {
       {/* ── Memo FAB — bottom right (읽기 중에만 표시) ─────────────────── */}
       {!finishOverlayVisible && (
         <ScalePressable
-          onPress={handleOpenMemo}
+          onPress={isMemoMode ? exitMemoMode : handleOpenMemo}
           hitSlop={8}
-          style={[styles.memoFab, { bottom: insets.bottom + 24 }]}
+          style={[
+            styles.memoFab,
+            { bottom: insets.bottom + 24 },
+            isMemoMode && styles.memoFabActive,
+          ]}
           contentStyle={styles.memoFabContent}
         >
-          <Feather name="edit-3" size={20} color={Colors.zinc600} />
+          <Feather
+            name={isMemoMode ? "x" : "edit-3"}
+            size={20}
+            color={isMemoMode ? Colors.zinc800 : Colors.zinc600}
+          />
         </ScalePressable>
+      )}
+
+      {/* ── 메모 모드 키보드 툴바 ──────────────────────────────────────── */}
+      {isMemoMode && keyboardVisible && keyboardHeight > 0 && (
+        <View
+          style={[
+            styles.memoToolbarWrap,
+            { bottom: keyboardHeight },
+          ]}
+          pointerEvents="box-none"
+        >
+          <MemoToolbar
+            currentPage={memoPageIndex}
+            totalPages={memoPages.length}
+            onPrevPage={handlePrevMemoPage}
+            onNextPage={handleNextMemoPage}
+            onDismissKeyboard={() => Keyboard.dismiss()}
+          />
+        </View>
       )}
 
       {/* ── Selection pill overlay ─────────────────────────────────────── */}
@@ -1855,57 +2189,6 @@ export default function ReadScreen() {
         </View>
       </BottomSheet>
 
-      {/* ── 읽기 중 메모 시트 (스와이프업 / FAB으로 열림) ─── */}
-      <BottomSheet
-        visible={memoSheetVisible}
-        onClose={() => {
-          setMemoSheetVisible(false);
-          setMemoAppendContent(undefined);
-          readingMemo.closeWithBackgroundSave();
-        }}
-        snapPoints={[0.82]}
-        enableDragDown={false}
-        dismissable={false}
-        keyboardAware
-      >
-        <View style={newMemoStyles.titleRow}>
-          <TextInput
-            style={newMemoStyles.titleInput}
-            value={memoTitle}
-            onChangeText={setMemoTitle}
-            placeholder="제목"
-            placeholderTextColor={Colors.zinc400}
-            returnKeyType="done"
-          />
-          <Pressable
-            onPress={() => {
-              setMemoSheetVisible(false);
-              setMemoAppendContent(undefined);
-              readingMemo.closeWithBackgroundSave();
-            }}
-            hitSlop={8}
-          >
-            <Text style={newMemoStyles.closeText}>닫기</Text>
-          </Pressable>
-        </View>
-        <View style={newMemoStyles.divider} />
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={newMemoStyles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <TextInput
-            style={newMemoStyles.freeMemoInput}
-            value={memoFreeMemo}
-            onChangeText={setMemoFreeMemo}
-            placeholder="자유롭게 메모하세요..."
-            placeholderTextColor={Colors.zinc400}
-            multiline
-            textAlignVertical="top"
-          />
-        </ScrollView>
-      </BottomSheet>
 
       {/* ── 질문 카드 플로팅 UI ──────────────────────────────────────── */}
       {finishOverlayVisible && (() => {
@@ -2327,10 +2610,20 @@ const styles = StyleSheet.create({
       default: {},
     }),
   },
+  memoFabActive: {
+    backgroundColor: Colors.zinc100,
+    borderColor: Colors.zinc300,
+  },
   memoFabContent: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+  },
+  memoToolbarWrap: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    zIndex: 50,
   },
   progressBarContainer: {
     width: "90%",
