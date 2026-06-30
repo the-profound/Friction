@@ -52,6 +52,7 @@ import { resolveArticleCover } from "@/utils/articleCover";
 import CoverPage from "@/components/CoverPage/CoverPage";
 import WebViewMarkdownReader from "@/components/WebViewMarkdownReader";
 import { normalizePageItem } from "@/utils/normalizePageItem";
+import { parseMemoPages, serializeMemoPages } from "@/utils/memoPages";
 import { useReadingSession } from "@/lib/useReadingSession";
 import { useReadingMemo } from "@/lib/useReadingMemo";
 import { useQueryClient } from "@tanstack/react-query";
@@ -144,22 +145,6 @@ function computeReaderLayout(availableWidth: number, availableHeight: number, ov
     titleLetterSpacing,
     titleBarHeight,
   };
-}
-
-/* ─── 메모 페이지 직렬화 헬퍼 ──────────────────────────────────────── */
-function parseMemoPages(content: string): string[] {
-  if (!content) return [""];
-  try {
-    const parsed = JSON.parse(content);
-    if (Array.isArray(parsed) && parsed.every((p) => typeof p === "string")) {
-      return parsed.length > 0 ? parsed : [""];
-    }
-  } catch {}
-  return [content];
-}
-
-function serializeMemoPages(pages: string[]): string {
-  return JSON.stringify(pages);
 }
 
 /* ─── 질문 블록 질문 데이터 ────────────────────────────────────────── */
