@@ -39,6 +39,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       bodyFontSize,
       bodyLetterSpacing,
       titleFontSize,
+      hideTitle,
     },
     ref,
   ) {
@@ -129,6 +130,16 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
               // 큐에 막히면 onReady 가 영원히 오지 않는 데드락이 생기기
               // 때문). 여기서는 boot 지표 기록과 외부 콜백만 처리한다.
               recordWebViewBoot("editor", mountedAtRef.current);
+              if (hideTitle) {
+                bridge.injectRaw(
+                  `(function(){try{` +
+                    `var t=document.getElementById('title-input');if(t)t.style.display='none';` +
+                    `var s=document.getElementById('source-article-slot');if(s)s.style.display='none';` +
+                    `if(document.body)document.body.style.paddingTop='0px';` +
+                    `var ec=document.getElementById('editor-content');if(ec)ec.style.paddingBottom='24px';` +
+                    `}catch(e){}})();true;`,
+                );
+              }
               onReady?.();
               break;
             case "onChange":
@@ -175,7 +186,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
           }
         });
       },
-      [bridge, onReady, onChange, onExportMarkdown, onTitleChange, onError, onKeyboardVisibilityChange, onSelectionUpdate, onSourceArticleSlotTap],
+      [bridge, hideTitle, onReady, onChange, onExportMarkdown, onTitleChange, onError, onKeyboardVisibilityChange, onSelectionUpdate, onSourceArticleSlotTap],
     );
 
     useEffect(() => {

@@ -113,4 +113,10 @@ export interface WebViewMarkdownEditorProps {
   bodyFontSize?: number;
   bodyLetterSpacing?: number;
   titleFontSize?: number;
+  /**
+   * 제목/원본연결 슬롯을 숨기고 하단 여백을 줄여 컴팩트한 "캡슐" 형태로
+   * 렌더링한다. 읽기 메모(read.tsx)처럼 본문만 필요한 경우 사용한다.
+   * 기본값 false — 기록 탭 등 기존 사용처는 영향 없음.
+   */
+  hideTitle?: boolean;
 }
