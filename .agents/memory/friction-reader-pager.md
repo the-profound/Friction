@@ -34,6 +34,58 @@ must match the column width pages were split at, or the last lines clip.
 lockstep and newly created letters paginate correctly. Letters created before the change
 keep their old split and may reflow/clip slightly — that is the unavoidable cost.
 
+# Memo-mode swipe flip: nested GestureDetector reuses button flip primitives
+
+`read.tsx` has an outer `panGesture` for the non-memo page pager that early-returns
+when memo mode is active. The memo swipe-to-flip feature adds a **separate, nested**
+`GestureDetector`/`Gesture.Pan()` wrapping just the memo overlay `Animated.View` —
+it does not extend/modify the outer gesture. `onUpdate` drives the same
+`memoFlipAngle` shared value the button flow already animates via `runFlip`, and
+`onEnd` (past a distance/velocity threshold) calls the existing `flipToPage()`
+directly rather than duplicating the export→edge-on→swap→return sequence.
+
+**Why:** `runFlip` already resumes correctly from a non-zero starting angle, so
+drag-then-release-to-commit "just works" by handing off to it — no special-cased
+"resume from mid-drag" logic was needed.
+
+**Boundary behavior differs from the button:** at the first/last page, the button
+(`handleNextMemoPage`) auto-creates a new blank page. The swipe gesture must NOT do
+this — swiping past a boundary should show reduced-range resistance then always
+snap back to 0°, never auto-create pages or navigate.
+
+**WebView selection conflict:** the memo editor's own text-selection-handle drag
+(inside the TipTap WebView) must suppress the swipe gesture, or dragging a selection
+handle gets misread as a page-turn attempt. Solved by threading an
+`onTextSelectionActiveChange` boolean prop up from `WebViewMarkdownEditor` (fired on
+`onSelHandleDragStart`/`onSelHandleDragEnd` bridge messages) through `MemoWebEditor`
+to `read.tsx`, gating the pan gesture's `onUpdate`/`onEnd` handlers.
+
+**Flip axis matches the physical hinge, not the drag convention people expect
+by default:** `rotateX` rotates around a *horizontal* axis (like flipping a
+notepad page over its top/bottom edge), so the pan gesture must measure
+*vertical* finger movement (`translationY`/`velocityY`), not horizontal — an
+initial horizontal-drag implementation looked disconnected from the visual
+flip and had to be swapped to vertical.
+
+**Avoid a real second WebView for the "page revealed underneath" effect —
+and prefer a static preview layer over a veil once "always visible" is a
+requirement.** A first attempt used a "veil" (`Animated.View`, solid
+`MEMO_BG`, opacity 1→0) to hide the instant content-swap at 90° edge-on, then
+faded away to reveal the new page. That only reveals the destination page at
+the very end, which fails a stricter requirement: the destination page must
+be visible *underneath* the flipping page from the moment it starts lifting,
+like a real stack of overlapping paper. The fix: render the destination
+page's content as a **plain, non-WebView static preview** (reuse the existing
+markdown block renderer — `parseMarkdownBlocks()` + `<MarkdownBlock>`, the
+same one `PretextMeasureLayer` uses) in a sibling `View` positioned underneath
+(rendered before, at the same absolute position as) the rotating WebView
+card — never rotated itself. It's swapped in via a JS-thread callback the
+instant a drag/flip starts (not at edge-on), so as the rotating WebView
+foreshortens toward 90° it visually thins and the always-already-there static
+page shows through naturally, no fade/veil needed. Still only one real
+WebView instance exists (the static layer is plain RN views/text), so the
+known WebView-zIndex-bleed issue above never comes into play.
+
 # Per-card animated shadows: use boxShadow, never elevation
 
 Each pager slot (next/current/prev) needs its own shadow. Android `elevation`
@@ -53,3 +105,21 @@ bottom `next` slot casts a static shadow (opacity 1). `current` shadow opacity g
 — "lifting paper"). `prev` shadow fades 1→0 as it settles in (`1-(prevSlotSV+W)/W`).
 So the resting stack always shows exactly one shadow, and forward/backward commits
 are seamless because the at-rest top cards contribute zero shadow.
+
+# Live WebView under rotateX goes blank/laggy — swap to a plain view while animating
+
+Once the destination page had a static preview underneath (see above), the *front*
+(currently rotating) layer was still the real interactive WebView, and it looked
+blank during the flip with content only "popping in" after the animation finished.
+Native WebViews under an RN 3D `rotateX` transform go blank/white and lag on
+content updates — this is a rendering limitation of the WebView layer itself, not
+a sequencing bug.
+
+**Fix:** never let the real WebView be the thing that's animating. Add a plain
+`frontBlocks` static render (same `parseMarkdownBlocks()` + `<MarkdownBlock>`
+pattern as the destination preview) as a sibling layer inside the rotating card,
+and hide the real WebView (`opacity:0` + `pointerEvents:"none"`) for the whole
+`isFlipping` duration (drag start through settle-to-0°, including cancelled/
+snap-back drags) — reveal it again only once the angle is back at rest. The
+WebView is only needed for interactivity, and interactivity is meaningless while
+mid-rotation anyway.

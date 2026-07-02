@@ -34,6 +34,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       onError,
       onKeyboardVisibilityChange,
       onSelectionUpdate,
+      onTextSelectionActiveChange,
       sourceArticleSlotText,
       onSourceArticleSlotTap,
       bodyFontSize,
@@ -174,9 +175,11 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
               break;
             case "onSelHandleDragStart":
               setScrollLocked(true);
+              onTextSelectionActiveChange?.(true);
               break;
             case "onSelHandleDragEnd":
               setScrollLocked(false);
+              onTextSelectionActiveChange?.(false);
               break;
             case "onAutoSplitComplete": {
               const resolvers = autoSplitResolversRef.current.splice(0);
@@ -186,7 +189,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
           }
         });
       },
-      [bridge, hideTitle, onReady, onChange, onExportMarkdown, onTitleChange, onError, onKeyboardVisibilityChange, onSelectionUpdate, onSourceArticleSlotTap],
+      [bridge, hideTitle, onReady, onChange, onExportMarkdown, onTitleChange, onError, onKeyboardVisibilityChange, onSelectionUpdate, onTextSelectionActiveChange, onSourceArticleSlotTap],
     );
 
     useEffect(() => {

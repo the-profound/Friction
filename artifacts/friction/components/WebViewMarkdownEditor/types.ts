@@ -107,6 +107,12 @@ export interface WebViewMarkdownEditorProps {
   onError?: (payload: OnErrorPayload) => void;
   onKeyboardVisibilityChange?: (visible: boolean) => void;
   onSelectionUpdate?: (payload: OnSelectionUpdatePayload) => void;
+  /**
+   * 사용자가 선택 핸들을 드래그해 텍스트 범위를 조정하는 동안 true.
+   * 이 구간 동안은 상위 스와이프 제스처(예: 메모 페이지 3D 플립)를 비활성화해야
+   * 선택 조작이 페이지 넘김으로 오인되지 않는다.
+   */
+  onTextSelectionActiveChange?: (active: boolean) => void;
   belowTitleSlot?: ReactNode;
   sourceArticleSlotText?: string | null;
   onSourceArticleSlotTap?: () => void;

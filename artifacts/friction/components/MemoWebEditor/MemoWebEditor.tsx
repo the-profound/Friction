@@ -12,7 +12,9 @@ import type {
   OnExportMarkdownPayload,
   OnSelectionUpdatePayload,
 } from "@/components/WebViewMarkdownEditor/types";
-import { Colors } from "@/constants/tokens";
+import { Colors, ReaderTokens } from "@/constants/tokens";
+import MarkdownBlock from "@/components/MarkdownBlock/MarkdownBlock";
+import type { MarkdownBlockType } from "@/utils/markdownParser";
 
 export type FormatType = "bold" | "italic" | "underline" | "quote";
 export type InlineMark = "bold" | "italic" | "underline";
@@ -39,11 +41,30 @@ interface MemoWebEditorProps {
   keyboardVisible?: boolean;
   editable?: boolean;
   flipAngle?: SharedValue<number>;
+  /**
+   * 플립 중 카드 뒤에 정적으로 깔아 둘 다음/이전 페이지의 마크다운 블록.
+   * null/undefined면 미리보기 레이어를 렌더링하지 않는다. 카드(WebView)가
+   * 회전으로 얇아지는 순간부터 자연스럽게 드러나며, 애니메이션 도중 실제
+   * 콘텐츠가 교체돼도 이미 같은 내용이 뒤에 있으므로 이질감이 없다.
+   */
+  previewBlocks?: MarkdownBlockType[] | null;
+  /**
+   * 현재(회전 중인) 페이지의 마크다운 블록. 실제 편집용 WebView는 각도가 0일
+   * 때(정지 상태)만 보이고, 플립/드래그 중에는 이 정적 블록이 대신 표시된다.
+   * WebView는 3D 회전(rotateX) 중 흰 화면으로 깜빡이거나 콘텐츠 갱신이
+   * 지연되는 문제가 있어, 애니메이션 구간에는 항상 즉시 렌더되는 플레인
+   * 뷰를 사용해 앞/뒤 페이지가 끊김 없이 계속 보이도록 한다.
+   */
+  frontBlocks?: MarkdownBlockType[] | null;
+  /** true면 플립/드래그 애니메이션 진행 중 — 실제 WebView를 숨기고 frontBlocks 정적 렌더를 보여준다. */
+  isFlipping?: boolean;
   /** onChange 디바운스 후 export 로 전달되는 저장용 markdown. */
   onExportMarkdown?: (markdown: string, requestId: string) => void;
   onActiveFormatsChange?: (formats: Set<FormatType>) => void;
   onReady?: () => void;
   onKeyboardVisibilityChange?: (visible: boolean) => void;
+  /** 텍스트 선택 핸들 드래그 중 true — 스와이프 플립 제스처를 일시 비활성화하는 데 사용. */
+  onTextSelectionActiveChange?: (active: boolean) => void;
 }
 
 const MEMO_BG = "#FFFAEB";
@@ -64,10 +85,14 @@ const MemoWebEditor = forwardRef<MemoWebEditorRef, MemoWebEditorProps>(
       keyboardVisible,
       editable = true,
       flipAngle,
+      previewBlocks,
+      frontBlocks,
+      isFlipping = false,
       onExportMarkdown,
       onActiveFormatsChange,
       onReady,
       onKeyboardVisibilityChange,
+      onTextSelectionActiveChange,
     },
     ref,
   ) {
@@ -130,59 +155,137 @@ const MemoWebEditor = forwardRef<MemoWebEditorRef, MemoWebEditorProps>(
     });
 
     const hintRowH = bodyFontSize * 0.78 + paddingY * 0.6;
+    const previewFontSize = bodyFontSize;
+    const previewLineHeight = bodyFontSize * ReaderTokens.lineHeight.relaxed;
+    const previewLetterSpacing = bodyFontSize * ReaderTokens.letterSpacing.relaxedEm;
+    const noop = useCallback(() => {}, []);
 
     return (
-      <Animated.View
-        style={[
-          styles.card,
-          { width: containerWidth, height: containerHeight, backgroundColor: MEMO_BG },
-          animStyle,
-        ]}
-      >
-        {/* Page hint */}
-        <View
-          style={[
-            styles.hintRow,
-            {
-              paddingHorizontal: paddingX,
-              paddingTop: paddingY * 0.6,
-              height: hintRowH,
-            },
-          ]}
-        >
-          <Text style={[styles.hintText, { fontSize: bodyFontSize * 0.78 }]}>
-            {pageIndex + 1} / {totalPages}
-          </Text>
-          {!keyboardVisible && (
-            <Text style={[styles.turnHint, { fontSize: bodyFontSize * 0.72 }]}>
-              버튼으로 페이지 이동
-            </Text>
-          )}
-        </View>
+      <View style={{ width: containerWidth, height: containerHeight }}>
+        {/* 정적 미리보기 레이어 — 회전하지 않고 항상 같은 위치에 놓여, 플립 중인
+            카드가 원근 축소로 얇아지는 순간부터 그 뒤에서 드러난다. 다음/이전
+            페이지가 실제로 넘어가기 전부터 이미 "거기 있는" 것처럼 보이게 한다. */}
+        {previewBlocks && (
+          <View
+            pointerEvents="none"
+            style={[
+              styles.card,
+              StyleSheet.absoluteFillObject,
+              { width: containerWidth, height: containerHeight, backgroundColor: MEMO_BG },
+            ]}
+          >
+            <View
+              style={[
+                styles.hintRow,
+                {
+                  paddingHorizontal: paddingX,
+                  paddingTop: paddingY * 0.6,
+                  height: hintRowH,
+                },
+              ]}
+            />
+            <View
+              style={[
+                styles.editorWrap,
+                { paddingHorizontal: paddingX + 24, paddingTop: 16, paddingBottom: bottomInset },
+              ]}
+            >
+              {previewBlocks.map((block, i) => (
+                <MarkdownBlock
+                  key={i}
+                  block={block}
+                  onCollect={noop}
+                  fontSize={previewFontSize}
+                  lineHeight={previewLineHeight}
+                  letterSpacing={previewLetterSpacing}
+                />
+              ))}
+            </View>
+          </View>
+        )}
 
-        {/* Web(TipTap) 에디터 — 기록 탭과 동일 엔진. body 가 투명이라 카드(크림) 배경이 비친다. */}
-        <View
+        <Animated.View
           style={[
-            styles.editorWrap,
-            { paddingHorizontal: paddingX, paddingBottom: bottomInset },
+            styles.card,
+            { width: containerWidth, height: containerHeight, backgroundColor: MEMO_BG },
+            animStyle,
           ]}
         >
-          <WebViewMarkdownEditor
-            ref={editorRef}
-            initialMarkdown={initialContent}
-            placeholder="이 페이지에 메모를 적어보세요..."
-            editable={editable}
-            hideTitle
-            bodyFontSize={bodyFontSize}
-            bodyLetterSpacing={0.3}
-            onReady={onReady}
-            onChange={handleChange}
-            onExportMarkdown={handleExport}
-            onSelectionUpdate={handleSelection}
-            onKeyboardVisibilityChange={onKeyboardVisibilityChange}
-          />
-        </View>
-      </Animated.View>
+          {/* Page hint */}
+          <View
+            style={[
+              styles.hintRow,
+              {
+                paddingHorizontal: paddingX,
+                paddingTop: paddingY * 0.6,
+                height: hintRowH,
+              },
+            ]}
+          >
+            <Text style={[styles.hintText, { fontSize: bodyFontSize * 0.78 }]}>
+              {pageIndex + 1} / {totalPages}
+            </Text>
+            {!keyboardVisible && (
+              <Text style={[styles.turnHint, { fontSize: bodyFontSize * 0.72 }]}>
+                스와이프 또는 버튼으로 이동
+              </Text>
+            )}
+          </View>
+
+          {/* 회전 중(front) 정적 미리보기 — 현재 페이지 내용을 즉시(지연 없이)
+              렌더해, 아래 실제 WebView가 숨겨진 애니메이션 구간 동안에도
+              콘텐츠가 끊김 없이 계속 보이게 한다. */}
+          {frontBlocks && (
+            <View
+              pointerEvents="none"
+              style={[
+                StyleSheet.absoluteFillObject,
+                styles.editorWrap,
+                { paddingHorizontal: paddingX + 24, paddingTop: 16, paddingBottom: bottomInset },
+              ]}
+            >
+              {frontBlocks.map((block, i) => (
+                <MarkdownBlock
+                  key={i}
+                  block={block}
+                  onCollect={noop}
+                  fontSize={previewFontSize}
+                  lineHeight={previewLineHeight}
+                  letterSpacing={previewLetterSpacing}
+                />
+              ))}
+            </View>
+          )}
+
+          {/* Web(TipTap) 에디터 — 기록 탭과 동일 엔진. body 가 투명이라 카드(크림) 배경이 비친다.
+              rotateX 3D 변환 중에는 WebView가 흰 화면으로 깜빡이거나 갱신이
+              지연되는 문제가 있어, 정지 상태(isFlipping=false)일 때만 보이도록
+              가린다 — 실제 편집은 정지 상태에서만 가능하면 충분하다. */}
+          <View
+            pointerEvents={isFlipping ? "none" : "auto"}
+            style={[
+              styles.editorWrap,
+              { paddingHorizontal: paddingX, paddingBottom: bottomInset, opacity: isFlipping ? 0 : 1 },
+            ]}
+          >
+            <WebViewMarkdownEditor
+              ref={editorRef}
+              initialMarkdown={initialContent}
+              placeholder="이 페이지에 메모를 적어보세요..."
+              editable={editable}
+              hideTitle
+              bodyFontSize={bodyFontSize}
+              bodyLetterSpacing={0.3}
+              onReady={onReady}
+              onChange={handleChange}
+              onExportMarkdown={handleExport}
+              onSelectionUpdate={handleSelection}
+              onKeyboardVisibilityChange={onKeyboardVisibilityChange}
+              onTextSelectionActiveChange={onTextSelectionActiveChange}
+            />
+          </View>
+        </Animated.View>
+      </View>
     );
   },
 );
