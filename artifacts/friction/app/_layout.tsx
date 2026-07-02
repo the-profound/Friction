@@ -93,7 +93,7 @@ function ActiveReadingGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-const AUTH_BYPASS_ROUTES = new Set(["login", "login-callback", "notepad"]);
+const AUTH_BYPASS_ROUTES = new Set(["login", "login-callback"]);
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { session, isLoading } = useAuth();
@@ -193,7 +193,6 @@ function RootLayoutNav() {
           <Stack.Screen name="terms" options={{ presentation: "card" }} />
           <Stack.Screen name="login" options={{ headerShown: false }} />
           <Stack.Screen name="login-callback" options={{ headerShown: false }} />
-          <Stack.Screen name="notepad" />
         </Stack>
       </ActiveReadingGuard>
     </AuthGuard>
