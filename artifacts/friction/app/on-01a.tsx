@@ -702,12 +702,27 @@ export default function WritingScreen() {
       exportDebounceTimerRef.current = null;
     }
     exportPendingRef.current = false;
+
+    // autoSplitImages 가 이미지 분할 트랜잭션을 dispatch 한 경우, WebView JS 이벤트
+    // 루프가 완전히 settle 될 때까지 한 틱 기다린다. 이 대기 없이 바로
+    // getEditorContent() 를 호출하면 직전 스냅샷 캐시가 반환될 수 있어
+    // 이미지 전후 텍스트 페이지 글자 수가 0 으로 나타나는 케이스가 발생한다.
+    await new Promise<void>((r) => setTimeout(r, 50));
+
     const cur = await getEditorContent();
     console.log(
       "[enterDividingMode] content acquired len=%d preview=%j",
       cur.length,
       cur.slice(0, 60),
     );
+    splitContentToPages(cur).forEach((p) => {
+      console.log(
+        "[enterDividingMode] page[%d] charCount=%d preview=%j",
+        p.pageIndex,
+        p.charCount,
+        p.content.slice(0, 40),
+      );
+    });
 
     // markDirty → flush 순서 보장: latestDataRef 를 최신값으로 갱신한 뒤에야
     // flush 를 호출해야 최신 콘텐츠가 서버에 저장된다.
@@ -851,8 +866,22 @@ export default function WritingScreen() {
     Keyboard.dismiss();
 
     const cur = await getEditorContent();
+    console.log(
+      "[handleNextToClosing] content len=%d preview=%j",
+      cur.length,
+      cur.slice(0, 60),
+    );
 
     const pgs = splitContentToPages(cur);
+    pgs.forEach((p) => {
+      console.log(
+        "[handleNextToClosing] page[%d] charCount=%d preview=%j",
+        p.pageIndex,
+        p.charCount,
+        p.content.slice(0, 40),
+      );
+    });
+
     const liveBaseWarnings = validatePages(pgs);
     const liveHeightWarnings = pgs
       .filter((p) => {

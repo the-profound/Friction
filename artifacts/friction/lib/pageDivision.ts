@@ -28,7 +28,14 @@ export interface DivisionValidation {
 }
 
 export function splitContentToPages(markdownContent: string): PageBlock[] {
-  const rawPages = markdownContent.split(new RegExp(`^${PAGE_DIVIDER}$`, "m"));
+  const leadingDivRe = new RegExp(`^(${PAGE_DIVIDER}\\n?)+`);
+  const trailingDivRe = new RegExp(`(\\n?${PAGE_DIVIDER})+$`);
+  const normalized = markdownContent
+    .trim()
+    .replace(leadingDivRe, "")
+    .replace(trailingDivRe, "")
+    .trim();
+  const rawPages = normalized.split(new RegExp(`^${PAGE_DIVIDER}$`, "m"));
   return rawPages.map((content, i) => ({
     pageIndex: i,
     content: content.trim(),
