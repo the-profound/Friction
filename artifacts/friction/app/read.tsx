@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   TextInput,
+  Image,
   BackHandler,
   AppState,
   Platform,
@@ -13,6 +14,7 @@ import {
   useWindowDimensions,
   type LayoutChangeEvent,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import MemoWebEditor, { type MemoWebEditorRef, type FormatType } from "@/components/MemoWebEditor/MemoWebEditor";
 import MemoToolbar from "@/components/MemoToolbar/MemoToolbar";
 import ScalePressable from "@/components/shared/ScalePressable";
@@ -239,7 +241,7 @@ export default function ReadScreen() {
   const [sentencePopupVisible, setSentencePopupVisible] = useState(false);
   const [selectedText, setSelectedText] = useState("");
   const [clearSelectionSignal, setClearSelectionSignal] = useState(0);
-  const [finishSheetVisible, setFinishSheetVisible] = useState(false);
+  const [readingCompleteVisible, setReadingCompleteVisible] = useState(false);
   // ── 질문 카드 스와이프 상태 (목업 ReaderSwipeNextPreview 로직) ──────────────
   const [cardPtr, setCardPtr] = useState(0);
   const [cardSaved, setCardSaved] = useState<{ qIdx: number; answer: string }[]>([]);
@@ -875,6 +877,13 @@ export default function ReadScreen() {
   // Vertical park distance: card height + buffer to ensure it is fully off-screen
   const cardRestTY = cardSmallH + 60;
 
+  // ── curl 애니메이션 (목업 QuestionCardSwipePreview 이식) ──────────────────
+  const curlProgress = useSharedValue(0);   // 0→1 during curl anim
+  const curlDirSV = useSharedValue(1);       // 1=forward, -1=back
+  const [curlCardData, setCurlCardData] = useState<{
+    outQ: string; outAns: string; inQ: string; inAns: string;
+  } | null>(null);
+
   // Tracks which direction the active swipe is going (JS-thread safe, runOnJS:true).
   const activeSwipeRef = useRef<'forward' | 'backward' | null>(null);
 
@@ -988,6 +997,63 @@ export default function ReadScreen() {
     transform: [{ translateY: incomingCardTY.value }],
   }));
 
+  // ── curl 레이어 애니메이션 스타일 (목업 geometry 이식) ───────────────────
+  // RIGHT_EXP < LEFT_EXP → 우측이 먼저 말려 올라가며 사선 구분선 형성
+  const CURL_RIGHT_EXP = 0.5;
+  const CURL_LEFT_EXP  = 0.7;
+  // cardSmallH / cardSmallW는 클로저로 캡처 (화면 크기는 애니메이션 중 바뀌지 않음).
+  const _cardSmallH = cardSmallH;
+  const _cardSmallW = cardSmallW;
+
+  // 2. Flat remaining: 나가는 카드 전체 — LEFT_EXP 기준 높이로 클립 (좌측이 느리게 말림)
+  //    단일 레이어로 전체 너비를 덮고, Flap의 skewY가 사선 경계를 만든다.
+  const curlFlatStyle = useAnimatedStyle(() => {
+    const rolledAmount = curlDirSV.value > 0 ? curlProgress.value : 1 - curlProgress.value;
+    const rL = Math.min(1, Math.max(0, Math.pow(rolledAmount, CURL_LEFT_EXP)));
+    return { height: Math.max(0, _cardSmallH * (1 - rL)) };
+  });
+
+  // 3. Flap: 종이 뒷면 — skewY 적용으로 top edge가 사선이 됨
+  //    수학적 근거: center_y = rollTopAvg + flapH/2 를 축으로 skewY(skewDeg) 적용 시
+  //      top-left  = rollTopAvg + (W/2)|tan(skewDeg)| = flatHeightL  ✓
+  //      top-right = rollTopAvg − (W/2)|tan(skewDeg)| = flatHeightR  ✓
+  const curlFlapStyle = useAnimatedStyle(() => {
+    const rolledAmount = curlDirSV.value > 0 ? curlProgress.value : 1 - curlProgress.value;
+    const rR = Math.min(1, Math.max(0, Math.pow(rolledAmount, CURL_RIGHT_EXP)));
+    const rL = Math.min(1, Math.max(0, Math.pow(rolledAmount, CURL_LEFT_EXP)));
+    const flatHeightR = _cardSmallH * (1 - rR);
+    const flatHeightL = _cardSmallH * (1 - rL);
+    const rollTopAvg  = (flatHeightR + flatHeightL) / 2;
+    const flapH = Math.max(0, _cardSmallH - rollTopAvg);
+    const skewDeg = Math.atan2(flatHeightR - flatHeightL, _cardSmallW) * 180 / Math.PI;
+    return {
+      top: rollTopAvg,
+      height: flapH,
+      opacity: flapH > 0 ? 1 : 0,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      transform: [{ skewY: `${skewDeg}deg` }] as any,
+    };
+  });
+
+  // 4. Crease: 구분선 그림자 — rollTopAvg 위치, skewY로 우측이 위로 기운 대각선 표현
+  const curlCreaseStyle = useAnimatedStyle(() => {
+    const rolledAmount = curlDirSV.value > 0 ? curlProgress.value : 1 - curlProgress.value;
+    const rR = Math.min(1, Math.max(0, Math.pow(rolledAmount, CURL_RIGHT_EXP)));
+    const rL = Math.min(1, Math.max(0, Math.pow(rolledAmount, CURL_LEFT_EXP)));
+    const flatHeightR = _cardSmallH * (1 - rR);
+    const flatHeightL = _cardSmallH * (1 - rL);
+    const rollTopAvg  = (flatHeightR + flatHeightL) / 2;
+    const taper   = Math.min(1, rolledAmount * 5, (1 - rolledAmount) * 5);
+    // skewDeg < 0 이므로 skewY 적용 시 우측 코너가 위(−Y)로 올라감
+    const skewDeg = Math.atan2(flatHeightR - flatHeightL, _cardSmallW) * 180 / Math.PI;
+    return {
+      top: Math.max(0, rollTopAvg - 22),
+      opacity: taper,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      transform: [{ skewY: `${skewDeg}deg` }] as any,
+    };
+  });
+
 
   // ── Gesture state ref (always fresh, avoids stale closure in useMemo) ────
   const isAtEnd = currentPage >= totalPages; // on the completion card (past all real pages)
@@ -1046,13 +1112,15 @@ export default function ReadScreen() {
   const afterCardTransition = useCallback((_restTX: number) => {
     setCardExitDir(null);
     setCardIncoming(null);
+    setCurlCardData(null);
+    curlProgress.value = 0;
     cardTX.value = 0;
     cardTY.value = 0;
     cardRotation.value = 0;
     incomingCardTY.value = 0;
     cardAlpha.value = 1;
     setCardAnimating(false);
-  }, [cardTX, cardTY, cardRotation, incomingCardTY, cardAlpha]);
+  }, [cardTX, cardTY, cardRotation, incomingCardTY, cardAlpha, curlProgress]);
 
   const afterCardTransitionRef = useRef(afterCardTransition);
   useEffect(() => { afterCardTransitionRef.current = afterCardTransition; }, [afterCardTransition]);
@@ -1097,9 +1165,15 @@ export default function ReadScreen() {
     setCardExitDir(exitMode);
 
     if (exitMode === "up-slide") {
-      // incoming card 사용: 아래에서 새 카드 올라오고, 현재 카드 위로 나감
+      // curl 애니메이션: 현재 카드가 말려 올라가며 다음 카드가 드러남
+      const outQ = isNewCard
+        ? QUESTION_BLOCK_QUESTIONS[seq % QUESTION_BLOCK_QUESTIONS.length]
+        : QUESTION_BLOCK_QUESTIONS[saved[ptr]?.qIdx ?? 0];
+      const outAns = isNewCard ? newAns : (saved[ptr]?.answer ?? "");
+      setCurlCardData({ outQ, outAns, inQ: nextQ, inAns: nextAns });
       setCardIncoming({ question: nextQ, answer: nextAns, fromLeft: false });
-      incomingCardTY.value = restTY; // 아래 대기
+      curlDirSV.value = 1;
+      curlProgress.value = 0;
       requestAnimationFrame(() => {
         setCardSaved(nextSaved);
         cardSavedRef.current = nextSaved;
@@ -1108,14 +1182,9 @@ export default function ReadScreen() {
         setCardSeq(nextSeq);
         cardSeqRef.current = nextSeq;
         if (isNewCard) { setCardNewAnswer(""); cardNewAnswerRef.current = ""; }
-
-        cardTY.value = withTiming(-restTY, {
-          duration: 380,
-          easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
-        });
-        incomingCardTY.value = withTiming(0, {
-          duration: 380,
-          easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
+        curlProgress.value = withTiming(1, {
+          duration: 950,
+          easing: Easing.bezier(0.45, 0.05, 0.55, 0.95),
         }, () => {
           runOnJS(afterCardTransitionRef.current)(restTX);
         });
@@ -1163,7 +1232,6 @@ export default function ReadScreen() {
   const triggerCardBack = useCallback(() => {
     const ptr = cardPtrRef.current;
     const saved = cardSavedRef.current;
-    const restTY = cardRestTYRef.current;
     const restTX = cardRestTXRef.current;
 
     if (ptr <= 0) {
@@ -1178,25 +1246,30 @@ export default function ReadScreen() {
 
     const prevCard = saved[ptr - 1];
     const prevQ = QUESTION_BLOCK_QUESTIONS[prevCard.qIdx];
+    // 현재 카드 정보 (outgoing = 현재 보이는 카드)
+    const isCurrentNew = ptr === saved.length;
+    const outQ = isCurrentNew
+      ? QUESTION_BLOCK_QUESTIONS[cardSeqRef.current % QUESTION_BLOCK_QUESTIONS.length]
+      : QUESTION_BLOCK_QUESTIONS[saved[ptr]?.qIdx ?? 0];
+    const outAns = isCurrentNew ? cardNewAnswerRef.current : (saved[ptr]?.answer ?? "");
+
+    // curl back: inQ/inAns = 이전(위에서 내려오는) 카드, outQ/outAns = 현재(아래로 사라지는) 카드
+    setCurlCardData({ outQ, outAns, inQ: prevQ, inAns: prevCard.answer });
     setCardIncoming({ question: prevQ, answer: prevCard.answer, fromLeft: true });
-    incomingCardTY.value = -restTY; // 위에서 대기
+    curlDirSV.value = -1;
+    curlProgress.value = 0;
 
     requestAnimationFrame(() => {
       setCardPtr(ptr - 1);
       cardPtrRef.current = ptr - 1;
-      // 현재 카드: 아래로 슬라이드 아웃, 이전 카드: 위에서 내려옴
-      cardTY.value = withTiming(restTY, {
-        duration: 420,
-        easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
-      });
-      incomingCardTY.value = withTiming(0, {
-        duration: 420,
-        easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
+      curlProgress.value = withTiming(1, {
+        duration: 950,
+        easing: Easing.bezier(0.45, 0.05, 0.55, 0.95),
       }, () => {
         runOnJS(afterCardTransitionRef.current)(restTX);
       });
     });
-  }, [afterCardTransitionRef, cardTY, incomingCardTY]);
+  }, [afterCardTransitionRef, cardTY, curlProgress, curlDirSV]);
 
   const triggerCardAdvanceRef = useRef(triggerCardAdvance);
   useEffect(() => { triggerCardAdvanceRef.current = triggerCardAdvance; }, [triggerCardAdvance]);
@@ -1253,12 +1326,18 @@ export default function ReadScreen() {
           }
         } else {
           if (dx < -THRESHOLD) {
-            // 우→좌 스와이프: 보관/삭제 액션시트 표시
+            // 우→좌 스와이프: 원래 글로 돌아가기
             if (!finishOverlayVisibleRef.current) return;
-            setCardActionSheetVisible(true);
-            cardTX.value = withSpring(0, { damping: 12, stiffness: 180 });
+            cardTX.value = withTiming(-cardRestTXRef.current, {
+              duration: 360,
+              easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
+            });
+            setTimeout(() => {
+              setFinishOverlayVisible(false);
+              cardTX.value = 0;
+            }, 370);
           } else if (dx > THRESHOLD) {
-            // 좌→우 스와이프: 카드 오른쪽으로 슬라이드 아웃 → 원 글 복귀
+            // 좌→우 스와이프: 카드 오른쪽으로 슬라이드 아웃 → 읽기 완료 화면
             if (!finishOverlayVisibleRef.current) return;
             setCardAnimating(true);
             cardAnimatingRef.current = true;
@@ -1267,7 +1346,7 @@ export default function ReadScreen() {
               easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
             });
             setTimeout(() => {
-              setFinishOverlayVisible(false);
+              setReadingCompleteVisible(true);
               setCardAnimating(false);
               cardAnimatingRef.current = false;
               cardTX.value = 0;
@@ -1529,7 +1608,7 @@ export default function ReadScreen() {
       }
 
       setFinishOverlayVisible(false);
-      setFinishSheetVisible(false);
+      setReadingCompleteVisible(false);
       trackArticleAction({ articleId, action: "save", msSinceComplete: Date.now() - completionTimeRef.current });
       invalidateInbox(queryClient);
       clearActiveSession();
@@ -1549,7 +1628,7 @@ export default function ReadScreen() {
     try {
       const result = await reading.commitCompletion();
       setFinishOverlayVisible(false);
-      setFinishSheetVisible(false);
+      setReadingCompleteVisible(false);
       if (result.success) {
         trackArticleAction({ articleId, action: "skip", msSinceComplete: Date.now() - completionTimeRef.current });
         if (!isListEntry) {
@@ -2160,46 +2239,75 @@ export default function ReadScreen() {
           }),
         };
 
+        // ── curl 애니메이션 중 렌더링 결정 ──────────────────────────────
+        const isCurling = cardAnimating && (cardExitDir === "up-slide" || cardExitDir === "down-slide") && curlCardData !== null;
+        const isTearing = cardAnimating && cardExitDir === "up-fly";
+
         return (
           <>
             <View style={floatingCardStyles.dim} pointerEvents="none" />
             <GestureDetector gesture={cardPanGesture}>
               <View style={floatingCardStyles.gestureLayer}>
-                {/* 현재 카드 */}
-                <Animated.View style={[cardStyle, cardAnimStyle]}>
-                  <SpringCoil width={cardSmallW} />
-                  <View style={floatingCardStyles.cardInner}>
-                    <Text style={floatingCardStyles.questionText}>{cardCurrentQ}</Text>
-                    <TextInput
-                      style={floatingCardStyles.answerInput}
-                      value={cardCurrentAnswer}
-                      onChangeText={(v) => {
-                        if (isCardNewCard) {
-                          setCardNewAnswer(v);
-                          cardNewAnswerRef.current = v;
-                        } else {
-                          setCardSaved((prev) =>
-                            prev.map((c, i) => (i === cardPtr ? { ...c, answer: v } : c)),
-                          );
-                        }
-                      }}
-                      placeholder="생각을 자유롭게 적어보세요..."
-                      placeholderTextColor={Colors.zinc400}
-                      multiline
-                      textAlignVertical="top"
-                    />
+                {isCurling ? (
+                  // ── curl 레이어: 목업 geometry 기반 ─────────────────────
+                  <View style={[cardStyle, { overflow: "hidden" as const, zIndex: 10 }]}>
+                    {/* 0. 노트패드 스프링 (항상 최상단) */}
+                    <SpringCoil width={cardSmallW} />
+                    {/* 1. Base: 들어오는 카드 (아래에 대기) */}
+                    <View style={StyleSheet.absoluteFillObject}>
+                      <View style={[floatingCardStyles.cardInner, { paddingTop: 32 }]}>
+                        <Text style={floatingCardStyles.questionText}>{curlCardData.inQ}</Text>
+                        <Text style={floatingCardStyles.answerGhost}>{curlCardData.inAns || "생각을 자유롭게 적어보세요..."}</Text>
+                      </View>
+                    </View>
+                    {/* 2. Flat remaining: 나가는 카드 — 단일 패널, LEFT_EXP 높이로 클립 */}
+                    {/*    Flap의 skewY top edge가 실제 사선 경계를 형성하므로 패널 분할 불필요 */}
+                    <Animated.View style={[
+                      { position: "absolute" as const, top: 0, left: 0, right: 0, overflow: "hidden" as const, zIndex: 3 },
+                      curlFlatStyle,
+                    ]}>
+                      <View style={[floatingCardStyles.cardInner, { paddingTop: 32 }]}>
+                        <Text style={floatingCardStyles.questionText}>{curlCardData.outQ}</Text>
+                        <Text style={floatingCardStyles.answerGhost}>{curlCardData.outAns || "생각을 자유롭게 적어보세요..."}</Text>
+                      </View>
+                    </Animated.View>
+                    {/* 3. Flap: 종이 뒷면 — skewY로 top edge가 우측↑ 좌측↓ 사선이 됨 */}
+                    {/*    이 사선이 flat 레이어의 우측 초과분을 가려 완벽한 대각 크리스를 만듦 */}
+                    <Animated.View style={[{ position: "absolute" as const, left: 0, right: 0, zIndex: 4, overflow: "hidden" as const }, curlFlapStyle]}>
+                      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: Colors.white }]} />
+                      <LinearGradient
+                        colors={["rgba(255,255,255,0.9)", "rgba(0,0,0,0.15)", "rgba(0,0,0,0.32)", "rgba(0,0,0,0.5)"]}
+                        locations={[0, 0.08, 0.55, 1.0]}
+                        style={StyleSheet.absoluteFillObject}
+                      />
+                    </Animated.View>
+                    {/* 4. Crease: 구분선 그림자 — skewY로 우측이 위로 기운 대각선 */}
+                    <Animated.View style={[{ position: "absolute" as const, left: 0, right: 0, height: 44, zIndex: 5 }, curlCreaseStyle]}>
+                      <LinearGradient
+                        colors={["rgba(0,0,0,0.5)", "rgba(0,0,0,0)"]}
+                        style={StyleSheet.absoluteFillObject}
+                      />
+                    </Animated.View>
                   </View>
-                </Animated.View>
-                {/* 전환 중 들어오는 카드 */}
-                {cardIncoming !== null && (
-                  <Animated.View style={[cardStyle, { zIndex: 9 }, incomingCardAnimStyle]}>
+                ) : (
+                  // ── 정적 / tear 애니메이션 ────────────────────────────────
+                  <Animated.View style={[cardStyle, cardAnimStyle]}>
                     <SpringCoil width={cardSmallW} />
                     <View style={floatingCardStyles.cardInner}>
-                      <Text style={floatingCardStyles.questionText}>{cardIncoming.question}</Text>
+                      <Text style={floatingCardStyles.questionText}>{cardCurrentQ}</Text>
                       <TextInput
                         style={floatingCardStyles.answerInput}
-                        value={cardIncoming.answer}
-                        editable={false}
+                        value={cardCurrentAnswer}
+                        onChangeText={(v) => {
+                          if (isCardNewCard) {
+                            setCardNewAnswer(v);
+                            cardNewAnswerRef.current = v;
+                          } else {
+                            setCardSaved((prev) =>
+                              prev.map((c, i) => (i === cardPtr ? { ...c, answer: v } : c)),
+                            );
+                          }
+                        }}
                         placeholder="생각을 자유롭게 적어보세요..."
                         placeholderTextColor={Colors.zinc400}
                         multiline
@@ -2208,19 +2316,18 @@ export default function ReadScreen() {
                     </View>
                   </Animated.View>
                 )}
+                {/* tear 중 다음 카드를 뒤에 보여주는 정적 레이어 */}
+                {isTearing && cardIncoming !== null && (
+                  <View style={[cardStyle, { zIndex: 9 }]}>
+                    <SpringCoil width={cardSmallW} />
+                    <View style={floatingCardStyles.cardInner}>
+                      <Text style={floatingCardStyles.questionText}>{cardIncoming.question}</Text>
+                    </View>
+                  </View>
+                )}
               </View>
             </GestureDetector>
-            {/* ── 마침 버튼 — 카드 레이어 위에 렌더링 ──────────────────── */}
-            <Pressable
-              onPress={() => {
-                setFinishOverlayVisible(false);
-                setFinishSheetVisible(true);
-              }}
-              hitSlop={8}
-              style={[styles.finishBtn, { bottom: insets.bottom + 24, zIndex: 50 }]}
-            >
-              <Text style={styles.finishBtnText}>마침</Text>
-            </Pressable>
+            {/* 읽기 완료 화면은 우 스와이프로 진입 — "마침" 버튼 제거됨 */}
           </>
         );
       })()}
@@ -2256,49 +2363,37 @@ export default function ReadScreen() {
         onClose={() => setCardActionSheetVisible(false)}
       />
 
-      {/* ── 마침 BottomSheet — 저장 / 나가기 ──────────────────────────── */}
-      <BottomSheet
-        visible={finishSheetVisible}
-        onClose={() => {
-          setFinishSheetVisible(false);
-          setFinishOverlayVisible(true);
-        }}
-        title="읽기 완료"
-        titleStyle={dynamicStyles.sheetTitle}
-        snapPoints={[0.3]}
-        dismissable={true}
-      >
-        <View style={finishSheetStyles.content}>
-          <ScalePressable
-            style={[styles.completionButton, (isSaving || !isCollectionsReady) && styles.completionButtonDisabled]}
-            onPress={handleCommitAndSave}
-            disabled={isSaving}
-            contentStyle={styles.completionButtonContent}
-          >
-            <Text style={dynamicStyles.completionButtonText}>
-              {isSaving ? "저장 중..." : !isCollectionsReady ? "불러오는 중..." : "보관함에 저장"}
-            </Text>
-          </ScalePressable>
-          <ScalePressable
-            style={[styles.completionButton, styles.completionButtonSecondary, isDeleting && styles.completionButtonDisabled]}
-            onPress={mode === "re_read"
-              ? async () => {
-                  setFinishSheetVisible(false);
-                  await readingMemo.cleanup();
-                  overlayOpacity.value = withTiming(1, { duration: 350, easing: Easing.in(Easing.ease) }, (finished) => {
-                    if (finished) runOnJS(router.back)();
-                  });
-                }
-              : handleCommitAndSkip}
-            disabled={!mode || (mode !== "re_read" && isDeleting)}
-            contentStyle={styles.completionButtonContent}
-          >
-            <Text style={dynamicStyles.completionButtonSecondaryText}>
-              {mode !== "re_read" && isDeleting ? "처리 중..." : "저장 없이 나가기"}
-            </Text>
-          </ScalePressable>
-        </View>
-      </BottomSheet>
+      {/* ── 읽기 완료 전체화면 오버레이 ────────────────────────────────── */}
+      {readingCompleteVisible && (
+        <ReadingCompleteScreen
+          caseType={
+            cardSaved.some((c) => c.answer.trim().length >= 10) ||
+            cardNewAnswer.trim().length >= 10
+              ? "answered"
+              : "read"
+          }
+          isSaving={isSaving}
+          isDeleting={isDeleting}
+          isCollectionsReady={isCollectionsReady}
+          onSave={handleCommitAndSave}
+          onSkip={mode === "re_read"
+            ? async () => {
+                setReadingCompleteVisible(false);
+                await readingMemo.cleanup();
+                overlayOpacity.value = withTiming(1, { duration: 350, easing: Easing.in(Easing.ease) }, (finished) => {
+                  if (finished) runOnJS(router.back)();
+                });
+              }
+            : handleCommitAndSkip}
+          onReread={() => {
+            setReadingCompleteVisible(false);
+            setFinishOverlayVisible(false);
+          }}
+          onBack={() => {
+            setReadingCompleteVisible(false);
+          }}
+        />
+      )}
 
       {/* ── 진입/퇴장 검은 오버레이 ──────────────────────────────────── */}
       <Animated.View
@@ -2432,12 +2527,13 @@ const floatingCardStyles = StyleSheet.create({
     backgroundColor: "transparent",
     borderWidth: 0,
   },
-});
-
-const finishSheetStyles = StyleSheet.create({
-  content: {
-    paddingVertical: 12,
-    gap: 10,
+  answerGhost: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: ReaderTokens.fontFamily.serif,
+    color: Colors.zinc400,
+    lineHeight: 28,
+    letterSpacing: 0.5,
   },
 });
 
@@ -2793,31 +2889,180 @@ const styles = StyleSheet.create({
     gap: 8,
     width: "100%",
   },
-  finishBtn: {
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ReadingCompleteScreen: 읽기 완료 전체화면 오버레이 (목업 ReadingCompletePreview 이식)
+// ─────────────────────────────────────────────────────────────────────────────
+const READ_ALL_IMG = require("@/assets/images/read-all.png");
+const READ_ALL_ANSWERED_IMG = require("@/assets/images/read-all-answered.png");
+
+interface ReadingCompleteScreenProps {
+  caseType: "read" | "answered";
+  isSaving: boolean;
+  isDeleting: boolean;
+  isCollectionsReady: boolean;
+  onSave: () => void;
+  onSkip: () => void;
+  onReread: () => void;
+  onBack: () => void;
+}
+
+function ReadingCompleteScreen({
+  caseType,
+  isSaving,
+  isDeleting,
+  isCollectionsReady,
+  onSave,
+  onSkip,
+  onReread,
+  onBack,
+}: ReadingCompleteScreenProps) {
+  const insets = useSafeAreaInsets();
+  const message = caseType === "read"
+    ? "마지막 장까지\n온전히 닿았습니다."
+    : "읽고, 마음으로\n온전히 답했습니다.";
+
+  const backGesture = useMemo(() =>
+    Gesture.Pan()
+      .runOnJS(true)
+      .minDistance(12)
+      .onEnd((e) => {
+        if (e.translationX < -80 && Math.abs(e.translationX) > Math.abs(e.translationY)) {
+          onBack();
+        }
+      }),
+    [onBack],
+  );
+
+  return (
+    <GestureDetector gesture={backGesture}>
+    <View style={readingCompleteStyles.overlay}>
+      {/* 아이콘 + 메시지 */}
+      <View style={readingCompleteStyles.center}>
+        <Image
+          source={caseType === "answered" ? READ_ALL_ANSWERED_IMG : READ_ALL_IMG}
+          style={readingCompleteStyles.icon}
+          resizeMode="contain"
+        />
+        <Text style={readingCompleteStyles.message}>{message}</Text>
+      </View>
+
+      {/* 하단 버튼 영역 */}
+      <View style={[readingCompleteStyles.bottom, { paddingBottom: Math.max(insets.bottom, 24) }]}>
+        {/* 보관하기 (primary) */}
+        <Pressable
+          style={[readingCompleteStyles.saveBtn, (isSaving || !isCollectionsReady) && readingCompleteStyles.btnDisabled]}
+          onPress={onSave}
+          disabled={isSaving || !isCollectionsReady}
+        >
+          <Text style={readingCompleteStyles.saveBtnText}>
+            {isSaving ? "저장 중..." : !isCollectionsReady ? "불러오는 중..." : "보관하기"}
+          </Text>
+        </Pressable>
+
+        {/* 나가기 (secondary) */}
+        <Pressable
+          style={[readingCompleteStyles.skipBtn, isDeleting && readingCompleteStyles.btnDisabled]}
+          onPress={onSkip}
+          disabled={isDeleting}
+        >
+          <Text style={readingCompleteStyles.skipBtnText}>
+            {isDeleting ? "처리 중..." : "나가기"}
+          </Text>
+        </Pressable>
+
+        {/* 다시 읽기 (tertiary) */}
+        <Pressable style={readingCompleteStyles.rereadBtn} onPress={onReread}>
+          <Text style={readingCompleteStyles.rereadBtnText}>다시 읽기</Text>
+        </Pressable>
+      </View>
+    </View>
+    </GestureDetector>
+  );
+}
+
+const readingCompleteStyles = StyleSheet.create({
+  overlay: {
     position: "absolute",
-    right: 20,
-    zIndex: 42,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 24,
-    backgroundColor: Colors.zinc800,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.18,
-        shadowRadius: 8,
-      },
-      android: { elevation: 4 },
-      default: {},
-    }),
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: Colors.white,
+    zIndex: 100,
+    flexDirection: "column",
+    justifyContent: "space-between",
   },
-  finishBtnText: {
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 28,
+    paddingHorizontal: 36,
+  },
+  icon: {
+    width: 130,
+    height: 130,
+  },
+  message: {
+    fontSize: 21,
+    fontFamily: ReaderTokens.fontFamily.serif,
+    fontWeight: "400",
+    color: Colors.zinc800,
+    lineHeight: 36,
+    letterSpacing: 0.4,
+    textAlign: "center",
+  },
+  bottom: {
+    paddingHorizontal: 24,
+    paddingTop: 8,
+    gap: 10,
+  },
+  saveBtn: {
+    width: "100%",
+    paddingVertical: 15,
+    backgroundColor: Colors.zinc900,
+    borderRadius: 14,
+    alignItems: "center",
+  },
+  saveBtnText: {
     fontSize: 15,
     fontFamily: ReaderTokens.fontFamily.sansSemiBold,
     fontWeight: "600",
     color: Colors.white,
-    letterSpacing: 0.3,
+    letterSpacing: 0.1,
+  },
+  skipBtn: {
+    width: "100%",
+    paddingVertical: 15,
+    backgroundColor: "transparent",
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: Colors.zinc200,
+    alignItems: "center",
+  },
+  skipBtnText: {
+    fontSize: 15,
+    fontFamily: ReaderTokens.fontFamily.sans,
+    fontWeight: "500",
+    color: Colors.zinc600,
+    letterSpacing: 0.1,
+  },
+  rereadBtn: {
+    width: "100%",
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  rereadBtnText: {
+    fontSize: 14,
+    fontFamily: ReaderTokens.fontFamily.sans,
+    fontWeight: "400",
+    color: Colors.zinc400,
+    textDecorationLine: "underline",
+  },
+  btnDisabled: {
+    opacity: 0.5,
   },
 });
 
