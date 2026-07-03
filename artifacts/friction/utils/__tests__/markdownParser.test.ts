@@ -52,6 +52,16 @@ describe("parseMarkdownBlocks — 정상 파싱", () => {
     expect(blocks.some((b) => b.type === "blockquote")).toBe(true);
   });
 
+  it("내용 없는 빈 블록쿼트(>)는 blockquote 대신 빈 단락으로 치환한다", () => {
+    const blocks = parseMarkdownBlocks(">");
+    expect(blocks.some((b) => b.type === "blockquote")).toBe(false);
+  });
+
+  it("공백만 있는 블록쿼트(> )도 blockquote 로 만들지 않는다", () => {
+    const blocks = parseMarkdownBlocks("> \n>\n");
+    expect(blocks.some((b) => b.type === "blockquote")).toBe(false);
+  });
+
   it("순서 없는 목록을 파싱한다", () => {
     const blocks = parseMarkdownBlocks("- 항목 1\n- 항목 2");
     const listItems = blocks.filter((b) => b.type === "ul_item");

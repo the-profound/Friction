@@ -443,6 +443,12 @@ export default function ReadScreen() {
   const memoPagesRef = useRef<string[]>([""]);
   const keyboardVisibleRef = useRef(false);
   const memoSlideX = useSharedValue(layout.containerWidth + 40);
+  // 메모 모드 진입/종료와 동기화되어 편지 페이지 pager를 좌우로 밀어내는
+  // 공유 애니메이션 값. 메모가 우측(W+40)→중앙으로 들어올 때 0→-(W+40)으로,
+  // 메모가 중앙→우측으로 나갈 때 -(W+40)→0으로 memoSlideX와 같은
+  // 지속시간/이징으로 움직인다 — 이동 내내 두 페이지 사이 40px 간격이 유지되고
+  // 밀려난 편지는 좌측 패딩·그림자까지 포함해 완전히 화면 밖으로 사라진다.
+  const letterSlideX = useSharedValue(0);
   const handleNextMemoPageRef = useRef<() => void>(() => {});
   const handlePrevMemoPageRef = useRef<() => void>(() => {});
 
@@ -483,6 +489,10 @@ export default function ReadScreen() {
 
   const memoAnimStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: memoSlideX.value }],
+  }));
+
+  const letterAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: letterSlideX.value }],
   }));
 
   // 메모 모드 진입/종료에 맞춰 하단 진행률 바를 fade out/in 한다.
@@ -552,10 +562,15 @@ export default function ReadScreen() {
     setMemoActiveFormats(new Set());
     setIsMemoMode(true);
     memoSlideX.value = (layout.containerWidth + 40);
+    letterSlideX.value = 0;
     requestAnimationFrame(() => {
       memoSlideX.value = withTiming(0, { duration: 320, easing: Easing.bezier(0.25, 0.46, 0.45, 0.94) });
+      // 메모(우측 W+40에서 시작)와 대칭으로 편지도 -(W+40)까지 밀어내야
+      // 두 페이지 사이 40px 간격이 유지되고, 화면 좌측 패딩/그림자까지 포함해
+      // 편지가 완전히 화면 밖으로 사라진다.
+      letterSlideX.value = withTiming(-(layout.containerWidth + 40), { duration: 320, easing: Easing.bezier(0.25, 0.46, 0.45, 0.94) });
     });
-  }, [layout.containerWidth, memoSlideX, memoFlipAngle, readingMemo]);
+  }, [layout.containerWidth, memoSlideX, letterSlideX, memoFlipAngle, readingMemo]);
 
   const exitMemoMode = useCallback(() => {
     // 현재 페이지의 최신 편집 내용을 저장한 뒤 슬라이드 아웃한다.
@@ -568,7 +583,11 @@ export default function ReadScreen() {
     }, () => {
       runOnJS(setIsMemoMode)(false);
     });
-  }, [layout.containerWidth, memoSlideX]);
+    letterSlideX.value = withTiming(0, {
+      duration: 280,
+      easing: Easing.in(Easing.ease),
+    });
+  }, [layout.containerWidth, memoSlideX, letterSlideX]);
 
   // 특정 인덱스의 페이지 내용을 저장 + 영속화
   const saveMemoPage = useCallback((idx: number, markdown: string) => {
@@ -2071,14 +2090,17 @@ export default function ReadScreen() {
                         backward → prev slides –W→0 in from left on top, current stays.
                       Opaque overlay Views on the bottom slot block WebView bleed-through
                       while the moving card exposes what is underneath. */}
-                  <View
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: layout.containerWidth,
-                      height: layout.containerHeight,
-                    }}
+                  <Animated.View
+                    style={[
+                      {
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: layout.containerWidth,
+                        height: layout.containerHeight,
+                      },
+                      letterAnimStyle,
+                    ]}
                     pointerEvents="box-none"
                   >
                     {(() => {
@@ -2188,7 +2210,7 @@ export default function ReadScreen() {
                         </>
                       );
                     })()}
-                  </View>
+                  </Animated.View>
 
                   {/* ── 메모 모드 오버레이 — 오른쪽에서 슬라이드인 ──────── */}
                   {isMemoMode && (

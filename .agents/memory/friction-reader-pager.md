@@ -123,3 +123,28 @@ and hide the real WebView (`opacity:0` + `pointerEvents:"none"`) for the whole
 snap-back drags) — reveal it again only once the angle is back at rest. The
 WebView is only needed for interactivity, and interactivity is meaningless while
 mid-rotation anyway.
+
+# Memo-mode entry/exit pushes the letter pager sideways in lockstep
+
+When the memo overlay slides in/out (right↔center via `memoSlideX`), the letter
+pager underneath must slide out/in too (center↔left via a second shared value,
+e.g. `letterSlideX`), not just get covered. Wrap the pager's slot-stack container
+(the `View` holding next/current/prev, NOT the outer scaled/shadow frame) in an
+`Animated.View` driven by its own `translateX` shared value, and drive both
+values with the **same duration/easing** inside `enterMemoMode`/`exitMemoMode` so
+they read as one paired motion.
+
+**Slide distance must mirror the memo's offset, not just -W:** the memo starts
+at `W+40`, so the letter must exit to `-(W+40)`. Exiting to only `-W` leaves the
+letter's edge peeking on screen (the reader card sits inside 14px side padding
+and its shadow bleeds ~24px), and the two pages touch with zero gap. The
+symmetric `±(W+40)` targets keep a constant 40px gap between the pages for the
+whole motion and push the letter fully offscreen including padding + shadow.
+
+**Why no `overflow:"hidden"` was added:** the reader frame is sized to exactly
+`containerWidth`/`containerHeight` at rest (scaleFactor is 1 outside the
+split-preview override path), and the per-slot shadow layers are deliberately
+allowed to bleed past that box edge (`pageListContainer` has side padding
+specifically so the drop-shadow shows). Clipping the frame would cut off that
+existing shadow bleed. The horizontal slide reuses the same unclipped track the
+normal page-swipe pager already uses, so no new overflow issue is introduced.

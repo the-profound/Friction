@@ -136,7 +136,12 @@ export function markdownToHtml(md: string): string {
           else { para.push(q); }
         }
         if (para.length) inner.push(`<p>${renderInline(para.join(" "))}</p>`);
-        blocks.push(`<blockquote>${inner.join("")}</blockquote>`);
+        // 내용 없는 ">" 라인은 빈 blockquote(회색 세로줄 잔상) 대신 빈 단락으로.
+        if (inner.length > 0) {
+          blocks.push(`<blockquote>${inner.join("")}</blockquote>`);
+        } else {
+          blocks.push("<p></p>");
+        }
         continue;
       }
 

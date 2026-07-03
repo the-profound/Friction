@@ -162,6 +162,20 @@ const MemoWebEditor = forwardRef<MemoWebEditorRef, MemoWebEditorProps>(
 
     return (
       <View style={{ width: containerWidth, height: containerHeight }}>
+        {/* 정적 드롭섀도우 — 편지 페이지 pager(read.tsx의 shadowLayer)와 동일한
+            메커니즘: 그림자 전용 불투명 박스를 카드 뒤(형제, 렌더 순서상 가장
+            아래)에 깔아 두고, 카드 자신은 overflow:hidden 이라 내부는 가려지고
+            테두리 밖으로 번지는 그림자만 보이게 한다. 편지의 `next` 슬롯처럼
+            이 카드는 항상 "떠 있는" 단일 정지 카드이므로 opacity 애니메이션
+            없이 항상 1로 고정한다(편지 슬라이드 중에도 카드 자체는 안 움직이고
+            바깥 래퍼가 함께 이동할 뿐이라 그림자도 늘 카드에 붙어 있으면 된다). */}
+        <View
+          pointerEvents="none"
+          style={[
+            styles.shadowLayer,
+            { width: containerWidth, height: containerHeight },
+          ]}
+        />
         {/* 정적 미리보기 레이어 — 회전하지 않고 항상 같은 위치에 놓여, 플립 중인
             카드가 원근 축소로 얇아지는 순간부터 그 뒤에서 드러난다. 다음/이전
             페이지가 실제로 넘어가기 전부터 이미 "거기 있는" 것처럼 보이게 한다. */}
@@ -304,6 +318,18 @@ const styles = StyleSheet.create({
   card: {
     overflow: "hidden",
     borderRadius: 2,
+  },
+  // 편지 페이지 pager(read.tsx)의 shadowLayer와 동일한 boxShadow 값을 그대로
+  // 재사용해 편지/메모 두 "종이"가 같은 광원·같은 두께로 떠 있는 것처럼
+  // 보이게 한다. borderRadius도 styles.card와 맞춰 그림자 윤곽이 카드 모서리와
+  // 일치하도록 한다.
+  shadowLayer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    backgroundColor: MEMO_BG,
+    borderRadius: 2,
+    boxShadow: "0px 2px 10px rgba(0,0,0,0.13), 0px 8px 24px rgba(0,0,0,0.09)",
   },
   hintRow: {
     flexDirection: "row",

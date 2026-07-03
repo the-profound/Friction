@@ -30,3 +30,19 @@ the WebView editor. A native editor cannot make the toolbar work.
   with `setMarkdown`, rotate in from ∓90°). A ~220ms fallback timer runs the flip if
   the export event never arrives (editor not ready). Exit also exports("exit")+blur
   to capture last edits before slide-out.
+
+# Empty blockquote round-trip leaves permanent gray bars
+
+Toggling quote on an empty line makes an empty `<blockquote>`; naive markdown
+export emits a bare `>` line, which every re-import turns back into an empty
+blockquote — the gray left-border bar then persists forever on the memo page
+(and in the static block renderer used for flips).
+
+**Rule:** treat contentless blockquotes as empty paragraphs at EVERY boundary:
+markdown export (skip emitting `>`), both markdown→HTML renderers, and
+`parseMarkdownBlocks` (legacy data may already contain bare `>` lines, so the
+parse-side healing is required, not optional).
+
+**How to apply:** after editing `editorWebviewSrc/index.ts`, ALWAYS rebuild the
+bundled HTML (`pnpm build:editor` in artifacts/friction) or the change won't
+reach the app — `editorHtml.ts` is generated, not imported live.

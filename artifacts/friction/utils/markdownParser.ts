@@ -151,13 +151,19 @@ export function parseMarkdownBlocks(markdown: string): MarkdownBlockType[] {
     } else if (token.type === "blockquote") {
       const t = token as Tokens.Blockquote;
       const rawText = t.text;
-      const innerBlocks = parseMarkdownBlocks(rawText);
-      if (innerBlocks.length > 0) {
-        for (const inner of innerBlocks) {
-          blocks.push({ type: "blockquote", tokens: inner.tokens, rawText: inner.rawText });
-        }
+      // 내용 없는 ">"(빈 인용, 과거 데이터에 남아 있을 수 있음)는 회색
+      // 세로줄만 남기는 잔상이 되므로 빈 단락으로 치환한다.
+      if (rawText.trim() === "") {
+        blocks.push({ type: "paragraph", tokens: [], rawText: "" });
       } else {
-        blocks.push({ type: "blockquote", tokens: expandUnderlines([{ kind: "text", value: rawText }]), rawText });
+        const innerBlocks = parseMarkdownBlocks(rawText);
+        if (innerBlocks.length > 0) {
+          for (const inner of innerBlocks) {
+            blocks.push({ type: "blockquote", tokens: inner.tokens, rawText: inner.rawText });
+          }
+        } else {
+          blocks.push({ type: "blockquote", tokens: expandUnderlines([{ kind: "text", value: rawText }]), rawText });
+        }
       }
     } else if (token.type === "list") {
       const t = token as Tokens.List;

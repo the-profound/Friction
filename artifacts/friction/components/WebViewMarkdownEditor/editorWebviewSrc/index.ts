@@ -591,7 +591,14 @@ function markdownToHtml(md: string): string {
           }
         }
         if (para.length) inner.push(`<p>${renderInline(para.join(" "))}</p>`);
-        blocks.push(`<blockquote>${inner.join("")}</blockquote>`);
+        // 내용 없는 ">" 라인(과거 데이터에 남은 빈 인용)은 빈 blockquote 로
+        // 만들지 않고 빈 단락으로 치환한다 — 빈 blockquote 는 회색 세로줄만
+        // 남기는 잔상이 된다.
+        if (inner.length > 0) {
+          blocks.push(`<blockquote>${inner.join("")}</blockquote>`);
+        } else {
+          blocks.push("<p></p>");
+        }
         continue;
       }
 
@@ -783,8 +790,12 @@ function htmlToMarkdown(html: string): string {
           inner += blockMd(child as HTMLElement, depth);
         }
         if (!inner) inner = childrenToInline(el) + "\n";
-        const quoted = inner
-          .replace(/\n+$/, "")
+        const body = inner.replace(/\n+$/, "");
+        // 내용이 없는(사용자가 인용을 켰지만 아무것도 입력하지 않은) 빈
+        // 인용은 마크다운으로 내보내지 않는다. ">"만 남기면 다음 라운드트립
+        // 에서 빈 blockquote 가 재생성되어 회색 세로줄이 계속 남는 버그가 된다.
+        if (!body.trim()) return "\n";
+        const quoted = body
           .split("\n")
           .map((l) => `> ${l}`.trimEnd())
           .join("\n");
