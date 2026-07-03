@@ -11,14 +11,14 @@
  * 목업(QuestionCardSwipePreview.tsx)과 동일한 geometry 사용.
  */
 
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
   TextInput,
+  Pressable,
   StyleSheet,
   Platform,
-  useWindowDimensions,
 } from "react-native";
 import Animated, {
   useSharedValue,
@@ -29,6 +29,7 @@ import Animated, {
   Easing,
 } from "react-native-reanimated";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import MaskedView from "@react-native-masked-view/masked-view";
 import Svg, {
   Defs,
   ClipPath,
@@ -37,7 +38,6 @@ import Svg, {
   Rect,
   LinearGradient as SvgLinearGradient,
   Stop,
-  ForeignObject,
 } from "react-native-svg";
 import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
 import { Colors, ReaderTokens } from "@/constants/tokens";
@@ -54,13 +54,16 @@ const CURL_DURATION = 950;
 const RIGHT_EXP = 0.5; // 우측이 먼저 말려 올라감
 const LEFT_EXP = 0.7;  // 좌측이 늦게 말려 올라감
 
-/* ─── Tear 상수 ──────────────────────────────────────────────────────── */
-const TEAR_FLY_DURATION = 1200; // ms
-const TEAR_FADE_DONE = 0.4;     // 이 progress에서 opacity=0 → 카드 교체
+/* ─── Tear 상수 (목업과 동일) ────────────────────────────────────────── */
+const TEAR_DURATION = 1700;    // ms (목업 TEAR_DURATION과 동일)
+const TEAR_FADE_DONE = 0.4;    // 이 rawProgress에서 opacity=0 → 카드 교체
 
 /* ─── Easing 함수 ────────────────────────────────────────────────────── */
 function easeInOutCubic(t: number) {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+function easeOutCubic(t: number) {
+  return 1 - Math.pow(1 - t, 3);
 }
 function clamp01(v: number) { return Math.max(0, Math.min(1, v)); }
 function taper(t: number) { return Math.min(1, t * 5, (1 - t) * 5); }
@@ -163,24 +166,55 @@ const cfc = StyleSheet.create({
 
 /* ─── Props ──────────────────────────────────────────────────────────── */
 export interface QuestionCardCurlProps {
+  /** 카드가 오른쪽으로 빠져나가는 애니메이션을 "시작"하는 시점에 호출됨 —
+   *  마지막 페이지가 같은 타이밍으로 왼쪽에서 슬라이드-인할 수 있도록
+   *  read.tsx가 즉시 페이지 상태를 되돌릴 수 있게 한다. */
   onDismissOverlay: () => void;
+  /** 카드가 오른쪽으로 완전히 빠져나간 뒤(애니메이션 종료) 호출됨 —
+   *  이 시점에 카드를 언마운트해도 이미 화면 밖이라 끊김이 보이지 않는다. */
+  onDismissOverlayComplete?: () => void;
   onReadingComplete: (hasSubstantialAnswer: boolean) => void;
+  /** 읽기 페이지 프레임 크기 (read.tsx의 layout.containerWidth/Height와 동일).
+   *  카드를 이 프레임 안에 거의 꽉 차게 배치해 페이지와 크기를 맞춘다. */
+  containerWidth: number;
+  containerHeight: number;
 }
+
+/* 카드가 프레임을 완전히 채우는 비율 — 마지막 페이지/읽기 완료 화면과 정확히
+ * 같은 크기여야 전환 시 배경(readerFrame)의 흰 사각형 테두리가 드러나지 않는다. */
+const CARD_FILL_RATIO = 1;
+/* 노트 진입 슬라이드 애니메이션 지속 시간/이징 — 페이지 넘김과 동일한 체감 속도 */
+const ENTRANCE_DURATION = 380;
+const ENTRANCE_EASING = Easing.bezier(0.25, 0.46, 0.45, 0.94);
 
 /* ════════════════════════════════════════════════════════════════════════
  * QuestionCardCurl (메인 컴포넌트)
  * ════════════════════════════════════════════════════════════════════════ */
 export default function QuestionCardCurl({
   onDismissOverlay,
+  onDismissOverlayComplete,
   onReadingComplete,
+  containerWidth: screenWidth,
+  containerHeight: screenHeight,
 }: QuestionCardCurlProps) {
-  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
-
-  /* ── 카드 레이아웃 (목업과 동일: 84% 너비, 8:5 비율) ───────────────── */
-  const cardSmallW = Math.round(screenWidth * 0.84);
-  const cardFullH = Math.round(screenWidth * (8 / 5));
-  const cardSmallH = Math.round(cardFullH * 0.84);
+  /* ── 카드 레이아웃 (페이지 프레임과 거의 동일한 크기) ───────────────── */
+  const cardSmallW = Math.round(screenWidth * CARD_FILL_RATIO);
+  const cardSmallH = Math.round(screenHeight * CARD_FILL_RATIO);
   const cardSmallLeft = Math.round((screenWidth - cardSmallW) / 2);
+
+  /* ── 진입 슬라이드: 화면 오른쪽 밖에서 시작해 0으로 들어오며
+   *    동시에 이전 페이지를 밀어내는 듯한 느낌을 준다 (마운트 1회). ── */
+  const entranceTX = useSharedValue(screenWidth);
+  useEffect(() => {
+    entranceTX.value = withTiming(0, {
+      duration: ENTRANCE_DURATION,
+      easing: ENTRANCE_EASING,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const entranceStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: entranceTX.value }],
+  }));
 
   /* ── 카드 상태 ──────────────────────────────────────────────────────── */
   const [ptr, setPtr] = useState(0);
@@ -208,30 +242,15 @@ export default function QuestionCardCurl({
   const curlRafRef = useRef<number | null>(null);
 
   /* ── Shared values (Reanimated) ─────────────────────────────────────── */
-  // 드래그 팔로우 피드백
+  // 드래그 팔로우 피드백 (좌우 스와이프 + 대기 카드 위/아래 드래그)
   const cardTX = useSharedValue(0);
   const cardTY = useSharedValue(0);
-  // tear 날아가기 애니메이션
-  const tearTX = useSharedValue(0);
-  const tearTY = useSharedValue(0);
-  const tearRot = useSharedValue(0);
-  const tearScale = useSharedValue(1);
-  const tearAlpha = useSharedValue(1);
 
   const cardDragStyle = useAnimatedStyle(() => ({
     transform: [
       { translateX: cardTX.value },
       { translateY: cardTY.value },
     ],
-  }));
-  const tearAnimStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: tearTX.value },
-      { translateY: tearTY.value },
-      { rotate: `${tearRot.value}deg` },
-      { scale: tearScale.value },
-    ],
-    opacity: tearAlpha.value,
   }));
 
   /* ── afterTransition ─────────────────────────────────────────────────── */
@@ -245,14 +264,9 @@ export default function QuestionCardCurl({
     setOutSnap(null);
     setIncoming(null);
     setRawProgress(0);
-    tearTX.value = 0;
-    tearTY.value = 0;
-    tearRot.value = 0;
-    tearScale.value = 1;
-    tearAlpha.value = 1;
     cardTY.value = 0;
     cardTX.value = 0;
-  }, [tearTX, tearTY, tearRot, tearScale, tearAlpha, cardTY, cardTX]);
+  }, [cardTY, cardTX]);
 
   const afterTransitionRef = useRef(afterTransition);
   afterTransitionRef.current = afterTransition;
@@ -334,36 +348,33 @@ export default function QuestionCardCurl({
           afterTransitionRef.current();
         });
       } else {
-        /* ── tear: Reanimated withTiming으로 1시 방향 날아가기 ──────── */
+        /* ── tear: RAF로 rawProgress 0→TEAR_FADE_DONE 구동 (목업과 동일) ── */
         setAnimType("tear");
-        const flyEasing = Easing.bezier(0.4, 0, 1, 0.55);
-        // 목업 기준(390×844) 대비 실제 화면 스케일
-        const flyX = Math.round(screenWidth * (460 / 390));
-        const flyY = -Math.round(screenHeight * (760 / 844));
-
-        tearTX.value = withTiming(flyX, { duration: TEAR_FLY_DURATION, easing: flyEasing });
-        tearTY.value = withTiming(flyY, { duration: TEAR_FLY_DURATION, easing: flyEasing });
-        tearRot.value = withTiming(38, { duration: TEAR_FLY_DURATION, easing: flyEasing });
-        tearScale.value = withTiming(0.78, { duration: TEAR_FLY_DURATION, easing: flyEasing });
-        // opacity=0 도달 시점(TEAR_FADE_DONE)에 카드 교체
-        tearAlpha.value = withTiming(
-          0,
-          { duration: Math.round(TEAR_FLY_DURATION * TEAR_FADE_DONE), easing: flyEasing },
-          () => {
+        if (curlRafRef.current !== null) cancelAnimationFrame(curlRafRef.current);
+        setRawProgress(0);
+        const startTime = performance.now();
+        const step = (now: number) => {
+          const raw = (now - startTime) / TEAR_DURATION;
+          setRawProgress(Math.min(raw, 1));
+          if (raw < TEAR_FADE_DONE) {
+            curlRafRef.current = requestAnimationFrame(step);
+          } else {
+            /* opacity=0 도달 → 카드 교체 후 트랜지션 종료 */
             ptrRef.current = nextPtr;
             savedRef.current = nextSaved;
             seqRef.current = nextSeq;
             newAnswerRef.current = "";
-            runOnJS(setPtr)(nextPtr);
-            runOnJS(setSaved)(nextSaved);
-            runOnJS(setSeq)(nextSeq);
-            runOnJS(setNewAnswer)("");
-            runOnJS(afterTransitionRef.current)();
-          },
-        );
+            setPtr(nextPtr);
+            setSaved(nextSaved);
+            setSeq(nextSeq);
+            if (_isNew) setNewAnswer("");
+            afterTransitionRef.current();
+          }
+        };
+        curlRafRef.current = requestAnimationFrame(step);
       }
     },
-    [runCurlRAF, tearTX, tearTY, tearRot, tearScale, tearAlpha, screenWidth, screenHeight],
+    [runCurlRAF],
   );
 
   const triggerAdvanceRef = useRef(triggerAdvance);
@@ -421,13 +432,15 @@ export default function QuestionCardCurl({
           const dy = e.translationY;
           const isVertical = Math.abs(dy) > Math.abs(dx);
           if (isVertical) {
+            /* 목업과 동일한 드래그 팔로우 계수 */
             if (dy < 0) {
-              cardTY.value = dy * 0.14;
+              cardTY.value = dy * 0.10;
             } else {
+              const restTy = cardSmallH + 60;
               cardTY.value =
                 ptrRef.current > 0
-                  ? dy * 0.14
-                  : Math.min(dy * 0.25, cardSmallH * 0.3);
+                  ? dy * 0.12
+                  : Math.min(dy * 0.22, restTy * 0.28);
             }
           } else {
             cardTX.value = dx * 0.14;
@@ -456,30 +469,38 @@ export default function QuestionCardCurl({
           } else {
             const restX = Math.round((screenWidth + cardSmallW) / 2);
             if (dx < -THRESHOLD) {
-              // 좌 스와이프: 원래 글로 돌아가기
-              cardTX.value = withTiming(
-                -restX,
-                { duration: 360, easing: Easing.bezier(0.25, 0.46, 0.45, 0.94) },
-                () => {
-                  runOnJS(onDismissOverlay)();
-                  cardTX.value = 0;
-                },
-              );
-            } else if (dx > THRESHOLD) {
-              // 우 스와이프: 읽기 완료 화면
+              // 좌 스와이프 (오른쪽→왼쪽): 페이지 순서상 앞으로 진행 → 읽기 완료 화면.
+              // 카드는 다음 페이지가 들어오는 방향(왼쪽)으로 빠져나간다.
               const hasSubstantial =
                 savedRef.current.some((c) => c.answer.trim().length >= 10) ||
                 newAnswerRef.current.trim().length >= 10;
               animatingRef.current = true;
               setAnimating(true);
+              // 애니메이션 "시작"과 동시에 호출 — 읽기 완료 화면이 같은 타이밍으로
+              // 오른쪽에서 슬라이드-인해, 카드가 사라진 뒤 뒤늦게 나타나는 대신
+              // 하나로 연결된 슬라이드처럼 보이게 한다.
+              runOnJS(onReadingComplete)(hasSubstantial);
               cardTX.value = withTiming(
-                restX,
+                -restX,
                 { duration: 420, easing: Easing.bezier(0.25, 0.46, 0.45, 0.94) },
                 () => {
-                  runOnJS(onReadingComplete)(hasSubstantial);
                   cardTX.value = 0;
                   animatingRef.current = false;
                   runOnJS(setAnimating)(false);
+                },
+              );
+            } else if (dx > THRESHOLD) {
+              // 우 스와이프 (왼쪽→오른쪽): 페이지 순서상 뒤로 진행 → 원래 글의 마지막
+              // 페이지로 돌아가기. 카드는 이전 페이지가 있는 방향(오른쪽)으로 빠져나간다.
+              // onDismissOverlay를 "시작" 시점에 호출해 read.tsx가 즉시 마지막
+              // 페이지 상태로 되돌리고, 같은 타이밍으로 왼쪽에서 슬라이드-인하게 한다.
+              runOnJS(onDismissOverlay)();
+              cardTX.value = withTiming(
+                restX,
+                { duration: 360, easing: Easing.bezier(0.25, 0.46, 0.45, 0.94) },
+                () => {
+                  cardTX.value = 0;
+                  if (onDismissOverlayComplete) runOnJS(onDismissOverlayComplete)();
                 },
               );
             } else {
@@ -538,6 +559,14 @@ export default function QuestionCardCurl({
       ? (outSnap?.ans ?? "")
       : (incoming?.ans ?? "");
 
+  /* ── Tear geometry (목업과 동일한 수식: RAF rawProgress → easeOutCubic) ── */
+  const tearEased = easeOutCubic(Math.min(rawProgress, 1));
+  const tearFlyX = tearEased * Math.round(screenWidth * (460 / 390));
+  const tearFlyY = tearEased * -Math.round(screenHeight * (760 / 844));
+  const tearFlyRot = tearEased * 38;
+  const tearFlyScale = 1 - tearEased * 0.22;
+  const tearFlyOpacity = Math.max(0, 1 - rawProgress / TEAR_FADE_DONE);
+
   const isCurling =
     animating && animType === "curl" && outSnap !== null;
   const isTearing =
@@ -592,10 +621,7 @@ export default function QuestionCardCurl({
    * Render
    * ───────────────────────────────────────────────────────────────────── */
   return (
-    <>
-      {/* 딤 오버레이 */}
-      <View style={s.dim} pointerEvents="none" />
-
+    <Animated.View style={[s.root, entranceStyle]}>
       <GestureDetector gesture={panGesture}>
         <View style={s.gestureLayer}>
 
@@ -631,23 +657,53 @@ export default function QuestionCardCurl({
            * ══════════════════════════════════════════════════════════ */}
           {isCurling ? (
             <View style={[cardBaseStyle, { overflow: "hidden" }]}>
+              {/*
+               * 1. Base: 들어오는 카드 (전체, 가장 아래).
+               * react-native-svg의 ForeignObject는 네이티브(안드로이드/iOS)에서
+               * 텍스트가 사라지거나 리렌더 시 렉이 발생하는 문제가 있어
+               * 일반 View로 렌더링 (SVG 밖).
+               */}
+              <View style={StyleSheet.absoluteFillObject}>
+                <CardFaceContent
+                  question={baseQ}
+                  answer={baseAns}
+                  width={cardSmallW}
+                  height={cardSmallH}
+                />
+              </View>
+
+              {/*
+               * 2. Flat-remaining: 나가는 카드, 사다리꼴 모양으로 마스킹.
+               * ForeignObject 대신 MaskedView + SVG Polygon 마스크 사용
+               * (실제 텍스트는 일반 RN Text로 렌더 → 네이티브에서 안정적).
+               */}
+              <MaskedView
+                style={StyleSheet.absoluteFillObject}
+                maskElement={
+                  <Svg width={cardSmallW} height={cardSmallH}>
+                    <Polygon
+                      points={`0,0 ${cardSmallW},0 ${cardSmallW},${flatHR.toFixed(2)} 0,${flatHL.toFixed(2)}`}
+                      fill="#000"
+                    />
+                  </Svg>
+                }
+              >
+                <CardFaceContent
+                  question={animQ}
+                  answer={animAns}
+                  width={cardSmallW}
+                  height={cardSmallH}
+                />
+              </MaskedView>
+
+              {/* 3+4. Flap 반사 + Crease 그림자 (텍스트 없음 → 순수 SVG로 유지) */}
               <Svg
                 width={cardSmallW}
                 height={cardSmallH}
                 style={StyleSheet.absoluteFillObject}
+                pointerEvents="none"
               >
                 <Defs>
-                  {/*
-                   * flat-remaining clip: 나가는 카드를 상단 사다리꼴로 클리핑.
-                   * polygon(0,0 → W,0 → W,flatHR → 0,flatHL)
-                   * flatHR < flatHL 이므로 우측이 먼저 말려 대각선 형성.
-                   */}
-                  <ClipPath id="qcFlatClip">
-                    <Polygon
-                      points={`0,0 ${cardSmallW},0 ${cardSmallW},${flatHR.toFixed(2)} 0,${flatHL.toFixed(2)}`}
-                    />
-                  </ClipPath>
-
                   {/*
                    * flap body clip: 분할선 아래 반사 영역.
                    * 이 클립은 parent coordinate(카드 공간)에서 평가됨.
@@ -689,38 +745,6 @@ export default function QuestionCardCurl({
                     <Stop offset="1" stopColor="#000000" stopOpacity={0} />
                   </SvgLinearGradient>
                 </Defs>
-
-                {/* 1. Base: 들어오는 카드 (전체, 가장 아래) */}
-                <ForeignObject
-                  x={0}
-                  y={0}
-                  width={cardSmallW}
-                  height={cardSmallH}
-                >
-                  <CardFaceContent
-                    question={baseQ}
-                    answer={baseAns}
-                    width={cardSmallW}
-                    height={cardSmallH}
-                  />
-                </ForeignObject>
-
-                {/* 2. Flat-remaining: 나가는 카드, 사다리꼴 ClipPath로 클리핑 */}
-                <G clipPath="url(#qcFlatClip)">
-                  <ForeignObject
-                    x={0}
-                    y={0}
-                    width={cardSmallW}
-                    height={cardSmallH}
-                  >
-                    <CardFaceContent
-                      question={animQ}
-                      answer={animAns}
-                      width={cardSmallW}
-                      height={cardSmallH}
-                    />
-                  </ForeignObject>
-                </G>
 
                 {/*
                  * 3. Flap: 분할선 대각선을 축으로 종이 뒷면 반사.
@@ -812,46 +836,51 @@ export default function QuestionCardCurl({
                * 나가는 카드: SVG 톱니 ClipPath로 찢긴 윗변 표현 + Reanimated 날아가기.
                * SpringCoil이 overflow:visible 컨테이너 위에 ovelray되므로 zIndex 높게.
                */}
-              <Animated.View
-                style={[cardBaseStyle, tearAnimStyle, { zIndex: 12, overflow: "visible" }]}
+              <View
+                style={[
+                  cardBaseStyle,
+                  {
+                    zIndex: 12,
+                    overflow: "visible",
+                    opacity: tearFlyOpacity,
+                    transform: [
+                      { translateX: tearFlyX },
+                      { translateY: tearFlyY },
+                      { rotate: `${tearFlyRot}deg` },
+                      { scale: tearFlyScale },
+                    ],
+                  },
+                ]}
               >
-                {/* 톱니 클립 + 카드 내용 */}
-                <Svg
-                  width={cardSmallW}
-                  height={cardSmallH}
-                  style={[StyleSheet.absoluteFillObject, { borderRadius: 20 }]}
-                  pointerEvents="none"
+                {/*
+                 * 톱니 모양 마스킹 + 카드 내용.
+                 * ForeignObject 대신 MaskedView + SVG Polygon 마스크 사용
+                 * (네이티브에서 텍스트 사라짐/렉 없이 안정적으로 렌더).
+                 */}
+                <MaskedView
+                  style={[StyleSheet.absoluteFillObject, { borderRadius: 20, overflow: "hidden" }]}
+                  maskElement={
+                    <Svg width={cardSmallW} height={cardSmallH}>
+                      <Polygon points={tornTopPoints} fill="#000" />
+                    </Svg>
+                  }
                 >
-                  <Defs>
-                    <ClipPath id="qcTornClip">
-                      <Polygon points={tornTopPoints} />
-                    </ClipPath>
-                  </Defs>
-                  <G clipPath="url(#qcTornClip)">
-                    <ForeignObject
-                      x={0}
-                      y={0}
-                      width={cardSmallW}
-                      height={cardSmallH}
-                    >
-                      <CardFaceContent
-                        question={outSnap?.q ?? ""}
-                        answer={outSnap?.ans ?? ""}
-                        width={cardSmallW}
-                        height={cardSmallH}
-                      />
-                    </ForeignObject>
-                  </G>
-                </Svg>
+                  <CardFaceContent
+                    question={outSnap?.q ?? ""}
+                    answer={outSnap?.ans ?? ""}
+                    width={cardSmallW}
+                    height={cardSmallH}
+                  />
+                </MaskedView>
 
-                {/* SpringCoil: SVG 위 오버레이 */}
+                {/* SpringCoil: 마스킹된 카드 위 오버레이 */}
                 <View
                   style={StyleSheet.absoluteFillObject}
                   pointerEvents="none"
                 >
                   <SpringCoil width={cardSmallW} />
                 </View>
-              </Animated.View>
+              </View>
             </>
 
           ) : (
@@ -896,6 +925,32 @@ export default function QuestionCardCurl({
         </View>
       </GestureDetector>
 
+      {/* ↑/↓ 이전·다음 질문 버튼 (목업과 동일: 하단 중앙, ↓=이전 ↑=다음) */}
+      <View style={s.navButtonsRow} pointerEvents="box-none">
+        <Pressable
+          onPress={() => triggerBackRef.current()}
+          accessibilityLabel="이전 질문"
+          style={s.navButton}
+          hitSlop={8}
+        >
+          <Text style={s.navButtonLabel}>↓</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => {
+            if (animatingRef.current) return;
+            const _isNew = ptrRef.current === savedRef.current.length;
+            triggerAdvanceRef.current(
+              _isNew ? newAnswerRef.current.trim().length > 0 : true,
+            );
+          }}
+          accessibilityLabel="다음 질문"
+          style={s.navButton}
+          hitSlop={8}
+        >
+          <Text style={s.navButtonLabel}>↑</Text>
+        </Pressable>
+      </View>
+
       {/* 보관/삭제 액션시트 */}
       <ActionSheetModal
         visible={actionSheetVisible}
@@ -921,19 +976,18 @@ export default function QuestionCardCurl({
         ]}
         onClose={() => setActionSheetVisible(false)}
       />
-    </>
+    </Animated.View>
   );
 }
 
 /* ─── 스타일 ─────────────────────────────────────────────────────────── */
 const s = StyleSheet.create({
-  dim: {
+  root: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.28)",
     zIndex: 40,
   },
   gestureLayer: {
@@ -943,6 +997,42 @@ const s = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 41,
+  },
+  navButtonsRow: {
+    position: "absolute",
+    bottom: 28,
+    left: 0,
+    right: 0,
+    zIndex: 50,
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 16,
+  },
+  navButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.9)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+    ...Platform.select({
+      web: {
+        boxShadow: "0 2px 12px rgba(0,0,0,0.18)",
+      } as object,
+      default: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.18,
+        shadowRadius: 12,
+        elevation: 6,
+      },
+    }),
+  },
+  navButtonLabel: {
+    fontSize: 18,
+    color: Colors.zinc700,
   },
   stackLayerBack: {
     position: "absolute",

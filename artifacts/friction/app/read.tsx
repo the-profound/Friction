@@ -1169,10 +1169,27 @@ export default function ReadScreen() {
   const finishOverlayVisibleRef = useRef(false);
   useEffect(() => { finishOverlayVisibleRef.current = finishOverlayVisible; }, [finishOverlayVisible]);
 
+  // When dismissing the question card back to the article's last page, we want
+  // that page to slide in from the left in sync with the card sliding out to
+  // the right (instead of instantly snapping into place). Setting this ref
+  // just before calling reading.prevPage() tells the layout effect below to
+  // animate the reveal instead of resetting instantly.
+  const suppressNextSlotResetRef = useRef<{ from: number; duration: number } | null>(null);
+
   // Reset all slot SVs after every page-turn commit (currentPage or layout change).
   useLayoutEffect(() => {
     currentPageSV.value = currentPage;
-    currentSlotSV.value = 0;
+    const suppressed = suppressNextSlotResetRef.current;
+    if (suppressed) {
+      suppressNextSlotResetRef.current = null;
+      currentSlotSV.value = suppressed.from;
+      currentSlotSV.value = withTiming(0, {
+        duration: suppressed.duration,
+        easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
+      });
+    } else {
+      currentSlotSV.value = 0;
+    }
     prevSlotSV.value = -(layout.containerWidth + PARK_EXTRA); // park prev far off-screen left
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, layout.containerWidth]);
@@ -1277,14 +1294,41 @@ export default function ReadScreen() {
     openMemoRef.current = () => handleOpenMemo();
   }, [handleOpenMemo]);
 
+  // Duration/easing the floating question card uses for its own mount-in
+  // slide (see QuestionCardCurl's ENTRANCE_DURATION) — kept in sync here so
+  // the outgoing last page and the incoming card move as one connected slide.
+  const LAST_PAGE_TRANSITION_DURATION = 380;
+
+  // Called via runOnJS once the last page has finished sliding fully off
+  // screen (see the `goingNext && gs.isOnLastPage` branch below).
+  const finishLastPageTransitionRef = useRef(() => {});
+  useEffect(() => {
+    finishLastPageTransitionRef.current = () => {
+      isCommittingRef.current = false;
+      activeSwipeRef.current = null;
+      handleSwipeLeftRef.current();
+    };
+  }, []);
+
   // Trigger the leftward page-turn animation then call reading.nextPage()
   // Used by both the gesture handler (extra left swipe on last page) and
   // the floating [ < ] button on last page in normal read mode.
   const triggerLastPageTransitionRef = useRef(() => {});
   useEffect(() => {
     triggerLastPageTransitionRef.current = () => {
-      // Last page: immediately show floating question card (no animation).
-      handleSwipeLeftRef.current();
+      // Last page: mount the floating question card immediately (it slides
+      // in from the right on its own), while this page slides fully off to
+      // the left in sync — reads as one continuous connected slide instead
+      // of an abrupt cut.
+      const W = containerWidthRef.current || 300;
+      isCommittingRef.current = true;
+      setFinishOverlayVisible(true);
+      currentSlotSV.value = withTiming(-(W + PARK_EXTRA), {
+        duration: LAST_PAGE_TRANSITION_DURATION,
+        easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
+      }, () => {
+        runOnJS(finishLastPageTransitionRef.current)();
+      });
     };
   });
 
@@ -1411,8 +1455,18 @@ export default function ReadScreen() {
         return;
       }
       if (goingNext && gs.isOnLastPage) {
-        // Last page extra swipe → show floating question card.
-        runOnJS(handleSwipeLeftRef.current)();
+        // Last page extra swipe → mount the floating question card immediately
+        // (it slides in from the right on its own) while this page finishes
+        // sliding fully off to the left in sync, so the transition reads as
+        // one continuous connected slide instead of an abrupt cut.
+        isCommittingRef.current = true;
+        runOnJS(setFinishOverlayVisible)(true);
+        currentSlotSV.value = withTiming(-(W + PARK_EXTRA), {
+          duration: LAST_PAGE_TRANSITION_DURATION,
+          easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
+        }, () => {
+          runOnJS(finishLastPageTransitionRef.current)();
+        });
         return;
       }
       if (goingNext && gs.isAtEnd) {
@@ -1950,6 +2004,36 @@ export default function ReadScreen() {
                     })()}
                   </Animated.View>
 
+                  {/* ── 질문 카드 (읽기 완료) — 마지막 페이지와 같은 프레임 안에서
+                      오른쪽에서 슬라이드인, 페이지와 거의 동일한 크기 ──────── */}
+                  {finishOverlayVisible && (
+                    <QuestionCardCurl
+                      containerWidth={layout.containerWidth}
+                      containerHeight={layout.containerHeight}
+                      onDismissOverlay={() => {
+                        // 카드가 오른쪽으로 빠져나가는 애니메이션이 "시작"되는 시점에
+                        // 호출됨 (완료 시점 아님). 마지막 페이지가 같은 타이밍으로
+                        // 왼쪽에서 슬라이드-인하도록 즉시 상태를 되돌린다.
+                        suppressNextSlotResetRef.current = {
+                          from: -(layout.containerWidth + PARK_EXTRA),
+                          duration: 360,
+                        };
+                        reading.prevPage();
+                      }}
+                      onDismissOverlayComplete={() => {
+                        // 카드가 화면 밖으로 완전히 빠져나간 뒤 언마운트.
+                        setFinishOverlayVisible(false);
+                      }}
+                      onReadingComplete={(hasSubstantialAnswer) => {
+                        // 카드가 왼쪽으로 빠져나가는 애니메이션이 "시작"되는 시점에
+                        // 호출됨 — 읽기 완료 화면이 같은 타이밍으로 오른쪽에서
+                        // 슬라이드-인해 하나로 연결된 슬라이드처럼 보이게 한다.
+                        setReadingCompleteCaseType(hasSubstantialAnswer ? "answered" : "read");
+                        setReadingCompleteVisible(true);
+                      }}
+                    />
+                  )}
+
                   {/* ── 메모 모드 오버레이 — 오른쪽에서 슬라이드인 ──────── */}
                   {isMemoMode && (
                     <GestureDetector gesture={memoPanGesture}>
@@ -2155,17 +2239,6 @@ export default function ReadScreen() {
         </View>
       </BottomSheet>
 
-
-      {/* ── 질문 카드 플로팅 UI (QuestionCardCurl) ──────────────────── */}
-      {finishOverlayVisible && (
-        <QuestionCardCurl
-          onDismissOverlay={() => setFinishOverlayVisible(false)}
-          onReadingComplete={(hasSubstantialAnswer) => {
-            setReadingCompleteCaseType(hasSubstantialAnswer ? "answered" : "read");
-            setReadingCompleteVisible(true);
-          }}
-        />
-      )}
 
       {/* ── 읽기 완료 전체화면 오버레이 ────────────────────────────────── */}
       {readingCompleteVisible && (
@@ -2718,25 +2791,46 @@ function ReadingCompleteScreen({
   onBack,
 }: ReadingCompleteScreenProps) {
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
   const message = caseType === "read"
     ? "마지막 장까지\n온전히 닿았습니다."
     : "읽고, 마음으로\n온전히 답했습니다.";
 
+  // 카드가 왼쪽으로 빠져나가는 것과 같은 타이밍(420ms)으로 오른쪽에서
+  // 슬라이드-인 — 카드가 사라진 뒤 뒤늦게 나타나지 않고 하나로 연결된
+  // 슬라이드처럼 보이게 한다.
+  const tx = useSharedValue(screenWidth);
+  useEffect(() => {
+    tx.value = withTiming(0, { duration: 420, easing: Easing.bezier(0.25, 0.46, 0.45, 0.94) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const slideStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: tx.value }],
+  }));
+
+  // 완료 화면 → 질문 카드로 되돌아가기: 왼쪽에서 오른쪽으로 스와이프 (페이지
+  // 순서상 뒤로 이동하는 방향과 동일한 규칙). 오른쪽으로 슬라이드-아웃하며
+  // 그 아래 이미 자리 잡고 있는 질문 카드를 드러낸다.
   const backGesture = useMemo(() =>
     Gesture.Pan()
       .runOnJS(true)
       .minDistance(12)
       .onEnd((e) => {
-        if (e.translationX < -80 && Math.abs(e.translationX) > Math.abs(e.translationY)) {
-          onBack();
+        if (e.translationX > 80 && Math.abs(e.translationX) > Math.abs(e.translationY)) {
+          tx.value = withTiming(screenWidth, {
+            duration: 300,
+            easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
+          }, () => {
+            runOnJS(onBack)();
+          });
         }
       }),
-    [onBack],
+    [onBack, tx, screenWidth],
   );
 
   return (
     <GestureDetector gesture={backGesture}>
-    <View style={readingCompleteStyles.overlay}>
+    <Animated.View style={[readingCompleteStyles.overlay, slideStyle]}>
       {/* 아이콘 + 메시지 */}
       <View style={readingCompleteStyles.center}>
         <Image
@@ -2776,7 +2870,7 @@ function ReadingCompleteScreen({
           <Text style={readingCompleteStyles.rereadBtnText}>다시 읽기</Text>
         </Pressable>
       </View>
-    </View>
+    </Animated.View>
     </GestureDetector>
   );
 }

@@ -8,3 +8,4 @@
 - [Friction memo overlay rendering](friction-memo-overlay-rendering.md) — RN `color: "transparent"` unreliable for hiding overlay text; use exact background hex match instead.
 - [Friction memo card scroll vs page-flip gesture](friction-memo-gesture-split.md) — keyboard-open drag translates the card (WebView scroll disabled); typing-overflow auto-split only reports the cut, RN must apply it via setMarkdown.
 - [Reanimated cancelled-callback cleanup](friction-reanimated-cancelled-callback.md) — never gate withTiming cleanup on `finished`; cancellation (finished:false) is common with interruptible gestures and skipping cleanup leaves UI stuck.
+- [Friction question card mockup parity](friction-question-card-mockup-parity.md) — tear anim needs single RAF/state progress (not separate Reanimated withTiming calls) to match mockup exactly; drag multipliers are asymmetric, copy literally.
