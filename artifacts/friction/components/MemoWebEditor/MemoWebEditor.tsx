@@ -273,14 +273,24 @@ const MemoWebEditor = forwardRef<MemoWebEditorRef, MemoWebEditorProps>(
 
           {/* 회전 중(front) 정적 미리보기 — 현재 페이지 내용을 즉시(지연 없이)
               렌더해, 아래 실제 WebView가 숨겨진 애니메이션 구간 동안에도
-              콘텐츠가 끊김 없이 계속 보이게 한다. */}
-          {frontBlocks && (
+              콘텐츠가 끊김 없이 계속 보이게 한다. isFlipping이 아닐 때는
+              실제 WebView가 그대로 보이므로 이 레이어는 렌더하지 않는다 —
+              그렇지 않으면 정지 상태에서도 이 레이어가 hintRow 영역까지
+              뒤덮어 페이지 수/이동 힌트와 겹치거나 그 위에 그려질 수 있다.
+              상단은 hintRow 높이만큼 오프셋을 줘 실제 편집 영역(editorOverlay)
+              과 동일한 위치에 렌더되도록 한다. */}
+          {isFlipping && frontBlocks && (
             <View
               pointerEvents="none"
               style={[
                 StyleSheet.absoluteFillObject,
                 styles.editorWrap,
-                { paddingHorizontal: paddingX + 24, paddingTop: 16, paddingBottom: bottomInset },
+                {
+                  top: hintRowH,
+                  paddingHorizontal: paddingX + 24,
+                  paddingTop: 16,
+                  paddingBottom: bottomInset,
+                },
               ]}
             >
               {frontBlocks.map((block, i) => (

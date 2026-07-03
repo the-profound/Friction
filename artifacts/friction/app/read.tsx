@@ -567,11 +567,15 @@ export default function ReadScreen() {
     if (keyboardVisible) return;
     if (memoEditScrollY.value === 0) return;
     memoReturningRef.current = true;
+    // 키보드가 빠르게 열고 닫히며 이 이펙트가 다시 실행되면 위 withTiming이
+    // 취소(finished=false)될 수 있다. `finished` 여부와 무관하게 항상
+    // clearMemoReturning을 호출해야 memoReturningRef가 true로 멈춰
+    // 스와이프 플립 제스처가 영구히 막히는 것을 방지한다.
     memoEditScrollY.value = withTiming(
       0,
       { duration: 220, easing: Easing.inOut(Easing.ease) },
-      (fin) => {
-        if (fin) runOnJS(clearMemoReturning)();
+      () => {
+        runOnJS(clearMemoReturning)();
       },
     );
   }, [keyboardVisible, clearMemoReturning, memoEditScrollY]);
@@ -668,18 +672,25 @@ export default function ReadScreen() {
   // 반대편에서 원위치(0°)로 회전시킨다. 다음 페이지는 정적 미리보기 레이어로
   // 이미 뒤에 놓여 있었으므로, 여기서는 그 위를 덮던 (지금은 콘텐츠가 같아진)
   // 카드를 제자리로 되돌리기만 하면 된다 — 별도의 가림막이 필요 없다.
+  // 아래 두 애니메이션 콜백은 의도적으로 `finished` 플래그를 무시하고 항상
+  // 정리(클린업) 로직을 실행한다. Reanimated의 withTiming 콜백은 새 값
+  // 대입 등으로 애니메이션이 중간에 취소되면 finished=false 로 호출되는데,
+  // 과거에는 `if (finished)` 로 감싸 두어 취소된 경우 markMemoFlipIdle 등이
+  // 전혀 호출되지 않았다. 그 결과 카드가 edge-on(±90°)으로 멈춘 채 실제
+  // WebView(페이지 수/힌트/placeholder 포함)는 opacity:0으로 계속 숨겨지고,
+  // 텍스트가 없는 previewBlocks 레이어만 남아 완전한 백지 카드로 보이는
+  // 버그가 있었다. 취소 여부와 무관하게 항상 idle 상태로 수렴시켜야
+  // 이런 교착을 방지할 수 있다.
   const afterFlipHalf = useCallback((targetIdx: number, dir: number) => {
     setMemoPageIndex(targetIdx);
     memoPageIndexRef.current = targetIdx;
     memoWebRef.current?.setMarkdown(memoPagesRef.current[targetIdx] ?? "");
     setMemoActiveFormats(new Set());
     memoFlipAngle.value = -dir * 90;
-    memoFlipAngle.value = withTiming(0, { duration: 180, easing: Easing.out(Easing.ease) }, (fin) => {
-      if (fin) {
-        runOnJS(clearMemoPreview)();
-        runOnJS(finishFlip)();
-        runOnJS(markMemoFlipIdle)();
-      }
+    memoFlipAngle.value = withTiming(0, { duration: 180, easing: Easing.out(Easing.ease) }, () => {
+      runOnJS(clearMemoPreview)();
+      runOnJS(finishFlip)();
+      runOnJS(markMemoFlipIdle)();
     });
   }, [memoFlipAngle, finishFlip, clearMemoPreview, markMemoFlipIdle]);
 
@@ -689,8 +700,8 @@ export default function ReadScreen() {
     markMemoFlipActive();
     showMemoPreview(targetIdx);
     const dir = targetIdx > memoPageIndexRef.current ? 1 : -1;
-    memoFlipAngle.value = withTiming(dir * 90, { duration: 160, easing: Easing.in(Easing.ease) }, (fin) => {
-      if (fin) runOnJS(afterFlipHalf)(targetIdx, dir);
+    memoFlipAngle.value = withTiming(dir * 90, { duration: 160, easing: Easing.in(Easing.ease) }, () => {
+      runOnJS(afterFlipHalf)(targetIdx, dir);
     });
   }, [memoFlipAngle, afterFlipHalf, showMemoPreview, markMemoFlipActive]);
 
@@ -869,12 +880,13 @@ export default function ReadScreen() {
       const atFirst = idx <= 0;
       const boundary = (isForward && atLast) || (!isForward && atFirst);
 
+      // `finished` 여부와 무관하게 항상 정리한다 (위 afterFlipHalf/runFlip
+      // 주석 참고) — 애니메이션이 새 제스처 등으로 취소되어도 idle 상태로
+      // 수렴시켜 카드가 edge-on/숨김 상태로 멈추지 않게 한다.
       const snapBack = () => {
-        memoFlipAngle.value = withTiming(0, { duration: 200, easing: Easing.out(Easing.ease) }, (fin) => {
-          if (fin) {
-            runOnJS(clearMemoPreview)();
-            runOnJS(markMemoFlipIdle)();
-          }
+        memoFlipAngle.value = withTiming(0, { duration: 200, easing: Easing.out(Easing.ease) }, () => {
+          runOnJS(clearMemoPreview)();
+          runOnJS(markMemoFlipIdle)();
         });
       };
 
@@ -899,11 +911,10 @@ export default function ReadScreen() {
     .onFinalize(() => {
       if (keyboardVisibleRef.current || memoReturningRef.current) return;
       if (!memoFlipAnimRunning.current) {
-        memoFlipAngle.value = withTiming(0, { duration: 200, easing: Easing.out(Easing.ease) }, (fin) => {
-          if (fin) {
-            runOnJS(clearMemoPreview)();
-            runOnJS(markMemoFlipIdle)();
-          }
+        // 여기서도 `finished` 여부와 무관하게 항상 정리한다.
+        memoFlipAngle.value = withTiming(0, { duration: 200, easing: Easing.out(Easing.ease) }, () => {
+          runOnJS(clearMemoPreview)();
+          runOnJS(markMemoFlipIdle)();
         });
       }
     }),
