@@ -1380,11 +1380,24 @@ function spellFindRange(
             if (lastAppliedMarkdown !== null && next === lastAppliedMarkdown) {
               break;
             }
+            // setContent 는 기존 문서를 완전히 교체하는 트랜잭션이라, 포커스된
+            // 상태에서 실행하면 브라우저가 현재 선택 영역(커서)이 있던 DOM
+            // 노드를 잃어 contenteditable 을 blur 시켰다가 다시 focus 하는
+            // 경우가 있다 — 이 blur/focus 가 네이티브 키보드를 순간적으로
+            // 내렸다 올리는 "버벅임"으로 보인다. 페이지 전환 중에도 사용자는
+            // 계속 타이핑할 의도이므로, 교체 전 포커스 여부를 기억해 뒀다가
+            // 같은 동기 실행 흐름 안에서 즉시 재포커스해 blur 가 실제
+            // 키보드 숨김으로 이어지기 전에 되돌린다.
+            const wasFocused = editor.isFocused;
             // setContent 는 docChanged 트랜잭션을 발생시켜 onUpdate 를 trigger 한다.
             // 프로그래매틱 변경임을 표시해 spurious onChange 가 RN 으로 가지 않도록 한다.
             programmaticUpdatePending = true;
             const html = markdownToHtml(next);
             editor.commands.setContent(html);
+            if (wasFocused) {
+              // 새 페이지 콘텐츠의 끝으로 커서를 옮기며 동기적으로 재포커스한다.
+              editor.commands.focus("end", { scrollIntoView: false });
+            }
             lastAppliedMarkdown = next;
             // 새 본문이 들어왔으니 export 캐시도 비운다.
             // (setContent 트랜잭션은 docChanged=true 라 docChangeCounter 가

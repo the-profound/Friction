@@ -256,35 +256,43 @@ const MemoWebEditor = forwardRef<MemoWebEditorRef, MemoWebEditorProps>(
               ))}
             </View>
           )}
-
-          {/* Web(TipTap) 에디터 — 기록 탭과 동일 엔진. body 가 투명이라 카드(크림) 배경이 비친다.
-              rotateX 3D 변환 중에는 WebView가 흰 화면으로 깜빡이거나 갱신이
-              지연되는 문제가 있어, 정지 상태(isFlipping=false)일 때만 보이도록
-              가린다 — 실제 편집은 정지 상태에서만 가능하면 충분하다. */}
-          <View
-            pointerEvents={isFlipping ? "none" : "auto"}
-            style={[
-              styles.editorWrap,
-              { paddingHorizontal: paddingX, paddingBottom: bottomInset, opacity: isFlipping ? 0 : 1 },
-            ]}
-          >
-            <WebViewMarkdownEditor
-              ref={editorRef}
-              initialMarkdown={initialContent}
-              placeholder="이 페이지에 메모를 적어보세요..."
-              editable={editable}
-              hideTitle
-              bodyFontSize={bodyFontSize}
-              bodyLetterSpacing={0.3}
-              onReady={onReady}
-              onChange={handleChange}
-              onExportMarkdown={handleExport}
-              onSelectionUpdate={handleSelection}
-              onKeyboardVisibilityChange={onKeyboardVisibilityChange}
-              onTextSelectionActiveChange={onTextSelectionActiveChange}
-            />
-          </View>
         </Animated.View>
+
+        {/* Web(TipTap) 에디터 — 기록 탭과 동일 엔진. 회전(rotateX)하는 카드의
+            자식으로 두면 transform이 걸리는 동안 포커스된 WebView가 OS에 의해
+            블러 처리되어 키보드가 닫혀버린다. 그래서 실제 편집용 WebView는
+            카드 밖에 고정된(회전하지 않는) 레이어로 분리해 두고, 플립 중에는
+            opacity만 낮춰 숨긴다(위 frontBlocks/previewBlocks 정적 레이어가
+            대신 보인다) — 포커스와 키보드는 그대로 유지된다. */}
+        <View
+          pointerEvents={isFlipping ? "none" : "auto"}
+          style={[
+            styles.editorWrap,
+            styles.editorOverlay,
+            {
+              top: hintRowH,
+              paddingHorizontal: paddingX,
+              paddingBottom: bottomInset,
+              opacity: isFlipping ? 0 : 1,
+            },
+          ]}
+        >
+          <WebViewMarkdownEditor
+            ref={editorRef}
+            initialMarkdown={initialContent}
+            placeholder="이 페이지에 메모를 적어보세요..."
+            editable={editable}
+            hideTitle
+            bodyFontSize={bodyFontSize}
+            bodyLetterSpacing={0.3}
+            onReady={onReady}
+            onChange={handleChange}
+            onExportMarkdown={handleExport}
+            onSelectionUpdate={handleSelection}
+            onKeyboardVisibilityChange={onKeyboardVisibilityChange}
+            onTextSelectionActiveChange={onTextSelectionActiveChange}
+          />
+        </View>
       </View>
     );
   },
@@ -318,5 +326,14 @@ const styles = StyleSheet.create({
   },
   editorWrap: {
     flex: 1,
+  },
+  editorOverlay: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    overflow: "hidden",
+    borderBottomLeftRadius: 2,
+    borderBottomRightRadius: 2,
   },
 });

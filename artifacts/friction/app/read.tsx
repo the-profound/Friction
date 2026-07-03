@@ -485,6 +485,18 @@ export default function ReadScreen() {
     transform: [{ translateX: memoSlideX.value }],
   }));
 
+  // 메모 모드 진입/종료에 맞춰 하단 진행률 바를 fade out/in 한다.
+  const progressBarOpacity = useSharedValue(1);
+  useEffect(() => {
+    progressBarOpacity.value = withTiming(isMemoMode ? 0 : 1, {
+      duration: 240,
+      easing: isMemoMode ? Easing.out(Easing.ease) : Easing.in(Easing.ease),
+    });
+  }, [isMemoMode, progressBarOpacity]);
+  const progressBarAnimStyle = useAnimatedStyle(() => ({
+    opacity: progressBarOpacity.value,
+  }));
+
   useEffect(() => { isMemoModeRef.current = isMemoMode; }, [isMemoMode]);
   useEffect(() => { memoPageIndexRef.current = memoPageIndex; }, [memoPageIndex]);
   useEffect(() => { memoPagesTotalRef.current = memoPages.length; }, [memoPages.length]);
@@ -2225,10 +2237,13 @@ export default function ReadScreen() {
               </View>
             </View>
 
-            {/* Progress bar below card */}
-            <View style={styles.progressBarContainer}>
+            {/* Progress bar below card — 메모 모드 진입/종료에 맞춰 fade in/out */}
+            <Animated.View
+              style={[styles.progressBarContainer, progressBarAnimStyle]}
+              pointerEvents={isMemoMode ? "none" : "auto"}
+            >
               <ProgressIndicator type="linear" progress={reading.progress} size="small" />
-            </View>
+            </Animated.View>
           </View>
         </GestureDetector>
       ) : (
