@@ -41,6 +41,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import QuestionCardCurl from "@/components/QuestionCardCurl/QuestionCardCurl";
 import { useRouter, useLocalSearchParams, Stack } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import {
@@ -247,15 +248,8 @@ export default function ReadScreen() {
   const [selectedText, setSelectedText] = useState("");
   const [clearSelectionSignal, setClearSelectionSignal] = useState(0);
   const [readingCompleteVisible, setReadingCompleteVisible] = useState(false);
-  // ── 질문 카드 스와이프 상태 (목업 ReaderSwipeNextPreview 로직) ──────────────
-  const [cardPtr, setCardPtr] = useState(0);
-  const [cardSaved, setCardSaved] = useState<{ qIdx: number; answer: string }[]>([]);
-  const [cardSeq, setCardSeq] = useState(0);
-  const [cardNewAnswer, setCardNewAnswer] = useState("");
-  const [cardAnimating, setCardAnimating] = useState(false);
-  const [cardExitDir, setCardExitDir] = useState<"up-slide" | "up-fly" | "down-slide" | null>(null);
-  const [cardActionSheetVisible, setCardActionSheetVisible] = useState(false);
-  const [cardIncoming, setCardIncoming] = useState<{ question: string; answer: string; fromLeft: boolean } | null>(null);
+  // 읽기 완료 화면 caseType (QuestionCardCurl 콜백에서 결정됨)
+  const [readingCompleteCaseType, setReadingCompleteCaseType] = useState<"answered" | "read">("read");
   const [showSelectionPill, setShowSelectionPill] = useState(false);
   const showSelectionPillRef = useRef(false);
   const selectionPillDismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1040,30 +1034,7 @@ export default function ReadScreen() {
       } else {
         setSelectedCollectionId(undefined);
       }
-      setCardPtr(0);
-      setCardSaved([]);
-      setCardSeq(0);
-      setCardNewAnswer("");
-      setCardExitDir(null);
-      setCardIncoming(null);
-      const restTX = cardRestTX;
-      cardTX.value = restTX;
-      cardTY.value = 0;
-      cardRotation.value = 0;
-      cardAlpha.value = 1;
-      incomingCardTX.value = 0;
-      incomingCardTY.value = 0;
-      setCardAnimating(true);
       setFinishOverlayVisible(true);
-      setTimeout(() => {
-        // 목업 SNAP: 0.48s cubic-bezier(0.25,0.46,0.45,0.94) — 부드러운 슬라이드 인
-        cardTX.value = withTiming(0, {
-          duration: 480,
-          easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
-        }, () => {
-          runOnJS(setCardAnimating)(false);
-        });
-      }, 16);
     }
   }, [reading.session.state, recentCollectionQuery.data, collectionsQuery.data]);
 
@@ -1167,27 +1138,6 @@ export default function ReadScreen() {
   const prevSlotSV = useSharedValue(0); // reset to -W in useLayoutEffect
   const currentPageSV = useSharedValue(currentPage);
   const containerWidthSV = useSharedValue(layout.containerWidth);
-  // ── 질문 카드 레이아웃 (목업 84% 너비, 8:5 비율) ─────────────────────────────
-  const cardSmallW = Math.round(screenWidth * 0.84);
-  const cardFullH = Math.round(screenWidth * (8 / 5));
-  const cardSmallH = Math.round(cardFullH * 0.84);
-  const cardSmallLeft = Math.round((screenWidth - cardSmallW) / 2);
-  const cardRestTX = Math.round((screenWidth + cardSmallW) / 2);
-  const cardTX = useSharedValue(0);
-  const cardTY = useSharedValue(0);
-  const cardRotation = useSharedValue(0);
-  const cardAlpha = useSharedValue(1);
-  const incomingCardTX = useSharedValue(0);
-  const incomingCardTY = useSharedValue(0);
-  // Vertical park distance: card height + buffer to ensure it is fully off-screen
-  const cardRestTY = cardSmallH + 60;
-
-  // ── curl 애니메이션 (목업 QuestionCardSwipePreview 이식) ──────────────────
-  const curlProgress = useSharedValue(0);   // 0→1 during curl anim
-  const curlDirSV = useSharedValue(1);       // 1=forward, -1=back
-  const [curlCardData, setCurlCardData] = useState<{
-    outQ: string; outAns: string; inQ: string; inAns: string;
-  } | null>(null);
 
   // Tracks which direction the active swipe is going (JS-thread safe, runOnJS:true).
   const activeSwipeRef = useRef<'forward' | 'backward' | null>(null);
@@ -1207,24 +1157,6 @@ export default function ReadScreen() {
   useEffect(() => { hasCoverRef.current = hasCover; }, [hasCover]);
   const finishOverlayVisibleRef = useRef(false);
   useEffect(() => { finishOverlayVisibleRef.current = finishOverlayVisible; }, [finishOverlayVisible]);
-  const cardAnimatingRef = useRef(false);
-  useEffect(() => { cardAnimatingRef.current = cardAnimating; }, [cardAnimating]);
-  const cardPtrRef = useRef(0);
-  useEffect(() => { cardPtrRef.current = cardPtr; }, [cardPtr]);
-  const cardSavedRef = useRef<{ qIdx: number; answer: string }[]>([]);
-  useEffect(() => { cardSavedRef.current = cardSaved; }, [cardSaved]);
-  const cardSeqRef = useRef(0);
-  useEffect(() => { cardSeqRef.current = cardSeq; }, [cardSeq]);
-  const cardNewAnswerRef = useRef("");
-  useEffect(() => { cardNewAnswerRef.current = cardNewAnswer; }, [cardNewAnswer]);
-  const cardRestTXRef = useRef(0);
-  useEffect(() => { cardRestTXRef.current = cardRestTX; }, [cardRestTX]);
-  const cardRestTYRef = useRef(0);
-  useEffect(() => { cardRestTYRef.current = cardRestTY; }, [cardRestTY]);
-  const screenWidthRef = useRef(screenWidth);
-  useEffect(() => { screenWidthRef.current = screenWidth; }, [screenWidth]);
-  const screenHeightRef = useRef(screenHeight);
-  useEffect(() => { screenHeightRef.current = screenHeight; }, [screenHeight]);
 
   // Reset all slot SVs after every page-turn commit (currentPage or layout change).
   useLayoutEffect(() => {
@@ -1290,74 +1222,6 @@ export default function ReadScreen() {
     const progress = Math.min(1, Math.max(0, 1 - slideIn / W));
     return { opacity: progress };
   });
-  const cardAnimStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: cardTX.value },
-      { translateY: cardTY.value },
-      { rotate: `${cardRotation.value}deg` },
-    ],
-    opacity: cardAlpha.value,
-  }));
-  const incomingCardAnimStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: incomingCardTY.value }],
-  }));
-
-  // ── curl 레이어 애니메이션 스타일 (목업 geometry 이식) ───────────────────
-  // RIGHT_EXP < LEFT_EXP → 우측이 먼저 말려 올라가며 사선 구분선 형성
-  const CURL_RIGHT_EXP = 0.5;
-  const CURL_LEFT_EXP  = 0.7;
-  // cardSmallH / cardSmallW는 클로저로 캡처 (화면 크기는 애니메이션 중 바뀌지 않음).
-  const _cardSmallH = cardSmallH;
-  const _cardSmallW = cardSmallW;
-
-  // 2. Flat remaining: 나가는 카드 전체 — LEFT_EXP 기준 높이로 클립 (좌측이 느리게 말림)
-  //    단일 레이어로 전체 너비를 덮고, Flap의 skewY가 사선 경계를 만든다.
-  const curlFlatStyle = useAnimatedStyle(() => {
-    const rolledAmount = curlDirSV.value > 0 ? curlProgress.value : 1 - curlProgress.value;
-    const rL = Math.min(1, Math.max(0, Math.pow(rolledAmount, CURL_LEFT_EXP)));
-    return { height: Math.max(0, _cardSmallH * (1 - rL)) };
-  });
-
-  // 3. Flap: 종이 뒷면 — skewY 적용으로 top edge가 사선이 됨
-  //    수학적 근거: center_y = rollTopAvg + flapH/2 를 축으로 skewY(skewDeg) 적용 시
-  //      top-left  = rollTopAvg + (W/2)|tan(skewDeg)| = flatHeightL  ✓
-  //      top-right = rollTopAvg − (W/2)|tan(skewDeg)| = flatHeightR  ✓
-  const curlFlapStyle = useAnimatedStyle(() => {
-    const rolledAmount = curlDirSV.value > 0 ? curlProgress.value : 1 - curlProgress.value;
-    const rR = Math.min(1, Math.max(0, Math.pow(rolledAmount, CURL_RIGHT_EXP)));
-    const rL = Math.min(1, Math.max(0, Math.pow(rolledAmount, CURL_LEFT_EXP)));
-    const flatHeightR = _cardSmallH * (1 - rR);
-    const flatHeightL = _cardSmallH * (1 - rL);
-    const rollTopAvg  = (flatHeightR + flatHeightL) / 2;
-    const flapH = Math.max(0, _cardSmallH - rollTopAvg);
-    const skewDeg = Math.atan2(flatHeightR - flatHeightL, _cardSmallW) * 180 / Math.PI;
-    return {
-      top: rollTopAvg,
-      height: flapH,
-      opacity: flapH > 0 ? 1 : 0,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      transform: [{ skewY: `${skewDeg}deg` }] as any,
-    };
-  });
-
-  // 4. Crease: 구분선 그림자 — rollTopAvg 위치, skewY로 우측이 위로 기운 대각선 표현
-  const curlCreaseStyle = useAnimatedStyle(() => {
-    const rolledAmount = curlDirSV.value > 0 ? curlProgress.value : 1 - curlProgress.value;
-    const rR = Math.min(1, Math.max(0, Math.pow(rolledAmount, CURL_RIGHT_EXP)));
-    const rL = Math.min(1, Math.max(0, Math.pow(rolledAmount, CURL_LEFT_EXP)));
-    const flatHeightR = _cardSmallH * (1 - rR);
-    const flatHeightL = _cardSmallH * (1 - rL);
-    const rollTopAvg  = (flatHeightR + flatHeightL) / 2;
-    const taper   = Math.min(1, rolledAmount * 5, (1 - rolledAmount) * 5);
-    // skewDeg < 0 이므로 skewY 적용 시 우측 코너가 위(−Y)로 올라감
-    const skewDeg = Math.atan2(flatHeightR - flatHeightL, _cardSmallW) * 180 / Math.PI;
-    return {
-      top: Math.max(0, rollTopAvg - 22),
-      opacity: taper,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      transform: [{ skewY: `${skewDeg}deg` }] as any,
-    };
-  });
 
 
   // ── Gesture state ref (always fresh, avoids stale closure in useMemo) ────
@@ -1413,257 +1277,6 @@ export default function ReadScreen() {
     };
   });
 
-  // ── 질문 카드 내비게이션 함수 (목업 triggerAdvance/triggerBack 이식) ───────────
-  const afterCardTransition = useCallback((_restTX: number) => {
-    setCardExitDir(null);
-    setCardIncoming(null);
-    setCurlCardData(null);
-    curlProgress.value = 0;
-    cardTX.value = 0;
-    cardTY.value = 0;
-    cardRotation.value = 0;
-    incomingCardTY.value = 0;
-    cardAlpha.value = 1;
-    setCardAnimating(false);
-  }, [cardTX, cardTY, cardRotation, incomingCardTY, cardAlpha, curlProgress]);
-
-  const afterCardTransitionRef = useRef(afterCardTransition);
-  useEffect(() => { afterCardTransitionRef.current = afterCardTransition; }, [afterCardTransition]);
-
-  const triggerCardAdvance = useCallback((hasAnswer: boolean) => {
-    const ptr = cardPtrRef.current;
-    const saved = cardSavedRef.current;
-    const seq = cardSeqRef.current;
-    const newAns = cardNewAnswerRef.current;
-    const restTY = cardRestTYRef.current;
-    const restTX = cardRestTXRef.current;
-    const isNewCard = ptr === saved.length;
-
-    let nextSaved = saved;
-    let nextPtr: number;
-    let exitMode: "up-slide" | "up-fly";
-    let nextSeq = seq;
-
-    if (isNewCard) {
-      nextSeq = seq + 1;
-      if (hasAnswer) {
-        const entry = { qIdx: seq % QUESTION_BLOCK_QUESTIONS.length, answer: newAns };
-        nextSaved = [...saved, entry];
-        nextPtr = nextSaved.length;
-        exitMode = "up-slide";
-      } else {
-        nextPtr = saved.length;
-        exitMode = "up-fly";
-      }
-    } else {
-      nextPtr = ptr + 1;
-      exitMode = "up-slide";
-    }
-
-    const nextQ = nextPtr < nextSaved.length
-      ? QUESTION_BLOCK_QUESTIONS[nextSaved[nextPtr].qIdx]
-      : QUESTION_BLOCK_QUESTIONS[nextSeq % QUESTION_BLOCK_QUESTIONS.length];
-    const nextAns = nextPtr < nextSaved.length ? nextSaved[nextPtr].answer : "";
-
-    setCardAnimating(true);
-    cardAnimatingRef.current = true;
-    setCardExitDir(exitMode);
-
-    if (exitMode === "up-slide") {
-      // curl 애니메이션: 현재 카드가 말려 올라가며 다음 카드가 드러남
-      const outQ = isNewCard
-        ? QUESTION_BLOCK_QUESTIONS[seq % QUESTION_BLOCK_QUESTIONS.length]
-        : QUESTION_BLOCK_QUESTIONS[saved[ptr]?.qIdx ?? 0];
-      const outAns = isNewCard ? newAns : (saved[ptr]?.answer ?? "");
-      setCurlCardData({ outQ, outAns, inQ: nextQ, inAns: nextAns });
-      setCardIncoming({ question: nextQ, answer: nextAns, fromLeft: false });
-      curlDirSV.value = 1;
-      curlProgress.value = 0;
-      requestAnimationFrame(() => {
-        setCardSaved(nextSaved);
-        cardSavedRef.current = nextSaved;
-        setCardPtr(nextPtr);
-        cardPtrRef.current = nextPtr;
-        setCardSeq(nextSeq);
-        cardSeqRef.current = nextSeq;
-        if (isNewCard) { setCardNewAnswer(""); cardNewAnswerRef.current = ""; }
-        curlProgress.value = withTiming(1, {
-          duration: 950,
-          easing: Easing.bezier(0.45, 0.05, 0.55, 0.95),
-        }, () => {
-          runOnJS(afterCardTransitionRef.current)(restTX);
-        });
-      });
-    } else {
-      // up-fly: 빈 답변 카드가 위로 찢겨 날아가며 사라짐.
-      // incoming card 슬롯을 사용하지 않고 메인 카드 슬롯만 재활용해
-      // "afterCardTransition에서 두 번째 슬라이드"가 발생하는 현상을 방지한다.
-      const flyX = Math.round(screenWidthRef.current * (30 / 390));
-      const flyY = -Math.round(screenHeightRef.current * (420 / 844));
-      const flyEasing = Easing.bezier(0.4, 0, 1, 0.55);
-      cardTX.value = withTiming(flyX, { duration: 420, easing: flyEasing });
-      cardTY.value = withTiming(flyY, { duration: 420, easing: flyEasing });
-      cardRotation.value = withTiming(22, { duration: 420, easing: flyEasing });
-      cardAlpha.value = withTiming(0, { duration: 280, easing: flyEasing });
-      setTimeout(() => {
-        // 상태 업데이트 후 메인 카드를 새 질문으로 전환
-        setCardSaved(nextSaved);
-        cardSavedRef.current = nextSaved;
-        setCardPtr(nextPtr);
-        cardPtrRef.current = nextPtr;
-        setCardSeq(nextSeq);
-        cardSeqRef.current = nextSeq;
-        setCardNewAnswer("");
-        cardNewAnswerRef.current = "";
-        setCardExitDir(null);
-        // 메인 카드: 아래에 파킹, 비가시 (alpha=0)
-        cardTX.value = 0;
-        cardTY.value = restTY;
-        cardRotation.value = 0;
-        requestAnimationFrame(() => {
-          // 새 카드(메인 슬롯)가 아래에서 올라옴
-          cardAlpha.value = 1;
-          cardTY.value = withTiming(0, {
-            duration: 400,
-            easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
-          }, () => {
-            runOnJS(setCardAnimating)(false);
-          });
-        });
-      }, 320);
-    }
-  }, [afterCardTransitionRef, cardTX, cardTY, cardRotation, cardAlpha, incomingCardTY]);
-
-  const triggerCardBack = useCallback(() => {
-    const ptr = cardPtrRef.current;
-    const saved = cardSavedRef.current;
-    const restTX = cardRestTXRef.current;
-
-    if (ptr <= 0) {
-      // 보관된 카드 없음 — snap-back (거부 효과)
-      cardTY.value = withSpring(0, { damping: 12, stiffness: 180 });
-      return;
-    }
-
-    setCardAnimating(true);
-    cardAnimatingRef.current = true;
-    setCardExitDir("down-slide");
-
-    const prevCard = saved[ptr - 1];
-    const prevQ = QUESTION_BLOCK_QUESTIONS[prevCard.qIdx];
-    // 현재 카드 정보 (outgoing = 현재 보이는 카드)
-    const isCurrentNew = ptr === saved.length;
-    const outQ = isCurrentNew
-      ? QUESTION_BLOCK_QUESTIONS[cardSeqRef.current % QUESTION_BLOCK_QUESTIONS.length]
-      : QUESTION_BLOCK_QUESTIONS[saved[ptr]?.qIdx ?? 0];
-    const outAns = isCurrentNew ? cardNewAnswerRef.current : (saved[ptr]?.answer ?? "");
-
-    // curl back: inQ/inAns = 이전(위에서 내려오는) 카드, outQ/outAns = 현재(아래로 사라지는) 카드
-    setCurlCardData({ outQ, outAns, inQ: prevQ, inAns: prevCard.answer });
-    setCardIncoming({ question: prevQ, answer: prevCard.answer, fromLeft: true });
-    curlDirSV.value = -1;
-    curlProgress.value = 0;
-
-    requestAnimationFrame(() => {
-      setCardPtr(ptr - 1);
-      cardPtrRef.current = ptr - 1;
-      curlProgress.value = withTiming(1, {
-        duration: 950,
-        easing: Easing.bezier(0.45, 0.05, 0.55, 0.95),
-      }, () => {
-        runOnJS(afterCardTransitionRef.current)(restTX);
-      });
-    });
-  }, [afterCardTransitionRef, cardTY, curlProgress, curlDirSV]);
-
-  const triggerCardAdvanceRef = useRef(triggerCardAdvance);
-  useEffect(() => { triggerCardAdvanceRef.current = triggerCardAdvance; }, [triggerCardAdvance]);
-  const triggerCardBackRef = useRef(triggerCardBack);
-  useEffect(() => { triggerCardBackRef.current = triggerCardBack; }, [triggerCardBack]);
-
-  const cardPanGesture = useMemo(() =>
-    Gesture.Pan()
-      .runOnJS(true)
-      .minDistance(8)
-      .onBegin(() => { /* capture start */ })
-      .onUpdate((e) => {
-        if (cardAnimatingRef.current) return;
-        const dx = e.translationX;
-        const dy = e.translationY;
-        const isVertical = Math.abs(dy) > Math.abs(dx);
-        if (isVertical) {
-          // 상하 스와이프: 카드 Y축 드래그 피드백
-          if (dy < 0) {
-            // 위로 (다음) — 자연스러운 드래그
-            cardTY.value = dy * 0.14;
-          } else {
-            // 아래로 (이전) — 보관된 카드 없으면 rubber-band
-            const ptr = cardPtrRef.current;
-            if (ptr > 0) {
-              cardTY.value = dy * 0.14;
-            } else {
-              cardTY.value = Math.min(dy * 0.25, cardRestTYRef.current * 0.3);
-            }
-          }
-        } else {
-          // 좌우 스와이프: X축 드래그 피드백 (light)
-          cardTX.value = dx * 0.14;
-        }
-      })
-      .onEnd((e) => {
-        if (cardAnimatingRef.current) return;
-        const dx = e.translationX;
-        const dy = e.translationY;
-        const THRESHOLD = 80;
-        const isVertical = Math.abs(dy) > Math.abs(dx);
-
-        if (isVertical) {
-          if (dy < -THRESHOLD) {
-            // 아래→위 스와이프: 다음 질문
-            const isNewCard = cardPtrRef.current === cardSavedRef.current.length;
-            const hasAnswer = isNewCard ? cardNewAnswerRef.current.trim().length > 0 : true;
-            triggerCardAdvanceRef.current(hasAnswer);
-          } else if (dy > THRESHOLD) {
-            // 위→아래 스와이프: 이전 질문으로 돌아가기
-            triggerCardBackRef.current();
-          } else {
-            cardTY.value = withSpring(0, { damping: 12, stiffness: 180 });
-          }
-        } else {
-          if (dx < -THRESHOLD) {
-            // 우→좌 스와이프: 원래 글로 돌아가기
-            if (!finishOverlayVisibleRef.current) return;
-            cardTX.value = withTiming(-cardRestTXRef.current, {
-              duration: 360,
-              easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
-            });
-            setTimeout(() => {
-              setFinishOverlayVisible(false);
-              cardTX.value = 0;
-            }, 370);
-          } else if (dx > THRESHOLD) {
-            // 좌→우 스와이프: 카드 오른쪽으로 슬라이드 아웃 → 읽기 완료 화면
-            if (!finishOverlayVisibleRef.current) return;
-            setCardAnimating(true);
-            cardAnimatingRef.current = true;
-            cardTX.value = withTiming(cardRestTXRef.current, {
-              duration: 420,
-              easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
-            });
-            setTimeout(() => {
-              setReadingCompleteVisible(true);
-              setCardAnimating(false);
-              cardAnimatingRef.current = false;
-              cardTX.value = 0;
-            }, 440);
-          } else {
-            // snap-back
-            cardTX.value = withSpring(0, { damping: 12, stiffness: 180 });
-          }
-        }
-      }),
-    [],
-  );
 
   // Floating [ < ] button handler:
   //   - re_read mode or finish overlay visible → fade out and go back
@@ -2532,165 +2145,21 @@ export default function ReadScreen() {
       </BottomSheet>
 
 
-      {/* ── 질문 카드 플로팅 UI ──────────────────────────────────────── */}
-      {finishOverlayVisible && (() => {
-        const isCardNewCard = cardPtr === cardSaved.length;
-        const cardCurrentQIdx = isCardNewCard
-          ? cardSeq % QUESTION_BLOCK_QUESTIONS.length
-          : (cardSaved[cardPtr]?.qIdx ?? 0);
-        const cardCurrentQ = QUESTION_BLOCK_QUESTIONS[cardCurrentQIdx];
-        const cardCurrentAnswer = isCardNewCard ? cardNewAnswer : (cardSaved[cardPtr]?.answer ?? "");
-
-        const cardStyle: object = {
-          position: "absolute" as const,
-          top: "50%" as any,
-          marginTop: -(cardSmallH / 2),
-          left: cardSmallLeft,
-          width: cardSmallW,
-          height: cardSmallH,
-          borderRadius: 20,
-          backgroundColor: Colors.white,
-          overflow: "hidden" as const,
-          zIndex: 10,
-          ...Platform.select({
-            web: { boxShadow: "0 4px 40px rgba(0,0,0,0.16), 0 1px 8px rgba(0,0,0,0.08)" } as object,
-            default: { shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.16, shadowRadius: 20, elevation: 10 },
-          }),
-        };
-
-        // ── curl 애니메이션 중 렌더링 결정 ──────────────────────────────
-        const isCurling = cardAnimating && (cardExitDir === "up-slide" || cardExitDir === "down-slide") && curlCardData !== null;
-        const isTearing = cardAnimating && cardExitDir === "up-fly";
-
-        return (
-          <>
-            <View style={floatingCardStyles.dim} pointerEvents="none" />
-            <GestureDetector gesture={cardPanGesture}>
-              <View style={floatingCardStyles.gestureLayer}>
-                {isCurling ? (
-                  // ── curl 레이어: 목업 geometry 기반 ─────────────────────
-                  <View style={[cardStyle, { overflow: "hidden" as const, zIndex: 10 }]}>
-                    {/* 0. 노트패드 스프링 (항상 최상단) */}
-                    <SpringCoil width={cardSmallW} />
-                    {/* 1. Base: 들어오는 카드 (아래에 대기) */}
-                    <View style={StyleSheet.absoluteFillObject}>
-                      <View style={[floatingCardStyles.cardInner, { paddingTop: 32 }]}>
-                        <Text style={floatingCardStyles.questionText}>{curlCardData.inQ}</Text>
-                        <Text style={floatingCardStyles.answerGhost}>{curlCardData.inAns || "생각을 자유롭게 적어보세요..."}</Text>
-                      </View>
-                    </View>
-                    {/* 2. Flat remaining: 나가는 카드 — 단일 패널, LEFT_EXP 높이로 클립 */}
-                    {/*    Flap의 skewY top edge가 실제 사선 경계를 형성하므로 패널 분할 불필요 */}
-                    <Animated.View style={[
-                      { position: "absolute" as const, top: 0, left: 0, right: 0, overflow: "hidden" as const, zIndex: 3 },
-                      curlFlatStyle,
-                    ]}>
-                      <View style={[floatingCardStyles.cardInner, { paddingTop: 32 }]}>
-                        <Text style={floatingCardStyles.questionText}>{curlCardData.outQ}</Text>
-                        <Text style={floatingCardStyles.answerGhost}>{curlCardData.outAns || "생각을 자유롭게 적어보세요..."}</Text>
-                      </View>
-                    </Animated.View>
-                    {/* 3. Flap: 종이 뒷면 — skewY로 top edge가 우측↑ 좌측↓ 사선이 됨 */}
-                    {/*    이 사선이 flat 레이어의 우측 초과분을 가려 완벽한 대각 크리스를 만듦 */}
-                    <Animated.View style={[{ position: "absolute" as const, left: 0, right: 0, zIndex: 4, overflow: "hidden" as const }, curlFlapStyle]}>
-                      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: Colors.white }]} />
-                      <LinearGradient
-                        colors={["rgba(255,255,255,0.9)", "rgba(0,0,0,0.15)", "rgba(0,0,0,0.32)", "rgba(0,0,0,0.5)"]}
-                        locations={[0, 0.08, 0.55, 1.0]}
-                        style={StyleSheet.absoluteFillObject}
-                      />
-                    </Animated.View>
-                    {/* 4. Crease: 구분선 그림자 — skewY로 우측이 위로 기운 대각선 */}
-                    <Animated.View style={[{ position: "absolute" as const, left: 0, right: 0, height: 44, zIndex: 5 }, curlCreaseStyle]}>
-                      <LinearGradient
-                        colors={["rgba(0,0,0,0.5)", "rgba(0,0,0,0)"]}
-                        style={StyleSheet.absoluteFillObject}
-                      />
-                    </Animated.View>
-                  </View>
-                ) : (
-                  // ── 정적 / tear 애니메이션 ────────────────────────────────
-                  <Animated.View style={[cardStyle, cardAnimStyle]}>
-                    <SpringCoil width={cardSmallW} />
-                    <View style={floatingCardStyles.cardInner}>
-                      <Text style={floatingCardStyles.questionText}>{cardCurrentQ}</Text>
-                      <TextInput
-                        style={floatingCardStyles.answerInput}
-                        value={cardCurrentAnswer}
-                        onChangeText={(v) => {
-                          if (isCardNewCard) {
-                            setCardNewAnswer(v);
-                            cardNewAnswerRef.current = v;
-                          } else {
-                            setCardSaved((prev) =>
-                              prev.map((c, i) => (i === cardPtr ? { ...c, answer: v } : c)),
-                            );
-                          }
-                        }}
-                        placeholder="생각을 자유롭게 적어보세요..."
-                        placeholderTextColor={Colors.zinc400}
-                        multiline
-                        textAlignVertical="top"
-                      />
-                    </View>
-                  </Animated.View>
-                )}
-                {/* tear 중 다음 카드를 뒤에 보여주는 정적 레이어 */}
-                {isTearing && cardIncoming !== null && (
-                  <View style={[cardStyle, { zIndex: 9 }]}>
-                    <SpringCoil width={cardSmallW} />
-                    <View style={floatingCardStyles.cardInner}>
-                      <Text style={floatingCardStyles.questionText}>{cardIncoming.question}</Text>
-                    </View>
-                  </View>
-                )}
-              </View>
-            </GestureDetector>
-            {/* 읽기 완료 화면은 우 스와이프로 진입 — "마침" 버튼 제거됨 */}
-          </>
-        );
-      })()}
-
-      {/* ── 질문 카드 보관/삭제 액션시트 (우 스와이프) ──────────────── */}
-      <ActionSheetModal
-        visible={cardActionSheetVisible}
-        title="이 질문을"
-        actions={[
-          {
-            label: "보관하기",
-            style: "default",
-            onPress: () => {
-              if (!finishOverlayVisible) return;
-              // 보관: 답변 유무에 관계없이 저장 후 다음으로
-              triggerCardAdvanceRef.current(true);
-            },
-          },
-          {
-            label: "삭제하기",
-            style: "destructive",
-            onPress: () => {
-              if (!finishOverlayVisible) return;
-              triggerCardAdvanceRef.current(false);
-            },
-          },
-          {
-            label: "취소",
-            style: "cancel",
-            onPress: () => {},
-          },
-        ]}
-        onClose={() => setCardActionSheetVisible(false)}
-      />
+      {/* ── 질문 카드 플로팅 UI (QuestionCardCurl) ──────────────────── */}
+      {finishOverlayVisible && (
+        <QuestionCardCurl
+          onDismissOverlay={() => setFinishOverlayVisible(false)}
+          onReadingComplete={(hasSubstantialAnswer) => {
+            setReadingCompleteCaseType(hasSubstantialAnswer ? "answered" : "read");
+            setReadingCompleteVisible(true);
+          }}
+        />
+      )}
 
       {/* ── 읽기 완료 전체화면 오버레이 ────────────────────────────────── */}
       {readingCompleteVisible && (
         <ReadingCompleteScreen
-          caseType={
-            cardSaved.some((c) => c.answer.trim().length >= 10) ||
-            cardNewAnswer.trim().length >= 10
-              ? "answered"
-              : "read"
-          }
+          caseType={readingCompleteCaseType}
           isSaving={isSaving}
           isDeleting={isDeleting}
           isCollectionsReady={isCollectionsReady}
