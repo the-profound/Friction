@@ -1,6 +1,7 @@
 import React, {
   forwardRef,
   useCallback,
+  useEffect,
   useImperativeHandle,
   useRef,
 } from "react";
@@ -25,6 +26,11 @@ export interface MemoWebEditorRef {
   toggleMark: (mark: InlineMark) => void;
   setBlockType: (blockType: string) => void;
   blur: () => void;
+}
+
+export interface MemoOverflowSplitPayload {
+  beforeMarkdown: string;
+  afterMarkdown: string;
 }
 
 interface MemoWebEditorProps {
@@ -65,6 +71,13 @@ interface MemoWebEditorProps {
   onKeyboardVisibilityChange?: (visible: boolean) => void;
   /** 텍스트 선택 핸들 드래그 중 true — 스와이프 플립 제스처를 일시 비활성화하는 데 사용. */
   onTextSelectionActiveChange?: (active: boolean) => void;
+  /**
+   * 타이핑 중 현재 페이지 콘텐츠가 이 높이(px)를 넘으면 넘친 부분을 다음
+   * 페이지로 자동 이동시킨다. undefined/null이면 오버플로 감지를 하지 않는다.
+   */
+  availableContentHeightPx?: number | null;
+  /** 오버플로로 페이지가 자동 분할되었을 때 호출된다. */
+  onOverflowSplit?: (payload: MemoOverflowSplitPayload) => void;
 }
 
 const MEMO_BG = "#FFFAEB";
@@ -93,12 +106,24 @@ const MemoWebEditor = forwardRef<MemoWebEditorRef, MemoWebEditorProps>(
       onReady,
       onKeyboardVisibilityChange,
       onTextSelectionActiveChange,
+      availableContentHeightPx,
+      onOverflowSplit,
     },
     ref,
   ) {
     const editorRef = useRef<WebViewMarkdownEditorRef>(null);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const autoReqRef = useRef(0);
+
+    // 타이핑 중 오버플로(다음 페이지 자동 이동) 감지 설정 — 페이지가 바뀌거나
+    // 가용 높이가 바뀔 때마다 최신 값을 WebView 에 전달한다. null 이면 감지를
+    // 끈다(예: 플립 애니메이션 중이거나 편집 불가 상태).
+    useEffect(() => {
+      editorRef.current?.setOverflowProbeConfig(
+        editable ? availableContentHeightPx ?? null : null,
+        true,
+      );
+    }, [editable, availableContentHeightPx]);
 
     useImperativeHandle(
       ref,
@@ -305,6 +330,9 @@ const MemoWebEditor = forwardRef<MemoWebEditorRef, MemoWebEditorProps>(
             onSelectionUpdate={handleSelection}
             onKeyboardVisibilityChange={onKeyboardVisibilityChange}
             onTextSelectionActiveChange={onTextSelectionActiveChange}
+            onOverflowSplit={onOverflowSplit}
+            scrollEnabled={false}
+            swipeDownToDismissKeyboard={false}
           />
         </View>
       </View>

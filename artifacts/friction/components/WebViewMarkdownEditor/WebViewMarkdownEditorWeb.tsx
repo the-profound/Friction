@@ -156,7 +156,7 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
       },
       setOverflowRanges(_ranges) {
       },
-      setOverflowProbeConfig(_availableContentHeightPx) {
+      setOverflowProbeConfig(_availableContentHeightPx, _autoSplit) {
       },
       setBlockType(_blockType: string) {
       },

@@ -20,7 +20,7 @@ export type RNToWebViewCommand =
   | { type: "setEditable"; isEditable: boolean }
   | { type: "setSourceArticleSlot"; text: string }
   | { type: "setOverflowRanges"; ranges: OverflowRange[] | null }
-  | { type: "setOverflowProbeConfig"; availableContentHeightPx: number | null }
+  | { type: "setOverflowProbeConfig"; availableContentHeightPx: number | null; autoSplit?: boolean }
   | { type: "setBodyMetrics"; fontSizePx: number; letterSpacingPx: number; titleFontSizePx?: number }
   | { type: "setBlockType"; blockType: string }
   | { type: "toggleMark"; mark: string }
@@ -72,7 +72,8 @@ export type WebViewToRNEvent =
   | { type: "onSelectionUpdate"; payload: OnSelectionUpdatePayload }
   | { type: "onSelHandleDragStart" }
   | { type: "onSelHandleDragEnd" }
-  | { type: "onAutoSplitComplete"; payload: { hadConsecutiveImages: boolean } };
+  | { type: "onAutoSplitComplete"; payload: { hadConsecutiveImages: boolean } }
+  | { type: "onOverflowSplit"; payload: { beforeMarkdown: string; afterMarkdown: string } };
 
 export interface WebViewMarkdownEditorRef {
   setMarkdown: (markdown: string) => void;
@@ -81,7 +82,7 @@ export interface WebViewMarkdownEditorRef {
   setTitle: (title: string) => void;
   blur: () => void;
   setOverflowRanges: (ranges: OverflowRange[] | null) => void;
-  setOverflowProbeConfig: (availableContentHeightPx: number | null) => void;
+  setOverflowProbeConfig: (availableContentHeightPx: number | null, autoSplit?: boolean) => void;
   setBlockType: (blockType: string) => void;
   toggleMark: (mark: string) => void;
   insertDivider: () => void;
@@ -125,4 +126,27 @@ export interface WebViewMarkdownEditorProps {
    * 기본값 false — 기록 탭 등 기존 사용처는 영향 없음.
    */
   hideTitle?: boolean;
+  /**
+   * WebView 내부 자동 스크롤(예: 캐럿을 화면에 보이도록 하는 브라우저 기본
+   * 동작)을 막기 위해 RN WebView 컴포넌트 자체의 스크롤을 비활성화한다.
+   * 메모 모드처럼 페이지가 고정 크기이고 넘치는 내용은 오버플로 감지로
+   * 다음 페이지로 넘겨야 하는 화면에서 사용한다. 기본값 true(기존 동작 유지).
+   */
+  scrollEnabled?: boolean;
+  /**
+   * 오버플로 감지(runOverflowProbe)가 활성화된 상태에서 현재 페이지 내용이
+   * 가용 높이를 넘으면 호출된다. `beforeMarkdown`은 잘라낸 앞부분(현재
+   * 페이지에 남길 내용), `afterMarkdown`은 넘친 뒷부분(다음 페이지로 옮길
+   * 내용)이다.
+   */
+  onOverflowSplit?: (payload: { beforeMarkdown: string; afterMarkdown: string }) => void;
+  /**
+   * WebView 내부의 "아래로 스와이프하면 키보드를 닫는다" 휴리스틱을 끈다.
+   * 메모 모드는 키보드가 열려 있는 동안 아래로 드래그하면 카드를 스크롤하는
+   * 별도 제스처를 쓰므로, 이 WebView 내부 휴리스틱과 충돌해 카드를 끝까지
+   * 스크롤한 뒤 계속 아래로 드래그하면 키보드가 의도치 않게 닫혀 버린다.
+   * 메모 모드에서는 false 로 넘겨 키보드가 서식 툴바의 닫기 버튼으로만
+   * 닫히도록 한다. 기본값 true(기록 탭 등 기존 동작 유지).
+   */
+  swipeDownToDismissKeyboard?: boolean;
 }

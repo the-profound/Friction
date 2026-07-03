@@ -16,6 +16,7 @@ import { HorizontalRule } from "@tiptap/extension-horizontal-rule";
 import { HardBreak } from "@tiptap/extension-hard-break";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
+import { DOMSerializer } from "@tiptap/pm/model";
 import type { Node as PMNode } from "@tiptap/pm/model";
 
 interface OverflowRange {
@@ -850,6 +851,7 @@ interface Command {
   isEditable?: boolean;
   ranges?: OverflowRange[] | null;
   availableContentHeightPx?: number | null;
+  autoSplit?: boolean;
   text?: string;
   fontSizePx?: number;
   letterSpacingPx?: number;
@@ -1029,6 +1031,14 @@ function spellFindRange(
   // RN 측 측정 레이어(WebViewMeasureLayer) 의 margin/padding 가정과 무관하게
   // 항상 에디터의 실제 시각 레이아웃과 정확히 일치한다.
   let overflowAvailableContentHeight: number | null = null;
+  // true면 오버플로 감지 시 빨간 강조 대신 문서를 잘라 다음 페이지로 넘기는
+  // "자동 페이지 분할" 이벤트를 RN 으로 보낸다(메모 모드 전용). 검토/분할
+  // 모드(on-01)의 기존 강조 동작은 이 값이 false 일 때와 동일하게 유지된다.
+  let overflowAutoSplit = false;
+  // 같은 overflowPos 에 대해 분할 이벤트를 중복 전송하지 않기 위한 가드.
+  // RN 이 setMarkdown 으로 잘라낸 내용을 반영하면 문서가 바뀌어 다음 probe 에서
+  // 자연히 초기화된다(overflowPos 가 없어지거나 달라짐).
+  let lastAutoSplitPos: number | null = null;
   let probeTimer: ReturnType<typeof setTimeout> | null = null;
   let probeRafId: number | null = null;
   const PROBE_DEBOUNCE_MS = 80;
@@ -1062,6 +1072,32 @@ function spellFindRange(
         runOverflowProbe();
       });
     }, delay);
+  }
+
+  // 문서를 splitPos 기준으로 앞/뒤 두 조각으로 잘라 각각 markdown 문자열로
+  // 변환해 RN 으로 보낸다(메모 모드의 "타이핑 중 오버플로 → 다음 페이지로
+  // 자동 이동" 용). ProseMirror 슬라이스를 DOMSerializer 로 실제 DOM 조각을
+  // 만든 뒤, 기존 htmlToMarkdown() 변환 파이프라인을 그대로 재사용한다.
+  function emitOverflowSplit(doc: PMNode, splitPos: number) {
+    if (!editor || editor.isDestroyed) return;
+    try {
+      const before = doc.cut(0, splitPos);
+      const after = doc.cut(splitPos, doc.content.size);
+      const serializer = DOMSerializer.fromSchema(editor.schema);
+      const beforeDiv = document.createElement("div");
+      beforeDiv.appendChild(serializer.serializeFragment(before.content));
+      const afterDiv = document.createElement("div");
+      afterDiv.appendChild(serializer.serializeFragment(after.content));
+      postToRN({
+        type: "onOverflowSplit",
+        payload: {
+          beforeMarkdown: htmlToMarkdown(beforeDiv.innerHTML),
+          afterMarkdown: htmlToMarkdown(afterDiv.innerHTML),
+        },
+      });
+    } catch (e) {
+      postToRN({ type: "onError", payload: { code: "OVERFLOW_SPLIT_FAIL", message: String(e) } });
+    }
   }
 
   function runOverflowProbe() {
@@ -1128,6 +1164,13 @@ function spellFindRange(
       const overflowPos = lo;
 
       if (overflowPos < page.end) {
+        if (overflowAutoSplit) {
+          if (lastAutoSplitPos !== overflowPos) {
+            lastAutoSplitPos = overflowPos;
+            emitOverflowSplit(doc, overflowPos);
+          }
+          return;
+        }
         // 일반 케이스: 글리프가 경계를 넘는 글자가 있다.
         const charOffset = pmPosToPageCharOffset(doc, page.start, overflowPos);
         ranges.push({ pageIndex: pi, startCharOffset: charOffset });
@@ -1162,6 +1205,13 @@ function spellFindRange(
             // 블록 시작 PM position 을 찾아 그 블록 전체를 강조한다.
             const blockStartPmPos = view.posAtDOM(blockEl, 0);
             if (blockStartPmPos >= page.start && blockStartPmPos < page.end) {
+              if (overflowAutoSplit) {
+                if (lastAutoSplitPos !== blockStartPmPos + 1) {
+                  lastAutoSplitPos = blockStartPmPos + 1;
+                  emitOverflowSplit(doc, blockStartPmPos + 1);
+                }
+                return;
+              }
               const charOffset = pmPosToPageCharOffset(doc, page.start, blockStartPmPos + 1);
               ranges.push({ pageIndex: pi, startCharOffset: charOffset });
             }
@@ -1170,6 +1220,13 @@ function spellFindRange(
       } catch {
         // DOM 접근 실패 시 이 페이지 강조는 조용히 건너뛴다.
       }
+    }
+
+    if (overflowAutoSplit) {
+      // 이 프레임에서 어떤 페이지도 오버플로 되지 않았다 — 다음 오버플로 발생 시
+      // 다시 분할 이벤트를 보낼 수 있도록 가드를 초기화한다.
+      lastAutoSplitPos = null;
+      return;
     }
 
     if (!editor || editor.isDestroyed) return;
@@ -1488,10 +1545,12 @@ function spellFindRange(
           const next = cmd.availableContentHeightPx;
           const prev = overflowAvailableContentHeight;
           overflowAvailableContentHeight = (next != null && next > 0) ? next : null;
+          overflowAutoSplit = !!cmd.autoSplit;
+          lastAutoSplitPos = null;
           if (overflowAvailableContentHeight == null) {
             // probe 가 비활성화되는 순간 1회만 강조를 비운다.
             // (이후 doc 변경 시에는 scheduleOverflowProbe 가 no-op 이라 트랜잭션이 발생하지 않는다.)
-            if (prev != null && editor && !editor.isDestroyed) {
+            if (prev != null && !overflowAutoSplit && editor && !editor.isDestroyed) {
               const tr = editor.state.tr.setMeta(overflowPluginKey, { ranges: [] });
               editor.view.dispatch(tr);
             }

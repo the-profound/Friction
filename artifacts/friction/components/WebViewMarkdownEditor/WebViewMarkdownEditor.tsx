@@ -41,6 +41,9 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       bodyLetterSpacing,
       titleFontSize,
       hideTitle,
+      scrollEnabled = true,
+      onOverflowSplit,
+      swipeDownToDismissKeyboard = true,
     },
     ref,
   ) {
@@ -83,8 +86,8 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       setOverflowRanges(ranges) {
         sendCommand({ type: "setOverflowRanges", ranges });
       },
-      setOverflowProbeConfig(availableContentHeightPx) {
-        sendCommand({ type: "setOverflowProbeConfig", availableContentHeightPx });
+      setOverflowProbeConfig(availableContentHeightPx, autoSplit) {
+        sendCommand({ type: "setOverflowProbeConfig", availableContentHeightPx, autoSplit });
       },
       setBlockType(blockType: string) {
         sendCommand({ type: "setBlockType", blockType });
@@ -163,6 +166,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
               onKeyboardVisibilityChange?.(false);
               break;
             case "onSwipeDownToDismiss": {
+              if (!swipeDownToDismissKeyboard) break;
               bridge.injectRaw(`(function(){try{if(document.activeElement){document.activeElement.blur();}}catch(e){}})();true;`);
               Keyboard.dismiss();
               break;
@@ -186,10 +190,13 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
               resolvers.forEach((r) => r(data.payload));
               break;
             }
+            case "onOverflowSplit":
+              onOverflowSplit?.(data.payload);
+              break;
           }
         });
       },
-      [bridge, hideTitle, onReady, onChange, onExportMarkdown, onTitleChange, onError, onKeyboardVisibilityChange, onSelectionUpdate, onTextSelectionActiveChange, onSourceArticleSlotTap],
+      [bridge, hideTitle, onReady, onChange, onExportMarkdown, onTitleChange, onError, onKeyboardVisibilityChange, onSelectionUpdate, onTextSelectionActiveChange, onSourceArticleSlotTap, onOverflowSplit, swipeDownToDismissKeyboard],
     );
 
     useEffect(() => {
@@ -297,7 +304,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
           allowFileAccess={false}
           allowUniversalAccessFromFileURLs={false}
           mediaPlaybackRequiresUserAction
-          scrollEnabled={!scrollLocked}
+          scrollEnabled={scrollEnabled && !scrollLocked}
           bounces={false}
           keyboardDisplayRequiresUserAction={false}
           hideKeyboardAccessoryView={Platform.OS === "ios"}

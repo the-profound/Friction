@@ -6,3 +6,4 @@
 - [Friction envelope animation](friction-envelope-animation.md) — sealed-envelope open: layer z-order, closed flap rotates & swaps to STATIC open flap at edge-on; mockup PNGs used as full-card layers, seal baked in.
 - [Friction two-database setup](friction-two-database.md) — executeSql tool hits local DB (DATABASE_URL); API server hits Supabase DB (SUPABASE_DB_URL). Migrations must reach BOTH.
 - [Friction memo overlay rendering](friction-memo-overlay-rendering.md) — RN `color: "transparent"` unreliable for hiding overlay text; use exact background hex match instead.
+- [Friction memo card scroll vs page-flip gesture](friction-memo-gesture-split.md) — keyboard-open drag translates the card (WebView scroll disabled); typing-overflow auto-split only reports the cut, RN must apply it via setMarkdown.
