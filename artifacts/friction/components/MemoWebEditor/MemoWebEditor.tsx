@@ -25,6 +25,7 @@ export interface MemoWebEditorRef {
   requestExport: (requestId: string) => void;
   toggleMark: (mark: InlineMark) => void;
   setBlockType: (blockType: string) => void;
+  insertQuote: (text: string) => void;
   blur: () => void;
 }
 
@@ -133,6 +134,7 @@ const MemoWebEditor = forwardRef<MemoWebEditorRef, MemoWebEditorProps>(
           editorRef.current?.requestExportMarkdown(requestId),
         toggleMark: (mark: InlineMark) => editorRef.current?.toggleMark(mark),
         setBlockType: (blockType: string) => editorRef.current?.setBlockType(blockType),
+        insertQuote: (text: string) => editorRef.current?.insertQuote(text),
         blur: () => editorRef.current?.blur(),
       }),
       [],

@@ -104,6 +104,9 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       insertImage(url: string) {
         sendCommand({ type: "insertImage", url });
       },
+      insertQuote(text: string) {
+        sendCommand({ type: "insertQuote", text });
+      },
       autoSplitImages() {
         return new Promise<{ hadConsecutiveImages: boolean }>((resolve) => {
           autoSplitResolversRef.current.push(resolve);

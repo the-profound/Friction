@@ -1,8 +1,15 @@
-import React from "react";
+import React, { useRef } from "react";
 import { View, Text, StyleSheet, Platform } from "react-native";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import ScalePressable from "@/components/shared/ScalePressable";
 import type { FormatType } from "@/components/MemoPageView/MemoPageView";
+
+export interface AttachMenuAnchor {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 interface MemoToolbarProps {
   currentPage: number;
@@ -12,6 +19,11 @@ interface MemoToolbarProps {
   onDismissKeyboard: () => void;
   onFormat?: (type: FormatType) => void;
   activeFormats?: Set<FormatType>;
+  /**
+   * 클립(첨부) 버튼을 눌렀을 때 호출된다. 버튼의 화면 좌표(anchor)를 전달하므로
+   * 부모가 키보드를 유지한 채 그 위에 첨부 메뉴를 띄운다.
+   */
+  onOpenAttachMenu?: (anchor: AttachMenuAnchor) => void;
 }
 
 export default function MemoToolbar({
@@ -22,13 +34,21 @@ export default function MemoToolbar({
   onDismissKeyboard,
   onFormat,
   activeFormats,
+  onOpenAttachMenu,
 }: MemoToolbarProps) {
+  const clipBtnRef = useRef<View>(null);
   const canGoPrev = currentPage > 0;
   const isLastPage = currentPage >= totalPages - 1;
   const isBoldActive = activeFormats?.has("bold");
   const isItalicActive = activeFormats?.has("italic");
   const isUnderlineActive = activeFormats?.has("underline");
   const isQuoteActive = activeFormats?.has("quote");
+
+  const openAttachMenu = () => {
+    clipBtnRef.current?.measureInWindow((x, y, width, height) => {
+      onOpenAttachMenu?.({ x, y, width, height });
+    });
+  };
 
   return (
     <View style={styles.outerWrap}>
@@ -69,6 +89,17 @@ export default function MemoToolbar({
         >
           <Text style={[styles.quoteIcon, isQuoteActive && styles.fmtLabelActive]}>{"\u201C\u201D"}</Text>
         </ScalePressable>
+
+        <View ref={clipBtnRef} collapsable={false}>
+          <ScalePressable
+            style={styles.btn}
+            contentStyle={styles.btnContent}
+            onPress={openAttachMenu}
+            hitSlop={6}
+          >
+            <Feather name="paperclip" size={15} color="#3f3f46" />
+          </ScalePressable>
+        </View>
 
         <View style={styles.divider} />
 

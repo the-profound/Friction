@@ -174,6 +174,14 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
       },
       insertImage(_url: string) {
       },
+      insertQuote(text: string) {
+        if (editor && !editor.isDestroyed && text) {
+          editor.chain().focus().insertContent({
+            type: "blockquote",
+            content: [{ type: "paragraph", content: [{ type: "text", text }] }],
+          }).run();
+        }
+      },
       autoSplitImages() {
         return Promise.resolve({ hadConsecutiveImages: false });
       },

@@ -1647,6 +1647,15 @@ function spellFindRange(
           }
           break;
         }
+        case "insertQuote": {
+          if (editor && !editor.isDestroyed && cmd.text) {
+            editor.chain().focus().insertContent({
+              type: "blockquote",
+              content: [{ type: "paragraph", content: [{ type: "text", text: cmd.text }] }],
+            }).run();
+          }
+          break;
+        }
         case "autoSplitImages": {
           if (!editor || editor.isDestroyed) {
             postToRN({ type: "onAutoSplitComplete", payload: { hadConsecutiveImages: false } });

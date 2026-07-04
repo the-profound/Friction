@@ -27,6 +27,7 @@ export type RNToWebViewCommand =
   | { type: "insertDivider" }
   | { type: "insertHardBreak" }
   | { type: "insertImage"; url: string }
+  | { type: "insertQuote"; text: string }
   | { type: "autoSplitImages" }
   | { type: "scrollToBlock"; pageIndex: number; blockIndex: number }
   | { type: "setSpellHighlight"; original: string; contextHint: string; occurrenceIndex: number }
@@ -88,6 +89,7 @@ export interface WebViewMarkdownEditorRef {
   insertDivider: () => void;
   insertHardBreak: () => void;
   insertImage: (url: string) => void;
+  insertQuote: (text: string) => void;
   autoSplitImages: () => Promise<{ hadConsecutiveImages: boolean }>;
   scrollToBlock: (pageIndex: number, blockIndex: number) => void;
   setSpellHighlight: (original: string, contextHint: string, occurrenceIndex: number) => void;
