@@ -27,6 +27,7 @@ import Animated, {
   withSpring,
   runOnJS,
   Easing,
+  type SharedValue,
 } from "react-native-reanimated";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import MaskedView from "@react-native-masked-view/masked-view";
@@ -166,26 +167,69 @@ const cfc = StyleSheet.create({
 
 /* ─── Props ──────────────────────────────────────────────────────────── */
 export interface QuestionCardCurlProps {
-  /** 카드가 오른쪽으로 빠져나가는 애니메이션을 "시작"하는 시점에 호출됨 —
-   *  마지막 페이지가 같은 타이밍으로 왼쪽에서 슬라이드-인할 수 있도록
-   *  read.tsx가 즉시 페이지 상태를 되돌릴 수 있게 한다. */
+  /** 카드가 오른쪽으로 빠져나가는 애니메이션의 커밋이 확정된 시점(release)에
+   *  호출됨 — read.tsx가 즉시 페이지 상태를 되돌릴 수 있게 한다. 실제 화면
+   *  이동은 이미 드래그 내내 `dismissPrevSlotSV`로 라이브 추적되어 있었으므로
+   *  이 시점엔 상태만 전환하면 된다. */
   onDismissOverlay: () => void;
   /** 카드가 오른쪽으로 완전히 빠져나간 뒤(애니메이션 종료) 호출됨 —
    *  이 시점에 카드를 언마운트해도 이미 화면 밖이라 끊김이 보이지 않는다. */
   onDismissOverlayComplete?: () => void;
-  onReadingComplete: (hasSubstantialAnswer: boolean) => void;
+  /** 좌 스와이프 제스처가 시작된 첫 프레임에 1회 호출됨 — 읽기 완료 화면을
+   *  즉시 마운트해 드래그 내내 `completeEntranceX`로 라이브 추적할 수 있게
+   *  한다 (커밋 여부는 아직 미정, 취소되면 onReadingCompleteCancel 호출). */
+  onReadingCompleteBegin: (hasSubstantialAnswer: boolean) => void;
+  /** 좌 스와이프가 임계값 미만으로 취소되어 카드가 제자리로 돌아올 때 호출됨 —
+   *  읽기 완료 화면을 다시 언마운트한다. */
+  onReadingCompleteCancel: () => void;
   /** 읽기 페이지 프레임 크기 (read.tsx의 layout.containerWidth/Height와 동일).
    *  카드를 이 프레임 안에 거의 꽉 차게 배치해 페이지와 크기를 맞춘다. */
   containerWidth: number;
   containerHeight: number;
+  /** read.tsx가 소유한, 카드의 절대 translateX (W=화면 밖 오른쪽, 0=제자리).
+   *  마지막 페이지→카드 진입(A)을 read.tsx의 페이지 드래그와 라이브로
+   *  동기화하기 위해 내부 entranceTX 대신 이 값을 그대로 사용한다. */
+  entranceX: SharedValue<number>;
+  /** read.tsx의 `prevSlotSV` — 카드→마지막 페이지 복귀(B) 드래그 중 라이브로
+   *  써서, 이미 마운트되어 있는 이전 페이지 슬롯이 카드와 1:1로 함께
+   *  드러나도록 한다. */
+  dismissPrevSlotSV: SharedValue<number>;
+  /** read.tsx의 `currentSlotSV` — B 커밋이 끝난 뒤 "current"/"prev" 두 슬롯을
+   *  정상 휴식 상태(current=0 노출, prev=파크)로 되돌리는 데 필요하다. B 동안
+   *  라이브로 노출된 것은 prev 슬롯이었지만, currentPage가 감소한 뒤에는 같은
+   *  내용이 이제 current 슬롯의 몫이므로 — 이 스왑을 안 해주면 prev 슬롯이
+   *  0에 낀 채로 남아 current 위에 영원히 덮여, 다음 A 드래그가 (진짜로
+   *  움직이는 current 대신) 이 정지된 prev 슬롯에 가려 다르게 보인다. */
+  currentSlotSV: SharedValue<number>;
+  /** read.tsx의 `flatTransitionSV` — B/C 드래그가 활성인 동안 1로 세팅해
+   *  이전 페이지 슬롯의 회전/그림자를 끈다 (완전 평면 슬라이드). */
+  flatTransitionSV: SharedValue<number>;
+  /** read.tsx가 소유한, 읽기 완료 화면의 절대 translateX. 카드→완료(C) 진입과
+   *  완료→카드 복귀(D, ReadingCompleteScreen 자체 제스처)가 같은 값을 공유해
+   *  두 방향 모두 라이브 추적되도록 한다. */
+  completeEntranceX: SharedValue<number>;
+  /** read.tsx가 소유한 카드 자체의 라이브 드래그 translateX (이전에는 이
+   *  컴포넌트 내부 로컬 상태였음). C(카드→완료)와 D(완료→카드,
+   *  ReadingCompleteScreen 자체 제스처) 모두 completeEntranceX와 함께
+   *  cardTX = completeEntranceX - W 공식으로 이 값을 구동해야, D 방향으로
+   *  되돌아올 때도 카드가 화면 밖에서 함께 슬라이드 인 하는 진짜 나란한
+   *  스와이프처럼 보인다 (내부 로컬 상태였을 때는 D가 이 값을 건드릴 수
+   *  없어 카드가 제자리에 정지된 채 완료 화면만 걷히는 것처럼 보였다). */
+  cardTX: SharedValue<number>;
 }
 
 /* 카드가 프레임을 완전히 채우는 비율 — 마지막 페이지/읽기 완료 화면과 정확히
  * 같은 크기여야 전환 시 배경(readerFrame)의 흰 사각형 테두리가 드러나지 않는다. */
 const CARD_FILL_RATIO = 1;
-/* 노트 진입 슬라이드 애니메이션 지속 시간/이징 — 페이지 넘김과 동일한 체감 속도 */
-const ENTRANCE_DURATION = 380;
-const ENTRANCE_EASING = Easing.bezier(0.25, 0.46, 0.45, 0.94);
+/* B/C 드래그 커밋 시 마무리 애니메이션 지속 시간/이징 — 페이지 넘김과 동일한 체감 속도 */
+const SETTLE_DURATION = 360;
+const SETTLE_EASING = Easing.bezier(0.25, 0.46, 0.45, 0.94);
+/* B/C 커밋 임계값 — 일반 페이지 넘김/D(완료→카드)와 동일한 느낌 */
+const COMMIT_DISTANCE_RATIO = 0.22;
+const COMMIT_VELOCITY = 450;
+/* read.tsx의 파킹 오프셋과 반드시 동일해야 함 — B 커밋 완료 시 prevSlotSV를
+ * 정확히 같은 "파크" 위치로 되돌리기 위함 (read.tsx PARK_EXTRA 참조). */
+const PARK_EXTRA = 120;
 
 /* ════════════════════════════════════════════════════════════════════════
  * QuestionCardCurl (메인 컴포넌트)
@@ -193,27 +237,27 @@ const ENTRANCE_EASING = Easing.bezier(0.25, 0.46, 0.45, 0.94);
 export default function QuestionCardCurl({
   onDismissOverlay,
   onDismissOverlayComplete,
-  onReadingComplete,
+  onReadingCompleteBegin,
+  onReadingCompleteCancel,
   containerWidth: screenWidth,
   containerHeight: screenHeight,
+  entranceX,
+  dismissPrevSlotSV,
+  currentSlotSV,
+  flatTransitionSV,
+  completeEntranceX,
+  cardTX,
 }: QuestionCardCurlProps) {
   /* ── 카드 레이아웃 (페이지 프레임과 거의 동일한 크기) ───────────────── */
   const cardSmallW = Math.round(screenWidth * CARD_FILL_RATIO);
   const cardSmallH = Math.round(screenHeight * CARD_FILL_RATIO);
   const cardSmallLeft = Math.round((screenWidth - cardSmallW) / 2);
 
-  /* ── 진입 슬라이드: 화면 오른쪽 밖에서 시작해 0으로 들어오며
-   *    동시에 이전 페이지를 밀어내는 듯한 느낌을 준다 (마운트 1회). ── */
-  const entranceTX = useSharedValue(screenWidth);
-  useEffect(() => {
-    entranceTX.value = withTiming(0, {
-      duration: ENTRANCE_DURATION,
-      easing: ENTRANCE_EASING,
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  /* ── 진입/드래그 위치는 read.tsx가 소유한 `entranceX`로 완전히 제어된다
+   *    (A: 마지막 페이지 드래그와 라이브 동기화). 이 컴포넌트는 마운트 시점에
+   *    이미 read.tsx가 세팅해 둔 값을 그대로 읽어 스타일만 적용한다. ── */
   const entranceStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: entranceTX.value }],
+    transform: [{ translateX: entranceX.value }],
   }));
 
   /* ── 카드 상태 ──────────────────────────────────────────────────────── */
@@ -242,15 +286,44 @@ export default function QuestionCardCurl({
   const curlRafRef = useRef<number | null>(null);
 
   /* ── Shared values (Reanimated) ─────────────────────────────────────── */
-  // 드래그 팔로우 피드백 (좌우 스와이프 + 대기 카드 위/아래 드래그)
-  const cardTX = useSharedValue(0);
+  // 드래그 팔로우 피드백 (좌우 스와이프 + 대기 카드 위/아래 드래그).
+  // cardTX는 read.tsx가 소유한 prop으로 끌어올려졌다 (D 전환이 함께 구동해야
+  // 하므로 — 위 QuestionCardCurlProps.cardTX 주석 참고).
   const cardTY = useSharedValue(0);
+  // Guards onReadingCompleteBegin to fire once per left-drag gesture (C),
+  // reset at gesture start so re-dragging left again after a cancel re-fires it.
+  const completeBeginFiredRef = useRef(false);
+  // Locks the vertical/horizontal classification for the CURRENT gesture the
+  // first time one axis dominates, so onEnd always agrees with whatever
+  // onUpdate has been live-driving all along. Without this, onUpdate and
+  // onEnd each independently re-derive `Math.abs(dy) > Math.abs(dx)` from the
+  // same cumulative translation — if the release point happens to land with a
+  // slightly different dominant axis than most of the drag (e.g. a rightward
+  // B-dismiss swipe with a bit of vertical drift), onEnd can classify it as
+  // vertical while onUpdate had been live-driving the horizontal dismiss the
+  // whole time, so the horizontal drag never commits/cancels and the legacy
+  // vertical dy>80 branch (triggerBack) fires instead — looking exactly like
+  // the old pre-fix behavior.
+  const dragAxisRef = useRef<"horizontal" | "vertical" | null>(null);
 
   const cardDragStyle = useAnimatedStyle(() => ({
     transform: [
       { translateX: cardTX.value },
       { translateY: cardTY.value },
     ],
+  }));
+  // The "notepad stack" decorative layers (stackLayerBack/Front) sit behind
+  // the draggable card to sell a stack-of-pages depth illusion. They must
+  // move in lockstep with the card during a HORIZONTAL B/C dismiss drag —
+  // otherwise the top card slides away on the finger while these two beige
+  // layers stay frozen in place (entranceX only moves the whole component on
+  // commit/cancel, not per-frame during the live drag), leaving a stray
+  // stationary beige/white patch visible mid-drag until commit finally moves
+  // everything at once. Deliberately translateX-only (not translateY) so the
+  // VERTICAL question-advance/back flip still shows the stack staying put
+  // while just the top card flips, which is the intended look there.
+  const stackDragStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: cardTX.value }],
   }));
 
   /* ── afterTransition ─────────────────────────────────────────────────── */
@@ -426,11 +499,22 @@ export default function QuestionCardCurl({
       Gesture.Pan()
         .runOnJS(true)
         .minDistance(8)
+        .onBegin(() => {
+          dragAxisRef.current = null;
+        })
         .onUpdate((e) => {
           if (animatingRef.current) return;
           const dx = e.translationX;
           const dy = e.translationY;
-          const isVertical = Math.abs(dy) > Math.abs(dx);
+          // Lock the axis the first time either direction clearly dominates
+          // (small deadzone avoids locking on the very first noisy pixels),
+          // then keep using that same axis for the rest of this gesture.
+          if (dragAxisRef.current === null && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
+            dragAxisRef.current = Math.abs(dy) > Math.abs(dx) ? "vertical" : "horizontal";
+          }
+          const isVertical = dragAxisRef.current === null
+            ? Math.abs(dy) > Math.abs(dx)
+            : dragAxisRef.current === "vertical";
           if (isVertical) {
             /* 목업과 동일한 드래그 팔로우 계수 */
             if (dy < 0) {
@@ -443,7 +527,29 @@ export default function QuestionCardCurl({
                   : Math.min(dy * 0.22, restTy * 0.28);
             }
           } else {
-            cardTX.value = dx * 0.14;
+            const W = screenWidth || 300;
+            cardTX.value = dx;
+            if (dx > 0) {
+              // (B) 카드→마지막 페이지 복귀: 이미 마운트된 이전 페이지 슬롯을
+              // 1:1로 라이브 노출한다 (read.tsx의 prevSlotSV/flatTransitionSV
+              // 컨벤션과 동일 — slideIn = prevSlotSV + W).
+              flatTransitionSV.value = 1;
+              dismissPrevSlotSV.value = dx - W;
+              completeBeginFiredRef.current = false;
+            } else if (dx < 0) {
+              // (C) 카드→읽기 완료 진입: 첫 프레임에 1회만 완료 화면을 마운트
+              // 요청하고, 이후 매 프레임 라이브로 위치를 동기화한다.
+              if (!completeBeginFiredRef.current) {
+                completeBeginFiredRef.current = true;
+                const hasSubstantial =
+                  savedRef.current.some((c) => c.answer.trim().length >= 10) ||
+                  newAnswerRef.current.trim().length >= 10;
+                runOnJS(onReadingCompleteBegin)(hasSubstantial);
+              }
+              completeEntranceX.value = W + dx;
+              flatTransitionSV.value = 0;
+              dismissPrevSlotSV.value = -(W + 400);
+            }
           }
         })
         .onEnd((e) => {
@@ -451,7 +557,14 @@ export default function QuestionCardCurl({
           const dx = e.translationX;
           const dy = e.translationY;
           const THRESHOLD = 80;
-          const isVertical = Math.abs(dy) > Math.abs(dx);
+          // Use the SAME axis onUpdate locked in for this gesture (see
+          // dragAxisRef above) instead of re-deriving it from scratch here —
+          // otherwise a release point with a slightly different dx/dy ratio
+          // than the rest of the drag can disagree with what was just being
+          // live-animated, dropping the horizontal commit/cancel entirely.
+          const isVertical = dragAxisRef.current === null
+            ? Math.abs(dy) > Math.abs(dx)
+            : dragAxisRef.current === "vertical";
 
           if (isVertical) {
             if (dy < -THRESHOLD) {
@@ -467,48 +580,115 @@ export default function QuestionCardCurl({
               cardTX.value = withSpring(0, { damping: 12, stiffness: 180 });
             }
           } else {
-            const restX = Math.round((screenWidth + cardSmallW) / 2);
-            if (dx < -THRESHOLD) {
-              // 좌 스와이프 (오른쪽→왼쪽): 페이지 순서상 앞으로 진행 → 읽기 완료 화면.
-              // 카드는 다음 페이지가 들어오는 방향(왼쪽)으로 빠져나간다.
-              const hasSubstantial =
-                savedRef.current.some((c) => c.answer.trim().length >= 10) ||
-                newAnswerRef.current.trim().length >= 10;
+            const W = screenWidth || 300;
+            const commit =
+              Math.abs(dx) > W * COMMIT_DISTANCE_RATIO ||
+              Math.abs(e.velocityX) > COMMIT_VELOCITY;
+            if (dx < 0 && commit) {
+              // (C) 좌 스와이프 커밋: 카드는 왼쪽으로 완전히 빠져나가고, 이미
+              // 마운트되어 라이브 추적 중이던 읽기 완료 화면이 같은 타이밍으로
+              // 0(제자리)까지 도착한다 — 하나로 연결된 슬라이드.
               animatingRef.current = true;
               setAnimating(true);
-              // 애니메이션 "시작"과 동시에 호출 — 읽기 완료 화면이 같은 타이밍으로
-              // 오른쪽에서 슬라이드-인해, 카드가 사라진 뒤 뒤늦게 나타나는 대신
-              // 하나로 연결된 슬라이드처럼 보이게 한다.
-              runOnJS(onReadingComplete)(hasSubstantial);
-              cardTX.value = withTiming(
-                -restX,
-                { duration: 420, easing: Easing.bezier(0.25, 0.46, 0.45, 0.94) },
-                () => {
-                  cardTX.value = 0;
-                  animatingRef.current = false;
-                  runOnJS(setAnimating)(false);
+              cardTX.value = withTiming(-W, {
+                duration: SETTLE_DURATION,
+                easing: SETTLE_EASING,
+              });
+              completeEntranceX.value = withTiming(
+                0,
+                { duration: SETTLE_DURATION, easing: SETTLE_EASING },
+                (finished) => {
+                  if (finished) {
+                    // NOTE: cardTX is intentionally left parked at -W here
+                    // (not reset to 0) — the card must stay off-screen to the
+                    // left while the completion screen is fully shown, so
+                    // that D's back-swipe (owned by ReadingCompleteScreen,
+                    // driving cardTX = tx - W in lockstep) can reveal it
+                    // sliding back in from -W. Resetting to 0 here would put
+                    // the card back in its resting/visible position behind
+                    // the opaque completion overlay, making D's reveal look
+                    // like the completion screen is floating in front of an
+                    // already-in-place card instead of a true side-by-side
+                    // swap. D's own commit branch resets cardTX to 0 once the
+                    // user actually swipes back to the card.
+                    animatingRef.current = false;
+                    // Clear the "begin" guard now that the entrance is done —
+                    // otherwise the next C attempt (after D brings the user
+                    // back to this same still-mounted card) silently skips
+                    // onReadingCompleteBegin and never re-mounts the
+                    // completion screen. Mirrors the cardEntranceMountedRef
+                    // fix for A in read.tsx.
+                    completeBeginFiredRef.current = false;
+                    runOnJS(setAnimating)(false);
+                  }
                 },
               );
-            } else if (dx > THRESHOLD) {
-              // 우 스와이프 (왼쪽→오른쪽): 페이지 순서상 뒤로 진행 → 원래 글의 마지막
-              // 페이지로 돌아가기. 카드는 이전 페이지가 있는 방향(오른쪽)으로 빠져나간다.
-              // onDismissOverlay를 "시작" 시점에 호출해 read.tsx가 즉시 마지막
-              // 페이지 상태로 되돌리고, 같은 타이밍으로 왼쪽에서 슬라이드-인하게 한다.
+            } else if (dx > 0 && commit) {
+              // (B) 우 스와이프 커밋: 카드는 오른쪽으로 완전히 빠져나가고, 이미
+              // 라이브 추적 중이던 이전 페이지 슬롯이 같은 타이밍으로 제자리(0)
+              // 까지 도착한다. onDismissOverlay는 release 시점에 상태만 전환.
               runOnJS(onDismissOverlay)();
-              cardTX.value = withTiming(
-                restX,
-                { duration: 360, easing: Easing.bezier(0.25, 0.46, 0.45, 0.94) },
-                () => {
-                  cardTX.value = 0;
-                  if (onDismissOverlayComplete) runOnJS(onDismissOverlayComplete)();
+              cardTX.value = withTiming(W, {
+                duration: SETTLE_DURATION,
+                easing: SETTLE_EASING,
+              });
+              dismissPrevSlotSV.value = withTiming(
+                0,
+                { duration: SETTLE_DURATION, easing: SETTLE_EASING },
+                (finished) => {
+                  if (finished) {
+                    cardTX.value = 0;
+                    flatTransitionSV.value = 0;
+                    // B 동안 라이브로 노출된 건 "prev" 슬롯이었지만, onDismissOverlay가
+                    // 이미 currentPage를 감소시켜 둔 상태라 그 내용은 지금부턴 "current"
+                    // 슬롯의 몫이다. 여기서 즉시(동일 프레임) current=0(노출)/
+                    // prev=파크로 스왑하지 않으면 prev가 0에 낀 채로 영원히 current
+                    // 위에 남아, 다음 A 드래그 때 실제로 움직이는 current 슬롯이 이
+                    // 정지된 prev에 가려 애니메이션이 달라 보인다.
+                    currentSlotSV.value = 0;
+                    dismissPrevSlotSV.value = -(screenWidth + PARK_EXTRA);
+                    if (onDismissOverlayComplete) runOnJS(onDismissOverlayComplete)();
+                  }
                 },
               );
-            } else {
-              cardTX.value = withSpring(0, { damping: 12, stiffness: 180 });
+            } else if (dx < 0) {
+              // (C) 취소: 카드 제자리 복귀 + 미리 마운트했던 완료 화면 언마운트 요청.
+              completeBeginFiredRef.current = false;
+              cardTX.value = withSpring(0, { damping: 18, stiffness: 280, mass: 0.8 });
+              completeEntranceX.value = withSpring(
+                W,
+                { damping: 18, stiffness: 280, mass: 0.8 },
+                (finished) => {
+                  if (finished) runOnJS(onReadingCompleteCancel)();
+                },
+              );
+            } else if (dx > 0) {
+              // (B) 취소: 카드 제자리 복귀 + 이전 페이지 슬롯을 다시 파크 위치로.
+              cardTX.value = withSpring(0, { damping: 18, stiffness: 280, mass: 0.8 });
+              dismissPrevSlotSV.value = withSpring(
+                -(W + 400),
+                { damping: 18, stiffness: 280, mass: 0.8 },
+                (finished) => {
+                  if (finished) flatTransitionSV.value = 0;
+                },
+              );
             }
           }
         }),
-    [cardTX, cardTY, cardSmallH, cardSmallW, screenWidth, onDismissOverlay, onReadingComplete],
+    [
+      cardTX,
+      cardTY,
+      cardSmallH,
+      cardSmallW,
+      screenWidth,
+      onDismissOverlay,
+      onDismissOverlayComplete,
+      onReadingCompleteBegin,
+      onReadingCompleteCancel,
+      dismissPrevSlotSV,
+      flatTransitionSV,
+      completeEntranceX,
+    ],
   );
 
   /* ── 현재 카드 표시값 ────────────────────────────────────────────────── */
@@ -626,7 +806,7 @@ export default function QuestionCardCurl({
         <View style={s.gestureLayer}>
 
           {/* 노트패드 스택 깊이감 */}
-          <View
+          <Animated.View
             style={[
               s.stackLayerBack,
               {
@@ -636,9 +816,10 @@ export default function QuestionCardCurl({
                 width: cardSmallW,
                 height: cardSmallH,
               },
+              stackDragStyle,
             ]}
           />
-          <View
+          <Animated.View
             style={[
               s.stackLayerFront,
               {
@@ -648,6 +829,7 @@ export default function QuestionCardCurl({
                 width: cardSmallW,
                 height: cardSmallH,
               },
+              stackDragStyle,
             ]}
           />
 
@@ -925,31 +1107,8 @@ export default function QuestionCardCurl({
         </View>
       </GestureDetector>
 
-      {/* ↑/↓ 이전·다음 질문 버튼 (목업과 동일: 하단 중앙, ↓=이전 ↑=다음) */}
-      <View style={s.navButtonsRow} pointerEvents="box-none">
-        <Pressable
-          onPress={() => triggerBackRef.current()}
-          accessibilityLabel="이전 질문"
-          style={s.navButton}
-          hitSlop={8}
-        >
-          <Text style={s.navButtonLabel}>↓</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => {
-            if (animatingRef.current) return;
-            const _isNew = ptrRef.current === savedRef.current.length;
-            triggerAdvanceRef.current(
-              _isNew ? newAnswerRef.current.trim().length > 0 : true,
-            );
-          }}
-          accessibilityLabel="다음 질문"
-          style={s.navButton}
-          hitSlop={8}
-        >
-          <Text style={s.navButtonLabel}>↑</Text>
-        </Pressable>
-      </View>
+      {/* 이전/다음 질문 이동은 오직 상하 스와이프(카드 자체 세로 팬 제스처)로만
+          동작한다 — ↑/↓ 버튼은 제거됨 (사용자 요청). */}
 
       {/* 보관/삭제 액션시트 */}
       <ActionSheetModal
@@ -997,42 +1156,6 @@ const s = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 41,
-  },
-  navButtonsRow: {
-    position: "absolute",
-    bottom: 28,
-    left: 0,
-    right: 0,
-    zIndex: 50,
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 16,
-  },
-  navButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.9)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.5)",
-    alignItems: "center",
-    justifyContent: "center",
-    ...Platform.select({
-      web: {
-        boxShadow: "0 2px 12px rgba(0,0,0,0.18)",
-      } as object,
-      default: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.18,
-        shadowRadius: 12,
-        elevation: 6,
-      },
-    }),
-  },
-  navButtonLabel: {
-    fontSize: 18,
-    color: Colors.zinc700,
   },
   stackLayerBack: {
     position: "absolute",

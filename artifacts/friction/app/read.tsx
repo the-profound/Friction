@@ -38,6 +38,7 @@ import Animated, {
   withTiming,
   runOnJS,
   Easing,
+  type SharedValue,
 } from "react-native-reanimated";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -1171,6 +1172,32 @@ export default function ReadScreen() {
   const prevSlotSV = useSharedValue(0); // reset to -W in useLayoutEffect
   const currentPageSV = useSharedValue(currentPage);
   const containerWidthSV = useSharedValue(layout.containerWidth);
+  // Last page → question card is a special transition: no lift/rotate/shadow,
+  // pure flat slide (unlike every other forward page-turn). Set to 1 for the
+  // duration of that specific transition only; normal page turns leave it 0.
+  // Also gates rotation for the card→last-page dismiss reveal (see prevSlotAnimStyle).
+  const flatTransitionSV = useSharedValue(0);
+  // Live-linked absolute translateX for the floating question card while it is
+  // arriving from the last page (A) or resting/exiting (B/C). W = fully hidden
+  // to the right, 0 = fully in place, -W = fully exited to the left.
+  const cardEntranceX = useSharedValue(0);
+  // Live-linked absolute translateX for the reading-complete screen. Same
+  // convention as cardEntranceX. Doubles as its controlled `tx` (also driven by
+  // ReadingCompleteScreen's own back-swipe gesture, D).
+  const completeEntranceX = useSharedValue(0);
+  // Question card's own live drag translateX, lifted out of QuestionCardCurl
+  // so both C (card→complete) and D (complete→card) can drive it in lockstep
+  // with completeEntranceX (cardTX = completeEntranceX - W always holds).
+  // Without this, D only moved completeEntranceX, leaving the card statically
+  // in place behind the completion overlay — looking like the completion
+  // screen slides "in front of" the card instead of a true side-by-side swap.
+  const cardTX = useSharedValue(0);
+  // True while a forward drag on the last page is live-driving the card's
+  // entrance (A) — lets onUpdate/onEnd keep tracking this same gesture even
+  // after finishOverlayVisible flips true mid-drag.
+  const lastPageEntranceActiveRef = useRef(false);
+  // Guards the one-time "mount the card" side effect per forward-drag gesture.
+  const cardEntranceMountedRef = useRef(false);
 
   // Tracks which direction the active swipe is going (JS-thread safe, runOnJS:true).
   const activeSwipeRef = useRef<'forward' | 'backward' | null>(null);
@@ -1196,12 +1223,32 @@ export default function ReadScreen() {
   // the right (instead of instantly snapping into place). Setting this ref
   // just before calling reading.prevPage() tells the layout effect below to
   // animate the reveal instead of resetting instantly.
-  const suppressNextSlotResetRef = useRef<{ from: number; duration: number } | null>(null);
+  const suppressNextSlotResetRef = useRef<
+    { skip: true } | { skip?: false; from: number; duration: number } | null
+  >(null);
+
+  // (B) 카드→마지막 페이지 복귀 커밋 순간, onDismissOverlay가 currentPage를
+  // 먼저 감소시킨다. 하지만 "prev" 슬롯은 이 감소 *이전의* currentPage-1
+  // (=실제 마지막 페이지)을 라이브 드래그 내내 보여주고 있었다 — 감소가
+  // 일어나는 순간 prevNode/key를 즉시 새 currentPage-1(=마지막에서 2번째
+  // 페이지)로 재계산해버리면, 아직 화면에 슬라이드 중인 "prev" 슬롯의
+  // React key가 바뀌어 즉시 언마운트→새 내용으로 리마운트되고 — 카드가
+  // 빠져나가는 동안 실제 마지막 페이지가 갑자기 마지막에서 2번째 페이지로
+  // 뒤바뀌어 보이는 겹침/번쩍임 현상이 생긴다. 이 ref에 감소 *직전* 값을
+  // 고정해 두면, 새틀 애니메이션이 끝나 prev가 파크되어 화면 밖으로 사라질
+  // 때까지 같은 내용/키를 유지한다.
+  const pinnedPrevPageIdxRef = useRef<number | null>(null);
 
   // Reset all slot SVs after every page-turn commit (currentPage or layout change).
   useLayoutEffect(() => {
     currentPageSV.value = currentPage;
     const suppressed = suppressNextSlotResetRef.current;
+    if (suppressed?.skip) {
+      // (B commit) QuestionCardCurl is still live-animating prevSlotSV → 0
+      // itself; don't touch either slot value here or we'd cut that off.
+      suppressNextSlotResetRef.current = null;
+      return;
+    }
     if (suppressed) {
       suppressNextSlotResetRef.current = null;
       currentSlotSV.value = suppressed.from;
@@ -1229,7 +1276,9 @@ export default function ReadScreen() {
     const W = containerWidthSV.value || 300;
     // Only rotate while actually sliding out (not at rest position 0).
     const slideOut = -currentSlotSV.value; // 0 at rest, W when fully out
-    const rotation = slideOut > 0.5 ? -(Math.min(1, slideOut / W) * MAX_ROTATE_DEG) : 0;
+    const rotation = flatTransitionSV.value
+      ? 0
+      : slideOut > 0.5 ? -(Math.min(1, slideOut / W) * MAX_ROTATE_DEG) : 0;
     return {
       transform: [
         { translateX: currentSlotSV.value },
@@ -1239,12 +1288,15 @@ export default function ReadScreen() {
   });
   const prevSlotAnimStyle = useAnimatedStyle(() => {
     const W = containerWidthSV.value || 300;
-    // Continuous rotation, no guard. Card is parked at -(W + PARK_EXTRA) — far
-    // enough off-screen that the bottom-right corner (most protruding corner under
-    // CCW rotation) stays invisible. As the card enters the viewport (slideIn→0)
-    // rotation is near -4°; by the time it is fully in (slideIn=W) rotation is 0°.
+    // Continuous rotation, no guard (except flatTransitionSV — used when the
+    // question card's own right-swipe is live-revealing this slot as the last
+    // page, which must stay perfectly flat like every other card→screen
+    // transition). Card is parked at -(W + PARK_EXTRA) — far enough off-screen
+    // that the bottom-right corner (most protruding corner under CCW rotation)
+    // stays invisible. As the card enters the viewport (slideIn→0) rotation is
+    // near -4°; by the time it is fully in (slideIn=W) rotation is 0°.
     const slideIn = prevSlotSV.value + W; // –PARK_EXTRA when parked, W when fully in
-    const rotation = (slideIn / W - 1) * MAX_ROTATE_DEG;
+    const rotation = flatTransitionSV.value ? 0 : (slideIn / W - 1) * MAX_ROTATE_DEG;
     // (slideIn/W − 1): parked ≈ −1.4 → screen-entry ≈ −1 → fully in = 0
     return {
       transform: [
@@ -1258,6 +1310,7 @@ export default function ReadScreen() {
   // swiped out — proportional to the same factor that drives its 0°→-4° rotation.
   // Mimics lifting a sheet of paper: the more it lifts, the darker its shadow.
   const currentShadowStyle = useAnimatedStyle(() => {
+    if (flatTransitionSV.value) return { opacity: 0 };
     const W = containerWidthSV.value || 300;
     const slideOut = -currentSlotSV.value; // 0 at rest, W when fully out
     const progress = Math.min(1, Math.max(0, slideOut / W));
@@ -1267,6 +1320,7 @@ export default function ReadScreen() {
   // off-screen / sliding in, fading to 0 as it settles flat at rest — so once it
   // becomes the new resting page it adds no second shadow over `next`.
   const prevShadowStyle = useAnimatedStyle(() => {
+    if (flatTransitionSV.value) return { opacity: 0 };
     const W = containerWidthSV.value || 300;
     const slideIn = prevSlotSV.value + W; // –PARK_EXTRA parked → W fully in
     const progress = Math.min(1, Math.max(0, 1 - slideIn / W));
@@ -1339,17 +1393,42 @@ export default function ReadScreen() {
   useEffect(() => {
     triggerLastPageTransitionRef.current = () => {
       // Last page: mount the floating question card immediately (it slides
-      // in from the right on its own), while this page slides fully off to
-      // the left in sync — reads as one continuous connected slide instead
-      // of an abrupt cut.
+      // in from the right in lockstep), while this page slides fully off to
+      // the left — reads as one continuous connected slide instead of an
+      // abrupt cut. Same flat A transition as the drag path, just driven by
+      // a timing animation instead of a live finger.
       const W = containerWidthRef.current || 300;
       isCommittingRef.current = true;
+      cardEntranceMountedRef.current = true;
       setFinishOverlayVisible(true);
-      currentSlotSV.value = withTiming(-(W + PARK_EXTRA), {
+      flatTransitionSV.value = 1;
+      cardEntranceX.value = W;
+      // cardTX now lives in read.tsx (lifted for the D transition) and
+      // persists across QuestionCardCurl mount/unmount — unlike before, it no
+      // longer auto-resets to 0 just because a fresh card instance mounts.
+      // If a previous dwell left it parked off-screen (e.g. a C-commit
+      // followed by "다시 읽기", which unmounts the card without ever
+      // resetting cardTX), a newly-mounted card here would silently render
+      // shifted by that stale leftover offset ON TOP OF this fresh
+      // cardEntranceX animation — a real bug/flicker candidate. Always
+      // reset it at the start of every fresh A entrance.
+      cardTX.value = 0;
+      currentSlotSV.value = withTiming(-W, {
         duration: LAST_PAGE_TRANSITION_DURATION,
         easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
-      }, () => {
-        runOnJS(finishLastPageTransitionRef.current)();
+      });
+      cardEntranceX.value = withTiming(0, {
+        duration: LAST_PAGE_TRANSITION_DURATION,
+        easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
+      }, (finished) => {
+        if (finished) {
+          flatTransitionSV.value = 0;
+          // See matching comment in panGesture's onEnd A-commit branch: this
+          // guard must clear once the entrance finishes, or the next A
+          // attempt (drag or button) silently no-ops.
+          cardEntranceMountedRef.current = false;
+          runOnJS(finishLastPageTransitionRef.current)();
+        }
       });
     };
   });
@@ -1388,11 +1467,11 @@ export default function ReadScreen() {
     }
     return g
     .onBegin(() => {
-      if (finishOverlayVisibleRef.current) return;
+      if (finishOverlayVisibleRef.current && !lastPageEntranceActiveRef.current) return;
       if (isDraggingRef.current || isTextSelectingRef.current) return;
     })
     .onUpdate((e) => {
-      if (finishOverlayVisibleRef.current) return;
+      if (finishOverlayVisibleRef.current && !lastPageEntranceActiveRef.current) return;
       if (isMemoModeRef.current) {
         // 메모 모드 에디터는 WebView(TipTap) 라 터치를 자체적으로 가로챈다.
         // 제스처로 플립 각도를 추적하지 않고, 페이지 전환은 툴바의 이전/다음
@@ -1411,7 +1490,28 @@ export default function ReadScreen() {
       if (dx > 0 && gs.atBoundaryLeft) return; // no prev at start
 
       const W = gs.containerWidth || 300;
-      if (dx < 0) {
+      if (dx < 0 && gs.isOnLastPage) {
+        // Special case (A): last page → question card. Pure flat 1:1 slide,
+        // no lift/rotate — the card is mounted immediately and live-tracks the
+        // same drag so it arrives in lockstep with the page leaving, revealed
+        // proportionally underneath exactly like the normal pager's slots.
+        activeSwipeRef.current = 'forward';
+        if (!cardEntranceMountedRef.current) {
+          cardEntranceMountedRef.current = true;
+          lastPageEntranceActiveRef.current = true;
+          flatTransitionSV.value = 1;
+          cardEntranceX.value = W;
+          // See matching comment in the button-driven A entrance above:
+          // cardTX is now lifted to read.tsx and persists across
+          // QuestionCardCurl mount/unmount, so it must be explicitly reset
+          // here too whenever a fresh card mount begins.
+          cardTX.value = 0;
+          runOnJS(setFinishOverlayVisible)(true);
+        }
+        const clamped = Math.max(dx, -W);
+        currentSlotSV.value = clamped;
+        cardEntranceX.value = W + clamped;
+      } else if (dx < 0) {
         // Forward: current slides left (0 → –(W + PARK_EXTRA)), next slot stays
         // at 0 below. Clamp at -(W + PARK_EXTRA) so the rotated corner can drag
         // fully off-screen instead of stopping with the corner still poking out.
@@ -1424,7 +1524,7 @@ export default function ReadScreen() {
       }
     })
     .onEnd((e) => {
-      if (finishOverlayVisibleRef.current) return;
+      if (finishOverlayVisibleRef.current && !lastPageEntranceActiveRef.current) return;
       if (isCommittingRef.current) return;
 
       const gs = gestureState.current;
@@ -1476,18 +1576,45 @@ export default function ReadScreen() {
         snapBackward();
         return;
       }
-      if (goingNext && gs.isOnLastPage) {
-        // Last page extra swipe → mount the floating question card immediately
-        // (it slides in from the right on its own) while this page finishes
-        // sliding fully off to the left in sync, so the transition reads as
-        // one continuous connected slide instead of an abrupt cut.
+      if (goingNext && gs.isOnLastPage && lastPageEntranceActiveRef.current) {
+        // (A) The card has been live-tracking this drag since it began (see
+        // onUpdate). Decide commit/cancel using the same threshold feel as a
+        // normal page turn, then finish the flat slide in perfect lockstep.
+        lastPageEntranceActiveRef.current = false;
+        const commit = absDx > W * 0.22 || Math.abs(e.velocityX) > 450;
+        if (!commit) {
+          currentSlotSV.value = withSpring(0, snapConfig);
+          cardEntranceX.value = withSpring(W, snapConfig, (finished) => {
+            if (finished) {
+              flatTransitionSV.value = 0;
+              cardEntranceMountedRef.current = false;
+              runOnJS(setFinishOverlayVisible)(false);
+            }
+          });
+          activeSwipeRef.current = null;
+          return;
+        }
         isCommittingRef.current = true;
-        runOnJS(setFinishOverlayVisible)(true);
-        currentSlotSV.value = withTiming(-(W + PARK_EXTRA), {
+        currentSlotSV.value = withTiming(-W, {
           duration: LAST_PAGE_TRANSITION_DURATION,
           easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
-        }, () => {
-          runOnJS(finishLastPageTransitionRef.current)();
+        });
+        cardEntranceX.value = withTiming(0, {
+          duration: LAST_PAGE_TRANSITION_DURATION,
+          easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
+        }, (finished) => {
+          if (finished) {
+            flatTransitionSV.value = 0;
+            // Card has fully arrived — this gesture's entrance is done, so
+            // clear the mount guard now. Otherwise the NEXT time the card is
+            // dismissed and re-approached (A again), onUpdate's
+            // `if (!cardEntranceMountedRef.current)` check silently skips the
+            // mount/flatTransitionSV/lastPageEntranceActiveRef setup and the
+            // drag falls through to the plain page-turn branch instead —
+            // exactly the "works once, then reverts to old behavior" bug.
+            cardEntranceMountedRef.current = false;
+            runOnJS(finishLastPageTransitionRef.current)();
+          }
         });
         return;
       }
@@ -1532,7 +1659,20 @@ export default function ReadScreen() {
       // If gesture is cancelled externally, snap back to rest position.
       if (!isCommittingRef.current) {
         const W = containerWidthRef.current || 300;
-        if (activeSwipeRef.current === 'forward') {
+        if (lastPageEntranceActiveRef.current) {
+          // (A) cancelled externally (e.g. another gesture stole recognition)
+          // — snap the page back and unmount the card exactly like a normal
+          // below-threshold release.
+          lastPageEntranceActiveRef.current = false;
+          currentSlotSV.value = withSpring(0, snapConfig);
+          cardEntranceX.value = withSpring(W, snapConfig, (finished) => {
+            if (finished) {
+              flatTransitionSV.value = 0;
+              cardEntranceMountedRef.current = false;
+              runOnJS(setFinishOverlayVisible)(false);
+            }
+          });
+        } else if (activeSwipeRef.current === 'forward') {
           currentSlotSV.value = withSpring(0, snapConfig);
         } else if (activeSwipeRef.current === 'backward') {
           prevSlotSV.value = withSpring(-(W + PARK_EXTRA), snapConfig);
@@ -1988,8 +2128,25 @@ export default function ReadScreen() {
                       };
 
                       const nextNode = makeNode(currentPage + 1);
-                      const currentNode = makeNode(currentPage);
-                      const prevNode = makeNode(currentPage - 1);
+                      // currentPage === totalPages는 "카드가 떠 있는 중"을 뜻하는
+                      // 가상 인덱스다 — 이때 그대로 makeNode(currentPage)를 쓰면
+                      // currentNode가 null이 되어 "current" 슬롯(마지막 실제
+                      // 페이지, 화면 밖 -W에 파킹됨)이 통째로 언마운트된다. 그러면
+                      // 카드에 머무는 동안 그 WebView 인스턴스가 사라졌다가, B
+                      // 커밋 시점에 다시 새로 마운트되어 새틀 애니메이션(360ms)
+                      // 안에 로드를 마쳐야 하는 경주가 생기고, 못 마치면 마지막
+                      // 페이지가 드러나는 순간 빈 화면이 잠깐 번쩍인다. 카드가
+                      // 떠 있는 동안에도 실제 마지막 페이지 인덱스로 clamp해
+                      // 같은 인스턴스를 계속 마운트 상태로 유지 — B 시점엔 이미
+                      // 충분히 로드가 끝나 있어 번쩍임 없이 그대로 드러난다.
+                      const currentPageIdx =
+                        currentPage >= totalPages ? totalPages - 1 : currentPage;
+                      const currentNode = makeNode(currentPageIdx);
+                      // (B) 새틀 애니메이션이 진행 중인 동안엔 감소 직전 값을
+                      // 그대로 써서 콘텐츠/React key가 흔들리지 않게 한다.
+                      const prevPageIdx =
+                        pinnedPrevPageIdxRef.current ?? currentPage - 1;
+                      const prevNode = makeNode(prevPageIdx);
 
                       return (
                         <>
@@ -1997,7 +2154,7 @@ export default function ReadScreen() {
                               (static, full opacity) so the resting page always casts
                               exactly one shadow. Rendered even when there is no next
                               real page so the completion card keeps its shadow. */}
-                          <View key={`page-${currentPage + 1}`} style={slotBase}>
+                          <View key={`page-${currentPage + 1}-next`} style={slotBase}>
                             <View style={shadowLayer} />
                             {nextNode != null && (
                               <View style={slotContent}>{nextNode}</View>
@@ -2005,9 +2162,19 @@ export default function ReadScreen() {
                           </View>
 
                           {/* current — middle layer, slides left + rotates during
-                              forward swipe. Its shadow fades in as it lifts/slides. */}
+                              forward swipe. Its shadow fades in as it lifts/slides.
+                              키에 역할 접미사(-current)를 붙이는 이유: 카드가 떠
+                              있는 동안(currentPage가 totalPages를 가리키는 가상
+                              인덱스)에는 currentPageIdx와 prevPageIdx가 둘 다
+                              totalPages-1로 같아져, 접미사 없이는 "current"와
+                              "prev" 두 형제 엘리먼트가 완전히 같은 key(예:
+                              `page-11`)를 갖게 되어 React가 "Encountered two
+                              children with the same key" 경고를 낸다. 페이지
+                              인덱스가 바뀔 때 슬롯을 리마운트시키는 기존 동작은
+                              그대로 유지된다(역할 접미사는 상수라 키의 이 부분은
+                              달라지지 않음). */}
                           {currentNode != null && (
-                            <Animated.View key={`page-${currentPage}`} style={[slotBase, currentSlotAnimStyle]}>
+                            <Animated.View key={`page-${currentPageIdx}-current`} style={[slotBase, currentSlotAnimStyle]}>
                               <Animated.View style={[shadowLayer, currentShadowStyle]} />
                               <View style={slotContent}>{currentNode}</View>
                             </Animated.View>
@@ -2016,7 +2183,7 @@ export default function ReadScreen() {
                           {/* prev — top layer, slides in from left + rotates to flat
                               during backward swipe. Its shadow fades out as it settles. */}
                           {prevNode != null && (
-                            <Animated.View key={`page-${currentPage - 1}`} style={[slotBase, prevSlotAnimStyle]}>
+                            <Animated.View key={`page-${prevPageIdx}-prev`} style={[slotBase, prevSlotAnimStyle]}>
                               <Animated.View style={[shadowLayer, prevShadowStyle]} />
                               <View style={slotContent}>{prevNode}</View>
                             </Animated.View>
@@ -2032,26 +2199,43 @@ export default function ReadScreen() {
                     <QuestionCardCurl
                       containerWidth={layout.containerWidth}
                       containerHeight={layout.containerHeight}
+                      entranceX={cardEntranceX}
+                      dismissPrevSlotSV={prevSlotSV}
+                      currentSlotSV={currentSlotSV}
+                      flatTransitionSV={flatTransitionSV}
+                      completeEntranceX={completeEntranceX}
+                      cardTX={cardTX}
                       onDismissOverlay={() => {
-                        // 카드가 오른쪽으로 빠져나가는 애니메이션이 "시작"되는 시점에
-                        // 호출됨 (완료 시점 아님). 마지막 페이지가 같은 타이밍으로
-                        // 왼쪽에서 슬라이드-인하도록 즉시 상태를 되돌린다.
-                        suppressNextSlotResetRef.current = {
-                          from: -(layout.containerWidth + PARK_EXTRA),
-                          duration: 360,
-                        };
+                        // (B) 우 스와이프 커밋이 확정된 시점(release)에 호출됨.
+                        // 실제 화면 이동은 드래그 내내 prevSlotSV로 이미 라이브
+                        // 추적되어 왔으므로, 여기서는 currentPage 상태만 되돌린다
+                        // (레이아웃 이펙트의 슬롯 리셋은 완전히 건너뛴다 — 카드가
+                        // 스스로 prevSlotSV를 0까지 애니메이션하는 중이므로).
+                        suppressNextSlotResetRef.current = { skip: true };
+                        // currentPage를 감소시키기 *직전* 값을 고정해, 새틀
+                        // 애니메이션이 끝날 때까지 "prev" 슬롯 콘텐츠/키가
+                        // 바뀌지 않게 한다 (겹침/번쩍임 방지).
+                        pinnedPrevPageIdxRef.current = currentPage - 1;
                         reading.prevPage();
                       }}
                       onDismissOverlayComplete={() => {
                         // 카드가 화면 밖으로 완전히 빠져나간 뒤 언마운트.
+                        cardEntranceMountedRef.current = false;
                         setFinishOverlayVisible(false);
+                        // 새틀 애니메이션이 끝나 prev가 파크된 뒤에는 고정을
+                        // 풀어 다음 렌더부터 정상적으로 currentPage-1을 따르게 한다.
+                        pinnedPrevPageIdxRef.current = null;
                       }}
-                      onReadingComplete={(hasSubstantialAnswer) => {
-                        // 카드가 왼쪽으로 빠져나가는 애니메이션이 "시작"되는 시점에
-                        // 호출됨 — 읽기 완료 화면이 같은 타이밍으로 오른쪽에서
-                        // 슬라이드-인해 하나로 연결된 슬라이드처럼 보이게 한다.
+                      onReadingCompleteBegin={(hasSubstantialAnswer) => {
+                        // (C) 좌 스와이프가 시작된 첫 프레임에 호출됨 — 아직 커밋
+                        // 여부는 미정이지만, 완료 화면을 즉시 마운트해 드래그 내내
+                        // completeEntranceX로 라이브 추적할 수 있게 한다.
                         setReadingCompleteCaseType(hasSubstantialAnswer ? "answered" : "read");
                         setReadingCompleteVisible(true);
+                      }}
+                      onReadingCompleteCancel={() => {
+                        // (C) 취소: 완료 화면을 다시 언마운트한다.
+                        setReadingCompleteVisible(false);
                       }}
                     />
                   )}
@@ -2323,6 +2507,8 @@ export default function ReadScreen() {
           isSaving={isSaving}
           isDeleting={isDeleting}
           isCollectionsReady={isCollectionsReady}
+          tx={completeEntranceX}
+          cardTX={cardTX}
           onSave={handleCommitAndSave}
           onSkip={mode === "re_read"
             ? async () => {
@@ -2883,6 +3069,9 @@ const styles = StyleSheet.create({
 // ─────────────────────────────────────────────────────────────────────────────
 const READ_ALL_IMG = require("@/assets/images/read-all.png");
 const READ_ALL_ANSWERED_IMG = require("@/assets/images/read-all-answered.png");
+// Matches the pager's own snap-back feel (see `snapConfig` in the main
+// component above). Module-level so it's a stable reference for useMemo deps.
+const COMPLETE_BACK_SNAP_CONFIG = { damping: 18, stiffness: 280, mass: 0.8 };
 
 interface ReadingCompleteScreenProps {
   caseType: "read" | "answered";
@@ -2893,6 +3082,19 @@ interface ReadingCompleteScreenProps {
   onSkip: () => void;
   onReread: () => void;
   onBack: () => void;
+  /** read.tsx가 소유한 절대 translateX (C: 카드→완료 진입, D: 완료→카드
+   *  복귀 모두 이 값을 라이브로 읽고 쓴다 — 두 방향 모두 항상 인접 화면이
+   *  1:1로 함께 드러나도록 하나의 값을 공유). */
+  tx: SharedValue<number>;
+  /** QuestionCardCurl이 소유했던 카드의 라이브 드래그 translateX를 read.tsx로
+   *  끌어올린 값. C(카드→완료)는 이미 이 값과 tx를 함께 움직여 카드가
+   *  왼쪽으로 나가는 동안 완료 화면이 1:1로 따라 들어오게 한다. D(완료→카드)
+   *  는 정반대 방향 — 이 컴포넌트의 자체 제스처가 tx만 움직이고 카드는
+   *  건드리지 않으면, 카드는 이미 제자리(cardTX=0)에 조용히 숨어 있다가
+   *  완료 화면이 걷히기만 하는 것처럼 보여 "완료 화면이 카드 앞에 있는"
+   *  느낌을 준다. 여기서도 cardTX = tx - W 공식으로 동시에 구동해야 카드가
+   *  화면 밖(-W)에서 함께 슬라이드 인 하는 자연스러운 페이저 느낌이 난다. */
+  cardTX: SharedValue<number>;
 }
 
 function ReadingCompleteScreen({
@@ -2904,6 +3106,8 @@ function ReadingCompleteScreen({
   onSkip,
   onReread,
   onBack,
+  tx,
+  cardTX,
 }: ReadingCompleteScreenProps) {
   const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
@@ -2911,36 +3115,71 @@ function ReadingCompleteScreen({
     ? "마지막 장까지\n온전히 닿았습니다."
     : "읽고, 마음으로\n온전히 답했습니다.";
 
-  // 카드가 왼쪽으로 빠져나가는 것과 같은 타이밍(420ms)으로 오른쪽에서
-  // 슬라이드-인 — 카드가 사라진 뒤 뒤늦게 나타나지 않고 하나로 연결된
-  // 슬라이드처럼 보이게 한다.
-  const tx = useSharedValue(screenWidth);
-  useEffect(() => {
-    tx.value = withTiming(0, { duration: 420, easing: Easing.bezier(0.25, 0.46, 0.45, 0.94) });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
   const slideStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: tx.value }],
   }));
 
   // 완료 화면 → 질문 카드로 되돌아가기: 왼쪽에서 오른쪽으로 스와이프 (페이지
-  // 순서상 뒤로 이동하는 방향과 동일한 규칙). 오른쪽으로 슬라이드-아웃하며
-  // 그 아래 이미 자리 잡고 있는 질문 카드를 드러낸다.
+  // 순서상 뒤로 이동하는 방향과 동일한 규칙). 손가락 이동량에 실시간으로
+  // 카드를 따라 움직이게 하고(pager의 forward/backward 스와이프와 동일한
+  // 손맛), 뗀 시점의 거리/속도로 완료(퇴장)/스냅백을 판정한다.
+  const dragStartX = useSharedValue(0);
+  const isCommittingBackRef = useRef(false);
   const backGesture = useMemo(() =>
     Gesture.Pan()
       .runOnJS(true)
-      .minDistance(12)
+      .minDistance(8)
+      .onBegin(() => {
+        if (isCommittingBackRef.current) return;
+        dragStartX.value = tx.value;
+      })
+      .onUpdate((e) => {
+        if (isCommittingBackRef.current) return;
+        // 왼쪽으로는(뒤로 갈 수 없으므로) 드래그되지 않도록 0에서 클램프.
+        tx.value = Math.max(0, dragStartX.value + e.translationX);
+        // 카드가 화면 밖(-W)에서 완료 화면과 정확히 반대로 함께 슬라이드 인
+        // 하도록 항상 cardTX = tx - W 로 동기화 (C의 completeEntranceX = W+dx
+        // 공식을 그대로 뒤집은 것). 이게 없으면 카드는 tx와 무관하게 이미
+        // 제자리(0)에 조용히 있다가 완료 화면만 걷히는 것처럼 보여, 두 화면이
+        // 나란히 미끄러지는 대신 완료 화면이 카드 "앞"에 떠 있는 것처럼 보인다.
+        cardTX.value = tx.value - screenWidth;
+      })
       .onEnd((e) => {
-        if (e.translationX > 80 && Math.abs(e.translationX) > Math.abs(e.translationY)) {
+        if (isCommittingBackRef.current) return;
+        const THRESHOLD = screenWidth * 0.22;
+        const VELOCITY_THRESHOLD = 450;
+        const isHorizontal = Math.abs(e.translationX) > Math.abs(e.translationY);
+        const shouldCommit =
+          isHorizontal &&
+          e.translationX > 0 &&
+          (e.translationX > THRESHOLD || e.velocityX > VELOCITY_THRESHOLD);
+
+        if (shouldCommit) {
+          isCommittingBackRef.current = true;
+          cardTX.value = withTiming(0, {
+            duration: 300,
+            easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
+          });
           tx.value = withTiming(screenWidth, {
             duration: 300,
             easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
-          }, () => {
-            runOnJS(onBack)();
+          }, (finished) => {
+            if (finished) runOnJS(onBack)();
           });
+        } else {
+          cardTX.value = withSpring(-screenWidth, COMPLETE_BACK_SNAP_CONFIG);
+          tx.value = withSpring(0, COMPLETE_BACK_SNAP_CONFIG);
+        }
+      })
+      .onFinalize(() => {
+        // 제스처가 onEnd 없이 외부 요인으로 취소된 경우, 커밋 중이 아니라면
+        // 안전하게 원위치로 스냅백한다.
+        if (!isCommittingBackRef.current) {
+          cardTX.value = withSpring(-screenWidth, COMPLETE_BACK_SNAP_CONFIG);
+          tx.value = withSpring(0, COMPLETE_BACK_SNAP_CONFIG);
         }
       }),
-    [onBack, tx, screenWidth],
+    [onBack, tx, cardTX, dragStartX, screenWidth],
   );
 
   return (
