@@ -127,6 +127,13 @@
       "when": 1782691200000,
       "tag": "0017_add_deleted_at_to_articles",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1783165470367,
+      "tag": "0018_add_article_questions",
+      "breakpoints": true
     }
   ]
 }

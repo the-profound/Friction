@@ -650,6 +650,22 @@ export const FinalizeArticleResponse = zod.object({
 });
 
 /**
+ * Returns the AI-generated question set for this article's question cards (5 questions, generated in the background when the article was finalized). Falls back to a fixed set of 3 generic questions if generation is still pending, failed, or was never triggered (e.g. articles finalized before this feature).
+ * @summary Get question card questions for an article
+ */
+export const GetArticleQuestionsParams = zod.object({
+  id: zod.coerce.string().uuid(),
+});
+
+export const GetArticleQuestionsResponse = zod.object({
+  questions: zod
+    .array(zod.string())
+    .describe(
+      "Ordered list of question card questions. 5 AI-generated questions when available, otherwise the 3 fixed fallback questions.",
+    ),
+});
+
+/**
  * LLM-based Korean spell/spacing check. Returns a list of suggested corrections.
  * @summary Check Korean spelling and spacing
  */

@@ -161,6 +161,11 @@ export interface FinalizeArticleBody {
   myCollectionId?: string;
 }
 
+export interface ArticleQuestionsResponse {
+  /** Ordered list of question card questions. 5 AI-generated questions when available, otherwise the 3 fixed fallback questions. */
+  questions: string[];
+}
+
 export interface InboxItem {
   id: string;
   recipientId: string;

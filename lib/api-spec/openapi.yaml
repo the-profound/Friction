@@ -422,6 +422,28 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /articles/{id}/questions:
+    get:
+      operationId: getArticleQuestions
+      tags: [articles]
+      summary: Get question card questions for an article
+      description: "Returns the AI-generated question set for this article's question cards (5 questions, generated in the background when the article was finalized). Falls back to a fixed set of 3 generic questions if generation is still pending, failed, or was never triggered (e.g. articles finalized before this feature)."
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Question list (AI-generated or fallback)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArticleQuestionsResponse"
+        "404":
+          description: Article not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   # ─── Spell Check ─────────────────────────────────
   /spell-check:
     post:
@@ -1912,6 +1934,16 @@ components:
           type: string
           format: uuid
           description: Optional personal collection to add the finalized article to. When omitted, the article is finalized without being added to a collection.
+
+    ArticleQuestionsResponse:
+      type: object
+      properties:
+        questions:
+          type: array
+          items:
+            type: string
+          description: Ordered list of question card questions. 5 AI-generated questions when available, otherwise the 3 fixed fallback questions.
+      required: [questions]
 
     # ─── Inbox ──────────────────────────────────────
     InboxItem:

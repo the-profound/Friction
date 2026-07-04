@@ -13,6 +13,7 @@ export * from "./article";
 export * from "./articleCover";
 export * from "./articleCoverAlign";
 export * from "./articleCoverType";
+export * from "./articleQuestionsResponse";
 export * from "./articleStatus";
 export * from "./articleStyle";
 export * from "./checkArticleRead200";

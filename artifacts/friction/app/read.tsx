@@ -78,6 +78,8 @@ import {
   useUpdateUserRecentCollection,
   useListInbox,
   useMarkInboxOthersRead,
+  useGetArticleQuestions,
+  getGetArticleQuestionsQueryKey,
   getGetUserRecentCollectionQueryKey,
   getListInboxQueryKey,
   getListStoredSentencesQueryKey,
@@ -160,14 +162,6 @@ function computeReaderLayout(availableWidth: number, availableHeight: number, ov
   };
 }
 
-/* ─── 질문 블록 질문 데이터 ────────────────────────────────────────── */
-const QUESTION_BLOCK_QUESTIONS = [
-  "작성자가 하고자 하는 말은 무엇이었나요?",
-  "이 글을 읽고 떠오르는 다른 글이나 경험이 있다면 무엇인가요?",
-  "이 글을 읽기 전과 읽은 후, 당신의 생각이 가장 크게 바뀐 지점은 어디인가요?",
-];
-
-
 export default function ReadScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -199,6 +193,11 @@ export default function ReadScreen() {
   const articleQuery = useGetArticle(articleId);
   const article = articleId ? articleQuery.data : undefined;
   const articleLoading = articleId ? articleQuery.isLoading : false;
+
+  const articleQuestionsQuery = useGetArticleQuestions(articleId, {
+    query: { queryKey: getGetArticleQuestionsQueryKey(articleId), enabled: !!articleId },
+  });
+  const questionCardQuestions = articleQuestionsQuery.data?.questions;
 
   const authorId = article?.authorId ?? "";
   const authorQuery = useGetUser(authorId);
@@ -2197,6 +2196,7 @@ export default function ReadScreen() {
                       오른쪽에서 슬라이드인, 페이지와 거의 동일한 크기 ──────── */}
                   {finishOverlayVisible && (
                     <QuestionCardCurl
+                      questions={questionCardQuestions}
                       containerWidth={layout.containerWidth}
                       containerHeight={layout.containerHeight}
                       entranceX={cardEntranceX}

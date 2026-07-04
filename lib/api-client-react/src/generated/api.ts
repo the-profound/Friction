@@ -21,6 +21,7 @@ import type {
   AddTeamArticleBody,
   AddTeamMemberBody,
   Article,
+  ArticleQuestionsResponse,
   CheckArticleRead200,
   CheckArticleReadParams,
   CreateArticleBody,
@@ -1460,6 +1461,94 @@ export const useFinalizeArticle = <
 > => {
   return useMutation(getFinalizeArticleMutationOptions(options));
 };
+
+/**
+ * Returns the AI-generated question set for this article's question cards (5 questions, generated in the background when the article was finalized). Falls back to a fixed set of 3 generic questions if generation is still pending, failed, or was never triggered (e.g. articles finalized before this feature).
+ * @summary Get question card questions for an article
+ */
+export const getGetArticleQuestionsUrl = (id: string) => {
+  return `/api/articles/${id}/questions`;
+};
+
+export const getArticleQuestions = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ArticleQuestionsResponse> => {
+  return customFetch<ArticleQuestionsResponse>(getGetArticleQuestionsUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetArticleQuestionsQueryKey = (id: string) => {
+  return [`/api/articles/${id}/questions`] as const;
+};
+
+export const getGetArticleQuestionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getArticleQuestions>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getArticleQuestions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetArticleQuestionsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getArticleQuestions>>
+  > = ({ signal }) => getArticleQuestions(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getArticleQuestions>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetArticleQuestionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getArticleQuestions>>
+>;
+export type GetArticleQuestionsQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get question card questions for an article
+ */
+
+export function useGetArticleQuestions<
+  TData = Awaited<ReturnType<typeof getArticleQuestions>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getArticleQuestions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetArticleQuestionsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * LLM-based Korean spell/spacing check. Returns a list of suggested corrections.

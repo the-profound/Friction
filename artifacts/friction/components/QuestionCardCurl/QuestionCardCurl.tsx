@@ -43,8 +43,10 @@ import Svg, {
 import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
 import { Colors, ReaderTokens } from "@/constants/tokens";
 
-/* ─── 질문 데이터 ────────────────────────────────────────────────────── */
-const QUESTIONS = [
+/* ─── 질문 데이터 ────────────────────────────────────────────────────────
+ * 고정 3개 질문 폴백 — 글마다 AI가 생성한 질문(5개, `questions` prop)이 아직
+ * 준비되지 않았거나 실패한 경우, 또는 prop이 전달되지 않은 경우 사용된다. */
+const FALLBACK_QUESTIONS = [
   "작성자가 하고자 하는 말은 무엇이었나요?",
   "이 글을 읽고 떠오르는 다른 글이나 경험이 있다면 무엇인가요?",
   "이 글을 읽기 전과 읽은 후, 당신의 생각이 가장 크게 바뀐 지점은 어디인가요?",
@@ -216,6 +218,9 @@ export interface QuestionCardCurlProps {
    *  스와이프처럼 보인다 (내부 로컬 상태였을 때는 D가 이 값을 건드릴 수
    *  없어 카드가 제자리에 정지된 채 완료 화면만 걷히는 것처럼 보였다). */
   cardTX: SharedValue<number>;
+  /** 이 글에 대한 질문 카드 질문 목록 (AI 생성 5개, 또는 서버 폴백 3개).
+   *  아직 로드되지 않았거나(undefined) 비어있으면 컴포넌트 내장 고정 3개 질문으로 대체된다. */
+  questions?: string[];
 }
 
 /* 카드가 프레임을 완전히 채우는 비율 — 마지막 페이지/읽기 완료 화면과 정확히
@@ -247,7 +252,13 @@ export default function QuestionCardCurl({
   flatTransitionSV,
   completeEntranceX,
   cardTX,
+  questions,
 }: QuestionCardCurlProps) {
+  /* 3~5개 가변 질문 목록: prop이 비어있거나 없으면 고정 3개 질문으로 대체 */
+  const activeQuestions = questions && questions.length > 0 ? questions : FALLBACK_QUESTIONS;
+  const activeQuestionsRef = useRef(activeQuestions);
+  activeQuestionsRef.current = activeQuestions;
+
   /* ── 카드 레이아웃 (페이지 프레임과 거의 동일한 크기) ───────────────── */
   const cardSmallW = Math.round(screenWidth * CARD_FILL_RATIO);
   const cardSmallH = Math.round(screenHeight * CARD_FILL_RATIO);
@@ -371,10 +382,11 @@ export default function QuestionCardCurl({
       const _seq = seqRef.current;
       const _ans = newAnswerRef.current;
       const _isNew = _ptr === _saved.length;
+      const _questions = activeQuestionsRef.current;
 
       const outQ = _isNew
-        ? QUESTIONS[_seq % QUESTIONS.length]
-        : QUESTIONS[_saved[_ptr]?.qIdx ?? 0];
+        ? _questions[_seq % _questions.length]
+        : _questions[_saved[_ptr]?.qIdx ?? 0];
       const outAns = _isNew ? _ans : (_saved[_ptr]?.answer ?? "");
 
       let nextSaved = _saved;
@@ -384,7 +396,7 @@ export default function QuestionCardCurl({
       if (_isNew) {
         nextSeq = _seq + 1;
         if (hasAnswer) {
-          const entry = { qIdx: _seq % QUESTIONS.length, answer: _ans };
+          const entry = { qIdx: _seq % _questions.length, answer: _ans };
           nextSaved = [..._saved, entry];
           nextPtr = nextSaved.length;
         } else {
@@ -396,8 +408,8 @@ export default function QuestionCardCurl({
 
       const nextIsNew = nextPtr === nextSaved.length;
       const nextQ = nextIsNew
-        ? QUESTIONS[nextSeq % QUESTIONS.length]
-        : QUESTIONS[nextSaved[nextPtr]?.qIdx ?? 0];
+        ? _questions[nextSeq % _questions.length]
+        : _questions[nextSaved[nextPtr]?.qIdx ?? 0];
       const nextAns = nextIsNew ? "" : (nextSaved[nextPtr]?.answer ?? "");
 
       animatingRef.current = true;
@@ -466,15 +478,16 @@ export default function QuestionCardCurl({
     }
 
     const isCurrentNew = _ptr === _saved.length;
+    const _questions = activeQuestionsRef.current;
     const outQ = isCurrentNew
-      ? QUESTIONS[seqRef.current % QUESTIONS.length]
-      : QUESTIONS[_saved[_ptr]?.qIdx ?? 0];
+      ? _questions[seqRef.current % _questions.length]
+      : _questions[_saved[_ptr]?.qIdx ?? 0];
     const outAns = isCurrentNew
       ? newAnswerRef.current
       : (_saved[_ptr]?.answer ?? "");
 
     const prevCard = _saved[_ptr - 1];
-    const prevQ = QUESTIONS[prevCard.qIdx];
+    const prevQ = _questions[prevCard.qIdx];
 
     animatingRef.current = true;
     setAnimating(true);
@@ -694,9 +707,9 @@ export default function QuestionCardCurl({
   /* ── 현재 카드 표시값 ────────────────────────────────────────────────── */
   const isNewCard = ptr === saved.length;
   const currentQIdx = isNewCard
-    ? seq % QUESTIONS.length
+    ? seq % activeQuestions.length
     : (saved[ptr]?.qIdx ?? 0);
-  const currentQ = QUESTIONS[currentQIdx];
+  const currentQ = activeQuestions[currentQIdx];
   const currentAnswer = isNewCard ? newAnswer : (saved[ptr]?.answer ?? "");
 
   /* ── Curl geometry (목업과 동일한 수식) ─────────────────────────────── */

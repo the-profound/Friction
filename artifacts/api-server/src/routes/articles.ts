@@ -3,6 +3,7 @@ import { and, eq, ilike, isNull, ne, sql } from "drizzle-orm";
 import { db, articlesTable, myCollectionArticlesTable, myCollectionsTable, usersTable, type ArticleStatus } from "@workspace/db";
 import { CreateArticleBody, UpdateArticleBody, TransitionArticleStatusBody, FinalizeArticleBody, ReadingMemoQueryParams } from "@workspace/api-zod";
 import { ObjectStorageService } from "../lib/objectStorage";
+import { generateArticleQuestions, getArticleQuestionsOrFallback } from "../services/generate-article-questions";
 
 // Resolves a display collection name for a standalone article fetched via
 // getArticle. Team-collection membership is preferred (matches the chain
@@ -368,6 +369,7 @@ router.post("/articles/:id/finalize", async (req, res) => {
       }
 
       let updatedArticle = article;
+      let didTransitionToLetter = false;
       if (article.status === "CLOSING") {
         const [updated] = await tx
           .update(articlesTable)
@@ -375,6 +377,7 @@ router.post("/articles/:id/finalize", async (req, res) => {
           .where(eq(articlesTable.id, articleId))
           .returning();
         updatedArticle = updated;
+        didTransitionToLetter = true;
       } else if (article.status !== "LETTER") {
         return {
           status: 400,
@@ -407,14 +410,33 @@ router.post("/articles/:id/finalize", async (req, res) => {
         }
       }
 
-      return { status: 200, body: updatedArticle } as const;
+      return { status: 200, body: updatedArticle, didTransitionToLetter } as const;
     });
 
     res.status(result.status).json(result.body);
+
+    if (result.status === 200 && "didTransitionToLetter" in result && result.didTransitionToLetter) {
+      const finalizedArticle = result.body as typeof articlesTable.$inferSelect;
+      generateArticleQuestions(finalizedArticle.id, finalizedArticle.content).catch((err) => {
+        req.log.error({ err, articleId: finalizedArticle.id }, "Background article question generation failed");
+      });
+    }
   } catch (error) {
     req.log.error({ err: error }, "Error finalizing article");
     res.status(500).json({ error: "Failed to finalize article" });
   }
+});
+
+router.get("/articles/:id/questions", async (req, res) => {
+  const articleId = req.params.id;
+  const [article] = await db.select({ id: articlesTable.id }).from(articlesTable).where(and(eq(articlesTable.id, articleId), isNull(articlesTable.deletedAt)));
+  if (!article) {
+    res.status(404).json({ error: "Article not found" });
+    return;
+  }
+
+  const questions = await getArticleQuestionsOrFallback(articleId);
+  res.json({ questions });
 });
 
 export default router;
