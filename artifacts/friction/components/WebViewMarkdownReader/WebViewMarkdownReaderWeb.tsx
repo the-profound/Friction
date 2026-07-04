@@ -83,7 +83,7 @@ const wrapperStyle: React.CSSProperties = {
   width: "100%",
   height: "100%",
   display: "flex",
-  alignItems: "center",
+  alignItems: "flex-start",
   justifyContent: "center",
   overflow: "hidden",
 };

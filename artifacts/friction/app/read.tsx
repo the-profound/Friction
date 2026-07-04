@@ -2554,7 +2554,7 @@ const styles = StyleSheet.create({
   },
   pageContainer: {
     overflow: "hidden",
-    justifyContent: "center",
+    justifyContent: "flex-start",
   },
   emptyContainer: {
     flex: 1,

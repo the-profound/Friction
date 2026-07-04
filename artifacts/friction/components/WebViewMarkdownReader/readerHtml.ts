@@ -38,7 +38,7 @@ ${bridgeHeadScript}
 <style>${fontFaceCSS}
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{height:100%;background:transparent;overflow:hidden;-webkit-user-select:text;user-select:text}
-body{display:flex;align-items:center;justify-content:center}
+body{display:flex;align-items:flex-start;justify-content:center}
 ${bodyTypographyCss}
 #reader-content{width:100%}
 ::selection{background:rgba(59,130,246,0.3)}
