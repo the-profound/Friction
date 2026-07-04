@@ -274,7 +274,7 @@ export const ReaderTokens = {
 
   padding: {
     xCqi: 6,
-    yCqi: 10,
+    yCqi: 15,
   },
 
   fontFamily: {
