@@ -11,7 +11,15 @@
  * 목업(QuestionCardSwipePreview.tsx)과 동일한 geometry 사용.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   View,
   Text,
@@ -223,6 +231,19 @@ export interface QuestionCardCurlProps {
   questions?: string[];
 }
 
+/** 답한(한 글자 이상 입력한) 질문 카드 하나. */
+export interface AnsweredQuestionCard {
+  question: string;
+  answer: string;
+}
+
+/** read.tsx가 완료 커밋 시점에 답한 질문 카드 목록을 끌어오기 위한 imperative handle. */
+export interface QuestionCardCurlHandle {
+  /** 답한 순서대로 정렬된, 한 글자 이상 답변이 있는 카드 전부(현재 입력 중인
+   *  카드 포함)를 반환한다. */
+  getAnsweredCards: () => AnsweredQuestionCard[];
+}
+
 /* 카드가 프레임을 완전히 채우는 비율 — 마지막 페이지/읽기 완료 화면과 정확히
  * 같은 크기여야 전환 시 배경(readerFrame)의 흰 사각형 테두리가 드러나지 않는다. */
 const CARD_FILL_RATIO = 1;
@@ -239,7 +260,7 @@ const PARK_EXTRA = 120;
 /* ════════════════════════════════════════════════════════════════════════
  * QuestionCardCurl (메인 컴포넌트)
  * ════════════════════════════════════════════════════════════════════════ */
-export default function QuestionCardCurl({
+function QuestionCardCurlInner({
   onDismissOverlay,
   onDismissOverlayComplete,
   onReadingCompleteBegin,
@@ -253,7 +274,7 @@ export default function QuestionCardCurl({
   completeEntranceX,
   cardTX,
   questions,
-}: QuestionCardCurlProps) {
+}: QuestionCardCurlProps, ref: React.ForwardedRef<QuestionCardCurlHandle>) {
   /* 3~5개 가변 질문 목록: prop이 비어있거나 없으면 고정 3개 질문으로 대체 */
   const activeQuestions = questions && questions.length > 0 ? questions : FALLBACK_QUESTIONS;
   const activeQuestionsRef = useRef(activeQuestions);
@@ -505,6 +526,30 @@ export default function QuestionCardCurl({
 
   const triggerBackRef = useRef(triggerBack);
   triggerBackRef.current = triggerBack;
+
+  /* ── read.tsx가 완료 커밋 시점에 답한 카드를 모두 끌어올 수 있는 핸들.
+   *  savedRef(이미 넘긴 카드들)에, 현재 "새 카드" 슬롯(ptr === saved.length)에
+   *  한 글자 이상 입력 중인 답변이 있으면 그것까지 답한 순서 그대로 덧붙인다. */
+  useImperativeHandle(ref, () => ({
+    getAnsweredCards: () => {
+      const _saved = savedRef.current;
+      const _questions = activeQuestionsRef.current;
+      const cards: AnsweredQuestionCard[] = _saved
+        .filter((c) => c.answer.trim().length > 0)
+        .map((c) => ({ question: _questions[c.qIdx] ?? "", answer: c.answer }));
+
+      const _ptr = ptrRef.current;
+      const isCurrentNew = _ptr === _saved.length;
+      if (isCurrentNew && newAnswerRef.current.trim().length > 0) {
+        const _seq = seqRef.current;
+        cards.push({
+          question: _questions[_seq % _questions.length] ?? "",
+          answer: newAnswerRef.current,
+        });
+      }
+      return cards;
+    },
+  }), []);
 
   /* ── Pan gesture ─────────────────────────────────────────────────────── */
   const panGesture = useMemo(
@@ -1151,6 +1196,9 @@ export default function QuestionCardCurl({
     </Animated.View>
   );
 }
+
+const QuestionCardCurl = forwardRef(QuestionCardCurlInner);
+export default QuestionCardCurl;
 
 /* ─── 스타일 ─────────────────────────────────────────────────────────── */
 const s = StyleSheet.create({

@@ -42,7 +42,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import QuestionCardCurl from "@/components/QuestionCardCurl/QuestionCardCurl";
+import QuestionCardCurl, { type QuestionCardCurlHandle } from "@/components/QuestionCardCurl/QuestionCardCurl";
 import { useRouter, useLocalSearchParams, Stack } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import {
@@ -62,7 +62,7 @@ import { resolveArticleCover } from "@/utils/articleCover";
 import CoverPage from "@/components/CoverPage/CoverPage";
 import WebViewMarkdownReader from "@/components/WebViewMarkdownReader";
 import { normalizePageItem } from "@/utils/normalizePageItem";
-import { parseMemoPages, serializeMemoPages } from "@/utils/memoPages";
+import { parseMemoPages, serializeMemoPages, buildReplyContent } from "@/utils/memoPages";
 import { parseMarkdownBlocks, type MarkdownBlockType } from "@/utils/markdownParser";
 import { useReadingSession } from "@/lib/useReadingSession";
 import { useReadingMemo } from "@/lib/useReadingMemo";
@@ -247,6 +247,7 @@ export default function ReadScreen() {
 
 
   const [finishOverlayVisible, setFinishOverlayVisible] = useState(false);
+  const questionCardRef = useRef<QuestionCardCurlHandle>(null);
   const [exitConfirmVisible, setExitConfirmVisible] = useState(false);
   const [sentencePopupVisible, setSentencePopupVisible] = useState(false);
   const [selectedText, setSelectedText] = useState("");
@@ -421,6 +422,20 @@ export default function ReadScreen() {
       });
     }, [showToast]),
   });
+
+  // 완료 커밋(보관/건너뛰기/재읽기 종료) 직전에 호출된다. 질문 카드에
+  // 한 글자 이상 답한 카드가 있으면, 읽기 중 메모 내용과 합쳐 최종 답장 글
+  // 본문을 만들고 이를 readingMemo의 최신 저장 대상 내용으로 동기적으로
+  // 반영한다 — 뒤이은 readingMemo.cleanup() 이 이 합쳐진 내용을 커밋한다.
+  // 답한 카드가 하나도 없으면 기존 메모 단독 흐름을 그대로 둔다.
+  const applyAnsweredQuestionCardsToMemo = useCallback(() => {
+    const answeredCards = questionCardRef.current?.getAnsweredCards() ?? [];
+    if (answeredCards.length === 0) return;
+    const finalContent = buildReplyContent(readingMemo.memoContent, answeredCards);
+    if (finalContent.trim()) {
+      readingMemo.updateMemoContent(finalContent);
+    }
+  }, [readingMemo]);
 
   const memoContentRef = useRef(readingMemo.memoContent);
   useEffect(() => { memoContentRef.current = readingMemo.memoContent; }, [readingMemo.memoContent]);
@@ -1756,6 +1771,7 @@ export default function ReadScreen() {
       trackArticleAction({ articleId, action: "save", msSinceComplete: Date.now() - completionTimeRef.current });
       invalidateInbox(queryClient);
       clearActiveSession();
+      applyAnsweredQuestionCardsToMemo();
       await readingMemo.cleanup();
       overlayOpacity.value = withTiming(1, { duration: 350, easing: Easing.in(Easing.ease) }, (finished) => {
         if (finished) runOnJS(router.back)();
@@ -1764,7 +1780,7 @@ export default function ReadScreen() {
     } finally {
       setIsSaving(false);
     }
-  }, [isSaving, isCollectionsReady, reading, selectedCollectionId, collectionsQuery.data, articleId, userId, createCollection, addToCollection, updateRecentCollection, queryClient, clearActiveSession, router, readingMemo]);
+  }, [isSaving, isCollectionsReady, reading, selectedCollectionId, collectionsQuery.data, articleId, userId, createCollection, addToCollection, updateRecentCollection, queryClient, clearActiveSession, router, readingMemo, applyAnsweredQuestionCardsToMemo]);
 
   const handleCommitAndSkip = useCallback(async () => {
     if (isDeleting) return;
@@ -1780,6 +1796,7 @@ export default function ReadScreen() {
           invalidateInbox(queryClient);
         }
         clearActiveSession();
+        applyAnsweredQuestionCardsToMemo();
         await readingMemo.cleanup();
         promptOrContinue(() => {
           overlayOpacity.value = withTiming(1, { duration: 350, easing: Easing.in(Easing.ease) }, (finished) => {
@@ -1793,7 +1810,7 @@ export default function ReadScreen() {
     } finally {
       setIsDeleting(false);
     }
-  }, [isDeleting, isListEntry, reading, router, clearActiveSession, queryClient, readingMemo, articleId, promptOrContinue]);
+  }, [isDeleting, isListEntry, reading, router, clearActiveSession, queryClient, readingMemo, articleId, promptOrContinue, applyAnsweredQuestionCardsToMemo]);
 
   const handleTextSelect = useCallback((text: string, isEmpty: boolean) => {
     if (!isEmpty && text) {
@@ -2196,6 +2213,7 @@ export default function ReadScreen() {
                       오른쪽에서 슬라이드인, 페이지와 거의 동일한 크기 ──────── */}
                   {finishOverlayVisible && (
                     <QuestionCardCurl
+                      ref={questionCardRef}
                       questions={questionCardQuestions}
                       containerWidth={layout.containerWidth}
                       containerHeight={layout.containerHeight}
@@ -2513,6 +2531,7 @@ export default function ReadScreen() {
           onSkip={mode === "re_read"
             ? async () => {
                 setReadingCompleteVisible(false);
+                applyAnsweredQuestionCardsToMemo();
                 await readingMemo.cleanup();
                 overlayOpacity.value = withTiming(1, { duration: 350, easing: Easing.in(Easing.ease) }, (finished) => {
                   if (finished) runOnJS(router.back)();
