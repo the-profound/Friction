@@ -169,7 +169,7 @@ function Phone({ caseType }: { caseType: Case }) {
 
   const message = caseType === "read"
     ? "마지막 장까지\n온전히 닿았습니다."
-    : "읽고, 마음으로\n온전히 답했습니다.";
+    : "마지막 장을\n직접 완성했습니다.";
 
   return (
     <div style={{

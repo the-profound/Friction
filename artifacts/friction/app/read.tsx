@@ -3113,7 +3113,7 @@ function ReadingCompleteScreen({
   const { width: screenWidth } = useWindowDimensions();
   const message = caseType === "read"
     ? "마지막 장까지\n온전히 닿았습니다."
-    : "읽고, 마음으로\n온전히 답했습니다.";
+    : "마지막 장을\n직접 완성했습니다.";
 
   const slideStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: tx.value }],
