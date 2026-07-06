@@ -229,6 +229,12 @@ function isHeadingPara(para: string): boolean {
   return SECTION_BOUNDARY_RE.test(para.split("\n")[0] ?? "");
 }
 
+/** 사진 마크다운(`![alt](url)`) 한 줄만으로 이루어진 단락인지 판별한다. */
+const IMAGE_ONLY_RE = /^!\[[^\]]*\]\([^)]*\)$/;
+export function isImagePara(para: string): boolean {
+  return IMAGE_ONLY_RE.test(para.trim());
+}
+
 /**
  * 자동분할 BS와 동일한 단어 토큰화. 공백(스페이스)만으로 분리하며 빈 토큰은 제거한다.
  * 줄바꿈/탭은 단어에 포함된 채 유지된다.
@@ -258,6 +264,15 @@ export function simulateGreedyJobs(
     const para = paragraphs[i];
     const paraH = paraHeights[i] ?? 0;
     const isHeading = isHeadingPara(para);
+    const isImage = isImagePara(para);
+
+    // 규칙 0: 사진 → 항상 단독 페이지. 앞뒤 어떤 단락과도 섞이지 않는다.
+    // (BS 분할도 필요 없음 — 사진 한 줄은 자체로 완결된 블록.)
+    if (isImage) {
+      simParaIdxs = [];
+      simH = 0;
+      continue;
+    }
 
     // 규칙 1: 소제목 → 무조건 페이지 분할
     if (isHeading && simParaIdxs.length > 0) {
@@ -422,6 +437,19 @@ export function runGreedy(
     const para = paragraphs[i];
     const paraH = paraHeights[i] ?? 0;
     const isHeading = isHeadingPara(para);
+    const isImage = isImagePara(para);
+
+    // 규칙 0: 사진 → 이전 누적 내용을 먼저 페이지로 확정하고, 사진 자신은
+    // 언제나 단독 페이지로 배치한다. 다음 단락은 새 페이지에서 시작한다.
+    if (isImage) {
+      if (currentParas.length > 0) {
+        pages.push(currentParas.join("\n\n"));
+      }
+      pages.push(para);
+      currentParas = [];
+      currentH = 0;
+      continue;
+    }
 
     if (isHeading && currentParas.length > 0) {
       pages.push(currentParas.join("\n\n"));

@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { splitContentToPages } from "../pageDivision";
+import {
+  splitContentToPages,
+  isImagePara,
+  simulateGreedyJobs,
+  runGreedy,
+} from "../pageDivision";
 
 describe("splitContentToPages", () => {
   it("splits content on --- dividers", () => {
@@ -70,5 +75,70 @@ describe("splitContentToPages", () => {
     expect(pages).toHaveLength(1);
     expect(pages[0].content).toBe("");
     expect(pages[0].charCount).toBe(0);
+  });
+});
+
+describe("isImagePara", () => {
+  it("recognizes a single-line image markdown paragraph", () => {
+    expect(isImagePara("![](https://example.com/a.jpg)")).toBe(true);
+    expect(isImagePara("![alt text](https://example.com/a.jpg)")).toBe(true);
+  });
+
+  it("rejects paragraphs that merely contain an image alongside text", () => {
+    expect(isImagePara("사진: ![](https://example.com/a.jpg)")).toBe(false);
+    expect(isImagePara("![](https://example.com/a.jpg) 설명")).toBe(false);
+  });
+
+  it("rejects plain text and headings", () => {
+    expect(isImagePara("일반 텍스트")).toBe(false);
+    expect(isImagePara("### 소제목")).toBe(false);
+  });
+});
+
+describe("image isolation in the greedy division engine", () => {
+  const threshold = 100;
+
+  it("keeps a photo on its own page even when it would fit alongside neighbours", () => {
+    const paragraphs = [
+      "짧은 문단 하나",
+      "![](https://example.com/a.jpg)",
+      "다음 문단도 짧다",
+    ];
+    const paraHeights = { 0: 20, 1: 10, 2: 20 };
+
+    const jobs = simulateGreedyJobs(paragraphs, paraHeights, threshold);
+    expect(jobs).toHaveLength(0);
+
+    const pages = runGreedy(paragraphs, paraHeights, {}, threshold);
+    expect(pages).toEqual([
+      "짧은 문단 하나",
+      "![](https://example.com/a.jpg)",
+      "다음 문단도 짧다",
+    ]);
+  });
+
+  it("isolates two photos inserted back-to-back onto separate pages", () => {
+    const paragraphs = [
+      "![](https://example.com/a.jpg)",
+      "![](https://example.com/b.jpg)",
+    ];
+    const paraHeights = { 0: 10, 1: 10 };
+
+    const pages = runGreedy(paragraphs, paraHeights, {}, threshold);
+    expect(pages).toEqual([
+      "![](https://example.com/a.jpg)",
+      "![](https://example.com/b.jpg)",
+    ]);
+  });
+
+  it("does not break a photo boundary during overflow-driven paragraph splitting", () => {
+    const longPara = Array.from({ length: 40 }, (_, i) => `단어${i}`).join(" ");
+    const paragraphs = ["앞 문단", "![](https://example.com/a.jpg)", longPara];
+    const paraHeights = { 0: 20, 1: 10, 2: 200 };
+
+    const jobs = simulateGreedyJobs(paragraphs, paraHeights, threshold);
+    // BS job should only ever target the overflowing text paragraph (idx 2),
+    // never the image paragraph (idx 1).
+    expect(jobs.every((j) => j.paraIdx === 2)).toBe(true);
   });
 });

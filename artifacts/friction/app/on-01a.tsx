@@ -645,9 +645,22 @@ export default function WritingScreen() {
   }, [id, updateArticle, queryClient, showToast]);
 
   // ── 이미지 업로드 (draft) ──────────────────────────────────────────────────
+  //
+  // 사진은 텍스트와 같은 페이지에 머무를 수 없다(사진 단독 페이지 규칙).
+  // 기존에는 [검토] 진입 직전에만 autoSplitImages() 를 호출했기 때문에,
+  // 작성 중에는 방금 삽입한 사진이 잠시 주변 텍스트와 같은 페이지에 섞여
+  // 있는 것처럼 보일 수 있었다. 삽입 직후 바로 같은 커맨드를 호출해
+  // 분할선이 즉시 생기도록 한다. 검토 진입 시의 호출은 안전망으로 유지.
   const handleImageUploadSuccess = useCallback((imageUrl: string) => {
     editorRef.current?.insertImage(imageUrl);
-  }, []);
+    // insertImage 트랜잭션이 WebView 이벤트 루프에서 커밋된 뒤 분할을
+    // 시도해야 방금 삽입한 이미지 노드를 인식할 수 있다.
+    setTimeout(() => {
+      editorRef.current?.autoSplitImages().then(() => {
+        showToast({ message: "사진은 페이지에 단독으로만 첨부할 수 있어요.", type: "info" });
+      }).catch(() => {});
+    }, 0);
+  }, [showToast]);
 
   const handleImageUploadError = useCallback((err: Error) => {
     showToast({ message: err.message, type: "error" });

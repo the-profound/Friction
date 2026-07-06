@@ -1740,8 +1740,15 @@ function spellFindRange(
             }
           }
 
+          // 문서 맨 끝이 사진이면(다음 유의미 노드가 없어 needHRAfter가 붙지 않음)
+          // 커서가 갈 빈 문단을 사진과 같은 페이지에 그냥 붙이면 안 된다 —
+          // 그 문단에 이어 타이핑하면 텍스트가 사진과 한 페이지를 공유하게 된다.
+          // 사진 바로 뒤에 HR을 하나 더 넣어 반드시 별도 페이지로 분리한다.
           const lastNode = result[result.length - 1];
           if (!lastNode || lastNode.type.name !== "paragraph") {
+            if (lastNode && _isImg(lastNode)) {
+              result.push(sc.nodes.horizontalRule.create());
+            }
             result.push(sc.nodes.paragraph.create());
           }
 
