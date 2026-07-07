@@ -304,8 +304,13 @@ export default function WritingScreen() {
   }, [editorReady, initialized]);
 
   const handleEditorReady = useCallback(() => {
+    // WebView 가 (재)로드될 때마다 WebView 쪽 docChangeCounter 는 0 으로 리셋된다.
+    // lastSeenDocVersionRef 를 함께 리셋하지 않으면 이전 세션의 높은 버전 번호가
+    // 남아 새 export 응답이 stale 로 판정·폐기되고 contentRef 가 갱신되지 않는다.
+    lastSeenDocVersionRef.current = -1;
     editorReadyRef.current = true;
     setEditorReady(true);
+    console.log("[handleEditorReady] editorReady=true, lastSeenDocVersion reset to -1, initializedRef=", initializedRef.current);
     if (initializedRef.current) {
       editorRef.current?.setMarkdown(articleContentRef.current);
       editorRef.current?.setTitle(titleRef.current);
@@ -320,17 +325,32 @@ export default function WritingScreen() {
         // 두 번째 폴백으로 사용한다.
         const bestKnown = contentRef.current || serverContentRef.current;
         if (!editorRef.current || !editorReadyRef.current) {
+          console.warn(
+            "[getEditorContent] fallback: editorRef=", !!editorRef.current,
+            "editorReadyRef=", editorReadyRef.current,
+            "bestKnown.len=", bestKnown.length,
+          );
           resolve(bestKnown);
           return;
         }
         const requestId = `export_${Date.now()}`;
+        console.log(
+          "[getEditorContent] requestExportMarkdown id=", requestId,
+          "lastSeenDocVersion=", lastSeenDocVersionRef.current,
+          "contentRef.len=", contentRef.current.length,
+        );
         pendingExportsRef.current.set(requestId, resolve);
         editorRef.current.requestExportMarkdown(requestId);
         setTimeout(() => {
           if (pendingExportsRef.current.has(requestId)) {
             pendingExportsRef.current.delete(requestId);
+            const fallback = contentRef.current || serverContentRef.current;
+            console.warn(
+              "[getEditorContent] 2s timeout — fallback len=", fallback.length,
+              "contentRef.len=", contentRef.current.length,
+            );
             // 타임아웃 시에도 동일한 이중 폴백 사용.
-            resolve(contentRef.current || serverContentRef.current);
+            resolve(fallback);
           }
         }, 2000);
       };
@@ -341,6 +361,7 @@ export default function WritingScreen() {
       if (editorReadyRef.current) {
         doExport();
       } else {
+        console.warn("[getEditorContent] editorNotReady — polling start");
         const POLL_INTERVAL_MS = 50;
         const MAX_WAIT_MS = 5000;
         let elapsed = 0;
@@ -348,6 +369,7 @@ export default function WritingScreen() {
           elapsed += POLL_INTERVAL_MS;
           if (editorReadyRef.current || elapsed >= MAX_WAIT_MS) {
             clearInterval(poll);
+            console.log("[getEditorContent] polling done elapsed=", elapsed, "ready=", editorReadyRef.current);
             doExport();
           }
         }, POLL_INTERVAL_MS);
@@ -358,7 +380,18 @@ export default function WritingScreen() {
   const handleExportMarkdown = useCallback((payload: OnExportMarkdownPayload) => {
     // stale 응답 폐기: 더 새로운 docVersion 응답을 이미 처리했다면 즉시 버린다.
     const incomingVer = payload.docVersion ?? 0;
-    if (incomingVer < lastSeenDocVersionRef.current) return;
+    const hasPendingCb = pendingExportsRef.current.has(payload.requestId);
+    console.log(
+      "[handleExportMarkdown] reqId=", payload.requestId,
+      "incomingVer=", incomingVer,
+      "lastSeenVer=", lastSeenDocVersionRef.current,
+      "md.len=", payload.markdown.length,
+      "hasPendingCb=", hasPendingCb,
+    );
+    if (incomingVer < lastSeenDocVersionRef.current) {
+      console.warn("[handleExportMarkdown] DISCARDED (stale version)");
+      return;
+    }
     lastSeenDocVersionRef.current = incomingVer;
     contentRef.current = payload.markdown;
     // 분할 모드에서는 모든 편집 이후 페이지/측정이 즉시 재계산돼야 하므로
