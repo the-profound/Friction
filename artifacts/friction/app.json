@@ -41,6 +41,13 @@
         }
       ],
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "글에 사진을 첨부하려면 사진첩 접근 권한이 필요합니다.",
+          "cameraPermission": "글에 사진을 첨부하려면 카메라 접근 권한이 필요합니다."
+        }
+      ],
+      [
         "expo-media-library",
         {
           "photosPermission": "글을 이미지로 저장하려면 사진첩 접근 권한이 필요합니다.",

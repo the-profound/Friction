@@ -3,7 +3,7 @@ import { openai } from "@workspace/integrations-openai-ai-server";
 
 const router: IRouter = Router();
 
-const SPELL_CHECK_MODEL = "gpt-5-mini";
+const SPELL_CHECK_MODEL = "gpt-4.1-mini";
 
 const SYSTEM_PROMPT = `역할: 너는 한국어 맞춤법·띄어쓰기 교정 엔진이다. 마크다운/리치텍스트가 섞일 수 있는 원문을 입력으로 받아, 오탈자와 띄어쓰기 오류만 찾아 교정 목록을 만든다.
 

@@ -1790,8 +1790,8 @@ export default function WritingScreen() {
             title="사진 추가"
             onClose={() => setImagePickerVisible(false)}
             actions={[
-              { label: "카메라로 촬영", onPress: () => { setImagePickerVisible(false); pickInlineImage("camera"); } },
-              { label: "갤러리에서 선택", onPress: () => { setImagePickerVisible(false); pickInlineImage("gallery"); } },
+              { label: "카메라로 촬영", onPress: () => { setImagePickerVisible(false); setTimeout(() => pickInlineImage("camera"), 300); } },
+              { label: "갤러리에서 선택", onPress: () => { setImagePickerVisible(false); setTimeout(() => pickInlineImage("gallery"), 300); } },
               { label: "취소", style: "cancel", onPress: () => setImagePickerVisible(false) },
             ]}
           />
