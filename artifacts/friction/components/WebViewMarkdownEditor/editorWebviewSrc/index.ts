@@ -1,4 +1,4 @@
-import { Editor, Extension, Node } from "@tiptap/core";
+import { Editor, Extension, Node as TipTapNode } from "@tiptap/core";
 import { Document } from "@tiptap/extension-document";
 import { Paragraph } from "@tiptap/extension-paragraph";
 import { Text } from "@tiptap/extension-text";
@@ -464,7 +464,7 @@ const HorizontalRuleWithControls = HorizontalRule.extend({
   },
 });
 
-const QuestionBlock = Node.create({
+const QuestionBlock = TipTapNode.create({
   name: "questionBlock",
   group: "block",
   content: "block+",
@@ -476,7 +476,7 @@ const QuestionBlock = Node.create({
   },
 });
 
-const InlineImage = Node.create({
+const InlineImage = TipTapNode.create({
   name: "inlineImage",
   group: "block",
   atom: true,

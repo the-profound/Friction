@@ -1,0 +1,272 @@
+    req: {
+      "id": 7,
+      "method": "GET",
+      "url": "/api/my-collections"
+    }
+    res: {
+      "statusCode": 304
+    }
+    responseTime: 650
+[10:22:13.481] INFO (277): request completed
+    req: {
+      "id": 6,
+      "method": "POST",
+      "url": "/api/users/sync"
+    }
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 666
+[10:22:13.548] INFO (277): request completed
+    req: {
+      "id": 3,
+      "method": "GET",
+      "url": "/api/inbox"
+    }
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 1330
+[10:22:13.632] INFO (277): request completed
+    req: {
+      "id": 5,
+      "method": "GET",
+      "url": "/api/send-records"
+    }
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 821
+[10:22:13.726] INFO (277): request completed
+    req: {
+      "id": 4,
+      "method": "GET",
+      "url": "/api/articles"
+    }
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 919
+[10:22:22.501] INFO (277): request completed
+    req: {
+      "id": 8,
+      "method": "GET",
+      "url": "/api/storage/objects/uploads/004ab348-cc84-4701-801f-2ea274fbe31b"
+    }
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 4834
+[10:22:22.617] INFO (277): request completed
+    req: {
+      "id": 9,
+      "method": "GET",
+      "url": "/api/storage/objects/uploads/42e60387-998b-47c5-b5cd-346744ad1756"
+    }
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 3605
+[10:22:33.117] INFO (277): request completed
+    req: {
+      "id": 10,
+      "method": "POST",
+      "url": "/api/articles"
+    }
+    res: {
+      "statusCode": 201
+    }
+    responseTime: 904
+[10:22:33.699] INFO (277): request completed
+    req: {
+      "id": 11,
+      "method": "GET",
+      "url": "/api/articles"
+    }
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 379
+[10:22:34.045] INFO (277): request completed
+    req: {
+      "id": 12,
+      "method": "GET",
+      "url": "/api/articles/4dec454b-5bd5-41f8-aca4-9c2c89950b62"
+    }
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 136
+[10:22:40.908] INFO (277): PATCH content payload
+    req: {
+      "id": 13,
+      "method": "PATCH",
+      "url": "/api/articles/4dec454b-5bd5-41f8-aca4-9c2c89950b62"
+    }
+    articleId: "4dec454b-5bd5-41f8-aca4-9c2c89950b62"
+    contentLen: 0
+    contentPreview: ""
+[10:22:41.294] INFO (277): request completed
+    req: {
+      "id": 13,
+      "method": "PATCH",
+      "url": "/api/articles/4dec454b-5bd5-41f8-aca4-9c2c89950b62"
+    }
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 516
+[10:22:49.513] INFO (277): PATCH content payload
+    req: {
+      "id": 14,
+      "method": "PATCH",
+      "url": "/api/articles/4dec454b-5bd5-41f8-aca4-9c2c89950b62"
+    }
+    articleId: "4dec454b-5bd5-41f8-aca4-9c2c89950b62"
+    contentLen: 0
+    contentPreview: ""
+[10:22:49.899] INFO (277): request completed
+    req: {
+      "id": 14,
+      "method": "PATCH",
+      "url": "/api/articles/4dec454b-5bd5-41f8-aca4-9c2c89950b62"
+    }
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 517
+[10:23:03.939] INFO (277): PATCH content payload
+    req: {
+      "id": 15,
+      "method": "PATCH",
+      "url": "/api/articles/4dec454b-5bd5-41f8-aca4-9c2c89950b62"
+    }
+    articleId: "4dec454b-5bd5-41f8-aca4-9c2c89950b62"
+    contentLen: 0
+    contentPreview: ""
+[10:23:04.327] INFO (277): request completed
+    req: {
+      "id": 15,
+      "method": "PATCH",
+      "url": "/api/articles/4dec454b-5bd5-41f8-aca4-9c2c89950b62"
+    }
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 1033
+[10:23:09.261] INFO (277): PATCH content payload
+    req: {
+      "id": 16,
+      "method": "PATCH",
+      "url": "/api/articles/4dec454b-5bd5-41f8-aca4-9c2c89950b62"
+    }
+    articleId: "4dec454b-5bd5-41f8-aca4-9c2c89950b62"
+    contentLen: 0
+    contentPreview: ""
+[10:23:09.649] INFO (277): request completed
+    req: {
+      "id": 16,
+      "method": "PATCH",
+      "url": "/api/articles/4dec454b-5bd5-41f8-aca4-9c2c89950b62"
+    }
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 518
+[10:23:16.366] INFO (277): PATCH content payload
+    req: {
+      "id": 17,
+      "method": "PATCH",
+      "url": "/api/articles/4dec454b-5bd5-41f8-aca4-9c2c89950b62"
+    }
+    articleId: "4dec454b-5bd5-41f8-aca4-9c2c89950b62"
+    contentLen: 0
+    contentPreview: ""
+[10:23:16.754] INFO (277): request completed
+    req: {
+      "id": 17,
+      "method": "PATCH",
+      "url": "/api/articles/4dec454b-5bd5-41f8-aca4-9c2c89950b62"
+    }
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 518
+[10:23:17.976] INFO (277): PATCH content payload
+    req: {
+      "id": 18,
+      "method": "PATCH",
+      "url": "/api/articles/4dec454b-5bd5-41f8-aca4-9c2c89950b62"
+    }
+    articleId: "4dec454b-5bd5-41f8-aca4-9c2c89950b62"
+    contentLen: 0
+    contentPreview: ""
+[10:23:18.366] INFO (277): request completed
+    req: {
+      "id": 18,
+      "method": "PATCH",
+      "url": "/api/articles/4dec454b-5bd5-41f8-aca4-9c2c89950b62"
+    }
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 519
+[10:23:18.707] INFO (277): PATCH content payload
+    req: {
+      "id": 19,
+      "method": "PATCH",
+      "url": "/api/articles/4dec454b-5bd5-41f8-aca4-9c2c89950b62"
+    }
+    articleId: "4dec454b-5bd5-41f8-aca4-9c2c89950b62"
+    contentLen: 0
+    contentPreview: ""
+[10:23:19.094] INFO (277): request completed
+    req: {
+      "id": 19,
+      "method": "PATCH",
+      "url": "/api/articles/4dec454b-5bd5-41f8-aca4-9c2c89950b62"
+    }
+    res: {
+      "statusCode": 200
+    }
+    responseTime: 517
+[10:23:49.712] INFO (277): request completed
+    req: {
+      "id": 20,
+      "method": "GET",
+      "url": "/"
+    }
+    res: {
+      "statusCode": 404
+    }
+    responseTime: 0
+[10:23:53.487] INFO (277): request completed
+    req: {
+      "id": 21,
+      "method": "GET",
+      "url": "/"
+    }
+    res: {
+      "statusCode": 404
+    }
+    responseTime: 2
+[10:23:54.501] INFO (277): request completed
+    req: {
+      "id": 22,
+      "method": "GET",
+      "url": "/"
+    }
+    res: {
+      "statusCode": 404
+    }
+    responseTime: 0
+^A[10:24:08.606] INFO (277): request completed
+    req: {
+      "id": 23,
+      "method": "GET",
+      "url": "/"
+    }
+    res: {
+      "statusCode": 404
+    }
+    responseTime: 1
