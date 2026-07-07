@@ -157,6 +157,7 @@ export default function WritingScreen() {
   const [charCount, setCharCount] = useState(0);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [editorReady, setEditorReady] = useState(false);
+  const editorReadyRef = useRef(false);
   const [initialized, setInitialized] = useState(false);
   const [selectionState, setSelectionState] = useState<OnSelectionUpdatePayload>(DEFAULT_SELECTION);
   const [blockTypeSheetVisible, setBlockTypeSheetVisible] = useState(false);
@@ -303,6 +304,7 @@ export default function WritingScreen() {
   }, [editorReady, initialized]);
 
   const handleEditorReady = useCallback(() => {
+    editorReadyRef.current = true;
     setEditorReady(true);
     if (initializedRef.current) {
       editorRef.current?.setMarkdown(articleContentRef.current);
@@ -312,26 +314,46 @@ export default function WritingScreen() {
 
   const getEditorContent = useCallback((): Promise<string> => {
     return new Promise((resolve) => {
-      // serverContentRef 는 마지막으로 서버에서 받은 값. contentRef 가 비어있을 경우
-      // (초기 로드 직후 WebView 가 아직 export 를 한 번도 보내지 않은 타이밍 등)를 대비해
-      // 두 번째 폴백으로 사용한다.
-      const bestKnown = contentRef.current || serverContentRef.current;
-      if (!editorRef.current || !editorReady) {
-        resolve(bestKnown);
-        return;
-      }
-      const requestId = `export_${Date.now()}`;
-      pendingExportsRef.current.set(requestId, resolve);
-      editorRef.current.requestExportMarkdown(requestId);
-      setTimeout(() => {
-        if (pendingExportsRef.current.has(requestId)) {
-          pendingExportsRef.current.delete(requestId);
-          // 타임아웃 시에도 동일한 이중 폴백 사용.
-          resolve(contentRef.current || serverContentRef.current);
+      const doExport = () => {
+        // serverContentRef 는 마지막으로 서버에서 받은 값. contentRef 가 비어있을 경우
+        // (초기 로드 직후 WebView 가 아직 export 를 한 번도 보내지 않은 타이밍 등)를 대비해
+        // 두 번째 폴백으로 사용한다.
+        const bestKnown = contentRef.current || serverContentRef.current;
+        if (!editorRef.current || !editorReadyRef.current) {
+          resolve(bestKnown);
+          return;
         }
-      }, 2000);
+        const requestId = `export_${Date.now()}`;
+        pendingExportsRef.current.set(requestId, resolve);
+        editorRef.current.requestExportMarkdown(requestId);
+        setTimeout(() => {
+          if (pendingExportsRef.current.has(requestId)) {
+            pendingExportsRef.current.delete(requestId);
+            // 타임아웃 시에도 동일한 이중 폴백 사용.
+            resolve(contentRef.current || serverContentRef.current);
+          }
+        }, 2000);
+      };
+
+      // 에디터가 아직 준비되지 않은 경우 최대 5초까지 50ms 간격으로 폴링한 뒤 export한다.
+      // 이 대기 없이 바로 fallback을 반환하면 새 글에서 contentRef / serverContentRef 가
+      // 모두 ""인 상태이므로 "본문이 비어있습니다" 오류가 즉시 발생한다.
+      if (editorReadyRef.current) {
+        doExport();
+      } else {
+        const POLL_INTERVAL_MS = 50;
+        const MAX_WAIT_MS = 5000;
+        let elapsed = 0;
+        const poll = setInterval(() => {
+          elapsed += POLL_INTERVAL_MS;
+          if (editorReadyRef.current || elapsed >= MAX_WAIT_MS) {
+            clearInterval(poll);
+            doExport();
+          }
+        }, POLL_INTERVAL_MS);
+      }
     });
-  }, [editorReady]);
+  }, []);
 
   const handleExportMarkdown = useCallback((payload: OnExportMarkdownPayload) => {
     // stale 응답 폐기: 더 새로운 docVersion 응답을 이미 처리했다면 즉시 버린다.
