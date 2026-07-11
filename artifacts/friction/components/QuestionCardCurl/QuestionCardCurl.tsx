@@ -676,30 +676,32 @@ function QuestionCardCurlInner({
               completeEntranceX.value = withTiming(
                 0,
                 { duration: SETTLE_DURATION, easing: SETTLE_EASING },
-                (finished) => {
-                  if (finished) {
-                    // NOTE: cardTX is intentionally left parked at -W here
-                    // (not reset to 0) — the card must stay off-screen to the
-                    // left while the completion screen is fully shown, so
-                    // that D's back-swipe (owned by ReadingCompleteScreen,
-                    // driving cardTX = tx - W in lockstep) can reveal it
-                    // sliding back in from -W. Resetting to 0 here would put
-                    // the card back in its resting/visible position behind
-                    // the opaque completion overlay, making D's reveal look
-                    // like the completion screen is floating in front of an
-                    // already-in-place card instead of a true side-by-side
-                    // swap. D's own commit branch resets cardTX to 0 once the
-                    // user actually swipes back to the card.
-                    animatingRef.current = false;
-                    // Clear the "begin" guard now that the entrance is done —
-                    // otherwise the next C attempt (after D brings the user
-                    // back to this same still-mounted card) silently skips
-                    // onReadingCompleteBegin and never re-mounts the
-                    // completion screen. Mirrors the cardEntranceMountedRef
-                    // fix for A in read.tsx.
-                    completeBeginFiredRef.current = false;
-                    runOnJS(setAnimating)(false);
-                  }
+                () => {
+                  // Always reset guard flags regardless of finished — gating on
+                  // `finished` leaves animatingRef/completeBeginFiredRef permanently
+                  // set when the animation is interrupted, blocking all future C
+                  // attempts after D returns the user to this card.
+                  // NOTE: cardTX is intentionally left parked at -W here
+                  // (not reset to 0) — the card must stay off-screen to the
+                  // left while the completion screen is fully shown, so
+                  // that D's back-swipe (owned by ReadingCompleteScreen,
+                  // driving cardTX = tx - W in lockstep) can reveal it
+                  // sliding back in from -W. Resetting to 0 here would put
+                  // the card back in its resting/visible position behind
+                  // the opaque completion overlay, making D's reveal look
+                  // like the completion screen is floating in front of an
+                  // already-in-place card instead of a true side-by-side
+                  // swap. D's own commit branch resets cardTX to 0 once the
+                  // user actually swipes back to the card.
+                  animatingRef.current = false;
+                  // Clear the "begin" guard now that the entrance is done —
+                  // otherwise the next C attempt (after D brings the user
+                  // back to this same still-mounted card) silently skips
+                  // onReadingCompleteBegin and never re-mounts the
+                  // completion screen. Mirrors the cardEntranceMountedRef
+                  // fix for A in read.tsx.
+                  completeBeginFiredRef.current = false;
+                  runOnJS(setAnimating)(false);
                 },
               );
             } else if (dx > 0 && commit) {
@@ -714,20 +716,22 @@ function QuestionCardCurlInner({
               dismissPrevSlotSV.value = withTiming(
                 0,
                 { duration: SETTLE_DURATION, easing: SETTLE_EASING },
-                (finished) => {
-                  if (finished) {
-                    cardTX.value = 0;
-                    flatTransitionSV.value = 0;
-                    // B 동안 라이브로 노출된 건 "prev" 슬롯이었지만, onDismissOverlay가
-                    // 이미 currentPage를 감소시켜 둔 상태라 그 내용은 지금부턴 "current"
-                    // 슬롯의 몫이다. 여기서 즉시(동일 프레임) current=0(노출)/
-                    // prev=파크로 스왑하지 않으면 prev가 0에 낀 채로 영원히 current
-                    // 위에 남아, 다음 A 드래그 때 실제로 움직이는 current 슬롯이 이
-                    // 정지된 prev에 가려 애니메이션이 달라 보인다.
-                    currentSlotSV.value = 0;
-                    dismissPrevSlotSV.value = -(screenWidth + PARK_EXTRA);
-                    if (onDismissOverlayComplete) runOnJS(onDismissOverlayComplete)();
-                  }
+                () => {
+                  // Always reset guard flags regardless of finished — gating on
+                  // `finished` leaves slot SVs and onDismissOverlayComplete uncalled
+                  // when the animation is interrupted, permanently blocking the next
+                  // A→B re-entry. Mirrors the pattern in read.tsx A commit callback.
+                  cardTX.value = 0;
+                  flatTransitionSV.value = 0;
+                  // B 동안 라이브로 노출된 건 "prev" 슬롯이었지만, onDismissOverlay가
+                  // 이미 currentPage를 감소시켜 둔 상태라 그 내용은 지금부턴 "current"
+                  // 슬롯의 몫이다. 여기서 즉시(동일 프레임) current=0(노출)/
+                  // prev=파크로 스왑하지 않으면 prev가 0에 낀 채로 영원히 current
+                  // 위에 남아, 다음 A 드래그 때 실제로 움직이는 current 슬롯이 이
+                  // 정지된 prev에 가려 애니메이션이 달라 보인다.
+                  currentSlotSV.value = 0;
+                  dismissPrevSlotSV.value = -(screenWidth + PARK_EXTRA);
+                  if (onDismissOverlayComplete) runOnJS(onDismissOverlayComplete)();
                 },
               );
             } else if (dx < 0) {
