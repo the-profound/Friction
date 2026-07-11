@@ -825,7 +825,14 @@ function QuestionCardCurlInner({
                   // `finished` leaves slot SVs and onDismissOverlayComplete uncalled
                   // when the animation is interrupted, permanently blocking the next
                   // A→B re-entry. Mirrors the pattern in read.tsx A commit callback.
-                  cardTX.value = 0;
+                  //
+                  // NOTE: cardTX is intentionally NOT reset to 0 here. Setting it to 0
+                  // would snap the card from W (off-screen right) back to center for
+                  // one frame before React processes setFinishOverlayVisible(false),
+                  // causing a visible flicker of the question card re-appearing
+                  // momentarily after it has already flown off screen. The next A
+                  // entrance always resets cardTX.value = 0 before mounting, so
+                  // leaving it at W here is safe.
                   flatTransitionSV.value = 0;
                   // B 동안 라이브로 노출된 건 "prev" 슬롯이었지만, onDismissOverlay가
                   // 이미 currentPage를 감소시켜 둔 상태라 그 내용은 지금부턴 "current"
