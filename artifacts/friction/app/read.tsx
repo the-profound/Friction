@@ -1435,12 +1435,19 @@ export default function ReadScreen() {
         duration: LAST_PAGE_TRANSITION_DURATION,
         easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
       }, (finished) => {
+        // Always reset guard flags regardless of whether the animation
+        // completed normally or was cancelled (finished=false). Gating on
+        // `finished` leaves isCommittingRef permanently true when the
+        // animation is interrupted, locking out all future swipes.
+        flatTransitionSV.value = 0;
+        cardEntranceMountedRef.current = false;
+        isCommittingRef.current = false;
+        activeSwipeRef.current = null;
+        // Only advance the page if the animation fully completed.
         if (finished) {
-          flatTransitionSV.value = 0;
           // See matching comment in panGesture's onEnd A-commit branch: this
           // guard must clear once the entrance finishes, or the next A
           // attempt (drag or button) silently no-ops.
-          cardEntranceMountedRef.current = false;
           runOnJS(finishLastPageTransitionRef.current)();
         }
       });
@@ -1617,16 +1624,22 @@ export default function ReadScreen() {
           duration: LAST_PAGE_TRANSITION_DURATION,
           easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
         }, (finished) => {
+          // Always reset guard flags regardless of finished — gating on
+          // `finished` leaves isCommittingRef permanently true when the
+          // animation is interrupted, locking out all future swipes.
+          flatTransitionSV.value = 0;
+          // Card has fully arrived — this gesture's entrance is done, so
+          // clear the mount guard now. Otherwise the NEXT time the card is
+          // dismissed and re-approached (A again), onUpdate's
+          // `if (!cardEntranceMountedRef.current)` check silently skips the
+          // mount/flatTransitionSV/lastPageEntranceActiveRef setup and the
+          // drag falls through to the plain page-turn branch instead —
+          // exactly the "works once, then reverts to old behavior" bug.
+          cardEntranceMountedRef.current = false;
+          isCommittingRef.current = false;
+          activeSwipeRef.current = null;
+          // Only advance the page if the animation actually completed.
           if (finished) {
-            flatTransitionSV.value = 0;
-            // Card has fully arrived — this gesture's entrance is done, so
-            // clear the mount guard now. Otherwise the NEXT time the card is
-            // dismissed and re-approached (A again), onUpdate's
-            // `if (!cardEntranceMountedRef.current)` check silently skips the
-            // mount/flatTransitionSV/lastPageEntranceActiveRef setup and the
-            // drag falls through to the plain page-turn branch instead —
-            // exactly the "works once, then reverts to old behavior" bug.
-            cardEntranceMountedRef.current = false;
             runOnJS(finishLastPageTransitionRef.current)();
           }
         });
@@ -2244,6 +2257,7 @@ export default function ReadScreen() {
                         // 풀어 다음 렌더부터 정상적으로 currentPage-1을 따르게 한다.
                         pinnedPrevPageIdxRef.current = null;
                       }}
+                      isCompleteVisible={readingCompleteVisible}
                       onReadingCompleteBegin={(hasSubstantialAnswer) => {
                         // (C) 좌 스와이프가 시작된 첫 프레임에 호출됨 — 아직 커밋
                         // 여부는 미정이지만, 완료 화면을 즉시 마운트해 드래그 내내
@@ -3183,6 +3197,10 @@ function ReadingCompleteScreen({
             duration: 300,
             easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
           }, (finished) => {
+            // Always reset the commit lock regardless of finished — gating on
+            // `finished` leaves isCommittingBackRef permanently true when the
+            // animation is interrupted, permanently blocking the back gesture.
+            isCommittingBackRef.current = false;
             if (finished) runOnJS(onBack)();
           });
         } else {

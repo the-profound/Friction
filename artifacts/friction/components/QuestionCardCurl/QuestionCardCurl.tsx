@@ -229,6 +229,10 @@ export interface QuestionCardCurlProps {
   /** 이 글에 대한 질문 카드 질문 목록 (AI 생성 5개, 또는 서버 폴백 3개).
    *  아직 로드되지 않았거나(undefined) 비어있으면 컴포넌트 내장 고정 3개 질문으로 대체된다. */
   questions?: string[];
+  /** 읽기 완료 화면(ReadingCompleteScreen)이 현재 화면 위에 떠 있는지 여부.
+   *  true 동안 수평 스와이프(B: 오른쪽, C: 왼쪽)를 처리하지 않아
+   *  ReadingCompleteScreen의 backGesture와 제스처 경합이 발생하지 않도록 한다. */
+  isCompleteVisible?: boolean;
 }
 
 /** 답한(한 글자 이상 입력한) 질문 카드 하나. */
@@ -274,6 +278,7 @@ function QuestionCardCurlInner({
   completeEntranceX,
   cardTX,
   questions,
+  isCompleteVisible,
 }: QuestionCardCurlProps, ref: React.ForwardedRef<QuestionCardCurlHandle>) {
   /* 3~5개 가변 질문 목록: prop이 비어있거나 없으면 고정 3개 질문으로 대체 */
   const activeQuestions = questions && questions.length > 0 ? questions : FALLBACK_QUESTIONS;
@@ -325,6 +330,10 @@ function QuestionCardCurlInner({
   // Guards onReadingCompleteBegin to fire once per left-drag gesture (C),
   // reset at gesture start so re-dragging left again after a cancel re-fires it.
   const completeBeginFiredRef = useRef(false);
+  // Tracks the latest isCompleteVisible prop in a ref so panGesture (useMemo)
+  // can read the live value without needing it in the dependency array.
+  const isCompleteVisibleRef = useRef(isCompleteVisible ?? false);
+  isCompleteVisibleRef.current = isCompleteVisible ?? false;
   // Locks the vertical/horizontal classification for the CURRENT gesture the
   // first time one axis dominates, so onEnd always agrees with whatever
   // onUpdate has been live-driving all along. Without this, onUpdate and
@@ -585,6 +594,12 @@ function QuestionCardCurlInner({
                   : Math.min(dy * 0.22, restTy * 0.28);
             }
           } else {
+            // 완료 화면이 안정적으로 떠 있는 동안(이전 C가 커밋된 D 상태)에는
+            // 수평 스와이프(B/C)를 차단해 ReadingCompleteScreen의 backGesture(D)와
+            // 충돌하지 않도록 한다. 단, 현재 C 제스처가 진행 중(completeBeginFiredRef=true)
+            // 이라면 차단하면 안 된다 — 이 제스처가 바로 완료 화면을 마운트시킨 장본인
+            // 이므로 계속 onUpdate로 추적해 커밋/취소가 정상 처리되어야 한다.
+            if (isCompleteVisibleRef.current && !completeBeginFiredRef.current) return;
             const W = screenWidth || 300;
             cardTX.value = dx;
             if (dx > 0) {
@@ -599,9 +614,10 @@ function QuestionCardCurlInner({
               // 요청하고, 이후 매 프레임 라이브로 위치를 동기화한다.
               if (!completeBeginFiredRef.current) {
                 completeBeginFiredRef.current = true;
+                // 1자 이상 입력하면 "answered" 종료 화면으로 분기한다.
                 const hasSubstantial =
-                  savedRef.current.some((c) => c.answer.trim().length >= 10) ||
-                  newAnswerRef.current.trim().length >= 10;
+                  savedRef.current.some((c) => c.answer.trim().length > 0) ||
+                  newAnswerRef.current.trim().length > 0;
                 runOnJS(onReadingCompleteBegin)(hasSubstantial);
               }
               completeEntranceX.value = W + dx;
@@ -638,6 +654,11 @@ function QuestionCardCurlInner({
               cardTX.value = withSpring(0, { damping: 12, stiffness: 180 });
             }
           } else {
+            // 완료 화면이 안정적으로 떠 있는 동안(이전 C 커밋 후 D 상태)에는
+            // 수평 스와이프(B/C)를 차단한다. 단, 현재 C 제스처가 진행 중이라면
+            // 차단하지 않는다 — onUpdate에서 이미 라이브 추적 중이므로 여기서
+            // 커밋/취소 판정이 계속 처리되어야 한다 (completeBeginFiredRef 참조).
+            if (isCompleteVisibleRef.current && !completeBeginFiredRef.current) return;
             const W = screenWidth || 300;
             const commit =
               Math.abs(dx) > W * COMMIT_DISTANCE_RATIO ||
