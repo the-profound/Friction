@@ -69,7 +69,7 @@ export function buildReplyContent(
   const memoSection = flattenMemoPages(parseMemoPages(memoContent));
   const cardsSection = answeredCards
     .filter((card) => card.answer.trim().length > 0)
-    .map((card) => `${card.question}\n\n${card.answer.trim()}`)
+    .map((card) => `> ${card.question}\n\n${card.answer.trim()}`)
     .join("\n\n");
 
   return [memoSection, cardsSection].filter((section) => section.length > 0).join("\n\n");

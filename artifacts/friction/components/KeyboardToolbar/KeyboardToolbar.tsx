@@ -10,6 +10,8 @@ interface KeyboardToolbarProps {
   onBoldPress: () => void;
   onItalicPress: () => void;
   onUnderlinePress: () => void;
+  onQuotePress?: () => void;
+  isQuoteActive?: boolean;
   onDismissKeyboard?: () => void;
   onInsertDivider?: () => void;
   onShiftEnter?: () => void;
@@ -32,6 +34,8 @@ export default function KeyboardToolbar({
   onBoldPress,
   onItalicPress,
   onUnderlinePress,
+  onQuotePress,
+  isQuoteActive,
   onInsertDivider,
   onShiftEnter,
   onInsertImage,
@@ -82,6 +86,19 @@ export default function KeyboardToolbar({
           U
         </Text>
       </ScalePressable>
+
+      {onQuotePress != null && (
+        <ScalePressable
+          style={[styles.button, isQuoteActive && styles.quoteActiveButton]}
+          contentStyle={styles.buttonContent}
+          onPress={onQuotePress}
+          hitSlop={8}
+        >
+          <Text style={[styles.buttonText, styles.quoteLabel, isQuoteActive && styles.activeText]}>
+            {"\u201C\u201D"}
+          </Text>
+        </ScalePressable>
+      )}
 
       {onInsertDivider != null && (
         <ScalePressable
@@ -153,6 +170,15 @@ const styles = StyleSheet.create({
   underlineLabel: {
     textDecorationLine: "underline",
     fontSize: 16,
+  },
+  quoteActiveButton: {
+    backgroundColor: "#92323D",
+    borderRadius: 4,
+  },
+  quoteLabel: {
+    fontSize: 18,
+    lineHeight: 20,
+    fontFamily: Platform.select({ ios: "Georgia", default: "serif" }),
   },
   activeText: {
     color: "#ffffff",

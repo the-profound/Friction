@@ -123,13 +123,13 @@ describe("buildReplyContent", () => {
   it("returns only the question-card section when memo is empty", () => {
     const memo = serializeMemoPages([""]);
     const cards = [{ question: "질문 A", answer: "답변 A" }];
-    expect(buildReplyContent(memo, cards)).toBe("질문 A\n\n답변 A");
+    expect(buildReplyContent(memo, cards)).toBe("> 질문 A\n\n답변 A");
   });
 
   it("combines memo above and answered cards below, separated by a blank line", () => {
     const memo = serializeMemoPages(["메모 내용"]);
     const cards = [{ question: "질문 A", answer: "답변 A" }];
-    expect(buildReplyContent(memo, cards)).toBe("메모 내용\n\n질문 A\n\n답변 A");
+    expect(buildReplyContent(memo, cards)).toBe("메모 내용\n\n> 질문 A\n\n답변 A");
   });
 
   it("separates multiple answered cards with a blank line, preserving order", () => {
@@ -138,7 +138,7 @@ describe("buildReplyContent", () => {
       { question: "질문 A", answer: "답변 A" },
       { question: "질문 B", answer: "답변 B" },
     ];
-    expect(buildReplyContent(memo, cards)).toBe("질문 A\n\n답변 A\n\n질문 B\n\n답변 B");
+    expect(buildReplyContent(memo, cards)).toBe("> 질문 A\n\n답변 A\n\n> 질문 B\n\n답변 B");
   });
 
   it("excludes cards with empty/whitespace-only answers", () => {
@@ -147,7 +147,7 @@ describe("buildReplyContent", () => {
       { question: "질문 A", answer: "   " },
       { question: "질문 B", answer: "답변 B" },
     ];
-    expect(buildReplyContent(memo, cards)).toBe("질문 B\n\n답변 B");
+    expect(buildReplyContent(memo, cards)).toBe("> 질문 B\n\n답변 B");
   });
 
   it("returns an empty string when both memo and cards are empty", () => {
@@ -158,6 +158,6 @@ describe("buildReplyContent", () => {
   it("flattens multi-page memo content before combining with cards", () => {
     const memo = serializeMemoPages(["첫 페이지", "둘째 페이지"]);
     const cards = [{ question: "질문 A", answer: "답변 A" }];
-    expect(buildReplyContent(memo, cards)).toBe("첫 페이지\n\n둘째 페이지\n\n질문 A\n\n답변 A");
+    expect(buildReplyContent(memo, cards)).toBe("첫 페이지\n\n둘째 페이지\n\n> 질문 A\n\n답변 A");
   });
 });

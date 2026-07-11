@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   splitContentToPages,
   isImagePara,
+  isBlockquotePara,
   simulateGreedyJobs,
   runGreedy,
 } from "../pageDivision";
@@ -140,5 +141,69 @@ describe("image isolation in the greedy division engine", () => {
     // BS job should only ever target the overflowing text paragraph (idx 2),
     // never the image paragraph (idx 1).
     expect(jobs.every((j) => j.paraIdx === 2)).toBe(true);
+  });
+});
+
+describe("isBlockquotePara", () => {
+  it("recognizes lines starting with '> '", () => {
+    expect(isBlockquotePara("> 인용 텍스트")).toBe(true);
+    expect(isBlockquotePara(">  이중 공백")).toBe(true);
+  });
+
+  it("rejects plain text and headings", () => {
+    expect(isBlockquotePara("일반 단락")).toBe(false);
+    expect(isBlockquotePara("### 소제목")).toBe(false);
+    expect(isBlockquotePara(">단락 없이 붙은 경우")).toBe(false);
+  });
+});
+
+describe("blockquote handling in the greedy division engine", () => {
+  const threshold = 100;
+
+  it("(a) 일반 단락 뒤에 blockquote가 오면 페이지가 분리된다", () => {
+    const paragraphs = ["일반 단락 텍스트", "> 인용 텍스트"];
+    const paraHeights = { 0: 30, 1: 30 };
+
+    const jobs = simulateGreedyJobs(paragraphs, paraHeights, threshold);
+    expect(jobs).toHaveLength(0);
+
+    const pages = runGreedy(paragraphs, paraHeights, {}, threshold);
+    expect(pages).toEqual(["일반 단락 텍스트", "> 인용 텍스트"]);
+  });
+
+  it("(b) 짧은 blockquote는 단독으로 한 페이지를 차지한다", () => {
+    const paragraphs = ["> 짧은 인용문입니다"];
+    const paraHeights = { 0: 20 };
+
+    const jobs = simulateGreedyJobs(paragraphs, paraHeights, threshold);
+    expect(jobs).toHaveLength(0);
+
+    const pages = runGreedy(paragraphs, paraHeights, {}, threshold);
+    expect(pages).toEqual(["> 짧은 인용문입니다"]);
+  });
+
+  it("(c) 긴 blockquote는 BS 분할되며 각 조각이 '> ' prefix를 유지한다", () => {
+    const words = Array.from({ length: 20 }, (_, i) => `단어${i}`);
+    const blockquotePara = "> " + words.join(" ");
+    const paragraphs = [blockquotePara];
+    const paraHeights = { 0: 200 };
+
+    const jobs = simulateGreedyJobs(paragraphs, paraHeights, threshold);
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0].paraIdx).toBe(0);
+    expect(jobs[0].allWords).toEqual(words);
+
+    const splitResults = {
+      0: [
+        { wordOffset: 0, wordCount: 10 },
+        { wordOffset: 10, wordCount: 10 },
+      ],
+    };
+    const pages = runGreedy(paragraphs, paraHeights, splitResults, threshold);
+    expect(pages).toHaveLength(2);
+    expect(pages[0]).toMatch(/^> /);
+    expect(pages[1]).toMatch(/^> /);
+    expect(pages[0]).toBe("> " + words.slice(0, 10).join(" "));
+    expect(pages[1]).toBe("> " + words.slice(10).join(" "));
   });
 });

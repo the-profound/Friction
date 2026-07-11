@@ -1186,6 +1186,11 @@ export default function WritingScreen() {
     editorRef.current?.toggleMark("underline");
   }, []);
 
+  const handleToolbarQuote = useCallback(() => {
+    const isActive = selectionState.activeBlock === "blockquote";
+    editorRef.current?.setBlockType(isActive ? "paragraph" : "blockquote");
+  }, [selectionState.activeBlock]);
+
   // ── 분할 조작 (dividing) ───────────────────────────────────────────────────
   const runDivisionEngine = useCallback(
     async (paragraphs: string[]): Promise<string[] | null> => {
@@ -1665,6 +1670,8 @@ export default function WritingScreen() {
               onBoldPress={handleToolbarBold}
               onItalicPress={handleToolbarItalic}
               onUnderlinePress={handleToolbarUnderline}
+              onQuotePress={handleToolbarQuote}
+              isQuoteActive={selectionState.activeBlock === "blockquote"}
               onInsertDivider={handleInsertDivider}
               onShiftEnter={handleShiftEnter}
               onInsertImage={isImageUploading ? undefined : handleInsertImage}

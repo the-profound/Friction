@@ -235,6 +235,11 @@ export function isImagePara(para: string): boolean {
   return IMAGE_ONLY_RE.test(para.trim());
 }
 
+/** `> ` 으로 시작하는 인용문(blockquote) 단락인지 판별한다. */
+export function isBlockquotePara(para: string): boolean {
+  return /^>\s/.test(para.trimStart());
+}
+
 /**
  * 자동분할 BS와 동일한 단어 토큰화. 공백(스페이스)만으로 분리하며 빈 토큰은 제거한다.
  * 줄바꿈/탭은 단어에 포함된 채 유지된다.
@@ -265,6 +270,7 @@ export function simulateGreedyJobs(
     const paraH = paraHeights[i] ?? 0;
     const isHeading = isHeadingPara(para);
     const isImage = isImagePara(para);
+    const isBlockquote = isBlockquotePara(para);
 
     // 규칙 0: 사진 → 항상 단독 페이지. 앞뒤 어떤 단락과도 섞이지 않는다.
     // (BS 분할도 필요 없음 — 사진 한 줄은 자체로 완결된 블록.)
@@ -280,6 +286,12 @@ export function simulateGreedyJobs(
       simH = 0;
     }
 
+    // 규칙 1b: 인용문 → 이전 단락이 쌓인 상태면 페이지 분할 (독립적 시작)
+    if (isBlockquote && simParaIdxs.length > 0 && !isHeading) {
+      simParaIdxs = [];
+      simH = 0;
+    }
+
     if (simH + paraH <= threshold) {
       simParaIdxs.push(i);
       simH += paraH;
@@ -288,7 +300,9 @@ export function simulateGreedyJobs(
       if (isHeadingOnlyPage) {
         // 규칙 2: 소제목 단독 페이지 잔여 공간 채우기
         const remainingH = Math.max(0, threshold - simH);
-        const allWords = paraToWords(para);
+        const allWords = isBlockquote
+          ? paraToWords(para.replace(/^>\s*/, ""))
+          : paraToWords(para);
         if (allWords.length > 1 && remainingH > 0) {
           bsJobs.push({ paraIdx: i, allWords, wordOffset: 0, targetH: remainingH });
         }
@@ -300,7 +314,9 @@ export function simulateGreedyJobs(
         simH = paraH;
         // 단락 자체가 임계값 초과면 BS 추가 (마지막 단락 누락 방지)
         if (paraH > threshold) {
-          const allWords = paraToWords(para);
+          const allWords = isBlockquote
+            ? paraToWords(para.replace(/^>\s*/, ""))
+            : paraToWords(para);
           if (allWords.length > 1) {
             bsJobs.push({ paraIdx: i, allWords, wordOffset: 0, targetH: threshold });
             simH = paraH * 0.5;
@@ -309,7 +325,9 @@ export function simulateGreedyJobs(
       }
     } else {
       // 규칙 3 Case B: 페이지 첫 단락 초과 → 전체 임계값 기준 BS
-      const allWords = paraToWords(para);
+      const allWords = isBlockquote
+        ? paraToWords(para.replace(/^>\s*/, ""))
+        : paraToWords(para);
       if (allWords.length > 1) {
         bsJobs.push({ paraIdx: i, allWords, wordOffset: 0, targetH: threshold });
       }
@@ -398,8 +416,11 @@ export function runGreedy(
 
   const applyBSSplit = (para: string, paraH: number, paraIdx: number) => {
     const results = splitResults[paraIdx];
-    const allWords = paraToWords(para);
     const isListItem = /^-\s/.test(para);
+    const isBlockquote = isBlockquotePara(para);
+    const allWords = isBlockquote
+      ? paraToWords(para.replace(/^>\s*/, ""))
+      : paraToWords(para);
 
     if (!results || results.length === 0) {
       pages.push([...currentParas, para].join("\n\n"));
@@ -412,11 +433,18 @@ export function runGreedy(
     for (let ri = 0; ri < results.length; ri++) {
       const { wordOffset, wordCount } = results[ri];
       const rawChunk = allWords.slice(wordOffset, wordOffset + wordCount).join(" ");
-      const chunk = ri > 0 && isListItem && rawChunk ? "\u3000" + rawChunk : rawChunk;
+      let chunk: string;
+      if (isBlockquote && rawChunk) {
+        chunk = "> " + rawChunk;
+      } else if (ri > 0 && isListItem && rawChunk) {
+        chunk = "\u3000" + rawChunk;
+      } else {
+        chunk = rawChunk;
+      }
       offset = wordOffset + wordCount;
 
       if (ri === 0) {
-        if (rawChunk) currentParas.push(rawChunk);
+        if (chunk) currentParas.push(chunk);
         pages.push(currentParas.join("\n\n"));
         currentParas = [];
         currentH = 0;
@@ -427,7 +455,14 @@ export function runGreedy(
 
     if (offset < allWords.length) {
       const rawRemaining = allWords.slice(offset).join(" ");
-      const remaining = isListItem ? "\u3000" + rawRemaining : rawRemaining;
+      let remaining: string;
+      if (isBlockquote) {
+        remaining = "> " + rawRemaining;
+      } else if (isListItem) {
+        remaining = "\u3000" + rawRemaining;
+      } else {
+        remaining = rawRemaining;
+      }
       currentParas = [remaining];
       currentH = (paraH * (allWords.length - offset)) / allWords.length;
     }
@@ -438,6 +473,7 @@ export function runGreedy(
     const paraH = paraHeights[i] ?? 0;
     const isHeading = isHeadingPara(para);
     const isImage = isImagePara(para);
+    const isBlockquote = isBlockquotePara(para);
 
     // 규칙 0: 사진 → 이전 누적 내용을 먼저 페이지로 확정하고, 사진 자신은
     // 언제나 단독 페이지로 배치한다. 다음 단락은 새 페이지에서 시작한다.
@@ -452,6 +488,13 @@ export function runGreedy(
     }
 
     if (isHeading && currentParas.length > 0) {
+      pages.push(currentParas.join("\n\n"));
+      currentParas = [];
+      currentH = 0;
+    }
+
+    // 규칙 1b: 인용문 → 이전 단락이 쌓인 상태면 페이지 분할 (독립적 시작)
+    if (isBlockquote && currentParas.length > 0 && !isHeading) {
       pages.push(currentParas.join("\n\n"));
       currentParas = [];
       currentH = 0;
