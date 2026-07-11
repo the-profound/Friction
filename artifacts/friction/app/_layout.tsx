@@ -13,6 +13,7 @@ import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Asset } from "expo-asset";
+import * as FileSystem from "expo-file-system/legacy";
 import { setEditorFonts, setEditorFontsError } from "@/lib/editorFontStore";
 import { posthog, PostHogProvider } from "@/lib/posthog";
 import { trackAppOpen } from "@/lib/analytics";
@@ -209,7 +210,6 @@ const styles = StyleSheet.create({
 async function loadEditorFonts(): Promise<void> {
   if (Platform.OS === "web") return;
   try {
-    const FileSystem = await import("expo-file-system/legacy");
     const [regularAsset, semiBoldAsset] = await Asset.loadAsync([
       require("../assets/fonts/Eulyoo1945-Regular.otf"),
       require("../assets/fonts/Eulyoo1945-SemiBold.otf"),
