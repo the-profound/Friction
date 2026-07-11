@@ -326,6 +326,7 @@ function QuestionCardCurlInner({
   const seqRef = useRef(0);
   const newAnswerRef = useRef("");
   const curlRafRef = useRef<number | null>(null);
+  const tearStartTYRef = useRef(0);
 
   /* ── 스크롤 추적 refs ────────────────────────────────────────────────── */
   // TextInput onContentSizeChange로 업데이트 (텍스트 전체 높이)
@@ -398,6 +399,7 @@ function QuestionCardCurlInner({
     setOutSnap(null);
     setIncoming(null);
     setRawProgress(0);
+    tearStartTYRef.current = 0;
     cardTY.value = 0;
     cardTX.value = 0;
     scrollOffsetSV.value = 0;
@@ -472,6 +474,7 @@ function QuestionCardCurlInner({
         /* ── curl forward ─────────────────────────────────────────── */
         setAnimType("curl");
         setAnimDir("forward");
+        cardTY.value = withTiming(0, { duration: CURL_DURATION });
         runCurlRAF(() => {
           ptrRef.current = nextPtr;
           savedRef.current = nextSaved;
@@ -485,6 +488,7 @@ function QuestionCardCurlInner({
         });
       } else {
         /* ── tear: RAF로 rawProgress 0→TEAR_FADE_DONE 구동 (목업과 동일) ── */
+        tearStartTYRef.current = cardTY.value;
         setAnimType("tear");
         if (curlRafRef.current !== null) cancelAnimationFrame(curlRafRef.current);
         setRawProgress(0);
@@ -547,6 +551,7 @@ function QuestionCardCurlInner({
     setOutSnap({ q: outQ, ans: outAns });
     setIncoming({ q: prevQ, ans: prevCard.answer });
 
+    cardTY.value = withTiming(0, { duration: CURL_DURATION });
     runCurlRAF(() => {
       ptrRef.current = _ptr - 1;
       setPtr(_ptr - 1);
@@ -926,7 +931,9 @@ function QuestionCardCurlInner({
   /* ── Tear geometry (목업과 동일한 수식: RAF rawProgress → easeOutCubic) ── */
   const tearEased = easeOutCubic(Math.min(rawProgress, 1));
   const tearFlyX = tearEased * Math.round(screenWidth * (460 / 390));
-  const tearFlyY = tearEased * -Math.round(screenHeight * (760 / 844));
+  const tearFlyY =
+    tearStartTYRef.current * (1 - tearEased) +
+    tearEased * -Math.round(screenHeight * (760 / 844));
   const tearFlyRot = tearEased * 38;
   const tearFlyScale = 1 - tearEased * 0.22;
   const tearFlyOpacity = Math.max(0, 1 - rawProgress / TEAR_FADE_DONE);
@@ -1022,7 +1029,7 @@ function QuestionCardCurlInner({
            * SVG ClipPath + Polygon으로 사선 분할 구현
            * ══════════════════════════════════════════════════════════ */}
           {isCurling ? (
-            <View style={[cardBaseStyle, { overflow: "hidden" }]}>
+            <Animated.View style={[cardBaseStyle, cardDragStyle, { overflow: "hidden" }]}>
               {/*
                * 1. Base: 들어오는 카드 (전체, 가장 아래).
                * react-native-svg의 ForeignObject는 네이티브(안드로이드/iOS)에서
@@ -1179,7 +1186,7 @@ function QuestionCardCurlInner({
               >
                 <SpringCoil width={cardSmallW} />
               </View>
-            </View>
+            </Animated.View>
 
           ) : isTearing ? (
             /* ══════════════════════════════════════════════════════════
@@ -1199,8 +1206,9 @@ function QuestionCardCurlInner({
               </View>
 
               {/*
-               * 나가는 카드: SVG 톱니 ClipPath로 찢긴 윗변 표현 + Reanimated 날아가기.
-               * SpringCoil이 overflow:visible 컨테이너 위에 ovelray되므로 zIndex 높게.
+               * 나가는 카드: SVG 톱니 ClipPath로 찢긴 윗변 표현 + RAF 날아가기.
+               * tearFlyY에 tearStartTYRef를 블렌딩해 드래그 위치에서 자연스럽게 이어지도록 한다.
+               * SpringCoil이 overflow:visible 컨테이너 위에 overlay되므로 zIndex 높게.
                */}
               <View
                 style={[

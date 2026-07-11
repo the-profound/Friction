@@ -2183,7 +2183,7 @@ export default function ReadScreen() {
                               (static, full opacity) so the resting page always casts
                               exactly one shadow. Rendered even when there is no next
                               real page so the completion card keeps its shadow. */}
-                          <View key={`page-${currentPage + 1}-next`} style={slotBase}>
+                          <View key={`page-${currentPage + 1}`} style={slotBase}>
                             <View style={shadowLayer} />
                             {nextNode != null && (
                               <View style={slotContent}>{nextNode}</View>
@@ -2192,27 +2192,22 @@ export default function ReadScreen() {
 
                           {/* current — middle layer, slides left + rotates during
                               forward swipe. Its shadow fades in as it lifts/slides.
-                              키에 역할 접미사(-current)를 붙이는 이유: 카드가 떠
-                              있는 동안(currentPage가 totalPages를 가리키는 가상
-                              인덱스)에는 currentPageIdx와 prevPageIdx가 둘 다
-                              totalPages-1로 같아져, 접미사 없이는 "current"와
-                              "prev" 두 형제 엘리먼트가 완전히 같은 key(예:
-                              `page-11`)를 갖게 되어 React가 "Encountered two
-                              children with the same key" 경고를 낸다. 페이지
-                              인덱스가 바뀔 때 슬롯을 리마운트시키는 기존 동작은
-                              그대로 유지된다(역할 접미사는 상수라 키의 이 부분은
-                              달라지지 않음). */}
+                              key는 pageIdx 기준 — 앞으로 넘길 때 next 슬롯에 이미
+                              마운트된 WebView(N+1)가 current 슬롯으로 전환되어도
+                              unmount 없이 유지되어 깜빡임이 사라진다. */}
                           {currentNode != null && (
-                            <Animated.View key={`page-${currentPageIdx}-current`} style={[slotBase, currentSlotAnimStyle]}>
+                            <Animated.View key={`page-${currentPageIdx}`} style={[slotBase, currentSlotAnimStyle]}>
                               <Animated.View style={[shadowLayer, currentShadowStyle]} />
                               <View style={slotContent}>{currentNode}</View>
                             </Animated.View>
                           )}
 
                           {/* prev — top layer, slides in from left + rotates to flat
-                              during backward swipe. Its shadow fades out as it settles. */}
-                          {prevNode != null && (
-                            <Animated.View key={`page-${prevPageIdx}-prev`} style={[slotBase, prevSlotAnimStyle]}>
+                              during backward swipe. Its shadow fades out as it settles.
+                              카드가 떠 있는 동안에는 currentPageIdx === prevPageIdx가
+                              되어 key 중복이 생기므로 이 경우 prev 슬롯 렌더를 건너뛴다. */}
+                          {prevNode != null && currentPageIdx !== prevPageIdx && (
+                            <Animated.View key={`page-${prevPageIdx}`} style={[slotBase, prevSlotAnimStyle]}>
                               <Animated.View style={[shadowLayer, prevShadowStyle]} />
                               <View style={slotContent}>{prevNode}</View>
                             </Animated.View>
