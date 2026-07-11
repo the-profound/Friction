@@ -34,7 +34,6 @@ import type {
   ErrorResponse,
   FinalizeArticleBody,
   GetReadingRecordParams,
-  GetTodayGreetingStatusParams,
   HealthStatus,
   InboxItem,
   ListArticlesParams,
@@ -70,7 +69,6 @@ import type {
   TeamCollectionMembership,
   TeamCollectionWithRole,
   TeamMemberWithUser,
-  TodayGreetingStatus,
   ToggleStoredSentenceFavoriteBody,
   ToggleTeamArticlePinBody,
   TransitionArticleBody,
@@ -4794,8 +4792,7 @@ export function useListTeamArticles<
 
 /**
  * Adds an article to the team collection and fans it out to all OWNER/MEMBER inboxes
-(excluding the sender). When `asNotice=true`, the sender must be an OWNER and no
-other notice may already exist for the current KST notice date for this collection.
+(excluding the sender).
 
  * @summary Add article to team collection (own articles only)
  */
@@ -4882,130 +4879,6 @@ export const useAddTeamArticle = <
 > => {
   return useMutation(getAddTeamArticleMutationOptions(options));
 };
-
-/**
- * Returns whether the requesting user is an OWNER of the collection and whether a notice
-has already been sent for the current KST notice date window. Used by the send screen
-to decide if the "오늘의 인사" modal should be shown.
-
- * @summary Today's "오늘의 인사" status for a (collection, user) pair
- */
-export const getGetTodayGreetingStatusUrl = (
-  id: string,
-  params: GetTodayGreetingStatusParams,
-) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? "null" : value.toString());
-    }
-  });
-
-  const stringifiedParams = normalizedParams.toString();
-
-  return stringifiedParams.length > 0
-    ? `/api/team-collections/${id}/today-greeting-status?${stringifiedParams}`
-    : `/api/team-collections/${id}/today-greeting-status`;
-};
-
-export const getTodayGreetingStatus = async (
-  id: string,
-  params: GetTodayGreetingStatusParams,
-  options?: RequestInit,
-): Promise<TodayGreetingStatus> => {
-  return customFetch<TodayGreetingStatus>(
-    getGetTodayGreetingStatusUrl(id, params),
-    {
-      ...options,
-      method: "GET",
-    },
-  );
-};
-
-export const getGetTodayGreetingStatusQueryKey = (
-  id: string,
-  params?: GetTodayGreetingStatusParams,
-) => {
-  return [
-    `/api/team-collections/${id}/today-greeting-status`,
-    ...(params ? [params] : []),
-  ] as const;
-};
-
-export const getGetTodayGreetingStatusQueryOptions = <
-  TData = Awaited<ReturnType<typeof getTodayGreetingStatus>>,
-  TError = ErrorType<ErrorResponse>,
->(
-  id: string,
-  params: GetTodayGreetingStatusParams,
-  options?: {
-    query?: UseQueryOptions<
-      Awaited<ReturnType<typeof getTodayGreetingStatus>>,
-      TError,
-      TData
-    >;
-    request?: SecondParameter<typeof customFetch>;
-  },
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey =
-    queryOptions?.queryKey ?? getGetTodayGreetingStatusQueryKey(id, params);
-
-  const queryFn: QueryFunction<
-    Awaited<ReturnType<typeof getTodayGreetingStatus>>
-  > = ({ signal }) =>
-    getTodayGreetingStatus(id, params, { signal, ...requestOptions });
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: !!id,
-    ...queryOptions,
-  } as UseQueryOptions<
-    Awaited<ReturnType<typeof getTodayGreetingStatus>>,
-    TError,
-    TData
-  > & { queryKey: QueryKey };
-};
-
-export type GetTodayGreetingStatusQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getTodayGreetingStatus>>
->;
-export type GetTodayGreetingStatusQueryError = ErrorType<ErrorResponse>;
-
-/**
- * @summary Today's "오늘의 인사" status for a (collection, user) pair
- */
-
-export function useGetTodayGreetingStatus<
-  TData = Awaited<ReturnType<typeof getTodayGreetingStatus>>,
-  TError = ErrorType<ErrorResponse>,
->(
-  id: string,
-  params: GetTodayGreetingStatusParams,
-  options?: {
-    query?: UseQueryOptions<
-      Awaited<ReturnType<typeof getTodayGreetingStatus>>,
-      TError,
-      TData
-    >;
-    request?: SecondParameter<typeof customFetch>;
-  },
-): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetTodayGreetingStatusQueryOptions(
-    id,
-    params,
-    options,
-  );
-
-  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-  };
-
-  return { ...query, queryKey: queryOptions.queryKey };
-}
 
 /**
  * @summary Remove article from team collection

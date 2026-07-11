@@ -261,7 +261,6 @@ export default function MyScreen() {
               collectionName: slot.article.collectionName ?? null,
               collectionId: slot.article.collectionId ?? null,
               date: slot.article.letterAt ?? slot.article.createdAt ?? null,
-              isNotice: slot.article.isNotice ?? false,
             }
           : {},
       );
@@ -275,7 +274,6 @@ export default function MyScreen() {
       collectionName: selectedCollectionName,
       collectionId: selectedCollectionId,
       date: selectedDateOverride,
-      isNotice: selectedArticle.isNotice ?? false,
     });
 
     return { toChainArticles: artList, toChainMetas: metaList, toChainInitialIndex: initIdx };

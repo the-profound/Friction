@@ -13,11 +13,9 @@ import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import {
   ApiError,
-  getGetTodayGreetingStatusQueryKey,
   getListSendRecordsQueryKey,
   getListTeamArticlesQueryKey,
   useAddTeamArticle,
-  useGetTodayGreetingStatus,
   useListArticles,
   useListNeighbors,
   useListTeamCollections,
@@ -101,37 +99,6 @@ export function SendInline({
 
   const deliveryInfo = useMemo(() => getNextDeliverySlot(), [confirmVisible]);
 
-  // When a team collection is selected, look up whether the current user can
-  // send today's greeting (only OWNERs, and only once per KST notice day).
-  const collectionId =
-    selectedRecipient?.type === "collection" ? selectedRecipient.data.id : null;
-  const todayGreetingQuery = useGetTodayGreetingStatus(
-    collectionId ?? "",
-    { userId },
-    {
-      query: {
-        queryKey: getGetTodayGreetingStatusQueryKey(collectionId ?? "", { userId }),
-        enabled: !!collectionId,
-      },
-    },
-  );
-  const greetingStatus = todayGreetingQuery.data;
-  // While the greeting status is still loading for a selected collection,
-  // hold the send button so eligible OWNERs can't accidentally bypass the
-  // notice prompt by tapping faster than the query resolves.
-  const greetingStatusLoading =
-    !!collectionId && (todayGreetingQuery.isLoading || todayGreetingQuery.isFetching) && !greetingStatus;
-  const canOfferTodayGreeting =
-    !!collectionId && !!greetingStatus && greetingStatus.isOwner && !greetingStatus.alreadySentToday;
-  const [noticePromptVisible, setNoticePromptVisible] = useState(false);
-
-  const noticeDateLabel = useMemo(() => {
-    if (!greetingStatus?.noticeDate) return "";
-    const [, mm, dd] = greetingStatus.noticeDate.split("-");
-    if (!mm || !dd) return "";
-    return `${parseInt(mm, 10)}월 ${parseInt(dd, 10)}일`;
-  }, [greetingStatus?.noticeDate]);
-
   // Apply collection prefill (case A: from of-02-detail "내 글 추가")
   useEffect(() => {
     if (!targetGroup) return;
@@ -185,7 +152,7 @@ export function SendInline({
   }, [selectedRecipient]);
 
   const handleSend = useCallback(
-    async (asNotice = false, isEnvelope = false) => {
+    async (isEnvelope = false) => {
       if (!selectedArticle || !selectedRecipient) return;
 
       try {
@@ -211,7 +178,6 @@ export function SendInline({
             },
           });
           setConfirmVisible(false);
-          setNoticePromptVisible(false);
           const arrivalTime = result?.deliverySlot
             ? formatDeliveryTime(new Date(result.deliverySlot))
             : formatDeliveryTime(deliveryInfo.visibleAt);
@@ -227,23 +193,16 @@ export function SendInline({
             data: {
               articleId: selectedArticle.id,
               addedBy: userId,
-              ...(asNotice ? { asNotice: true } : {}),
             },
           });
           setConfirmVisible(false);
-          setNoticePromptVisible(false);
           const arrivalTime = formatDeliveryTime(deliveryInfo.visibleAt);
           if (returnToId) {
             queryClient.invalidateQueries({ queryKey: getListTeamArticlesQueryKey(returnToId) });
           }
           queryClient.invalidateQueries({ queryKey: getListSendRecordsQueryKey({ senderId: userId }) });
-          queryClient.invalidateQueries({
-            queryKey: getGetTodayGreetingStatusQueryKey(collection.id, { userId }),
-          });
           showToast({
-            message: asNotice
-              ? `'${collection.name}' 모음에 오늘의 인사를 보냈어요 · ${arrivalTime} 도착 예정`
-              : `'${collection.name}' 모음에 발송됐어요 · ${arrivalTime} 도착 예정`,
+            message: `'${collection.name}' 모음에 발송됐어요 · ${arrivalTime} 도착 예정`,
             type: "success",
           });
         }
@@ -252,14 +211,11 @@ export function SendInline({
         onSent?.();
       } catch (e: unknown) {
         setConfirmVisible(false);
-        setNoticePromptVisible(false);
         let msg = "실패했습니다.";
         if (e instanceof ApiError) {
           const errorData = e.data as { error?: string } | null;
           if (e.status === 400 && errorData?.error === "Article already in collection") {
             msg = "이미 모음에 전송된 편지입니다.";
-          } else if (e.status === 409 && errorData?.error === "Today's greeting was already sent") {
-            msg = "이미 오늘의 인사를 보낸 모임입니다.";
           }
         }
         showToast({ message: msg, type: "error" });
@@ -362,16 +318,14 @@ export function SendInline({
             if (selectedRecipient?.type === "neighbor") {
               setPendingIsEnvelope(false);
               setEnvelopePromptVisible(true);
-            } else if (canOfferTodayGreeting) {
-              setNoticePromptVisible(true);
             } else {
               setConfirmVisible(true);
             }
           }}
-          pending={isPending || greetingStatusLoading}
-          disabled={!canSend || greetingStatusLoading}
+          pending={isPending}
+          disabled={!canSend}
           label="보내기"
-          pendingLabel={greetingStatusLoading ? "확인 중..." : "처리 중..."}
+          pendingLabel="처리 중..."
           renderIcon={({ disabled }) => (
             <Feather name="send" size={16} color={disabled ? Colors.zinc400 : Colors.white} />
           )}
@@ -619,23 +573,10 @@ export function SendInline({
         description={confirmDescription}
         confirmLabel="보내기"
         cancelLabel="취소"
-        onConfirm={() => handleSend(false, pendingIsEnvelope)}
+        onConfirm={() => handleSend(pendingIsEnvelope)}
         onCancel={() => setConfirmVisible(false)}
       />
 
-      <ConfirmModal
-        visible={noticePromptVisible}
-        title={`이 편지를 ${noticeDateLabel} <오늘의 인사>로\n설정하시겠습니까?`}
-        description={"(수신자의 수신함 맨 앞에 표시됩니다.)"}
-        confirmLabel="예"
-        cancelLabel="아니오"
-        onConfirm={() => handleSend(true)}
-        onCancel={() => {
-          setNoticePromptVisible(false);
-          handleSend(false);
-        }}
-        onBackdropPress={() => setNoticePromptVisible(false)}
-      />
     </View>
   );
 }

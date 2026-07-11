@@ -51,7 +51,6 @@ export interface ChainArticleMeta {
   collectionName?: string | null;
   collectionId?: string | null;
   date?: string | Date | null;
-  isNotice?: boolean;
 }
 
 /** @deprecated Use ChainArticleMeta */
@@ -523,7 +522,7 @@ export default function CardSelectOverlay({
 
   // ── Active card info ──────────────────────────────────────────────────────
   const activeMeta = displayMetas[activeIndex] ?? {};
-  const { authorName, authorId, collectionName, collectionId, date, isNotice } = activeMeta;
+  const { authorName, authorId, collectionName, collectionId, date } = activeMeta;
   const dateLabel = date ? formatDate(date) : "";
   const canTapCollection = !!(collectionId && onNavigateToCollection);
   const canTapAuthor = !!(authorId && onNavigateToAuthor);
@@ -793,7 +792,6 @@ export default function CardSelectOverlay({
                           cover={art.cover}
                           isRead={false}
                           isActive
-                          isNoticeOfDay={!!(art.isNotice && art.noticeDate)}
                           onPress={() => {}}
                         />,
                         i,
@@ -817,7 +815,6 @@ export default function CardSelectOverlay({
                 cover={displayArticles[0].cover}
                 isRead={false}
                 isActive
-                isNoticeOfDay={!!(displayArticles[0].isNotice && displayArticles[0].noticeDate)}
                 onPress={() => {}}
               />,
               0,
@@ -845,9 +842,6 @@ export default function CardSelectOverlay({
             >
               <View style={styles.infoRow}>
                 <Text style={styles.infoText}>{dateLabel}</Text>
-                {isNotice ? (
-                  <Text style={[styles.infoText, styles.infoTextNotice]}> 오늘의 인사</Text>
-                ) : null}
                 {authorName ? (
                   <>
                     <Text style={styles.infoSep}>·</Text>
@@ -963,7 +957,6 @@ const styles = StyleSheet.create({
   infoText: { ...Typography.caption, fontSize: 13, fontWeight: "600", color: Colors.zinc700 },
   infoSep: { ...Typography.caption, fontSize: 13, fontWeight: "600", color: Colors.zinc500, marginHorizontal: 4 },
   infoTappableRow: { flexDirection: "row", alignItems: "center", gap: 2 },
-  infoTextNotice: { color: Colors.noticeAccent },
   dotsRow: { flexDirection: "row", justifyContent: "center", gap: 6, marginBottom: 10 },
   dot: { width: 6, height: 6, borderRadius: 3 },
   dotActive: { backgroundColor: Colors.zinc700 },

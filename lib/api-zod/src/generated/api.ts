@@ -180,18 +180,6 @@ export const ListArticlesResponseItem = zod.object({
     .describe("Article cover display settings. null means default cover."),
   letterAt: zod.date().nullish(),
   sourceArticleId: zod.string().uuid().nullish(),
-  isNotice: zod
-    .boolean()
-    .optional()
-    .describe(
-      'True when this article was sent as the day\'s \"오늘의 인사\" notice.',
-    ),
-  noticeDate: zod
-    .date()
-    .nullish()
-    .describe(
-      "KST date this article was designated as a notice (YYYY-MM-DD). Null when isNotice=false.",
-    ),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -274,18 +262,6 @@ export const ReadingMemoResponse = zod.object({
     .describe("Article cover display settings. null means default cover."),
   letterAt: zod.date().nullish(),
   sourceArticleId: zod.string().uuid().nullish(),
-  isNotice: zod
-    .boolean()
-    .optional()
-    .describe(
-      'True when this article was sent as the day\'s \"오늘의 인사\" notice.',
-    ),
-  noticeDate: zod
-    .date()
-    .nullish()
-    .describe(
-      "KST date this article was designated as a notice (YYYY-MM-DD). Null when isNotice=false.",
-    ),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -349,18 +325,6 @@ export const GetArticleResponse = zod.object({
     .describe("Article cover display settings. null means default cover."),
   letterAt: zod.date().nullish(),
   sourceArticleId: zod.string().uuid().nullish(),
-  isNotice: zod
-    .boolean()
-    .optional()
-    .describe(
-      'True when this article was sent as the day\'s \"오늘의 인사\" notice.',
-    ),
-  noticeDate: zod
-    .date()
-    .nullish()
-    .describe(
-      "KST date this article was designated as a notice (YYYY-MM-DD). Null when isNotice=false.",
-    ),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -460,18 +424,6 @@ export const UpdateArticleResponse = zod.object({
     .describe("Article cover display settings. null means default cover."),
   letterAt: zod.date().nullish(),
   sourceArticleId: zod.string().uuid().nullish(),
-  isNotice: zod
-    .boolean()
-    .optional()
-    .describe(
-      'True when this article was sent as the day\'s \"오늘의 인사\" notice.',
-    ),
-  noticeDate: zod
-    .date()
-    .nullish()
-    .describe(
-      "KST date this article was designated as a notice (YYYY-MM-DD). Null when isNotice=false.",
-    ),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -547,18 +499,6 @@ export const TransitionArticleStatusResponse = zod.object({
     .describe("Article cover display settings. null means default cover."),
   letterAt: zod.date().nullish(),
   sourceArticleId: zod.string().uuid().nullish(),
-  isNotice: zod
-    .boolean()
-    .optional()
-    .describe(
-      'True when this article was sent as the day\'s \"오늘의 인사\" notice.',
-    ),
-  noticeDate: zod
-    .date()
-    .nullish()
-    .describe(
-      "KST date this article was designated as a notice (YYYY-MM-DD). Null when isNotice=false.",
-    ),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -633,18 +573,6 @@ export const FinalizeArticleResponse = zod.object({
     .describe("Article cover display settings. null means default cover."),
   letterAt: zod.date().nullish(),
   sourceArticleId: zod.string().uuid().nullish(),
-  isNotice: zod
-    .boolean()
-    .optional()
-    .describe(
-      'True when this article was sent as the day\'s \"오늘의 인사\" notice.',
-    ),
-  noticeDate: zod
-    .date()
-    .nullish()
-    .describe(
-      "KST date this article was designated as a notice (YYYY-MM-DD). Null when isNotice=false.",
-    ),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -773,18 +701,6 @@ export const ListInboxResponseItem = zod.object({
         .describe("Article cover display settings. null means default cover."),
       letterAt: zod.date().nullish(),
       sourceArticleId: zod.string().uuid().nullish(),
-      isNotice: zod
-        .boolean()
-        .optional()
-        .describe(
-          'True when this article was sent as the day\'s \"오늘의 인사\" notice.',
-        ),
-      noticeDate: zod
-        .date()
-        .nullish()
-        .describe(
-          "KST date this article was designated as a notice (YYYY-MM-DD). Null when isNotice=false.",
-        ),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     })
@@ -894,18 +810,6 @@ export const GetInboxItemResponse = zod.object({
         .describe("Article cover display settings. null means default cover."),
       letterAt: zod.date().nullish(),
       sourceArticleId: zod.string().uuid().nullish(),
-      isNotice: zod
-        .boolean()
-        .optional()
-        .describe(
-          'True when this article was sent as the day\'s \"오늘의 인사\" notice.',
-        ),
-      noticeDate: zod
-        .date()
-        .nullish()
-        .describe(
-          "KST date this article was designated as a notice (YYYY-MM-DD). Null when isNotice=false.",
-        ),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     })
@@ -1021,18 +925,6 @@ export const MarkInboxOpenedResponse = zod.object({
         .describe("Article cover display settings. null means default cover."),
       letterAt: zod.date().nullish(),
       sourceArticleId: zod.string().uuid().nullish(),
-      isNotice: zod
-        .boolean()
-        .optional()
-        .describe(
-          'True when this article was sent as the day\'s \"오늘의 인사\" notice.',
-        ),
-      noticeDate: zod
-        .date()
-        .nullish()
-        .describe(
-          "KST date this article was designated as a notice (YYYY-MM-DD). Null when isNotice=false.",
-        ),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     })
@@ -1142,18 +1034,6 @@ export const MarkInboxReadResponse = zod.object({
         .describe("Article cover display settings. null means default cover."),
       letterAt: zod.date().nullish(),
       sourceArticleId: zod.string().uuid().nullish(),
-      isNotice: zod
-        .boolean()
-        .optional()
-        .describe(
-          'True when this article was sent as the day\'s \"오늘의 인사\" notice.',
-        ),
-      noticeDate: zod
-        .date()
-        .nullish()
-        .describe(
-          "KST date this article was designated as a notice (YYYY-MM-DD). Null when isNotice=false.",
-        ),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     })
@@ -1368,18 +1248,6 @@ export const ListMyCollectionArticlesResponseItem = zod.object({
         .describe("Article cover display settings. null means default cover."),
       letterAt: zod.date().nullish(),
       sourceArticleId: zod.string().uuid().nullish(),
-      isNotice: zod
-        .boolean()
-        .optional()
-        .describe(
-          'True when this article was sent as the day\'s \"오늘의 인사\" notice.',
-        ),
-      noticeDate: zod
-        .date()
-        .nullish()
-        .describe(
-          "KST date this article was designated as a notice (YYYY-MM-DD). Null when isNotice=false.",
-        ),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     })
@@ -1833,18 +1701,6 @@ export const ListTeamArticlesResponseItem = zod.object({
         .describe("Article cover display settings. null means default cover."),
       letterAt: zod.date().nullish(),
       sourceArticleId: zod.string().uuid().nullish(),
-      isNotice: zod
-        .boolean()
-        .optional()
-        .describe(
-          'True when this article was sent as the day\'s \"오늘의 인사\" notice.',
-        ),
-      noticeDate: zod
-        .date()
-        .nullish()
-        .describe(
-          "KST date this article was designated as a notice (YYYY-MM-DD). Null when isNotice=false.",
-        ),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     })
@@ -1894,8 +1750,7 @@ export const ListTeamArticlesResponse = zod.array(ListTeamArticlesResponseItem);
 
 /**
  * Adds an article to the team collection and fans it out to all OWNER/MEMBER inboxes
-(excluding the sender). When `asNotice=true`, the sender must be an OWNER and no
-other notice may already exist for the current KST notice date for this collection.
+(excluding the sender).
 
  * @summary Add article to team collection (own articles only)
  */
@@ -1906,45 +1761,6 @@ export const AddTeamArticleParams = zod.object({
 export const AddTeamArticleBody = zod.object({
   articleId: zod.string().uuid(),
   addedBy: zod.string().uuid(),
-  asNotice: zod
-    .boolean()
-    .optional()
-    .describe(
-      'When true, the addedBy user is the OWNER and this article is designated as today\'s \"오늘의 인사\" for this collection. The server validates ownership and one-per-day uniqueness.',
-    ),
-});
-
-/**
- * Returns whether the requesting user is an OWNER of the collection and whether a notice
-has already been sent for the current KST notice date window. Used by the send screen
-to decide if the "오늘의 인사" modal should be shown.
-
- * @summary Today's "오늘의 인사" status for a (collection, user) pair
- */
-export const GetTodayGreetingStatusParams = zod.object({
-  id: zod.coerce.string().uuid(),
-});
-
-export const GetTodayGreetingStatusQueryParams = zod.object({
-  userId: zod.coerce.string().uuid(),
-});
-
-export const GetTodayGreetingStatusResponse = zod.object({
-  isOwner: zod
-    .boolean()
-    .describe(
-      "Whether the requesting user is an OWNER of this team collection.",
-    ),
-  alreadySentToday: zod
-    .boolean()
-    .describe(
-      'Whether an \"오늘의 인사\" has already been sent for this collection on the current notice date window.',
-    ),
-  noticeDate: zod
-    .date()
-    .describe(
-      "The KST notice date (YYYY-MM-DD) the next greeting would be assigned to. Today before 06:00 KST, tomorrow after.",
-    ),
 });
 
 /**
@@ -2195,18 +2011,6 @@ export const ListSendRecordsResponseItem = zod.object({
         .describe("Article cover display settings. null means default cover."),
       letterAt: zod.date().nullish(),
       sourceArticleId: zod.string().uuid().nullish(),
-      isNotice: zod
-        .boolean()
-        .optional()
-        .describe(
-          'True when this article was sent as the day\'s \"오늘의 인사\" notice.',
-        ),
-      noticeDate: zod
-        .date()
-        .nullish()
-        .describe(
-          "KST date this article was designated as a notice (YYYY-MM-DD). Null when isNotice=false.",
-        ),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     })
@@ -2313,18 +2117,6 @@ export const GetSendRecordResponse = zod.object({
         .describe("Article cover display settings. null means default cover."),
       letterAt: zod.date().nullish(),
       sourceArticleId: zod.string().uuid().nullish(),
-      isNotice: zod
-        .boolean()
-        .optional()
-        .describe(
-          'True when this article was sent as the day\'s \"오늘의 인사\" notice.',
-        ),
-      noticeDate: zod
-        .date()
-        .nullish()
-        .describe(
-          "KST date this article was designated as a notice (YYYY-MM-DD). Null when isNotice=false.",
-        ),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     })

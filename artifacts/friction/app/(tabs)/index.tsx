@@ -94,16 +94,9 @@ function groupBySlot(items: InboxItem[]): DateGroup[] {
   }
 
   return Array.from(map.entries()).map(([dateKey, groupItems]) => {
-    const datePart = dateKey;
-    // Sort order within a group: notices → replies → regular letters.
+    // Sort order within a group: replies → regular letters.
     // Items in the same tier keep their original visibleAt order.
     const ordered = [...groupItems].sort((a, b) => {
-      const aIsNoticeForKey =
-        a.article?.isNotice === true && a.article?.noticeDate === datePart;
-      const bIsNoticeForKey =
-        b.article?.isNotice === true && b.article?.noticeDate === datePart;
-      if (aIsNoticeForKey && !bIsNoticeForKey) return -1;
-      if (!aIsNoticeForKey && bIsNoticeForKey) return 1;
       const aIsReply = a.isReplyToMe === true;
       const bIsReply = b.isReplyToMe === true;
       if (aIsReply && !bIsReply) return -1;
@@ -626,7 +619,6 @@ export default function InboxScreen() {
               collectionName: inboxItem?.collectionName ?? slot.article.collectionName ?? null,
               collectionId: inboxItem?.sourceTeamCollectionId ?? slot.article.collectionId ?? null,
               date: inboxItem?.visibleAt ?? slot.article.createdAt ?? null,
-              isNotice: slot.article.isNotice ?? false,
             }
           : {},
       );
@@ -642,7 +634,6 @@ export default function InboxScreen() {
       collectionName: tapItem.collectionName ?? tapItem.article?.collectionName ?? null,
       collectionId: tapItem.sourceTeamCollectionId ?? tapItem.article?.collectionId ?? null,
       date: tapItem.visibleAt ?? null,
-      isNotice: tapItem.article?.isNotice ?? false,
     });
 
     // Descendants — recursively collected from all inbox data
@@ -657,7 +648,6 @@ export default function InboxScreen() {
         collectionName: desc.collectionName ?? desc.article.collectionName ?? null,
         collectionId: desc.sourceTeamCollectionId ?? desc.article?.collectionId ?? null,
         date: desc.visibleAt ?? desc.article.createdAt ?? null,
-        isNotice: desc.article.isNotice ?? false,
       });
     }
 

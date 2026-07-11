@@ -28,10 +28,6 @@ export interface Article {
   cover?: ArticleCover | null;
   letterAt?: Date | null;
   sourceArticleId?: string | null;
-  /** True when this article was sent as the day's "오늘의 인사" notice. */
-  isNotice?: boolean;
-  /** KST date this article was designated as a notice (YYYY-MM-DD). Null when isNotice=false. */
-  noticeDate?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }

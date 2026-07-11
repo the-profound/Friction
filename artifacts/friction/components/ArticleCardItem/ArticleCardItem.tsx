@@ -19,7 +19,6 @@ interface ArticleCardItemProps {
   isRead?: boolean;
   isActive?: boolean;
   cardWidth?: number;
-  isNoticeOfDay?: boolean;
 }
 
 const DEFAULT_BG = Colors.zinc50;
@@ -34,7 +33,6 @@ function ArticleCardItem({
   isRead = false,
   isActive = true,
   cardWidth,
-  isNoticeOfDay = false,
 }: ArticleCardItemProps) {
   const textColor = cover?.textColor ?? Colors.zinc900;
   const w = cardWidth ?? CARD_W;
@@ -49,10 +47,6 @@ function ArticleCardItem({
   const pad = Math.max(6, Math.round(24 * scale));
 
   const borderRadius = Math.max(8, Math.round(16 * scale));
-
-  const tagSize = 8;
-  const tagPadV = 2;
-  const tagPadH = 4;
 
   return (
     <View style={[{ width: w, height: h }, !isActive && styles.inactive]}>
@@ -126,17 +120,6 @@ function ArticleCardItem({
         )}
       </ScalePressable>
 
-      {isNoticeOfDay && (
-        <View
-          style={[
-            styles.noticeBadge,
-            { bottom: pad, left: pad, paddingVertical: tagPadV, paddingHorizontal: tagPadH, borderRadius: 3 },
-          ]}
-          pointerEvents="none"
-        >
-          <Text style={[styles.noticeBadgeText, { fontSize: tagSize }]}>오늘의 인사</Text>
-        </View>
-      )}
     </View>
   );
 }
@@ -180,14 +163,6 @@ const styles = StyleSheet.create({
     fontFamily: ReaderTokens.fontFamily.sansBold,
   },
   collection: {
-    fontFamily: ReaderTokens.fontFamily.sansBold,
-  },
-  noticeBadge: {
-    position: "absolute",
-    backgroundColor: Colors.noticeAccent,
-  },
-  noticeBadgeText: {
-    color: Colors.white,
     fontFamily: ReaderTokens.fontFamily.sansBold,
   },
 });

@@ -16,13 +16,11 @@ let _seq = 1;
 function makeArticle(
   overrides: Partial<TeamCollectionArticleWithDetails> & {
     title?: string;
-    isNotice?: boolean;
-    noticeDate?: string;
     sourceArticleId?: string | null;
   } = {},
 ): TeamCollectionArticleWithDetails {
   const id = `art-${_seq++}`;
-  const { title, isNotice, noticeDate, sourceArticleId, ...rest } = overrides;
+  const { title, sourceArticleId, ...rest } = overrides;
   return {
     id,
     teamCollectionId: "col-1",
@@ -40,8 +38,6 @@ function makeArticle(
       content: "{}",
       status: "LETTER",
       coverImageIds: [],
-      isNotice: isNotice ?? false,
-      noticeDate: noticeDate ?? null,
       sourceArticleId: sourceArticleId ?? null,
       createdAt: "2026-04-25T09:00:00.000Z",
       updatedAt: "2026-04-25T09:00:00.000Z",
@@ -125,76 +121,6 @@ describe("buildTeamArticleRows — 기본 정렬", () => {
     const ids = articleIds(rows);
     expect(ids[0]).toBe(later.articleId);
     expect(ids[1]).toBe(earlier.articleId);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// buildTeamArticleRows — 공지(notice) 우선 정렬
-// ---------------------------------------------------------------------------
-
-describe("buildTeamArticleRows — 공지 우선", () => {
-  it("공지글은 같은 날 최상단에 위치한다", () => {
-    const dateKey = "2026-04-25";
-    const visibleAt = "2026-04-25T09:00:00.000Z";
-
-    const regular = makeArticle({ visibleAt, addedAt: visibleAt, title: "일반글" });
-    const notice = makeArticle({
-      visibleAt,
-      addedAt: visibleAt,
-      title: "오늘의 인사",
-      isNotice: true,
-      noticeDate: dateKey,
-      article: undefined,
-    });
-    notice.article = {
-      id: notice.articleId,
-      authorId: "user-1",
-      title: "오늘의 인사",
-      content: "{}",
-      status: "LETTER",
-      coverImageIds: [],
-      isNotice: true,
-      noticeDate: dateKey,
-      sourceArticleId: null,
-      createdAt: visibleAt,
-      updatedAt: visibleAt,
-    } as NonNullable<TeamCollectionArticleWithDetails["article"]>;
-
-    const rows = buildTeamArticleRows([regular, notice]);
-    const ids = articleIds(rows);
-    expect(ids[0]).toBe(notice.articleId);
-    expect(ids[1]).toBe(regular.articleId);
-  });
-
-  it("공지에 대한 답장은 공지 바로 아래에 들여쓰기로 나타난다", () => {
-    const dateKey = "2026-04-25";
-    const visibleAt = "2026-04-25T09:00:00.000Z";
-
-    const notice = makeArticle({
-      visibleAt,
-      addedAt: visibleAt,
-      title: "오늘의 인사",
-    });
-    notice.article!.isNotice = true;
-    notice.article!.noticeDate = dateKey;
-
-    const replyToNotice = makeArticle({
-      visibleAt,
-      addedAt: visibleAt,
-      title: "공지 답장",
-      sourceArticleId: notice.articleId,
-      parentInThisCollection: true,
-    });
-    replyToNotice.article!.sourceArticleId = notice.articleId;
-
-    const rows = buildTeamArticleRows([notice, replyToNotice]);
-    const ids = articleIds(rows);
-    const ind = indents(rows);
-
-    expect(ids[0]).toBe(notice.articleId);
-    expect(ids[1]).toBe(replyToNotice.articleId);
-    expect(ind[0]).toBe(false);
-    expect(ind[1]).toBe(true);
   });
 });
 

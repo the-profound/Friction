@@ -57,18 +57,16 @@ export function formatDateLabel(dateKey: string): string {
 
 export type TeamArticleListRow =
   | { type: "header"; dateKey: string; label: string }
-  | { type: "article"; item: TeamCollectionArticleWithDetails; indent: boolean; isNoticeOfDay: boolean };
+  | { type: "article"; item: TeamCollectionArticleWithDetails; indent: boolean };
 
 /**
  * TeamCollectionArticleWithDetails 배열을 KST 일자 그룹 + 정렬 규칙에 따라
  * FlatList에 바로 넣을 수 있는 row 배열로 변환한다.
  *
  * 정렬 규칙 (그룹 내):
- *   1. 오늘의 인사(`isNotice && noticeDate === dateKey`) → 맨 위 (답장이어도 여기)
- *   2. 나머지는 visibleAt 최신순
- *   3. 같은 모음의 글에 대한 답장(`sourceArticleId && parentInThisCollection`)은
+ *   1. visibleAt 최신순
+ *   2. 같은 모음의 글에 대한 답장(`sourceArticleId && parentInThisCollection`)은
  *      원글 바로 아래에 고정 1단계 들여쓰기로 붙인다
- *      (답장이더라도 오늘의 인사이면 맨 위로)
  */
 type ArticleWithKey = TeamCollectionArticleWithDetails & { _dateKey: string };
 
@@ -88,7 +86,7 @@ function insertWithReplies(
   result: TeamArticleListRow[],
   indent: boolean,
 ): void {
-  result.push({ type: "article", item, indent, isNoticeOfDay: false });
+  result.push({ type: "article", item, indent });
   visited.add(item.articleId);
   const children = replyMap.get(item.articleId) ?? [];
   for (const child of children) {
@@ -191,15 +189,8 @@ export function buildTeamArticleRows(
   for (const dateKey of sortedKeys) {
     const groupItems = groupMap.get(dateKey)!;
 
-    // 그룹 내 정렬: 오늘의 인사 → 나머지(visibleAt 내림차순)
-    const notices = groupItems.filter(
-      (a) => a.article?.isNotice && a.article?.noticeDate === dateKey,
-    );
-    const nonNotices = groupItems.filter(
-      (a) => !(a.article?.isNotice && a.article?.noticeDate === dateKey),
-    );
-
-    nonNotices.sort((a, b) => {
+    // 그룹 내 정렬: visibleAt 내림차순
+    groupItems.sort((a, b) => {
       const ta = a.visibleAt ?? a.addedAt;
       const tb = b.visibleAt ?? b.addedAt;
       return new Date(tb).getTime() - new Date(ta).getTime();
@@ -208,20 +199,9 @@ export function buildTeamArticleRows(
     // 헤더 행
     result.push({ type: "header", dateKey, label: formatDateLabel(dateKey) });
 
-    // 오늘의 인사 먼저 (들여쓰기 없음) + 전역 replyMap으로 답장 DFS 삽입
+    // 루트 글 + 전역 replyMap으로 답장 DFS 삽입
     const visited = new Set<string>();
-    for (const notice of notices) {
-      result.push({ type: "article", item: notice, indent: false, isNoticeOfDay: true });
-      visited.add(notice.articleId);
-      for (const child of globalReplyMap.get(notice.articleId) ?? []) {
-        if (!visited.has(child.articleId)) {
-          insertWithReplies(child, globalReplyMap, visited, result, true);
-        }
-      }
-    }
-
-    // 나머지 루트 글 + 전역 replyMap으로 답장 DFS 삽입
-    for (const item of nonNotices) {
+    for (const item of groupItems) {
       if (visited.has(item.articleId)) continue;
       insertWithReplies(item, globalReplyMap, visited, result, false);
     }

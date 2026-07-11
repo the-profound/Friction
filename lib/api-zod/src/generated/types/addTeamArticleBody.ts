@@ -9,6 +9,4 @@
 export interface AddTeamArticleBody {
   articleId: string;
   addedBy: string;
-  /** When true, the addedBy user is the OWNER and this article is designated as today's "오늘의 인사" for this collection. The server validates ownership and one-per-day uniqueness. */
-  asNotice?: boolean;
 }

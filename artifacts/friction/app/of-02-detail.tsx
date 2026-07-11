@@ -498,7 +498,6 @@ export default function TeamCollectionDetailScreen() {
       collectionName: collection?.name ?? null,
       collectionId: id ?? null,
       date: tapCard.visibleAt ?? tapCard.addedAt ?? null,
-      isNotice: !!(tapCard.article?.isNotice && tapCard.article?.noticeDate),
     };
   }, [tapCard, memberNicknameMap, collection, id]);
 
@@ -707,7 +706,6 @@ export default function TeamCollectionDetailScreen() {
                             cover={item.article?.cover}
                             isRead={item.completedAt != null}
                             cardWidth={CAROUSEL_CARD_W}
-                            isNoticeOfDay={!!(item.article?.isNotice && item.article?.noticeDate)}
                           />
                         </View>
                       </View>
@@ -742,7 +740,6 @@ export default function TeamCollectionDetailScreen() {
                                 cover={item.article?.cover}
                                 isRead={item.completedAt != null}
                                 cardWidth={CAROUSEL_CARD_W}
-                                isNoticeOfDay={!!(item.article?.isNotice && item.article?.noticeDate)}
                               />
                             </View>
                           </View>

@@ -351,7 +351,6 @@ export default function UserProfileScreen() {
               collectionName: slot.article.collectionName ?? null,
               collectionId: slot.article.collectionId ?? null,
               date: slot.article.letterAt ?? null,
-              isNotice: (slot.article as any).isNotice ?? false,
             }
           : {},
       );
@@ -365,7 +364,6 @@ export default function UserProfileScreen() {
       collectionName: selectedCollectionName,
       collectionId: selectedCollectionId,
       date: selectedDateOverride,
-      isNotice: selectedArticle.isNotice ?? false,
     });
 
     return { chainArticles: artList, chainMetas: metaList, chainInitialIndex: initIdx };
