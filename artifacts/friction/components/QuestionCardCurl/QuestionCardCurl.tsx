@@ -27,6 +27,7 @@ import {
   Pressable,
   StyleSheet,
   Platform,
+  Keyboard,
 } from "react-native";
 import Animated, {
   useSharedValue,
@@ -233,6 +234,9 @@ export interface QuestionCardCurlProps {
    *  true 동안 수평 스와이프(B: 오른쪽, C: 왼쪽)를 처리하지 않아
    *  ReadingCompleteScreen의 backGesture와 제스처 경합이 발생하지 않도록 한다. */
   isCompleteVisible?: boolean;
+  /** read.tsx의 keyboardVisibleRef — 키보드 열림/닫힘 상태를 추적한다.
+   *  pan 제스처 분기(키보드 열림 시 스크롤/닫기, 닫힘 시 스크롤/플립)에 사용. */
+  keyboardVisibleRef: React.RefObject<boolean>;
 }
 
 /** 답한(한 글자 이상 입력한) 질문 카드 하나. */
@@ -279,6 +283,7 @@ function QuestionCardCurlInner({
   cardTX,
   questions,
   isCompleteVisible,
+  keyboardVisibleRef,
 }: QuestionCardCurlProps, ref: React.ForwardedRef<QuestionCardCurlHandle>) {
   /* 3~5개 가변 질문 목록: prop이 비어있거나 없으면 고정 3개 질문으로 대체 */
   const activeQuestions = questions && questions.length > 0 ? questions : FALLBACK_QUESTIONS;
@@ -322,11 +327,23 @@ function QuestionCardCurlInner({
   const newAnswerRef = useRef("");
   const curlRafRef = useRef<number | null>(null);
 
+  /* ── 스크롤 추적 refs ────────────────────────────────────────────────── */
+  // TextInput onContentSizeChange로 업데이트 (텍스트 전체 높이)
+  const contentHeightRef = useRef(0);
+  // 답변 클립 컨테이너 onLayout으로 업데이트 (표시 가능한 높이)
+  const availableHeightRef = useRef(0);
+  // 각 제스처 시작 시 scrollOffsetSV 현재값을 기록 (이전 드래그 이어붙이기)
+  const scrollStartRef = useRef(0);
+  // 현재 제스처가 스크롤 모드로 처리됐는지 (true) vs 카드 플립 모드(false)
+  const gestureScrolledRef = useRef(false);
+
   /* ── Shared values (Reanimated) ─────────────────────────────────────── */
   // 드래그 팔로우 피드백 (좌우 스와이프 + 대기 카드 위/아래 드래그).
   // cardTX는 read.tsx가 소유한 prop으로 끌어올려졌다 (D 전환이 함께 구동해야
   // 하므로 — 위 QuestionCardCurlProps.cardTX 주석 참고).
   const cardTY = useSharedValue(0);
+  // 답변 입력 영역의 스크롤 오프셋 (음수: 위로 스크롤, 0: 상단). 범위: [-overflowH, 0]
+  const scrollOffsetSV = useSharedValue(0);
   // Guards onReadingCompleteBegin to fire once per left-drag gesture (C),
   // reset at gesture start so re-dragging left again after a cancel re-fires it.
   const completeBeginFiredRef = useRef(false);
@@ -352,6 +369,9 @@ function QuestionCardCurlInner({
       { translateX: cardTX.value },
       { translateY: cardTY.value },
     ],
+  }));
+  const answerScrollStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: scrollOffsetSV.value }],
   }));
   // The "notepad stack" decorative layers (stackLayerBack/Front) sit behind
   // the draggable card to sell a stack-of-pages depth illusion. They must
@@ -380,7 +400,8 @@ function QuestionCardCurlInner({
     setRawProgress(0);
     cardTY.value = 0;
     cardTX.value = 0;
-  }, [cardTY, cardTX]);
+    scrollOffsetSV.value = 0;
+  }, [cardTY, cardTX, scrollOffsetSV]);
 
   const afterTransitionRef = useRef(afterTransition);
   afterTransitionRef.current = afterTransition;
@@ -568,6 +589,8 @@ function QuestionCardCurlInner({
         .minDistance(8)
         .onBegin(() => {
           dragAxisRef.current = null;
+          gestureScrolledRef.current = false;
+          scrollStartRef.current = scrollOffsetSV.value;
         })
         .onUpdate((e) => {
           if (animatingRef.current) return;
@@ -582,18 +605,28 @@ function QuestionCardCurlInner({
           const isVertical = dragAxisRef.current === null
             ? Math.abs(dy) > Math.abs(dx)
             : dragAxisRef.current === "vertical";
-          if (isVertical) {
-            /* 목업과 동일한 드래그 팔로우 계수 */
-            if (dy < 0) {
-              cardTY.value = dy * 0.10;
-            } else {
-              const restTy = cardSmallH + 60;
-              cardTY.value =
-                ptrRef.current > 0
-                  ? dy * 0.12
-                  : Math.min(dy * 0.22, restTy * 0.28);
+
+          const overflowH = Math.max(0, contentHeightRef.current - availableHeightRef.current);
+
+          /* ── 키보드 열린 상태 ──────────────────────────────────────────
+           * 수평 / 위→아래: 아무 이동 없이 방향만 추적 (onEnd에서 dismiss).
+           * 아래→위 + 오버플로 있음: 스크롤 오프셋 업데이트.         */
+          if (keyboardVisibleRef.current) {
+            if (!isVertical || dy > 0) {
+              // no movement — just tracking axis for onEnd
+            } else if (dy < 0 && overflowH > 0) {
+              const liveOffset = scrollOffsetSV.value;
+              if (liveOffset > -overflowH) {
+                gestureScrolledRef.current = true;
+                scrollOffsetSV.value = Math.max(-overflowH, scrollStartRef.current + dy);
+              }
+              // already at bottom: no movement (nothing more to reveal)
             }
-          } else {
+            return;
+          }
+
+          /* ── 키보드 꺼진 상태 ─────────────────────────────────────── */
+          if (!isVertical) {
             // 완료 화면이 안정적으로 떠 있는 동안(이전 C가 커밋된 D 상태)에는
             // 수평 스와이프(B/C)를 차단해 ReadingCompleteScreen의 backGesture(D)와
             // 충돌하지 않도록 한다. 단, 현재 C 제스처가 진행 중(completeBeginFiredRef=true)
@@ -624,6 +657,48 @@ function QuestionCardCurlInner({
               flatTransitionSV.value = 0;
               dismissPrevSlotSV.value = -(W + 400);
             }
+          } else if (overflowH > 0) {
+            /* ── 오버플로 있음: 라이브 오프셋 기준으로 스크롤/플립 매 프레임 판정 ──
+             * scrollStartRef(제스처 시작 시점 오프셋)가 아닌 scrollOffsetSV.value
+             * (현재 프레임의 실제 오프셋)로 경계 도달 여부를 판단해,
+             * 한 제스처 내에서 스크롤 경계에 닿은 후 계속 드래그하면
+             * 자연스럽게 카드 플립 팔로우로 전환된다. */
+            const liveOffset = scrollOffsetSV.value;
+            const atBottom = liveOffset <= -overflowH;
+            const atTop = liveOffset >= 0;
+
+            if (dy < 0) {
+              // 아래→위 드래그: 하단 경계 미도달이면 스크롤, 도달했으면 플립
+              if (!atBottom) {
+                gestureScrolledRef.current = true;
+                scrollOffsetSV.value = Math.max(-overflowH, scrollStartRef.current + dy);
+              } else {
+                gestureScrolledRef.current = false;
+                cardTY.value = dy * 0.10;
+              }
+            } else if (dy > 0) {
+              // 위→아래 드래그: 상단 경계 미도달이면 스크롤, 도달했으면 플립
+              if (!atTop) {
+                gestureScrolledRef.current = true;
+                scrollOffsetSV.value = Math.min(0, scrollStartRef.current + dy);
+              } else {
+                gestureScrolledRef.current = false;
+                const restTy = cardSmallH + 60;
+                cardTY.value = ptrRef.current > 0
+                  ? dy * 0.12
+                  : Math.min(dy * 0.22, restTy * 0.28);
+              }
+            }
+          } else {
+            /* ── 오버플로 없음: 기존 카드 플립 드래그 팔로우 ─────────── */
+            if (dy < 0) {
+              cardTY.value = dy * 0.10;
+            } else {
+              const restTy = cardSmallH + 60;
+              cardTY.value = ptrRef.current > 0
+                ? dy * 0.12
+                : Math.min(dy * 0.22, restTy * 0.28);
+            }
           }
         })
         .onEnd((e) => {
@@ -640,18 +715,42 @@ function QuestionCardCurlInner({
             ? Math.abs(dy) > Math.abs(dx)
             : dragAxisRef.current === "vertical";
 
+          const overflowH = Math.max(0, contentHeightRef.current - availableHeightRef.current);
+
+          /* ── 키보드 열린 상태 ──────────────────────────────────────────
+           * 수평 또는 위→아래: 키보드 dismiss.
+           * 아래→위 스크롤이었으면: withSpring으로 오프셋 정착.          */
+          if (keyboardVisibleRef.current) {
+            if (!isVertical || dy > 0) {
+              Keyboard.dismiss();
+            } else if (gestureScrolledRef.current) {
+              // scrollOffsetSV.value is already clamped to [-overflowH, 0] by onUpdate
+              scrollOffsetSV.value = withSpring(scrollOffsetSV.value, { damping: 20, stiffness: 300 });
+            }
+            return;
+          }
+
+          /* ── 키보드 꺼진 상태 ─────────────────────────────────────── */
           if (isVertical) {
-            if (dy < -THRESHOLD) {
-              const _isNew = ptrRef.current === savedRef.current.length;
-              const hasAns = _isNew
-                ? newAnswerRef.current.trim().length > 0
-                : true;
-              triggerAdvanceRef.current(hasAns);
-            } else if (dy > THRESHOLD) {
-              triggerBackRef.current();
-            } else {
+            if (gestureScrolledRef.current) {
+              /* 마지막 프레임이 스크롤 모드였으면: 현재 오프셋에서 withSpring 정착.
+               * cardTY는 스크롤 중 건드리지 않았지만 안전하게 0으로 복귀시킨다. */
+              scrollOffsetSV.value = withSpring(scrollOffsetSV.value, { damping: 20, stiffness: 300 });
               cardTY.value = withSpring(0, { damping: 12, stiffness: 180 });
-              cardTX.value = withSpring(0, { damping: 12, stiffness: 180 });
+            } else {
+              /* 플립 제스처였으면: 기존 triggerAdvance/triggerBack 임계값 판정 */
+              if (dy < -THRESHOLD) {
+                const _isNew = ptrRef.current === savedRef.current.length;
+                const hasAns = _isNew
+                  ? newAnswerRef.current.trim().length > 0
+                  : true;
+                triggerAdvanceRef.current(hasAns);
+              } else if (dy > THRESHOLD) {
+                triggerBackRef.current();
+              } else {
+                cardTY.value = withSpring(0, { damping: 12, stiffness: 180 });
+                cardTX.value = withSpring(0, { damping: 12, stiffness: 180 });
+              }
             }
           } else {
             // 완료 화면이 안정적으로 떠 있는 동안(이전 C 커밋 후 D 상태)에는
@@ -762,15 +861,17 @@ function QuestionCardCurlInner({
       cardTX,
       cardTY,
       cardSmallH,
-      cardSmallW,
+      scrollOffsetSV,
       screenWidth,
       onDismissOverlay,
       onDismissOverlayComplete,
       onReadingCompleteBegin,
       onReadingCompleteCancel,
       dismissPrevSlotSV,
+      currentSlotSV,
       flatTransitionSV,
       completeEntranceX,
+      keyboardVisibleRef,
     ],
   );
 
@@ -1159,28 +1260,45 @@ function QuestionCardCurlInner({
                 <Text style={s.questionText} numberOfLines={6}>
                   {currentQ}
                 </Text>
-                <TextInput
-                  style={s.answerInput}
-                  value={currentAnswer}
-                  onChangeText={(v) => {
-                    if (isNewCard) {
-                      setNewAnswer(v);
-                      newAnswerRef.current = v;
-                    } else {
-                      setSaved((prev) => {
-                        const next = prev.map((c, i) =>
-                          i === ptr ? { ...c, answer: v } : c,
-                        );
-                        savedRef.current = next;
-                        return next;
-                      });
-                    }
+                {/* 답변 스크롤 클립 컨테이너 — flex:1로 남은 영역을 차지하고
+                    overflow:hidden으로 자식(Animated.View)의 translateY 범위를
+                    클리핑한다. TextInput은 내부적으로 scrollEnabled=false로
+                    자동 확장되며, 우리가 직접 translateY로 스크롤을 제어한다. */}
+                <View
+                  style={s.answerScrollClip}
+                  onLayout={(ev) => {
+                    availableHeightRef.current = ev.nativeEvent.layout.height;
                   }}
-                  placeholder="생각을 자유롭게 적어보세요..."
-                  placeholderTextColor={Colors.zinc400}
-                  multiline
-                  textAlignVertical="top"
-                />
+                >
+                  <Animated.View style={answerScrollStyle}>
+                    <TextInput
+                      style={s.answerInput}
+                      value={currentAnswer}
+                      onChangeText={(v) => {
+                        if (isNewCard) {
+                          setNewAnswer(v);
+                          newAnswerRef.current = v;
+                        } else {
+                          setSaved((prev) => {
+                            const next = prev.map((c, i) =>
+                              i === ptr ? { ...c, answer: v } : c,
+                            );
+                            savedRef.current = next;
+                            return next;
+                          });
+                        }
+                      }}
+                      onContentSizeChange={(ev) => {
+                        contentHeightRef.current = ev.nativeEvent.contentSize.height;
+                      }}
+                      placeholder="생각을 자유롭게 적어보세요..."
+                      placeholderTextColor={Colors.zinc400}
+                      multiline
+                      scrollEnabled={false}
+                      textAlignVertical="top"
+                    />
+                  </Animated.View>
+                </View>
               </View>
               {/* SpringCoil: 항상 카드 최상단에 absolute 렌더 */}
               <SpringCoil width={cardSmallW} />
@@ -1288,8 +1406,11 @@ const s = StyleSheet.create({
     letterSpacing: 0.3,
     marginBottom: 20,
   },
-  answerInput: {
+  answerScrollClip: {
     flex: 1,
+    overflow: "hidden",
+  },
+  answerInput: {
     fontSize: 15,
     fontFamily: ReaderTokens.fontFamily.serif,
     color: Colors.zinc700,

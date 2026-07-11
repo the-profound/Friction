@@ -2236,6 +2236,7 @@ export default function ReadScreen() {
                       flatTransitionSV={flatTransitionSV}
                       completeEntranceX={completeEntranceX}
                       cardTX={cardTX}
+                      keyboardVisibleRef={keyboardVisibleRef}
                       onDismissOverlay={() => {
                         // (B) 우 스와이프 커밋이 확정된 시점(release)에 호출됨.
                         // 실제 화면 이동은 드래그 내내 prevSlotSV로 이미 라이브
