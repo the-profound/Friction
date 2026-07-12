@@ -44,6 +44,14 @@ type FormData = {
 const DEFAULT_CENTER_INTERVAL = 7;
 const DEFAULT_CENTER_COUNT = 1;
 
+function getTodayDigits(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}${m}${d}`;
+}
+
 function buildSteps(roundCount: number): string[] {
   const base = ["기본 설정", "운영 설정"];
   for (let i = 1; i <= roundCount; i++) {
@@ -84,12 +92,14 @@ export default function SpaceCreateScreen() {
   const [step, setStep] = useState(0);
   const [advancedCustomized, setAdvancedCustomized] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [roundCountRaw, setRoundCountRaw] = useState("1");
+  const [roundCountError, setRoundCountError] = useState("");
 
   const [form, setForm] = useState<FormData>({
     name: "",
     description: "",
     isAnonymous: false,
-    startsAt: "",
+    startsAt: getTodayDigits(),
     roundCount: 1,
     maxParticipants: "",
     rounds: [{ title: "", description: "" }],
@@ -111,35 +121,39 @@ export default function SpaceCreateScreen() {
   }, []);
 
   const handleRoundCountChange = useCallback((text: string) => {
-    const n = parseInt(text, 10);
-    const count = isNaN(n) || n < 1 ? 1 : Math.min(n, 52);
-    setForm((prev) => {
-      const existing = prev.rounds;
-      const rounds: RoundDraft[] = Array.from({ length: count }, (_, i) =>
-        existing[i] ?? { title: "", description: "" },
-      );
-      return { ...prev, roundCount: count, rounds };
-    });
-  }, []);
+    const digits = text.replace(/\D/g, "");
+    setRoundCountRaw(digits);
+    if (roundCountError) setRoundCountError("");
+  }, [roundCountError]);
 
   const steps = useMemo(() => buildSteps(form.roundCount), [form.roundCount]);
   const totalSteps = steps.length;
 
   const canProceed = useMemo(() => {
     if (step === 0) return form.name.trim().length > 0;
-    if (step === 1) return form.roundCount >= 1;
-    const roundIndex = step - 2;
-    if (roundIndex >= 0 && roundIndex < form.roundCount) return true;
-    const advancedStep = form.roundCount + 2;
-    if (step === advancedStep) return true;
     return true;
   }, [step, form]);
 
   const handleNext = useCallback(() => {
+    if (step === 1) {
+      const n = parseInt(roundCountRaw, 10);
+      if (isNaN(n) || n < 1 || n > 52) {
+        setRoundCountError("1에서 52 사이의 양의 정수를 입력해주세요.");
+        return;
+      }
+      setRoundCountError("");
+      setForm((prev) => {
+        const existing = prev.rounds;
+        const rounds: RoundDraft[] = Array.from({ length: n }, (_, i) =>
+          existing[i] ?? { title: "", description: "" },
+        );
+        return { ...prev, roundCount: n, rounds };
+      });
+    }
     if (step < totalSteps - 1) {
       setStep((s) => s + 1);
     }
-  }, [step, totalSteps]);
+  }, [step, totalSteps, roundCountRaw]);
 
   const handleBack = useCallback(() => {
     if (step > 0) {
@@ -212,6 +226,8 @@ export default function SpaceCreateScreen() {
         <OperationSettingsStep
           form={form}
           updateField={updateField}
+          roundCountRaw={roundCountRaw}
+          roundCountError={roundCountError}
           onRoundCountChange={handleRoundCountChange}
         />
       );
@@ -371,13 +387,17 @@ function BasicSettingsStep({
 function OperationSettingsStep({
   form,
   updateField,
+  roundCountRaw,
+  roundCountError,
   onRoundCountChange,
 }: {
   form: FormData;
   updateField: <K extends keyof FormData>(key: K, value: FormData[K]) => void;
+  roundCountRaw: string;
+  roundCountError: string;
   onRoundCountChange: (text: string) => void;
 }) {
-  const [dateRaw, setDateRaw] = useState(form.startsAt);
+  const [dateRaw, setDateRaw] = useState(formatDateDisplay(form.startsAt));
 
   const handleDateChange = (text: string) => {
     const digits = text.replace(/\D/g, "").slice(0, 8);
@@ -392,7 +412,7 @@ function OperationSettingsStep({
       <Text style={stepStyles.stepDesc}>공간 운영 조건을 설정하세요.</Text>
 
       <View style={stepStyles.fieldGroup}>
-        <Text style={stepStyles.fieldLabel}>시작일 (선택)</Text>
+        <Text style={stepStyles.fieldLabel}>시작일 *</Text>
         <TextInput
           style={stepStyles.input}
           placeholder="YYYY.MM.DD"
@@ -413,12 +433,16 @@ function OperationSettingsStep({
           style={stepStyles.input}
           placeholder="예: 12"
           placeholderTextColor={Colors.zinc400}
-          value={String(form.roundCount)}
+          value={roundCountRaw}
           onChangeText={onRoundCountChange}
           keyboardType="number-pad"
           maxLength={2}
         />
-        <Text style={stepStyles.hint}>최대 52회차까지 설정할 수 있어요</Text>
+        {roundCountError ? (
+          <Text style={stepStyles.errorText}>{roundCountError}</Text>
+        ) : (
+          <Text style={stepStyles.hint}>최대 52회차까지 설정할 수 있어요</Text>
+        )}
       </View>
 
       <View style={stepStyles.fieldGroup}>
