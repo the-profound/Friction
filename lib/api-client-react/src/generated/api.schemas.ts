@@ -659,6 +659,7 @@ export const SpaceCodeRequestStatus = {
   PENDING: "PENDING",
   APPROVED: "APPROVED",
   REJECTED: "REJECTED",
+  CANCELLED: "CANCELLED",
 } as const;
 
 export interface SpaceCodeRequest {
@@ -667,6 +668,7 @@ export interface SpaceCodeRequest {
   requesterId: string;
   code: string;
   status: SpaceCodeRequestStatus;
+  rejectionReason?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -834,6 +836,11 @@ export interface UpdateSpaceInvitationBody {
   status?: UpdateSpaceInvitationBodyStatus;
 }
 
+export interface SpaceCodeRequestWithRequester {
+  codeRequest: SpaceCodeRequest;
+  requesterNickname?: string | null;
+}
+
 export interface CreateSpaceCodeRequestBody {
   requesterId: string;
   /**
@@ -849,10 +856,12 @@ export type UpdateSpaceCodeRequestBodyStatus =
 export const UpdateSpaceCodeRequestBodyStatus = {
   APPROVED: "APPROVED",
   REJECTED: "REJECTED",
+  CANCELLED: "CANCELLED",
 } as const;
 
 export interface UpdateSpaceCodeRequestBody {
-  status?: UpdateSpaceCodeRequestBodyStatus;
+  status: UpdateSpaceCodeRequestBodyStatus;
+  rejectionReason?: string | null;
 }
 
 export type SpaceLetterLetterType =
@@ -915,6 +924,18 @@ export interface SpaceScheduledSend {
 
 export interface CreateSpaceScheduledSendBody {
   scheduledAt: string;
+}
+
+export type SpaceWithCreatorInfo = Space & {
+  creatorNickname?: string | null;
+  participantCount: number;
+};
+
+export interface SpaceJoinContext {
+  space: SpaceWithCreatorInfo;
+  participation?: SpaceParticipation | null;
+  invitation?: SpaceInvitation | null;
+  codeRequest?: SpaceCodeRequest | null;
 }
 
 export interface SpellCheckBody {
@@ -1032,6 +1053,28 @@ export type ListMySpaceCodeRequestsParams = {
 };
 
 export type ListSpacesParams = {
+  userId: string;
+};
+
+export type ListSpaceCodeRequestsParams = {
+  status?: ListSpaceCodeRequestsStatus;
+};
+
+export type ListSpaceCodeRequestsStatus =
+  (typeof ListSpaceCodeRequestsStatus)[keyof typeof ListSpaceCodeRequestsStatus];
+
+export const ListSpaceCodeRequestsStatus = {
+  PENDING: "PENDING",
+  APPROVED: "APPROVED",
+  REJECTED: "REJECTED",
+  CANCELLED: "CANCELLED",
+} as const;
+
+export type GetSpaceJoinContextParams = {
+  userId: string;
+};
+
+export type ListUserSpaceInvitationsParams = {
   userId: string;
 };
 

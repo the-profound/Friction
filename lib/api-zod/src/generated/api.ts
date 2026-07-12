@@ -1849,7 +1849,8 @@ export const ListMySpaceCodeRequestsResponseItem = zod.object({
     spaceId: zod.string().uuid(),
     requesterId: zod.string().uuid(),
     code: zod.string(),
-    status: zod.enum(["PENDING", "APPROVED", "REJECTED"]),
+    status: zod.enum(["PENDING", "APPROVED", "REJECTED", "CANCELLED"]),
+    rejectionReason: zod.string().nullish(),
     createdAt: zod.date(),
     updatedAt: zod.date(),
   }),
@@ -2143,6 +2144,34 @@ export const UpdateSpaceInvitationResponse = zod.object({
 });
 
 /**
+ * @summary List code requests for a space (operator only)
+ */
+export const ListSpaceCodeRequestsParams = zod.object({
+  id: zod.coerce.string().uuid(),
+});
+
+export const ListSpaceCodeRequestsQueryParams = zod.object({
+  status: zod.enum(["PENDING", "APPROVED", "REJECTED", "CANCELLED"]).optional(),
+});
+
+export const ListSpaceCodeRequestsResponseItem = zod.object({
+  codeRequest: zod.object({
+    id: zod.string().uuid(),
+    spaceId: zod.string().uuid(),
+    requesterId: zod.string().uuid(),
+    code: zod.string(),
+    status: zod.enum(["PENDING", "APPROVED", "REJECTED", "CANCELLED"]),
+    rejectionReason: zod.string().nullish(),
+    createdAt: zod.date(),
+    updatedAt: zod.date(),
+  }),
+  requesterNickname: zod.string().nullish(),
+});
+export const ListSpaceCodeRequestsResponse = zod.array(
+  ListSpaceCodeRequestsResponseItem,
+);
+
+/**
  * @summary Request to join a space using an invite code
  */
 export const CreateSpaceCodeRequestParams = zod.object({
@@ -2361,8 +2390,8 @@ export const ListUserSpaceInvitationsQueryParams = zod.object({
   userId: zod.coerce.string().uuid(),
 });
 
-export const ListUserSpaceInvitationsResponseItem = zod
-  .object({
+export const ListUserSpaceInvitationsResponseItem = zod.object({
+  invitation: zod.object({
     id: zod.string().uuid(),
     spaceId: zod.string().uuid(),
     invitedUserId: zod.string().uuid(),
@@ -2370,34 +2399,24 @@ export const ListUserSpaceInvitationsResponseItem = zod
     status: zod.enum(["PENDING", "ACCEPTED", "DECLINED"]),
     createdAt: zod.date(),
     updatedAt: zod.date(),
-  })
-  .and(
-    zod.object({
-      space: zod
-        .object({
-          id: zod.string().uuid(),
-          name: zod.string(),
-          description: zod.string().nullish(),
-          isAnonymous: zod.boolean(),
-          startsAt: zod.date().nullish(),
-          roundCount: zod.number(),
-          maxParticipants: zod.number().nullish(),
-          defaultCenterInterval: zod.number(),
-          defaultCenterCount: zod.number(),
-          status: zod.enum(["RECRUITING", "ACTIVE", "ARCHIVED"]),
-          creatorId: zod.string().uuid(),
-          inviteCode: zod.string().nullish(),
-          createdAt: zod.date(),
-          updatedAt: zod.date(),
-        })
-        .and(
-          zod.object({
-            creatorNickname: zod.string().nullish(),
-            participantCount: zod.number(),
-          }),
-        ),
-    }),
-  );
+  }),
+  space: zod.object({
+    id: zod.string().uuid(),
+    name: zod.string(),
+    description: zod.string().nullish(),
+    isAnonymous: zod.boolean(),
+    startsAt: zod.date().nullish(),
+    roundCount: zod.number(),
+    maxParticipants: zod.number().nullish(),
+    defaultCenterInterval: zod.number(),
+    defaultCenterCount: zod.number(),
+    status: zod.enum(["RECRUITING", "ACTIVE", "ARCHIVED"]),
+    creatorId: zod.string().uuid(),
+    inviteCode: zod.string().nullish(),
+    createdAt: zod.date(),
+    updatedAt: zod.date(),
+  }),
+});
 export const ListUserSpaceInvitationsResponse = zod.array(
   ListUserSpaceInvitationsResponseItem,
 );

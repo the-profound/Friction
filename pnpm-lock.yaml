@@ -170,6 +170,9 @@ importers:
       '@google-cloud/storage':
         specifier: ^7.19.0
         version: 7.19.0
+      '@supabase/supabase-js':
+        specifier: ^2.103.3
+        version: 2.103.3
       '@workspace/api-zod':
         specifier: workspace:*
         version: link:../../lib/api-zod

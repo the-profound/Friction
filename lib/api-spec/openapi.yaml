@@ -1688,6 +1688,27 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
   /spaces/{id}/code-requests:
+    get:
+      operationId: listSpaceCodeRequests
+      tags: [spaces]
+      summary: List code requests for a space (operator only)
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [PENDING, APPROVED, REJECTED, CANCELLED]
+      responses:
+        "200":
+          description: Code request list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SpaceCodeRequestWithRequester"
     post:
       operationId: createSpaceCodeRequest
       tags: [spaces]
@@ -3477,6 +3498,16 @@ components:
           type: string
           enum: [ACCEPTED, DECLINED]
 
+    SpaceCodeRequestWithRequester:
+      type: object
+      properties:
+        codeRequest:
+          $ref: "#/components/schemas/SpaceCodeRequest"
+        requesterNickname:
+          type: string
+          nullable: true
+      required: [codeRequest]
+
     SpaceCodeRequest:
       type: object
       properties:
@@ -3526,6 +3557,7 @@ components:
         rejectionReason:
           type: string
           nullable: true
+      required: [status]
 
     SpaceLetter:
       type: object
@@ -3631,28 +3663,22 @@ components:
               type: integer
           required: [participantCount]
 
-    SpaceInvitationWithSpace:
-      allOf:
-        - $ref: "#/components/schemas/SpaceInvitation"
-        - type: object
-          properties:
-            space:
-              $ref: "#/components/schemas/SpaceWithCreatorInfo"
-          required: [space]
-
     SpaceJoinContext:
       type: object
       properties:
         space:
           $ref: "#/components/schemas/SpaceWithCreatorInfo"
         participation:
-          $ref: "#/components/schemas/SpaceParticipation"
+          allOf:
+            - $ref: "#/components/schemas/SpaceParticipation"
           nullable: true
         invitation:
-          $ref: "#/components/schemas/SpaceInvitation"
+          allOf:
+            - $ref: "#/components/schemas/SpaceInvitation"
           nullable: true
         codeRequest:
-          $ref: "#/components/schemas/SpaceCodeRequest"
+          allOf:
+            - $ref: "#/components/schemas/SpaceCodeRequest"
           nullable: true
       required: [space]
 

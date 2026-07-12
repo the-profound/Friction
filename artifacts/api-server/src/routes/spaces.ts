@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, inArray, count } from "drizzle-orm";
+import { requireAuth } from "../middlewares/requireAuth";
 import {
   db,
   spacesTable,
@@ -194,7 +195,24 @@ router.get("/spaces/:id", async (req, res) => {
   res.json(space);
 });
 
-router.patch("/spaces/:id", async (req, res) => {
+router.patch("/spaces/:id", requireAuth, async (req, res) => {
+  const callerId = req.user!.id;
+  const [callerParticipation] = await db
+    .select()
+    .from(spaceParticipationsTable)
+    .where(
+      and(
+        eq(spaceParticipationsTable.spaceId, req.params.id),
+        eq(spaceParticipationsTable.userId, callerId),
+        eq(spaceParticipationsTable.role, "OPERATOR"),
+        eq(spaceParticipationsTable.status, "APPROVED"),
+      ),
+    )
+    .limit(1);
+  if (!callerParticipation) {
+    res.status(403).json({ error: "Only operators can update a space" });
+    return;
+  }
   const [space] = await db
     .update(spacesTable)
     .set(req.body)
@@ -302,6 +320,51 @@ router.patch("/spaces/:id/invitations/:invitationId", async (req, res) => {
   res.json(invitation);
 });
 
+router.get("/spaces/:id/code-requests", requireAuth, async (req, res) => {
+  const callerId = req.user!.id;
+  const { status } = req.query;
+  const [callerParticipation] = await db
+    .select()
+    .from(spaceParticipationsTable)
+    .where(
+      and(
+        eq(spaceParticipationsTable.spaceId, req.params.id),
+        eq(spaceParticipationsTable.userId, callerId),
+        eq(spaceParticipationsTable.role, "OPERATOR"),
+        eq(spaceParticipationsTable.status, "APPROVED"),
+      ),
+    )
+    .limit(1);
+  if (!callerParticipation) {
+    res.status(403).json({ error: "Only operators can view code requests" });
+    return;
+  }
+  const conditions = [eq(spaceCodeRequestsTable.spaceId, req.params.id)];
+  if (status && typeof status === "string") {
+    conditions.push(eq(spaceCodeRequestsTable.status, status as "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED"));
+  }
+  const codeRequests = await db
+    .select()
+    .from(spaceCodeRequestsTable)
+    .where(and(...conditions))
+    .orderBy(spaceCodeRequestsTable.createdAt);
+  if (codeRequests.length === 0) {
+    res.json([]);
+    return;
+  }
+  const requesterIds = [...new Set(codeRequests.map((r) => r.requesterId))];
+  const requesters = await db
+    .select({ id: usersTable.id, nickname: usersTable.nickname })
+    .from(usersTable)
+    .where(inArray(usersTable.id, requesterIds));
+  const requesterMap = new Map(requesters.map((u) => [u.id, u.nickname]));
+  const result = codeRequests.map((r) => ({
+    codeRequest: r,
+    requesterNickname: requesterMap.get(r.requesterId) ?? null,
+  }));
+  res.json(result);
+});
+
 router.post("/spaces/:id/code-requests", async (req, res) => {
   const [codeRequest] = await db
     .insert(spaceCodeRequestsTable)
@@ -310,8 +373,25 @@ router.post("/spaces/:id/code-requests", async (req, res) => {
   res.status(201).json(codeRequest);
 });
 
-router.patch("/spaces/:id/code-requests/:requestId", async (req, res) => {
+router.patch("/spaces/:id/code-requests/:requestId", requireAuth, async (req, res) => {
+  const callerId = req.user!.id;
   const { status, rejectionReason } = req.body;
+  const [callerParticipation] = await db
+    .select()
+    .from(spaceParticipationsTable)
+    .where(
+      and(
+        eq(spaceParticipationsTable.spaceId, req.params.id),
+        eq(spaceParticipationsTable.userId, callerId),
+        eq(spaceParticipationsTable.role, "OPERATOR"),
+        eq(spaceParticipationsTable.status, "APPROVED"),
+      ),
+    )
+    .limit(1);
+  if (!callerParticipation) {
+    res.status(403).json({ error: "Only operators can approve or reject code requests" });
+    return;
+  }
   const updateFields: Record<string, unknown> = { status };
   if (rejectionReason !== undefined) updateFields.rejectionReason = rejectionReason;
 

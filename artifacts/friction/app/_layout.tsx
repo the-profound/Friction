@@ -25,7 +25,8 @@ import { ToastProvider } from "@/contexts/ToastContext";
 import { UserProvider } from "@/contexts/UserContext";
 import { ActiveReadingProvider, useActiveReading } from "@/contexts/ActiveReadingContext";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
-import { setBaseUrl } from "@workspace/api-client-react";
+import { setBaseUrl, setAuthTokenGetter } from "@workspace/api-client-react";
+import { supabase } from "@/lib/supabase";
 import { Colors } from "@/constants/tokens";
 import { Platform } from "react-native";
 
@@ -40,6 +41,11 @@ if (process.env.EXPO_PUBLIC_DOMAIN) {
     : `https://${domain}`;
   setBaseUrl(baseUrl);
 }
+
+setAuthTokenGetter(async () => {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token ?? null;
+});
 
 SplashScreen.preventAutoHideAsync();
 

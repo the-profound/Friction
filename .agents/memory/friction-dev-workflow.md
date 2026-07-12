@@ -7,9 +7,21 @@ description: Non-obvious gotchas when changing the API contract or routes in the
 
 ## API contract changes start in openapi.yaml
 `lib/api-spec/openapi.yaml` is the single source of truth. After editing it, run
-`pnpm --filter @workspace/api-spec run codegen` (orval) to regenerate BOTH
-`lib/api-zod` and `lib/api-client-react`. Editing the generated files directly is
-pointless — codegen with `clean: true` wipes them.
+codegen programmatically (NOT via CLI — the CLI has a jiti ESM `__dirname` issue):
+
+```js
+import { generate } from './lib/api-spec/node_modules/orval/dist/index.mjs';
+// Call generate() SEPARATELY for each project — passing a named-project object fails
+await generate({ input: { target: './openapi.yaml' }, output: { workspace: '…/api-client-react/src', target: 'generated', client: 'react-query', mode: 'split', baseUrl: '/api', clean: true, prettier: true, override: { mutator: { path: '…/custom-fetch.ts', name: 'customFetch' }, fetch: { includeHttpResponseReturnType: false } } } }, '/home/runner/workspace/lib/api-spec');
+// Repeat for zod output
+```
+
+**Critical yaml rules** — these patterns silently break the orval input resolver:
+1. **No duplicate schema names** — having `SpaceInvitationWithSpace` defined twice causes "Failed to resolve input". Check with `grep -n "SchemaName:" openapi.yaml`.
+2. **No bare `$ref + nullable: true`** at the same level on a schema *property* that itself contains an allOf-based type — use `allOf: [$ref: '…']` + `nullable: true` instead.
+3. **Codegen generates flat files** (`api.ts`, `api.schemas.ts`) in `lib/api-client-react/src/generated/`. The `index.ts` should only export from `./generated/api` and `./generated/api.schemas`, not from tag subdirectories.
+
+After codegen, editing the generated files directly is pointless — codegen with `clean: true` wipes them.
 
 ## api-server does NOT hot-reload
 The api-server workflow runs `build && start` (no watch). Any change to
