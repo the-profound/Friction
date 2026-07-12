@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,9 @@ import {
   TextInput,
   ActivityIndicator,
   RefreshControl,
+  Platform,
+  Modal,
+  useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -62,7 +65,12 @@ function roundStatusColor(status: string): string {
   return Colors.zinc300;
 }
 
-// ─── Round Card ──────────────────────────────────────────────────────────────
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// ─── Letter type badge ────────────────────────────────────────────────────────
 
 const LETTER_TYPE_LABEL: Record<string, string> = {
   OPENING: "오프닝",
@@ -70,13 +78,13 @@ const LETTER_TYPE_LABEL: Record<string, string> = {
   REPLY: "답장",
 };
 
-function LetterChip({ type }: { type: string }) {
+function LetterTypeBadge({ type }: { type: string }) {
   const isOpening = type === "OPENING";
   return (
     <View
       style={[
-        styles.letterChip,
-        isOpening ? styles.letterChipOpening : styles.letterChipCenter,
+        styles.letterTypeBadge,
+        isOpening ? styles.letterTypeBadgeOpening : styles.letterTypeBadgeCenter,
       ]}
     >
       <Feather
@@ -86,7 +94,7 @@ function LetterChip({ type }: { type: string }) {
       />
       <Text
         style={[
-          styles.letterChipText,
+          styles.letterTypeBadgeText,
           { color: isOpening ? Colors.noticeAccent : Colors.zinc500 },
         ]}
       >
@@ -96,56 +104,233 @@ function LetterChip({ type }: { type: string }) {
   );
 }
 
-function RoundCard({
+// ─── Letter Card ──────────────────────────────────────────────────────────────
+
+function LetterCard({
+  letter,
+  cardWidth,
+  isAnonymous,
+  onPress,
+}: {
+  letter: SpaceLetter;
+  cardWidth: number;
+  isAnonymous: boolean;
+  onPress: () => void;
+}) {
+  const title = (letter as any).articleTitle as string | null;
+  const excerpt = (letter as any).articleExcerpt as string | null;
+  const authorNickname = (letter as any).authorNickname as string | null;
+  const displayName = (letter as any).displayName as string | null;
+  // In anonymous spaces use displayName (stable pseudonym) if available,
+  // fall back to "익명". In non-anonymous spaces show the real nickname.
+  const displayAuthor = isAnonymous
+    ? (displayName ?? "익명")
+    : (authorNickname ?? "알 수 없음");
+
+  return (
+    <ScalePressable
+      style={[styles.letterCard, { width: cardWidth }]}
+      onPress={onPress}
+    >
+      <View style={styles.letterCardTop}>
+        <LetterTypeBadge type={letter.letterType} />
+        <Text style={styles.letterCardDate}>{formatDate(letter.createdAt)}</Text>
+      </View>
+      <Text
+        style={styles.letterCardTitle}
+        numberOfLines={1}
+      >
+        {title ?? "제목 없음"}
+      </Text>
+      {excerpt ? (
+        <Text style={styles.letterCardExcerpt} numberOfLines={2}>
+          {excerpt}
+        </Text>
+      ) : null}
+      <View style={styles.letterCardBottom}>
+        <Feather name="user" size={11} color={Colors.zinc400} />
+        <Text style={styles.letterCardAuthor} numberOfLines={1}>
+          {displayAuthor}
+        </Text>
+      </View>
+    </ScalePressable>
+  );
+}
+
+// ─── Letter Carousel ──────────────────────────────────────────────────────────
+
+function LetterCarousel({
+  letters,
+  cardWidth,
+  isAnonymous,
+  onPressLetter,
+}: {
+  letters: SpaceLetter[];
+  cardWidth: number;
+  isAnonymous: boolean;
+  onPressLetter: (letter: SpaceLetter) => void;
+}) {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const listRef = useRef<FlatList>(null);
+
+  const handleScroll = useCallback((event: any) => {
+    const offset = event.nativeEvent.contentOffset.x;
+    const index = Math.round(offset / (cardWidth + 12));
+    setActiveIndex(Math.max(0, Math.min(index, letters.length - 1)));
+  }, [cardWidth, letters.length]);
+
+  return (
+    <View>
+      <FlatList
+        ref={listRef}
+        data={letters}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <LetterCard
+            letter={item}
+            cardWidth={cardWidth}
+            isAnonymous={isAnonymous}
+            onPress={() => onPressLetter(item)}
+          />
+        )}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.carouselContent}
+        ItemSeparatorComponent={() => <View style={{ width: 12 }} />}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        pagingEnabled={false}
+        snapToInterval={cardWidth + 12}
+        snapToAlignment="start"
+        decelerationRate="fast"
+      />
+      {letters.length > 1 && (
+        <View style={styles.dotRow}>
+          {letters.map((_, i) => (
+            <View
+              key={i}
+              style={[styles.dot, i === activeIndex ? styles.dotActive : styles.dotInactive]}
+            />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ─── Round Section ────────────────────────────────────────────────────────────
+
+function RoundSection({
   round,
   letters,
+  spaceStatus,
+  isOperator,
+  isAnonymous,
+  cardWidth,
+  onPressLetter,
+  onPressWriteOpening,
 }: {
   round: SpaceRound;
   letters: SpaceLetter[];
+  spaceStatus: string;
+  isOperator: boolean;
+  isAnonymous: boolean;
+  cardWidth: number;
+  onPressLetter: (letter: SpaceLetter) => void;
+  onPressWriteOpening: (round: SpaceRound) => void;
 }) {
-  const color = roundStatusColor(round.status);
-  const openingLetters = letters.filter((l) => l.letterType === "OPENING");
-  const centerLetters = letters.filter((l) => l.letterType === "CENTER");
-  const hasLetters = letters.length > 0;
+  const statusColor = roundStatusColor(round.status);
+  const isUpcoming = round.status === "UPCOMING";
+  const isSpaceRecruiting = spaceStatus === "RECRUITING";
+  const isSpaceArchived = spaceStatus === "ARCHIVED";
+
+  const hasOpeningLetter = letters.some((l) => l.letterType === "OPENING");
+
+  // Opening-letter CTA/notice: shown when active and opening letter is missing,
+  // regardless of whether other letter types (CENTER/REPLY) exist.
+  const openingArea: React.ReactNode =
+    !isUpcoming && !isSpaceRecruiting && !hasOpeningLetter && !isSpaceArchived
+      ? isOperator
+        ? (
+          <ScalePressable
+            style={styles.writeOpeningBtn}
+            onPress={() => onPressWriteOpening(round)}
+          >
+            <Feather name="plus" size={14} color={Colors.zinc600} />
+            <Text style={styles.writeOpeningBtnText}>여는 편지 작성</Text>
+          </ScalePressable>
+        )
+        : (
+          <View style={styles.preparingArea}>
+            <Text style={styles.preparingText}>여는 편지를 준비 중이에요</Text>
+          </View>
+        )
+      : null;
+
+  let letterArea: React.ReactNode;
+
+  if (isUpcoming) {
+    letterArea = (
+      <View style={styles.lockedArea}>
+        <Feather name="lock" size={20} color={Colors.zinc300} />
+        <Text style={styles.lockedText}>회차 시작 후 공개</Text>
+      </View>
+    );
+  } else if (isSpaceRecruiting) {
+    letterArea = (
+      <View style={styles.lockedArea}>
+        <Feather name="clock" size={20} color={Colors.zinc300} />
+        <Text style={styles.lockedText}>공간 시작 후 공개</Text>
+      </View>
+    );
+  } else if (letters.length > 0) {
+    letterArea = (
+      <LetterCarousel
+        letters={letters}
+        cardWidth={cardWidth}
+        isAnonymous={isAnonymous}
+        onPressLetter={onPressLetter}
+      />
+    );
+  } else {
+    letterArea = null;
+  }
 
   return (
-    <View style={styles.roundCard}>
-      <View style={styles.roundCardTop}>
-        <View style={[styles.roundStatusDot, { backgroundColor: color }]} />
-        <Text style={[styles.roundStatusText, { color }]}>
-          {roundStatusLabel(round.status)}
-        </Text>
-      </View>
-      <Text style={styles.roundNumber}>{round.roundNumber}회차</Text>
-      {round.title ? (
-        <Text style={styles.roundTitle} numberOfLines={1}>
-          {round.title}
-        </Text>
-      ) : (
-        <Text style={styles.roundTitleEmpty} numberOfLines={1}>
-          제목 없음
-        </Text>
-      )}
-      {/* Letter cards */}
-      {hasLetters ? (
-        <View style={styles.letterChipRow}>
-          {openingLetters.length > 0 && <LetterChip type="OPENING" />}
-          {centerLetters.length > 0 && (
-            <View style={[styles.letterChip, styles.letterChipCenter]}>
-              <Feather name="edit-3" size={9} color={Colors.zinc500} />
-              <Text style={[styles.letterChipText, { color: Colors.zinc500 }]}>
-                센터 {centerLetters.length}
-              </Text>
-            </View>
-          )}
+    <View style={styles.roundSection}>
+      <View style={styles.roundSectionHeader}>
+        <View style={styles.roundSectionLeft}>
+          <View style={[styles.roundStatusDot, { backgroundColor: statusColor }]} />
+          <Text style={[styles.roundStatusText, { color: statusColor }]}>
+            {roundStatusLabel(round.status)}
+          </Text>
+          <Text style={styles.roundNumberText}>{round.roundNumber}회차</Text>
+          {round.title ? (
+            <Text style={styles.roundTitleText} numberOfLines={1}>
+              {round.title}
+            </Text>
+          ) : null}
         </View>
-      ) : round.status === "UPCOMING" ? (
-        <Text style={styles.letterPlaceholder}>편지 준비 중</Text>
-      ) : round.status === "ACTIVE" ? (
-        <Text style={styles.letterPlaceholder}>편지 작성 가능</Text>
-      ) : (
-        <Text style={styles.letterPlaceholder}>편지 없음</Text>
-      )}
+        {!isUpcoming && !isSpaceRecruiting && letters.length > 0 && (
+          <Text style={styles.roundLetterCount}>{letters.length}편</Text>
+        )}
+      </View>
+      {round.description ? (
+        <Text style={styles.roundDescription} numberOfLines={2}>
+          {round.description}
+        </Text>
+      ) : null}
+      {openingArea ? (
+        <View style={styles.roundOpeningArea}>{openingArea}</View>
+      ) : null}
+      {letterArea ? (
+        <View style={styles.roundLetterArea}>{letterArea}</View>
+      ) : null}
+      {!openingArea && !letterArea && !isUpcoming && !isSpaceRecruiting ? (
+        <View style={styles.preparingArea}>
+          <Text style={styles.preparingText}>편지 없음</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -157,11 +342,13 @@ function CodeRequestItem({
   onApprove,
   onReject,
   processing,
+  recruitmentClosed,
 }: {
   item: SpaceCodeRequestWithRequester;
   onApprove: () => void;
   onReject: () => void;
   processing: boolean;
+  recruitmentClosed: boolean;
 }) {
   return (
     <View style={styles.codeRequestItem}>
@@ -187,16 +374,81 @@ function CodeRequestItem({
           <Text style={styles.rejectBtnText}>거절</Text>
         </ScalePressable>
         <ScalePressable
-          style={[styles.actionBtn, styles.approveBtn]}
-          onPress={onApprove}
-          disabled={processing}
+          style={[
+            styles.actionBtn,
+            styles.approveBtn,
+            recruitmentClosed && styles.approveBtnDisabled,
+          ]}
+          onPress={recruitmentClosed ? undefined : onApprove}
+          disabled={processing || recruitmentClosed}
         >
           <Text style={styles.approveBtnText}>
-            {processing ? "처리 중" : "승인"}
+            {processing ? "처리 중" : recruitmentClosed ? "마감" : "승인"}
           </Text>
         </ScalePressable>
       </View>
     </View>
+  );
+}
+
+// ─── Android Rejection Reason Modal ──────────────────────────────────────────
+
+function RejectReasonModal({
+  visible,
+  onCancel,
+  onConfirm,
+}: {
+  visible: boolean;
+  onCancel: () => void;
+  onConfirm: (reason: string) => void;
+}) {
+  const [reason, setReason] = useState("");
+  const insets = useSafeAreaInsets();
+
+  const handleConfirm = () => {
+    const trimmed = reason.trim();
+    if (!trimmed) {
+      Alert.alert("알림", "거절 사유를 입력해주세요.");
+      return;
+    }
+    onConfirm(trimmed);
+    setReason("");
+  };
+
+  const handleCancel = () => {
+    setReason("");
+    onCancel();
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleCancel}>
+      <View style={modalStyles.backdrop}>
+        <View style={[modalStyles.sheet, { paddingBottom: insets.bottom + 16 }]}>
+          <Text style={modalStyles.title}>거절 사유 입력</Text>
+          <Text style={modalStyles.subtitle}>
+            사유를 입력해주세요. 현재는 운영자에게만 기록됩니다.
+          </Text>
+          <TextInput
+            style={modalStyles.input}
+            value={reason}
+            onChangeText={setReason}
+            placeholder="거절 사유를 입력하세요"
+            placeholderTextColor={Colors.zinc400}
+            multiline
+            autoFocus
+            maxLength={200}
+          />
+          <View style={modalStyles.btnRow}>
+            <ScalePressable style={[modalStyles.btn, modalStyles.cancelBtn]} onPress={handleCancel}>
+              <Text style={modalStyles.cancelBtnText}>취소</Text>
+            </ScalePressable>
+            <ScalePressable style={[modalStyles.btn, modalStyles.confirmBtn]} onPress={handleConfirm}>
+              <Text style={modalStyles.confirmBtnText}>거절</Text>
+            </ScalePressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -223,21 +475,33 @@ function DescriptionSection({
     setIsEditing(true);
   }, [space.description]);
 
-  const handleSave = useCallback(async () => {
-    setSaving(true);
-    try {
-      await updateSpace.mutateAsync({
-        id: space.id,
-        data: { description: draft.trim() || null },
-      });
-      setIsEditing(false);
-      onSaved();
-    } catch {
-      Alert.alert("오류", "저장에 실패했어요. 다시 시도해주세요.");
-    } finally {
-      setSaving(false);
-    }
-  }, [space.id, draft, updateSpace, userId, onSaved]);
+  const handleSave = useCallback(() => {
+    Alert.alert(
+      "설명 변경",
+      "저장하면 현재 참여자 모두에게 변경된 설명이 바로 보입니다.",
+      [
+        { text: "취소", style: "cancel" },
+        {
+          text: "저장",
+          onPress: async () => {
+            setSaving(true);
+            try {
+              await updateSpace.mutateAsync({
+                id: space.id,
+                data: { description: draft.trim() || null },
+              });
+              setIsEditing(false);
+              onSaved();
+            } catch {
+              Alert.alert("오류", "저장에 실패했어요. 다시 시도해주세요.");
+            } finally {
+              setSaving(false);
+            }
+          },
+        },
+      ],
+    );
+  }, [space.id, draft, updateSpace, onSaved]);
 
   if (isEditing) {
     return (
@@ -307,10 +571,14 @@ export default function SpaceDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { userId } = useUser();
   const queryClient = useQueryClient();
+  const { width: screenWidth } = useWindowDimensions();
 
-  const [processingRequestId, setProcessingRequestId] = useState<string | null>(
-    null,
-  );
+  // 28 = carousel paddingHorizontal (14) × 2 so cards fill the visible carousel
+  // area without overflowing the section's horizontal bounds.
+  const cardWidth = screenWidth - Spacing.screenPx * 2 - 28;
+
+  const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
+  const [rejectTargetId, setRejectTargetId] = useState<string | null>(null);
 
   const joinContextQuery = useGetSpaceJoinContext(
     id,
@@ -330,6 +598,14 @@ export default function SpaceDetailScreen() {
   const space = joinContext?.space;
   const myParticipation = joinContext?.participation;
   const isOperator = myParticipation?.role === "OPERATOR";
+  const isArchived = space?.status === "ARCHIVED";
+  const isRecruiting = space?.status === "RECRUITING";
+
+  // Recruitment is closed when the space is no longer in RECRUITING status
+  // OR when the participant cap has been reached.
+  const recruitmentClosed =
+    space?.status !== "RECRUITING" ||
+    !!(space?.maxParticipants && space.participantCount >= space.maxParticipants);
 
   const codeRequestsQuery = useListSpaceCodeRequests(
     id,
@@ -345,7 +621,6 @@ export default function SpaceDetailScreen() {
     codeRequestsQuery.data ?? []
   ) as SpaceCodeRequestWithRequester[];
 
-  // Group letters by round id for O(1) lookup in carousel
   const lettersByRound = useMemo<Record<string, SpaceLetter[]>>(() => {
     const map: Record<string, SpaceLetter[]> = {};
     for (const letter of letters) {
@@ -395,24 +670,29 @@ export default function SpaceDetailScreen() {
         setProcessingRequestId(null);
       }
     },
-    [processingRequestId, updateCodeRequest, id, userId, codeRequestsQuery],
+    [processingRequestId, updateCodeRequest, id, codeRequestsQuery],
   );
 
   const handleReject = useCallback(
     (requestId: string) => {
       if (processingRequestId) return;
-      Alert.alert("참여 거절", "이 코드 요청을 거절하시겠어요?", [
-        { text: "취소", style: "cancel" },
-        {
-          text: "거절",
-          style: "destructive",
-          onPress: async () => {
+      if (Platform.OS === "ios") {
+        Alert.prompt(
+          "거절 사유",
+          "사유를 입력해주세요. 현재는 운영자에게만 기록됩니다.",
+          async (reason) => {
+            if (reason === undefined) return;
+            const trimmed = reason.trim();
+            if (!trimmed) {
+              Alert.alert("알림", "거절 사유를 입력해주세요.");
+              return;
+            }
             setProcessingRequestId(requestId);
             try {
               await updateCodeRequest.mutateAsync({
                 id,
                 requestId,
-                data: { status: "REJECTED" },
+                data: { status: "REJECTED", rejectionReason: trimmed },
               });
               await codeRequestsQuery.refetch();
             } catch {
@@ -421,10 +701,56 @@ export default function SpaceDetailScreen() {
               setProcessingRequestId(null);
             }
           },
-        },
-      ]);
+          "plain-text",
+        );
+      } else {
+        setRejectTargetId(requestId);
+      }
     },
-    [processingRequestId, updateCodeRequest, id, userId, codeRequestsQuery],
+    [processingRequestId, updateCodeRequest, id, codeRequestsQuery],
+  );
+
+  const handleRejectConfirm = useCallback(
+    async (reason: string) => {
+      const requestId = rejectTargetId;
+      if (!requestId) return;
+      setRejectTargetId(null);
+      setProcessingRequestId(requestId);
+      try {
+        await updateCodeRequest.mutateAsync({
+          id,
+          requestId,
+          data: { status: "REJECTED", rejectionReason: reason },
+        });
+        await codeRequestsQuery.refetch();
+      } catch {
+        Alert.alert("오류", "거절에 실패했어요. 다시 시도해주세요.");
+      } finally {
+        setProcessingRequestId(null);
+      }
+    },
+    [rejectTargetId, updateCodeRequest, id, codeRequestsQuery],
+  );
+
+  const handlePressLetter = useCallback(
+    (letter: SpaceLetter) => {
+      if (!letter.sourceArticleId) return;
+      router.push({
+        pathname: "/read" as never,
+        params: { articleId: letter.sourceArticleId },
+      });
+    },
+    [router],
+  );
+
+  const handlePressWriteOpening = useCallback(
+    (_round: SpaceRound) => {
+      router.push({
+        pathname: "/of-space-schedule-send" as never,
+        params: { id },
+      });
+    },
+    [router, id],
   );
 
   // ─── Loading ────────────────────────────────────────────────────────────────
@@ -498,6 +824,13 @@ export default function SpaceDetailScreen() {
   // ─── Main content ───────────────────────────────────────────────────────────
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* Android rejection reason modal */}
+      <RejectReasonModal
+        visible={!!rejectTargetId}
+        onCancel={() => setRejectTargetId(null)}
+        onConfirm={handleRejectConfirm}
+      />
+
       {/* Header */}
       <View style={styles.header}>
         <ScalePressable onPress={() => router.back()} hitSlop={12}>
@@ -529,6 +862,13 @@ export default function SpaceDetailScreen() {
                 {statusText}
               </Text>
             </View>
+            {isArchived && (
+              <View style={[styles.statusBadge, { borderColor: Colors.zinc300 }]}>
+                <Text style={[styles.statusBadgeText, { color: Colors.zinc400 }]}>
+                  종료됨
+                </Text>
+              </View>
+            )}
             <Text style={styles.roleBadge}>
               {isOperator ? "운영자" : "참여자"}
             </Text>
@@ -553,7 +893,7 @@ export default function SpaceDetailScreen() {
             <Feather name="users" size={13} color={Colors.zinc400} />
             <Text style={styles.metaText}>
               {space.participantCount}
-              {space.maxParticipants ? `/${space.maxParticipants}` : ""}명
+              {space.maxParticipants ? `/${space.maxParticipants}명` : "명"}
             </Text>
             <View style={styles.metaDot} />
             <Feather name="repeat" size={13} color={Colors.zinc400} />
@@ -561,9 +901,11 @@ export default function SpaceDetailScreen() {
           </View>
         </View>
 
-        {/* ── Round carousel ── */}
+        {/* ── Rounds sections ── */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>회차</Text>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionLabel}>회차</Text>
+          </View>
           {roundsQuery.isLoading ? (
             <View style={styles.sectionLoading}>
               <ActivityIndicator size="small" color={Colors.zinc400} />
@@ -571,27 +913,25 @@ export default function SpaceDetailScreen() {
           ) : rounds.length === 0 ? (
             <View style={styles.emptySection}>
               <Text style={styles.emptySectionText}>
-                {isOperator
-                  ? "아직 회차가 없어요"
-                  : "진행 중인 회차가 없어요"}
+                {isOperator ? "아직 회차가 없어요" : "진행 중인 회차가 없어요"}
               </Text>
             </View>
           ) : (
-            <FlatList
-              data={rounds}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <RoundCard
-                  round={item}
-                  letters={lettersByRound[item.id] ?? []}
+            <View style={styles.roundsList}>
+              {rounds.map((round) => (
+                <RoundSection
+                  key={round.id}
+                  round={round}
+                  letters={lettersByRound[round.id] ?? []}
+                  spaceStatus={space.status}
+                  isOperator={isOperator}
+                  isAnonymous={space.isAnonymous}
+                  cardWidth={cardWidth}
+                  onPressLetter={handlePressLetter}
+                  onPressWriteOpening={handlePressWriteOpening}
                 />
-              )}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.roundsListContent}
-              ItemSeparatorComponent={() => <View style={{ width: 10 }} />}
-              scrollEnabled
-            />
+              ))}
+            </View>
           )}
         </View>
 
@@ -606,6 +946,12 @@ export default function SpaceDetailScreen() {
                 </View>
               )}
             </View>
+            {recruitmentClosed && (
+              <View style={styles.recruitmentClosedBanner}>
+                <Feather name="slash" size={13} color={Colors.zinc500} />
+                <Text style={styles.recruitmentClosedText}>모집이 마감되었어요</Text>
+              </View>
+            )}
             {codeRequestsQuery.isLoading ? (
               <View style={styles.sectionLoading}>
                 <ActivityIndicator size="small" color={Colors.zinc400} />
@@ -625,6 +971,7 @@ export default function SpaceDetailScreen() {
                     onApprove={() => handleApprove(item.codeRequest.id)}
                     onReject={() => handleReject(item.codeRequest.id)}
                     processing={processingRequestId === item.codeRequest.id}
+                    recruitmentClosed={recruitmentClosed}
                   />
                 ))}
               </View>
@@ -635,7 +982,9 @@ export default function SpaceDetailScreen() {
         {/* ── Invite code (operator only) ── */}
         {isOperator && space.inviteCode && (
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>초대 코드</Text>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionLabel}>초대 코드</Text>
+            </View>
             <View style={styles.inviteCodeCard}>
               <Text style={styles.inviteCode}>{space.inviteCode}</Text>
               <Text style={styles.inviteCodeHint}>
@@ -648,7 +997,9 @@ export default function SpaceDetailScreen() {
         {/* ── Operator management actions ── */}
         {isOperator && (
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>운영 관리</Text>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionLabel}>운영 관리</Text>
+            </View>
             <View style={styles.operatorActions}>
               <ScalePressable
                 style={styles.operatorActionRow}
@@ -668,27 +1019,30 @@ export default function SpaceDetailScreen() {
                 <Feather name="chevron-right" size={16} color={Colors.zinc400} />
               </ScalePressable>
 
-              <View style={styles.operatorDivider} />
+              {!isArchived && (
+                <>
+                  <View style={styles.operatorDivider} />
+                  <ScalePressable
+                    style={styles.operatorActionRow}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/of-space-schedule-send" as never,
+                        params: { id },
+                      })
+                    }
+                  >
+                    <View style={styles.operatorActionLeft}>
+                      <View style={styles.operatorActionIcon}>
+                        <Feather name="send" size={15} color={Colors.zinc600} />
+                      </View>
+                      <Text style={styles.operatorActionText}>글 예약 발송</Text>
+                    </View>
+                    <Feather name="chevron-right" size={16} color={Colors.zinc400} />
+                  </ScalePressable>
+                </>
+              )}
 
-              <ScalePressable
-                style={styles.operatorActionRow}
-                onPress={() =>
-                  router.push({
-                    pathname: "/of-space-schedule-send" as never,
-                    params: { id },
-                  })
-                }
-              >
-                <View style={styles.operatorActionLeft}>
-                  <View style={styles.operatorActionIcon}>
-                    <Feather name="send" size={15} color={Colors.zinc600} />
-                  </View>
-                  <Text style={styles.operatorActionText}>글 예약 발송</Text>
-                </View>
-                <Feather name="chevron-right" size={16} color={Colors.zinc400} />
-              </ScalePressable>
-
-              {space.status !== "ARCHIVED" && (
+              {!isArchived && (
                 <>
                   <View style={styles.operatorDivider} />
                   <ScalePressable
@@ -837,8 +1191,6 @@ const styles = StyleSheet.create({
     color: Colors.zinc900,
     lineHeight: 26,
   },
-
-  // ─── Description ───────────────────────────────────────────────────────────
   descRow: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -904,8 +1256,6 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontWeight: "600",
   },
-
-  // ─── Meta row ──────────────────────────────────────────────────────────────
   metaRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -943,7 +1293,6 @@ const styles = StyleSheet.create({
     color: Colors.zinc400,
     textTransform: "uppercase",
     letterSpacing: 0.8,
-    paddingHorizontal: Spacing.screenPx,
   },
   sectionLoading: {
     paddingVertical: 20,
@@ -978,23 +1327,32 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  // ─── Round cards ───────────────────────────────────────────────────────────
-  roundsListContent: {
+  // ─── Rounds list ───────────────────────────────────────────────────────────
+  roundsList: {
+    gap: 16,
     paddingHorizontal: Spacing.screenPx,
   },
-  roundCard: {
-    width: 130,
+  roundSection: {
+    gap: 10,
     backgroundColor: Colors.zinc50,
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.zinc200,
-    padding: 14,
-    gap: 6,
+    paddingTop: 14,
+    paddingBottom: 14,
+    overflow: "hidden",
   },
-  roundCardTop: {
+  roundSectionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+  },
+  roundSectionLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flex: 1,
   },
   roundStatusDot: {
     width: 6,
@@ -1006,29 +1364,111 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
   },
-  roundNumber: {
+  roundNumberText: {
     ...Typography.bodySemiBold,
-    fontSize: 16,
-    color: Colors.zinc900,
+    fontSize: 14,
+    color: Colors.zinc800,
   },
-  roundTitle: {
+  roundTitleText: {
     ...Typography.body,
-    fontSize: 12,
+    fontSize: 13,
     color: Colors.zinc500,
-    lineHeight: 16,
+    flex: 1,
   },
-  roundTitleEmpty: {
+  roundLetterCount: {
+    ...Typography.caption,
+    fontSize: 11,
+    color: Colors.zinc400,
+  },
+  roundDescription: {
     ...Typography.body,
     fontSize: 12,
-    color: Colors.zinc300,
+    color: Colors.zinc400,
+    lineHeight: 17,
+    paddingHorizontal: 14,
+    marginTop: -4,
   },
-  letterChipRow: {
+  roundOpeningArea: {
+    marginTop: 2,
+  },
+  roundLetterArea: {
+    marginTop: 2,
+  },
+
+  // ─── Letter carousel ────────────────────────────────────────────────────────
+  carouselContent: {
+    paddingHorizontal: 14,
+  },
+  dotRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 4,
-    marginTop: 4,
+    justifyContent: "center",
+    gap: 5,
+    marginTop: 8,
+    paddingHorizontal: 14,
   },
-  letterChip: {
+  dot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+  },
+  dotActive: {
+    backgroundColor: Colors.zinc600,
+  },
+  dotInactive: {
+    backgroundColor: Colors.zinc200,
+  },
+
+  // ─── Letter card ────────────────────────────────────────────────────────────
+  letterCard: {
+    backgroundColor: Colors.white,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.zinc200,
+    padding: 14,
+    gap: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  letterCardTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  letterCardDate: {
+    ...Typography.caption,
+    fontSize: 11,
+    color: Colors.zinc400,
+  },
+  letterCardTitle: {
+    ...Typography.bodySemiBold,
+    fontSize: 15,
+    color: Colors.zinc900,
+    lineHeight: 20,
+  },
+  letterCardExcerpt: {
+    ...Typography.body,
+    fontSize: 13,
+    color: Colors.zinc500,
+    lineHeight: 18,
+  },
+  letterCardBottom: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 2,
+  },
+  letterCardAuthor: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc400,
+    flex: 1,
+  },
+
+  // ─── Letter type badge ──────────────────────────────────────────────────────
+  letterTypeBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
@@ -1036,22 +1476,79 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
-  letterChipOpening: {
+  letterTypeBadgeOpening: {
     backgroundColor: Colors.noticeAccentSoft,
   },
-  letterChipCenter: {
+  letterTypeBadgeCenter: {
     backgroundColor: Colors.zinc100,
   },
-  letterChipText: {
+  letterTypeBadgeText: {
     ...Typography.caption,
     fontSize: 10,
     fontWeight: "600",
   },
-  letterPlaceholder: {
-    ...Typography.caption,
-    fontSize: 11,
-    color: Colors.zinc300,
-    marginTop: 4,
+
+  // ─── Locked / preparing areas ───────────────────────────────────────────────
+  lockedArea: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 20,
+    gap: 6,
+    marginHorizontal: 14,
+    backgroundColor: Colors.zinc100,
+    borderRadius: 10,
+  },
+  lockedText: {
+    ...Typography.body,
+    fontSize: 13,
+    color: Colors.zinc400,
+  },
+  preparingArea: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
+    marginHorizontal: 14,
+  },
+  preparingText: {
+    ...Typography.body,
+    fontSize: 13,
+    color: Colors.zinc400,
+  },
+  writeOpeningBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    marginHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.zinc300,
+    borderStyle: "dashed",
+    backgroundColor: Colors.white,
+  },
+  writeOpeningBtnText: {
+    ...Typography.body,
+    fontSize: 13,
+    color: Colors.zinc600,
+    fontWeight: "600",
+  },
+
+  // ─── Recruitment closed banner ──────────────────────────────────────────────
+  recruitmentClosedBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginHorizontal: Spacing.screenPx,
+    backgroundColor: Colors.zinc100,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  recruitmentClosedText: {
+    ...Typography.body,
+    fontSize: 13,
+    color: Colors.zinc500,
   },
 
   // ─── Code request items ────────────────────────────────────────────────────
@@ -1121,6 +1618,9 @@ const styles = StyleSheet.create({
   approveBtn: {
     backgroundColor: Colors.zinc900,
   },
+  approveBtnDisabled: {
+    backgroundColor: Colors.zinc300,
+  },
   approveBtnText: {
     ...Typography.caption,
     fontSize: 13,
@@ -1189,5 +1689,74 @@ const styles = StyleSheet.create({
     ...Typography.caption,
     fontSize: 12,
     color: Colors.zinc400,
+  },
+});
+
+// ─── Modal Styles ─────────────────────────────────────────────────────────────
+
+const modalStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    backgroundColor: Colors.white,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 24,
+    paddingTop: 20,
+    gap: 12,
+  },
+  title: {
+    ...Typography.bodySemiBold,
+    fontSize: 17,
+    color: Colors.zinc900,
+  },
+  subtitle: {
+    ...Typography.body,
+    fontSize: 13,
+    color: Colors.zinc500,
+    lineHeight: 18,
+    marginTop: -4,
+  },
+  input: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc800,
+    borderWidth: 1,
+    borderColor: Colors.zinc300,
+    borderRadius: 10,
+    padding: 12,
+    minHeight: 80,
+    textAlignVertical: "top",
+    backgroundColor: Colors.zinc50,
+  },
+  btnRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 4,
+  },
+  btn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  cancelBtn: {
+    backgroundColor: Colors.zinc100,
+  },
+  cancelBtnText: {
+    ...Typography.bodySemiBold,
+    fontSize: 15,
+    color: Colors.zinc600,
+  },
+  confirmBtn: {
+    backgroundColor: Colors.zinc900,
+  },
+  confirmBtnText: {
+    ...Typography.bodySemiBold,
+    fontSize: 15,
+    color: Colors.white,
   },
 });

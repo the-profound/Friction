@@ -898,6 +898,11 @@ export interface SpaceLetter {
   isPublic: boolean;
   createdAt: string;
   updatedAt: string;
+  articleTitle?: string | null;
+  articleExcerpt?: string | null;
+  authorNickname?: string | null;
+  /** Pseudonymous display name for anonymous spaces (e.g. "참여자 1"). Null in non-anonymous spaces. */
+  displayName?: string | null;
 }
 
 export type CreateSpaceLetterBodyLetterType =

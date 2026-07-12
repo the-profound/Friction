@@ -530,12 +530,89 @@ router.get("/spaces/:id/join-context", async (req, res) => {
   });
 });
 
-router.get("/spaces/:id/letters", async (req, res) => {
+router.get("/spaces/:id/letters", requireAuth, async (req, res) => {
+  const callerId = req.user!.id;
+  const [callerParticipation] = await db
+    .select()
+    .from(spaceParticipationsTable)
+    .where(
+      and(
+        eq(spaceParticipationsTable.spaceId, req.params.id),
+        eq(spaceParticipationsTable.userId, callerId),
+        eq(spaceParticipationsTable.status, "APPROVED"),
+      ),
+    )
+    .limit(1);
+  if (!callerParticipation) {
+    res.status(403).json({ error: "Only approved participants can view letters" });
+    return;
+  }
   const letters = await db
     .select()
     .from(spaceLettersTable)
     .where(eq(spaceLettersTable.spaceId, req.params.id));
-  res.json(letters);
+  if (letters.length === 0) {
+    res.json([]);
+    return;
+  }
+  const articleIds = [...new Set(letters.map((l) => l.sourceArticleId).filter(Boolean) as string[])];
+  const authorIds = [...new Set(letters.map((l) => l.authorId))];
+  const [articles, authors] = await Promise.all([
+    articleIds.length > 0
+      ? db
+          .select({ id: articlesTable.id, title: articlesTable.title, content: articlesTable.content })
+          .from(articlesTable)
+          .where(inArray(articlesTable.id, articleIds))
+      : Promise.resolve([]),
+    authorIds.length > 0
+      ? db
+          .select({ id: usersTable.id, nickname: usersTable.nickname })
+          .from(usersTable)
+          .where(inArray(usersTable.id, authorIds))
+      : Promise.resolve([]),
+  ]);
+  const articleMap = new Map(articles.map((a) => [a.id, a]));
+  const authorMap = new Map(authors.map((u) => [u.id, u.nickname]));
+
+  // For anonymous spaces: derive a stable pseudonymous display name per author
+  // based on the order they joined the space (earliest joiner = "참여자 1", etc.)
+  const [space] = await db
+    .select({ isAnonymous: spacesTable.isAnonymous })
+    .from(spacesTable)
+    .where(eq(spacesTable.id, req.params.id))
+    .limit(1);
+
+  let displayNameMap = new Map<string, string>();
+  if (space?.isAnonymous) {
+    const allAuthorIds = [...new Set(letters.map((l) => l.authorId))];
+    const participations = await db
+      .select({ userId: spaceParticipationsTable.userId, createdAt: spaceParticipationsTable.createdAt })
+      .from(spaceParticipationsTable)
+      .where(
+        and(
+          eq(spaceParticipationsTable.spaceId, req.params.id),
+          inArray(spaceParticipationsTable.userId, allAuthorIds),
+        ),
+      )
+      .orderBy(spaceParticipationsTable.createdAt);
+    participations.forEach((p, i) => {
+      displayNameMap.set(p.userId, `참여자 ${i + 1}`);
+    });
+  }
+
+  const result = letters.map((letter) => {
+    const article = letter.sourceArticleId ? (articleMap.get(letter.sourceArticleId) ?? null) : null;
+    const rawContent = article?.content ?? null;
+    const articleExcerpt = rawContent ? rawContent.replace(/[#*_`>\-~[\]()]/g, "").trim().slice(0, 100) : null;
+    return {
+      ...letter,
+      articleTitle: article?.title ?? null,
+      articleExcerpt,
+      authorNickname: authorMap.get(letter.authorId) ?? null,
+      displayName: displayNameMap.get(letter.authorId) ?? null,
+    };
+  });
+  res.json(result);
 });
 
 router.post("/spaces/:id/letters", async (req, res) => {

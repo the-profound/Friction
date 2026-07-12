@@ -3692,6 +3692,19 @@ components:
         updatedAt:
           type: string
           format: date-time
+        articleTitle:
+          type: string
+          nullable: true
+        articleExcerpt:
+          type: string
+          nullable: true
+        authorNickname:
+          type: string
+          nullable: true
+        displayName:
+          type: string
+          nullable: true
+          description: Pseudonymous display name for anonymous spaces (e.g. "참여자 1"). Null in non-anonymous spaces.
       required: [id, spaceId, authorId, letterType, isPublic, createdAt, updatedAt]
 
     CreateSpaceLetterBody:
