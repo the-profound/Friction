@@ -1,24 +1,30 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  FlatList,
   Alert,
   TextInput,
   ActivityIndicator,
   RefreshControl,
   Platform,
   Modal,
-  useWindowDimensions,
+  Animated,
+  PanResponder,
+  Dimensions,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
-import { Colors, Typography, Spacing } from "@/constants/tokens";
+import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
+import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
+import DotIndicator from "@/components/DotIndicator/DotIndicator";
+import CardSelectOverlay, { type OriginLayout, type ChainArticleMeta } from "@/components/CardSelectOverlay/CardSelectOverlay";
 import { useUser } from "@/contexts/UserContext";
 import {
   useGetSpaceJoinContext,
@@ -29,13 +35,31 @@ import {
   useUpdateSpaceCodeRequest,
   useUpdateSpace,
   ListSpaceCodeRequestsStatus,
+  getArticle,
+  getGetArticleQueryKey,
 } from "@workspace/api-client-react";
 import type {
   SpaceRound,
   SpaceLetter,
   SpaceCodeRequestWithRequester,
   SpaceWithCreatorInfo,
+  Article,
 } from "@workspace/api-client-react";
+
+// ─── Carousel constants (mirrors index.tsx) ───────────────────────────────────
+
+const { width: SCREEN_W } = Dimensions.get("window");
+const CARD_W = Sizing.cardSlotW;
+const CARD_H = Sizing.cardH;
+const CARD_GAP = Spacing.cardGap;
+const SNAP_INTERVAL = CARD_W + CARD_GAP;
+const SNAP_THRESHOLD = 48;
+const FLING_VELOCITY = 0.5;
+const CENTER_OFFSET = (SCREEN_W - CARD_W) / 2;
+
+function getBaseX(idx: number) {
+  return -(idx * SNAP_INTERVAL) + CENTER_OFFSET;
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -65,158 +89,216 @@ function roundStatusColor(status: string): string {
   return Colors.zinc300;
 }
 
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
-}
+// ─── Space Carousel ───────────────────────────────────────────────────────────
+// Mirrors the CarouselGroup pattern from the inbox (index.tsx):
+//   Web  → PanResponder + Animated translate
+//   Native → horizontal ScrollView with snap
 
-// ─── Letter type badge ────────────────────────────────────────────────────────
-
-const LETTER_TYPE_LABEL: Record<string, string> = {
-  OPENING: "오프닝",
-  CENTER: "센터",
-  REPLY: "답장",
-};
-
-function LetterTypeBadge({ type }: { type: string }) {
-  const isOpening = type === "OPENING";
-  return (
-    <View
-      style={[
-        styles.letterTypeBadge,
-        isOpening ? styles.letterTypeBadgeOpening : styles.letterTypeBadgeCenter,
-      ]}
-    >
-      <Feather
-        name={isOpening ? "mail" : "edit-3"}
-        size={9}
-        color={isOpening ? Colors.noticeAccent : Colors.zinc500}
-      />
-      <Text
-        style={[
-          styles.letterTypeBadgeText,
-          { color: isOpening ? Colors.noticeAccent : Colors.zinc500 },
-        ]}
-      >
-        {LETTER_TYPE_LABEL[type] ?? type}
-      </Text>
-    </View>
-  );
-}
-
-// ─── Letter Card ──────────────────────────────────────────────────────────────
-
-function LetterCard({
-  letter,
-  cardWidth,
-  isAnonymous,
-  onPress,
-}: {
-  letter: SpaceLetter;
-  cardWidth: number;
-  isAnonymous: boolean;
-  onPress: () => void;
-}) {
-  const title = (letter as any).articleTitle as string | null;
-  const excerpt = (letter as any).articleExcerpt as string | null;
-  const authorNickname = (letter as any).authorNickname as string | null;
-  const displayName = (letter as any).displayName as string | null;
-  // In anonymous spaces use displayName (stable pseudonym) if available,
-  // fall back to "익명". In non-anonymous spaces show the real nickname.
-  const displayAuthor = isAnonymous
-    ? (displayName ?? "익명")
-    : (authorNickname ?? "알 수 없음");
-
-  return (
-    <ScalePressable
-      style={[styles.letterCard, { width: cardWidth }]}
-      onPress={onPress}
-    >
-      <View style={styles.letterCardTop}>
-        <LetterTypeBadge type={letter.letterType} />
-        <Text style={styles.letterCardDate}>{formatDate(letter.createdAt)}</Text>
-      </View>
-      <Text
-        style={styles.letterCardTitle}
-        numberOfLines={1}
-      >
-        {title ?? "제목 없음"}
-      </Text>
-      {excerpt ? (
-        <Text style={styles.letterCardExcerpt} numberOfLines={2}>
-          {excerpt}
-        </Text>
-      ) : null}
-      <View style={styles.letterCardBottom}>
-        <Feather name="user" size={11} color={Colors.zinc400} />
-        <Text style={styles.letterCardAuthor} numberOfLines={1}>
-          {displayAuthor}
-        </Text>
-      </View>
-    </ScalePressable>
-  );
-}
-
-// ─── Letter Carousel ──────────────────────────────────────────────────────────
-
-function LetterCarousel({
+function SpaceCarousel({
   letters,
-  cardWidth,
   isAnonymous,
-  onPressLetter,
+  onCardPress,
 }: {
   letters: SpaceLetter[];
-  cardWidth: number;
   isAnonymous: boolean;
-  onPressLetter: (letter: SpaceLetter) => void;
+  onCardPress: (letter: SpaceLetter, layout: OriginLayout) => void;
 }) {
+  const itemCount = letters.length;
   const [activeIndex, setActiveIndex] = useState(0);
-  const listRef = useRef<FlatList>(null);
 
-  const handleScroll = useCallback((event: any) => {
-    const offset = event.nativeEvent.contentOffset.x;
-    const index = Math.round(offset / (cardWidth + 12));
-    setActiveIndex(Math.max(0, Math.min(index, letters.length - 1)));
-  }, [cardWidth, letters.length]);
+  const cardSlotRefs = useRef<(View | null)[]>([]);
+
+  const activeIndexRef = useRef(0);
+  const itemCountRef = useRef(itemCount);
+  const translateX = useRef(new Animated.Value(getBaseX(0))).current;
+  const swipedRef = useRef(false);
+
+  useEffect(() => {
+    itemCountRef.current = itemCount;
+    const clamped = Math.min(activeIndexRef.current, itemCount - 1);
+    if (clamped !== activeIndexRef.current) {
+      activeIndexRef.current = clamped;
+      setActiveIndex(clamped);
+      translateX.setValue(getBaseX(clamped));
+    }
+  }, [itemCount, translateX]);
+
+  const snapToRef = useRef((_idx: number) => {});
+  snapToRef.current = (idx: number) => {
+    const clamped = Math.max(0, Math.min(idx, itemCountRef.current - 1));
+    activeIndexRef.current = clamped;
+    setActiveIndex(clamped);
+    Animated.spring(translateX, {
+      toValue: getBaseX(clamped),
+      useNativeDriver: false,
+      overshootClamping: true,
+      tension: 100,
+      friction: 20,
+    }).start();
+  };
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => {
+        swipedRef.current = false;
+        return false;
+      },
+      onMoveShouldSetPanResponder: (_, g) =>
+        itemCountRef.current > 1 &&
+        Math.abs(g.dx) > Math.abs(g.dy) &&
+        Math.abs(g.dx) > 5,
+      onPanResponderGrant: () => {
+        translateX.setValue(getBaseX(activeIndexRef.current));
+      },
+      onPanResponderMove: (_, g) => {
+        if (Math.abs(g.dx) > 15) {
+          swipedRef.current = true;
+        }
+        const baseX = getBaseX(activeIndexRef.current);
+        const raw = baseX + g.dx;
+        const maxX = getBaseX(0);
+        const minX = getBaseX(itemCountRef.current - 1);
+        const rubber =
+          raw > maxX
+            ? maxX + (raw - maxX) * 0.3
+            : raw < minX
+              ? minX + (raw - minX) * 0.3
+              : raw;
+        translateX.setValue(rubber);
+      },
+      onPanResponderRelease: (_, g) => {
+        const { dx, vx } = g;
+        const current = activeIndexRef.current;
+        let next = current;
+        if (Math.abs(vx) > FLING_VELOCITY) {
+          next = vx < 0 ? current + 1 : current - 1;
+        } else if (Math.abs(dx) >= SNAP_THRESHOLD) {
+          next = dx < 0 ? current + 1 : current - 1;
+        }
+        snapToRef.current(next);
+        setTimeout(() => { swipedRef.current = false; }, 100);
+      },
+      onPanResponderTerminate: (_, g) => {
+        const { dx, vx } = g;
+        const current = activeIndexRef.current;
+        let next = current;
+        if (Math.abs(vx) > FLING_VELOCITY) {
+          next = vx < 0 ? current + 1 : current - 1;
+        } else if (Math.abs(dx) >= SNAP_THRESHOLD) {
+          next = dx < 0 ? current + 1 : current - 1;
+        }
+        snapToRef.current(next);
+        setTimeout(() => { swipedRef.current = false; }, 100);
+      },
+    }),
+  ).current;
+
+  const handleScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const offsetX = e.nativeEvent.contentOffset.x;
+      const index = Math.round(offsetX / SNAP_INTERVAL);
+      setActiveIndex(Math.max(0, Math.min(index, itemCount - 1)));
+    },
+    [itemCount],
+  );
+
+  const cards = letters.map((letter, index) => {
+    const authorNickname = (letter as any).authorNickname as string | null;
+    const displayName = (letter as any).displayName as string | null;
+    const title = (letter as any).articleTitle as string | null;
+    const authorName = isAnonymous
+      ? (displayName ?? "익명")
+      : (authorNickname ?? "알 수 없음");
+
+    const handlePress = () => {
+      if (Platform.OS === "web" && swipedRef.current) return;
+      const slotRef = cardSlotRefs.current[index];
+      if (slotRef) {
+        slotRef.measureInWindow((x, y, width, height) => {
+          onCardPress(letter, { x, y, width, height });
+        });
+      } else {
+        onCardPress(letter, { x: 0, y: 0, width: CARD_W, height: CARD_H });
+      }
+    };
+
+    return (
+      <View
+        key={letter.id}
+        ref={(ref) => { cardSlotRefs.current[index] = ref; }}
+        style={[
+          spaceCarouselStyles.cardSlot,
+          index < letters.length - 1 && { marginRight: CARD_GAP },
+        ]}
+      >
+        <ArticleCardItem
+          title={title ?? "제목 없음"}
+          authorName={authorName}
+          cover={null}
+          isRead={false}
+          isActive={index === activeIndex}
+          onPress={handlePress}
+        />
+      </View>
+    );
+  });
 
   return (
     <View>
-      <FlatList
-        ref={listRef}
-        data={letters}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <LetterCard
-            letter={item}
-            cardWidth={cardWidth}
-            isAnonymous={isAnonymous}
-            onPress={() => onPressLetter(item)}
-          />
-        )}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.carouselContent}
-        ItemSeparatorComponent={() => <View style={{ width: 12 }} />}
-        onScroll={handleScroll}
-        scrollEventThrottle={16}
-        pagingEnabled={false}
-        snapToInterval={cardWidth + 12}
-        snapToAlignment="start"
-        decelerationRate="fast"
-      />
-      {letters.length > 1 && (
-        <View style={styles.dotRow}>
-          {letters.map((_, i) => (
-            <View
-              key={i}
-              style={[styles.dot, i === activeIndex ? styles.dotActive : styles.dotInactive]}
-            />
-          ))}
+      {Platform.OS === "web" ? (
+        <View
+          style={[
+            spaceCarouselStyles.carouselWindow,
+            { userSelect: "none", cursor: "grab" } as object,
+          ]}
+          {...panResponder.panHandlers}
+        >
+          <Animated.View
+            style={[spaceCarouselStyles.carouselTrack, { transform: [{ translateX }] }]}
+          >
+            {cards}
+          </Animated.View>
         </View>
+      ) : (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          snapToInterval={SNAP_INTERVAL}
+          snapToAlignment="start"
+          decelerationRate="fast"
+          scrollEventThrottle={16}
+          onScroll={handleScroll}
+          contentContainerStyle={spaceCarouselStyles.carouselContent}
+          style={spaceCarouselStyles.carouselScroll}
+        >
+          {cards}
+        </ScrollView>
       )}
+      <DotIndicator total={letters.length} activeIndex={activeIndex} />
     </View>
   );
 }
+
+const spaceCarouselStyles = StyleSheet.create({
+  carouselWindow: {
+    width: SCREEN_W,
+    height: CARD_H,
+    overflow: "hidden",
+  },
+  carouselTrack: {
+    flexDirection: "row",
+    height: CARD_H,
+  },
+  carouselScroll: {
+    height: CARD_H,
+  },
+  carouselContent: {
+    paddingHorizontal: CENTER_OFFSET,
+  },
+  cardSlot: {
+    width: CARD_W,
+  },
+});
 
 // ─── Round Section ────────────────────────────────────────────────────────────
 
@@ -226,7 +308,6 @@ function RoundSection({
   spaceStatus,
   isOperator,
   isAnonymous,
-  cardWidth,
   onPressLetter,
   onPressWriteOpening,
 }: {
@@ -235,8 +316,7 @@ function RoundSection({
   spaceStatus: string;
   isOperator: boolean;
   isAnonymous: boolean;
-  cardWidth: number;
-  onPressLetter: (letter: SpaceLetter) => void;
+  onPressLetter: (letter: SpaceLetter, layout: OriginLayout) => void;
   onPressWriteOpening: (round: SpaceRound) => void;
 }) {
   const statusColor = roundStatusColor(round.status);
@@ -285,11 +365,10 @@ function RoundSection({
     );
   } else if (letters.length > 0) {
     letterArea = (
-      <LetterCarousel
+      <SpaceCarousel
         letters={letters}
-        cardWidth={cardWidth}
         isAnonymous={isAnonymous}
-        onPressLetter={onPressLetter}
+        onCardPress={onPressLetter}
       />
     );
   } else {
@@ -571,14 +650,14 @@ export default function SpaceDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { userId } = useUser();
   const queryClient = useQueryClient();
-  const { width: screenWidth } = useWindowDimensions();
-
-  // 28 = carousel paddingHorizontal (14) × 2 so cards fill the visible carousel
-  // area without overflowing the section's horizontal bounds.
-  const cardWidth = screenWidth - Spacing.screenPx * 2 - 28;
 
   const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
   const [rejectTargetId, setRejectTargetId] = useState<string | null>(null);
+
+  // ── Card select overlay state ─────────────────────────────────────────────
+  const [tapLetter, setTapLetter] = useState<SpaceLetter | null>(null);
+  const [tapLetterOrigin, setTapLetterOrigin] = useState<OriginLayout | null>(null);
+  const [tapArticle, setTapArticle] = useState<Article | null>(null);
 
   const joinContextQuery = useGetSpaceJoinContext(
     id,
@@ -733,15 +812,40 @@ export default function SpaceDetailScreen() {
   );
 
   const handlePressLetter = useCallback(
-    (letter: SpaceLetter) => {
-      if (!letter.sourceArticleId) return;
-      router.push({
-        pathname: "/read" as never,
-        params: { articleId: letter.sourceArticleId },
-      });
+    (letter: SpaceLetter, layout: OriginLayout) => {
+      setTapLetter(letter);
+      setTapLetterOrigin(layout);
+      setTapArticle(null);
+      if (letter.sourceArticleId) {
+        queryClient.fetchQuery({
+          queryKey: getGetArticleQueryKey(letter.sourceArticleId),
+          queryFn: () => getArticle(letter.sourceArticleId!),
+          staleTime: 5 * 60 * 1000,
+        }).then((article) => {
+          setTapArticle(article as Article);
+        }).catch(() => {});
+      }
     },
-    [router],
+    [queryClient],
   );
+
+  const handleOverlayClose = useCallback(() => {
+    setTapLetter(null);
+    setTapLetterOrigin(null);
+    setTapArticle(null);
+  }, []);
+
+  const handleOverlayRead = useCallback(() => {
+    const letter = tapLetter;
+    setTapLetter(null);
+    setTapLetterOrigin(null);
+    setTapArticle(null);
+    if (!letter?.sourceArticleId) return;
+    router.push({
+      pathname: "/read" as never,
+      params: { articleId: letter.sourceArticleId },
+    });
+  }, [tapLetter, router]);
 
   const handlePressWriteOpening = useCallback(
     (_round: SpaceRound) => {
@@ -926,7 +1030,6 @@ export default function SpaceDetailScreen() {
                   spaceStatus={space.status}
                   isOperator={isOperator}
                   isAnonymous={space.isAnonymous}
-                  cardWidth={cardWidth}
                   onPressLetter={handlePressLetter}
                   onPressWriteOpening={handlePressWriteOpening}
                 />
@@ -1072,6 +1175,31 @@ export default function SpaceDetailScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* ── Card select overlay ── */}
+      {(() => {
+        if (!tapLetter) return null;
+        const authorNickname = (tapLetter as any).authorNickname as string | null;
+        const displayName = (tapLetter as any).displayName as string | null;
+        const authorName = space.isAnonymous
+          ? (displayName ?? "익명")
+          : (authorNickname ?? "알 수 없음");
+        const meta: ChainArticleMeta = {
+          authorName,
+          date: tapLetter.createdAt,
+          collectionName: space.name,
+        };
+        return (
+          <CardSelectOverlay
+            articles={[tapArticle]}
+            metas={[meta]}
+            initialIndex={0}
+            originLayout={tapLetterOrigin}
+            onClose={handleOverlayClose}
+            onRead={handleOverlayRead}
+          />
+        );
+      })()}
     </View>
   );
 }
@@ -1393,99 +1521,6 @@ const styles = StyleSheet.create({
   },
   roundLetterArea: {
     marginTop: 2,
-  },
-
-  // ─── Letter carousel ────────────────────────────────────────────────────────
-  carouselContent: {
-    paddingHorizontal: 14,
-  },
-  dotRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 5,
-    marginTop: 8,
-    paddingHorizontal: 14,
-  },
-  dot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-  },
-  dotActive: {
-    backgroundColor: Colors.zinc600,
-  },
-  dotInactive: {
-    backgroundColor: Colors.zinc200,
-  },
-
-  // ─── Letter card ────────────────────────────────────────────────────────────
-  letterCard: {
-    backgroundColor: Colors.white,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.zinc200,
-    padding: 14,
-    gap: 6,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  letterCardTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  letterCardDate: {
-    ...Typography.caption,
-    fontSize: 11,
-    color: Colors.zinc400,
-  },
-  letterCardTitle: {
-    ...Typography.bodySemiBold,
-    fontSize: 15,
-    color: Colors.zinc900,
-    lineHeight: 20,
-  },
-  letterCardExcerpt: {
-    ...Typography.body,
-    fontSize: 13,
-    color: Colors.zinc500,
-    lineHeight: 18,
-  },
-  letterCardBottom: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginTop: 2,
-  },
-  letterCardAuthor: {
-    ...Typography.caption,
-    fontSize: 12,
-    color: Colors.zinc400,
-    flex: 1,
-  },
-
-  // ─── Letter type badge ──────────────────────────────────────────────────────
-  letterTypeBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    borderRadius: 5,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  letterTypeBadgeOpening: {
-    backgroundColor: Colors.noticeAccentSoft,
-  },
-  letterTypeBadgeCenter: {
-    backgroundColor: Colors.zinc100,
-  },
-  letterTypeBadgeText: {
-    ...Typography.caption,
-    fontSize: 10,
-    fontWeight: "600",
   },
 
   // ─── Locked / preparing areas ───────────────────────────────────────────────
