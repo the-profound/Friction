@@ -546,6 +546,330 @@ export interface SendArticleBody {
   isEnvelope?: boolean;
 }
 
+export type SpaceStatus = (typeof SpaceStatus)[keyof typeof SpaceStatus];
+
+export const SpaceStatus = {
+  RECRUITING: "RECRUITING",
+  ACTIVE: "ACTIVE",
+  ARCHIVED: "ARCHIVED",
+} as const;
+
+export interface Space {
+  id: string;
+  name: string;
+  description?: string | null;
+  isAnonymous: boolean;
+  startsAt?: string | null;
+  roundCount: number;
+  maxParticipants?: number | null;
+  defaultCenterInterval: number;
+  defaultCenterCount: number;
+  status: SpaceStatus;
+  creatorId: string;
+  inviteCode?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateSpaceBody {
+  /**
+   * @minLength 1
+   * @maxLength 50
+   */
+  name: string;
+  description?: string | null;
+  isAnonymous?: boolean;
+  startsAt?: string | null;
+  /** @minimum 1 */
+  roundCount?: number;
+  maxParticipants?: number | null;
+  /** @minimum 1 */
+  defaultCenterInterval?: number;
+  /** @minimum 1 */
+  defaultCenterCount?: number;
+  creatorId: string;
+}
+
+export type UpdateSpaceBodyStatus =
+  (typeof UpdateSpaceBodyStatus)[keyof typeof UpdateSpaceBodyStatus];
+
+export const UpdateSpaceBodyStatus = {
+  RECRUITING: "RECRUITING",
+  ACTIVE: "ACTIVE",
+  ARCHIVED: "ARCHIVED",
+} as const;
+
+export interface UpdateSpaceBody {
+  /**
+   * @minLength 1
+   * @maxLength 50
+   */
+  name?: string;
+  description?: string | null;
+  isAnonymous?: boolean;
+  startsAt?: string | null;
+  /** @minimum 1 */
+  roundCount?: number;
+  maxParticipants?: number | null;
+  /** @minimum 1 */
+  defaultCenterInterval?: number;
+  /** @minimum 1 */
+  defaultCenterCount?: number;
+  status?: UpdateSpaceBodyStatus;
+}
+
+export type SpaceRoundStatus =
+  (typeof SpaceRoundStatus)[keyof typeof SpaceRoundStatus];
+
+export const SpaceRoundStatus = {
+  UPCOMING: "UPCOMING",
+  ACTIVE: "ACTIVE",
+  COMPLETED: "COMPLETED",
+} as const;
+
+export interface SpaceRound {
+  id: string;
+  spaceId: string;
+  roundNumber: number;
+  title?: string | null;
+  description?: string | null;
+  status: SpaceRoundStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateSpaceRoundBody {
+  /** @minimum 1 */
+  roundNumber: number;
+  title?: string | null;
+  description?: string | null;
+}
+
+export type SpaceParticipationRole =
+  (typeof SpaceParticipationRole)[keyof typeof SpaceParticipationRole];
+
+export const SpaceParticipationRole = {
+  OPERATOR: "OPERATOR",
+  PARTICIPANT: "PARTICIPANT",
+} as const;
+
+export type SpaceParticipationJoinPath =
+  | (typeof SpaceParticipationJoinPath)[keyof typeof SpaceParticipationJoinPath]
+  | null;
+
+export const SpaceParticipationJoinPath = {
+  INVITATION: "INVITATION",
+  CODE: "CODE",
+} as const;
+
+export type SpaceParticipationStatus =
+  (typeof SpaceParticipationStatus)[keyof typeof SpaceParticipationStatus];
+
+export const SpaceParticipationStatus = {
+  PENDING: "PENDING",
+  APPROVED: "APPROVED",
+  REJECTED: "REJECTED",
+  WITHDRAWN: "WITHDRAWN",
+} as const;
+
+export interface SpaceParticipation {
+  id: string;
+  spaceId: string;
+  userId: string;
+  role: SpaceParticipationRole;
+  joinPath?: SpaceParticipationJoinPath;
+  status: SpaceParticipationStatus;
+  invitationId?: string | null;
+  codeRequestId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CreateSpaceParticipationBodyRole =
+  (typeof CreateSpaceParticipationBodyRole)[keyof typeof CreateSpaceParticipationBodyRole];
+
+export const CreateSpaceParticipationBodyRole = {
+  OPERATOR: "OPERATOR",
+  PARTICIPANT: "PARTICIPANT",
+} as const;
+
+export type CreateSpaceParticipationBodyJoinPath =
+  | (typeof CreateSpaceParticipationBodyJoinPath)[keyof typeof CreateSpaceParticipationBodyJoinPath]
+  | null;
+
+export const CreateSpaceParticipationBodyJoinPath = {
+  INVITATION: "INVITATION",
+  CODE: "CODE",
+} as const;
+
+export interface CreateSpaceParticipationBody {
+  userId: string;
+  role?: CreateSpaceParticipationBodyRole;
+  joinPath?: CreateSpaceParticipationBodyJoinPath;
+  invitationId?: string | null;
+  codeRequestId?: string | null;
+}
+
+export type UpdateSpaceParticipationBodyStatus =
+  (typeof UpdateSpaceParticipationBodyStatus)[keyof typeof UpdateSpaceParticipationBodyStatus];
+
+export const UpdateSpaceParticipationBodyStatus = {
+  APPROVED: "APPROVED",
+  REJECTED: "REJECTED",
+  WITHDRAWN: "WITHDRAWN",
+} as const;
+
+export type UpdateSpaceParticipationBodyRole =
+  (typeof UpdateSpaceParticipationBodyRole)[keyof typeof UpdateSpaceParticipationBodyRole];
+
+export const UpdateSpaceParticipationBodyRole = {
+  OPERATOR: "OPERATOR",
+  PARTICIPANT: "PARTICIPANT",
+} as const;
+
+export interface UpdateSpaceParticipationBody {
+  status?: UpdateSpaceParticipationBodyStatus;
+  role?: UpdateSpaceParticipationBodyRole;
+}
+
+export type SpaceInvitationStatus =
+  (typeof SpaceInvitationStatus)[keyof typeof SpaceInvitationStatus];
+
+export const SpaceInvitationStatus = {
+  PENDING: "PENDING",
+  ACCEPTED: "ACCEPTED",
+  DECLINED: "DECLINED",
+} as const;
+
+export interface SpaceInvitation {
+  id: string;
+  spaceId: string;
+  invitedUserId: string;
+  invitedBy: string;
+  status: SpaceInvitationStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateSpaceInvitationBody {
+  invitedUserId: string;
+  invitedBy: string;
+}
+
+export type UpdateSpaceInvitationBodyStatus =
+  (typeof UpdateSpaceInvitationBodyStatus)[keyof typeof UpdateSpaceInvitationBodyStatus];
+
+export const UpdateSpaceInvitationBodyStatus = {
+  ACCEPTED: "ACCEPTED",
+  DECLINED: "DECLINED",
+} as const;
+
+export interface UpdateSpaceInvitationBody {
+  status?: UpdateSpaceInvitationBodyStatus;
+}
+
+export type SpaceCodeRequestStatus =
+  (typeof SpaceCodeRequestStatus)[keyof typeof SpaceCodeRequestStatus];
+
+export const SpaceCodeRequestStatus = {
+  PENDING: "PENDING",
+  APPROVED: "APPROVED",
+  REJECTED: "REJECTED",
+} as const;
+
+export interface SpaceCodeRequest {
+  id: string;
+  spaceId: string;
+  requesterId: string;
+  code: string;
+  status: SpaceCodeRequestStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateSpaceCodeRequestBody {
+  requesterId: string;
+  /**
+   * @minLength 1
+   * @maxLength 20
+   */
+  code: string;
+}
+
+export type UpdateSpaceCodeRequestBodyStatus =
+  (typeof UpdateSpaceCodeRequestBodyStatus)[keyof typeof UpdateSpaceCodeRequestBodyStatus];
+
+export const UpdateSpaceCodeRequestBodyStatus = {
+  APPROVED: "APPROVED",
+  REJECTED: "REJECTED",
+} as const;
+
+export interface UpdateSpaceCodeRequestBody {
+  status?: UpdateSpaceCodeRequestBodyStatus;
+}
+
+export type SpaceLetterLetterType =
+  (typeof SpaceLetterLetterType)[keyof typeof SpaceLetterLetterType];
+
+export const SpaceLetterLetterType = {
+  OPENING: "OPENING",
+  CENTER: "CENTER",
+  REPLY: "REPLY",
+} as const;
+
+export interface SpaceLetter {
+  id: string;
+  spaceId: string;
+  spaceRoundId?: string | null;
+  authorId: string;
+  sourceArticleId?: string | null;
+  letterType: SpaceLetterLetterType;
+  isPublic: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CreateSpaceLetterBodyLetterType =
+  (typeof CreateSpaceLetterBodyLetterType)[keyof typeof CreateSpaceLetterBodyLetterType];
+
+export const CreateSpaceLetterBodyLetterType = {
+  OPENING: "OPENING",
+  CENTER: "CENTER",
+  REPLY: "REPLY",
+} as const;
+
+export interface CreateSpaceLetterBody {
+  spaceRoundId?: string | null;
+  authorId: string;
+  sourceArticleId?: string | null;
+  letterType: CreateSpaceLetterBodyLetterType;
+  isPublic?: boolean;
+}
+
+export type SpaceScheduledSendStatus =
+  (typeof SpaceScheduledSendStatus)[keyof typeof SpaceScheduledSendStatus];
+
+export const SpaceScheduledSendStatus = {
+  PENDING: "PENDING",
+  SENT: "SENT",
+  CANCELLED: "CANCELLED",
+} as const;
+
+export interface SpaceScheduledSend {
+  id: string;
+  spaceId: string;
+  spaceLetterId: string;
+  scheduledAt: string;
+  status: SpaceScheduledSendStatus;
+  sentAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateSpaceScheduledSendBody {
+  scheduledAt: string;
+}
+
 export interface SpellCheckBody {
   /** Markdown text to check */
   text: string;
@@ -650,6 +974,10 @@ export type ListTeamArticlesParams = {
    * When provided, each item includes the requesting user's per-article read state (isRead/completedAt) so callers can decide reading mode (basic vs re_read) without an extra request.
    */
   userId?: string;
+};
+
+export type ListSpacesParams = {
+  userId: string;
 };
 
 export type ListNeighborsParams = {

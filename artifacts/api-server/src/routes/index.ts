@@ -11,6 +11,7 @@ import neighborsRouter from "./neighbors";
 import sendRecordsRouter from "./send-records";
 import storageRouter from "./storage";
 import spellCheckRouter from "./spell-check";
+import spacesRouter from "./spaces";
 
 const router: IRouter = Router();
 
@@ -26,5 +27,6 @@ router.use(neighborsRouter);
 router.use(sendRecordsRouter);
 router.use(storageRouter);
 router.use(spellCheckRouter);
+router.use(spacesRouter);
 
 export default router;

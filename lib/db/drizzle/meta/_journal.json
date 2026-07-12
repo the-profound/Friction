@@ -134,6 +134,34 @@
       "when": 1783165470367,
       "tag": "0018_add_article_questions",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1783814400000,
+      "tag": "0019_drop_notice_columns_from_articles",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1784073600000,
+      "tag": "0020_add_spaces",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1784160000000,
+      "tag": "0021_spaces_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1784246400000,
+      "tag": "0022_spaces_check_constraints",
+      "breakpoints": true
     }
   ]
 }

@@ -24,6 +24,8 @@ tags:
     description: Reading record and progress operations
   - name: team-collections
     description: Team collection operations
+  - name: spaces
+    description: Space operations
   - name: neighbors
     description: Neighbor relationship operations
   - name: send-records
@@ -1381,6 +1383,404 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  # ─── Spaces ───────────────────────────────────────
+  /spaces:
+    get:
+      operationId: listSpaces
+      tags: [spaces]
+      summary: List spaces the user participates in
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Space list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Space"
+    post:
+      operationId: createSpace
+      tags: [spaces]
+      summary: Create a new space
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSpaceBody"
+      responses:
+        "201":
+          description: Created space
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Space"
+
+  /spaces/{id}:
+    get:
+      operationId: getSpace
+      tags: [spaces]
+      summary: Get a space by ID
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Space
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Space"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateSpace
+      tags: [spaces]
+      summary: Update a space (operator only)
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSpaceBody"
+      responses:
+        "200":
+          description: Updated space
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Space"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /spaces/{id}/rounds:
+    get:
+      operationId: listSpaceRounds
+      tags: [spaces]
+      summary: List rounds for a space
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Round list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SpaceRound"
+    post:
+      operationId: createSpaceRound
+      tags: [spaces]
+      summary: Create a new round in a space
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSpaceRoundBody"
+      responses:
+        "201":
+          description: Created round
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpaceRound"
+
+  /spaces/{id}/participations:
+    get:
+      operationId: listSpaceParticipations
+      tags: [spaces]
+      summary: List participations for a space
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Participation list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SpaceParticipation"
+    post:
+      operationId: createSpaceParticipation
+      tags: [spaces]
+      summary: Join or request to join a space
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSpaceParticipationBody"
+      responses:
+        "201":
+          description: Created participation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpaceParticipation"
+
+  /spaces/{id}/participations/{participationId}:
+    patch:
+      operationId: updateSpaceParticipation
+      tags: [spaces]
+      summary: Approve, reject, or withdraw a participation
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+        - name: participationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSpaceParticipationBody"
+      responses:
+        "200":
+          description: Updated participation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpaceParticipation"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /spaces/{id}/invitations:
+    get:
+      operationId: listSpaceInvitations
+      tags: [spaces]
+      summary: List invitations for a space
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Invitation list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SpaceInvitation"
+    post:
+      operationId: createSpaceInvitation
+      tags: [spaces]
+      summary: Invite a user to a space
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSpaceInvitationBody"
+      responses:
+        "201":
+          description: Created invitation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpaceInvitation"
+
+  /spaces/{id}/invitations/{invitationId}:
+    patch:
+      operationId: updateSpaceInvitation
+      tags: [spaces]
+      summary: Accept or decline an invitation
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+        - name: invitationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSpaceInvitationBody"
+      responses:
+        "200":
+          description: Updated invitation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpaceInvitation"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /spaces/{id}/code-requests:
+    post:
+      operationId: createSpaceCodeRequest
+      tags: [spaces]
+      summary: Request to join a space using an invite code
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSpaceCodeRequestBody"
+      responses:
+        "201":
+          description: Created code request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpaceCodeRequest"
+
+  /spaces/{id}/code-requests/{requestId}:
+    patch:
+      operationId: updateSpaceCodeRequest
+      tags: [spaces]
+      summary: Approve or reject a code request (operator only)
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSpaceCodeRequestBody"
+      responses:
+        "200":
+          description: Updated code request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpaceCodeRequest"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /spaces/{id}/letters:
+    get:
+      operationId: listSpaceLetters
+      tags: [spaces]
+      summary: List letters for a space
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Letter list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SpaceLetter"
+    post:
+      operationId: createSpaceLetter
+      tags: [spaces]
+      summary: Submit a letter to a space
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSpaceLetterBody"
+      responses:
+        "201":
+          description: Created letter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpaceLetter"
+
+  /spaces/{id}/letters/{letterId}/scheduled-sends:
+    get:
+      operationId: listSpaceScheduledSends
+      tags: [spaces]
+      summary: List scheduled sends for a space letter
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+        - name: letterId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Scheduled send list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SpaceScheduledSend"
+    post:
+      operationId: createSpaceScheduledSend
+      tags: [spaces]
+      summary: Schedule a send for a space letter
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+        - name: letterId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSpaceScheduledSendBody"
+      responses:
+        "201":
+          description: Created scheduled send
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpaceScheduledSend"
+
   # ─── Neighbors ────────────────────────────────────
   /neighbors:
     get:
@@ -2623,6 +3023,408 @@ components:
           type: boolean
           description: When true, the inbox item is created with is_envelope=true so the recipient sees a sealed envelope front face before opening.
       required: [senderId, recipientId, articleId]
+
+    # ─── Space ──────────────────────────────────────
+    Space:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        isAnonymous:
+          type: boolean
+        startsAt:
+          type: string
+          format: date-time
+          nullable: true
+        roundCount:
+          type: integer
+        maxParticipants:
+          type: integer
+          nullable: true
+        defaultCenterInterval:
+          type: integer
+        defaultCenterCount:
+          type: integer
+        status:
+          type: string
+          enum: [RECRUITING, ACTIVE, ARCHIVED]
+        creatorId:
+          type: string
+          format: uuid
+        inviteCode:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, name, isAnonymous, roundCount, defaultCenterInterval, defaultCenterCount, status, creatorId, createdAt, updatedAt]
+
+    CreateSpaceBody:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+        description:
+          type: string
+          nullable: true
+        isAnonymous:
+          type: boolean
+        startsAt:
+          type: string
+          format: date-time
+          nullable: true
+        roundCount:
+          type: integer
+          minimum: 1
+        maxParticipants:
+          type: integer
+          nullable: true
+        defaultCenterInterval:
+          type: integer
+          minimum: 1
+        defaultCenterCount:
+          type: integer
+          minimum: 1
+        creatorId:
+          type: string
+          format: uuid
+      required: [name, creatorId]
+
+    UpdateSpaceBody:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+        description:
+          type: string
+          nullable: true
+        isAnonymous:
+          type: boolean
+        startsAt:
+          type: string
+          format: date-time
+          nullable: true
+        roundCount:
+          type: integer
+          minimum: 1
+        maxParticipants:
+          type: integer
+          nullable: true
+        defaultCenterInterval:
+          type: integer
+          minimum: 1
+        defaultCenterCount:
+          type: integer
+          minimum: 1
+        status:
+          type: string
+          enum: [RECRUITING, ACTIVE, ARCHIVED]
+
+    SpaceRound:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        spaceId:
+          type: string
+          format: uuid
+        roundNumber:
+          type: integer
+        title:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [UPCOMING, ACTIVE, COMPLETED]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, spaceId, roundNumber, status, createdAt, updatedAt]
+
+    CreateSpaceRoundBody:
+      type: object
+      properties:
+        roundNumber:
+          type: integer
+          minimum: 1
+        title:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+      required: [roundNumber]
+
+    SpaceParticipation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        spaceId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [OPERATOR, PARTICIPANT]
+        joinPath:
+          type: string
+          enum: [INVITATION, CODE]
+          nullable: true
+        status:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED, WITHDRAWN]
+        invitationId:
+          type: string
+          format: uuid
+          nullable: true
+        codeRequestId:
+          type: string
+          format: uuid
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, spaceId, userId, role, status, createdAt, updatedAt]
+
+    CreateSpaceParticipationBody:
+      type: object
+      properties:
+        userId:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [OPERATOR, PARTICIPANT]
+        joinPath:
+          type: string
+          enum: [INVITATION, CODE]
+          nullable: true
+        invitationId:
+          type: string
+          format: uuid
+          nullable: true
+        codeRequestId:
+          type: string
+          format: uuid
+          nullable: true
+      required: [userId]
+
+    UpdateSpaceParticipationBody:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [APPROVED, REJECTED, WITHDRAWN]
+        role:
+          type: string
+          enum: [OPERATOR, PARTICIPANT]
+
+    SpaceInvitation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        spaceId:
+          type: string
+          format: uuid
+        invitedUserId:
+          type: string
+          format: uuid
+        invitedBy:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [PENDING, ACCEPTED, DECLINED]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, spaceId, invitedUserId, invitedBy, status, createdAt, updatedAt]
+
+    CreateSpaceInvitationBody:
+      type: object
+      properties:
+        invitedUserId:
+          type: string
+          format: uuid
+        invitedBy:
+          type: string
+          format: uuid
+      required: [invitedUserId, invitedBy]
+
+    UpdateSpaceInvitationBody:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ACCEPTED, DECLINED]
+
+    SpaceCodeRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        spaceId:
+          type: string
+          format: uuid
+        requesterId:
+          type: string
+          format: uuid
+        code:
+          type: string
+        status:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, spaceId, requesterId, code, status, createdAt, updatedAt]
+
+    CreateSpaceCodeRequestBody:
+      type: object
+      properties:
+        requesterId:
+          type: string
+          format: uuid
+        code:
+          type: string
+          minLength: 1
+          maxLength: 20
+      required: [requesterId, code]
+
+    UpdateSpaceCodeRequestBody:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [APPROVED, REJECTED]
+
+    SpaceLetter:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        spaceId:
+          type: string
+          format: uuid
+        spaceRoundId:
+          type: string
+          format: uuid
+          nullable: true
+        authorId:
+          type: string
+          format: uuid
+        sourceArticleId:
+          type: string
+          format: uuid
+          nullable: true
+        letterType:
+          type: string
+          enum: [OPENING, CENTER, REPLY]
+        isPublic:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, spaceId, authorId, letterType, isPublic, createdAt, updatedAt]
+
+    CreateSpaceLetterBody:
+      type: object
+      properties:
+        spaceRoundId:
+          type: string
+          format: uuid
+          nullable: true
+        authorId:
+          type: string
+          format: uuid
+        sourceArticleId:
+          type: string
+          format: uuid
+          nullable: true
+        letterType:
+          type: string
+          enum: [OPENING, CENTER, REPLY]
+        isPublic:
+          type: boolean
+      required: [authorId, letterType]
+
+    SpaceScheduledSend:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        spaceId:
+          type: string
+          format: uuid
+        spaceLetterId:
+          type: string
+          format: uuid
+        scheduledAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [PENDING, SENT, CANCELLED]
+        sentAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, spaceId, spaceLetterId, scheduledAt, status, createdAt, updatedAt]
+
+    CreateSpaceScheduledSendBody:
+      type: object
+      properties:
+        scheduledAt:
+          type: string
+          format: date-time
+      required: [scheduledAt]
 
     # ─── SpellCheck ─────────────────────────────────
     SpellCheckBody:

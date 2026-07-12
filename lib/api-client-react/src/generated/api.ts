@@ -27,6 +27,13 @@ import type {
   CreateArticleBody,
   CreateMyCollectionBody,
   CreateNeighborRequestBody,
+  CreateSpaceBody,
+  CreateSpaceCodeRequestBody,
+  CreateSpaceInvitationBody,
+  CreateSpaceLetterBody,
+  CreateSpaceParticipationBody,
+  CreateSpaceRoundBody,
+  CreateSpaceScheduledSendBody,
   CreateStoredSentenceBody,
   CreateTeamCollectionBody,
   CreateUserArticleReadBody,
@@ -42,6 +49,7 @@ import type {
   ListNeighborRequestsParams,
   ListNeighborsParams,
   ListSendRecordsParams,
+  ListSpacesParams,
   ListStoredSentencesParams,
   ListTeamArticlesParams,
   ListTeamCollectionsParams,
@@ -60,6 +68,13 @@ import type {
   RecentSavedCollectionResponse,
   SendArticleBody,
   SendRecordWithDetails,
+  Space,
+  SpaceCodeRequest,
+  SpaceInvitation,
+  SpaceLetter,
+  SpaceParticipation,
+  SpaceRound,
+  SpaceScheduledSend,
   SpellCheckBody,
   SpellCheckResponse,
   StoredSentence,
@@ -75,6 +90,10 @@ import type {
   UpdateArticleBody,
   UpdateMyCollectionBody,
   UpdateRecentCollectionBody,
+  UpdateSpaceBody,
+  UpdateSpaceCodeRequestBody,
+  UpdateSpaceInvitationBody,
+  UpdateSpaceParticipationBody,
   UpdateTeamCollectionBody,
   UpdateUserBody,
   UpsertReadingRecordBody,
@@ -5078,6 +5097,1698 @@ export const useToggleTeamArticlePin = <
   TContext
 > => {
   return useMutation(getToggleTeamArticlePinMutationOptions(options));
+};
+
+/**
+ * @summary List spaces the user participates in
+ */
+export const getListSpacesUrl = (params: ListSpacesParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/spaces?${stringifiedParams}`
+    : `/api/spaces`;
+};
+
+export const listSpaces = async (
+  params: ListSpacesParams,
+  options?: RequestInit,
+): Promise<Space[]> => {
+  return customFetch<Space[]>(getListSpacesUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListSpacesQueryKey = (params?: ListSpacesParams) => {
+  return [`/api/spaces`, ...(params ? [params] : [])] as const;
+};
+
+export const getListSpacesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listSpaces>>,
+  TError = ErrorType<unknown>,
+>(
+  params: ListSpacesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSpaces>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListSpacesQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listSpaces>>> = ({
+    signal,
+  }) => listSpaces(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listSpaces>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListSpacesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listSpaces>>
+>;
+export type ListSpacesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List spaces the user participates in
+ */
+
+export function useListSpaces<
+  TData = Awaited<ReturnType<typeof listSpaces>>,
+  TError = ErrorType<unknown>,
+>(
+  params: ListSpacesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSpaces>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListSpacesQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a new space
+ */
+export const getCreateSpaceUrl = () => {
+  return `/api/spaces`;
+};
+
+export const createSpace = async (
+  createSpaceBody: CreateSpaceBody,
+  options?: RequestInit,
+): Promise<Space> => {
+  return customFetch<Space>(getCreateSpaceUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createSpaceBody),
+  });
+};
+
+export const getCreateSpaceMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSpace>>,
+    TError,
+    { data: BodyType<CreateSpaceBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createSpace>>,
+  TError,
+  { data: BodyType<CreateSpaceBody> },
+  TContext
+> => {
+  const mutationKey = ["createSpace"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createSpace>>,
+    { data: BodyType<CreateSpaceBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createSpace(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateSpaceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createSpace>>
+>;
+export type CreateSpaceMutationBody = BodyType<CreateSpaceBody>;
+export type CreateSpaceMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create a new space
+ */
+export const useCreateSpace = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSpace>>,
+    TError,
+    { data: BodyType<CreateSpaceBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createSpace>>,
+  TError,
+  { data: BodyType<CreateSpaceBody> },
+  TContext
+> => {
+  return useMutation(getCreateSpaceMutationOptions(options));
+};
+
+/**
+ * @summary Get a space by ID
+ */
+export const getGetSpaceUrl = (id: string) => {
+  return `/api/spaces/${id}`;
+};
+
+export const getSpace = async (
+  id: string,
+  options?: RequestInit,
+): Promise<Space> => {
+  return customFetch<Space>(getGetSpaceUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetSpaceQueryKey = (id: string) => {
+  return [`/api/spaces/${id}`] as const;
+};
+
+export const getGetSpaceQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSpace>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getSpace>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetSpaceQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getSpace>>> = ({
+    signal,
+  }) => getSpace(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getSpace>>, TError, TData> & {
+    queryKey: QueryKey;
+  };
+};
+
+export type GetSpaceQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getSpace>>
+>;
+export type GetSpaceQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get a space by ID
+ */
+
+export function useGetSpace<
+  TData = Awaited<ReturnType<typeof getSpace>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getSpace>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetSpaceQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Update a space (operator only)
+ */
+export const getUpdateSpaceUrl = (id: string) => {
+  return `/api/spaces/${id}`;
+};
+
+export const updateSpace = async (
+  id: string,
+  updateSpaceBody: UpdateSpaceBody,
+  options?: RequestInit,
+): Promise<Space> => {
+  return customFetch<Space>(getUpdateSpaceUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateSpaceBody),
+  });
+};
+
+export const getUpdateSpaceMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSpace>>,
+    TError,
+    { id: string; data: BodyType<UpdateSpaceBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateSpace>>,
+  TError,
+  { id: string; data: BodyType<UpdateSpaceBody> },
+  TContext
+> => {
+  const mutationKey = ["updateSpace"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateSpace>>,
+    { id: string; data: BodyType<UpdateSpaceBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateSpace(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateSpaceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateSpace>>
+>;
+export type UpdateSpaceMutationBody = BodyType<UpdateSpaceBody>;
+export type UpdateSpaceMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Update a space (operator only)
+ */
+export const useUpdateSpace = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSpace>>,
+    TError,
+    { id: string; data: BodyType<UpdateSpaceBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateSpace>>,
+  TError,
+  { id: string; data: BodyType<UpdateSpaceBody> },
+  TContext
+> => {
+  return useMutation(getUpdateSpaceMutationOptions(options));
+};
+
+/**
+ * @summary List rounds for a space
+ */
+export const getListSpaceRoundsUrl = (id: string) => {
+  return `/api/spaces/${id}/rounds`;
+};
+
+export const listSpaceRounds = async (
+  id: string,
+  options?: RequestInit,
+): Promise<SpaceRound[]> => {
+  return customFetch<SpaceRound[]>(getListSpaceRoundsUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListSpaceRoundsQueryKey = (id: string) => {
+  return [`/api/spaces/${id}/rounds`] as const;
+};
+
+export const getListSpaceRoundsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listSpaceRounds>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSpaceRounds>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListSpaceRoundsQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listSpaceRounds>>> = ({
+    signal,
+  }) => listSpaceRounds(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listSpaceRounds>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListSpaceRoundsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listSpaceRounds>>
+>;
+export type ListSpaceRoundsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List rounds for a space
+ */
+
+export function useListSpaceRounds<
+  TData = Awaited<ReturnType<typeof listSpaceRounds>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSpaceRounds>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListSpaceRoundsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a new round in a space
+ */
+export const getCreateSpaceRoundUrl = (id: string) => {
+  return `/api/spaces/${id}/rounds`;
+};
+
+export const createSpaceRound = async (
+  id: string,
+  createSpaceRoundBody: CreateSpaceRoundBody,
+  options?: RequestInit,
+): Promise<SpaceRound> => {
+  return customFetch<SpaceRound>(getCreateSpaceRoundUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createSpaceRoundBody),
+  });
+};
+
+export const getCreateSpaceRoundMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSpaceRound>>,
+    TError,
+    { id: string; data: BodyType<CreateSpaceRoundBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createSpaceRound>>,
+  TError,
+  { id: string; data: BodyType<CreateSpaceRoundBody> },
+  TContext
+> => {
+  const mutationKey = ["createSpaceRound"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createSpaceRound>>,
+    { id: string; data: BodyType<CreateSpaceRoundBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return createSpaceRound(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateSpaceRoundMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createSpaceRound>>
+>;
+export type CreateSpaceRoundMutationBody = BodyType<CreateSpaceRoundBody>;
+export type CreateSpaceRoundMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create a new round in a space
+ */
+export const useCreateSpaceRound = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSpaceRound>>,
+    TError,
+    { id: string; data: BodyType<CreateSpaceRoundBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createSpaceRound>>,
+  TError,
+  { id: string; data: BodyType<CreateSpaceRoundBody> },
+  TContext
+> => {
+  return useMutation(getCreateSpaceRoundMutationOptions(options));
+};
+
+/**
+ * @summary List participations for a space
+ */
+export const getListSpaceParticipationsUrl = (id: string) => {
+  return `/api/spaces/${id}/participations`;
+};
+
+export const listSpaceParticipations = async (
+  id: string,
+  options?: RequestInit,
+): Promise<SpaceParticipation[]> => {
+  return customFetch<SpaceParticipation[]>(getListSpaceParticipationsUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListSpaceParticipationsQueryKey = (id: string) => {
+  return [`/api/spaces/${id}/participations`] as const;
+};
+
+export const getListSpaceParticipationsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listSpaceParticipations>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSpaceParticipations>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListSpaceParticipationsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listSpaceParticipations>>
+  > = ({ signal }) =>
+    listSpaceParticipations(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listSpaceParticipations>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListSpaceParticipationsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listSpaceParticipations>>
+>;
+export type ListSpaceParticipationsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List participations for a space
+ */
+
+export function useListSpaceParticipations<
+  TData = Awaited<ReturnType<typeof listSpaceParticipations>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSpaceParticipations>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListSpaceParticipationsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Join or request to join a space
+ */
+export const getCreateSpaceParticipationUrl = (id: string) => {
+  return `/api/spaces/${id}/participations`;
+};
+
+export const createSpaceParticipation = async (
+  id: string,
+  createSpaceParticipationBody: CreateSpaceParticipationBody,
+  options?: RequestInit,
+): Promise<SpaceParticipation> => {
+  return customFetch<SpaceParticipation>(getCreateSpaceParticipationUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createSpaceParticipationBody),
+  });
+};
+
+export const getCreateSpaceParticipationMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSpaceParticipation>>,
+    TError,
+    { id: string; data: BodyType<CreateSpaceParticipationBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createSpaceParticipation>>,
+  TError,
+  { id: string; data: BodyType<CreateSpaceParticipationBody> },
+  TContext
+> => {
+  const mutationKey = ["createSpaceParticipation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createSpaceParticipation>>,
+    { id: string; data: BodyType<CreateSpaceParticipationBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return createSpaceParticipation(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateSpaceParticipationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createSpaceParticipation>>
+>;
+export type CreateSpaceParticipationMutationBody =
+  BodyType<CreateSpaceParticipationBody>;
+export type CreateSpaceParticipationMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Join or request to join a space
+ */
+export const useCreateSpaceParticipation = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSpaceParticipation>>,
+    TError,
+    { id: string; data: BodyType<CreateSpaceParticipationBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createSpaceParticipation>>,
+  TError,
+  { id: string; data: BodyType<CreateSpaceParticipationBody> },
+  TContext
+> => {
+  return useMutation(getCreateSpaceParticipationMutationOptions(options));
+};
+
+/**
+ * @summary Approve, reject, or withdraw a participation
+ */
+export const getUpdateSpaceParticipationUrl = (
+  id: string,
+  participationId: string,
+) => {
+  return `/api/spaces/${id}/participations/${participationId}`;
+};
+
+export const updateSpaceParticipation = async (
+  id: string,
+  participationId: string,
+  updateSpaceParticipationBody: UpdateSpaceParticipationBody,
+  options?: RequestInit,
+): Promise<SpaceParticipation> => {
+  return customFetch<SpaceParticipation>(
+    getUpdateSpaceParticipationUrl(id, participationId),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(updateSpaceParticipationBody),
+    },
+  );
+};
+
+export const getUpdateSpaceParticipationMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSpaceParticipation>>,
+    TError,
+    {
+      id: string;
+      participationId: string;
+      data: BodyType<UpdateSpaceParticipationBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateSpaceParticipation>>,
+  TError,
+  {
+    id: string;
+    participationId: string;
+    data: BodyType<UpdateSpaceParticipationBody>;
+  },
+  TContext
+> => {
+  const mutationKey = ["updateSpaceParticipation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateSpaceParticipation>>,
+    {
+      id: string;
+      participationId: string;
+      data: BodyType<UpdateSpaceParticipationBody>;
+    }
+  > = (props) => {
+    const { id, participationId, data } = props ?? {};
+
+    return updateSpaceParticipation(id, participationId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateSpaceParticipationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateSpaceParticipation>>
+>;
+export type UpdateSpaceParticipationMutationBody =
+  BodyType<UpdateSpaceParticipationBody>;
+export type UpdateSpaceParticipationMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Approve, reject, or withdraw a participation
+ */
+export const useUpdateSpaceParticipation = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSpaceParticipation>>,
+    TError,
+    {
+      id: string;
+      participationId: string;
+      data: BodyType<UpdateSpaceParticipationBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateSpaceParticipation>>,
+  TError,
+  {
+    id: string;
+    participationId: string;
+    data: BodyType<UpdateSpaceParticipationBody>;
+  },
+  TContext
+> => {
+  return useMutation(getUpdateSpaceParticipationMutationOptions(options));
+};
+
+/**
+ * @summary List invitations for a space
+ */
+export const getListSpaceInvitationsUrl = (id: string) => {
+  return `/api/spaces/${id}/invitations`;
+};
+
+export const listSpaceInvitations = async (
+  id: string,
+  options?: RequestInit,
+): Promise<SpaceInvitation[]> => {
+  return customFetch<SpaceInvitation[]>(getListSpaceInvitationsUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListSpaceInvitationsQueryKey = (id: string) => {
+  return [`/api/spaces/${id}/invitations`] as const;
+};
+
+export const getListSpaceInvitationsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listSpaceInvitations>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSpaceInvitations>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListSpaceInvitationsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listSpaceInvitations>>
+  > = ({ signal }) => listSpaceInvitations(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listSpaceInvitations>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListSpaceInvitationsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listSpaceInvitations>>
+>;
+export type ListSpaceInvitationsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List invitations for a space
+ */
+
+export function useListSpaceInvitations<
+  TData = Awaited<ReturnType<typeof listSpaceInvitations>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSpaceInvitations>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListSpaceInvitationsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Invite a user to a space
+ */
+export const getCreateSpaceInvitationUrl = (id: string) => {
+  return `/api/spaces/${id}/invitations`;
+};
+
+export const createSpaceInvitation = async (
+  id: string,
+  createSpaceInvitationBody: CreateSpaceInvitationBody,
+  options?: RequestInit,
+): Promise<SpaceInvitation> => {
+  return customFetch<SpaceInvitation>(getCreateSpaceInvitationUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createSpaceInvitationBody),
+  });
+};
+
+export const getCreateSpaceInvitationMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSpaceInvitation>>,
+    TError,
+    { id: string; data: BodyType<CreateSpaceInvitationBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createSpaceInvitation>>,
+  TError,
+  { id: string; data: BodyType<CreateSpaceInvitationBody> },
+  TContext
+> => {
+  const mutationKey = ["createSpaceInvitation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createSpaceInvitation>>,
+    { id: string; data: BodyType<CreateSpaceInvitationBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return createSpaceInvitation(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateSpaceInvitationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createSpaceInvitation>>
+>;
+export type CreateSpaceInvitationMutationBody =
+  BodyType<CreateSpaceInvitationBody>;
+export type CreateSpaceInvitationMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Invite a user to a space
+ */
+export const useCreateSpaceInvitation = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSpaceInvitation>>,
+    TError,
+    { id: string; data: BodyType<CreateSpaceInvitationBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createSpaceInvitation>>,
+  TError,
+  { id: string; data: BodyType<CreateSpaceInvitationBody> },
+  TContext
+> => {
+  return useMutation(getCreateSpaceInvitationMutationOptions(options));
+};
+
+/**
+ * @summary Accept or decline an invitation
+ */
+export const getUpdateSpaceInvitationUrl = (
+  id: string,
+  invitationId: string,
+) => {
+  return `/api/spaces/${id}/invitations/${invitationId}`;
+};
+
+export const updateSpaceInvitation = async (
+  id: string,
+  invitationId: string,
+  updateSpaceInvitationBody: UpdateSpaceInvitationBody,
+  options?: RequestInit,
+): Promise<SpaceInvitation> => {
+  return customFetch<SpaceInvitation>(
+    getUpdateSpaceInvitationUrl(id, invitationId),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(updateSpaceInvitationBody),
+    },
+  );
+};
+
+export const getUpdateSpaceInvitationMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSpaceInvitation>>,
+    TError,
+    {
+      id: string;
+      invitationId: string;
+      data: BodyType<UpdateSpaceInvitationBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateSpaceInvitation>>,
+  TError,
+  {
+    id: string;
+    invitationId: string;
+    data: BodyType<UpdateSpaceInvitationBody>;
+  },
+  TContext
+> => {
+  const mutationKey = ["updateSpaceInvitation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateSpaceInvitation>>,
+    {
+      id: string;
+      invitationId: string;
+      data: BodyType<UpdateSpaceInvitationBody>;
+    }
+  > = (props) => {
+    const { id, invitationId, data } = props ?? {};
+
+    return updateSpaceInvitation(id, invitationId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateSpaceInvitationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateSpaceInvitation>>
+>;
+export type UpdateSpaceInvitationMutationBody =
+  BodyType<UpdateSpaceInvitationBody>;
+export type UpdateSpaceInvitationMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Accept or decline an invitation
+ */
+export const useUpdateSpaceInvitation = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSpaceInvitation>>,
+    TError,
+    {
+      id: string;
+      invitationId: string;
+      data: BodyType<UpdateSpaceInvitationBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateSpaceInvitation>>,
+  TError,
+  {
+    id: string;
+    invitationId: string;
+    data: BodyType<UpdateSpaceInvitationBody>;
+  },
+  TContext
+> => {
+  return useMutation(getUpdateSpaceInvitationMutationOptions(options));
+};
+
+/**
+ * @summary Request to join a space using an invite code
+ */
+export const getCreateSpaceCodeRequestUrl = (id: string) => {
+  return `/api/spaces/${id}/code-requests`;
+};
+
+export const createSpaceCodeRequest = async (
+  id: string,
+  createSpaceCodeRequestBody: CreateSpaceCodeRequestBody,
+  options?: RequestInit,
+): Promise<SpaceCodeRequest> => {
+  return customFetch<SpaceCodeRequest>(getCreateSpaceCodeRequestUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createSpaceCodeRequestBody),
+  });
+};
+
+export const getCreateSpaceCodeRequestMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSpaceCodeRequest>>,
+    TError,
+    { id: string; data: BodyType<CreateSpaceCodeRequestBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createSpaceCodeRequest>>,
+  TError,
+  { id: string; data: BodyType<CreateSpaceCodeRequestBody> },
+  TContext
+> => {
+  const mutationKey = ["createSpaceCodeRequest"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createSpaceCodeRequest>>,
+    { id: string; data: BodyType<CreateSpaceCodeRequestBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return createSpaceCodeRequest(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateSpaceCodeRequestMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createSpaceCodeRequest>>
+>;
+export type CreateSpaceCodeRequestMutationBody =
+  BodyType<CreateSpaceCodeRequestBody>;
+export type CreateSpaceCodeRequestMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Request to join a space using an invite code
+ */
+export const useCreateSpaceCodeRequest = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSpaceCodeRequest>>,
+    TError,
+    { id: string; data: BodyType<CreateSpaceCodeRequestBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createSpaceCodeRequest>>,
+  TError,
+  { id: string; data: BodyType<CreateSpaceCodeRequestBody> },
+  TContext
+> => {
+  return useMutation(getCreateSpaceCodeRequestMutationOptions(options));
+};
+
+/**
+ * @summary Approve or reject a code request (operator only)
+ */
+export const getUpdateSpaceCodeRequestUrl = (id: string, requestId: string) => {
+  return `/api/spaces/${id}/code-requests/${requestId}`;
+};
+
+export const updateSpaceCodeRequest = async (
+  id: string,
+  requestId: string,
+  updateSpaceCodeRequestBody: UpdateSpaceCodeRequestBody,
+  options?: RequestInit,
+): Promise<SpaceCodeRequest> => {
+  return customFetch<SpaceCodeRequest>(
+    getUpdateSpaceCodeRequestUrl(id, requestId),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(updateSpaceCodeRequestBody),
+    },
+  );
+};
+
+export const getUpdateSpaceCodeRequestMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSpaceCodeRequest>>,
+    TError,
+    {
+      id: string;
+      requestId: string;
+      data: BodyType<UpdateSpaceCodeRequestBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateSpaceCodeRequest>>,
+  TError,
+  { id: string; requestId: string; data: BodyType<UpdateSpaceCodeRequestBody> },
+  TContext
+> => {
+  const mutationKey = ["updateSpaceCodeRequest"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateSpaceCodeRequest>>,
+    {
+      id: string;
+      requestId: string;
+      data: BodyType<UpdateSpaceCodeRequestBody>;
+    }
+  > = (props) => {
+    const { id, requestId, data } = props ?? {};
+
+    return updateSpaceCodeRequest(id, requestId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateSpaceCodeRequestMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateSpaceCodeRequest>>
+>;
+export type UpdateSpaceCodeRequestMutationBody =
+  BodyType<UpdateSpaceCodeRequestBody>;
+export type UpdateSpaceCodeRequestMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Approve or reject a code request (operator only)
+ */
+export const useUpdateSpaceCodeRequest = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSpaceCodeRequest>>,
+    TError,
+    {
+      id: string;
+      requestId: string;
+      data: BodyType<UpdateSpaceCodeRequestBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateSpaceCodeRequest>>,
+  TError,
+  { id: string; requestId: string; data: BodyType<UpdateSpaceCodeRequestBody> },
+  TContext
+> => {
+  return useMutation(getUpdateSpaceCodeRequestMutationOptions(options));
+};
+
+/**
+ * @summary List letters for a space
+ */
+export const getListSpaceLettersUrl = (id: string) => {
+  return `/api/spaces/${id}/letters`;
+};
+
+export const listSpaceLetters = async (
+  id: string,
+  options?: RequestInit,
+): Promise<SpaceLetter[]> => {
+  return customFetch<SpaceLetter[]>(getListSpaceLettersUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListSpaceLettersQueryKey = (id: string) => {
+  return [`/api/spaces/${id}/letters`] as const;
+};
+
+export const getListSpaceLettersQueryOptions = <
+  TData = Awaited<ReturnType<typeof listSpaceLetters>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSpaceLetters>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListSpaceLettersQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listSpaceLetters>>
+  > = ({ signal }) => listSpaceLetters(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listSpaceLetters>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListSpaceLettersQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listSpaceLetters>>
+>;
+export type ListSpaceLettersQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List letters for a space
+ */
+
+export function useListSpaceLetters<
+  TData = Awaited<ReturnType<typeof listSpaceLetters>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSpaceLetters>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListSpaceLettersQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Submit a letter to a space
+ */
+export const getCreateSpaceLetterUrl = (id: string) => {
+  return `/api/spaces/${id}/letters`;
+};
+
+export const createSpaceLetter = async (
+  id: string,
+  createSpaceLetterBody: CreateSpaceLetterBody,
+  options?: RequestInit,
+): Promise<SpaceLetter> => {
+  return customFetch<SpaceLetter>(getCreateSpaceLetterUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createSpaceLetterBody),
+  });
+};
+
+export const getCreateSpaceLetterMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSpaceLetter>>,
+    TError,
+    { id: string; data: BodyType<CreateSpaceLetterBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createSpaceLetter>>,
+  TError,
+  { id: string; data: BodyType<CreateSpaceLetterBody> },
+  TContext
+> => {
+  const mutationKey = ["createSpaceLetter"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createSpaceLetter>>,
+    { id: string; data: BodyType<CreateSpaceLetterBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return createSpaceLetter(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateSpaceLetterMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createSpaceLetter>>
+>;
+export type CreateSpaceLetterMutationBody = BodyType<CreateSpaceLetterBody>;
+export type CreateSpaceLetterMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Submit a letter to a space
+ */
+export const useCreateSpaceLetter = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSpaceLetter>>,
+    TError,
+    { id: string; data: BodyType<CreateSpaceLetterBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createSpaceLetter>>,
+  TError,
+  { id: string; data: BodyType<CreateSpaceLetterBody> },
+  TContext
+> => {
+  return useMutation(getCreateSpaceLetterMutationOptions(options));
+};
+
+/**
+ * @summary List scheduled sends for a space letter
+ */
+export const getListSpaceScheduledSendsUrl = (id: string, letterId: string) => {
+  return `/api/spaces/${id}/letters/${letterId}/scheduled-sends`;
+};
+
+export const listSpaceScheduledSends = async (
+  id: string,
+  letterId: string,
+  options?: RequestInit,
+): Promise<SpaceScheduledSend[]> => {
+  return customFetch<SpaceScheduledSend[]>(
+    getListSpaceScheduledSendsUrl(id, letterId),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListSpaceScheduledSendsQueryKey = (
+  id: string,
+  letterId: string,
+) => {
+  return [`/api/spaces/${id}/letters/${letterId}/scheduled-sends`] as const;
+};
+
+export const getListSpaceScheduledSendsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listSpaceScheduledSends>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  letterId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSpaceScheduledSends>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListSpaceScheduledSendsQueryKey(id, letterId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listSpaceScheduledSends>>
+  > = ({ signal }) =>
+    listSpaceScheduledSends(id, letterId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!(id && letterId),
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listSpaceScheduledSends>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListSpaceScheduledSendsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listSpaceScheduledSends>>
+>;
+export type ListSpaceScheduledSendsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List scheduled sends for a space letter
+ */
+
+export function useListSpaceScheduledSends<
+  TData = Awaited<ReturnType<typeof listSpaceScheduledSends>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  letterId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSpaceScheduledSends>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListSpaceScheduledSendsQueryOptions(
+    id,
+    letterId,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Schedule a send for a space letter
+ */
+export const getCreateSpaceScheduledSendUrl = (
+  id: string,
+  letterId: string,
+) => {
+  return `/api/spaces/${id}/letters/${letterId}/scheduled-sends`;
+};
+
+export const createSpaceScheduledSend = async (
+  id: string,
+  letterId: string,
+  createSpaceScheduledSendBody: CreateSpaceScheduledSendBody,
+  options?: RequestInit,
+): Promise<SpaceScheduledSend> => {
+  return customFetch<SpaceScheduledSend>(
+    getCreateSpaceScheduledSendUrl(id, letterId),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(createSpaceScheduledSendBody),
+    },
+  );
+};
+
+export const getCreateSpaceScheduledSendMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSpaceScheduledSend>>,
+    TError,
+    {
+      id: string;
+      letterId: string;
+      data: BodyType<CreateSpaceScheduledSendBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createSpaceScheduledSend>>,
+  TError,
+  {
+    id: string;
+    letterId: string;
+    data: BodyType<CreateSpaceScheduledSendBody>;
+  },
+  TContext
+> => {
+  const mutationKey = ["createSpaceScheduledSend"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createSpaceScheduledSend>>,
+    {
+      id: string;
+      letterId: string;
+      data: BodyType<CreateSpaceScheduledSendBody>;
+    }
+  > = (props) => {
+    const { id, letterId, data } = props ?? {};
+
+    return createSpaceScheduledSend(id, letterId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateSpaceScheduledSendMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createSpaceScheduledSend>>
+>;
+export type CreateSpaceScheduledSendMutationBody =
+  BodyType<CreateSpaceScheduledSendBody>;
+export type CreateSpaceScheduledSendMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Schedule a send for a space letter
+ */
+export const useCreateSpaceScheduledSend = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSpaceScheduledSend>>,
+    TError,
+    {
+      id: string;
+      letterId: string;
+      data: BodyType<CreateSpaceScheduledSendBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createSpaceScheduledSend>>,
+  TError,
+  {
+    id: string;
+    letterId: string;
+    data: BodyType<CreateSpaceScheduledSendBody>;
+  },
+  TContext
+> => {
+  return useMutation(getCreateSpaceScheduledSendMutationOptions(options));
 };
 
 /**
