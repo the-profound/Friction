@@ -546,6 +546,82 @@ export interface SendArticleBody {
   isEnvelope?: boolean;
 }
 
+export type SpaceListItemStatus =
+  (typeof SpaceListItemStatus)[keyof typeof SpaceListItemStatus];
+
+export const SpaceListItemStatus = {
+  RECRUITING: "RECRUITING",
+  ACTIVE: "ACTIVE",
+  ARCHIVED: "ARCHIVED",
+} as const;
+
+export type SpaceListItemMyRole =
+  (typeof SpaceListItemMyRole)[keyof typeof SpaceListItemMyRole];
+
+export const SpaceListItemMyRole = {
+  OPERATOR: "OPERATOR",
+  PARTICIPANT: "PARTICIPANT",
+} as const;
+
+export type SpaceRoundStatus =
+  (typeof SpaceRoundStatus)[keyof typeof SpaceRoundStatus];
+
+export const SpaceRoundStatus = {
+  UPCOMING: "UPCOMING",
+  ACTIVE: "ACTIVE",
+  COMPLETED: "COMPLETED",
+} as const;
+
+export interface SpaceRound {
+  id: string;
+  spaceId: string;
+  roundNumber: number;
+  title?: string | null;
+  description?: string | null;
+  status: SpaceRoundStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SpaceListItem {
+  id: string;
+  name: string;
+  description?: string | null;
+  isAnonymous: boolean;
+  startsAt?: string | null;
+  roundCount: number;
+  maxParticipants?: number | null;
+  defaultCenterInterval: number;
+  defaultCenterCount: number;
+  status: SpaceListItemStatus;
+  creatorId: string;
+  inviteCode?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  myRole: SpaceListItemMyRole;
+  participantCount: number;
+  activeRound?: SpaceRound | null;
+}
+
+export type SpaceInvitationStatus =
+  (typeof SpaceInvitationStatus)[keyof typeof SpaceInvitationStatus];
+
+export const SpaceInvitationStatus = {
+  PENDING: "PENDING",
+  ACCEPTED: "ACCEPTED",
+  DECLINED: "DECLINED",
+} as const;
+
+export interface SpaceInvitation {
+  id: string;
+  spaceId: string;
+  invitedUserId: string;
+  invitedBy: string;
+  status: SpaceInvitationStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type SpaceStatus = (typeof SpaceStatus)[keyof typeof SpaceStatus];
 
 export const SpaceStatus = {
@@ -569,6 +645,35 @@ export interface Space {
   inviteCode?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SpaceInvitationWithSpace {
+  invitation: SpaceInvitation;
+  space: Space;
+}
+
+export type SpaceCodeRequestStatus =
+  (typeof SpaceCodeRequestStatus)[keyof typeof SpaceCodeRequestStatus];
+
+export const SpaceCodeRequestStatus = {
+  PENDING: "PENDING",
+  APPROVED: "APPROVED",
+  REJECTED: "REJECTED",
+} as const;
+
+export interface SpaceCodeRequest {
+  id: string;
+  spaceId: string;
+  requesterId: string;
+  code: string;
+  status: SpaceCodeRequestStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SpaceCodeRequestWithSpace {
+  codeRequest: SpaceCodeRequest;
+  space: Space;
 }
 
 export interface CreateSpaceBody {
@@ -616,26 +721,6 @@ export interface UpdateSpaceBody {
   /** @minimum 1 */
   defaultCenterCount?: number;
   status?: UpdateSpaceBodyStatus;
-}
-
-export type SpaceRoundStatus =
-  (typeof SpaceRoundStatus)[keyof typeof SpaceRoundStatus];
-
-export const SpaceRoundStatus = {
-  UPCOMING: "UPCOMING",
-  ACTIVE: "ACTIVE",
-  COMPLETED: "COMPLETED",
-} as const;
-
-export interface SpaceRound {
-  id: string;
-  spaceId: string;
-  roundNumber: number;
-  title?: string | null;
-  description?: string | null;
-  status: SpaceRoundStatus;
-  createdAt: string;
-  updatedAt: string;
 }
 
 export interface CreateSpaceRoundBody {
@@ -732,25 +817,6 @@ export interface UpdateSpaceParticipationBody {
   role?: UpdateSpaceParticipationBodyRole;
 }
 
-export type SpaceInvitationStatus =
-  (typeof SpaceInvitationStatus)[keyof typeof SpaceInvitationStatus];
-
-export const SpaceInvitationStatus = {
-  PENDING: "PENDING",
-  ACCEPTED: "ACCEPTED",
-  DECLINED: "DECLINED",
-} as const;
-
-export interface SpaceInvitation {
-  id: string;
-  spaceId: string;
-  invitedUserId: string;
-  invitedBy: string;
-  status: SpaceInvitationStatus;
-  createdAt: string;
-  updatedAt: string;
-}
-
 export interface CreateSpaceInvitationBody {
   invitedUserId: string;
   invitedBy: string;
@@ -768,27 +834,6 @@ export interface UpdateSpaceInvitationBody {
   status?: UpdateSpaceInvitationBodyStatus;
 }
 
-export type SpaceCodeRequestStatus =
-  (typeof SpaceCodeRequestStatus)[keyof typeof SpaceCodeRequestStatus];
-
-export const SpaceCodeRequestStatus = {
-  PENDING: "PENDING",
-  APPROVED: "APPROVED",
-  REJECTED: "REJECTED",
-  CANCELLED: "CANCELLED",
-} as const;
-
-export interface SpaceCodeRequest {
-  id: string;
-  spaceId: string;
-  requesterId: string;
-  code: string;
-  status: SpaceCodeRequestStatus;
-  rejectionReason?: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
 export interface CreateSpaceCodeRequestBody {
   requesterId: string;
   /**
@@ -804,12 +849,10 @@ export type UpdateSpaceCodeRequestBodyStatus =
 export const UpdateSpaceCodeRequestBodyStatus = {
   APPROVED: "APPROVED",
   REJECTED: "REJECTED",
-  CANCELLED: "CANCELLED",
 } as const;
 
 export interface UpdateSpaceCodeRequestBody {
   status?: UpdateSpaceCodeRequestBodyStatus;
-  rejectionReason?: string | null;
 }
 
 export type SpaceLetterLetterType =
@@ -872,22 +915,6 @@ export interface SpaceScheduledSend {
 
 export interface CreateSpaceScheduledSendBody {
   scheduledAt: string;
-}
-
-export type SpaceWithCreatorInfo = Space & {
-  creatorNickname?: string | null;
-  participantCount: number;
-};
-
-export type SpaceInvitationWithSpace = SpaceInvitation & {
-  space: SpaceWithCreatorInfo;
-};
-
-export interface SpaceJoinContext {
-  space: SpaceWithCreatorInfo;
-  participation?: SpaceParticipation | null;
-  invitation?: SpaceInvitation | null;
-  codeRequest?: SpaceCodeRequest | null;
 }
 
 export interface SpellCheckBody {
@@ -996,15 +1023,15 @@ export type ListTeamArticlesParams = {
   userId?: string;
 };
 
+export type ListMySpaceInvitationsParams = {
+  userId: string;
+};
+
+export type ListMySpaceCodeRequestsParams = {
+  userId: string;
+};
+
 export type ListSpacesParams = {
-  userId: string;
-};
-
-export type GetSpaceJoinContextParams = {
-  userId: string;
-};
-
-export type ListUserSpaceInvitationsParams = {
   userId: string;
 };
 

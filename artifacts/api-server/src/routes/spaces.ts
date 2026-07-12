@@ -14,6 +14,71 @@ import {
 
 const router: IRouter = Router();
 
+// ─── My invitations (must be before /:id) ───────────────────────────────────
+router.get("/spaces/my-invitations", async (req, res) => {
+  const { userId } = req.query;
+  if (!userId || typeof userId !== "string") {
+    res.status(400).json({ error: "userId is required" });
+    return;
+  }
+  const invitations = await db
+    .select()
+    .from(spaceInvitationsTable)
+    .where(
+      and(
+        eq(spaceInvitationsTable.invitedUserId, userId),
+        eq(spaceInvitationsTable.status, "PENDING"),
+      ),
+    );
+  if (invitations.length === 0) {
+    res.json([]);
+    return;
+  }
+  const spaceIds = [...new Set(invitations.map((i) => i.spaceId))];
+  const spaces = await db
+    .select()
+    .from(spacesTable)
+    .where(inArray(spacesTable.id, spaceIds));
+  const spaceMap = new Map(spaces.map((s) => [s.id, s]));
+  const result = invitations
+    .filter((i) => spaceMap.has(i.spaceId))
+    .map((i) => ({ invitation: i, space: spaceMap.get(i.spaceId)! }));
+  res.json(result);
+});
+
+// ─── My code requests (must be before /:id) ─────────────────────────────────
+router.get("/spaces/my-code-requests", async (req, res) => {
+  const { userId } = req.query;
+  if (!userId || typeof userId !== "string") {
+    res.status(400).json({ error: "userId is required" });
+    return;
+  }
+  const codeRequests = await db
+    .select()
+    .from(spaceCodeRequestsTable)
+    .where(
+      and(
+        eq(spaceCodeRequestsTable.requesterId, userId),
+        eq(spaceCodeRequestsTable.status, "PENDING"),
+      ),
+    );
+  if (codeRequests.length === 0) {
+    res.json([]);
+    return;
+  }
+  const spaceIds = [...new Set(codeRequests.map((r) => r.spaceId))];
+  const spaces = await db
+    .select()
+    .from(spacesTable)
+    .where(inArray(spacesTable.id, spaceIds));
+  const spaceMap = new Map(spaces.map((s) => [s.id, s]));
+  const result = codeRequests
+    .filter((r) => spaceMap.has(r.spaceId))
+    .map((r) => ({ codeRequest: r, space: spaceMap.get(r.spaceId)! }));
+  res.json(result);
+});
+
+// ─── List spaces (enriched with role + participant count) ────────────────────
 router.get("/spaces", async (req, res) => {
   const { userId } = req.query;
   if (!userId || typeof userId !== "string") {
@@ -21,7 +86,7 @@ router.get("/spaces", async (req, res) => {
     return;
   }
   const participations = await db
-    .select({ spaceId: spaceParticipationsTable.spaceId })
+    .select()
     .from(spaceParticipationsTable)
     .where(
       and(
@@ -34,11 +99,47 @@ router.get("/spaces", async (req, res) => {
     return;
   }
   const spaceIds = participations.map((p) => p.spaceId);
-  const spaces = await db
-    .select()
-    .from(spacesTable)
-    .where(inArray(spacesTable.id, spaceIds));
-  res.json(spaces);
+  const roleMap = new Map(
+    participations.map((p) => [p.spaceId, p.role]),
+  );
+
+  const [spaces, allParticipations, allRounds] = await Promise.all([
+    db.select().from(spacesTable).where(inArray(spacesTable.id, spaceIds)),
+    db
+      .select()
+      .from(spaceParticipationsTable)
+      .where(
+        and(
+          inArray(spaceParticipationsTable.spaceId, spaceIds),
+          eq(spaceParticipationsTable.status, "APPROVED"),
+        ),
+      ),
+    db
+      .select()
+      .from(spaceRoundsTable)
+      .where(
+        and(
+          inArray(spaceRoundsTable.spaceId, spaceIds),
+          eq(spaceRoundsTable.status, "ACTIVE"),
+        ),
+      ),
+  ]);
+
+  const participantCountMap = new Map<string, number>();
+  for (const p of allParticipations) {
+    participantCountMap.set(p.spaceId, (participantCountMap.get(p.spaceId) ?? 0) + 1);
+  }
+
+  const activeRoundMap = new Map(allRounds.map((r) => [r.spaceId, r]));
+
+  const result = spaces.map((space) => ({
+    ...space,
+    myRole: roleMap.get(space.id) ?? "PARTICIPANT",
+    participantCount: participantCountMap.get(space.id) ?? 0,
+    activeRound: activeRoundMap.get(space.id) ?? null,
+  }));
+
+  res.json(result);
 });
 
 router.post("/spaces", async (req, res) => {

@@ -1799,7 +1799,83 @@ export const ToggleTeamArticlePinResponse = zod.object({
 });
 
 /**
- * @summary List spaces the user participates in
+ * @summary List pending space invitations for the current user
+ */
+export const ListMySpaceInvitationsQueryParams = zod.object({
+  userId: zod.coerce.string().uuid(),
+});
+
+export const ListMySpaceInvitationsResponseItem = zod.object({
+  invitation: zod.object({
+    id: zod.string().uuid(),
+    spaceId: zod.string().uuid(),
+    invitedUserId: zod.string().uuid(),
+    invitedBy: zod.string().uuid(),
+    status: zod.enum(["PENDING", "ACCEPTED", "DECLINED"]),
+    createdAt: zod.date(),
+    updatedAt: zod.date(),
+  }),
+  space: zod.object({
+    id: zod.string().uuid(),
+    name: zod.string(),
+    description: zod.string().nullish(),
+    isAnonymous: zod.boolean(),
+    startsAt: zod.date().nullish(),
+    roundCount: zod.number(),
+    maxParticipants: zod.number().nullish(),
+    defaultCenterInterval: zod.number(),
+    defaultCenterCount: zod.number(),
+    status: zod.enum(["RECRUITING", "ACTIVE", "ARCHIVED"]),
+    creatorId: zod.string().uuid(),
+    inviteCode: zod.string().nullish(),
+    createdAt: zod.date(),
+    updatedAt: zod.date(),
+  }),
+});
+export const ListMySpaceInvitationsResponse = zod.array(
+  ListMySpaceInvitationsResponseItem,
+);
+
+/**
+ * @summary List pending code requests for the current user
+ */
+export const ListMySpaceCodeRequestsQueryParams = zod.object({
+  userId: zod.coerce.string().uuid(),
+});
+
+export const ListMySpaceCodeRequestsResponseItem = zod.object({
+  codeRequest: zod.object({
+    id: zod.string().uuid(),
+    spaceId: zod.string().uuid(),
+    requesterId: zod.string().uuid(),
+    code: zod.string(),
+    status: zod.enum(["PENDING", "APPROVED", "REJECTED"]),
+    createdAt: zod.date(),
+    updatedAt: zod.date(),
+  }),
+  space: zod.object({
+    id: zod.string().uuid(),
+    name: zod.string(),
+    description: zod.string().nullish(),
+    isAnonymous: zod.boolean(),
+    startsAt: zod.date().nullish(),
+    roundCount: zod.number(),
+    maxParticipants: zod.number().nullish(),
+    defaultCenterInterval: zod.number(),
+    defaultCenterCount: zod.number(),
+    status: zod.enum(["RECRUITING", "ACTIVE", "ARCHIVED"]),
+    creatorId: zod.string().uuid(),
+    inviteCode: zod.string().nullish(),
+    createdAt: zod.date(),
+    updatedAt: zod.date(),
+  }),
+});
+export const ListMySpaceCodeRequestsResponse = zod.array(
+  ListMySpaceCodeRequestsResponseItem,
+);
+
+/**
+ * @summary List spaces the user participates in (with role and participant count)
  */
 export const ListSpacesQueryParams = zod.object({
   userId: zod.coerce.string().uuid(),
@@ -1820,6 +1896,20 @@ export const ListSpacesResponseItem = zod.object({
   inviteCode: zod.string().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
+  myRole: zod.enum(["OPERATOR", "PARTICIPANT"]),
+  participantCount: zod.number(),
+  activeRound: zod
+    .object({
+      id: zod.string().uuid(),
+      spaceId: zod.string().uuid(),
+      roundNumber: zod.number(),
+      title: zod.string().nullish(),
+      description: zod.string().nullish(),
+      status: zod.enum(["UPCOMING", "ACTIVE", "COMPLETED"]),
+      createdAt: zod.date(),
+      updatedAt: zod.date(),
+    })
+    .nullish(),
 });
 export const ListSpacesResponse = zod.array(ListSpacesResponseItem);
 

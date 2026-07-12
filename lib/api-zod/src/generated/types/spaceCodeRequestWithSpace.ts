@@ -6,9 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { Space } from "./space";
-import type { SpaceInvitation } from "./spaceInvitation";
+import type { SpaceCodeRequest } from "./spaceCodeRequest";
 
-export interface SpaceInvitationWithSpace {
-  invitation: SpaceInvitation;
+export interface SpaceCodeRequestWithSpace {
+  codeRequest: SpaceCodeRequest;
   space: Space;
 }

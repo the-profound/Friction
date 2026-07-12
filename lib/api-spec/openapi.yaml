@@ -1384,11 +1384,55 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
   # ─── Spaces ───────────────────────────────────────
+  /spaces/my-invitations:
+    get:
+      operationId: listMySpaceInvitations
+      tags: [spaces]
+      summary: List pending space invitations for the current user
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Pending invitations with space data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SpaceInvitationWithSpace"
+
+  /spaces/my-code-requests:
+    get:
+      operationId: listMySpaceCodeRequests
+      tags: [spaces]
+      summary: List pending code requests for the current user
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Pending code requests with space data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SpaceCodeRequestWithSpace"
+
   /spaces:
     get:
       operationId: listSpaces
       tags: [spaces]
-      summary: List spaces the user participates in
+      summary: List spaces the user participates in (with role and participant count)
       parameters:
         - name: userId
           in: query
@@ -1404,7 +1448,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/Space"
+                  $ref: "#/components/schemas/SpaceListItem"
     post:
       operationId: createSpace
       tags: [spaces]
@@ -3099,6 +3143,75 @@ components:
       required: [senderId, recipientId, articleId]
 
     # ─── Space ──────────────────────────────────────
+    SpaceListItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        isAnonymous:
+          type: boolean
+        startsAt:
+          type: string
+          format: date-time
+          nullable: true
+        roundCount:
+          type: integer
+        maxParticipants:
+          type: integer
+          nullable: true
+        defaultCenterInterval:
+          type: integer
+        defaultCenterCount:
+          type: integer
+        status:
+          type: string
+          enum: [RECRUITING, ACTIVE, ARCHIVED]
+        creatorId:
+          type: string
+          format: uuid
+        inviteCode:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        myRole:
+          type: string
+          enum: [OPERATOR, PARTICIPANT]
+        participantCount:
+          type: integer
+        activeRound:
+          $ref: "#/components/schemas/SpaceRound"
+          nullable: true
+      required: [id, name, isAnonymous, roundCount, defaultCenterInterval, defaultCenterCount, status, creatorId, createdAt, updatedAt, myRole, participantCount]
+
+    SpaceInvitationWithSpace:
+      type: object
+      properties:
+        invitation:
+          $ref: "#/components/schemas/SpaceInvitation"
+        space:
+          $ref: "#/components/schemas/Space"
+      required: [invitation, space]
+
+    SpaceCodeRequestWithSpace:
+      type: object
+      properties:
+        codeRequest:
+          $ref: "#/components/schemas/SpaceCodeRequest"
+        space:
+          $ref: "#/components/schemas/Space"
+      required: [codeRequest, space]
+
     Space:
       type: object
       properties:
