@@ -145,17 +145,22 @@ router.get("/spaces", async (req, res) => {
 });
 
 router.post("/spaces", async (req, res) => {
-  const body = req.body;
-  const [space] = await db.insert(spacesTable).values(body).returning();
-  if (body.creatorId) {
-    await db.insert(spaceParticipationsTable).values({
-      spaceId: space.id,
-      userId: body.creatorId,
-      role: "OPERATOR",
-      status: "APPROVED",
-    });
+  try {
+    const body = req.body;
+    const [space] = await db.insert(spacesTable).values(body).returning();
+    if (body.creatorId) {
+      await db.insert(spaceParticipationsTable).values({
+        spaceId: space.id,
+        userId: body.creatorId,
+        role: "OPERATOR",
+        status: "APPROVED",
+      });
+    }
+    res.status(201).json(space);
+  } catch (err) {
+    console.error("POST /spaces error:", err);
+    res.status(500).json({ error: "공간 생성에 실패했어요." });
   }
-  res.status(201).json(space);
 });
 
 router.get("/spaces/by-invite-code/:code", async (req, res) => {
@@ -235,11 +240,16 @@ router.get("/spaces/:id/rounds", async (req, res) => {
 });
 
 router.post("/spaces/:id/rounds", async (req, res) => {
-  const [round] = await db
-    .insert(spaceRoundsTable)
-    .values({ ...req.body, spaceId: req.params.id })
-    .returning();
-  res.status(201).json(round);
+  try {
+    const [round] = await db
+      .insert(spaceRoundsTable)
+      .values({ ...req.body, spaceId: req.params.id })
+      .returning();
+    res.status(201).json(round);
+  } catch (err) {
+    console.error("POST /spaces/:id/rounds error:", err);
+    res.status(500).json({ error: "라운드 생성에 실패했어요." });
+  }
 });
 
 router.patch("/spaces/:id/rounds/:roundId", requireAuth, async (req, res) => {

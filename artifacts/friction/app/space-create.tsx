@@ -165,11 +165,16 @@ export default function SpaceCreateScreen() {
 
   const handleCreate = useCallback(async () => {
     if (isSubmitting) return;
+    if (!userId) {
+      showToast({ message: "로그인이 필요해요.", type: "error" });
+      return;
+    }
     setIsSubmitting(true);
     try {
       const startsAtParsed = form.startsAt.trim()
         ? parseDateInput(form.startsAt) ?? undefined
         : undefined;
+      const startsAtDate = startsAtParsed ? new Date(startsAtParsed) : undefined;
 
       const maxParticipants = form.maxParticipants.trim()
         ? parseInt(form.maxParticipants, 10) || undefined
@@ -180,7 +185,7 @@ export default function SpaceCreateScreen() {
           name: form.name.trim(),
           description: form.description.trim() || null,
           isAnonymous: form.isAnonymous,
-          startsAt: startsAtParsed ?? null,
+          startsAt: startsAtDate ?? null,
           roundCount: form.roundCount,
           maxParticipants: maxParticipants ?? null,
           defaultCenterInterval: form.defaultCenterInterval,
