@@ -2,7 +2,8 @@ import React, { useRef } from "react";
 import { View, Text, StyleSheet, Platform } from "react-native";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import ScalePressable from "@/components/shared/ScalePressable";
-import type { FormatType } from "@/components/MemoPageView/MemoPageView";
+
+export type FormatType = "bold" | "italic" | "underline" | "quote";
 
 export interface AttachMenuAnchor {
   x: number;
@@ -12,33 +13,19 @@ export interface AttachMenuAnchor {
 }
 
 interface MemoToolbarProps {
-  currentPage: number;
-  totalPages: number;
-  onPrevPage: () => void;
-  onNextPage: () => void;
   onDismissKeyboard: () => void;
   onFormat?: (type: FormatType) => void;
   activeFormats?: Set<FormatType>;
-  /**
-   * 클립(첨부) 버튼을 눌렀을 때 호출된다. 버튼의 화면 좌표(anchor)를 전달하므로
-   * 부모가 키보드를 유지한 채 그 위에 첨부 메뉴를 띄운다.
-   */
   onOpenAttachMenu?: (anchor: AttachMenuAnchor) => void;
 }
 
 export default function MemoToolbar({
-  currentPage,
-  totalPages,
-  onPrevPage,
-  onNextPage,
   onDismissKeyboard,
   onFormat,
   activeFormats,
   onOpenAttachMenu,
 }: MemoToolbarProps) {
   const clipBtnRef = useRef<View>(null);
-  const canGoPrev = currentPage > 0;
-  const isLastPage = currentPage >= totalPages - 1;
   const isBoldActive = activeFormats?.has("bold");
   const isItalicActive = activeFormats?.has("italic");
   const isUnderlineActive = activeFormats?.has("underline");
@@ -53,7 +40,6 @@ export default function MemoToolbar({
   return (
     <View style={styles.outerWrap}>
       <View style={styles.capsule}>
-        {/* ── 포맷 버튼 ── */}
         <ScalePressable
           style={[styles.btn, isBoldActive && styles.btnActive]}
           contentStyle={styles.btnContent}
@@ -103,29 +89,6 @@ export default function MemoToolbar({
 
         <View style={styles.divider} />
 
-        {/* ── 페이지 이동 ── */}
-        <ScalePressable
-          style={[styles.btn, !canGoPrev && styles.btnDisabled]}
-          contentStyle={styles.btnContent}
-          onPress={onPrevPage}
-          hitSlop={8}
-          disabled={!canGoPrev}
-        >
-          <Feather name="chevron-up" size={18} color={canGoPrev ? "#3f3f46" : "#d4d4d8"} />
-        </ScalePressable>
-
-        <ScalePressable
-          style={styles.btn}
-          contentStyle={styles.btnContent}
-          onPress={onNextPage}
-          hitSlop={8}
-        >
-          <Feather name="chevron-down" size={18} color={isLastPage ? "#a1a1aa" : "#3f3f46"} />
-        </ScalePressable>
-
-        <View style={styles.divider} />
-
-        {/* ── 키보드 닫기 ── */}
         <ScalePressable
           style={styles.btn}
           contentStyle={styles.btnContent}
@@ -173,9 +136,6 @@ const styles = StyleSheet.create({
   btnContent: {
     alignItems: "center",
     justifyContent: "center",
-  },
-  btnDisabled: {
-    opacity: 0.35,
   },
   btnActive: {
     backgroundColor: "#92323D",

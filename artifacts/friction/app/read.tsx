@@ -3,24 +3,18 @@ import {
   View,
   Text,
   StyleSheet,
-  TextInput,
   Image,
   BackHandler,
   AppState,
   Platform,
-  ScrollView,
   Pressable,
   Keyboard,
   useWindowDimensions,
   type LayoutChangeEvent,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import MemoWebEditor, {
-  type MemoWebEditorRef,
-  type FormatType,
-  type MemoOverflowSplitPayload,
-} from "@/components/MemoWebEditor/MemoWebEditor";
-import MemoToolbar, { type AttachMenuAnchor } from "@/components/MemoToolbar/MemoToolbar";
+import MemoBottomSheet, { type MemoBottomSheetRef } from "@/components/MemoBottomSheet/MemoBottomSheet";
+import MemoToolbar, { type FormatType, type AttachMenuAnchor } from "@/components/MemoToolbar/MemoToolbar";
 import ScalePressable from "@/components/shared/ScalePressable";
 import {
   trackPageTurn,
@@ -62,8 +56,7 @@ import { resolveArticleCover } from "@/utils/articleCover";
 import CoverPage from "@/components/CoverPage/CoverPage";
 import WebViewMarkdownReader from "@/components/WebViewMarkdownReader";
 import { normalizePageItem } from "@/utils/normalizePageItem";
-import { parseMemoPages, serializeMemoPages, buildReplyContent } from "@/utils/memoPages";
-import { parseMarkdownBlocks, type MarkdownBlockType } from "@/utils/markdownParser";
+import { parseMemoPages, buildReplyContent } from "@/utils/memoPages";
 import { useReadingSession } from "@/lib/useReadingSession";
 import { useReadingMemo } from "@/lib/useReadingMemo";
 import { useQueryClient } from "@tanstack/react-query";
@@ -440,102 +433,16 @@ export default function ReadScreen() {
   const memoContentRef = useRef(readingMemo.memoContent);
   useEffect(() => { memoContentRef.current = readingMemo.memoContent; }, [readingMemo.memoContent]);
 
-  // ── 메모 모드 (페이지네이션) ──────────────────────────────────────────────
+  // ── 메모 모드 (바텀시트) ──────────────────────────────────────────────────
   const [isMemoMode, setIsMemoMode] = useState(false);
-  const [memoPages, setMemoPages] = useState<string[]>([""]);
-  const [memoPageIndex, setMemoPageIndex] = useState(0);
-  // 현재(회전 중인) 페이지 콘텐츠의 정적 블록. WebView가 숨겨지는 애니메이션
-  // 구간 동안 대신 렌더된다 — memoPages/memoPageIndex 가 바뀌면 자동으로
-  // 최신 콘텐츠를 반영한다.
-  const memoFrontBlocks = useMemo(
-    () => parseMarkdownBlocks(memoPages[memoPageIndex] ?? ""),
-    [memoPages, memoPageIndex],
-  );
+  const [memoOpenContent, setMemoOpenContent] = useState("");
+  const [memoPendingQuote, setMemoPendingQuote] = useState<string | undefined>(undefined);
   const [memoActiveFormats, setMemoActiveFormats] = useState<Set<FormatType>>(new Set());
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const isMemoModeRef = useRef(false);
-  const memoPageIndexRef = useRef(0);
-  const memoWebRef = useRef<MemoWebEditorRef>(null);
-  const memoPagesRef = useRef<string[]>([""]);
+  const memoWebRef = useRef<MemoBottomSheetRef>(null);
   const keyboardVisibleRef = useRef(false);
-  const memoSlideX = useSharedValue(layout.containerWidth + 40);
-  // 키보드가 열려 있는 동안 위/아래 드래그로 메모 카드 자체를 이동시키는
-  // (WebView 내부 스크롤이 아닌) translateY 값. 키보드가 닫히면 0으로
-  // 애니메이션 복귀한 뒤에만 다시 페이지 플립 제스처가 활성화된다.
-  const memoEditScrollY = useSharedValue(0);
-  // 카드를 위로 끌어올릴 수 있는 최대치(px). 키보드 높이에 맞춰 갱신된다.
-  const memoEditScrollMaxRef = useRef(0);
-  // 편집-스크롤 드래그가 시작될 때 카드의 현재 오프셋을 기록해 둔다.
-  // translationY 는 매 제스처마다 0에서 다시 시작하므로, 이전 드래그가
-  // 남겨둔 오프셋 위에 새 드래그를 이어 붙이려면 시작점을 더해야 한다
-  // (그렇지 않으면 새 드래그가 시작될 때마다 카드가 0으로 스냅했다가
-  // 다시 움직이는 것처럼 보인다).
-  const memoEditScrollStartRef = useRef(0);
-  // 키보드가 닫혀 카드가 중앙으로 복귀 애니메이션 중인 동안 true — 이 구간
-  // 에는 드래그를 무시해 플립 제스처가 섣불리 활성화되지 않게 막는다.
-  const memoReturningRef = useRef(false);
-  // 메모 모드 진입/종료와 동기화되어 편지 페이지 pager를 좌우로 밀어내는
-  // 공유 애니메이션 값. 메모가 우측(W+40)→중앙으로 들어올 때 0→-(W+40)으로,
-  // 메모가 중앙→우측으로 나갈 때 -(W+40)→0으로 memoSlideX와 같은
-  // 지속시간/이징으로 움직인다 — 이동 내내 두 페이지 사이 40px 간격이 유지되고
-  // 밀려난 편지는 좌측 패딩·그림자까지 포함해 완전히 화면 밖으로 사라진다.
-  const letterSlideX = useSharedValue(0);
-  const handleNextMemoPageRef = useRef<() => void>(() => {});
-  const handlePrevMemoPageRef = useRef<() => void>(() => {});
-
-  // 3D flip animation state (버튼 + 스와이프 공용)
-  const memoFlipAngle = useSharedValue(0);
-  // 현재 페이지가 들리기 시작하는 순간부터 그 뒤에 "이미 놓여 있는" 다음/이전
-  // 페이지를 정적으로 렌더링하기 위한 미리보기 블록. null이면 미리보기 레이어를
-  // 렌더링하지 않는다.
-  const [memoPreviewBlocks, setMemoPreviewBlocks] = useState<MarkdownBlockType[] | null>(null);
-  const memoPreviewIdxRef = useRef<number | null>(null);
-  // 드래그/플립 애니메이션 진행 중에는 실제 편집용 WebView를 숨기고(3D 회전 중
-  // 흰 화면 깜빡임/갱신 지연 문제가 있음) 즉시 렌더되는 정적 블록을 대신
-  // 보여준다. 각도가 0(정지)으로 돌아오면 다시 WebView를 드러낸다.
-  const [memoIsFlipping, setMemoIsFlipping] = useState(false);
-  const memoIsFlippingRef = useRef(false);
-  const markMemoFlipActive = useCallback(() => {
-    if (!memoIsFlippingRef.current) {
-      memoIsFlippingRef.current = true;
-      setMemoIsFlipping(true);
-    }
-  }, []);
-  const markMemoFlipIdle = useCallback(() => {
-    memoIsFlippingRef.current = false;
-    setMemoIsFlipping(false);
-  }, []);
-  const memoPagesTotalRef = useRef(1);
-  const memoContainerHeightRef = useRef(600);
-  const memoContainerWidthRef = useRef(300);
-  const memoFlipAnimRunning = useRef(false);
-  // 페이지 전환 대기 상태: export(현재 페이지 저장) 완료 후 실제 플립 실행
-  const pendingTurnRef = useRef<number | null>(null);
-  const memoTurnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // 메모 에디터 선택 핸들 드래그 중에는 스와이프 플립 제스처를 비활성화한다.
-  const memoTextSelectingRef = useRef(false);
-  const handleMemoSelectionActiveChange = useCallback((active: boolean) => {
-    memoTextSelectingRef.current = active;
-  }, []);
-
-  // MemoWebEditor 내부 레이아웃(hintRow + editorWrap)과 동일한 공식으로 계산한
-  // 실제 편집 가능 높이 — 오버플로 자동 분할 감지에 사용된다.
-  const memoAvailableContentHeightPx = useMemo(() => {
-    const hintRowH = layout.bodyFontSize * 0.78 + layout.paddingY * 0.6;
-    return Math.max(0, layout.containerHeight - hintRowH - insets.bottom);
-  }, [layout.containerHeight, layout.bodyFontSize, layout.paddingY, insets.bottom]);
-
-  const memoAnimStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: memoSlideX.value },
-      { translateY: memoEditScrollY.value },
-    ],
-  }));
-
-  const letterAnimStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: letterSlideX.value }],
-  }));
 
   // 메모 모드 진입/종료에 맞춰 하단 진행률 바를 fade out/in 한다.
   const progressBarOpacity = useSharedValue(1);
@@ -550,10 +457,6 @@ export default function ReadScreen() {
   }));
 
   useEffect(() => { isMemoModeRef.current = isMemoMode; }, [isMemoMode]);
-  useEffect(() => { memoPageIndexRef.current = memoPageIndex; }, [memoPageIndex]);
-  useEffect(() => { memoPagesTotalRef.current = memoPages.length; }, [memoPages.length]);
-  useEffect(() => { memoContainerHeightRef.current = layout.containerHeight; }, [layout.containerHeight]);
-  useEffect(() => { memoContainerWidthRef.current = layout.containerWidth; }, [layout.containerWidth]);
 
   // Keyboard height tracking for toolbar
   useEffect(() => {
@@ -563,10 +466,6 @@ export default function ReadScreen() {
       setKeyboardHeight(e.endCoordinates.height);
       setKeyboardVisible(true);
       keyboardVisibleRef.current = true;
-      memoEditScrollMaxRef.current = Math.min(
-        e.endCoordinates.height,
-        memoContainerHeightRef.current * 0.45,
-      );
     });
     const hideSub = Keyboard.addListener(hideEvent, () => {
       setKeyboardHeight(0);
@@ -576,368 +475,21 @@ export default function ReadScreen() {
     return () => { showSub.remove(); hideSub.remove(); };
   }, []);
 
-  // 키보드가 닫히면 (열려 있는 동안 드래그로 이동했던) 메모 카드를 중앙으로
-  // 부드럽게 복귀시킨다. 복귀 애니메이션이 끝나기 전까지는 스와이프 플립
-  // 제스처가 재활성화되지 않도록 memoReturningRef 로 막는다.
-  const clearMemoReturning = useCallback(() => {
-    memoReturningRef.current = false;
-  }, []);
-  useEffect(() => {
-    if (keyboardVisible) return;
-    if (memoEditScrollY.value === 0) return;
-    memoReturningRef.current = true;
-    // 키보드가 빠르게 열고 닫히며 이 이펙트가 다시 실행되면 위 withTiming이
-    // 취소(finished=false)될 수 있다. `finished` 여부와 무관하게 항상
-    // clearMemoReturning을 호출해야 memoReturningRef가 true로 멈춰
-    // 스와이프 플립 제스처가 영구히 막히는 것을 방지한다.
-    memoEditScrollY.value = withTiming(
-      0,
-      { duration: 220, easing: Easing.inOut(Easing.ease) },
-      () => {
-        runOnJS(clearMemoReturning)();
-      },
-    );
-  }, [keyboardVisible, clearMemoReturning, memoEditScrollY]);
-
-  // Sync memo pages from readingMemo.memoContent when not in memo mode
-  useEffect(() => {
-    if (isMemoModeRef.current) return;
-    const pages = parseMemoPages(readingMemo.memoContent);
-    memoPagesRef.current = pages;
-    setMemoPages(pages);
-  }, [readingMemo.memoContent]);
-
-  const enterMemoMode = useCallback((appendText?: string) => {
-    const currentContent = memoContentRef.current;
-    const pages = parseMemoPages(currentContent);
-    if (appendText) {
-      // Append text to last page and immediately persist so the quote isn't lost
-      const lastIdx = pages.length - 1;
-      const base = pages[lastIdx] ?? "";
-      pages[lastIdx] = base ? `${base}\n\n${appendText}` : appendText;
-      readingMemo.updateMemoContent(serializeMemoPages(pages));
-    }
-    memoPagesRef.current = pages;
-    setMemoPages(pages);
-    setMemoPageIndex(pages.length - 1);
-    memoPageIndexRef.current = pages.length - 1;
-    memoFlipAngle.value = 0;
-    memoPreviewIdxRef.current = null;
-    setMemoPreviewBlocks(null);
-    memoFlipAnimRunning.current = false;
-    memoIsFlippingRef.current = false;
-    setMemoIsFlipping(false);
-    pendingTurnRef.current = null;
+  const openMemoMode = useCallback((quoteText?: string) => {
+    const pages = parseMemoPages(memoContentRef.current);
+    const flattened = pages.join("\n\n").trim();
+    setMemoOpenContent(flattened);
+    setMemoPendingQuote(quoteText);
     setMemoActiveFormats(new Set());
     setIsMemoMode(true);
-    memoSlideX.value = (layout.containerWidth + 40);
-    letterSlideX.value = 0;
-    requestAnimationFrame(() => {
-      memoSlideX.value = withTiming(0, { duration: 320, easing: Easing.bezier(0.25, 0.46, 0.45, 0.94) });
-      // 메모(우측 W+40에서 시작)와 대칭으로 편지도 -(W+40)까지 밀어내야
-      // 두 페이지 사이 40px 간격이 유지되고, 화면 좌측 패딩/그림자까지 포함해
-      // 편지가 완전히 화면 밖으로 사라진다.
-      letterSlideX.value = withTiming(-(layout.containerWidth + 40), { duration: 320, easing: Easing.bezier(0.25, 0.46, 0.45, 0.94) });
-    });
-  }, [layout.containerWidth, memoSlideX, letterSlideX, memoFlipAngle, readingMemo]);
+  }, []);
 
-  const exitMemoMode = useCallback(() => {
-    // 현재 페이지의 최신 편집 내용을 저장한 뒤 슬라이드 아웃한다.
-    memoWebRef.current?.requestExport("exit");
+  const closeMemoMode = useCallback(() => {
     memoWebRef.current?.blur();
     Keyboard.dismiss();
-    memoSlideX.value = withTiming(layout.containerWidth + 40, {
-      duration: 280,
-      easing: Easing.in(Easing.ease),
-    }, () => {
-      runOnJS(setIsMemoMode)(false);
-    });
-    letterSlideX.value = withTiming(0, {
-      duration: 280,
-      easing: Easing.in(Easing.ease),
-    });
-  }, [layout.containerWidth, memoSlideX, letterSlideX]);
-
-  // 특정 인덱스의 페이지 내용을 저장 + 영속화
-  const saveMemoPage = useCallback((idx: number, markdown: string) => {
-    setMemoPages((prev) => {
-      if (idx < 0 || idx >= prev.length || prev[idx] === markdown) return prev;
-      const next = [...prev];
-      next[idx] = markdown;
-      memoPagesRef.current = next;
-      readingMemo.updateMemoContent(serializeMemoPages(next));
-      return next;
-    });
-  }, [readingMemo]);
-
-  const finishFlip = useCallback(() => {
-    memoFlipAnimRunning.current = false;
+    setIsMemoMode(false);
+    setMemoPendingQuote(undefined);
   }, []);
-
-  // targetIdx 페이지를 "뒤에 이미 놓여 있는" 정적 미리보기로 표시한다. 같은
-  // 페이지가 이미 표시 중이면 다시 파싱/렌더하지 않는다.
-  const showMemoPreview = useCallback((targetIdx: number) => {
-    if (memoPreviewIdxRef.current === targetIdx) return;
-    memoPreviewIdxRef.current = targetIdx;
-    setMemoPreviewBlocks(parseMarkdownBlocks(memoPagesRef.current[targetIdx] ?? ""));
-  }, []);
-
-  const clearMemoPreview = useCallback(() => {
-    memoPreviewIdxRef.current = null;
-    setMemoPreviewBlocks(null);
-  }, []);
-
-  // 플립 후반부: edge-on(±90°) 상태에서 콘텐츠를 다음 페이지로 교체한 뒤
-  // 반대편에서 원위치(0°)로 회전시킨다. 다음 페이지는 정적 미리보기 레이어로
-  // 이미 뒤에 놓여 있었으므로, 여기서는 그 위를 덮던 (지금은 콘텐츠가 같아진)
-  // 카드를 제자리로 되돌리기만 하면 된다 — 별도의 가림막이 필요 없다.
-  // 아래 두 애니메이션 콜백은 의도적으로 `finished` 플래그를 무시하고 항상
-  // 정리(클린업) 로직을 실행한다. Reanimated의 withTiming 콜백은 새 값
-  // 대입 등으로 애니메이션이 중간에 취소되면 finished=false 로 호출되는데,
-  // 과거에는 `if (finished)` 로 감싸 두어 취소된 경우 markMemoFlipIdle 등이
-  // 전혀 호출되지 않았다. 그 결과 카드가 edge-on(±90°)으로 멈춘 채 실제
-  // WebView(페이지 수/힌트/placeholder 포함)는 opacity:0으로 계속 숨겨지고,
-  // 텍스트가 없는 previewBlocks 레이어만 남아 완전한 백지 카드로 보이는
-  // 버그가 있었다. 취소 여부와 무관하게 항상 idle 상태로 수렴시켜야
-  // 이런 교착을 방지할 수 있다.
-  const afterFlipHalf = useCallback((targetIdx: number, dir: number) => {
-    setMemoPageIndex(targetIdx);
-    memoPageIndexRef.current = targetIdx;
-    memoWebRef.current?.setMarkdown(memoPagesRef.current[targetIdx] ?? "");
-    setMemoActiveFormats(new Set());
-    memoFlipAngle.value = -dir * 90;
-    memoFlipAngle.value = withTiming(0, { duration: 180, easing: Easing.out(Easing.ease) }, () => {
-      runOnJS(clearMemoPreview)();
-      runOnJS(finishFlip)();
-      runOnJS(markMemoFlipIdle)();
-    });
-  }, [memoFlipAngle, finishFlip, clearMemoPreview, markMemoFlipIdle]);
-
-  // 플립 전반부: 현재 페이지를 edge-on(±90°)까지 회전시켜 사라지게 함.
-  // 회전이 시작되는 순간부터 목표 페이지를 정적 미리보기로 뒤에 깔아 둔다.
-  const runFlip = useCallback((targetIdx: number) => {
-    markMemoFlipActive();
-    showMemoPreview(targetIdx);
-    const dir = targetIdx > memoPageIndexRef.current ? 1 : -1;
-    memoFlipAngle.value = withTiming(dir * 90, { duration: 160, easing: Easing.in(Easing.ease) }, () => {
-      runOnJS(afterFlipHalf)(targetIdx, dir);
-    });
-  }, [memoFlipAngle, afterFlipHalf, showMemoPreview, markMemoFlipActive]);
-
-  // 페이지 전환: 현재 페이지를 export(저장)한 뒤 플립 실행
-  const flipToPage = useCallback((targetIdx: number) => {
-    if (memoFlipAnimRunning.current) return;
-    const curIdx = memoPageIndexRef.current;
-    if (targetIdx === curIdx || targetIdx < 0 || targetIdx >= memoPagesRef.current.length) return;
-    memoFlipAnimRunning.current = true;
-    pendingTurnRef.current = targetIdx;
-    memoWebRef.current?.requestExport(`turn:${targetIdx}`);
-    // export 이벤트가 오지 않는 경우(에디터 미준비 등) 대비 fallback
-    if (memoTurnTimerRef.current) clearTimeout(memoTurnTimerRef.current);
-    memoTurnTimerRef.current = setTimeout(() => {
-      if (pendingTurnRef.current === targetIdx) {
-        pendingTurnRef.current = null;
-        runFlip(targetIdx);
-      }
-    }, 220);
-  }, [runFlip]);
-
-  // WebView 에디터의 export 결과 수신 → 현재 페이지 저장 + (turn 요청이면) 플립 실행
-  const handleMemoExport = useCallback((markdown: string, requestId: string) => {
-    const savedIdx = memoPageIndexRef.current;
-    saveMemoPage(savedIdx, markdown);
-    if (requestId.startsWith("turn:")) {
-      const target = pendingTurnRef.current;
-      pendingTurnRef.current = null;
-      if (memoTurnTimerRef.current) { clearTimeout(memoTurnTimerRef.current); memoTurnTimerRef.current = null; }
-      if (target != null && target !== savedIdx) {
-        runFlip(target);
-      } else {
-        memoFlipAnimRunning.current = false;
-      }
-    }
-  }, [saveMemoPage, runFlip]);
-
-  // 타이핑 중 현재 페이지가 넘칠 때 WebView 가 보고하는 분할 이벤트 처리:
-  // 넘치기 전 내용은 현재 페이지에 남기고, 넘친 내용은 다음 페이지 맨
-  // 앞에 이어붙인 뒤(다음 페이지가 없으면 새로 만든다) 기존 플립
-  // 애니메이션으로 자연스럽게 넘어간다.
-  const handleMemoOverflowSplit = useCallback((payload: MemoOverflowSplitPayload) => {
-    if (memoFlipAnimRunning.current) return;
-    const idx = memoPageIndexRef.current;
-    const pages = memoPagesRef.current;
-    const { beforeMarkdown, afterMarkdown } = payload;
-
-    const hasNext = idx < pages.length - 1;
-    const mergedNext = hasNext
-      ? `${afterMarkdown}\n\n${pages[idx + 1] ?? ""}`.replace(/\n{3,}/g, "\n\n")
-      : afterMarkdown;
-
-    const nextPages = pages.slice();
-    nextPages[idx] = beforeMarkdown;
-    if (hasNext) {
-      nextPages[idx + 1] = mergedNext;
-    } else {
-      nextPages.push(mergedNext);
-    }
-    memoPagesRef.current = nextPages;
-    setMemoPages(nextPages);
-    readingMemo.updateMemoContent(serializeMemoPages(nextPages));
-    memoWebRef.current?.setMarkdown(beforeMarkdown);
-
-    memoFlipAnimRunning.current = true;
-    runFlip(idx + 1);
-  }, [readingMemo, runFlip]);
-
-  const handleNextMemoPage = useCallback(() => {
-    if (memoFlipAnimRunning.current) return;
-    const idx = memoPageIndexRef.current;
-    const pages = memoPagesRef.current;
-    if (idx < pages.length - 1) {
-      flipToPage(idx + 1);
-    } else {
-      // 마지막 페이지에서 새 빈 페이지 추가 후 이동
-      const next = [...pages, ""];
-      memoPagesRef.current = next;
-      setMemoPages(next);
-      readingMemo.updateMemoContent(serializeMemoPages(next));
-      flipToPage(next.length - 1);
-    }
-  }, [flipToPage, readingMemo]);
-
-  const handlePrevMemoPage = useCallback(() => {
-    const idx = memoPageIndexRef.current;
-    if (idx > 0) flipToPage(idx - 1);
-  }, [flipToPage]);
-
-  // 스와이프 제스처에서도 버튼과 동일한 export→플립 흐름을 재사용하기 위한 ref.
-  // (Gesture.Pan은 useMemo(deps=[])로 한 번만 생성되므로 최신 콜백은 ref로 참조한다.)
-  const flipToPageRef = useRef(flipToPage);
-  useEffect(() => { flipToPageRef.current = flipToPage; }, [flipToPage]);
-
-  // 메모 모드 스와이프 3D 플립 제스처.
-  // rotateX 는 가로축을 기준으로 앞/뒤로 넘어가는 회전이므로, 손가락도 상하(수직)로
-  // 움직인 양에 비례해 memoFlipAngle 을 실시간으로 갱신한다(rotateX 입체 효과).
-  // 임계값을 넘겨 손을 떼면 flipToPage 로 커밋(export→edge-on→콘텐츠 교체→복귀),
-  // 못 넘기면 0도로 스냅백한다. 더 넘길 페이지가 없는 경계에서는 살짝만 젖혀졌다가
-  // 스냅백되는 저항 효과를 준다. (위로 스와이프 = 다음 페이지, 아래로 스와이프 = 이전 페이지)
-  const memoPanGesture = useMemo(() => Gesture.Pan()
-    .runOnJS(true)
-    .minDistance(6)
-    .activeOffsetY([-10, 10])
-    .failOffsetX([-14, 14])
-    .onBegin(() => {
-      // 편집-스크롤 드래그가 이어질 경우를 대비해 카드의 현재 오프셋을
-      // 시작점으로 기록해 둔다(플립 모드에서는 사용되지 않아도 무해하다).
-      memoEditScrollStartRef.current = memoEditScrollY.value;
-    })
-    .onUpdate((e) => {
-      if (memoTextSelectingRef.current || memoReturningRef.current) return;
-      const dx = e.translationX;
-      const dy = e.translationY;
-      if (Math.abs(dx) > Math.abs(dy) * 1.2) return;
-
-      // 키보드가 열려 편집 중일 때는 페이지를 넘기지 않고, 카드 자체를
-      // 위/아래로 이동시켜 키보드에 가려진 텍스트를 볼 수 있게 한다
-      // (WebView 내부 스크롤이 아니라 카드 translateY). translationY 는
-      // 매 제스처마다 0부터 다시 시작하므로 이전 드래그가 남긴 오프셋
-      // (memoEditScrollStartRef)에 이어 붙여야 새 드래그 시작 시 카드가
-      // 0으로 스냅했다가 움직이는 점프가 생기지 않는다.
-      if (keyboardVisibleRef.current) {
-        const max = memoEditScrollMaxRef.current;
-        let next = memoEditScrollStartRef.current + dy;
-        if (next < -max) next = -max;
-        if (next > max * 0.15) next = max * 0.15;
-        memoEditScrollY.value = next;
-        return;
-      }
-
-      if (memoFlipAnimRunning.current) return;
-
-      const H = memoContainerHeightRef.current || 600;
-      const idx = memoPageIndexRef.current;
-      const total = memoPagesTotalRef.current;
-      const isForward = dy < 0;
-      const atLast = idx >= total - 1;
-      const atFirst = idx <= 0;
-      const boundary = (isForward && atLast) || (!isForward && atFirst);
-
-      // 드래그가 시작되는 즉시 실제 WebView를 숨기고(회전 중 흰 화면 깜빡임
-      // 방지) 현재 페이지의 정적 렌더로 전환한다.
-      markMemoFlipActive();
-
-      // 현재 페이지가 들리기 시작하는 즉시, 그 뒤에 놓일 다음/이전 페이지를
-      // 정적 미리보기로 표시한다 (경계에서는 넘어갈 페이지가 없으므로 생략).
-      if (!boundary) {
-        showMemoPreview(isForward ? idx + 1 : idx - 1);
-      }
-
-      const RATIO = boundary ? 30 : 115;
-      const MAX = boundary ? 16 : 90;
-      let angle = (-dy / H) * RATIO;
-      angle = Math.max(-MAX, Math.min(MAX, angle));
-      memoFlipAngle.value = angle;
-    })
-    .onEnd((e) => {
-      if (memoTextSelectingRef.current || memoReturningRef.current) {
-        return;
-      }
-      if (keyboardVisibleRef.current) {
-        // 편집 중 카드 이동은 별도 스냅이 필요 없다 — 사용자가 놓은 위치에
-        // 그대로 머문다(키보드가 닫힐 때 중앙 복귀 애니메이션이 처리).
-        return;
-      }
-      if (memoFlipAnimRunning.current) {
-        return;
-      }
-      const dy = e.translationY;
-      const vy = e.velocityY;
-      const idx = memoPageIndexRef.current;
-      const total = memoPagesTotalRef.current;
-      const isForward = dy < 0;
-      const atLast = idx >= total - 1;
-      const atFirst = idx <= 0;
-      const boundary = (isForward && atLast) || (!isForward && atFirst);
-
-      // `finished` 여부와 무관하게 항상 정리한다 (위 afterFlipHalf/runFlip
-      // 주석 참고) — 애니메이션이 새 제스처 등으로 취소되어도 idle 상태로
-      // 수렴시켜 카드가 edge-on/숨김 상태로 멈추지 않게 한다.
-      const snapBack = () => {
-        memoFlipAngle.value = withTiming(0, { duration: 200, easing: Easing.out(Easing.ease) }, () => {
-          runOnJS(clearMemoPreview)();
-          runOnJS(markMemoFlipIdle)();
-        });
-      };
-
-      if (boundary) {
-        snapBack();
-        return;
-      }
-
-      const H = memoContainerHeightRef.current || 600;
-      const THRESHOLD_PX = H * 0.22;
-      const VELOCITY_THRESHOLD = 500;
-      const shouldCommit = Math.abs(dy) > THRESHOLD_PX || Math.abs(vy) > VELOCITY_THRESHOLD;
-
-      if (!shouldCommit) {
-        snapBack();
-        return;
-      }
-
-      const targetIdx = isForward ? idx + 1 : idx - 1;
-      flipToPageRef.current(targetIdx);
-    })
-    .onFinalize(() => {
-      if (keyboardVisibleRef.current || memoReturningRef.current) return;
-      if (!memoFlipAnimRunning.current) {
-        // 여기서도 `finished` 여부와 무관하게 항상 정리한다.
-        memoFlipAngle.value = withTiming(0, { duration: 200, easing: Easing.out(Easing.ease) }, () => {
-          runOnJS(clearMemoPreview)();
-          runOnJS(markMemoFlipIdle)();
-        });
-      }
-    }),
-  []);
 
   // 툴바 서식 버튼 → WebView 에디터 명령
   const handleMemoFormat = useCallback((type: FormatType) => {
@@ -967,12 +519,9 @@ export default function ReadScreen() {
     memoWebRef.current?.insertQuote(sentence.text);
   }, []);
 
-  useEffect(() => { handleNextMemoPageRef.current = handleNextMemoPage; }, [handleNextMemoPage]);
-  useEffect(() => { handlePrevMemoPageRef.current = handlePrevMemoPage; }, [handlePrevMemoPage]);
-
   const handleOpenMemo = useCallback(() => {
-    enterMemoMode();
-  }, [enterMemoMode]);
+    openMemoMode();
+  }, [openMemoMode]);
 
   // Entry animation: fade in reader only once, when content is actually ready.
   // Using [] would fire immediately during the loading state (before the overlay
@@ -1933,9 +1482,9 @@ export default function ReadScreen() {
     const author = authorName ?? "";
     const title = article?.title ?? "";
     const quoteBlock = `> ${text.trim()}\n>\n> ${author}, <${title}>, ${pageNum}면`;
-    enterMemoMode(quoteBlock);
+    openMemoMode(quoteBlock);
     trackMemoCreatedDuringReading({ articleId, page: currentPage });
-  }, [currentPage, authorName, article?.title, enterMemoMode, articleId]);
+  }, [currentPage, authorName, article?.title, openMemoMode, articleId]);
 
   const handleSaveSentence = useCallback(async () => {
     if (!selectedText) return;
@@ -2133,17 +1682,14 @@ export default function ReadScreen() {
                         backward → prev slides –W→0 in from left on top, current stays.
                       Opaque overlay Views on the bottom slot block WebView bleed-through
                       while the moving card exposes what is underneath. */}
-                  <Animated.View
-                    style={[
-                      {
-                        position: "absolute",
-                        top: 0,
-                        left: 0,
-                        width: layout.containerWidth,
-                        height: layout.containerHeight,
-                      },
-                      letterAnimStyle,
-                    ]}
+                  <View
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: layout.containerWidth,
+                      height: layout.containerHeight,
+                    }}
                     pointerEvents="box-none"
                   >
                     {(() => {
@@ -2282,7 +1828,7 @@ export default function ReadScreen() {
                         </>
                       );
                     })()}
-                  </Animated.View>
+                  </View>
 
                   {/* ── 질문 카드 (읽기 완료) — 마지막 페이지와 같은 프레임 안에서
                       오른쪽에서 슬라이드인, 페이지와 거의 동일한 크기 ──────── */}
@@ -2335,50 +1881,6 @@ export default function ReadScreen() {
                     />
                   )}
 
-                  {/* ── 메모 모드 오버레이 — 오른쪽에서 슬라이드인 ──────── */}
-                  {isMemoMode && (
-                    <GestureDetector gesture={memoPanGesture}>
-                      <Animated.View
-                        style={[
-                          {
-                            position: "absolute",
-                            top: 0,
-                            left: 0,
-                            width: layout.containerWidth,
-                            height: layout.containerHeight,
-                            zIndex: 20,
-                          },
-                          memoAnimStyle,
-                        ]}
-                      >
-                        {/* 메모 에디터: 기록 탭과 동일한 WebView(TipTap) 엔진.
-                            한 번에 한 페이지를 표시하고, 페이지 전환은 좌우 스와이프
-                            (드래그 비례 3D 플립) 또는 툴바 이전/다음 버튼으로 처리한다. */}
-                        <MemoWebEditor
-                          ref={memoWebRef}
-                          flipAngle={memoFlipAngle}
-                          previewBlocks={memoPreviewBlocks}
-                          frontBlocks={memoFrontBlocks}
-                          isFlipping={memoIsFlipping}
-                          initialContent={memoPages[memoPageIndex] ?? ""}
-                          pageIndex={memoPageIndex}
-                          totalPages={memoPages.length}
-                          onExportMarkdown={handleMemoExport}
-                          onActiveFormatsChange={setMemoActiveFormats}
-                          onTextSelectionActiveChange={handleMemoSelectionActiveChange}
-                          onOverflowSplit={handleMemoOverflowSplit}
-                          availableContentHeightPx={memoAvailableContentHeightPx}
-                          containerWidth={layout.containerWidth}
-                          containerHeight={layout.containerHeight}
-                          paddingX={layout.paddingX}
-                          paddingY={layout.paddingY}
-                          bodyFontSize={layout.bodyFontSize}
-                          keyboardVisible={keyboardVisible}
-                          bottomInset={insets.bottom}
-                        />
-                      </Animated.View>
-                    </GestureDetector>
-                  )}
                 </View>
               </View>
               </View>
@@ -2415,25 +1917,38 @@ export default function ReadScreen() {
           !finishOverlayVisible 조건처럼 뚝 잘리지 않는다. */}
       <Animated.View
         style={[fabAnimStyle, { position: "absolute", bottom: insets.bottom + 24, right: 20 }]}
-        pointerEvents={finishOverlayVisible ? "none" : "box-none"}
+        pointerEvents={finishOverlayVisible || isMemoMode ? "none" : "box-none"}
       >
         <ScalePressable
-          onPress={isMemoMode ? exitMemoMode : handleOpenMemo}
+          onPress={handleOpenMemo}
           hitSlop={8}
           style={[
             styles.memoFab,
             { bottom: 0, right: 0, position: "relative" },
-            isMemoMode && styles.memoFabActive,
           ]}
           contentStyle={styles.memoFabContent}
         >
-          <Feather
-            name={isMemoMode ? "x" : "edit-3"}
-            size={20}
-            color={isMemoMode ? Colors.zinc800 : Colors.zinc600}
-          />
+          <Feather name="edit-3" size={20} color={Colors.zinc600} />
         </ScalePressable>
       </Animated.View>
+
+      {/* ── 메모 바텀시트 ──────────────────────────────────────────────── */}
+      <MemoBottomSheet
+        ref={memoWebRef}
+        visible={isMemoMode}
+        onClose={closeMemoMode}
+        memoTitle={readingMemo.memoTitle}
+        memoContent={memoOpenContent}
+        pendingQuote={memoPendingQuote}
+        onTitleChange={readingMemo.updateMemoTitle}
+        onExportMarkdown={(markdown, _requestId) => {
+          readingMemo.updateMemoContent(markdown);
+        }}
+        onActiveFormatsChange={setMemoActiveFormats}
+        bodyFontSize={layout.bodyFontSize}
+        keyboardVisible={keyboardVisible}
+        bottomInset={insets.bottom}
+      />
 
       {/* ── 메모 모드 키보드 툴바 ──────────────────────────────────────── */}
       {isMemoMode && keyboardVisible && keyboardHeight > 0 && (
@@ -2445,13 +1960,7 @@ export default function ReadScreen() {
           pointerEvents="box-none"
         >
           <MemoToolbar
-            currentPage={memoPageIndex}
-            totalPages={memoPages.length}
-            onPrevPage={handlePrevMemoPage}
-            onNextPage={handleNextMemoPage}
             onDismissKeyboard={() => {
-              // 키보드는 WebView 내부에 떠 있으므로 RN Keyboard.dismiss() 만으로는
-              // 닫히지 않는다. WebView 에디터의 포커스를 먼저 해제해야 한다.
               memoWebRef.current?.blur();
               Keyboard.dismiss();
             }}
@@ -2899,7 +2408,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     right: 0,
-    zIndex: 50,
+    zIndex: 52,
   },
   attachMenu: {
     position: "absolute",
