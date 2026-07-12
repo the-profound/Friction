@@ -7,6 +7,7 @@ import {
   RefreshControl,
   ScrollView,
 } from "react-native";
+import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -183,6 +184,7 @@ export default function SpacesScreen() {
   const queryClient = useQueryClient();
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   const [accepting, setAccepting] = useState<string | null>(null);
+  const [showAddSheet, setShowAddSheet] = useState(false);
 
   const spacesQuery = useListSpaces({ userId });
   const invitationsQuery = useListMySpaceInvitations({ userId });
@@ -299,7 +301,26 @@ export default function SpacesScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <PageHeader title="공간" />
+      <PageHeader
+        title="공간"
+        showAdd
+        onAddPress={() => setShowAddSheet(true)}
+      />
+      <ActionSheetModal
+        visible={showAddSheet}
+        onClose={() => setShowAddSheet(false)}
+        actions={[
+          {
+            label: "공간 만들기",
+            onPress: () => router.push("/space-create" as never),
+          },
+          {
+            label: "초대 코드로 참여",
+            onPress: () => router.push("/space-join" as never),
+          },
+          { label: "취소", style: "cancel", onPress: () => {} },
+        ]}
+      />
 
       {isLoading ? (
         <View style={[styles.centerContainer, { paddingBottom: navBottom }]}>
