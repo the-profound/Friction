@@ -1,4 +1,5 @@
-import { boolean, check, integer, pgEnum, pgTable, sql, text, timestamp, unique, uuid, varchar } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { boolean, check, integer, pgEnum, pgTable, text, timestamp, unique, uuid, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 

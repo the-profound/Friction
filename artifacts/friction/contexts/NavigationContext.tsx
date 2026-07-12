@@ -36,6 +36,7 @@ const DETAIL_ROUTE_MAP: Record<string, DetailRouteInfo> = {
   "of-02": { tab: "OF" },
   "of-02-detail": { tab: "OF" },
   "of-03": { tab: "AR" },
+  "space-create": { tab: "OF" },
   "to-03": { tab: "TO", toSubTab: "history" },
   "read": { tab: "IN" },
 };
