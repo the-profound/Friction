@@ -219,3 +219,21 @@ semantics for a given slot as its own index changes over time. General
 lesson: whenever multiple sibling slots in a multi-slot pager can
 legitimately point at the same underlying index (virtual/dwell states,
 pinned-during-settle states), key by `(role, index)` not index alone.
+
+**(Supersedes the "prev slot reveal" description above) B is now a true PUSH
+driven through the CURRENT slot, and the dwell parks current off-screen.**
+The old B implementation drove `dismissPrevSlotSV` — but during the card
+dwell the prev slot render is SKIPPED (currentPageIdx === prevPageIdx key
+collision), so that drive was a no-op and B only "worked" because the slot
+-reset useLayoutEffect had incorrectly snapped the current slot (last page)
+back to translateX 0 behind the card — visible as "a letter page stuck
+behind the card stack" once the card shrank below full-screen. Current
+architecture: (1) the slot-reset effect parks `currentSlotSV` at
+-(W+PARK_EXTRA) whenever `currentPage >= totalPages` (card dwell); (2) B's
+drag drives `currentSlotSV = min(0, dx - W)` glued 1:1 to `cardTX` with
+`flatTransitionSV = 1` (the initial jump from -(W+PARK_EXTRA) to ≈ -W is
+invisible — both off-screen); (3) B-commit sets the card's animatingRef
+BEFORE `onDismissOverlay` — without it, a new gesture starting mid-settle
+fires onDismissOverlay/prevPage() twice and jumps back two pages; (4) the
+card's own gesture ignores input while `entranceX.value > 0.5` (A entrance
+still animating) so it can't fight the entrance timing on the same values.

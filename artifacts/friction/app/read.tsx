@@ -1269,13 +1269,31 @@ export default function ReadScreen() {
       currentSlotSV.value = withTiming(0, {
         duration: suppressed.duration,
         easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
+      }, () => {
+        // 입장 애니메이션이 끝나 페이지가 제자리(0)에 정착한 시점에만 flat
+        // 플래그를 내린다 (finished 게이트 없이 항상 — 취소돼도 플래그가
+        // 굳지 않게). 이 시점엔 current 슬롯 그림자와 next 슬롯 정적
+        // 그림자가 같은 자리라 교대가 눈에 보이지 않는다.
+        flatTransitionSV.value = 0;
       });
+    } else if (currentPage >= totalPages) {
+      // (A 커밋 완료) 질문 카드가 떠 있는 동안(currentPage === totalPages 가상
+      // 인덱스) 마지막 페이지는 화면 왼쪽 밖에 파킹돼 있어야 한다.
+      currentSlotSV.value = -(layout.containerWidth + PARK_EXTRA);
+      // 카드 체류 중에는 flatTransitionSV를 1로 유지해 파킹된 슬롯에 회전이
+      // 걸리지 않게 한다. 회전이 있으면 모서리가 화면 가장자리에 삐져나와
+      // "편지 페이지가 좌우로 늘어나 보이는" 현상이 생긴다.
+      flatTransitionSV.value = 1;
     } else {
       currentSlotSV.value = 0;
+      // 일반 페이지 상태의 안전망: 어떤 경로로든 flat 플래그가 1로 남아
+      // 있으면 이후 모든 페이지 넘김의 회전/그림자가 flat 모드로 굳는다.
+      // 페이지가 제자리(0)로 강제되는 이 시점에 함께 0으로 확정한다.
+      flatTransitionSV.value = 0;
     }
     prevSlotSV.value = -(layout.containerWidth + PARK_EXTRA); // park prev far off-screen left
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, layout.containerWidth]);
+  }, [currentPage, layout.containerWidth, totalPages]);
 
   // Forward swipe: current slides left and tilts slightly clockwise (positive rotateZ).
   // Backward swipe: prev slides in from left, starting tilted and settling to flat.
@@ -1324,7 +1342,13 @@ export default function ReadScreen() {
   // swiped out — proportional to the same factor that drives its 0°→-4° rotation.
   // Mimics lifting a sheet of paper: the more it lifts, the darker its shadow.
   const currentShadowStyle = useAnimatedStyle(() => {
-    if (flatTransitionSV.value) return { opacity: 0 };
+    // Flat transition (마지막 페이지 ↔ 질문 카드): 아래에 드러나는 슬롯이
+    // 없으므로 정지 그림자는 이 페이지 "자신"의 것이어야 한다 — 페이지와 함께
+    // 이동하도록 여기(current 슬롯 내부, translateX를 같이 탐)서 풀 오퍼시티로
+    // 켠다. next 슬롯의 정적 그림자는 이때 완전히 꺼진다(아래 참조). 제자리에
+    // 남은 정적 그림자가 좌우로 삐져나오면 "카드 뒤에 편지 페이지가 놓인 듯한"
+    // 고스트가 되기 때문.
+    if (flatTransitionSV.value) return { opacity: 1 };
     const W = containerWidthSV.value || 300;
     const slideOut = -currentSlotSV.value; // 0 at rest, W when fully out
     const progress = Math.min(1, Math.max(0, slideOut / W));
@@ -1339,6 +1363,28 @@ export default function ReadScreen() {
     const slideIn = prevSlotSV.value + W; // –PARK_EXTRA parked → W fully in
     const progress = Math.min(1, Math.max(0, 1 - slideIn / W));
     return { opacity: progress };
+  });
+
+  // NEXT 슬롯 정적 그림자: 일반 페이지 넘김에서는 아래에 드러나는 다음
+  // 페이지의 정지 그림자이므로 항상 켠다. flat 전환(마지막 페이지 ↔ 질문
+  // 카드) 중에는 아래에 드러나는 것이 없으므로 완전히 끈다 — 제자리에 남은
+  // 이 그림자 상자의 좌우 번짐(boxShadow bleed)이 "카드 뒤에 편지 페이지가
+  // 좌우로 늘어나 놓여 있는" 고스트의 원인이었다. 그림자 역할은 current
+  // 슬롯(페이지와 함께 이동, 위 currentShadowStyle)이 넘겨받는다.
+  // flatTransitionSV는 페이지가 정확히 제자리(currentSlotSV=0)일 때만
+  // 토글되므로 두 그림자가 같은 자리에서 교대해 팝이 전혀 없다.
+  const nextSlotShadowAnimStyle = useAnimatedStyle(() => {
+    return { opacity: flatTransitionSV.value ? 0 : 1 };
+  });
+
+  // Memo FAB opacity: fades out as the letter page slides off to the left (A),
+  // fades back in as the letter page returns (B). Driven by currentSlotSV so
+  // the animation is continuous and perfectly in sync with the page — no abrupt
+  // jump when finishOverlayVisible changes.
+  const fabAnimStyle = useAnimatedStyle(() => {
+    const W = containerWidthSV.value || 300;
+    const slideOut = Math.min(W, Math.max(0, -currentSlotSV.value));
+    return { opacity: 1 - slideOut / W };
   });
 
 
@@ -1439,7 +1485,12 @@ export default function ReadScreen() {
         // completed normally or was cancelled (finished=false). Gating on
         // `finished` leaves isCommittingRef permanently true when the
         // animation is interrupted, locking out all future swipes.
-        flatTransitionSV.value = 0;
+        // NOTE: flatTransitionSV는 여기서 0으로 되돌리지 않는다 — 카드 체류가
+        // 시작되는 순간이며, 슬롯 리셋 useLayoutEffect가 JS 스레드에서 돌기
+        // 전 몇 프레임 동안 0이면 파킹된 페이지에 회전이 걸리고 next 슬롯
+        // 정적 그림자가 카드 뒤에서 번쩍인다("좌우로 늘어난 편지지" 고스트).
+        // 카드가 떠 있는 동안은 항상 1을 유지하고, B 새틀 완료 시점에
+        // QuestionCardCurl이 0으로 되돌린다.
         cardEntranceMountedRef.current = false;
         isCommittingRef.current = false;
         activeSwipeRef.current = null;
@@ -1521,17 +1572,18 @@ export default function ReadScreen() {
           cardEntranceMountedRef.current = true;
           lastPageEntranceActiveRef.current = true;
           flatTransitionSV.value = 1;
-          cardEntranceX.value = W;
-          // See matching comment in the button-driven A entrance above:
-          // cardTX is now lifted to read.tsx and persists across
-          // QuestionCardCurl mount/unmount, so it must be explicitly reset
-          // here too whenever a fresh card mount begins.
+          // 2W: 드래그 내내 카드를 화면 밖에 완전히 숨긴다. 카드 왼쪽 가장자리
+          // = 2W + clamped, clamped 최솟값 = –W → 카드 최솟값 = W (컨테이너
+          // 오른쪽 경계). overflow:hidden이 적용된 프레임 안에서 카드는 절대
+          // 보이지 않는다. 커밋 시점에 W → 0 으로 슬라이드 인한다.
+          cardEntranceX.value = 2 * W;
           cardTX.value = 0;
           runOnJS(setFinishOverlayVisible)(true);
         }
         const clamped = Math.max(dx, -W);
         currentSlotSV.value = clamped;
-        cardEntranceX.value = W + clamped;
+        // 카드를 항상 containerWidth 이상 오른쪽에 유지 — 드래그 중 절대 미노출.
+        cardEntranceX.value = 2 * W + clamped;
       } else if (dx < 0) {
         // Forward: current slides left (0 → –(W + PARK_EXTRA)), next slot stays
         // at 0 below. Clamp at -(W + PARK_EXTRA) so the rotated corner can drag
@@ -1605,7 +1657,8 @@ export default function ReadScreen() {
         const commit = absDx > W * 0.22 || Math.abs(e.velocityX) > 450;
         if (!commit) {
           currentSlotSV.value = withSpring(0, snapConfig);
-          cardEntranceX.value = withSpring(W, snapConfig, (finished) => {
+          // 2W: 카드를 다시 완전히 화면 밖으로 스냅 (W는 경계, 2W는 완전 숨김)
+          cardEntranceX.value = withSpring(2 * W, snapConfig, (finished) => {
             if (finished) {
               flatTransitionSV.value = 0;
               cardEntranceMountedRef.current = false;
@@ -1620,6 +1673,11 @@ export default function ReadScreen() {
           duration: LAST_PAGE_TRANSITION_DURATION,
           easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
         });
+        // 커밋: 카드를 오른쪽 경계(W)에서 시작해 0까지 슬라이드 인.
+        // 드래그 중 cardEntranceX는 2W+clamped(항상 ≥W)로 보관됐으므로
+        // 여기서 W로 점프한 뒤 애니메이션 — 커밋 순간 카드가 오른쪽 경계에서
+        // 나타나 페이지 퇴장과 동시에 슬라이드 인한다.
+        cardEntranceX.value = W;
         cardEntranceX.value = withTiming(0, {
           duration: LAST_PAGE_TRANSITION_DURATION,
           easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
@@ -1627,7 +1685,8 @@ export default function ReadScreen() {
           // Always reset guard flags regardless of finished — gating on
           // `finished` leaves isCommittingRef permanently true when the
           // animation is interrupted, locking out all future swipes.
-          flatTransitionSV.value = 0;
+          // NOTE: flatTransitionSV는 여기서 되돌리지 않는다 — 위의 버튼 구동
+          // A 커밋과 동일한 이유(카드 체류 내내 1 유지, gap-frame 고스트 방지).
           // Card has fully arrived — this gesture's entrance is done, so
           // clear the mount guard now. Otherwise the NEXT time the card is
           // dismissed and re-approached (A again), onUpdate's
@@ -1692,7 +1751,8 @@ export default function ReadScreen() {
           // below-threshold release.
           lastPageEntranceActiveRef.current = false;
           currentSlotSV.value = withSpring(0, snapConfig);
-          cardEntranceX.value = withSpring(W, snapConfig, (finished) => {
+          // 2W: 카드를 완전히 화면 밖으로 복귀 (onEnd cancel과 동일)
+          cardEntranceX.value = withSpring(2 * W, snapConfig, (finished) => {
             if (finished) {
               flatTransitionSV.value = 0;
               cardEntranceMountedRef.current = false;
@@ -2181,10 +2241,17 @@ export default function ReadScreen() {
                         <>
                           {/* next — bottom layer, always carries the base shadow
                               (static, full opacity) so the resting page always casts
-                              exactly one shadow. Rendered even when there is no next
-                              real page so the completion card keeps its shadow. */}
+                              exactly one shadow. Shadow is suppressed while the
+                              question-card overlay is visible — the card has its own
+                              shadow, and the slot shadow would appear as a ghost
+                              letter-page outline behind the card. */}
                           <View key={`page-${currentPage + 1}`} style={slotBase}>
-                            <View style={shadowLayer} />
+                            {/* flat 전환(마지막 페이지 ↔ 질문 카드) 동안엔 완전히
+                                꺼진다 — 이 정적 그림자 상자가 제자리에 남으면 좌우
+                                boxShadow 번짐이 "카드 뒤 편지지" 고스트가 된다.
+                                그동안의 그림자는 current 슬롯이 페이지와 함께
+                                이동하며 대신 그린다 (nextSlotShadowAnimStyle 참조). */}
+                            <Animated.View style={[shadowLayer, nextSlotShadowAnimStyle]} />
                             {nextNode != null && (
                               <View style={slotContent}>{nextNode}</View>
                             )}
@@ -2343,13 +2410,19 @@ export default function ReadScreen() {
       </Animated.View>
 
       {/* ── Memo FAB — bottom right (읽기 중에만 표시) ─────────────────── */}
-      {!finishOverlayVisible && (
+      {/* 카드 화면으로 넘어가는 동안 편지 페이지와 함께 서서히 fade out,
+          마지막 페이지로 복귀할 때 fade in — currentSlotSV에 연동돼
+          !finishOverlayVisible 조건처럼 뚝 잘리지 않는다. */}
+      <Animated.View
+        style={[fabAnimStyle, { position: "absolute", bottom: insets.bottom + 24, right: 20 }]}
+        pointerEvents={finishOverlayVisible ? "none" : "box-none"}
+      >
         <ScalePressable
           onPress={isMemoMode ? exitMemoMode : handleOpenMemo}
           hitSlop={8}
           style={[
             styles.memoFab,
-            { bottom: insets.bottom + 24 },
+            { bottom: 0, right: 0, position: "relative" },
             isMemoMode && styles.memoFabActive,
           ]}
           contentStyle={styles.memoFabContent}
@@ -2360,7 +2433,7 @@ export default function ReadScreen() {
             color={isMemoMode ? Colors.zinc800 : Colors.zinc600}
           />
         </ScalePressable>
-      )}
+      </Animated.View>
 
       {/* ── 메모 모드 키보드 툴바 ──────────────────────────────────────── */}
       {isMemoMode && keyboardVisible && keyboardHeight > 0 && (

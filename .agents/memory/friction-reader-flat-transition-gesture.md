@@ -11,11 +11,27 @@ no natural hook to special-case a single transition (e.g. last-page → question
 touching every other normal page turn that reuses the same style functions.
 
 **Pattern:** add a dedicated boolean-ish shared value (e.g. `flatTransitionSV`, 0/1) read at
-the top of the shared `useAnimatedStyle` functions to force rotation → 0 and shadow opacity → 0
-when set. Set it to 1 immediately before starting the special transition's `withTiming`, and
-reset it to 0 inside that same `withTiming`'s completion callback (before/alongside the
-`runOnJS` continuation). This keeps every other call site of the shared style untouched — no
-per-call-site duplication of the rotation math.
+the top of the shared `useAnimatedStyle` functions to force rotation → 0 when set. This keeps
+every other call site of the shared style untouched — no per-call-site duplication of the
+rotation math.
+
+**Flag lifetime (learned the hard way — regressed twice):** the flag must stay 1 for the
+*entire* time the overlay/card exists, and only return to 0 at moments when the page slot is
+exactly at rest (translateX = 0): cancel-snap-back completion, dismiss-settle completion, or
+the normal-page slot-reset layout effect. Resetting it inside the *entrance* animation's
+completion callback creates a UI-thread→JS-thread gap of a few frames (before the layout
+effect re-parks the slot and re-sets the flag) where rotation and the wrong shadow flash
+behind the card. Also don't reset it in mid-dwell paths (direction-flip, cancel, onFinalize
+recovery) — still dwelling.
+
+**Shadow handoff during flat transitions:** the resting shadow normally lives on the static
+`next` slot underneath. During a flat push transition nothing is revealed underneath, so a
+static shadow box left in place bleeds its boxShadow beyond the left/right edges and reads as
+a "stretched letter page lying behind the card" ghost. Fading it with drag progress does NOT
+fix this (still visible mid-transition). Correct fix: while the flat flag is set, the static
+next-slot shadow is fully OFF and the *moving* slot carries the shadow at full opacity
+(shadow layer inside the translating slot). Because the flag only toggles when the page is at
+rest, the two shadows swap on the same footprint — zero visible pop.
 
 # Converting a fixed-timing onEnd-only swipe into a gesture-following one
 
