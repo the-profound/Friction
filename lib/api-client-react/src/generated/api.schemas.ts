@@ -775,6 +775,7 @@ export const SpaceCodeRequestStatus = {
   PENDING: "PENDING",
   APPROVED: "APPROVED",
   REJECTED: "REJECTED",
+  CANCELLED: "CANCELLED",
 } as const;
 
 export interface SpaceCodeRequest {
@@ -783,6 +784,7 @@ export interface SpaceCodeRequest {
   requesterId: string;
   code: string;
   status: SpaceCodeRequestStatus;
+  rejectionReason?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -802,10 +804,12 @@ export type UpdateSpaceCodeRequestBodyStatus =
 export const UpdateSpaceCodeRequestBodyStatus = {
   APPROVED: "APPROVED",
   REJECTED: "REJECTED",
+  CANCELLED: "CANCELLED",
 } as const;
 
 export interface UpdateSpaceCodeRequestBody {
   status?: UpdateSpaceCodeRequestBodyStatus;
+  rejectionReason?: string | null;
 }
 
 export type SpaceLetterLetterType =
@@ -868,6 +872,22 @@ export interface SpaceScheduledSend {
 
 export interface CreateSpaceScheduledSendBody {
   scheduledAt: string;
+}
+
+export type SpaceWithCreatorInfo = Space & {
+  creatorNickname?: string | null;
+  participantCount: number;
+};
+
+export type SpaceInvitationWithSpace = SpaceInvitation & {
+  space: SpaceWithCreatorInfo;
+};
+
+export interface SpaceJoinContext {
+  space: SpaceWithCreatorInfo;
+  participation?: SpaceParticipation | null;
+  invitation?: SpaceInvitation | null;
+  codeRequest?: SpaceCodeRequest | null;
 }
 
 export interface SpellCheckBody {
@@ -977,6 +997,14 @@ export type ListTeamArticlesParams = {
 };
 
 export type ListSpacesParams = {
+  userId: string;
+};
+
+export type GetSpaceJoinContextParams = {
+  userId: string;
+};
+
+export type ListUserSpaceInvitationsParams = {
   userId: string;
 };
 

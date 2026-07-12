@@ -2075,7 +2075,8 @@ export const UpdateSpaceCodeRequestParams = zod.object({
 });
 
 export const UpdateSpaceCodeRequestBody = zod.object({
-  status: zod.enum(["APPROVED", "REJECTED"]).optional(),
+  status: zod.enum(["APPROVED", "REJECTED", "CANCELLED"]).optional(),
+  rejectionReason: zod.string().nullish(),
 });
 
 export const UpdateSpaceCodeRequestResponse = zod.object({
@@ -2083,7 +2084,8 @@ export const UpdateSpaceCodeRequestResponse = zod.object({
   spaceId: zod.string().uuid(),
   requesterId: zod.string().uuid(),
   code: zod.string(),
-  status: zod.enum(["PENDING", "APPROVED", "REJECTED"]),
+  status: zod.enum(["PENDING", "APPROVED", "REJECTED", "CANCELLED"]),
+  rejectionReason: zod.string().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -2156,6 +2158,159 @@ export const CreateSpaceScheduledSendParams = zod.object({
 export const CreateSpaceScheduledSendBody = zod.object({
   scheduledAt: zod.date(),
 });
+
+/**
+ * @summary Look up a space by its invite code
+ */
+export const GetSpaceByInviteCodeParams = zod.object({
+  code: zod.coerce.string(),
+});
+
+export const GetSpaceByInviteCodeResponse = zod
+  .object({
+    id: zod.string().uuid(),
+    name: zod.string(),
+    description: zod.string().nullish(),
+    isAnonymous: zod.boolean(),
+    startsAt: zod.date().nullish(),
+    roundCount: zod.number(),
+    maxParticipants: zod.number().nullish(),
+    defaultCenterInterval: zod.number(),
+    defaultCenterCount: zod.number(),
+    status: zod.enum(["RECRUITING", "ACTIVE", "ARCHIVED"]),
+    creatorId: zod.string().uuid(),
+    inviteCode: zod.string().nullish(),
+    createdAt: zod.date(),
+    updatedAt: zod.date(),
+  })
+  .and(
+    zod.object({
+      creatorNickname: zod.string().nullish(),
+      participantCount: zod.number(),
+    }),
+  );
+
+/**
+ * @summary Get a user's join context for a space (participation, invitation, code request)
+ */
+export const GetSpaceJoinContextParams = zod.object({
+  id: zod.coerce.string().uuid(),
+});
+
+export const GetSpaceJoinContextQueryParams = zod.object({
+  userId: zod.coerce.string().uuid(),
+});
+
+export const GetSpaceJoinContextResponse = zod.object({
+  space: zod
+    .object({
+      id: zod.string().uuid(),
+      name: zod.string(),
+      description: zod.string().nullish(),
+      isAnonymous: zod.boolean(),
+      startsAt: zod.date().nullish(),
+      roundCount: zod.number(),
+      maxParticipants: zod.number().nullish(),
+      defaultCenterInterval: zod.number(),
+      defaultCenterCount: zod.number(),
+      status: zod.enum(["RECRUITING", "ACTIVE", "ARCHIVED"]),
+      creatorId: zod.string().uuid(),
+      inviteCode: zod.string().nullish(),
+      createdAt: zod.date(),
+      updatedAt: zod.date(),
+    })
+    .and(
+      zod.object({
+        creatorNickname: zod.string().nullish(),
+        participantCount: zod.number(),
+      }),
+    ),
+  participation: zod
+    .object({
+      id: zod.string().uuid(),
+      spaceId: zod.string().uuid(),
+      userId: zod.string().uuid(),
+      role: zod.enum(["OPERATOR", "PARTICIPANT"]),
+      joinPath: zod.enum(["INVITATION", "CODE"]).nullish(),
+      status: zod.enum(["PENDING", "APPROVED", "REJECTED", "WITHDRAWN"]),
+      invitationId: zod.string().uuid().nullish(),
+      codeRequestId: zod.string().uuid().nullish(),
+      createdAt: zod.date(),
+      updatedAt: zod.date(),
+    })
+    .nullish(),
+  invitation: zod
+    .object({
+      id: zod.string().uuid(),
+      spaceId: zod.string().uuid(),
+      invitedUserId: zod.string().uuid(),
+      invitedBy: zod.string().uuid(),
+      status: zod.enum(["PENDING", "ACCEPTED", "DECLINED"]),
+      createdAt: zod.date(),
+      updatedAt: zod.date(),
+    })
+    .nullish(),
+  codeRequest: zod
+    .object({
+      id: zod.string().uuid(),
+      spaceId: zod.string().uuid(),
+      requesterId: zod.string().uuid(),
+      code: zod.string(),
+      status: zod.enum(["PENDING", "APPROVED", "REJECTED", "CANCELLED"]),
+      rejectionReason: zod.string().nullish(),
+      createdAt: zod.date(),
+      updatedAt: zod.date(),
+    })
+    .nullish(),
+});
+
+/**
+ * @summary List pending space invitations for a user
+ */
+export const ListUserSpaceInvitationsQueryParams = zod.object({
+  userId: zod.coerce.string().uuid(),
+});
+
+export const ListUserSpaceInvitationsResponseItem = zod
+  .object({
+    id: zod.string().uuid(),
+    spaceId: zod.string().uuid(),
+    invitedUserId: zod.string().uuid(),
+    invitedBy: zod.string().uuid(),
+    status: zod.enum(["PENDING", "ACCEPTED", "DECLINED"]),
+    createdAt: zod.date(),
+    updatedAt: zod.date(),
+  })
+  .and(
+    zod.object({
+      space: zod
+        .object({
+          id: zod.string().uuid(),
+          name: zod.string(),
+          description: zod.string().nullish(),
+          isAnonymous: zod.boolean(),
+          startsAt: zod.date().nullish(),
+          roundCount: zod.number(),
+          maxParticipants: zod.number().nullish(),
+          defaultCenterInterval: zod.number(),
+          defaultCenterCount: zod.number(),
+          status: zod.enum(["RECRUITING", "ACTIVE", "ARCHIVED"]),
+          creatorId: zod.string().uuid(),
+          inviteCode: zod.string().nullish(),
+          createdAt: zod.date(),
+          updatedAt: zod.date(),
+        })
+        .and(
+          zod.object({
+            creatorNickname: zod.string().nullish(),
+            participantCount: zod.number(),
+          }),
+        ),
+    }),
+  );
+export const ListUserSpaceInvitationsResponse = zod.array(
+  ListUserSpaceInvitationsResponseItem,
+);
 
 /**
  * @summary List neighbors for a user

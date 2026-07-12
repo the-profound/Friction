@@ -1781,6 +1781,80 @@ paths:
               schema:
                 $ref: "#/components/schemas/SpaceScheduledSend"
 
+  /spaces/by-invite-code/{code}:
+    get:
+      operationId: getSpaceByInviteCode
+      tags: [spaces]
+      summary: Look up a space by its invite code
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Space with creator info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpaceWithCreatorInfo"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /spaces/{id}/join-context:
+    get:
+      operationId: getSpaceJoinContext
+      tags: [spaces]
+      summary: Get a user's join context for a space (participation, invitation, code request)
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Join context
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpaceJoinContext"
+        "404":
+          description: Space not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /space-invitations:
+    get:
+      operationId: listUserSpaceInvitations
+      tags: [spaces]
+      summary: List pending space invitations for a user
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Invitation list with space info
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SpaceInvitationWithSpace"
+
   # ─── Neighbors ────────────────────────────────────
   /neighbors:
     get:
@@ -3306,7 +3380,10 @@ components:
           type: string
         status:
           type: string
-          enum: [PENDING, APPROVED, REJECTED]
+          enum: [PENDING, APPROVED, REJECTED, CANCELLED]
+        rejectionReason:
+          type: string
+          nullable: true
         createdAt:
           type: string
           format: date-time
@@ -3332,7 +3409,10 @@ components:
       properties:
         status:
           type: string
-          enum: [APPROVED, REJECTED]
+          enum: [APPROVED, REJECTED, CANCELLED]
+        rejectionReason:
+          type: string
+          nullable: true
 
     SpaceLetter:
       type: object
@@ -3425,6 +3505,43 @@ components:
           type: string
           format: date-time
       required: [scheduledAt]
+
+    SpaceWithCreatorInfo:
+      allOf:
+        - $ref: "#/components/schemas/Space"
+        - type: object
+          properties:
+            creatorNickname:
+              type: string
+              nullable: true
+            participantCount:
+              type: integer
+          required: [participantCount]
+
+    SpaceInvitationWithSpace:
+      allOf:
+        - $ref: "#/components/schemas/SpaceInvitation"
+        - type: object
+          properties:
+            space:
+              $ref: "#/components/schemas/SpaceWithCreatorInfo"
+          required: [space]
+
+    SpaceJoinContext:
+      type: object
+      properties:
+        space:
+          $ref: "#/components/schemas/SpaceWithCreatorInfo"
+        participation:
+          $ref: "#/components/schemas/SpaceParticipation"
+          nullable: true
+        invitation:
+          $ref: "#/components/schemas/SpaceInvitation"
+          nullable: true
+        codeRequest:
+          $ref: "#/components/schemas/SpaceCodeRequest"
+          nullable: true
+      required: [space]
 
     # ─── SpellCheck ─────────────────────────────────
     SpellCheckBody:

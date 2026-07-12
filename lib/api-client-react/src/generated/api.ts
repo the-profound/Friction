@@ -41,6 +41,7 @@ import type {
   ErrorResponse,
   FinalizeArticleBody,
   GetReadingRecordParams,
+  GetSpaceJoinContextParams,
   HealthStatus,
   InboxItem,
   ListArticlesParams,
@@ -53,6 +54,7 @@ import type {
   ListStoredSentencesParams,
   ListTeamArticlesParams,
   ListTeamCollectionsParams,
+  ListUserSpaceInvitationsParams,
   MarkInboxOthersReadParams,
   MarkInboxOthersReadResponse,
   MyCollection,
@@ -71,10 +73,13 @@ import type {
   Space,
   SpaceCodeRequest,
   SpaceInvitation,
+  SpaceInvitationWithSpace,
+  SpaceJoinContext,
   SpaceLetter,
   SpaceParticipation,
   SpaceRound,
   SpaceScheduledSend,
+  SpaceWithCreatorInfo,
   SpellCheckBody,
   SpellCheckResponse,
   StoredSentence,
@@ -6790,6 +6795,310 @@ export const useCreateSpaceScheduledSend = <
 > => {
   return useMutation(getCreateSpaceScheduledSendMutationOptions(options));
 };
+
+/**
+ * @summary Look up a space by its invite code
+ */
+export const getGetSpaceByInviteCodeUrl = (code: string) => {
+  return `/api/spaces/by-invite-code/${code}`;
+};
+
+export const getSpaceByInviteCode = async (
+  code: string,
+  options?: RequestInit,
+): Promise<SpaceWithCreatorInfo> => {
+  return customFetch<SpaceWithCreatorInfo>(getGetSpaceByInviteCodeUrl(code), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetSpaceByInviteCodeQueryKey = (code: string) => {
+  return [`/api/spaces/by-invite-code/${code}`] as const;
+};
+
+export const getGetSpaceByInviteCodeQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSpaceByInviteCode>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  code: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getSpaceByInviteCode>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetSpaceByInviteCodeQueryKey(code);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getSpaceByInviteCode>>
+  > = ({ signal }) => getSpaceByInviteCode(code, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!code,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSpaceByInviteCode>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetSpaceByInviteCodeQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getSpaceByInviteCode>>
+>;
+export type GetSpaceByInviteCodeQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Look up a space by its invite code
+ */
+
+export function useGetSpaceByInviteCode<
+  TData = Awaited<ReturnType<typeof getSpaceByInviteCode>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  code: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getSpaceByInviteCode>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetSpaceByInviteCodeQueryOptions(code, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get a user's join context for a space (participation, invitation, code request)
+ */
+export const getGetSpaceJoinContextUrl = (
+  id: string,
+  params: GetSpaceJoinContextParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/spaces/${id}/join-context?${stringifiedParams}`
+    : `/api/spaces/${id}/join-context`;
+};
+
+export const getSpaceJoinContext = async (
+  id: string,
+  params: GetSpaceJoinContextParams,
+  options?: RequestInit,
+): Promise<SpaceJoinContext> => {
+  return customFetch<SpaceJoinContext>(getGetSpaceJoinContextUrl(id, params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetSpaceJoinContextQueryKey = (
+  id: string,
+  params?: GetSpaceJoinContextParams,
+) => {
+  return [
+    `/api/spaces/${id}/join-context`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getGetSpaceJoinContextQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSpaceJoinContext>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: string,
+  params: GetSpaceJoinContextParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getSpaceJoinContext>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetSpaceJoinContextQueryKey(id, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getSpaceJoinContext>>
+  > = ({ signal }) =>
+    getSpaceJoinContext(id, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSpaceJoinContext>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetSpaceJoinContextQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getSpaceJoinContext>>
+>;
+export type GetSpaceJoinContextQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get a user's join context for a space (participation, invitation, code request)
+ */
+
+export function useGetSpaceJoinContext<
+  TData = Awaited<ReturnType<typeof getSpaceJoinContext>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: string,
+  params: GetSpaceJoinContextParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getSpaceJoinContext>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetSpaceJoinContextQueryOptions(id, params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List pending space invitations for a user
+ */
+export const getListUserSpaceInvitationsUrl = (
+  params: ListUserSpaceInvitationsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/space-invitations?${stringifiedParams}`
+    : `/api/space-invitations`;
+};
+
+export const listUserSpaceInvitations = async (
+  params: ListUserSpaceInvitationsParams,
+  options?: RequestInit,
+): Promise<SpaceInvitationWithSpace[]> => {
+  return customFetch<SpaceInvitationWithSpace[]>(
+    getListUserSpaceInvitationsUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListUserSpaceInvitationsQueryKey = (
+  params?: ListUserSpaceInvitationsParams,
+) => {
+  return [`/api/space-invitations`, ...(params ? [params] : [])] as const;
+};
+
+export const getListUserSpaceInvitationsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listUserSpaceInvitations>>,
+  TError = ErrorType<unknown>,
+>(
+  params: ListUserSpaceInvitationsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listUserSpaceInvitations>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListUserSpaceInvitationsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listUserSpaceInvitations>>
+  > = ({ signal }) =>
+    listUserSpaceInvitations(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listUserSpaceInvitations>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListUserSpaceInvitationsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listUserSpaceInvitations>>
+>;
+export type ListUserSpaceInvitationsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List pending space invitations for a user
+ */
+
+export function useListUserSpaceInvitations<
+  TData = Awaited<ReturnType<typeof listUserSpaceInvitations>>,
+  TError = ErrorType<unknown>,
+>(
+  params: ListUserSpaceInvitationsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listUserSpaceInvitations>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListUserSpaceInvitationsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary List neighbors for a user

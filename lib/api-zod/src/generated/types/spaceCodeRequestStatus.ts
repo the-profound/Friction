@@ -13,4 +13,5 @@ export const SpaceCodeRequestStatus = {
   PENDING: "PENDING",
   APPROVED: "APPROVED",
   REJECTED: "REJECTED",
+  CANCELLED: "CANCELLED",
 } as const;

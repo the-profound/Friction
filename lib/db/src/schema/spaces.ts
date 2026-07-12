@@ -1,5 +1,5 @@
-import { sql } from "drizzle-orm";
 import { boolean, check, integer, pgEnum, pgTable, text, timestamp, unique, uuid, varchar } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -12,7 +12,7 @@ export const spaceMemberRoleEnum = pgEnum("space_member_role", ["OPERATOR", "PAR
 export const spaceJoinPathEnum = pgEnum("space_join_path", ["INVITATION", "CODE"]);
 export const spaceParticipationStatusEnum = pgEnum("space_participation_status", ["PENDING", "APPROVED", "REJECTED", "WITHDRAWN"]);
 export const spaceInvitationStatusEnum = pgEnum("space_invitation_status", ["PENDING", "ACCEPTED", "DECLINED"]);
-export const spaceCodeRequestStatusEnum = pgEnum("space_code_request_status", ["PENDING", "APPROVED", "REJECTED"]);
+export const spaceCodeRequestStatusEnum = pgEnum("space_code_request_status", ["PENDING", "APPROVED", "REJECTED", "CANCELLED"]);
 export const spaceLetterTypeEnum = pgEnum("space_letter_type", ["OPENING", "CENTER", "REPLY"]);
 export const spaceScheduledSendStatusEnum = pgEnum("space_scheduled_send_status", ["PENDING", "SENT", "CANCELLED"]);
 
@@ -76,6 +76,7 @@ export const spaceCodeRequestsTable = pgTable("space_code_requests", {
   requesterId: uuid("requester_id").notNull().references(() => usersTable.id),
   code: varchar("code", { length: 20 }).notNull(),
   status: spaceCodeRequestStatusEnum("status").notNull().default("PENDING"),
+  rejectionReason: text("rejection_reason"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

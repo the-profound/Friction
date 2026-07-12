@@ -12,4 +12,5 @@ export type UpdateSpaceCodeRequestBodyStatus =
 export const UpdateSpaceCodeRequestBodyStatus = {
   APPROVED: "APPROVED",
   REJECTED: "REJECTED",
+  CANCELLED: "CANCELLED",
 } as const;

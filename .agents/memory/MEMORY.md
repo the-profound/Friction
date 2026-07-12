@@ -13,3 +13,4 @@
 - [Cross-component live pager sync](friction-cross-component-pager-sync.md) — lift Reanimated shared values as controlled props across parent/child gesture boundaries instead of child-owned mount animations; update ALL guard sites (onBegin/onUpdate/onEnd/onFinalize) together.
 - [Friction AI question generation](friction-ai-question-generation.md) — orval query hooks need explicit `queryKey` in options when passing `enabled`, or tsc errors; low-signal article content legitimately fails LLM validation and falls back — not a bug.
 - [Friction photo-must-be-standalone-page](friction-photo-standalone-page.md) — reuse existing autoSplitImages (idempotent) for insert-time isolation instead of a new mechanism; fixed doc-end trailing-fallback edge case.
+- [Drizzle sql import in lib/db](friction-drizzle-sql-import.md) — `sql` tag must come from `drizzle-orm`, not `drizzle-orm/pg-core`; esbuild errors on the wrong import path.

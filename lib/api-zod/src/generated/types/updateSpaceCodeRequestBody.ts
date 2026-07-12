@@ -9,4 +9,5 @@ import type { UpdateSpaceCodeRequestBodyStatus } from "./updateSpaceCodeRequestB
 
 export interface UpdateSpaceCodeRequestBody {
   status?: UpdateSpaceCodeRequestBodyStatus;
+  rejectionReason?: string | null;
 }

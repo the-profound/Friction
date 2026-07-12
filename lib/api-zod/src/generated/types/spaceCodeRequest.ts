@@ -13,6 +13,7 @@ export interface SpaceCodeRequest {
   requesterId: string;
   code: string;
   status: SpaceCodeRequestStatus;
+  rejectionReason?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

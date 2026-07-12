@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, count } from "drizzle-orm";
 import {
   db,
   spacesTable,
@@ -9,6 +9,7 @@ import {
   spaceCodeRequestsTable,
   spaceLettersTable,
   spaceScheduledSendsTable,
+  usersTable,
 } from "@workspace/db";
 
 const router: IRouter = Router();
@@ -52,6 +53,32 @@ router.post("/spaces", async (req, res) => {
     });
   }
   res.status(201).json(space);
+});
+
+router.get("/spaces/by-invite-code/:code", async (req, res) => {
+  const { code } = req.params;
+  const [space] = await db
+    .select()
+    .from(spacesTable)
+    .where(eq(spacesTable.inviteCode, code));
+  if (!space) {
+    res.status(404).json({ error: "Space not found" });
+    return;
+  }
+  const [creator] = await db
+    .select({ nickname: usersTable.nickname })
+    .from(usersTable)
+    .where(eq(usersTable.id, space.creatorId));
+  const [{ value: participantCount }] = await db
+    .select({ value: count() })
+    .from(spaceParticipationsTable)
+    .where(
+      and(
+        eq(spaceParticipationsTable.spaceId, space.id),
+        eq(spaceParticipationsTable.status, "APPROVED"),
+      ),
+    );
+  res.json({ ...space, creatorNickname: creator?.nickname ?? null, participantCount });
 });
 
 router.get("/spaces/:id", async (req, res) => {
@@ -146,9 +173,10 @@ router.post("/spaces/:id/invitations", async (req, res) => {
 });
 
 router.patch("/spaces/:id/invitations/:invitationId", async (req, res) => {
+  const { status } = req.body;
   const [invitation] = await db
     .update(spaceInvitationsTable)
-    .set(req.body)
+    .set({ status })
     .where(
       and(
         eq(spaceInvitationsTable.id, req.params.invitationId),
@@ -159,6 +187,16 @@ router.patch("/spaces/:id/invitations/:invitationId", async (req, res) => {
   if (!invitation) {
     res.status(404).json({ error: "Invitation not found" });
     return;
+  }
+  if (status === "ACCEPTED") {
+    await db.insert(spaceParticipationsTable).values({
+      spaceId: req.params.id,
+      userId: invitation.invitedUserId,
+      role: "PARTICIPANT",
+      status: "APPROVED",
+      joinPath: "INVITATION",
+      invitationId: invitation.id,
+    }).onConflictDoNothing();
   }
   res.json(invitation);
 });
@@ -172,9 +210,13 @@ router.post("/spaces/:id/code-requests", async (req, res) => {
 });
 
 router.patch("/spaces/:id/code-requests/:requestId", async (req, res) => {
+  const { status, rejectionReason } = req.body;
+  const updateFields: Record<string, unknown> = { status };
+  if (rejectionReason !== undefined) updateFields.rejectionReason = rejectionReason;
+
   const [codeRequest] = await db
     .update(spaceCodeRequestsTable)
-    .set(req.body)
+    .set(updateFields)
     .where(
       and(
         eq(spaceCodeRequestsTable.id, req.params.requestId),
@@ -186,7 +228,84 @@ router.patch("/spaces/:id/code-requests/:requestId", async (req, res) => {
     res.status(404).json({ error: "Code request not found" });
     return;
   }
+  if (status === "APPROVED") {
+    await db.insert(spaceParticipationsTable).values({
+      spaceId: req.params.id,
+      userId: codeRequest.requesterId,
+      role: "PARTICIPANT",
+      status: "APPROVED",
+      joinPath: "CODE",
+      codeRequestId: codeRequest.id,
+    }).onConflictDoNothing();
+  }
   res.json(codeRequest);
+});
+
+router.get("/spaces/:id/join-context", async (req, res) => {
+  const { userId } = req.query;
+  if (!userId || typeof userId !== "string") {
+    res.status(400).json({ error: "userId is required" });
+    return;
+  }
+  const [space] = await db
+    .select()
+    .from(spacesTable)
+    .where(eq(spacesTable.id, req.params.id));
+  if (!space) {
+    res.status(404).json({ error: "Space not found" });
+    return;
+  }
+  const [creator] = await db
+    .select({ nickname: usersTable.nickname })
+    .from(usersTable)
+    .where(eq(usersTable.id, space.creatorId));
+  const [{ value: participantCount }] = await db
+    .select({ value: count() })
+    .from(spaceParticipationsTable)
+    .where(
+      and(
+        eq(spaceParticipationsTable.spaceId, space.id),
+        eq(spaceParticipationsTable.status, "APPROVED"),
+      ),
+    );
+  const spaceWithInfo = { ...space, creatorNickname: creator?.nickname ?? null, participantCount };
+
+  const [participation] = await db
+    .select()
+    .from(spaceParticipationsTable)
+    .where(
+      and(
+        eq(spaceParticipationsTable.spaceId, req.params.id),
+        eq(spaceParticipationsTable.userId, userId),
+      ),
+    );
+  const [invitation] = await db
+    .select()
+    .from(spaceInvitationsTable)
+    .where(
+      and(
+        eq(spaceInvitationsTable.spaceId, req.params.id),
+        eq(spaceInvitationsTable.invitedUserId, userId),
+      ),
+    );
+  const codeRequests = await db
+    .select()
+    .from(spaceCodeRequestsTable)
+    .where(
+      and(
+        eq(spaceCodeRequestsTable.spaceId, req.params.id),
+        eq(spaceCodeRequestsTable.requesterId, userId),
+      ),
+    )
+    .orderBy(spaceCodeRequestsTable.createdAt);
+  const codeRequest = codeRequests.at(-1) ?? null;
+
+  res.json({
+    space: spaceWithInfo,
+    participation: participation ?? null,
+    invitation: invitation ?? null,
+    codeRequest,
+  });
 });
 
 router.get("/spaces/:id/letters", async (req, res) => {
@@ -224,6 +343,64 @@ router.post("/spaces/:id/letters/:letterId/scheduled-sends", async (req, res) =>
     .values({ ...req.body, spaceId: req.params.id, spaceLetterId: req.params.letterId })
     .returning();
   res.status(201).json(send);
+});
+
+router.get("/space-invitations", async (req, res) => {
+  const { userId } = req.query;
+  if (!userId || typeof userId !== "string") {
+    res.status(400).json({ error: "userId is required" });
+    return;
+  }
+  const invitations = await db
+    .select()
+    .from(spaceInvitationsTable)
+    .where(
+      and(
+        eq(spaceInvitationsTable.invitedUserId, userId),
+        eq(spaceInvitationsTable.status, "PENDING"),
+      ),
+    );
+  if (invitations.length === 0) {
+    res.json([]);
+    return;
+  }
+  const spaceIds = [...new Set(invitations.map((i) => i.spaceId))];
+  const spaces = await db
+    .select()
+    .from(spacesTable)
+    .where(inArray(spacesTable.id, spaceIds));
+
+  const creatorIds = [...new Set(spaces.map((s) => s.creatorId))];
+  const creators = await db
+    .select({ id: usersTable.id, nickname: usersTable.nickname })
+    .from(usersTable)
+    .where(inArray(usersTable.id, creatorIds));
+  const creatorMap = Object.fromEntries(creators.map((c) => [c.id, c.nickname]));
+
+  const participantCounts = await db
+    .select({ spaceId: spaceParticipationsTable.spaceId, value: count() })
+    .from(spaceParticipationsTable)
+    .where(
+      and(
+        inArray(spaceParticipationsTable.spaceId, spaceIds),
+        eq(spaceParticipationsTable.status, "APPROVED"),
+      ),
+    )
+    .groupBy(spaceParticipationsTable.spaceId);
+  const countMap = Object.fromEntries(participantCounts.map((pc) => [pc.spaceId, pc.value]));
+
+  const spaceMap = Object.fromEntries(
+    spaces.map((s) => [
+      s.id,
+      { ...s, creatorNickname: creatorMap[s.creatorId] ?? null, participantCount: countMap[s.id] ?? 0 },
+    ]),
+  );
+
+  const result = invitations
+    .filter((inv) => spaceMap[inv.spaceId])
+    .map((inv) => ({ ...inv, space: spaceMap[inv.spaceId] }));
+
+  res.json(result);
 });
 
 export default router;

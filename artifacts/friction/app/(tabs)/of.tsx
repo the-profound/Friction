@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useCallback } from "react";
 import { View, Text, StyleSheet, FlatList, RefreshControl } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
@@ -9,8 +9,9 @@ import { useRouter, useFocusEffect } from "expo-router";
 import {
   useListSpaces,
   getListSpacesQueryKey,
+  useListUserSpaceInvitations,
 } from "@workspace/api-client-react";
-import type { Space } from "@workspace/api-client-react";
+import type { Space, SpaceInvitationWithSpace } from "@workspace/api-client-react";
 import RefreshableEmpty from "@/components/RefreshableEmpty";
 import ScalePressable from "@/components/ScalePressable/ScalePressable";
 import { isQueryStale } from "@/lib/useScreenFocused";
@@ -27,9 +28,18 @@ export default function SpacesScreen() {
 
   const spacesQuery = useListSpaces({ userId });
   const spaces = (spacesQuery.data ?? []) as Space[];
+  const spaceInvitationsQuery = useListUserSpaceInvitations({ userId });
 
   const handleCreateSpace = useCallback(() => {
     router.push("/space-create" as never);
+  }, [router]);
+
+  const handleOpenSpaceJoin = useCallback(() => {
+    router.push({ pathname: "/space-join" });
+  }, [router]);
+
+  const handleOpenSpaceInvitation = useCallback((spaceId: string) => {
+    router.push({ pathname: "/space-join", params: { spaceId } });
   }, [router]);
 
   const refetchSpaces = spacesQuery.refetch;
@@ -72,6 +82,40 @@ export default function SpacesScreen() {
     [],
   );
 
+  const pendingInvitations = (spaceInvitationsQuery.data ?? []) as SpaceInvitationWithSpace[];
+
+  const renderSpaceInvitations = () => {
+    if (pendingInvitations.length === 0) return null;
+    return (
+      <View style={styles.invitationSection}>
+        <Text style={styles.invitationSectionTitle}>공간 초대</Text>
+        {pendingInvitations.map((inv) => (
+          <ScalePressable
+            key={inv.id}
+            style={styles.invitationCard}
+            contentStyle={styles.invitationCardContent}
+            onPress={() => handleOpenSpaceInvitation(inv.spaceId)}
+          >
+            <View style={styles.invitationCardIcon}>
+              <Feather name="book-open" size={18} color="#7C3AED" />
+            </View>
+            <View style={styles.invitationCardInfo}>
+              <Text style={styles.invitationCardName} numberOfLines={1}>{inv.space.name}</Text>
+              <Text style={styles.invitationCardMeta}>
+                {inv.space.creatorNickname
+                  ? `${inv.space.creatorNickname}님의 초대`
+                  : "공간 초대가 왔어요"}
+              </Text>
+            </View>
+            <View style={styles.invitationCardBadge}>
+              <Text style={styles.invitationCardBadgeText}>확인하기</Text>
+            </View>
+          </ScalePressable>
+        ))}
+      </View>
+    );
+  };
+
   const renderContent = () => {
     if (spacesQuery.isLoading) {
       return (
@@ -108,6 +152,9 @@ export default function SpacesScreen() {
           <ScalePressable style={styles.emptyButton} onPress={handleCreateSpace}>
             <Text style={styles.emptyButtonText}>새 공간 만들기</Text>
           </ScalePressable>
+          <ScalePressable style={styles.emptySecondaryButton} onPress={handleOpenSpaceJoin}>
+            <Text style={styles.emptySecondaryButtonText}>코드로 신청하기</Text>
+          </ScalePressable>
         </RefreshableEmpty>
       );
     }
@@ -139,6 +186,7 @@ export default function SpacesScreen() {
         rightText="새 공간"
         onRightTextPress={handleCreateSpace}
       />
+      {renderSpaceInvitations()}
       {renderContent()}
     </View>
   );
@@ -180,6 +228,15 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 14,
     color: Colors.white,
+  },
+  emptySecondaryButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  emptySecondaryButtonText: {
+    ...Typography.body,
+    fontSize: 13,
+    color: Colors.zinc400,
   },
   loadingText: {
     ...Typography.body,
@@ -238,5 +295,60 @@ const styles = StyleSheet.create({
     ...Typography.caption,
     fontSize: 12,
     color: Colors.zinc400,
+  },
+  invitationSection: {
+    paddingHorizontal: Spacing.screenPx,
+    paddingTop: 8,
+    paddingBottom: 4,
+    gap: 8,
+  },
+  invitationSectionTitle: {
+    ...Typography.bodySemiBold,
+    fontSize: 13,
+    color: Colors.zinc500,
+    letterSpacing: 0.3,
+  },
+  invitationCard: {
+    backgroundColor: "#EDE9FE",
+    borderRadius: 12,
+    padding: 12,
+  },
+  invitationCardContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  invitationCardIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "#DDD6FE",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  invitationCardInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  invitationCardName: {
+    ...Typography.bodySemiBold,
+    fontSize: 14,
+    color: "#4C1D95",
+  },
+  invitationCardMeta: {
+    ...Typography.body,
+    fontSize: 12,
+    color: "#7C3AED",
+  },
+  invitationCardBadge: {
+    backgroundColor: "#7C3AED",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  invitationCardBadgeText: {
+    ...Typography.bodySemiBold,
+    fontSize: 12,
+    color: "#FFFFFF",
   },
 });
