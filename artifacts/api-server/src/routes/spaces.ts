@@ -145,21 +145,23 @@ router.get("/spaces", async (req, res) => {
 });
 
 router.post("/spaces", async (req, res) => {
+  const body = req.body;
+  if (!body.creatorId) {
+    res.status(400).json({ error: "creatorId is required" });
+    return;
+  }
   try {
-    const body = req.body;
     const [space] = await db.insert(spacesTable).values(body).returning();
-    if (body.creatorId) {
-      await db.insert(spaceParticipationsTable).values({
-        spaceId: space.id,
-        userId: body.creatorId,
-        role: "OPERATOR",
-        status: "APPROVED",
-      });
-    }
+    await db.insert(spaceParticipationsTable).values({
+      spaceId: space.id,
+      userId: body.creatorId,
+      role: "OPERATOR",
+      status: "APPROVED",
+    });
     res.status(201).json(space);
   } catch (err) {
     console.error("POST /spaces error:", err);
-    res.status(500).json({ error: "공간 생성에 실패했어요." });
+    res.status(500).json({ error: "공간 생성에 실패했습니다." });
   }
 });
 
@@ -248,7 +250,7 @@ router.post("/spaces/:id/rounds", async (req, res) => {
     res.status(201).json(round);
   } catch (err) {
     console.error("POST /spaces/:id/rounds error:", err);
-    res.status(500).json({ error: "라운드 생성에 실패했어요." });
+    res.status(500).json({ error: "회차 생성에 실패했습니다." });
   }
 });
 

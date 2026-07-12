@@ -130,11 +130,21 @@ export default function SpaceCreateScreen() {
     if (roundCountError) setRoundCountError("");
   }, [roundCountError]);
 
-  const steps = useMemo(() => buildSteps(form.roundCount, form.customizeRounds), [form.roundCount, form.customizeRounds]);
+  const steps = useMemo(
+    () => buildSteps(form.roundCount, form.customizeRounds),
+    [form.roundCount, form.customizeRounds],
+  );
   const totalSteps = steps.length;
+
+  const ROUND_MODE_STEP = 2;
+  const roundIndex = step - 3;
+  const isRoundStep = form.customizeRounds && roundIndex >= 0 && roundIndex < form.roundCount;
+  const advancedStep = form.customizeRounds ? form.roundCount + 3 : 3;
+  const confirmStep = form.customizeRounds ? form.roundCount + 4 : 4;
 
   const canProceed = useMemo(() => {
     if (step === 0) return form.name.trim().length > 0;
+    if (step === ROUND_MODE_STEP) return false;
     return true;
   }, [step, form]);
 
@@ -159,6 +169,16 @@ export default function SpaceCreateScreen() {
     }
   }, [step, totalSteps, roundCountRaw]);
 
+  const handleSelectRoundMode = useCallback((customize: boolean) => {
+    setForm((prev) => {
+      const rounds = customize
+        ? prev.rounds
+        : prev.rounds.map(() => ({ title: "", description: "" }));
+      return { ...prev, customizeRounds: customize, rounds };
+    });
+    setStep(3);
+  }, []);
+
   const handleBack = useCallback(() => {
     if (step > 0) {
       setStep((s) => s - 1);
@@ -170,15 +190,13 @@ export default function SpaceCreateScreen() {
   const handleCreate = useCallback(async () => {
     if (isSubmitting) return;
     if (!userId) {
-      showToast({ message: "로그인이 필요해요.", type: "error" });
+      showToast({ message: "로그인이 필요합니다.", type: "error" });
       return;
     }
     setIsSubmitting(true);
     try {
-      const startsAtParsed = form.startsAt.trim()
-        ? parseDateInput(form.startsAt) ?? undefined
-        : undefined;
-      const startsAtDate = startsAtParsed ? new Date(startsAtParsed) : undefined;
+      const startsAtStr = form.startsAt.trim() ? parseDateInput(form.startsAt) : null;
+      const startsAtParsed = startsAtStr ? new Date(startsAtStr) : null;
 
       const maxParticipants = form.maxParticipants.trim()
         ? parseInt(form.maxParticipants, 10) || undefined
@@ -189,7 +207,7 @@ export default function SpaceCreateScreen() {
           name: form.name.trim(),
           description: form.description.trim() || null,
           isAnonymous: form.isAnonymous,
-          startsAt: startsAtDate ?? null,
+          startsAt: startsAtParsed ?? null,
           roundCount: form.roundCount,
           maxParticipants: maxParticipants ?? null,
           defaultCenterInterval: form.defaultCenterInterval,
@@ -223,21 +241,6 @@ export default function SpaceCreateScreen() {
     }
   }, [isSubmitting, form, userId, createSpace, createSpaceRound, queryClient, showToast, router]);
 
-  const roundIndex = step - 3;
-  const isRoundStep = form.customizeRounds && roundIndex >= 0 && roundIndex < form.roundCount;
-  const advancedStep = 3 + (form.customizeRounds ? form.roundCount : 0);
-  const confirmStep = advancedStep + 1;
-
-  const handleChooseRoundSetup = useCallback((customize: boolean) => {
-    setForm((prev) => {
-      const rounds = customize
-        ? prev.rounds
-        : prev.rounds.map(() => ({ title: "", description: "" }));
-      return { ...prev, customizeRounds: customize, rounds };
-    });
-    setStep((s) => s + 1);
-  }, []);
-
   const renderStepContent = () => {
     if (step === 0) {
       return <BasicSettingsStep form={form} updateField={updateField} />;
@@ -253,11 +256,10 @@ export default function SpaceCreateScreen() {
         />
       );
     }
-    if (step === 2) {
+    if (step === ROUND_MODE_STEP) {
       return (
-        <RoundSetupChoiceStep
-          customizeRounds={form.customizeRounds}
-          onChoose={handleChooseRoundSetup}
+        <RoundModeStep
+          onSelect={handleSelectRoundMode}
         />
       );
     }
@@ -287,6 +289,7 @@ export default function SpaceCreateScreen() {
   };
 
   const isLastStep = step === confirmStep;
+  const isRoundModeStep = step === ROUND_MODE_STEP;
 
   return (
     <KeyboardAvoidingView
@@ -328,28 +331,30 @@ export default function SpaceCreateScreen() {
           </ScrollView>
         </TouchableWithoutFeedback>
 
-        <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
-          {isLastStep ? (
-            <SubmitButton
-              style={styles.nextBtn}
-              textStyle={styles.nextBtnText}
-              onPress={handleCreate}
-              pending={isSubmitting}
-              label="공간 만들기"
-              pendingLabel="만드는 중..."
-            />
-          ) : (
-            <SubmitButton
-              style={[styles.nextBtn, !canProceed && styles.nextBtnDisabled]}
-              disabledStyle={styles.nextBtnDisabled}
-              textStyle={styles.nextBtnText}
-              onPress={handleNext}
-              pending={false}
-              disabled={!canProceed}
-              label="다음"
-            />
-          )}
-        </View>
+        {!isRoundModeStep && (
+          <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
+            {isLastStep ? (
+              <SubmitButton
+                style={styles.nextBtn}
+                textStyle={styles.nextBtnText}
+                onPress={handleCreate}
+                pending={isSubmitting}
+                label="공간 만들기"
+                pendingLabel="만드는 중..."
+              />
+            ) : (
+              <SubmitButton
+                style={[styles.nextBtn, !canProceed && styles.nextBtnDisabled]}
+                disabledStyle={styles.nextBtnDisabled}
+                textStyle={styles.nextBtnText}
+                onPress={handleNext}
+                pending={false}
+                disabled={!canProceed}
+                label="다음"
+              />
+            )}
+          </View>
+        )}
       </View>
     </KeyboardAvoidingView>
   );
@@ -490,6 +495,43 @@ function OperationSettingsStep({
   );
 }
 
+function RoundModeStep({ onSelect }: { onSelect: (customize: boolean) => void }) {
+  return (
+    <View style={stepStyles.container}>
+      <Text style={stepStyles.stepTitle}>회차 구성 방식</Text>
+      <Text style={stepStyles.stepDesc}>회차별 제목과 설명을 직접 설정하시겠어요?</Text>
+
+      <View style={roundModeStyles.cardList}>
+        <ScalePressable style={roundModeStyles.card} onPress={() => onSelect(false)}>
+          <View style={roundModeStyles.cardIcon}>
+            <Feather name="check-circle" size={22} color={Colors.zinc700} />
+          </View>
+          <View style={roundModeStyles.cardBody}>
+            <Text style={roundModeStyles.cardTitle}>기본값 적용</Text>
+            <Text style={roundModeStyles.cardDesc}>
+              회차 제목·설명 없이 바로 다음 단계로 넘어가요.
+            </Text>
+          </View>
+          <Feather name="chevron-right" size={18} color={Colors.zinc400} />
+        </ScalePressable>
+
+        <ScalePressable style={roundModeStyles.card} onPress={() => onSelect(true)}>
+          <View style={roundModeStyles.cardIcon}>
+            <Feather name="edit-3" size={22} color={Colors.zinc700} />
+          </View>
+          <View style={roundModeStyles.cardBody}>
+            <Text style={roundModeStyles.cardTitle}>직접 설정하기</Text>
+            <Text style={roundModeStyles.cardDesc}>
+              각 회차마다 제목과 설명을 직접 입력해요.
+            </Text>
+          </View>
+          <Feather name="chevron-right" size={18} color={Colors.zinc400} />
+        </ScalePressable>
+      </View>
+    </View>
+  );
+}
+
 function RoundConfigStep({
   roundNumber,
   round,
@@ -533,61 +575,6 @@ function RoundConfigStep({
           maxLength={200}
         />
       </View>
-    </View>
-  );
-}
-
-function RoundSetupChoiceStep({
-  customizeRounds,
-  onChoose,
-}: {
-  customizeRounds: boolean;
-  onChoose: (customize: boolean) => void;
-}) {
-  return (
-    <View style={stepStyles.container}>
-      <Text style={stepStyles.stepTitle}>회차 구성 방식</Text>
-      <Text style={stepStyles.stepDesc}>각 회차의 제목과 설명을 직접 입력할지 선택하세요.</Text>
-
-      <ScalePressable
-        style={[choiceStyles.card, !customizeRounds && choiceStyles.cardSelected]}
-        onPress={() => onChoose(false)}
-      >
-        <View style={choiceStyles.cardHeader}>
-          <Feather name="zap" size={20} color={!customizeRounds ? Colors.zinc900 : Colors.zinc400} />
-          <Text style={[choiceStyles.cardTitle, !customizeRounds && choiceStyles.cardTitleSelected]}>
-            기본값 적용
-          </Text>
-          {!customizeRounds && (
-            <View style={choiceStyles.badge}>
-              <Text style={choiceStyles.badgeText}>선택됨</Text>
-            </View>
-          )}
-        </View>
-        <Text style={choiceStyles.cardDesc}>
-          회차 제목·설명 없이 바로 다음 단계로 넘어가요. 나중에 공간 편집에서 추가할 수 있어요.
-        </Text>
-      </ScalePressable>
-
-      <ScalePressable
-        style={[choiceStyles.card, customizeRounds && choiceStyles.cardSelected]}
-        onPress={() => onChoose(true)}
-      >
-        <View style={choiceStyles.cardHeader}>
-          <Feather name="edit-3" size={20} color={customizeRounds ? Colors.zinc900 : Colors.zinc400} />
-          <Text style={[choiceStyles.cardTitle, customizeRounds && choiceStyles.cardTitleSelected]}>
-            직접 설정하기
-          </Text>
-          {customizeRounds && (
-            <View style={choiceStyles.badge}>
-              <Text style={choiceStyles.badgeText}>선택됨</Text>
-            </View>
-          )}
-        </View>
-        <Text style={choiceStyles.cardDesc}>
-          회차마다 제목과 설명을 직접 입력해요.
-        </Text>
-      </ScalePressable>
     </View>
   );
 }
@@ -942,49 +929,40 @@ const stepStyles = StyleSheet.create({
   },
 });
 
-const choiceStyles = StyleSheet.create({
+const roundModeStyles = StyleSheet.create({
+  cardList: {
+    gap: 12,
+  },
   card: {
-    backgroundColor: Colors.zinc50,
-    borderRadius: 14,
-    padding: 18,
-    gap: 10,
-    borderWidth: 1.5,
-    borderColor: Colors.zinc100,
-  },
-  cardSelected: {
-    borderColor: Colors.zinc900,
-    backgroundColor: Colors.white,
-  },
-  cardHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    backgroundColor: Colors.zinc50,
+    borderRadius: 16,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: Colors.zinc100,
+    gap: 14,
+  },
+  cardIcon: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cardBody: {
+    flex: 1,
+    gap: 3,
   },
   cardTitle: {
     ...Typography.bodySemiBold,
     fontSize: 16,
-    color: Colors.zinc400,
-    flex: 1,
-  },
-  cardTitleSelected: {
     color: Colors.zinc900,
-  },
-  badge: {
-    backgroundColor: Colors.zinc900,
-    borderRadius: 20,
-    paddingVertical: 2,
-    paddingHorizontal: 8,
-  },
-  badgeText: {
-    ...Typography.caption,
-    fontSize: 11,
-    color: Colors.white,
   },
   cardDesc: {
     ...Typography.body,
-    fontSize: 14,
-    color: Colors.zinc400,
-    lineHeight: 20,
+    fontSize: 13,
+    color: Colors.zinc500,
+    lineHeight: 18,
   },
 });
 
