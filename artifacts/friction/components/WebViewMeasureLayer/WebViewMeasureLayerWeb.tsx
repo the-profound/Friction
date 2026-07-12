@@ -75,7 +75,7 @@ export default function WebViewMeasureLayerWeb({ request, onMeasured }: Props) {
       ref={containerRef}
       style={{
         ...CONTAINER_STYLE,
-        fontFamily: "'Eulyoo1945-Regular', serif",
+        fontFamily: "'Eulyoo1945-Regular','NotoSerifKR_400Regular',serif",
         lineHeight: 1.8,
         color: "#1A1A1A",
         overflowWrap: "break-word" as const,

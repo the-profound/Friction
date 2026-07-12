@@ -238,7 +238,7 @@ const containerStyle: React.CSSProperties = {
   flexDirection: "column",
   height: "100%",
   overflow: "auto",
-  fontFamily: "'Eulyoo1945-Regular', serif",
+  fontFamily: "'Eulyoo1945-Regular','NotoSerifKR_400Regular',serif",
   fontSize: 16,
   lineHeight: 1.8,
   letterSpacing: "0.05em",
@@ -248,7 +248,7 @@ const containerStyle: React.CSSProperties = {
 const titleInputStyle: React.CSSProperties = {
   display: "block",
   width: "100%",
-  fontFamily: "'Eulyoo1945-SemiBold', serif",
+  fontFamily: "'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif",
   fontSize: 22,
   fontWeight: 600,
   lineHeight: 1.25,
@@ -276,7 +276,7 @@ const proseMirrorCss = `
   min-height: 100%;
   padding: 16px 24px 120px;
   outline: none;
-  font-family: 'Eulyoo1945-Regular', serif;
+  font-family: 'Eulyoo1945-Regular','NotoSerifKR_400Regular',serif;
   font-size: 16px;
   line-height: 1.8;
   letter-spacing: 0.05em;
@@ -290,12 +290,12 @@ const proseMirrorCss = `
   hyphens: auto;
 }
 .ProseMirror p { margin-bottom: 1em; text-align: justify; overflow-wrap: break-word; word-break: normal; -webkit-hyphens: auto; hyphens: auto; }
-.ProseMirror h1 { font-family: 'Eulyoo1945-SemiBold', serif; font-size: 1.6em; font-weight: 700; letter-spacing: 0.025em; margin: 1em 0 0.4em; line-height: 1.25; text-align: left; }
-.ProseMirror h2 { font-family: 'Eulyoo1945-SemiBold', serif; font-size: 1.3em; font-weight: 700; letter-spacing: 0.025em; margin: 0.8em 0 0.3em; line-height: 1.3; text-align: left; }
-.ProseMirror h3 { font-family: 'Eulyoo1945-SemiBold', serif; font-size: 1.1em; font-weight: 600; letter-spacing: 0.025em; margin: 0.6em 0 0.3em; line-height: 1.35; text-align: left; }
+.ProseMirror h1 { font-family: 'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif; font-size: 1.6em; font-weight: 700; letter-spacing: 0.025em; margin: 1em 0 0.4em; line-height: 1.25; text-align: left; }
+.ProseMirror h2 { font-family: 'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif; font-size: 1.3em; font-weight: 700; letter-spacing: 0.025em; margin: 0.8em 0 0.3em; line-height: 1.3; text-align: left; }
+.ProseMirror h3 { font-family: 'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif; font-size: 1.1em; font-weight: 600; letter-spacing: 0.025em; margin: 0.6em 0 0.3em; line-height: 1.35; text-align: left; }
 .ProseMirror ul, .ProseMirror ol { padding-left: 1.5em; margin-bottom: 1em; text-align: left; }
 .ProseMirror li { margin-bottom: 0.2em; text-align: left; }
-.ProseMirror blockquote { font-family: 'Eulyoo1945-Regular', serif; font-style: italic; border-left: 3px solid #d4d4d8; padding-left: 1em; margin: 0.5em 0; color: #52525b; text-align: left; }
+.ProseMirror blockquote { font-family: 'Eulyoo1945-Regular','NotoSerifKR_400Regular',serif; font-style: italic; border-left: 3px solid #d4d4d8; padding-left: 1em; margin: 0.5em 0; color: #52525b; text-align: left; }
 .ProseMirror hr { border: none; border-top: 1px solid #e4e4e7; margin: 1em 0; }
 .ProseMirror p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
@@ -305,7 +305,7 @@ const proseMirrorCss = `
   height: 0;
 }
 .ProseMirror u { text-decoration: underline; }
-.ProseMirror strong { font-family: 'Eulyoo1945-SemiBold', serif; font-weight: 700; }
+.ProseMirror strong { font-family: 'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif; font-weight: 700; }
 .ProseMirror em { font-style: italic; }
 .ProseMirror code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: #f4f4f5; padding: 0.1em 0.3em; border-radius: 3px; letter-spacing: 0; font-size: 0.9em; }
 .ProseMirror pre { background: #f4f4f5; padding: 0.75em 1em; border-radius: 4px; overflow-x: auto; margin: 0.5em 0; letter-spacing: 0; text-align: left; }
