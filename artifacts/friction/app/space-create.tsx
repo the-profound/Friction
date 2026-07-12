@@ -264,31 +264,31 @@ export default function SpaceCreateScreen() {
       style={styles.root}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-        <View style={[styles.container, { paddingTop: insets.top }]}>
-          <View style={styles.header}>
-            <ScalePressable style={styles.backBtn} onPress={handleBack} hitSlop={8}>
-              <Feather name="chevron-left" size={24} color={Colors.zinc700} />
-            </ScalePressable>
-            <Text style={styles.headerTitle}>공간 만들기</Text>
-            <View style={styles.headerRight} />
-          </View>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <ScalePressable style={styles.backBtn} onPress={handleBack} hitSlop={8}>
+            <Feather name="chevron-left" size={24} color={Colors.zinc700} />
+          </ScalePressable>
+          <Text style={styles.headerTitle}>공간 만들기</Text>
+          <View style={styles.headerRight} />
+        </View>
 
-          <View style={styles.progressBar}>
-            <View
-              style={[
-                styles.progressFill,
-                { width: `${((step + 1) / totalSteps) * 100}%` },
-              ]}
-            />
-          </View>
+        <View style={styles.progressBar}>
+          <View
+            style={[
+              styles.progressFill,
+              { width: `${((step + 1) / totalSteps) * 100}%` },
+            ]}
+          />
+        </View>
 
-          <View style={styles.stepLabel}>
-            <Text style={styles.stepLabelText}>
-              {step + 1} / {totalSteps} — {steps[step]}
-            </Text>
-          </View>
+        <View style={styles.stepLabel}>
+          <Text style={styles.stepLabelText}>
+            {step + 1} / {totalSteps} — {steps[step]}
+          </Text>
+        </View>
 
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
           <ScrollView
             style={styles.scrollArea}
             contentContainerStyle={styles.scrollContent}
@@ -297,31 +297,31 @@ export default function SpaceCreateScreen() {
           >
             {renderStepContent()}
           </ScrollView>
+        </TouchableWithoutFeedback>
 
-          <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
-            {isLastStep ? (
-              <SubmitButton
-                style={styles.nextBtn}
-                textStyle={styles.nextBtnText}
-                onPress={handleCreate}
-                pending={isSubmitting}
-                label="공간 만들기"
-                pendingLabel="만드는 중..."
-              />
-            ) : (
-              <SubmitButton
-                style={[styles.nextBtn, !canProceed && styles.nextBtnDisabled]}
-                disabledStyle={styles.nextBtnDisabled}
-                textStyle={styles.nextBtnText}
-                onPress={handleNext}
-                pending={false}
-                disabled={!canProceed}
-                label="다음"
-              />
-            )}
-          </View>
+        <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
+          {isLastStep ? (
+            <SubmitButton
+              style={styles.nextBtn}
+              textStyle={styles.nextBtnText}
+              onPress={handleCreate}
+              pending={isSubmitting}
+              label="공간 만들기"
+              pendingLabel="만드는 중..."
+            />
+          ) : (
+            <SubmitButton
+              style={[styles.nextBtn, !canProceed && styles.nextBtnDisabled]}
+              disabledStyle={styles.nextBtnDisabled}
+              textStyle={styles.nextBtnText}
+              onPress={handleNext}
+              pending={false}
+              disabled={!canProceed}
+              label="다음"
+            />
+          )}
         </View>
-      </TouchableWithoutFeedback>
+      </View>
     </KeyboardAvoidingView>
   );
 }
