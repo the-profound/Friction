@@ -62,6 +62,7 @@
   },
   "dependencies": {
     "@expo-google-fonts/noto-serif-kr": "^0.4.3",
+    "@react-native-community/datetimepicker": "^9.1.0",
     "@react-native-masked-view/masked-view": "0.3.2",
     "@supabase/supabase-js": "^2.103.3",
     "@tiptap/core": "^3.22.0",

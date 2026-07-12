@@ -61,6 +61,7 @@ async function buildAll() {
       "@tensorflow/*",
       "@prisma/client",
       "@mikro-orm/*",
+      "@supabase/supabase-js",
       "@grpc/*",
       "@swc/*",
       "@aws-sdk/*",

@@ -14,7 +14,7 @@ export const spaceParticipationStatusEnum = pgEnum("space_participation_status",
 export const spaceInvitationStatusEnum = pgEnum("space_invitation_status", ["PENDING", "ACCEPTED", "DECLINED"]);
 export const spaceCodeRequestStatusEnum = pgEnum("space_code_request_status", ["PENDING", "APPROVED", "REJECTED", "CANCELLED"]);
 export const spaceLetterTypeEnum = pgEnum("space_letter_type", ["OPENING", "CENTER", "REPLY"]);
-export const spaceScheduledSendStatusEnum = pgEnum("space_scheduled_send_status", ["PENDING", "SENT", "CANCELLED"]);
+export const spaceScheduledSendStatusEnum = pgEnum("space_scheduled_send_status", ["PENDING", "SENT", "CANCELLED", "FAILED"]);
 
 export const spacesTable = pgTable("spaces", {
   id: uuid("id").defaultRandom().primaryKey(),

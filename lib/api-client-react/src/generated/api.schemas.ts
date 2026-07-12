@@ -732,6 +732,21 @@ export interface CreateSpaceRoundBody {
   description?: string | null;
 }
 
+export type UpdateSpaceRoundBodyStatus =
+  (typeof UpdateSpaceRoundBodyStatus)[keyof typeof UpdateSpaceRoundBodyStatus];
+
+export const UpdateSpaceRoundBodyStatus = {
+  UPCOMING: "UPCOMING",
+  ACTIVE: "ACTIVE",
+  COMPLETED: "COMPLETED",
+} as const;
+
+export interface UpdateSpaceRoundBody {
+  title?: string | null;
+  description?: string | null;
+  status?: UpdateSpaceRoundBodyStatus;
+}
+
 export type SpaceParticipationRole =
   (typeof SpaceParticipationRole)[keyof typeof SpaceParticipationRole];
 
@@ -909,6 +924,7 @@ export const SpaceScheduledSendStatus = {
   PENDING: "PENDING",
   SENT: "SENT",
   CANCELLED: "CANCELLED",
+  FAILED: "FAILED",
 } as const;
 
 export interface SpaceScheduledSend {
@@ -924,6 +940,46 @@ export interface SpaceScheduledSend {
 
 export interface CreateSpaceScheduledSendBody {
   scheduledAt: string;
+}
+
+export type UpdateSpaceScheduledSendBodyStatus =
+  (typeof UpdateSpaceScheduledSendBodyStatus)[keyof typeof UpdateSpaceScheduledSendBodyStatus];
+
+export const UpdateSpaceScheduledSendBodyStatus = {
+  PENDING: "PENDING",
+  CANCELLED: "CANCELLED",
+  FAILED: "FAILED",
+} as const;
+
+export interface UpdateSpaceScheduledSendBody {
+  status: UpdateSpaceScheduledSendBodyStatus;
+  scheduledAt?: string;
+}
+
+export type SpaceScheduledSendWithLetterStatus =
+  (typeof SpaceScheduledSendWithLetterStatus)[keyof typeof SpaceScheduledSendWithLetterStatus];
+
+export const SpaceScheduledSendWithLetterStatus = {
+  PENDING: "PENDING",
+  SENT: "SENT",
+  CANCELLED: "CANCELLED",
+  FAILED: "FAILED",
+} as const;
+
+export interface SpaceScheduledSendWithLetter {
+  id: string;
+  spaceId: string;
+  spaceLetterId: string;
+  scheduledAt: string;
+  status: SpaceScheduledSendWithLetterStatus;
+  sentAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  letter?: SpaceLetter | null;
+  /** Title of the source article, if available */
+  articleTitle?: string | null;
+  /** Nickname of the letter author */
+  authorNickname?: string | null;
 }
 
 export type SpaceWithCreatorInfo = Space & {

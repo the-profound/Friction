@@ -645,6 +645,77 @@ export default function SpaceDetailScreen() {
           </View>
         )}
 
+        {/* ── Operator management actions ── */}
+        {isOperator && (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>운영 관리</Text>
+            <View style={styles.operatorActions}>
+              <ScalePressable
+                style={styles.operatorActionRow}
+                onPress={() =>
+                  router.push({
+                    pathname: "/of-space-rounds" as never,
+                    params: { id, spaceName: space.name },
+                  })
+                }
+              >
+                <View style={styles.operatorActionLeft}>
+                  <View style={styles.operatorActionIcon}>
+                    <Feather name="layers" size={15} color={Colors.zinc600} />
+                  </View>
+                  <Text style={styles.operatorActionText}>회차 관리</Text>
+                </View>
+                <Feather name="chevron-right" size={16} color={Colors.zinc400} />
+              </ScalePressable>
+
+              <View style={styles.operatorDivider} />
+
+              <ScalePressable
+                style={styles.operatorActionRow}
+                onPress={() =>
+                  router.push({
+                    pathname: "/of-space-schedule-send" as never,
+                    params: { id },
+                  })
+                }
+              >
+                <View style={styles.operatorActionLeft}>
+                  <View style={styles.operatorActionIcon}>
+                    <Feather name="send" size={15} color={Colors.zinc600} />
+                  </View>
+                  <Text style={styles.operatorActionText}>글 예약 발송</Text>
+                </View>
+                <Feather name="chevron-right" size={16} color={Colors.zinc400} />
+              </ScalePressable>
+
+              {space.status !== "ARCHIVED" && (
+                <>
+                  <View style={styles.operatorDivider} />
+                  <ScalePressable
+                    style={styles.operatorActionRow}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/of-space-archive" as never,
+                        params: { id, spaceName: space.name },
+                      })
+                    }
+                  >
+                    <View style={styles.operatorActionLeft}>
+                      <View style={styles.operatorActionIcon}>
+                        <Feather name="archive" size={15} color={Colors.zinc400} />
+                      </View>
+                      <Text style={[styles.operatorActionText, { color: Colors.zinc400 }]}>
+                        공간 보관
+                      </Text>
+                    </View>
+                    <Feather name="chevron-right" size={16} color={Colors.zinc300} />
+                  </ScalePressable>
+                </>
+              )}
+            </View>
+          </View>
+        )}
+
         <View style={{ height: 40 }} />
       </ScrollView>
     </View>
@@ -1055,6 +1126,46 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.white,
     fontWeight: "600",
+  },
+
+  // ─── Operator actions ──────────────────────────────────────────────────────
+  operatorActions: {
+    marginHorizontal: Spacing.screenPx,
+    backgroundColor: Colors.zinc50,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.zinc200,
+    overflow: "hidden",
+  },
+  operatorActionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  operatorActionLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  operatorActionIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: Colors.zinc200,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  operatorActionText: {
+    ...Typography.body,
+    fontSize: 15,
+    color: Colors.zinc800,
+  },
+  operatorDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: Colors.zinc200,
+    marginLeft: 58,
   },
 
   // ─── Invite code card ──────────────────────────────────────────────────────

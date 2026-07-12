@@ -85,6 +85,7 @@ import type {
   SpaceParticipation,
   SpaceRound,
   SpaceScheduledSend,
+  SpaceScheduledSendWithLetter,
   SpaceWithCreatorInfo,
   SpellCheckBody,
   SpellCheckResponse,
@@ -105,6 +106,8 @@ import type {
   UpdateSpaceCodeRequestBody,
   UpdateSpaceInvitationBody,
   UpdateSpaceParticipationBody,
+  UpdateSpaceRoundBody,
+  UpdateSpaceScheduledSendBody,
   UpdateTeamCollectionBody,
   UpdateUserBody,
   UpsertReadingRecordBody,
@@ -5843,6 +5846,186 @@ export const useCreateSpaceRound = <
 };
 
 /**
+ * @summary Update a round in a space (operator only)
+ */
+export const getUpdateSpaceRoundUrl = (id: string, roundId: string) => {
+  return `/api/spaces/${id}/rounds/${roundId}`;
+};
+
+export const updateSpaceRound = async (
+  id: string,
+  roundId: string,
+  updateSpaceRoundBody: UpdateSpaceRoundBody,
+  options?: RequestInit,
+): Promise<SpaceRound> => {
+  return customFetch<SpaceRound>(getUpdateSpaceRoundUrl(id, roundId), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateSpaceRoundBody),
+  });
+};
+
+export const getUpdateSpaceRoundMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSpaceRound>>,
+    TError,
+    { id: string; roundId: string; data: BodyType<UpdateSpaceRoundBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateSpaceRound>>,
+  TError,
+  { id: string; roundId: string; data: BodyType<UpdateSpaceRoundBody> },
+  TContext
+> => {
+  const mutationKey = ["updateSpaceRound"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateSpaceRound>>,
+    { id: string; roundId: string; data: BodyType<UpdateSpaceRoundBody> }
+  > = (props) => {
+    const { id, roundId, data } = props ?? {};
+
+    return updateSpaceRound(id, roundId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateSpaceRoundMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateSpaceRound>>
+>;
+export type UpdateSpaceRoundMutationBody = BodyType<UpdateSpaceRoundBody>;
+export type UpdateSpaceRoundMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Update a round in a space (operator only)
+ */
+export const useUpdateSpaceRound = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSpaceRound>>,
+    TError,
+    { id: string; roundId: string; data: BodyType<UpdateSpaceRoundBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateSpaceRound>>,
+  TError,
+  { id: string; roundId: string; data: BodyType<UpdateSpaceRoundBody> },
+  TContext
+> => {
+  return useMutation(getUpdateSpaceRoundMutationOptions(options));
+};
+
+/**
+ * @summary List all scheduled sends for a space (operator view)
+ */
+export const getListAllSpaceScheduledSendsUrl = (id: string) => {
+  return `/api/spaces/${id}/scheduled-sends`;
+};
+
+export const listAllSpaceScheduledSends = async (
+  id: string,
+  options?: RequestInit,
+): Promise<SpaceScheduledSendWithLetter[]> => {
+  return customFetch<SpaceScheduledSendWithLetter[]>(
+    getListAllSpaceScheduledSendsUrl(id),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListAllSpaceScheduledSendsQueryKey = (id: string) => {
+  return [`/api/spaces/${id}/scheduled-sends`] as const;
+};
+
+export const getListAllSpaceScheduledSendsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAllSpaceScheduledSends>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAllSpaceScheduledSends>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListAllSpaceScheduledSendsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listAllSpaceScheduledSends>>
+  > = ({ signal }) =>
+    listAllSpaceScheduledSends(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAllSpaceScheduledSends>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAllSpaceScheduledSendsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAllSpaceScheduledSends>>
+>;
+export type ListAllSpaceScheduledSendsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all scheduled sends for a space (operator view)
+ */
+
+export function useListAllSpaceScheduledSends<
+  TData = Awaited<ReturnType<typeof listAllSpaceScheduledSends>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAllSpaceScheduledSends>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAllSpaceScheduledSendsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
  * @summary List participations for a space
  */
 export const getListSpaceParticipationsUrl = (id: string) => {
@@ -7126,6 +7309,128 @@ export const useCreateSpaceScheduledSend = <
   TContext
 > => {
   return useMutation(getCreateSpaceScheduledSendMutationOptions(options));
+};
+
+/**
+ * @summary Cancel or update a scheduled send
+ */
+export const getUpdateSpaceScheduledSendUrl = (
+  id: string,
+  letterId: string,
+  sendId: string,
+) => {
+  return `/api/spaces/${id}/letters/${letterId}/scheduled-sends/${sendId}`;
+};
+
+export const updateSpaceScheduledSend = async (
+  id: string,
+  letterId: string,
+  sendId: string,
+  updateSpaceScheduledSendBody: UpdateSpaceScheduledSendBody,
+  options?: RequestInit,
+): Promise<SpaceScheduledSend> => {
+  return customFetch<SpaceScheduledSend>(
+    getUpdateSpaceScheduledSendUrl(id, letterId, sendId),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(updateSpaceScheduledSendBody),
+    },
+  );
+};
+
+export const getUpdateSpaceScheduledSendMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSpaceScheduledSend>>,
+    TError,
+    {
+      id: string;
+      letterId: string;
+      sendId: string;
+      data: BodyType<UpdateSpaceScheduledSendBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateSpaceScheduledSend>>,
+  TError,
+  {
+    id: string;
+    letterId: string;
+    sendId: string;
+    data: BodyType<UpdateSpaceScheduledSendBody>;
+  },
+  TContext
+> => {
+  const mutationKey = ["updateSpaceScheduledSend"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateSpaceScheduledSend>>,
+    {
+      id: string;
+      letterId: string;
+      sendId: string;
+      data: BodyType<UpdateSpaceScheduledSendBody>;
+    }
+  > = (props) => {
+    const { id, letterId, sendId, data } = props ?? {};
+
+    return updateSpaceScheduledSend(id, letterId, sendId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateSpaceScheduledSendMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateSpaceScheduledSend>>
+>;
+export type UpdateSpaceScheduledSendMutationBody =
+  BodyType<UpdateSpaceScheduledSendBody>;
+export type UpdateSpaceScheduledSendMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Cancel or update a scheduled send
+ */
+export const useUpdateSpaceScheduledSend = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSpaceScheduledSend>>,
+    TError,
+    {
+      id: string;
+      letterId: string;
+      sendId: string;
+      data: BodyType<UpdateSpaceScheduledSendBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateSpaceScheduledSend>>,
+  TError,
+  {
+    id: string;
+    letterId: string;
+    sendId: string;
+    data: BodyType<UpdateSpaceScheduledSendBody>;
+  },
+  TContext
+> => {
+  return useMutation(getUpdateSpaceScheduledSendMutationOptions(options));
 };
 
 /**

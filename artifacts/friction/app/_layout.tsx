@@ -184,6 +184,9 @@ function RootLayoutNav() {
           <Stack.Screen name="of-02" />
           <Stack.Screen name="of-02-detail" />
           <Stack.Screen name="of-03" />
+          <Stack.Screen name="of-space-rounds" />
+          <Stack.Screen name="of-space-schedule-send" />
+          <Stack.Screen name="of-space-archive" />
           <Stack.Screen name="on-01a" options={{ animationTypeForReplace: "pop" }} />
           <Stack.Screen name="on-01b" options={{ animationTypeForReplace: "pop" }} />
           <Stack.Screen name="on-01c" />

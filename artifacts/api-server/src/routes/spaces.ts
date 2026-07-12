@@ -11,6 +11,7 @@ import {
   spaceLettersTable,
   spaceScheduledSendsTable,
   usersTable,
+  articlesTable,
 } from "@workspace/db";
 
 const router: IRouter = Router();
@@ -239,6 +240,46 @@ router.post("/spaces/:id/rounds", async (req, res) => {
     .values({ ...req.body, spaceId: req.params.id })
     .returning();
   res.status(201).json(round);
+});
+
+router.patch("/spaces/:id/rounds/:roundId", requireAuth, async (req, res) => {
+  const callerId = req.user!.id;
+  const [callerParticipation] = await db
+    .select()
+    .from(spaceParticipationsTable)
+    .where(
+      and(
+        eq(spaceParticipationsTable.spaceId, req.params.id),
+        eq(spaceParticipationsTable.userId, callerId),
+        eq(spaceParticipationsTable.role, "OPERATOR"),
+        eq(spaceParticipationsTable.status, "APPROVED"),
+      ),
+    )
+    .limit(1);
+  if (!callerParticipation) {
+    res.status(403).json({ error: "Only operators can update rounds" });
+    return;
+  }
+  const { title, description, status } = req.body;
+  const updateFields: Record<string, unknown> = {};
+  if (title !== undefined) updateFields.title = title;
+  if (description !== undefined) updateFields.description = description;
+  if (status !== undefined) updateFields.status = status;
+  const [round] = await db
+    .update(spaceRoundsTable)
+    .set(updateFields)
+    .where(
+      and(
+        eq(spaceRoundsTable.id, req.params.roundId),
+        eq(spaceRoundsTable.spaceId, req.params.id),
+      ),
+    )
+    .returning();
+  if (!round) {
+    res.status(404).json({ error: "Round not found" });
+    return;
+  }
+  res.json(round);
 });
 
 router.get("/spaces/:id/participations", async (req, res) => {
@@ -505,7 +546,24 @@ router.post("/spaces/:id/letters", async (req, res) => {
   res.status(201).json(letter);
 });
 
-router.get("/spaces/:id/letters/:letterId/scheduled-sends", async (req, res) => {
+router.get("/spaces/:id/letters/:letterId/scheduled-sends", requireAuth, async (req, res) => {
+  const callerId = req.user!.id;
+  const [callerParticipation] = await db
+    .select()
+    .from(spaceParticipationsTable)
+    .where(
+      and(
+        eq(spaceParticipationsTable.spaceId, req.params.id),
+        eq(spaceParticipationsTable.userId, callerId),
+        eq(spaceParticipationsTable.role, "OPERATOR"),
+        eq(spaceParticipationsTable.status, "APPROVED"),
+      ),
+    )
+    .limit(1);
+  if (!callerParticipation) {
+    res.status(403).json({ error: "Only operators can view scheduled sends" });
+    return;
+  }
   const sends = await db
     .select()
     .from(spaceScheduledSendsTable)
@@ -518,12 +576,133 @@ router.get("/spaces/:id/letters/:letterId/scheduled-sends", async (req, res) => 
   res.json(sends);
 });
 
-router.post("/spaces/:id/letters/:letterId/scheduled-sends", async (req, res) => {
+router.post("/spaces/:id/letters/:letterId/scheduled-sends", requireAuth, async (req, res) => {
+  const callerId = req.user!.id;
+  const [callerParticipation] = await db
+    .select()
+    .from(spaceParticipationsTable)
+    .where(
+      and(
+        eq(spaceParticipationsTable.spaceId, req.params.id),
+        eq(spaceParticipationsTable.userId, callerId),
+        eq(spaceParticipationsTable.role, "OPERATOR"),
+        eq(spaceParticipationsTable.status, "APPROVED"),
+      ),
+    )
+    .limit(1);
+  if (!callerParticipation) {
+    res.status(403).json({ error: "Only operators can create scheduled sends" });
+    return;
+  }
   const [send] = await db
     .insert(spaceScheduledSendsTable)
     .values({ ...req.body, spaceId: req.params.id, spaceLetterId: req.params.letterId })
     .returning();
   res.status(201).json(send);
+});
+
+router.patch("/spaces/:id/letters/:letterId/scheduled-sends/:sendId", requireAuth, async (req, res) => {
+  const callerId = req.user!.id;
+  const [callerParticipation] = await db
+    .select()
+    .from(spaceParticipationsTable)
+    .where(
+      and(
+        eq(spaceParticipationsTable.spaceId, req.params.id),
+        eq(spaceParticipationsTable.userId, callerId),
+        eq(spaceParticipationsTable.role, "OPERATOR"),
+        eq(spaceParticipationsTable.status, "APPROVED"),
+      ),
+    )
+    .limit(1);
+  if (!callerParticipation) {
+    res.status(403).json({ error: "Only operators can update scheduled sends" });
+    return;
+  }
+  const { status, scheduledAt } = req.body;
+  const updateFields: Record<string, unknown> = { status };
+  if (scheduledAt !== undefined) updateFields.scheduledAt = scheduledAt;
+  const [send] = await db
+    .update(spaceScheduledSendsTable)
+    .set(updateFields)
+    .where(
+      and(
+        eq(spaceScheduledSendsTable.id, req.params.sendId),
+        eq(spaceScheduledSendsTable.spaceLetterId, req.params.letterId),
+        eq(spaceScheduledSendsTable.spaceId, req.params.id),
+      ),
+    )
+    .returning();
+  if (!send) {
+    res.status(404).json({ error: "Scheduled send not found" });
+    return;
+  }
+  res.json(send);
+});
+
+router.get("/spaces/:id/scheduled-sends", requireAuth, async (req, res) => {
+  const callerId = req.user!.id;
+  const [callerParticipation] = await db
+    .select()
+    .from(spaceParticipationsTable)
+    .where(
+      and(
+        eq(spaceParticipationsTable.spaceId, req.params.id),
+        eq(spaceParticipationsTable.userId, callerId),
+        eq(spaceParticipationsTable.role, "OPERATOR"),
+        eq(spaceParticipationsTable.status, "APPROVED"),
+      ),
+    )
+    .limit(1);
+  if (!callerParticipation) {
+    res.status(403).json({ error: "Only operators can list all scheduled sends" });
+    return;
+  }
+  const sends = await db
+    .select()
+    .from(spaceScheduledSendsTable)
+    .where(eq(spaceScheduledSendsTable.spaceId, req.params.id))
+    .orderBy(spaceScheduledSendsTable.scheduledAt);
+  if (sends.length === 0) {
+    res.json([]);
+    return;
+  }
+  const letterIds = [...new Set(sends.map((s) => s.spaceLetterId))];
+  const letters = await db
+    .select()
+    .from(spaceLettersTable)
+    .where(inArray(spaceLettersTable.id, letterIds));
+  const letterMap = new Map(letters.map((l) => [l.id, l]));
+
+  const articleIds = [...new Set(letters.map((l) => l.sourceArticleId).filter(Boolean) as string[])];
+  const authorIds = [...new Set(letters.map((l) => l.authorId))];
+
+  const [articles, authors] = await Promise.all([
+    articleIds.length > 0
+      ? db
+          .select({ id: articlesTable.id, title: articlesTable.title })
+          .from(articlesTable)
+          .where(inArray(articlesTable.id, articleIds))
+      : Promise.resolve([]),
+    authorIds.length > 0
+      ? db
+          .select({ id: usersTable.id, nickname: usersTable.nickname })
+          .from(usersTable)
+          .where(inArray(usersTable.id, authorIds))
+      : Promise.resolve([]),
+  ]);
+
+  const articleMap = new Map(articles.map((a) => [a.id, a.title]));
+  const authorMap = new Map(authors.map((u) => [u.id, u.nickname]));
+
+  const result = sends.map((send) => {
+    const letter = letterMap.get(send.spaceLetterId) ?? null;
+    const articleTitle = letter?.sourceArticleId ? (articleMap.get(letter.sourceArticleId) ?? null) : null;
+    const authorNickname = letter ? (authorMap.get(letter.authorId) ?? null) : null;
+    return { ...send, letter, articleTitle, authorNickname };
+  });
+
+  res.json(result);
 });
 
 router.get("/space-invitations", async (req, res) => {
