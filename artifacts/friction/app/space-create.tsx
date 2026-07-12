@@ -41,7 +41,7 @@ type FormData = {
   defaultCenterCount: number;
 };
 
-const DEFAULT_CENTER_INTERVAL = 7;
+const DEFAULT_CENTER_INTERVAL = 1;
 const DEFAULT_CENTER_COUNT = 1;
 
 function getTodayDigits(): string {
