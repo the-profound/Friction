@@ -6,7 +6,7 @@ export const modules: ModuleMap = {
   "./components/mockups/friction-navbar/FrictionNavBar.tsx": () => import("../components/mockups/friction-navbar/FrictionNavBar.tsx"),
   "./components/mockups/question-block/QuestionBlockPreview.tsx": () => import("../components/mockups/question-block/QuestionBlockPreview.tsx"),
   "./components/mockups/question-block-popup/QuestionBlockPopupPreview.tsx": () => import("../components/mockups/question-block-popup/QuestionBlockPopupPreview.tsx"),
-  "./components/mockups/reader-swipe-next/ReaderSwipeNextPreview.tsx": () => import("../components/mockups/reader-swipe-next/ReaderSwipeNextPreview.tsx"),
   "./components/mockups/question-card-swipe/QuestionCardSwipePreview.tsx": () => import("../components/mockups/question-card-swipe/QuestionCardSwipePreview.tsx"),
+  "./components/mockups/reader-swipe-next/ReaderSwipeNextPreview.tsx": () => import("../components/mockups/reader-swipe-next/ReaderSwipeNextPreview.tsx"),
   "./components/mockups/reading-complete/ReadingCompletePreview.tsx": () => import("../components/mockups/reading-complete/ReadingCompletePreview.tsx")
 };
