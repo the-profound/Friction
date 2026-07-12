@@ -16,6 +16,7 @@ The project is structured to ensure maintainability, scalability, and developer 
 2. **관련 스킬 읽기** — 관련 스킬이 있으면 해당 `SKILL.md`를 읽고 절차를 숙지한 뒤 작업을 시작한다.
 3. **절차 준수** — 스킬에 명시된 단계·규칙·형식을 작업 전 과정에 걸쳐 지킨다.
 4. **DB 규칙 준수** — Replit 내장 DB(database skill, Replit PostgreSQL)는 절대 사용하지 않는다. 모든 DB 작업은 `SUPABASE_DB_URL` 환경변수를 통해 Supabase에만 연결한다.
+5. **기존 컴포넌트 우선 활용** — 새 UI 요소를 만들기 전에 `artifacts/friction/components/`의 공용 컴포넌트(`BottomSheet`, `ConfirmModal`, `SubmitButton`, `ProgressIndicator`, `ArticleCardItem`, `ArticleListItem`, `CoverPreview`, `CoverEditor`, `WebViewMarkdownEditor` 등)를 먼저 확인하고, 재사용 가능한 컴포넌트가 있으면 새로 만들지 않고 기존 것을 활용한다.
 
 # Developer Setup
 
