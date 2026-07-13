@@ -47,6 +47,7 @@ import type {
   ArticleCover,
 } from "@workspace/api-client-react";
 import { useAncestorChain } from "@/hooks/useAncestorChain";
+import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
 
 // ─── Space Carousel constants ─────────────────────────────────────────────────
 // Card width is derived so that exactly 2 full cards + the centre of the 3rd
@@ -98,10 +99,12 @@ function SpaceCarousel({
   letters,
   isAnonymous,
   onCardPress,
+  hiddenCardId,
 }: {
   letters: SpaceLetter[];
   isAnonymous: boolean;
   onCardPress: (letter: SpaceLetter, layout: OriginLayout) => void;
+  hiddenCardId?: string | null;
 }) {
   const itemCount = letters.length;
   const cardSlotRefs = useRef<(View | null)[]>([]);
@@ -193,6 +196,7 @@ function SpaceCarousel({
         style={[
           spaceCarouselStyles.cardSlot,
           index < letters.length - 1 && { marginRight: SC_CARD_GAP },
+          letter.id === hiddenCardId && spaceCarouselStyles.cardSlotHidden,
         ]}
       >
         <ArticleCardItem
@@ -259,6 +263,9 @@ const spaceCarouselStyles = StyleSheet.create({
   cardSlot: {
     width: SC_CARD_W,
   },
+  cardSlotHidden: {
+    opacity: 0,
+  },
 });
 
 // ─── Round Section ────────────────────────────────────────────────────────────
@@ -271,6 +278,7 @@ function RoundSection({
   isAnonymous,
   onPressLetter,
   onPressWriteOpening,
+  hiddenCardId,
 }: {
   round: SpaceRound;
   letters: SpaceLetter[];
@@ -279,6 +287,7 @@ function RoundSection({
   isAnonymous: boolean;
   onPressLetter: (letter: SpaceLetter, layout: OriginLayout) => void;
   onPressWriteOpening: (round: SpaceRound) => void;
+  hiddenCardId?: string | null;
 }) {
   const statusColor = roundStatusColor(round.status);
   const isUpcoming = round.status === "UPCOMING";
@@ -330,6 +339,7 @@ function RoundSection({
         letters={letters}
         isAnonymous={isAnonymous}
         onCardPress={onPressLetter}
+        hiddenCardId={hiddenCardId}
       />
     );
   } else {
@@ -340,11 +350,10 @@ function RoundSection({
     <View style={styles.roundSection}>
       <View style={styles.roundSectionHeader}>
         <View style={styles.roundSectionLeft}>
-          <View style={[styles.roundStatusDot, { backgroundColor: statusColor }]} />
+          <Text style={styles.roundNumberText}>{round.roundNumber}회차</Text>
           <Text style={[styles.roundStatusText, { color: statusColor }]}>
             {roundStatusLabel(round.status)}
           </Text>
-          <Text style={styles.roundNumberText}>{round.roundNumber}회차</Text>
           {round.title ? (
             <Text style={styles.roundTitleText} numberOfLines={1}>
               {round.title}
@@ -614,6 +623,7 @@ export default function SpaceDetailScreen() {
 
   const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
   const [rejectTargetId, setRejectTargetId] = useState<string | null>(null);
+  const [showKebabSheet, setShowKebabSheet] = useState(false);
 
   // ── Card select overlay state ─────────────────────────────────────────────
   const [tapLetter, setTapLetter] = useState<SpaceLetter | null>(null);
@@ -978,7 +988,17 @@ export default function SpaceDetailScreen() {
         <ScalePressable onPress={() => router.back()} hitSlop={12}>
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
         </ScalePressable>
-        <View style={{ width: 28 }} />
+        {isOperator ? (
+          <ScalePressable
+            onPress={() => setShowKebabSheet(true)}
+            hitSlop={12}
+            style={styles.kebabBtn}
+          >
+            <Feather name="more-horizontal" size={20} color={Colors.zinc600} />
+          </ScalePressable>
+        ) : (
+          <View style={{ width: 28 }} />
+        )}
       </View>
 
       <ScrollView
@@ -1004,13 +1024,6 @@ export default function SpaceDetailScreen() {
                 {statusText}
               </Text>
             </View>
-            {isArchived && (
-              <View style={[styles.statusBadge, { borderColor: Colors.zinc300 }]}>
-                <Text style={[styles.statusBadgeText, { color: Colors.zinc400 }]}>
-                  종료됨
-                </Text>
-              </View>
-            )}
             <Text style={styles.roleBadge}>
               {isOperator ? "운영자" : "참여자"}
             </Text>
@@ -1061,9 +1074,6 @@ export default function SpaceDetailScreen() {
 
         {/* ── Rounds sections ── */}
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionLabel}>회차</Text>
-          </View>
           {roundsQuery.isLoading ? (
             <View style={styles.sectionLoading}>
               <ActivityIndicator size="small" color={Colors.zinc400} />
@@ -1089,6 +1099,7 @@ export default function SpaceDetailScreen() {
                     isAnonymous={space.isAnonymous}
                     onPressLetter={handlePressLetter}
                     onPressWriteOpening={handlePressWriteOpening}
+                    hiddenCardId={tapLetter?.id ?? null}
                   />
                 ))}
             </View>
@@ -1173,6 +1184,39 @@ export default function SpaceDetailScreen() {
         </ScalePressable>
       )}
 
+      {/* ── Operator kebab action sheet ── */}
+      <ActionSheetModal
+        visible={showKebabSheet}
+        onClose={() => setShowKebabSheet(false)}
+        actions={[
+          {
+            label: "회차 관리",
+            onPress: () =>
+              router.push({
+                pathname: "/of-space-rounds" as never,
+                params: { id, spaceName: space.name },
+              }),
+          },
+          ...(!isArchived
+            ? [
+                {
+                  label: "공간 보관",
+                  onPress: () =>
+                    router.push({
+                      pathname: "/of-space-archive" as never,
+                      params: { id, spaceName: space.name },
+                    }),
+                },
+              ]
+            : []),
+          {
+            label: "취소",
+            style: "cancel" as const,
+            onPress: () => {},
+          },
+        ]}
+      />
+
       {/* ── Card select overlay (shared 편지 선택 모드) ── */}
       {tapLetter && (
         <CardSelectOverlay
@@ -1201,6 +1245,12 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: Spacing.screenPx,
     paddingVertical: 12,
+  },
+  kebabBtn: {
+    width: 28,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
   },
   headerTitle: {
     ...Typography.bodySemiBold,
