@@ -14,3 +14,4 @@
 - [Friction AI question generation](friction-ai-question-generation.md) — orval query hooks need explicit `queryKey` in options when passing `enabled`, or tsc errors; low-signal article content legitimately fails LLM validation and falls back — not a bug.
 - [Friction photo-must-be-standalone-page](friction-photo-standalone-page.md) — reuse existing autoSplitImages (idempotent) for insert-time isolation instead of a new mechanism; fixed doc-end trailing-fallback edge case.
 - [Drizzle sql import in lib/db](friction-drizzle-sql-import.md) — `sql` tag must come from `drizzle-orm`, not `drizzle-orm/pg-core`; esbuild errors on the wrong import path.
+- [Native pill stretch](friction-native-pill-stretch.md) — flex guards (alignSelf/alignItems flex-start) failed to stop capsule buttons stretching vertically on native; only explicit fixed height on every layer works.

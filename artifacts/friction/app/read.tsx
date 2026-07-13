@@ -1993,26 +1993,28 @@ export default function ReadScreen() {
               },
             ]}
           >
-            <ScalePressable
-              style={styles.attachMenuRow}
-              contentStyle={styles.attachMenuRowContent}
-              onPress={() => setAttachMenuVisible(false)}
-            >
-              <Feather name="image" size={15} color={Colors.zinc600} />
-              <Text style={styles.attachMenuLabel}>사진</Text>
-            </ScalePressable>
-            <View style={styles.attachMenuDivider} />
-            <ScalePressable
-              style={styles.attachMenuRow}
-              contentStyle={styles.attachMenuRowContent}
-              onPress={() => {
-                setAttachMenuVisible(false);
-                handleOpenQuotePicker();
-              }}
-            >
-              <Feather name="message-square" size={15} color={Colors.zinc600} />
-              <Text style={styles.attachMenuLabel}>인용</Text>
-            </ScalePressable>
+            <View style={styles.attachMenuClip}>
+              <ScalePressable
+                style={styles.attachMenuRow}
+                contentStyle={styles.attachMenuRowContent}
+                onPress={() => setAttachMenuVisible(false)}
+              >
+                <Feather name="image" size={15} color={Colors.zinc600} />
+                <Text style={styles.attachMenuLabel}>사진</Text>
+              </ScalePressable>
+              <View style={styles.attachMenuDivider} />
+              <ScalePressable
+                style={styles.attachMenuRow}
+                contentStyle={styles.attachMenuRowContent}
+                onPress={() => {
+                  setAttachMenuVisible(false);
+                  handleOpenQuotePicker();
+                }}
+              >
+                <Feather name="message-square" size={15} color={Colors.zinc600} />
+                <Text style={styles.attachMenuLabel}>인용</Text>
+              </ScalePressable>
+            </View>
           </View>
         </View>
       )}
@@ -2415,7 +2417,6 @@ const styles = StyleSheet.create({
     width: ATTACH_MENU_WIDTH,
     backgroundColor: Colors.white,
     borderRadius: 14,
-    overflow: "hidden",
     zIndex: 60,
     ...Platform.select({
       ios: {
@@ -2429,6 +2430,11 @@ const styles = StyleSheet.create({
       },
       default: {},
     }),
+  },
+  attachMenuClip: {
+    borderRadius: 14,
+    overflow: "hidden",
+    backgroundColor: Colors.white,
   },
   attachMenuRow: {
     paddingVertical: 12,
