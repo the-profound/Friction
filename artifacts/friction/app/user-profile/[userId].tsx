@@ -15,6 +15,7 @@ import ScalePressable from "@/components/shared/ScalePressable";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import CardSelectOverlay, { type ChainArticleMeta } from "@/components/CardSelectOverlay/CardSelectOverlay";
+import { useAncestorChain } from "@/hooks/useAncestorChain";
 import { Colors, Spacing, Typography, Sizing } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { useToast } from "@/contexts/ToastContext";
@@ -31,8 +32,6 @@ import {
   useCreateNeighborRequest,
   useDeleteNeighborRequest,
   useRemoveNeighbor,
-  getArticle,
-  getGetArticleQueryKey,
 } from "@workspace/api-client-react";
 import type {
   Article,
@@ -282,52 +281,8 @@ export default function UserProfileScreen() {
     [router],
   );
 
-  // ── Article chain for the overlay (recursive ancestor traversal) ──────────
-  interface AncestorSlot { id: string; article: Article | null }
-  const [ancestorChain, setAncestorChain] = useState<AncestorSlot[]>([]);
-
-  useEffect(() => {
-    const startId = selectedArticle?.sourceArticleId;
-    if (!startId) {
-      setAncestorChain([]);
-      return;
-    }
-    let cancelled = false;
-    setAncestorChain([{ id: startId, article: null }]);
-
-    async function traverse(id: string) {
-      if (cancelled) return;
-      let article: Article | null = null;
-      try {
-        article = await queryClient.fetchQuery({
-          queryKey: getGetArticleQueryKey(id),
-          queryFn: () => getArticle(id),
-          staleTime: 5 * 60 * 1000,
-        }) as Article;
-      } catch {
-        return;
-      }
-      if (cancelled || !article) return;
-
-      setAncestorChain((prev) => {
-        const idx = prev.findIndex((s) => s.id === id);
-        if (idx === -1) return prev;
-        const next = [...prev];
-        next[idx] = { id, article };
-        return next;
-      });
-
-      const nextId = (article as any).sourceArticleId as string | null | undefined;
-      if (nextId && !cancelled) {
-        setAncestorChain((prev) => [{ id: nextId, article: null }, ...prev]);
-        await traverse(nextId);
-      }
-    }
-
-    traverse(startId);
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedArticle?.sourceArticleId]);
+  // ── Article chain for the overlay (shared 편지 선택 모드 traversal) ────────
+  const ancestorChain = useAncestorChain(selectedArticle?.sourceArticleId, queryClient);
 
   const { chainArticles, chainMetas, chainInitialIndex } = useMemo(() => {
     if (!selectedArticle) {

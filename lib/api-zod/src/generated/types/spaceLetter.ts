@@ -5,6 +5,7 @@
  * Friction MVP 1.0.0 API
  * OpenAPI spec version: 0.1.0
  */
+import type { ArticleCover } from "./articleCover";
 import type { SpaceLetterLetterType } from "./spaceLetterLetterType";
 
 export interface SpaceLetter {
@@ -17,4 +18,10 @@ export interface SpaceLetter {
   isPublic: boolean;
   createdAt: Date;
   updatedAt: Date;
+  articleTitle?: string | null;
+  articleExcerpt?: string | null;
+  articleCover?: ArticleCover | null;
+  authorNickname?: string | null;
+  /** Pseudonymous display name for anonymous spaces (e.g. "참여자 1"). Null in non-anonymous spaces. */
+  displayName?: string | null;
 }

@@ -22,7 +22,11 @@ import {
   useCreateSpaceScheduledSend,
   useUpdateSpaceScheduledSend,
   useListArticles,
+  useGetSpaceJoinContext,
+  getGetSpaceJoinContextQueryKey,
   getListAllSpaceScheduledSendsQueryKey,
+  getListSpaceRoundsQueryKey,
+  getListSpaceLettersQueryKey,
   getListArticlesQueryKey,
 } from "@workspace/api-client-react";
 import type {
@@ -363,9 +367,16 @@ export default function SpaceScheduleSendScreen() {
   const [showNewSheet, setShowNewSheet] = useState(false);
   const [resendTarget, setResendTarget] = useState<SpaceScheduledSendWithLetter | null>(null);
 
-  const sendsQuery = useListAllSpaceScheduledSends(id, { query: { enabled: !!id } });
-  const roundsQuery = useListSpaceRounds(id, { query: { enabled: !!id } });
-  const lettersQuery = useListSpaceLetters(id, { query: { enabled: !!id } });
+  const joinContextQuery = useGetSpaceJoinContext(
+    id,
+    { userId },
+    { query: { enabled: !!id && !!userId, queryKey: getGetSpaceJoinContextQueryKey(id, { userId }) } },
+  );
+  const isOperator = joinContextQuery.data?.participation?.role === "OPERATOR";
+
+  const sendsQuery = useListAllSpaceScheduledSends(id, { query: { enabled: !!id, queryKey: getListAllSpaceScheduledSendsQueryKey(id) } });
+  const roundsQuery = useListSpaceRounds(id, { query: { enabled: !!id, queryKey: getListSpaceRoundsQueryKey(id) } });
+  const lettersQuery = useListSpaceLetters(id, { query: { enabled: !!id, queryKey: getListSpaceLettersQueryKey(id) } });
   const articlesQuery = useListArticles(
     { authorId: userId, status: "LETTER" },
     { query: { enabled: !!userId, queryKey: getListArticlesQueryKey({ authorId: userId, status: "LETTER" }) } },
@@ -522,7 +533,7 @@ export default function SpaceScheduleSendScreen() {
         <NewSendSheet
           spaceId={id}
           rounds={rounds}
-          letters={letters}
+          letters={isOperator ? letters : letters.filter((l) => l.authorId === userId)}
           articles={articles}
           onClose={() => setShowNewSheet(false)}
           onSaved={handleSaved}

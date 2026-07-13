@@ -6,10 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type SpaceScheduledSendStatus =
-  (typeof SpaceScheduledSendStatus)[keyof typeof SpaceScheduledSendStatus];
+export type SpaceScheduledSendWithLetterStatus =
+  (typeof SpaceScheduledSendWithLetterStatus)[keyof typeof SpaceScheduledSendWithLetterStatus];
 
-export const SpaceScheduledSendStatus = {
+export const SpaceScheduledSendWithLetterStatus = {
   PENDING: "PENDING",
   SENT: "SENT",
   CANCELLED: "CANCELLED",

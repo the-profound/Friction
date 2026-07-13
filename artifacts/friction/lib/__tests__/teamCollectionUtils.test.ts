@@ -31,6 +31,7 @@ function makeArticle(
     sourceArticleId: sourceArticleId ?? null,
     parentInThisCollection: false,
     isDeletedPlaceholder: false,
+    isPinned: false,
     article: {
       id,
       authorId: "user-1",

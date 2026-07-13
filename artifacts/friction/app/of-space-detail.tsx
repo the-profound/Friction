@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -13,25 +13,25 @@ import {
   Animated,
   PanResponder,
   Dimensions,
-  NativeSyntheticEvent,
-  NativeScrollEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
-import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
+import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
-import DotIndicator from "@/components/DotIndicator/DotIndicator";
 import CardSelectOverlay, { type OriginLayout, type ChainArticleMeta } from "@/components/CardSelectOverlay/CardSelectOverlay";
 import { useUser } from "@/contexts/UserContext";
 import {
   useGetSpaceJoinContext,
   getGetSpaceJoinContextQueryKey,
   useListSpaceRounds,
+  getListSpaceRoundsQueryKey,
   useListSpaceLetters,
+  getListSpaceLettersQueryKey,
   useListSpaceCodeRequests,
+  getListSpaceCodeRequestsQueryKey,
   useUpdateSpaceCodeRequest,
   useUpdateSpace,
   ListSpaceCodeRequestsStatus,
@@ -44,22 +44,22 @@ import type {
   SpaceCodeRequestWithRequester,
   SpaceWithCreatorInfo,
   Article,
+  ArticleCover,
 } from "@workspace/api-client-react";
+import { useAncestorChain } from "@/hooks/useAncestorChain";
 
-// ─── Carousel constants (mirrors index.tsx) ───────────────────────────────────
+// ─── Space Carousel constants ─────────────────────────────────────────────────
+// Card width is derived so that exactly 2 full cards + the centre of the 3rd
+// card fall at the right screen edge, regardless of device width.
+//   leftPad + cardW + gap + cardW + gap + cardW/2 = screenW
+//   2.5 * cardW = screenW - leftPad - 2 * gap
+//   cardW = (screenW - leftPad - 2 * gap) / 2.5
 
 const { width: SCREEN_W } = Dimensions.get("window");
-const CARD_W = Sizing.cardSlotW;
-const CARD_H = Sizing.cardH;
-const CARD_GAP = Spacing.cardGap;
-const SNAP_INTERVAL = CARD_W + CARD_GAP;
-const SNAP_THRESHOLD = 48;
-const FLING_VELOCITY = 0.5;
-const CENTER_OFFSET = (SCREEN_W - CARD_W) / 2;
-
-function getBaseX(idx: number) {
-  return -(idx * SNAP_INTERVAL) + CENTER_OFFSET;
-}
+const SC_CARD_GAP = 10;
+const SC_LEFT_PAD = Spacing.screenPx;
+const SC_CARD_W = Math.floor((SCREEN_W - SC_LEFT_PAD - 2 * SC_CARD_GAP) / 2.5);
+const SC_CARD_H = SC_CARD_W * (8 / 5);
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -90,9 +90,9 @@ function roundStatusColor(status: string): string {
 }
 
 // ─── Space Carousel ───────────────────────────────────────────────────────────
-// Mirrors the CarouselGroup pattern from the inbox (index.tsx):
-//   Web  → PanResponder + Animated translate
-//   Native → horizontal ScrollView with snap
+// Free-scroll (no snap). 2+ cards visible + 3rd peeking at right edge.
+//   Web  → PanResponder + Animated translate (free scroll)
+//   Native → horizontal ScrollView (no snap)
 
 function SpaceCarousel({
   letters,
@@ -104,38 +104,19 @@ function SpaceCarousel({
   onCardPress: (letter: SpaceLetter, layout: OriginLayout) => void;
 }) {
   const itemCount = letters.length;
-  const [activeIndex, setActiveIndex] = useState(0);
-
   const cardSlotRefs = useRef<(View | null)[]>([]);
-
-  const activeIndexRef = useRef(0);
-  const itemCountRef = useRef(itemCount);
-  const translateX = useRef(new Animated.Value(getBaseX(0))).current;
   const swipedRef = useRef(false);
 
-  useEffect(() => {
-    itemCountRef.current = itemCount;
-    const clamped = Math.min(activeIndexRef.current, itemCount - 1);
-    if (clamped !== activeIndexRef.current) {
-      activeIndexRef.current = clamped;
-      setActiveIndex(clamped);
-      translateX.setValue(getBaseX(clamped));
-    }
-  }, [itemCount, translateX]);
+  // Web free-scroll state
+  const scrollOffsetRef = useRef(0);
+  const savedOffsetRef = useRef(0);
+  const translateX = useRef(new Animated.Value(SC_LEFT_PAD)).current;
 
-  const snapToRef = useRef((_idx: number) => {});
-  snapToRef.current = (idx: number) => {
-    const clamped = Math.max(0, Math.min(idx, itemCountRef.current - 1));
-    activeIndexRef.current = clamped;
-    setActiveIndex(clamped);
-    Animated.spring(translateX, {
-      toValue: getBaseX(clamped),
-      useNativeDriver: false,
-      overshootClamping: true,
-      tension: 100,
-      friction: 20,
-    }).start();
-  };
+  const maxScrollOffset = useCallback(() => {
+    const totalW =
+      itemCount * SC_CARD_W + Math.max(0, itemCount - 1) * SC_CARD_GAP;
+    return Math.max(0, totalW + SC_LEFT_PAD * 2 - SCREEN_W);
+  }, [itemCount]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -144,63 +125,46 @@ function SpaceCarousel({
         return false;
       },
       onMoveShouldSetPanResponder: (_, g) =>
-        itemCountRef.current > 1 &&
+        itemCount > 1 &&
         Math.abs(g.dx) > Math.abs(g.dy) &&
         Math.abs(g.dx) > 5,
       onPanResponderGrant: () => {
-        translateX.setValue(getBaseX(activeIndexRef.current));
+        savedOffsetRef.current = scrollOffsetRef.current;
+        swipedRef.current = false;
       },
       onPanResponderMove: (_, g) => {
-        if (Math.abs(g.dx) > 15) {
-          swipedRef.current = true;
-        }
-        const baseX = getBaseX(activeIndexRef.current);
-        const raw = baseX + g.dx;
-        const maxX = getBaseX(0);
-        const minX = getBaseX(itemCountRef.current - 1);
-        const rubber =
-          raw > maxX
-            ? maxX + (raw - maxX) * 0.3
-            : raw < minX
-              ? minX + (raw - minX) * 0.3
+        if (Math.abs(g.dx) > 10) swipedRef.current = true;
+        const raw = savedOffsetRef.current - g.dx;
+        const max = maxScrollOffset();
+        const clamped =
+          raw < 0
+            ? raw * 0.3
+            : raw > max
+              ? max + (raw - max) * 0.3
               : raw;
-        translateX.setValue(rubber);
+        scrollOffsetRef.current = clamped;
+        translateX.setValue(SC_LEFT_PAD - clamped);
       },
-      onPanResponderRelease: (_, g) => {
-        const { dx, vx } = g;
-        const current = activeIndexRef.current;
-        let next = current;
-        if (Math.abs(vx) > FLING_VELOCITY) {
-          next = vx < 0 ? current + 1 : current - 1;
-        } else if (Math.abs(dx) >= SNAP_THRESHOLD) {
-          next = dx < 0 ? current + 1 : current - 1;
+      onPanResponderRelease: () => {
+        const max = maxScrollOffset();
+        const clamped = Math.max(0, Math.min(scrollOffsetRef.current, max));
+        if (clamped !== scrollOffsetRef.current) {
+          scrollOffsetRef.current = clamped;
+          Animated.spring(translateX, {
+            toValue: SC_LEFT_PAD - clamped,
+            useNativeDriver: false,
+            overshootClamping: true,
+            tension: 120,
+            friction: 20,
+          }).start();
         }
-        snapToRef.current(next);
         setTimeout(() => { swipedRef.current = false; }, 100);
       },
-      onPanResponderTerminate: (_, g) => {
-        const { dx, vx } = g;
-        const current = activeIndexRef.current;
-        let next = current;
-        if (Math.abs(vx) > FLING_VELOCITY) {
-          next = vx < 0 ? current + 1 : current - 1;
-        } else if (Math.abs(dx) >= SNAP_THRESHOLD) {
-          next = dx < 0 ? current + 1 : current - 1;
-        }
-        snapToRef.current(next);
+      onPanResponderTerminate: () => {
         setTimeout(() => { swipedRef.current = false; }, 100);
       },
     }),
   ).current;
-
-  const handleScroll = useCallback(
-    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const offsetX = e.nativeEvent.contentOffset.x;
-      const index = Math.round(offsetX / SNAP_INTERVAL);
-      setActiveIndex(Math.max(0, Math.min(index, itemCount - 1)));
-    },
-    [itemCount],
-  );
 
   const cards = letters.map((letter, index) => {
     const authorNickname = (letter as any).authorNickname as string | null;
@@ -218,7 +182,7 @@ function SpaceCarousel({
           onCardPress(letter, { x, y, width, height });
         });
       } else {
-        onCardPress(letter, { x: 0, y: 0, width: CARD_W, height: CARD_H });
+        onCardPress(letter, { x: 0, y: 0, width: SC_CARD_W, height: SC_CARD_H });
       }
     };
 
@@ -228,15 +192,16 @@ function SpaceCarousel({
         ref={(ref) => { cardSlotRefs.current[index] = ref; }}
         style={[
           spaceCarouselStyles.cardSlot,
-          index < letters.length - 1 && { marginRight: CARD_GAP },
+          index < letters.length - 1 && { marginRight: SC_CARD_GAP },
         ]}
       >
         <ArticleCardItem
           title={title ?? "제목 없음"}
           authorName={authorName}
-          cover={null}
+          cover={((letter as any).articleCover ?? null) as ArticleCover | null}
+          cardWidth={SC_CARD_W}
           isRead={false}
-          isActive={index === activeIndex}
+          isActive={true}
           onPress={handlePress}
         />
       </View>
@@ -263,18 +228,13 @@ function SpaceCarousel({
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          snapToInterval={SNAP_INTERVAL}
-          snapToAlignment="start"
-          decelerationRate="fast"
           scrollEventThrottle={16}
-          onScroll={handleScroll}
           contentContainerStyle={spaceCarouselStyles.carouselContent}
           style={spaceCarouselStyles.carouselScroll}
         >
           {cards}
         </ScrollView>
       )}
-      <DotIndicator total={letters.length} activeIndex={activeIndex} />
     </View>
   );
 }
@@ -282,21 +242,22 @@ function SpaceCarousel({
 const spaceCarouselStyles = StyleSheet.create({
   carouselWindow: {
     width: SCREEN_W,
-    height: CARD_H,
+    height: SC_CARD_H,
     overflow: "hidden",
   },
   carouselTrack: {
     flexDirection: "row",
-    height: CARD_H,
+    height: SC_CARD_H,
   },
   carouselScroll: {
-    height: CARD_H,
+    height: SC_CARD_H,
   },
   carouselContent: {
-    paddingHorizontal: CENTER_OFFSET,
+    paddingLeft: SC_LEFT_PAD,
+    paddingRight: SC_LEFT_PAD,
   },
   cardSlot: {
-    width: CARD_W,
+    width: SC_CARD_W,
   },
 });
 
@@ -662,15 +623,15 @@ export default function SpaceDetailScreen() {
   const joinContextQuery = useGetSpaceJoinContext(
     id,
     { userId },
-    { query: { enabled: !!id && !!userId } },
+    { query: { enabled: !!id && !!userId, queryKey: getGetSpaceJoinContextQueryKey(id, { userId }) } },
   );
 
   const roundsQuery = useListSpaceRounds(id, {
-    query: { enabled: !!id },
+    query: { enabled: !!id, queryKey: getListSpaceRoundsQueryKey(id) },
   });
 
   const lettersQuery = useListSpaceLetters(id, {
-    query: { enabled: !!id },
+    query: { enabled: !!id, queryKey: getListSpaceLettersQueryKey(id) },
   });
 
   const joinContext = joinContextQuery.data;
@@ -689,7 +650,12 @@ export default function SpaceDetailScreen() {
   const codeRequestsQuery = useListSpaceCodeRequests(
     id,
     { status: ListSpaceCodeRequestsStatus.PENDING },
-    { query: { enabled: !!id && isOperator } },
+    {
+      query: {
+        enabled: !!id && isOperator,
+        queryKey: getListSpaceCodeRequestsQueryKey(id, { status: ListSpaceCodeRequestsStatus.PENDING }),
+      },
+    },
   );
 
   const updateCodeRequest = useUpdateSpaceCodeRequest();
@@ -705,6 +671,13 @@ export default function SpaceDetailScreen() {
     for (const letter of letters) {
       const key = letter.spaceRoundId ?? "__none__";
       (map[key] ??= []).push(letter);
+    }
+    for (const key of Object.keys(map)) {
+      map[key] = map[key].sort((a, b) => {
+        if (a.letterType === "OPENING" && b.letterType !== "OPENING") return -1;
+        if (b.letterType === "OPENING" && a.letterType !== "OPENING") return 1;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
     }
     return map;
   }, [letters]);
@@ -835,17 +808,82 @@ export default function SpaceDetailScreen() {
     setTapArticle(null);
   }, []);
 
-  const handleOverlayRead = useCallback(() => {
-    const letter = tapLetter;
-    setTapLetter(null);
-    setTapLetterOrigin(null);
-    setTapArticle(null);
-    if (!letter?.sourceArticleId) return;
-    router.push({
-      pathname: "/read" as never,
-      params: { articleId: letter.sourceArticleId },
+  // ── Article chain for the overlay (shared with 수신함/프로필) ──────────────
+  // In anonymous spaces we skip ancestor traversal so real author identities
+  // in the reply chain are never exposed.
+  const isAnonymousSpace = !!space?.isAnonymous;
+  const ancestorChain = useAncestorChain(
+    isAnonymousSpace ? null : tapArticle?.sourceArticleId,
+    queryClient,
+  );
+
+  const { chainArticles, chainMetas, chainInitialIndex } = useMemo(() => {
+    if (!tapLetter) {
+      return {
+        chainArticles: [] as (Article | null)[],
+        chainMetas: [] as ChainArticleMeta[],
+        chainInitialIndex: 0,
+      };
+    }
+
+    const artList: (Article | null)[] = [];
+    const metaList: ChainArticleMeta[] = [];
+
+    for (const slot of ancestorChain) {
+      artList.push(slot.article);
+      metaList.push(
+        slot.article
+          ? {
+              authorName: (slot.article as any).authorNickname ?? null,
+              authorId: slot.article.authorId ?? null,
+              collectionName: slot.article.collectionName ?? null,
+              collectionId: slot.article.collectionId ?? null,
+              date: slot.article.letterAt ?? null,
+            }
+          : {},
+      );
+    }
+
+    const initIdx = artList.length;
+    const authorNickname = (tapLetter as any).authorNickname as string | null;
+    const displayName = (tapLetter as any).displayName as string | null;
+    const authorName = isAnonymousSpace
+      ? (displayName ?? "익명")
+      : (authorNickname ?? "알 수 없음");
+    artList.push(tapArticle);
+    metaList.push({
+      authorName,
+      date: tapLetter.createdAt,
+      collectionName: space?.name ?? null,
     });
-  }, [tapLetter, router]);
+
+    return { chainArticles: artList, chainMetas: metaList, chainInitialIndex: initIdx };
+  }, [tapLetter, tapArticle, ancestorChain, isAnonymousSpace, space?.name]);
+
+  const handleOverlayRead = useCallback(
+    (chainIdx: number) => {
+      const isTapped = chainIdx === chainInitialIndex;
+      const article = chainArticles[chainIdx];
+      const letter = tapLetter;
+      setTapLetter(null);
+      setTapLetterOrigin(null);
+      setTapArticle(null);
+      if (isTapped) {
+        if (!letter?.sourceArticleId) return;
+        router.push({
+          pathname: "/read" as never,
+          params: { articleId: letter.sourceArticleId },
+        });
+        return;
+      }
+      if (!article) return;
+      router.push({
+        pathname: "/read" as never,
+        params: { articleId: article.id, mode: "re_read" },
+      });
+    },
+    [tapLetter, chainArticles, chainInitialIndex, router],
+  );
 
   const handlePressWriteOpening = useCallback(
     (_round: SpaceRound) => {
@@ -940,15 +978,15 @@ export default function SpaceDetailScreen() {
         <ScalePressable onPress={() => router.back()} hitSlop={12}>
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
         </ScalePressable>
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          {space.name}
-        </Text>
         <View style={{ width: 28 }} />
       </View>
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          !isOperator && !isArchived && { paddingBottom: 80 + insets.bottom },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -958,8 +996,8 @@ export default function SpaceDetailScreen() {
           />
         }
       >
-        {/* ── Space info card ── */}
-        <View style={styles.infoCard}>
+        {/* ── Space info flat section ── */}
+        <View style={styles.infoSection}>
           <View style={styles.badgeRow}>
             <View style={[styles.statusBadge, { borderColor: statusColor }]}>
               <Text style={[styles.statusBadgeText, { color: statusColor }]}>
@@ -993,16 +1031,32 @@ export default function SpaceDetailScreen() {
             onSaved={handleDescriptionSaved}
           />
 
+          {(space as any).creatorNickname ? (
+            <View style={styles.creatorRow}>
+              <Feather name="user-check" size={13} color={Colors.zinc400} />
+              <Text style={styles.creatorText}>{(space as any).creatorNickname}</Text>
+            </View>
+          ) : null}
+
           <View style={styles.metaRow}>
-            <Feather name="users" size={13} color={Colors.zinc400} />
             <Text style={styles.metaText}>
-              {space.participantCount}
-              {space.maxParticipants ? `/${space.maxParticipants}명` : "명"}
+              참여자 {space.participantCount}
+              {space.maxParticipants ? `/${space.maxParticipants}` : ""}명
             </Text>
             <View style={styles.metaDot} />
-            <Feather name="repeat" size={13} color={Colors.zinc400} />
-            <Text style={styles.metaText}>{space.roundCount}회차 계획</Text>
+            <Text style={styles.metaText}>편지 {letters.length}개</Text>
           </View>
+
+          {(space as any).startsAt ? (
+            <View style={styles.startDateRow}>
+              <Text style={styles.startDateText}>
+                {(() => {
+                  const d = new Date((space as any).startsAt);
+                  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")} 시작`;
+                })()}
+              </Text>
+            </View>
+          ) : null}
         </View>
 
         {/* ── Rounds sections ── */}
@@ -1022,18 +1076,21 @@ export default function SpaceDetailScreen() {
             </View>
           ) : (
             <View style={styles.roundsList}>
-              {rounds.map((round) => (
-                <RoundSection
-                  key={round.id}
-                  round={round}
-                  letters={lettersByRound[round.id] ?? []}
-                  spaceStatus={space.status}
-                  isOperator={isOperator}
-                  isAnonymous={space.isAnonymous}
-                  onPressLetter={handlePressLetter}
-                  onPressWriteOpening={handlePressWriteOpening}
-                />
-              ))}
+              {rounds
+                .slice()
+                .sort((a, b) => b.roundNumber - a.roundNumber)
+                .map((round) => (
+                  <RoundSection
+                    key={round.id}
+                    round={round}
+                    letters={lettersByRound[round.id] ?? []}
+                    spaceStatus={space.status}
+                    isOperator={isOperator}
+                    isAnonymous={space.isAnonymous}
+                    onPressLetter={handlePressLetter}
+                    onPressWriteOpening={handlePressWriteOpening}
+                  />
+                ))}
             </View>
           )}
         </View>
@@ -1097,109 +1154,36 @@ export default function SpaceDetailScreen() {
           </View>
         )}
 
-        {/* ── Operator management actions ── */}
-        {isOperator && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionLabel}>운영 관리</Text>
-            </View>
-            <View style={styles.operatorActions}>
-              <ScalePressable
-                style={styles.operatorActionRow}
-                onPress={() =>
-                  router.push({
-                    pathname: "/of-space-rounds" as never,
-                    params: { id, spaceName: space.name },
-                  })
-                }
-              >
-                <View style={styles.operatorActionLeft}>
-                  <View style={styles.operatorActionIcon}>
-                    <Feather name="layers" size={15} color={Colors.zinc600} />
-                  </View>
-                  <Text style={styles.operatorActionText}>회차 관리</Text>
-                </View>
-                <Feather name="chevron-right" size={16} color={Colors.zinc400} />
-              </ScalePressable>
-
-              {!isArchived && (
-                <>
-                  <View style={styles.operatorDivider} />
-                  <ScalePressable
-                    style={styles.operatorActionRow}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/of-space-schedule-send" as never,
-                        params: { id },
-                      })
-                    }
-                  >
-                    <View style={styles.operatorActionLeft}>
-                      <View style={styles.operatorActionIcon}>
-                        <Feather name="send" size={15} color={Colors.zinc600} />
-                      </View>
-                      <Text style={styles.operatorActionText}>글 예약 발송</Text>
-                    </View>
-                    <Feather name="chevron-right" size={16} color={Colors.zinc400} />
-                  </ScalePressable>
-                </>
-              )}
-
-              {!isArchived && (
-                <>
-                  <View style={styles.operatorDivider} />
-                  <ScalePressable
-                    style={styles.operatorActionRow}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/of-space-archive" as never,
-                        params: { id, spaceName: space.name },
-                      })
-                    }
-                  >
-                    <View style={styles.operatorActionLeft}>
-                      <View style={styles.operatorActionIcon}>
-                        <Feather name="archive" size={15} color={Colors.zinc400} />
-                      </View>
-                      <Text style={[styles.operatorActionText, { color: Colors.zinc400 }]}>
-                        공간 보관
-                      </Text>
-                    </View>
-                    <Feather name="chevron-right" size={16} color={Colors.zinc300} />
-                  </ScalePressable>
-                </>
-              )}
-            </View>
-          </View>
-        )}
-
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* ── Card select overlay ── */}
-      {(() => {
-        if (!tapLetter) return null;
-        const authorNickname = (tapLetter as any).authorNickname as string | null;
-        const displayName = (tapLetter as any).displayName as string | null;
-        const authorName = space.isAnonymous
-          ? (displayName ?? "익명")
-          : (authorNickname ?? "알 수 없음");
-        const meta: ChainArticleMeta = {
-          authorName,
-          date: tapLetter.createdAt,
-          collectionName: space.name,
-        };
-        return (
-          <CardSelectOverlay
-            articles={[tapArticle]}
-            metas={[meta]}
-            initialIndex={0}
-            originLayout={tapLetterOrigin}
-            onClose={handleOverlayClose}
-            onRead={handleOverlayRead}
-          />
-        );
-      })()}
+      {/* ── Floating "글 예약 발송" button (non-operators only) ── */}
+      {!isOperator && !isArchived && (
+        <ScalePressable
+          style={[styles.floatingBtn, { bottom: insets.bottom + 16 }]}
+          onPress={() =>
+            router.push({
+              pathname: "/of-space-schedule-send" as never,
+              params: { id },
+            })
+          }
+        >
+          <Feather name="send" size={15} color={Colors.white} />
+          <Text style={styles.floatingBtnText}>글 예약 발송</Text>
+        </ScalePressable>
+      )}
+
+      {/* ── Card select overlay (shared 편지 선택 모드) ── */}
+      {tapLetter && (
+        <CardSelectOverlay
+          articles={chainArticles}
+          metas={chainMetas}
+          initialIndex={chainInitialIndex}
+          originLayout={tapLetterOrigin}
+          onClose={handleOverlayClose}
+          onRead={handleOverlayRead}
+        />
+      )}
     </View>
   );
 }
@@ -1265,16 +1249,11 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
 
-  // ─── Info card ─────────────────────────────────────────────────────────────
-  infoCard: {
-    marginHorizontal: Spacing.screenPx,
-    marginTop: 8,
-    marginBottom: 4,
-    backgroundColor: Colors.zinc50,
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.zinc200,
-    padding: 20,
+  // ─── Info flat section ─────────────────────────────────────────────────────
+  infoSection: {
+    paddingHorizontal: Spacing.screenPx,
+    paddingTop: 4,
+    paddingBottom: 8,
     gap: 10,
   },
   badgeRow: {
@@ -1314,10 +1293,30 @@ const styles = StyleSheet.create({
     color: Colors.zinc400,
   },
   spaceName: {
-    ...Typography.bodySemiBold,
-    fontSize: 20,
+    fontFamily: Platform.select({ ios: "Pretendard-Black", default: "Pretendard-Black" }),
+    fontSize: 26,
+    fontWeight: "900" as const,
     color: Colors.zinc900,
-    lineHeight: 26,
+    lineHeight: 32,
+    letterSpacing: -0.3,
+  },
+  creatorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  creatorText: {
+    ...Typography.caption,
+    fontSize: 13,
+    color: Colors.zinc500,
+  },
+  startDateRow: {
+    marginTop: -2,
+  },
+  startDateText: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc400,
   },
   descRow: {
     flexDirection: "row",
@@ -1457,24 +1456,18 @@ const styles = StyleSheet.create({
 
   // ─── Rounds list ───────────────────────────────────────────────────────────
   roundsList: {
-    gap: 16,
-    paddingHorizontal: Spacing.screenPx,
+    gap: 24,
   },
   roundSection: {
     gap: 10,
-    backgroundColor: Colors.zinc50,
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.zinc200,
-    paddingTop: 14,
-    paddingBottom: 14,
-    overflow: "hidden",
+    paddingTop: 2,
+    paddingBottom: 4,
   },
   roundSectionHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 14,
+    paddingHorizontal: Spacing.screenPx,
   },
   roundSectionLeft: {
     flexDirection: "row",
@@ -1513,7 +1506,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.zinc400,
     lineHeight: 17,
-    paddingHorizontal: 14,
+    paddingHorizontal: Spacing.screenPx,
     marginTop: -4,
   },
   roundOpeningArea: {
@@ -1529,7 +1522,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingVertical: 20,
     gap: 6,
-    marginHorizontal: 14,
+    marginHorizontal: Spacing.screenPx,
     backgroundColor: Colors.zinc100,
     borderRadius: 10,
   },
@@ -1542,7 +1535,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 16,
-    marginHorizontal: 14,
+    marginHorizontal: Spacing.screenPx,
   },
   preparingText: {
     ...Typography.body,
@@ -1554,7 +1547,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    marginHorizontal: 14,
+    marginHorizontal: Spacing.screenPx,
     paddingVertical: 12,
     borderRadius: 10,
     borderWidth: 1,
@@ -1701,6 +1694,24 @@ const styles = StyleSheet.create({
     height: StyleSheet.hairlineWidth,
     backgroundColor: Colors.zinc200,
     marginLeft: 58,
+  },
+
+  // ─── Floating button ───────────────────────────────────────────────────────
+  floatingBtn: {
+    position: "absolute",
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 22,
+    paddingVertical: 13,
+    backgroundColor: Colors.zinc900,
+    borderRadius: 999,
+  },
+  floatingBtnText: {
+    ...Typography.bodySemiBold,
+    fontSize: 15,
+    color: Colors.white,
   },
 
   // ─── Invite code card ──────────────────────────────────────────────────────

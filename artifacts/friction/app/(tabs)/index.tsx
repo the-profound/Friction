@@ -26,8 +26,9 @@ import EnvelopeFrontCard from "@/components/EnvelopeCard/EnvelopeFrontCard";
 import DotIndicator from "@/components/DotIndicator/DotIndicator";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import CardSelectOverlay, { type OriginLayout, type ChainArticleMeta, type EnvelopeInfo } from "@/components/CardSelectOverlay/CardSelectOverlay";
+import { useAncestorChain } from "@/hooks/useAncestorChain";
 import { useQueryClient } from "@tanstack/react-query";
-import { useListInbox, useMarkInboxOpened, useDeleteInboxItem, getListInboxQueryKey, getArticle, getGetArticleQueryKey } from "@workspace/api-client-react";
+import { useListInbox, useMarkInboxOpened, useDeleteInboxItem, getListInboxQueryKey } from "@workspace/api-client-react";
 import { patchInboxItemInCache, removeInboxItemFromCache } from "@/lib/queryInvalidation";
 import type { InboxItem, Article } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
@@ -528,57 +529,13 @@ export default function InboxScreen() {
     }
   }, [refetch]);
 
-  // ── Ancestor chain — truly recursive fetch ───────────────────────────────
+  // ── Ancestor chain — shared 편지 선택 모드 traversal ──────────────────────
   // Each tap starts a new traversal: follow InboxItem.replyToArticleId, then
-  // recursively follow Article.sourceArticleId until the root. Results are
-  // accumulated in state so each discovered slot is shown immediately as a
-  // skeleton and replaced with the real article once it loads.
-
-  interface AncestorSlot { id: string; article: Article | null }
-  const [ancestorChain, setAncestorChain] = useState<AncestorSlot[]>([]);
-
-  useEffect(() => {
-    const startId = (tapItem as any)?.replyToArticleId as string | null | undefined;
-    if (!startId) {
-      setAncestorChain([]);
-      return;
-    }
-    let cancelled = false;
-    setAncestorChain([{ id: startId, article: null }]);
-
-    async function traverse(id: string) {
-      if (cancelled) return;
-      let article: Article | null = null;
-      try {
-        article = await queryClient.fetchQuery({
-          queryKey: getGetArticleQueryKey(id),
-          queryFn: () => getArticle(id),
-          staleTime: 5 * 60 * 1000,
-        }) as Article;
-      } catch {
-        return;
-      }
-      if (cancelled || !article) return;
-
-      setAncestorChain((prev) => {
-        const idx = prev.findIndex((s) => s.id === id);
-        if (idx === -1) return prev;
-        const next = [...prev];
-        next[idx] = { id, article };
-        return next;
-      });
-
-      const nextId = (article as any).sourceArticleId as string | null | undefined;
-      if (nextId && !cancelled) {
-        setAncestorChain((prev) => [{ id: nextId, article: null }, ...prev]);
-        await traverse(nextId);
-      }
-    }
-
-    traverse(startId);
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [(tapItem as any)?.replyToArticleId]);
+  // recursively follow Article.sourceArticleId until the root.
+  const ancestorChain = useAncestorChain(
+    (tapItem as any)?.replyToArticleId as string | null | undefined,
+    queryClient,
+  );
 
   // ── Fast lookup: articleId → InboxItem ───────────────────────────────────
   const inboxItemByArticleId = useMemo(() => {

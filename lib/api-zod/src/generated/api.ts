@@ -2026,6 +2026,99 @@ export const CreateSpaceRoundBody = zod.object({
 });
 
 /**
+ * @summary Update a round in a space (operator only)
+ */
+export const UpdateSpaceRoundParams = zod.object({
+  id: zod.coerce.string().uuid(),
+  roundId: zod.coerce.string().uuid(),
+});
+
+export const UpdateSpaceRoundBody = zod.object({
+  title: zod.string().nullish(),
+  description: zod.string().nullish(),
+  status: zod.enum(["UPCOMING", "ACTIVE", "COMPLETED"]).optional(),
+});
+
+export const UpdateSpaceRoundResponse = zod.object({
+  id: zod.string().uuid(),
+  spaceId: zod.string().uuid(),
+  roundNumber: zod.number(),
+  title: zod.string().nullish(),
+  description: zod.string().nullish(),
+  status: zod.enum(["UPCOMING", "ACTIVE", "COMPLETED"]),
+  createdAt: zod.date(),
+  updatedAt: zod.date(),
+});
+
+/**
+ * @summary List all scheduled sends for a space (operator view)
+ */
+export const ListAllSpaceScheduledSendsParams = zod.object({
+  id: zod.coerce.string().uuid(),
+});
+
+export const ListAllSpaceScheduledSendsResponseItem = zod.object({
+  id: zod.string().uuid(),
+  spaceId: zod.string().uuid(),
+  spaceLetterId: zod.string().uuid(),
+  scheduledAt: zod.date(),
+  status: zod.enum(["PENDING", "SENT", "CANCELLED", "FAILED"]),
+  sentAt: zod.date().nullish(),
+  createdAt: zod.date(),
+  updatedAt: zod.date(),
+  letter: zod
+    .object({
+      id: zod.string().uuid(),
+      spaceId: zod.string().uuid(),
+      spaceRoundId: zod.string().uuid().nullish(),
+      authorId: zod.string().uuid(),
+      sourceArticleId: zod.string().uuid().nullish(),
+      letterType: zod.enum(["OPENING", "CENTER", "REPLY"]),
+      isPublic: zod.boolean(),
+      createdAt: zod.date(),
+      updatedAt: zod.date(),
+      articleTitle: zod.string().nullish(),
+      articleExcerpt: zod.string().nullish(),
+      articleCover: zod
+        .object({
+          type: zod.enum(["image", "color", "default"]),
+          imageUrl: zod
+            .string()
+            .url()
+            .optional()
+            .describe("Cover image URL (used when type=image)"),
+          bgColor: zod
+            .string()
+            .optional()
+            .describe("Background color hex (used when type=color)"),
+          textColor: zod.string().describe("Text color hex for title overlay"),
+          align: zod.enum(["left", "center"]),
+        })
+        .nullish()
+        .describe("Article cover display settings. null means default cover."),
+      authorNickname: zod.string().nullish(),
+      displayName: zod
+        .string()
+        .nullish()
+        .describe(
+          'Pseudonymous display name for anonymous spaces (e.g. \"참여자 1\"). Null in non-anonymous spaces.',
+        ),
+    })
+    .nullish(),
+  articleTitle: zod
+    .string()
+    .nullish()
+    .describe("Title of the source article, if available"),
+  authorNickname: zod
+    .string()
+    .nullish()
+    .describe("Nickname of the letter author"),
+});
+export const ListAllSpaceScheduledSendsResponse = zod.array(
+  ListAllSpaceScheduledSendsResponseItem,
+);
+
+/**
  * @summary List participations for a space
  */
 export const ListSpaceParticipationsParams = zod.object({
@@ -2194,7 +2287,7 @@ export const UpdateSpaceCodeRequestParams = zod.object({
 });
 
 export const UpdateSpaceCodeRequestBody = zod.object({
-  status: zod.enum(["APPROVED", "REJECTED", "CANCELLED"]).optional(),
+  status: zod.enum(["APPROVED", "REJECTED", "CANCELLED"]),
   rejectionReason: zod.string().nullish(),
 });
 
@@ -2226,6 +2319,32 @@ export const ListSpaceLettersResponseItem = zod.object({
   isPublic: zod.boolean(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
+  articleTitle: zod.string().nullish(),
+  articleExcerpt: zod.string().nullish(),
+  articleCover: zod
+    .object({
+      type: zod.enum(["image", "color", "default"]),
+      imageUrl: zod
+        .string()
+        .url()
+        .optional()
+        .describe("Cover image URL (used when type=image)"),
+      bgColor: zod
+        .string()
+        .optional()
+        .describe("Background color hex (used when type=color)"),
+      textColor: zod.string().describe("Text color hex for title overlay"),
+      align: zod.enum(["left", "center"]),
+    })
+    .nullish()
+    .describe("Article cover display settings. null means default cover."),
+  authorNickname: zod.string().nullish(),
+  displayName: zod
+    .string()
+    .nullish()
+    .describe(
+      'Pseudonymous display name for anonymous spaces (e.g. \"참여자 1\"). Null in non-anonymous spaces.',
+    ),
 });
 export const ListSpaceLettersResponse = zod.array(ListSpaceLettersResponseItem);
 
@@ -2257,7 +2376,7 @@ export const ListSpaceScheduledSendsResponseItem = zod.object({
   spaceId: zod.string().uuid(),
   spaceLetterId: zod.string().uuid(),
   scheduledAt: zod.date(),
-  status: zod.enum(["PENDING", "SENT", "CANCELLED"]),
+  status: zod.enum(["PENDING", "SENT", "CANCELLED", "FAILED"]),
   sentAt: zod.date().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
@@ -2276,6 +2395,31 @@ export const CreateSpaceScheduledSendParams = zod.object({
 
 export const CreateSpaceScheduledSendBody = zod.object({
   scheduledAt: zod.date(),
+});
+
+/**
+ * @summary Cancel or update a scheduled send
+ */
+export const UpdateSpaceScheduledSendParams = zod.object({
+  id: zod.coerce.string().uuid(),
+  letterId: zod.coerce.string().uuid(),
+  sendId: zod.coerce.string().uuid(),
+});
+
+export const UpdateSpaceScheduledSendBody = zod.object({
+  status: zod.enum(["PENDING", "CANCELLED", "FAILED"]),
+  scheduledAt: zod.date().optional(),
+});
+
+export const UpdateSpaceScheduledSendResponse = zod.object({
+  id: zod.string().uuid(),
+  spaceId: zod.string().uuid(),
+  spaceLetterId: zod.string().uuid(),
+  scheduledAt: zod.date(),
+  status: zod.enum(["PENDING", "SENT", "CANCELLED", "FAILED"]),
+  sentAt: zod.date().nullish(),
+  createdAt: zod.date(),
+  updatedAt: zod.date(),
 });
 
 /**

@@ -3698,6 +3698,9 @@ components:
         articleExcerpt:
           type: string
           nullable: true
+        articleCover:
+          $ref: "#/components/schemas/ArticleCover"
+          nullable: true
         authorNickname:
           type: string
           nullable: true

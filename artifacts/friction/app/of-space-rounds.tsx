@@ -19,6 +19,7 @@ import {
   useUpdateSpaceRound,
   useListSpaceLetters,
   getListSpaceRoundsQueryKey,
+  getListSpaceLettersQueryKey,
 } from "@workspace/api-client-react";
 import type { SpaceRound, SpaceLetter } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -215,8 +216,8 @@ export default function SpaceRoundsScreen() {
   const queryClient = useQueryClient();
   const [editingRound, setEditingRound] = useState<SpaceRound | null>(null);
 
-  const roundsQuery = useListSpaceRounds(id, { query: { enabled: !!id } });
-  const lettersQuery = useListSpaceLetters(id, { query: { enabled: !!id } });
+  const roundsQuery = useListSpaceRounds(id, { query: { enabled: !!id, queryKey: getListSpaceRoundsQueryKey(id) } });
+  const lettersQuery = useListSpaceLetters(id, { query: { enabled: !!id, queryKey: getListSpaceLettersQueryKey(id) } });
 
   const rounds = (roundsQuery.data ?? []) as SpaceRound[];
   const letters = (lettersQuery.data ?? []) as SpaceLetter[];

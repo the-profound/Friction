@@ -8,6 +8,6 @@
 import type { UpdateSpaceCodeRequestBodyStatus } from "./updateSpaceCodeRequestBodyStatus";
 
 export interface UpdateSpaceCodeRequestBody {
-  status?: UpdateSpaceCodeRequestBodyStatus;
+  status: UpdateSpaceCodeRequestBodyStatus;
   rejectionReason?: string | null;
 }

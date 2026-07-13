@@ -207,7 +207,7 @@ export default function SpaceCreateScreen() {
           name: form.name.trim(),
           description: form.description.trim() || null,
           isAnonymous: form.isAnonymous,
-          startsAt: startsAtParsed ?? null,
+          startsAt: startsAtParsed ? startsAtParsed.toISOString() : null,
           roundCount: form.roundCount,
           maxParticipants: maxParticipants ?? null,
           defaultCenterInterval: form.defaultCenterInterval,
