@@ -530,7 +530,6 @@ function RoundModeStep({ onSelect }: { onSelect: (customize: boolean) => void })
               회차 제목·설명 없이 바로 다음 단계로 넘어가요.
             </Text>
           </View>
-          <Feather name="chevron-right" size={18} color={Colors.zinc400} />
         </ScalePressable>
 
         <ScalePressable style={roundModeStyles.card} onPress={() => onSelect(true)}>
@@ -543,7 +542,6 @@ function RoundModeStep({ onSelect }: { onSelect: (customize: boolean) => void })
               각 회차마다 제목과 설명을 직접 입력해요.
             </Text>
           </View>
-          <Feather name="chevron-right" size={18} color={Colors.zinc400} />
         </ScalePressable>
       </View>
     </View>
