@@ -655,7 +655,7 @@ export default function SpaceDetailScreen() {
     if (showInviteGuide === "1") {
       Alert.alert(
         "공간이 만들어졌어요 🎉",
-        "초대 코드로 초대하거나 아이디로 직접 초대할 수 있어요.",
+        "초대 문구로 초대하거나 아이디로 직접 초대할 수 있어요.",
         [{ text: "확인" }],
       );
     }
@@ -932,7 +932,7 @@ export default function SpaceDetailScreen() {
   const handleCopyInviteCode = useCallback(async () => {
     if (!space?.inviteCode) return;
     await Clipboard.setStringAsync(space.inviteCode);
-    showToast({ message: "초대 코드가 복사됐어요", type: "success" });
+    showToast({ message: "초대 문구가 복사됐어요", type: "success" });
   }, [space?.inviteCode, showToast]);
 
   const handlePressWriteOpening = useCallback(
@@ -1000,7 +1000,7 @@ export default function SpaceDetailScreen() {
           <Feather name="lock" size={36} color={Colors.zinc300} />
           <Text style={styles.errorText}>참여하지 않은 공간이에요</Text>
           <Text style={styles.errorSubText}>
-            초대 코드로 참여 신청 후 운영자 승인을 받으세요
+            초대 문구로 참여 신청 후 운영자 승인을 받으세요
           </Text>
           <ScalePressable style={styles.retryButton} onPress={() => router.back()}>
             <Text style={styles.retryButtonText}>돌아가기</Text>
@@ -1125,7 +1125,7 @@ export default function SpaceDetailScreen() {
             <View style={styles.inviteCodeRow}>
               <View style={styles.inviteCodeRowLeft}>
                 <Feather name="key" size={12} color={Colors.zinc400} />
-                <Text style={styles.inviteCodeLabel}>초대 코드</Text>
+                <Text style={styles.inviteCodeLabel}>초대 문구</Text>
                 <Text style={styles.inviteCodeValue}>{space.inviteCode}</Text>
               </View>
               <ScalePressable style={styles.inviteCopyBtn} onPress={handleCopyInviteCode} hitSlop={8}>

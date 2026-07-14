@@ -278,7 +278,7 @@ export default function SpaceJoinScreen() {
   const handleCodeLookup = useCallback(async () => {
     const raw = inviteCode.trim();
     if (!raw) {
-      setCodeError("초대 코드를 입력해주세요.");
+      setCodeError("초대 문구를 입력해주세요.");
       return;
     }
     setCodeError(null);
@@ -418,13 +418,13 @@ export default function SpaceJoinScreen() {
           <View style={styles.codeInputIcon}>
             <Feather name="hash" size={32} color="#7C3AED" />
           </View>
-          <Text style={styles.codeInputTitle}>초대 코드로 신청</Text>
+          <Text style={styles.codeInputTitle}>초대 문구로 신청</Text>
           <Text style={styles.codeInputSubtitle}>
-            운영자에게 받은 초대 코드를 입력하면{"\n"}운영자의 승인 후 공간에 참여할 수 있어요
+            운영자에게 받은 초대 문구를 입력하면{"\n"}운영자의 승인 후 공간에 참여할 수 있어요
           </Text>
           <TextInput
             style={[styles.codeInput, !!codeError && styles.codeInputError]}
-            placeholder="초대 코드 입력"
+            placeholder="초대 문구 입력"
             placeholderTextColor={Colors.zinc400}
             value={inviteCode}
             onChangeText={(v) => {

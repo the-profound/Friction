@@ -363,7 +363,7 @@ export default function SpacesScreen() {
             onPress: () => router.push("/space-create" as never),
           },
           {
-            label: "초대 코드로 참여",
+            label: "초대 문구로 참여",
             onPress: () => router.push("/space-join" as never),
           },
           { label: "취소", style: "cancel", onPress: () => {} },
@@ -390,7 +390,7 @@ export default function SpacesScreen() {
         >
           <Feather name="grid" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>공간이 없어요</Text>
-          <Text style={styles.emptySubtitle}>함께 편지를 나눌 공간을 만들거나{"\n"}초대 코드로 참여해보세요</Text>
+          <Text style={styles.emptySubtitle}>함께 편지를 나눌 공간을 만들거나{"\n"}초대 문구로 참여해보세요</Text>
         </RefreshableEmpty>
       ) : invitations.length > 0 || codeRequests.length > 0 ? (
         spaces.length === 0 ? (
