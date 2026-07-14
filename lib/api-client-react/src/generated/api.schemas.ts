@@ -579,6 +579,8 @@ export interface SpaceRound {
   title?: string | null;
   description?: string | null;
   status: SpaceRoundStatus;
+  startsAt?: string | null;
+  endsAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }

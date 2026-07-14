@@ -44,6 +44,8 @@ export const spaceRoundsTable = pgTable("space_rounds", {
   title: varchar("title", { length: 100 }),
   description: text("description"),
   status: spaceRoundStatusEnum("status").notNull().default("UPCOMING"),
+  startsAt: timestamp("starts_at", { withTimezone: true }),
+  endsAt: timestamp("ends_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (t) => [

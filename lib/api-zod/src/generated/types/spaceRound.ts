@@ -14,6 +14,8 @@ export interface SpaceRound {
   title?: string | null;
   description?: string | null;
   status: SpaceRoundStatus;
+  startsAt?: Date | null;
+  endsAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }

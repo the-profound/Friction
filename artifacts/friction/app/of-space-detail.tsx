@@ -346,6 +346,21 @@ function RoundSection({
     letterArea = null;
   }
 
+  const formatRoundDate = (iso: string) => {
+    const d = new Date(iso);
+    return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
+  };
+
+  const roundDateRange =
+    round.startsAt || round.endsAt
+      ? [
+          round.startsAt ? formatRoundDate(round.startsAt) : null,
+          round.endsAt ? formatRoundDate(round.endsAt) : null,
+        ]
+          .filter(Boolean)
+          .join(" ~ ")
+      : null;
+
   return (
     <View style={styles.roundSection}>
       <View style={styles.roundSectionHeader}>
@@ -364,6 +379,9 @@ function RoundSection({
           <Text style={styles.roundLetterCount}>{letters.length}편</Text>
         )}
       </View>
+      {roundDateRange ? (
+        <Text style={styles.roundDateRange}>{roundDateRange}</Text>
+      ) : null}
       {round.description ? (
         <Text style={styles.roundDescription} numberOfLines={2}>
           {round.description}
@@ -666,6 +684,9 @@ export default function SpaceDetailScreen() {
   const recruitmentClosed =
     space?.status !== "RECRUITING" ||
     !!(space?.maxParticipants && space.participantCount >= space.maxParticipants);
+
+  // Capacity-full flag: participant cap reached (independent of status).
+  const isCapacityFull = !!(space?.maxParticipants && space.participantCount >= space.maxParticipants);
 
   const codeRequestsQuery = useListSpaceCodeRequests(
     id,
@@ -1016,6 +1037,7 @@ export default function SpaceDetailScreen() {
         contentContainerStyle={[
           styles.scrollContent,
           !isOperator && !isArchived && { paddingBottom: 80 + insets.bottom },
+          !isOperator && isArchived && { paddingBottom: 56 + insets.bottom },
         ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -1080,6 +1102,22 @@ export default function SpaceDetailScreen() {
               </Text>
             </View>
           ) : null}
+
+          {(space.defaultCenterInterval != null && space.defaultCenterCount != null) ? (
+            <View style={styles.centreRuleRow}>
+              <Feather name="repeat" size={12} color={Colors.zinc400} />
+              <Text style={styles.centreRuleText}>
+                {`${space.defaultCenterInterval}일마다 중심글 ${space.defaultCenterCount}개`}
+              </Text>
+            </View>
+          ) : null}
+
+          {isCapacityFull && !isOperator && (
+            <View style={styles.recruitmentClosedBanner}>
+              <Feather name="slash" size={13} color={Colors.zinc500} />
+              <Text style={styles.recruitmentClosedText}>모집이 마감됐어요</Text>
+            </View>
+          )}
         </View>
 
         {/* ── Rounds sections ── */}
@@ -1178,7 +1216,7 @@ export default function SpaceDetailScreen() {
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* ── Floating "글 예약 발송" button (non-operators only) ── */}
+      {/* ── Floating "글 예약 발송" button (non-operators only, active spaces) ── */}
       {!isOperator && !isArchived && (
         <ScalePressable
           style={[styles.floatingBtn, { bottom: insets.bottom + 16 }]}
@@ -1192,6 +1230,14 @@ export default function SpaceDetailScreen() {
           <Feather name="send" size={15} color={Colors.white} />
           <Text style={styles.floatingBtnText}>글 예약 발송</Text>
         </ScalePressable>
+      )}
+
+      {/* ── Archived notice bar (non-operators only, archived spaces) ── */}
+      {!isOperator && isArchived && (
+        <View style={[styles.archivedNoticeBar, { paddingBottom: insets.bottom + 12 }]}>
+          <Feather name="archive" size={13} color={Colors.zinc500} />
+          <Text style={styles.archivedNoticeText}>종료된 공간이에요</Text>
+        </View>
       )}
 
       {/* ── Operator kebab action sheet ── */}
@@ -1378,6 +1424,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.zinc400,
   },
+  centreRuleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginTop: -2,
+  },
+  centreRuleText: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc400,
+  },
   descRow: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -1560,6 +1617,13 @@ const styles = StyleSheet.create({
     ...Typography.caption,
     fontSize: 11,
     color: Colors.zinc400,
+  },
+  roundDateRange: {
+    ...Typography.caption,
+    fontSize: 11,
+    color: Colors.zinc400,
+    paddingHorizontal: Spacing.screenPx,
+    marginTop: -4,
   },
   roundDescription: {
     ...Typography.body,
@@ -1772,6 +1836,23 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 15,
     color: Colors.white,
+  },
+
+  // ─── Archived notice bar ────────────────────────────────────────────────────
+  archivedNoticeBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingTop: 12,
+    backgroundColor: Colors.zinc50,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.zinc200,
+  },
+  archivedNoticeText: {
+    ...Typography.body,
+    fontSize: 13,
+    color: Colors.zinc500,
   },
 
   // ─── Invite code card ──────────────────────────────────────────────────────

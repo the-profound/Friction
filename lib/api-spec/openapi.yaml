@@ -3450,6 +3450,14 @@ components:
         status:
           type: string
           enum: [UPCOMING, ACTIVE, COMPLETED]
+        startsAt:
+          type: string
+          format: date-time
+          nullable: true
+        endsAt:
+          type: string
+          format: date-time
+          nullable: true
         createdAt:
           type: string
           format: date-time

@@ -1907,6 +1907,8 @@ export const ListSpacesResponseItem = zod.object({
       title: zod.string().nullish(),
       description: zod.string().nullish(),
       status: zod.enum(["UPCOMING", "ACTIVE", "COMPLETED"]),
+      startsAt: zod.date().nullish(),
+      endsAt: zod.date().nullish(),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     })
@@ -2007,6 +2009,8 @@ export const ListSpaceRoundsResponseItem = zod.object({
   title: zod.string().nullish(),
   description: zod.string().nullish(),
   status: zod.enum(["UPCOMING", "ACTIVE", "COMPLETED"]),
+  startsAt: zod.date().nullish(),
+  endsAt: zod.date().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -2046,6 +2050,8 @@ export const UpdateSpaceRoundResponse = zod.object({
   title: zod.string().nullish(),
   description: zod.string().nullish(),
   status: zod.enum(["UPCOMING", "ACTIVE", "COMPLETED"]),
+  startsAt: zod.date().nullish(),
+  endsAt: zod.date().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
