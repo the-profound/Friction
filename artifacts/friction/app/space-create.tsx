@@ -379,8 +379,6 @@ function BasicSettingsStep({
   form: FormData;
   updateField: <K extends keyof FormData>(key: K, value: FormData[K]) => void;
 }) {
-  const descRef = useRef<TextInput>(null);
-
   return (
     <View style={stepStyles.container}>
       <Text style={stepStyles.stepTitle}>기본 설정</Text>
@@ -397,8 +395,6 @@ function BasicSettingsStep({
           maxLength={50}
           autoFocus
           returnKeyType="next"
-          onSubmitEditing={() => descRef.current?.focus()}
-          blurOnSubmit={false}
         />
         <Text style={stepStyles.charCount}>{form.name.length} / 50</Text>
       </View>
@@ -406,7 +402,6 @@ function BasicSettingsStep({
       <View style={stepStyles.fieldGroup}>
         <Text style={stepStyles.fieldLabel}>설명 (선택)</Text>
         <TextInput
-          ref={descRef}
           style={[stepStyles.input, stepStyles.inputMulti]}
           placeholder="이 공간은 어떤 목적으로 운영되나요?"
           placeholderTextColor={Colors.zinc400}
@@ -449,8 +444,6 @@ function OperationSettingsStep({
   onRoundCountChange: (text: string) => void;
 }) {
   const [dateRaw, setDateRaw] = useState(formatDateDisplay(form.startsAt));
-  const roundCountRef = useRef<TextInput>(null);
-  const maxParticipantsRef = useRef<TextInput>(null);
 
   const handleDateChange = (text: string) => {
     const digits = text.replace(/\D/g, "").slice(0, 8);
@@ -474,9 +467,6 @@ function OperationSettingsStep({
           onChangeText={handleDateChange}
           keyboardType="numeric"
           maxLength={10}
-          returnKeyType="next"
-          onSubmitEditing={() => roundCountRef.current?.focus()}
-          blurOnSubmit={false}
         />
         {form.startsAt.length > 0 && parseDateInput(form.startsAt) === null && (
           <Text style={stepStyles.errorText}>올바른 날짜를 입력해주세요 (예: 20250101)</Text>
@@ -486,7 +476,6 @@ function OperationSettingsStep({
       <View style={stepStyles.fieldGroup}>
         <Text style={stepStyles.fieldLabel}>전체 회차 수 *</Text>
         <TextInput
-          ref={roundCountRef}
           style={stepStyles.input}
           placeholder="예: 12"
           placeholderTextColor={Colors.zinc400}
@@ -494,9 +483,6 @@ function OperationSettingsStep({
           onChangeText={onRoundCountChange}
           keyboardType="number-pad"
           maxLength={2}
-          returnKeyType="next"
-          onSubmitEditing={() => maxParticipantsRef.current?.focus()}
-          blurOnSubmit={false}
         />
         {roundCountError ? (
           <Text style={stepStyles.errorText}>{roundCountError}</Text>
@@ -508,7 +494,6 @@ function OperationSettingsStep({
       <View style={stepStyles.fieldGroup}>
         <Text style={stepStyles.fieldLabel}>몇 명까지 참여할 수 있나요? (선택)</Text>
         <TextInput
-          ref={maxParticipantsRef}
           style={stepStyles.input}
           placeholder="제한 없음"
           placeholderTextColor={Colors.zinc400}
@@ -521,7 +506,6 @@ function OperationSettingsStep({
           }}
           keyboardType="number-pad"
           maxLength={4}
-          returnKeyType="done"
         />
         <Text style={stepStyles.hint}>비워두면 인원 제한 없이 운영돼요 (최소 1명)</Text>
       </View>
@@ -575,8 +559,6 @@ function RoundConfigStep({
   round: RoundDraft;
   onChange: (field: keyof RoundDraft, value: string) => void;
 }) {
-  const descRef = useRef<TextInput>(null);
-
   return (
     <View style={stepStyles.container}>
       <Text style={stepStyles.stepTitle}>{roundNumber}회차 구성</Text>
@@ -595,15 +577,12 @@ function RoundConfigStep({
           maxLength={100}
           autoFocus
           returnKeyType="next"
-          onSubmitEditing={() => descRef.current?.focus()}
-          blurOnSubmit={false}
         />
       </View>
 
       <View style={stepStyles.fieldGroup}>
         <Text style={stepStyles.fieldLabel}>짧은 설명 (선택)</Text>
         <TextInput
-          ref={descRef}
           style={[stepStyles.input, stepStyles.inputMulti]}
           placeholder="이 회차에 대해 간단히 소개해주세요"
           placeholderTextColor={Colors.zinc400}
@@ -654,23 +633,7 @@ function AdvancedSettingsStep({
           </ScalePressable>
         </View>
       ) : (
-        <AdvancedCustomFields form={form} updateField={updateField} />
-      )}
-    </View>
-  );
-}
-
-function AdvancedCustomFields({
-  form,
-  updateField,
-}: {
-  form: FormData;
-  updateField: <K extends keyof FormData>(key: K, value: FormData[K]) => void;
-}) {
-  const centerCountRef = useRef<TextInput>(null);
-
-  return (
-    <>
+        <>
           <View style={stepStyles.fieldGroup}>
             <Text style={stepStyles.fieldLabel}>중심글 전송 간격 (일)</Text>
             <TextInput
@@ -685,9 +648,6 @@ function AdvancedCustomFields({
               keyboardType="number-pad"
               maxLength={3}
               autoFocus
-              returnKeyType="next"
-              onSubmitEditing={() => centerCountRef.current?.focus()}
-              blurOnSubmit={false}
             />
             <Text style={stepStyles.hint}>각 회차 중심글 사이 전송 주기예요</Text>
           </View>
@@ -695,7 +655,6 @@ function AdvancedCustomFields({
           <View style={stepStyles.fieldGroup}>
             <Text style={stepStyles.fieldLabel}>회차당 중심글 수</Text>
             <TextInput
-              ref={centerCountRef}
               style={stepStyles.input}
               placeholder={String(DEFAULT_CENTER_COUNT)}
               placeholderTextColor={Colors.zinc400}
@@ -706,10 +665,11 @@ function AdvancedCustomFields({
               }}
               keyboardType="number-pad"
               maxLength={2}
-              returnKeyType="done"
             />
           </View>
-    </>
+        </>
+      )}
+    </View>
   );
 }
 
