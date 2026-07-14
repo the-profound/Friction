@@ -142,10 +142,15 @@ export default function SpaceJoinScreen() {
   const params = useLocalSearchParams<{
     spaceId?: string;
     inviteCode?: string;
+    invitationId?: string;
+    codeRequestId?: string;
   }>();
 
+  const hasDeepLink = !!(params.spaceId || params.invitationId || params.codeRequestId);
+  const cameFromList = hasDeepLink;
+
   const [step, setStep] = useState<Step>(
-    params.spaceId ? "context_loading" : "code_input",
+    hasDeepLink ? "context_loading" : "code_input",
   );
   const [inviteCode, setInviteCode] = useState(params.inviteCode ?? "");
   const [codeError, setCodeError] = useState<string | null>(null);
@@ -162,7 +167,10 @@ export default function SpaceJoinScreen() {
   const updateInvitation = useUpdateSpaceInvitation();
 
   const loadJoinContext = useCallback(
-    async (sid: string) => {
+    async (
+      sid: string,
+      opts?: { invitationId?: string; codeRequestId?: string },
+    ) => {
       try {
         const ctx = await getSpaceJoinContext(sid, { userId });
         setJoinContext(ctx);
@@ -180,19 +188,36 @@ export default function SpaceJoinScreen() {
           space.maxParticipants != null &&
           space.participantCount >= space.maxParticipants &&
           space.status !== "RECRUITING";
-        if (isFull && !invitation && !codeRequest) {
+
+        // When entering via invitationId, only treat the matching invitation as valid.
+        const targetInvitation =
+          opts?.invitationId != null
+            ? invitation?.id === opts.invitationId
+              ? invitation
+              : null
+            : invitation;
+
+        // When entering via codeRequestId, only treat the matching request as valid.
+        const targetCodeRequest =
+          opts?.codeRequestId != null
+            ? codeRequest?.id === opts.codeRequestId
+              ? codeRequest
+              : null
+            : codeRequest;
+
+        if (isFull && !targetInvitation && !targetCodeRequest) {
           setStep("space_full");
           return;
         }
-        if (invitation?.status === "PENDING") {
+        if (targetInvitation?.status === "PENDING") {
           setStep("invitation");
           return;
         }
-        if (codeRequest?.status === "PENDING") {
+        if (targetCodeRequest?.status === "PENDING") {
           setStep("code_pending");
           return;
         }
-        if (codeRequest?.status === "REJECTED") {
+        if (targetCodeRequest?.status === "REJECTED") {
           setStep("code_rejected");
           return;
         }
@@ -211,10 +236,18 @@ export default function SpaceJoinScreen() {
   );
 
   useEffect(() => {
-    if (step === "context_loading" && spaceId) {
-      loadJoinContext(spaceId);
+    if (step === "context_loading") {
+      if (spaceId) {
+        loadJoinContext(spaceId, {
+          invitationId: params.invitationId,
+          codeRequestId: params.codeRequestId,
+        });
+      } else {
+        // Deep-link without spaceId: cannot resolve — show error.
+        setStep("context_error");
+      }
     }
-  }, [step, spaceId, loadJoinContext]);
+  }, [step, spaceId, loadJoinContext, params.invitationId, params.codeRequestId]);
 
   useEffect(() => {
     if (step === "code_pending" && spaceId) {
@@ -326,16 +359,20 @@ export default function SpaceJoinScreen() {
         requestId: joinContext.codeRequest.id,
         data: { status: "CANCELLED" },
       });
-      setInviteCode("");
-      setFoundSpace(null);
-      setJoinContext(null);
-      setStep("code_input");
+      if (cameFromList) {
+        router.back();
+      } else {
+        setInviteCode("");
+        setFoundSpace(null);
+        setJoinContext(null);
+        setStep("code_input");
+      }
     } catch {
       showToast({ message: "취소에 실패했어요. 다시 시도해주세요.", type: "error" });
     } finally {
       setActionLoading(false);
     }
-  }, [spaceId, joinContext, updateCodeRequest, showToast]);
+  }, [spaceId, joinContext, updateCodeRequest, showToast, cameFromList, router]);
 
   const handleAcceptInvitation = useCallback(async () => {
     if (!spaceId || !joinContext?.invitation) return;
@@ -583,14 +620,14 @@ export default function SpaceJoinScreen() {
             <Feather name="x-circle" size={32} color={Colors.zinc400} />
           </View>
           <Text style={styles.rejectedTitle}>신청이 거절되었어요</Text>
-          {joinContext.codeRequest?.rejectionReason ? (
-            <View style={styles.rejectionReasonBox}>
-              <Text style={styles.rejectionReasonLabel}>거절 사유</Text>
-              <Text style={styles.rejectionReasonText}>
-                {joinContext.codeRequest.rejectionReason}
-              </Text>
-            </View>
-          ) : null}
+          <View style={styles.rejectionReasonBox}>
+            <Text style={styles.rejectionReasonLabel}>거절 사유</Text>
+            <Text style={styles.rejectionReasonText}>
+              {joinContext.codeRequest?.rejectionReason
+                ? joinContext.codeRequest.rejectionReason
+                : "운영자가 별도의 사유를 남기지 않았어요."}
+            </Text>
+          </View>
           <SpaceInfoCard space={joinContext.space} />
           <ScalePressable style={styles.secondaryButton} onPress={() => router.back()}>
             <Text style={styles.secondaryButtonText}>돌아가기</Text>

@@ -180,19 +180,30 @@ function InvitationBar({
   );
 }
 
-function CodeRequestBar({ requests }: { requests: SpaceCodeRequestWithSpace[] }) {
+function CodeRequestBar({
+  requests,
+  onPress,
+}: {
+  requests: SpaceCodeRequestWithSpace[];
+  onPress: (item: SpaceCodeRequestWithSpace) => void;
+}) {
   if (requests.length === 0) return null;
   return (
     <View style={styles.codeRequestSection}>
       <Text style={styles.inviteSectionLabel}>승인 대기</Text>
       {requests.map((item) => (
-        <View key={item.codeRequest.id} style={styles.codeRequestBar}>
+        <ScalePressable
+          key={item.codeRequest.id}
+          style={styles.codeRequestBar}
+          onPress={() => onPress(item)}
+        >
           <Feather name="clock" size={14} color={Colors.zinc400} style={styles.inviteIcon} />
           <Text style={styles.codeRequestSpaceName} numberOfLines={1}>{item.space.name}</Text>
           <View style={styles.pendingBadge}>
             <Text style={styles.pendingBadgeText}>승인 대기 중</Text>
           </View>
-        </View>
+          <Feather name="chevron-right" size={15} color={Colors.zinc400} />
+        </ScalePressable>
       ))}
     </View>
   );
@@ -279,6 +290,16 @@ export default function SpacesScreen() {
     [router],
   );
 
+  const handleCodeRequestBarPress = useCallback(
+    (item: SpaceCodeRequestWithSpace) => {
+      router.push({
+        pathname: "/space-join" as never,
+        params: { spaceId: item.space.id, codeRequestId: item.codeRequest.id },
+      });
+    },
+    [router],
+  );
+
   const renderSpaceItem = useCallback(
     ({ item }: { item: SpaceListItem }) => (
       <SpaceCard
@@ -319,7 +340,7 @@ export default function SpacesScreen() {
         invitations={invitations}
         onPress={handleInvitationBarPress}
       />
-      <CodeRequestBar requests={codeRequests} />
+      <CodeRequestBar requests={codeRequests} onPress={handleCodeRequestBarPress} />
       {spaces.length > 0 && <View style={styles.gridTopSpacer} />}
     </>
   );
@@ -389,7 +410,7 @@ export default function SpacesScreen() {
               invitations={invitations}
               onPress={handleInvitationBarPress}
             />
-            <CodeRequestBar requests={codeRequests} />
+            <CodeRequestBar requests={codeRequests} onPress={handleCodeRequestBarPress} />
             {allSpaces.length > 0 && (
               <View style={[styles.centerContainer, styles.filteredEmptyInline]}>
                 <Text style={styles.filteredEmptyText}>해당하는 공간이 없어요</Text>
