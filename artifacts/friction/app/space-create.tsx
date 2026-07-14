@@ -233,7 +233,10 @@ export default function SpaceCreateScreen() {
       queryClient.invalidateQueries({ queryKey: getListSpacesQueryKey() });
 
       showToast({ message: "공간을 만들었어요.", type: "success" });
-      router.replace({ pathname: "/(tabs)/of" });
+      router.replace({
+        pathname: "/of-space-detail" as never,
+        params: { id: space.id, showInviteGuide: "1" },
+      } as never);
     } catch {
       showToast({ message: "공간 생성에 실패했어요. 다시 시도해주세요.", type: "error" });
     } finally {
@@ -283,7 +286,16 @@ export default function SpaceCreateScreen() {
       );
     }
     if (step === confirmStep) {
-      return <ConfirmStep form={form} />;
+      return (
+        <ConfirmStep
+          form={form}
+          onGoToStep={setStep}
+          basicStep={0}
+          operationStep={1}
+          roundModeStep={ROUND_MODE_STEP}
+          advancedStep={advancedStep}
+        />
+      );
     }
     return null;
   };
@@ -480,16 +492,22 @@ function OperationSettingsStep({
       </View>
 
       <View style={stepStyles.fieldGroup}>
-        <Text style={stepStyles.fieldLabel}>모집 인원 (선택)</Text>
+        <Text style={stepStyles.fieldLabel}>몇 명까지 참여할 수 있나요? (선택)</Text>
         <TextInput
           style={stepStyles.input}
           placeholder="제한 없음"
           placeholderTextColor={Colors.zinc400}
           value={form.maxParticipants}
-          onChangeText={(v) => updateField("maxParticipants", v.replace(/\D/g, ""))}
+          onChangeText={(v) => {
+            const digits = v.replace(/\D/g, "");
+            if (digits === "" || parseInt(digits, 10) > 0) {
+              updateField("maxParticipants", digits);
+            }
+          }}
           keyboardType="number-pad"
           maxLength={4}
         />
+        <Text style={stepStyles.hint}>비워두면 인원 제한 없이 운영돼요 (최소 1명)</Text>
       </View>
     </View>
   );
@@ -593,7 +611,7 @@ function AdvancedSettingsStep({
   return (
     <View style={stepStyles.container}>
       <Text style={stepStyles.stepTitle}>고급 설정</Text>
-      <Text style={stepStyles.stepDesc}>중심글 전송 주기와 개수를 설정해요.</Text>
+      <Text style={stepStyles.stepDesc}>하루에 한 명씩 글을 올리는 기본 방식으로 진행할까요?</Text>
 
       {!customized ? (
         <View style={stepStyles.defaultCard}>
@@ -655,7 +673,21 @@ function AdvancedSettingsStep({
   );
 }
 
-function ConfirmStep({ form }: { form: FormData }) {
+function ConfirmStep({
+  form,
+  onGoToStep,
+  basicStep,
+  operationStep,
+  roundModeStep,
+  advancedStep,
+}: {
+  form: FormData;
+  onGoToStep: (step: number) => void;
+  basicStep: number;
+  operationStep: number;
+  roundModeStep: number;
+  advancedStep: number;
+}) {
   const hasRoundTitles = form.customizeRounds && form.rounds.some((r) => r.title.trim());
 
   return (
@@ -664,7 +696,12 @@ function ConfirmStep({ form }: { form: FormData }) {
       <Text style={stepStyles.stepDesc}>입력한 내용을 확인하고 공간을 만들어요.</Text>
 
       <View style={confirmStyles.section}>
-        <Text style={confirmStyles.sectionTitle}>기본 설정</Text>
+        <View style={confirmStyles.sectionHeader}>
+          <Text style={confirmStyles.sectionTitle}>기본 설정</Text>
+          <ScalePressable onPress={() => onGoToStep(basicStep)}>
+            <Text style={confirmStyles.editBtn}>수정</Text>
+          </ScalePressable>
+        </View>
         <ConfirmRow label="공간 이름" value={form.name} />
         {form.description.trim() ? (
           <ConfirmRow label="설명" value={form.description} />
@@ -673,7 +710,12 @@ function ConfirmStep({ form }: { form: FormData }) {
       </View>
 
       <View style={confirmStyles.section}>
-        <Text style={confirmStyles.sectionTitle}>운영 설정</Text>
+        <View style={confirmStyles.sectionHeader}>
+          <Text style={confirmStyles.sectionTitle}>운영 설정</Text>
+          <ScalePressable onPress={() => onGoToStep(operationStep)}>
+            <Text style={confirmStyles.editBtn}>수정</Text>
+          </ScalePressable>
+        </View>
         {form.startsAt.trim() && parseDateInput(form.startsAt) ? (
           <ConfirmRow label="시작일" value={formatDateDisplay(form.startsAt)} />
         ) : (
@@ -692,19 +734,33 @@ function ConfirmStep({ form }: { form: FormData }) {
         />
       </View>
 
-      {hasRoundTitles && (
-        <View style={confirmStyles.section}>
+      <View style={confirmStyles.section}>
+        <View style={confirmStyles.sectionHeader}>
           <Text style={confirmStyles.sectionTitle}>회차 구성</Text>
-          {form.rounds.map((r, i) =>
+          <ScalePressable onPress={() => onGoToStep(roundModeStep)}>
+            <Text style={confirmStyles.editBtn}>수정</Text>
+          </ScalePressable>
+        </View>
+        <ConfirmRow
+          label="구성 방식"
+          value={form.customizeRounds ? "직접 설정" : "기본값 적용"}
+          muted={!form.customizeRounds}
+        />
+        {hasRoundTitles &&
+          form.rounds.map((r, i) =>
             r.title.trim() ? (
               <ConfirmRow key={i} label={`${i + 1}회차`} value={r.title} />
             ) : null,
           )}
-        </View>
-      )}
+      </View>
 
       <View style={confirmStyles.section}>
-        <Text style={confirmStyles.sectionTitle}>고급 설정</Text>
+        <View style={confirmStyles.sectionHeader}>
+          <Text style={confirmStyles.sectionTitle}>고급 설정</Text>
+          <ScalePressable onPress={() => onGoToStep(advancedStep)}>
+            <Text style={confirmStyles.editBtn}>수정</Text>
+          </ScalePressable>
+        </View>
         <ConfirmRow label="중심글 간격" value={`${form.defaultCenterInterval}일`} />
         <ConfirmRow label="회차당 중심글" value={`${form.defaultCenterCount}편`} />
       </View>
@@ -970,6 +1026,11 @@ const confirmStyles = StyleSheet.create({
   section: {
     gap: 8,
   },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
   sectionTitle: {
     ...Typography.bodySemiBold,
     fontSize: 13,
@@ -977,6 +1038,13 @@ const confirmStyles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.5,
     marginBottom: 2,
+  },
+  editBtn: {
+    ...Typography.bodySemiBold,
+    fontSize: 13,
+    color: Colors.zinc500,
+    paddingVertical: 2,
+    paddingHorizontal: 6,
   },
   row: {
     flexDirection: "row",

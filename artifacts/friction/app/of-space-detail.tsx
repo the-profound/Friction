@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -617,7 +617,7 @@ function DescriptionSection({
 export default function SpaceDetailScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, showInviteGuide } = useLocalSearchParams<{ id: string; showInviteGuide?: string }>();
   const { userId } = useUser();
   const queryClient = useQueryClient();
 
@@ -629,6 +629,16 @@ export default function SpaceDetailScreen() {
   const [tapLetter, setTapLetter] = useState<SpaceLetter | null>(null);
   const [tapLetterOrigin, setTapLetterOrigin] = useState<OriginLayout | null>(null);
   const [tapArticle, setTapArticle] = useState<Article | null>(null);
+
+  useEffect(() => {
+    if (showInviteGuide === "1") {
+      Alert.alert(
+        "공간이 만들어졌어요 🎉",
+        "초대 코드로 초대하거나 아이디로 직접 초대할 수 있어요.",
+        [{ text: "확인" }],
+      );
+    }
+  }, [showInviteGuide]);
 
   const joinContextQuery = useGetSpaceJoinContext(
     id,
