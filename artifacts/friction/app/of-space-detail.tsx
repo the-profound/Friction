@@ -1199,7 +1199,7 @@ export default function SpaceDetailScreen() {
         )}
 
         {/* ── Invite code (operator only) ── */}
-        {isOperator && space.inviteCode && (
+        {isOperator && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionLabel}>초대 코드</Text>

@@ -28,7 +28,7 @@ export const spacesTable = pgTable("spaces", {
   defaultCenterCount: integer("default_center_count").notNull().default(1),
   status: spaceStatusEnum("status").notNull().default("RECRUITING"),
   creatorId: uuid("creator_id").notNull().references(() => usersTable.id),
-  inviteCode: varchar("invite_code", { length: 20 }).unique(),
+  inviteCode: varchar("invite_code", { length: 30 }).unique(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and, inArray, count } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth";
+import { generateInviteCode } from "../lib/inviteCodeWords";
 import {
   db,
   spacesTable,
@@ -167,21 +168,39 @@ router.post("/spaces", async (req, res) => {
     res.status(400).json({ error: "creatorId is required" });
     return;
   }
-  try {
-    const { startsAt, ...rest } = body;
-    const values = { ...rest, ...(startsAt != null ? { startsAt: toDate(startsAt) } : {}) };
-    const [space] = await db.insert(spacesTable).values(values).returning();
-    await db.insert(spaceParticipationsTable).values({
-      spaceId: space.id,
-      userId: body.creatorId,
-      role: "OPERATOR",
-      status: "APPROVED",
-    });
-    res.status(201).json(space);
-  } catch (err) {
-    console.error("POST /spaces error:", err);
-    res.status(500).json({ error: "공간 생성에 실패했습니다." });
+  const MAX_RETRIES = 5;
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const inviteCode: string = body.inviteCode ?? generateInviteCode();
+    try {
+      const { startsAt, ...rest } = body;
+      const values = {
+        ...rest,
+        inviteCode,
+        ...(startsAt != null ? { startsAt: toDate(startsAt) } : {}),
+      };
+      const [space] = await db.insert(spacesTable).values(values).returning();
+      await db.insert(spaceParticipationsTable).values({
+        spaceId: space.id,
+        userId: body.creatorId,
+        role: "OPERATOR",
+        status: "APPROVED",
+      });
+      res.status(201).json(space);
+      return;
+    } catch (err: unknown) {
+      const pg = err as { code?: string };
+      if (pg.code === "23505" && !body.inviteCode) {
+        lastErr = err;
+        continue;
+      }
+      console.error("POST /spaces error:", err);
+      res.status(500).json({ error: "공간 생성에 실패했습니다." });
+      return;
+    }
   }
+  console.error("POST /spaces: invite code collision after max retries", lastErr);
+  res.status(500).json({ error: "공간 생성에 실패했습니다." });
 });
 
 router.get("/spaces/by-invite-code/:code", async (req, res) => {

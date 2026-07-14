@@ -3288,6 +3288,7 @@ components:
         inviteCode:
           type: string
           nullable: true
+          description: 한글 형용사+명사 조합 초대 코드 (예: "파란하늘"). 공간 생성 시 자동 배정.
         createdAt:
           type: string
           format: date-time
@@ -3360,6 +3361,7 @@ components:
         inviteCode:
           type: string
           nullable: true
+          description: 한글 형용사+명사 조합 초대 코드 (예: "파란하늘"). 공간 생성 시 자동 배정.
         createdAt:
           type: string
           format: date-time
