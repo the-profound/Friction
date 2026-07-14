@@ -56,14 +56,19 @@ function ArchivedSpaceCard({
           <View style={styles.archivedBadge}>
             <Text style={styles.archivedBadgeText}>종료</Text>
           </View>
+          {item.isAnonymous && (
+            <View style={styles.anonymousBadge}>
+              <Text style={styles.anonymousBadgeText}>익명</Text>
+            </View>
+          )}
           <View style={styles.roleBadge}>
             <Text style={styles.roleBadgeText}>{role}</Text>
           </View>
         </View>
       </View>
       <Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>
-      {item.description ? (
-        <Text style={styles.cardDesc} numberOfLines={2}>{item.description}</Text>
+      {item.operatorNickname ? (
+        <Text style={styles.cardOperator} numberOfLines={1}>운영자 · {item.operatorNickname}</Text>
       ) : null}
       <View style={styles.cardSpacer} />
       <View style={styles.cardMeta}>
@@ -288,6 +293,26 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "600",
     color: Colors.zinc400,
+  },
+  anonymousBadge: {
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderColor: Colors.zinc200,
+    backgroundColor: Colors.zinc100,
+  },
+  anonymousBadgeText: {
+    ...Typography.caption,
+    fontSize: 10,
+    fontWeight: "500",
+    color: Colors.zinc500,
+  },
+  cardOperator: {
+    ...Typography.caption,
+    fontSize: 11,
+    color: Colors.zinc400,
+    marginTop: 2,
   },
   roleBadge: {
     borderRadius: 6,

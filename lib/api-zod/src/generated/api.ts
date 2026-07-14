@@ -1913,6 +1913,7 @@ export const ListSpacesResponseItem = zod.object({
       updatedAt: zod.date(),
     })
     .nullish(),
+  operatorNickname: zod.string().nullish(),
 });
 export const ListSpacesResponse = zod.array(ListSpacesResponseItem);
 

@@ -603,6 +603,7 @@ export interface SpaceListItem {
   myRole: SpaceListItemMyRole;
   participantCount: number;
   activeRound?: SpaceRound | null;
+  operatorNickname?: string | null;
 }
 
 export type SpaceInvitationStatus =

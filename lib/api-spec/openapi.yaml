@@ -3302,6 +3302,9 @@ components:
         activeRound:
           $ref: "#/components/schemas/SpaceRound"
           nullable: true
+        operatorNickname:
+          type: string
+          nullable: true
       required: [id, name, isAnonymous, roundCount, defaultCenterInterval, defaultCenterCount, status, creatorId, createdAt, updatedAt, myRole, participantCount]
 
     SpaceInvitationWithSpace:

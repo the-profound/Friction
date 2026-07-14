@@ -134,11 +134,21 @@ router.get("/spaces", async (req, res) => {
 
   const activeRoundMap = new Map(allRounds.map((r) => [r.spaceId, r]));
 
+  const creatorIds = [...new Set(spaces.map((s) => s.creatorId))];
+  const creators = creatorIds.length > 0
+    ? await db
+        .select({ id: usersTable.id, nickname: usersTable.nickname })
+        .from(usersTable)
+        .where(inArray(usersTable.id, creatorIds))
+    : [];
+  const creatorNicknameMap = new Map(creators.map((u) => [u.id, u.nickname]));
+
   const result = spaces.map((space) => ({
     ...space,
     myRole: roleMap.get(space.id) ?? "PARTICIPANT",
     participantCount: participantCountMap.get(space.id) ?? 0,
     activeRound: activeRoundMap.get(space.id) ?? null,
+    operatorNickname: creatorNicknameMap.get(space.creatorId) ?? null,
   }));
 
   res.json(result);
