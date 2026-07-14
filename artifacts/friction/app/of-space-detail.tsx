@@ -18,6 +18,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
+import * as Clipboard from "expo-clipboard";
+import { useToast } from "@/contexts/ToastContext";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
@@ -638,6 +640,7 @@ export default function SpaceDetailScreen() {
   const { id, showInviteGuide } = useLocalSearchParams<{ id: string; showInviteGuide?: string }>();
   const { userId } = useUser();
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
 
   const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
   const [rejectTargetId, setRejectTargetId] = useState<string | null>(null);
@@ -926,6 +929,12 @@ export default function SpaceDetailScreen() {
     [tapLetter, chainArticles, chainInitialIndex, router],
   );
 
+  const handleCopyInviteCode = useCallback(async () => {
+    if (!space?.inviteCode) return;
+    await Clipboard.setStringAsync(space.inviteCode);
+    showToast({ message: "초대 코드가 복사됐어요", type: "success" });
+  }, [space?.inviteCode, showToast]);
+
   const handlePressWriteOpening = useCallback(
     (_round: SpaceRound) => {
       router.push({
@@ -1112,6 +1121,20 @@ export default function SpaceDetailScreen() {
             </View>
           ) : null}
 
+          {isOperator && isRecruiting && space.inviteCode ? (
+            <View style={styles.inviteCodeRow}>
+              <View style={styles.inviteCodeRowLeft}>
+                <Feather name="key" size={12} color={Colors.zinc400} />
+                <Text style={styles.inviteCodeLabel}>초대 코드</Text>
+                <Text style={styles.inviteCodeValue}>{space.inviteCode}</Text>
+              </View>
+              <ScalePressable style={styles.inviteCopyBtn} onPress={handleCopyInviteCode} hitSlop={8}>
+                <Feather name="copy" size={13} color={Colors.zinc500} />
+                <Text style={styles.inviteCopyBtnText}>복사</Text>
+              </ScalePressable>
+            </View>
+          ) : null}
+
           {isCapacityFull && !isOperator && (
             <View style={styles.recruitmentClosedBanner}>
               <Feather name="slash" size={13} color={Colors.zinc500} />
@@ -1195,21 +1218,6 @@ export default function SpaceDetailScreen() {
                 ))}
               </View>
             )}
-          </View>
-        )}
-
-        {/* ── Invite code (operator only) ── */}
-        {isOperator && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionLabel}>초대 코드</Text>
-            </View>
-            <View style={styles.inviteCodeCard}>
-              <Text style={styles.inviteCode}>{space.inviteCode}</Text>
-              <Text style={styles.inviteCodeHint}>
-                참여자에게 이 코드를 공유하세요
-              </Text>
-            </View>
           </View>
         )}
 
@@ -1855,27 +1863,51 @@ const styles = StyleSheet.create({
     color: Colors.zinc500,
   },
 
-  // ─── Invite code card ──────────────────────────────────────────────────────
-  inviteCodeCard: {
-    marginHorizontal: Spacing.screenPx,
+  // ─── Invite code inline row ────────────────────────────────────────────────
+  inviteCodeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     backgroundColor: Colors.zinc50,
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.zinc200,
-    padding: 16,
+  },
+  inviteCodeRowLeft: {
+    flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    flexShrink: 1,
   },
-  inviteCode: {
-    ...Typography.bodySemiBold,
-    fontSize: 24,
-    color: Colors.zinc900,
-    letterSpacing: 3,
-  },
-  inviteCodeHint: {
+  inviteCodeLabel: {
     ...Typography.caption,
     fontSize: 12,
     color: Colors.zinc400,
+  },
+  inviteCodeValue: {
+    ...Typography.bodySemiBold,
+    fontSize: 14,
+    color: Colors.zinc800,
+    letterSpacing: 1.5,
+  },
+  inviteCopyBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.zinc300,
+    backgroundColor: Colors.white,
+  },
+  inviteCopyBtnText: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc500,
   },
 });
 
