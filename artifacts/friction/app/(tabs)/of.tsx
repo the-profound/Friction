@@ -12,6 +12,7 @@ import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
@@ -26,7 +27,6 @@ import {
   useListSpaces,
   useListMySpaceInvitations,
   useListMySpaceCodeRequests,
-  useUpdateSpaceInvitation,
   getListSpacesQueryKey,
   getListMySpaceInvitationsQueryKey,
   getListMySpaceCodeRequestsQueryKey,
@@ -39,20 +39,19 @@ import type {
 
 const GRID_H_PADDING = Spacing.screenPx;
 const GRID_COLUMN_GAP = 10;
+const OPERATOR_CROWN_COLOR = "#92323D";
 
 type RoleFilter = "all" | "OPERATOR" | "PARTICIPANT";
-type StatusFilter = "all" | "ACTIVE" | "ARCHIVED";
+type StatusFilter = "all" | "ACTIVE";
 
 const STATUS_PRIORITY: Record<string, number> = {
   ACTIVE: 0,
   RECRUITING: 1,
-  ARCHIVED: 2,
 };
 
 function spaceStatusLabel(status: string): string {
   if (status === "ACTIVE") return "진행 중";
   if (status === "RECRUITING") return "모집 중";
-  if (status === "ARCHIVED") return "종료";
   return status;
 }
 
@@ -90,6 +89,7 @@ function SpaceCard({
   const statusText = spaceStatusLabel(item.status);
   const role = roleLabel(item.myRole);
   const avatarLetter = item.name.charAt(0);
+  const isOperator = item.myRole === "OPERATOR";
 
   return (
     <ScalePressable
@@ -97,6 +97,11 @@ function SpaceCard({
       onPress={onPress}
       contentStyle={styles.cardContent}
     >
+      {isOperator && (
+        <View style={styles.crownRow}>
+          <MaterialCommunityIcons name="crown" size={14} color={OPERATOR_CROWN_COLOR} />
+        </View>
+      )}
       <View style={styles.cardTopRow}>
         <View style={styles.cardAvatar}>
           <Text style={styles.cardAvatarText}>{avatarLetter}</Text>
@@ -144,50 +149,32 @@ const ROLE_FILTER_OPTIONS: { key: RoleFilter; label: string }[] = [
 const STATUS_FILTER_OPTIONS: { key: StatusFilter; label: string }[] = [
   { key: "all", label: "전체" },
   { key: "ACTIVE", label: "진행 중" },
-  { key: "ARCHIVED", label: "종료" },
 ];
 
 function InvitationBar({
   invitations,
-  onAccept,
-  onDecline,
-  accepting,
+  onPress,
 }: {
   invitations: SpaceInvitationWithSpace[];
-  onAccept: (item: SpaceInvitationWithSpace) => void;
-  onDecline: (item: SpaceInvitationWithSpace) => void;
-  accepting: string | null;
+  onPress: (item: SpaceInvitationWithSpace) => void;
 }) {
   if (invitations.length === 0) return null;
   return (
     <View style={styles.inviteSection}>
       <Text style={styles.inviteSectionLabel}>초대</Text>
       {invitations.map((item) => (
-        <View key={item.invitation.id} style={styles.inviteBar}>
+        <ScalePressable
+          key={item.invitation.id}
+          style={styles.inviteBar}
+          onPress={() => onPress(item)}
+        >
           <View style={styles.inviteBarInfo}>
             <Feather name="mail" size={14} color={Colors.noticeAccent} style={styles.inviteIcon} />
             <Text style={styles.inviteSpaceName} numberOfLines={1}>{item.space.name}</Text>
             <Text style={styles.inviteSubtext}>에서 초대가 왔어요</Text>
           </View>
-          <View style={styles.inviteActions}>
-            <ScalePressable
-              style={[styles.inviteBtn, styles.inviteDeclineBtn]}
-              onPress={() => onDecline(item)}
-              disabled={accepting === item.invitation.id}
-            >
-              <Text style={styles.inviteDeclineBtnText}>거절</Text>
-            </ScalePressable>
-            <ScalePressable
-              style={[styles.inviteBtn, styles.inviteAcceptBtn]}
-              onPress={() => onAccept(item)}
-              disabled={accepting === item.invitation.id}
-            >
-              <Text style={styles.inviteAcceptBtnText}>
-                {accepting === item.invitation.id ? "처리 중" : "수락"}
-              </Text>
-            </ScalePressable>
-          </View>
-        </View>
+          <Feather name="chevron-right" size={16} color={Colors.noticeAccent} />
+        </ScalePressable>
       ))}
     </View>
   );
@@ -219,7 +206,6 @@ export default function SpacesScreen() {
   const queryClient = useQueryClient();
   const { width: screenWidth } = useWindowDimensions();
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
-  const [accepting, setAccepting] = useState<string | null>(null);
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -229,10 +215,14 @@ export default function SpacesScreen() {
   const spacesQuery = useListSpaces({ userId });
   const invitationsQuery = useListMySpaceInvitations({ userId });
   const codeRequestsQuery = useListMySpaceCodeRequests({ userId });
-  const updateInvitation = useUpdateSpaceInvitation();
 
   const allSpaces = useMemo(
-    () => sortSpaces((spacesQuery.data ?? []) as SpaceListItem[]),
+    () =>
+      sortSpaces(
+        ((spacesQuery.data ?? []) as SpaceListItem[]).filter(
+          (s) => s.status !== "ARCHIVED",
+        ),
+      ),
     [spacesQuery.data],
   );
 
@@ -279,44 +269,14 @@ export default function SpacesScreen() {
     }, [queryClient, userId, spacesQuery.refetch, invitationsQuery.refetch, codeRequestsQuery.refetch]),
   );
 
-  const handleAcceptInvitation = useCallback(
-    async (item: SpaceInvitationWithSpace) => {
-      if (accepting) return;
-      setAccepting(item.invitation.id);
-      try {
-        await updateInvitation.mutateAsync({
-          id: item.space.id,
-          invitationId: item.invitation.id,
-          data: { status: "ACCEPTED" },
-        });
-        await refetchAll();
-      } catch {
-        await invitationsQuery.refetch();
-      } finally {
-        setAccepting(null);
-      }
+  const handleInvitationBarPress = useCallback(
+    (item: SpaceInvitationWithSpace) => {
+      router.push({
+        pathname: "/space-join" as never,
+        params: { spaceId: item.space.id, invitationId: item.invitation.id },
+      });
     },
-    [accepting, updateInvitation, refetchAll, invitationsQuery],
-  );
-
-  const handleDeclineInvitation = useCallback(
-    async (item: SpaceInvitationWithSpace) => {
-      if (accepting) return;
-      setAccepting(item.invitation.id);
-      try {
-        await updateInvitation.mutateAsync({
-          id: item.space.id,
-          invitationId: item.invitation.id,
-          data: { status: "DECLINED" },
-        });
-        await invitationsQuery.refetch();
-      } catch {
-        await invitationsQuery.refetch();
-      } finally {
-        setAccepting(null);
-      }
-    },
-    [accepting, updateInvitation, invitationsQuery],
+    [router],
   );
 
   const renderSpaceItem = useCallback(
@@ -357,9 +317,7 @@ export default function SpacesScreen() {
       {filterBars}
       <InvitationBar
         invitations={invitations}
-        onAccept={handleAcceptInvitation}
-        onDecline={handleDeclineInvitation}
-        accepting={accepting}
+        onPress={handleInvitationBarPress}
       />
       <CodeRequestBar requests={codeRequests} />
       {spaces.length > 0 && <View style={styles.gridTopSpacer} />}
@@ -372,6 +330,8 @@ export default function SpacesScreen() {
         title="공간"
         showAdd
         onAddPress={() => setShowAddSheet(true)}
+        showArchive
+        onArchivePress={() => router.push("/of-space-archived-list" as never)}
       />
       <ActionSheetModal
         visible={showAddSheet}
@@ -427,9 +387,7 @@ export default function SpacesScreen() {
             {filterBars}
             <InvitationBar
               invitations={invitations}
-              onAccept={handleAcceptInvitation}
-              onDecline={handleDeclineInvitation}
-              accepting={accepting}
+              onPress={handleInvitationBarPress}
             />
             <CodeRequestBar requests={codeRequests} />
             {allSpaces.length > 0 && (
@@ -578,6 +536,9 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 14,
   },
+  crownRow: {
+    marginBottom: 4,
+  },
   cardTopRow: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -704,35 +665,6 @@ const styles = StyleSheet.create({
     ...Typography.body,
     fontSize: 13,
     color: Colors.zinc700,
-  },
-  inviteActions: {
-    flexDirection: "row",
-    gap: 6,
-  },
-  inviteBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  inviteDeclineBtn: {
-    backgroundColor: Colors.white,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.zinc300,
-  },
-  inviteDeclineBtnText: {
-    ...Typography.caption,
-    fontSize: 13,
-    color: Colors.zinc500,
-    fontWeight: "600",
-  },
-  inviteAcceptBtn: {
-    backgroundColor: Colors.noticeAccent,
-  },
-  inviteAcceptBtnText: {
-    ...Typography.caption,
-    fontSize: 13,
-    color: Colors.white,
-    fontWeight: "600",
   },
   // ─── Code request bar ────────────────────────────────────────────────────────
   codeRequestSection: {

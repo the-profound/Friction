@@ -16,11 +16,13 @@ interface PageHeaderProps {
   showKebab?: boolean;
   showProfile?: boolean;
   showHistory?: boolean;
+  showArchive?: boolean;
   onSearchPress?: () => void;
   onAddPress?: () => void;
   onKebabPress?: () => void;
   onProfilePress?: () => void;
   onHistoryPress?: () => void;
+  onArchivePress?: () => void;
   searchActive?: boolean;
   addDisabled?: boolean;
   rightText?: string;
@@ -37,11 +39,13 @@ export function PageHeader({
   showKebab = false,
   showProfile = false,
   showHistory = false,
+  showArchive = false,
   onSearchPress,
   onAddPress,
   onKebabPress,
   onProfilePress,
   onHistoryPress,
+  onArchivePress,
   searchActive = false,
   addDisabled = false,
   rightText,
@@ -92,6 +96,18 @@ export function PageHeader({
               accessibilityLabel="발신 기록"
             >
               <Feather name="clock" size={Sizing.searchIconSize} color={Colors.zinc700} />
+            </ScalePressable>
+          )}
+          {showArchive && (
+            <ScalePressable
+              style={styles.actionButton}
+              contentStyle={styles.actionButtonContent}
+              onPress={onArchivePress}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="보관된 공간"
+            >
+              <Feather name="archive" size={Sizing.searchIconSize} color={Colors.zinc700} />
             </ScalePressable>
           )}
           {!searchLast && showSearch && (
