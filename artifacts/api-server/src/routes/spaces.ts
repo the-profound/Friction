@@ -16,6 +16,13 @@ import {
 
 const router: IRouter = Router();
 
+function toDate(val: unknown): Date | undefined {
+  if (val == null) return undefined;
+  if (val instanceof Date) return val;
+  const d = new Date(val as string);
+  return isNaN(d.getTime()) ? undefined : d;
+}
+
 // ─── My invitations (must be before /:id) ───────────────────────────────────
 router.get("/spaces/my-invitations", async (req, res) => {
   const { userId } = req.query;
@@ -161,7 +168,9 @@ router.post("/spaces", async (req, res) => {
     return;
   }
   try {
-    const [space] = await db.insert(spacesTable).values(body).returning();
+    const { startsAt, ...rest } = body;
+    const values = { ...rest, ...(startsAt != null ? { startsAt: toDate(startsAt) } : {}) };
+    const [space] = await db.insert(spacesTable).values(values).returning();
     await db.insert(spaceParticipationsTable).values({
       spaceId: space.id,
       userId: body.creatorId,
@@ -253,9 +262,16 @@ router.get("/spaces/:id/rounds", async (req, res) => {
 
 router.post("/spaces/:id/rounds", async (req, res) => {
   try {
+    const { startsAt, endsAt, ...rest } = req.body;
+    const values = {
+      ...rest,
+      spaceId: req.params.id,
+      ...(startsAt != null ? { startsAt: toDate(startsAt) } : {}),
+      ...(endsAt != null ? { endsAt: toDate(endsAt) } : {}),
+    };
     const [round] = await db
       .insert(spaceRoundsTable)
-      .values({ ...req.body, spaceId: req.params.id })
+      .values(values)
       .returning();
     res.status(201).json(round);
   } catch (err) {
@@ -704,9 +720,10 @@ router.post("/spaces/:id/letters/:letterId/scheduled-sends", requireAuth, async 
     res.status(403).json({ error: "You can only schedule sends for your own letters" });
     return;
   }
+  const { scheduledAt, ...sendRest } = req.body;
   const [send] = await db
     .insert(spaceScheduledSendsTable)
-    .values({ ...req.body, spaceId: req.params.id, spaceLetterId: req.params.letterId })
+    .values({ ...sendRest, spaceId: req.params.id, spaceLetterId: req.params.letterId, ...(scheduledAt != null ? { scheduledAt: toDate(scheduledAt) } : {}) })
     .returning();
   res.status(201).json(send);
 });
@@ -720,7 +737,7 @@ router.patch("/spaces/:id/letters/:letterId/scheduled-sends/:sendId", requireAut
   }
   const { status, scheduledAt } = req.body;
   const updateFields: Record<string, unknown> = { status };
-  if (scheduledAt !== undefined) updateFields.scheduledAt = scheduledAt;
+  if (scheduledAt !== undefined) updateFields.scheduledAt = toDate(scheduledAt);
   const [send] = await db
     .update(spaceScheduledSendsTable)
     .set(updateFields)
