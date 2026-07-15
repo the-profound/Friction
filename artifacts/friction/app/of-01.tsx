@@ -122,7 +122,7 @@ export default function PersonalCollectionListScreen() {
         <View style={styles.emptyContainer}>
           <Feather name="alert-circle" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>불러오기에 실패했어요</Text>
-          <ScalePressable style={styles.createButton} onPress={() => collectionsQuery.refetch()}>
+          <ScalePressable style={styles.createButtonOuter} contentStyle={styles.createButton} onPress={() => collectionsQuery.refetch()}>
             <Text style={styles.createButtonText}>다시 시도</Text>
           </ScalePressable>
         </View>
@@ -176,7 +176,7 @@ export default function PersonalCollectionListScreen() {
 
       <View style={styles.tabBar}>
         <ScalePressable
-          style={[styles.tab, activeTab === "mine" && styles.tabActive]}
+          contentStyle={[styles.tab, activeTab === "mine" && styles.tabActive]}
           onPress={() => setActiveTab("mine")}
         >
           <Text style={[styles.tabText, activeTab === "mine" && styles.tabTextActive]}>
@@ -184,7 +184,7 @@ export default function PersonalCollectionListScreen() {
           </Text>
         </ScalePressable>
         <ScalePressable
-          style={[styles.tab, activeTab === "public" && styles.tabActive]}
+          contentStyle={[styles.tab, activeTab === "public" && styles.tabActive]}
           onPress={() => setActiveTab("public")}
         >
           <Text style={[styles.tabText, activeTab === "public" && styles.tabTextActive]}>
@@ -378,8 +378,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.zinc500,
   },
-  createButton: {
+  createButtonOuter: {
     marginTop: 16,
+  },
+  createButton: {
     paddingHorizontal: 20,
     paddingVertical: 12,
     backgroundColor: Colors.zinc900,

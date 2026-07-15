@@ -122,7 +122,7 @@ function RoundEditSheet({
           {STATUS_OPTIONS.map((opt) => (
             <ScalePressable
               key={opt.value}
-              style={[
+              contentStyle={[
                 editStyles.statusChip,
                 status === opt.value && editStyles.statusChipActive,
               ]}
@@ -141,7 +141,8 @@ function RoundEditSheet({
         </View>
 
         <ScalePressable
-          style={[editStyles.saveBtn, saving && editStyles.saveBtnDisabled]}
+          style={editStyles.saveBtnOuter}
+          contentStyle={[editStyles.saveBtn, saving && editStyles.saveBtnDisabled]}
           onPress={handleSave}
           disabled={saving}
         >
@@ -533,12 +534,14 @@ const editStyles = StyleSheet.create({
   statusChipTextActive: {
     color: Colors.white,
   },
+  saveBtnOuter: {
+    marginTop: 20,
+  },
   saveBtn: {
     backgroundColor: Colors.zinc900,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
-    marginTop: 20,
   },
   saveBtnDisabled: {
     opacity: 0.5,

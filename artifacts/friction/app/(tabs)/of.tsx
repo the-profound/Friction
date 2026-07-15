@@ -165,7 +165,8 @@ function InvitationBar({
       {invitations.map((item) => (
         <ScalePressable
           key={item.invitation.id}
-          style={styles.inviteBar}
+          style={styles.inviteBarOuter}
+          contentStyle={styles.inviteBar}
           onPress={() => onPress(item)}
         >
           <View style={styles.inviteBarInfo}>
@@ -194,7 +195,8 @@ function CodeRequestBar({
       {requests.map((item) => (
         <ScalePressable
           key={item.codeRequest.id}
-          style={styles.codeRequestBar}
+          style={styles.codeRequestBarOuter}
+          contentStyle={styles.codeRequestBar}
           onPress={() => onPress(item)}
         >
           <Feather name="clock" size={14} color={Colors.zinc400} style={styles.inviteIcon} />
@@ -378,7 +380,7 @@ export default function SpacesScreen() {
         <View style={[styles.centerContainer, { paddingBottom: navBottom }]}>
           <Feather name="alert-circle" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>불러오기에 실패했어요</Text>
-          <ScalePressable style={styles.retryButton} onPress={handleRefresh}>
+          <ScalePressable style={styles.retryButtonOuter} contentStyle={styles.retryButton} onPress={handleRefresh}>
             <Text style={styles.retryButtonText}>다시 시도</Text>
           </ScalePressable>
         </View>
@@ -506,8 +508,10 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 20,
   },
-  retryButton: {
+  retryButtonOuter: {
     marginTop: 16,
+  },
+  retryButton: {
     paddingHorizontal: 20,
     paddingVertical: 10,
     backgroundColor: Colors.zinc900,
@@ -653,9 +657,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.screenPx,
     marginBottom: 6,
   },
-  inviteBar: {
+  inviteBarOuter: {
     marginHorizontal: Spacing.screenPx,
     marginVertical: 4,
+  },
+  inviteBar: {
     backgroundColor: Colors.noticeAccentSoft,
     borderRadius: 12,
     padding: 14,
@@ -692,9 +698,11 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 4,
   },
-  codeRequestBar: {
+  codeRequestBarOuter: {
     marginHorizontal: Spacing.screenPx,
     marginVertical: 4,
+  },
+  codeRequestBar: {
     backgroundColor: Colors.zinc50,
     borderRadius: 12,
     padding: 14,

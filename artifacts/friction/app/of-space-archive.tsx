@@ -105,14 +105,16 @@ export default function SpaceArchiveScreen() {
 
         <View style={styles.actions}>
           <ScalePressable
-            style={styles.cancelButton}
+            style={styles.cancelButtonOuter}
+            contentStyle={styles.cancelButton}
             onPress={() => router.back()}
             disabled={archiving}
           >
             <Text style={styles.cancelButtonText}>취소</Text>
           </ScalePressable>
           <ScalePressable
-            style={[styles.archiveButton, archiving && styles.archiveButtonDisabled]}
+            style={styles.archiveButtonOuter}
+            contentStyle={[styles.archiveButton, archiving && styles.archiveButtonDisabled]}
             onPress={handleArchive}
             disabled={archiving}
           >
@@ -208,8 +210,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
   },
-  cancelButton: {
+  cancelButtonOuter: {
     flex: 1,
+  },
+  cancelButton: {
     paddingVertical: 14,
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
@@ -223,8 +227,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.zinc700,
   },
-  archiveButton: {
+  archiveButtonOuter: {
     flex: 2,
+  },
+  archiveButton: {
     paddingVertical: 14,
     borderRadius: 12,
     backgroundColor: Colors.zinc900,

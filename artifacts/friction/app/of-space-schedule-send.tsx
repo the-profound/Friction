@@ -109,28 +109,28 @@ function SendRow({
       <View style={styles.sendRowActions}>
         {isPending && (
           <>
-            <ScalePressable style={styles.cancelBtn} onPress={onCancel}>
+            <ScalePressable contentStyle={styles.cancelBtn} onPress={onCancel}>
               <Text style={styles.cancelBtnText}>예약 취소</Text>
             </ScalePressable>
             {!schedulingBlocked && (
-              <ScalePressable style={styles.changeBtn} onPress={onChangePending}>
+              <ScalePressable contentStyle={styles.changeBtn} onPress={onChangePending}>
                 <Text style={styles.changeBtnText}>예약 변경</Text>
               </ScalePressable>
             )}
           </>
         )}
         {!schedulingBlocked && (isSent || send.status === "CANCELLED") && (
-          <ScalePressable style={styles.resendBtn} onPress={onResend}>
+          <ScalePressable contentStyle={styles.resendBtn} onPress={onResend}>
             <Text style={styles.resendBtnText}>다시 예약</Text>
           </ScalePressable>
         )}
         {isFailed && (
           <>
-            <ScalePressable style={styles.cancelBtn} onPress={onCancel}>
+            <ScalePressable contentStyle={styles.cancelBtn} onPress={onCancel}>
               <Text style={styles.cancelBtnText}>취소</Text>
             </ScalePressable>
             {!schedulingBlocked && (
-              <ScalePressable style={[styles.resendBtn, styles.resendBtnFailed]} onPress={onResend}>
+              <ScalePressable contentStyle={[styles.resendBtn, styles.resendBtnFailed]} onPress={onResend}>
                 <Feather name="refresh-cw" size={12} color="#EF4444" />
                 <Text style={[styles.resendBtnText, styles.resendBtnTextFailed]}>다시 예약</Text>
               </ScalePressable>
@@ -244,7 +244,8 @@ function NewSendSheet({
               기록함에서 글을 완성하고{"\n"}이 공간으로 내보낸 뒤 예약하세요
             </Text>
             <ScalePressable
-              style={sheetStyles.goToArchiveBtn}
+              style={sheetStyles.goToArchiveBtnOuter}
+              contentStyle={sheetStyles.goToArchiveBtn}
               onPress={() => {
                 onClose();
                 onGoToArchive();
@@ -259,7 +260,8 @@ function NewSendSheet({
               {eligibleLetters.map((letter) => (
                 <ScalePressable
                   key={letter.id}
-                  style={[
+                  style={sheetStyles.letterOptionOuter}
+                  contentStyle={[
                     sheetStyles.letterOption,
                     selectedLetterId === letter.id && sheetStyles.letterOptionSelected,
                   ]}
@@ -307,7 +309,7 @@ function NewSendSheet({
 
             <Text style={sheetStyles.fieldLabel}>발송 예약 일시</Text>
             <ScalePressable
-              style={sheetStyles.dateBtn}
+              contentStyle={sheetStyles.dateBtn}
               onPress={() => setShowPicker(true)}
             >
               <Feather name="calendar" size={15} color={Colors.zinc500} />
@@ -328,7 +330,8 @@ function NewSendSheet({
             )}
 
             <ScalePressable
-              style={[sheetStyles.saveBtn, saving && sheetStyles.saveBtnDisabled]}
+              style={sheetStyles.saveBtnOuter}
+              contentStyle={[sheetStyles.saveBtn, saving && sheetStyles.saveBtnDisabled]}
               onPress={handleSave}
               disabled={saving}
             >
@@ -395,7 +398,7 @@ function ResendSheet({
 
         <Text style={sheetStyles.fieldLabel}>새 발송 예약 일시</Text>
         <ScalePressable
-          style={sheetStyles.dateBtn}
+          contentStyle={sheetStyles.dateBtn}
           onPress={() => setShowPicker(true)}
         >
           <Feather name="calendar" size={15} color={Colors.zinc500} />
@@ -416,7 +419,8 @@ function ResendSheet({
         )}
 
         <ScalePressable
-          style={[sheetStyles.saveBtn, saving && sheetStyles.saveBtnDisabled]}
+          style={sheetStyles.saveBtnOuter}
+          contentStyle={[sheetStyles.saveBtn, saving && sheetStyles.saveBtnDisabled]}
           onPress={handleSave}
           disabled={saving}
         >
@@ -482,7 +486,7 @@ function ChangeSheet({
 
         <Text style={sheetStyles.fieldLabel}>새 발송 예약 일시</Text>
         <ScalePressable
-          style={sheetStyles.dateBtn}
+          contentStyle={sheetStyles.dateBtn}
           onPress={() => setShowPicker(true)}
         >
           <Feather name="calendar" size={15} color={Colors.zinc500} />
@@ -503,7 +507,8 @@ function ChangeSheet({
         )}
 
         <ScalePressable
-          style={[sheetStyles.saveBtn, saving && sheetStyles.saveBtnDisabled]}
+          style={sheetStyles.saveBtnOuter}
+          contentStyle={[sheetStyles.saveBtn, saving && sheetStyles.saveBtnDisabled]}
           onPress={handleSave}
           disabled={saving}
         >
@@ -1029,13 +1034,15 @@ const sheetStyles = StyleSheet.create({
   letterList: {
     maxHeight: 200,
   },
+  letterOptionOuter: {
+    marginBottom: 6,
+  },
   letterOption: {
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 10,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.zinc200,
-    marginBottom: 6,
   },
   letterOptionSelected: {
     borderColor: Colors.noticeAccent,
@@ -1084,8 +1091,10 @@ const sheetStyles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 19,
   },
-  goToArchiveBtn: {
+  goToArchiveBtnOuter: {
     marginTop: 4,
+  },
+  goToArchiveBtn: {
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 10,
@@ -1152,12 +1161,14 @@ const sheetStyles = StyleSheet.create({
     color: Colors.zinc700,
     marginBottom: 4,
   },
+  saveBtnOuter: {
+    marginTop: 16,
+  },
   saveBtn: {
     backgroundColor: Colors.zinc900,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
-    marginTop: 16,
   },
   saveBtnDisabled: {
     opacity: 0.5,

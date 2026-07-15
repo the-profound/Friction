@@ -305,7 +305,8 @@ function RoundSection({
       ? isOperator
         ? (
           <ScalePressable
-            style={styles.writeOpeningBtn}
+            style={styles.writeOpeningBtnOuter}
+            contentStyle={styles.writeOpeningBtn}
             onPress={() => onPressWriteOpening(round)}
           >
             <Feather name="plus" size={14} color={Colors.zinc600} />
@@ -436,14 +437,14 @@ function CodeRequestItem({
       </View>
       <View style={styles.codeRequestActions}>
         <ScalePressable
-          style={[styles.actionBtn, styles.rejectBtn]}
+          contentStyle={[styles.actionBtn, styles.rejectBtn]}
           onPress={onReject}
           disabled={processing}
         >
           <Text style={styles.rejectBtnText}>거절</Text>
         </ScalePressable>
         <ScalePressable
-          style={[
+          contentStyle={[
             styles.actionBtn,
             styles.approveBtn,
             recruitmentClosed && styles.approveBtnDisabled,
@@ -508,10 +509,10 @@ function RejectReasonModal({
             maxLength={200}
           />
           <View style={modalStyles.btnRow}>
-            <ScalePressable style={[modalStyles.btn, modalStyles.cancelBtn]} onPress={handleCancel}>
+            <ScalePressable style={modalStyles.btnOuter} contentStyle={[modalStyles.btn, modalStyles.cancelBtn]} onPress={handleCancel}>
               <Text style={modalStyles.cancelBtnText}>취소</Text>
             </ScalePressable>
-            <ScalePressable style={[modalStyles.btn, modalStyles.confirmBtn]} onPress={handleConfirm}>
+            <ScalePressable style={modalStyles.btnOuter} contentStyle={[modalStyles.btn, modalStyles.confirmBtn]} onPress={handleConfirm}>
               <Text style={modalStyles.confirmBtnText}>거절</Text>
             </ScalePressable>
           </View>
@@ -587,14 +588,14 @@ function DescriptionSection({
         />
         <View style={styles.descEditButtons}>
           <ScalePressable
-            style={[styles.descEditBtn, styles.descCancelBtn]}
+            contentStyle={[styles.descEditBtn, styles.descCancelBtn]}
             onPress={() => setIsEditing(false)}
             disabled={saving}
           >
             <Text style={styles.descCancelBtnText}>취소</Text>
           </ScalePressable>
           <ScalePressable
-            style={[styles.descEditBtn, styles.descSaveBtn]}
+            contentStyle={[styles.descEditBtn, styles.descSaveBtn]}
             onPress={handleSave}
             disabled={saving}
           >
@@ -609,7 +610,8 @@ function DescriptionSection({
 
   return (
     <ScalePressable
-      style={styles.descRow}
+      style={styles.descRowOuter}
+      contentStyle={styles.descRow}
       onPress={isOperator ? handleStart : undefined}
       disabled={!isOperator}
     >
@@ -975,7 +977,7 @@ export default function SpaceDetailScreen() {
         <View style={styles.centerContainer}>
           <Feather name="alert-circle" size={36} color={Colors.zinc300} />
           <Text style={styles.errorText}>공간을 불러오지 못했어요</Text>
-          <ScalePressable style={styles.retryButton} onPress={refetchAll}>
+          <ScalePressable style={styles.retryButtonOuter} contentStyle={styles.retryButton} onPress={refetchAll}>
             <Text style={styles.retryButtonText}>다시 시도</Text>
           </ScalePressable>
         </View>
@@ -1002,7 +1004,7 @@ export default function SpaceDetailScreen() {
           <Text style={styles.errorSubText}>
             초대 문구로 참여 신청 후 운영자 승인을 받으세요
           </Text>
-          <ScalePressable style={styles.retryButton} onPress={() => router.back()}>
+          <ScalePressable style={styles.retryButtonOuter} contentStyle={styles.retryButton} onPress={() => router.back()}>
             <Text style={styles.retryButtonText}>돌아가기</Text>
           </ScalePressable>
         </View>
@@ -1032,7 +1034,8 @@ export default function SpaceDetailScreen() {
           <ScalePressable
             onPress={() => setShowKebabSheet(true)}
             hitSlop={12}
-            style={styles.kebabBtn}
+            style={styles.kebabBtnOuter}
+            contentStyle={styles.kebabBtn}
           >
             <Feather name="more-horizontal" size={20} color={Colors.zinc600} />
           </ScalePressable>
@@ -1128,7 +1131,7 @@ export default function SpaceDetailScreen() {
                 <Text style={styles.inviteCodeLabel}>초대 문구</Text>
                 <Text style={styles.inviteCodeValue}>{space.inviteCode}</Text>
               </View>
-              <ScalePressable style={styles.inviteCopyBtn} onPress={handleCopyInviteCode} hitSlop={8}>
+              <ScalePressable contentStyle={styles.inviteCopyBtn} onPress={handleCopyInviteCode} hitSlop={8}>
                 <Feather name="copy" size={13} color={Colors.zinc500} />
                 <Text style={styles.inviteCopyBtnText}>복사</Text>
               </ScalePressable>
@@ -1227,7 +1230,8 @@ export default function SpaceDetailScreen() {
       {/* ── Floating "글 예약 발송" button (non-operators only, active spaces) ── */}
       {!isOperator && !isArchived && (
         <ScalePressable
-          style={[styles.floatingBtn, { bottom: insets.bottom + 16 }]}
+          style={[styles.floatingBtnOuter, { bottom: insets.bottom + 16 }]}
+          contentStyle={styles.floatingBtn}
           onPress={() =>
             router.push({
               pathname: "/of-space-schedule-send" as never,
@@ -1310,9 +1314,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.screenPx,
     paddingVertical: 12,
   },
-  kebabBtn: {
+  kebabBtnOuter: {
     width: 28,
     height: 28,
+  },
+  kebabBtn: {
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1344,8 +1350,10 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginTop: -4,
   },
-  retryButton: {
+  retryButtonOuter: {
     marginTop: 4,
+  },
+  retryButton: {
     paddingHorizontal: 20,
     paddingVertical: 10,
     backgroundColor: Colors.zinc900,
@@ -1443,11 +1451,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.zinc400,
   },
+  descRowOuter: {
+    minHeight: 20,
+  },
   descRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 6,
-    minHeight: 20,
   },
   spaceDesc: {
     ...Typography.body,
@@ -1674,12 +1684,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.zinc400,
   },
+  writeOpeningBtnOuter: {
+    marginHorizontal: Spacing.screenPx,
+  },
   writeOpeningBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    marginHorizontal: Spacing.screenPx,
     paddingVertical: 12,
     borderRadius: 10,
     borderWidth: 1,
@@ -1829,9 +1841,11 @@ const styles = StyleSheet.create({
   },
 
   // ─── Floating button ───────────────────────────────────────────────────────
-  floatingBtn: {
+  floatingBtnOuter: {
     position: "absolute",
     alignSelf: "center",
+  },
+  floatingBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -1903,6 +1917,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.zinc300,
     backgroundColor: Colors.white,
+    alignSelf: "flex-start",
   },
   inviteCopyBtnText: {
     ...Typography.caption,
@@ -1956,8 +1971,10 @@ const modalStyles = StyleSheet.create({
     gap: 10,
     marginTop: 4,
   },
-  btn: {
+  btnOuter: {
     flex: 1,
+  },
+  btn: {
     paddingVertical: 13,
     borderRadius: 12,
     alignItems: "center",

@@ -521,7 +521,7 @@ export default function PersonalCollectionDetailScreen() {
             편지 목록 ({articles.length})
           </Text>
           {!isArchive && (
-            <ScalePressable style={styles.addArticleButton} onPress={() => setShowPicker(true)}
+            <ScalePressable onPress={() => setShowPicker(true)}
             contentStyle={styles.addArticleButtonContent}
             >
               <Feather name="plus" size={16} color={Colors.zinc600} />
@@ -535,7 +535,7 @@ export default function PersonalCollectionDetailScreen() {
         <View style={[styles.emptyContainer, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}>
           <Feather name="alert-circle" size={36} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>편지 목록을 불러오지 못했어요</Text>
-          <ScalePressable style={styles.retryButton} onPress={() => articlesQuery.refetch()}>
+          <ScalePressable style={styles.retryButtonOuter} contentStyle={styles.retryButton} onPress={() => articlesQuery.refetch()}>
             <Text style={styles.retryButtonText}>다시 시도</Text>
           </ScalePressable>
         </View>
@@ -834,16 +834,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.zinc900,
   },
-  addArticleButton: {
+  addArticleButtonContent: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     backgroundColor: Colors.zinc50,
     borderRadius: 8,
-  },
-  addArticleButtonContent: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,},
+    gap: 4,
+  },
   addArticleText: {
     ...Typography.caption,
     fontSize: 13,
@@ -896,8 +895,10 @@ const styles = StyleSheet.create({
     color: Colors.zinc500,
     textAlign: "center",
   },
-  retryButton: {
+  retryButtonOuter: {
     marginTop: 12,
+  },
+  retryButton: {
     paddingHorizontal: 20,
     paddingVertical: 10,
     backgroundColor: Colors.zinc900,

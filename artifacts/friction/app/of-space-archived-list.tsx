@@ -148,7 +148,7 @@ export default function ArchivedSpacesScreen() {
         <View style={[styles.center, { paddingBottom: navBottom }]}>
           <Feather name="alert-circle" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>불러오기에 실패했어요</Text>
-          <ScalePressable style={styles.retryButton} onPress={handleRefresh}>
+          <ScalePressable style={styles.retryButtonOuter} contentStyle={styles.retryButton} onPress={handleRefresh}>
             <Text style={styles.retryButtonText}>다시 시도</Text>
           </ScalePressable>
         </View>
@@ -227,8 +227,10 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 20,
   },
-  retryButton: {
+  retryButtonOuter: {
     marginTop: 16,
+  },
+  retryButton: {
     paddingHorizontal: 20,
     paddingVertical: 10,
     backgroundColor: Colors.zinc900,
