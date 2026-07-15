@@ -107,6 +107,13 @@ function formatDateDisplay(raw: string): string {
   return `${digits.slice(0, 4)}.${digits.slice(4, 6)}.${digits.slice(6, 8)}`;
 }
 
+function formatDateKorean(raw: string): string | null {
+  const parsed = parseDateInput(raw);
+  if (!parsed) return null;
+  const [y, m, d] = parsed.split("-");
+  return `${y}년 ${parseInt(m)}월 ${parseInt(d)}일`;
+}
+
 export default function SpaceCreateScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -734,101 +741,87 @@ function ConfirmStep({
   roundModeStep: number;
   advancedStep: number;
 }) {
+  const dateKorean = formatDateKorean(form.startsAt);
   const hasRoundTitles = form.customizeRounds && form.rounds.some((r) => r.title.trim());
+  const roundTitleSummary = hasRoundTitles
+    ? form.rounds
+        .map((r, i) => (r.title.trim() ? `${i + 1}회차 '${r.title}'` : null))
+        .filter(Boolean)
+        .join(", ")
+    : "";
 
   return (
     <View style={stepStyles.container}>
       <Text style={stepStyles.stepTitle}>생성 확인</Text>
       <Text style={stepStyles.stepDesc}>입력한 내용을 확인하고 공간을 만들어요.</Text>
 
-      <View style={confirmStyles.section}>
-        <View style={confirmStyles.sectionHeader}>
-          <Text style={confirmStyles.sectionTitle}>기본 설정</Text>
+      <View style={confirmStyles.block}>
+        <View style={confirmStyles.blockEditRow}>
           <ScalePressable onPress={() => onGoToStep(basicStep)}>
             <Text style={confirmStyles.editBtn}>수정</Text>
           </ScalePressable>
         </View>
-        <ConfirmRow label="공간 이름" value={form.name} />
-        {form.description.trim() ? (
-          <ConfirmRow label="설명" value={form.description} />
-        ) : null}
-        <ConfirmRow label="익명 운영" value={form.isAnonymous ? "예" : "아니요"} />
+        <Text style={confirmStyles.proseText}>
+          <Text style={confirmStyles.proseBold}>{form.name}</Text>
+          <Text> 공간이에요.</Text>
+          {form.description.trim() ? (
+            <Text> {form.description.trim()}</Text>
+          ) : null}
+          <Text>{form.isAnonymous ? " 익명으로 운영돼요." : " 기명으로 운영돼요."}</Text>
+        </Text>
       </View>
 
-      <View style={confirmStyles.section}>
-        <View style={confirmStyles.sectionHeader}>
-          <Text style={confirmStyles.sectionTitle}>운영 설정</Text>
+      <View style={confirmStyles.block}>
+        <View style={confirmStyles.blockEditRow}>
           <ScalePressable onPress={() => onGoToStep(operationStep)}>
             <Text style={confirmStyles.editBtn}>수정</Text>
           </ScalePressable>
         </View>
-        {form.startsAt.trim() && parseDateInput(form.startsAt) ? (
-          <ConfirmRow label="시작일" value={formatDateDisplay(form.startsAt)} />
-        ) : (
-          <ConfirmRow label="시작일" value="미정" muted />
-        )}
-        <ConfirmRow label="전체 회차" value={`${form.roundCount}회차`} />
-        {form.maxParticipants.trim() ? (
-          <ConfirmRow label="모집 인원" value={`${form.maxParticipants}명`} />
-        ) : (
-          <ConfirmRow label="모집 인원" value="제한 없음" muted />
-        )}
-        <ConfirmRow
-          label="회차 구성"
-          value={form.customizeRounds ? "직접 설정" : "기본값 적용"}
-          muted={!form.customizeRounds}
-        />
+        <Text style={confirmStyles.proseText}>
+          {dateKorean ? (
+            <Text>{dateKorean}에 시작하는 </Text>
+          ) : (
+            <Text>시작일 미정의 </Text>
+          )}
+          <Text>
+            {"총 "}
+            <Text style={confirmStyles.proseBold}>{form.roundCount}회차</Text>
+            {" 공간이에요."}
+          </Text>
+          {form.maxParticipants.trim() ? (
+            <Text> 최대 {form.maxParticipants}명까지 참여할 수 있어요.</Text>
+          ) : null}
+        </Text>
       </View>
 
-      <View style={confirmStyles.section}>
-        <View style={confirmStyles.sectionHeader}>
-          <Text style={confirmStyles.sectionTitle}>회차 구성</Text>
+      <View style={confirmStyles.block}>
+        <View style={confirmStyles.blockEditRow}>
           <ScalePressable onPress={() => onGoToStep(roundModeStep)}>
             <Text style={confirmStyles.editBtn}>수정</Text>
           </ScalePressable>
         </View>
-        <ConfirmRow
-          label="구성 방식"
-          value={form.customizeRounds ? "직접 설정" : "기본값 적용"}
-          muted={!form.customizeRounds}
-        />
-        {hasRoundTitles &&
-          form.rounds.map((r, i) =>
-            r.title.trim() ? (
-              <ConfirmRow key={i} label={`${i + 1}회차`} value={r.title} />
-            ) : null,
-          )}
+        <Text style={confirmStyles.proseText}>
+          {form.customizeRounds
+            ? "회차를 직접 설정했어요."
+            : "회차는 기본값으로 구성돼요."}
+          {roundTitleSummary ? <Text> {roundTitleSummary}으로 구성돼요.</Text> : null}
+        </Text>
       </View>
 
-      <View style={confirmStyles.section}>
-        <View style={confirmStyles.sectionHeader}>
-          <Text style={confirmStyles.sectionTitle}>고급 설정</Text>
+      <View style={confirmStyles.block}>
+        <View style={confirmStyles.blockEditRow}>
           <ScalePressable onPress={() => onGoToStep(advancedStep)}>
             <Text style={confirmStyles.editBtn}>수정</Text>
           </ScalePressable>
         </View>
-        <ConfirmRow label="중심글 간격" value={`${form.defaultCenterInterval}일`} />
-        <ConfirmRow label="회차당 중심글" value={`${form.defaultCenterCount}편`} />
+        <Text style={confirmStyles.proseText}>
+          {"중심글은 "}
+          <Text style={confirmStyles.proseBold}>{form.defaultCenterInterval}일</Text>
+          {" 간격으로, 회차당 "}
+          <Text style={confirmStyles.proseBold}>{form.defaultCenterCount}편</Text>
+          {"씩 게시돼요."}
+        </Text>
       </View>
-    </View>
-  );
-}
-
-function ConfirmRow({
-  label,
-  value,
-  muted,
-}: {
-  label: string;
-  value: string;
-  muted?: boolean;
-}) {
-  return (
-    <View style={confirmStyles.row}>
-      <Text style={confirmStyles.rowLabel}>{label}</Text>
-      <Text style={[confirmStyles.rowValue, muted && confirmStyles.rowValueMuted]}>
-        {value}
-      </Text>
     </View>
   );
 }
@@ -1098,21 +1091,11 @@ const roundModeStyles = StyleSheet.create({
 });
 
 const confirmStyles = StyleSheet.create({
-  section: {
-    gap: 8,
+  block: {
+    gap: 6,
   },
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  sectionTitle: {
-    ...Typography.bodySemiBold,
-    fontSize: 13,
-    color: Colors.zinc400,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: 2,
+  blockEditRow: {
+    alignItems: "flex-end",
   },
   editBtn: {
     ...Typography.bodySemiBold,
@@ -1121,31 +1104,15 @@ const confirmStyles = StyleSheet.create({
     paddingVertical: 2,
     paddingHorizontal: 6,
   },
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.zinc100,
-    gap: 16,
-  },
-  rowLabel: {
+  proseText: {
     ...Typography.body,
-    fontSize: 15,
-    color: Colors.zinc500,
-    flex: 0,
-    minWidth: 90,
+    fontSize: 16,
+    color: Colors.zinc800,
+    lineHeight: 26,
   },
-  rowValue: {
+  proseBold: {
     ...Typography.bodySemiBold,
-    fontSize: 15,
+    fontSize: 16,
     color: Colors.zinc900,
-    flex: 1,
-    textAlign: "right",
-  },
-  rowValueMuted: {
-    color: Colors.zinc400,
-    fontWeight: "normal",
   },
 });
