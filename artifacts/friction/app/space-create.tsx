@@ -761,10 +761,12 @@ function ConfirmStep({
         </View>
         <Text style={confirmStyles.proseText}>
           <Text style={confirmStyles.proseBold}>{form.name}</Text>
-          <Text> 공간이에요.</Text>
+          <Text>{" 공간이에요."}</Text>
           {form.description.trim() ? (
-            <Text> {form.description.trim()}</Text>
-          ) : null}
+            <Text>{` ${form.description.trim()}`}</Text>
+          ) : (
+            <Text>{""}</Text>
+          )}
           <Text>{form.isAnonymous ? " 익명으로 운영돼요." : " 기명으로 운영돼요."}</Text>
         </Text>
       </View>
@@ -777,9 +779,9 @@ function ConfirmStep({
         </View>
         <Text style={confirmStyles.proseText}>
           {dateKorean ? (
-            <Text>{dateKorean}에 시작하는 </Text>
+            <Text>{`${dateKorean}에 시작하는 `}</Text>
           ) : (
-            <Text>시작일 미정의 </Text>
+            <Text>{"시작일 미정의 "}</Text>
           )}
           <Text>
             {"총 "}
@@ -787,8 +789,10 @@ function ConfirmStep({
             {" 공간이에요."}
           </Text>
           {form.maxParticipants.trim() ? (
-            <Text> 최대 {form.maxParticipants}명까지 참여할 수 있어요.</Text>
-          ) : null}
+            <Text>{` 최대 ${form.maxParticipants}명까지 참여할 수 있어요.`}</Text>
+          ) : (
+            <Text>{""}</Text>
+          )}
         </Text>
       </View>
 
@@ -799,10 +803,12 @@ function ConfirmStep({
           </ScalePressable>
         </View>
         <Text style={confirmStyles.proseText}>
-          {form.customizeRounds
-            ? "회차를 직접 설정했어요."
-            : "회차는 기본값으로 구성돼요."}
-          {roundTitleSummary ? <Text> {roundTitleSummary}으로 구성돼요.</Text> : null}
+          <Text>{form.customizeRounds ? "회차를 직접 설정했어요." : "회차는 기본값으로 구성돼요."}</Text>
+          {roundTitleSummary ? (
+            <Text>{` ${roundTitleSummary}으로 구성돼요.`}</Text>
+          ) : (
+            <Text>{""}</Text>
+          )}
         </Text>
       </View>
 
@@ -813,11 +819,11 @@ function ConfirmStep({
           </ScalePressable>
         </View>
         <Text style={confirmStyles.proseText}>
-          {"중심글은 "}
+          <Text>{"중심글은 "}</Text>
           <Text style={confirmStyles.proseBold}>{form.defaultCenterInterval}일</Text>
-          {" 간격으로, 회차당 "}
+          <Text>{" 간격으로, 회차당 "}</Text>
           <Text style={confirmStyles.proseBold}>{form.defaultCenterCount}편</Text>
-          {"씩 게시돼요."}
+          <Text>{"씩 게시돼요."}</Text>
         </Text>
       </View>
     </View>
