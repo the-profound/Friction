@@ -146,7 +146,6 @@ function SendRow({
 
 function NewSendSheet({
   spaceId,
-  userId,
   rounds,
   letters,
   articles,
@@ -155,7 +154,6 @@ function NewSendSheet({
   onGoToArchive,
 }: {
   spaceId: string;
-  userId: string;
   rounds: SpaceRound[];
   letters: SpaceLetter[];
   articles: Article[];
@@ -169,35 +167,33 @@ function NewSendSheet({
   const [saving, setSaving] = useState(false);
   const createSend = useCreateSpaceScheduledSend();
 
-  const articleMap = useMemo(
-    () => new Map(articles.map((a) => [a.id, a])),
-    [articles],
+  // Build a lookup from sourceArticleId → spaceLetter so we can go article-first.
+  const letterBySourceArticleId = useMemo(
+    () =>
+      new Map(
+        letters
+          .filter((l) => !!l.sourceArticleId)
+          .map((l) => [l.sourceArticleId!, l]),
+      ),
+    [letters],
   );
 
-  // Only show letters whose source article is a finalized/exported article.
-  // Eligibility check (separate from display title):
-  //   • Own letters (authorId === userId): require the article to be in the status:LETTER
-  //     articleMap — this is the only trustworthy status check available client-side.
-  //   • Other authors' letters (operator scheduling on behalf of participants):
-  //     presence of sourceArticleId is sufficient — space letters are created during
-  //     the export flow which enforces LETTER status at the UI level.
+  // Show only the user's own completed articles that have been exported to this space.
+  // id is the spaceLetter.id — used as letterId in the scheduling API call.
   const eligibleLetters = useMemo(
     () =>
-      letters
-        .filter((l) => {
-          if (!l.sourceArticleId) return false;
-          if (l.authorId === userId) return articleMap.has(l.sourceArticleId);
-          return true; // operator: trust export-time enforcement
-        })
-        .map((l) => ({
-          ...l,
-          // Display title: prefer local articleMap (guaranteed current), fall back to server-enriched
-          articleTitle:
-            articleMap.get(l.sourceArticleId!)?.title ?? l.articleTitle ?? null,
-          roundNumber: rounds.find((r) => r.id === l.spaceRoundId)?.roundNumber ?? null,
-          roundTitle: rounds.find((r) => r.id === l.spaceRoundId)?.title ?? null,
-        })),
-    [letters, articleMap, rounds, userId],
+      articles
+        .filter((a) => letterBySourceArticleId.has(a.id))
+        .map((a) => {
+          const letter = letterBySourceArticleId.get(a.id)!;
+          return {
+            id: letter.id,
+            articleTitle: a.title ?? null,
+            roundNumber: rounds.find((r) => r.id === letter.spaceRoundId)?.roundNumber ?? null,
+            roundTitle: rounds.find((r) => r.id === letter.spaceRoundId)?.title ?? null,
+          };
+        }),
+    [articles, letterBySourceArticleId, rounds],
   );
 
   const selectedLetter = eligibleLetters.find((l) => l.id === selectedLetterId) ?? null;
@@ -537,7 +533,6 @@ export default function SpaceScheduleSendScreen() {
     { userId },
     { query: { enabled: !!id && !!userId, queryKey: getGetSpaceJoinContextQueryKey(id, { userId }) } },
   );
-  const isOperator = joinContextQuery.data?.participation?.role === "OPERATOR";
   const spaceStatus = joinContextQuery.data?.space?.status ?? null;
   const isSpaceArchived = spaceStatus === "ARCHIVED";
 
@@ -615,7 +610,7 @@ export default function SpaceScheduleSendScreen() {
   );
 
   const handleGoToArchive = useCallback(() => {
-    router.push("/(tabs)/archive");
+    router.push("/(tabs)/on");
   }, [router]);
 
   const pendingSends = sends.filter((s) => s.status === "PENDING");
@@ -743,9 +738,8 @@ export default function SpaceScheduleSendScreen() {
       {showNewSheet && (
         <NewSendSheet
           spaceId={id}
-          userId={userId ?? ""}
           rounds={rounds}
-          letters={isOperator ? letters : letters.filter((l) => l.authorId === userId)}
+          letters={letters}
           articles={articles}
           onClose={() => setShowNewSheet(false)}
           onSaved={handleSaved}
