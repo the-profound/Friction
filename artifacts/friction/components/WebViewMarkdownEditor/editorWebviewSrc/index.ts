@@ -1611,6 +1611,18 @@ function spellFindRange(
           }
           break;
         }
+        case "undo": {
+          if (editor && !editor.isDestroyed) {
+            editor.chain().focus().undo().run();
+          }
+          break;
+        }
+        case "redo": {
+          if (editor && !editor.isDestroyed) {
+            editor.chain().focus().redo().run();
+          }
+          break;
+        }
         case "toggleMark": {
           if (editor && !editor.isDestroyed) {
             const mk = cmd.mark || "";

@@ -32,6 +32,8 @@ export interface MemoBottomSheetRef {
   toggleMark: (mark: string) => void;
   setBlockType: (blockType: string) => void;
   blur: () => void;
+  undo: () => void;
+  redo: () => void;
 }
 
 interface MemoBottomSheetProps {
@@ -126,6 +128,8 @@ const MemoBottomSheet = forwardRef<MemoBottomSheetRef, MemoBottomSheetProps>(
       toggleMark: (mark: string) => editorRef.current?.toggleMark(mark),
       setBlockType: (blockType: string) => editorRef.current?.setBlockType(blockType),
       blur: () => editorRef.current?.blur(),
+      undo: () => editorRef.current?.undo(),
+      redo: () => editorRef.current?.redo(),
     }), []);
 
     // Sync pendingQuote into the queue whenever the sheet opens.

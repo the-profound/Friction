@@ -14,6 +14,8 @@ export interface OverflowRange {
 
 export type RNToWebViewCommand =
   | { type: "init"; payload: EditorInitPayload }
+  | { type: "undo" }
+  | { type: "redo" }
   | { type: "setMarkdown"; markdown: string }
   | { type: "setTitle"; title: string }
   | { type: "requestExportMarkdown"; requestId: string }
@@ -82,6 +84,8 @@ export interface WebViewMarkdownEditorRef {
   setEditable: (isEditable: boolean) => void;
   setTitle: (title: string) => void;
   blur: () => void;
+  undo: () => void;
+  redo: () => void;
   setOverflowRanges: (ranges: OverflowRange[] | null) => void;
   setOverflowProbeConfig: (availableContentHeightPx: number | null, autoSplit?: boolean) => void;
   setBlockType: (blockType: string) => void;

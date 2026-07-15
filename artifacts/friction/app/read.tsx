@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import MemoBottomSheet, { type MemoBottomSheetRef } from "@/components/MemoBottomSheet/MemoBottomSheet";
-import MemoToolbar, { type FormatType, type AttachMenuAnchor } from "@/components/MemoToolbar/MemoToolbar";
+import MemoToolbar, { type FormatType } from "@/components/MemoToolbar/MemoToolbar";
 import ScalePressable from "@/components/shared/ScalePressable";
 import {
   trackPageTurn,
@@ -88,8 +88,6 @@ import { useToast } from "@/contexts/ToastContext";
 // Horizontal padding on each side of the reader card so the drop-shadow is
 // visible left and right. Must match pageListContainer.paddingHorizontal below.
 const READER_SIDE_PAD = 14;
-const ATTACH_MENU_WIDTH = 120;
-const ATTACH_MENU_GAP = 8;
 
 function computeReaderLayout(availableWidth: number, availableHeight: number, overrideContainerWidth?: number): ReaderLayout {
   const widthFromHeight = availableHeight * ReaderTokens.aspectRatio;
@@ -502,13 +500,6 @@ export default function ReadScreen() {
   }, [memoActiveFormats]);
 
   const [quotePickerVisible, setQuotePickerVisible] = useState(false);
-  const [attachMenuVisible, setAttachMenuVisible] = useState(false);
-  const [attachMenuAnchor, setAttachMenuAnchor] = useState<AttachMenuAnchor | null>(null);
-
-  const handleOpenAttachMenu = useCallback((anchor: AttachMenuAnchor) => {
-    setAttachMenuAnchor(anchor);
-    setAttachMenuVisible(true);
-  }, []);
 
   const handleOpenQuotePicker = useCallback(() => {
     setQuotePickerVisible(true);
@@ -1970,56 +1961,10 @@ export default function ReadScreen() {
             }}
             onFormat={handleMemoFormat}
             activeFormats={memoActiveFormats}
-            onOpenAttachMenu={handleOpenAttachMenu}
+            onOpenQuotePicker={handleOpenQuotePicker}
+            onUndo={() => memoWebRef.current?.undo()}
+            onRedo={() => memoWebRef.current?.redo()}
           />
-        </View>
-      )}
-
-      {/* ── 첨부(클립) 메뉴 오버레이 ───────────────────────────────────────
-          RN Modal 은 새 네이티브 윈도우를 만들어 WebView 포커스를 잃게 하므로
-          키보드가 닫힌다. 그래서 Modal 대신 같은 화면 트리 안에 절대배치
-          오버레이로 렌더링해 키보드를 유지한다. */}
-      {isMemoMode && attachMenuVisible && attachMenuAnchor && (
-        <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-          <Pressable
-            style={StyleSheet.absoluteFill}
-            onPress={() => setAttachMenuVisible(false)}
-          />
-          <View
-            style={[
-              styles.attachMenu,
-              {
-                left: Math.min(
-                  Math.max(8, attachMenuAnchor.x + attachMenuAnchor.width / 2 - ATTACH_MENU_WIDTH / 2),
-                  screenWidth - ATTACH_MENU_WIDTH - 8,
-                ),
-                bottom: Math.max(8, screenHeight - attachMenuAnchor.y + ATTACH_MENU_GAP),
-              },
-            ]}
-          >
-            <View style={styles.attachMenuClip}>
-              <ScalePressable
-                style={styles.attachMenuRow}
-                contentStyle={styles.attachMenuRowContent}
-                onPress={() => setAttachMenuVisible(false)}
-              >
-                <Feather name="image" size={15} color={Colors.zinc600} />
-                <Text style={styles.attachMenuLabel}>사진</Text>
-              </ScalePressable>
-              <View style={styles.attachMenuDivider} />
-              <ScalePressable
-                style={styles.attachMenuRow}
-                contentStyle={styles.attachMenuRowContent}
-                onPress={() => {
-                  setAttachMenuVisible(false);
-                  handleOpenQuotePicker();
-                }}
-              >
-                <Feather name="message-square" size={15} color={Colors.zinc600} />
-                <Text style={styles.attachMenuLabel}>인용</Text>
-              </ScalePressable>
-            </View>
-          </View>
         </View>
       )}
 
@@ -2415,49 +2360,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 52,
-  },
-  attachMenu: {
-    position: "absolute",
-    width: ATTACH_MENU_WIDTH,
-    backgroundColor: Colors.white,
-    borderRadius: 14,
-    zIndex: 60,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.16,
-        shadowRadius: 12,
-      },
-      android: {
-        elevation: 10,
-      },
-      default: {},
-    }),
-  },
-  attachMenuClip: {
-    borderRadius: 14,
-    overflow: "hidden",
-    backgroundColor: Colors.white,
-  },
-  attachMenuRow: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-  },
-  attachMenuRowContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  attachMenuLabel: {
-    fontSize: 14,
-    color: Colors.zinc700,
-    fontFamily: ReaderTokens.fontFamily.sans,
-  },
-  attachMenuDivider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: Colors.zinc200,
-    marginHorizontal: 12,
   },
   progressBarContainer: {
     width: "90%",

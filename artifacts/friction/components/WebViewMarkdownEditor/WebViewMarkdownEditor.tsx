@@ -83,6 +83,12 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       blur() {
         bridge.injectRaw(`(function(){try{if(document.activeElement){document.activeElement.blur();}}catch(e){}})();true;`);
       },
+      undo() {
+        sendCommand({ type: "undo" });
+      },
+      redo() {
+        sendCommand({ type: "redo" });
+      },
       setOverflowRanges(ranges) {
         sendCommand({ type: "setOverflowRanges", ranges });
       },
