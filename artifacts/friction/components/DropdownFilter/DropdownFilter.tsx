@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import ScalePressable from "@/components/shared/ScalePressable";
+import PillButton from "@/components/shared/PillButton";
 import { Colors, Typography, ZIndex } from "@/constants/tokens";
 
 export interface DropdownOption<T extends string> {
@@ -25,7 +26,6 @@ interface Anchor {
 
 const DROPDOWN_WIDTH = 140;
 const DROPDOWN_GAP = 6;
-const PILL_HEIGHT = 33;
 
 interface DropdownFilterProps<T extends string> {
   label: string;
@@ -64,9 +64,10 @@ export default function DropdownFilter<T extends string>({
   const dropdownLeft = anchor ? anchor.x : 0;
 
   return (
-    <View ref={pillRef} collapsable={false} style={styles.wrapper}>
-      <ScalePressable
-        style={[styles.pill, isFiltered && styles.pillActive]}
+    <View ref={pillRef} collapsable={false}>
+      <PillButton
+        size="sm"
+        variant={isFiltered ? "primary" : "outline"}
         contentStyle={styles.pillContent}
         onPress={handleOpen}
       >
@@ -81,7 +82,7 @@ export default function DropdownFilter<T extends string>({
           size={13}
           color={isFiltered ? Colors.white : Colors.zinc500}
         />
-      </ScalePressable>
+      </PillButton>
 
       <Modal
         visible={open}
@@ -128,24 +129,6 @@ export default function DropdownFilter<T extends string>({
 }
 
 const styles = StyleSheet.create({
-  wrapper: {
-    alignSelf: "flex-start",
-    height: PILL_HEIGHT,
-    flexGrow: 0,
-    flexShrink: 0,
-  },
-  pill: {
-    alignSelf: "flex-start",
-    height: PILL_HEIGHT,
-    flexGrow: 0,
-    flexShrink: 0,
-    justifyContent: "center",
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: Colors.zinc200,
-    backgroundColor: Colors.white,
-  },
   pillContent: {
     flexGrow: 0,
     flexShrink: 0,
@@ -155,10 +138,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 4,
-  },
-  pillActive: {
-    backgroundColor: Colors.zinc900,
-    borderColor: Colors.zinc900,
   },
   pillText: {
     ...Typography.caption,
@@ -176,9 +155,6 @@ const styles = StyleSheet.create({
       default: "Pretendard-SemiBold",
     }),
     fontWeight: "600",
-  },
-  chevron: {
-    marginTop: 1,
   },
   dropdownShadow: {
     position: "absolute",
