@@ -89,6 +89,7 @@
     "expo-secure-store": "^15.0.8",
     "marked": "^17.0.5",
     "posthog-react-native": "^4.43.13",
+    "react-native-calendars": "^1.1314.0",
     "react-native-url-polyfill": "^3.0.0",
     "react-native-view-shot": "^4.0.3",
     "react-native-webview": "^13.16.1",

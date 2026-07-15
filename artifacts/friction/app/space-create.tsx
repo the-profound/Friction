@@ -11,7 +11,10 @@ import {
   TouchableWithoutFeedback,
   Keyboard,
   ActivityIndicator,
+  Modal,
+  Pressable,
 } from "react-native";
+import { Calendar } from "react-native-calendars";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -51,6 +54,28 @@ function getTodayDigits(): string {
   const m = String(now.getMonth() + 1).padStart(2, "0");
   const d = String(now.getDate()).padStart(2, "0");
   return `${y}${m}${d}`;
+}
+
+function getTomorrowDigits(): string {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const y = tomorrow.getFullYear();
+  const m = String(tomorrow.getMonth() + 1).padStart(2, "0");
+  const d = String(tomorrow.getDate()).padStart(2, "0");
+  return `${y}${m}${d}`;
+}
+
+function getTomorrowIso(): string {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const y = tomorrow.getFullYear();
+  const m = String(tomorrow.getMonth() + 1).padStart(2, "0");
+  const d = String(tomorrow.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function digitsToIso(digits: string): string {
+  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
 }
 
 function buildSteps(roundCount: number, customizeRounds: boolean): string[] {
@@ -102,7 +127,7 @@ export default function SpaceCreateScreen() {
     name: "",
     description: "",
     isAnonymous: false,
-    startsAt: getTodayDigits(),
+    startsAt: getTomorrowDigits(),
     roundCount: 1,
     maxParticipants: "",
     rounds: [{ title: "", description: "" }],
@@ -443,14 +468,12 @@ function OperationSettingsStep({
   roundCountError: string;
   onRoundCountChange: (text: string) => void;
 }) {
-  const [dateRaw, setDateRaw] = useState(formatDateDisplay(form.startsAt));
+  const [calendarVisible, setCalendarVisible] = useState(false);
 
-  const handleDateChange = (text: string) => {
-    const digits = text.replace(/\D/g, "").slice(0, 8);
-    const formatted = formatDateDisplay(digits);
-    setDateRaw(formatted);
-    updateField("startsAt", digits);
-  };
+  const selectedIso = form.startsAt.length === 8 ? digitsToIso(form.startsAt) : undefined;
+  const markedDates = selectedIso
+    ? { [selectedIso]: { selected: true, selectedColor: Colors.zinc900 } }
+    : {};
 
   return (
     <View style={stepStyles.container}>
@@ -459,18 +482,43 @@ function OperationSettingsStep({
 
       <View style={stepStyles.fieldGroup}>
         <Text style={stepStyles.fieldLabel}>시작일 *</Text>
-        <TextInput
-          style={stepStyles.input}
-          placeholder="YYYY.MM.DD"
-          placeholderTextColor={Colors.zinc400}
-          value={dateRaw}
-          onChangeText={handleDateChange}
-          keyboardType="numeric"
-          maxLength={10}
-        />
-        {form.startsAt.length > 0 && parseDateInput(form.startsAt) === null && (
-          <Text style={stepStyles.errorText}>올바른 날짜를 입력해주세요 (예: 20250101)</Text>
-        )}
+        <Pressable
+          style={[stepStyles.input, operationStyles.datePressable]}
+          onPress={() => setCalendarVisible(true)}
+        >
+          <Text style={form.startsAt ? stepStyles.inputText : stepStyles.inputPlaceholder}>
+            {form.startsAt ? formatDateDisplay(form.startsAt) : "날짜를 선택하세요"}
+          </Text>
+        </Pressable>
+
+        <Modal
+          visible={calendarVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setCalendarVisible(false)}
+        >
+          <Pressable
+            style={operationStyles.modalBackdrop}
+            onPress={() => setCalendarVisible(false)}
+          >
+            <Pressable style={operationStyles.calendarContainer} onPress={() => {}}>
+              <Calendar
+                minDate={getTomorrowIso()}
+                markedDates={markedDates}
+                onDayPress={(day) => {
+                  const digits = day.dateString.replace(/-/g, "");
+                  updateField("startsAt", digits);
+                  setCalendarVisible(false);
+                }}
+                theme={{
+                  selectedDayBackgroundColor: Colors.zinc900,
+                  todayTextColor: Colors.zinc500,
+                  arrowColor: Colors.zinc900,
+                }}
+              />
+            </Pressable>
+          </Pressable>
+        </Modal>
       </View>
 
       <View style={stepStyles.fieldGroup}>
@@ -905,6 +953,16 @@ const stepStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.zinc100,
   },
+  inputText: {
+    ...Typography.body,
+    fontSize: 16,
+    color: Colors.zinc900,
+  },
+  inputPlaceholder: {
+    ...Typography.body,
+    fontSize: 16,
+    color: Colors.zinc400,
+  },
   inputMulti: {
     minHeight: 96,
     lineHeight: 22,
@@ -980,6 +1038,25 @@ const stepStyles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 13,
     color: Colors.white,
+  },
+});
+
+const operationStyles = StyleSheet.create({
+  datePressable: {
+    justifyContent: "center",
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  calendarContainer: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    overflow: "hidden",
+    width: "100%",
   },
 });
 
