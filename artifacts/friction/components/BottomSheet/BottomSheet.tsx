@@ -154,7 +154,7 @@ export default function BottomSheet({
         Animated.spring(translateY, {
           toValue: getSnapY(0),
           useNativeDriver: true,
-          damping: 20,
+          damping: 30,
           stiffness: 200,
         }),
         Animated.timing(overlayOpacity, {
@@ -252,7 +252,7 @@ export default function BottomSheet({
             Animated.spring(translateY, {
               toValue: Math.max(target, 0),
               useNativeDriver: true,
-              damping: 20,
+              damping: 30,
               stiffness: 200,
             }).start();
           }
@@ -263,7 +263,7 @@ export default function BottomSheet({
             Animated.spring(translateY, {
               toValue: Math.max(target, 0),
               useNativeDriver: true,
-              damping: 20,
+              damping: 30,
               stiffness: 200,
             }).start();
           }
@@ -272,7 +272,7 @@ export default function BottomSheet({
           Animated.spring(translateY, {
             toValue: Math.max(target, 0),
             useNativeDriver: true,
-            damping: 20,
+            damping: 30,
             stiffness: 200,
           }).start();
         }
