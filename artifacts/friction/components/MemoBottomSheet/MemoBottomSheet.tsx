@@ -7,12 +7,13 @@ import React, {
 } from "react";
 import {
   View,
-  Text,
   TextInput,
   StyleSheet,
   Animated,
   Pressable,
   Platform,
+  Keyboard,
+  PanResponder,
   useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -44,11 +45,14 @@ interface MemoBottomSheetProps {
   onActiveFormatsChange: (formats: Set<FormatType>) => void;
   bodyFontSize: number;
   keyboardVisible: boolean;
+  keyboardHeight: number;
   bottomInset: number;
 }
 
 const AUTOSAVE_DEBOUNCE_MS = 700;
 const TOP_GAP = 8;
+const SWIPE_CLOSE_THRESHOLD = 80;
+const SWIPE_VELOCITY_THRESHOLD = 0.5;
 
 const MemoBottomSheet = forwardRef<MemoBottomSheetRef, MemoBottomSheetProps>(
   function MemoBottomSheet(
@@ -63,6 +67,7 @@ const MemoBottomSheet = forwardRef<MemoBottomSheetRef, MemoBottomSheetProps>(
       onActiveFormatsChange,
       bodyFontSize,
       keyboardVisible,
+      keyboardHeight,
       bottomInset,
     },
     ref,
@@ -203,6 +208,49 @@ const MemoBottomSheet = forwardRef<MemoBottomSheetRef, MemoBottomSheetProps>(
       });
     }, [onClose, screenHeight, translateY, dimOpacity]);
 
+    // Keep a stable ref so PanResponder can always call the latest handleClose.
+    const handleCloseRef = useRef(handleClose);
+    handleCloseRef.current = handleClose;
+
+    // PanResponder for the grab pill only — drag down to dismiss.
+    // onStartShouldSetPanResponder is false so that taps on this zone
+    // do NOT steal touches from sibling controls (TextInput / close button).
+    // The responder only claims the gesture once a downward move is detected.
+    const panResponder = useRef(
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => false,
+        onStartShouldSetPanResponderCapture: () => false,
+        onMoveShouldSetPanResponder: (_, gs) =>
+          gs.dy > 4 && gs.dy > Math.abs(gs.dx),
+        onMoveShouldSetPanResponderCapture: () => false,
+        onPanResponderMove: (_, gs) => {
+          if (gs.dy > 0) {
+            translateY.setValue(openY + gs.dy);
+          }
+        },
+        onPanResponderRelease: (_, gs) => {
+          if (gs.dy > SWIPE_CLOSE_THRESHOLD || gs.vy > SWIPE_VELOCITY_THRESHOLD) {
+            handleCloseRef.current();
+          } else {
+            Animated.spring(translateY, {
+              toValue: openY,
+              useNativeDriver: true,
+              tension: 100,
+              friction: 10,
+            }).start();
+          }
+        },
+        onPanResponderTerminate: () => {
+          Animated.spring(translateY, {
+            toValue: openY,
+            useNativeDriver: true,
+            tension: 100,
+            friction: 10,
+          }).start();
+        },
+      }),
+    ).current;
+
     const handleSelection = useCallback(
       (payload: OnSelectionUpdatePayload) => {
         const formats = new Set<FormatType>();
@@ -228,14 +276,25 @@ const MemoBottomSheet = forwardRef<MemoBottomSheetRef, MemoBottomSheetProps>(
 
     if (!visible) return null;
 
+    const editorBottomPad = keyboardVisible ? keyboardHeight : Math.max(bottomInset, 16);
+
     return (
       <>
-        {/* Dim overlay — blocks touches on underlying reader */}
+        {/* Dim overlay — keyboard-first dismiss, then sheet close */}
         <Animated.View
           style={[styles.dim, { opacity: dimOpacity }]}
           pointerEvents="auto"
         >
-          <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => {
+              if (keyboardVisible) {
+                Keyboard.dismiss();
+              } else {
+                handleClose();
+              }
+            }}
+          />
         </Animated.View>
 
         {/* Sheet — full-height card sliding up from bottom */}
@@ -245,11 +304,14 @@ const MemoBottomSheet = forwardRef<MemoBottomSheetRef, MemoBottomSheetProps>(
             { height: screenHeight, transform: [{ translateY }] },
           ]}
         >
-          {/* Handle bar (same as BottomSheet) */}
+          {/* Handle bar — grab pill is the drag target; title row is independent */}
           <View style={styles.handleArea}>
-            <View style={styles.handle} />
+            {/* Grab zone: pill + padding. panHandlers here, NOT on titleRow. */}
+            <View style={styles.handleGrabZone} {...panResponder.panHandlers}>
+              <View style={styles.handle} />
+            </View>
 
-            {/* Title row: editable title + X close */}
+            {/* Title row: editable title + X close — no panHandlers */}
             <View style={styles.titleRow}>
               <TextInput
                 style={[styles.titleInput, { fontSize: Math.max(15, bodyFontSize * 0.9) }]}
@@ -268,7 +330,7 @@ const MemoBottomSheet = forwardRef<MemoBottomSheetRef, MemoBottomSheetProps>(
 
           <View style={styles.divider} />
 
-          <View style={styles.editorWrap}>
+          <View style={[styles.editorWrap, { paddingBottom: editorBottomPad }]}>
             <WebViewMarkdownEditor
               ref={editorRef}
               initialMarkdown={memoContent}
@@ -285,11 +347,6 @@ const MemoBottomSheet = forwardRef<MemoBottomSheetRef, MemoBottomSheetProps>(
               onSelectionUpdate={handleSelection}
             />
           </View>
-
-          {/* Bottom safe-area padding */}
-          {!keyboardVisible && (
-            <View style={{ height: Math.max(bottomInset, 16) }} />
-          )}
         </Animated.View>
       </>
     );
@@ -333,9 +390,13 @@ const styles = StyleSheet.create({
   },
   handleArea: {
     alignItems: "center",
-    paddingTop: 10,
     paddingBottom: 4,
-    minHeight: 28,
+  },
+  handleGrabZone: {
+    alignSelf: "stretch",
+    alignItems: "center",
+    paddingTop: 10,
+    paddingBottom: 6,
   },
   handle: {
     width: 36,
@@ -372,5 +433,6 @@ const styles = StyleSheet.create({
   },
   editorWrap: {
     flex: 1,
+    paddingHorizontal: Spacing.screenPx,
   },
 });

@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { AppState, type AppStateStatus } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useCreateArticle,
   useUpdateArticle,
@@ -8,6 +9,7 @@ import {
   useReadingMemo as useReadingMemoQuery,
   getReadingMemoQueryKey,
 } from "@workspace/api-client-react";
+import { invalidateArticleLists } from "@/lib/queryInvalidation";
 
 interface UseReadingMemoOptions {
   userId: string;
@@ -107,6 +109,10 @@ export function useReadingMemo({
   useEffect(() => {
     defaultMemoTitleRef.current = defaultMemoTitle;
   }, [defaultMemoTitle]);
+
+  const queryClient = useQueryClient();
+  const queryClientRef = useRef(queryClient);
+  useEffect(() => { queryClientRef.current = queryClient; }, [queryClient]);
 
   const createArticle = useCreateArticle();
   const updateArticle = useUpdateArticle();
@@ -253,6 +259,8 @@ export function useReadingMemo({
           memoArticleIdRef.current = id;
           setMemoArticleId(id);
           createPromiseRef.current = null;
+          // Invalidate the articles list so 기록 tab picks up the new memo.
+          void invalidateArticleLists(queryClientRef.current);
           return id;
         })
         .catch((err) => {

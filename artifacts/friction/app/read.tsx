@@ -1481,8 +1481,11 @@ export default function ReadScreen() {
     const pageNum = currentPage;
     const author = authorName ?? "";
     const title = article?.title ?? "";
-    const quoteBlock = `> ${text.trim()}\n>\n> ${author}, <${title}>, ${pageNum}면`;
-    openMemoMode(quoteBlock);
+    const quoteData = JSON.stringify({
+      text: text.trim(),
+      attribution: `${author}, <${title}>, ${pageNum}면`,
+    });
+    openMemoMode(quoteData);
     trackMemoCreatedDuringReading({ articleId, page: currentPage });
   }, [currentPage, authorName, article?.title, openMemoMode, articleId]);
 
@@ -1945,8 +1948,9 @@ export default function ReadScreen() {
           readingMemo.updateMemoContent(markdown);
         }}
         onActiveFormatsChange={setMemoActiveFormats}
-        bodyFontSize={layout.bodyFontSize}
+        bodyFontSize={readerFontSize(ReaderTokens.typeScale.bodyCqi, screenWidth - 2 * Spacing.screenPx)}
         keyboardVisible={keyboardVisible}
+        keyboardHeight={keyboardHeight}
         bottomInset={insets.bottom}
       />
 
