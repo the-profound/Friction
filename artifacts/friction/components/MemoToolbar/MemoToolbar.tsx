@@ -2,8 +2,19 @@ import React, { useRef, useState } from "react";
 import { View, Text, StyleSheet, Platform, Animated } from "react-native";
 import { MaterialCommunityIcons, Feather } from "@expo/vector-icons";
 import ScalePressable from "@/components/shared/ScalePressable";
+import type { OnSelectionUpdatePayload } from "@/components/WebViewMarkdownEditor/types";
 
 export type FormatType = "bold" | "italic" | "underline" | "quote";
+
+const BLOCK_LABELS: Record<string, string> = {
+  paragraph: "본문",
+  heading1: "제목 1",
+  heading2: "제목 2",
+  heading3: "제목 3",
+  blockquote: "인용",
+  bulletList: "글머리",
+  orderedList: "번호",
+};
 
 interface MemoToolbarProps {
   onDismissKeyboard: () => void;
@@ -12,9 +23,20 @@ interface MemoToolbarProps {
   onOpenQuotePicker?: () => void;
   onUndo?: () => void;
   onRedo?: () => void;
+  selectionState?: OnSelectionUpdatePayload;
+  onFormatPress?: () => void;
+  onInsertDivider?: () => void;
+  onShiftEnter?: () => void;
 }
 
 const CROSS_FADE_MS = 80;
+
+const DEFAULT_SELECTION: OnSelectionUpdatePayload = {
+  activeBlock: "paragraph",
+  isBold: false,
+  isItalic: false,
+  isUnderline: false,
+};
 
 export default function MemoToolbar({
   onDismissKeyboard,
@@ -23,10 +45,12 @@ export default function MemoToolbar({
   onOpenQuotePicker,
   onUndo,
   onRedo,
+  selectionState = DEFAULT_SELECTION,
+  onFormatPress,
+  onInsertDivider,
+  onShiftEnter,
 }: MemoToolbarProps) {
-  // true = format layer on top; controls pointerEvents immediately on press
   const [isFormat, setIsFormat] = useState(false);
-  // 0 = main fully visible, 1 = format fully visible
   const transition = useRef(new Animated.Value(0)).current;
 
   const mainOpacity = transition.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
@@ -50,21 +74,15 @@ export default function MemoToolbar({
     }).start();
   };
 
-  const isBoldActive = activeFormats?.has("bold");
-  const isItalicActive = activeFormats?.has("italic");
-  const isUnderlineActive = activeFormats?.has("underline");
-  const isQuoteActive = activeFormats?.has("quote");
+  const isBoldActive = selectionState.isBold || activeFormats?.has("bold");
+  const isItalicActive = selectionState.isItalic || activeFormats?.has("italic");
+  const isUnderlineActive = selectionState.isUnderline || activeFormats?.has("underline");
+
+  const blockLabel = BLOCK_LABELS[selectionState.activeBlock] ?? "본문";
 
   return (
     <View style={styles.outerWrap}>
       <View style={styles.capsule}>
-        {/*
-         * Both layers are always mounted and stacked.
-         * Main layer sits in normal flow → sizes the capsule.
-         * Format layer is absolutely positioned on top → same footprint.
-         * pointerEvents flips instantly on press so touches are never lost.
-         */}
-
         {/* ── Main layer ── */}
         <Animated.View
           style={[styles.row, { opacity: mainOpacity }]}
@@ -72,6 +90,10 @@ export default function MemoToolbar({
         >
           <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={goFormat} hitSlop={6}>
             <Text style={styles.aaLabel}>Aa</Text>
+          </ScalePressable>
+
+          <ScalePressable style={styles.blockTypeBtn} contentStyle={styles.btnContent} onPress={onFormatPress} hitSlop={6}>
+            <Text style={styles.blockTypeLabel} numberOfLines={1}>{blockLabel}</Text>
           </ScalePressable>
 
           <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={onOpenQuotePicker} hitSlop={6}>
@@ -92,6 +114,18 @@ export default function MemoToolbar({
             <Feather name="corner-up-right" size={16} color="#3f3f46" />
           </ScalePressable>
 
+          {onInsertDivider != null && (
+            <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={onInsertDivider} hitSlop={6}>
+              <Feather name="scissors" size={15} color="#3f3f46" />
+            </ScalePressable>
+          )}
+
+          {onShiftEnter != null && (
+            <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={onShiftEnter} hitSlop={6}>
+              <Feather name="corner-down-left" size={15} color="#3f3f46" />
+            </ScalePressable>
+          )}
+
           <View style={styles.divider} />
 
           <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={onDismissKeyboard} hitSlop={8}>
@@ -99,7 +133,7 @@ export default function MemoToolbar({
           </ScalePressable>
         </Animated.View>
 
-        {/* ── Format layer (absolute, same footprint as main) ── */}
+        {/* ── Format sub-layer (Aa 탭 후) ── */}
         <Animated.View
           style={[styles.row, styles.absoluteLayer, { opacity: formatOpacity }]}
           pointerEvents={isFormat ? "auto" : "none"}
@@ -120,10 +154,6 @@ export default function MemoToolbar({
 
           <ScalePressable style={[styles.btn, isUnderlineActive && styles.btnActive]} contentStyle={styles.btnContent} onPress={() => onFormat?.("underline")} hitSlop={6}>
             <Text style={[styles.fmtLabel, styles.underline, isUnderlineActive && styles.fmtLabelActive]}>U</Text>
-          </ScalePressable>
-
-          <ScalePressable style={[styles.btn, isQuoteActive && styles.btnActive]} contentStyle={styles.btnContent} onPress={() => onFormat?.("quote")} hitSlop={6}>
-            <Text style={[styles.quoteIcon, isQuoteActive && styles.fmtLabelActive]}>{"\u201C\u201D"}</Text>
           </ScalePressable>
 
           <View style={styles.divider} />
@@ -176,6 +206,12 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 18,
   },
+  blockTypeBtn: {
+    height: 36,
+    borderRadius: 18,
+    paddingHorizontal: 8,
+    minWidth: 36,
+  },
   btnContent: {
     alignItems: "center",
     justifyContent: "center",
@@ -192,6 +228,14 @@ const styles = StyleSheet.create({
     }),
     fontWeight: "600",
   },
+  blockTypeLabel: {
+    fontSize: 13,
+    color: "#3f3f46",
+    fontFamily: Platform.select({
+      ios: "Pretendard-Regular",
+      default: "Pretendard",
+    }),
+  },
   fmtLabel: {
     fontSize: 15,
     color: "#3f3f46",
@@ -206,15 +250,6 @@ const styles = StyleSheet.create({
   bold: { fontWeight: "700" },
   italic: { fontStyle: "italic" },
   underline: { textDecorationLine: "underline" },
-  quoteIcon: {
-    fontSize: 18,
-    color: "#3f3f46",
-    lineHeight: 20,
-    fontFamily: Platform.select({
-      ios: "Georgia",
-      default: "serif",
-    }),
-  },
   divider: {
     width: 1,
     height: 20,

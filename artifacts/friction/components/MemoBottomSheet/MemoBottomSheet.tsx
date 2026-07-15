@@ -31,6 +31,8 @@ export interface MemoBottomSheetRef {
   insertQuote: (text: string) => void;
   toggleMark: (mark: string) => void;
   setBlockType: (blockType: string) => void;
+  insertDivider: () => void;
+  insertHardBreak: () => void;
   blur: () => void;
   undo: () => void;
   redo: () => void;
@@ -45,6 +47,7 @@ interface MemoBottomSheetProps {
   onTitleChange: (title: string) => void;
   onExportMarkdown: (markdown: string, requestId: string) => void;
   onActiveFormatsChange: (formats: Set<FormatType>) => void;
+  onSelectionUpdate?: (payload: OnSelectionUpdatePayload) => void;
   bodyFontSize: number;
   keyboardVisible: boolean;
   keyboardHeight: number;
@@ -67,6 +70,7 @@ const MemoBottomSheet = forwardRef<MemoBottomSheetRef, MemoBottomSheetProps>(
       onTitleChange,
       onExportMarkdown,
       onActiveFormatsChange,
+      onSelectionUpdate,
       bodyFontSize,
       keyboardVisible,
       keyboardHeight,
@@ -127,6 +131,8 @@ const MemoBottomSheet = forwardRef<MemoBottomSheetRef, MemoBottomSheetProps>(
       },
       toggleMark: (mark: string) => editorRef.current?.toggleMark(mark),
       setBlockType: (blockType: string) => editorRef.current?.setBlockType(blockType),
+      insertDivider: () => editorRef.current?.insertDivider(),
+      insertHardBreak: () => editorRef.current?.insertHardBreak(),
       blur: () => editorRef.current?.blur(),
       undo: () => editorRef.current?.undo(),
       redo: () => editorRef.current?.redo(),
@@ -263,8 +269,9 @@ const MemoBottomSheet = forwardRef<MemoBottomSheetRef, MemoBottomSheetProps>(
         if (payload.isUnderline) formats.add("underline");
         if (payload.activeBlock === "blockquote") formats.add("quote");
         onActiveFormatsChange(formats);
+        onSelectionUpdate?.(payload);
       },
-      [onActiveFormatsChange],
+      [onActiveFormatsChange, onSelectionUpdate],
     );
 
     useEffect(() => {

@@ -15,6 +15,8 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import MemoBottomSheet, { type MemoBottomSheetRef } from "@/components/MemoBottomSheet/MemoBottomSheet";
 import MemoToolbar, { type FormatType } from "@/components/MemoToolbar/MemoToolbar";
+import BlockTypeSheet from "@/components/KeyboardToolbar/BlockTypeSheet";
+import type { OnSelectionUpdatePayload } from "@/components/WebViewMarkdownEditor/types";
 import ScalePressable from "@/components/shared/ScalePressable";
 import {
   trackPageTurn,
@@ -436,6 +438,13 @@ export default function ReadScreen() {
   const [memoOpenContent, setMemoOpenContent] = useState("");
   const [memoPendingQuote, setMemoPendingQuote] = useState<string | undefined>(undefined);
   const [memoActiveFormats, setMemoActiveFormats] = useState<Set<FormatType>>(new Set());
+  const [memoSelectionState, setMemoSelectionState] = useState<OnSelectionUpdatePayload>({
+    activeBlock: "paragraph",
+    isBold: false,
+    isItalic: false,
+    isUnderline: false,
+  });
+  const [blockTypeSheetVisible, setBlockTypeSheetVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const isMemoModeRef = useRef(false);
@@ -1939,6 +1948,7 @@ export default function ReadScreen() {
           readingMemo.updateMemoContent(markdown);
         }}
         onActiveFormatsChange={setMemoActiveFormats}
+        onSelectionUpdate={setMemoSelectionState}
         bodyFontSize={readerFontSize(ReaderTokens.typeScale.bodyCqi, screenWidth - 2 * Spacing.screenPx)}
         keyboardVisible={keyboardVisible}
         keyboardHeight={keyboardHeight}
@@ -1964,6 +1974,10 @@ export default function ReadScreen() {
             onOpenQuotePicker={handleOpenQuotePicker}
             onUndo={() => memoWebRef.current?.undo()}
             onRedo={() => memoWebRef.current?.redo()}
+            selectionState={memoSelectionState}
+            onFormatPress={() => setBlockTypeSheetVisible(true)}
+            onInsertDivider={() => memoWebRef.current?.insertDivider()}
+            onShiftEnter={() => memoWebRef.current?.insertHardBreak()}
           />
         </View>
       )}
@@ -1973,6 +1987,15 @@ export default function ReadScreen() {
         onClose={() => setQuotePickerVisible(false)}
         userId={userId}
         onSelect={handleSelectQuoteSentence}
+      />
+
+      <BlockTypeSheet
+        visible={blockTypeSheetVisible}
+        activeBlock={memoSelectionState.activeBlock}
+        onClose={() => setBlockTypeSheetVisible(false)}
+        onSelect={(blockType) => {
+          memoWebRef.current?.setBlockType(blockType);
+        }}
       />
 
       {/* ── Selection pill overlay ─────────────────────────────────────── */}

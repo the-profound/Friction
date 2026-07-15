@@ -26,6 +26,10 @@ export interface MemoWebEditorRef {
   toggleMark: (mark: InlineMark) => void;
   setBlockType: (blockType: string) => void;
   insertQuote: (text: string) => void;
+  insertDivider: () => void;
+  insertHardBreak: () => void;
+  undo: () => void;
+  redo: () => void;
   blur: () => void;
 }
 
@@ -68,6 +72,7 @@ interface MemoWebEditorProps {
   /** onChange 디바운스 후 export 로 전달되는 저장용 markdown. */
   onExportMarkdown?: (markdown: string, requestId: string) => void;
   onActiveFormatsChange?: (formats: Set<FormatType>) => void;
+  onSelectionUpdate?: (payload: OnSelectionUpdatePayload) => void;
   onReady?: () => void;
   onKeyboardVisibilityChange?: (visible: boolean) => void;
   /** 텍스트 선택 핸들 드래그 중 true — 스와이프 플립 제스처를 일시 비활성화하는 데 사용. */
@@ -104,6 +109,7 @@ const MemoWebEditor = forwardRef<MemoWebEditorRef, MemoWebEditorProps>(
       isFlipping = false,
       onExportMarkdown,
       onActiveFormatsChange,
+      onSelectionUpdate,
       onReady,
       onKeyboardVisibilityChange,
       onTextSelectionActiveChange,
@@ -135,6 +141,10 @@ const MemoWebEditor = forwardRef<MemoWebEditorRef, MemoWebEditorProps>(
         toggleMark: (mark: InlineMark) => editorRef.current?.toggleMark(mark),
         setBlockType: (blockType: string) => editorRef.current?.setBlockType(blockType),
         insertQuote: (text: string) => editorRef.current?.insertQuote(text),
+        insertDivider: () => editorRef.current?.insertDivider(),
+        insertHardBreak: () => editorRef.current?.insertHardBreak(),
+        undo: () => editorRef.current?.undo(),
+        redo: () => editorRef.current?.redo(),
         blur: () => editorRef.current?.blur(),
       }),
       [],
@@ -163,8 +173,9 @@ const MemoWebEditor = forwardRef<MemoWebEditorRef, MemoWebEditorProps>(
         if (payload.isUnderline) formats.add("underline");
         if (payload.activeBlock === "blockquote") formats.add("quote");
         onActiveFormatsChange?.(formats);
+        onSelectionUpdate?.(payload);
       },
-      [onActiveFormatsChange],
+      [onActiveFormatsChange, onSelectionUpdate],
     );
 
     const animStyle = useAnimatedStyle(() => {
