@@ -98,15 +98,15 @@ const MemoBottomSheet = forwardRef<MemoBottomSheetRef, MemoBottomSheetProps>(
         translateY.setValue(screenHeight);
         dimOpacity.setValue(0);
         const anim = Animated.parallel([
-          Animated.timing(translateY, {
+          Animated.spring(translateY, {
             toValue: openY,
-            duration: 280,
-            easing: (t) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t,
+            damping: 30,
+            stiffness: 200,
             useNativeDriver: true,
           }),
           Animated.timing(dimOpacity, {
             toValue: 1,
-            duration: 220,
+            duration: 200,
             useNativeDriver: true,
           }),
         ]);
@@ -183,10 +183,10 @@ const MemoBottomSheet = forwardRef<MemoBottomSheetRef, MemoBottomSheetProps>(
         animRef.current = null;
       }
       const anim = Animated.parallel([
-        Animated.timing(translateY, {
+        Animated.spring(translateY, {
           toValue: screenHeight,
-          duration: 260,
-          easing: (t) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t,
+          damping: 30,
+          stiffness: 200,
           useNativeDriver: true,
         }),
         Animated.timing(dimOpacity, {
@@ -239,8 +239,8 @@ const MemoBottomSheet = forwardRef<MemoBottomSheetRef, MemoBottomSheetProps>(
             Animated.spring(translateY, {
               toValue: openY,
               useNativeDriver: true,
-              tension: 100,
-              friction: 10,
+              damping: 30,
+              stiffness: 200,
             }).start();
           }
         },
@@ -248,8 +248,8 @@ const MemoBottomSheet = forwardRef<MemoBottomSheetRef, MemoBottomSheetProps>(
           Animated.spring(translateY, {
             toValue: openY,
             useNativeDriver: true,
-            tension: 100,
-            friction: 10,
+            damping: 30,
+            stiffness: 200,
           }).start();
         },
       }),
