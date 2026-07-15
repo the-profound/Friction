@@ -1143,40 +1143,6 @@ export default function SpaceDetailScreen() {
           )}
         </View>
 
-        {/* ── Rounds sections ── */}
-        <View style={styles.section}>
-          {roundsQuery.isLoading ? (
-            <View style={styles.sectionLoading}>
-              <ActivityIndicator size="small" color={Colors.zinc400} />
-            </View>
-          ) : rounds.length === 0 ? (
-            <View style={styles.emptySection}>
-              <Text style={styles.emptySectionText}>
-                {isOperator ? "아직 회차가 없어요" : "진행 중인 회차가 없어요"}
-              </Text>
-            </View>
-          ) : (
-            <View style={styles.roundsList}>
-              {rounds
-                .slice()
-                .sort((a, b) => b.roundNumber - a.roundNumber)
-                .map((round) => (
-                  <RoundSection
-                    key={round.id}
-                    round={round}
-                    letters={lettersByRound[round.id] ?? []}
-                    spaceStatus={space.status}
-                    isOperator={isOperator}
-                    isAnonymous={space.isAnonymous}
-                    onPressLetter={handlePressLetter}
-                    onPressWriteOpening={handlePressWriteOpening}
-                    hiddenCardId={tapLetter?.id ?? null}
-                  />
-                ))}
-            </View>
-          )}
-        </View>
-
         {/* ── Code requests (operator only) ── */}
         {isOperator && (
           <View style={styles.section}>
@@ -1220,6 +1186,40 @@ export default function SpaceDetailScreen() {
             )}
           </View>
         )}
+
+        {/* ── Rounds sections ── */}
+        <View style={styles.section}>
+          {roundsQuery.isLoading ? (
+            <View style={styles.sectionLoading}>
+              <ActivityIndicator size="small" color={Colors.zinc400} />
+            </View>
+          ) : rounds.length === 0 ? (
+            <View style={styles.emptySection}>
+              <Text style={styles.emptySectionText}>
+                {isOperator ? "아직 회차가 없어요" : "진행 중인 회차가 없어요"}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.roundsList}>
+              {rounds
+                .slice()
+                .sort((a, b) => a.roundNumber - b.roundNumber)
+                .map((round) => (
+                  <RoundSection
+                    key={round.id}
+                    round={round}
+                    letters={lettersByRound[round.id] ?? []}
+                    spaceStatus={space.status}
+                    isOperator={isOperator}
+                    isAnonymous={space.isAnonymous}
+                    onPressLetter={handlePressLetter}
+                    onPressWriteOpening={handlePressWriteOpening}
+                    hiddenCardId={tapLetter?.id ?? null}
+                  />
+                ))}
+            </View>
+          )}
+        </View>
 
         <View style={{ height: 40 }} />
       </ScrollView>
