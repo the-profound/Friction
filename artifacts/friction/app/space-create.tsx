@@ -664,6 +664,7 @@ function Stepper({
     <View style={stepperStyles.row}>
       <ScalePressable
         style={[stepperStyles.btn, value <= min && stepperStyles.btnDisabled]}
+        contentStyle={stepperStyles.btnContent}
         onPress={() => { if (value > min) onChange(value - 1); }}
         disabled={value <= min}
       >
@@ -675,6 +676,7 @@ function Stepper({
       </View>
       <ScalePressable
         style={[stepperStyles.btn, value >= max && stepperStyles.btnDisabled]}
+        contentStyle={stepperStyles.btnContent}
         onPress={() => { if (value < max) onChange(value + 1); }}
         disabled={value >= max}
       >
@@ -1009,6 +1011,14 @@ const stepperStyles = StyleSheet.create({
   btnDisabled: {
     borderColor: Colors.zinc100,
     backgroundColor: Colors.zinc50,
+  },
+  btnContent: {
+    height: "100%",
+    flexGrow: 0,
+    flexShrink: 0,
+    alignSelf: "auto",
+    justifyContent: "center",
+    alignItems: "center",
   },
   valueBox: {
     flexDirection: "row",
