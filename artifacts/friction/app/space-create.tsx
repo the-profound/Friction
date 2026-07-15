@@ -125,7 +125,6 @@ export default function SpaceCreateScreen() {
   const createSpaceRound = useCreateSpaceRound();
 
   const [step, setStep] = useState(0);
-  const [advancedCustomized, setAdvancedCustomized] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [roundCountRaw, setRoundCountRaw] = useState("1");
   const [roundCountError, setRoundCountError] = useState("");
@@ -312,8 +311,6 @@ export default function SpaceCreateScreen() {
         <AdvancedSettingsStep
           form={form}
           updateField={updateField}
-          customized={advancedCustomized}
-          onCustomize={() => setAdvancedCustomized(true)}
         />
       );
     }
@@ -650,78 +647,77 @@ function RoundConfigStep({
   );
 }
 
+function Stepper({
+  value,
+  min,
+  max,
+  onChange,
+  unit,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  onChange: (next: number) => void;
+  unit: string;
+}) {
+  return (
+    <View style={stepperStyles.row}>
+      <ScalePressable
+        style={[stepperStyles.btn, value <= min && stepperStyles.btnDisabled]}
+        onPress={() => { if (value > min) onChange(value - 1); }}
+        disabled={value <= min}
+      >
+        <Feather name="minus" size={18} color={value <= min ? Colors.zinc300 : Colors.zinc700} />
+      </ScalePressable>
+      <View style={stepperStyles.valueBox}>
+        <Text style={stepperStyles.valueText}>{value}</Text>
+        <Text style={stepperStyles.unitText}>{unit}</Text>
+      </View>
+      <ScalePressable
+        style={[stepperStyles.btn, value >= max && stepperStyles.btnDisabled]}
+        onPress={() => { if (value < max) onChange(value + 1); }}
+        disabled={value >= max}
+      >
+        <Feather name="plus" size={18} color={value >= max ? Colors.zinc300 : Colors.zinc700} />
+      </ScalePressable>
+    </View>
+  );
+}
+
 function AdvancedSettingsStep({
   form,
   updateField,
-  customized,
-  onCustomize,
 }: {
   form: FormData;
   updateField: <K extends keyof FormData>(key: K, value: FormData[K]) => void;
-  customized: boolean;
-  onCustomize: () => void;
 }) {
   return (
     <View style={stepStyles.container}>
       <Text style={stepStyles.stepTitle}>고급 설정</Text>
-      <Text style={stepStyles.stepDesc}>하루에 한 명씩 글을 올리는 기본 방식으로 진행할까요?</Text>
+      <Text style={stepStyles.stepDesc}>중심글 전송 간격과 회차당 글 수를 조정해요.</Text>
 
-      {!customized ? (
-        <View style={stepStyles.defaultCard}>
-          <View style={stepStyles.defaultCardRow}>
-            <Feather name="clock" size={18} color={Colors.zinc500} />
-            <Text style={stepStyles.defaultCardText}>
-              중심글 전송 간격: <Text style={stepStyles.defaultCardValue}>{form.defaultCenterInterval}일</Text>
-            </Text>
-          </View>
-          <View style={stepStyles.defaultCardRow}>
-            <Feather name="file-text" size={18} color={Colors.zinc500} />
-            <Text style={stepStyles.defaultCardText}>
-              회차당 중심글 수: <Text style={stepStyles.defaultCardValue}>{form.defaultCenterCount}편</Text>
-            </Text>
-          </View>
-          <Text style={stepStyles.defaultCardHint}>기본값으로 진행해요. 아래 버튼으로 변경할 수 있어요.</Text>
-          <ScalePressable style={stepStyles.customizeBtn} onPress={onCustomize}>
-            <Text style={stepStyles.customizeBtnText}>직접 설정하기</Text>
-          </ScalePressable>
-        </View>
-      ) : (
-        <>
-          <View style={stepStyles.fieldGroup}>
-            <Text style={stepStyles.fieldLabel}>중심글 전송 간격 (일)</Text>
-            <TextInput
-              style={stepStyles.input}
-              placeholder={String(DEFAULT_CENTER_INTERVAL)}
-              placeholderTextColor={Colors.zinc400}
-              value={String(form.defaultCenterInterval)}
-              onChangeText={(v) => {
-                const n = parseInt(v, 10);
-                if (!isNaN(n) && n >= 1) updateField("defaultCenterInterval", n);
-              }}
-              keyboardType="number-pad"
-              maxLength={3}
-              autoFocus
-            />
-            <Text style={stepStyles.hint}>각 회차 중심글 사이 전송 주기예요</Text>
-          </View>
+      <View style={stepStyles.fieldGroup}>
+        <Text style={stepStyles.fieldLabel}>중심글 전송 간격</Text>
+        <Text style={stepStyles.hint}>각 회차 중심글 사이 전송 주기예요</Text>
+        <Stepper
+          value={form.defaultCenterInterval}
+          min={1}
+          max={30}
+          onChange={(v) => updateField("defaultCenterInterval", v)}
+          unit="일"
+        />
+      </View>
 
-          <View style={stepStyles.fieldGroup}>
-            <Text style={stepStyles.fieldLabel}>회차당 중심글 수</Text>
-            <TextInput
-              style={stepStyles.input}
-              placeholder={String(DEFAULT_CENTER_COUNT)}
-              placeholderTextColor={Colors.zinc400}
-              value={String(form.defaultCenterCount)}
-              onChangeText={(v) => {
-                const n = parseInt(v, 10);
-                if (!isNaN(n) && n >= 1) updateField("defaultCenterCount", n);
-              }}
-              keyboardType="number-pad"
-              maxLength={2}
-            />
-          </View>
-        </>
-      )}
+      <View style={stepStyles.fieldGroup}>
+        <Text style={stepStyles.fieldLabel}>회차당 중심글 수</Text>
+        <Stepper
+          value={form.defaultCenterCount}
+          min={1}
+          max={10}
+          onChange={(v) => updateField("defaultCenterCount", v)}
+          unit="편"
+        />
+      </View>
     </View>
   );
 }
@@ -991,46 +987,45 @@ const stepStyles = StyleSheet.create({
     fontSize: 13,
     color: Colors.zinc400,
   },
-  defaultCard: {
-    backgroundColor: Colors.zinc50,
-    borderRadius: 14,
-    padding: 18,
-    gap: 10,
-    borderWidth: 1,
-    borderColor: Colors.zinc100,
-  },
-  defaultCardRow: {
+});
+
+const stepperStyles = StyleSheet.create({
+  row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 12,
+    marginTop: 10,
   },
-  defaultCardText: {
-    ...Typography.body,
-    fontSize: 15,
-    color: Colors.zinc600,
+  btn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
+    backgroundColor: Colors.white,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  defaultCardValue: {
+  btnDisabled: {
+    borderColor: Colors.zinc100,
+    backgroundColor: Colors.zinc50,
+  },
+  valueBox: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 3,
+    minWidth: 60,
+    justifyContent: "center",
+  },
+  valueText: {
     ...Typography.bodySemiBold,
+    fontSize: 22,
     color: Colors.zinc900,
   },
-  defaultCardHint: {
-    ...Typography.caption,
-    fontSize: 13,
-    color: Colors.zinc400,
-    marginTop: 4,
-  },
-  customizeBtn: {
-    marginTop: 4,
-    alignSelf: "flex-start",
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-    backgroundColor: Colors.zinc900,
-  },
-  customizeBtnText: {
-    ...Typography.bodySemiBold,
-    fontSize: 13,
-    color: Colors.white,
+  unitText: {
+    ...Typography.body,
+    fontSize: 15,
+    color: Colors.zinc500,
   },
 });
 
