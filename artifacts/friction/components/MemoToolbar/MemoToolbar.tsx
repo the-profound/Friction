@@ -83,17 +83,19 @@ export default function MemoToolbar({
   return (
     <View style={styles.outerWrap}>
       <View style={styles.capsule}>
-        {/* ── Main layer ── */}
+        {/* ── Main layer ──
+            Normal flow when !isFormat (drives capsule width).
+            Absolute (invisible) when isFormat so the narrower format layer drives the width. */}
         <Animated.View
-          style={[styles.row, { opacity: mainOpacity }]}
+          style={[styles.row, isFormat && styles.absoluteHidden, { opacity: mainOpacity }]}
           pointerEvents={isFormat ? "none" : "auto"}
         >
-          <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={goFormat} hitSlop={6}>
-            <Text style={styles.aaLabel}>Aa</Text>
-          </ScalePressable>
-
           <ScalePressable style={styles.blockTypeBtn} contentStyle={styles.btnContent} onPress={onFormatPress} hitSlop={6}>
             <Text style={styles.blockTypeLabel} numberOfLines={1}>{blockLabel}</Text>
+          </ScalePressable>
+
+          <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={goFormat} hitSlop={6}>
+            <Text style={styles.aaLabel}>Aa</Text>
           </ScalePressable>
 
           <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={onOpenQuotePicker} hitSlop={6}>
@@ -107,11 +109,11 @@ export default function MemoToolbar({
           <View style={styles.divider} />
 
           <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={onUndo} hitSlop={6}>
-            <Feather name="corner-up-left" size={16} color="#3f3f46" />
+            <MaterialCommunityIcons name="undo" size={18} color="#3f3f46" />
           </ScalePressable>
 
           <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={onRedo} hitSlop={6}>
-            <Feather name="corner-up-right" size={16} color="#3f3f46" />
+            <MaterialCommunityIcons name="redo" size={18} color="#3f3f46" />
           </ScalePressable>
 
           {onInsertDivider != null && (
@@ -133,9 +135,11 @@ export default function MemoToolbar({
           </ScalePressable>
         </Animated.View>
 
-        {/* ── Format sub-layer (Aa 탭 후) ── */}
+        {/* ── Format sub-layer (Aa 탭 후) ──
+            Normal flow when isFormat (drives capsule to content width).
+            Absolute (invisible) when !isFormat. */}
         <Animated.View
-          style={[styles.row, styles.absoluteLayer, { opacity: formatOpacity }]}
+          style={[styles.row, !isFormat && styles.absoluteHidden, { opacity: formatOpacity }]}
           pointerEvents={isFormat ? "auto" : "none"}
         >
           <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={goMain} hitSlop={6}>
@@ -174,7 +178,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   capsule: {
-    position: "relative",
     backgroundColor: "#ffffff",
     borderRadius: 24,
     paddingHorizontal: 8,
@@ -194,12 +197,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 2,
   },
-  absoluteLayer: {
+  absoluteHidden: {
     position: "absolute",
     top: 4,
     left: 8,
-    right: 8,
-    bottom: 4,
   },
   btn: {
     width: 36,
