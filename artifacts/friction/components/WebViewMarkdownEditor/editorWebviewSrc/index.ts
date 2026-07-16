@@ -1275,6 +1275,8 @@ function spellFindRange(
       isBold: ed.isActive("bold"),
       isItalic: ed.isActive("italic"),
       isUnderline: ed.isActive("underline"),
+      canUndo: ed.can().undo(),
+      canRedo: ed.can().redo(),
     };
   }
 
@@ -1294,7 +1296,9 @@ function spellFindRange(
         payload.activeBlock === lastSelectionPayload.activeBlock &&
         payload.isBold === lastSelectionPayload.isBold &&
         payload.isItalic === lastSelectionPayload.isItalic &&
-        payload.isUnderline === lastSelectionPayload.isUnderline
+        payload.isUnderline === lastSelectionPayload.isUnderline &&
+        payload.canUndo === lastSelectionPayload.canUndo &&
+        payload.canRedo === lastSelectionPayload.canRedo
       ) {
         return;
       }

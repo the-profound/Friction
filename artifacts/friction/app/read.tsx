@@ -15,7 +15,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import MemoBottomSheet, { type MemoBottomSheetRef } from "@/components/MemoBottomSheet/MemoBottomSheet";
 import MemoToolbar, { type FormatType } from "@/components/MemoToolbar/MemoToolbar";
-import BlockTypeSheet from "@/components/KeyboardToolbar/BlockTypeSheet";
+import InlineMenuPanel, { type InlineMenuMode } from "@/components/InlineMenuPanel/InlineMenuPanel";
 import type { OnSelectionUpdatePayload } from "@/components/WebViewMarkdownEditor/types";
 import ScalePressable from "@/components/shared/ScalePressable";
 import {
@@ -51,7 +51,6 @@ import {
 import { computeBodyLayout } from "@/lib/bodyLayout";
 import ProgressIndicator from "@/components/ProgressIndicator/ProgressIndicator";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
-import QuoteSentencePickerBottomSheet from "@/components/QuoteSentencePickerBottomSheet/QuoteSentencePickerBottomSheet";
 import type { StoredSentence } from "@workspace/api-client-react";
 import CoverPreview from "@/components/CoverPreview/CoverPreview";
 import { resolveArticleCover } from "@/utils/articleCover";
@@ -444,9 +443,13 @@ export default function ReadScreen() {
     isItalic: false,
     isUnderline: false,
   });
-  const [blockTypeSheetVisible, setBlockTypeSheetVisible] = useState(false);
+  const [inlineMenuMode, setInlineMenuMode] = useState<InlineMenuMode | null>(null);
+  // 패널 닫기 → focus() → keyboardWillShow 이벤트 사이의 공백에서
+  // 툴바가 언마운트되어 번쩍이지 않도록 유지하는 전환 플래그
+  const [keyboardRestorePending, setKeyboardRestorePending] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const lastKeyboardHeightRef = useRef(0);
   const isMemoModeRef = useRef(false);
   const memoWebRef = useRef<MemoBottomSheetRef>(null);
   const keyboardVisibleRef = useRef(false);
@@ -470,9 +473,12 @@ export default function ReadScreen() {
     const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
     const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
     const showSub = Keyboard.addListener(showEvent, (e) => {
-      setKeyboardHeight(e.endCoordinates.height);
+      const h = e.endCoordinates.height;
+      lastKeyboardHeightRef.current = h;
+      setKeyboardHeight(h);
       setKeyboardVisible(true);
       keyboardVisibleRef.current = true;
+      setKeyboardRestorePending(false); // 키보드가 실제로 올라오면 플래그 해제
     });
     const hideSub = Keyboard.addListener(hideEvent, () => {
       setKeyboardHeight(0);
@@ -496,7 +502,24 @@ export default function ReadScreen() {
     Keyboard.dismiss();
     setIsMemoMode(false);
     setMemoPendingQuote(undefined);
+    setInlineMenuMode(null);
+    setKeyboardRestorePending(false);
   }, []);
+
+  // 패널을 닫고 에디터 포커스를 복귀시키는 공통 헬퍼.
+  // keyboardRestorePending을 세워 키보드가 올라오는 동안 툴바가 언마운트되지 않게 한다.
+  const closePanelRestoreKeyboard = useCallback(() => {
+    setKeyboardRestorePending(true);
+    setInlineMenuMode(null);
+    memoWebRef.current?.focus();
+  }, []);
+
+  // 키보드 이벤트가 없는 환경(웹 등)에서 플래그가 영구히 남지 않도록 타임아웃 폴백
+  useEffect(() => {
+    if (!keyboardRestorePending) return;
+    const t = setTimeout(() => setKeyboardRestorePending(false), 1000);
+    return () => clearTimeout(t);
+  }, [keyboardRestorePending]);
 
   // 툴바 서식 버튼 → WebView 에디터 명령
   const handleMemoFormat = useCallback((type: FormatType) => {
@@ -508,16 +531,28 @@ export default function ReadScreen() {
     }
   }, [memoActiveFormats]);
 
-  const [quotePickerVisible, setQuotePickerVisible] = useState(false);
+  // 인라인 메뉴 패널 높이: 키보드가 한 번이라도 올라왔으면 그 높이를,
+  // 아직 키보드 이벤트가 없었으면(웹 등) 화면의 40%로 폴백한다.
+  // 높이 0으로 렌더되어 패널이 보이지 않는 문제를 방지한다.
+  const inlinePanelHeight =
+    lastKeyboardHeightRef.current > 0
+      ? lastKeyboardHeightRef.current
+      : Math.min(320, Math.round(screenHeight * 0.4));
 
   const handleOpenQuotePicker = useCallback(() => {
-    setQuotePickerVisible(true);
-  }, []);
+    if (inlineMenuMode === "quotePicker") {
+      closePanelRestoreKeyboard();
+      return;
+    }
+    memoWebRef.current?.blur();
+    Keyboard.dismiss();
+    setInlineMenuMode("quotePicker");
+  }, [inlineMenuMode, closePanelRestoreKeyboard]);
 
   const handleSelectQuoteSentence = useCallback((sentence: StoredSentence) => {
-    setQuotePickerVisible(false);
     memoWebRef.current?.insertQuote(sentence.text);
-  }, []);
+    closePanelRestoreKeyboard();
+  }, [closePanelRestoreKeyboard]);
 
   const handleOpenMemo = useCallback(() => {
     openMemoMode();
@@ -1956,11 +1991,11 @@ export default function ReadScreen() {
       />
 
       {/* ── 메모 모드 키보드 툴바 ──────────────────────────────────────── */}
-      {isMemoMode && keyboardVisible && keyboardHeight > 0 && (
+      {isMemoMode && (keyboardVisible || inlineMenuMode !== null || keyboardRestorePending) && (
         <View
           style={[
             styles.memoToolbarWrap,
-            { bottom: keyboardHeight },
+            { bottom: keyboardVisible ? keyboardHeight : inlinePanelHeight },
           ]}
           pointerEvents="box-none"
         >
@@ -1974,29 +2009,41 @@ export default function ReadScreen() {
             onOpenQuotePicker={handleOpenQuotePicker}
             onUndo={() => memoWebRef.current?.undo()}
             onRedo={() => memoWebRef.current?.redo()}
+            canUndo={memoSelectionState?.canUndo ?? false}
+            canRedo={memoSelectionState?.canRedo ?? false}
             selectionState={memoSelectionState}
-            onFormatPress={() => setBlockTypeSheetVisible(true)}
+            onFormatPress={() => {
+              if (inlineMenuMode === "blockType") {
+                closePanelRestoreKeyboard();
+                return;
+              }
+              memoWebRef.current?.blur();
+              Keyboard.dismiss();
+              setInlineMenuMode("blockType");
+            }}
             onInsertDivider={() => memoWebRef.current?.insertDivider()}
             onShiftEnter={() => memoWebRef.current?.insertHardBreak()}
+            inlineMenuMode={inlineMenuMode}
+            onAaPress={inlineMenuMode !== null ? closePanelRestoreKeyboard : undefined}
           />
         </View>
       )}
 
-      <QuoteSentencePickerBottomSheet
-        visible={quotePickerVisible}
-        onClose={() => setQuotePickerVisible(false)}
-        userId={userId}
-        onSelect={handleSelectQuoteSentence}
-      />
-
-      <BlockTypeSheet
-        visible={blockTypeSheetVisible}
-        activeBlock={memoSelectionState.activeBlock}
-        onClose={() => setBlockTypeSheetVisible(false)}
-        onSelect={(blockType) => {
-          memoWebRef.current?.setBlockType(blockType);
-        }}
-      />
+      {/* ── 인라인 메뉴 패널 (본문/문장수집 인용) ────────────────────── */}
+      {isMemoMode && inlineMenuMode !== null && (
+        <InlineMenuPanel
+          mode={inlineMenuMode}
+          panelHeight={inlinePanelHeight}
+          activeBlock={memoSelectionState.activeBlock}
+          userId={userId}
+          onSelectBlock={(blockType) => {
+            memoWebRef.current?.setBlockType(blockType);
+            closePanelRestoreKeyboard();
+          }}
+          onSelectSentence={handleSelectQuoteSentence}
+          onDismiss={closePanelRestoreKeyboard}
+        />
+      )}
 
       {/* ── Selection pill overlay ─────────────────────────────────────── */}
       {showSelectionPill && (
@@ -2382,7 +2429,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     right: 0,
-    zIndex: 52,
+    zIndex: 53,
   },
   progressBarContainer: {
     width: "90%",

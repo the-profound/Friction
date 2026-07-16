@@ -33,6 +33,7 @@ export interface MemoBottomSheetRef {
   setBlockType: (blockType: string) => void;
   insertDivider: () => void;
   insertHardBreak: () => void;
+  focus: () => void;
   blur: () => void;
   undo: () => void;
   redo: () => void;
@@ -133,6 +134,7 @@ const MemoBottomSheet = forwardRef<MemoBottomSheetRef, MemoBottomSheetProps>(
       setBlockType: (blockType: string) => editorRef.current?.setBlockType(blockType),
       insertDivider: () => editorRef.current?.insertDivider(),
       insertHardBreak: () => editorRef.current?.insertHardBreak(),
+      focus: () => editorRef.current?.focus(),
       blur: () => editorRef.current?.blur(),
       undo: () => editorRef.current?.undo(),
       redo: () => editorRef.current?.redo(),

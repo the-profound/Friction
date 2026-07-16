@@ -149,6 +149,11 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
           titleRef.current.value = title;
         }
       },
+      focus() {
+        if (editor && !editor.isDestroyed) {
+          editor.commands.focus();
+        }
+      },
       blur() {
         if (editor && !editor.isDestroyed) {
           editor.commands.blur();

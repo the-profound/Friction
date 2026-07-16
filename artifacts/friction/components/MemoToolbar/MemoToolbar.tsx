@@ -1,8 +1,13 @@
 import React, { useRef, useState } from "react";
-import { View, Text, StyleSheet, Platform, Animated } from "react-native";
+import { View, Text, StyleSheet, Platform, Animated, LayoutAnimation, UIManager } from "react-native";
 import { MaterialCommunityIcons, Feather } from "@expo/vector-icons";
 import ScalePressable from "@/components/shared/ScalePressable";
 import type { OnSelectionUpdatePayload } from "@/components/WebViewMarkdownEditor/types";
+import type { InlineMenuMode } from "@/components/InlineMenuPanel/InlineMenuPanel";
+
+if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 export type FormatType = "bold" | "italic" | "underline" | "quote";
 
@@ -23,13 +28,17 @@ interface MemoToolbarProps {
   onOpenQuotePicker?: () => void;
   onUndo?: () => void;
   onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
   selectionState?: OnSelectionUpdatePayload;
   onFormatPress?: () => void;
   onInsertDivider?: () => void;
   onShiftEnter?: () => void;
+  inlineMenuMode?: InlineMenuMode | null;
+  onAaPress?: () => void;
 }
 
-const CROSS_FADE_MS = 80;
+const CROSS_FADE_MS = 150;
 
 const DEFAULT_SELECTION: OnSelectionUpdatePayload = {
   activeBlock: "paragraph",
@@ -45,10 +54,14 @@ export default function MemoToolbar({
   onOpenQuotePicker,
   onUndo,
   onRedo,
+  canUndo = true,
+  canRedo = true,
   selectionState = DEFAULT_SELECTION,
   onFormatPress,
   onInsertDivider,
   onShiftEnter,
+  inlineMenuMode,
+  onAaPress,
 }: MemoToolbarProps) {
   const [isFormat, setIsFormat] = useState(false);
   const transition = useRef(new Animated.Value(0)).current;
@@ -56,22 +69,39 @@ export default function MemoToolbar({
   const mainOpacity = transition.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
   const formatOpacity = transition;
 
+  // opacity 페이드를 먼저 완료한 뒤 레이어를 스왑한다.
+  // 스왑 시점에 departing 레이어는 이미 opacity 0이므로
+  // 캡슐 폭 변화가 사용자 눈에 띄지 않는다.
   const goFormat = () => {
-    setIsFormat(true);
     Animated.timing(transition, {
       toValue: 1,
       duration: CROSS_FADE_MS,
       useNativeDriver: true,
-    }).start();
+    }).start(({ finished }) => {
+      if (finished) {
+        LayoutAnimation.configureNext({
+          duration: 60,
+          update: { type: LayoutAnimation.Types.easeInEaseOut },
+        });
+        setIsFormat(true);
+      }
+    });
   };
 
   const goMain = () => {
-    setIsFormat(false);
     Animated.timing(transition, {
       toValue: 0,
       duration: CROSS_FADE_MS,
       useNativeDriver: true,
-    }).start();
+    }).start(({ finished }) => {
+      if (finished) {
+        LayoutAnimation.configureNext({
+          duration: 60,
+          update: { type: LayoutAnimation.Types.easeInEaseOut },
+        });
+        setIsFormat(false);
+      }
+    });
   };
 
   const isBoldActive = selectionState.isBold || activeFormats?.has("bold");
@@ -90,16 +120,31 @@ export default function MemoToolbar({
           style={[styles.row, isFormat && styles.absoluteHidden, { opacity: mainOpacity }]}
           pointerEvents={isFormat ? "none" : "auto"}
         >
-          <ScalePressable style={styles.blockTypeBtn} contentStyle={styles.btnContent} onPress={onFormatPress} hitSlop={6}>
-            <Text style={styles.blockTypeLabel} numberOfLines={1}>{blockLabel}</Text>
+          <ScalePressable
+            style={[styles.blockTypeBtn, inlineMenuMode === "blockType" && styles.btnActive]}
+            contentStyle={styles.btnContent}
+            onPress={onFormatPress}
+            hitSlop={6}
+          >
+            <Text style={[styles.blockTypeLabel, inlineMenuMode === "blockType" && styles.blockTypeLabelActive]} numberOfLines={1}>{blockLabel}</Text>
           </ScalePressable>
 
-          <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={goFormat} hitSlop={6}>
+          <ScalePressable
+            style={styles.btn}
+            contentStyle={styles.btnContent}
+            onPress={() => { goFormat(); onAaPress?.(); }}
+            hitSlop={6}
+          >
             <Text style={styles.aaLabel}>Aa</Text>
           </ScalePressable>
 
-          <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={onOpenQuotePicker} hitSlop={6}>
-            <Feather name="message-square" size={16} color="#3f3f46" />
+          <ScalePressable
+            style={[styles.btn, inlineMenuMode === "quotePicker" && styles.btnActive]}
+            contentStyle={styles.btnContent}
+            onPress={onOpenQuotePicker}
+            hitSlop={6}
+          >
+            <Feather name="message-square" size={16} color={inlineMenuMode === "quotePicker" ? "#ffffff" : "#3f3f46"} />
           </ScalePressable>
 
           <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={undefined} hitSlop={6}>
@@ -108,12 +153,12 @@ export default function MemoToolbar({
 
           <View style={styles.divider} />
 
-          <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={onUndo} hitSlop={6}>
-            <MaterialCommunityIcons name="undo" size={18} color="#3f3f46" />
+          <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={canUndo ? onUndo : undefined} hitSlop={6}>
+            <MaterialCommunityIcons name="undo" size={18} color={canUndo ? "#3f3f46" : "#d4d4d8"} />
           </ScalePressable>
 
-          <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={onRedo} hitSlop={6}>
-            <MaterialCommunityIcons name="redo" size={18} color="#3f3f46" />
+          <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={canRedo ? onRedo : undefined} hitSlop={6}>
+            <MaterialCommunityIcons name="redo" size={18} color={canRedo ? "#3f3f46" : "#d4d4d8"} />
           </ScalePressable>
 
           {onInsertDivider != null && (
@@ -130,9 +175,15 @@ export default function MemoToolbar({
 
           <View style={styles.divider} />
 
-          <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={onDismissKeyboard} hitSlop={8}>
-            <MaterialCommunityIcons name="keyboard-off-outline" size={20} color="#3f3f46" />
-          </ScalePressable>
+          {inlineMenuMode !== null ? (
+            <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={onAaPress} hitSlop={8}>
+              <Feather name="x" size={18} color="#3f3f46" />
+            </ScalePressable>
+          ) : (
+            <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={onDismissKeyboard} hitSlop={8}>
+              <MaterialCommunityIcons name="keyboard-off-outline" size={20} color="#3f3f46" />
+            </ScalePressable>
+          )}
         </Animated.View>
 
         {/* ── Format sub-layer (Aa 탭 후) ──
@@ -208,10 +259,10 @@ const styles = StyleSheet.create({
     borderRadius: 18,
   },
   blockTypeBtn: {
+    width: 44,
     height: 36,
     borderRadius: 18,
-    paddingHorizontal: 8,
-    minWidth: 36,
+    overflow: "hidden",
   },
   btnContent: {
     alignItems: "center",
@@ -232,10 +283,14 @@ const styles = StyleSheet.create({
   blockTypeLabel: {
     fontSize: 13,
     color: "#3f3f46",
+    textAlign: "center",
     fontFamily: Platform.select({
       ios: "Pretendard-Regular",
       default: "Pretendard",
     }),
+  },
+  blockTypeLabelActive: {
+    color: "#ffffff",
   },
   fmtLabel: {
     fontSize: 15,

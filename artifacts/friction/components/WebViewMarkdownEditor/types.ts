@@ -59,6 +59,8 @@ export interface OnSelectionUpdatePayload {
   isBold: boolean;
   isItalic: boolean;
   isUnderline: boolean;
+  canUndo?: boolean;
+  canRedo?: boolean;
 }
 
 export type WebViewToRNEvent =
@@ -83,6 +85,7 @@ export interface WebViewMarkdownEditorRef {
   requestExportMarkdown: (requestId: string) => void;
   setEditable: (isEditable: boolean) => void;
   setTitle: (title: string) => void;
+  focus: () => void;
   blur: () => void;
   undo: () => void;
   redo: () => void;

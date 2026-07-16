@@ -80,6 +80,9 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       setTitle(title: string) {
         sendCommand({ type: "setTitle", title });
       },
+      focus() {
+        bridge.injectRaw(`(function(){try{var el=document.querySelector('.ProseMirror');if(el){el.focus();}}catch(e){}})();true;`);
+      },
       blur() {
         bridge.injectRaw(`(function(){try{if(document.activeElement){document.activeElement.blur();}}catch(e){}})();true;`);
       },
