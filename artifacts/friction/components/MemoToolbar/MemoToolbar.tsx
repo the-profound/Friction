@@ -1,13 +1,10 @@
-import React, { useRef, useState } from "react";
-import { View, Text, StyleSheet, Platform, Animated, LayoutAnimation, UIManager } from "react-native";
+import React, { useEffect, useRef } from "react";
+import { View, Text, StyleSheet, Platform, Animated, Easing } from "react-native";
 import { MaterialCommunityIcons, Feather } from "@expo/vector-icons";
 import ScalePressable from "@/components/shared/ScalePressable";
 import type { OnSelectionUpdatePayload } from "@/components/WebViewMarkdownEditor/types";
 import type { InlineMenuMode } from "@/components/InlineMenuPanel/InlineMenuPanel";
-
-if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+import { useState } from "react";
 
 export type FormatType = "bold" | "italic" | "underline" | "quote";
 
@@ -38,7 +35,30 @@ interface MemoToolbarProps {
   onAaPress?: () => void;
 }
 
-const CROSS_FADE_MS = 150;
+// 모든 버튼은 고정 크기이므로 직접 계산한다.
+// btn: 36, blockTypeBtn: 44, divider: width(1) + marginHorizontal(4×2) = 9
+// gap: 2 (flexbox gap between items)
+const BTN = 36;
+const BLOCK_BTN = 44;
+const DIVIDER_W = 9; // width:1 + marginHorizontal:4
+const GAP = 2;
+const CAPSULE_H_PADDING = 16; // paddingHorizontal:8 × 2
+
+function rowWidth(...items: number[]): number {
+  return items.reduce((sum, w) => sum + w, 0) + (items.length - 1) * GAP;
+}
+
+const FORMAT_ROW_W = rowWidth(BTN, DIVIDER_W, BTN, BTN, BTN, DIVIDER_W, BTN);
+// ← | B I U | ⌨️  = 36+9+36+36+36+9+36 + 6×2 = 210
+
+function mainRowW(hasInsertDivider: boolean, hasShiftEnter: boolean): number {
+  // 본문 Aa 💬 🖼️ | ↩️ ↪️ [✂️] [↵] | ⌨️/X
+  const items = [BLOCK_BTN, BTN, BTN, BTN, DIVIDER_W, BTN, BTN];
+  if (hasInsertDivider) items.push(BTN);
+  if (hasShiftEnter) items.push(BTN);
+  items.push(DIVIDER_W, BTN);
+  return rowWidth(...items);
+}
 
 const DEFAULT_SELECTION: OnSelectionUpdatePayload = {
   activeBlock: "paragraph",
@@ -46,6 +66,10 @@ const DEFAULT_SELECTION: OnSelectionUpdatePayload = {
   isItalic: false,
   isUnderline: false,
 };
+
+const ANIM_DURATION = 200;
+const FADE_DURATION = 150;
+const ANIM_EASING = Easing.out(Easing.ease);
 
 export default function MemoToolbar({
   onDismissKeyboard,
@@ -64,44 +88,66 @@ export default function MemoToolbar({
   onAaPress,
 }: MemoToolbarProps) {
   const [isFormat, setIsFormat] = useState(false);
-  const transition = useRef(new Animated.Value(0)).current;
 
-  const mainOpacity = transition.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
-  const formatOpacity = transition;
+  const mainW = mainRowW(onInsertDivider != null, onShiftEnter != null);
+  const formatW = FORMAT_ROW_W;
 
-  // opacity 페이드를 먼저 완료한 뒤 레이어를 스왑한다.
-  // 스왑 시점에 departing 레이어는 이미 opacity 0이므로
-  // 캡슐 폭 변화가 사용자 눈에 띄지 않는다.
+  const capsuleWidth = useRef(
+    new Animated.Value(mainW + CAPSULE_H_PADDING)
+  ).current;
+  const mainOpacity = useRef(new Animated.Value(1)).current;
+  const formatOpacity = useRef(new Animated.Value(0)).current;
+
+  // onInsertDivider / onShiftEnter 변경 시 너비 재동기화
+  useEffect(() => {
+    if (!isFormat) {
+      capsuleWidth.setValue(mainW + CAPSULE_H_PADDING);
+    }
+  }, [mainW]);
+
   const goFormat = () => {
-    Animated.timing(transition, {
-      toValue: 1,
-      duration: CROSS_FADE_MS,
-      useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (finished) {
-        LayoutAnimation.configureNext({
-          duration: 60,
-          update: { type: LayoutAnimation.Types.easeInEaseOut },
-        });
-        setIsFormat(true);
-      }
-    });
+    setIsFormat(true);
+    onAaPress?.();
+    Animated.parallel([
+      Animated.timing(capsuleWidth, {
+        toValue: formatW + CAPSULE_H_PADDING,
+        duration: ANIM_DURATION,
+        easing: ANIM_EASING,
+        useNativeDriver: false,
+      }),
+      Animated.timing(mainOpacity, {
+        toValue: 0,
+        duration: FADE_DURATION,
+        useNativeDriver: true,
+      }),
+      Animated.timing(formatOpacity, {
+        toValue: 1,
+        duration: FADE_DURATION,
+        useNativeDriver: true,
+      }),
+    ]).start();
   };
 
   const goMain = () => {
-    Animated.timing(transition, {
-      toValue: 0,
-      duration: CROSS_FADE_MS,
-      useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (finished) {
-        LayoutAnimation.configureNext({
-          duration: 60,
-          update: { type: LayoutAnimation.Types.easeInEaseOut },
-        });
-        setIsFormat(false);
-      }
-    });
+    setIsFormat(false);
+    Animated.parallel([
+      Animated.timing(capsuleWidth, {
+        toValue: mainW + CAPSULE_H_PADDING,
+        duration: ANIM_DURATION,
+        easing: ANIM_EASING,
+        useNativeDriver: false,
+      }),
+      Animated.timing(formatOpacity, {
+        toValue: 0,
+        duration: FADE_DURATION,
+        useNativeDriver: true,
+      }),
+      Animated.timing(mainOpacity, {
+        toValue: 1,
+        duration: FADE_DURATION,
+        useNativeDriver: true,
+      }),
+    ]).start();
   };
 
   const isBoldActive = selectionState.isBold || activeFormats?.has("bold");
@@ -112,112 +158,113 @@ export default function MemoToolbar({
 
   return (
     <View style={styles.outerWrap}>
-      <View style={styles.capsule}>
-        {/* ── Main layer ──
-            Normal flow when !isFormat (drives capsule width).
-            Absolute (invisible) when isFormat so the narrower format layer drives the width. */}
-        <Animated.View
-          style={[styles.row, isFormat && styles.absoluteHidden, { opacity: mainOpacity }]}
-          pointerEvents={isFormat ? "none" : "auto"}
-        >
-          <ScalePressable
-            style={[styles.blockTypeBtn, inlineMenuMode === "blockType" && styles.btnActive]}
-            contentStyle={styles.btnContent}
-            onPress={onFormatPress}
-            hitSlop={6}
+      <Animated.View style={[styles.capsule, { width: capsuleWidth }]}>
+        {/* overflow: hidden은 그림자를 자르므로 안쪽 뷰에서만 처리 */}
+        <View style={styles.clipper}>
+
+          {/* ── Main layer ── */}
+          <Animated.View
+            style={[styles.row, isFormat && styles.absolutePos, { opacity: mainOpacity }]}
+            pointerEvents={isFormat ? "none" : "auto"}
           >
-            <Text style={[styles.blockTypeLabel, inlineMenuMode === "blockType" && styles.blockTypeLabelActive]} numberOfLines={1}>{blockLabel}</Text>
-          </ScalePressable>
+            <ScalePressable
+              style={[styles.blockTypeBtn, inlineMenuMode === "blockType" && styles.btnActive]}
+              contentStyle={styles.btnContent}
+              onPress={onFormatPress}
+              hitSlop={6}
+            >
+              <Text style={[styles.blockTypeLabel, inlineMenuMode === "blockType" && styles.blockTypeLabelActive]} numberOfLines={1}>{blockLabel}</Text>
+            </ScalePressable>
 
-          <ScalePressable
-            style={styles.btn}
-            contentStyle={styles.btnContent}
-            onPress={() => { goFormat(); onAaPress?.(); }}
-            hitSlop={6}
+            <ScalePressable
+              style={styles.btn}
+              contentStyle={styles.btnContent}
+              onPress={goFormat}
+              hitSlop={6}
+            >
+              <Text style={styles.aaLabel}>Aa</Text>
+            </ScalePressable>
+
+            <ScalePressable
+              style={[styles.btn, inlineMenuMode === "quotePicker" && styles.btnActive]}
+              contentStyle={styles.btnContent}
+              onPress={onOpenQuotePicker}
+              hitSlop={6}
+            >
+              <Feather name="message-square" size={16} color={inlineMenuMode === "quotePicker" ? "#ffffff" : "#3f3f46"} />
+            </ScalePressable>
+
+            <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={undefined} hitSlop={6}>
+              <Feather name="image" size={16} color="#3f3f46" />
+            </ScalePressable>
+
+            <View style={styles.divider} />
+
+            <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={canUndo ? onUndo : undefined} hitSlop={6}>
+              <MaterialCommunityIcons name="undo" size={18} color={canUndo ? "#3f3f46" : "#d4d4d8"} />
+            </ScalePressable>
+
+            <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={canRedo ? onRedo : undefined} hitSlop={6}>
+              <MaterialCommunityIcons name="redo" size={18} color={canRedo ? "#3f3f46" : "#d4d4d8"} />
+            </ScalePressable>
+
+            {onInsertDivider != null && (
+              <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={onInsertDivider} hitSlop={6}>
+                <Feather name="scissors" size={15} color="#3f3f46" />
+              </ScalePressable>
+            )}
+
+            {onShiftEnter != null && (
+              <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={onShiftEnter} hitSlop={6}>
+                <Feather name="corner-down-left" size={15} color="#3f3f46" />
+              </ScalePressable>
+            )}
+
+            <View style={styles.divider} />
+
+            {inlineMenuMode !== null ? (
+              <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={onAaPress} hitSlop={8}>
+                <Feather name="x" size={18} color="#3f3f46" />
+              </ScalePressable>
+            ) : (
+              <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={onDismissKeyboard} hitSlop={8}>
+                <MaterialCommunityIcons name="keyboard-off-outline" size={20} color="#3f3f46" />
+              </ScalePressable>
+            )}
+          </Animated.View>
+
+          {/* ── Format sub-layer (Aa 탭 후) ── */}
+          <Animated.View
+            style={[styles.formatRow, !isFormat && styles.absolutePos, { opacity: formatOpacity }]}
+            pointerEvents={isFormat ? "auto" : "none"}
           >
-            <Text style={styles.aaLabel}>Aa</Text>
-          </ScalePressable>
-
-          <ScalePressable
-            style={[styles.btn, inlineMenuMode === "quotePicker" && styles.btnActive]}
-            contentStyle={styles.btnContent}
-            onPress={onOpenQuotePicker}
-            hitSlop={6}
-          >
-            <Feather name="message-square" size={16} color={inlineMenuMode === "quotePicker" ? "#ffffff" : "#3f3f46"} />
-          </ScalePressable>
-
-          <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={undefined} hitSlop={6}>
-            <Feather name="image" size={16} color="#3f3f46" />
-          </ScalePressable>
-
-          <View style={styles.divider} />
-
-          <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={canUndo ? onUndo : undefined} hitSlop={6}>
-            <MaterialCommunityIcons name="undo" size={18} color={canUndo ? "#3f3f46" : "#d4d4d8"} />
-          </ScalePressable>
-
-          <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={canRedo ? onRedo : undefined} hitSlop={6}>
-            <MaterialCommunityIcons name="redo" size={18} color={canRedo ? "#3f3f46" : "#d4d4d8"} />
-          </ScalePressable>
-
-          {onInsertDivider != null && (
-            <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={onInsertDivider} hitSlop={6}>
-              <Feather name="scissors" size={15} color="#3f3f46" />
+            <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={goMain} hitSlop={6}>
+              <Feather name="arrow-left" size={16} color="#3f3f46" />
             </ScalePressable>
-          )}
 
-          {onShiftEnter != null && (
-            <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={onShiftEnter} hitSlop={6}>
-              <Feather name="corner-down-left" size={15} color="#3f3f46" />
+            <View style={styles.divider} />
+
+            <ScalePressable style={[styles.btn, isBoldActive && styles.btnActive]} contentStyle={styles.btnContent} onPress={() => onFormat?.("bold")} hitSlop={6}>
+              <Text style={[styles.fmtLabel, styles.bold, isBoldActive && styles.fmtLabelActive]}>B</Text>
             </ScalePressable>
-          )}
 
-          <View style={styles.divider} />
-
-          {inlineMenuMode !== null ? (
-            <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={onAaPress} hitSlop={8}>
-              <Feather name="x" size={18} color="#3f3f46" />
+            <ScalePressable style={[styles.btn, isItalicActive && styles.btnActive]} contentStyle={styles.btnContent} onPress={() => onFormat?.("italic")} hitSlop={6}>
+              <MaterialCommunityIcons name="format-italic" size={18} color={isItalicActive ? "#ffffff" : "#3f3f46"} />
             </ScalePressable>
-          ) : (
+
+            <ScalePressable style={[styles.btn, isUnderlineActive && styles.btnActive]} contentStyle={styles.btnContent} onPress={() => onFormat?.("underline")} hitSlop={6}>
+              <Text style={[styles.fmtLabel, styles.underline, isUnderlineActive && styles.fmtLabelActive]}>U</Text>
+            </ScalePressable>
+
+            <View style={styles.divider} />
+
             <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={onDismissKeyboard} hitSlop={8}>
               <MaterialCommunityIcons name="keyboard-off-outline" size={20} color="#3f3f46" />
             </ScalePressable>
-          )}
-        </Animated.View>
+          </Animated.View>
 
-        {/* ── Format sub-layer (Aa 탭 후) ──
-            Normal flow when isFormat (drives capsule to content width).
-            Absolute (invisible) when !isFormat. */}
-        <Animated.View
-          style={[styles.row, !isFormat && styles.absoluteHidden, { opacity: formatOpacity }]}
-          pointerEvents={isFormat ? "auto" : "none"}
-        >
-          <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={goMain} hitSlop={6}>
-            <Feather name="arrow-left" size={16} color="#3f3f46" />
-          </ScalePressable>
-
-          <View style={styles.divider} />
-
-          <ScalePressable style={[styles.btn, isBoldActive && styles.btnActive]} contentStyle={styles.btnContent} onPress={() => onFormat?.("bold")} hitSlop={6}>
-            <Text style={[styles.fmtLabel, styles.bold, isBoldActive && styles.fmtLabelActive]}>B</Text>
-          </ScalePressable>
-
-          <ScalePressable style={[styles.btn, isItalicActive && styles.btnActive]} contentStyle={styles.btnContent} onPress={() => onFormat?.("italic")} hitSlop={6}>
-            <Text style={[styles.fmtLabel, styles.italic, isItalicActive && styles.fmtLabelActive]}>I</Text>
-          </ScalePressable>
-
-          <ScalePressable style={[styles.btn, isUnderlineActive && styles.btnActive]} contentStyle={styles.btnContent} onPress={() => onFormat?.("underline")} hitSlop={6}>
-            <Text style={[styles.fmtLabel, styles.underline, isUnderlineActive && styles.fmtLabelActive]}>U</Text>
-          </ScalePressable>
-
-          <View style={styles.divider} />
-
-          <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={onDismissKeyboard} hitSlop={8}>
-            <MaterialCommunityIcons name="keyboard-off-outline" size={20} color="#3f3f46" />
-          </ScalePressable>
-        </Animated.View>
-      </View>
+        </View>{/* clipper */}
+      </Animated.View>
     </View>
   );
 }
@@ -231,8 +278,6 @@ const styles = StyleSheet.create({
   capsule: {
     backgroundColor: "#ffffff",
     borderRadius: 24,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
     ...Platform.select({
       ios: {
         shadowColor: "#000",
@@ -243,12 +288,25 @@ const styles = StyleSheet.create({
       android: { elevation: 6 },
     }),
   },
+  clipper: {
+    borderRadius: 24,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    overflow: "hidden",
+  },
   row: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 2,
   },
-  absoluteHidden: {
+  formatRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
+  },
+  absolutePos: {
     position: "absolute",
     top: 4,
     left: 8,

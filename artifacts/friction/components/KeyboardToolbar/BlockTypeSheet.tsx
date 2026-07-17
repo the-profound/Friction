@@ -90,6 +90,7 @@ const styles = StyleSheet.create({
   },
   label: {
     ...Typography.body,
+    fontSize: 15,
     color: Colors.zinc700,
     fontFamily: Platform.select({ ios: "Pretendard-Regular", default: "Pretendard" }),
   },
