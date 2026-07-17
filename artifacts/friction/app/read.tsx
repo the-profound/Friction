@@ -2028,6 +2028,7 @@ export default function ReadScreen() {
             onShiftEnter={() => memoWebRef.current?.insertHardBreak()}
             inlineMenuMode={inlineMenuMode}
             onAaPress={inlineMenuMode !== null ? closePanelRestoreKeyboard : undefined}
+            keyboardVisible={keyboardVisible}
           />
         </View>
       )}

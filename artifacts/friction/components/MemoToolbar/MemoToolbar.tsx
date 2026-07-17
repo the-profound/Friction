@@ -1,10 +1,9 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { View, Text, StyleSheet, Platform, Animated, Easing } from "react-native";
 import { MaterialCommunityIcons, Feather } from "@expo/vector-icons";
 import ScalePressable from "@/components/shared/ScalePressable";
 import type { OnSelectionUpdatePayload } from "@/components/WebViewMarkdownEditor/types";
 import type { InlineMenuMode } from "@/components/InlineMenuPanel/InlineMenuPanel";
-import { useState } from "react";
 
 export type FormatType = "bold" | "italic" | "underline" | "quote";
 
@@ -33,6 +32,7 @@ interface MemoToolbarProps {
   onShiftEnter?: () => void;
   inlineMenuMode?: InlineMenuMode | null;
   onAaPress?: () => void;
+  keyboardVisible?: boolean;
 }
 
 // 모든 버튼은 고정 크기이므로 직접 계산한다.
@@ -86,6 +86,7 @@ export default function MemoToolbar({
   onShiftEnter,
   inlineMenuMode,
   onAaPress,
+  keyboardVisible = false,
 }: MemoToolbarProps) {
   const [isFormat, setIsFormat] = useState(false);
 
@@ -104,6 +105,18 @@ export default function MemoToolbar({
       capsuleWidth.setValue(mainW + CAPSULE_H_PADDING);
     }
   }, [mainW]);
+
+  // 키보드가 닫혔다 다시 열릴 때 항상 layer 1(main)으로 초기화
+  const prevKeyboardVisible = useRef(keyboardVisible);
+  useEffect(() => {
+    if (keyboardVisible && !prevKeyboardVisible.current) {
+      setIsFormat(false);
+      capsuleWidth.setValue(mainW + CAPSULE_H_PADDING);
+      mainOpacity.setValue(1);
+      formatOpacity.setValue(0);
+    }
+    prevKeyboardVisible.current = keyboardVisible;
+  }, [keyboardVisible]);
 
   const goFormat = () => {
     setIsFormat(true);
