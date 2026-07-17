@@ -1991,11 +1991,14 @@ export default function ReadScreen() {
       />
 
       {/* ── 메모 모드 키보드 툴바 ──────────────────────────────────────── */}
-      {isMemoMode && (keyboardVisible || inlineMenuMode !== null || keyboardRestorePending) && (
+      {isMemoMode && (
         <View
           style={[
             styles.memoToolbarWrap,
-            { bottom: keyboardVisible ? keyboardHeight : inlinePanelHeight },
+            {
+              bottom: keyboardVisible ? keyboardHeight : inlinePanelHeight,
+              display: (keyboardVisible || inlineMenuMode !== null || keyboardRestorePending) ? "flex" : "none",
+            },
           ]}
           pointerEvents="box-none"
         >
