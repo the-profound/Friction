@@ -43,11 +43,11 @@ interface InlineMenuPanelProps {
 }
 
 const ADD_MENU_ITEMS = [
-  { key: "quote", label: "문장수집 인용" },
-  { key: "photo", label: "사진 추가" },
+  { key: "quote", label: "수집한 문장", icon: "bookmark" as const },
+  { key: "photo", label: "사진", icon: "image" as const },
 ] as const;
 
-const ADD_MENU_HEIGHT = 130;
+const ADD_MENU_HEIGHT = 96;
 
 export default function InlineMenuPanel({
   mode,
@@ -95,11 +95,12 @@ export default function InlineMenuPanel({
             {ADD_MENU_ITEMS.map((item) => (
               <ScalePressable
                 key={item.key}
-                style={styles.row}
-                contentStyle={styles.rowContent}
+                style={styles.addMenuRow}
+                contentStyle={styles.addMenuRowContent}
                 onPress={item.key === "quote" ? onSelectQuoteMenu : undefined}
               >
-                <Text style={styles.label}>{item.label}</Text>
+                <Feather name={item.icon} size={16} color={Colors.zinc500} />
+                <Text style={styles.addMenuLabel}>{item.label}</Text>
               </ScalePressable>
             ))}
           </View>
@@ -191,15 +192,15 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderLeftWidth: StyleSheet.hairlineWidth,
     borderRightWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.zinc200,
+    borderColor: Colors.zinc300,
     ...Platform.select({
       ios: {
         shadowColor: "#000",
-        shadowOffset: { width: 0, height: -3 },
-        shadowOpacity: 0.08,
-        shadowRadius: 6,
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.18,
+        shadowRadius: 14,
       },
-      android: { elevation: 8 },
+      android: { elevation: 12 },
     }),
   },
   scroll: {
@@ -218,6 +219,27 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+  },
+  addMenuRow: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.zinc100,
+  },
+  addMenuRowContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-start",
+    gap: 10,
+  },
+  addMenuLabel: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc700,
+    fontFamily: Platform.select({
+      ios: "Pretendard-Regular",
+      default: "Pretendard",
+    }),
   },
   activeRow: {
     backgroundColor: "transparent",
