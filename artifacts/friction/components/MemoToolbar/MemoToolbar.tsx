@@ -231,7 +231,7 @@ export default function MemoToolbar({
 
             <View style={styles.divider} />
 
-            {inlineMenuMode !== null ? (
+            {inlineMenuMode !== null && inlineMenuMode !== "addMenu" ? (
               <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={onAaPress} hitSlop={8}>
                 <Feather name="x" size={18} color="#3f3f46" />
               </ScalePressable>

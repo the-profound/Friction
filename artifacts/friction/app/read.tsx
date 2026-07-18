@@ -453,6 +453,7 @@ export default function ReadScreen() {
   const isMemoModeRef = useRef(false);
   const memoWebRef = useRef<MemoBottomSheetRef>(null);
   const keyboardVisibleRef = useRef(false);
+  const addMenuPendingRef = useRef(false);
 
   // 메모 모드 진입/종료에 맞춰 하단 진행률 바를 fade out/in 한다.
   const progressBarOpacity = useSharedValue(1);
@@ -479,6 +480,10 @@ export default function ReadScreen() {
       setKeyboardVisible(true);
       keyboardVisibleRef.current = true;
       setKeyboardRestorePending(false); // 키보드가 실제로 올라오면 플래그 해제
+      if (addMenuPendingRef.current) {
+        addMenuPendingRef.current = false;
+        setInlineMenuMode("addMenu");
+      }
     });
     const hideSub = Keyboard.addListener(hideEvent, () => {
       setKeyboardHeight(0);
@@ -544,8 +549,13 @@ export default function ReadScreen() {
       setInlineMenuMode(null);
       return;
     }
+    if (inlineMenuMode === "blockType" || inlineMenuMode === "quotePicker") {
+      addMenuPendingRef.current = true;
+      closePanelRestoreKeyboard();
+      return;
+    }
     setInlineMenuMode("addMenu");
-  }, [inlineMenuMode]);
+  }, [inlineMenuMode, closePanelRestoreKeyboard]);
 
   const handleSelectQuoteFromAddMenu = useCallback(() => {
     memoWebRef.current?.blur();
