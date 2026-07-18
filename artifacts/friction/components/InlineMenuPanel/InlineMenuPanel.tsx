@@ -9,7 +9,7 @@ import {
   Text,
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
-import { Feather } from "@expo/vector-icons";
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Colors, Typography } from "@/constants/tokens";
 import { useListStoredSentences, getListStoredSentencesQueryKey } from "@workspace/api-client-react";
 import type { StoredSentence } from "@workspace/api-client-react";
@@ -43,8 +43,8 @@ interface InlineMenuPanelProps {
 }
 
 const ADD_MENU_ITEMS = [
-  { key: "quote", label: "수집한 문장", icon: "bookmark" as const },
-  { key: "photo", label: "사진", icon: "image" as const },
+  { key: "quote", label: "수집한 문장", iconLib: "mci" as const, icon: "text-box-outline" as const },
+  { key: "photo", label: "사진", iconLib: "feather" as const, icon: "image" as const },
 ] as const;
 
 const ADD_MENU_HEIGHT = 96;
@@ -99,7 +99,11 @@ export default function InlineMenuPanel({
                 contentStyle={styles.addMenuRowContent}
                 onPress={item.key === "quote" ? onSelectQuoteMenu : undefined}
               >
-                <Feather name={item.icon} size={16} color={Colors.zinc500} />
+                {item.iconLib === "mci" ? (
+                  <MaterialCommunityIcons name={item.icon as any} size={16} color={Colors.zinc500} />
+                ) : (
+                  <Feather name={item.icon as any} size={16} color={Colors.zinc500} />
+                )}
                 <Text style={styles.addMenuLabel}>{item.label}</Text>
               </ScalePressable>
             ))}
@@ -133,7 +137,7 @@ export default function InlineMenuPanel({
           </View>
         ) : sentences.length === 0 ? (
           <View style={styles.centerContainer}>
-            <Feather name="bookmark" size={32} color={Colors.zinc300} />
+            <MaterialCommunityIcons name="text-box-outline" size={32} color={Colors.zinc300} />
             <Text style={styles.emptyTitle}>수집한 문장이 없어요</Text>
             <Text style={styles.emptySubtitle}>
               읽으면서 마음에 드는 문장을 수집해보세요

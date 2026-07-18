@@ -40,7 +40,7 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import QuestionCardCurl, { type QuestionCardCurlHandle } from "@/components/QuestionCardCurl/QuestionCardCurl";
 import { useRouter, useLocalSearchParams, Stack } from "expo-router";
-import { Feather } from "@expo/vector-icons";
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import {
   Colors,
   Spacing,
@@ -454,6 +454,8 @@ export default function ReadScreen() {
   const memoWebRef = useRef<MemoBottomSheetRef>(null);
   const keyboardVisibleRef = useRef(false);
   const addMenuPendingRef = useRef(false);
+  const addMenuBtnRef = useRef<View>(null);
+  const [plusBtnCenterX, setPlusBtnCenterX] = useState<number | null>(null);
 
   // 메모 모드 진입/종료에 맞춰 하단 진행률 바를 fade out/in 한다.
   const progressBarOpacity = useSharedValue(1);
@@ -554,6 +556,9 @@ export default function ReadScreen() {
       closePanelRestoreKeyboard();
       return;
     }
+    addMenuBtnRef.current?.measure((_x, _y, width, _height, pageX) => {
+      setPlusBtnCenterX(pageX + width / 2);
+    });
     setInlineMenuMode("addMenu");
   }, [inlineMenuMode, closePanelRestoreKeyboard]);
 
@@ -2041,14 +2046,8 @@ export default function ReadScreen() {
             onInsertDivider={() => memoWebRef.current?.insertDivider()}
             onShiftEnter={() => memoWebRef.current?.insertHardBreak()}
             inlineMenuMode={inlineMenuMode}
-            onAaPress={
-              inlineMenuMode === "addMenu"
-                ? () => setInlineMenuMode(null)
-                : inlineMenuMode !== null
-                  ? closePanelRestoreKeyboard
-                  : undefined
-            }
             keyboardVisible={keyboardVisible}
+            addMenuBtnRef={addMenuBtnRef}
           />
         </View>
       )}
@@ -2067,7 +2066,11 @@ export default function ReadScreen() {
               styles.addMenuPopup,
               {
                 bottom: keyboardHeight + 60 + 4,
-                left: Math.max(16, screenWidth / 2 - 144),
+                left: (() => {
+                  const popupW = 140;
+                  const cx = plusBtnCenterX ?? screenWidth / 2;
+                  return Math.max(16, Math.min(screenWidth - 16 - popupW, cx - popupW / 2));
+                })(),
               },
             ]}
           >
@@ -2076,7 +2079,7 @@ export default function ReadScreen() {
                 style={styles.addMenuRow}
                 onPress={handleSelectQuoteFromAddMenu}
               >
-                <Feather name="bookmark" size={16} color="#3f3f46" style={styles.addMenuIcon} />
+                <MaterialCommunityIcons name="text-box-outline" size={16} color="#3f3f46" style={styles.addMenuIcon} />
                 <Text style={styles.addMenuLabel}>수집한 문장</Text>
               </Pressable>
               <Pressable
@@ -2496,7 +2499,7 @@ const styles = StyleSheet.create({
   },
   addMenuPopup: {
     position: "absolute",
-    width: 160,
+    width: 140,
     borderRadius: 12,
     zIndex: 54,
     ...Platform.select({
@@ -2517,8 +2520,8 @@ const styles = StyleSheet.create({
   addMenuRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    paddingVertical: 13,
+    paddingHorizontal: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
   },

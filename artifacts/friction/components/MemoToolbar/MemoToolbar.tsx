@@ -1,5 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
-import { View, Text, StyleSheet, Platform, Animated, Easing } from "react-native";
+import { View, Text, StyleSheet, Platform, ScrollView } from "react-native";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  Easing,
+} from "react-native-reanimated";
 import { MaterialCommunityIcons, Feather } from "@expo/vector-icons";
 import ScalePressable from "@/components/shared/ScalePressable";
 import type { OnSelectionUpdatePayload } from "@/components/WebViewMarkdownEditor/types";
@@ -17,6 +23,25 @@ const BLOCK_LABELS: Record<string, string> = {
   orderedList: "번호",
 };
 
+// 스크롤 영역 폭 계산:
+//   blockTypeBtn(44) + marginRight(2) + Aa(W) + marginRight(2) + [애니 영역] + +(W) + ... + enter(W)
+// calcBtnW: 고정 요소 제외 후 6개 버튼(Aa, +, undo, redo, scissors, enter)이 남은 폭을 균등분
+// blockType(44) + 6×gap + 6×btnW = scrollAreaWidth  →  btnW = (scrollAreaWidth - 44 - 12) / 6
+const BLOCK_BTN_W = 44;
+const BTN_GAP = 2;
+const ROUND_BTN_COUNT = 6;
+
+// 애니 영역 폭: B + I + U + 인용 버튼 4개, 각 36px, 사이 gap 2px × 3 + trailing padding 2px
+const EXPANDED_BTN_W = 36;
+const EXPANDED_GROUP_W = EXPANDED_BTN_W * 4 + BTN_GAP * 3 + BTN_GAP; // 152
+
+function calcBtnW(scrollAreaWidth: number): number {
+  if (scrollAreaWidth <= 0) return 36;
+  return Math.max(36, Math.floor(
+    (scrollAreaWidth - BLOCK_BTN_W - BTN_GAP * ROUND_BTN_COUNT) / ROUND_BTN_COUNT
+  ));
+}
+
 interface MemoToolbarProps {
   onDismissKeyboard: () => void;
   onFormat?: (type: FormatType) => void;
@@ -31,33 +56,8 @@ interface MemoToolbarProps {
   onInsertDivider?: () => void;
   onShiftEnter?: () => void;
   inlineMenuMode?: InlineMenuMode | null;
-  onAaPress?: () => void;
   keyboardVisible?: boolean;
-}
-
-// 모든 버튼은 고정 크기이므로 직접 계산한다.
-// btn: 36, blockTypeBtn: 44, divider: width(1) + marginHorizontal(4×2) = 9
-// gap: 2 (flexbox gap between items)
-const BTN = 36;
-const BLOCK_BTN = 44;
-const DIVIDER_W = 9; // width:1 + marginHorizontal:4
-const GAP = 2;
-const CAPSULE_H_PADDING = 16; // paddingHorizontal:8 × 2
-
-function rowWidth(...items: number[]): number {
-  return items.reduce((sum, w) => sum + w, 0) + (items.length - 1) * GAP;
-}
-
-const FORMAT_ROW_W = rowWidth(BTN, DIVIDER_W, BTN, BTN, BTN, DIVIDER_W, BTN);
-// ← | B I U | ⌨️  = 36+9+36+36+36+9+36 + 6×2 = 210
-
-function mainRowW(hasInsertDivider: boolean, hasShiftEnter: boolean): number {
-  // 본문 Aa + | ↩️ ↪️ [✂️] [↵] | ⌨️/X
-  const items = [BLOCK_BTN, BTN, BTN, DIVIDER_W, BTN, BTN];
-  if (hasInsertDivider) items.push(BTN);
-  if (hasShiftEnter) items.push(BTN);
-  items.push(DIVIDER_W, BTN);
-  return rowWidth(...items);
+  addMenuBtnRef?: React.RefObject<View | null>;
 }
 
 const DEFAULT_SELECTION: OnSelectionUpdatePayload = {
@@ -66,10 +66,6 @@ const DEFAULT_SELECTION: OnSelectionUpdatePayload = {
   isItalic: false,
   isUnderline: false,
 };
-
-const ANIM_DURATION = 200;
-const FADE_DURATION = 150;
-const ANIM_EASING = Easing.out(Easing.ease);
 
 export default function MemoToolbar({
   onDismissKeyboard,
@@ -85,208 +81,227 @@ export default function MemoToolbar({
   onInsertDivider,
   onShiftEnter,
   inlineMenuMode,
-  onAaPress,
   keyboardVisible = false,
+  addMenuBtnRef,
 }: MemoToolbarProps) {
-  const [isFormat, setIsFormat] = useState(false);
+  const [aaActive, setAaActive] = useState(false);
+  const [scrollAreaWidth, setScrollAreaWidth] = useState(0);
+  const scrollViewRef = useRef<ScrollView>(null);
 
-  const mainW = mainRowW(onInsertDivider != null, onShiftEnter != null);
-  const formatW = FORMAT_ROW_W;
-
-  const capsuleWidth = useRef(
-    new Animated.Value(mainW + CAPSULE_H_PADDING)
-  ).current;
-  const mainOpacity = useRef(new Animated.Value(1)).current;
-  const formatOpacity = useRef(new Animated.Value(0)).current;
-
-  // onInsertDivider / onShiftEnter 변경 시 너비 재동기화
+  // Aa 활성화 시 B/I/U/인용 그룹 슬라이드인 애니메이션
+  const expandWidth = useSharedValue(0);
   useEffect(() => {
-    if (!isFormat) {
-      capsuleWidth.setValue(mainW + CAPSULE_H_PADDING);
+    expandWidth.value = withTiming(aaActive ? EXPANDED_GROUP_W : 0, {
+      duration: 230,
+      easing: Easing.out(Easing.cubic),
+    });
+    // 접힐 때 스크롤 위치 초기화
+    if (!aaActive) {
+      scrollViewRef.current?.scrollTo({ x: 0, animated: false });
     }
-  }, [mainW]);
+  }, [aaActive]);
 
-  // 키보드가 닫혔다 다시 열릴 때 항상 layer 1(main)으로 초기화
+  const expandedStyle = useAnimatedStyle(() => ({
+    width: expandWidth.value,
+  }));
+
+  // 키보드가 다시 열릴 때 Aa 해제
   const prevKeyboardVisible = useRef(keyboardVisible);
   useEffect(() => {
     if (keyboardVisible && !prevKeyboardVisible.current) {
-      setIsFormat(false);
-      capsuleWidth.setValue(mainW + CAPSULE_H_PADDING);
-      mainOpacity.setValue(1);
-      formatOpacity.setValue(0);
+      setAaActive(false);
     }
     prevKeyboardVisible.current = keyboardVisible;
   }, [keyboardVisible]);
 
-  const goFormat = () => {
-    setIsFormat(true);
-    onAaPress?.();
-    Animated.parallel([
-      Animated.timing(capsuleWidth, {
-        toValue: formatW + CAPSULE_H_PADDING,
-        duration: ANIM_DURATION,
-        easing: ANIM_EASING,
-        useNativeDriver: false,
-      }),
-      Animated.timing(mainOpacity, {
-        toValue: 0,
-        duration: FADE_DURATION,
-        useNativeDriver: true,
-      }),
-      Animated.timing(formatOpacity, {
-        toValue: 1,
-        duration: FADE_DURATION,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  };
-
-  const goMain = () => {
-    setIsFormat(false);
-    Animated.parallel([
-      Animated.timing(capsuleWidth, {
-        toValue: mainW + CAPSULE_H_PADDING,
-        duration: ANIM_DURATION,
-        easing: ANIM_EASING,
-        useNativeDriver: false,
-      }),
-      Animated.timing(formatOpacity, {
-        toValue: 0,
-        duration: FADE_DURATION,
-        useNativeDriver: true,
-      }),
-      Animated.timing(mainOpacity, {
-        toValue: 1,
-        duration: FADE_DURATION,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  };
+  const normalBtnW = calcBtnW(scrollAreaWidth);
+  const btnW = aaActive ? EXPANDED_BTN_W : normalBtnW;
+  const btn = { width: btnW, height: 36, borderRadius: 18, marginRight: BTN_GAP };
 
   const isBoldActive = selectionState.isBold || activeFormats?.has("bold");
   const isItalicActive = selectionState.isItalic || activeFormats?.has("italic");
   const isUnderlineActive = selectionState.isUnderline || activeFormats?.has("underline");
-
+  const isQuoteActive =
+    selectionState.activeBlock === "blockquote" || activeFormats?.has("quote");
   const blockLabel = BLOCK_LABELS[selectionState.activeBlock] ?? "본문";
 
   return (
     <View style={styles.outerWrap}>
-      <Animated.View style={[styles.capsule, { width: capsuleWidth }]}>
-        {/* overflow: hidden은 그림자를 자르므로 안쪽 뷰에서만 처리 */}
-        <View style={styles.clipper}>
-
-          {/* ── Main layer ── */}
-          <Animated.View
-            style={[styles.row, isFormat && styles.absolutePos, { opacity: mainOpacity }]}
-            pointerEvents={isFormat ? "none" : "auto"}
+      <View style={styles.capsule}>
+        {/* ── 스크롤 가능한 버튼 영역 ── */}
+        <ScrollView
+          ref={scrollViewRef}
+          horizontal
+          scrollEnabled={aaActive}
+          showsHorizontalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.scrollContent}
+          style={styles.scrollArea}
+          onLayout={(e) => setScrollAreaWidth(e.nativeEvent.layout.width)}
+        >
+          {/* 블록 타입 */}
+          <ScalePressable
+            style={[styles.blockTypeBtn, inlineMenuMode === "blockType" && styles.btnActive]}
+            contentStyle={styles.btnContent}
+            onPress={onFormatPress}
+            hitSlop={6}
           >
+            <Text
+              style={[styles.blockTypeLabel, inlineMenuMode === "blockType" && styles.blockTypeLabelActive]}
+              numberOfLines={1}
+            >
+              {blockLabel}
+            </Text>
+          </ScalePressable>
+
+          {/* Aa */}
+          <ScalePressable
+            style={[btn, aaActive && styles.btnActive]}
+            contentStyle={styles.btnContent}
+            onPress={() => setAaActive((v) => !v)}
+            hitSlop={6}
+          >
+            <Text style={[styles.aaLabel, aaActive && styles.aaLabelActive]}>Aa</Text>
+          </ScalePressable>
+
+          {/* B / I / U / 인용 — ease 슬라이드인 */}
+          <Animated.View style={[styles.expandedGroup, expandedStyle]}>
             <ScalePressable
-              style={[styles.blockTypeBtn, inlineMenuMode === "blockType" && styles.btnActive]}
+              style={[styles.expandBtn, isBoldActive && styles.btnActive]}
               contentStyle={styles.btnContent}
-              onPress={onFormatPress}
+              onPress={() => onFormat?.("bold")}
               hitSlop={6}
             >
-              <Text style={[styles.blockTypeLabel, inlineMenuMode === "blockType" && styles.blockTypeLabelActive]} numberOfLines={1}>{blockLabel}</Text>
+              <Text style={[styles.fmtLabel, styles.bold, isBoldActive && styles.fmtLabelActive]}>B</Text>
             </ScalePressable>
 
             <ScalePressable
-              style={styles.btn}
+              style={[styles.expandBtn, isItalicActive && styles.btnActive]}
               contentStyle={styles.btnContent}
-              onPress={goFormat}
+              onPress={() => onFormat?.("italic")}
               hitSlop={6}
             >
-              <Text style={styles.aaLabel}>Aa</Text>
+              <MaterialCommunityIcons
+                name="format-italic"
+                size={18}
+                color={isItalicActive ? "#ffffff" : "#3f3f46"}
+              />
             </ScalePressable>
 
             <ScalePressable
-              style={[styles.btn, inlineMenuMode === "addMenu" && styles.btnActive]}
+              style={[styles.expandBtn, isUnderlineActive && styles.btnActive]}
+              contentStyle={styles.btnContent}
+              onPress={() => onFormat?.("underline")}
+              hitSlop={6}
+            >
+              <Text style={[styles.fmtLabel, styles.underline, isUnderlineActive && styles.fmtLabelActive]}>U</Text>
+            </ScalePressable>
+
+            {/* 인용 — 마지막 버튼은 marginRight 없음 (trailing padding으로 대체) */}
+            <ScalePressable
+              style={[styles.expandBtnLast, isQuoteActive && styles.btnActive]}
+              contentStyle={styles.btnContent}
+              onPress={() => onFormat?.("quote")}
+              hitSlop={6}
+            >
+              <MaterialCommunityIcons
+                name="format-quote-open"
+                size={18}
+                color={isQuoteActive ? "#ffffff" : "#3f3f46"}
+              />
+            </ScalePressable>
+          </Animated.View>
+
+          {/* + */}
+          <View ref={addMenuBtnRef} collapsable={false}>
+            <ScalePressable
+              style={[btn, inlineMenuMode === "addMenu" && styles.btnActive]}
               contentStyle={styles.btnContent}
               onPress={onOpenAddMenu}
               hitSlop={6}
             >
-              <Feather name="plus" size={18} color={inlineMenuMode === "addMenu" ? "#ffffff" : "#3f3f46"} />
+              <Feather
+                name="plus"
+                size={18}
+                color={inlineMenuMode === "addMenu" ? "#ffffff" : "#3f3f46"}
+              />
             </ScalePressable>
+          </View>
 
-            <View style={styles.divider} />
-
-            <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={canUndo ? onUndo : undefined} hitSlop={6}>
-              <MaterialCommunityIcons name="undo" size={18} color={canUndo ? "#3f3f46" : "#d4d4d8"} />
-            </ScalePressable>
-
-            <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={canRedo ? onRedo : undefined} hitSlop={6}>
-              <MaterialCommunityIcons name="redo" size={18} color={canRedo ? "#3f3f46" : "#d4d4d8"} />
-            </ScalePressable>
-
-            {onInsertDivider != null && (
-              <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={onInsertDivider} hitSlop={6}>
-                <Feather name="scissors" size={15} color="#3f3f46" />
-              </ScalePressable>
-            )}
-
-            {onShiftEnter != null && (
-              <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={onShiftEnter} hitSlop={6}>
-                <Feather name="corner-down-left" size={15} color="#3f3f46" />
-              </ScalePressable>
-            )}
-
-            <View style={styles.divider} />
-
-            {inlineMenuMode !== null && inlineMenuMode !== "addMenu" ? (
-              <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={onAaPress} hitSlop={8}>
-                <Feather name="x" size={18} color="#3f3f46" />
-              </ScalePressable>
-            ) : (
-              <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={onDismissKeyboard} hitSlop={8}>
-                <MaterialCommunityIcons name="keyboard-off-outline" size={20} color="#3f3f46" />
-              </ScalePressable>
-            )}
-          </Animated.View>
-
-          {/* ── Format sub-layer (Aa 탭 후) ── */}
-          <Animated.View
-            style={[styles.formatRow, !isFormat && styles.absolutePos, { opacity: formatOpacity }]}
-            pointerEvents={isFormat ? "auto" : "none"}
+          {/* undo */}
+          <ScalePressable
+            style={btn}
+            contentStyle={styles.btnContent}
+            onPress={canUndo ? onUndo : undefined}
+            hitSlop={6}
           >
-            <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={goMain} hitSlop={6}>
-              <Feather name="arrow-left" size={16} color="#3f3f46" />
+            <MaterialCommunityIcons name="undo" size={18} color={canUndo ? "#3f3f46" : "#d4d4d8"} />
+          </ScalePressable>
+
+          {/* redo */}
+          <ScalePressable
+            style={btn}
+            contentStyle={styles.btnContent}
+            onPress={canRedo ? onRedo : undefined}
+            hitSlop={6}
+          >
+            <MaterialCommunityIcons name="redo" size={18} color={canRedo ? "#3f3f46" : "#d4d4d8"} />
+          </ScalePressable>
+
+          {/* scissors */}
+          {onInsertDivider != null && (
+            <ScalePressable
+              style={btn}
+              contentStyle={styles.btnContent}
+              onPress={onInsertDivider}
+              hitSlop={6}
+            >
+              <Feather name="scissors" size={15} color="#3f3f46" />
             </ScalePressable>
+          )}
 
-            <View style={styles.divider} />
-
-            <ScalePressable style={[styles.btn, isBoldActive && styles.btnActive]} contentStyle={styles.btnContent} onPress={() => onFormat?.("bold")} hitSlop={6}>
-              <Text style={[styles.fmtLabel, styles.bold, isBoldActive && styles.fmtLabelActive]}>B</Text>
+          {/* enter */}
+          {onShiftEnter != null && (
+            <ScalePressable
+              style={{ width: btnW, height: 36, borderRadius: 18 }}
+              contentStyle={styles.btnContent}
+              onPress={onShiftEnter}
+              hitSlop={6}
+            >
+              <Feather name="corner-down-left" size={15} color="#3f3f46" />
             </ScalePressable>
+          )}
+        </ScrollView>
 
-            <ScalePressable style={[styles.btn, isItalicActive && styles.btnActive]} contentStyle={styles.btnContent} onPress={() => onFormat?.("italic")} hitSlop={6}>
-              <MaterialCommunityIcons name="format-italic" size={18} color={isItalicActive ? "#ffffff" : "#3f3f46"} />
-            </ScalePressable>
-
-            <ScalePressable style={[styles.btn, isUnderlineActive && styles.btnActive]} contentStyle={styles.btnContent} onPress={() => onFormat?.("underline")} hitSlop={6}>
-              <Text style={[styles.fmtLabel, styles.underline, isUnderlineActive && styles.fmtLabelActive]}>U</Text>
-            </ScalePressable>
-
-            <View style={styles.divider} />
-
-            <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={onDismissKeyboard} hitSlop={8}>
-              <MaterialCommunityIcons name="keyboard-off-outline" size={20} color="#3f3f46" />
-            </ScalePressable>
-          </Animated.View>
-
-        </View>{/* clipper */}
-      </Animated.View>
+        {/* ── 구분선 + 키보드 해제 버튼 ── */}
+        <View style={styles.keyboardSeparator} />
+        <ScalePressable
+          style={styles.keyboardBtn}
+          contentStyle={styles.btnContent}
+          onPress={onDismissKeyboard}
+          hitSlop={8}
+        >
+          <MaterialCommunityIcons name="keyboard-off-outline" size={20} color="#3f3f46" />
+        </ScalePressable>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   outerWrap: {
-    alignItems: "center",
+    alignItems: "stretch",
     paddingHorizontal: 16,
     paddingVertical: 8,
   },
   capsule: {
     backgroundColor: "#ffffff",
     borderRadius: 24,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingLeft: 8,
+    paddingRight: 8,
+    paddingVertical: 4,
     ...Platform.select({
       ios: {
         shadowColor: "#000",
@@ -297,39 +312,61 @@ const styles = StyleSheet.create({
       android: { elevation: 6 },
     }),
   },
-  clipper: {
-    borderRadius: 24,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+  scrollArea: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  blockTypeBtn: {
+    width: BLOCK_BTN_W,
+    height: 36,
+    borderRadius: 18,
+    overflow: "hidden",
+    marginRight: BTN_GAP,
+  },
+  // B / I / U / 인용 그룹 컨테이너
+  expandedGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    overflow: "hidden",
+    // paddingRight은 trailing gap 역할 (trailing 2px = BTN_GAP)
+    paddingRight: BTN_GAP,
+  },
+  // B, I, U — marginRight로 다음 버튼과 간격
+  expandBtn: {
+    width: EXPANDED_BTN_W,
+    height: 36,
+    borderRadius: 18,
+    marginRight: BTN_GAP,
     overflow: "hidden",
   },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 2,
+  // 인용 — 마지막 버튼, marginRight 없음 (컨테이너 paddingRight이 gap 담당)
+  expandBtnLast: {
+    width: EXPANDED_BTN_W,
+    height: 36,
+    borderRadius: 18,
+    overflow: "hidden",
   },
-  formatRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 2,
+  keyboardSeparator: {
+    width: StyleSheet.hairlineWidth,
+    height: 20,
+    backgroundColor: "#d4d4d8",
+    marginHorizontal: 4,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: -3, height: 0 },
+        shadowOpacity: 0.14,
+        shadowRadius: 3,
+      },
+    }),
   },
-  absolutePos: {
-    position: "absolute",
-    top: 4,
-    left: 8,
-  },
-  btn: {
+  keyboardBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
-  },
-  blockTypeBtn: {
-    width: 44,
-    height: 36,
-    borderRadius: 18,
-    overflow: "hidden",
   },
   btnContent: {
     alignItems: "center",
@@ -346,6 +383,9 @@ const styles = StyleSheet.create({
       default: "Pretendard-SemiBold",
     }),
     fontWeight: "600",
+  },
+  aaLabelActive: {
+    color: "#ffffff",
   },
   blockTypeLabel: {
     fontSize: 13,
@@ -371,12 +411,5 @@ const styles = StyleSheet.create({
     color: "#ffffff",
   },
   bold: { fontWeight: "700" },
-  italic: { fontStyle: "italic" },
   underline: { textDecorationLine: "underline" },
-  divider: {
-    width: 1,
-    height: 20,
-    backgroundColor: "#e4e4e7",
-    marginHorizontal: 4,
-  },
 });
