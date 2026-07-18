@@ -327,7 +327,7 @@ const MemoBottomSheet = forwardRef<MemoBottomSheetRef, MemoBottomSheetProps>(
             {/* Title row: editable title + X close — no panHandlers */}
             <View style={styles.titleRow}>
               <TextInput
-                style={[styles.titleInput, { fontSize: Math.max(15, bodyFontSize * 0.9) }]}
+                style={[styles.titleInput, { fontSize: Math.max(18, bodyFontSize * 1.1) }]}
                 value={memoTitle}
                 onChangeText={onTitleChange}
                 placeholder="메모 제목"
@@ -447,5 +447,6 @@ const styles = StyleSheet.create({
   editorWrap: {
     flex: 1,
     paddingHorizontal: Spacing.screenPx,
+    paddingTop: 12,
   },
 });

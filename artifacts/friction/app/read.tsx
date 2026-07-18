@@ -2003,7 +2003,7 @@ export default function ReadScreen() {
         }}
         onActiveFormatsChange={setMemoActiveFormats}
         onSelectionUpdate={setMemoSelectionState}
-        bodyFontSize={readerFontSize(ReaderTokens.typeScale.bodyCqi, screenWidth - 2 * Spacing.screenPx)}
+        bodyFontSize={layout.bodyFontSize}
         keyboardVisible={keyboardVisible}
         keyboardHeight={keyboardHeight}
         bottomInset={insets.bottom}
