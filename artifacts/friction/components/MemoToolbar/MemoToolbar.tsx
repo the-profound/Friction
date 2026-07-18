@@ -21,7 +21,7 @@ interface MemoToolbarProps {
   onDismissKeyboard: () => void;
   onFormat?: (type: FormatType) => void;
   activeFormats?: Set<FormatType>;
-  onOpenQuotePicker?: () => void;
+  onOpenAddMenu?: () => void;
   onUndo?: () => void;
   onRedo?: () => void;
   canUndo?: boolean;
@@ -52,8 +52,8 @@ const FORMAT_ROW_W = rowWidth(BTN, DIVIDER_W, BTN, BTN, BTN, DIVIDER_W, BTN);
 // ← | B I U | ⌨️  = 36+9+36+36+36+9+36 + 6×2 = 210
 
 function mainRowW(hasInsertDivider: boolean, hasShiftEnter: boolean): number {
-  // 본문 Aa 💬 🖼️ | ↩️ ↪️ [✂️] [↵] | ⌨️/X
-  const items = [BLOCK_BTN, BTN, BTN, BTN, DIVIDER_W, BTN, BTN];
+  // 본문 Aa + | ↩️ ↪️ [✂️] [↵] | ⌨️/X
+  const items = [BLOCK_BTN, BTN, BTN, DIVIDER_W, BTN, BTN];
   if (hasInsertDivider) items.push(BTN);
   if (hasShiftEnter) items.push(BTN);
   items.push(DIVIDER_W, BTN);
@@ -75,7 +75,7 @@ export default function MemoToolbar({
   onDismissKeyboard,
   onFormat,
   activeFormats,
-  onOpenQuotePicker,
+  onOpenAddMenu,
   onUndo,
   onRedo,
   canUndo = true,
@@ -199,16 +199,12 @@ export default function MemoToolbar({
             </ScalePressable>
 
             <ScalePressable
-              style={[styles.btn, inlineMenuMode === "quotePicker" && styles.btnActive]}
+              style={[styles.btn, inlineMenuMode === "addMenu" && styles.btnActive]}
               contentStyle={styles.btnContent}
-              onPress={onOpenQuotePicker}
+              onPress={onOpenAddMenu}
               hitSlop={6}
             >
-              <Feather name="message-square" size={16} color={inlineMenuMode === "quotePicker" ? "#ffffff" : "#3f3f46"} />
-            </ScalePressable>
-
-            <ScalePressable style={styles.btn} contentStyle={styles.btnContent} onPress={undefined} hitSlop={6}>
-              <Feather name="image" size={16} color="#3f3f46" />
+              <Feather name="plus" size={18} color={inlineMenuMode === "addMenu" ? "#ffffff" : "#3f3f46"} />
             </ScalePressable>
 
             <View style={styles.divider} />

@@ -539,15 +539,19 @@ export default function ReadScreen() {
       ? lastKeyboardHeightRef.current
       : Math.min(320, Math.round(screenHeight * 0.4));
 
-  const handleOpenQuotePicker = useCallback(() => {
-    if (inlineMenuMode === "quotePicker") {
-      closePanelRestoreKeyboard();
+  const handleOpenAddMenu = useCallback(() => {
+    if (inlineMenuMode === "addMenu") {
+      setInlineMenuMode(null);
       return;
     }
+    setInlineMenuMode("addMenu");
+  }, [inlineMenuMode]);
+
+  const handleSelectQuoteFromAddMenu = useCallback(() => {
     memoWebRef.current?.blur();
     Keyboard.dismiss();
     setInlineMenuMode("quotePicker");
-  }, [inlineMenuMode, closePanelRestoreKeyboard]);
+  }, []);
 
   const handleSelectQuoteSentence = useCallback((sentence: StoredSentence) => {
     memoWebRef.current?.insertQuote(sentence.text);
@@ -2009,7 +2013,7 @@ export default function ReadScreen() {
             }}
             onFormat={handleMemoFormat}
             activeFormats={memoActiveFormats}
-            onOpenQuotePicker={handleOpenQuotePicker}
+            onOpenAddMenu={handleOpenAddMenu}
             onUndo={() => memoWebRef.current?.undo()}
             onRedo={() => memoWebRef.current?.redo()}
             canUndo={memoSelectionState?.canUndo ?? false}
@@ -2027,14 +2031,54 @@ export default function ReadScreen() {
             onInsertDivider={() => memoWebRef.current?.insertDivider()}
             onShiftEnter={() => memoWebRef.current?.insertHardBreak()}
             inlineMenuMode={inlineMenuMode}
-            onAaPress={inlineMenuMode !== null ? closePanelRestoreKeyboard : undefined}
+            onAaPress={
+              inlineMenuMode === "addMenu"
+                ? () => setInlineMenuMode(null)
+                : inlineMenuMode !== null
+                  ? closePanelRestoreKeyboard
+                  : undefined
+            }
             keyboardVisible={keyboardVisible}
           />
         </View>
       )}
 
+      {/* ── [+] 팝업 메뉴 (addMenu) ────────────────────────────────── */}
+      {isMemoMode && inlineMenuMode === "addMenu" && (
+        <>
+          {/* 투명 오버레이 — 탭하면 팝업 닫힘 */}
+          <Pressable
+            style={[StyleSheet.absoluteFill, { zIndex: 52 }]}
+            onPress={() => setInlineMenuMode(null)}
+          />
+          {/* 팝업 카드 — 툴바 위 [+] 버튼 위치에 floating */}
+          <View
+            style={[
+              styles.addMenuPopup,
+              {
+                bottom: keyboardHeight + 60 + 4,
+                left: Math.max(16, screenWidth / 2 - 144),
+              },
+            ]}
+          >
+            <Pressable
+              style={styles.addMenuRow}
+              onPress={handleSelectQuoteFromAddMenu}
+            >
+              <Text style={styles.addMenuLabel}>문장수집 인용</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.addMenuRow, { borderBottomWidth: 0 }]}
+              onPress={() => setInlineMenuMode(null)}
+            >
+              <Text style={[styles.addMenuLabel, styles.addMenuLabelDisabled]}>사진 추가</Text>
+            </Pressable>
+          </View>
+        </>
+      )}
+
       {/* ── 인라인 메뉴 패널 (본문/문장수집 인용) ────────────────────── */}
-      {isMemoMode && inlineMenuMode !== null && (
+      {isMemoMode && inlineMenuMode !== null && inlineMenuMode !== "addMenu" && (
         <InlineMenuPanel
           mode={inlineMenuMode}
           panelHeight={inlinePanelHeight}
@@ -2045,6 +2089,7 @@ export default function ReadScreen() {
             closePanelRestoreKeyboard();
           }}
           onSelectSentence={handleSelectQuoteSentence}
+          onSelectQuoteMenu={handleSelectQuoteFromAddMenu}
           onDismiss={closePanelRestoreKeyboard}
         />
       )}
@@ -2434,6 +2479,37 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 53,
+  },
+  addMenuPopup: {
+    position: "absolute",
+    width: 160,
+    backgroundColor: "#ffffff",
+    borderRadius: 12,
+    zIndex: 54,
+    overflow: "hidden",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.14,
+        shadowRadius: 10,
+      },
+      android: { elevation: 8 },
+    }),
+  },
+  addMenuRow: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.zinc100,
+  },
+  addMenuLabel: {
+    fontSize: 15,
+    color: Colors.zinc800,
+    fontFamily: Platform.select({ ios: "Pretendard-Regular", default: "Pretendard" }),
+  },
+  addMenuLabelDisabled: {
+    color: Colors.zinc400,
   },
   progressBarContainer: {
     width: "90%",

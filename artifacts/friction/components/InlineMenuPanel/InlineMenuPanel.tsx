@@ -14,7 +14,7 @@ import { Colors, Typography } from "@/constants/tokens";
 import { useListStoredSentences, getListStoredSentencesQueryKey } from "@workspace/api-client-react";
 import type { StoredSentence } from "@workspace/api-client-react";
 
-export type InlineMenuMode = "blockType" | "quotePicker";
+export type InlineMenuMode = "blockType" | "quotePicker" | "addMenu";
 
 interface BlockTypeOption {
   key: string;
@@ -38,8 +38,16 @@ interface InlineMenuPanelProps {
   userId: string;
   onSelectBlock: (blockType: string) => void;
   onSelectSentence: (sentence: StoredSentence) => void;
+  onSelectQuoteMenu: () => void;
   onDismiss: () => void;
 }
+
+const ADD_MENU_ITEMS = [
+  { key: "quote", label: "문장수집 인용" },
+  { key: "photo", label: "사진 추가" },
+] as const;
+
+const ADD_MENU_HEIGHT = 130;
 
 export default function InlineMenuPanel({
   mode,
@@ -48,6 +56,7 @@ export default function InlineMenuPanel({
   userId,
   onSelectBlock,
   onSelectSentence,
+  onSelectQuoteMenu,
   onDismiss,
 }: InlineMenuPanelProps) {
   const sentencesQuery = useListStoredSentences(
@@ -69,6 +78,8 @@ export default function InlineMenuPanel({
     [onSelectSentence],
   );
 
+  const effectivePanelHeight = mode === "addMenu" ? ADD_MENU_HEIGHT : panelHeight;
+
   return (
     <View style={styles.root} pointerEvents="box-none">
       {/* Transparent overlay above the panel — tapping it dismisses */}
@@ -78,8 +89,21 @@ export default function InlineMenuPanel({
       />
 
       {/* Inline panel anchored to bottom */}
-      <View style={[styles.panel, { height: panelHeight }]}>
-        {mode === "blockType" ? (
+      <View style={[styles.panel, { height: effectivePanelHeight }]}>
+        {mode === "addMenu" ? (
+          <View style={styles.scroll}>
+            {ADD_MENU_ITEMS.map((item) => (
+              <ScalePressable
+                key={item.key}
+                style={styles.row}
+                contentStyle={styles.rowContent}
+                onPress={item.key === "quote" ? onSelectQuoteMenu : undefined}
+              >
+                <Text style={styles.label}>{item.label}</Text>
+              </ScalePressable>
+            ))}
+          </View>
+        ) : mode === "blockType" ? (
           <ScrollView
             showsVerticalScrollIndicator={false}
             style={styles.scroll}
