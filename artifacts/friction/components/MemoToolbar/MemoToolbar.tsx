@@ -103,6 +103,8 @@ export default function MemoToolbar({
 
   const expandedStyle = useAnimatedStyle(() => ({
     width: expandWidth.value,
+    // 거의 닫힌 구간(4px 미만)에서 opacity를 0으로 끊어 active 배경 삐져나옴 방지
+    opacity: expandWidth.value < 4 ? 0 : 1,
   }));
 
   // 키보드가 다시 열릴 때 Aa 해제
@@ -167,48 +169,56 @@ export default function MemoToolbar({
           {/* B / I / U / 인용 — ease 슬라이드인 */}
           <Animated.View style={[styles.expandedGroup, expandedStyle]}>
             <ScalePressable
-              style={[styles.expandBtn, isBoldActive && styles.btnActive]}
+              style={styles.expandBtn}
               contentStyle={styles.btnContent}
               onPress={() => onFormat?.("bold")}
               hitSlop={6}
             >
-              <Text style={[styles.fmtLabel, styles.bold, isBoldActive && styles.fmtLabelActive]}>B</Text>
+              <View style={[styles.fmtCircle, isBoldActive && styles.fmtCircleActive]}>
+                <Text style={[styles.fmtLabel, styles.bold, isBoldActive && styles.fmtLabelActive]}>B</Text>
+              </View>
             </ScalePressable>
 
             <ScalePressable
-              style={[styles.expandBtn, isItalicActive && styles.btnActive]}
+              style={styles.expandBtn}
               contentStyle={styles.btnContent}
               onPress={() => onFormat?.("italic")}
               hitSlop={6}
             >
-              <MaterialCommunityIcons
-                name="format-italic"
-                size={18}
-                color={isItalicActive ? "#ffffff" : "#3f3f46"}
-              />
+              <View style={[styles.fmtCircle, isItalicActive && styles.fmtCircleActive]}>
+                <MaterialCommunityIcons
+                  name="format-italic"
+                  size={18}
+                  color={isItalicActive ? "#ffffff" : "#3f3f46"}
+                />
+              </View>
             </ScalePressable>
 
             <ScalePressable
-              style={[styles.expandBtn, isUnderlineActive && styles.btnActive]}
+              style={styles.expandBtn}
               contentStyle={styles.btnContent}
               onPress={() => onFormat?.("underline")}
               hitSlop={6}
             >
-              <Text style={[styles.fmtLabel, styles.underline, isUnderlineActive && styles.fmtLabelActive]}>U</Text>
+              <View style={[styles.fmtCircle, isUnderlineActive && styles.fmtCircleActive]}>
+                <Text style={[styles.fmtLabel, styles.underline, isUnderlineActive && styles.fmtLabelActive]}>U</Text>
+              </View>
             </ScalePressable>
 
             {/* 인용 — 마지막 버튼은 marginRight 없음 (trailing padding으로 대체) */}
             <ScalePressable
-              style={[styles.expandBtnLast, isQuoteActive && styles.btnActive]}
+              style={styles.expandBtnLast}
               contentStyle={styles.btnContent}
               onPress={() => onFormat?.("quote")}
               hitSlop={6}
             >
-              <MaterialCommunityIcons
-                name="format-quote-open"
-                size={18}
-                color={isQuoteActive ? "#ffffff" : "#3f3f46"}
-              />
+              <View style={[styles.fmtCircle, isQuoteActive && styles.fmtCircleActive]}>
+                <MaterialCommunityIcons
+                  name="format-quote-open"
+                  size={18}
+                  color={isQuoteActive ? "#ffffff" : "#3f3f46"}
+                />
+              </View>
             </ScalePressable>
           </Animated.View>
 
@@ -335,19 +345,18 @@ const styles = StyleSheet.create({
     paddingRight: BTN_GAP,
   },
   // B, I, U — marginRight로 다음 버튼과 간격
+  // overflow:"hidden" 사용 금지 — active border가 clip되고 아이콘이 가려짐
   expandBtn: {
     width: EXPANDED_BTN_W,
     height: 36,
     borderRadius: 18,
     marginRight: BTN_GAP,
-    overflow: "hidden",
   },
   // 인용 — 마지막 버튼, marginRight 없음 (컨테이너 paddingRight이 gap 담당)
   expandBtnLast: {
     width: EXPANDED_BTN_W,
     height: 36,
     borderRadius: 18,
-    overflow: "hidden",
   },
   keyboardSeparator: {
     width: StyleSheet.hairlineWidth,
@@ -372,6 +381,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  // Aa / 본문 / + 버튼 활성화 — 빨간 채움
   btnActive: {
     backgroundColor: "#92323D",
   },
@@ -409,6 +419,17 @@ const styles = StyleSheet.create({
   },
   fmtLabelActive: {
     color: "#ffffff",
+  },
+  // B/I/U/인용 활성 표시용 — 다른 버튼(36px)보다 작은 원(28px)
+  fmtCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  fmtCircleActive: {
+    backgroundColor: "#92323D",
   },
   bold: { fontWeight: "700" },
   underline: { textDecorationLine: "underline" },

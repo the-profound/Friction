@@ -9,6 +9,7 @@ import {
   Platform,
   ScrollView,
   BackHandler,
+  useWindowDimensions,
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -56,6 +57,7 @@ import {
   useTransitionArticleStatus,
   TransitionArticleBodyTargetStatus,
   getGetArticleQueryKey,
+  type StoredSentence,
   type SpellChange,
   spellCheck as apiSpellCheck,
 } from "@workspace/api-client-react";
@@ -70,8 +72,9 @@ import { useToast } from "@/contexts/ToastContext";
 import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
 import SourceArticlePickerSheet from "@/components/SourceArticlePickerSheet/SourceArticlePickerSheet";
 import WritingStateBar, { type WritingStage } from "@/components/WritingStateBar/WritingStateBar";
-import KeyboardToolbar from "@/components/KeyboardToolbar/KeyboardToolbar";
-import BlockTypeSheet from "@/components/KeyboardToolbar/BlockTypeSheet";
+import MemoToolbar, { type FormatType } from "@/components/MemoToolbar/MemoToolbar";
+import AddMenuPopup from "@/components/MemoToolbar/AddMenuPopup";
+import InlineMenuPanel, { type InlineMenuMode } from "@/components/InlineMenuPanel/InlineMenuPanel";
 
 const PAGE_DIVIDER = MarkdownPolicy.PAGE_DIVIDER;
 
@@ -138,6 +141,7 @@ export default function WritingScreen() {
   const transitionStatus = useTransitionArticleStatus();
 
   const editorRef = useRef<WebViewMarkdownEditorRef>(null);
+  const addMenuBtnRef = useRef<View>(null);
 
   // ── 모드 ──────────────────────────────────────────────────────────────────
   const [mode, setMode] = useState<EditorMode>(
@@ -160,8 +164,58 @@ export default function WritingScreen() {
   const editorReadyRef = useRef(false);
   const [initialized, setInitialized] = useState(false);
   const [selectionState, setSelectionState] = useState<OnSelectionUpdatePayload>(DEFAULT_SELECTION);
-  const [blockTypeSheetVisible, setBlockTypeSheetVisible] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
+
+  // ── 서식 툴바 인라인 메뉴 시스템 (read.tsx 메모 모드와 동일 구조) ─────────
+  const { height: screenHeight } = useWindowDimensions();
+  const [inlineMenuMode, setInlineMenuMode] = useState<InlineMenuMode | null>(null);
+  const [keyboardRestorePending, setKeyboardRestorePending] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [plusBtnCenterX, setPlusBtnCenterX] = useState<number | null>(null);
+  const lastKeyboardHeightRef = useRef(0);
+  const addMenuPendingRef = useRef(false);
+
+  // 키보드 높이 추적 — 툴바·팝업·패널 위치 계산에 사용
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      const h = e.endCoordinates.height;
+      lastKeyboardHeightRef.current = h;
+      setKeyboardHeight(h);
+      setKeyboardRestorePending(false); // 키보드가 실제로 올라오면 플래그 해제
+      if (addMenuPendingRef.current) {
+        addMenuPendingRef.current = false;
+        setInlineMenuMode("addMenu");
+      }
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+    return () => { showSub.remove(); hideSub.remove(); };
+  }, []);
+
+  // 패널을 닫고 에디터 포커스를 복귀시키는 공통 헬퍼.
+  // keyboardRestorePending을 세워 키보드가 올라오는 동안 툴바가 언마운트되지 않게 한다.
+  const closePanelRestoreKeyboard = useCallback(() => {
+    setKeyboardRestorePending(true);
+    setInlineMenuMode(null);
+    editorRef.current?.focus();
+  }, []);
+
+  // 키보드 이벤트가 없는 환경(웹 등)에서 플래그가 영구히 남지 않도록 타임아웃 폴백
+  useEffect(() => {
+    if (!keyboardRestorePending) return;
+    const t = setTimeout(() => setKeyboardRestorePending(false), 1000);
+    return () => clearTimeout(t);
+  }, [keyboardRestorePending]);
+
+  // 인라인 메뉴 패널 높이: 키보드가 한 번이라도 올라왔으면 그 높이를,
+  // 아직 키보드 이벤트가 없었으면 화면의 40%로 폴백한다.
+  const inlinePanelHeight =
+    lastKeyboardHeightRef.current > 0
+      ? lastKeyboardHeightRef.current
+      : Math.min(320, Math.round(screenHeight * 0.4));
 
   const contentRef = useRef("");
   const titleRef = useRef("");
@@ -1166,29 +1220,52 @@ export default function WritingScreen() {
     setSelectionState(payload);
   }, []);
 
+  // "본문" 버튼 — 블록 타입 인라인 패널 토글 (read.tsx와 동일 동작)
   const handleToolbarFormat = useCallback(() => {
-    setBlockTypeSheetVisible(true);
+    if (inlineMenuMode === "blockType") {
+      closePanelRestoreKeyboard();
+      return;
+    }
+    editorRef.current?.blur();
+    Keyboard.dismiss();
+    setInlineMenuMode("blockType");
+  }, [inlineMenuMode, closePanelRestoreKeyboard]);
+
+  // [+] 버튼 — floating 팝업 토글 (read.tsx와 동일 동작)
+  const handleOpenAddMenu = useCallback(() => {
+    if (inlineMenuMode === "addMenu") {
+      setInlineMenuMode(null);
+      return;
+    }
+    if (inlineMenuMode === "blockType" || inlineMenuMode === "quotePicker") {
+      addMenuPendingRef.current = true;
+      closePanelRestoreKeyboard();
+      return;
+    }
+    addMenuBtnRef.current?.measure((_x, _y, width, _height, pageX) => {
+      setPlusBtnCenterX(pageX + width / 2);
+    });
+    setInlineMenuMode("addMenu");
+  }, [inlineMenuMode, closePanelRestoreKeyboard]);
+
+  const handleSelectQuoteFromAddMenu = useCallback(() => {
+    editorRef.current?.blur();
+    Keyboard.dismiss();
+    setInlineMenuMode("quotePicker");
   }, []);
 
-  const handleBlockTypeSelect = useCallback((blockType: string) => {
-    editorRef.current?.setBlockType(blockType);
-  }, []);
+  const handleSelectQuoteSentence = useCallback((sentence: StoredSentence) => {
+    editorRef.current?.insertQuote(sentence.text);
+    closePanelRestoreKeyboard();
+  }, [closePanelRestoreKeyboard]);
 
-  const handleToolbarBold = useCallback(() => {
-    editorRef.current?.toggleMark("bold");
-  }, []);
-
-  const handleToolbarItalic = useCallback(() => {
-    editorRef.current?.toggleMark("italic");
-  }, []);
-
-  const handleToolbarUnderline = useCallback(() => {
-    editorRef.current?.toggleMark("underline");
-  }, []);
-
-  const handleToolbarQuote = useCallback(() => {
-    const isActive = selectionState.activeBlock === "blockquote";
-    editorRef.current?.setBlockType(isActive ? "paragraph" : "blockquote");
+  const handleOnFormat = useCallback((type: FormatType) => {
+    if (type === "bold" || type === "italic" || type === "underline") {
+      editorRef.current?.toggleMark(type);
+    } else if (type === "quote") {
+      const isActive = selectionState.activeBlock === "blockquote";
+      editorRef.current?.setBlockType(isActive ? "paragraph" : "blockquote");
+    }
   }, [selectionState.activeBlock]);
 
   // ── 분할 조작 (dividing) ───────────────────────────────────────────────────
@@ -1663,21 +1740,82 @@ export default function WritingScreen() {
             </View>
           </View>
 
+          {/*
+            툴바 자체는 화면 루트에 absolute로 floating한다(read.tsx와 동일 구조).
+            여기서는 키보드가 올라온 동안 에디터가 툴바에 가려지지 않도록
+            툴바 높이만큼 공간을 확보한다.
+          */}
           {!isDividing && keyboardVisible && Platform.OS !== "web" && selectionState.activeBlock !== "horizontalRule" && (
-            <KeyboardToolbar
-              selectionState={selectionState}
-              onFormatPress={handleToolbarFormat}
-              onBoldPress={handleToolbarBold}
-              onItalicPress={handleToolbarItalic}
-              onUnderlinePress={handleToolbarUnderline}
-              onQuotePress={handleToolbarQuote}
-              isQuoteActive={selectionState.activeBlock === "blockquote"}
-              onInsertDivider={handleInsertDivider}
-              onShiftEnter={handleShiftEnter}
-              onInsertImage={isImageUploading ? undefined : handleInsertImage}
-            />
+            <View style={styles.toolbarSpacerBottom} />
           )}
         </KeyboardAvoidingView>
+
+        {/* ── 서식 툴바 — 키보드/인라인 패널 위 floating (read.tsx와 동일) ── */}
+        {!isDividing && Platform.OS !== "web" && selectionState.activeBlock !== "horizontalRule" &&
+          (keyboardVisible || inlineMenuMode !== null || keyboardRestorePending) && (
+          <View
+            style={[
+              styles.memoToolbarWrap,
+              { bottom: keyboardVisible ? keyboardHeight : inlinePanelHeight },
+            ]}
+            pointerEvents="box-none"
+          >
+            <MemoToolbar
+              onDismissKeyboard={() => {
+                editorRef.current?.blur();
+                Keyboard.dismiss();
+              }}
+              onFormat={handleOnFormat}
+              onOpenAddMenu={handleOpenAddMenu}
+              onUndo={() => editorRef.current?.undo()}
+              onRedo={() => editorRef.current?.redo()}
+              canUndo={selectionState.canUndo ?? true}
+              canRedo={selectionState.canRedo ?? true}
+              selectionState={selectionState}
+              onFormatPress={handleToolbarFormat}
+              onInsertDivider={handleInsertDivider}
+              onShiftEnter={handleShiftEnter}
+              inlineMenuMode={inlineMenuMode}
+              keyboardVisible={keyboardVisible}
+              addMenuBtnRef={addMenuBtnRef}
+            />
+          </View>
+        )}
+
+        {/* ── [+] 팝업 메뉴 (addMenu) ── */}
+        {!isDividing && inlineMenuMode === "addMenu" && (
+          <AddMenuPopup
+            keyboardHeight={keyboardHeight}
+            plusBtnCenterX={plusBtnCenterX}
+            onDismiss={() => setInlineMenuMode(null)}
+            onSelectQuote={handleSelectQuoteFromAddMenu}
+            onSelectPhoto={
+              isImageUploading
+                ? undefined
+                : () => {
+                    setInlineMenuMode(null);
+                    handleInsertImage();
+                  }
+            }
+          />
+        )}
+
+        {/* ── 인라인 메뉴 패널 (본문/문장수집 인용) ── */}
+        {!isDividing && inlineMenuMode !== null && inlineMenuMode !== "addMenu" && (
+          <InlineMenuPanel
+            mode={inlineMenuMode}
+            panelHeight={inlinePanelHeight}
+            activeBlock={selectionState.activeBlock}
+            userId={userId ?? ""}
+            onSelectBlock={(blockType) => {
+              editorRef.current?.setBlockType(blockType);
+              closePanelRestoreKeyboard();
+            }}
+            onSelectSentence={handleSelectQuoteSentence}
+            onSelectQuoteMenu={handleSelectQuoteFromAddMenu}
+            onDismiss={closePanelRestoreKeyboard}
+          />
+        )}
 
         {isDividing && spellTabVisible && (
           <View style={styles.spellPanel}>
@@ -1784,13 +1922,6 @@ export default function WritingScreen() {
           />
         )}
 
-        <BlockTypeSheet
-          visible={blockTypeSheetVisible}
-          activeBlock={selectionState.activeBlock}
-          onClose={() => setBlockTypeSheetVisible(false)}
-          onSelect={handleBlockTypeSelect}
-        />
-
         {!isDividing && (
           <ActionSheetModal
             visible={imagePickerVisible}
@@ -1886,6 +2017,17 @@ const styles = StyleSheet.create({
   editorOuter: {
     flex: 1,
     alignItems: "center",
+  },
+  // floating 툴바가 가리는 만큼 KAV 내부에 확보하는 공간 (툴바 캡슐 44 + 상하 8)
+  toolbarSpacerBottom: {
+    height: 60,
+  },
+  memoToolbarWrap: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    zIndex: 53,
+    ...Platform.select({ android: { elevation: 8 } }),
   },
   editorInner: {
     flex: 1,

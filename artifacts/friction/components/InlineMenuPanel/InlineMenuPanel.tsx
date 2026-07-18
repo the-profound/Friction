@@ -26,7 +26,6 @@ const BLOCK_TYPES: BlockTypeOption[] = [
   { key: "heading1", label: "제목 1" },
   { key: "heading2", label: "제목 2" },
   { key: "heading3", label: "제목 3" },
-  { key: "blockquote", label: "인용" },
   { key: "bulletList", label: "글머리 기호" },
   { key: "orderedList", label: "숫자 목록" },
 ];

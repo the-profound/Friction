@@ -15,3 +15,4 @@
 - [Friction photo-must-be-standalone-page](friction-photo-standalone-page.md) — reuse existing autoSplitImages (idempotent) for insert-time isolation instead of a new mechanism; fixed doc-end trailing-fallback edge case.
 - [Drizzle sql import in lib/db](friction-drizzle-sql-import.md) — `sql` tag must come from `drizzle-orm`, not `drizzle-orm/pg-core`; esbuild errors on the wrong import path.
 - [Native pill stretch](friction-native-pill-stretch.md) — flex guards (alignSelf/alignItems flex-start) failed to stop capsule buttons stretching vertically on native; only explicit fixed height on every layer works.
+- [RN border + overflow:hidden](friction-toolbar-border-overflow.md) — borderWidth on a view with overflow:"hidden" gets clipped and can hide inner icons; drop overflow:hidden for outline-style buttons.

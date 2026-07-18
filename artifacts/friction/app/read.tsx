@@ -15,6 +15,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import MemoBottomSheet, { type MemoBottomSheetRef } from "@/components/MemoBottomSheet/MemoBottomSheet";
 import MemoToolbar, { type FormatType } from "@/components/MemoToolbar/MemoToolbar";
+import AddMenuPopup from "@/components/MemoToolbar/AddMenuPopup";
 import InlineMenuPanel, { type InlineMenuMode } from "@/components/InlineMenuPanel/InlineMenuPanel";
 import type { OnSelectionUpdatePayload } from "@/components/WebViewMarkdownEditor/types";
 import ScalePressable from "@/components/shared/ScalePressable";
@@ -2052,46 +2053,14 @@ export default function ReadScreen() {
         </View>
       )}
 
-      {/* ── [+] 팝업 메뉴 (addMenu) ────────────────────────────────── */}
+      {/* ── [+] 팝업 메뉴 (addMenu) — 공유 컴포넌트 ─────────────────── */}
       {isMemoMode && inlineMenuMode === "addMenu" && (
-        <>
-          {/* 투명 오버레이 — 탭하면 팝업 닫힘 */}
-          <Pressable
-            style={[StyleSheet.absoluteFill, { zIndex: 52 }]}
-            onPress={() => setInlineMenuMode(null)}
-          />
-          {/* 팝업 카드 — 툴바 위 [+] 버튼 위치에 floating */}
-          <View
-            style={[
-              styles.addMenuPopup,
-              {
-                bottom: keyboardHeight + 60 + 4,
-                left: (() => {
-                  const popupW = 140;
-                  const cx = plusBtnCenterX ?? screenWidth / 2;
-                  return Math.max(16, Math.min(screenWidth - 16 - popupW, cx - popupW / 2));
-                })(),
-              },
-            ]}
-          >
-            <View style={styles.addMenuInner}>
-              <Pressable
-                style={styles.addMenuRow}
-                onPress={handleSelectQuoteFromAddMenu}
-              >
-                <MaterialCommunityIcons name="text-box-outline" size={16} color="#3f3f46" style={styles.addMenuIcon} />
-                <Text style={styles.addMenuLabel}>수집한 문장</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.addMenuRow, { borderBottomWidth: 0 }]}
-                onPress={() => setInlineMenuMode(null)}
-              >
-                <Feather name="image" size={16} color="#a1a1aa" style={styles.addMenuIcon} />
-                <Text style={[styles.addMenuLabel, styles.addMenuLabelDisabled]}>사진</Text>
-              </Pressable>
-            </View>
-          </View>
-        </>
+        <AddMenuPopup
+          keyboardHeight={keyboardHeight}
+          plusBtnCenterX={plusBtnCenterX}
+          onDismiss={() => setInlineMenuMode(null)}
+          onSelectQuote={handleSelectQuoteFromAddMenu}
+        />
       )}
 
       {/* ── 인라인 메뉴 패널 (본문/문장수집 인용) ────────────────────── */}
@@ -2496,45 +2465,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 53,
-  },
-  addMenuPopup: {
-    position: "absolute",
-    width: 140,
-    borderRadius: 12,
-    zIndex: 54,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.14,
-        shadowRadius: 10,
-      },
-      android: { elevation: 8 },
-    }),
-  },
-  addMenuInner: {
-    backgroundColor: "#ffffff",
-    borderRadius: 12,
-    overflow: "hidden",
-  },
-  addMenuRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 13,
-    paddingHorizontal: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.zinc100,
-  },
-  addMenuIcon: {
-    marginRight: 10,
-  },
-  addMenuLabel: {
-    fontSize: 15,
-    color: Colors.zinc800,
-    fontFamily: Platform.select({ ios: "Pretendard-Regular", default: "Pretendard" }),
-  },
-  addMenuLabelDisabled: {
-    color: Colors.zinc400,
   },
   progressBarContainer: {
     width: "90%",
