@@ -2071,18 +2071,22 @@ export default function ReadScreen() {
               },
             ]}
           >
-            <Pressable
-              style={styles.addMenuRow}
-              onPress={handleSelectQuoteFromAddMenu}
-            >
-              <Text style={styles.addMenuLabel}>문장수집 인용</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.addMenuRow, { borderBottomWidth: 0 }]}
-              onPress={() => setInlineMenuMode(null)}
-            >
-              <Text style={[styles.addMenuLabel, styles.addMenuLabelDisabled]}>사진 추가</Text>
-            </Pressable>
+            <View style={styles.addMenuInner}>
+              <Pressable
+                style={styles.addMenuRow}
+                onPress={handleSelectQuoteFromAddMenu}
+              >
+                <Feather name="bookmark" size={16} color="#3f3f46" style={styles.addMenuIcon} />
+                <Text style={styles.addMenuLabel}>수집한 문장</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.addMenuRow, { borderBottomWidth: 0 }]}
+                onPress={() => setInlineMenuMode(null)}
+              >
+                <Feather name="image" size={16} color="#a1a1aa" style={styles.addMenuIcon} />
+                <Text style={[styles.addMenuLabel, styles.addMenuLabelDisabled]}>사진</Text>
+              </Pressable>
+            </View>
           </View>
         </>
       )}
@@ -2493,10 +2497,8 @@ const styles = StyleSheet.create({
   addMenuPopup: {
     position: "absolute",
     width: 160,
-    backgroundColor: "#ffffff",
     borderRadius: 12,
     zIndex: 54,
-    overflow: "hidden",
     ...Platform.select({
       ios: {
         shadowColor: "#000",
@@ -2507,11 +2509,21 @@ const styles = StyleSheet.create({
       android: { elevation: 8 },
     }),
   },
+  addMenuInner: {
+    backgroundColor: "#ffffff",
+    borderRadius: 12,
+    overflow: "hidden",
+  },
   addMenuRow: {
+    flexDirection: "row",
+    alignItems: "center",
     paddingVertical: 14,
     paddingHorizontal: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
+  },
+  addMenuIcon: {
+    marginRight: 10,
   },
   addMenuLabel: {
     fontSize: 15,
