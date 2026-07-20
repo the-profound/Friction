@@ -112,54 +112,58 @@ function SpaceCard({
   const isOperator = item.myRole === "OPERATOR";
 
   return (
-    <ScalePressable
-      style={[styles.card, { width: cardWidth }]}
-      onPress={onPress}
-      contentStyle={styles.cardContent}
-    >
+    <View style={[styles.cardWrapper, { width: cardWidth }]}>
       {isOperator && (
-        <View style={styles.crownRow}>
+        <View style={styles.crownBadge}>
           <MaterialCommunityIcons name="crown" size={14} color={OPERATOR_CROWN_COLOR} />
         </View>
       )}
-      <View style={styles.cardTopRow}>
-        <View
-          style={[
-            styles.statusBadge,
-            {
-              backgroundColor: statusStyle.backgroundColor,
-              borderColor: statusStyle.borderColor,
-              borderWidth: statusStyle.borderWidth,
-            },
-          ]}
-        >
-          <Text style={[styles.statusBadgeText, { color: statusStyle.textColor }]}>
-            {statusText}
-          </Text>
+      <ScalePressable
+        style={styles.card}
+        onPress={onPress}
+        contentStyle={styles.cardContent}
+      >
+        <View style={styles.cardTopRow}>
+          <View
+            style={[
+              styles.statusBadge,
+              {
+                backgroundColor: statusStyle.backgroundColor,
+                borderColor: statusStyle.borderColor,
+                borderWidth: statusStyle.borderWidth,
+              },
+            ]}
+          >
+            <Text style={[styles.statusBadgeText, { color: statusStyle.textColor }]}>
+              {statusText}
+            </Text>
+          </View>
         </View>
-      </View>
-      <Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>
-      {item.description ? (
-        <Text style={styles.cardDesc} numberOfLines={2}>{item.description}</Text>
-      ) : null}
-      <View style={styles.cardSpacer} />
-      <View style={styles.cardMeta}>
-        {item.activeRound ? (
-          <Text style={styles.cardMetaText}>
-            {item.activeRound.roundNumber}회차 진행 중
-          </Text>
-        ) : (
-          <Text style={styles.cardMetaText}>
-            {item.roundCount}회차 계획
-          </Text>
-        )}
-        <View style={styles.metaDot} />
-        <Text style={styles.cardMetaText}>
-          {item.participantCount}
-          {item.maxParticipants ? `/${item.maxParticipants}` : ""}명
-        </Text>
-      </View>
-    </ScalePressable>
+        <Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>
+        {item.description ? (
+          <Text style={styles.cardDesc} numberOfLines={2}>{item.description}</Text>
+        ) : null}
+        <View style={styles.cardSpacer} />
+        <View style={styles.cardMeta}>
+          {item.activeRound ? (
+            <Text style={styles.cardMetaText}>
+              {item.activeRound.roundNumber}회차 진행 중
+            </Text>
+          ) : (
+            <Text style={styles.cardMetaText}>
+              {item.roundCount}회차 계획
+            </Text>
+          )}
+          <View style={styles.cardMetaRight}>
+            <Feather name="user" size={11} color={Colors.zinc400} />
+            <Text style={styles.cardMetaText}>
+              {item.participantCount}
+              {item.maxParticipants ? `/${item.maxParticipants}` : ""}명
+            </Text>
+          </View>
+        </View>
+      </ScalePressable>
+    </View>
   );
 }
 
@@ -571,21 +575,24 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   // ─── Space card ─────────────────────────────────────────────────────────────
+  cardWrapper: {
+    marginHorizontal: GRID_H_PADDING,
+    marginBottom: GRID_COLUMN_GAP,
+  },
   card: {
     borderRadius: 16,
     backgroundColor: Colors.zinc50,
     overflow: "hidden",
-    marginHorizontal: GRID_H_PADDING,
-    marginBottom: GRID_COLUMN_GAP,
   },
   cardContent: {
     padding: 16,
     position: "relative",
   },
-  crownRow: {
+  crownBadge: {
     position: "absolute",
-    top: 14,
-    left: 14,
+    top: -8,
+    left: 10,
+    zIndex: 1,
   },
   cardTopRow: {
     flexDirection: "row",
@@ -606,7 +613,7 @@ const styles = StyleSheet.create({
   },
   cardName: {
     ...Typography.bodySemiBold,
-    fontSize: 18,
+    fontSize: 20,
     color: Colors.zinc900,
   },
   cardDesc: {
@@ -622,19 +629,18 @@ const styles = StyleSheet.create({
   cardMeta: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    justifyContent: "space-between",
     marginTop: 6,
+  },
+  cardMetaRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
   },
   cardMetaText: {
     ...Typography.caption,
     fontSize: 11,
     color: Colors.zinc400,
-  },
-  metaDot: {
-    width: 2,
-    height: 2,
-    borderRadius: 1,
-    backgroundColor: Colors.zinc300,
   },
   // ─── Invitation bar ──────────────────────────────────────────────────────────
   inviteSection: {
