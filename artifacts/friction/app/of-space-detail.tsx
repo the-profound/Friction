@@ -13,6 +13,8 @@ import {
   Animated,
   PanResponder,
   Dimensions,
+  type NativeSyntheticEvent,
+  type TextLayoutEventData,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -538,6 +540,9 @@ function DescriptionSection({
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [measuredLines, setMeasuredLines] = useState<number | null>(null);
+  const hasMore = measuredLines !== null && measuredLines > 3;
   const updateSpace = useUpdateSpace();
 
   const handleStart = useCallback(() => {
@@ -608,29 +613,67 @@ function DescriptionSection({
     );
   }
 
-  return (
-    <ScalePressable
-      style={styles.descRowOuter}
-      contentStyle={styles.descRow}
-      onPress={isOperator ? handleStart : undefined}
-      disabled={!isOperator}
-    >
-      {space.description ? (
-        <Text style={styles.spaceDesc}>{space.description}</Text>
-      ) : (
+  if (!space.description) {
+    return (
+      <ScalePressable
+        style={styles.descRowOuter}
+        contentStyle={styles.descRow}
+        onPress={isOperator ? handleStart : undefined}
+        disabled={!isOperator}
+      >
         <Text style={styles.spaceDescEmpty}>
           {isOperator ? "+ 설명 추가하기" : "설명 없음"}
         </Text>
+        {isOperator && (
+          <Feather
+            name="edit-2"
+            size={13}
+            color={Colors.zinc400}
+            style={styles.descEditIcon}
+          />
+        )}
+      </ScalePressable>
+    );
+  }
+
+  return (
+    <View style={styles.descRowOuter}>
+      {/* Hidden measuring text — width-constrained to match visible text */}
+      <Text
+        style={[styles.spaceDesc, { position: "absolute", opacity: 0, left: 0, right: 0 }]}
+        onTextLayout={(e: NativeSyntheticEvent<TextLayoutEventData>) =>
+          setMeasuredLines(e.nativeEvent.lines.length)
+        }
+        aria-hidden
+      >
+        {space.description}
+      </Text>
+      <View style={styles.descRow}>
+        <Text
+          style={styles.spaceDesc}
+          numberOfLines={hasMore && !expanded ? 3 : undefined}
+        >
+          {space.description}
+        </Text>
+        {isOperator && (
+          <ScalePressable onPress={handleStart} hitSlop={8}>
+            <Feather
+              name="edit-2"
+              size={13}
+              color={Colors.zinc400}
+              style={styles.descEditIcon}
+            />
+          </ScalePressable>
+        )}
+      </View>
+      {hasMore && (
+        <ScalePressable onPress={() => setExpanded((v) => !v)} hitSlop={6}>
+          <Text style={styles.descMoreBtn}>
+            {expanded ? "접기" : "더보기"}
+          </Text>
+        </ScalePressable>
       )}
-      {isOperator && (
-        <Feather
-          name="edit-2"
-          size={13}
-          color={Colors.zinc400}
-          style={styles.descEditIcon}
-        />
-      )}
-    </ScalePressable>
+    </View>
   );
 }
 
@@ -1062,7 +1105,8 @@ export default function SpaceDetailScreen() {
       >
         {/* ── Space info flat section ── */}
         <View style={styles.infoSection}>
-          <View style={styles.badgeRow}>
+          {/* Badge row */}
+          <View style={[styles.badgeRow, { marginBottom: 6 }]}>
             <View style={[styles.statusBadge, { borderColor: statusColor }]}>
               <Text style={[styles.statusBadgeText, { color: statusColor }]}>
                 {statusText}
@@ -1079,53 +1123,61 @@ export default function SpaceDetailScreen() {
             )}
           </View>
 
-          <Text style={styles.spaceName}>{space.name}</Text>
+          {/* Space name — visually dominant title block */}
+          <Text style={[styles.spaceName, { marginBottom: 12 }]}>{space.name}</Text>
 
-          <DescriptionSection
-            space={space}
-            isOperator={isOperator}
-            userId={userId}
-            onSaved={handleDescriptionSaved}
-          />
-
-          {(space as any).creatorNickname ? (
-            <View style={styles.creatorRow}>
-              <Feather name="user-check" size={13} color={Colors.zinc400} />
-              <Text style={styles.creatorText}>{(space as any).creatorNickname}</Text>
-            </View>
-          ) : null}
-
-          <View style={styles.metaRow}>
-            <Text style={styles.metaText}>
-              참여자 {space.participantCount}
-              {space.maxParticipants ? `/${space.maxParticipants}` : ""}명
-            </Text>
-            <View style={styles.metaDot} />
-            <Text style={styles.metaText}>편지 {letters.length}개</Text>
+          {/* Description with expand/collapse */}
+          <View style={{ marginBottom: 16 }}>
+            <DescriptionSection
+              space={space}
+              isOperator={isOperator}
+              userId={userId}
+              onSaved={handleDescriptionSaved}
+            />
           </View>
 
-          {(space as any).startsAt ? (
-            <View style={styles.startDateRow}>
-              <Text style={styles.startDateText}>
-                {(() => {
-                  const d = new Date((space as any).startsAt);
-                  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")} 시작`;
-                })()}
+          {/* Unified meta group */}
+          <View style={styles.metaGroup}>
+            <View style={styles.metaIconRow}>
+              <Feather name="users" size={12} color={Colors.zinc400} />
+              <Text style={styles.metaIconRowText}>
+                참여자 {space.participantCount}
+                {space.maxParticipants ? `/${space.maxParticipants}` : ""}명
+                {" · "}편지 {letters.length}개
               </Text>
             </View>
-          ) : null}
 
-          {(space.defaultCenterInterval != null && space.defaultCenterCount != null) ? (
-            <View style={styles.centreRuleRow}>
-              <Feather name="repeat" size={12} color={Colors.zinc400} />
-              <Text style={styles.centreRuleText}>
-                {`${space.defaultCenterInterval}일마다 중심글 ${space.defaultCenterCount}개`}
-              </Text>
-            </View>
-          ) : null}
+            {(space as any).startsAt ? (
+              <View style={styles.metaIconRow}>
+                <Feather name="calendar" size={12} color={Colors.zinc400} />
+                <Text style={styles.metaIconRowText}>
+                  {(() => {
+                    const d = new Date((space as any).startsAt);
+                    return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")} 시작`;
+                  })()}
+                </Text>
+              </View>
+            ) : null}
+
+            {(space.defaultCenterInterval != null && space.defaultCenterCount != null) ? (
+              <View style={styles.metaIconRow}>
+                <Feather name="repeat" size={12} color={Colors.zinc400} />
+                <Text style={styles.metaIconRowText}>
+                  {`${space.defaultCenterInterval}일마다 중심글 ${space.defaultCenterCount}개`}
+                </Text>
+              </View>
+            ) : null}
+
+            {(space as any).creatorNickname ? (
+              <View style={styles.metaIconRow}>
+                <Feather name="user-check" size={12} color={Colors.zinc400} />
+                <Text style={styles.metaIconRowText}>{(space as any).creatorNickname}</Text>
+              </View>
+            ) : null}
+          </View>
 
           {isOperator && isRecruiting && space.inviteCode ? (
-            <View style={styles.inviteCodeRow}>
+            <View style={[styles.inviteCodeRow, { marginTop: 12 }]}>
               <View style={styles.inviteCodeRowLeft}>
                 <Feather name="key" size={12} color={Colors.zinc400} />
                 <Text style={styles.inviteCodeLabel}>초대 문구</Text>
@@ -1139,12 +1191,15 @@ export default function SpaceDetailScreen() {
           ) : null}
 
           {isCapacityFull && !isOperator && (
-            <View style={styles.recruitmentClosedBanner}>
+            <View style={[styles.recruitmentClosedBanner, { marginTop: 12, marginHorizontal: 0 }]}>
               <Feather name="slash" size={13} color={Colors.zinc500} />
               <Text style={styles.recruitmentClosedText}>모집이 마감됐어요</Text>
             </View>
           )}
         </View>
+
+        {/* ── Info / rounds separator ── */}
+        <View style={styles.infoSeparator} />
 
         {/* ── Code requests (operator only) ── */}
         {isOperator && (
@@ -1375,8 +1430,7 @@ const styles = StyleSheet.create({
   infoSection: {
     paddingHorizontal: Spacing.screenPx,
     paddingTop: 4,
-    paddingBottom: 8,
-    gap: 10,
+    paddingBottom: 16,
   },
   badgeRow: {
     flexDirection: "row",
@@ -1422,34 +1476,29 @@ const styles = StyleSheet.create({
     lineHeight: 32,
     letterSpacing: -0.3,
   },
-  creatorRow: {
-    flexDirection: "row",
-    alignItems: "center",
+  metaGroup: {
     gap: 5,
   },
-  creatorText: {
-    ...Typography.caption,
-    fontSize: 13,
-    color: Colors.zinc500,
+  metaIconRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
-  startDateRow: {
-    marginTop: -2,
-  },
-  startDateText: {
+  metaIconRowText: {
     ...Typography.caption,
     fontSize: 12,
     color: Colors.zinc400,
   },
-  centreRuleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    marginTop: -2,
+  infoSeparator: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: Colors.zinc200,
+    marginTop: 4,
   },
-  centreRuleText: {
+  descMoreBtn: {
     ...Typography.caption,
     fontSize: 12,
     color: Colors.zinc400,
+    marginTop: 4,
   },
   descRowOuter: {
     minHeight: 20,
@@ -1517,24 +1566,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.white,
     fontWeight: "600",
-  },
-  metaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    flexWrap: "wrap",
-    marginTop: 2,
-  },
-  metaText: {
-    ...Typography.caption,
-    fontSize: 12,
-    color: Colors.zinc400,
-  },
-  metaDot: {
-    width: 3,
-    height: 3,
-    borderRadius: 1.5,
-    backgroundColor: Colors.zinc300,
   },
 
   // ─── Section ───────────────────────────────────────────────────────────────
@@ -1882,7 +1913,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 10,
     paddingVertical: 10,
     paddingHorizontal: 12,
     backgroundColor: Colors.zinc50,
