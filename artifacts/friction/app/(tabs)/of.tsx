@@ -544,14 +544,20 @@ const styles = StyleSheet.create({
   },
   card: {
     borderRadius: 16,
-    backgroundColor: Colors.zinc50,
-    overflow: "hidden",
+    backgroundColor: Colors.white,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   cardContent: {
     padding: 16,
     position: "relative",
     flexDirection: "column",
     justifyContent: "flex-start",
+    borderRadius: 16,
+    overflow: "hidden",
   },
   crownBadge: {
     position: "absolute",
