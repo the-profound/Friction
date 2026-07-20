@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQueryClient } from "@tanstack/react-query";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { PageHeader } from "@/components/NavBar/PageHeader";
@@ -55,14 +55,36 @@ function spaceStatusLabel(status: string): string {
   return status;
 }
 
-function spaceStatusColor(status: string): string {
-  if (status === "ACTIVE") return Colors.noticeAccent;
-  if (status === "RECRUITING") return Colors.zinc500;
-  return Colors.zinc300;
-}
+type StatusStyle = {
+  backgroundColor: string;
+  borderColor: string;
+  borderWidth: number;
+  textColor: string;
+};
 
-function roleLabel(role: string): string {
-  return role === "OPERATOR" ? "운영자" : "참여자";
+function spaceStatusStyle(status: string): StatusStyle {
+  if (status === "ACTIVE") {
+    return {
+      backgroundColor: Colors.noticeAccent,
+      borderColor: Colors.noticeAccent,
+      borderWidth: 0,
+      textColor: Colors.white,
+    };
+  }
+  if (status === "RECRUITING") {
+    return {
+      backgroundColor: Colors.transparent,
+      borderColor: Colors.noticeAccent,
+      borderWidth: 1,
+      textColor: Colors.noticeAccent,
+    };
+  }
+  return {
+    backgroundColor: Colors.zinc900,
+    borderColor: Colors.zinc900,
+    borderWidth: 0,
+    textColor: Colors.white,
+  };
 }
 
 function sortSpaces(spaces: SpaceListItem[]): SpaceListItem[] {
@@ -79,21 +101,19 @@ function sortSpaces(spaces: SpaceListItem[]): SpaceListItem[] {
 function SpaceCard({
   item,
   onPress,
-  cardSize,
+  cardWidth,
 }: {
   item: SpaceListItem;
   onPress: () => void;
-  cardSize: number;
+  cardWidth: number;
 }) {
-  const statusColor = spaceStatusColor(item.status);
+  const statusStyle = spaceStatusStyle(item.status);
   const statusText = spaceStatusLabel(item.status);
-  const role = roleLabel(item.myRole);
-  const avatarLetter = item.name.charAt(0);
   const isOperator = item.myRole === "OPERATOR";
 
   return (
     <ScalePressable
-      style={[styles.card, { width: cardSize, height: cardSize }]}
+      style={[styles.card, { width: cardWidth }]}
       onPress={onPress}
       contentStyle={styles.cardContent}
     >
@@ -103,16 +123,19 @@ function SpaceCard({
         </View>
       )}
       <View style={styles.cardTopRow}>
-        <View style={styles.cardAvatar}>
-          <Text style={styles.cardAvatarText}>{avatarLetter}</Text>
-        </View>
-        <View style={styles.cardBadgeStack}>
-          <View style={[styles.statusBadge, { borderColor: statusColor }]}>
-            <Text style={[styles.statusBadgeText, { color: statusColor }]}>{statusText}</Text>
-          </View>
-          <View style={styles.roleBadge}>
-            <Text style={styles.roleBadgeText}>{role}</Text>
-          </View>
+        <View
+          style={[
+            styles.statusBadge,
+            {
+              backgroundColor: statusStyle.backgroundColor,
+              borderColor: statusStyle.borderColor,
+              borderWidth: statusStyle.borderWidth,
+            },
+          ]}
+        >
+          <Text style={[styles.statusBadgeText, { color: statusStyle.textColor }]}>
+            {statusText}
+          </Text>
         </View>
       </View>
       <Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>
@@ -223,9 +246,14 @@ export default function SpacesScreen() {
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
-  const cardSize = Math.floor((screenWidth - GRID_H_PADDING * 2 - GRID_COLUMN_GAP) / 2);
+  const cardWidth = Math.floor(screenWidth - GRID_H_PADDING * 2);
 
-  const spacesQuery = useListSpaces({ userId });
+  const spacesQuery = useListSpaces({ userId }, {
+    query: {
+      staleTime: 30_000,
+      placeholderData: keepPreviousData,
+    },
+  });
   const invitationsQuery = useListMySpaceInvitations({ userId });
   const codeRequestsQuery = useListMySpaceCodeRequests({ userId });
 
@@ -306,13 +334,13 @@ export default function SpacesScreen() {
     ({ item }: { item: SpaceListItem }) => (
       <SpaceCard
         item={item}
-        cardSize={cardSize}
+        cardWidth={cardWidth}
         onPress={() =>
           router.push({ pathname: "/of-space-detail" as never, params: { id: item.id } })
         }
       />
     ),
-    [router, cardSize],
+    [router, cardWidth],
   );
 
   const hasRawContent =
@@ -425,8 +453,6 @@ export default function SpacesScreen() {
             data={spaces}
             keyExtractor={(item) => item.id}
             renderItem={renderSpaceItem}
-            numColumns={2}
-            columnWrapperStyle={styles.columnWrapper}
             contentContainerStyle={[styles.listContent, { paddingBottom: navBottom }]}
             refreshControl={
               <RefreshControl
@@ -450,8 +476,6 @@ export default function SpacesScreen() {
           data={spaces}
           keyExtractor={(item) => item.id}
           renderItem={renderSpaceItem}
-          numColumns={2}
-          columnWrapperStyle={styles.columnWrapper}
           contentContainerStyle={[styles.listContent, { paddingBottom: navBottom }]}
           refreshControl={
             <RefreshControl
@@ -528,11 +552,6 @@ const styles = StyleSheet.create({
   gridTopSpacer: {
     height: 4,
   },
-  columnWrapper: {
-    paddingHorizontal: Spacing.screenPx,
-    gap: GRID_COLUMN_GAP,
-    marginBottom: GRID_COLUMN_GAP,
-  },
   filteredEmptyInline: {
     paddingVertical: 32,
     alignItems: "center",
@@ -556,63 +575,38 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: Colors.zinc50,
     overflow: "hidden",
+    marginHorizontal: GRID_H_PADDING,
+    marginBottom: GRID_COLUMN_GAP,
   },
   cardContent: {
-    flex: 1,
-    padding: 14,
+    padding: 16,
+    position: "relative",
   },
   crownRow: {
-    marginBottom: 4,
+    position: "absolute",
+    top: 14,
+    left: 14,
   },
   cardTopRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    justifyContent: "space-between",
+    justifyContent: "flex-end",
     marginBottom: 10,
-  },
-  cardAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.zinc200,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  cardAvatarText: {
-    ...Typography.bodySemiBold,
-    fontSize: 18,
-    color: Colors.zinc700,
-  },
-  cardBadgeStack: {
-    alignItems: "flex-end",
-    gap: 4,
+    minHeight: 22,
   },
   statusBadge: {
-    borderWidth: 1,
     borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
   },
   statusBadgeText: {
     ...Typography.caption,
     fontSize: 10,
     fontWeight: "600",
   },
-  roleBadge: {
-    borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    backgroundColor: Colors.zinc100,
-  },
-  roleBadgeText: {
-    ...Typography.caption,
-    fontSize: 10,
-    color: Colors.zinc500,
-    fontWeight: "500",
-  },
   cardName: {
     ...Typography.bodySemiBold,
-    fontSize: 14,
+    fontSize: 18,
     color: Colors.zinc900,
   },
   cardDesc: {
