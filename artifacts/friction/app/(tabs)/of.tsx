@@ -104,7 +104,7 @@ function SpaceCard({
         </View>
         <Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>
         {item.description ? (
-          <Text style={styles.cardDesc} numberOfLines={2}>{item.description}</Text>
+          <Text style={styles.cardDesc} numberOfLines={4}>{item.description}</Text>
         ) : null}
         <View style={styles.cardSpacer} />
         <View style={styles.cardMeta}>
@@ -569,7 +569,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "flex-end",
-    marginBottom: 10,
+    marginBottom: 4,
     minHeight: 22,
   },
   statusBadge: {
@@ -596,6 +596,7 @@ const styles = StyleSheet.create({
   },
   cardSpacer: {
     flex: 1,
+    minHeight: 8,
   },
   cardMeta: {
     flexDirection: "row",
