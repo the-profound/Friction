@@ -587,6 +587,8 @@ const styles = StyleSheet.create({
   cardContent: {
     padding: 16,
     position: "relative",
+    flexDirection: "column",
+    justifyContent: "flex-start",
   },
   crownBadge: {
     position: "absolute",
