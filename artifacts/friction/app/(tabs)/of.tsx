@@ -36,6 +36,7 @@ import type {
   SpaceInvitationWithSpace,
   SpaceCodeRequestWithSpace,
 } from "@workspace/api-client-react";
+import { spaceStatusLabel, spaceStatusStyle } from "@/lib/spaceStatusStyle";
 
 const GRID_H_PADDING = Spacing.screenPx;
 const GRID_COLUMN_GAP = 10;
@@ -48,44 +49,6 @@ const STATUS_PRIORITY: Record<string, number> = {
   ACTIVE: 0,
   RECRUITING: 1,
 };
-
-function spaceStatusLabel(status: string): string {
-  if (status === "ACTIVE") return "진행 중";
-  if (status === "RECRUITING") return "모집 중";
-  return status;
-}
-
-type StatusStyle = {
-  backgroundColor: string;
-  borderColor: string;
-  borderWidth: number;
-  textColor: string;
-};
-
-function spaceStatusStyle(status: string): StatusStyle {
-  if (status === "ACTIVE") {
-    return {
-      backgroundColor: Colors.noticeAccent,
-      borderColor: Colors.noticeAccent,
-      borderWidth: 0,
-      textColor: Colors.white,
-    };
-  }
-  if (status === "RECRUITING") {
-    return {
-      backgroundColor: Colors.transparent,
-      borderColor: Colors.noticeAccent,
-      borderWidth: 1,
-      textColor: Colors.noticeAccent,
-    };
-  }
-  return {
-    backgroundColor: Colors.zinc900,
-    borderColor: Colors.zinc900,
-    borderWidth: 0,
-    textColor: Colors.white,
-  };
-}
 
 function sortSpaces(spaces: SpaceListItem[]): SpaceListItem[] {
   return [...spaces].sort((a, b) => {

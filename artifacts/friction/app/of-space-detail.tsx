@@ -52,6 +52,7 @@ import type {
 } from "@workspace/api-client-react";
 import { useAncestorChain } from "@/hooks/useAncestorChain";
 import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
+import { spaceStatusLabel, spaceStatusStyle } from "@/lib/spaceStatusStyle";
 
 // ─── Space Carousel constants ─────────────────────────────────────────────────
 // Card width is derived so that exactly 2 full cards + the centre of the 3rd
@@ -67,19 +68,6 @@ const SC_CARD_W = Math.floor((SCREEN_W - SC_LEFT_PAD - 2 * SC_CARD_GAP) / 2.5);
 const SC_CARD_H = SC_CARD_W * (8 / 5);
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function spaceStatusLabel(status: string): string {
-  if (status === "ACTIVE") return "진행 중";
-  if (status === "RECRUITING") return "모집 중";
-  if (status === "ARCHIVED") return "종료";
-  return status;
-}
-
-function spaceStatusColor(status: string): string {
-  if (status === "ACTIVE") return Colors.noticeAccent;
-  if (status === "RECRUITING") return Colors.zinc500;
-  return Colors.zinc300;
-}
 
 function roundStatusLabel(status: string): string {
   if (status === "ACTIVE") return "진행 중";
@@ -1055,7 +1043,7 @@ export default function SpaceDetailScreen() {
     );
   }
 
-  const statusColor = spaceStatusColor(space.status);
+  const statusStyle = spaceStatusStyle(space.status);
   const statusText = spaceStatusLabel(space.status);
 
   // ─── Main content ───────────────────────────────────────────────────────────
@@ -1107,8 +1095,17 @@ export default function SpaceDetailScreen() {
         <View style={styles.infoSection}>
           {/* Badge row */}
           <View style={[styles.badgeRow, { marginBottom: 6 }]}>
-            <View style={[styles.statusBadge, { borderColor: statusColor }]}>
-              <Text style={[styles.statusBadgeText, { color: statusColor }]}>
+            <View
+              style={[
+                styles.statusBadge,
+                {
+                  backgroundColor: statusStyle.backgroundColor,
+                  borderColor: statusStyle.borderColor,
+                  borderWidth: statusStyle.borderWidth,
+                },
+              ]}
+            >
+              <Text style={[styles.statusBadgeText, { color: statusStyle.textColor }]}>
                 {statusText}
               </Text>
             </View>

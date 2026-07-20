@@ -151,7 +151,9 @@ router.get("/spaces", async (req, res) => {
     : [];
   const creatorNicknameMap = new Map(creators.map((u) => [u.id, u.nickname]));
 
-  const result = spaces.map((space) => ({
+  const activatedSpaces = await Promise.all(spaces.map(autoActivateSpace));
+
+  const result = activatedSpaces.map((space) => ({
     ...space,
     myRole: roleMap.get(space.id) ?? "PARTICIPANT",
     participantCount: participantCountMap.get(space.id) ?? 0,
@@ -229,15 +231,32 @@ router.get("/spaces/by-invite-code/:code", async (req, res) => {
   res.json({ ...space, creatorNickname: creator?.nickname ?? null, participantCount });
 });
 
+async function autoActivateSpace(space: typeof spacesTable.$inferSelect): Promise<typeof spacesTable.$inferSelect> {
+  if (
+    space.status === "RECRUITING" &&
+    space.startsAt != null &&
+    new Date(space.startsAt) <= new Date()
+  ) {
+    const [updated] = await db
+      .update(spacesTable)
+      .set({ status: "ACTIVE" })
+      .where(eq(spacesTable.id, space.id))
+      .returning();
+    return updated ?? { ...space, status: "ACTIVE" };
+  }
+  return space;
+}
+
 router.get("/spaces/:id", async (req, res) => {
-  const [space] = await db
+  const [raw] = await db
     .select()
     .from(spacesTable)
     .where(eq(spacesTable.id, req.params.id));
-  if (!space) {
+  if (!raw) {
     res.status(404).json({ error: "Space not found" });
     return;
   }
+  const space = await autoActivateSpace(raw);
   res.json(space);
 });
 
