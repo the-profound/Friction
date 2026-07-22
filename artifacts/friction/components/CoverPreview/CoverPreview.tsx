@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from "react";
-import { View, Text, StyleSheet, Image, LayoutChangeEvent } from "react-native";
+import { View, Text, StyleSheet, LayoutChangeEvent } from "react-native";
+import { Image } from "expo-image";
 import { Colors, ReaderTokens, cqiToPx, readerFontSize, readerLetterSpacing } from "../../constants/tokens";
 import type { ArticleCover } from "@workspace/api-client-react";
 import { resolveArticleCover } from "../../utils/articleCover";
@@ -53,7 +54,8 @@ export default function CoverPreview({
         <Image
           source={{ uri: cover.imageUrl }}
           style={StyleSheet.absoluteFill}
-          resizeMode="cover"
+          contentFit="cover"
+          cachePolicy="disk"
         />
       )}
       {isImage && <View style={styles.imageOverlay} />}

@@ -28,9 +28,20 @@ import {
   useListUserArticleReads,
   getArticle,
   getGetArticleQueryKey,
+  getGetUserQueryKey,
+  getListArticlesQueryKey,
+  getListTeamCollectionsQueryKey,
+  getListSendRecordsQueryKey,
+  getListNeighborsQueryKey,
 } from "@workspace/api-client-react";
+import { isQueryStale } from "@/lib/useScreenFocused";
 import type { Article, TeamCollectionWithRole, SendRecordWithDetails } from "@workspace/api-client-react";
 import type { OriginLayout } from "@/components/CardSelectOverlay/CardSelectOverlay";
+
+// getListUserArticleReadsQueryKey is not in the compiled dist types — define locally.
+// Key shape mirrors packages/api-client-react/src/user-article-reads.ts.
+const getListUserArticleReadsQueryKey = (params: { userId: string }) =>
+  ["/api/user-article-reads", params] as const;
 
 
 type MyTab = "letters" | "publications" | "groups";
@@ -68,6 +79,7 @@ export default function MyScreen() {
   const neighborsQuery = useListNeighbors({ userId });
   const userReadsQuery = useListUserArticleReads({ userId });
 
+  const refetchUser = userQuery.refetch;
   const refetchArticles = articlesQuery.refetch;
   const refetchTeams = teamsQuery.refetch;
   const refetchSendRecords = sendRecordsQuery.refetch;
@@ -75,12 +87,25 @@ export default function MyScreen() {
   const refetchUserReads = userReadsQuery.refetch;
   useFocusEffect(
     useCallback(() => {
-      refetchArticles();
-      refetchTeams();
-      refetchSendRecords();
-      refetchNeighbors();
-      refetchUserReads();
-    }, [refetchArticles, refetchTeams, refetchSendRecords, refetchNeighbors, refetchUserReads]),
+      if (isQueryStale(queryClient, getGetUserQueryKey(userId))) {
+        refetchUser();
+      }
+      if (isQueryStale(queryClient, getListArticlesQueryKey({ authorId: userId }))) {
+        refetchArticles();
+      }
+      if (isQueryStale(queryClient, getListTeamCollectionsQueryKey({ userId }))) {
+        refetchTeams();
+      }
+      if (isQueryStale(queryClient, getListSendRecordsQueryKey({ senderId: userId }))) {
+        refetchSendRecords();
+      }
+      if (isQueryStale(queryClient, getListNeighborsQueryKey({ userId }))) {
+        refetchNeighbors();
+      }
+      if (isQueryStale(queryClient, getListUserArticleReadsQueryKey({ userId }))) {
+        refetchUserReads();
+      }
+    }, [queryClient, userId, refetchUser, refetchArticles, refetchTeams, refetchSendRecords, refetchNeighbors, refetchUserReads]),
   );
 
   const sendRecordByArticleId = useMemo<
@@ -204,36 +229,63 @@ export default function MyScreen() {
     let cancelled = false;
     setToAncestorChain([{ id: startId, article: null }]);
 
-    async function traverse(id: string) {
-      if (cancelled) return;
-      let article: Article | null = null;
-      try {
-        article = await queryClient.fetchQuery({
-          queryKey: getGetArticleQueryKey(id),
-          queryFn: () => getArticle(id),
-          staleTime: 5 * 60 * 1000,
-        }) as Article;
-      } catch {
-        return;
-      }
-      if (cancelled || !article) return;
+    const MAX_DEPTH = 20;
 
-      setToAncestorChain((prev) => {
-        const idx = prev.findIndex((s) => s.id === id);
-        if (idx === -1) return prev;
-        const next = [...prev];
-        next[idx] = { id, article };
-        return next;
-      });
+    async function bfsTraverse() {
+      let currentIds = [startId as string];
 
-      const nextId = (article as any).sourceArticleId as string | null | undefined;
-      if (nextId && !cancelled) {
-        setToAncestorChain((prev) => [{ id: nextId, article: null }, ...prev]);
-        await traverse(nextId);
+      for (let depth = 0; depth < MAX_DEPTH && currentIds.length > 0; depth++) {
+        if (cancelled) return;
+
+        const results = await Promise.all(
+          currentIds.map(async (id) => {
+            try {
+              return (await queryClient.fetchQuery({
+                queryKey: getGetArticleQueryKey(id),
+                queryFn: () => getArticle(id),
+                staleTime: 5 * 60 * 1000,
+              })) as Article;
+            } catch {
+              return null;
+            }
+          }),
+        );
+
+        if (cancelled) return;
+
+        setToAncestorChain((prev) => {
+          const next = [...prev];
+          for (let i = 0; i < currentIds.length; i++) {
+            const id = currentIds[i];
+            const article = results[i];
+            const idx = next.findIndex((s) => s.id === id);
+            if (idx !== -1 && article) {
+              next[idx] = { id, article };
+            }
+          }
+          return next;
+        });
+
+        const nextIds: string[] = [];
+        for (const article of results) {
+          if (article) {
+            const nextId = (article as any).sourceArticleId as string | null | undefined;
+            if (nextId) nextIds.push(nextId);
+          }
+        }
+
+        if (nextIds.length > 0 && !cancelled) {
+          setToAncestorChain((prev) => [
+            ...nextIds.map((id) => ({ id, article: null })),
+            ...prev,
+          ]);
+        }
+
+        currentIds = nextIds;
       }
     }
 
-    traverse(startId);
+    bfsTraverse();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedArticle?.sourceArticleId]);

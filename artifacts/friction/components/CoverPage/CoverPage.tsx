@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
-import { View, Text, StyleSheet, ImageBackground } from "react-native";
+import { View, Text, StyleSheet } from "react-native";
+import { Image } from "expo-image";
 import { ReaderTokens, Colors, cqiToPx, readerFontSize, readerLetterSpacing } from "@/constants/tokens";
 import type { ArticleCover } from "@workspace/api-client-react";
 
@@ -92,16 +93,18 @@ export default function CoverPage({
 
   if (cover.type === "image" && cover.imageUrl) {
     return (
-      <ImageBackground
-        source={{ uri: cover.imageUrl }}
-        style={dynamicStyles.imageWrapper}
-        resizeMode="cover"
-        onLoadEnd={onImageLoad}
-      >
+      <View style={dynamicStyles.imageWrapper}>
+        <Image
+          source={{ uri: cover.imageUrl }}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          cachePolicy="disk"
+          onLoadEnd={onImageLoad}
+        />
         <View style={dynamicStyles.imageOverlay}>
           {content}
         </View>
-      </ImageBackground>
+      </View>
     );
   }
 
