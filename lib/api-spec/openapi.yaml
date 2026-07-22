@@ -32,6 +32,8 @@ tags:
     description: Send record operations
   - name: spell-check
     description: Korean spell-check operations
+  - name: thoughts
+    description: Thought operations
 
 paths:
   /healthz:
@@ -2276,6 +2278,29 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  # ─── Thoughts ──────────────────────────────────────
+  /thoughts:
+    get:
+      operationId: listThoughts
+      tags: [thoughts]
+      summary: List thoughts for the authenticated user
+      description: Returns thoughts belonging to the authenticated user. No query params — identity is taken from the auth token.
+      responses:
+        "200":
+          description: Thought list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Thought"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   parameters:
     IdPath:
@@ -3864,6 +3889,37 @@ components:
             - $ref: "#/components/schemas/SpaceCodeRequest"
           nullable: true
       required: [space]
+
+    # ─── Thoughts ────────────────────────────────────
+    ThoughtCreatedFrom:
+      type: string
+      enum: [quoted, question, reading, direct]
+
+    Thought:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        authorId:
+          type: string
+          format: uuid
+        content:
+          type: string
+          nullable: true
+        createdFrom:
+          $ref: "#/components/schemas/ThoughtCreatedFrom"
+        sourceArticleId:
+          type: string
+          format: uuid
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, authorId, createdFrom, createdAt, updatedAt]
 
     # ─── SpellCheck ─────────────────────────────────
     SpellCheckBody:

@@ -12,6 +12,7 @@ import sendRecordsRouter from "./send-records";
 import storageRouter from "./storage";
 import spellCheckRouter from "./spell-check";
 import spacesRouter from "./spaces";
+import thoughtsRouter from "./thoughts";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(sendRecordsRouter);
 router.use(storageRouter);
 router.use(spellCheckRouter);
 router.use(spacesRouter);
+router.use(thoughtsRouter);
 
 export default router;

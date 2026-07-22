@@ -98,6 +98,7 @@ import type {
   TeamMemberWithUser,
   ToggleStoredSentenceFavoriteBody,
   ToggleTeamArticlePinBody,
+  Thought,
   TransitionArticleBody,
   UpdateArticleBody,
   UpdateMyCollectionBody,
@@ -8882,3 +8883,69 @@ export const useDeleteSendRecord = <
 > => {
   return useMutation(getDeleteSendRecordMutationOptions(options));
 };
+
+// ─── Thoughts ──────────────────────────────────────────────────────────────
+
+export const getListThoughtsUrl = () => `/api/thoughts`;
+
+export const listThoughts = async (
+  options?: RequestInit,
+): Promise<Thought[]> => {
+  return customFetch<Thought[]>(getListThoughtsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListThoughtsQueryKey = () => {
+  return [`/api/thoughts`] as const;
+};
+
+export const getListThoughtsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listThoughts>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listThoughts>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getListThoughtsQueryKey();
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listThoughts>>> = ({
+    signal,
+  }) => listThoughts({ signal, ...requestOptions });
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listThoughts>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListThoughtsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listThoughts>>
+>;
+export type ListThoughtsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List thoughts for the authenticated user
+ */
+export function useListThoughts<
+  TData = Awaited<ReturnType<typeof listThoughts>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listThoughts>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListThoughtsQueryOptions(options);
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+  return { ...query, queryKey: queryOptions.queryKey };
+}

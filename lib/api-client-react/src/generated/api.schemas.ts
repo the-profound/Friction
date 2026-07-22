@@ -1155,3 +1155,16 @@ export type ListNeighborRequestsParams = {
 export type ListSendRecordsParams = {
   senderId: string;
 };
+
+export type ThoughtCreatedFrom = "quoted" | "question" | "reading" | "direct";
+
+export interface Thought {
+  id: string;
+  authorId: string;
+  content?: string | null;
+  createdFrom: ThoughtCreatedFrom;
+  sourceArticleId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+

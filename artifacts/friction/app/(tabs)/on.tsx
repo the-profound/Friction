@@ -15,6 +15,8 @@ import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { PageHeader } from "@/components/NavBar/PageHeader";
 import ArticleListItem from "@/components/ArticleListItem/ArticleListItem";
+import ThoughtListItem from "@/components/ThoughtListItem/ThoughtListItem";
+import ThoughtDetailModal from "@/components/ThoughtDetailModal/ThoughtDetailModal";
 import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import RefreshableEmpty from "@/components/RefreshableEmpty";
@@ -28,16 +30,17 @@ import {
   useListSendRecords,
   useListMyCollections,
   useAddArticleToMyCollection,
+  useListThoughts,
 } from "@workspace/api-client-react";
 import { invalidateArticleLists } from "@/lib/queryInvalidation";
-import type { Article, MyCollection } from "@workspace/api-client-react";
+import type { Article, MyCollection, Thought } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useNavigation } from "@/contexts/NavigationContext";
 import type { ArticleStatus } from "@/lib/policies";
 import { LIST_PERF_PRESET } from "@/lib/listPerf";
 
-type TopTab = "memo" | "my_article";
+type TopTab = "memo" | "my_article" | "thought";
 type FilterMode = "all" | "DRAFT" | "DIVIDING" | "CLOSING";
 
 const FILTER_OPTIONS: { key: FilterMode; label: string }[] = [
@@ -49,7 +52,8 @@ const FILTER_OPTIONS: { key: FilterMode; label: string }[] = [
 
 type ListItem =
   | { type: "memo"; article: Article }
-  | { type: "my_article"; article: Article };
+  | { type: "my_article"; article: Article }
+  | { type: "thought"; thought: Thought };
 
 function getScreenForStatus(status: ArticleStatus): string {
   switch (status) {
@@ -111,9 +115,13 @@ export default function OnScreen() {
   const openRowRef = useRef<SwipeableRowHandle | null>(null);
   const rowRefs = useRef<Map<string, SwipeableRowHandle>>(new Map());
 
+  const [selectedThought, setSelectedThought] = useState<Thought | null>(null);
+
   const { data: articles, isLoading, refetch, isRefetching } = useListArticles({
     authorId: userId,
   });
+
+  const { data: thoughts, isLoading: isThoughtsLoading, refetch: refetchThoughts, isRefetching: isThoughtsRefetching } = useListThoughts();
 
   const { data: sendRecords } = useListSendRecords({ senderId: userId });
 
@@ -155,7 +163,7 @@ export default function OnScreen() {
       return () => {
         setShowRecordFab(false);
       };
-    }, [topTab, selectionMode, setShowRecordFab])
+    }, [topTab, selectionMode, setShowRecordFab]),
   );
 
   const filteredArticles = useMemo(() => {
@@ -207,8 +215,11 @@ export default function OnScreen() {
     if (topTab === "my_article") {
       return displayedMyArticles.map((a) => ({ type: "my_article", article: a }));
     }
+    if (topTab === "thought") {
+      return (thoughts ?? []).map((t: Thought) => ({ type: "thought" as const, thought: t }));
+    }
     return displayedArticles.map((a) => ({ type: "memo", article: a }));
-  }, [topTab, displayedArticles, displayedMyArticles]);
+  }, [topTab, displayedArticles, displayedMyArticles, thoughts]);
 
   const closeOpenRow = useCallback(() => {
     if (openRowRef.current) {
@@ -541,6 +552,17 @@ export default function OnScreen() {
         );
       }
 
+      if (item.type === "thought") {
+        return (
+          <ThoughtListItem
+            content={item.thought.content}
+            createdFrom={item.thought.createdFrom}
+            rightMeta={formatRelativeDate(item.thought.createdAt)}
+            onPress={() => setSelectedThought(item.thought)}
+          />
+        );
+      }
+
       return null;
     },
     [
@@ -559,6 +581,7 @@ export default function OnScreen() {
   );
 
   const keyExtractor = useCallback((item: ListItem) => {
+    if (item.type === "thought") return `thought-${item.thought.id}`;
     return `${item.type}-${item.article.id}`;
   }, []);
 
@@ -596,6 +619,11 @@ export default function OnScreen() {
     searchQuery.trim().length === 0 &&
     myLetterArticles.length === 0;
 
+  const showThoughtEmpty =
+    topTab === "thought" &&
+    !isThoughtsLoading &&
+    (thoughts ?? []).length === 0;
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {selectionMode ? (
@@ -623,7 +651,7 @@ export default function OnScreen() {
             <ScalePressable
               style={[styles.topTabItem, { paddingLeft: 16, paddingRight: 8 }]}
               onPress={() => switchTopTab("memo")}
-            contentStyle={styles.topTabItemContent}
+              contentStyle={styles.topTabItemContent}
             >
               <Text
                 style={[styles.topTabText, topTab === "memo" && styles.topTabTextActive]}
@@ -637,9 +665,9 @@ export default function OnScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <ScalePressable
-              style={[styles.topTabItem, { paddingLeft: 8, paddingRight: 16 }]}
+              style={[styles.topTabItem, { paddingHorizontal: 8 }]}
               onPress={() => switchTopTab("my_article")}
-            contentStyle={styles.topTabItemContent}
+              contentStyle={styles.topTabItemContent}
             >
               <Text
                 style={[styles.topTabText, topTab === "my_article" && styles.topTabTextActive]}
@@ -649,6 +677,22 @@ export default function OnScreen() {
                 편지
               </Text>
               {topTab === "my_article" && <View style={styles.topTabUnderline} />}
+            </ScalePressable>
+          </View>
+          <View style={{ flex: 1 }}>
+            <ScalePressable
+              style={[styles.topTabItem, { paddingLeft: 8, paddingRight: 16 }]}
+              onPress={() => switchTopTab("thought")}
+              contentStyle={styles.topTabItemContent}
+            >
+              <Text
+                style={[styles.topTabText, topTab === "thought" && styles.topTabTextActive]}
+                allowFontScaling={false}
+                numberOfLines={1}
+              >
+                단상
+              </Text>
+              {topTab === "thought" && <View style={styles.topTabUnderline} />}
             </ScalePressable>
           </View>
         </View>
@@ -682,7 +726,7 @@ export default function OnScreen() {
         </View>
       )}
 
-      {isLoading ? (
+      {(isLoading && topTab !== "thought") || (isThoughtsLoading && topTab === "thought") ? (
         <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
           <Text style={styles.emptySubtitle}>불러오는 중...</Text>
         </View>
@@ -744,6 +788,18 @@ export default function OnScreen() {
             메모를 완성해 편지로 내보내면{"\n"}여기에 모아볼 수 있어요
           </Text>
         </RefreshableEmpty>
+      ) : showThoughtEmpty ? (
+        <RefreshableEmpty
+          refreshing={isThoughtsRefetching}
+          onRefresh={refetchThoughts}
+          contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
+        >
+          <Feather name="feather" size={40} color={Colors.zinc300} />
+          <Text style={styles.emptyTitle}>단상이 없어요</Text>
+          <Text style={styles.emptySubtitle}>
+            독서 중 떠오른 생각들이{"\n"}여기에 모아집니다
+          </Text>
+        </RefreshableEmpty>
       ) : (
         <FlatList
           {...LIST_PERF_PRESET}
@@ -752,7 +808,10 @@ export default function OnScreen() {
           renderItem={renderItem}
           refreshControl={
             !selectionMode ? (
-              <RefreshControl refreshing={isRefetching} onRefresh={refetch} />
+              <RefreshControl
+                refreshing={topTab === "thought" ? isThoughtsRefetching : isRefetching}
+                onRefresh={topTab === "thought" ? refetchThoughts : refetch}
+              />
             ) : undefined
           }
           contentContainerStyle={[
@@ -880,6 +939,11 @@ export default function OnScreen() {
         destructive
         onConfirm={handleBulkDeleteConfirm}
         onCancel={handleBulkDeleteCancel}
+      />
+
+      <ThoughtDetailModal
+        thought={selectedThought}
+        onClose={() => setSelectedThought(null)}
       />
     </View>
   );

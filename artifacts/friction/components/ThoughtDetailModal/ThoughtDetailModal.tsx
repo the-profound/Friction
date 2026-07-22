@@ -1,0 +1,102 @@
+import React from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+} from "react-native";
+import { Feather } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import BottomSheet from "@/components/BottomSheet/BottomSheet";
+import { Colors, Typography, Spacing } from "../../constants/tokens";
+import type { Thought, ThoughtCreatedFrom } from "@workspace/api-client-react";
+
+const CREATED_FROM_LABEL: Record<ThoughtCreatedFrom, string> = {
+  quoted: "인용",
+  question: "질문",
+  reading: "메모",
+  direct: "직접",
+};
+
+interface ThoughtDetailModalProps {
+  thought: Thought | null;
+  onClose: () => void;
+}
+
+function ThoughtDetailModal({ thought, onClose }: ThoughtDetailModalProps) {
+  const insets = useSafeAreaInsets();
+
+  return (
+    <BottomSheet
+      visible={thought !== null}
+      onClose={onClose}
+      snapPoints={[0.65]}
+      enableDragDown
+      dismissable
+    >
+      <View style={[styles.container, { paddingBottom: insets.bottom + 16 }]}>
+        <View style={styles.header}>
+          {thought && (
+            <View style={styles.tag}>
+              <Text style={styles.tagText} allowFontScaling={false}>
+                {CREATED_FROM_LABEL[thought.createdFrom]}
+              </Text>
+            </View>
+          )}
+          <TouchableOpacity style={styles.closeButton} onPress={onClose} hitSlop={8}>
+            <Feather name="x" size={20} color={Colors.zinc500} />
+          </TouchableOpacity>
+        </View>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={styles.content}>{thought?.content ?? ""}</Text>
+        </ScrollView>
+      </View>
+    </BottomSheet>
+  );
+}
+
+export default ThoughtDetailModal;
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    paddingHorizontal: Spacing.screenPx,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+  },
+  tag: {
+    backgroundColor: Colors.zinc100,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  tagText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Colors.zinc500,
+  },
+  closeButton: {
+    padding: 4,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 16,
+  },
+  content: {
+    ...Typography.body,
+    fontSize: 15,
+    color: Colors.zinc800,
+    lineHeight: 24,
+  },
+});
