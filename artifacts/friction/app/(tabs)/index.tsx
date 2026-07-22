@@ -635,8 +635,7 @@ export default function InboxScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <PageHeader
-        title="수신함"
-        titleImage={require("@/assets/images/wordmark_maroon.png")}
+        title="수신"
         showSearch
         onSearchPress={handleSearchPress}
         searchActive={searchActive}

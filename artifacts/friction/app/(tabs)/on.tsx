@@ -607,6 +607,7 @@ export default function OnScreen() {
       ) : (
         <PageHeader
           title="기록"
+          titleImage={require("@/assets/images/wordmark_maroon.png")}
           showSearch
           onSearchPress={handleSearchPress}
           searchActive={searchActive}

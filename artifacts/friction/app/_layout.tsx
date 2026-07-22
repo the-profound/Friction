@@ -244,6 +244,10 @@ export default function RootLayout() {
     trackAppOpen();
   }, []);
 
+  useEffect(() => {
+    Asset.loadAsync([require("@/assets/images/wordmark_maroon.png")]);
+  }, []);
+
   const [fontsLoaded, fontError] = useFonts({
     "Pretendard-ExtraLight": require("../assets/fonts/Pretendard-ExtraLight.otf"),
     "Pretendard-SemiBold": require("../assets/fonts/Pretendard-SemiBold.otf"),
