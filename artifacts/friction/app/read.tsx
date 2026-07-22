@@ -74,6 +74,7 @@ import {
   useListInbox,
   useMarkInboxOthersRead,
   useGetArticleQuestions,
+  useCreateThought,
   getGetArticleQuestionsQueryKey,
   getGetUserRecentCollectionQueryKey,
   getListInboxQueryKey,
@@ -301,6 +302,7 @@ export default function ReadScreen() {
 
 
   const createSentence = useCreateStoredSentence();
+  const createThought = useCreateThought();
   const collectionsQuery = useListMyCollections({ ownerId: userId });
   const addToCollection = useAddArticleToMyCollection();
   const createCollection = useCreateMyCollection();
@@ -428,7 +430,21 @@ export default function ReadScreen() {
     if (finalContent.trim()) {
       readingMemo.updateMemoContent(finalContent);
     }
-  }, [readingMemo]);
+    answeredCards
+      .filter((card) => card.answer.trim().length > 0)
+      .forEach((card) => {
+        createThought.mutate(
+          {
+            data: {
+              content: `> ${card.question}\n\n${card.answer.trim()}`,
+              createdFrom: "question",
+              sourceArticleId: articleId,
+            },
+          },
+          { onError: (e) => console.warn("[thought] question creation failed:", e) },
+        );
+      });
+  }, [readingMemo, articleId, createThought]);
 
   const memoContentRef = useRef(readingMemo.memoContent);
   useEffect(() => { memoContentRef.current = readingMemo.memoContent; }, [readingMemo.memoContent]);
@@ -1542,7 +1558,17 @@ export default function ReadScreen() {
     });
     openMemoMode(quoteData);
     trackMemoCreatedDuringReading({ articleId, page: currentPage });
-  }, [currentPage, authorName, article?.title, openMemoMode, articleId]);
+    createThought.mutate(
+      {
+        data: {
+          content: `> ${text.trim()}\n\n— ${author}, <${title}>, ${pageNum}면`,
+          createdFrom: "quoted",
+          sourceArticleId: articleId,
+        },
+      },
+      { onError: (e) => console.warn("[thought] quoted creation failed:", e) },
+    );
+  }, [currentPage, authorName, article?.title, openMemoMode, articleId, createThought]);
 
   const handleSaveSentence = useCallback(async () => {
     if (!selectedText) return;

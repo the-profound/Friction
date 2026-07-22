@@ -2914,3 +2914,12 @@ export const GetSendRecordResponse = zod.object({
 export const DeleteSendRecordParams = zod.object({
   id: zod.coerce.string().uuid(),
 });
+
+/**
+ * @summary Create a thought (단상)
+ */
+export const CreateThoughtBody = zod.object({
+  content: zod.string(),
+  createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
+  sourceArticleId: zod.string().uuid().nullish(),
+});

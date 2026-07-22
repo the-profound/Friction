@@ -35,6 +35,8 @@ import type {
   CreateSpaceRoundBody,
   CreateSpaceScheduledSendBody,
   CreateStoredSentenceBody,
+  CreateThoughtBody,
+  Thought,
   CreateTeamCollectionBody,
   CreateUserArticleReadBody,
   CreateUserBody,
@@ -8949,3 +8951,83 @@ export function useListThoughts<
   };
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+export const getCreateThoughtUrl = () => `/api/thoughts`;
+
+export const createThought = async (
+  createThoughtBody: CreateThoughtBody,
+  options?: RequestInit,
+): Promise<Thought> => {
+  return customFetch<Thought>(getCreateThoughtUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createThoughtBody),
+  });
+};
+
+export const getCreateThoughtMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createThought>>,
+    TError,
+    { data: BodyType<CreateThoughtBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createThought>>,
+  TError,
+  { data: BodyType<CreateThoughtBody> },
+  TContext
+> => {
+  const mutationKey = ["createThought"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createThought>>,
+    { data: BodyType<CreateThoughtBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+    return createThought(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateThoughtMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createThought>>
+>;
+export type CreateThoughtMutationBody = BodyType<CreateThoughtBody>;
+export type CreateThoughtMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Create a thought (단상)
+ */
+export const useCreateThought = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createThought>>,
+    TError,
+    { data: BodyType<CreateThoughtBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createThought>>,
+  TError,
+  { data: BodyType<CreateThoughtBody> },
+  TContext
+> => {
+  return useMutation(getCreateThoughtMutationOptions(options));
+};

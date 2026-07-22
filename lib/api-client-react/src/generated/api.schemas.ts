@@ -1168,3 +1168,8 @@ export interface Thought {
   updatedAt: string;
 }
 
+export interface CreateThoughtBody {
+  content: string;
+  createdFrom: ThoughtCreatedFrom;
+  sourceArticleId?: string | null;
+}

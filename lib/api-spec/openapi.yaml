@@ -33,7 +33,7 @@ tags:
   - name: spell-check
     description: Korean spell-check operations
   - name: thoughts
-    description: Thought operations
+    description: Thought (단상) operations
 
 paths:
   /healthz:
@@ -2300,6 +2300,29 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createThought
+      tags: [thoughts]
+      summary: Create a thought (단상)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateThoughtBody"
+      responses:
+        "201":
+          description: Created thought
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Thought"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
 components:
   parameters:
@@ -3961,3 +3984,47 @@ components:
           type: string
           nullable: true
       required: []
+
+    # ─── Thoughts ─────────────────────────────────
+    ThoughtCreatedFrom:
+      type: string
+      enum: [quoted, question, reading, direct]
+
+    Thought:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        authorId:
+          type: string
+          format: uuid
+        content:
+          type: string
+          nullable: true
+        sourceArticleId:
+          type: string
+          format: uuid
+          nullable: true
+        createdFrom:
+          $ref: "#/components/schemas/ThoughtCreatedFrom"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, authorId, createdFrom, createdAt, updatedAt]
+
+    CreateThoughtBody:
+      type: object
+      properties:
+        content:
+          type: string
+        createdFrom:
+          $ref: "#/components/schemas/ThoughtCreatedFrom"
+        sourceArticleId:
+          type: string
+          format: uuid
+          nullable: true
+      required: [content, createdFrom]
