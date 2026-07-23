@@ -100,7 +100,6 @@ import type {
   TeamMemberWithUser,
   ToggleStoredSentenceFavoriteBody,
   ToggleTeamArticlePinBody,
-  Thought,
   TransitionArticleBody,
   UpdateArticleBody,
   UpdateMyCollectionBody,
