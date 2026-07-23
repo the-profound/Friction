@@ -218,7 +218,7 @@ function NewSendSheet({
       await createSend.mutateAsync({
         id: spaceId,
         letterId: selectedLetterId,
-        data: { scheduledAt: scheduledAt.toISOString() },
+        data: { scheduledAt: scheduledAt.toISOString(), ...(slotId != null ? { slotId } : {}) },
       });
       onSaved();
       onClose();

@@ -136,6 +136,7 @@ export const spaceScheduledSendsTable = pgTable("space_scheduled_sends", {
   id: uuid("id").defaultRandom().primaryKey(),
   spaceId: uuid("space_id").notNull().references(() => spacesTable.id),
   spaceLetterId: uuid("space_letter_id").notNull().references(() => spaceLettersTable.id),
+  slotId: uuid("slot_id").references(() => spaceRoundSlotsTable.id, { onDelete: "set null" }),
   scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
   status: spaceScheduledSendStatusEnum("status").notNull().default("PENDING"),
   sentAt: timestamp("sent_at", { withTimezone: true }),

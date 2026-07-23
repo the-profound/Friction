@@ -4050,6 +4050,10 @@ components:
         scheduledAt:
           type: string
           format: date-time
+        slotId:
+          type: string
+          format: uuid
+          nullable: true
       required: [scheduledAt]
 
     UpdateSpaceScheduledSendBody:
@@ -4075,6 +4079,10 @@ components:
         spaceLetterId:
           type: string
           format: uuid
+        slotId:
+          type: string
+          format: uuid
+          nullable: true
         scheduledAt:
           type: string
           format: date-time

@@ -921,10 +921,16 @@ router.post("/spaces/:id/letters/:letterId/scheduled-sends", requireAuth, async 
     res.status(403).json({ error: "You can only schedule sends for your own letters" });
     return;
   }
-  const { scheduledAt, ...sendRest } = req.body;
+  const { scheduledAt, slotId, ...sendRest } = req.body;
   const [send] = await db
     .insert(spaceScheduledSendsTable)
-    .values({ ...sendRest, spaceId: req.params.id, spaceLetterId: req.params.letterId, ...(scheduledAt != null ? { scheduledAt: toDate(scheduledAt) } : {}) })
+    .values({
+      ...sendRest,
+      spaceId: req.params.id,
+      spaceLetterId: req.params.letterId,
+      ...(scheduledAt != null ? { scheduledAt: toDate(scheduledAt) } : {}),
+      ...(slotId != null ? { slotId } : {}),
+    })
     .returning();
   res.status(201).json(send);
 });

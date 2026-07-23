@@ -949,6 +949,7 @@ export interface SpaceScheduledSend {
 
 export interface CreateSpaceScheduledSendBody {
   scheduledAt: string;
+  slotId?: string | null;
 }
 
 export type UpdateSpaceScheduledSendBodyStatus =
@@ -979,6 +980,7 @@ export interface SpaceScheduledSendWithLetter {
   id: string;
   spaceId: string;
   spaceLetterId: string;
+  slotId?: string | null;
   scheduledAt: string;
   status: SpaceScheduledSendWithLetterStatus;
   sentAt?: string | null;

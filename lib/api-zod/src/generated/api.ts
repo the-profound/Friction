@@ -2068,6 +2068,7 @@ export const ListAllSpaceScheduledSendsResponseItem = zod.object({
   id: zod.string().uuid(),
   spaceId: zod.string().uuid(),
   spaceLetterId: zod.string().uuid(),
+  slotId: zod.string().uuid().nullish(),
   scheduledAt: zod.date(),
   status: zod.enum(["PENDING", "SENT", "CANCELLED", "FAILED"]),
   sentAt: zod.date().nullish(),
@@ -2382,6 +2383,7 @@ export const ListSpaceScheduledSendsResponseItem = zod.object({
   id: zod.string().uuid(),
   spaceId: zod.string().uuid(),
   spaceLetterId: zod.string().uuid(),
+  slotId: zod.string().uuid().nullish(),
   scheduledAt: zod.date(),
   status: zod.enum(["PENDING", "SENT", "CANCELLED", "FAILED"]),
   sentAt: zod.date().nullish(),
@@ -2402,6 +2404,7 @@ export const CreateSpaceScheduledSendParams = zod.object({
 
 export const CreateSpaceScheduledSendBody = zod.object({
   scheduledAt: zod.date(),
+  slotId: zod.string().uuid().nullish(),
 });
 
 /**
@@ -2422,6 +2425,7 @@ export const UpdateSpaceScheduledSendResponse = zod.object({
   id: zod.string().uuid(),
   spaceId: zod.string().uuid(),
   spaceLetterId: zod.string().uuid(),
+  slotId: zod.string().uuid().nullish(),
   scheduledAt: zod.date(),
   status: zod.enum(["PENDING", "SENT", "CANCELLED", "FAILED"]),
   sentAt: zod.date().nullish(),
