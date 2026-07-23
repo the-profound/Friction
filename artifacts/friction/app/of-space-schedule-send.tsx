@@ -152,6 +152,8 @@ function NewSendSheet({
   onClose,
   onSaved,
   onGoToArchive,
+  initialScheduledDate,
+  slotId,
 }: {
   spaceId: string;
   rounds: SpaceRound[];
@@ -160,9 +162,17 @@ function NewSendSheet({
   onClose: () => void;
   onSaved: () => void;
   onGoToArchive: () => void;
+  initialScheduledDate?: string | null;
+  slotId?: string | null;
 }) {
   const [selectedLetterId, setSelectedLetterId] = useState<string | null>(null);
-  const [scheduledAt, setScheduledAt] = useState(new Date(Date.now() + 24 * 60 * 60 * 1000));
+  const [scheduledAt, setScheduledAt] = useState(() => {
+    if (initialScheduledDate) {
+      const d = new Date(initialScheduledDate);
+      if (!isNaN(d.getTime())) return d;
+    }
+    return new Date(Date.now() + 24 * 60 * 60 * 1000);
+  });
   const [showPicker, setShowPicker] = useState(false);
   const [saving, setSaving] = useState(false);
   const createSend = useCreateSpaceScheduledSend();
@@ -520,11 +530,15 @@ function ChangeSheet({
 export default function SpaceScheduleSendScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, slotId, scheduledDate } = useLocalSearchParams<{
+    id: string;
+    slotId?: string;
+    scheduledDate?: string;
+  }>();
   const { userId } = useUser();
   const queryClient = useQueryClient();
 
-  const [showNewSheet, setShowNewSheet] = useState(false);
+  const [showNewSheet, setShowNewSheet] = useState(() => !!slotId);
   const [resendTarget, setResendTarget] = useState<SpaceScheduledSendWithLetter | null>(null);
   const [changeTarget, setChangeTarget] = useState<SpaceScheduledSendWithLetter | null>(null);
 
@@ -744,6 +758,8 @@ export default function SpaceScheduleSendScreen() {
           onClose={() => setShowNewSheet(false)}
           onSaved={handleSaved}
           onGoToArchive={handleGoToArchive}
+          initialScheduledDate={scheduledDate || null}
+          slotId={slotId || null}
         />
       )}
 

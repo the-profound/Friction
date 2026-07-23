@@ -6,6 +6,7 @@ import {
   db,
   spacesTable,
   spaceRoundsTable,
+  spaceRoundSlotsTable,
   spaceParticipationsTable,
   spaceInvitationsTable,
   spaceCodeRequestsTable,
@@ -356,6 +357,168 @@ router.patch("/spaces/:id/rounds/:roundId", requireAuth, async (req, res) => {
     return;
   }
   res.json(round);
+});
+
+// ─── Slot CRUD ────────────────────────────────────────────────────────────────
+
+async function requireSpaceOperator(spaceId: string, callerId: string, res: any): Promise<boolean> {
+  const [participation] = await db
+    .select()
+    .from(spaceParticipationsTable)
+    .where(
+      and(
+        eq(spaceParticipationsTable.spaceId, spaceId),
+        eq(spaceParticipationsTable.userId, callerId),
+        eq(spaceParticipationsTable.role, "OPERATOR"),
+        eq(spaceParticipationsTable.status, "APPROVED"),
+      ),
+    )
+    .limit(1);
+  if (!participation) {
+    res.status(403).json({ error: "Only operators can manage slots" });
+    return false;
+  }
+  return true;
+}
+
+/** Validate that roundId belongs to the given spaceId. Returns null and sends 404 on failure. */
+async function requireRoundInSpace(
+  spaceId: string,
+  roundId: string,
+  res: any,
+): Promise<(typeof spaceRoundsTable.$inferSelect) | null> {
+  const [round] = await db
+    .select()
+    .from(spaceRoundsTable)
+    .where(
+      and(
+        eq(spaceRoundsTable.id, roundId),
+        eq(spaceRoundsTable.spaceId, spaceId),
+      ),
+    )
+    .limit(1);
+  if (!round) {
+    res.status(404).json({ error: "Round not found in this space" });
+    return null;
+  }
+  return round;
+}
+
+async function enrichSlots(slots: (typeof spaceRoundSlotsTable.$inferSelect)[]) {
+  if (slots.length === 0) return [];
+  const userIds = [...new Set(slots.map((s) => s.assignedUserId))];
+  const users = await db
+    .select({ id: usersTable.id, nickname: usersTable.nickname })
+    .from(usersTable)
+    .where(inArray(usersTable.id, userIds));
+  const userMap = new Map(users.map((u) => [u.id, u.nickname]));
+  return slots.map((slot) => ({
+    ...slot,
+    assignedUserNickname: userMap.get(slot.assignedUserId) ?? null,
+  }));
+}
+
+router.get("/spaces/:id/rounds/:roundId/slots", async (req, res) => {
+  const round = await requireRoundInSpace(req.params.id, req.params.roundId, res);
+  if (!round) return;
+  const slots = await db
+    .select()
+    .from(spaceRoundSlotsTable)
+    .where(eq(spaceRoundSlotsTable.spaceRoundId, req.params.roundId))
+    .orderBy(spaceRoundSlotsTable.slotOrder, spaceRoundSlotsTable.createdAt);
+  res.json(await enrichSlots(slots));
+});
+
+router.post("/spaces/:id/rounds/:roundId/slots", requireAuth, async (req, res) => {
+  const callerId = req.user!.id;
+  const allowed = await requireSpaceOperator(req.params.id, callerId, res);
+  if (!allowed) return;
+  const round = await requireRoundInSpace(req.params.id, req.params.roundId, res);
+  if (!round) return;
+  const { assignedUserId, slotOrder, scheduledDate } = req.body;
+  const [slot] = await db
+    .insert(spaceRoundSlotsTable)
+    .values({
+      spaceRoundId: req.params.roundId,
+      assignedUserId,
+      slotOrder: slotOrder ?? 0,
+      scheduledDate: scheduledDate ?? null,
+    })
+    .returning();
+  const enriched = await enrichSlots([slot]);
+  res.status(201).json(enriched[0]);
+});
+
+router.patch("/spaces/:id/rounds/:roundId/slots/:slotId", requireAuth, async (req, res) => {
+  const callerId = req.user!.id;
+  const allowed = await requireSpaceOperator(req.params.id, callerId, res);
+  if (!allowed) return;
+  const round = await requireRoundInSpace(req.params.id, req.params.roundId, res);
+  if (!round) return;
+  const { assignedUserId, slotOrder, scheduledDate } = req.body;
+  const updateFields: Record<string, unknown> = {};
+  if (assignedUserId !== undefined) updateFields.assignedUserId = assignedUserId;
+  if (slotOrder !== undefined) updateFields.slotOrder = slotOrder;
+  if (scheduledDate !== undefined) updateFields.scheduledDate = scheduledDate;
+  const [slot] = await db
+    .update(spaceRoundSlotsTable)
+    .set(updateFields)
+    .where(
+      and(
+        eq(spaceRoundSlotsTable.id, req.params.slotId),
+        eq(spaceRoundSlotsTable.spaceRoundId, req.params.roundId),
+      ),
+    )
+    .returning();
+  if (!slot) {
+    res.status(404).json({ error: "Slot not found" });
+    return;
+  }
+  const enriched = await enrichSlots([slot]);
+  res.json(enriched[0]);
+});
+
+router.delete("/spaces/:id/rounds/:roundId/slots/:slotId", requireAuth, async (req, res) => {
+  const callerId = req.user!.id;
+  const allowed = await requireSpaceOperator(req.params.id, callerId, res);
+  if (!allowed) return;
+  const round = await requireRoundInSpace(req.params.id, req.params.roundId, res);
+  if (!round) return;
+  const [slot] = await db
+    .delete(spaceRoundSlotsTable)
+    .where(
+      and(
+        eq(spaceRoundSlotsTable.id, req.params.slotId),
+        eq(spaceRoundSlotsTable.spaceRoundId, req.params.roundId),
+      ),
+    )
+    .returning();
+  if (!slot) {
+    res.status(404).json({ error: "Slot not found" });
+    return;
+  }
+  res.status(204).send();
+});
+
+// ─── Space Members (with nicknames, for slot assignment) ──────────────────────
+
+router.get("/spaces/:id/members", async (req, res) => {
+  const participations = await db
+    .select({
+      userId: spaceParticipationsTable.userId,
+      role: spaceParticipationsTable.role,
+      status: spaceParticipationsTable.status,
+      nickname: usersTable.nickname,
+    })
+    .from(spaceParticipationsTable)
+    .innerJoin(usersTable, eq(spaceParticipationsTable.userId, usersTable.id))
+    .where(
+      and(
+        eq(spaceParticipationsTable.spaceId, req.params.id),
+        eq(spaceParticipationsTable.status, "APPROVED"),
+      ),
+    );
+  res.json(participations);
 });
 
 router.get("/spaces/:id/participations", async (req, res) => {

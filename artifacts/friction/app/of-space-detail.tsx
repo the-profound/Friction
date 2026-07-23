@@ -41,6 +41,8 @@ import {
   ListSpaceCodeRequestsStatus,
   getArticle,
   getGetArticleQueryKey,
+  useListSpaceRoundSlots,
+  getListSpaceRoundSlotsQueryKey,
 } from "@workspace/api-client-react";
 import type {
   SpaceRound,
@@ -49,6 +51,7 @@ import type {
   SpaceWithCreatorInfo,
   Article,
   ArticleCover,
+  SpaceRoundSlotWithUser,
 } from "@workspace/api-client-react";
 import { useAncestorChain } from "@/hooks/useAncestorChain";
 import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
@@ -260,6 +263,121 @@ const spaceCarouselStyles = StyleSheet.create({
   },
 });
 
+// ─── Upcoming Round Slots ─────────────────────────────────────────────────────
+
+function UpcomingRoundSlots({
+  spaceId,
+  round,
+  userId,
+  isAnonymous,
+  onSchedule,
+}: {
+  spaceId: string;
+  round: SpaceRound;
+  userId: string;
+  isAnonymous: boolean;
+  onSchedule: (slot: SpaceRoundSlotWithUser) => void;
+}) {
+  const slotsQuery = useListSpaceRoundSlots(spaceId, round.id, {
+    query: {
+      enabled: !!spaceId && !!round.id,
+      queryKey: getListSpaceRoundSlotsQueryKey(spaceId, round.id),
+    },
+  });
+  const slots = (slotsQuery.data ?? []) as SpaceRoundSlotWithUser[];
+
+  if (slotsQuery.isLoading) {
+    return (
+      <View style={styles.slotLoadingRow}>
+        <ActivityIndicator size="small" color={Colors.zinc300} />
+      </View>
+    );
+  }
+
+  if (slots.length === 0) {
+    return (
+      <View style={styles.lockedArea}>
+        <Feather name="lock" size={20} color={Colors.zinc300} />
+        <Text style={styles.lockedText}>회차 시작 후 공개</Text>
+      </View>
+    );
+  }
+
+  const formatSlotDate = (iso: string | null | undefined) => {
+    if (!iso) return null;
+    const d = new Date(iso);
+    return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
+  };
+
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.slotCarouselContent}
+    >
+      {slots
+        .slice()
+        .sort((a, b) => {
+          if (a.scheduledDate && b.scheduledDate) {
+            return a.scheduledDate < b.scheduledDate ? -1 : a.scheduledDate > b.scheduledDate ? 1 : 0;
+          }
+          if (a.scheduledDate) return -1;
+          if (b.scheduledDate) return 1;
+          return a.slotOrder - b.slotOrder;
+        })
+        .map((slot) => {
+          const isMySlot = slot.assignedUserId === userId;
+          const showNickname = !isAnonymous || isMySlot;
+          return (
+            <View
+              key={slot.id}
+              style={[
+                styles.slotCard,
+                isMySlot ? styles.slotCardMine : styles.slotCardOther,
+              ]}
+            >
+              <View style={styles.slotCardTop}>
+                {isMySlot ? (
+                  <Feather name="edit-3" size={18} color={Colors.zinc500} />
+                ) : (
+                  <Feather name="lock" size={18} color={Colors.zinc300} />
+                )}
+              </View>
+              <View style={styles.slotCardMiddle}>
+                {isMySlot ? (
+                  <Text style={styles.slotCardMyText}>내 차례</Text>
+                ) : (
+                  <Text style={styles.slotCardOtherText}>추후 공개</Text>
+                )}
+              </View>
+              {isMySlot && (
+                <ScalePressable
+                  style={styles.slotCtaOuter}
+                  contentStyle={styles.slotCta}
+                  onPress={() => onSchedule(slot)}
+                >
+                  <Text style={styles.slotCtaText}>글 예약하기</Text>
+                </ScalePressable>
+              )}
+              <View style={styles.slotCardFooter}>
+                {showNickname && (
+                  <Text style={styles.slotNickname} numberOfLines={1}>
+                    {isMySlot ? "나" : (slot.assignedUserNickname ?? "멤버")}
+                  </Text>
+                )}
+                {slot.scheduledDate ? (
+                  <Text style={styles.slotDate}>
+                    {formatSlotDate(slot.scheduledDate)}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+          );
+        })}
+    </ScrollView>
+  );
+}
+
 // ─── Round Section ────────────────────────────────────────────────────────────
 
 function RoundSection({
@@ -271,6 +389,9 @@ function RoundSection({
   onPressLetter,
   onPressWriteOpening,
   hiddenCardId,
+  spaceId,
+  userId,
+  onScheduleSlot,
 }: {
   round: SpaceRound;
   letters: SpaceLetter[];
@@ -280,6 +401,9 @@ function RoundSection({
   onPressLetter: (letter: SpaceLetter, layout: OriginLayout) => void;
   onPressWriteOpening: (round: SpaceRound) => void;
   hiddenCardId?: string | null;
+  spaceId: string;
+  userId: string;
+  onScheduleSlot: (slot: SpaceRoundSlotWithUser) => void;
 }) {
   const statusColor = roundStatusColor(round.status);
   const isUpcoming = round.status === "UPCOMING";
@@ -314,10 +438,13 @@ function RoundSection({
 
   if (isUpcoming) {
     letterArea = (
-      <View style={styles.lockedArea}>
-        <Feather name="lock" size={20} color={Colors.zinc300} />
-        <Text style={styles.lockedText}>회차 시작 후 공개</Text>
-      </View>
+      <UpcomingRoundSlots
+        spaceId={spaceId}
+        round={round}
+        userId={userId}
+        isAnonymous={isAnonymous}
+        onSchedule={onScheduleSlot}
+      />
     );
   } else if (isSpaceRecruiting) {
     letterArea = (
@@ -978,6 +1105,21 @@ export default function SpaceDetailScreen() {
     [router, id],
   );
 
+  const handleScheduleSlot = useCallback(
+    (slot: SpaceRoundSlotWithUser) => {
+      router.push({
+        pathname: "/of-space-schedule-send" as never,
+        params: {
+          id,
+          slotId: slot.id,
+          roundId: slot.spaceRoundId,
+          scheduledDate: slot.scheduledDate ?? "",
+        },
+      });
+    },
+    [router, id],
+  );
+
   // ─── Loading ────────────────────────────────────────────────────────────────
   if (isLoading) {
     return (
@@ -1270,6 +1412,9 @@ export default function SpaceDetailScreen() {
                     onPressLetter={handlePressLetter}
                     onPressWriteOpening={handlePressWriteOpening}
                     hiddenCardId={tapLetter?.id ?? null}
+                    spaceId={id}
+                    userId={userId}
+                    onScheduleSlot={handleScheduleSlot}
                   />
                 ))}
             </View>
@@ -1701,6 +1846,82 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.zinc400,
   },
+
+  // ─── Slot carousel ────────────────────────────────────────────────────────
+  slotLoadingRow: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 24,
+  },
+  slotCarouselContent: {
+    paddingLeft: SC_LEFT_PAD,
+    paddingRight: SC_LEFT_PAD,
+    gap: SC_CARD_GAP,
+  },
+  slotCard: {
+    width: SC_CARD_W,
+    height: SC_CARD_H,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 14,
+    justifyContent: "space-between",
+  },
+  slotCardMine: {
+    backgroundColor: Colors.zinc100,
+    borderColor: Colors.zinc300,
+  },
+  slotCardOther: {
+    backgroundColor: Colors.zinc50,
+    borderColor: Colors.zinc200,
+  },
+  slotCardTop: {
+    alignItems: "flex-start",
+  },
+  slotCardMiddle: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "flex-start",
+    paddingTop: 8,
+  },
+  slotCardMyText: {
+    ...Typography.bodySemiBold,
+    fontSize: 15,
+    color: Colors.zinc700,
+  },
+  slotCardOtherText: {
+    ...Typography.body,
+    fontSize: 13,
+    color: Colors.zinc400,
+  },
+  slotCtaOuter: {
+    marginBottom: 8,
+  },
+  slotCta: {
+    backgroundColor: Colors.zinc900,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    alignItems: "center",
+  },
+  slotCtaText: {
+    ...Typography.bodySemiBold,
+    fontSize: 13,
+    color: Colors.white,
+  },
+  slotCardFooter: {
+    gap: 2,
+  },
+  slotNickname: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc500,
+  },
+  slotDate: {
+    ...Typography.caption,
+    fontSize: 11,
+    color: Colors.zinc400,
+  },
+
   preparingArea: {
     alignItems: "center",
     justifyContent: "center",

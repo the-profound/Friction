@@ -1152,6 +1152,29 @@ export type ListNeighborRequestsParams = {
   requesterId?: string;
 };
 
+export type SpaceRoundSlotWithUser = {
+  id: string;
+  spaceRoundId: string;
+  assignedUserId: string;
+  slotOrder: number;
+  scheduledDate?: string | null;
+  assignedUserNickname?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateSpaceRoundSlotBody = {
+  assignedUserId: string;
+  slotOrder?: number;
+  scheduledDate?: string | null;
+};
+
+export type UpdateSpaceRoundSlotBody = {
+  assignedUserId?: string;
+  slotOrder?: number;
+  scheduledDate?: string | null;
+};
+
 export type ListSendRecordsParams = {
   senderId: string;
 };
@@ -1173,3 +1196,9 @@ export interface CreateThoughtBody {
   createdFrom: ThoughtCreatedFrom;
   sourceArticleId?: string | null;
 }
+export type SpaceMember = {
+  userId: string;
+  nickname: string | null;
+  role: string;
+  status: string;
+};

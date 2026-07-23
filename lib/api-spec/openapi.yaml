@@ -1584,6 +1584,138 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /spaces/{id}/rounds/{roundId}/slots:
+    get:
+      operationId: listSpaceRoundSlots
+      tags: [spaces]
+      summary: List slots for a round (with assignee nickname)
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+        - name: roundId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Slot list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SpaceRoundSlotWithUser"
+    post:
+      operationId: createSpaceRoundSlot
+      tags: [spaces]
+      summary: Create a slot for a round (operator only)
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+        - name: roundId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSpaceRoundSlotBody"
+      responses:
+        "201":
+          description: Created slot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpaceRoundSlotWithUser"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /spaces/{id}/rounds/{roundId}/slots/{slotId}:
+    patch:
+      operationId: updateSpaceRoundSlot
+      tags: [spaces]
+      summary: Update a slot (operator only)
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+        - name: roundId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: slotId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSpaceRoundSlotBody"
+      responses:
+        "200":
+          description: Updated slot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpaceRoundSlotWithUser"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteSpaceRoundSlot
+      tags: [spaces]
+      summary: Delete a slot (operator only)
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+        - name: roundId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: slotId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /spaces/{id}/scheduled-sends:
     get:
       operationId: listAllSpaceScheduledSends
@@ -1600,6 +1732,23 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/SpaceScheduledSendWithLetter"
+
+  /spaces/{id}/members:
+    get:
+      operationId: listSpaceMembers
+      tags: [spaces]
+      summary: List approved members of a space (with nicknames)
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Member list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SpaceMember"
 
   /spaces/{id}/participations:
     get:
@@ -3545,6 +3694,79 @@ components:
         status:
           type: string
           enum: [UPCOMING, ACTIVE, COMPLETED]
+
+    SpaceMember:
+      type: object
+      properties:
+        userId:
+          type: string
+          format: uuid
+        nickname:
+          type: string
+          nullable: true
+        role:
+          type: string
+        status:
+          type: string
+      required: [userId, role, status]
+
+    SpaceRoundSlotWithUser:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        spaceRoundId:
+          type: string
+          format: uuid
+        assignedUserId:
+          type: string
+          format: uuid
+        slotOrder:
+          type: integer
+        scheduledDate:
+          type: string
+          nullable: true
+          description: "ISO date string (YYYY-MM-DD), null if not set"
+        assignedUserNickname:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, spaceRoundId, assignedUserId, slotOrder, createdAt, updatedAt]
+
+    CreateSpaceRoundSlotBody:
+      type: object
+      properties:
+        assignedUserId:
+          type: string
+          format: uuid
+        slotOrder:
+          type: integer
+          minimum: 0
+        scheduledDate:
+          type: string
+          nullable: true
+          description: "ISO date string (YYYY-MM-DD)"
+      required: [assignedUserId]
+
+    UpdateSpaceRoundSlotBody:
+      type: object
+      properties:
+        assignedUserId:
+          type: string
+          format: uuid
+        slotOrder:
+          type: integer
+          minimum: 0
+        scheduledDate:
+          type: string
+          nullable: true
+          description: "ISO date string (YYYY-MM-DD)"
 
     SpaceParticipation:
       type: object

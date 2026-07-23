@@ -1,4 +1,4 @@
-import { boolean, check, integer, pgEnum, pgTable, text, timestamp, unique, uuid, varchar } from "drizzle-orm/pg-core";
+import { boolean, check, date, integer, pgEnum, pgTable, text, timestamp, unique, uuid, varchar } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -146,3 +146,17 @@ export const spaceScheduledSendsTable = pgTable("space_scheduled_sends", {
 export const insertSpaceScheduledSendSchema = createInsertSchema(spaceScheduledSendsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertSpaceScheduledSend = z.infer<typeof insertSpaceScheduledSendSchema>;
 export type SpaceScheduledSend = typeof spaceScheduledSendsTable.$inferSelect;
+
+export const spaceRoundSlotsTable = pgTable("space_round_slots", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  spaceRoundId: uuid("space_round_id").notNull().references(() => spaceRoundsTable.id, { onDelete: "cascade" }),
+  assignedUserId: uuid("assigned_user_id").notNull().references(() => usersTable.id),
+  slotOrder: integer("slot_order").notNull().default(0),
+  scheduledDate: date("scheduled_date"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+export const insertSpaceRoundSlotSchema = createInsertSchema(spaceRoundSlotsTable).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertSpaceRoundSlot = z.infer<typeof insertSpaceRoundSlotSchema>;
+export type SpaceRoundSlot = typeof spaceRoundSlotsTable.$inferSelect;

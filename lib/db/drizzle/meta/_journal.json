@@ -169,6 +169,13 @@
       "when": 1752451200000,
       "tag": "0024_expand_invite_code_length",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1753056000000,
+      "tag": "0025_add_space_round_slots",
+      "breakpoints": true
     }
   ]
 }
