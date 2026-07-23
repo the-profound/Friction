@@ -49,6 +49,7 @@ import type {
   InboxItem,
   ListArticlesParams,
   ListInboxParams,
+  ListThoughtsParams,
   ListMyCollectionsParams,
   ListMySpaceCodeRequestsParams,
   ListMySpaceInvitationsParams,
@@ -8891,37 +8892,49 @@ export const useDeleteSendRecord = <
 
 // ─── Thoughts ──────────────────────────────────────────────────────────────
 
-export const getListThoughtsUrl = () => `/api/thoughts`;
+export const getListThoughtsUrl = (params?: ListThoughtsParams) => {
+  const url = new URL(`/api/thoughts`, "http://localhost");
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      url.searchParams.append(key, String(value));
+    }
+  });
+  return url.pathname + (url.search ? url.search : "");
+};
 
 export const listThoughts = async (
+  params?: ListThoughtsParams,
   options?: RequestInit,
 ): Promise<Thought[]> => {
-  return customFetch<Thought[]>(getListThoughtsUrl(), {
+  return customFetch<Thought[]>(getListThoughtsUrl(params), {
     ...options,
     method: "GET",
   });
 };
 
-export const getListThoughtsQueryKey = () => {
-  return [`/api/thoughts`] as const;
+export const getListThoughtsQueryKey = (params?: ListThoughtsParams) => {
+  return [`/api/thoughts`, ...(params ? [params] : [])] as const;
 };
 
 export const getListThoughtsQueryOptions = <
   TData = Awaited<ReturnType<typeof listThoughts>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listThoughts>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
+>(
+  params?: ListThoughtsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listThoughts>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
-  const queryKey = queryOptions?.queryKey ?? getListThoughtsQueryKey();
+  const queryKey = queryOptions?.queryKey ?? getListThoughtsQueryKey(params);
   const queryFn: QueryFunction<Awaited<ReturnType<typeof listThoughts>>> = ({
     signal,
-  }) => listThoughts({ signal, ...requestOptions });
+  }) => listThoughts(params, { signal, ...requestOptions });
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof listThoughts>>,
     TError,
@@ -8940,15 +8953,18 @@ export type ListThoughtsQueryError = ErrorType<unknown>;
 export function useListThoughts<
   TData = Awaited<ReturnType<typeof listThoughts>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listThoughts>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getListThoughtsQueryOptions(options);
+>(
+  params?: ListThoughtsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listThoughts>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListThoughtsQueryOptions(params, options);
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
   };

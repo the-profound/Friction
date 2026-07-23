@@ -8,6 +8,13 @@ const router: IRouter = Router();
 
 router.get("/thoughts", requireAuth, async (req, res) => {
   const userId = req.user!.id;
+  const sourceArticleId = typeof req.query.sourceArticleId === "string" ? req.query.sourceArticleId : undefined;
+
+  const conditions = [
+    eq(thoughtsTable.authorId, userId),
+    isNull(thoughtsTable.deletedAt),
+    ...(sourceArticleId ? [eq(thoughtsTable.sourceArticleId, sourceArticleId)] : []),
+  ];
 
   const thoughts = await db
     .select({
@@ -20,12 +27,7 @@ router.get("/thoughts", requireAuth, async (req, res) => {
       updatedAt: thoughtsTable.updatedAt,
     })
     .from(thoughtsTable)
-    .where(
-      and(
-        eq(thoughtsTable.authorId, userId),
-        isNull(thoughtsTable.deletedAt),
-      ),
-    )
+    .where(and(...conditions))
     .orderBy(desc(thoughtsTable.createdAt));
 
   res.json(thoughts);

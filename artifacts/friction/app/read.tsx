@@ -13,11 +13,7 @@ import {
   type LayoutChangeEvent,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import MemoBottomSheet, { type MemoBottomSheetRef } from "@/components/MemoBottomSheet/MemoBottomSheet";
-import MemoToolbar, { type FormatType } from "@/components/MemoToolbar/MemoToolbar";
-import AddMenuPopup from "@/components/MemoToolbar/AddMenuPopup";
-import InlineMenuPanel, { type InlineMenuMode } from "@/components/InlineMenuPanel/InlineMenuPanel";
-import type { OnSelectionUpdatePayload } from "@/components/WebViewMarkdownEditor/types";
+import DansangBottomSheet from "@/components/DansangBottomSheet/DansangBottomSheet";
 import ScalePressable from "@/components/shared/ScalePressable";
 import {
   trackPageTurn,
@@ -58,9 +54,7 @@ import { resolveArticleCover } from "@/utils/articleCover";
 import CoverPage from "@/components/CoverPage/CoverPage";
 import WebViewMarkdownReader from "@/components/WebViewMarkdownReader";
 import { normalizePageItem } from "@/utils/normalizePageItem";
-import { parseMemoPages, buildReplyContent } from "@/utils/memoPages";
 import { useReadingSession } from "@/lib/useReadingSession";
-import { useReadingMemo } from "@/lib/useReadingMemo";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetArticle,
@@ -394,42 +388,10 @@ export default function ReadScreen() {
   const completionTimeRef = useRef<number>(0);
   const hasTrackedReadingStartRef = useRef(false);
 
-  const readingMemo = useReadingMemo({
-    userId,
-    sourceArticleId: articleId,
-    sourceArticleTitle: article?.title,
-    onSaveError: useCallback(
-      (retry: () => void) => {
-        showToast({
-          message: "메모 저장에 실패했어요. 다시 시도할까요?",
-          type: "error",
-          duration: 15000,
-          action: { label: "다시 저장", onPress: retry },
-        });
-      },
-      [showToast],
-    ),
-    onSnapshotRecovered: useCallback(() => {
-      showToast({
-        message: "이전에 저장하지 못한 메모를 복구했어요.",
-        type: "info",
-        duration: 4000,
-      });
-    }, [showToast]),
-  });
-
   // 완료 커밋(보관/건너뛰기/재읽기 종료) 직전에 호출된다. 질문 카드에
-  // 한 글자 이상 답한 카드가 있으면, 읽기 중 메모 내용과 합쳐 최종 답장 글
-  // 본문을 만들고 이를 readingMemo의 최신 저장 대상 내용으로 동기적으로
-  // 반영한다 — 뒤이은 readingMemo.cleanup() 이 이 합쳐진 내용을 커밋한다.
-  // 답한 카드가 하나도 없으면 기존 메모 단독 흐름을 그대로 둔다.
+  // 한 글자 이상 답한 카드가 있으면, 단상으로 저장한다.
   const applyAnsweredQuestionCardsToMemo = useCallback(() => {
     const answeredCards = questionCardRef.current?.getAnsweredCards() ?? [];
-    if (answeredCards.length === 0) return;
-    const finalContent = buildReplyContent(readingMemo.memoContent, answeredCards);
-    if (finalContent.trim()) {
-      readingMemo.updateMemoContent(finalContent);
-    }
     answeredCards
       .filter((card) => card.answer.trim().length > 0)
       .forEach((card) => {
@@ -444,155 +406,50 @@ export default function ReadScreen() {
           { onError: (e) => console.warn("[thought] question creation failed:", e) },
         );
       });
-  }, [readingMemo, articleId, createThought]);
+  }, [articleId, createThought]);
 
-  const memoContentRef = useRef(readingMemo.memoContent);
-  useEffect(() => { memoContentRef.current = readingMemo.memoContent; }, [readingMemo.memoContent]);
+  // ── 단상 바텀시트 ────────────────────────────────────────────────────────
+  const [isDansangOpen, setIsDansangOpen] = useState(false);
+  const [dansangQuote, setDansangQuote] = useState<string | undefined>(undefined);
+  const isDansangOpenRef = useRef(false);
 
-  // ── 메모 모드 (바텀시트) ──────────────────────────────────────────────────
-  const [isMemoMode, setIsMemoMode] = useState(false);
-  const [memoOpenContent, setMemoOpenContent] = useState("");
-  const [memoPendingQuote, setMemoPendingQuote] = useState<string | undefined>(undefined);
-  const [memoActiveFormats, setMemoActiveFormats] = useState<Set<FormatType>>(new Set());
-  const [memoSelectionState, setMemoSelectionState] = useState<OnSelectionUpdatePayload>({
-    activeBlock: "paragraph",
-    isBold: false,
-    isItalic: false,
-    isUnderline: false,
-  });
-  const [inlineMenuMode, setInlineMenuMode] = useState<InlineMenuMode | null>(null);
-  // 패널 닫기 → focus() → keyboardWillShow 이벤트 사이의 공백에서
-  // 툴바가 언마운트되어 번쩍이지 않도록 유지하는 전환 플래그
-  const [keyboardRestorePending, setKeyboardRestorePending] = useState(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const [keyboardVisible, setKeyboardVisible] = useState(false);
-  const lastKeyboardHeightRef = useRef(0);
-  const isMemoModeRef = useRef(false);
-  const memoWebRef = useRef<MemoBottomSheetRef>(null);
+  // QuestionCardCurl에서 키보드 가시 여부를 확인하기 위한 ref
   const keyboardVisibleRef = useRef(false);
-  const addMenuPendingRef = useRef(false);
-  const addMenuBtnRef = useRef<View>(null);
-  const [plusBtnCenterX, setPlusBtnCenterX] = useState<number | null>(null);
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSub = Keyboard.addListener(showEvent, () => { keyboardVisibleRef.current = true; });
+    const hideSub = Keyboard.addListener(hideEvent, () => { keyboardVisibleRef.current = false; });
+    return () => { showSub.remove(); hideSub.remove(); };
+  }, []);
 
   // 메모 모드 진입/종료에 맞춰 하단 진행률 바를 fade out/in 한다.
   const progressBarOpacity = useSharedValue(1);
   useEffect(() => {
-    progressBarOpacity.value = withTiming(isMemoMode ? 0 : 1, {
+    progressBarOpacity.value = withTiming(isDansangOpen ? 0 : 1, {
       duration: 240,
-      easing: isMemoMode ? Easing.out(Easing.ease) : Easing.in(Easing.ease),
+      easing: isDansangOpen ? Easing.out(Easing.ease) : Easing.in(Easing.ease),
     });
-  }, [isMemoMode, progressBarOpacity]);
+  }, [isDansangOpen, progressBarOpacity]);
   const progressBarAnimStyle = useAnimatedStyle(() => ({
     opacity: progressBarOpacity.value,
   }));
 
-  useEffect(() => { isMemoModeRef.current = isMemoMode; }, [isMemoMode]);
+  useEffect(() => { isDansangOpenRef.current = isDansangOpen; }, [isDansangOpen]);
 
-  // Keyboard height tracking for toolbar
-  useEffect(() => {
-    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
-    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
-    const showSub = Keyboard.addListener(showEvent, (e) => {
-      const h = e.endCoordinates.height;
-      lastKeyboardHeightRef.current = h;
-      setKeyboardHeight(h);
-      setKeyboardVisible(true);
-      keyboardVisibleRef.current = true;
-      setKeyboardRestorePending(false); // 키보드가 실제로 올라오면 플래그 해제
-      if (addMenuPendingRef.current) {
-        addMenuPendingRef.current = false;
-        setInlineMenuMode("addMenu");
-      }
-    });
-    const hideSub = Keyboard.addListener(hideEvent, () => {
-      setKeyboardHeight(0);
-      setKeyboardVisible(false);
-      keyboardVisibleRef.current = false;
-    });
-    return () => { showSub.remove(); hideSub.remove(); };
+  const handleOpenDansang = useCallback((quote?: string) => {
+    setDansangQuote(quote);
+    setIsDansangOpen(true);
   }, []);
 
-  const openMemoMode = useCallback((quoteText?: string) => {
-    const pages = parseMemoPages(memoContentRef.current);
-    const flattened = pages.join("\n\n").trim();
-    setMemoOpenContent(flattened);
-    setMemoPendingQuote(quoteText);
-    setMemoActiveFormats(new Set());
-    setIsMemoMode(true);
+  const handleCloseDansang = useCallback(() => {
+    setIsDansangOpen(false);
+    setDansangQuote(undefined);
   }, []);
-
-  const closeMemoMode = useCallback(() => {
-    memoWebRef.current?.blur();
-    Keyboard.dismiss();
-    setIsMemoMode(false);
-    setMemoPendingQuote(undefined);
-    setInlineMenuMode(null);
-    setKeyboardRestorePending(false);
-  }, []);
-
-  // 패널을 닫고 에디터 포커스를 복귀시키는 공통 헬퍼.
-  // keyboardRestorePending을 세워 키보드가 올라오는 동안 툴바가 언마운트되지 않게 한다.
-  const closePanelRestoreKeyboard = useCallback(() => {
-    setKeyboardRestorePending(true);
-    setInlineMenuMode(null);
-    memoWebRef.current?.focus();
-  }, []);
-
-  // 키보드 이벤트가 없는 환경(웹 등)에서 플래그가 영구히 남지 않도록 타임아웃 폴백
-  useEffect(() => {
-    if (!keyboardRestorePending) return;
-    const t = setTimeout(() => setKeyboardRestorePending(false), 1000);
-    return () => clearTimeout(t);
-  }, [keyboardRestorePending]);
-
-  // 툴바 서식 버튼 → WebView 에디터 명령
-  const handleMemoFormat = useCallback((type: FormatType) => {
-    if (type === "quote") {
-      const isQuote = memoActiveFormats.has("quote");
-      memoWebRef.current?.setBlockType(isQuote ? "paragraph" : "blockquote");
-    } else {
-      memoWebRef.current?.toggleMark(type);
-    }
-  }, [memoActiveFormats]);
-
-  // 인라인 메뉴 패널 높이: 키보드가 한 번이라도 올라왔으면 그 높이를,
-  // 아직 키보드 이벤트가 없었으면(웹 등) 화면의 40%로 폴백한다.
-  // 높이 0으로 렌더되어 패널이 보이지 않는 문제를 방지한다.
-  const inlinePanelHeight =
-    lastKeyboardHeightRef.current > 0
-      ? lastKeyboardHeightRef.current
-      : Math.min(320, Math.round(screenHeight * 0.4));
-
-  const handleOpenAddMenu = useCallback(() => {
-    if (inlineMenuMode === "addMenu") {
-      setInlineMenuMode(null);
-      return;
-    }
-    if (inlineMenuMode === "blockType" || inlineMenuMode === "quotePicker") {
-      addMenuPendingRef.current = true;
-      closePanelRestoreKeyboard();
-      return;
-    }
-    addMenuBtnRef.current?.measure((_x, _y, width, _height, pageX) => {
-      setPlusBtnCenterX(pageX + width / 2);
-    });
-    setInlineMenuMode("addMenu");
-  }, [inlineMenuMode, closePanelRestoreKeyboard]);
-
-  const handleSelectQuoteFromAddMenu = useCallback(() => {
-    memoWebRef.current?.blur();
-    Keyboard.dismiss();
-    setInlineMenuMode("quotePicker");
-  }, []);
-
-  const handleSelectQuoteSentence = useCallback((sentence: StoredSentence) => {
-    memoWebRef.current?.insertQuote(sentence.text);
-    closePanelRestoreKeyboard();
-  }, [closePanelRestoreKeyboard]);
 
   const handleOpenMemo = useCallback(() => {
-    openMemoMode();
-  }, [openMemoMode]);
+    handleOpenDansang();
+  }, [handleOpenDansang]);
 
   // Entry animation: fade in reader only once, when content is actually ready.
   // Using [] would fire immediately during the loading state (before the overlay
@@ -733,11 +590,10 @@ export default function ReadScreen() {
     if (reading.session.state === "READING" || reading.session.state === "PAUSED") {
       reading.pause();
     }
-    await readingMemo.cleanup();
     overlayOpacity.value = withTiming(1, { duration: 350, easing: Easing.in(Easing.ease) }, (finished) => {
       if (finished) runOnJS(router.back)();
     });
-  }, [mode, isListEntry, reading, router, readingMemo, overlayOpacity]);
+  }, [mode, reading, router, overlayOpacity]);
 
   const canNavigate = mode === "re_read" || reading.session.state === "READING" || reading.session.state === "COMPLETED_READY";
 
@@ -1164,10 +1020,8 @@ export default function ReadScreen() {
     })
     .onUpdate((e) => {
       if (finishOverlayVisibleRef.current && !lastPageEntranceActiveRef.current) return;
-      if (isMemoModeRef.current) {
-        // 메모 모드 에디터는 WebView(TipTap) 라 터치를 자체적으로 가로챈다.
-        // 제스처로 플립 각도를 추적하지 않고, 페이지 전환은 툴바의 이전/다음
-        // 버튼으로만 처리한다.
+      if (isDansangOpenRef.current) {
+        // 단상 바텀시트가 열려 있으면 페이지 전환 제스처를 무시한다.
         return;
       }
       if (isDraggingRef.current || isTextSelectingRef.current || isCommittingRef.current) return;
@@ -1242,14 +1096,13 @@ export default function ReadScreen() {
       const dy = e.translationY;
       const absDx = Math.abs(dx);
 
-      // 메모 모드: 페이지 전환은 툴바의 이전/다음 버튼으로만 처리한다.
-      // (에디터가 WebView 라 제스처를 자체 처리하므로 여기서는 무시한다.)
-      if (isMemoModeRef.current) {
+      // 단상 바텀시트가 열려 있으면 페이지 전환 제스처를 무시한다.
+      if (isDansangOpenRef.current) {
         return;
       }
 
-      // Upward swipe → enter memo mode (skip if already in memo mode or finish overlay)
-      if (dy < -50 && Math.abs(dy) > absDx * 1.5 && !isMemoModeRef.current) {
+      // Upward swipe → open dansang sheet (skip if already open or finish overlay)
+      if (dy < -50 && Math.abs(dy) > absDx * 1.5 && !isDansangOpenRef.current) {
         if (activeSwipeRef.current === 'forward') snapForward();
         else snapBackward();
         runOnJS(openMemoRef.current)();
@@ -1465,7 +1318,6 @@ export default function ReadScreen() {
       invalidateInbox(queryClient);
       clearActiveSession();
       applyAnsweredQuestionCardsToMemo();
-      await readingMemo.cleanup();
       overlayOpacity.value = withTiming(1, { duration: 350, easing: Easing.in(Easing.ease) }, (finished) => {
         if (finished) runOnJS(router.back)();
       });
@@ -1473,7 +1325,7 @@ export default function ReadScreen() {
     } finally {
       setIsSaving(false);
     }
-  }, [isSaving, isCollectionsReady, reading, selectedCollectionId, collectionsQuery.data, articleId, userId, createCollection, addToCollection, updateRecentCollection, queryClient, clearActiveSession, router, readingMemo, applyAnsweredQuestionCardsToMemo]);
+  }, [isSaving, isCollectionsReady, reading, selectedCollectionId, collectionsQuery.data, articleId, userId, createCollection, addToCollection, updateRecentCollection, queryClient, clearActiveSession, router, applyAnsweredQuestionCardsToMemo]);
 
   const handleCommitAndSkip = useCallback(async () => {
     if (isDeleting) return;
@@ -1490,7 +1342,6 @@ export default function ReadScreen() {
         }
         clearActiveSession();
         applyAnsweredQuestionCardsToMemo();
-        await readingMemo.cleanup();
         promptOrContinue(() => {
           overlayOpacity.value = withTiming(1, { duration: 350, easing: Easing.in(Easing.ease) }, (finished) => {
             if (finished) runOnJS(router.back)();
@@ -1503,7 +1354,7 @@ export default function ReadScreen() {
     } finally {
       setIsDeleting(false);
     }
-  }, [isDeleting, isListEntry, reading, router, clearActiveSession, queryClient, readingMemo, articleId, promptOrContinue, applyAnsweredQuestionCardsToMemo]);
+  }, [isDeleting, isListEntry, reading, router, clearActiveSession, queryClient, articleId, promptOrContinue, applyAnsweredQuestionCardsToMemo]);
 
   const handleTextSelect = useCallback((text: string, isEmpty: boolean) => {
     if (!isEmpty && text) {
@@ -1552,23 +1403,12 @@ export default function ReadScreen() {
     const pageNum = currentPage;
     const author = authorName ?? "";
     const title = article?.title ?? "";
-    const quoteData = JSON.stringify({
-      text: text.trim(),
-      attribution: `${author}, <${title}>, ${pageNum}면`,
-    });
-    openMemoMode(quoteData);
     trackMemoCreatedDuringReading({ articleId, page: currentPage });
-    createThought.mutate(
-      {
-        data: {
-          content: `> ${text.trim()}\n\n— ${author}, <${title}>, ${pageNum}면`,
-          createdFrom: "quoted",
-          sourceArticleId: articleId,
-        },
-      },
-      { onError: (e) => console.warn("[thought] quoted creation failed:", e) },
-    );
-  }, [currentPage, authorName, article?.title, openMemoMode, articleId, createThought]);
+    // Route quote text into the dansang sheet's compose field via pendingQuote.
+    // The user can edit/augment the quote before saving — no immediate creation.
+    const quoteText = `> ${text.trim()}\n\n— ${author}, <${title}>, ${pageNum}면`;
+    handleOpenDansang(quoteText);
+  }, [currentPage, authorName, article?.title, handleOpenDansang, articleId]);
 
   const handleSaveSentence = useCallback(async () => {
     if (!selectedText) return;
@@ -1973,7 +1813,7 @@ export default function ReadScreen() {
             {/* Progress bar below card — 메모 모드 진입/종료에 맞춰 fade in/out */}
             <Animated.View
               style={[styles.progressBarContainer, progressBarAnimStyle]}
-              pointerEvents={isMemoMode ? "none" : "auto"}
+              pointerEvents={isDansangOpen ? "none" : "auto"}
             >
               <ProgressIndicator type="linear" progress={reading.progress} size="small" />
             </Animated.View>
@@ -2001,7 +1841,7 @@ export default function ReadScreen() {
           !finishOverlayVisible 조건처럼 뚝 잘리지 않는다. */}
       <Animated.View
         style={[fabAnimStyle, { position: "absolute", bottom: insets.bottom + 24, right: 20 }]}
-        pointerEvents={finishOverlayVisible || isMemoMode ? "none" : "box-none"}
+        pointerEvents={finishOverlayVisible || isDansangOpen ? "none" : "box-none"}
       >
         <ScalePressable
           onPress={handleOpenMemo}
@@ -2016,95 +1856,15 @@ export default function ReadScreen() {
         </ScalePressable>
       </Animated.View>
 
-      {/* ── 메모 바텀시트 ──────────────────────────────────────────────── */}
-      <MemoBottomSheet
-        ref={memoWebRef}
-        visible={isMemoMode}
-        onClose={closeMemoMode}
-        memoTitle={readingMemo.memoTitle}
-        memoContent={memoOpenContent}
-        pendingQuote={memoPendingQuote}
-        onTitleChange={readingMemo.updateMemoTitle}
-        onExportMarkdown={(markdown, _requestId) => {
-          readingMemo.updateMemoContent(markdown);
-        }}
-        onActiveFormatsChange={setMemoActiveFormats}
-        onSelectionUpdate={setMemoSelectionState}
-        bodyFontSize={layout.bodyFontSize}
-        keyboardVisible={keyboardVisible}
-        keyboardHeight={keyboardHeight}
-        bottomInset={insets.bottom}
-      />
-
-      {/* ── 메모 모드 키보드 툴바 ──────────────────────────────────────── */}
-      {isMemoMode && (
-        <View
-          style={[
-            styles.memoToolbarWrap,
-            {
-              bottom: keyboardVisible ? keyboardHeight : inlinePanelHeight,
-              display: (keyboardVisible || inlineMenuMode !== null || keyboardRestorePending) ? "flex" : "none",
-            },
-          ]}
-          pointerEvents="box-none"
-        >
-          <MemoToolbar
-            onDismissKeyboard={() => {
-              memoWebRef.current?.blur();
-              Keyboard.dismiss();
-            }}
-            onFormat={handleMemoFormat}
-            activeFormats={memoActiveFormats}
-            onOpenAddMenu={handleOpenAddMenu}
-            onUndo={() => memoWebRef.current?.undo()}
-            onRedo={() => memoWebRef.current?.redo()}
-            canUndo={memoSelectionState?.canUndo ?? false}
-            canRedo={memoSelectionState?.canRedo ?? false}
-            selectionState={memoSelectionState}
-            onFormatPress={() => {
-              if (inlineMenuMode === "blockType") {
-                closePanelRestoreKeyboard();
-                return;
-              }
-              memoWebRef.current?.blur();
-              Keyboard.dismiss();
-              setInlineMenuMode("blockType");
-            }}
-            onInsertDivider={() => memoWebRef.current?.insertDivider()}
-            onShiftEnter={() => memoWebRef.current?.insertHardBreak()}
-            inlineMenuMode={inlineMenuMode}
-            keyboardVisible={keyboardVisible}
-            addMenuBtnRef={addMenuBtnRef}
-          />
-        </View>
-      )}
-
-      {/* ── [+] 팝업 메뉴 (addMenu) — 공유 컴포넌트 ─────────────────── */}
-      {isMemoMode && inlineMenuMode === "addMenu" && (
-        <AddMenuPopup
-          keyboardHeight={keyboardHeight}
-          plusBtnCenterX={plusBtnCenterX}
-          onDismiss={() => setInlineMenuMode(null)}
-          onSelectQuote={handleSelectQuoteFromAddMenu}
+      {/* ── 단상 바텀시트 ──────────────────────────────────────────────── */}
+      {articleId ? (
+        <DansangBottomSheet
+          visible={isDansangOpen}
+          onClose={handleCloseDansang}
+          articleId={articleId}
+          pendingQuote={dansangQuote}
         />
-      )}
-
-      {/* ── 인라인 메뉴 패널 (본문/문장수집 인용) ────────────────────── */}
-      {isMemoMode && inlineMenuMode !== null && inlineMenuMode !== "addMenu" && (
-        <InlineMenuPanel
-          mode={inlineMenuMode}
-          panelHeight={inlinePanelHeight}
-          activeBlock={memoSelectionState.activeBlock}
-          userId={userId}
-          onSelectBlock={(blockType) => {
-            memoWebRef.current?.setBlockType(blockType);
-            closePanelRestoreKeyboard();
-          }}
-          onSelectSentence={handleSelectQuoteSentence}
-          onSelectQuoteMenu={handleSelectQuoteFromAddMenu}
-          onDismiss={closePanelRestoreKeyboard}
-        />
-      )}
+      ) : null}
 
       {/* ── Selection pill overlay ─────────────────────────────────────── */}
       {showSelectionPill && (
@@ -2206,7 +1966,6 @@ export default function ReadScreen() {
             ? async () => {
                 setReadingCompleteVisible(false);
                 applyAnsweredQuestionCardsToMemo();
-                await readingMemo.cleanup();
                 overlayOpacity.value = withTiming(1, { duration: 350, easing: Easing.in(Easing.ease) }, (finished) => {
                   if (finished) runOnJS(router.back)();
                 });

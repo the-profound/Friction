@@ -16,3 +16,5 @@
 - [Drizzle sql import in lib/db](friction-drizzle-sql-import.md) — `sql` tag must come from `drizzle-orm`, not `drizzle-orm/pg-core`; esbuild errors on the wrong import path.
 - [Native pill stretch](friction-native-pill-stretch.md) — flex guards (alignSelf/alignItems flex-start) failed to stop capsule buttons stretching vertically on native; only explicit fixed height on every layer works.
 - [RN border + overflow:hidden](friction-toolbar-border-overflow.md) — borderWidth on a view with overflow:"hidden" gets clipped and can hide inner icons; drop overflow:hidden for outline-style buttons.
+- [Dansang sheet snap semantics](friction-dansang-sheet-snaps.md) — "full" snap = maxPanelHeight (notch), not default 58% height; check snap targets are visually distinct before debugging gestures.
+- [RN Animated native/non-native split](friction-animated-driver-split.md) — can't mix native (translateY) and non-native (bottom) animated props on same Animated.View; split into outer (non-native, bottom) + inner (native, transform) wrappers.

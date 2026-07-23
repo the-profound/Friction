@@ -1035,6 +1035,11 @@ export interface SpellCheckResponse {
   error?: string | null;
 }
 
+export type ListThoughtsParams = {
+  /** Filter thoughts linked to a specific article */
+  sourceArticleId?: string;
+};
+
 export type ListArticlesParams = {
   authorId?: string;
   status?: ListArticlesStatus;

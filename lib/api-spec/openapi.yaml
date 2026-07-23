@@ -2433,7 +2433,15 @@ paths:
       operationId: listThoughts
       tags: [thoughts]
       summary: List thoughts for the authenticated user
-      description: Returns thoughts belonging to the authenticated user. No query params — identity is taken from the auth token.
+      description: Returns thoughts belonging to the authenticated user. Identity is taken from the auth token. Optionally filtered by sourceArticleId.
+      parameters:
+        - name: sourceArticleId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Filter thoughts linked to a specific article
       responses:
         "200":
           description: Thought list

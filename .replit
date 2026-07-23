@@ -35,21 +35,5 @@ packages = ["pstree"]
 EXPO_PUBLIC_POSTHOG_TOKEN = "phc_ujzCizkg5fppua6PwidhQAuhegBrVQ3cm78GP9mmr4S5"
 EXPO_PUBLIC_POSTHOG_HOST = "https://us.i.posthog.com"
 
-[[ports]]
-localPort = 3000
-externalPort = 3001
-
-[[ports]]
-localPort = 8080
-externalPort = 8080
-
-[[ports]]
-localPort = 8081
-externalPort = 80
-
-[[ports]]
-localPort = 21672
-externalPort = 3000
-
 [objectStorage]
 defaultBucketID = "replit-objstore-4b6c9fed-f757-4bf7-8128-d80078b0642f"
