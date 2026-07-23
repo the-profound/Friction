@@ -49,6 +49,24 @@ Task 브랜치가 소스만 수정하고 머지될 경우 이 단계가 누락�
 fix가 적용되지 않아 본문 저장 버그가 지속됨. `grep programmaticUpdatePending editorHtml.ts`
 count=0 이면 번들이 오래된 것.
 
+## api-zod generated files vanish / codegen won't run
+
+If `lib/api-zod/src/generated/` is empty and the API server fails to build:
+
+- **orval CLI fails** with "Failed to resolve input" when the config is `.ts` — jiti transpilation issue with `import.meta.url` in the config.
+- **`generate()` programmatic call** (from `node_modules/orval/dist/index.mjs`) runs without error but produces **no files** — confirmed broken as of orval v8.5.3 in this environment.
+- **Fix:** restore from git. The generated files are committed. Find the most recent commit that has all needed types (check `git log --all --oneline -- "lib/api-zod/src/generated/api.ts"`) and restore via:
+  ```bash
+  git show <SHA>:lib/api-zod/src/generated/api.ts > lib/api-zod/src/generated/api.ts
+  # For all type files:
+  git show <SHA> --name-only | grep "^lib/api-zod/src/generated" | while read f; do
+    mkdir -p "$(dirname "$f")" && git show "<SHA>:$f" > "$f"
+  done
+  ```
+- After a task agent merge that adds new API routes, the new types will be in `api-zod/src/generated/api.ts` in that merge commit — restore from there.
+
+**Why:** The safe-codegen script (`lib/api-spec/scripts/safe-codegen.mjs`) backs up then deletes generated dirs before running orval CLI; when CLI fails, it restores from backup — but if backup was already empty (e.g. files never committed or wiped), nothing comes back.
+
 ## Pre-existing baselines (not your regression)
 - `lib/api-zod` declaration build fails with TS2308 duplicate-export ambiguity
   (`src/index.ts` does `export * from "./generated/api"` AND `"./generated/types"`,
