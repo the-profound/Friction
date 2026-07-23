@@ -87,6 +87,7 @@ function SpaceCard({
         contentStyle={styles.cardContent}
       >
         <View style={styles.cardTopRow}>
+          <Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>
           <View
             style={[
               styles.statusBadge,
@@ -102,7 +103,6 @@ function SpaceCard({
             </Text>
           </View>
         </View>
-        <Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>
         {item.description ? (
           <Text style={styles.cardDesc} numberOfLines={4}>{item.description}</Text>
         ) : null}
@@ -567,10 +567,10 @@ const styles = StyleSheet.create({
   },
   cardTopRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "flex-end",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: 4,
-    minHeight: 22,
+    gap: 8,
   },
   statusBadge: {
     borderRadius: 6,
@@ -586,6 +586,7 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 20,
     color: Colors.zinc900,
+    flex: 1,
   },
   cardDesc: {
     ...Typography.body,
