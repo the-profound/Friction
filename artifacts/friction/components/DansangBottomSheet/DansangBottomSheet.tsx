@@ -36,7 +36,7 @@ import {
 import type { Thought } from "@workspace/api-client-react";
 import { Colors, Spacing } from "@/constants/tokens";
 
-const PANEL_RATIO = 0.58;
+const PANEL_RATIO = 0.5;
 /** 스와이프 1단계 중간 스냅 높이 비율 */
 const PANEL_MID_RATIO = 0.5;
 /** 노치/상단 안전 영역 아래 추가 여백 */
@@ -103,6 +103,9 @@ export interface DansangBottomSheetProps {
   onClose: () => void;
   articleId: string;
   pendingQuote?: string;
+  effectiveSheetHeightAnim?: Animated.Value;
+  /** 외부에서 애니메이션 close를 트리거하기 위한 ref. 배경 탭 해제 등에서 사용. */
+  closeHandleRef?: React.MutableRefObject<(() => void) | null>;
 }
 
 export default function DansangBottomSheet({
@@ -110,6 +113,8 @@ export default function DansangBottomSheet({
   onClose,
   articleId,
   pendingQuote,
+  effectiveSheetHeightAnim,
+  closeHandleRef,
 }: DansangBottomSheetProps) {
   const insets = useSafeAreaInsets();
   const { height: screenHeight } = useWindowDimensions();
@@ -150,6 +155,27 @@ export default function DansangBottomSheet({
   const maxPanelHeightRef = useRef(maxPanelHeight);
   maxPanelHeightRef.current = maxPanelHeight;
 
+  // ── Effective sheet height exposure ──────────────────────────────────────
+  // slideAnim uses useNativeDriver:true — addListener on it is unreliable
+  // during native spring animations (JS callbacks may be skipped entirely).
+  // Instead, we drive effectiveSheetHeightAnim explicitly in parallel with
+  // every animation/setValue that changes the panel's visible height.
+  //
+  // outerHListenRef: tracks outerHeightAnim (non-native, listener always fires)
+  // so PanResponder closures can read the current outer height synchronously.
+  const outerHListenRef = useRef(defaultPanelHeight);
+  // effectiveSheetHeightAnimRef: stable ref to the prop so PanResponder
+  // closures (created once) always access the latest value.
+  const effectiveSheetHeightAnimRef = useRef(effectiveSheetHeightAnim);
+  effectiveSheetHeightAnimRef.current = effectiveSheetHeightAnim;
+
+  useEffect(() => {
+    const sub = outerHeightAnim.addListener(({ value }) => {
+      outerHListenRef.current = value;
+    });
+    return () => outerHeightAnim.removeListener(sub);
+  }, [outerHeightAnim]);
+
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -180,22 +206,22 @@ export default function DansangBottomSheet({
   // ── Keyboard: 패널 height + inputBar padding 동시 신축 ─────────────────────
 
   const animKbOptions = useCallback(
-    (toHeight: number, toPad: number) =>
-      Animated.parallel([
-        Animated.timing(outerHeightAnim, {
-          toValue: toHeight,
-          duration: KB_ANIM_DURATION,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: false,
-        }),
-        Animated.timing(inputPadAnim, {
-          toValue: toPad,
-          duration: KB_ANIM_DURATION,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: false,
-        }),
-      ]),
-    [outerHeightAnim, inputPadAnim],
+    (toHeight: number, toPad: number) => {
+      const timingBase = {
+        duration: KB_ANIM_DURATION,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false as const,
+      };
+      const animations: Animated.CompositeAnimation[] = [
+        Animated.timing(outerHeightAnim, { toValue: toHeight, ...timingBase }),
+        Animated.timing(inputPadAnim, { toValue: toPad, ...timingBase }),
+      ];
+      if (effectiveSheetHeightAnim) {
+        animations.push(Animated.timing(effectiveSheetHeightAnim, { toValue: toHeight, ...timingBase }));
+      }
+      return Animated.parallel(animations);
+    },
+    [outerHeightAnim, inputPadAnim, effectiveSheetHeightAnim],
   );
 
   useEffect(() => {
@@ -230,21 +256,33 @@ export default function DansangBottomSheet({
 
   const doClose = useCallback(() => {
     Keyboard.dismiss();
-    Animated.spring(slideAnimRef.current, {
-      toValue: screenHeight,
-      damping: 32,
-      stiffness: 400,
-      useNativeDriver: true,
-    }).start(({ finished }) => {
+    const springBase = { damping: 32, stiffness: 400 };
+    const animations: Animated.CompositeAnimation[] = [
+      Animated.spring(slideAnimRef.current, { toValue: screenHeight, ...springBase, useNativeDriver: true }),
+    ];
+    if (effectiveSheetHeightAnim) {
+      animations.push(Animated.spring(effectiveSheetHeightAnim, { toValue: 0, ...springBase, useNativeDriver: false }));
+    }
+    Animated.parallel(animations).start(({ finished }) => {
       if (finished) {
         setInputText("");
         onClose();
       }
     });
-  }, [screenHeight, onClose]);
+  }, [screenHeight, onClose, effectiveSheetHeightAnim]);
 
   const doCloseRef = useRef(doClose);
   doCloseRef.current = doClose;
+
+  // 외부(read.tsx 배경 탭 등)에서 doClose를 트리거할 수 있도록 ref 노출
+  useEffect(() => {
+    if (closeHandleRef) {
+      closeHandleRef.current = () => doCloseRef.current();
+    }
+    return () => {
+      if (closeHandleRef) closeHandleRef.current = null;
+    };
+  }, [closeHandleRef]);
 
   // ── Open ─────────────────────────────────────────────────────────────────
 
@@ -255,12 +293,15 @@ export default function DansangBottomSheet({
       outerHeightAnim.setValue(defaultPanelHeight);
       inputPadAnim.setValue(restPadRef.current);
       slideAnim.setValue(defaultPanelHeight);
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        damping: 28,
-        stiffness: 220,
-        useNativeDriver: true,
-      }).start();
+      effectiveSheetHeightAnim?.setValue(0);
+      const springBase = { damping: 28, stiffness: 220 };
+      const animations: Animated.CompositeAnimation[] = [
+        Animated.spring(slideAnim, { toValue: 0, ...springBase, useNativeDriver: true }),
+      ];
+      if (effectiveSheetHeightAnim) {
+        animations.push(Animated.spring(effectiveSheetHeightAnim, { toValue: defaultPanelHeight, ...springBase, useNativeDriver: false }));
+      }
+      Animated.parallel(animations).start();
       if (pendingQuote) {
         setTimeout(() => inputRef.current?.focus(), 300);
       }
@@ -299,22 +340,24 @@ export default function DansangBottomSheet({
 
   // ── 공용 스냅-백 spring ───────────────────────────────────────────────────
 
-  const springBack = () =>
-    Animated.spring(slideAnimRef.current, {
-      toValue: 0,
-      damping: 32,
-      stiffness: 400,
-      useNativeDriver: true,
-    }).start();
+  const springBack = () => {
+    const springBase = { damping: 32, stiffness: 400 };
+    const animations: Animated.CompositeAnimation[] = [
+      Animated.spring(slideAnimRef.current, { toValue: 0, ...springBase, useNativeDriver: true }),
+    ];
+    const eff = effectiveSheetHeightAnimRef.current;
+    if (eff) {
+      animations.push(Animated.spring(eff, { toValue: outerHListenRef.current, ...springBase, useNativeDriver: false }));
+    }
+    Animated.parallel(animations).start();
+  };
 
   // ── 리스트 스와이프 release 로직 ─────────────────────────────────────────
   //   드래그 거리·속도 기반으로 full/mid/close 직접 결정 (강제 2단계 없음)
 
   const onSwipeRelease = (gs: { dy: number; vy: number }) => {
     if (gs.dy > SWIPE_CLOSE_DY || gs.vy > SWIPE_CLOSE_VEL) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const panelH = (outerHeightAnim as any)._value as number;
-      const currentH = Math.max(0, panelH - gs.dy);
+      const currentH = Math.max(0, outerHListenRef.current - gs.dy);
       const target = getSnapTarget(
         currentH, gs.vy,
         maxPanelHeightRef.current, midPanelHeightRef.current,
@@ -323,20 +366,14 @@ export default function DansangBottomSheet({
         doCloseRef.current();
       } else {
         snapStageRef.current = target >= maxPanelHeightRef.current * 0.9 ? "full" : "mid";
-        Animated.parallel([
-          Animated.spring(slideAnimRef.current, {
-            toValue: 0,
-            damping: 28,
-            stiffness: 220,
-            useNativeDriver: true,
-          }),
-          Animated.spring(outerHeightAnim, {
-            toValue: target,
-            damping: 28,
-            stiffness: 220,
-            useNativeDriver: false,
-          }),
-        ]).start();
+        const springBase = { damping: 28, stiffness: 220 };
+        const animations: Animated.CompositeAnimation[] = [
+          Animated.spring(slideAnimRef.current, { toValue: 0, ...springBase, useNativeDriver: true }),
+          Animated.spring(outerHeightAnim, { toValue: target, ...springBase, useNativeDriver: false }),
+        ];
+        const eff = effectiveSheetHeightAnimRef.current;
+        if (eff) animations.push(Animated.spring(eff, { toValue: target, ...springBase, useNativeDriver: false }));
+        Animated.parallel(animations).start();
       }
     } else {
       springBack();
@@ -353,12 +390,13 @@ export default function DansangBottomSheet({
   const snapToHeight = (target: number) => {
     if (target <= 0) { doCloseRef.current(); return; }
     snapStageRef.current = target >= maxPanelHeightRef.current * 0.9 ? "full" : "mid";
-    Animated.spring(outerHeightAnim, {
-      toValue: target,
-      damping: 32,
-      stiffness: 400,
-      useNativeDriver: false,
-    }).start();
+    const springBase = { damping: 32, stiffness: 400, useNativeDriver: false as const };
+    const animations: Animated.CompositeAnimation[] = [
+      Animated.spring(outerHeightAnim, { toValue: target, ...springBase }),
+    ];
+    const eff = effectiveSheetHeightAnimRef.current;
+    if (eff) animations.push(Animated.spring(eff, { toValue: target, ...springBase }));
+    Animated.parallel(animations).start();
   };
   const snapToHeightRef = useRef(snapToHeight);
   snapToHeightRef.current = snapToHeight;
@@ -381,6 +419,9 @@ export default function DansangBottomSheet({
         );
         currentDragHeightRef.current = newH;
         outerHeightAnim.setValue(newH);
+        // outerHListenRef update: addListener fires asynchronously, so sync here
+        outerHListenRef.current = newH;
+        effectiveSheetHeightAnimRef.current?.setValue(newH);
       },
       onPanResponderRelease: (_, gs) => {
         // currentDragHeightRef: move에서 직접 기록한 값 — _value 내부 API 불필요
@@ -411,7 +452,10 @@ export default function DansangBottomSheet({
         listScrollYRef.current <= 0 && gs.dy > 8 && gs.dy > Math.abs(gs.dx) * 1.5,
       onMoveShouldSetPanResponderCapture: () => false,
       onPanResponderMove: (_, gs) => {
-        slideAnimRef.current.setValue(Math.max(0, gs.dy));
+        const dy = Math.max(0, gs.dy);
+        slideAnimRef.current.setValue(dy);
+        const eff = effectiveSheetHeightAnimRef.current;
+        if (eff) eff.setValue(Math.max(0, outerHListenRef.current - dy));
       },
       onPanResponderRelease: (_, gs) => { onSwipeReleaseRef.current(gs); },
       onPanResponderTerminate: () => { springBack(); },

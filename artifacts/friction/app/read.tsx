@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import {
+  Animated as RNAnimated,
   View,
   Text,
   StyleSheet,
@@ -250,6 +251,21 @@ export default function ReadScreen() {
 
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | undefined>(undefined);
   const [pageListSize, setPageListSize] = useState({ width: 0, height: 0 });
+  // 카드 래퍼의 실제 윈도우 Y 좌표(측정값). 수식 유도 대신 measureInWindow로
+  // 실측해 시트 축소 애니메이션의 기준점으로 사용한다.
+  const cardWrapRef = useRef<View>(null);
+  const [cardWindowTop, setCardWindowTop] = useState<number | null>(null);
+  const handleCardWrapLayout = useCallback(() => {
+    // onLayout 직후 measureInWindow로 윈도우 절대좌표를 얻는다.
+    // (transform은 부모 RNAnimated.View 바깥이므로 측정에 영향 없음)
+    cardWrapRef.current?.measureInWindow((_x, y) => {
+      if (typeof y === "number" && !Number.isNaN(y)) {
+        setCardWindowTop((prev) =>
+          prev !== null && Math.abs(prev - y) < 0.5 ? prev : y,
+        );
+      }
+    });
+  }, []);
   const handlePageListLayout = useCallback((e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
     setPageListSize((prev) =>
@@ -280,6 +296,60 @@ export default function ReadScreen() {
       ),
     [pageListSize.width, pageListSize.height, screenWidth, effectiveLayoutWidth],
   );
+
+  // ── 단상 시트 연동 편지 페이지 축소 ────────────────────────────────────────
+  // 목표: 시트가 열리면 편지가 "시트 위에 남은 가용 영역"을 채우도록
+  //       위로 이동하며 축소된다 (fit & center).
+  //
+  //   가용 영역 = [insets.top + 8, sheetTop - 12]  (상단 안전영역 아래 ~ 시트 위)
+  //   smallScale = min(1, 가용높이 / frameHeight)
+  //   translateY = 가용영역 중앙 Y - 카드 원래 중앙 Y  (부모 좌표계)
+  //
+  // transform 순서는 [translateY, scale]:
+  //   translateY가 먼저 적용되어야 부모(비스케일) 좌표계에서 정확한 픽셀만큼
+  //   이동한 뒤, 그 위치의 중심을 기준으로 축소된다.
+  // 카드 원래 위치는 가정하지 않고 measureInWindow 실측값(cardWindowTop)을 쓴다.
+  const sheetEffectiveHeightAnim = useRef(new RNAnimated.Value(0)).current;
+
+  const pageSheetAnimStyle = useMemo(() => {
+    // 카드 최소 크기에 도달하는 기준: mid-snap (PANEL_MID_RATIO = 0.5).
+    // 이 높이에서 카드가 최소 크기에 도달하고, 시트가 더 올라가도 clamp로 고정.
+    // DansangBottomSheet의 PANEL_MID_RATIO = 0.5와 반드시 동기화.
+    const DANSANG_MID_RATIO = 0.5;
+    const midPanelHeight = screenHeight * DANSANG_MID_RATIO;
+    // mid-snap일 때 시트 상단 Y
+    const sheetTop = screenHeight - midPanelHeight; // = screenHeight * 0.5
+
+    // 시트 위 가용 영역 (mid-snap 기준으로 계산 — 최소 크기의 정의)
+    const availTop = insets.top + 8;
+    const availBottom = sheetTop - 12;
+    const availHeight = Math.max(0, availBottom - availTop);
+
+    // 카드 원래 상단 Y: measureInWindow 실측값 우선, 미측정 시 중앙 가정 fallback
+    const cardTop = cardWindowTop ?? (screenHeight - layout.frameHeight) / 2;
+    const cardCenterY = cardTop + layout.frameHeight / 2;
+
+    // fit: 가용 높이에 맞춰 축소 (확대는 안 함)
+    const smallScale = layout.frameHeight > 0 && availHeight > 0
+      ? Math.min(1, availHeight / layout.frameHeight)
+      : 1;
+    // center: 가용 영역 중앙으로 이동
+    const targetCenterY = (availTop + availBottom) / 2;
+    const translateY = targetCenterY - cardCenterY;
+
+    const pageTranslateYInterp = sheetEffectiveHeightAnim.interpolate({
+      inputRange: [0, midPanelHeight],
+      outputRange: [0, translateY],
+      extrapolate: "clamp",
+    });
+    const pageScaleInterp = sheetEffectiveHeightAnim.interpolate({
+      inputRange: [0, midPanelHeight],
+      outputRange: [1, smallScale],
+      extrapolate: "clamp",
+    });
+
+    return { transform: [{ translateY: pageTranslateYInterp }, { scale: pageScaleInterp }] };
+  }, [screenHeight, insets.top, layout.frameHeight, cardWindowTop, sheetEffectiveHeightAnim]);
 
   // Entry/exit black overlay animation — starts opaque (value=1) so the
   // reader "fades in" on mount, and fades back to opaque when exiting.
@@ -412,6 +482,12 @@ export default function ReadScreen() {
   const [isDansangOpen, setIsDansangOpen] = useState(false);
   const [dansangQuote, setDansangQuote] = useState<string | undefined>(undefined);
   const isDansangOpenRef = useRef(false);
+  // 배경 탭 시 DansangBottomSheet 내부의 doClose(애니메이션 포함)를 호출하기 위한 ref
+  const dansangCloseHandleRef = useRef<(() => void) | null>(null);
+  // Reanimated SV mirroring isDansangOpen — used in prevSlotAnimStyle to hide the
+  // prev slot while the sheet is open (outer scale shrinks the card and can reveal
+  // the parked prev slot in the strip between the scaled card and the screen edge).
+  const dansangOpenSV = useSharedValue(0);
 
   // QuestionCardCurl에서 키보드 가시 여부를 확인하기 위한 ref
   const keyboardVisibleRef = useRef(false);
@@ -436,6 +512,7 @@ export default function ReadScreen() {
   }));
 
   useEffect(() => { isDansangOpenRef.current = isDansangOpen; }, [isDansangOpen]);
+  useEffect(() => { dansangOpenSV.value = isDansangOpen ? 1 : 0; }, [isDansangOpen, dansangOpenSV]);
 
   const handleOpenDansang = useCallback((quote?: string) => {
     setDansangQuote(quote);
@@ -445,7 +522,8 @@ export default function ReadScreen() {
   const handleCloseDansang = useCallback(() => {
     setIsDansangOpen(false);
     setDansangQuote(undefined);
-  }, []);
+    sheetEffectiveHeightAnim.setValue(0);
+  }, [sheetEffectiveHeightAnim]);
 
   const handleOpenMemo = useCallback(() => {
     handleOpenDansang();
@@ -806,11 +884,16 @@ export default function ReadScreen() {
     const slideIn = prevSlotSV.value + W; // –PARK_EXTRA when parked, W when fully in
     const rotation = flatTransitionSV.value ? 0 : (slideIn / W - 1) * MAX_ROTATE_DEG;
     // (slideIn/W − 1): parked ≈ −1.4 → screen-entry ≈ −1 → fully in = 0
+    // When the dansang sheet is open the outer RNAnimated.View scales the entire
+    // card down, which brings the parked prev slot (at -(W + PARK_EXTRA)) closer
+    // to the screen center in screen-space until it becomes visible in the strip
+    // left of the card. Hide it so that strip stays clean.
     return {
       transform: [
         { translateX: prevSlotSV.value },
         { rotateZ: `${rotation}deg` },
       ],
+      opacity: dansangOpenSV.value ? 0 : 1,
     };
   });
   // Shadow opacity for the CURRENT card: 0 at rest (only `next` casts a shadow,
@@ -1571,7 +1654,9 @@ export default function ReadScreen() {
             onLayout={handlePageListLayout}
           >
             {/* Card: shadow wrapper gives floating-paper feel */}
-            <View>
+            {/* 측정용 래퍼 — transform 바깥이므로 measureInWindow가 원래 위치를 반환 */}
+            <View ref={cardWrapRef} collapsable={false} onLayout={handleCardWrapLayout}>
+            <RNAnimated.View style={pageSheetAnimStyle}>
               <View
                 style={[
                   styles.readerShadowWrapper,
@@ -1808,6 +1893,7 @@ export default function ReadScreen() {
                 </View>
               </View>
               </View>
+            </RNAnimated.View>
             </View>
 
             {/* Progress bar below card — 메모 모드 진입/종료에 맞춰 fade in/out */}
@@ -1856,6 +1942,15 @@ export default function ReadScreen() {
         </ScalePressable>
       </Animated.View>
 
+      {/* ── 단상 시트 배경 탭 해제 ─────────────────────────────────────── */}
+      {/* dansangCloseHandleRef.current → 시트 내부 doClose(슬라이드+스프링 후 onClose) */}
+      {isDansangOpen && (
+        <Pressable
+          style={StyleSheet.absoluteFillObject}
+          onPress={() => dansangCloseHandleRef.current?.()}
+        />
+      )}
+
       {/* ── 단상 바텀시트 ──────────────────────────────────────────────── */}
       {articleId ? (
         <DansangBottomSheet
@@ -1863,6 +1958,8 @@ export default function ReadScreen() {
           onClose={handleCloseDansang}
           articleId={articleId}
           pendingQuote={dansangQuote}
+          effectiveSheetHeightAnim={sheetEffectiveHeightAnim}
+          closeHandleRef={dansangCloseHandleRef}
         />
       ) : null}
 
