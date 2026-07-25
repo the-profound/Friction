@@ -142,6 +142,8 @@ export default function DansangBottomSheet({
 
   // 스와이프 단계: "full" = 전체 확장, "mid" = 중간 스냅
   const snapStageRef = useRef<"full" | "mid">("full");
+  // 키보드 오픈 직전 단계 기록 — hide 시 복원에 사용
+  const prevSnapStageRef = useRef<"mid" | null>(null);
   // 항상 최신 midPanelHeight를 PanResponder 클로저에서 쓸 수 있도록 ref로 유지
   const midPanelHeightRef = useRef(screenHeight * PANEL_MID_RATIO);
   midPanelHeightRef.current = screenHeight * PANEL_MID_RATIO;
@@ -177,6 +179,8 @@ export default function DansangBottomSheet({
   }, [outerHeightAnim]);
 
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const keyboardVisibleRef = useRef(false);
+  keyboardVisibleRef.current = keyboardVisible;
   const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const inputRef = useRef<TextInput>(null);
@@ -231,30 +235,54 @@ export default function DansangBottomSheet({
 
     const showSub = Keyboard.addListener(showEvent, (e) => {
       const kh = e.endCoordinates.height;
-      const targetH = Math.min(defaultPanelHeight + kh, maxPanelHeight);
-      snapStageRef.current = "full";
       setKeyboardVisible(true);
-      animKbOptions(targetH, kh + 8).start();
+      if (snapStageRef.current === "mid") {
+        // 중간 단계에서 키보드 열림 → 65%로 시트 확장, snapStage는 "mid" 유지
+        prevSnapStageRef.current = "mid";
+        const targetH = Math.min(screenHeight * 0.65, maxPanelHeight);
+        animKbOptions(targetH, kh + 8).start();
+      } else {
+        // 전체 단계에서 키보드 열림 → 높이 그대로, inputPad만 올림
+        // (defaultPanelHeight + kh 가 maxPanelHeight 보다 작을 수 있어
+        //  animKbOptions로 outerHeight를 변경하면 시트가 내려가는 버그 발생)
+        prevSnapStageRef.current = null;
+        snapStageRef.current = "full";
+        Animated.timing(inputPadAnim, {
+          toValue: kh + 8,
+          duration: KB_ANIM_DURATION,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: false,
+        }).start();
+      }
     });
 
     const hideSub = Keyboard.addListener(hideEvent, () => {
       setKeyboardVisible(false);
-      // outerHeightAnim은 건드리지 않음 — 패널은 전체 확장 상태 유지
-      // (키보드가 올라오면서 커진 패널은 키보드가 내려가도 그대로 유지)
-      Animated.timing(inputPadAnim, {
-        toValue: restPadRef.current,
-        duration: KB_ANIM_DURATION,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: false,
-      }).start();
+      if (prevSnapStageRef.current === "mid") {
+        // 중간 단계에서 키보드가 열렸다가 닫힘 → mid 높이(50%)로 복원
+        prevSnapStageRef.current = null;
+        snapStageRef.current = "mid";
+        const midH = screenHeight * PANEL_MID_RATIO;
+        animKbOptions(midH, restPadRef.current).start();
+      } else {
+        // 전체 단계 복귀: 패널 높이는 그대로, inputPad만 복원
+        Animated.timing(inputPadAnim, {
+          toValue: restPadRef.current,
+          duration: KB_ANIM_DURATION,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: false,
+        }).start();
+      }
     });
 
     return () => { showSub.remove(); hideSub.remove(); };
-  }, [animKbOptions, defaultPanelHeight, maxPanelHeight]);
+  }, [animKbOptions, defaultPanelHeight, maxPanelHeight, screenHeight]);
 
   // ── Close ─────────────────────────────────────────────────────────────────
 
   const doClose = useCallback(() => {
+    // keyboardWillHide가 mid 복원 애니메이션을 실행하지 않도록 먼저 초기화
+    prevSnapStageRef.current = null;
     Keyboard.dismiss();
     const springBase = { damping: 32, stiffness: 400 };
     const animations: Animated.CompositeAnimation[] = [
@@ -289,7 +317,10 @@ export default function DansangBottomSheet({
   useEffect(() => {
     if (visible) {
       setInputText(pendingQuote ?? "");
-      snapStageRef.current = "full";
+      // 시트는 defaultPanelHeight(50% = mid) 높이로 열린다 → snapStage = "mid"
+      // "full"로 설정하면 키보드 열릴 때 65% 분기가 동작하지 않음
+      snapStageRef.current = "mid";
+      prevSnapStageRef.current = null;
       outerHeightAnim.setValue(defaultPanelHeight);
       inputPadAnim.setValue(restPadRef.current);
       slideAnim.setValue(defaultPanelHeight);
@@ -358,10 +389,14 @@ export default function DansangBottomSheet({
   const onSwipeRelease = (gs: { dy: number; vy: number }) => {
     if (gs.dy > SWIPE_CLOSE_DY || gs.vy > SWIPE_CLOSE_VEL) {
       const currentH = Math.max(0, outerHListenRef.current - gs.dy);
-      const target = getSnapTarget(
+      let target = getSnapTarget(
         currentH, gs.vy,
         maxPanelHeightRef.current, midPanelHeightRef.current,
       );
+      // full 단계에서 직접 닫힘 차단 — 반드시 mid를 먼저 거쳐야 함
+      if (target <= 0 && snapStageRef.current === "full") {
+        target = midPanelHeightRef.current;
+      }
       if (target <= 0) {
         doCloseRef.current();
       } else {
@@ -406,6 +441,8 @@ export default function DansangBottomSheet({
       // 핸들바는 터치 시작부터 제스처를 소유 → onPanResponderGrant 보장
       onStartShouldSetPanResponder: () => true,
       onPanResponderGrant: () => {
+        // 핸들바 터치 시작 = 키보드 해제 (드래그든 단순 탭이든 동일)
+        if (keyboardVisibleRef.current) Keyboard.dismiss();
         // 진행 중인 spring을 중단하고 현재 위치를 드래그 시작점으로 캡처
         outerHeightAnim.stopAnimation((stoppedValue) => {
           startHeightRef.current = stoppedValue;
@@ -426,17 +463,25 @@ export default function DansangBottomSheet({
       onPanResponderRelease: (_, gs) => {
         // currentDragHeightRef: move에서 직접 기록한 값 — _value 내부 API 불필요
         // full 스냅 목표 = maxPanelHeight (키보드 확장 시와 동일한 노치 근처 높이)
-        const target = getSnapTarget(
+        let target = getSnapTarget(
           currentDragHeightRef.current, gs.vy,
           maxPanelHeightRef.current, midPanelHeightRef.current,
         );
+        // full 단계에서 직접 닫힘 차단
+        if (target <= 0 && snapStageRef.current === "full") {
+          target = midPanelHeightRef.current;
+        }
         snapToHeightRef.current(target);
       },
       onPanResponderTerminate: () => {
-        const target = getSnapTarget(
+        let target = getSnapTarget(
           currentDragHeightRef.current, 0,
           maxPanelHeightRef.current, midPanelHeightRef.current,
         );
+        // full 단계에서 직접 닫힘 차단
+        if (target <= 0 && snapStageRef.current === "full") {
+          target = midPanelHeightRef.current;
+        }
         snapToHeightRef.current(target);
       },
     }),

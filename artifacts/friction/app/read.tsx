@@ -311,45 +311,85 @@ export default function ReadScreen() {
   // 카드 원래 위치는 가정하지 않고 measureInWindow 실측값(cardWindowTop)을 쓴다.
   const sheetEffectiveHeightAnim = useRef(new RNAnimated.Value(0)).current;
 
-  const pageSheetAnimStyle = useMemo(() => {
-    // 카드 최소 크기에 도달하는 기준: mid-snap (PANEL_MID_RATIO = 0.5).
-    // 이 높이에서 카드가 최소 크기에 도달하고, 시트가 더 올라가도 clamp로 고정.
-    // DansangBottomSheet의 PANEL_MID_RATIO = 0.5와 반드시 동기화.
-    const DANSANG_MID_RATIO = 0.5;
-    const midPanelHeight = screenHeight * DANSANG_MID_RATIO;
-    // mid-snap일 때 시트 상단 Y
-    const sheetTop = screenHeight - midPanelHeight; // = screenHeight * 0.5
+  // ── Native-driver card transform values ──────────────────────────────────
+  // sheetEffectiveHeightAnim is non-native (drives outerHeight resize).
+  // Interpolating transforms directly from a non-native value causes the GPU
+  // to scale a JS-side bitmap → blurry result. Instead we listen to the
+  // non-native value, compute the interpolation in JS, and push the result
+  // into separate Animated.Values whose transforms RN can GPU-composite.
+  const cardScaleAnim = useRef(new RNAnimated.Value(1)).current;
+  const cardTranslateYAnim = useRef(new RNAnimated.Value(0)).current;
 
-    // 시트 위 가용 영역 (mid-snap 기준으로 계산 — 최소 크기의 정의)
-    const availTop = insets.top + 8;
-    const availBottom = sheetTop - 12;
-    const availHeight = Math.max(0, availBottom - availTop);
+  // Refs so the addListener closure always sees the latest layout params
+  // without needing to recreate the listener on every layout change.
+  // 리스너에서 항상 최신 레이아웃 값을 읽을 수 있도록 ref에 유지
+  const cardAnimParamsRef = useRef({
+    availTop: insets.top + 8,
+    frameHeight: layout.frameHeight,
+    cardCenterY: (cardWindowTop ?? 0) + layout.frameHeight / 2,
+    screenHeight,
+  });
 
-    // 카드 원래 상단 Y: measureInWindow 실측값 우선, 미측정 시 중앙 가정 fallback
+  // 레이아웃·위치가 바뀔 때마다 ref 갱신
+  useEffect(() => {
     const cardTop = cardWindowTop ?? (screenHeight - layout.frameHeight) / 2;
-    const cardCenterY = cardTop + layout.frameHeight / 2;
+    cardAnimParamsRef.current = {
+      availTop: insets.top + 8,
+      frameHeight: layout.frameHeight,
+      cardCenterY: cardTop + layout.frameHeight / 2,
+      screenHeight,
+    };
+  }, [screenHeight, insets.top, layout.frameHeight, cardWindowTop]);
 
-    // fit: 가용 높이에 맞춰 축소 (확대는 안 함)
-    const smallScale = layout.frameHeight > 0 && availHeight > 0
-      ? Math.min(1, availHeight / layout.frameHeight)
-      : 1;
-    // center: 가용 영역 중앙으로 이동
-    const targetCenterY = (availTop + availBottom) / 2;
-    const translateY = targetCenterY - cardCenterY;
+  // Sync sheetEffectiveHeightAnim → cardScaleAnim / cardTranslateYAnim
+  //
+  // 시트 높이를 실시간으로 받아 카드 크기·위치를 직접 계산.
+  // 고정 목표값을 보간하지 않으므로 50% / 65% / full 어느 단계든
+  // 카드 하단 ~ 시트 상단 간격이 항상 12 px으로 동일해진다.
+  //
+  // 【시트 닫힘 시 흔들림 방지】
+  //   availHeight >= frameHeight 구간에서 "가용 영역 중앙"을 쓰면
+  //   카드 원래 위치와 어긋나 급격한 이동이 생긴다.
+  //   대신: 카드 rest 하단이 시트와 겹치는 만큼만 위로 올린다(overlap 방식).
+  //   scale=1 → overlap=0 → translateY=0 으로 자연스럽게 수렴.
+  useEffect(() => {
+    const sub = sheetEffectiveHeightAnim.addListener(({ value }) => {
+      const { availTop, frameHeight, cardCenterY, screenHeight: sh } = cardAnimParamsRef.current;
+      if (value <= 0 || frameHeight <= 0) {
+        cardScaleAnim.setValue(1);
+        cardTranslateYAnim.setValue(0);
+        return;
+      }
+      const sheetTopY   = sh - value;
+      const availBottom = sheetTopY - 12;                    // 카드 하단 여유 12 px
+      const availHeight = Math.max(0, availBottom - availTop);
+      const restBottom  = cardCenterY + frameHeight / 2;     // 카드 rest 하단 Y
 
-    const pageTranslateYInterp = sheetEffectiveHeightAnim.interpolate({
-      inputRange: [0, midPanelHeight],
-      outputRange: [0, translateY],
-      extrapolate: "clamp",
+      if (availHeight >= frameHeight) {
+        // 카드가 축소 없이 들어감 — rest 위치가 시트와 겹치는 만큼만 위로 이동
+        // overlap → 0 이 되면 translateY = 0 (원래 위치)으로 자연 복귀
+        const overlap = Math.max(0, restBottom - availBottom);
+        cardScaleAnim.setValue(1);
+        cardTranslateYAnim.setValue(-overlap);
+        return;
+      }
+
+      // 카드를 가용 영역에 맞춰 축소 + 중앙 정렬
+      const scale   = availHeight / frameHeight;
+      const centerY = (availTop + availBottom) / 2;
+      cardScaleAnim.setValue(scale);
+      cardTranslateYAnim.setValue(centerY - cardCenterY);
     });
-    const pageScaleInterp = sheetEffectiveHeightAnim.interpolate({
-      inputRange: [0, midPanelHeight],
-      outputRange: [1, smallScale],
-      extrapolate: "clamp",
-    });
+    return () => sheetEffectiveHeightAnim.removeListener(sub);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sheetEffectiveHeightAnim]);
 
-    return { transform: [{ translateY: pageTranslateYInterp }, { scale: pageScaleInterp }] };
-  }, [screenHeight, insets.top, layout.frameHeight, cardWindowTop, sheetEffectiveHeightAnim]);
+  const pageSheetAnimStyle = {
+    transform: [
+      { translateY: cardTranslateYAnim },
+      { scale: cardScaleAnim },
+    ],
+  };
 
   // Entry/exit black overlay animation — starts opaque (value=1) so the
   // reader "fades in" on mount, and fades back to opaque when exiting.
