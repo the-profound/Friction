@@ -148,3 +148,20 @@ allowed to bleed past that box edge (`pageListContainer` has side padding
 specifically so the drop-shadow shows). Clipping the frame would cut off that
 existing shadow bleed. The horizontal slide reuses the same unclipped track the
 normal page-swipe pager already uses, so no new overflow issue is introduced.
+
+# Key handoff between pager slots requires identical element types
+
+The pager keeps WebViews alive across page-turn commits by moving React keys
+between slots (key `page-N+1` moves from the next slot to the current slot on a
+forward commit). React reuses a keyed sibling ONLY if the element **type** also
+matches. The next slot was a plain `View` while current/prev were `Animated.View`
+— so every forward commit unmounted and remounted the WebView, which renders
+blank until it reloads → the "text flashes off then back on" bug at the moment
+every page turn completed.
+
+**Rule:** all three pager slots (next/current/prev) must be `Animated.View`, even
+if a slot has no animated style. Same key + different type = full remount.
+
+**How to apply:** when refactoring the slot markup, never "simplify" a static
+slot back to `View`; and keep containers always-mounted (gate only inner content
+on `node != null`) so transient nulls can't unmount the WebView either.

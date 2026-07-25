@@ -1021,7 +1021,12 @@ export default function ReadScreen() {
       const W = containerWidthRef.current || 300;
       isCommittingRef.current = true;
       cardEntranceMountedRef.current = true;
-      setFinishOverlayVisible(true);
+      // SV를 QuestionCardCurl 마운트(setFinishOverlayVisible)보다 먼저 설정한다.
+      // React 상태 업데이트는 비동기이고, 동일 이벤트핸들러 내에서도 현재 실행 스택이
+      // 끝난 뒤 배치 처리되므로, 이 순서(SV 설정 → setState)라면 카드의 첫 렌더
+      // 시점에 entranceX = W(화면 오른쪽 바깥) / flatTransitionSV = 1이 보장된다.
+      // 반대 순서(setState 먼저)이면 첫 렌더 프레임에서 SV가 이전 값으로 한 프레임
+      // 노출될 위험이 있다.
       flatTransitionSV.value = 1;
       cardEntranceX.value = W;
       // cardTX now lives in read.tsx (lifted for the D transition) and
@@ -1034,6 +1039,7 @@ export default function ReadScreen() {
       // cardEntranceX animation — a real bug/flicker candidate. Always
       // reset it at the start of every fresh A entrance.
       cardTX.value = 0;
+      setFinishOverlayVisible(true);
       currentSlotSV.value = withTiming(-W, {
         duration: LAST_PAGE_TRANSITION_DURATION,
         easing: Easing.bezier(0.25, 0.46, 0.45, 0.94),
@@ -1810,7 +1816,14 @@ export default function ReadScreen() {
                               question-card overlay is visible — the card has its own
                               shadow, and the slot shadow would appear as a ghost
                               letter-page outline behind the card. */}
-                          <View key={`page-${currentPage + 1}`} style={slotBase}>
+                          {/* 반드시 Animated.View — current 슬롯과 같은 element
+                              type이어야 한다. 페이지 넘김 커밋 시 key(page-N+1)가
+                              next 슬롯에서 current 슬롯으로 이동하는데, React는
+                              key가 같아도 type이 다르면(View vs Animated.View)
+                              재사용하지 않고 unmount+remount한다. 그러면 WebView가
+                              통째로 새로 마운트되어 로드될 때까지 빈 화면 —
+                              "텍스트 번쩍임"의 근본 원인. */}
+                          <Animated.View key={`page-${currentPage + 1}`} style={slotBase}>
                             {/* flat 전환(마지막 페이지 ↔ 질문 카드) 동안엔 완전히
                                 꺼진다 — 이 정적 그림자 상자가 제자리에 남으면 좌우
                                 boxShadow 번짐이 "카드 뒤 편지지" 고스트가 된다.
@@ -1820,28 +1833,34 @@ export default function ReadScreen() {
                             {nextNode != null && (
                               <View style={slotContent}>{nextNode}</View>
                             )}
-                          </View>
+                          </Animated.View>
 
                           {/* current — middle layer, slides left + rotates during
                               forward swipe. Its shadow fades in as it lifts/slides.
                               key는 pageIdx 기준 — 앞으로 넘길 때 next 슬롯에 이미
                               마운트된 WebView(N+1)가 current 슬롯으로 전환되어도
-                              unmount 없이 유지되어 깜빡임이 사라진다. */}
-                          {currentNode != null && (
-                            <Animated.View key={`page-${currentPageIdx}`} style={[slotBase, currentSlotAnimStyle]}>
-                              <Animated.View style={[shadowLayer, currentShadowStyle]} />
-                              <View style={slotContent}>{currentNode}</View>
-                            </Animated.View>
-                          )}
+                              unmount 없이 유지되어 깜빡임이 사라진다.
+                              Animated.View 컨테이너는 currentNode 유무와 관계없이
+                              항상 마운트 상태를 유지한다 — currentNode != null 조건을
+                              외부 컨테이너에 두면, 상태 전환 중 한 프레임이라도 null이
+                              되는 순간 Animated.View(+WebView)가 언마운트되어 내용이
+                              사라졌다가 재마운트 시 빈 화면이 번쩍이는 버그가 생긴다.
+                              컨테이너는 항상 렌더링하고 내부 콘텐츠만 조건부로 렌더한다. */}
+                          <Animated.View key={`page-${currentPageIdx}`} style={[slotBase, currentSlotAnimStyle]}>
+                            <Animated.View style={[shadowLayer, currentShadowStyle]} />
+                            {currentNode != null && <View style={slotContent}>{currentNode}</View>}
+                          </Animated.View>
 
                           {/* prev — top layer, slides in from left + rotates to flat
                               during backward swipe. Its shadow fades out as it settles.
                               카드가 떠 있는 동안에는 currentPageIdx === prevPageIdx가
-                              되어 key 중복이 생기므로 이 경우 prev 슬롯 렌더를 건너뛴다. */}
-                          {prevNode != null && currentPageIdx !== prevPageIdx && (
+                              되어 key 중복이 생기므로 이 경우 prev 슬롯 렌더를 건너뛴다.
+                              컨테이너는 key 충돌 방지 조건만 유지하고, prevNode 유무는
+                              내부 콘텐츠만 조건부로 렌더하는 방식으로 분리한다. */}
+                          {currentPageIdx !== prevPageIdx && (
                             <Animated.View key={`page-${prevPageIdx}`} style={[slotBase, prevSlotAnimStyle]}>
                               <Animated.View style={[shadowLayer, prevShadowStyle]} />
-                              <View style={slotContent}>{prevNode}</View>
+                              {prevNode != null && <View style={slotContent}>{prevNode}</View>}
                             </Animated.View>
                           )}
                         </>
