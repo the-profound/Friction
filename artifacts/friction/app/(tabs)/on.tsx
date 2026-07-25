@@ -947,7 +947,6 @@ export default function OnScreen() {
         thought={selectedThought}
         onClose={() => setSelectedThought(null)}
         onRecommend={(t) => {
-          setSelectedThought(null);
           setSimilarPopupThoughtId(t.id);
         }}
       />
