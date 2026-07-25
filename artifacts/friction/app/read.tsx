@@ -936,15 +936,17 @@ export default function ReadScreen() {
     return { opacity: flatTransitionSV.value ? 0 : 1 };
   });
 
-  // Memo FAB opacity: fades out as the letter page slides off to the left (A),
-  // fades back in as the letter page returns (B). Driven by currentSlotSV so
-  // the animation is continuous and perfectly in sync with the page — no abrupt
-  // jump when finishOverlayVisible changes.
-  const fabAnimStyle = useAnimatedStyle(() => {
-    const W = containerWidthSV.value || 300;
-    const slideOut = Math.min(W, Math.max(0, -currentSlotSV.value));
-    return { opacity: 1 - slideOut / W };
-  });
+  // Memo FAB opacity: fades out when the question-card overlay appears (A),
+  // fades back in when dismissed (B/cancel). Driven by finishOverlayVisible
+  // state — NOT by currentSlotSV — so normal page turns never affect the FAB.
+  // Using currentSlotSV caused a blink on every turn: the slot animates to
+  // -(W+PARK_EXTRA) then jumps back to 0, creating an opacity 0→1 pop.
+  const fabOpacitySV = useSharedValue(1);
+  useEffect(() => {
+    fabOpacitySV.value = withTiming(finishOverlayVisible ? 0 : 1, { duration: 180 });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finishOverlayVisible]);
+  const fabAnimStyle = useAnimatedStyle(() => ({ opacity: fabOpacitySV.value }));
 
 
   // ── Gesture state ref (always fresh, avoids stale closure in useMemo) ────
@@ -1112,8 +1114,11 @@ export default function ReadScreen() {
 
       const dx = e.translationX;
       const dy = e.translationY;
-      // Only track horizontal movement for page sliding
-      if (Math.abs(dy) > Math.abs(dx) * 1.8) return;
+      // Guard against vertical gestures only BEFORE a swipe direction is
+      // committed. Once swiping has started (activeSwipeRef set), always keep
+      // tracking horizontal movement — stopping mid-drag because the wrist
+      // drifted slightly vertical freezes the card at an intermediate position.
+      if (!activeSwipeRef.current && Math.abs(dy) > Math.abs(dx) * 1.8) return;
 
       if (dx < 0 && gs.isAtEnd) return;  // no next after completion card
       if (dx > 0 && gs.atBoundaryLeft) return; // no prev at start
@@ -1315,9 +1320,14 @@ export default function ReadScreen() {
               runOnJS(setFinishOverlayVisible)(false);
             }
           });
-        } else if (activeSwipeRef.current === 'forward') {
+        } else {
+          // Always snap both slots to rest, regardless of activeSwipeRef.
+          // This covers the case where onUpdate set a slot value but returned
+          // early (e.g. dy>dx check mid-swipe) without clearing activeSwipeRef,
+          // and onEnd was skipped or also returned early — leaving a slot stuck
+          // at an intermediate position. Spring-to-rest is a no-op when the
+          // slot is already at rest, so this is always safe.
           currentSlotSV.value = withSpring(0, snapConfig);
-        } else if (activeSwipeRef.current === 'backward') {
           prevSlotSV.value = withSpring(-(W + PARK_EXTRA), snapConfig);
         }
         activeSwipeRef.current = null;
