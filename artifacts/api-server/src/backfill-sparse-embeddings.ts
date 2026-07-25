@@ -11,26 +11,17 @@ async function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function generateSparseWithRetry(
+function generateSparseWithRetry(
   text: string,
   thoughtId: string
-): Promise<Record<string, number> | null> {
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      return await generateSparseEmbedding(text);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(
-        `  [시도 ${attempt}/${MAX_RETRIES}] 단상 ${thoughtId} Sparse 임베딩 실패: ${msg}`
-      );
-      if (attempt < MAX_RETRIES) {
-        const delay = RETRY_DELAY_MS * attempt;
-        console.log(`  ${delay}ms 후 재시도...`);
-        await sleep(delay);
-      }
-    }
+): Record<string, number> | null {
+  try {
+    return generateSparseEmbedding(text);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`  단상 ${thoughtId} Sparse 임베딩 실패: ${msg}`);
+    return null;
   }
-  return null;
 }
 
 async function main() {

@@ -68,16 +68,17 @@ router.post("/thoughts", requireAuth, async (req, res) => {
           console.warn("[embeddings/dense] OPENROUTER_API_KEY not set — skipping for thought", thought.id)
         );
 
-    const sparseTask = generateSparseEmbedding(content)
-      .then((sparse) =>
-        db
+    const sparseTask = (async () => {
+      try {
+        const sparse = generateSparseEmbedding(content);
+        await db
           .update(thoughtsTable)
           .set({ textEmbeddingSparse: sparse })
-          .where(eq(thoughtsTable.id, thought.id))
-      )
-      .catch((err) => {
+          .where(eq(thoughtsTable.id, thought.id));
+      } catch (err) {
         console.error("[embeddings/sparse] Failed for thought", thought.id, err);
-      });
+      }
+    })();
 
     Promise.allSettled([denseTask, sparseTask]);
   }
