@@ -1,5 +1,5 @@
 /**
- * DansangBottomSheet
+ * ThoughtsBottomSheet
  *
  * 읽기 화면 하단에서 슬라이드 업하는 단상 패널.
  * • 배경 딤 없음 — 편지는 그대로 보이고, 불투명 흰 패널이 하단을 덮는다.
@@ -98,24 +98,31 @@ function ThoughtCard({ thought }: ThoughtCardProps) {
   );
 }
 
-export interface DansangBottomSheetProps {
+export interface ThoughtsBottomSheetProps {
   visible: boolean;
   onClose: () => void;
   articleId: string;
   pendingQuote?: string;
-  effectiveSheetHeightAnim?: Animated.Value;
+  /**
+   * 카드 애니메이션 단일 소스:
+   *   0        = 시트 닫힘
+   *   midH     = 시트 50% (normal open)
+   *   kbH      = 시트 65% (keyboard open at mid)
+   * 수동 스와이프(full)는 이 값을 변경하지 않아 카드가 scale50/ty50 에 고정된다.
+   */
+  cardSheetHAnim?: Animated.Value;
   /** 외부에서 애니메이션 close를 트리거하기 위한 ref. 배경 탭 해제 등에서 사용. */
   closeHandleRef?: React.MutableRefObject<(() => void) | null>;
 }
 
-export default function DansangBottomSheet({
+export default function ThoughtsBottomSheet({
   visible,
   onClose,
   articleId,
   pendingQuote,
-  effectiveSheetHeightAnim,
+  cardSheetHAnim,
   closeHandleRef,
-}: DansangBottomSheetProps) {
+}: ThoughtsBottomSheetProps) {
   const insets = useSafeAreaInsets();
   const { height: screenHeight } = useWindowDimensions();
   const queryClient = useQueryClient();
@@ -157,19 +164,14 @@ export default function DansangBottomSheet({
   const maxPanelHeightRef = useRef(maxPanelHeight);
   maxPanelHeightRef.current = maxPanelHeight;
 
-  // ── Effective sheet height exposure ──────────────────────────────────────
-  // slideAnim uses useNativeDriver:true — addListener on it is unreliable
-  // during native spring animations (JS callbacks may be skipped entirely).
-  // Instead, we drive effectiveSheetHeightAnim explicitly in parallel with
-  // every animation/setValue that changes the panel's visible height.
-  //
+  // ── outerHListenRef ───────────────────────────────────────────────────────
   // outerHListenRef: tracks outerHeightAnim (non-native, listener always fires)
   // so PanResponder closures can read the current outer height synchronously.
   const outerHListenRef = useRef(defaultPanelHeight);
-  // effectiveSheetHeightAnimRef: stable ref to the prop so PanResponder
-  // closures (created once) always access the latest value.
-  const effectiveSheetHeightAnimRef = useRef(effectiveSheetHeightAnim);
-  effectiveSheetHeightAnimRef.current = effectiveSheetHeightAnim;
+  // cardSheetHAnimRef: stable ref to the prop so doClose (created in useCallback)
+  // always accesses the latest value without needing to re-create the callback.
+  const cardSheetHAnimRef = useRef(cardSheetHAnim);
+  cardSheetHAnimRef.current = cardSheetHAnim;
 
   useEffect(() => {
     const sub = outerHeightAnim.addListener(({ value }) => {
@@ -216,16 +218,12 @@ export default function DansangBottomSheet({
         easing: Easing.out(Easing.cubic),
         useNativeDriver: false as const,
       };
-      const animations: Animated.CompositeAnimation[] = [
+      return Animated.parallel([
         Animated.timing(outerHeightAnim, { toValue: toHeight, ...timingBase }),
         Animated.timing(inputPadAnim, { toValue: toPad, ...timingBase }),
-      ];
-      if (effectiveSheetHeightAnim) {
-        animations.push(Animated.timing(effectiveSheetHeightAnim, { toValue: toHeight, ...timingBase }));
-      }
-      return Animated.parallel(animations);
+      ]);
     },
-    [outerHeightAnim, inputPadAnim, effectiveSheetHeightAnim],
+    [outerHeightAnim, inputPadAnim],
   );
 
   useEffect(() => {
@@ -238,9 +236,15 @@ export default function DansangBottomSheet({
       setKeyboardVisible(true);
       if (snapStageRef.current === "mid") {
         // 중간 단계에서 키보드 열림 → 65%로 시트 확장, snapStage는 "mid" 유지
+        // cardSheetHAnim을 kbH(65%)로 timing → read.tsx 리스너가 상단 면 기준 축소 적용
         prevSnapStageRef.current = "mid";
         const targetH = Math.min(screenHeight * 0.65, maxPanelHeight);
-        animKbOptions(targetH, kh + 8).start();
+        const timingBase = { duration: KB_ANIM_DURATION, easing: Easing.out(Easing.cubic), useNativeDriver: false as const };
+        const animations: Animated.CompositeAnimation[] = [animKbOptions(targetH, kh + 8)];
+        if (cardSheetHAnimRef.current) {
+          animations.push(Animated.timing(cardSheetHAnimRef.current, { toValue: targetH, ...timingBase }));
+        }
+        Animated.parallel(animations).start();
       } else {
         // 전체 단계에서 키보드 열림 → 높이 그대로, inputPad만 올림
         // (defaultPanelHeight + kh 가 maxPanelHeight 보다 작을 수 있어
@@ -260,10 +264,19 @@ export default function DansangBottomSheet({
       setKeyboardVisible(false);
       if (prevSnapStageRef.current === "mid") {
         // 중간 단계에서 키보드가 열렸다가 닫힘 → mid 높이(50%)로 복원
+        // ⚠️ Animated.parallel을 사용하면 onPanResponderRelease의 snapToHeight가
+        //    outerHeightAnim에 새 spring을 시작할 때, stopTogether:true(기본값)에 의해
+        //    같은 그룹의 inputPadAnim·cardSheetHAnim 도 함께 강제 종료된다.
+        // Fix: 세 값을 독립적으로 start() — 하나가 외부에서 중단돼도 나머지는 계속 실행.
         prevSnapStageRef.current = null;
         snapStageRef.current = "mid";
         const midH = screenHeight * PANEL_MID_RATIO;
-        animKbOptions(midH, restPadRef.current).start();
+        const timingBase = { duration: KB_ANIM_DURATION, easing: Easing.out(Easing.cubic), useNativeDriver: false as const };
+        Animated.timing(outerHeightAnim, { toValue: midH, ...timingBase }).start();
+        Animated.timing(inputPadAnim, { toValue: restPadRef.current, ...timingBase }).start();
+        if (cardSheetHAnimRef.current) {
+          Animated.timing(cardSheetHAnimRef.current, { toValue: midH, ...timingBase }).start();
+        }
       } else {
         // 전체 단계 복귀: 패널 높이는 그대로, inputPad만 복원
         Animated.timing(inputPadAnim, {
@@ -288,8 +301,8 @@ export default function DansangBottomSheet({
     const animations: Animated.CompositeAnimation[] = [
       Animated.spring(slideAnimRef.current, { toValue: screenHeight, ...springBase, useNativeDriver: true }),
     ];
-    if (effectiveSheetHeightAnim) {
-      animations.push(Animated.spring(effectiveSheetHeightAnim, { toValue: 0, ...springBase, useNativeDriver: false }));
+    if (cardSheetHAnimRef.current) {
+      animations.push(Animated.spring(cardSheetHAnimRef.current, { toValue: 0, ...springBase, useNativeDriver: false }));
     }
     Animated.parallel(animations).start(({ finished }) => {
       if (finished) {
@@ -297,7 +310,7 @@ export default function DansangBottomSheet({
         onClose();
       }
     });
-  }, [screenHeight, onClose, effectiveSheetHeightAnim]);
+  }, [screenHeight, onClose]);
 
   const doCloseRef = useRef(doClose);
   doCloseRef.current = doClose;
@@ -324,13 +337,13 @@ export default function DansangBottomSheet({
       outerHeightAnim.setValue(defaultPanelHeight);
       inputPadAnim.setValue(restPadRef.current);
       slideAnim.setValue(defaultPanelHeight);
-      effectiveSheetHeightAnim?.setValue(0);
+      cardSheetHAnimRef.current?.setValue(0);
       const springBase = { damping: 28, stiffness: 220 };
       const animations: Animated.CompositeAnimation[] = [
         Animated.spring(slideAnim, { toValue: 0, ...springBase, useNativeDriver: true }),
       ];
-      if (effectiveSheetHeightAnim) {
-        animations.push(Animated.spring(effectiveSheetHeightAnim, { toValue: defaultPanelHeight, ...springBase, useNativeDriver: false }));
+      if (cardSheetHAnimRef.current) {
+        animations.push(Animated.spring(cardSheetHAnimRef.current, { toValue: defaultPanelHeight, ...springBase, useNativeDriver: false }));
       }
       Animated.parallel(animations).start();
       if (pendingQuote) {
@@ -361,7 +374,7 @@ export default function DansangBottomSheet({
       invalidateThoughts();
       setInputText("");
     } catch (e) {
-      console.warn("[DansangBottomSheet] save failed:", e);
+      console.warn("[ThoughtsBottomSheet] save failed:", e);
     } finally {
       setIsSending(false);
     }
@@ -373,14 +386,7 @@ export default function DansangBottomSheet({
 
   const springBack = () => {
     const springBase = { damping: 32, stiffness: 400 };
-    const animations: Animated.CompositeAnimation[] = [
-      Animated.spring(slideAnimRef.current, { toValue: 0, ...springBase, useNativeDriver: true }),
-    ];
-    const eff = effectiveSheetHeightAnimRef.current;
-    if (eff) {
-      animations.push(Animated.spring(eff, { toValue: outerHListenRef.current, ...springBase, useNativeDriver: false }));
-    }
-    Animated.parallel(animations).start();
+    Animated.spring(slideAnimRef.current, { toValue: 0, ...springBase, useNativeDriver: true }).start();
   };
 
   // ── 리스트 스와이프 release 로직 ─────────────────────────────────────────
@@ -406,8 +412,6 @@ export default function DansangBottomSheet({
           Animated.spring(slideAnimRef.current, { toValue: 0, ...springBase, useNativeDriver: true }),
           Animated.spring(outerHeightAnim, { toValue: target, ...springBase, useNativeDriver: false }),
         ];
-        const eff = effectiveSheetHeightAnimRef.current;
-        if (eff) animations.push(Animated.spring(eff, { toValue: target, ...springBase, useNativeDriver: false }));
         Animated.parallel(animations).start();
       }
     } else {
@@ -426,12 +430,13 @@ export default function DansangBottomSheet({
     if (target <= 0) { doCloseRef.current(); return; }
     snapStageRef.current = target >= maxPanelHeightRef.current * 0.9 ? "full" : "mid";
     const springBase = { damping: 32, stiffness: 400, useNativeDriver: false as const };
-    const animations: Animated.CompositeAnimation[] = [
-      Animated.spring(outerHeightAnim, { toValue: target, ...springBase }),
-    ];
-    const eff = effectiveSheetHeightAnimRef.current;
-    if (eff) animations.push(Animated.spring(eff, { toValue: target, ...springBase }));
-    Animated.parallel(animations).start();
+    Animated.spring(outerHeightAnim, { toValue: target, ...springBase }).start();
+    // 드래그 중 setValue로 변경된 cardSheetHAnim을 원래 위치로 복원.
+    // full 스냅 시에도 카드는 scale50/ty50 고정이므로 목표는 항상 midH 이하.
+    if (cardSheetHAnimRef.current) {
+      const cardTarget = Math.min(target, midPanelHeightRef.current);
+      Animated.spring(cardSheetHAnimRef.current, { toValue: cardTarget, ...springBase }).start();
+    }
   };
   const snapToHeightRef = useRef(snapToHeight);
   snapToHeightRef.current = snapToHeight;
@@ -443,10 +448,14 @@ export default function DansangBottomSheet({
       onPanResponderGrant: () => {
         // 핸들바 터치 시작 = 키보드 해제 (드래그든 단순 탭이든 동일)
         if (keyboardVisibleRef.current) Keyboard.dismiss();
-        // 진행 중인 spring을 중단하고 현재 위치를 드래그 시작점으로 캡처
+        // stopAnimation: 진행 중인 outerHeightAnim 애니메이션을 멈추고 정확한
+        // 현재값을 동기로 캡처한다. outerHeightAnim만 중단되며,
+        // keyboardWillHide가 시작한 inputPadAnim·cardSheetHAnim 은 독립 실행
+        // 중이므로 영향을 받지 않는다(Animated.parallel 에서 분리된 구조).
         outerHeightAnim.stopAnimation((stoppedValue) => {
           startHeightRef.current = stoppedValue;
           currentDragHeightRef.current = stoppedValue;
+          outerHListenRef.current = stoppedValue;
         });
       },
       onPanResponderMove: (_, gs) => {
@@ -458,7 +467,11 @@ export default function DansangBottomSheet({
         outerHeightAnim.setValue(newH);
         // outerHListenRef update: addListener fires asynchronously, so sync here
         outerHListenRef.current = newH;
-        effectiveSheetHeightAnimRef.current?.setValue(newH);
+        // cardSheetHAnim: 드래그로 시트가 midH 아래로 내려갈 때 카드 비례 복원.
+        // midH 이상은 scale50/ty50 고정 (full 스와이프 시 카드 추가 변형 없음).
+        cardSheetHAnimRef.current?.setValue(
+          Math.min(newH, midPanelHeightRef.current),
+        );
       },
       onPanResponderRelease: (_, gs) => {
         // currentDragHeightRef: move에서 직접 기록한 값 — _value 내부 API 불필요
@@ -499,8 +512,6 @@ export default function DansangBottomSheet({
       onPanResponderMove: (_, gs) => {
         const dy = Math.max(0, gs.dy);
         slideAnimRef.current.setValue(dy);
-        const eff = effectiveSheetHeightAnimRef.current;
-        if (eff) eff.setValue(Math.max(0, outerHListenRef.current - dy));
       },
       onPanResponderRelease: (_, gs) => { onSwipeReleaseRef.current(gs); },
       onPanResponderTerminate: () => { springBack(); },

@@ -14,7 +14,7 @@ import {
   type LayoutChangeEvent,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import DansangBottomSheet from "@/components/DansangBottomSheet/DansangBottomSheet";
+import ThoughtsBottomSheet from "@/components/ThoughtsBottomSheet/ThoughtsBottomSheet";
 import ScalePressable from "@/components/shared/ScalePressable";
 import {
   trackPageTurn,
@@ -310,18 +310,18 @@ export default function ReadScreen() {
   //   translateY가 먼저 적용되어야 부모(비스케일) 좌표계에서 정확한 픽셀만큼
   //   이동한 뒤, 그 위치의 중심을 기준으로 축소된다.
   // 카드 원래 위치는 가정하지 않고 measureInWindow 실측값(cardWindowTop)을 쓴다.
-  const sheetEffectiveHeightAnim = useRef(new RNAnimated.Value(0)).current;
+  // 카드 애니메이션 단일 소스(race condition 방지):
+  //   0    = 시트 닫힘
+  //   midH = 50% (normal open)
+  //   kbH  = 65% (keyboard open at mid)
+  // 수동 스와이프는 이 값을 변경하지 않아 카드가 scale50/ty50 에 고정된다.
+  const cardSheetHAnim = useRef(new RNAnimated.Value(0)).current;
 
   // ── Reanimated SharedValues for card transform (UI-thread, no JS→bridge) ──
-  // sheetEffectiveHeightAnim is non-native (drives outerHeight resize).
-  // Previously we bridged its listener into two RNAnimated.Values, but those
-  // are also non-native so transforms still went JS→bridge and caused the GPU
-  // to rasterize the WebView at the scaled bitmap size → blurry text/images.
-  //
-  // Fix: drive transform from Reanimated SharedValues. The addListener fires on
-  // the JS thread (unavoidable — sheetEffectiveHeightAnim is non-native), but
-  // setting a SharedValue from JS is cheap and the actual Core Animation update
-  // happens on the UI thread via useAnimatedStyle, bypassing the JS→bridge hop.
+  // cardSheetHAnim is non-native (single source of truth for card position).
+  // The addListener fires on the JS thread, but setting a SharedValue from JS
+  // is cheap and the actual Core Animation update happens on the UI thread via
+  // useAnimatedStyle — bypassing the JS→bridge hop that caused blurry WebViews.
   const cardScaleSV = useSharedValue(1);
   const cardTranslateYSV = useSharedValue(0);
 
@@ -337,7 +337,6 @@ export default function ReadScreen() {
     scale50: 1,
     ty50: 0,
     midH: screenHeight * 0.5,
-    kbH: screenHeight * 0.65,
   });
 
   // 레이아웃·위치가 바뀔 때마다 ref 갱신 + 50% 기준 목표값 선계산
@@ -347,7 +346,6 @@ export default function ReadScreen() {
     const frameHeight = layout.frameHeight;
     const cardCenterY = cardTop + layout.frameHeight / 2;
     const midH        = screenHeight * 0.5;
-    const kbH         = screenHeight * 0.65;
 
     // 50% 스냅 시점의 가용 영역
     const availBottom50 = screenHeight - midH - 12;
@@ -374,19 +372,18 @@ export default function ReadScreen() {
       scale50,
       ty50,
       midH,
-      kbH,
     };
   }, [screenHeight, insets.top, layout.frameHeight, cardWindowTop]);
 
-  // Sync sheetEffectiveHeightAnim → cardScaleSV / cardTranslateYSV
-  //
-  // 50% 스냅 기준으로 미리 계산된 목표값(scale50, ty50)을 고정 보간한다.
-  //   0 → midH  : (1, 0) → (scale50, ty50) 선형 보간 (카드 축소 완료)
-  //   midH → kbH : scale 고정, ty만 위로 이동 (카드 하단 ~ 시트 상단 12 px 유지)
-  //   kbH 초과  : scale50 · ty50-(kbH-midH) 에 고정 (더 이상 이동 없음)
+  // cardSheetHAnim 단일 리스너 (race condition 없음):
+  //   0    → midH : (1, 0) → (scale50, ty50) 선형 보간 [시트 열림·닫힘]
+  //   midH → kbH  : 상단 면 고정 + 추가 축소           [키보드 열림]
+  // 수동 스와이프(full)는 이 값을 변경하지 않으므로 카드가 scale50/ty50 에 고정된다.
   useEffect(() => {
-    const sub = sheetEffectiveHeightAnim.addListener(({ value }) => {
-      const { frameHeight, scale50, ty50, midH, kbH } = cardAnimParamsRef.current;
+    const sub = cardSheetHAnim.addListener(({ value }) => {
+      const { availTop, frameHeight, cardCenterY, screenHeight, scale50, ty50, midH } = cardAnimParamsRef.current;
+      const kbH = screenHeight * 0.65;
+
       if (value <= 0 || frameHeight <= 0) {
         cardScaleSV.value = 1;
         cardTranslateYSV.value = 0;
@@ -398,19 +395,18 @@ export default function ReadScreen() {
         const t = value / midH;
         cardScaleSV.value = 1 + (scale50 - 1) * t;
         cardTranslateYSV.value = ty50 * t;
-      } else if (value <= kbH) {
-        // 50% → 65%: scale 고정, ty 만 위로 밀림
-        cardScaleSV.value = scale50;
-        cardTranslateYSV.value = ty50 - (value - midH);
       } else {
-        // 65% 초과(full 포함): 고정
-        cardScaleSV.value = scale50;
-        cardTranslateYSV.value = ty50 - (kbH - midH);
+        // 50% → 65% (키보드 열림): 상단 면 고정 + 추가 축소
+        const clamped = Math.min(value, kbH);
+        const newScale = Math.max(0, (screenHeight - clamped - 12 - availTop) / frameHeight);
+        const ty = availTop + (frameHeight * newScale) / 2 - cardCenterY;
+        cardScaleSV.value = newScale;
+        cardTranslateYSV.value = ty;
       }
     });
-    return () => sheetEffectiveHeightAnim.removeListener(sub);
+    return () => cardSheetHAnim.removeListener(sub);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sheetEffectiveHeightAnim]);
+  }, [cardSheetHAnim]);
 
   // useAnimatedStyle → UI 스레드에서 직접 Core Animation에 반영
   // (JS→bridge 경유 없이 GPU composite — WebView 래스터화 해상도 유지)
@@ -550,15 +546,15 @@ export default function ReadScreen() {
   }, [articleId, createThought]);
 
   // ── 단상 바텀시트 ────────────────────────────────────────────────────────
-  const [isDansangOpen, setIsDansangOpen] = useState(false);
-  const [dansangQuote, setDansangQuote] = useState<string | undefined>(undefined);
-  const isDansangOpenRef = useRef(false);
-  // 배경 탭 시 DansangBottomSheet 내부의 doClose(애니메이션 포함)를 호출하기 위한 ref
-  const dansangCloseHandleRef = useRef<(() => void) | null>(null);
-  // Reanimated SV mirroring isDansangOpen — used in prevSlotAnimStyle to hide the
+  const [isThoughtsOpen, setIsThoughtsOpen] = useState(false);
+  const [thoughtsQuote, setThoughtsQuote] = useState<string | undefined>(undefined);
+  const isThoughtsOpenRef = useRef(false);
+  // 배경 탭 시 ThoughtsBottomSheet 내부의 doClose(애니메이션 포함)를 호출하기 위한 ref
+  const thoughtsCloseHandleRef = useRef<(() => void) | null>(null);
+  // Reanimated SV mirroring isThoughtsOpen — used in prevSlotAnimStyle to hide the
   // prev slot while the sheet is open (outer scale shrinks the card and can reveal
   // the parked prev slot in the strip between the scaled card and the screen edge).
-  const dansangOpenSV = useSharedValue(0);
+  const thoughtsOpenSV = useSharedValue(0);
 
   // QuestionCardCurl에서 키보드 가시 여부를 확인하기 위한 ref
   const keyboardVisibleRef = useRef(false);
@@ -573,32 +569,32 @@ export default function ReadScreen() {
   // 메모 모드 진입/종료에 맞춰 하단 진행률 바를 fade out/in 한다.
   const progressBarOpacity = useSharedValue(1);
   useEffect(() => {
-    progressBarOpacity.value = withTiming(isDansangOpen ? 0 : 1, {
+    progressBarOpacity.value = withTiming(isThoughtsOpen ? 0 : 1, {
       duration: 240,
-      easing: isDansangOpen ? Easing.out(Easing.ease) : Easing.in(Easing.ease),
+      easing: isThoughtsOpen ? Easing.out(Easing.ease) : Easing.in(Easing.ease),
     });
-  }, [isDansangOpen, progressBarOpacity]);
+  }, [isThoughtsOpen, progressBarOpacity]);
   const progressBarAnimStyle = useAnimatedStyle(() => ({
     opacity: progressBarOpacity.value,
   }));
 
-  useEffect(() => { isDansangOpenRef.current = isDansangOpen; }, [isDansangOpen]);
-  useEffect(() => { dansangOpenSV.value = isDansangOpen ? 1 : 0; }, [isDansangOpen, dansangOpenSV]);
+  useEffect(() => { isThoughtsOpenRef.current = isThoughtsOpen; }, [isThoughtsOpen]);
+  useEffect(() => { thoughtsOpenSV.value = isThoughtsOpen ? 1 : 0; }, [isThoughtsOpen, thoughtsOpenSV]);
 
-  const handleOpenDansang = useCallback((quote?: string) => {
-    setDansangQuote(quote);
-    setIsDansangOpen(true);
+  const handleOpenThoughts = useCallback((quote?: string) => {
+    setThoughtsQuote(quote);
+    setIsThoughtsOpen(true);
   }, []);
 
-  const handleCloseDansang = useCallback(() => {
-    setIsDansangOpen(false);
-    setDansangQuote(undefined);
-    sheetEffectiveHeightAnim.setValue(0);
-  }, [sheetEffectiveHeightAnim]);
+  const handleCloseThoughts = useCallback(() => {
+    setIsThoughtsOpen(false);
+    setThoughtsQuote(undefined);
+    cardSheetHAnim.setValue(0);
+  }, [cardSheetHAnim]);
 
   const handleOpenMemo = useCallback(() => {
-    handleOpenDansang();
-  }, [handleOpenDansang]);
+    handleOpenThoughts();
+  }, [handleOpenThoughts]);
 
   // Entry animation: fade in reader only once, when content is actually ready.
   // Using [] would fire immediately during the loading state (before the overlay
@@ -959,7 +955,7 @@ export default function ReadScreen() {
     const slideIn = prevSlotSV.value + W; // –PARK_EXTRA when parked, W when fully in
     const rotation = flatTransitionSV.value ? 0 : (slideIn / W - 1) * MAX_ROTATE_DEG;
     // (slideIn/W − 1): parked ≈ −1.4 → screen-entry ≈ −1 → fully in = 0
-    // When the dansang sheet is open the outer RNAnimated.View scales the entire
+    // When the thoughts sheet is open the outer RNAnimated.View scales the entire
     // card down, which brings the parked prev slot (at -(W + PARK_EXTRA)) closer
     // to the screen center in screen-space until it becomes visible in the strip
     // left of the card. Hide it so that strip stays clean.
@@ -968,7 +964,7 @@ export default function ReadScreen() {
         { translateX: prevSlotSV.value },
         { rotateZ: `${rotation}deg` },
       ],
-      opacity: dansangOpenSV.value ? 0 : 1,
+      opacity: thoughtsOpenSV.value ? 0 : 1,
     };
   });
   // Shadow opacity for the CURRENT card: 0 at rest (only `next` casts a shadow,
@@ -1186,7 +1182,7 @@ export default function ReadScreen() {
     })
     .onUpdate((e) => {
       if (finishOverlayVisibleRef.current && !lastPageEntranceActiveRef.current) return;
-      if (isDansangOpenRef.current) {
+      if (isThoughtsOpenRef.current) {
         // 단상 바텀시트가 열려 있으면 페이지 전환 제스처를 무시한다.
         return;
       }
@@ -1266,12 +1262,12 @@ export default function ReadScreen() {
       const absDx = Math.abs(dx);
 
       // 단상 바텀시트가 열려 있으면 페이지 전환 제스처를 무시한다.
-      if (isDansangOpenRef.current) {
+      if (isThoughtsOpenRef.current) {
         return;
       }
 
-      // Upward swipe → open dansang sheet (skip if already open or finish overlay)
-      if (dy < -50 && Math.abs(dy) > absDx * 1.5 && !isDansangOpenRef.current) {
+      // Upward swipe → open thoughts sheet (skip if already open or finish overlay)
+      if (dy < -50 && Math.abs(dy) > absDx * 1.5 && !isThoughtsOpenRef.current) {
         if (activeSwipeRef.current === 'forward') snapForward();
         else snapBackward();
         runOnJS(openMemoRef.current)();
@@ -1578,11 +1574,11 @@ export default function ReadScreen() {
     const author = authorName ?? "";
     const title = article?.title ?? "";
     trackMemoCreatedDuringReading({ articleId, page: currentPage });
-    // Route quote text into the dansang sheet's compose field via pendingQuote.
+    // Route quote text into the thoughts sheet's compose field via pendingQuote.
     // The user can edit/augment the quote before saving — no immediate creation.
     const quoteText = `> ${text.trim()}\n\n— ${author}, <${title}>, ${pageNum}면`;
-    handleOpenDansang(quoteText);
-  }, [currentPage, authorName, article?.title, handleOpenDansang, articleId]);
+    handleOpenThoughts(quoteText);
+  }, [currentPage, authorName, article?.title, handleOpenThoughts, articleId]);
 
   const handleSaveSentence = useCallback(async () => {
     if (!selectedText) return;
@@ -2007,7 +2003,7 @@ export default function ReadScreen() {
             {/* Progress bar below card — 메모 모드 진입/종료에 맞춰 fade in/out */}
             <Animated.View
               style={[styles.progressBarContainer, progressBarAnimStyle]}
-              pointerEvents={isDansangOpen ? "none" : "auto"}
+              pointerEvents={isThoughtsOpen ? "none" : "auto"}
             >
               <ProgressIndicator type="linear" progress={reading.progress} size="small" />
             </Animated.View>
@@ -2035,15 +2031,13 @@ export default function ReadScreen() {
           !finishOverlayVisible 조건처럼 뚝 잘리지 않는다. */}
       <Animated.View
         style={[fabAnimStyle, { position: "absolute", bottom: insets.bottom + 24, right: 20 }]}
-        pointerEvents={finishOverlayVisible || isDansangOpen ? "none" : "box-none"}
+        pointerEvents={finishOverlayVisible || isThoughtsOpen ? "none" : "box-none"}
       >
         <ScalePressable
           onPress={handleOpenMemo}
           hitSlop={8}
-          style={[
-            styles.memoFab,
-            { bottom: 0, right: 0, position: "relative" },
-          ]}
+          scaleTo={0.9}
+          style={{ width: 48, height: 48 }}
           contentStyle={styles.memoFabContent}
         >
           <Feather name="edit-3" size={20} color={Colors.zinc600} />
@@ -2051,23 +2045,23 @@ export default function ReadScreen() {
       </Animated.View>
 
       {/* ── 단상 시트 배경 탭 해제 ─────────────────────────────────────── */}
-      {/* dansangCloseHandleRef.current → 시트 내부 doClose(슬라이드+스프링 후 onClose) */}
-      {isDansangOpen && (
+      {/* thoughtsCloseHandleRef.current → 시트 내부 doClose(슬라이드+스프링 후 onClose) */}
+      {isThoughtsOpen && (
         <Pressable
           style={StyleSheet.absoluteFillObject}
-          onPress={() => dansangCloseHandleRef.current?.()}
+          onPress={() => thoughtsCloseHandleRef.current?.()}
         />
       )}
 
       {/* ── 단상 바텀시트 ──────────────────────────────────────────────── */}
       {articleId ? (
-        <DansangBottomSheet
-          visible={isDansangOpen}
-          onClose={handleCloseDansang}
+        <ThoughtsBottomSheet
+          visible={isThoughtsOpen}
+          onClose={handleCloseThoughts}
           articleId={articleId}
-          pendingQuote={dansangQuote}
-          effectiveSheetHeightAnim={sheetEffectiveHeightAnim}
-          closeHandleRef={dansangCloseHandleRef}
+          pendingQuote={thoughtsQuote}
+          cardSheetHAnim={cardSheetHAnim}
+          closeHandleRef={thoughtsCloseHandleRef}
         />
       ) : null}
 
@@ -2420,16 +2414,16 @@ const styles = StyleSheet.create({
     left: Spacing.screenPx,
     zIndex: 30,
   },
-  memoFab: {
-    position: "absolute",
-    right: 20,
-    zIndex: 30,
+  memoFabContent: {
+    alignSelf: "flex-start",
     width: 48,
     height: 48,
     borderRadius: 24,
     backgroundColor: Colors.white,
     borderWidth: 1,
     borderColor: Colors.zinc200,
+    alignItems: "center",
+    justifyContent: "center",
     ...Platform.select({
       ios: {
         shadowColor: "#000",
@@ -2440,15 +2434,6 @@ const styles = StyleSheet.create({
       android: { elevation: 3 },
       default: {},
     }),
-  },
-  memoFabActive: {
-    backgroundColor: Colors.zinc100,
-    borderColor: Colors.zinc300,
-  },
-  memoFabContent: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
   },
   memoToolbarWrap: {
     position: "absolute",
