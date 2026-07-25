@@ -30,6 +30,7 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
   withTiming,
+  withDelay,
   runOnJS,
   Easing,
   type SharedValue,
@@ -420,8 +421,9 @@ export default function ReadScreen() {
     ],
   }));
 
-  // Entry/exit black overlay animation — starts opaque (value=1) so the
-  // reader "fades in" on mount, and fades back to opaque when exiting.
+  // Entry/exit black overlay animation — starts opaque (value=1) so the loading
+  // state is hidden. On content ready: hold 300ms → brighten 700ms. On exit:
+  // darken 700ms → hold 300ms → navigate back.
   const overlayOpacity = useSharedValue(1);
   const overlayAnimStyle = useAnimatedStyle(() => ({
     opacity: overlayOpacity.value,
@@ -605,7 +607,7 @@ export default function ReadScreen() {
   useEffect(() => {
     if (!articleLoading && !reading.isRestoring && reading.isSessionHydrated && !hasStartedEntryFadeRef.current) {
       hasStartedEntryFadeRef.current = true;
-      overlayOpacity.value = withTiming(0, { duration: 400, easing: Easing.out(Easing.ease) });
+      overlayOpacity.value = withDelay(300, withTiming(0, { duration: 700, easing: Easing.out(Easing.ease) }));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [articleLoading, reading.isRestoring, reading.isSessionHydrated]);
@@ -729,6 +731,10 @@ export default function ReadScreen() {
   }, [mode, reading.canExit, isListEntry]);
 
 
+  const navigateBackDelayed = useCallback(() => {
+    setTimeout(() => router.back(), 300);
+  }, [router]);
+
   const handleBack = useCallback(async () => {
     if (mode === "basic" && !reading.canExit) {
       setExitConfirmVisible(true);
@@ -737,10 +743,10 @@ export default function ReadScreen() {
     if (reading.session.state === "READING" || reading.session.state === "PAUSED") {
       reading.pause();
     }
-    overlayOpacity.value = withTiming(1, { duration: 350, easing: Easing.in(Easing.ease) }, (finished) => {
-      if (finished) runOnJS(router.back)();
+    overlayOpacity.value = withTiming(1, { duration: 700, easing: Easing.in(Easing.ease) }, (finished) => {
+      if (finished) runOnJS(navigateBackDelayed)();
     });
-  }, [mode, reading, router, overlayOpacity]);
+  }, [mode, reading, navigateBackDelayed, overlayOpacity]);
 
   const canNavigate = mode === "re_read" || reading.session.state === "READING" || reading.session.state === "COMPLETED_READY";
 
@@ -1486,8 +1492,8 @@ export default function ReadScreen() {
       invalidateInbox(queryClient);
       clearActiveSession();
       applyAnsweredQuestionCardsToMemo();
-      overlayOpacity.value = withTiming(1, { duration: 350, easing: Easing.in(Easing.ease) }, (finished) => {
-        if (finished) runOnJS(router.back)();
+      overlayOpacity.value = withTiming(1, { duration: 700, easing: Easing.in(Easing.ease) }, (finished) => {
+        if (finished) runOnJS(navigateBackDelayed)();
       });
       showToast({ message: "보관함에 저장됐어요.", type: "success" });
     } finally {
@@ -1511,8 +1517,8 @@ export default function ReadScreen() {
         clearActiveSession();
         applyAnsweredQuestionCardsToMemo();
         promptOrContinue(() => {
-          overlayOpacity.value = withTiming(1, { duration: 350, easing: Easing.in(Easing.ease) }, (finished) => {
-            if (finished) runOnJS(router.back)();
+          overlayOpacity.value = withTiming(1, { duration: 700, easing: Easing.in(Easing.ease) }, (finished) => {
+            if (finished) runOnJS(navigateBackDelayed)();
           });
           showToast({ message: "읽기를 완료했어요.", type: "success" });
         });
@@ -2165,8 +2171,8 @@ export default function ReadScreen() {
             ? async () => {
                 setReadingCompleteVisible(false);
                 applyAnsweredQuestionCardsToMemo();
-                overlayOpacity.value = withTiming(1, { duration: 350, easing: Easing.in(Easing.ease) }, (finished) => {
-                  if (finished) runOnJS(router.back)();
+                overlayOpacity.value = withTiming(1, { duration: 700, easing: Easing.in(Easing.ease) }, (finished) => {
+                  if (finished) runOnJS(navigateBackDelayed)();
                 });
               }
             : handleCommitAndSkip}

@@ -13,6 +13,7 @@ import ScalePressable from "@/components/shared/ScalePressable";
 import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
+import { useReaderTransition } from "@/contexts/ReaderTransitionContext";
 import { Feather, AntDesign } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
@@ -43,6 +44,7 @@ import { LIST_PERF_PRESET } from "@/lib/listPerf";
 type ArchiveSubTab = "personal" | "sentence";
 
 export default function ArchiveScreen() {
+  const { startFadeToBlack } = useReaderTransition();
   const { width: windowWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const navBottom = useNavBarBottomSafeArea();
@@ -744,8 +746,11 @@ export default function ArchiveScreen() {
                 <ScalePressable
                   style={styles.sentenceSheetRow}
                   onPress={() => {
-                    setSelectedSentence(null);
-                    router.push({ pathname: "/read", params: { articleId: selectedSentence.articleId, mode: "re_read" } });
+                    const articleId = selectedSentence.articleId;
+                    startFadeToBlack(() => {
+                      setSelectedSentence(null);
+                      router.push({ pathname: "/read", params: { articleId, mode: "re_read" } });
+                    });
                   }}
                 contentStyle={styles.sentenceSheetRowContent}
                 >

@@ -10,6 +10,7 @@ import ScalePressable from "@/components/shared/ScalePressable";
 import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useReaderTransition } from "@/contexts/ReaderTransitionContext";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
@@ -84,6 +85,7 @@ function formatRelativeDate(dateStr: string): string {
 }
 
 export default function OnScreen() {
+  const { startFadeToBlack } = useReaderTransition();
   const insets = useSafeAreaInsets();
   const navBottom = useNavBarBottomSafeArea();
   const router = useRouter();
@@ -300,9 +302,11 @@ export default function OnScreen() {
   const handleMyArticlePress = useCallback(
     (article: Article) => {
       closeOpenRow();
-      router.push({ pathname: "/read" as never, params: { articleId: article.id, mode: "re_read" } });
+      startFadeToBlack(() => {
+        router.push({ pathname: "/read" as never, params: { articleId: article.id, mode: "re_read" } });
+      });
     },
-    [closeOpenRow, router],
+    [closeOpenRow, startFadeToBlack, router],
   );
 
   const handleSendAction = useCallback(

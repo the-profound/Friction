@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useRouter, useFocusEffect } from "expo-router";
+import { useReaderTransition } from "@/contexts/ReaderTransitionContext";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import ScalePressable from "@/components/shared/ScalePressable";
@@ -57,6 +58,7 @@ const GRID_GAP = 4;
 const GRID_COLS = 3;
 
 export default function MyScreen() {
+  const { startFadeToBlack } = useReaderTransition();
   const insets = useSafeAreaInsets();
   const navBottom = useNavBarBottomSafeArea();
   const router = useRouter();
@@ -334,16 +336,18 @@ export default function MyScreen() {
   const handleOverlayRead = useCallback((chainIdx: number) => {
     const article = toChainArticles[chainIdx];
     if (!article) return; // still loading
-    setSelectedArticle(null);
-    setSelectedOrigin(null);
-    setSelectedCollectionName(null);
-    setSelectedCollectionId(null);
-    setSelectedDateOverride(null);
-    router.push({
-      pathname: "/read" as never,
-      params: { articleId: article.id, mode: "re_read" },
+    startFadeToBlack(() => {
+      setSelectedArticle(null);
+      setSelectedOrigin(null);
+      setSelectedCollectionName(null);
+      setSelectedCollectionId(null);
+      setSelectedDateOverride(null);
+      router.push({
+        pathname: "/read" as never,
+        params: { articleId: article.id, mode: "re_read" },
+      });
     });
-  }, [toChainArticles, router]);
+  }, [toChainArticles, startFadeToBlack, router]);
 
   const handleGroupPress = useCallback(
     (team: TeamCollectionWithRole) => {

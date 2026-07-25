@@ -13,6 +13,13 @@ import {
   ActivityIndicator,
   ScrollView,
 } from "react-native";
+import RAnimated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  runOnJS,
+  Easing as REasing,
+} from "react-native-reanimated";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
@@ -526,7 +533,26 @@ export default function CardSelectOverlay({
   const dateLabel = date ? formatDate(date) : "";
   const canTapCollection = !!(collectionId && onNavigateToCollection);
   const canTapAuthor = !!(authorId && onNavigateToAuthor);
-  const handleRead = useCallback(() => onRead(activeIndexRef.current), [onRead]);
+  const fadeOverlayOpacity = useSharedValue(0);
+  const fadeOverlayStyle = useAnimatedStyle(() => ({ opacity: fadeOverlayOpacity.value }));
+
+  // Reset fade overlay when the Modal closes so it starts fresh next time.
+  useEffect(() => {
+    if (!rendered) {
+      fadeOverlayOpacity.value = 0;
+    }
+  }, [rendered, fadeOverlayOpacity]);
+
+  const handleRead = useCallback(() => {
+    const idx = activeIndexRef.current;
+    fadeOverlayOpacity.value = withTiming(
+      1,
+      { duration: 700, easing: REasing.in(REasing.ease) },
+      (finished) => {
+        if (finished) runOnJS(onRead)(idx);
+      },
+    );
+  }, [onRead, fadeOverlayOpacity]);
 
   // ── Whether the tapped card is a sealed envelope ──────────────────────────
   const isEnvelopeSealed = !!envelopeInfo && envelopePhase !== "revealed";
@@ -913,6 +939,12 @@ export default function CardSelectOverlay({
           </ScalePressable>
         )}
       </Animated.View>
+
+      {/* Full-screen fade-to-black overlay inside the Modal so it renders above all Modal content */}
+      <RAnimated.View
+        style={[StyleSheet.absoluteFillObject, styles.readFadeOverlay, fadeOverlayStyle]}
+        pointerEvents="none"
+      />
     </Modal>
   );
 }
@@ -925,6 +957,7 @@ const styles = StyleSheet.create({
     height: CARD_H,
     overflow: "visible",
   },
+  readFadeOverlay: { backgroundColor: "black" },
   carouselTrack: { flexDirection: "row", height: CARD_H },
   carouselSlot: { width: CARD_W, height: CARD_H },
   skeletonCard: {

@@ -17,6 +17,7 @@ import {
 import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
+import { useReaderTransition } from "@/contexts/ReaderTransitionContext";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
@@ -338,6 +339,7 @@ function CarouselGroup({
 const groupKeyExtractor = (group: DateGroup) => group.dateKey;
 
 export default function InboxScreen() {
+  const { startFadeToBlack } = useReaderTransition();
   const insets = useSafeAreaInsets();
   const navBottom = useNavBarBottomSafeArea();
   const router = useRouter();
@@ -424,31 +426,17 @@ export default function InboxScreen() {
     router.push({ pathname: "/of-02-detail", params: { id: collectionId } });
   }, [router]);
 
-  const navigateToReply = useCallback(async (item: InboxItem) => {
+  const prepareInboxItem = useCallback((item: InboxItem) => {
     if (!item.openedAt) {
-      // 낙관적 업데이트: openedAt 만 즉시 캐시에 반영하고, invalidate 로 인한
-      // 재요청+로딩 깜빡임을 생략한다. 서버 호출이 실패해도 다음 focus 시
-      // refetch 가 다시 정상화한다.
       const openedAt = new Date().toISOString();
       patchInboxItemInCache(queryClient, item.id, { openedAt });
-      try {
-        await markOpened.mutateAsync({ id: item.id });
-      } catch (e: unknown) {
+      markOpened.mutateAsync({ id: item.id }).catch((e: unknown) => {
         console.warn("Failed to mark inbox opened:", e instanceof Error ? e.message : e);
-      }
+      });
     }
-    const mode = (item.isRead || item.hasReadBefore) ? "re_read" : "basic";
-    router.push({
-      pathname: "/read",
-      params: {
-        articleId: item.articleId,
-        inboxId: item.id,
-        mode,
-      },
-    });
-  }, [markOpened, router, queryClient]);
+  }, [markOpened, queryClient]);
 
-  const handleRead = useCallback(async (chainIdx: number) => {
+  const handleRead = useCallback((chainIdx: number) => {
     // Look up which article and inbox item correspond to the active carousel slot.
     // chainArticles / inboxItemByArticleId are captured via refs so the callback
     // stays stable even after setTapItem(null) clears the overlay.
@@ -456,21 +444,31 @@ export default function InboxScreen() {
     const inboxItem = article
       ? inboxItemByArticleIdRef.current.get(article.id) ?? null
       : null;
-    setTapItem(null);
+
     if (inboxItem) {
       const isReply = inboxItem.isReplyToMe === true || !!inboxItem.replyToArticleId;
       if (isReply && inboxItem.hasReadSourceArticle === false) {
+        setTapItem(null);
         setSourcePromptItem(inboxItem);
         return;
       }
-      await navigateToReply(inboxItem);
+      // CardSelectOverlay handles the fade-to-black internally (Modal renders above global overlay).
+      // Here we just navigate immediately after the fade calls back.
+      prepareInboxItem(inboxItem);
+      const mode = (inboxItem.isRead || inboxItem.hasReadBefore) ? "re_read" : "basic";
+      setTapItem(null);
+      router.push({
+        pathname: "/read",
+        params: { articleId: inboxItem.articleId, inboxId: inboxItem.id, mode },
+      });
     } else if (article) {
+      setTapItem(null);
       router.push({
         pathname: "/read",
         params: { articleId: article.id, mode: "re_read" },
       });
     }
-  }, [navigateToReply, router]);
+  }, [prepareInboxItem, router]);
 
   const handleSourcePromptClose = useCallback(() => {
     setSourcePromptItem(null);
@@ -482,28 +480,37 @@ export default function InboxScreen() {
       setSourcePromptItem(null);
       return;
     }
-    setSourcePromptItem(null);
     // 원글에 대응하는 (현재 사용자의) 미독 인박스 행이 있다면 함께 전달.
     // 없으면 inboxId 없이 진입 — read.tsx가 inboxId 없이도 동작한다.
     const sourceInboxId = (inboxData as InboxItem[] | undefined)?.find(
       (it) => it.articleId === item.replyToArticleId,
     )?.id;
-    router.push({
-      pathname: "/read",
-      params: {
-        articleId: item.replyToArticleId,
-        ...(sourceInboxId ? { inboxId: sourceInboxId } : {}),
-        mode: "basic",
-      },
+    startFadeToBlack(() => {
+      setSourcePromptItem(null);
+      router.push({
+        pathname: "/read",
+        params: {
+          articleId: item.replyToArticleId!,
+          ...(sourceInboxId ? { inboxId: sourceInboxId } : {}),
+          mode: "basic",
+        },
+      });
     });
-  }, [sourcePromptItem, inboxData, router]);
+  }, [sourcePromptItem, inboxData, startFadeToBlack, router]);
 
-  const handleSkipToReply = useCallback(async () => {
+  const handleSkipToReply = useCallback(() => {
     const item = sourcePromptItem;
-    setSourcePromptItem(null);
-    if (!item) return;
-    await navigateToReply(item);
-  }, [sourcePromptItem, navigateToReply]);
+    if (!item) { setSourcePromptItem(null); return; }
+    prepareInboxItem(item);
+    const mode = (item.isRead || item.hasReadBefore) ? "re_read" : "basic";
+    startFadeToBlack(() => {
+      setSourcePromptItem(null);
+      router.push({
+        pathname: "/read",
+        params: { articleId: item.articleId, inboxId: item.id, mode },
+      });
+    });
+  }, [sourcePromptItem, prepareInboxItem, startFadeToBlack, router]);
 
   const handleDelete = useCallback(async () => {
     if (!tapItem) return;

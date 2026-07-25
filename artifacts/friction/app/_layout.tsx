@@ -29,6 +29,7 @@ import { setBaseUrl, setAuthTokenGetter } from "@workspace/api-client-react";
 import { supabase } from "@/lib/supabase";
 import { Colors } from "@/constants/tokens";
 import { Platform } from "react-native";
+import { ReaderTransitionProvider } from "@/contexts/ReaderTransitionContext";
 
 // 웹 개발 환경 로그인 바이패스 (비활성화: 실제 Supabase 인증 사용)
 const DEV_WEB_BYPASS = false;
@@ -178,7 +179,7 @@ function RootLayoutNav() {
       <ActiveReadingGuard>
         <Stack screenOptions={{ headerShown: false, headerBackTitle: "Back" }}>
           <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="read" />
+          <Stack.Screen name="read" options={{ animation: "none" }} />
           <Stack.Screen name="of-01" />
           <Stack.Screen name="of-01-detail" />
           <Stack.Screen name="of-02" />
@@ -277,8 +278,10 @@ export default function RootLayout() {
                 <ActiveReadingProvider>
                   <ToastProvider>
                     <NavigationProvider>
-                      <RootLayoutNav />
-                      <ToastContainer />
+                      <ReaderTransitionProvider>
+                        <RootLayoutNav />
+                        <ToastContainer />
+                      </ReaderTransitionProvider>
                     </NavigationProvider>
                   </ToastProvider>
                 </ActiveReadingProvider>
