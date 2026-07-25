@@ -36,21 +36,21 @@ import type {
   CreateSpaceRoundSlotBody,
   CreateSpaceScheduledSendBody,
   CreateStoredSentenceBody,
-  CreateThoughtBody,
-  Thought,
   CreateTeamCollectionBody,
+  CreateThoughtBody,
   CreateUserArticleReadBody,
   CreateUserBody,
   ErrorResponse,
+  ExpandThoughtsBody,
+  ExpandThoughtsResponse,
   FinalizeArticleBody,
   GetReadingRecordParams,
+  GetSimilarThoughtsParams,
   GetSpaceJoinContextParams,
   HealthStatus,
   InboxItem,
   ListArticlesParams,
   ListInboxParams,
-  GetSimilarThoughtsParams,
-  ListThoughtsParams,
   ListMyCollectionsParams,
   ListMySpaceCodeRequestsParams,
   ListMySpaceInvitationsParams,
@@ -62,6 +62,7 @@ import type {
   ListStoredSentencesParams,
   ListTeamArticlesParams,
   ListTeamCollectionsParams,
+  ListThoughtsParams,
   ListUserSpaceInvitationsParams,
   MarkInboxOthersReadParams,
   MarkInboxOthersReadResponse,
@@ -87,8 +88,10 @@ import type {
   SpaceJoinContext,
   SpaceLetter,
   SpaceListItem,
+  SpaceMember,
   SpaceParticipation,
   SpaceRound,
+  SpaceRoundSlotWithUser,
   SpaceScheduledSend,
   SpaceScheduledSendWithLetter,
   SpaceWithCreatorInfo,
@@ -101,6 +104,7 @@ import type {
   TeamCollectionMembership,
   TeamCollectionWithRole,
   TeamMemberWithUser,
+  Thought,
   ToggleStoredSentenceFavoriteBody,
   ToggleTeamArticlePinBody,
   TransitionArticleBody,
@@ -119,8 +123,6 @@ import type {
   UpsertReadingRecordBody,
   User,
   UserArticleRead,
-  SpaceRoundSlotWithUser,
-  SpaceMember,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -5942,6 +5944,405 @@ export const useUpdateSpaceRound = <
 };
 
 /**
+ * @summary List slots for a round (with assignee nickname)
+ */
+export const getListSpaceRoundSlotsUrl = (id: string, roundId: string) => {
+  return `/api/spaces/${id}/rounds/${roundId}/slots`;
+};
+
+export const listSpaceRoundSlots = async (
+  id: string,
+  roundId: string,
+  options?: RequestInit,
+): Promise<SpaceRoundSlotWithUser[]> => {
+  return customFetch<SpaceRoundSlotWithUser[]>(
+    getListSpaceRoundSlotsUrl(id, roundId),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListSpaceRoundSlotsQueryKey = (id: string, roundId: string) => {
+  return [`/api/spaces/${id}/rounds/${roundId}/slots`] as const;
+};
+
+export const getListSpaceRoundSlotsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listSpaceRoundSlots>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  roundId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSpaceRoundSlots>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListSpaceRoundSlotsQueryKey(id, roundId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listSpaceRoundSlots>>
+  > = ({ signal }) =>
+    listSpaceRoundSlots(id, roundId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!(id && roundId),
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listSpaceRoundSlots>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListSpaceRoundSlotsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listSpaceRoundSlots>>
+>;
+export type ListSpaceRoundSlotsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List slots for a round (with assignee nickname)
+ */
+
+export function useListSpaceRoundSlots<
+  TData = Awaited<ReturnType<typeof listSpaceRoundSlots>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  roundId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSpaceRoundSlots>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListSpaceRoundSlotsQueryOptions(id, roundId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a slot for a round (operator only)
+ */
+export const getCreateSpaceRoundSlotUrl = (id: string, roundId: string) => {
+  return `/api/spaces/${id}/rounds/${roundId}/slots`;
+};
+
+export const createSpaceRoundSlot = async (
+  id: string,
+  roundId: string,
+  createSpaceRoundSlotBody: CreateSpaceRoundSlotBody,
+  options?: RequestInit,
+): Promise<SpaceRoundSlotWithUser> => {
+  return customFetch<SpaceRoundSlotWithUser>(
+    getCreateSpaceRoundSlotUrl(id, roundId),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(createSpaceRoundSlotBody),
+    },
+  );
+};
+
+export const getCreateSpaceRoundSlotMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSpaceRoundSlot>>,
+    TError,
+    { id: string; roundId: string; data: BodyType<CreateSpaceRoundSlotBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createSpaceRoundSlot>>,
+  TError,
+  { id: string; roundId: string; data: BodyType<CreateSpaceRoundSlotBody> },
+  TContext
+> => {
+  const mutationKey = ["createSpaceRoundSlot"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createSpaceRoundSlot>>,
+    { id: string; roundId: string; data: BodyType<CreateSpaceRoundSlotBody> }
+  > = (props) => {
+    const { id, roundId, data } = props ?? {};
+
+    return createSpaceRoundSlot(id, roundId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateSpaceRoundSlotMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createSpaceRoundSlot>>
+>;
+export type CreateSpaceRoundSlotMutationBody =
+  BodyType<CreateSpaceRoundSlotBody>;
+export type CreateSpaceRoundSlotMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Create a slot for a round (operator only)
+ */
+export const useCreateSpaceRoundSlot = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSpaceRoundSlot>>,
+    TError,
+    { id: string; roundId: string; data: BodyType<CreateSpaceRoundSlotBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createSpaceRoundSlot>>,
+  TError,
+  { id: string; roundId: string; data: BodyType<CreateSpaceRoundSlotBody> },
+  TContext
+> => {
+  return useMutation(getCreateSpaceRoundSlotMutationOptions(options));
+};
+
+/**
+ * @summary Update a slot (operator only)
+ */
+export const getUpdateSpaceRoundSlotUrl = (
+  id: string,
+  roundId: string,
+  slotId: string,
+) => {
+  return `/api/spaces/${id}/rounds/${roundId}/slots/${slotId}`;
+};
+
+export const updateSpaceRoundSlot = async (
+  id: string,
+  roundId: string,
+  slotId: string,
+  updateSpaceRoundSlotBody: UpdateSpaceRoundSlotBody,
+  options?: RequestInit,
+): Promise<SpaceRoundSlotWithUser> => {
+  return customFetch<SpaceRoundSlotWithUser>(
+    getUpdateSpaceRoundSlotUrl(id, roundId, slotId),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(updateSpaceRoundSlotBody),
+    },
+  );
+};
+
+export const getUpdateSpaceRoundSlotMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSpaceRoundSlot>>,
+    TError,
+    {
+      id: string;
+      roundId: string;
+      slotId: string;
+      data: BodyType<UpdateSpaceRoundSlotBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateSpaceRoundSlot>>,
+  TError,
+  {
+    id: string;
+    roundId: string;
+    slotId: string;
+    data: BodyType<UpdateSpaceRoundSlotBody>;
+  },
+  TContext
+> => {
+  const mutationKey = ["updateSpaceRoundSlot"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateSpaceRoundSlot>>,
+    {
+      id: string;
+      roundId: string;
+      slotId: string;
+      data: BodyType<UpdateSpaceRoundSlotBody>;
+    }
+  > = (props) => {
+    const { id, roundId, slotId, data } = props ?? {};
+
+    return updateSpaceRoundSlot(id, roundId, slotId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateSpaceRoundSlotMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateSpaceRoundSlot>>
+>;
+export type UpdateSpaceRoundSlotMutationBody =
+  BodyType<UpdateSpaceRoundSlotBody>;
+export type UpdateSpaceRoundSlotMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Update a slot (operator only)
+ */
+export const useUpdateSpaceRoundSlot = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSpaceRoundSlot>>,
+    TError,
+    {
+      id: string;
+      roundId: string;
+      slotId: string;
+      data: BodyType<UpdateSpaceRoundSlotBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateSpaceRoundSlot>>,
+  TError,
+  {
+    id: string;
+    roundId: string;
+    slotId: string;
+    data: BodyType<UpdateSpaceRoundSlotBody>;
+  },
+  TContext
+> => {
+  return useMutation(getUpdateSpaceRoundSlotMutationOptions(options));
+};
+
+/**
+ * @summary Delete a slot (operator only)
+ */
+export const getDeleteSpaceRoundSlotUrl = (
+  id: string,
+  roundId: string,
+  slotId: string,
+) => {
+  return `/api/spaces/${id}/rounds/${roundId}/slots/${slotId}`;
+};
+
+export const deleteSpaceRoundSlot = async (
+  id: string,
+  roundId: string,
+  slotId: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteSpaceRoundSlotUrl(id, roundId, slotId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteSpaceRoundSlotMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteSpaceRoundSlot>>,
+    TError,
+    { id: string; roundId: string; slotId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteSpaceRoundSlot>>,
+  TError,
+  { id: string; roundId: string; slotId: string },
+  TContext
+> => {
+  const mutationKey = ["deleteSpaceRoundSlot"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteSpaceRoundSlot>>,
+    { id: string; roundId: string; slotId: string }
+  > = (props) => {
+    const { id, roundId, slotId } = props ?? {};
+
+    return deleteSpaceRoundSlot(id, roundId, slotId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteSpaceRoundSlotMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteSpaceRoundSlot>>
+>;
+
+export type DeleteSpaceRoundSlotMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Delete a slot (operator only)
+ */
+export const useDeleteSpaceRoundSlot = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteSpaceRoundSlot>>,
+    TError,
+    { id: string; roundId: string; slotId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteSpaceRoundSlot>>,
+  TError,
+  { id: string; roundId: string; slotId: string },
+  TContext
+> => {
+  return useMutation(getDeleteSpaceRoundSlotMutationOptions(options));
+};
+
+/**
  * @summary List all scheduled sends for a space (operator view)
  */
 export const getListAllSpaceScheduledSendsUrl = (id: string) => {
@@ -6025,6 +6426,93 @@ export function useListAllSpaceScheduledSends<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getListAllSpaceScheduledSendsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List approved members of a space (with nicknames)
+ */
+export const getListSpaceMembersUrl = (id: string) => {
+  return `/api/spaces/${id}/members`;
+};
+
+export const listSpaceMembers = async (
+  id: string,
+  options?: RequestInit,
+): Promise<SpaceMember[]> => {
+  return customFetch<SpaceMember[]>(getListSpaceMembersUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListSpaceMembersQueryKey = (id: string) => {
+  return [`/api/spaces/${id}/members`] as const;
+};
+
+export const getListSpaceMembersQueryOptions = <
+  TData = Awaited<ReturnType<typeof listSpaceMembers>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSpaceMembers>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListSpaceMembersQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listSpaceMembers>>
+  > = ({ signal }) => listSpaceMembers(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listSpaceMembers>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListSpaceMembersQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listSpaceMembers>>
+>;
+export type ListSpaceMembersQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List approved members of a space (with nicknames)
+ */
+
+export function useListSpaceMembers<
+  TData = Awaited<ReturnType<typeof listSpaceMembers>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSpaceMembers>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListSpaceMembersQueryOptions(id, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
@@ -8891,16 +9379,135 @@ export const useDeleteSendRecord = <
   return useMutation(getDeleteSendRecordMutationOptions(options));
 };
 
-// ─── Thoughts ──────────────────────────────────────────────────────────────
+/**
+ * Returns the authenticated user's own thoughts ordered by cosine similarity to the given thought's dense embedding. Excludes the source thought itself. Returns an empty array if the source thought has no embedding.
+ * @summary Get similar thoughts by vector cosine similarity
+ */
+export const getGetSimilarThoughtsUrl = (
+  id: string,
+  params?: GetSimilarThoughtsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
 
-export const getListThoughtsUrl = (params?: ListThoughtsParams) => {
-  const url = new URL(`/api/thoughts`, "http://localhost");
   Object.entries(params || {}).forEach(([key, value]) => {
-    if (value !== undefined && value !== null) {
-      url.searchParams.append(key, String(value));
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
     }
   });
-  return url.pathname + (url.search ? url.search : "");
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/thoughts/${id}/similar?${stringifiedParams}`
+    : `/api/thoughts/${id}/similar`;
+};
+
+export const getSimilarThoughts = async (
+  id: string,
+  params?: GetSimilarThoughtsParams,
+  options?: RequestInit,
+): Promise<Thought[]> => {
+  return customFetch<Thought[]>(getGetSimilarThoughtsUrl(id, params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetSimilarThoughtsQueryKey = (
+  id: string,
+  params?: GetSimilarThoughtsParams,
+) => {
+  return [`/api/thoughts/${id}/similar`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetSimilarThoughtsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSimilarThoughts>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: string,
+  params?: GetSimilarThoughtsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getSimilarThoughts>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetSimilarThoughtsQueryKey(id, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getSimilarThoughts>>
+  > = ({ signal }) =>
+    getSimilarThoughts(id, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSimilarThoughts>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetSimilarThoughtsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getSimilarThoughts>>
+>;
+export type GetSimilarThoughtsQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get similar thoughts by vector cosine similarity
+ */
+
+export function useGetSimilarThoughts<
+  TData = Awaited<ReturnType<typeof getSimilarThoughts>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: string,
+  params?: GetSimilarThoughtsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getSimilarThoughts>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetSimilarThoughtsQueryOptions(id, params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Returns thoughts belonging to the authenticated user. Identity is taken from the auth token. Optionally filtered by sourceArticleId.
+ * @summary List thoughts for the authenticated user
+ */
+export const getListThoughtsUrl = (params?: ListThoughtsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/thoughts?${stringifiedParams}`
+    : `/api/thoughts`;
 };
 
 export const listThoughts = async (
@@ -8919,7 +9526,7 @@ export const getListThoughtsQueryKey = (params?: ListThoughtsParams) => {
 
 export const getListThoughtsQueryOptions = <
   TData = Awaited<ReturnType<typeof listThoughts>>,
-  TError = ErrorType<unknown>,
+  TError = ErrorType<ErrorResponse>,
 >(
   params?: ListThoughtsParams,
   options?: {
@@ -8932,10 +9539,13 @@ export const getListThoughtsQueryOptions = <
   },
 ) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
+
   const queryKey = queryOptions?.queryKey ?? getListThoughtsQueryKey(params);
+
   const queryFn: QueryFunction<Awaited<ReturnType<typeof listThoughts>>> = ({
     signal,
   }) => listThoughts(params, { signal, ...requestOptions });
+
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof listThoughts>>,
     TError,
@@ -8946,14 +9556,15 @@ export const getListThoughtsQueryOptions = <
 export type ListThoughtsQueryResult = NonNullable<
   Awaited<ReturnType<typeof listThoughts>>
 >;
-export type ListThoughtsQueryError = ErrorType<unknown>;
+export type ListThoughtsQueryError = ErrorType<ErrorResponse>;
 
 /**
  * @summary List thoughts for the authenticated user
  */
+
 export function useListThoughts<
   TData = Awaited<ReturnType<typeof listThoughts>>,
-  TError = ErrorType<unknown>,
+  TError = ErrorType<ErrorResponse>,
 >(
   params?: ListThoughtsParams,
   options?: {
@@ -8966,13 +9577,20 @@ export function useListThoughts<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getListThoughtsQueryOptions(params, options);
+
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
   };
+
   return { ...query, queryKey: queryOptions.queryKey };
 }
 
-export const getCreateThoughtUrl = () => `/api/thoughts`;
+/**
+ * @summary Create a thought (단상)
+ */
+export const getCreateThoughtUrl = () => {
+  return `/api/thoughts`;
+};
 
 export const createThought = async (
   createThoughtBody: CreateThoughtBody,
@@ -9017,6 +9635,7 @@ export const getCreateThoughtMutationOptions = <
     { data: BodyType<CreateThoughtBody> }
   > = (props) => {
     const { data } = props ?? {};
+
     return createThought(data, requestOptions);
   };
 
@@ -9052,544 +9671,89 @@ export const useCreateThought = <
   return useMutation(getCreateThoughtMutationOptions(options));
 };
 
-// ─── Space Round Slots ───────────────────────────────────────────────────────
-
 /**
- * @summary List slots for a round (with assignee nickname)
+ * Given a target thought (단상) and a list of candidate thoughts, returns AI-generated connection analysis for each candidate: connection reason (r), mediating keywords (k), and highlight phrases (h). Uses OpenRouter Gemini Flash 1.5 with a fixed system prompt to enable automatic context caching.
+ * @summary Analyze AI connections between a target thought and candidate thoughts
  */
-export const getListSpaceRoundSlotsUrl = (id: string, roundId: string) => {
-  return `/api/spaces/${id}/rounds/${roundId}/slots`;
+export const getExpandThoughtsUrl = () => {
+  return `/api/thoughts/expand`;
 };
 
-export const listSpaceRoundSlots = async (
-  id: string,
-  roundId: string,
+export const expandThoughts = async (
+  expandThoughtsBody: ExpandThoughtsBody,
   options?: RequestInit,
-): Promise<SpaceRoundSlotWithUser[]> => {
-  return customFetch<SpaceRoundSlotWithUser[]>(
-    getListSpaceRoundSlotsUrl(id, roundId),
-    { ...options, method: "GET" },
-  );
-};
-
-export const getListSpaceRoundSlotsQueryKey = (
-  id: string,
-  roundId: string,
-) => {
-  return [`/api/spaces/${id}/rounds/${roundId}/slots`] as const;
-};
-
-export const getListSpaceRoundSlotsQueryOptions = <
-  TData = Awaited<ReturnType<typeof listSpaceRoundSlots>>,
-  TError = ErrorType<unknown>,
->(
-  id: string,
-  roundId: string,
-  options?: {
-    query?: UseQueryOptions<
-      Awaited<ReturnType<typeof listSpaceRoundSlots>>,
-      TError,
-      TData
-    >;
-    request?: SecondParameter<typeof customFetch>;
-  },
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-  const queryKey =
-    queryOptions?.queryKey ?? getListSpaceRoundSlotsQueryKey(id, roundId);
-  const queryFn: QueryFunction<
-    Awaited<ReturnType<typeof listSpaceRoundSlots>>
-  > = ({ signal }) =>
-    listSpaceRoundSlots(id, roundId, { signal, ...requestOptions });
-  return {
-    queryKey,
-    queryFn,
-    enabled: !!id && !!roundId,
-    ...queryOptions,
-  } as UseQueryOptions<
-    Awaited<ReturnType<typeof listSpaceRoundSlots>>,
-    TError,
-    TData
-  > & { queryKey: QueryKey };
-};
-
-export type ListSpaceRoundSlotsQueryResult = NonNullable<
-  Awaited<ReturnType<typeof listSpaceRoundSlots>>
->;
-export type ListSpaceRoundSlotsQueryError = ErrorType<unknown>;
-
-export function useListSpaceRoundSlots<
-  TData = Awaited<ReturnType<typeof listSpaceRoundSlots>>,
-  TError = ErrorType<unknown>,
->(
-  id: string,
-  roundId: string,
-  options?: {
-    query?: UseQueryOptions<
-      Awaited<ReturnType<typeof listSpaceRoundSlots>>,
-      TError,
-      TData
-    >;
-    request?: SecondParameter<typeof customFetch>;
-  },
-): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getListSpaceRoundSlotsQueryOptions(id, roundId, options);
-  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-  };
-  return { ...query, queryKey: queryOptions.queryKey };
-}
-
-/**
- * @summary Create a slot for a round (operator only)
- */
-export const getCreateSpaceRoundSlotUrl = (id: string, roundId: string) => {
-  return `/api/spaces/${id}/rounds/${roundId}/slots`;
-};
-
-export const createSpaceRoundSlot = async (
-  id: string,
-  roundId: string,
-  createSpaceRoundSlotBody: CreateSpaceRoundSlotBody,
-  options?: RequestInit,
-): Promise<SpaceRoundSlotWithUser> => {
-  return customFetch<SpaceRoundSlotWithUser>(
-    getCreateSpaceRoundSlotUrl(id, roundId),
-    {
-      ...options,
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...options?.headers },
-      body: JSON.stringify(createSpaceRoundSlotBody),
-    },
-  );
-};
-
-export const getCreateSpaceRoundSlotMutationOptions = <
-  TError = ErrorType<ErrorResponse>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof createSpaceRoundSlot>>,
-    TError,
-    { id: string; roundId: string; data: BodyType<CreateSpaceRoundSlotBody> },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationOptions<
-  Awaited<ReturnType<typeof createSpaceRoundSlot>>,
-  TError,
-  { id: string; roundId: string; data: BodyType<CreateSpaceRoundSlotBody> },
-  TContext
-> => {
-  const mutationKey = ["createSpaceRoundSlot"];
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      "mutationKey" in options.mutation &&
-      options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined };
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof createSpaceRoundSlot>>,
-    { id: string; roundId: string; data: BodyType<CreateSpaceRoundSlotBody> }
-  > = (props) => {
-    const { id, roundId, data } = props ?? {};
-    return createSpaceRoundSlot(id, roundId, data, requestOptions);
-  };
-  return { mutationFn, ...mutationOptions };
-};
-
-export type CreateSpaceRoundSlotMutationResult = NonNullable<
-  Awaited<ReturnType<typeof createSpaceRoundSlot>>
->;
-export type CreateSpaceRoundSlotMutationBody =
-  BodyType<CreateSpaceRoundSlotBody>;
-export type CreateSpaceRoundSlotMutationError = ErrorType<ErrorResponse>;
-
-export const useCreateSpaceRoundSlot = <
-  TError = ErrorType<ErrorResponse>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof createSpaceRoundSlot>>,
-    TError,
-    { id: string; roundId: string; data: BodyType<CreateSpaceRoundSlotBody> },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationResult<
-  Awaited<ReturnType<typeof createSpaceRoundSlot>>,
-  TError,
-  { id: string; roundId: string; data: BodyType<CreateSpaceRoundSlotBody> },
-  TContext
-> => {
-  return useMutation(getCreateSpaceRoundSlotMutationOptions(options));
-};
-
-/**
- * @summary Update a slot (operator only)
- */
-export const getUpdateSpaceRoundSlotUrl = (
-  id: string,
-  roundId: string,
-  slotId: string,
-) => {
-  return `/api/spaces/${id}/rounds/${roundId}/slots/${slotId}`;
-};
-
-export const updateSpaceRoundSlot = async (
-  id: string,
-  roundId: string,
-  slotId: string,
-  updateSpaceRoundSlotBody: UpdateSpaceRoundSlotBody,
-  options?: RequestInit,
-): Promise<SpaceRoundSlotWithUser> => {
-  return customFetch<SpaceRoundSlotWithUser>(
-    getUpdateSpaceRoundSlotUrl(id, roundId, slotId),
-    {
-      ...options,
-      method: "PATCH",
-      headers: { "Content-Type": "application/json", ...options?.headers },
-      body: JSON.stringify(updateSpaceRoundSlotBody),
-    },
-  );
-};
-
-export const getUpdateSpaceRoundSlotMutationOptions = <
-  TError = ErrorType<ErrorResponse>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof updateSpaceRoundSlot>>,
-    TError,
-    {
-      id: string;
-      roundId: string;
-      slotId: string;
-      data: BodyType<UpdateSpaceRoundSlotBody>;
-    },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationOptions<
-  Awaited<ReturnType<typeof updateSpaceRoundSlot>>,
-  TError,
-  {
-    id: string;
-    roundId: string;
-    slotId: string;
-    data: BodyType<UpdateSpaceRoundSlotBody>;
-  },
-  TContext
-> => {
-  const mutationKey = ["updateSpaceRoundSlot"];
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      "mutationKey" in options.mutation &&
-      options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined };
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof updateSpaceRoundSlot>>,
-    {
-      id: string;
-      roundId: string;
-      slotId: string;
-      data: BodyType<UpdateSpaceRoundSlotBody>;
-    }
-  > = (props) => {
-    const { id, roundId, slotId, data } = props ?? {};
-    return updateSpaceRoundSlot(id, roundId, slotId, data, requestOptions);
-  };
-  return { mutationFn, ...mutationOptions };
-};
-
-export type UpdateSpaceRoundSlotMutationResult = NonNullable<
-  Awaited<ReturnType<typeof updateSpaceRoundSlot>>
->;
-export type UpdateSpaceRoundSlotMutationBody =
-  BodyType<UpdateSpaceRoundSlotBody>;
-export type UpdateSpaceRoundSlotMutationError = ErrorType<ErrorResponse>;
-
-export const useUpdateSpaceRoundSlot = <
-  TError = ErrorType<ErrorResponse>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof updateSpaceRoundSlot>>,
-    TError,
-    {
-      id: string;
-      roundId: string;
-      slotId: string;
-      data: BodyType<UpdateSpaceRoundSlotBody>;
-    },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationResult<
-  Awaited<ReturnType<typeof updateSpaceRoundSlot>>,
-  TError,
-  {
-    id: string;
-    roundId: string;
-    slotId: string;
-    data: BodyType<UpdateSpaceRoundSlotBody>;
-  },
-  TContext
-> => {
-  return useMutation(getUpdateSpaceRoundSlotMutationOptions(options));
-};
-
-/**
- * @summary Delete a slot (operator only)
- */
-export const getDeleteSpaceRoundSlotUrl = (
-  id: string,
-  roundId: string,
-  slotId: string,
-) => {
-  return `/api/spaces/${id}/rounds/${roundId}/slots/${slotId}`;
-};
-
-export const deleteSpaceRoundSlot = async (
-  id: string,
-  roundId: string,
-  slotId: string,
-  options?: RequestInit,
-): Promise<void> => {
-  return customFetch<void>(
-    getDeleteSpaceRoundSlotUrl(id, roundId, slotId),
-    { ...options, method: "DELETE" },
-  );
-};
-
-export const getDeleteSpaceRoundSlotMutationOptions = <
-  TError = ErrorType<ErrorResponse>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof deleteSpaceRoundSlot>>,
-    TError,
-    { id: string; roundId: string; slotId: string },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationOptions<
-  Awaited<ReturnType<typeof deleteSpaceRoundSlot>>,
-  TError,
-  { id: string; roundId: string; slotId: string },
-  TContext
-> => {
-  const mutationKey = ["deleteSpaceRoundSlot"];
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      "mutationKey" in options.mutation &&
-      options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined };
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof deleteSpaceRoundSlot>>,
-    { id: string; roundId: string; slotId: string }
-  > = (props) => {
-    const { id, roundId, slotId } = props ?? {};
-    return deleteSpaceRoundSlot(id, roundId, slotId, requestOptions);
-  };
-  return { mutationFn, ...mutationOptions };
-};
-
-export type DeleteSpaceRoundSlotMutationResult = NonNullable<
-  Awaited<ReturnType<typeof deleteSpaceRoundSlot>>
->;
-export type DeleteSpaceRoundSlotMutationError = ErrorType<ErrorResponse>;
-
-export const useDeleteSpaceRoundSlot = <
-  TError = ErrorType<ErrorResponse>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof deleteSpaceRoundSlot>>,
-    TError,
-    { id: string; roundId: string; slotId: string },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationResult<
-  Awaited<ReturnType<typeof deleteSpaceRoundSlot>>,
-  TError,
-  { id: string; roundId: string; slotId: string },
-  TContext
-> => {
-  return useMutation(getDeleteSpaceRoundSlotMutationOptions(options));
-};
-
-// ─── Space Members ────────────────────────────────────────────────────────────
-
-/**
- * @summary List approved members of a space (with nicknames)
- */
-export const getListSpaceMembersUrl = (id: string) => {
-  return `/api/spaces/${id}/members`;
-};
-
-export const listSpaceMembers = async (
-  id: string,
-  options?: RequestInit,
-): Promise<SpaceMember[]> => {
-  return customFetch<SpaceMember[]>(getListSpaceMembersUrl(id), {
+): Promise<ExpandThoughtsResponse> => {
+  return customFetch<ExpandThoughtsResponse>(getExpandThoughtsUrl(), {
     ...options,
-    method: "GET",
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(expandThoughtsBody),
   });
 };
 
-export const getListSpaceMembersQueryKey = (id: string) => {
-  return [`/api/spaces/${id}/members`] as const;
-};
-
-export const getListSpaceMembersQueryOptions = <
-  TData = Awaited<ReturnType<typeof listSpaceMembers>>,
-  TError = ErrorType<unknown>,
->(
-  id: string,
-  options?: {
-    query?: UseQueryOptions<
-      Awaited<ReturnType<typeof listSpaceMembers>>,
-      TError,
-      TData
-    >;
-    request?: SecondParameter<typeof customFetch>;
-  },
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-  const queryKey = queryOptions?.queryKey ?? getListSpaceMembersQueryKey(id);
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof listSpaceMembers>>> = ({
-    signal,
-  }) => listSpaceMembers(id, { signal, ...requestOptions });
-  return {
-    queryKey,
-    queryFn,
-    enabled: !!id,
-    ...queryOptions,
-  } as UseQueryOptions<
-    Awaited<ReturnType<typeof listSpaceMembers>>,
+export const getExpandThoughtsMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof expandThoughts>>,
     TError,
-    TData
-  > & { queryKey: QueryKey };
-};
+    { data: BodyType<ExpandThoughtsBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof expandThoughts>>,
+  TError,
+  { data: BodyType<ExpandThoughtsBody> },
+  TContext
+> => {
+  const mutationKey = ["expandThoughts"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-export type ListSpaceMembersQueryResult = NonNullable<
-  Awaited<ReturnType<typeof listSpaceMembers>>
->;
-export type ListSpaceMembersQueryError = ErrorType<unknown>;
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof expandThoughts>>,
+    { data: BodyType<ExpandThoughtsBody> }
+  > = (props) => {
+    const { data } = props ?? {};
 
-export function useListSpaceMembers<
-  TData = Awaited<ReturnType<typeof listSpaceMembers>>,
-  TError = ErrorType<unknown>,
->(
-  id: string,
-  options?: {
-    query?: UseQueryOptions<
-      Awaited<ReturnType<typeof listSpaceMembers>>,
-      TError,
-      TData
-    >;
-    request?: SecondParameter<typeof customFetch>;
-  },
-): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getListSpaceMembersQueryOptions(id, options);
-  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
+    return expandThoughts(data, requestOptions);
   };
-  return { ...query, queryKey: queryOptions.queryKey };
-}
 
-// ─── Similar Thoughts ──────────────────────────────────────────────────────
-
-export const getSimilarThoughtsUrl = (id: string, params?: GetSimilarThoughtsParams) => {
-  const url = new URL(`/api/thoughts/${id}/similar`, "http://localhost");
-  Object.entries(params || {}).forEach(([key, value]) => {
-    if (value !== undefined && value !== null) {
-      url.searchParams.append(key, String(value));
-    }
-  });
-  return url.pathname + (url.search ? url.search : "");
+  return { mutationFn, ...mutationOptions };
 };
 
-export const getSimilarThoughts = async (
-  id: string,
-  params?: GetSimilarThoughtsParams,
-  options?: RequestInit,
-): Promise<Thought[]> => {
-  return customFetch<Thought[]>(getSimilarThoughtsUrl(id, params), {
-    ...options,
-    method: "GET",
-  });
-};
-
-export const getGetSimilarThoughtsQueryKey = (id: string, params?: GetSimilarThoughtsParams) => {
-  return [`/api/thoughts/${id}/similar`, ...(params ? [params] : [])] as const;
-};
-
-export const getGetSimilarThoughtsQueryOptions = <
-  TData = Awaited<ReturnType<typeof getSimilarThoughts>>,
-  TError = ErrorType<unknown>,
->(
-  id: string,
-  params?: GetSimilarThoughtsParams,
-  options?: {
-    query?: UseQueryOptions<
-      Awaited<ReturnType<typeof getSimilarThoughts>>,
-      TError,
-      TData
-    >;
-    request?: SecondParameter<typeof customFetch>;
-  },
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-  const queryKey = queryOptions?.queryKey ?? getGetSimilarThoughtsQueryKey(id, params);
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof getSimilarThoughts>>> = ({
-    signal,
-  }) => getSimilarThoughts(id, params, { signal, ...requestOptions });
-  return {
-    queryKey,
-    queryFn,
-    enabled: !!id,
-    ...queryOptions,
-  } as UseQueryOptions<
-    Awaited<ReturnType<typeof getSimilarThoughts>>,
-    TError,
-    TData
-  > & { queryKey: QueryKey };
-};
-
-export type GetSimilarThoughtsQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getSimilarThoughts>>
+export type ExpandThoughtsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof expandThoughts>>
 >;
-export type GetSimilarThoughtsQueryError = ErrorType<unknown>;
+export type ExpandThoughtsMutationBody = BodyType<ExpandThoughtsBody>;
+export type ExpandThoughtsMutationError = ErrorType<ErrorResponse>;
 
 /**
- * @summary Get similar thoughts by vector cosine similarity
+ * @summary Analyze AI connections between a target thought and candidate thoughts
  */
-export function useGetSimilarThoughts<
-  TData = Awaited<ReturnType<typeof getSimilarThoughts>>,
-  TError = ErrorType<unknown>,
->(
-  id: string,
-  params?: GetSimilarThoughtsParams,
-  options?: {
-    query?: UseQueryOptions<
-      Awaited<ReturnType<typeof getSimilarThoughts>>,
-      TError,
-      TData
-    >;
-    request?: SecondParameter<typeof customFetch>;
-  },
-): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetSimilarThoughtsQueryOptions(id, params, options);
-  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-  };
-  return { ...query, queryKey: queryOptions.queryKey };
-}
+export const useExpandThoughts = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof expandThoughts>>,
+    TError,
+    { data: BodyType<ExpandThoughtsBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof expandThoughts>>,
+  TError,
+  { data: BodyType<ExpandThoughtsBody> },
+  TContext
+> => {
+  return useMutation(getExpandThoughtsMutationOptions(options));
+};

@@ -4,6 +4,7 @@ import { db, thoughtsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth";
 import { CreateThoughtBody } from "@workspace/api-zod";
 import { generateDenseEmbedding, generateSparseEmbedding } from "../lib/embeddings";
+import { analyzeThoughtExpansion } from "../services/analyze-thought-expansion";
 
 const router: IRouter = Router();
 
@@ -128,6 +129,43 @@ router.post("/thoughts", requireAuth, async (req, res) => {
     })();
 
     Promise.allSettled([denseTask, sparseTask]);
+  }
+});
+
+function isNoteObject(v: unknown): v is { id: string; content: string } {
+  return (
+    typeof v === "object" &&
+    v !== null &&
+    typeof (v as Record<string, unknown>).id === "string" &&
+    typeof (v as Record<string, unknown>).content === "string"
+  );
+}
+
+router.post("/thoughts/expand", requireAuth, async (req, res) => {
+  const body = req.body as Record<string, unknown> | null | undefined;
+  const targetNote = body?.targetNote;
+  const candidates = body?.candidates;
+
+  if (!isNoteObject(targetNote)) {
+    res.status(400).json({ error: "targetNote must have id and content fields" });
+    return;
+  }
+  if (!Array.isArray(candidates) || candidates.length === 0 || !candidates.every(isNoteObject)) {
+    res.status(400).json({ error: "candidates must be a non-empty array of {id, content} objects" });
+    return;
+  }
+
+  if (!process.env.OPENROUTER_API_KEY) {
+    res.status(500).json({ error: "OPENROUTER_API_KEY is not configured on the server" });
+    return;
+  }
+
+  try {
+    const results = await analyzeThoughtExpansion(targetNote, candidates);
+    res.json({ results });
+  } catch (err) {
+    req.log?.error({ err }, "thoughts/expand AI error");
+    res.status(500).json({ error: "단상 분석 중 오류가 발생했어요" });
   }
 });
 

@@ -1827,7 +1827,12 @@ export const ListMySpaceInvitationsResponseItem = zod.object({
     defaultCenterCount: zod.number(),
     status: zod.enum(["RECRUITING", "ACTIVE", "ARCHIVED"]),
     creatorId: zod.string().uuid(),
-    inviteCode: zod.string().nullish(),
+    inviteCode: zod
+      .string()
+      .nullish()
+      .describe(
+        '한글 형용사+명사 조합 초대 코드 (예: \"파란하늘\"). 공간 생성 시 자동 배정.',
+      ),
     createdAt: zod.date(),
     updatedAt: zod.date(),
   }),
@@ -1866,7 +1871,12 @@ export const ListMySpaceCodeRequestsResponseItem = zod.object({
     defaultCenterCount: zod.number(),
     status: zod.enum(["RECRUITING", "ACTIVE", "ARCHIVED"]),
     creatorId: zod.string().uuid(),
-    inviteCode: zod.string().nullish(),
+    inviteCode: zod
+      .string()
+      .nullish()
+      .describe(
+        '한글 형용사+명사 조합 초대 코드 (예: \"파란하늘\"). 공간 생성 시 자동 배정.',
+      ),
     createdAt: zod.date(),
     updatedAt: zod.date(),
   }),
@@ -1894,7 +1904,12 @@ export const ListSpacesResponseItem = zod.object({
   defaultCenterCount: zod.number(),
   status: zod.enum(["RECRUITING", "ACTIVE", "ARCHIVED"]),
   creatorId: zod.string().uuid(),
-  inviteCode: zod.string().nullish(),
+  inviteCode: zod
+    .string()
+    .nullish()
+    .describe(
+      '한글 형용사+명사 조합 초대 코드 (예: \"파란하늘\"). 공간 생성 시 자동 배정.',
+    ),
   createdAt: zod.date(),
   updatedAt: zod.date(),
   myRole: zod.enum(["OPERATOR", "PARTICIPANT"]),
@@ -1953,7 +1968,12 @@ export const GetSpaceResponse = zod.object({
   defaultCenterCount: zod.number(),
   status: zod.enum(["RECRUITING", "ACTIVE", "ARCHIVED"]),
   creatorId: zod.string().uuid(),
-  inviteCode: zod.string().nullish(),
+  inviteCode: zod
+    .string()
+    .nullish()
+    .describe(
+      '한글 형용사+명사 조합 초대 코드 (예: \"파란하늘\"). 공간 생성 시 자동 배정.',
+    ),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -1991,7 +2011,12 @@ export const UpdateSpaceResponse = zod.object({
   defaultCenterCount: zod.number(),
   status: zod.enum(["RECRUITING", "ACTIVE", "ARCHIVED"]),
   creatorId: zod.string().uuid(),
-  inviteCode: zod.string().nullish(),
+  inviteCode: zod
+    .string()
+    .nullish()
+    .describe(
+      '한글 형용사+명사 조합 초대 코드 (예: \"파란하늘\"). 공간 생성 시 자동 배정.',
+    ),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -2055,6 +2080,93 @@ export const UpdateSpaceRoundResponse = zod.object({
   endsAt: zod.date().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
+});
+
+/**
+ * @summary List slots for a round (with assignee nickname)
+ */
+export const ListSpaceRoundSlotsParams = zod.object({
+  id: zod.coerce.string().uuid(),
+  roundId: zod.coerce.string().uuid(),
+});
+
+export const ListSpaceRoundSlotsResponseItem = zod.object({
+  id: zod.string().uuid(),
+  spaceRoundId: zod.string().uuid(),
+  assignedUserId: zod.string().uuid(),
+  slotOrder: zod.number(),
+  scheduledDate: zod
+    .string()
+    .nullish()
+    .describe("ISO date string (YYYY-MM-DD), null if not set"),
+  assignedUserNickname: zod.string().nullish(),
+  createdAt: zod.date(),
+  updatedAt: zod.date(),
+});
+export const ListSpaceRoundSlotsResponse = zod.array(
+  ListSpaceRoundSlotsResponseItem,
+);
+
+/**
+ * @summary Create a slot for a round (operator only)
+ */
+export const CreateSpaceRoundSlotParams = zod.object({
+  id: zod.coerce.string().uuid(),
+  roundId: zod.coerce.string().uuid(),
+});
+
+export const createSpaceRoundSlotBodySlotOrderMin = 0;
+
+export const CreateSpaceRoundSlotBody = zod.object({
+  assignedUserId: zod.string().uuid(),
+  slotOrder: zod.number().min(createSpaceRoundSlotBodySlotOrderMin).optional(),
+  scheduledDate: zod
+    .string()
+    .nullish()
+    .describe("ISO date string (YYYY-MM-DD)"),
+});
+
+/**
+ * @summary Update a slot (operator only)
+ */
+export const UpdateSpaceRoundSlotParams = zod.object({
+  id: zod.coerce.string().uuid(),
+  roundId: zod.coerce.string().uuid(),
+  slotId: zod.coerce.string().uuid(),
+});
+
+export const updateSpaceRoundSlotBodySlotOrderMin = 0;
+
+export const UpdateSpaceRoundSlotBody = zod.object({
+  assignedUserId: zod.string().uuid().optional(),
+  slotOrder: zod.number().min(updateSpaceRoundSlotBodySlotOrderMin).optional(),
+  scheduledDate: zod
+    .string()
+    .nullish()
+    .describe("ISO date string (YYYY-MM-DD)"),
+});
+
+export const UpdateSpaceRoundSlotResponse = zod.object({
+  id: zod.string().uuid(),
+  spaceRoundId: zod.string().uuid(),
+  assignedUserId: zod.string().uuid(),
+  slotOrder: zod.number(),
+  scheduledDate: zod
+    .string()
+    .nullish()
+    .describe("ISO date string (YYYY-MM-DD), null if not set"),
+  assignedUserNickname: zod.string().nullish(),
+  createdAt: zod.date(),
+  updatedAt: zod.date(),
+});
+
+/**
+ * @summary Delete a slot (operator only)
+ */
+export const DeleteSpaceRoundSlotParams = zod.object({
+  id: zod.coerce.string().uuid(),
+  roundId: zod.coerce.string().uuid(),
+  slotId: zod.coerce.string().uuid(),
 });
 
 /**
@@ -2125,6 +2237,21 @@ export const ListAllSpaceScheduledSendsResponseItem = zod.object({
 export const ListAllSpaceScheduledSendsResponse = zod.array(
   ListAllSpaceScheduledSendsResponseItem,
 );
+
+/**
+ * @summary List approved members of a space (with nicknames)
+ */
+export const ListSpaceMembersParams = zod.object({
+  id: zod.coerce.string().uuid(),
+});
+
+export const ListSpaceMembersResponseItem = zod.object({
+  userId: zod.string().uuid(),
+  nickname: zod.string().nullish(),
+  role: zod.string(),
+  status: zod.string(),
+});
+export const ListSpaceMembersResponse = zod.array(ListSpaceMembersResponseItem);
 
 /**
  * @summary List participations for a space
@@ -2383,7 +2510,6 @@ export const ListSpaceScheduledSendsResponseItem = zod.object({
   id: zod.string().uuid(),
   spaceId: zod.string().uuid(),
   spaceLetterId: zod.string().uuid(),
-  slotId: zod.string().uuid().nullish(),
   scheduledAt: zod.date(),
   status: zod.enum(["PENDING", "SENT", "CANCELLED", "FAILED"]),
   sentAt: zod.date().nullish(),
@@ -2425,7 +2551,6 @@ export const UpdateSpaceScheduledSendResponse = zod.object({
   id: zod.string().uuid(),
   spaceId: zod.string().uuid(),
   spaceLetterId: zod.string().uuid(),
-  slotId: zod.string().uuid().nullish(),
   scheduledAt: zod.date(),
   status: zod.enum(["PENDING", "SENT", "CANCELLED", "FAILED"]),
   sentAt: zod.date().nullish(),
@@ -2453,7 +2578,12 @@ export const GetSpaceByInviteCodeResponse = zod
     defaultCenterCount: zod.number(),
     status: zod.enum(["RECRUITING", "ACTIVE", "ARCHIVED"]),
     creatorId: zod.string().uuid(),
-    inviteCode: zod.string().nullish(),
+    inviteCode: zod
+      .string()
+      .nullish()
+      .describe(
+        '한글 형용사+명사 조합 초대 코드 (예: \"파란하늘\"). 공간 생성 시 자동 배정.',
+      ),
     createdAt: zod.date(),
     updatedAt: zod.date(),
   })
@@ -2489,7 +2619,12 @@ export const GetSpaceJoinContextResponse = zod.object({
       defaultCenterCount: zod.number(),
       status: zod.enum(["RECRUITING", "ACTIVE", "ARCHIVED"]),
       creatorId: zod.string().uuid(),
-      inviteCode: zod.string().nullish(),
+      inviteCode: zod
+        .string()
+        .nullish()
+        .describe(
+          '한글 형용사+명사 조합 초대 코드 (예: \"파란하늘\"). 공간 생성 시 자동 배정.',
+        ),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     })
@@ -2567,7 +2702,12 @@ export const ListUserSpaceInvitationsResponseItem = zod.object({
     defaultCenterCount: zod.number(),
     status: zod.enum(["RECRUITING", "ACTIVE", "ARCHIVED"]),
     creatorId: zod.string().uuid(),
-    inviteCode: zod.string().nullish(),
+    inviteCode: zod
+      .string()
+      .nullish()
+      .describe(
+        '한글 형용사+명사 조합 초대 코드 (예: \"파란하늘\"). 공간 생성 시 자동 배정.',
+      ),
     createdAt: zod.date(),
     updatedAt: zod.date(),
   }),
@@ -2920,10 +3060,96 @@ export const DeleteSendRecordParams = zod.object({
 });
 
 /**
+ * Returns the authenticated user's own thoughts ordered by cosine similarity to the given thought's dense embedding. Excludes the source thought itself. Returns an empty array if the source thought has no embedding.
+ * @summary Get similar thoughts by vector cosine similarity
+ */
+export const GetSimilarThoughtsParams = zod.object({
+  id: zod.coerce.string().uuid(),
+});
+
+export const getSimilarThoughtsQueryLimitDefault = 20;
+
+export const GetSimilarThoughtsQueryParams = zod.object({
+  limit: zod.coerce
+    .number()
+    .default(getSimilarThoughtsQueryLimitDefault)
+    .describe("Maximum number of results to return"),
+});
+
+export const GetSimilarThoughtsResponseItem = zod.object({
+  id: zod.string().uuid(),
+  authorId: zod.string().uuid(),
+  content: zod.string().nullish(),
+  createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
+  sourceArticleId: zod.string().uuid().nullish(),
+  createdAt: zod.date(),
+  updatedAt: zod.date(),
+});
+export const GetSimilarThoughtsResponse = zod.array(
+  GetSimilarThoughtsResponseItem,
+);
+
+/**
+ * Returns thoughts belonging to the authenticated user. Identity is taken from the auth token. Optionally filtered by sourceArticleId.
+ * @summary List thoughts for the authenticated user
+ */
+export const ListThoughtsQueryParams = zod.object({
+  sourceArticleId: zod.coerce
+    .string()
+    .uuid()
+    .optional()
+    .describe("Filter thoughts linked to a specific article"),
+});
+
+export const ListThoughtsResponseItem = zod.object({
+  id: zod.string().uuid(),
+  authorId: zod.string().uuid(),
+  content: zod.string().nullish(),
+  createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
+  sourceArticleId: zod.string().uuid().nullish(),
+  createdAt: zod.date(),
+  updatedAt: zod.date(),
+});
+export const ListThoughtsResponse = zod.array(ListThoughtsResponseItem);
+
+/**
  * @summary Create a thought (단상)
  */
 export const CreateThoughtBody = zod.object({
   content: zod.string(),
   createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
   sourceArticleId: zod.string().uuid().nullish(),
+});
+
+/**
+ * Given a target thought (단상) and a list of candidate thoughts, returns AI-generated connection analysis for each candidate: connection reason (r), mediating keywords (k), and highlight phrases (h). Uses OpenRouter Gemini Flash 1.5 with a fixed system prompt to enable automatic context caching.
+ * @summary Analyze AI connections between a target thought and candidate thoughts
+ */
+
+export const ExpandThoughtsBody = zod.object({
+  targetNote: zod.object({
+    id: zod.string(),
+    content: zod.string(),
+  }),
+  candidates: zod
+    .array(
+      zod.object({
+        id: zod.string(),
+        content: zod.string(),
+      }),
+    )
+    .min(1),
+});
+
+export const ExpandThoughtsResponse = zod.object({
+  results: zod.array(
+    zod.object({
+      id: zod.string(),
+      r: zod.string().describe("연결 이유 (connection reason)"),
+      k: zod.array(zod.string()).describe("매개 키워드 (mediating keywords)"),
+      h: zod
+        .array(zod.string())
+        .describe("하이라이트 어구 (highlight phrases from candidate)"),
+    }),
+  ),
 });

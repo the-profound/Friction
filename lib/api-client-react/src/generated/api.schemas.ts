@@ -597,6 +597,7 @@ export interface SpaceListItem {
   defaultCenterCount: number;
   status: SpaceListItemStatus;
   creatorId: string;
+  /** 한글 형용사+명사 조합 초대 코드 (예: "파란하늘"). 공간 생성 시 자동 배정. */
   inviteCode?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -645,6 +646,7 @@ export interface Space {
   defaultCenterCount: number;
   status: SpaceStatus;
   creatorId: string;
+  /** 한글 형용사+명사 조합 초대 코드 (예: "파란하늘"). 공간 생성 시 자동 배정. */
   inviteCode?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -748,6 +750,41 @@ export interface UpdateSpaceRoundBody {
   title?: string | null;
   description?: string | null;
   status?: UpdateSpaceRoundBodyStatus;
+}
+
+export interface SpaceMember {
+  userId: string;
+  nickname?: string | null;
+  role: string;
+  status: string;
+}
+
+export interface SpaceRoundSlotWithUser {
+  id: string;
+  spaceRoundId: string;
+  assignedUserId: string;
+  slotOrder: number;
+  /** ISO date string (YYYY-MM-DD), null if not set */
+  scheduledDate?: string | null;
+  assignedUserNickname?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateSpaceRoundSlotBody {
+  assignedUserId: string;
+  /** @minimum 0 */
+  slotOrder?: number;
+  /** ISO date string (YYYY-MM-DD) */
+  scheduledDate?: string | null;
+}
+
+export interface UpdateSpaceRoundSlotBody {
+  assignedUserId?: string;
+  /** @minimum 0 */
+  slotOrder?: number;
+  /** ISO date string (YYYY-MM-DD) */
+  scheduledDate?: string | null;
 }
 
 export type SpaceParticipationRole =
@@ -1005,6 +1042,51 @@ export interface SpaceJoinContext {
   codeRequest?: SpaceCodeRequest | null;
 }
 
+export type ThoughtCreatedFrom =
+  (typeof ThoughtCreatedFrom)[keyof typeof ThoughtCreatedFrom];
+
+export const ThoughtCreatedFrom = {
+  quoted: "quoted",
+  question: "question",
+  reading: "reading",
+  direct: "direct",
+} as const;
+
+export interface Thought {
+  id: string;
+  authorId: string;
+  content?: string | null;
+  createdFrom: ThoughtCreatedFrom;
+  sourceArticleId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ThoughtNote {
+  id: string;
+  content: string;
+}
+
+export interface ThoughtExpansionResult {
+  id: string;
+  /** 연결 이유 (connection reason) */
+  r: string;
+  /** 매개 키워드 (mediating keywords) */
+  k: string[];
+  /** 하이라이트 어구 (highlight phrases from candidate) */
+  h: string[];
+}
+
+export interface ExpandThoughtsBody {
+  targetNote: ThoughtNote;
+  /** @minItems 1 */
+  candidates: ThoughtNote[];
+}
+
+export interface ExpandThoughtsResponse {
+  results: ThoughtExpansionResult[];
+}
+
 export interface SpellCheckBody {
   /** Markdown text to check */
   text: string;
@@ -1035,15 +1117,11 @@ export interface SpellCheckResponse {
   error?: string | null;
 }
 
-export type GetSimilarThoughtsParams = {
-  /** Maximum number of results to return */
-  limit?: number;
-};
-
-export type ListThoughtsParams = {
-  /** Filter thoughts linked to a specific article */
-  sourceArticleId?: string;
-};
+export interface CreateThoughtBody {
+  content: string;
+  createdFrom: ThoughtCreatedFrom;
+  sourceArticleId?: string | null;
+}
 
 export type ListArticlesParams = {
   authorId?: string;
@@ -1168,50 +1246,16 @@ export type ListSendRecordsParams = {
   senderId: string;
 };
 
-export type ThoughtCreatedFrom = "quoted" | "question" | "reading" | "direct";
-
-export interface Thought {
-  id: string;
-  authorId: string;
-  content?: string | null;
-  createdFrom: ThoughtCreatedFrom;
-  sourceArticleId?: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface CreateThoughtBody {
-  content: string;
-  createdFrom: ThoughtCreatedFrom;
-  sourceArticleId?: string | null;
-}
-
-export type SpaceRoundSlotWithUser = {
-  id: string;
-  spaceRoundId: string;
-  assignedUserId: string;
-  slotOrder: number;
-  scheduledDate?: string | null;
-  assignedUserNickname?: string | null;
-  createdAt: string;
-  updatedAt: string;
+export type GetSimilarThoughtsParams = {
+  /**
+   * Maximum number of results to return
+   */
+  limit?: number;
 };
 
-export type CreateSpaceRoundSlotBody = {
-  assignedUserId: string;
-  slotOrder?: number;
-  scheduledDate?: string | null;
-};
-
-export type UpdateSpaceRoundSlotBody = {
-  assignedUserId?: string;
-  slotOrder?: number;
-  scheduledDate?: string | null;
-};
-
-export type SpaceMember = {
-  userId: string;
-  nickname: string | null;
-  role: string;
-  status: string;
+export type ListThoughtsParams = {
+  /**
+   * Filter thoughts linked to a specific article
+   */
+  sourceArticleId?: string;
 };

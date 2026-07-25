@@ -2518,6 +2518,46 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /thoughts/expand:
+    post:
+      operationId: expandThoughts
+      tags: [thoughts]
+      summary: Analyze AI connections between a target thought and candidate thoughts
+      description: "Given a target thought (단상) and a list of candidate thoughts, returns AI-generated connection analysis for each candidate: connection reason (r), mediating keywords (k), and highlight phrases (h). Uses OpenRouter Gemini Flash 1.5 with a fixed system prompt to enable automatic context caching."
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExpandThoughtsBody"
+      responses:
+        "200":
+          description: Thought expansion analysis results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExpandThoughtsResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: AI service error or OPENROUTER_API_KEY not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   parameters:
     IdPath:
@@ -3530,7 +3570,7 @@ components:
         inviteCode:
           type: string
           nullable: true
-          description: 한글 형용사+명사 조합 초대 코드 (예: "파란하늘"). 공간 생성 시 자동 배정.
+          description: '한글 형용사+명사 조합 초대 코드 (예: "파란하늘"). 공간 생성 시 자동 배정.'
         createdAt:
           type: string
           format: date-time
@@ -3603,7 +3643,7 @@ components:
         inviteCode:
           type: string
           nullable: true
-          description: 한글 형용사+명사 조합 초대 코드 (예: "파란하늘"). 공간 생성 시 자동 배정.
+          description: '한글 형용사+명사 조합 초대 코드 (예: "파란하늘"). 공간 생성 시 자동 배정.'
         createdAt:
           type: string
           format: date-time
@@ -4219,6 +4259,56 @@ components:
           format: date-time
       required: [id, authorId, createdFrom, createdAt, updatedAt]
 
+    ThoughtNote:
+      type: object
+      properties:
+        id:
+          type: string
+        content:
+          type: string
+      required: [id, content]
+
+    ThoughtExpansionResult:
+      type: object
+      properties:
+        id:
+          type: string
+        r:
+          type: string
+          description: 연결 이유 (connection reason)
+        k:
+          type: array
+          items:
+            type: string
+          description: 매개 키워드 (mediating keywords)
+        h:
+          type: array
+          items:
+            type: string
+          description: 하이라이트 어구 (highlight phrases from candidate)
+      required: [id, r, k, h]
+
+    ExpandThoughtsBody:
+      type: object
+      properties:
+        targetNote:
+          $ref: "#/components/schemas/ThoughtNote"
+        candidates:
+          type: array
+          items:
+            $ref: "#/components/schemas/ThoughtNote"
+          minItems: 1
+      required: [targetNote, candidates]
+
+    ExpandThoughtsResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/ThoughtExpansionResult"
+      required: [results]
+
     # ─── SpellCheck ─────────────────────────────────
     SpellCheckBody:
       type: object
@@ -4259,37 +4349,6 @@ components:
           type: string
           nullable: true
       required: []
-
-    # ─── Thoughts ─────────────────────────────────
-    ThoughtCreatedFrom:
-      type: string
-      enum: [quoted, question, reading, direct]
-
-    Thought:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        authorId:
-          type: string
-          format: uuid
-        content:
-          type: string
-          nullable: true
-        sourceArticleId:
-          type: string
-          format: uuid
-          nullable: true
-        createdFrom:
-          $ref: "#/components/schemas/ThoughtCreatedFrom"
-        createdAt:
-          type: string
-          format: date-time
-        updatedAt:
-          type: string
-          format: date-time
-      required: [id, authorId, createdFrom, createdAt, updatedAt]
 
     CreateThoughtBody:
       type: object
