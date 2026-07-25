@@ -311,14 +311,18 @@ export default function ReadScreen() {
   // 카드 원래 위치는 가정하지 않고 measureInWindow 실측값(cardWindowTop)을 쓴다.
   const sheetEffectiveHeightAnim = useRef(new RNAnimated.Value(0)).current;
 
-  // ── Native-driver card transform values ──────────────────────────────────
+  // ── Reanimated SharedValues for card transform (UI-thread, no JS→bridge) ──
   // sheetEffectiveHeightAnim is non-native (drives outerHeight resize).
-  // Interpolating transforms directly from a non-native value causes the GPU
-  // to scale a JS-side bitmap → blurry result. Instead we listen to the
-  // non-native value, compute the interpolation in JS, and push the result
-  // into separate Animated.Values whose transforms RN can GPU-composite.
-  const cardScaleAnim = useRef(new RNAnimated.Value(1)).current;
-  const cardTranslateYAnim = useRef(new RNAnimated.Value(0)).current;
+  // Previously we bridged its listener into two RNAnimated.Values, but those
+  // are also non-native so transforms still went JS→bridge and caused the GPU
+  // to rasterize the WebView at the scaled bitmap size → blurry text/images.
+  //
+  // Fix: drive transform from Reanimated SharedValues. The addListener fires on
+  // the JS thread (unavoidable — sheetEffectiveHeightAnim is non-native), but
+  // setting a SharedValue from JS is cheap and the actual Core Animation update
+  // happens on the UI thread via useAnimatedStyle, bypassing the JS→bridge hop.
+  const cardScaleSV = useSharedValue(1);
+  const cardTranslateYSV = useSharedValue(0);
 
   // Refs so the addListener closure always sees the latest layout params
   // without needing to recreate the listener on every layout change.
@@ -341,7 +345,7 @@ export default function ReadScreen() {
     };
   }, [screenHeight, insets.top, layout.frameHeight, cardWindowTop]);
 
-  // Sync sheetEffectiveHeightAnim → cardScaleAnim / cardTranslateYAnim
+  // Sync sheetEffectiveHeightAnim → cardScaleSV / cardTranslateYSV
   //
   // 시트 높이를 실시간으로 받아 카드 크기·위치를 직접 계산.
   // 고정 목표값을 보간하지 않으므로 50% / 65% / full 어느 단계든
@@ -356,8 +360,8 @@ export default function ReadScreen() {
     const sub = sheetEffectiveHeightAnim.addListener(({ value }) => {
       const { availTop, frameHeight, cardCenterY, screenHeight: sh } = cardAnimParamsRef.current;
       if (value <= 0 || frameHeight <= 0) {
-        cardScaleAnim.setValue(1);
-        cardTranslateYAnim.setValue(0);
+        cardScaleSV.value = 1;
+        cardTranslateYSV.value = 0;
         return;
       }
       const sheetTopY   = sh - value;
@@ -369,27 +373,29 @@ export default function ReadScreen() {
         // 카드가 축소 없이 들어감 — rest 위치가 시트와 겹치는 만큼만 위로 이동
         // overlap → 0 이 되면 translateY = 0 (원래 위치)으로 자연 복귀
         const overlap = Math.max(0, restBottom - availBottom);
-        cardScaleAnim.setValue(1);
-        cardTranslateYAnim.setValue(-overlap);
+        cardScaleSV.value = 1;
+        cardTranslateYSV.value = -overlap;
         return;
       }
 
       // 카드를 가용 영역에 맞춰 축소 + 중앙 정렬
       const scale   = availHeight / frameHeight;
       const centerY = (availTop + availBottom) / 2;
-      cardScaleAnim.setValue(scale);
-      cardTranslateYAnim.setValue(centerY - cardCenterY);
+      cardScaleSV.value = scale;
+      cardTranslateYSV.value = centerY - cardCenterY;
     });
     return () => sheetEffectiveHeightAnim.removeListener(sub);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sheetEffectiveHeightAnim]);
 
-  const pageSheetAnimStyle = {
+  // useAnimatedStyle → UI 스레드에서 직접 Core Animation에 반영
+  // (JS→bridge 경유 없이 GPU composite — WebView 래스터화 해상도 유지)
+  const pageSheetAnimStyle = useAnimatedStyle(() => ({
     transform: [
-      { translateY: cardTranslateYAnim },
-      { scale: cardScaleAnim },
+      { translateY: cardTranslateYSV.value },
+      { scale: cardScaleSV.value },
     ],
-  };
+  }));
 
   // Entry/exit black overlay animation — starts opaque (value=1) so the
   // reader "fades in" on mount, and fades back to opaque when exiting.
@@ -1712,7 +1718,7 @@ export default function ReadScreen() {
             {/* Card: shadow wrapper gives floating-paper feel */}
             {/* 측정용 래퍼 — transform 바깥이므로 measureInWindow가 원래 위치를 반환 */}
             <View ref={cardWrapRef} collapsable={false} onLayout={handleCardWrapLayout}>
-            <RNAnimated.View style={pageSheetAnimStyle}>
+            <Animated.View style={pageSheetAnimStyle}>
               <View
                 style={[
                   styles.readerShadowWrapper,
@@ -1788,10 +1794,14 @@ export default function ReadScreen() {
                         boxShadow: "0px 2px 10px rgba(0,0,0,0.13), 0px 8px 24px rgba(0,0,0,0.09)",
                       };
                       // Inner wrapper clips text/WebView content to card bounds.
+                      // overflow:"hidden" 제거 — slotContent가 WebView와 정확히
+                      // 같은 크기이므로 실질적 클리핑이 없다. scale transform 조상에
+                      // overflow:hidden(masksToBounds)이 걸리면 iOS가 합성 레이어를
+                      // 현재 시각적 크기(축소 비율) 기준으로 래스터화해 해상도가
+                      // 깨지는 원인이 된다 — 해당 속성을 제거해 이를 방지한다.
                       const slotContent = {
                         width: W,
                         height: H,
-                        overflow: "hidden" as const,
                         backgroundColor: ReaderTokens.bodyBg,
                       };
 
@@ -1962,7 +1972,7 @@ export default function ReadScreen() {
                 </View>
               </View>
               </View>
-            </RNAnimated.View>
+            </Animated.View>
             </View>
 
             {/* Progress bar below card — 메모 모드 진입/종료에 맞춰 fade in/out */}
