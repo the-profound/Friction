@@ -9,6 +9,7 @@
     "start": "node --enable-source-maps ./dist/index.mjs",
     "seed": "NODE_ENV=development node --enable-source-maps ./dist/seed-runner.mjs",
     "migrate:rounds-backfill": "tsx src/migrate-spaces-rounds-backfill.ts",
+    "backfill:embeddings": "tsx src/backfill-embeddings.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
