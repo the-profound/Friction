@@ -22,9 +22,10 @@ const CREATED_FROM_LABEL: Record<ThoughtCreatedFrom, string> = {
 interface ThoughtDetailModalProps {
   thought: Thought | null;
   onClose: () => void;
+  onRecommend?: (thought: Thought) => void;
 }
 
-function ThoughtDetailModal({ thought, onClose }: ThoughtDetailModalProps) {
+function ThoughtDetailModal({ thought, onClose, onRecommend }: ThoughtDetailModalProps) {
   const insets = useSafeAreaInsets();
 
   return (
@@ -55,6 +56,17 @@ function ThoughtDetailModal({ thought, onClose }: ThoughtDetailModalProps) {
         >
           <Text style={styles.content}>{thought?.content ?? ""}</Text>
         </ScrollView>
+        {onRecommend && thought && (
+          <View style={styles.footer}>
+            <TouchableOpacity
+              style={styles.recommendButton}
+              onPress={() => onRecommend(thought)}
+              hitSlop={8}
+            >
+              <Text style={styles.recommendText}>추천</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
     </BottomSheet>
   );
@@ -98,5 +110,22 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.zinc800,
     lineHeight: 24,
+  },
+  footer: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    paddingTop: 12,
+  },
+  recommendButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 8,
+    backgroundColor: Colors.zinc100,
+  },
+  recommendText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: Colors.zinc700,
+    fontFamily: "Pretendard-SemiBold",
   },
 });

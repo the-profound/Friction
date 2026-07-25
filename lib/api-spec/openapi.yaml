@@ -2428,6 +2428,43 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
   # ─── Thoughts ──────────────────────────────────────
+  /thoughts/{id}/similar:
+    get:
+      operationId: getSimilarThoughts
+      tags: [thoughts]
+      summary: Get similar thoughts by vector cosine similarity
+      description: Returns the authenticated user's own thoughts ordered by cosine similarity to the given thought's dense embedding. Excludes the source thought itself. Returns an empty array if the source thought has no embedding.
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+          description: Maximum number of results to return
+      responses:
+        "200":
+          description: Similar thoughts list ordered by cosine similarity descending
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Thought"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Thought not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /thoughts:
     get:
       operationId: listThoughts

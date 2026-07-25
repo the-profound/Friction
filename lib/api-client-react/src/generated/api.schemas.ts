@@ -1035,6 +1035,11 @@ export interface SpellCheckResponse {
   error?: string | null;
 }
 
+export type GetSimilarThoughtsParams = {
+  /** Maximum number of results to return */
+  limit?: number;
+};
+
 export type ListThoughtsParams = {
   /** Filter thoughts linked to a specific article */
   sourceArticleId?: string;

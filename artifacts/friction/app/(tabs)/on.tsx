@@ -17,6 +17,7 @@ import { PageHeader } from "@/components/NavBar/PageHeader";
 import ArticleListItem from "@/components/ArticleListItem/ArticleListItem";
 import ThoughtListItem from "@/components/ThoughtListItem/ThoughtListItem";
 import ThoughtDetailModal from "@/components/ThoughtDetailModal/ThoughtDetailModal";
+import SimilarThoughtPopup from "@/components/SimilarThoughtPopup/SimilarThoughtPopup";
 import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import RefreshableEmpty from "@/components/RefreshableEmpty";
@@ -116,6 +117,7 @@ export default function OnScreen() {
   const rowRefs = useRef<Map<string, SwipeableRowHandle>>(new Map());
 
   const [selectedThought, setSelectedThought] = useState<Thought | null>(null);
+  const [similarPopupThoughtId, setSimilarPopupThoughtId] = useState<string | null>(null);
 
   const { data: articles, isLoading, refetch, isRefetching } = useListArticles({
     authorId: userId,
@@ -944,6 +946,16 @@ export default function OnScreen() {
       <ThoughtDetailModal
         thought={selectedThought}
         onClose={() => setSelectedThought(null)}
+        onRecommend={(t) => {
+          setSelectedThought(null);
+          setSimilarPopupThoughtId(t.id);
+        }}
+      />
+
+      <SimilarThoughtPopup
+        visible={similarPopupThoughtId !== null}
+        thoughtId={similarPopupThoughtId}
+        onClose={() => setSimilarPopupThoughtId(null)}
       />
     </View>
   );

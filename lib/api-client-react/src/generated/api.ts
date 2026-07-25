@@ -49,6 +49,7 @@ import type {
   InboxItem,
   ListArticlesParams,
   ListInboxParams,
+  GetSimilarThoughtsParams,
   ListThoughtsParams,
   ListMyCollectionsParams,
   ListMySpaceCodeRequestsParams,
@@ -9498,6 +9499,95 @@ export function useListSpaceMembers<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getListSpaceMembersQueryOptions(id, options);
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+// ─── Similar Thoughts ──────────────────────────────────────────────────────
+
+export const getSimilarThoughtsUrl = (id: string, params?: GetSimilarThoughtsParams) => {
+  const url = new URL(`/api/thoughts/${id}/similar`, "http://localhost");
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      url.searchParams.append(key, String(value));
+    }
+  });
+  return url.pathname + (url.search ? url.search : "");
+};
+
+export const getSimilarThoughts = async (
+  id: string,
+  params?: GetSimilarThoughtsParams,
+  options?: RequestInit,
+): Promise<Thought[]> => {
+  return customFetch<Thought[]>(getSimilarThoughtsUrl(id, params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetSimilarThoughtsQueryKey = (id: string, params?: GetSimilarThoughtsParams) => {
+  return [`/api/thoughts/${id}/similar`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetSimilarThoughtsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSimilarThoughts>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  params?: GetSimilarThoughtsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getSimilarThoughts>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getGetSimilarThoughtsQueryKey(id, params);
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getSimilarThoughts>>> = ({
+    signal,
+  }) => getSimilarThoughts(id, params, { signal, ...requestOptions });
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSimilarThoughts>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetSimilarThoughtsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getSimilarThoughts>>
+>;
+export type GetSimilarThoughtsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get similar thoughts by vector cosine similarity
+ */
+export function useGetSimilarThoughts<
+  TData = Awaited<ReturnType<typeof getSimilarThoughts>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  params?: GetSimilarThoughtsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getSimilarThoughts>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetSimilarThoughtsQueryOptions(id, params, options);
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
   };

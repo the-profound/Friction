@@ -1,11 +1,58 @@
 import { Router, type IRouter } from "express";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { db, thoughtsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth";
 import { CreateThoughtBody } from "@workspace/api-zod";
 import { generateDenseEmbedding, generateSparseEmbedding } from "../lib/embeddings";
 
 const router: IRouter = Router();
+
+router.get("/thoughts/:id/similar", requireAuth, async (req, res) => {
+  const userId = req.user!.id;
+  const { id } = req.params;
+  const limit = Math.max(1, Math.min(parseInt(String(req.query.limit ?? "20"), 10) || 20, 100));
+
+  const [source] = await db
+    .select({ id: thoughtsTable.id, textEmbeddingDense: thoughtsTable.textEmbeddingDense })
+    .from(thoughtsTable)
+    .where(and(eq(thoughtsTable.id, id), eq(thoughtsTable.authorId, userId), isNull(thoughtsTable.deletedAt)));
+
+  if (!source) {
+    res.status(404).json({ error: "Thought not found" });
+    return;
+  }
+
+  if (!source.textEmbeddingDense) {
+    res.json([]);
+    return;
+  }
+
+  const vectorLiteral = `[${source.textEmbeddingDense.join(",")}]`;
+
+  const similar = await db
+    .select({
+      id: thoughtsTable.id,
+      authorId: thoughtsTable.authorId,
+      content: thoughtsTable.content,
+      createdFrom: thoughtsTable.createdFrom,
+      sourceArticleId: thoughtsTable.sourceArticleId,
+      createdAt: thoughtsTable.createdAt,
+      updatedAt: thoughtsTable.updatedAt,
+    })
+    .from(thoughtsTable)
+    .where(
+      and(
+        eq(thoughtsTable.authorId, userId),
+        isNull(thoughtsTable.deletedAt),
+        ne(thoughtsTable.id, id),
+        isNotNull(thoughtsTable.textEmbeddingDense),
+      )
+    )
+    .orderBy(sql`text_embedding_dense <=> ${vectorLiteral}::vector`)
+    .limit(limit);
+
+  res.json(similar);
+});
 
 router.get("/thoughts", requireAuth, async (req, res) => {
   const userId = req.user!.id;
