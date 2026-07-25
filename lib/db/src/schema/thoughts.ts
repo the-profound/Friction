@@ -1,4 +1,4 @@
-import { customType, integer, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { customType, integer, jsonb, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 import { articlesTable } from "./articles";
 import { usersTable } from "./users";
@@ -44,7 +44,8 @@ export const thoughtsTable = pgTable("thoughts", {
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   recommendedAtWidget: timestamp("recommended_at_widget", { withTimezone: true }),
   recommendedTimesWidget: integer("recommended_times_widget").notNull().default(0),
-  textEmbedding: vector("text_embedding", 1024),
+  textEmbeddingDense: vector("text_embedding_dense", 1024),
+  textEmbeddingSparse: jsonb("text_embedding_sparse").$type<Record<string, number>>(),
   createdFrom: thoughtCreatedFromEnum("created_from").notNull(),
 });
 

@@ -3,7 +3,7 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 import { db, thoughtsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth";
 import { CreateThoughtBody } from "@workspace/api-zod";
-import { generateEmbedding } from "../lib/embeddings";
+import { generateDenseEmbedding, generateSparseEmbedding } from "../lib/embeddings";
 
 const router: IRouter = Router();
 
@@ -53,21 +53,33 @@ router.post("/thoughts", requireAuth, async (req, res) => {
   res.status(201).json(thought);
 
   if (content) {
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
-      console.warn("[embeddings] OPENROUTER_API_KEY is not set — skipping embedding for thought", thought.id);
-    } else {
-      generateEmbedding(content)
-        .then((vector) =>
-          db
-            .update(thoughtsTable)
-            .set({ textEmbedding: vector })
-            .where(eq(thoughtsTable.id, thought.id))
-        )
-        .catch((err) => {
-          console.error("[embeddings] Failed to generate/store embedding for thought", thought.id, err);
-        });
-    }
+    const denseTask = process.env.OPENROUTER_API_KEY
+      ? generateDenseEmbedding(content)
+          .then((vector) =>
+            db
+              .update(thoughtsTable)
+              .set({ textEmbeddingDense: vector })
+              .where(eq(thoughtsTable.id, thought.id))
+          )
+          .catch((err) => {
+            console.error("[embeddings/dense] Failed for thought", thought.id, err);
+          })
+      : Promise.resolve(
+          console.warn("[embeddings/dense] OPENROUTER_API_KEY not set — skipping for thought", thought.id)
+        );
+
+    const sparseTask = generateSparseEmbedding(content)
+      .then((sparse) =>
+        db
+          .update(thoughtsTable)
+          .set({ textEmbeddingSparse: sparse })
+          .where(eq(thoughtsTable.id, thought.id))
+      )
+      .catch((err) => {
+        console.error("[embeddings/sparse] Failed for thought", thought.id, err);
+      });
+
+    Promise.allSettled([denseTask, sparseTask]);
   }
 });
 

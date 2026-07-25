@@ -1,6 +1,6 @@
-import { isNull, eq } from "drizzle-orm";
+import { and, isNotNull, isNull, eq } from "drizzle-orm";
 import { db, thoughtsTable } from "@workspace/db";
-import { generateDenseEmbedding } from "./lib/embeddings.js";
+import { generateSparseEmbedding } from "./lib/embeddings.js";
 
 const BATCH_SIZE = 20;
 const DELAY_MS = 500;
@@ -11,17 +11,17 @@ async function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function generateEmbeddingWithRetry(
+async function generateSparseWithRetry(
   text: string,
   thoughtId: string
-): Promise<number[] | null> {
+): Promise<Record<string, number> | null> {
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      return await generateDenseEmbedding(text);
+      return await generateSparseEmbedding(text);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(
-        `  [시도 ${attempt}/${MAX_RETRIES}] 단상 ${thoughtId} 임베딩 실패: ${msg}`
+        `  [시도 ${attempt}/${MAX_RETRIES}] 단상 ${thoughtId} Sparse 임베딩 실패: ${msg}`
       );
       if (attempt < MAX_RETRIES) {
         const delay = RETRY_DELAY_MS * attempt;
@@ -34,7 +34,7 @@ async function generateEmbeddingWithRetry(
 }
 
 async function main() {
-  console.log("=== 단상 Dense 임베딩 백필 시작 ===");
+  console.log("=== 단상 Sparse 임베딩 백필 시작 ===");
   console.log(
     `배치 크기: ${BATCH_SIZE}, 배치 간 딜레이: ${DELAY_MS}ms, 최대 재시도: ${MAX_RETRIES}회`
   );
@@ -43,14 +43,19 @@ async function main() {
   const allThoughts = await db
     .select({ id: thoughtsTable.id, content: thoughtsTable.content })
     .from(thoughtsTable)
-    .where(isNull(thoughtsTable.textEmbeddingDense));
+    .where(
+      and(
+        isNull(thoughtsTable.textEmbeddingSparse),
+        isNotNull(thoughtsTable.content)
+      )
+    );
 
   const withContent = allThoughts.filter(
     (t: { id: string; content: string | null }) => t.content && t.content.trim().length > 0
   ) as Array<{ id: string; content: string }>;
   const skipped = allThoughts.length - withContent.length;
 
-  console.log(`text_embedding_dense가 NULL인 단상: ${allThoughts.length}개`);
+  console.log(`text_embedding_sparse가 NULL인 단상: ${allThoughts.length}개`);
   console.log(`content가 있는 단상 (처리 대상): ${withContent.length}개`);
   console.log(`content가 없는 단상 (건너뜀): ${skipped}개`);
   console.log("");
@@ -73,16 +78,16 @@ async function main() {
 
     for (const thought of batch) {
       const content = thought.content!;
-      const embedding = await generateEmbeddingWithRetry(content, thought.id);
+      const sparse = await generateSparseWithRetry(content, thought.id);
 
-      if (embedding !== null) {
+      if (sparse !== null) {
         await db
           .update(thoughtsTable)
-          .set({ textEmbeddingDense: embedding })
+          .set({ textEmbeddingSparse: sparse })
           .where(eq(thoughtsTable.id, thought.id));
 
         processed++;
-        console.log(`  ✓ ${thought.id} (${content.length}자)`);
+        console.log(`  ✓ ${thought.id} (${content.length}자, ${Object.keys(sparse).length}개 토큰)`);
       } else {
         failed++;
         failedIds.push(thought.id);
@@ -97,7 +102,7 @@ async function main() {
   }
 
   console.log("");
-  console.log("=== 백필 완료 ===");
+  console.log("=== Sparse 백필 완료 ===");
   console.log(`성공: ${processed}개`);
   console.log(`실패: ${failed}개`);
   if (failedIds.length > 0) {
