@@ -9,6 +9,7 @@ import {
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
+import SimilarThoughtPopup from "@/components/SimilarThoughtPopup/SimilarThoughtPopup";
 import { Colors, Typography, Spacing } from "../../constants/tokens";
 import type { Thought, ThoughtCreatedFrom } from "@workspace/api-client-react";
 
@@ -23,9 +24,17 @@ interface ThoughtDetailModalProps {
   thought: Thought | null;
   onClose: () => void;
   onRecommend?: (thought: Thought) => void;
+  similarPopupThoughtId?: string | null;
+  onCloseSimilarPopup?: () => void;
 }
 
-function ThoughtDetailModal({ thought, onClose, onRecommend }: ThoughtDetailModalProps) {
+function ThoughtDetailModal({
+  thought,
+  onClose,
+  onRecommend,
+  similarPopupThoughtId,
+  onCloseSimilarPopup,
+}: ThoughtDetailModalProps) {
   const insets = useSafeAreaInsets();
 
   return (
@@ -35,6 +44,13 @@ function ThoughtDetailModal({ thought, onClose, onRecommend }: ThoughtDetailModa
       snapPoints={[0.65]}
       enableDragDown
       dismissable
+      overlay={
+        <SimilarThoughtPopup
+          visible={similarPopupThoughtId != null}
+          thoughtId={similarPopupThoughtId ?? null}
+          onClose={onCloseSimilarPopup ?? (() => {})}
+        />
+      }
     >
       <View style={[styles.container, { paddingBottom: insets.bottom + 16 }]}>
         <View style={styles.header}>

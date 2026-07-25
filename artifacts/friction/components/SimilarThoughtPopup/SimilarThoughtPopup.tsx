@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import {
-  Modal,
   View,
   Text,
   TouchableOpacity,
@@ -51,97 +50,93 @@ export default function SimilarThoughtPopup({ visible, thoughtId, onClose }: Sim
     }
   }, [visible, thoughtId]);
 
+  if (!visible) return null;
+
   const current = similar?.[index] ?? null;
   const isLast = !similar || index >= similar.length - 1;
   const isEmpty = !isLoading && (!similar || similar.length === 0);
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-      statusBarTranslucent
-    >
-      <View style={styles.overlay}>
-        <View
-          style={[
-            styles.popup,
-            { paddingBottom: Math.max(insets.bottom, 16) },
-          ]}
-        >
-          {isLoading ? (
-            <View style={styles.centerState}>
-              <ActivityIndicator size="small" color={Colors.zinc400} />
-            </View>
-          ) : isEmpty ? (
-            <View style={styles.centerState}>
-              <Text style={styles.emptyTitle}>비슷한 단상이 없어요</Text>
-              <Text style={styles.emptySubtitle}>
-                단상이 더 쌓이면 유사한 생각을{"\n"}추천해드릴게요
+    <View style={styles.overlay}>
+      <TouchableOpacity style={StyleSheet.absoluteFill} onPress={onClose} activeOpacity={1} />
+      <View
+        style={[
+          styles.popup,
+          { paddingBottom: Math.max(insets.bottom, 16) },
+        ]}
+      >
+        {isLoading ? (
+          <View style={styles.centerState}>
+            <ActivityIndicator size="small" color={Colors.zinc400} />
+          </View>
+        ) : isEmpty ? (
+          <View style={styles.centerState}>
+            <Text style={styles.emptyTitle}>비슷한 단상이 없어요</Text>
+            <Text style={styles.emptySubtitle}>
+              단상이 더 쌓이면 유사한 생각을{"\n"}추천해드릴게요
+            </Text>
+          </View>
+        ) : (
+          <>
+            <View style={styles.metaRow}>
+              {current && (
+                <>
+                  <View style={styles.tag}>
+                    <Text style={styles.tagText} allowFontScaling={false}>
+                      {CREATED_FROM_LABEL[current.createdFrom]}
+                    </Text>
+                  </View>
+                  <Text style={styles.dateText} allowFontScaling={false}>
+                    {formatDate(current.createdAt)}
+                  </Text>
+                </>
+              )}
+              <Text style={styles.counterText} allowFontScaling={false}>
+                {index + 1} / {similar?.length ?? 0}
               </Text>
             </View>
-          ) : (
-            <>
-              <View style={styles.metaRow}>
-                {current && (
-                  <>
-                    <View style={styles.tag}>
-                      <Text style={styles.tagText} allowFontScaling={false}>
-                        {CREATED_FROM_LABEL[current.createdFrom]}
-                      </Text>
-                    </View>
-                    <Text style={styles.dateText} allowFontScaling={false}>
-                      {formatDate(current.createdAt)}
-                    </Text>
-                  </>
-                )}
-                <Text style={styles.counterText} allowFontScaling={false}>
-                  {index + 1} / {similar?.length ?? 0}
-                </Text>
-              </View>
-              <ScrollView
-                style={styles.scrollView}
-                contentContainerStyle={styles.scrollContent}
-                showsVerticalScrollIndicator={false}
-              >
-                <Text style={styles.content}>{current?.content ?? ""}</Text>
-              </ScrollView>
-            </>
-          )}
+            <ScrollView
+              style={styles.scrollView}
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+            >
+              <Text style={styles.content}>{current?.content ?? ""}</Text>
+            </ScrollView>
+          </>
+        )}
 
-          <View style={styles.buttonRow}>
-            <TouchableOpacity style={styles.exitButton} onPress={onClose}>
-              <Text style={styles.exitText}>나가기</Text>
+        <View style={styles.buttonRow}>
+          <TouchableOpacity style={styles.exitButton} onPress={onClose}>
+            <Text style={styles.exitText}>나가기</Text>
+          </TouchableOpacity>
+          {!isEmpty && (
+            <TouchableOpacity
+              style={[styles.nextButton, isLast && styles.nextButtonDisabled]}
+              onPress={() => {
+                if (!isLast) setIndex((i) => i + 1);
+              }}
+              disabled={isLast}
+            >
+              <Text style={[styles.nextText, isLast && styles.nextTextDisabled]}>
+                다음
+              </Text>
             </TouchableOpacity>
-            {!isEmpty && (
-              <TouchableOpacity
-                style={[styles.nextButton, isLast && styles.nextButtonDisabled]}
-                onPress={() => {
-                  if (!isLast) setIndex((i) => i + 1);
-                }}
-                disabled={isLast}
-              >
-                <Text style={[styles.nextText, isLast && styles.nextTextDisabled]}>
-                  다음
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          )}
         </View>
       </View>
-    </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   overlay: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.45)",
     justifyContent: "flex-end",
     alignItems: "center",
     paddingHorizontal: Spacing.screenPx,
     paddingBottom: 48,
+    zIndex: 9999,
   },
   popup: {
     width: "100%",

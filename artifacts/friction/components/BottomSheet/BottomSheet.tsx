@@ -26,6 +26,7 @@ interface BottomSheetProps {
   visible: boolean;
   onClose: () => void;
   children: React.ReactNode;
+  overlay?: React.ReactNode;
   title?: string;
   titleStyle?: TextStyle;
   snapPoints?: number[];
@@ -105,6 +106,7 @@ export default function BottomSheet({
   visible,
   onClose,
   children,
+  overlay,
   title,
   titleStyle,
   snapPoints = [0.4, 0.8],
@@ -333,6 +335,7 @@ export default function BottomSheet({
             {children}
           </View>
         </Animated.View>
+        {overlay}
       </View>
     </Modal>
   );

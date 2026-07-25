@@ -18,7 +18,6 @@ import { PageHeader } from "@/components/NavBar/PageHeader";
 import ArticleListItem from "@/components/ArticleListItem/ArticleListItem";
 import ThoughtListItem from "@/components/ThoughtListItem/ThoughtListItem";
 import ThoughtDetailModal from "@/components/ThoughtDetailModal/ThoughtDetailModal";
-import SimilarThoughtPopup from "@/components/SimilarThoughtPopup/SimilarThoughtPopup";
 import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import RefreshableEmpty from "@/components/RefreshableEmpty";
@@ -953,12 +952,8 @@ export default function OnScreen() {
         onRecommend={(t) => {
           setSimilarPopupThoughtId(t.id);
         }}
-      />
-
-      <SimilarThoughtPopup
-        visible={similarPopupThoughtId !== null}
-        thoughtId={similarPopupThoughtId}
-        onClose={() => setSimilarPopupThoughtId(null)}
+        similarPopupThoughtId={similarPopupThoughtId}
+        onCloseSimilarPopup={() => setSimilarPopupThoughtId(null)}
       />
     </View>
   );
