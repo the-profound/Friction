@@ -79,6 +79,7 @@ import type {
   RecentSavedCollectionResponse,
   SendArticleBody,
   SendRecordWithDetails,
+  SimilarThought,
   Space,
   SpaceCodeRequest,
   SpaceCodeRequestWithRequester,
@@ -9380,7 +9381,7 @@ export const useDeleteSendRecord = <
 };
 
 /**
- * Returns the authenticated user's own thoughts ordered by cosine similarity to the given thought's dense embedding. Excludes the source thought itself. Returns an empty array if the source thought has no embedding.
+ * Returns the authenticated user's own thoughts ordered by cosine similarity to the given thought's dense embedding. Excludes the source thought itself. Returns an empty array if the source thought has no embedding. Each item includes AI-generated r/k/h fields when analysis succeeds; fields are null on failure or when AI is unavailable.
  * @summary Get similar thoughts by vector cosine similarity
  */
 export const getGetSimilarThoughtsUrl = (
@@ -9406,8 +9407,8 @@ export const getSimilarThoughts = async (
   id: string,
   params?: GetSimilarThoughtsParams,
   options?: RequestInit,
-): Promise<Thought[]> => {
-  return customFetch<Thought[]>(getGetSimilarThoughtsUrl(id, params), {
+): Promise<SimilarThought[]> => {
+  return customFetch<SimilarThought[]>(getGetSimilarThoughtsUrl(id, params), {
     ...options,
     method: "GET",
   });

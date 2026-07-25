@@ -1062,6 +1062,15 @@ export interface Thought {
   updatedAt: string;
 }
 
+export type SimilarThought = Thought & {
+  /** 연결 이유 — AI가 생성한 추천 사유 문장 (null if AI failed or no connection) */
+  r?: string | null;
+  /** 매개 키워드 — 기준 단상에서 강조할 키워드 배열 (null if AI failed) */
+  k?: string[] | null;
+  /** 하이라이트 어구 — 추천 단상에서 강조할 키워드 배열 (null if AI failed) */
+  h?: string[] | null;
+};
+
 export interface ThoughtNote {
   id: string;
   content: string;

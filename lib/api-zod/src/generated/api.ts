@@ -3060,14 +3060,14 @@ export const DeleteSendRecordParams = zod.object({
 });
 
 /**
- * Returns the authenticated user's own thoughts ordered by cosine similarity to the given thought's dense embedding. Excludes the source thought itself. Returns an empty array if the source thought has no embedding.
+ * Returns the authenticated user's own thoughts ordered by cosine similarity to the given thought's dense embedding. Excludes the source thought itself. Returns an empty array if the source thought has no embedding. Each item includes AI-generated r/k/h fields when analysis succeeds; fields are null on failure or when AI is unavailable.
  * @summary Get similar thoughts by vector cosine similarity
  */
 export const GetSimilarThoughtsParams = zod.object({
   id: zod.coerce.string().uuid(),
 });
 
-export const getSimilarThoughtsQueryLimitDefault = 20;
+export const getSimilarThoughtsQueryLimitDefault = 15;
 
 export const GetSimilarThoughtsQueryParams = zod.object({
   limit: zod.coerce
@@ -3076,15 +3076,38 @@ export const GetSimilarThoughtsQueryParams = zod.object({
     .describe("Maximum number of results to return"),
 });
 
-export const GetSimilarThoughtsResponseItem = zod.object({
-  id: zod.string().uuid(),
-  authorId: zod.string().uuid(),
-  content: zod.string().nullish(),
-  createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
-  sourceArticleId: zod.string().uuid().nullish(),
-  createdAt: zod.date(),
-  updatedAt: zod.date(),
-});
+export const GetSimilarThoughtsResponseItem = zod
+  .object({
+    id: zod.string().uuid(),
+    authorId: zod.string().uuid(),
+    content: zod.string().nullish(),
+    createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
+    sourceArticleId: zod.string().uuid().nullish(),
+    createdAt: zod.date(),
+    updatedAt: zod.date(),
+  })
+  .and(
+    zod.object({
+      r: zod
+        .string()
+        .nullish()
+        .describe(
+          "연결 이유 — AI가 생성한 추천 사유 문장 (null if AI failed or no connection)",
+        ),
+      k: zod
+        .array(zod.string())
+        .nullish()
+        .describe(
+          "매개 키워드 — 기준 단상에서 강조할 키워드 배열 (null if AI failed)",
+        ),
+      h: zod
+        .array(zod.string())
+        .nullish()
+        .describe(
+          "하이라이트 어구 — 추천 단상에서 강조할 키워드 배열 (null if AI failed)",
+        ),
+    }),
+  );
 export const GetSimilarThoughtsResponse = zod.array(
   GetSimilarThoughtsResponseItem,
 );

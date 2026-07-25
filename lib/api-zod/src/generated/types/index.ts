@@ -84,6 +84,7 @@ export * from "./sendRecord";
 export * from "./sendRecordTargetType";
 export * from "./sendRecordWithDetails";
 export * from "./sendRecordWithDetailsTargetType";
+export * from "./similarThought";
 export * from "./space";
 export * from "./spaceCodeRequest";
 export * from "./spaceCodeRequestStatus";

@@ -11,10 +11,14 @@ const router: IRouter = Router();
 router.get("/thoughts/:id/similar", requireAuth, async (req, res) => {
   const userId = req.user!.id;
   const { id } = req.params;
-  const limit = Math.max(1, Math.min(parseInt(String(req.query.limit ?? "20"), 10) || 20, 100));
+  const limit = Math.max(1, Math.min(parseInt(String(req.query.limit ?? "15"), 10) || 15, 100));
 
   const [source] = await db
-    .select({ id: thoughtsTable.id, textEmbeddingDense: thoughtsTable.textEmbeddingDense })
+    .select({
+      id: thoughtsTable.id,
+      content: thoughtsTable.content,
+      textEmbeddingDense: thoughtsTable.textEmbeddingDense,
+    })
     .from(thoughtsTable)
     .where(and(eq(thoughtsTable.id, id), eq(thoughtsTable.authorId, userId), isNull(thoughtsTable.deletedAt)));
 
@@ -52,7 +56,40 @@ router.get("/thoughts/:id/similar", requireAuth, async (req, res) => {
     .orderBy(sql`text_embedding_dense <=> ${vectorLiteral}::vector`)
     .limit(limit);
 
-  res.json(similar);
+  if (similar.length === 0) {
+    res.json([]);
+    return;
+  }
+
+  const nullAnalysis = { r: null, k: null, h: null };
+  let analysisMap: Record<string, { r: string | null; k: string[] | null; h: string[] | null }> = {};
+
+  if (source.content && process.env.OPENROUTER_API_KEY) {
+    try {
+      const candidates = similar
+        .filter((s) => s.content != null)
+        .map((s) => ({ id: s.id, content: s.content! }));
+
+      if (candidates.length > 0) {
+        const results = await analyzeThoughtExpansion(
+          { id: source.id, content: source.content },
+          candidates,
+        );
+        for (const result of results) {
+          analysisMap[result.id] = { r: result.r, k: result.k, h: result.h };
+        }
+      }
+    } catch (err) {
+      req.log?.warn({ err }, "[thoughts/similar] AI analysis failed — returning null r/k/h");
+    }
+  }
+
+  const response = similar.map((s) => ({
+    ...s,
+    ...(analysisMap[s.id] ?? nullAnalysis),
+  }));
+
+  res.json(response);
 });
 
 router.get("/thoughts", requireAuth, async (req, res) => {

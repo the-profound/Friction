@@ -11,6 +11,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useGetSimilarThoughts } from "@workspace/api-client-react";
 import { Colors, Typography, Spacing } from "../../constants/tokens";
+import HighlightedText from "../HighlightedText/HighlightedText";
 import type { ThoughtCreatedFrom } from "@workspace/api-client-react";
 
 const CREATED_FROM_LABEL: Record<ThoughtCreatedFrom, string> = {
@@ -32,15 +33,21 @@ interface SimilarThoughtPopupProps {
   visible: boolean;
   thoughtId: string | null;
   onClose: () => void;
+  onHighlightChange?: (k: string[]) => void;
 }
 
-export default function SimilarThoughtPopup({ visible, thoughtId, onClose }: SimilarThoughtPopupProps) {
+export default function SimilarThoughtPopup({
+  visible,
+  thoughtId,
+  onClose,
+  onHighlightChange,
+}: SimilarThoughtPopupProps) {
   const insets = useSafeAreaInsets();
   const [index, setIndex] = useState(0);
 
   const { data: similar, isLoading } = useGetSimilarThoughts(
     thoughtId ?? "",
-    { limit: 20 },
+    { limit: 15 },
     { query: { enabled: visible && thoughtId !== null } }
   );
 
@@ -50,15 +57,34 @@ export default function SimilarThoughtPopup({ visible, thoughtId, onClose }: Sim
     }
   }, [visible, thoughtId]);
 
+  useEffect(() => {
+    if (!visible) {
+      onHighlightChange?.([]);
+      return;
+    }
+    const current = similar?.[index];
+    onHighlightChange?.(current?.k ?? []);
+  }, [visible, index, similar]);
+
   if (!visible) return null;
 
   const current = similar?.[index] ?? null;
   const isLast = !similar || index >= similar.length - 1;
   const isEmpty = !isLoading && (!similar || similar.length === 0);
 
+  const rText = current?.r ?? null;
+  const hKeywords = current?.h ?? null;
+
   return (
     <View style={styles.overlay}>
       <TouchableOpacity style={StyleSheet.absoluteFill} onPress={onClose} activeOpacity={1} />
+
+      {!isLoading && !isEmpty && rText ? (
+        <View style={styles.reasonBanner}>
+          <Text style={styles.reasonText} numberOfLines={2}>{rText}</Text>
+        </View>
+      ) : null}
+
       <View
         style={[
           styles.popup,
@@ -100,7 +126,11 @@ export default function SimilarThoughtPopup({ visible, thoughtId, onClose }: Sim
               contentContainerStyle={styles.scrollContent}
               showsVerticalScrollIndicator={false}
             >
-              <Text style={styles.content}>{current?.content ?? ""}</Text>
+              <HighlightedText
+                text={current?.content ?? ""}
+                keywords={hKeywords}
+                style={styles.content}
+              />
             </ScrollView>
           </>
         )}
@@ -137,6 +167,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.screenPx,
     paddingBottom: 48,
     zIndex: 9999,
+  },
+  reasonBanner: {
+    width: "100%",
+    maxWidth: 380,
+    backgroundColor: "#FFE066",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 6,
+  },
+  reasonText: {
+    fontSize: 13,
+    color: Colors.zinc800,
+    fontFamily: Platform.select({ ios: "Pretendard-ExtraLight", default: "Pretendard-ExtraLight" }),
+    lineHeight: 20,
   },
   popup: {
     width: "100%",

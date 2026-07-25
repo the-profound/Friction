@@ -1,15 +1,16 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   View,
-  Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Text,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import SimilarThoughtPopup from "@/components/SimilarThoughtPopup/SimilarThoughtPopup";
+import HighlightedText from "@/components/HighlightedText/HighlightedText";
 import { Colors, Typography, Spacing } from "../../constants/tokens";
 import type { Thought, ThoughtCreatedFrom } from "@workspace/api-client-react";
 
@@ -36,6 +37,16 @@ function ThoughtDetailModal({
   onCloseSimilarPopup,
 }: ThoughtDetailModalProps) {
   const insets = useSafeAreaInsets();
+  const [highlightKeywords, setHighlightKeywords] = useState<string[]>([]);
+
+  const handleHighlightChange = (k: string[]) => {
+    setHighlightKeywords(k);
+  };
+
+  const handleCloseSimilarPopup = () => {
+    setHighlightKeywords([]);
+    onCloseSimilarPopup?.();
+  };
 
   return (
     <BottomSheet
@@ -48,7 +59,8 @@ function ThoughtDetailModal({
         <SimilarThoughtPopup
           visible={similarPopupThoughtId != null}
           thoughtId={similarPopupThoughtId ?? null}
-          onClose={onCloseSimilarPopup ?? (() => {})}
+          onClose={handleCloseSimilarPopup}
+          onHighlightChange={handleHighlightChange}
         />
       }
     >
@@ -70,7 +82,11 @@ function ThoughtDetailModal({
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.content}>{thought?.content ?? ""}</Text>
+          <HighlightedText
+            text={thought?.content ?? ""}
+            keywords={highlightKeywords}
+            style={styles.content}
+          />
         </ScrollView>
         {onRecommend && thought && (
           <View style={styles.footer}>
