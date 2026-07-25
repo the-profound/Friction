@@ -332,57 +332,80 @@ export default function ReadScreen() {
     frameHeight: layout.frameHeight,
     cardCenterY: (cardWindowTop ?? 0) + layout.frameHeight / 2,
     screenHeight,
+    // 50% 스냅 기준으로 미리 계산된 목표값
+    scale50: 1,
+    ty50: 0,
+    midH: screenHeight * 0.5,
+    kbH: screenHeight * 0.65,
   });
 
-  // 레이아웃·위치가 바뀔 때마다 ref 갱신
+  // 레이아웃·위치가 바뀔 때마다 ref 갱신 + 50% 기준 목표값 선계산
   useEffect(() => {
-    const cardTop = cardWindowTop ?? (screenHeight - layout.frameHeight) / 2;
+    const cardTop     = cardWindowTop ?? (screenHeight - layout.frameHeight) / 2;
+    const availTop    = insets.top + 8;
+    const frameHeight = layout.frameHeight;
+    const cardCenterY = cardTop + layout.frameHeight / 2;
+    const midH        = screenHeight * 0.5;
+    const kbH         = screenHeight * 0.65;
+
+    // 50% 스냅 시점의 가용 영역
+    const availBottom50 = screenHeight - midH - 12;
+    const availHeight50 = Math.max(0, availBottom50 - availTop);
+    const restBottom    = cardCenterY + frameHeight / 2;
+
+    let scale50: number;
+    let ty50: number;
+    if (frameHeight <= 0 || availHeight50 >= frameHeight) {
+      // 카드가 축소 없이 들어감 — 겹치는 만큼만 위로
+      scale50 = 1;
+      ty50    = -Math.max(0, restBottom - availBottom50);
+    } else {
+      // 가용 영역에 맞게 축소 + 중앙 정렬
+      scale50 = availHeight50 / frameHeight;
+      ty50    = (availTop + availBottom50) / 2 - cardCenterY;
+    }
+
     cardAnimParamsRef.current = {
-      availTop: insets.top + 8,
-      frameHeight: layout.frameHeight,
-      cardCenterY: cardTop + layout.frameHeight / 2,
+      availTop,
+      frameHeight,
+      cardCenterY,
       screenHeight,
+      scale50,
+      ty50,
+      midH,
+      kbH,
     };
   }, [screenHeight, insets.top, layout.frameHeight, cardWindowTop]);
 
   // Sync sheetEffectiveHeightAnim → cardScaleSV / cardTranslateYSV
   //
-  // 시트 높이를 실시간으로 받아 카드 크기·위치를 직접 계산.
-  // 고정 목표값을 보간하지 않으므로 50% / 65% / full 어느 단계든
-  // 카드 하단 ~ 시트 상단 간격이 항상 12 px으로 동일해진다.
-  //
-  // 【시트 닫힘 시 흔들림 방지】
-  //   availHeight >= frameHeight 구간에서 "가용 영역 중앙"을 쓰면
-  //   카드 원래 위치와 어긋나 급격한 이동이 생긴다.
-  //   대신: 카드 rest 하단이 시트와 겹치는 만큼만 위로 올린다(overlap 방식).
-  //   scale=1 → overlap=0 → translateY=0 으로 자연스럽게 수렴.
+  // 50% 스냅 기준으로 미리 계산된 목표값(scale50, ty50)을 고정 보간한다.
+  //   0 → midH  : (1, 0) → (scale50, ty50) 선형 보간 (카드 축소 완료)
+  //   midH → kbH : scale 고정, ty만 위로 이동 (카드 하단 ~ 시트 상단 12 px 유지)
+  //   kbH 초과  : scale50 · ty50-(kbH-midH) 에 고정 (더 이상 이동 없음)
   useEffect(() => {
     const sub = sheetEffectiveHeightAnim.addListener(({ value }) => {
-      const { availTop, frameHeight, cardCenterY, screenHeight: sh } = cardAnimParamsRef.current;
+      const { frameHeight, scale50, ty50, midH, kbH } = cardAnimParamsRef.current;
       if (value <= 0 || frameHeight <= 0) {
         cardScaleSV.value = 1;
         cardTranslateYSV.value = 0;
         return;
       }
-      const sheetTopY   = sh - value;
-      const availBottom = sheetTopY - 12;                    // 카드 하단 여유 12 px
-      const availHeight = Math.max(0, availBottom - availTop);
-      const restBottom  = cardCenterY + frameHeight / 2;     // 카드 rest 하단 Y
 
-      if (availHeight >= frameHeight) {
-        // 카드가 축소 없이 들어감 — rest 위치가 시트와 겹치는 만큼만 위로 이동
-        // overlap → 0 이 되면 translateY = 0 (원래 위치)으로 자연 복귀
-        const overlap = Math.max(0, restBottom - availBottom);
-        cardScaleSV.value = 1;
-        cardTranslateYSV.value = -overlap;
-        return;
+      if (value <= midH) {
+        // 0 → 50%: scale50·ty50 로 선형 보간
+        const t = value / midH;
+        cardScaleSV.value = 1 + (scale50 - 1) * t;
+        cardTranslateYSV.value = ty50 * t;
+      } else if (value <= kbH) {
+        // 50% → 65%: scale 고정, ty 만 위로 밀림
+        cardScaleSV.value = scale50;
+        cardTranslateYSV.value = ty50 - (value - midH);
+      } else {
+        // 65% 초과(full 포함): 고정
+        cardScaleSV.value = scale50;
+        cardTranslateYSV.value = ty50 - (kbH - midH);
       }
-
-      // 카드를 가용 영역에 맞춰 축소 + 중앙 정렬
-      const scale   = availHeight / frameHeight;
-      const centerY = (availTop + availBottom) / 2;
-      cardScaleSV.value = scale;
-      cardTranslateYSV.value = centerY - cardCenterY;
     });
     return () => sheetEffectiveHeightAnim.removeListener(sub);
   // eslint-disable-next-line react-hooks/exhaustive-deps
