@@ -85,6 +85,18 @@ function roundStatusColor(status: string): string {
   return Colors.zinc300;
 }
 
+function letterTypeLabel(type: string): string {
+  if (type === "OPENING") return "여는 편지";
+  if (type === "CENTER") return "중심 편지";
+  if (type === "REPLY") return "답장";
+  return type;
+}
+
+function formatLetterDate(iso: string | Date): string {
+  const d = typeof iso === "string" ? new Date(iso) : iso;
+  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
+}
+
 // ─── Space Carousel ───────────────────────────────────────────────────────────
 // Free-scroll (no snap). 2+ cards visible + 3rd peeking at right edge.
 //   Web  → PanResponder + Animated translate (free scroll)
@@ -202,6 +214,8 @@ function SpaceCarousel({
           isRead={false}
           isActive={true}
           onPress={handlePress}
+          letterTypeBadge={letterTypeLabel(letter.letterType)}
+          date={formatLetterDate(letter.createdAt)}
         />
       </View>
     );
@@ -412,10 +426,12 @@ function RoundSection({
 
   const hasOpeningLetter = letters.some((l) => l.letterType === "OPENING");
 
-  // Opening-letter CTA/notice: shown when active and opening letter is missing,
-  // regardless of whether other letter types (CENTER/REPLY) exist.
+  // Opening-letter CTA/notice: shown only for ACTIVE rounds when the opening
+  // letter is missing, regardless of whether CENTER/REPLY letters exist.
+  // Deliberately excludes UPCOMING and COMPLETED rounds so a finished round
+  // without an opening letter never shows the write-CTA.
   const openingArea: React.ReactNode =
-    !isUpcoming && !isSpaceRecruiting && !hasOpeningLetter && !isSpaceArchived
+    round.status === "ACTIVE" && !isSpaceRecruiting && !hasOpeningLetter && !isSpaceArchived
       ? isOperator
         ? (
           <ScalePressable

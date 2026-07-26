@@ -19,6 +19,8 @@ interface ArticleCardItemProps {
   isRead?: boolean;
   isActive?: boolean;
   cardWidth?: number;
+  letterTypeBadge?: string | null;
+  date?: string | null;
 }
 
 const DEFAULT_BG = Colors.zinc50;
@@ -33,6 +35,8 @@ function ArticleCardItem({
   isRead = false,
   isActive = true,
   cardWidth,
+  letterTypeBadge,
+  date,
 }: ArticleCardItemProps) {
   const textColor = cover?.textColor ?? Colors.zinc900;
   const w = cardWidth ?? CARD_W;
@@ -64,8 +68,15 @@ function ArticleCardItem({
           >
             <View style={styles.imageOverlay} />
             <View style={[styles.inner, { padding: pad }]} pointerEvents="none">
+              {letterTypeBadge ? (
+                <View style={styles.letterTypeBadge}>
+                  <Text style={[styles.letterTypeBadgeText, { fontSize: Math.max(8, Math.round(10 * scale)) }]}>
+                    {letterTypeBadge}
+                  </Text>
+                </View>
+              ) : null}
               <Text
-                style={[styles.title, { color: textColor, fontSize: titleSize, lineHeight: titleSize * ReaderTokens.lineHeight.tight }]}
+                style={[styles.title, { color: textColor, fontSize: titleSize, lineHeight: titleSize * ReaderTokens.lineHeight.tight, marginTop: letterTypeBadge ? Math.max(4, Math.round(6 * scale)) : 0 }]}
                 numberOfLines={4}
               >
                 {title}
@@ -82,6 +93,11 @@ function ArticleCardItem({
                   </Text>
                 ) : null}
               </View>
+              {date ? (
+                <Text style={[styles.dateText, { left: 0, bottom: pad, fontSize: Math.max(7, Math.round(9 * scale)), color: "rgba(255,255,255,0.70)" }]} numberOfLines={1}>
+                  {date}
+                </Text>
+              ) : null}
             </View>
           </ImageBackground>
         ) : (
@@ -97,8 +113,15 @@ function ArticleCardItem({
             ]}
           >
             <View style={[styles.inner, { padding: pad }]} pointerEvents="none">
+              {letterTypeBadge ? (
+                <View style={[styles.letterTypeBadge, { backgroundColor: `${textColor}22` }]}>
+                  <Text style={[styles.letterTypeBadgeText, { fontSize: Math.max(8, Math.round(10 * scale)), color: textColor }]}>
+                    {letterTypeBadge}
+                  </Text>
+                </View>
+              ) : null}
               <Text
-                style={[styles.title, { color: textColor, fontSize: titleSize, lineHeight: titleSize * ReaderTokens.lineHeight.tight }]}
+                style={[styles.title, { color: textColor, fontSize: titleSize, lineHeight: titleSize * ReaderTokens.lineHeight.tight, marginTop: letterTypeBadge ? Math.max(4, Math.round(6 * scale)) : 0 }]}
                 numberOfLines={4}
               >
                 {title}
@@ -115,6 +138,11 @@ function ArticleCardItem({
                   </Text>
                 ) : null}
               </View>
+              {date ? (
+                <Text style={[styles.dateText, { left: 0, bottom: pad, fontSize: Math.max(7, Math.round(9 * scale)), color: textColor, opacity: 0.55 }]} numberOfLines={1}>
+                  {date}
+                </Text>
+              ) : null}
             </View>
           </View>
         )}
@@ -164,5 +192,23 @@ const styles = StyleSheet.create({
   },
   collection: {
     fontFamily: ReaderTokens.fontFamily.sansBold,
+  },
+  letterTypeBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(0,0,0,0.30)",
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+  },
+  letterTypeBadgeText: {
+    fontFamily: ReaderTokens.fontFamily.sansBold,
+    color: Colors.white,
+    letterSpacing: 0.2,
+  },
+  dateText: {
+    position: "absolute",
+    fontFamily: ReaderTokens.fontFamily.sans,
+    color: "rgba(255,255,255,0.75)",
+    letterSpacing: 0.1,
   },
 });
