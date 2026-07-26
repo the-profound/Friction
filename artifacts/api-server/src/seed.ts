@@ -1024,6 +1024,231 @@ export async function seedDevData(): Promise<void> {
 
       logger.info("Dev seed data (v6) inserted successfully");
     }
+
+    // -----------------------------------------------------------------------
+    // v7 sentinel: ㅌㅅㅌ 공간 — 참여자·편지·슬롯 시드
+    //   Space:   19496c3d-a08a-4218-9e9a-dce2dfc57849 (민지가 운영하는 공간)
+    //   Rounds:
+    //     Round 1 (887bbe69): UPCOMING → ACTIVE + 여는 편지 + 중심 편지 3편
+    //     Round 2 (8705018f): UPCOMING + 5명 슬롯
+    //     Round 3 (44777912): UPCOMING + 4명 슬롯
+    //     Round 4 (e714e0de): UPCOMING + 3명 슬롯 (민지 내 차례 포함)
+    //     Round 5 (904a14a5): UPCOMING, 슬롯 없음 (배너 유지)
+    // -----------------------------------------------------------------------
+    const { rows: sentinelV7 } = await client.query(`
+      SELECT id FROM space_round_slots
+      WHERE id = 'd2000001-0000-4000-d000-000000000001'
+      LIMIT 1
+    `);
+    if (sentinelV7.length > 0) {
+      logger.info("Dev seed data already present (v7), skipping");
+    } else {
+      logger.info("Inserting dev seed data (v7)…");
+
+      // v7-0. 새 참여자 3명
+      await client.query(`
+        INSERT INTO users (id, email, nickname, created_at, updated_at)
+        VALUES
+          ('b3000001-0000-4000-b000-000000000001', 'eunseo@test.dev', '은서', NOW(), NOW()),
+          ('b3000002-0000-4000-b000-000000000002', 'jaemin@test.dev', '재민', NOW(), NOW()),
+          ('b3000003-0000-4000-b000-000000000003', 'jisu@test.dev',   '지수', NOW(), NOW())
+        ON CONFLICT (id) DO UPDATE SET nickname = EXCLUDED.nickname
+      `);
+
+      // v7-1. 공간 참여 등록 (민지=운영자, 나머지=참여자 APPROVED)
+      //   민지는 앱에서 공간을 직접 생성했으므로 이미 OPERATOR 행이 있을 수 있음 → DO NOTHING
+      await client.query(`
+        INSERT INTO space_participations
+          (id, space_id, user_id, role, join_path, status,
+           invitation_id, code_request_id, created_at, updated_at)
+        VALUES
+          (gen_random_uuid(), '19496c3d-a08a-4218-9e9a-dce2dfc57849',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            'OPERATOR', NULL, 'APPROVED', NULL, NULL,
+            NOW() - interval '30 days', NOW()),
+          (gen_random_uuid(), '19496c3d-a08a-4218-9e9a-dce2dfc57849',
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
+            'PARTICIPANT', NULL, 'APPROVED', NULL, NULL,
+            NOW() - interval '28 days', NOW()),
+          (gen_random_uuid(), '19496c3d-a08a-4218-9e9a-dce2dfc57849',
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
+            'PARTICIPANT', NULL, 'APPROVED', NULL, NULL,
+            NOW() - interval '27 days', NOW()),
+          (gen_random_uuid(), '19496c3d-a08a-4218-9e9a-dce2dfc57849',
+            'b3000001-0000-4000-b000-000000000001',
+            'PARTICIPANT', NULL, 'APPROVED', NULL, NULL,
+            NOW() - interval '26 days', NOW()),
+          (gen_random_uuid(), '19496c3d-a08a-4218-9e9a-dce2dfc57849',
+            'b3000002-0000-4000-b000-000000000002',
+            'PARTICIPANT', NULL, 'APPROVED', NULL, NULL,
+            NOW() - interval '25 days', NOW()),
+          (gen_random_uuid(), '19496c3d-a08a-4218-9e9a-dce2dfc57849',
+            'b3000003-0000-4000-b000-000000000003',
+            'PARTICIPANT', NULL, 'APPROVED', NULL, NULL,
+            NOW() - interval '24 days', NOW())
+        ON CONFLICT ON CONSTRAINT space_participations_space_user_unique DO NOTHING
+      `);
+
+      // v7-2. Round 1 → ACTIVE (이미 ACTIVE이면 무해)
+      await client.query(`
+        UPDATE space_rounds
+        SET status = 'ACTIVE',
+            starts_at = NOW() - interval '14 days',
+            updated_at = NOW()
+        WHERE id = '887bbe69-4dd3-420b-a12b-ca925c831161'
+          AND status = 'UPCOMING'
+      `);
+
+      // v7-3. Round 1 편지 본문 (articles)
+      await client.query(`
+        INSERT INTO articles
+          (id, author_id, title, content, status, pages, style, cover,
+           source_article_id, is_notice, notice_date, created_at, updated_at)
+        VALUES
+          ('a2000001-0000-4000-a000-000000000001',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            '이번 회차를 시작하며',
+            '안녕하세요, 모두. 오래 기다리셨죠. 드디어 첫 번째 회차를 시작합니다. 각자의 속도로 편하게 써내려가 주시면 좋겠어요. 글 쓰는 일이 부담보다 기쁨이 되길 바라며, 잘 부탁드려요.',
+            'LETTER', '[]', NULL, NULL, NULL, FALSE, NULL,
+            NOW() - interval '13 days', NOW() - interval '13 days'),
+          ('a2000002-0000-4000-a000-000000000002',
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
+            '요즘 나를 채우는 것들',
+            '요즘은 이상하게 작은 것들이 눈에 많이 들어온다. 출근길에 마주치는 고양이, 점심때 창밖으로 보이는 은행나무, 퇴근하고 마시는 따뜻한 차 한 잔. 별것 아닌 것들이 하루를 붙들어주는 것 같아서, 그게 좋다.',
+            'LETTER', '[]', NULL, NULL, NULL, FALSE, NULL,
+            NOW() - interval '10 days', NOW() - interval '10 days'),
+          ('a2000003-0000-4000-a000-000000000003',
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
+            '가을이 오기 전에',
+            '여름이 끝나기 전에 하고 싶었던 것들을 적어봤는데, 절반도 못 했다. 그래도 괜찮다고 생각하기로 했다. 계획은 언제나 현실보다 조금 더 부풀어 있는 법이니까. 가을에는 조금 더 현실적인 목록을 써볼 예정이다.',
+            'LETTER', '[]', NULL, NULL, NULL, FALSE, NULL,
+            NOW() - interval '8 days', NOW() - interval '8 days'),
+          ('a2000004-0000-4000-a000-000000000004',
+            'b3000001-0000-4000-b000-000000000001',
+            '처음 인사드립니다',
+            '이 공간에 처음 들어왔을 때 조금 떨렸어요. 글을 쓰는 게 오래간만이라서. 그런데 여기 분위기가 너무 좋아서 금방 마음이 놓였어요. 앞으로 잘 부탁드려요. 짧지만 처음 인사를 남겨요.',
+            'LETTER', '[]', NULL, NULL, NULL, FALSE, NULL,
+            NOW() - interval '6 days', NOW() - interval '6 days')
+        ON CONFLICT (id) DO UPDATE SET
+          title   = EXCLUDED.title,
+          content = EXCLUDED.content,
+          updated_at = EXCLUDED.updated_at
+      `);
+
+      // v7-4. Round 1 공간 편지 (space_letters)
+      await client.query(`
+        INSERT INTO space_letters
+          (id, space_id, space_round_id, author_id, source_article_id,
+           letter_type, is_public, created_at, updated_at)
+        VALUES
+          ('c1000001-0000-4000-c000-000000000001',
+            '19496c3d-a08a-4218-9e9a-dce2dfc57849',
+            '887bbe69-4dd3-420b-a12b-ca925c831161',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            'a2000001-0000-4000-a000-000000000001',
+            'OPENING', TRUE,
+            NOW() - interval '13 days', NOW() - interval '13 days'),
+          ('c1000002-0000-4000-c000-000000000002',
+            '19496c3d-a08a-4218-9e9a-dce2dfc57849',
+            '887bbe69-4dd3-420b-a12b-ca925c831161',
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
+            'a2000002-0000-4000-a000-000000000002',
+            'CENTER', FALSE,
+            NOW() - interval '10 days', NOW() - interval '10 days'),
+          ('c1000003-0000-4000-c000-000000000003',
+            '19496c3d-a08a-4218-9e9a-dce2dfc57849',
+            '887bbe69-4dd3-420b-a12b-ca925c831161',
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
+            'a2000003-0000-4000-a000-000000000003',
+            'CENTER', FALSE,
+            NOW() - interval '8 days', NOW() - interval '8 days'),
+          ('c1000004-0000-4000-c000-000000000004',
+            '19496c3d-a08a-4218-9e9a-dce2dfc57849',
+            '887bbe69-4dd3-420b-a12b-ca925c831161',
+            'b3000001-0000-4000-b000-000000000001',
+            'a2000004-0000-4000-a000-000000000004',
+            'CENTER', FALSE,
+            NOW() - interval '6 days', NOW() - interval '6 days')
+        ON CONFLICT (id) DO NOTHING
+      `);
+
+      // v7-5. Round 2 슬롯 (5명 — 하윤·서준·은서·재민·지수)
+      await client.query(`
+        INSERT INTO space_round_slots
+          (id, space_round_id, assigned_user_id, slot_order, scheduled_date,
+           created_at, updated_at)
+        VALUES
+          ('d2000001-0000-4000-d000-000000000001',
+            '8705018f-8d43-42b9-abad-071844da90ad',
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
+            1, '2026-08-04', NOW(), NOW()),
+          ('d2000002-0000-4000-d000-000000000002',
+            '8705018f-8d43-42b9-abad-071844da90ad',
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
+            2, '2026-08-11', NOW(), NOW()),
+          ('d2000003-0000-4000-d000-000000000003',
+            '8705018f-8d43-42b9-abad-071844da90ad',
+            'b3000001-0000-4000-b000-000000000001',
+            3, '2026-08-18', NOW(), NOW()),
+          ('d2000004-0000-4000-d000-000000000004',
+            '8705018f-8d43-42b9-abad-071844da90ad',
+            'b3000002-0000-4000-b000-000000000002',
+            4, '2026-08-25', NOW(), NOW()),
+          ('d2000005-0000-4000-d000-000000000005',
+            '8705018f-8d43-42b9-abad-071844da90ad',
+            'b3000003-0000-4000-b000-000000000003',
+            5, '2026-09-01', NOW(), NOW())
+        ON CONFLICT (id) DO NOTHING
+      `);
+
+      // v7-6. Round 3 슬롯 (4명 — 재민·지수·서준·하윤)
+      await client.query(`
+        INSERT INTO space_round_slots
+          (id, space_round_id, assigned_user_id, slot_order, scheduled_date,
+           created_at, updated_at)
+        VALUES
+          ('d3000001-0000-4000-d000-000000000001',
+            '44777912-69ac-488d-aaff-a9704374acfa',
+            'b3000002-0000-4000-b000-000000000002',
+            1, '2026-09-08', NOW(), NOW()),
+          ('d3000002-0000-4000-d000-000000000002',
+            '44777912-69ac-488d-aaff-a9704374acfa',
+            'b3000003-0000-4000-b000-000000000003',
+            2, '2026-09-15', NOW(), NOW()),
+          ('d3000003-0000-4000-d000-000000000003',
+            '44777912-69ac-488d-aaff-a9704374acfa',
+            '05cb0a0b-c73c-4d1c-8410-cee7da564fda',
+            3, '2026-09-22', NOW(), NOW()),
+          ('d3000004-0000-4000-d000-000000000004',
+            '44777912-69ac-488d-aaff-a9704374acfa',
+            '54cbadb0-eab9-4f69-8c32-90a9e00d7908',
+            4, '2026-09-29', NOW(), NOW())
+        ON CONFLICT (id) DO NOTHING
+      `);
+
+      // v7-7. Round 4 슬롯 (3명 — 은서·민지·재민, 민지는 내 차례 카드)
+      await client.query(`
+        INSERT INTO space_round_slots
+          (id, space_round_id, assigned_user_id, slot_order, scheduled_date,
+           created_at, updated_at)
+        VALUES
+          ('d4000001-0000-4000-d000-000000000001',
+            'e714e0de-7cb5-4a5e-b238-f811eb34ddbb',
+            'b3000001-0000-4000-b000-000000000001',
+            1, '2026-10-06', NOW(), NOW()),
+          ('d4000002-0000-4000-d000-000000000002',
+            'e714e0de-7cb5-4a5e-b238-f811eb34ddbb',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            2, '2026-10-13', NOW(), NOW()),
+          ('d4000003-0000-4000-d000-000000000003',
+            'e714e0de-7cb5-4a5e-b238-f811eb34ddbb',
+            'b3000002-0000-4000-b000-000000000002',
+            3, '2026-10-20', NOW(), NOW())
+        ON CONFLICT (id) DO NOTHING
+      `);
+
+      logger.info("Dev seed data (v7) inserted successfully");
+    }
   } catch (err) {
     logger.error({ err }, "Seed data error");
     throw err;
