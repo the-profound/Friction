@@ -98,9 +98,11 @@ function formatLetterDate(iso: string | Date): string {
 }
 
 // ─── Space Carousel ───────────────────────────────────────────────────────────
-// Free-scroll (no snap). 2+ cards visible + 3rd peeking at right edge.
-//   Web  → PanResponder + Animated translate (free scroll)
-//   Native → horizontal ScrollView (no snap)
+// Card-snapping carousel. 2+ cards visible + 3rd peeking at right edge.
+//   Web  → PanResponder + Animated translate, snaps to card boundary on release
+//   Native → horizontal ScrollView with snapToInterval
+
+const SC_SNAP_STEP = SC_CARD_W + SC_CARD_GAP;
 
 function SpaceCarousel({
   letters,
@@ -117,7 +119,12 @@ function SpaceCarousel({
   const cardSlotRefs = useRef<(View | null)[]>([]);
   const swipedRef = useRef(false);
 
-  // Web free-scroll state
+  const [currentIndex, setCurrentIndex] = useState(0);
+  // Stable ref so PanResponder (created once) can update state
+  const setCurrentIndexRef = useRef(setCurrentIndex);
+  setCurrentIndexRef.current = setCurrentIndex;
+
+  // Web snap state
   const scrollOffsetRef = useRef(0);
   const savedOffsetRef = useRef(0);
   const translateX = useRef(new Animated.Value(SC_LEFT_PAD)).current;
@@ -157,17 +164,28 @@ function SpaceCarousel({
       },
       onPanResponderRelease: () => {
         const max = maxScrollOffset();
-        const clamped = Math.max(0, Math.min(scrollOffsetRef.current, max));
-        if (clamped !== scrollOffsetRef.current) {
-          scrollOffsetRef.current = clamped;
-          Animated.spring(translateX, {
-            toValue: SC_LEFT_PAD - clamped,
-            useNativeDriver: false,
-            overshootClamping: true,
-            tension: 120,
-            friction: 20,
-          }).start();
-        }
+        // Snap to nearest card boundary, then clamp to valid scroll range
+        const rawOffset = Math.max(0, Math.min(scrollOffsetRef.current, max));
+        const snapIndex = Math.max(
+          0,
+          Math.min(Math.round(rawOffset / SC_SNAP_STEP), itemCount - 1),
+        );
+        // Clamp snap target to max so we never animate past content end
+        const snapOffset = Math.min(snapIndex * SC_SNAP_STEP, max);
+        // Derive actual index from the clamped offset in case it differs
+        const actualIndex = Math.max(
+          0,
+          Math.min(Math.round(snapOffset / SC_SNAP_STEP), itemCount - 1),
+        );
+        scrollOffsetRef.current = snapOffset;
+        setCurrentIndexRef.current(actualIndex);
+        Animated.spring(translateX, {
+          toValue: SC_LEFT_PAD - snapOffset,
+          useNativeDriver: false,
+          overshootClamping: true,
+          tension: 120,
+          friction: 20,
+        }).start();
         setTimeout(() => { swipedRef.current = false; }, 100);
       },
       onPanResponderTerminate: () => {
@@ -221,6 +239,21 @@ function SpaceCarousel({
     );
   });
 
+  const indicator =
+    itemCount > 1 ? (
+      <View style={spaceCarouselStyles.indicatorRow}>
+        {letters.map((_, i) => (
+          <View
+            key={i}
+            style={[
+              spaceCarouselStyles.indicatorDot,
+              i === currentIndex && spaceCarouselStyles.indicatorDotActive,
+            ]}
+          />
+        ))}
+      </View>
+    ) : null;
+
   return (
     <View>
       {Platform.OS === "web" ? (
@@ -242,12 +275,24 @@ function SpaceCarousel({
           horizontal
           showsHorizontalScrollIndicator={false}
           scrollEventThrottle={16}
+          snapToInterval={SC_SNAP_STEP}
+          snapToAlignment="start"
+          decelerationRate="fast"
           contentContainerStyle={spaceCarouselStyles.carouselContent}
           style={spaceCarouselStyles.carouselScroll}
+          onScroll={(e) => {
+            const offsetX = e.nativeEvent.contentOffset.x;
+            const idx = Math.max(
+              0,
+              Math.min(Math.round(offsetX / SC_SNAP_STEP), itemCount - 1),
+            );
+            setCurrentIndex(idx);
+          }}
         >
           {cards}
         </ScrollView>
       )}
+      {indicator}
     </View>
   );
 }
@@ -274,6 +319,22 @@ const spaceCarouselStyles = StyleSheet.create({
   },
   cardSlotHidden: {
     opacity: 0,
+  },
+  indicatorRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 12,
+  },
+  indicatorDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.zinc300,
+  },
+  indicatorDotActive: {
+    backgroundColor: Colors.zinc600,
   },
 });
 
