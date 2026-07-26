@@ -429,6 +429,19 @@ function QuestionCardCurlInner({
     },
   }), []);
 
+  /* ── Tap gesture: 키보드 열린 상태에서 카드 영역 탭 → 키보드 dismiss ── */
+  const tapGesture = useMemo(
+    () =>
+      Gesture.Tap()
+        .runOnJS(true)
+        .onEnd(() => {
+          if (keyboardVisibleRef.current) {
+            Keyboard.dismiss();
+          }
+        }),
+    [keyboardVisibleRef],
+  );
+
   /* ── Pan gesture ─────────────────────────────────────────────────────── */
   const panGesture = useMemo(
     () =>
@@ -750,7 +763,7 @@ function QuestionCardCurlInner({
    * ───────────────────────────────────────────────────────────────────── */
   return (
     <Animated.View style={[s.root, entranceStyle]}>
-      <GestureDetector gesture={panGesture}>
+      <GestureDetector gesture={Gesture.Simultaneous(tapGesture, panGesture)}>
         <View style={s.gestureLayer}>
 
           {/* 카드 화면의 흰 배경 페이지 — 마지막 페이지가 좌측으로 밀려나면
