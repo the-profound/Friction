@@ -45,15 +45,20 @@ const OPERATOR_CROWN_COLOR = "#92323D";
 type RoleFilter = "all" | "OPERATOR" | "PARTICIPANT";
 type StatusFilter = "all" | "ACTIVE";
 
-const STATUS_PRIORITY: Record<string, number> = {
-  ACTIVE: 0,
-  RECRUITING: 1,
-};
+function isOverduePlannedStart(item: SpaceListItem): boolean {
+  if (item.status !== "RECRUITING" || !item.plannedStartsAt) return false;
+  return new Date(item.plannedStartsAt) < new Date();
+}
 
 function sortSpaces(spaces: SpaceListItem[]): SpaceListItem[] {
+  const getPriority = (s: SpaceListItem): number => {
+    if (s.status === "ACTIVE") return 0;
+    if (s.status === "RECRUITING") return isOverduePlannedStart(s) ? 1 : 2;
+    return 9;
+  };
   return [...spaces].sort((a, b) => {
-    const pa = STATUS_PRIORITY[a.status] ?? 9;
-    const pb = STATUS_PRIORITY[b.status] ?? 9;
+    const pa = getPriority(a);
+    const pb = getPriority(b);
     if (pa !== pb) return pa - pb;
     if (a.activeRound && !b.activeRound) return -1;
     if (!a.activeRound && b.activeRound) return 1;
@@ -73,6 +78,7 @@ function SpaceCard({
   const statusStyle = spaceStatusStyle(item.status);
   const statusText = spaceStatusLabel(item.status);
   const isOperator = item.myRole === "OPERATOR";
+  const isOverdue = isOverduePlannedStart(item);
 
   return (
     <View style={[styles.cardWrapper, { width: cardWidth }]}>
@@ -88,19 +94,26 @@ function SpaceCard({
       >
         <View style={styles.cardTopRow}>
           <Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>
-          <View
-            style={[
-              styles.statusBadge,
-              {
-                backgroundColor: statusStyle.backgroundColor,
-                borderColor: statusStyle.borderColor,
-                borderWidth: statusStyle.borderWidth,
-              },
-            ]}
-          >
-            <Text style={[styles.statusBadgeText, { color: statusStyle.textColor }]}>
-              {statusText}
-            </Text>
+          <View style={styles.cardBadgeGroup}>
+            {isOverdue && (
+              <View style={styles.overdueBadge}>
+                <Text style={styles.overdueBadgeText}>예정일 경과</Text>
+              </View>
+            )}
+            <View
+              style={[
+                styles.statusBadge,
+                {
+                  backgroundColor: statusStyle.backgroundColor,
+                  borderColor: statusStyle.borderColor,
+                  borderWidth: statusStyle.borderWidth,
+                },
+              ]}
+            >
+              <Text style={[styles.statusBadgeText, { color: statusStyle.textColor }]}>
+                {statusText}
+              </Text>
+            </View>
           </View>
         </View>
         {item.description ? (
@@ -571,6 +584,24 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 4,
     gap: 8,
+  },
+  cardBadgeGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    flexShrink: 0,
+  },
+  overdueBadge: {
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    backgroundColor: "#FEF3C7",
+  },
+  overdueBadgeText: {
+    ...Typography.caption,
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#B45309",
   },
   statusBadge: {
     borderRadius: 6,

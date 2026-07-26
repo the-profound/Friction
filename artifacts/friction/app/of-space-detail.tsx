@@ -97,6 +97,31 @@ function formatLetterDate(iso: string | Date): string {
   return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
 }
 
+function formatPlannedDate(val: Date | string | null | undefined): string {
+  if (!val) return "미정";
+  const d = typeof val === "string" ? new Date(val) : val;
+  return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
+}
+
+const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
+
+function scheduleTypeLabel(
+  scheduleType: string | null | undefined,
+  weekdays: number[] | null | undefined,
+  centerInterval: number,
+): string {
+  if (scheduleType === "WEEKDAY") {
+    if (weekdays && weekdays.length > 0) {
+      return `요일 지정 (${weekdays.map((w) => WEEKDAY_LABELS[w]).join(", ")})`;
+    }
+    return "요일 지정";
+  }
+  if (scheduleType === "N_DAY") {
+    return `${centerInterval}일 간격`;
+  }
+  return `${centerInterval}일 간격`;
+}
+
 // ─── Space Carousel ───────────────────────────────────────────────────────────
 // Card-snapping carousel. 2+ cards visible + 3rd peeking at right edge.
 //   Web  → PanResponder + Animated translate, snaps to card boundary on release
@@ -1310,9 +1335,9 @@ export default function SpaceDetailScreen() {
         style={styles.scrollView}
         contentContainerStyle={[
           styles.scrollContent,
-          isOperator && isRecruiting && { paddingBottom: 80 + insets.bottom },
-          !isOperator && !isArchived && { paddingBottom: 80 + insets.bottom },
+          !isOperator && !isArchived && !isRecruiting && { paddingBottom: 80 + insets.bottom },
           !isOperator && isArchived && { paddingBottom: 56 + insets.bottom },
+          isRecruiting && { paddingBottom: 80 + insets.bottom },
         ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -1397,10 +1422,15 @@ export default function SpaceDetailScreen() {
               </View>
             ) : null}
 
-            {(space as any).creatorNickname ? (
+            {(!space.isAnonymous || isOperator) && (space as any).creatorNickname ? (
               <View style={styles.metaIconRow}>
                 <Feather name="user-check" size={12} color={Colors.zinc400} />
                 <Text style={styles.metaIconRowText}>{(space as any).creatorNickname}</Text>
+              </View>
+            ) : space.isAnonymous && !isOperator ? (
+              <View style={styles.metaIconRow}>
+                <Feather name="user-check" size={12} color={Colors.zinc400} />
+                <Text style={styles.metaIconRowText}>익명 운영자</Text>
               </View>
             ) : null}
           </View>
@@ -1474,65 +1504,118 @@ export default function SpaceDetailScreen() {
           </View>
         )}
 
-        {/* ── Rounds sections ── */}
-        <View style={styles.section}>
-          {roundsQuery.isLoading ? (
-            <View style={styles.sectionLoading}>
-              <ActivityIndicator size="small" color={Colors.zinc400} />
+        {/* ── Rounds sections / Recruiting planned info ── */}
+        {isRecruiting ? (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionLabel}>공간 예정 정보</Text>
             </View>
-          ) : rounds.length === 0 ? (
-            <View style={styles.emptySection}>
-              <Text style={styles.emptySectionText}>
-                {isOperator ? "아직 회차가 없어요" : "진행 중인 회차가 없어요"}
-              </Text>
+            <View style={styles.recruitingInfoCard}>
+              <View style={styles.recruitingInfoRow}>
+                <Feather name="calendar" size={13} color={Colors.zinc400} />
+                <Text style={styles.recruitingInfoLabel}>시작 예정일</Text>
+                <Text style={styles.recruitingInfoValue}>
+                  {formatPlannedDate((space as any).plannedStartsAt)}
+                </Text>
+              </View>
+              <View style={styles.recruitingInfoRow}>
+                <Feather name="list" size={13} color={Colors.zinc400} />
+                <Text style={styles.recruitingInfoLabel}>예정 회차 수</Text>
+                <Text style={styles.recruitingInfoValue}>{space.roundCount}회</Text>
+              </View>
+              <View style={styles.recruitingInfoRow}>
+                <Feather name="repeat" size={13} color={Colors.zinc400} />
+                <Text style={styles.recruitingInfoLabel}>진행 방식</Text>
+                <Text style={styles.recruitingInfoValue}>
+                  {scheduleTypeLabel(
+                    (space as any).scheduleType,
+                    (space as any).weekdays,
+                    space.defaultCenterInterval,
+                  )}
+                </Text>
+              </View>
             </View>
-          ) : (
-            <View style={styles.roundsList}>
-              {rounds
-                .slice()
-                .sort((a, b) => a.roundNumber - b.roundNumber)
-                .map((round) => (
-                  <RoundSection
-                    key={round.id}
-                    round={round}
-                    letters={lettersByRound[round.id] ?? []}
-                    spaceStatus={space.status}
-                    isOperator={isOperator}
-                    isAnonymous={space.isAnonymous}
-                    onPressLetter={handlePressLetter}
-                    onPressWriteOpening={handlePressWriteOpening}
-                    hiddenCardId={tapLetter?.id ?? null}
-                    spaceId={id}
-                    userId={userId}
-                    onScheduleSlot={handleScheduleSlot}
-                  />
-                ))}
-            </View>
-          )}
-        </View>
+          </View>
+        ) : (
+          <View style={styles.section}>
+            {roundsQuery.isLoading ? (
+              <View style={styles.sectionLoading}>
+                <ActivityIndicator size="small" color={Colors.zinc400} />
+              </View>
+            ) : rounds.length === 0 ? (
+              <View style={styles.emptySection}>
+                <Text style={styles.emptySectionText}>
+                  {isOperator ? "아직 회차가 없어요" : "진행 중인 회차가 없어요"}
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.roundsList}>
+                {rounds
+                  .slice()
+                  .sort((a, b) => a.roundNumber - b.roundNumber)
+                  .map((round) => (
+                    <RoundSection
+                      key={round.id}
+                      round={round}
+                      letters={lettersByRound[round.id] ?? []}
+                      spaceStatus={space.status}
+                      isOperator={isOperator}
+                      isAnonymous={space.isAnonymous}
+                      onPressLetter={handlePressLetter}
+                      onPressWriteOpening={handlePressWriteOpening}
+                      hiddenCardId={tapLetter?.id ?? null}
+                      spaceId={id}
+                      userId={userId}
+                      onScheduleSlot={handleScheduleSlot}
+                    />
+                  ))}
+              </View>
+            )}
+          </View>
+        )}
 
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* ── Floating "공간 시작하기" button (operators only, recruiting spaces) ── */}
-      {isOperator && isRecruiting && (
-        <ScalePressable
-          style={[styles.floatingBtnOuter, { bottom: insets.bottom + 16 }]}
-          contentStyle={styles.floatingBtn}
-          onPress={() =>
-            router.push({
-              pathname: "/of-space-start" as never,
-              params: { id },
-            })
-          }
-        >
-          <Feather name="play" size={15} color={Colors.white} />
-          <Text style={styles.floatingBtnText}>공간 시작하기</Text>
-        </ScalePressable>
+      {/* ── Operator "공간 시작하기" CTA (RECRUITING state only) ── */}
+      {isOperator && isRecruiting && (() => {
+        const isOverdue =
+          (space as any).plannedStartsAt
+            ? new Date((space as any).plannedStartsAt) < new Date()
+            : false;
+        return (
+          <ScalePressable
+            style={[styles.floatingBtnOuter, { bottom: insets.bottom + 16 }]}
+            contentStyle={[
+              styles.floatingBtn,
+              isOverdue && styles.floatingBtnUrgent,
+            ]}
+            onPress={() =>
+              router.push({
+                pathname: "/of-space-start" as never,
+                params: { id },
+              })
+            }
+          >
+            <Feather name="play" size={15} color={Colors.white} />
+            <Text style={[styles.floatingBtnText, isOverdue && styles.floatingBtnTextUrgent]}>
+              공간 시작하기
+              {isOverdue ? " (예정일 경과)" : ""}
+            </Text>
+          </ScalePressable>
+        );
+      })()}
+
+      {/* ── Participant recruiting notice bar ── */}
+      {!isOperator && isRecruiting && (
+        <View style={[styles.archivedNoticeBar, { paddingBottom: insets.bottom + 12 }]}>
+          <Feather name="clock" size={13} color={Colors.zinc500} />
+          <Text style={styles.archivedNoticeText}>운영자가 곧 시작할 예정입니다</Text>
+        </View>
       )}
 
       {/* ── Floating "글 예약 발송" button (non-operators only, active spaces) ── */}
-      {!isOperator && !isArchived && (
+      {!isOperator && !isArchived && !isRecruiting && (
         <ScalePressable
           style={[styles.floatingBtnOuter, { bottom: insets.bottom + 16 }]}
           contentStyle={styles.floatingBtn}
@@ -2196,6 +2279,38 @@ const styles = StyleSheet.create({
     marginLeft: 58,
   },
 
+  // ─── Recruiting info card ──────────────────────────────────────────────────
+  recruitingInfoCard: {
+    marginHorizontal: Spacing.screenPx,
+    backgroundColor: Colors.zinc50,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.zinc200,
+    overflow: "hidden",
+    gap: 0,
+  },
+  recruitingInfoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.zinc200,
+  },
+  recruitingInfoLabel: {
+    ...Typography.body,
+    fontSize: 13,
+    color: Colors.zinc500,
+    flex: 1,
+  },
+  recruitingInfoValue: {
+    ...Typography.bodySemiBold,
+    fontSize: 13,
+    color: Colors.zinc800,
+    textAlign: "right",
+  },
+
   // ─── Floating button ───────────────────────────────────────────────────────
   floatingBtnOuter: {
     position: "absolute",
@@ -2210,9 +2325,15 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.zinc900,
     borderRadius: 999,
   },
+  floatingBtnUrgent: {
+    backgroundColor: Colors.noticeAccent,
+  },
   floatingBtnText: {
     ...Typography.bodySemiBold,
     fontSize: 15,
+    color: Colors.white,
+  },
+  floatingBtnTextUrgent: {
     color: Colors.white,
   },
 

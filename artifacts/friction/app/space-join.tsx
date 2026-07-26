@@ -48,8 +48,25 @@ function formatDate(iso: string | null | undefined): string {
   return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
 }
 
+const WEEKDAY_LABELS_JOIN = ["일", "월", "화", "수", "목", "금", "토"];
+
+function scheduleTypeLabelJoin(
+  scheduleType: string | null | undefined,
+  weekdays: number[] | null | undefined,
+  centerInterval: number,
+): string {
+  if (scheduleType === "WEEKDAY") {
+    if (weekdays && weekdays.length > 0) {
+      return `요일 지정 (${weekdays.map((w) => WEEKDAY_LABELS_JOIN[w]).join(", ")})`;
+    }
+    return "요일 지정";
+  }
+  return `${centerInterval}일 간격`;
+}
+
 function SpaceInfoCard({ space }: { space: SpaceWithCreatorInfo }) {
   const isRecruiting = space.status === "RECRUITING";
+  const isActive = space.status === "ACTIVE";
   const isFull =
     space.maxParticipants != null &&
     space.participantCount >= space.maxParticipants;
@@ -65,10 +82,19 @@ function SpaceInfoCard({ space }: { space: SpaceWithCreatorInfo }) {
       ) : null}
       <View style={styles.infoCardDivider} />
       <View style={styles.infoRows}>
-        <InfoRow icon="repeat" label="회차 수" value={`${space.roundCount}회`} />
-        {space.startsAt ? (
-          <InfoRow icon="calendar" label="시작일" value={formatDate(space.startsAt)} />
+        <InfoRow icon="repeat" label="예정 회차 수" value={`${space.roundCount}회`} />
+        {(space as any).plannedStartsAt ? (
+          <InfoRow icon="calendar" label="시작 예정일" value={formatDate((space as any).plannedStartsAt)} />
         ) : null}
+        <InfoRow
+          icon="clock"
+          label="진행 방식"
+          value={scheduleTypeLabelJoin(
+            (space as any).scheduleType,
+            (space as any).weekdays,
+            space.defaultCenterInterval,
+          )}
+        />
         <InfoRow
           icon="users"
           label="모집 인원"
@@ -84,22 +110,32 @@ function SpaceInfoCard({ space }: { space: SpaceWithCreatorInfo }) {
           label="익명 여부"
           value={space.isAnonymous ? "익명 참여" : "실명 참여"}
         />
-        {space.creatorNickname ? (
+        {space.isAnonymous ? (
+          <InfoRow icon="shield" label="운영자" value="익명 운영자" />
+        ) : space.creatorNickname ? (
           <InfoRow icon="shield" label="운영자" value={space.creatorNickname} />
         ) : null}
         <InfoRow
           icon="activity"
           label="모집 상태"
           value={
-            space.status === "RECRUITING"
+            isRecruiting
               ? "모집 중"
-              : space.status === "ACTIVE"
-              ? "진행 중"
+              : isActive
+              ? "진행 중 (모집 마감)"
               : "종료됨"
           }
           accent={!isRecruiting ? "gray" : undefined}
         />
       </View>
+      {!isActive && (
+        <View style={styles.roundsDisclaimerRow}>
+          <Feather name="info" size={12} color={Colors.zinc400} />
+          <Text style={styles.roundsDisclaimerText}>
+            실제 회차 구성은 공간 시작 시점에 확정됩니다
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -535,18 +571,28 @@ export default function SpaceJoinScreen() {
     }
 
     if (step === "space_preview" && foundSpace) {
+      const isClosed = foundSpace.status === "ACTIVE";
       return (
         <View style={styles.spacePreviewContainer}>
           <SpaceInfoCard space={foundSpace} />
-          <SubmitButton
-            style={styles.primaryButton}
-            disabledStyle={styles.primaryButtonDisabled}
-            textStyle={styles.primaryButtonText}
-            onPress={handleApply}
-            pending={actionLoading}
-            label="참여 신청하기"
-            pendingLabel="신청 중..."
-          />
+          {isClosed ? (
+            <View style={styles.closedNoticeBanner}>
+              <Feather name="slash" size={14} color={Colors.zinc500} />
+              <Text style={styles.closedNoticeText}>
+                공간이 이미 시작되어 모집이 마감됐어요.
+              </Text>
+            </View>
+          ) : (
+            <SubmitButton
+              style={styles.primaryButton}
+              disabledStyle={styles.primaryButtonDisabled}
+              textStyle={styles.primaryButtonText}
+              onPress={handleApply}
+              pending={actionLoading}
+              label="참여 신청하기"
+              pendingLabel="신청 중..."
+            />
+          )}
           <ScalePressable
             style={styles.secondaryButton}
             onPress={() => {
@@ -561,32 +607,46 @@ export default function SpaceJoinScreen() {
     }
 
     if (step === "invitation" && joinContext) {
+      const isClosed = joinContext.space.status === "ACTIVE";
       return (
         <View style={styles.spacePreviewContainer}>
           <View style={styles.invitationBanner}>
             <Feather name="mail" size={16} color="#7C3AED" />
             <Text style={styles.invitationBannerText}>
-              {joinContext.space.creatorNickname
+              {joinContext.space.isAnonymous
+                ? "익명 운영자님이 초대했어요"
+                : joinContext.space.creatorNickname
                 ? `${joinContext.space.creatorNickname}님이 초대했어요`
                 : "초대받은 공간이에요"}
             </Text>
           </View>
           <SpaceInfoCard space={joinContext.space} />
-          <SubmitButton
-            style={styles.primaryButton}
-            disabledStyle={styles.primaryButtonDisabled}
-            textStyle={styles.primaryButtonText}
-            onPress={handleAcceptInvitation}
-            pending={actionLoading}
-            label="수락하기"
-            pendingLabel="처리 중..."
-          />
-          <ScalePressable
-            style={styles.secondaryButton}
-            onPress={() => setDeclineConfirmVisible(true)}
-          >
-            <Text style={styles.secondaryButtonTextDestructive}>거절하기</Text>
-          </ScalePressable>
+          {isClosed ? (
+            <View style={styles.closedNoticeBanner}>
+              <Feather name="slash" size={14} color={Colors.zinc500} />
+              <Text style={styles.closedNoticeText}>
+                공간이 이미 시작되어 수락할 수 없어요.
+              </Text>
+            </View>
+          ) : (
+            <SubmitButton
+              style={styles.primaryButton}
+              disabledStyle={styles.primaryButtonDisabled}
+              textStyle={styles.primaryButtonText}
+              onPress={handleAcceptInvitation}
+              pending={actionLoading}
+              label="수락하기"
+              pendingLabel="처리 중..."
+            />
+          )}
+          {!isClosed && (
+            <ScalePressable
+              style={styles.secondaryButton}
+              onPress={() => setDeclineConfirmVisible(true)}
+            >
+              <Text style={styles.secondaryButtonTextDestructive}>거절하기</Text>
+            </ScalePressable>
+          )}
         </View>
       );
     }
@@ -847,6 +907,38 @@ const styles = StyleSheet.create({
     ...Typography.body,
     fontSize: 15,
     color: "#DC2626",
+  },
+  roundsDisclaimerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.zinc200,
+  },
+  roundsDisclaimerText: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc400,
+    flex: 1,
+    lineHeight: 16,
+  },
+  closedNoticeBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: Colors.zinc100,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 8,
+  },
+  closedNoticeText: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc500,
+    flex: 1,
+    lineHeight: 20,
   },
   infoCard: {
     backgroundColor: Colors.zinc50,
