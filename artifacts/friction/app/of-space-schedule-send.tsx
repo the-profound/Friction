@@ -20,6 +20,7 @@ import {
   useListSpaceRounds,
   useListSpaceLetters,
   useCreateSpaceScheduledSend,
+  useCreateSpaceLetter,
   useUpdateSpaceScheduledSend,
   useListArticles,
   useGetSpaceJoinContext,
@@ -146,7 +147,7 @@ function SendRow({
 
 function NewSendSheet({
   spaceId,
-  rounds,
+  userId,
   letters,
   articles,
   onClose,
@@ -156,7 +157,7 @@ function NewSendSheet({
   slotId,
 }: {
   spaceId: string;
-  rounds: SpaceRound[];
+  userId: string;
   letters: SpaceLetter[];
   articles: Article[];
   onClose: () => void;
@@ -165,7 +166,7 @@ function NewSendSheet({
   initialScheduledDate?: string | null;
   slotId?: string | null;
 }) {
-  const [selectedLetterId, setSelectedLetterId] = useState<string | null>(null);
+  const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   const [scheduledAt, setScheduledAt] = useState(() => {
     if (initialScheduledDate) {
       const d = new Date(initialScheduledDate);
@@ -176,48 +177,47 @@ function NewSendSheet({
   const [showPicker, setShowPicker] = useState(false);
   const [saving, setSaving] = useState(false);
   const createSend = useCreateSpaceScheduledSend();
+  const createLetter = useCreateSpaceLetter();
+  const queryClient = useQueryClient();
 
-  // Build a lookup from sourceArticleId → spaceLetter so we can go article-first.
-  const letterBySourceArticleId = useMemo(
+  // Show all of the user's completed articles (status=LETTER) directly.
+  const eligibleArticles = useMemo(
     () =>
-      new Map(
-        letters
-          .filter((l) => !!l.sourceArticleId)
-          .map((l) => [l.sourceArticleId!, l]),
-      ),
-    [letters],
+      articles.map((a) => ({
+        articleId: a.id,
+        articleTitle: a.title ?? null,
+      })),
+    [articles],
   );
 
-  // Show only the user's own completed articles that have been exported to this space.
-  // id is the spaceLetter.id — used as letterId in the scheduling API call.
-  const eligibleLetters = useMemo(
-    () =>
-      articles
-        .filter((a) => letterBySourceArticleId.has(a.id))
-        .map((a) => {
-          const letter = letterBySourceArticleId.get(a.id)!;
-          return {
-            id: letter.id,
-            articleTitle: a.title ?? null,
-            roundNumber: rounds.find((r) => r.id === letter.spaceRoundId)?.roundNumber ?? null,
-            roundTitle: rounds.find((r) => r.id === letter.spaceRoundId)?.title ?? null,
-          };
-        }),
-    [articles, letterBySourceArticleId, rounds],
-  );
-
-  const selectedLetter = eligibleLetters.find((l) => l.id === selectedLetterId) ?? null;
+  const selectedArticle = eligibleArticles.find((a) => a.articleId === selectedArticleId) ?? null;
 
   const handleSave = useCallback(async () => {
-    if (!selectedLetterId) {
-      Alert.alert("알림", "발송할 편지를 선택해주세요.");
+    if (!selectedArticleId) {
+      Alert.alert("알림", "발송할 글을 선택해주세요.");
       return;
     }
     setSaving(true);
     try {
+      // Client-side fast-path: check in-memory letters first to avoid a round-trip.
+      // The server also handles dedup authoritatively (returns existing on 200).
+      const existingLetter = letters.find((l) => l.sourceArticleId === selectedArticleId);
+      let spaceLetterId: string;
+      if (existingLetter) {
+        spaceLetterId = existingLetter.id;
+      } else {
+        const newLetter = await createLetter.mutateAsync({
+          id: spaceId,
+          data: { authorId: userId, sourceArticleId: selectedArticleId, letterType: "CENTER" },
+        });
+        spaceLetterId = newLetter.id;
+        // Invalidate so subsequent opens of the sheet see the new SpaceLetter and
+        // the client-side fast-path correctly avoids a second creation attempt.
+        queryClient.invalidateQueries({ queryKey: getListSpaceLettersQueryKey(spaceId) });
+      }
       await createSend.mutateAsync({
         id: spaceId,
-        letterId: selectedLetterId,
+        letterId: spaceLetterId,
         data: { scheduledAt: scheduledAt.toISOString(), ...(slotId != null ? { slotId } : {}) },
       });
       onSaved();
@@ -227,7 +227,7 @@ function NewSendSheet({
     } finally {
       setSaving(false);
     }
-  }, [selectedLetterId, scheduledAt, spaceId, createSend, onSaved, onClose]);
+  }, [selectedArticleId, scheduledAt, spaceId, letters, userId, createLetter, createSend, queryClient, onSaved, onClose, slotId]);
 
   return (
     <View style={sheetStyles.overlay}>
@@ -242,12 +242,12 @@ function NewSendSheet({
 
         <Text style={sheetStyles.fieldLabel}>발송할 글 선택</Text>
 
-        {eligibleLetters.length === 0 ? (
+        {eligibleArticles.length === 0 ? (
           <View style={sheetStyles.emptyArticleState}>
             <Feather name="book-open" size={28} color={Colors.zinc300} />
-            <Text style={sheetStyles.emptyArticleTitle}>내보낸 완성 글이 없어요</Text>
+            <Text style={sheetStyles.emptyArticleTitle}>완성된 글이 없어요</Text>
             <Text style={sheetStyles.emptyArticleSubtitle}>
-              기록함에서 글을 완성하고{"\n"}이 공간으로 내보낸 뒤 예약하세요
+              기록함에서 글을 완성한 뒤{"\n"}돌아오세요
             </Text>
             <ScalePressable
               style={sheetStyles.goToArchiveBtnOuter}
@@ -263,49 +263,35 @@ function NewSendSheet({
         ) : (
           <>
             <ScrollView style={sheetStyles.letterList} showsVerticalScrollIndicator={false}>
-              {eligibleLetters.map((letter) => (
+              {eligibleArticles.map((article) => (
                 <ScalePressable
-                  key={letter.id}
+                  key={article.articleId}
                   style={sheetStyles.letterOptionOuter}
                   contentStyle={[
                     sheetStyles.letterOption,
-                    selectedLetterId === letter.id && sheetStyles.letterOptionSelected,
+                    selectedArticleId === article.articleId && sheetStyles.letterOptionSelected,
                   ]}
-                  onPress={() => setSelectedLetterId(letter.id)}
+                  onPress={() => setSelectedArticleId(article.articleId)}
                 >
                   <View style={sheetStyles.letterOptionRow}>
-                    {selectedLetterId === letter.id ? (
+                    {selectedArticleId === article.articleId ? (
                       <Feather name="check-circle" size={16} color={Colors.noticeAccent} />
                     ) : (
                       <Feather name="circle" size={16} color={Colors.zinc300} />
                     )}
                     <View style={sheetStyles.letterOptionText}>
                       <Text style={sheetStyles.letterOptionTitle} numberOfLines={1}>
-                        {letter.articleTitle}
+                        {article.articleTitle ?? "제목 없음"}
                       </Text>
-                      {letter.roundNumber != null && (
-                        <Text style={sheetStyles.letterOptionRound}>
-                          {letter.roundNumber}회차{letter.roundTitle ? ` · ${letter.roundTitle}` : ""}
-                        </Text>
-                      )}
                     </View>
                   </View>
                 </ScalePressable>
               ))}
             </ScrollView>
 
-            {selectedLetter && (
+            {selectedArticle && (
               <View style={sheetStyles.reservationInfo}>
                 <Text style={sheetStyles.reservationInfoTitle}>예약 정보</Text>
-                {selectedLetter.roundNumber != null && (
-                  <View style={sheetStyles.reservationInfoRow}>
-                    <Text style={sheetStyles.reservationInfoLabel}>발송 회차</Text>
-                    <Text style={sheetStyles.reservationInfoValue}>
-                      {selectedLetter.roundNumber}회차
-                      {selectedLetter.roundTitle ? ` · ${selectedLetter.roundTitle}` : ""}
-                    </Text>
-                  </View>
-                )}
                 <View style={sheetStyles.reservationInfoRow}>
                   <Text style={sheetStyles.reservationInfoLabel}>예정 발송</Text>
                   <Text style={sheetStyles.reservationInfoValue}>{formatDateTime(scheduledAt.toISOString())}</Text>
@@ -752,7 +738,7 @@ export default function SpaceScheduleSendScreen() {
       {showNewSheet && (
         <NewSendSheet
           spaceId={id}
-          rounds={rounds}
+          userId={userId ?? ""}
           letters={letters}
           articles={articles}
           onClose={() => setShowNewSheet(false)}

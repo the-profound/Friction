@@ -1118,10 +1118,59 @@ router.get("/spaces/:id/letters", requireAuth, async (req, res) => {
   res.json(result);
 });
 
-router.post("/spaces/:id/letters", async (req, res) => {
+router.post("/spaces/:id/letters", requireAuth, async (req, res) => {
+  const bodySchema = z.object({
+    sourceArticleId: z.string().uuid().nullable().optional(),
+    spaceRoundId: z.string().uuid().nullable().optional(),
+    letterType: z.enum(["OPENING", "CENTER", "REPLY"]),
+    isPublic: z.boolean().optional(),
+  });
+  const parsed = bodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid request body", details: parsed.error.flatten() });
+    return;
+  }
+
+  // Require approved membership in the target space.
+  const [participation] = await db
+    .select()
+    .from(spaceParticipationsTable)
+    .where(
+      and(
+        eq(spaceParticipationsTable.spaceId, req.params.id),
+        eq(spaceParticipationsTable.userId, req.user!.id),
+        eq(spaceParticipationsTable.status, "APPROVED"),
+      ),
+    )
+    .limit(1);
+  if (!participation) {
+    res.status(403).json({ error: "Not a member of this space" });
+    return;
+  }
+
+  // If a sourceArticleId is provided, reuse any existing SpaceLetter for
+  // (space, article, author) instead of creating a duplicate.
+  if (parsed.data.sourceArticleId) {
+    const [existing] = await db
+      .select()
+      .from(spaceLettersTable)
+      .where(
+        and(
+          eq(spaceLettersTable.spaceId, req.params.id),
+          eq(spaceLettersTable.sourceArticleId, parsed.data.sourceArticleId),
+          eq(spaceLettersTable.authorId, req.user!.id),
+        ),
+      )
+      .limit(1);
+    if (existing) {
+      res.status(200).json(existing);
+      return;
+    }
+  }
+
   const [letter] = await db
     .insert(spaceLettersTable)
-    .values({ ...req.body, spaceId: req.params.id })
+    .values({ ...parsed.data, spaceId: req.params.id, authorId: req.user!.id })
     .returning();
   res.status(201).json(letter);
 });
