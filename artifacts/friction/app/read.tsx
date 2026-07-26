@@ -615,14 +615,40 @@ export default function ReadScreen() {
     handleOpenThoughts();
   }, [handleOpenThoughts]);
 
-  // Entry animation: fade in reader only once, when content is actually ready.
-  // Using [] would fire immediately during the loading state (before the overlay
-  // is rendered), so the 400ms animation finishes before content appears.
+  // Entry animation: fixed 300ms hold → 700ms fade, independent of load state.
+  // Fades to HOLD_OPACITY (0.01) — nearly transparent — as the safe hold point.
+  // A separate effect snaps to 0 once content is ready, but ONLY after the
+  // full 1000ms entry timeline has elapsed, preventing early cancellation on
+  // fast/cached loads and ensuring the fixed timing is always respected.
+  const HOLD_OPACITY = 0.01;
+  const ENTRY_TIMELINE_MS = 1000; // 300ms delay + 700ms fade
   const hasStartedEntryFadeRef = useRef(false);
+  const entryTimelineDoneRef = useRef(false);
+  const contentReadyRef = useRef(false);
+
   useEffect(() => {
-    if (!articleLoading && !reading.isRestoring && reading.isSessionHydrated && !hasStartedEntryFadeRef.current) {
-      hasStartedEntryFadeRef.current = true;
-      overlayOpacity.value = withDelay(300, withTiming(0, { duration: 700, easing: Easing.out(Easing.ease) }));
+    if (hasStartedEntryFadeRef.current) return;
+    hasStartedEntryFadeRef.current = true;
+    overlayOpacity.value = withDelay(300, withTiming(HOLD_OPACITY, { duration: 700, easing: Easing.out(Easing.ease) }));
+    const timer = setTimeout(() => {
+      entryTimelineDoneRef.current = true;
+      // Snap to 0 if content was already ready before the timeline finished.
+      if (contentReadyRef.current && overlayOpacity.value > 0) {
+        overlayOpacity.value = withTiming(0, { duration: 0 });
+      }
+    }, ENTRY_TIMELINE_MS);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Snap overlay to 0 when content is ready — but only after the entry
+  // timeline has run to completion, so the fixed fade is never cut short.
+  useEffect(() => {
+    if (!articleLoading && !reading.isRestoring && reading.isSessionHydrated) {
+      contentReadyRef.current = true;
+      if (entryTimelineDoneRef.current && overlayOpacity.value > 0) {
+        overlayOpacity.value = withTiming(0, { duration: 0 });
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [articleLoading, reading.isRestoring, reading.isSessionHydrated]);
