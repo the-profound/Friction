@@ -282,10 +282,9 @@ export default function SpaceStartScreen() {
       queryKey: getListSpaceMembersQueryKey(id),
     },
   });
-  const allMembers = (membersQuery.data ?? []) as SpaceMember[];
   const confirmedMembers = useMemo(
-    () => allMembers.filter((m) => m.status === "APPROVED"),
-    [allMembers],
+    () => ((membersQuery.data ?? []) as SpaceMember[]).filter((m) => m.status === "APPROVED"),
+    [membersQuery.data],
   );
 
   const codeRequestsQuery = useListSpaceCodeRequests(
@@ -367,7 +366,9 @@ export default function SpaceStartScreen() {
         : confirmedMembers.filter((m) => m.role !== "OPERATOR").map((m) => m.userId);
       const kept = prev.filter((uid) => eligible.includes(uid));
       const added = eligible.filter((uid) => !kept.includes(uid));
-      return [...kept, ...added];
+      const next = [...kept, ...added];
+      if (next.length === prev.length && next.every((uid, i) => uid === prev[i])) return prev;
+      return next;
     });
   }, [confirmedMembers, operatorParticipates]);
 
