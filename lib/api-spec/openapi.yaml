@@ -4076,7 +4076,10 @@ components:
           type: string
           nullable: true
           description: Pseudonymous display name for anonymous spaces (e.g. "참여자 1"). Null in non-anonymous spaces.
-      required: [id, spaceId, authorId, letterType, isPublic, createdAt, updatedAt]
+        isRead:
+          type: boolean
+          description: Whether the calling user has already read the source article. Always false when there is no sourceArticleId.
+      required: [id, spaceId, authorId, letterType, isPublic, createdAt, updatedAt, isRead]
 
     CreateSpaceLetterBody:
       type: object

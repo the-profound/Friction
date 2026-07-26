@@ -14,6 +14,7 @@ import {
   spaceScheduledSendsTable,
   usersTable,
   articlesTable,
+  userArticleReadsTable,
 } from "@workspace/db";
 
 const router: IRouter = Router();
@@ -839,6 +840,18 @@ router.get("/spaces/:id/letters", requireAuth, async (req, res) => {
     });
   }
 
+  // Fetch read status for the calling user across all letter articles
+  const readArticleIds = articleIds.length > 0
+    ? await db
+        .select({ articleId: userArticleReadsTable.articleId })
+        .from(userArticleReadsTable)
+        .where(and(
+          eq(userArticleReadsTable.userId, callerId),
+          inArray(userArticleReadsTable.articleId, articleIds),
+        ))
+    : [];
+  const readSet = new Set(readArticleIds.map((r) => r.articleId));
+
   const result = letters.map((letter) => {
     const article = letter.sourceArticleId ? (articleMap.get(letter.sourceArticleId) ?? null) : null;
     const rawContent = article?.content ?? null;
@@ -850,6 +863,7 @@ router.get("/spaces/:id/letters", requireAuth, async (req, res) => {
       articleCover: article?.cover ?? null,
       authorNickname: authorMap.get(letter.authorId) ?? null,
       displayName: displayNameMap.get(letter.authorId) ?? null,
+      isRead: letter.sourceArticleId ? readSet.has(letter.sourceArticleId) : false,
     };
   });
   res.json(result);

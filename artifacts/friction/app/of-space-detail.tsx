@@ -17,7 +17,7 @@ import {
   type TextLayoutEventData,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import * as Clipboard from "expo-clipboard";
@@ -229,7 +229,7 @@ function SpaceCarousel({
           authorName={authorName}
           cover={((letter as any).articleCover ?? null) as ArticleCover | null}
           cardWidth={SC_CARD_W}
-          isRead={false}
+          isRead={letter.isRead}
           isActive={true}
           onPress={handlePress}
           letterTypeBadge={letterTypeLabel(letter.letterType)}
@@ -883,6 +883,17 @@ export default function SpaceDetailScreen() {
   const [rejectTargetId, setRejectTargetId] = useState<string | null>(null);
   const [showKebabSheet, setShowKebabSheet] = useState(false);
 
+  // ── Track navigation to reader so we can refetch letters on return ───────
+  const wentToReaderRef = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (wentToReaderRef.current) {
+        wentToReaderRef.current = false;
+        queryClient.invalidateQueries({ queryKey: getListSpaceLettersQueryKey(id) });
+      }
+    }, [queryClient, id]),
+  );
+
   // ── Card select overlay state ─────────────────────────────────────────────
   const [tapLetter, setTapLetter] = useState<SpaceLetter | null>(null);
   const [tapLetterOrigin, setTapLetterOrigin] = useState<OriginLayout | null>(null);
@@ -1151,6 +1162,7 @@ export default function SpaceDetailScreen() {
       setTapArticle(null);
       if (isTapped) {
         if (!letter?.sourceArticleId) return;
+        wentToReaderRef.current = true;
         router.push({
           pathname: "/read" as never,
           params: { articleId: letter.sourceArticleId },

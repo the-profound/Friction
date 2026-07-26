@@ -53,7 +53,7 @@ function ArticleCardItem({
   const borderRadius = Math.max(8, Math.round(16 * scale));
 
   return (
-    <View style={[{ width: w, height: h }, !isActive && styles.inactive]}>
+    <View style={[{ width: w, height: h }, !isActive && styles.inactive, isRead && styles.read]}>
       <ScalePressable
         onPress={onPress}
         onLongPress={onLongPress}
@@ -164,6 +164,9 @@ const COLLECTION_SIZE = 16;
 const styles = StyleSheet.create({
   inactive: {
     opacity: Colors.cardInactiveOpacity,
+  },
+  read: {
+    opacity: 0.45,
   },
   backgroundImage: {
     flex: 1,
