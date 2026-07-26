@@ -1310,6 +1310,7 @@ export default function SpaceDetailScreen() {
         style={styles.scrollView}
         contentContainerStyle={[
           styles.scrollContent,
+          isOperator && isRecruiting && { paddingBottom: 80 + insets.bottom },
           !isOperator && !isArchived && { paddingBottom: 80 + insets.bottom },
           !isOperator && isArchived && { paddingBottom: 56 + insets.bottom },
         ]}
@@ -1512,6 +1513,23 @@ export default function SpaceDetailScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* ── Floating "공간 시작하기" button (operators only, recruiting spaces) ── */}
+      {isOperator && isRecruiting && (
+        <ScalePressable
+          style={[styles.floatingBtnOuter, { bottom: insets.bottom + 16 }]}
+          contentStyle={styles.floatingBtn}
+          onPress={() =>
+            router.push({
+              pathname: "/of-space-start" as never,
+              params: { id },
+            })
+          }
+        >
+          <Feather name="play" size={15} color={Colors.white} />
+          <Text style={styles.floatingBtnText}>공간 시작하기</Text>
+        </ScalePressable>
+      )}
 
       {/* ── Floating "글 예약 발송" button (non-operators only, active spaces) ── */}
       {!isOperator && !isArchived && (
