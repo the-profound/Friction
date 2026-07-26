@@ -1,4 +1,4 @@
-import { boolean, check, date, integer, pgEnum, pgTable, text, timestamp, unique, uuid, varchar } from "drizzle-orm/pg-core";
+import { boolean, check, date, integer, jsonb, pgEnum, pgTable, text, timestamp, unique, uuid, varchar } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -15,13 +15,18 @@ export const spaceInvitationStatusEnum = pgEnum("space_invitation_status", ["PEN
 export const spaceCodeRequestStatusEnum = pgEnum("space_code_request_status", ["PENDING", "APPROVED", "REJECTED", "CANCELLED"]);
 export const spaceLetterTypeEnum = pgEnum("space_letter_type", ["OPENING", "CENTER", "REPLY"]);
 export const spaceScheduledSendStatusEnum = pgEnum("space_scheduled_send_status", ["PENDING", "SENT", "CANCELLED", "FAILED"]);
+export const spaceScheduleTypeEnum = pgEnum("space_schedule_type", ["N_DAY", "WEEKDAY"]);
 
 export const spacesTable = pgTable("spaces", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: varchar("name", { length: 50 }).notNull(),
   description: text("description"),
   isAnonymous: boolean("is_anonymous").notNull().default(false),
-  startsAt: timestamp("starts_at", { withTimezone: true }),
+  plannedStartsAt: timestamp("planned_starts_at", { withTimezone: true }),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  scheduleType: spaceScheduleTypeEnum("schedule_type"),
+  weekdays: jsonb("weekdays").$type<number[]>(),
+  operatorParticipates: boolean("operator_participates").notNull().default(true),
   roundCount: integer("round_count").notNull().default(1),
   maxParticipants: integer("max_participants"),
   defaultCenterInterval: integer("default_center_interval").notNull().default(7),

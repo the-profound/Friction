@@ -1,7 +1,10 @@
 import { Router, type IRouter } from "express";
-import { eq, and, inArray, count } from "drizzle-orm";
+import { eq, and, inArray, count, ne } from "drizzle-orm";
+import { z } from "zod";
 import { requireAuth } from "../middlewares/requireAuth";
 import { generateInviteCode } from "../lib/inviteCodeWords";
+import { logger } from "../lib/logger";
+import { dispatchNotification } from "../lib/notifications";
 import {
   db,
   spacesTable,
@@ -24,6 +27,40 @@ function toDate(val: unknown): Date | undefined {
   if (val instanceof Date) return val;
   const d = new Date(val as string);
   return isNaN(d.getTime()) ? undefined : d;
+}
+
+// ─── Round start date calculation ────────────────────────────────────────────
+
+/**
+ * Calculate the scheduled start date for a round (0-indexed) given the start
+ * time and the schedule config (N_DAY or WEEKDAY).
+ */
+function calculateRoundStartDate(
+  startedAt: Date,
+  scheduleType: "N_DAY" | "WEEKDAY",
+  intervalDays: number,
+  weekdays: number[],
+  roundIndex: number,
+): Date | null {
+  if (scheduleType === "N_DAY") {
+    const date = new Date(startedAt);
+    date.setDate(date.getDate() + roundIndex * intervalDays);
+    return date;
+  }
+  if (scheduleType === "WEEKDAY" && weekdays.length > 0) {
+    const sorted = [...weekdays].sort((a, b) => a - b);
+    const date = new Date(startedAt);
+    date.setHours(0, 0, 0, 0);
+    let found = 0;
+    for (let attempt = 0; attempt < 3650; attempt++) {
+      if (sorted.includes(date.getDay())) {
+        if (found === roundIndex) return new Date(date);
+        found++;
+      }
+      date.setDate(date.getDate() + 1);
+    }
+  }
+  return null;
 }
 
 // ─── My invitations (must be before /:id) ───────────────────────────────────
@@ -153,9 +190,7 @@ router.get("/spaces", async (req, res) => {
     : [];
   const creatorNicknameMap = new Map(creators.map((u) => [u.id, u.nickname]));
 
-  const activatedSpaces = await Promise.all(spaces.map(autoActivateSpace));
-
-  const result = activatedSpaces.map((space) => ({
+  const result = spaces.map((space) => ({
     ...space,
     myRole: roleMap.get(space.id) ?? "PARTICIPANT",
     participantCount: participantCountMap.get(space.id) ?? 0,
@@ -177,11 +212,13 @@ router.post("/spaces", async (req, res) => {
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     const inviteCode: string = body.inviteCode ?? generateInviteCode();
     try {
-      const { startsAt, ...rest } = body;
+      // Accept plannedStartsAt (new) or startsAt (legacy) for backward compat
+      const { plannedStartsAt, startsAt, ...rest } = body;
+      const resolvedPlannedStartsAt = plannedStartsAt ?? startsAt;
       const values = {
         ...rest,
         inviteCode,
-        ...(startsAt != null ? { startsAt: toDate(startsAt) } : {}),
+        ...(resolvedPlannedStartsAt != null ? { plannedStartsAt: toDate(resolvedPlannedStartsAt) } : {}),
       };
       const [space] = await db.insert(spacesTable).values(values).returning();
       await db.insert(spaceParticipationsTable).values({
@@ -233,32 +270,15 @@ router.get("/spaces/by-invite-code/:code", async (req, res) => {
   res.json({ ...space, creatorNickname: creator?.nickname ?? null, participantCount });
 });
 
-async function autoActivateSpace(space: typeof spacesTable.$inferSelect): Promise<typeof spacesTable.$inferSelect> {
-  if (
-    space.status === "RECRUITING" &&
-    space.startsAt != null &&
-    new Date(space.startsAt) <= new Date()
-  ) {
-    const [updated] = await db
-      .update(spacesTable)
-      .set({ status: "ACTIVE" })
-      .where(eq(spacesTable.id, space.id))
-      .returning();
-    return updated ?? { ...space, status: "ACTIVE" };
-  }
-  return space;
-}
-
 router.get("/spaces/:id", async (req, res) => {
-  const [raw] = await db
+  const [space] = await db
     .select()
     .from(spacesTable)
     .where(eq(spacesTable.id, req.params.id));
-  if (!raw) {
+  if (!space) {
     res.status(404).json({ error: "Space not found" });
     return;
   }
-  const space = await autoActivateSpace(raw);
   res.json(space);
 });
 
@@ -290,6 +310,236 @@ router.patch("/spaces/:id", requireAuth, async (req, res) => {
     return;
   }
   res.json(space);
+});
+
+// ─── Start a space (operator only) ───────────────────────────────────────────
+
+const startSpaceRoundSchema = z.object({
+  title: z.string().max(100).nullish(),
+  description: z.string().nullish(),
+  slots: z.array(z.string().uuid()).default([]),
+});
+
+const startSpaceBodySchema = z.object({
+  roundCount: z.number().int().min(1),
+  scheduleType: z.enum(["N_DAY", "WEEKDAY"]),
+  interval: z.number().int().min(1).optional(),
+  weekdays: z.array(z.number().int().min(0).max(6)).optional(),
+  defaultCenterCount: z.number().int().min(1).optional(),
+  rounds: z.array(startSpaceRoundSchema).optional(),
+  operatorParticipates: z.boolean().default(true),
+});
+
+router.post("/spaces/:id/start", requireAuth, async (req, res) => {
+  const callerId = req.user!.id;
+
+  // 1. Verify operator
+  const [callerParticipation] = await db
+    .select()
+    .from(spaceParticipationsTable)
+    .where(
+      and(
+        eq(spaceParticipationsTable.spaceId, req.params.id),
+        eq(spaceParticipationsTable.userId, callerId),
+        eq(spaceParticipationsTable.role, "OPERATOR"),
+        eq(spaceParticipationsTable.status, "APPROVED"),
+      ),
+    )
+    .limit(1);
+  if (!callerParticipation) {
+    res.status(403).json({ error: "Only operators can start a space" });
+    return;
+  }
+
+  // 2. Get current space
+  const [space] = await db
+    .select()
+    .from(spacesTable)
+    .where(eq(spacesTable.id, req.params.id));
+  if (!space) {
+    res.status(404).json({ error: "Space not found" });
+    return;
+  }
+  if (space.status !== "RECRUITING") {
+    res.status(400).json({ error: "이미 시작되었거나 보관된 공간입니다." });
+    return;
+  }
+
+  // 3. Check opening letter exists
+  const [openingLetter] = await db
+    .select({ id: spaceLettersTable.id })
+    .from(spaceLettersTable)
+    .where(
+      and(
+        eq(spaceLettersTable.spaceId, req.params.id),
+        eq(spaceLettersTable.letterType, "OPENING"),
+      ),
+    )
+    .limit(1);
+  if (!openingLetter) {
+    res.status(400).json({ error: "여는 편지를 먼저 작성해야 합니다." });
+    return;
+  }
+
+  // 4. Check confirmed participants (non-operator)
+  const [{ value: confirmedParticipantCount }] = await db
+    .select({ value: count() })
+    .from(spaceParticipationsTable)
+    .where(
+      and(
+        eq(spaceParticipationsTable.spaceId, req.params.id),
+        eq(spaceParticipationsTable.status, "APPROVED"),
+        ne(spaceParticipationsTable.role, "OPERATOR"),
+      ),
+    );
+  if (Number(confirmedParticipantCount) === 0) {
+    res.status(400).json({ error: "확정된 참여자가 없습니다." });
+    return;
+  }
+
+  // 5. Validate request body
+  const parseResult = startSpaceBodySchema.safeParse(req.body);
+  if (!parseResult.success) {
+    res.status(400).json({ error: "잘못된 요청입니다.", details: parseResult.error.issues });
+    return;
+  }
+  const body = parseResult.data;
+
+  if (body.scheduleType === "N_DAY" && !body.interval) {
+    res.status(400).json({ error: "N_DAY 방식은 interval(일수)이 필요합니다." });
+    return;
+  }
+  if (body.scheduleType === "WEEKDAY" && (!body.weekdays || body.weekdays.length === 0)) {
+    res.status(400).json({ error: "WEEKDAY 방식은 weekdays 배열이 필요합니다." });
+    return;
+  }
+
+  // 6. Fetch approved participants to validate slot assignments
+  const approvedParticipations = await db
+    .select({ userId: spaceParticipationsTable.userId, role: spaceParticipationsTable.role })
+    .from(spaceParticipationsTable)
+    .where(
+      and(
+        eq(spaceParticipationsTable.spaceId, req.params.id),
+        eq(spaceParticipationsTable.status, "APPROVED"),
+      ),
+    );
+  const approvedUserIds = new Set(approvedParticipations.map((p) => p.userId));
+
+  // Validate and filter slot assignments:
+  // - operatorParticipates=false: silently remove operator from all slot lists
+  // - All remaining slot user IDs must be approved space participants
+  const effectiveRounds = (body.rounds ?? []).map((round, i) => {
+    let slots = round.slots ?? [];
+    if (!body.operatorParticipates) {
+      slots = slots.filter((uid) => uid !== callerId);
+    }
+    const invalidSlotIds = slots.filter((uid) => !approvedUserIds.has(uid));
+    if (invalidSlotIds.length > 0) {
+      return { error: `회차 ${i + 1}에 공간 참여자가 아닌 사용자가 포함되어 있습니다: ${invalidSlotIds.join(", ")}` };
+    }
+    return { ...round, slots };
+  });
+
+  const firstError = effectiveRounds.find((r) => "error" in r);
+  if (firstError && "error" in firstError) {
+    res.status(400).json({ error: firstError.error });
+    return;
+  }
+
+  // 7. Execute in a transaction
+  const now = new Date();
+  const intervalDays = body.interval ?? space.defaultCenterInterval;
+  const weekdays = body.weekdays ?? [];
+  let rejectedRequesterIds: string[] = [];
+
+  try {
+    await db.transaction(async (tx) => {
+      // Update space
+      await tx
+        .update(spacesTable)
+        .set({
+          status: "ACTIVE",
+          startedAt: now,
+          scheduleType: body.scheduleType,
+          weekdays: body.weekdays ?? null,
+          operatorParticipates: body.operatorParticipates,
+          roundCount: body.roundCount,
+          ...(body.defaultCenterCount != null ? { defaultCenterCount: body.defaultCenterCount } : {}),
+        })
+        .where(eq(spacesTable.id, req.params.id));
+
+      // Create rounds and slots
+      for (let i = 0; i < body.roundCount; i++) {
+        const roundConfig = effectiveRounds[i] as Exclude<typeof effectiveRounds[number], { error: string }>;
+        const roundStartDate = calculateRoundStartDate(
+          now,
+          body.scheduleType,
+          intervalDays,
+          weekdays,
+          i,
+        );
+
+        const [round] = await tx
+          .insert(spaceRoundsTable)
+          .values({
+            spaceId: req.params.id,
+            roundNumber: i + 1,
+            title: roundConfig?.title ?? null,
+            description: roundConfig?.description ?? null,
+            ...(roundStartDate ? { startsAt: roundStartDate } : {}),
+          })
+          .returning();
+
+        // Create slots for this round (already filtered for operator if needed)
+        const slots = roundConfig?.slots ?? [];
+        for (let j = 0; j < slots.length; j++) {
+          await tx.insert(spaceRoundSlotsTable).values({
+            spaceRoundId: round.id,
+            assignedUserId: slots[j],
+            slotOrder: j,
+          });
+        }
+      }
+
+      // Reject all pending code requests and collect requester IDs for notification
+      const rejected = await tx
+        .update(spaceCodeRequestsTable)
+        .set({
+          status: "REJECTED",
+          rejectionReason: "공간이 시작되어 더 이상 코드 신청을 받지 않습니다.",
+        })
+        .where(
+          and(
+            eq(spaceCodeRequestsTable.spaceId, req.params.id),
+            eq(spaceCodeRequestsTable.status, "PENDING"),
+          ),
+        )
+        .returning({ requesterId: spaceCodeRequestsTable.requesterId });
+      rejectedRequesterIds = rejected.map((r) => r.requesterId);
+    });
+  } catch (err) {
+    console.error("POST /spaces/:id/start transaction error:", err);
+    res.status(500).json({ error: "공간 시작에 실패했습니다." });
+    return;
+  }
+
+  // Dispatch rejection notifications for auto-rejected code requesters
+  for (const requesterId of rejectedRequesterIds) {
+    dispatchNotification({
+      type: "SPACE_CODE_REQUEST_AUTO_REJECTED",
+      spaceId: req.params.id,
+      requesterId,
+      rejectionReason: "공간이 시작되어 더 이상 코드 신청을 받지 않습니다.",
+    });
+  }
+
+  // Return updated space
+  const [updatedSpace] = await db
+    .select()
+    .from(spacesTable)
+    .where(eq(spacesTable.id, req.params.id));
+  res.json(updatedSpace);
 });
 
 router.get("/spaces/:id/rounds", async (req, res) => {
@@ -815,7 +1065,6 @@ router.get("/spaces/:id/letters", requireAuth, async (req, res) => {
   const authorMap = new Map(authors.map((u) => [u.id, u.nickname]));
 
   // For anonymous spaces: derive a stable pseudonymous display name per author
-  // based on the order they joined the space (earliest joiner = "참여자 1", etc.)
   const [space] = await db
     .select({ isAnonymous: spacesTable.isAnonymous })
     .from(spacesTable)

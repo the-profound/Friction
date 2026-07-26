@@ -24,4 +24,6 @@ export interface SpaceLetter {
   authorNickname?: string | null;
   /** Pseudonymous display name for anonymous spaces (e.g. "참여자 1"). Null in non-anonymous spaces. */
   displayName?: string | null;
+  /** Whether the calling user has already read the source article. Always false when there is no sourceArticleId. */
+  isRead: boolean;
 }

@@ -5,6 +5,7 @@
  * Friction MVP 1.0.0 API
  * OpenAPI spec version: 0.1.0
  */
+import type { SpaceScheduleType } from "./spaceScheduleType";
 import type { SpaceStatus } from "./spaceStatus";
 
 export interface Space {
@@ -12,7 +13,16 @@ export interface Space {
   name: string;
   description?: string | null;
   isAnonymous: boolean;
-  startsAt?: Date | null;
+  /** 참여자에게 공개되는 공간 시작 예정일 (운영자가 설정) */
+  plannedStartsAt?: Date | null;
+  /** 운영자가 실제로 시작 버튼을 누른 시각 */
+  startedAt?: Date | null;
+  /** 진행 방식 (N일 간격 또는 요일 지정) */
+  scheduleType?: SpaceScheduleType;
+  /** 요일 지정 시 요일 배열 (0=일, 1=월, ..., 6=토) */
+  weekdays?: number[] | null;
+  /** 운영자가 중심글 순서에 포함될지 여부 */
+  operatorParticipates: boolean;
   roundCount: number;
   maxParticipants?: number | null;
   defaultCenterInterval: number;

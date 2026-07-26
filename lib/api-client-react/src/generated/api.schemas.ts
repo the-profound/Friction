@@ -546,6 +546,18 @@ export interface SendArticleBody {
   isEnvelope?: boolean;
 }
 
+/**
+ * 진행 방식 (N일 간격 또는 요일 지정)
+ */
+export type SpaceListItemScheduleType =
+  | (typeof SpaceListItemScheduleType)[keyof typeof SpaceListItemScheduleType]
+  | null;
+
+export const SpaceListItemScheduleType = {
+  N_DAY: "N_DAY",
+  WEEKDAY: "WEEKDAY",
+} as const;
+
 export type SpaceListItemStatus =
   (typeof SpaceListItemStatus)[keyof typeof SpaceListItemStatus];
 
@@ -590,7 +602,16 @@ export interface SpaceListItem {
   name: string;
   description?: string | null;
   isAnonymous: boolean;
-  startsAt?: string | null;
+  /** 참여자에게 공개되는 공간 시작 예정일 (운영자가 설정) */
+  plannedStartsAt?: string | null;
+  /** 운영자가 실제로 시작 버튼을 누른 시각 */
+  startedAt?: string | null;
+  /** 진행 방식 (N일 간격 또는 요일 지정) */
+  scheduleType?: SpaceListItemScheduleType;
+  /** 요일 지정 시 요일 배열 (0=일, 1=월, ..., 6=토) */
+  weekdays?: number[] | null;
+  /** 운영자가 중심글 순서에 포함될지 여부 */
+  operatorParticipates: boolean;
   roundCount: number;
   maxParticipants?: number | null;
   defaultCenterInterval: number;
@@ -626,6 +647,18 @@ export interface SpaceInvitation {
   updatedAt: string;
 }
 
+/**
+ * 진행 방식 (N일 간격 또는 요일 지정)
+ */
+export type SpaceScheduleType =
+  | (typeof SpaceScheduleType)[keyof typeof SpaceScheduleType]
+  | null;
+
+export const SpaceScheduleType = {
+  N_DAY: "N_DAY",
+  WEEKDAY: "WEEKDAY",
+} as const;
+
 export type SpaceStatus = (typeof SpaceStatus)[keyof typeof SpaceStatus];
 
 export const SpaceStatus = {
@@ -639,7 +672,16 @@ export interface Space {
   name: string;
   description?: string | null;
   isAnonymous: boolean;
-  startsAt?: string | null;
+  /** 참여자에게 공개되는 공간 시작 예정일 (운영자가 설정) */
+  plannedStartsAt?: string | null;
+  /** 운영자가 실제로 시작 버튼을 누른 시각 */
+  startedAt?: string | null;
+  /** 진행 방식 (N일 간격 또는 요일 지정) */
+  scheduleType?: SpaceScheduleType;
+  /** 요일 지정 시 요일 배열 (0=일, 1=월, ..., 6=토) */
+  weekdays?: number[] | null;
+  /** 운영자가 중심글 순서에 포함될지 여부 */
+  operatorParticipates: boolean;
   roundCount: number;
   maxParticipants?: number | null;
   defaultCenterInterval: number;
@@ -691,7 +733,8 @@ export interface CreateSpaceBody {
   name: string;
   description?: string | null;
   isAnonymous?: boolean;
-  startsAt?: string | null;
+  /** 참여자에게 공개되는 공간 시작 예정일 */
+  plannedStartsAt?: string | null;
   /** @minimum 1 */
   roundCount?: number;
   maxParticipants?: number | null;
@@ -719,7 +762,8 @@ export interface UpdateSpaceBody {
   name?: string;
   description?: string | null;
   isAnonymous?: boolean;
-  startsAt?: string | null;
+  /** 참여자에게 공개되는 공간 시작 예정일 */
+  plannedStartsAt?: string | null;
   /** @minimum 1 */
   roundCount?: number;
   maxParticipants?: number | null;
@@ -728,6 +772,51 @@ export interface UpdateSpaceBody {
   /** @minimum 1 */
   defaultCenterCount?: number;
   status?: UpdateSpaceBodyStatus;
+}
+
+export interface StartSpaceRoundConfig {
+  /** @maxLength 100 */
+  title?: string | null;
+  description?: string | null;
+  /** 중심글 작성 순서 (userId 배열, 순서대로 배정) */
+  slots?: string[];
+}
+
+/**
+ * 진행 방식
+ */
+export type StartSpaceBodyScheduleType =
+  (typeof StartSpaceBodyScheduleType)[keyof typeof StartSpaceBodyScheduleType];
+
+export const StartSpaceBodyScheduleType = {
+  N_DAY: "N_DAY",
+  WEEKDAY: "WEEKDAY",
+} as const;
+
+export interface StartSpaceBody {
+  /**
+   * 확정 회차 수
+   * @minimum 1
+   */
+  roundCount: number;
+  /** 진행 방식 */
+  scheduleType: StartSpaceBodyScheduleType;
+  /**
+   * N_DAY 방식 시 회차 간격(일수)
+   * @minimum 1
+   */
+  interval?: number;
+  /** WEEKDAY 방식 시 요일 배열 (0=일, 1=월, ..., 6=토) */
+  weekdays?: number[];
+  /**
+   * 회차별 중심글 수
+   * @minimum 1
+   */
+  defaultCenterCount?: number;
+  /** 회차별 제목·설명·슬롯 배열 (roundCount와 길이가 다를 경우 넘치는 회차는 기본값 사용) */
+  rounds?: StartSpaceRoundConfig[];
+  /** 운영자가 중심글 순서 배정에 포함될지 여부 */
+  operatorParticipates?: boolean;
 }
 
 export interface CreateSpaceRoundBody {

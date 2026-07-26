@@ -1515,6 +1515,47 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /spaces/{id}/start:
+    post:
+      operationId: startSpace
+      tags: [spaces]
+      summary: 공간 시작 (운영자 전용) — ACTIVE 전환, 회차 틀 생성, 코드 신청 자동 거절
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartSpaceBody"
+      responses:
+        "200":
+          description: 시작된 공간
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Space"
+        "400":
+          description: 여는 편지 미작성 또는 확정 참여자 없음
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: 운영자만 호출 가능
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: 공간 없음
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /spaces/{id}/rounds:
     get:
       operationId: listSpaceRounds
@@ -3548,10 +3589,32 @@ components:
           nullable: true
         isAnonymous:
           type: boolean
-        startsAt:
+        plannedStartsAt:
           type: string
           format: date-time
           nullable: true
+          description: 참여자에게 공개되는 공간 시작 예정일 (운영자가 설정)
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: 운영자가 실제로 시작 버튼을 누른 시각
+        scheduleType:
+          type: string
+          enum: [N_DAY, WEEKDAY]
+          nullable: true
+          description: 진행 방식 (N일 간격 또는 요일 지정)
+        weekdays:
+          type: array
+          items:
+            type: integer
+            minimum: 0
+            maximum: 6
+          nullable: true
+          description: 요일 지정 시 요일 배열 (0=일, 1=월, ..., 6=토)
+        operatorParticipates:
+          type: boolean
+          description: 운영자가 중심글 순서에 포함될지 여부
         roundCount:
           type: integer
         maxParticipants:
@@ -3588,7 +3651,7 @@ components:
         operatorNickname:
           type: string
           nullable: true
-      required: [id, name, isAnonymous, roundCount, defaultCenterInterval, defaultCenterCount, status, creatorId, createdAt, updatedAt, myRole, participantCount]
+      required: [id, name, isAnonymous, operatorParticipates, roundCount, defaultCenterInterval, defaultCenterCount, status, creatorId, createdAt, updatedAt, myRole, participantCount]
 
     SpaceInvitationWithSpace:
       type: object
@@ -3621,10 +3684,32 @@ components:
           nullable: true
         isAnonymous:
           type: boolean
-        startsAt:
+        plannedStartsAt:
           type: string
           format: date-time
           nullable: true
+          description: 참여자에게 공개되는 공간 시작 예정일 (운영자가 설정)
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: 운영자가 실제로 시작 버튼을 누른 시각
+        scheduleType:
+          type: string
+          enum: [N_DAY, WEEKDAY]
+          nullable: true
+          description: 진행 방식 (N일 간격 또는 요일 지정)
+        weekdays:
+          type: array
+          items:
+            type: integer
+            minimum: 0
+            maximum: 6
+          nullable: true
+          description: 요일 지정 시 요일 배열 (0=일, 1=월, ..., 6=토)
+        operatorParticipates:
+          type: boolean
+          description: 운영자가 중심글 순서에 포함될지 여부
         roundCount:
           type: integer
         maxParticipants:
@@ -3650,7 +3735,7 @@ components:
         updatedAt:
           type: string
           format: date-time
-      required: [id, name, isAnonymous, roundCount, defaultCenterInterval, defaultCenterCount, status, creatorId, createdAt, updatedAt]
+      required: [id, name, isAnonymous, operatorParticipates, roundCount, defaultCenterInterval, defaultCenterCount, status, creatorId, createdAt, updatedAt]
 
     CreateSpaceBody:
       type: object
@@ -3664,10 +3749,11 @@ components:
           nullable: true
         isAnonymous:
           type: boolean
-        startsAt:
+        plannedStartsAt:
           type: string
           format: date-time
           nullable: true
+          description: 참여자에게 공개되는 공간 시작 예정일
         roundCount:
           type: integer
           minimum: 1
@@ -3697,10 +3783,11 @@ components:
           nullable: true
         isAnonymous:
           type: boolean
-        startsAt:
+        plannedStartsAt:
           type: string
           format: date-time
           nullable: true
+          description: 참여자에게 공개되는 공간 시작 예정일
         roundCount:
           type: integer
           minimum: 1
@@ -3716,6 +3803,61 @@ components:
         status:
           type: string
           enum: [RECRUITING, ACTIVE, ARCHIVED]
+
+    StartSpaceRoundConfig:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 100
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        slots:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: 중심글 작성 순서 (userId 배열, 순서대로 배정)
+          default: []
+
+    StartSpaceBody:
+      type: object
+      properties:
+        roundCount:
+          type: integer
+          minimum: 1
+          description: 확정 회차 수
+        scheduleType:
+          type: string
+          enum: [N_DAY, WEEKDAY]
+          description: 진행 방식
+        interval:
+          type: integer
+          minimum: 1
+          description: N_DAY 방식 시 회차 간격(일수)
+        weekdays:
+          type: array
+          items:
+            type: integer
+            minimum: 0
+            maximum: 6
+          description: WEEKDAY 방식 시 요일 배열 (0=일, 1=월, ..., 6=토)
+        defaultCenterCount:
+          type: integer
+          minimum: 1
+          description: 회차별 중심글 수
+        rounds:
+          type: array
+          items:
+            $ref: "#/components/schemas/StartSpaceRoundConfig"
+          description: 회차별 제목·설명·슬롯 배열 (roundCount와 길이가 다를 경우 넘치는 회차는 기본값 사용)
+        operatorParticipates:
+          type: boolean
+          description: 운영자가 중심글 순서 배정에 포함될지 여부
+          default: true
+      required: [roundCount, scheduleType]
 
     SpaceRound:
       type: object

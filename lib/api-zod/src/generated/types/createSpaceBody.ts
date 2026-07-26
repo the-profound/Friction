@@ -14,7 +14,8 @@ export interface CreateSpaceBody {
   name: string;
   description?: string | null;
   isAnonymous?: boolean;
-  startsAt?: Date | null;
+  /** 참여자에게 공개되는 공간 시작 예정일 */
+  plannedStartsAt?: Date | null;
   /** @minimum 1 */
   roundCount?: number;
   maxParticipants?: number | null;

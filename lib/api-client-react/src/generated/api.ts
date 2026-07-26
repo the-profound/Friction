@@ -98,6 +98,7 @@ import type {
   SpaceWithCreatorInfo,
   SpellCheckBody,
   SpellCheckResponse,
+  StartSpaceBody,
   StoredSentence,
   TeamCollection,
   TeamCollectionArticle,
@@ -5680,6 +5681,93 @@ export const useUpdateSpace = <
   TContext
 > => {
   return useMutation(getUpdateSpaceMutationOptions(options));
+};
+
+/**
+ * @summary 공간 시작 (운영자 전용) — ACTIVE 전환, 회차 틀 생성, 코드 신청 자동 거절
+ */
+export const getStartSpaceUrl = (id: string) => {
+  return `/api/spaces/${id}/start`;
+};
+
+export const startSpace = async (
+  id: string,
+  startSpaceBody: StartSpaceBody,
+  options?: RequestInit,
+): Promise<Space> => {
+  return customFetch<Space>(getStartSpaceUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(startSpaceBody),
+  });
+};
+
+export const getStartSpaceMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof startSpace>>,
+    TError,
+    { id: string; data: BodyType<StartSpaceBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof startSpace>>,
+  TError,
+  { id: string; data: BodyType<StartSpaceBody> },
+  TContext
+> => {
+  const mutationKey = ["startSpace"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof startSpace>>,
+    { id: string; data: BodyType<StartSpaceBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return startSpace(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type StartSpaceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof startSpace>>
+>;
+export type StartSpaceMutationBody = BodyType<StartSpaceBody>;
+export type StartSpaceMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary 공간 시작 (운영자 전용) — ACTIVE 전환, 회차 틀 생성, 코드 신청 자동 거절
+ */
+export const useStartSpace = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof startSpace>>,
+    TError,
+    { id: string; data: BodyType<StartSpaceBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof startSpace>>,
+  TError,
+  { id: string; data: BodyType<StartSpaceBody> },
+  TContext
+> => {
+  return useMutation(getStartSpaceMutationOptions(options));
 };
 
 /**
