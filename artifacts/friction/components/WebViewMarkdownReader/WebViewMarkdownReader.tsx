@@ -21,8 +21,11 @@ export interface WebViewMarkdownReaderProps {
   onDragStateChange?: (isDragging: boolean) => void;
 }
 
-const FADE_IN_DURATION_MS = 100;
+const FADE_OUT_DURATION_MS = 100;
 const CONTENT_READY_FALLBACK_MS = 250;
+// Background colour of the page — must match the slot content background so
+// the overlay is invisible while the WebView loads behind it.
+const OVERLAY_BG = "#FFFFFF";
 
 export default function WebViewMarkdownReader({
   markdown,
@@ -51,7 +54,11 @@ export default function WebViewMarkdownReader({
   }
   const bridge = bridgeRef.current;
 
-  const opacityAnim = useRef(new Animated.Value(0)).current;
+  // Starts at 1 (overlay fully opaque, hiding the WebView until content is
+  // ready). Fades to 0 once content is rendered (overlay becomes transparent).
+  // The WebView itself always has opacity:1 so iOS never creates a compositing
+  // buffer for it during ancestor scale animations (dansang sheet open/close).
+  const opacityAnim = useRef(new Animated.Value(1)).current;
   const fadeAnimRef = useRef<Animated.CompositeAnimation | null>(null);
   // Tracks the latest setContent we issued. onContentReady from older
   // injections is ignored so we never fade in stale content.
@@ -69,20 +76,21 @@ export default function WebViewMarkdownReader({
     if (fadeAnimRef.current) {
       fadeAnimRef.current.stop();
     }
+    // Fade the overlay OUT to reveal the WebView beneath.
     fadeAnimRef.current = Animated.timing(opacityAnim, {
-      toValue: 1,
-      duration: FADE_IN_DURATION_MS,
+      toValue: 0,
+      duration: FADE_OUT_DURATION_MS,
       useNativeDriver: true,
     });
     fadeAnimRef.current.start();
   }, [opacityAnim]);
 
   const beginContentSwap = useCallback(() => {
-    // Hide instantly so the brief gap during async DOM update is invisible.
+    // Snap overlay back to opaque so the async DOM update is invisible.
     if (fadeAnimRef.current) {
       fadeAnimRef.current.stop();
     }
-    opacityAnim.setValue(0);
+    opacityAnim.setValue(1);
     pendingVersionRef.current += 1;
     const myVersion = pendingVersionRef.current;
     clearFallbackTimer();
@@ -215,7 +223,7 @@ export default function WebViewMarkdownReader({
   }
 
   return (
-    <Animated.View style={[styles.container, { opacity: opacityAnim }]}>
+    <View style={styles.container}>
       <WebView
         ref={webViewRef}
         source={{ html: documentHtml }}
@@ -224,8 +232,8 @@ export default function WebViewMarkdownReader({
         onLoad={() => {
           bridge.markReady();
           prevHtmlRef.current = htmlRef.current;
-          // Hide before the very first content injection too, then fade in
-          // when the WebView reports the new DOM is in place.
+          // Overlay stays opaque while the first content injection is async.
+          // Fades out when the WebView reports the new DOM is in place.
           const version = beginContentSwap();
           injectContent(htmlRef.current, version);
           if (bodyFontSize != null && bodyLetterSpacing != null) {
@@ -243,7 +251,17 @@ export default function WebViewMarkdownReader({
         showsVerticalScrollIndicator={false}
         contentMode="mobile"
       />
-    </Animated.View>
+      {/* Opaque overlay that hides the WebView until content is ready, then
+          fades out. Kept separate from the WebView so the WebView itself never
+          has an animated opacity ancestor — this prevents iOS from creating an
+          offscreen compositing buffer for the WKWebView during scale animations
+          (e.g. dansang sheet open/close), which was the cause of the blur and
+          the brief re-rasterization flash when returning to scale 1.0. */}
+      <Animated.View
+        style={[styles.overlay, { opacity: opacityAnim }]}
+        pointerEvents="none"
+      />
+    </View>
   );
 }
 
@@ -254,6 +272,10 @@ const styles = StyleSheet.create({
   webView: {
     flex: 1,
     backgroundColor: "transparent",
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: OVERLAY_BG,
   },
   loading: {
     flex: 1,

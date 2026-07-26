@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useEffect, useRef } from "react";
 import { Animated, Platform, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import Reanimated, { useSharedValue, useAnimatedStyle, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Animation, Colors, Shadows, Sizing, Spacing, TabConfig, Typography } from "@/constants/tokens";
@@ -43,9 +44,10 @@ export function NavBar() {
       <View style={[styles.dockShadow, Shadows.navBarIos, { width: dockWidth }]}>
       <View style={[styles.dock, Shadows.navBarAndroid, { width: dockWidth }]}>
         <Animated.View
-          style={[styles.layerAbsolute, { width: dockWidth, height: Sizing.navBarHeight, opacity: mainOpacity, transform: [{ scale: mainScale }] }]}
+          style={[styles.layerAbsolute, { width: dockWidth, height: Sizing.navBarHeight, opacity: mainOpacity }]}
           pointerEvents={nav.layer === "main" ? "auto" : "none"}
         >
+          <Animated.View style={[styles.layerAbsolute, { width: dockWidth, height: Sizing.navBarHeight, transform: [{ scale: mainScale }] }]}>
           {TabConfig.mainTabs.map((tab) => (
             <TabItem
               key={tab.key}
@@ -55,15 +57,17 @@ export function NavBar() {
               onPress={() => nav.setActiveTab(tab.key)}
             />
           ))}
+          </Animated.View>
         </Animated.View>
 
         <Animated.View
           style={[
             styles.layerAbsolute,
-            { width: dockWidth, height: Sizing.navBarHeight, opacity: subOpacity, transform: [{ scale: subScale }, { translateY: subTranslateY }] },
+            { width: dockWidth, height: Sizing.navBarHeight, opacity: subOpacity },
           ]}
           pointerEvents={nav.layer === "sub" ? "auto" : "none"}
         >
+          <Animated.View style={[styles.layerAbsolute, { width: dockWidth, height: Sizing.navBarHeight, transform: [{ scale: subScale }, { translateY: subTranslateY }] }]}>
           <ScalePressable
             style={styles.backButton}
             contentStyle={styles.backButtonContent}
@@ -80,6 +84,7 @@ export function NavBar() {
               onPress={() => onSubTabPress(item.key)}
             />
           ))}
+          </Animated.View>
         </Animated.View>
       </View>
       </View>
@@ -98,6 +103,16 @@ function TabItem({
   active: boolean;
   onPress: () => void;
 }) {
+  const scale = useSharedValue(active ? Animation.scaleActive : 1);
+
+  useEffect(() => {
+    scale.value = withTiming(active ? Animation.scaleActive : 1, { duration: Animation.crossFadeDuration });
+  }, [active, scale]);
+
+  const animatedIconStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
   return (
     <ScalePressable
       style={[styles.tabItem, { flex: 1 }]}
@@ -108,13 +123,13 @@ function TabItem({
       accessibilityState={{ selected: active }}
       hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
     >
-      <Animated.View style={{ transform: [{ scale: active ? Animation.scaleActive : 1 }] }}>
+      <Reanimated.View style={animatedIconStyle}>
         <Feather
           name={icon}
           size={Sizing.tabIconSize}
           color={active ? Colors.tabActive : Colors.tabInactive}
         />
-      </Animated.View>
+      </Reanimated.View>
       <Text
         style={[
           styles.tabLabel,

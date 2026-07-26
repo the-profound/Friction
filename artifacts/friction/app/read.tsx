@@ -2407,7 +2407,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: ReaderTokens.bodyBg,
-    overflow: "hidden",
   },
   floatingBackBtn: {
     position: "absolute",
@@ -2457,7 +2456,6 @@ const styles = StyleSheet.create({
     pointerEvents: "none",
   },
   pageContainer: {
-    overflow: "hidden",
     justifyContent: "flex-start",
   },
   emptyContainer: {
