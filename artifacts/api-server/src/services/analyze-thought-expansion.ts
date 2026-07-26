@@ -1,5 +1,5 @@
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
-const EXPANSION_MODEL = "google/gemini-flash-3.1-lite";
+const EXPANSION_MODEL = "google/gemini-2.0-flash-lite";
 
 export interface ThoughtNote {
   id: string;
