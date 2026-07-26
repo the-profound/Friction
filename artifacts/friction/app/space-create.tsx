@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useRef } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -10,7 +10,6 @@ import {
   Platform,
   TouchableWithoutFeedback,
   Keyboard,
-  ActivityIndicator,
   Modal,
   Pressable,
 } from "react-native";
@@ -30,7 +29,7 @@ import {
   getListSpacesQueryKey,
 } from "@workspace/api-client-react";
 
-type RoundDraft = { title: string; description: string };
+type ScheduleType = "N_DAY" | "WEEKDAY";
 
 type FormData = {
   name: string;
@@ -39,14 +38,20 @@ type FormData = {
   startsAt: string;
   roundCount: number;
   maxParticipants: string;
-  rounds: RoundDraft[];
   defaultCenterInterval: number;
   defaultCenterCount: number;
-  customizeRounds: boolean;
+  scheduleType: ScheduleType;
+  weekdays: number[];
+  operatorParticipates: boolean;
 };
 
 const DEFAULT_CENTER_INTERVAL = 1;
 const DEFAULT_CENTER_COUNT = 1;
+
+const WEEKDAY_LABELS = ["월", "화", "수", "목", "금", "토", "일"];
+
+const STEPS = ["기본 설정", "운영 설정", "고급 설정", "생성 확인"];
+const TOTAL_STEPS = STEPS.length;
 
 function getTodayDigits(): string {
   const now = new Date();
@@ -56,37 +61,8 @@ function getTodayDigits(): string {
   return `${y}${m}${d}`;
 }
 
-function getTomorrowDigits(): string {
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const y = tomorrow.getFullYear();
-  const m = String(tomorrow.getMonth() + 1).padStart(2, "0");
-  const d = String(tomorrow.getDate()).padStart(2, "0");
-  return `${y}${m}${d}`;
-}
-
-function getTomorrowIso(): string {
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const y = tomorrow.getFullYear();
-  const m = String(tomorrow.getMonth() + 1).padStart(2, "0");
-  const d = String(tomorrow.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
 function digitsToIso(digits: string): string {
   return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
-}
-
-function buildSteps(roundCount: number, customizeRounds: boolean): string[] {
-  const base = ["기본 설정", "운영 설정", "회차 구성 방식"];
-  if (customizeRounds) {
-    for (let i = 1; i <= roundCount; i++) {
-      base.push(`${i}회차 구성`);
-    }
-  }
-  base.push("고급 설정", "생성 확인");
-  return base;
 }
 
 function parseDateInput(raw: string): string | null {
@@ -133,26 +109,18 @@ export default function SpaceCreateScreen() {
     name: "",
     description: "",
     isAnonymous: false,
-    startsAt: getTomorrowDigits(),
+    startsAt: getTodayDigits(),
     roundCount: 1,
     maxParticipants: "",
-    rounds: [{ title: "", description: "" }],
     defaultCenterInterval: DEFAULT_CENTER_INTERVAL,
     defaultCenterCount: DEFAULT_CENTER_COUNT,
-    customizeRounds: false,
+    scheduleType: "N_DAY",
+    weekdays: [],
+    operatorParticipates: true,
   });
 
   const updateField = useCallback(<K extends keyof FormData>(key: K, value: FormData[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
-  }, []);
-
-  const updateRound = useCallback((index: number, field: keyof RoundDraft, value: string) => {
-    setForm((prev) => {
-      const rounds = prev.rounds.map((r, i) =>
-        i === index ? { ...prev.rounds[i], [field]: value } : r,
-      );
-      return { ...prev, rounds };
-    });
   }, []);
 
   const handleRoundCountChange = useCallback((text: string) => {
@@ -161,23 +129,10 @@ export default function SpaceCreateScreen() {
     if (roundCountError) setRoundCountError("");
   }, [roundCountError]);
 
-  const steps = useMemo(
-    () => buildSteps(form.roundCount, form.customizeRounds),
-    [form.roundCount, form.customizeRounds],
-  );
-  const totalSteps = steps.length;
-
-  const ROUND_MODE_STEP = 2;
-  const roundIndex = step - 3;
-  const isRoundStep = form.customizeRounds && roundIndex >= 0 && roundIndex < form.roundCount;
-  const advancedStep = form.customizeRounds ? form.roundCount + 3 : 3;
-  const confirmStep = form.customizeRounds ? form.roundCount + 4 : 4;
-
   const canProceed = useMemo(() => {
     if (step === 0) return form.name.trim().length > 0;
-    if (step === ROUND_MODE_STEP) return false;
     return true;
-  }, [step, form]);
+  }, [step, form.name]);
 
   const handleNext = useCallback(() => {
     if (step === 1) {
@@ -187,28 +142,12 @@ export default function SpaceCreateScreen() {
         return;
       }
       setRoundCountError("");
-      setForm((prev) => {
-        const existing = prev.rounds;
-        const rounds: RoundDraft[] = Array.from({ length: n }, (_, i) =>
-          existing[i] ?? { title: "", description: "" },
-        );
-        return { ...prev, roundCount: n, rounds };
-      });
+      setForm((prev) => ({ ...prev, roundCount: n }));
     }
-    if (step < totalSteps - 1) {
+    if (step < TOTAL_STEPS - 1) {
       setStep((s) => s + 1);
     }
-  }, [step, totalSteps, roundCountRaw]);
-
-  const handleSelectRoundMode = useCallback((customize: boolean) => {
-    setForm((prev) => {
-      const rounds = customize
-        ? prev.rounds
-        : prev.rounds.map(() => ({ title: "", description: "" }));
-      return { ...prev, customizeRounds: customize, rounds };
-    });
-    setStep(3);
-  }, []);
+  }, [step, roundCountRaw]);
 
   const handleBack = useCallback(() => {
     if (step > 0) {
@@ -233,30 +172,39 @@ export default function SpaceCreateScreen() {
         ? parseInt(form.maxParticipants, 10) || undefined
         : undefined;
 
+      // UI weekday indices: 0=월,1=화,2=수,3=목,4=금,5=토,6=일
+      // Backend weekday convention: date.getDay() — 0=일,1=월,...,6=토
+      const toJsWeekday = (uiIdx: number) => (uiIdx + 1) % 7;
+      const backendWeekdays =
+        form.scheduleType === "WEEKDAY"
+          ? form.weekdays.map(toJsWeekday).sort((a, b) => a - b)
+          : undefined;
+
       const space = await createSpace.mutateAsync({
         data: {
           name: form.name.trim(),
           description: form.description.trim() || null,
           isAnonymous: form.isAnonymous,
-          startsAt: startsAtParsed ? startsAtParsed.toISOString() : null,
+          plannedStartsAt: startsAtParsed ? startsAtParsed.toISOString() : null,
           roundCount: form.roundCount,
           maxParticipants: maxParticipants ?? null,
           defaultCenterInterval: form.defaultCenterInterval,
           defaultCenterCount: form.defaultCenterCount,
           creatorId: userId,
-        },
+          // Additional fields stored in DB but not yet in generated API types:
+          scheduleType: form.scheduleType,
+          weekdays: backendWeekdays ?? null,
+          operatorParticipates: form.operatorParticipates,
+        } as any,
       });
 
       for (let i = 0; i < form.roundCount; i++) {
-        const round = form.customizeRounds
-          ? (form.rounds[i] ?? { title: "", description: "" })
-          : { title: "", description: "" };
         await createSpaceRound.mutateAsync({
           id: space.id,
           data: {
             roundNumber: i + 1,
-            title: round.title.trim() || null,
-            description: round.description.trim() || null,
+            title: null,
+            description: null,
           },
         });
       }
@@ -290,47 +238,21 @@ export default function SpaceCreateScreen() {
         />
       );
     }
-    if (step === ROUND_MODE_STEP) {
-      return (
-        <RoundModeStep
-          onSelect={handleSelectRoundMode}
-        />
-      );
+    if (step === 2) {
+      return <AdvancedSettingsStep form={form} updateField={updateField} />;
     }
-    if (isRoundStep) {
-      return (
-        <RoundConfigStep
-          roundNumber={roundIndex + 1}
-          round={form.rounds[roundIndex] ?? { title: "", description: "" }}
-          onChange={(field, value) => updateRound(roundIndex, field, value)}
-        />
-      );
-    }
-    if (step === advancedStep) {
-      return (
-        <AdvancedSettingsStep
-          form={form}
-          updateField={updateField}
-        />
-      );
-    }
-    if (step === confirmStep) {
+    if (step === 3) {
       return (
         <ConfirmStep
           form={form}
           onGoToStep={setStep}
-          basicStep={0}
-          operationStep={1}
-          roundModeStep={ROUND_MODE_STEP}
-          advancedStep={advancedStep}
         />
       );
     }
     return null;
   };
 
-  const isLastStep = step === confirmStep;
-  const isRoundModeStep = step === ROUND_MODE_STEP;
+  const isLastStep = step === 3;
 
   return (
     <KeyboardAvoidingView
@@ -350,14 +272,14 @@ export default function SpaceCreateScreen() {
           <View
             style={[
               styles.progressFill,
-              { width: `${((step + 1) / totalSteps) * 100}%` },
+              { width: `${((step + 1) / TOTAL_STEPS) * 100}%` },
             ]}
           />
         </View>
 
         <View style={styles.stepLabel}>
           <Text style={styles.stepLabelText}>
-            {step + 1} / {totalSteps} — {steps[step]}
+            {step + 1} / {TOTAL_STEPS} — {STEPS[step]}
           </Text>
         </View>
 
@@ -372,30 +294,28 @@ export default function SpaceCreateScreen() {
           </ScrollView>
         </TouchableWithoutFeedback>
 
-        {!isRoundModeStep && (
-          <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
-            {isLastStep ? (
-              <SubmitButton
-                style={styles.nextBtn}
-                textStyle={styles.nextBtnText}
-                onPress={handleCreate}
-                pending={isSubmitting}
-                label="공간 만들기"
-                pendingLabel="만드는 중..."
-              />
-            ) : (
-              <SubmitButton
-                style={[styles.nextBtn, !canProceed && styles.nextBtnDisabled]}
-                disabledStyle={styles.nextBtnDisabled}
-                textStyle={styles.nextBtnText}
-                onPress={handleNext}
-                pending={false}
-                disabled={!canProceed}
-                label="다음"
-              />
-            )}
-          </View>
-        )}
+        <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
+          {isLastStep ? (
+            <SubmitButton
+              style={styles.nextBtn}
+              textStyle={styles.nextBtnText}
+              onPress={handleCreate}
+              pending={isSubmitting}
+              label="공간 만들기"
+              pendingLabel="만드는 중..."
+            />
+          ) : (
+            <SubmitButton
+              style={[styles.nextBtn, !canProceed && styles.nextBtnDisabled]}
+              disabledStyle={styles.nextBtnDisabled}
+              textStyle={styles.nextBtnText}
+              onPress={handleNext}
+              pending={false}
+              disabled={!canProceed}
+              label="다음"
+            />
+          )}
+        </View>
       </View>
     </KeyboardAvoidingView>
   );
@@ -447,6 +367,11 @@ function BasicSettingsStep({
         <View style={stepStyles.toggleInfo}>
           <Text style={stepStyles.fieldLabel}>익명 운영</Text>
           <Text style={stepStyles.toggleDesc}>참여자 이름이 공개되지 않아요</Text>
+          {form.isAnonymous && (
+            <Text style={stepStyles.toggleNotice}>
+              운영자도 익명으로 참여하며, 다른 참여자에게 운영자 표시가 보이지 않습니다
+            </Text>
+          )}
         </View>
         <Switch
           value={form.isAnonymous}
@@ -485,7 +410,7 @@ function OperationSettingsStep({
       <Text style={stepStyles.stepDesc}>공간 운영 조건을 설정하세요.</Text>
 
       <View style={stepStyles.fieldGroup}>
-        <Text style={stepStyles.fieldLabel}>시작일 *</Text>
+        <Text style={stepStyles.fieldLabel}>시작 예정일 *</Text>
         <Pressable
           style={[stepStyles.input, operationStyles.datePressable]}
           onPress={() => setCalendarVisible(true)}
@@ -507,7 +432,6 @@ function OperationSettingsStep({
           >
             <Pressable style={operationStyles.calendarContainer} onPress={() => {}}>
               <Calendar
-                minDate={getTomorrowIso()}
                 markedDates={markedDates}
                 onDayPress={(day) => {
                   const digits = day.dateString.replace(/-/g, "");
@@ -523,6 +447,7 @@ function OperationSettingsStep({
             </Pressable>
           </Pressable>
         </Modal>
+        <Text style={stepStyles.hint}>과거 날짜를 선택하면 생성 즉시 경과 상태로 간주돼요</Text>
       </View>
 
       <View style={stepStyles.fieldGroup}>
@@ -560,88 +485,6 @@ function OperationSettingsStep({
           maxLength={4}
         />
         <Text style={stepStyles.hint}>비워두면 인원 제한 없이 운영돼요 (최소 1명)</Text>
-      </View>
-    </View>
-  );
-}
-
-function RoundModeStep({ onSelect }: { onSelect: (customize: boolean) => void }) {
-  return (
-    <View style={stepStyles.container}>
-      <Text style={stepStyles.stepTitle}>회차 구성 방식</Text>
-      <Text style={stepStyles.stepDesc}>회차별 제목과 설명을 직접 설정하시겠어요?</Text>
-
-      <View style={roundModeStyles.cardList}>
-        <ScalePressable style={roundModeStyles.card} onPress={() => onSelect(false)}>
-          <View style={roundModeStyles.cardIcon}>
-            <Feather name="check-circle" size={22} color={Colors.zinc700} />
-          </View>
-          <View style={roundModeStyles.cardBody}>
-            <Text style={roundModeStyles.cardTitle}>기본값 적용</Text>
-            <Text style={roundModeStyles.cardDesc}>
-              회차 제목·설명 없이 바로 다음 단계로 넘어가요.
-            </Text>
-          </View>
-        </ScalePressable>
-
-        <ScalePressable style={roundModeStyles.card} onPress={() => onSelect(true)}>
-          <View style={roundModeStyles.cardIcon}>
-            <Feather name="edit-3" size={22} color={Colors.zinc700} />
-          </View>
-          <View style={roundModeStyles.cardBody}>
-            <Text style={roundModeStyles.cardTitle}>직접 설정하기</Text>
-            <Text style={roundModeStyles.cardDesc}>
-              각 회차마다 제목과 설명을 직접 입력해요.
-            </Text>
-          </View>
-        </ScalePressable>
-      </View>
-    </View>
-  );
-}
-
-function RoundConfigStep({
-  roundNumber,
-  round,
-  onChange,
-}: {
-  roundNumber: number;
-  round: RoundDraft;
-  onChange: (field: keyof RoundDraft, value: string) => void;
-}) {
-  return (
-    <View style={stepStyles.container}>
-      <Text style={stepStyles.stepTitle}>{roundNumber}회차 구성</Text>
-      <Text style={stepStyles.stepDesc}>
-        {roundNumber}회차에 대한 이름과 짧은 소개를 적어두세요. 비워두어도 괜찮아요.
-      </Text>
-
-      <View style={stepStyles.fieldGroup}>
-        <Text style={stepStyles.fieldLabel}>{roundNumber}회차 제목 (선택)</Text>
-        <TextInput
-          style={stepStyles.input}
-          placeholder={`예: ${roundNumber}회차 — 봄 이야기`}
-          placeholderTextColor={Colors.zinc400}
-          value={round.title}
-          onChangeText={(v) => onChange("title", v)}
-          maxLength={100}
-          autoFocus
-          returnKeyType="next"
-        />
-      </View>
-
-      <View style={stepStyles.fieldGroup}>
-        <Text style={stepStyles.fieldLabel}>짧은 설명 (선택)</Text>
-        <TextInput
-          style={[stepStyles.input, stepStyles.inputMulti]}
-          placeholder="이 회차에 대해 간단히 소개해주세요"
-          placeholderTextColor={Colors.zinc400}
-          value={round.description}
-          onChangeText={(v) => onChange("description", v)}
-          multiline
-          textAlignVertical="top"
-          maxLength={200}
-        />
       </View>
     </View>
   );
@@ -686,6 +529,41 @@ function Stepper({
   );
 }
 
+function WeekdayToggle({
+  weekdays,
+  onChange,
+}: {
+  weekdays: number[];
+  onChange: (next: number[]) => void;
+}) {
+  const toggle = (idx: number) => {
+    if (weekdays.includes(idx)) {
+      onChange(weekdays.filter((d) => d !== idx));
+    } else {
+      onChange([...weekdays, idx].sort((a, b) => a - b));
+    }
+  };
+
+  return (
+    <View style={weekdayStyles.row}>
+      {WEEKDAY_LABELS.map((label, idx) => {
+        const selected = weekdays.includes(idx);
+        return (
+          <ScalePressable
+            key={idx}
+            style={[weekdayStyles.pill, selected && weekdayStyles.pillSelected]}
+            onPress={() => toggle(idx)}
+          >
+            <Text style={[weekdayStyles.pillText, selected && weekdayStyles.pillTextSelected]}>
+              {label}
+            </Text>
+          </ScalePressable>
+        );
+      })}
+    </View>
+  );
+}
+
 function AdvancedSettingsStep({
   form,
   updateField,
@@ -696,18 +574,64 @@ function AdvancedSettingsStep({
   return (
     <View style={stepStyles.container}>
       <Text style={stepStyles.stepTitle}>고급 설정</Text>
-      <Text style={stepStyles.stepDesc}>중심글 전송 간격과 회차당 글 수를 조정해요.</Text>
+      <Text style={stepStyles.stepDesc}>진행 방식과 중심글 설정을 조정해요.</Text>
 
       <View style={stepStyles.fieldGroup}>
-        <Text style={stepStyles.fieldLabel}>중심글 전송 간격</Text>
-        <Text style={stepStyles.hint}>각 회차 중심글 사이 전송 주기예요</Text>
-        <Stepper
-          value={form.defaultCenterInterval}
-          min={1}
-          max={30}
-          onChange={(v) => updateField("defaultCenterInterval", v)}
-          unit="일"
-        />
+        <Text style={stepStyles.fieldLabel}>진행 방식</Text>
+        <View style={scheduleStyles.optionList}>
+          <ScalePressable
+            style={[
+              scheduleStyles.option,
+              form.scheduleType === "N_DAY" && scheduleStyles.optionSelected,
+            ]}
+            onPress={() => updateField("scheduleType", "N_DAY")}
+          >
+            <View style={scheduleStyles.optionRadio}>
+              {form.scheduleType === "N_DAY" && (
+                <View style={scheduleStyles.optionRadioDot} />
+              )}
+            </View>
+            <Text style={scheduleStyles.optionLabel}>N일 간격</Text>
+          </ScalePressable>
+
+          <ScalePressable
+            style={[
+              scheduleStyles.option,
+              form.scheduleType === "WEEKDAY" && scheduleStyles.optionSelected,
+            ]}
+            onPress={() => updateField("scheduleType", "WEEKDAY")}
+          >
+            <View style={scheduleStyles.optionRadio}>
+              {form.scheduleType === "WEEKDAY" && (
+                <View style={scheduleStyles.optionRadioDot} />
+              )}
+            </View>
+            <Text style={scheduleStyles.optionLabel}>요일 지정</Text>
+          </ScalePressable>
+        </View>
+
+        {form.scheduleType === "N_DAY" && (
+          <View style={scheduleStyles.subSection}>
+            <Text style={stepStyles.hint}>중심글을 보낼 간격을 설정해요</Text>
+            <Stepper
+              value={form.defaultCenterInterval}
+              min={1}
+              max={30}
+              onChange={(v) => updateField("defaultCenterInterval", v)}
+              unit="일"
+            />
+          </View>
+        )}
+
+        {form.scheduleType === "WEEKDAY" && (
+          <View style={scheduleStyles.subSection}>
+            <Text style={stepStyles.hint}>중심글을 보낼 요일을 선택해요</Text>
+            <WeekdayToggle
+              weekdays={form.weekdays}
+              onChange={(v) => updateField("weekdays", v)}
+            />
+          </View>
+        )}
       </View>
 
       <View style={stepStyles.fieldGroup}>
@@ -720,33 +644,42 @@ function AdvancedSettingsStep({
           unit="편"
         />
       </View>
+
+      <View style={stepStyles.toggleRow}>
+        <View style={stepStyles.toggleInfo}>
+          <Text style={stepStyles.fieldLabel}>운영자 참여</Text>
+          <Text style={stepStyles.toggleDesc}>운영자도 회차에 글을 제출할 수 있어요</Text>
+        </View>
+        <Switch
+          value={form.operatorParticipates}
+          onValueChange={(v) => updateField("operatorParticipates", v)}
+          trackColor={{ false: Colors.zinc200, true: Colors.zinc700 }}
+          thumbColor={Colors.white}
+        />
+      </View>
     </View>
   );
+}
+
+function formatScheduleSummary(form: FormData): string {
+  if (form.scheduleType === "N_DAY") {
+    return `${form.defaultCenterInterval}일 간격`;
+  }
+  if (form.weekdays.length === 0) {
+    return "요일 미지정";
+  }
+  return form.weekdays.map((d) => WEEKDAY_LABELS[d]).join(", ") + "요일";
 }
 
 function ConfirmStep({
   form,
   onGoToStep,
-  basicStep,
-  operationStep,
-  roundModeStep,
-  advancedStep,
 }: {
   form: FormData;
   onGoToStep: (step: number) => void;
-  basicStep: number;
-  operationStep: number;
-  roundModeStep: number;
-  advancedStep: number;
 }) {
   const dateKorean = formatDateKorean(form.startsAt);
-  const hasRoundTitles = form.customizeRounds && form.rounds.some((r) => r.title.trim());
-  const roundTitleSummary = hasRoundTitles
-    ? form.rounds
-        .map((r, i) => (r.title.trim() ? `${i + 1}회차 '${r.title}'` : null))
-        .filter(Boolean)
-        .join(", ")
-    : "";
+  const scheduleSummary = formatScheduleSummary(form);
 
   return (
     <View style={stepStyles.container}>
@@ -755,7 +688,7 @@ function ConfirmStep({
 
       <View style={confirmStyles.block}>
         <View style={confirmStyles.blockEditRow}>
-          <ScalePressable onPress={() => onGoToStep(basicStep)}>
+          <ScalePressable onPress={() => onGoToStep(0)}>
             <Text style={confirmStyles.editBtn}>수정</Text>
           </ScalePressable>
         </View>
@@ -764,24 +697,22 @@ function ConfirmStep({
           <Text>{" 공간이에요."}</Text>
           {form.description.trim() ? (
             <Text>{` ${form.description.trim()}`}</Text>
-          ) : (
-            <Text>{""}</Text>
-          )}
+          ) : null}
           <Text>{form.isAnonymous ? " 익명으로 운영돼요." : " 기명으로 운영돼요."}</Text>
         </Text>
       </View>
 
       <View style={confirmStyles.block}>
         <View style={confirmStyles.blockEditRow}>
-          <ScalePressable onPress={() => onGoToStep(operationStep)}>
+          <ScalePressable onPress={() => onGoToStep(1)}>
             <Text style={confirmStyles.editBtn}>수정</Text>
           </ScalePressable>
         </View>
         <Text style={confirmStyles.proseText}>
           {dateKorean ? (
-            <Text>{`${dateKorean}에 시작하는 `}</Text>
+            <Text>{`${dateKorean}에 시작 예정인 `}</Text>
           ) : (
-            <Text>{"시작일 미정의 "}</Text>
+            <Text>{"시작 예정일 미정의 "}</Text>
           )}
           <Text>
             {"총 "}
@@ -790,40 +721,27 @@ function ConfirmStep({
           </Text>
           {form.maxParticipants.trim() ? (
             <Text>{` 최대 ${form.maxParticipants}명까지 참여할 수 있어요.`}</Text>
-          ) : (
-            <Text>{""}</Text>
-          )}
+          ) : null}
         </Text>
       </View>
 
       <View style={confirmStyles.block}>
         <View style={confirmStyles.blockEditRow}>
-          <ScalePressable onPress={() => onGoToStep(roundModeStep)}>
+          <ScalePressable onPress={() => onGoToStep(2)}>
             <Text style={confirmStyles.editBtn}>수정</Text>
           </ScalePressable>
         </View>
         <Text style={confirmStyles.proseText}>
-          <Text>{form.customizeRounds ? "회차를 직접 설정했어요." : "회차는 기본값으로 구성돼요."}</Text>
-          {roundTitleSummary ? (
-            <Text>{` ${roundTitleSummary}으로 구성돼요.`}</Text>
-          ) : (
-            <Text>{""}</Text>
-          )}
-        </Text>
-      </View>
-
-      <View style={confirmStyles.block}>
-        <View style={confirmStyles.blockEditRow}>
-          <ScalePressable onPress={() => onGoToStep(advancedStep)}>
-            <Text style={confirmStyles.editBtn}>수정</Text>
-          </ScalePressable>
-        </View>
-        <Text style={confirmStyles.proseText}>
-          <Text>{"중심글은 "}</Text>
-          <Text style={confirmStyles.proseBold}>{form.defaultCenterInterval}일</Text>
-          <Text>{" 간격으로, 회차당 "}</Text>
+          <Text>{"진행 방식: "}</Text>
+          <Text style={confirmStyles.proseBold}>{scheduleSummary}</Text>
+          <Text>{", 회차당 중심글 "}</Text>
           <Text style={confirmStyles.proseBold}>{form.defaultCenterCount}편</Text>
           <Text>{"씩 게시돼요."}</Text>
+          <Text>
+            {form.operatorParticipates
+              ? " 운영자도 회차에 참여해요."
+              : " 운영자는 회차에 참여하지 않아요."}
+          </Text>
         </Text>
       </View>
     </View>
@@ -982,9 +900,10 @@ const stepStyles = StyleSheet.create({
   },
   toggleRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     paddingVertical: 6,
+    gap: 12,
   },
   toggleInfo: {
     flex: 1,
@@ -994,6 +913,13 @@ const stepStyles = StyleSheet.create({
     ...Typography.caption,
     fontSize: 13,
     color: Colors.zinc400,
+  },
+  toggleNotice: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc500,
+    lineHeight: 18,
+    marginTop: 4,
   },
 });
 
@@ -1064,40 +990,81 @@ const operationStyles = StyleSheet.create({
   },
 });
 
-const roundModeStyles = StyleSheet.create({
-  cardList: {
-    gap: 12,
+const scheduleStyles = StyleSheet.create({
+  optionList: {
+    gap: 8,
+    marginTop: 4,
   },
-  card: {
+  option: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: Colors.zinc50,
-    borderRadius: 16,
-    padding: 18,
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.zinc100,
-    gap: 14,
+    borderColor: Colors.zinc200,
+    backgroundColor: Colors.zinc50,
   },
-  cardIcon: {
-    width: 36,
-    height: 36,
+  optionSelected: {
+    borderColor: Colors.zinc700,
+    backgroundColor: Colors.white,
+  },
+  optionRadio: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: Colors.zinc400,
     alignItems: "center",
     justifyContent: "center",
   },
-  cardBody: {
-    flex: 1,
-    gap: 3,
+  optionRadioDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.zinc900,
   },
-  cardTitle: {
-    ...Typography.bodySemiBold,
-    fontSize: 16,
-    color: Colors.zinc900,
-  },
-  cardDesc: {
+  optionLabel: {
     ...Typography.body,
+    fontSize: 15,
+    color: Colors.zinc800,
+  },
+  subSection: {
+    gap: 6,
+    paddingTop: 4,
+    paddingLeft: 4,
+  },
+});
+
+const weekdayStyles = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 8,
+    flexWrap: "wrap",
+  },
+  pill: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
+    backgroundColor: Colors.zinc50,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pillSelected: {
+    borderColor: Colors.zinc900,
+    backgroundColor: Colors.zinc900,
+  },
+  pillText: {
+    ...Typography.bodySemiBold,
     fontSize: 13,
     color: Colors.zinc500,
-    lineHeight: 18,
+  },
+  pillTextSelected: {
+    color: Colors.white,
   },
 });
 
