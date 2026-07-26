@@ -325,6 +325,13 @@ export default function ReadScreen() {
   const cardScaleSV = useSharedValue(1);
   const cardTranslateYSV = useSharedValue(0);
 
+  // ── shouldRasterize: captures a full-res snapshot before scale-down begins ──
+  // Enabled the moment the sheet starts opening (value > 0), disabled once the
+  // sheet is fully closed and scale has returned to 1. A ref tracks the current
+  // rasterize state so we don't call setShouldRasterize on every animation frame.
+  const [shouldRasterize, setShouldRasterize] = useState(false);
+  const isRasterizingRef = useRef(false);
+
   // Refs so the addListener closure always sees the latest layout params
   // without needing to recreate the listener on every layout change.
   // 리스너에서 항상 최신 레이아웃 값을 읽을 수 있도록 ref에 유지
@@ -387,7 +394,19 @@ export default function ReadScreen() {
       if (value <= 0 || frameHeight <= 0) {
         cardScaleSV.value = 1;
         cardTranslateYSV.value = 0;
+        // Sheet fully closed — disable rasterization so WebView returns to live
+        if (isRasterizingRef.current) {
+          isRasterizingRef.current = false;
+          setShouldRasterize(false);
+        }
         return;
+      }
+
+      // Sheet is opening — enable rasterization before scale-down begins so iOS
+      // captures a full-resolution snapshot rather than compositing at lower res
+      if (!isRasterizingRef.current) {
+        isRasterizingRef.current = true;
+        setShouldRasterize(true);
       }
 
       if (value <= midH) {
@@ -1743,7 +1762,11 @@ export default function ReadScreen() {
             {/* Card: shadow wrapper gives floating-paper feel */}
             {/* 측정용 래퍼 — transform 바깥이므로 measureInWindow가 원래 위치를 반환 */}
             <View ref={cardWrapRef} collapsable={false} onLayout={handleCardWrapLayout}>
-            <Animated.View style={pageSheetAnimStyle}>
+            <Animated.View
+              style={pageSheetAnimStyle}
+              shouldRasterizeIOS={shouldRasterize}
+              renderToHardwareTextureAndroid={shouldRasterize}
+            >
               <View
                 style={[
                   styles.readerShadowWrapper,
