@@ -1249,6 +1249,312 @@ export async function seedDevData(): Promise<void> {
 
       logger.info("Dev seed data (v7) inserted successfully");
     }
+
+    // -----------------------------------------------------------------------
+    // v8 sentinel: 민지 운영자 다중 공간 세팅
+    //   Users: 서연·지호·수아·태윤·예린 (5명)
+    //   Space A: 파친코 읽기 모임     — RECRUITING, N_DAY(7), plannedStartsAt 미경과
+    //   Space B: 82년생 김지영 독서 클럽 — RECRUITING, WEEKDAY(화·목), plannedStartsAt 경과
+    //   Space C: 채식주의자 이야기 나눔  — ACTIVE, 익명, 운영자 미참여, 3회차
+    //   Space D: 봄날의 시 읽기        — ARCHIVED, 2회차 완료
+    // Sentinel: 서연 user row (e1000001-0000-4000-e000-000000000001)
+    // -----------------------------------------------------------------------
+    const { rows: sentinelV8 } = await client.query(`
+      SELECT id FROM users
+      WHERE id = 'e1000001-0000-4000-e000-000000000001'
+      LIMIT 1
+    `);
+    if (sentinelV8.length > 0) {
+      logger.info("Dev seed data already present (v8), skipping");
+    } else {
+      logger.info("Inserting dev seed data (v8)…");
+
+      // v8-0. 가상 사용자 5명
+      await client.query(`
+        INSERT INTO users (id, email, nickname, created_at, updated_at)
+        VALUES
+          ('e1000001-0000-4000-e000-000000000001', 'seoyeon@test.dev', '서연', NOW(), NOW()),
+          ('e1000002-0000-4000-e000-000000000002', 'jiho@test.dev',    '지호', NOW(), NOW()),
+          ('e1000003-0000-4000-e000-000000000003', 'sua@test.dev',     '수아', NOW(), NOW()),
+          ('e1000004-0000-4000-e000-000000000004', 'taeyun@test.dev',  '태윤', NOW(), NOW()),
+          ('e1000005-0000-4000-e000-000000000005', 'yerin@test.dev',   '예린', NOW(), NOW())
+        ON CONFLICT (id) DO UPDATE SET nickname = EXCLUDED.nickname
+      `);
+
+      // v8-1. 공간 4개 (민지 = 92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f)
+      await client.query(`
+        INSERT INTO spaces
+          (id, name, description, is_anonymous, planned_starts_at, started_at,
+           schedule_type, weekdays, operator_participates, round_count,
+           max_participants, default_center_interval, default_center_count,
+           status, creator_id, invite_code, created_at, updated_at)
+        VALUES
+          -- A: 파친코 읽기 모임 (RECRUITING, N_DAY, 예정일 미경과)
+          ('f1000001-0000-4000-f000-000000000001',
+            '파친코 읽기 모임',
+            '이민진의 파친코를 함께 읽고 이야기 나누는 모임입니다.',
+            FALSE,
+            NOW() + interval '7 days',
+            NULL,
+            'N_DAY', NULL, TRUE, 4, 5, 7, 1,
+            'RECRUITING',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            'PACHINK01',
+            NOW() - interval '3 days', NOW()),
+
+          -- B: 82년생 김지영 독서 클럽 (RECRUITING, WEEKDAY 화·목, 예정일 경과)
+          ('f1000002-0000-4000-f000-000000000002',
+            '82년생 김지영 독서 클럽',
+            '조남주의 82년생 김지영을 함께 읽는 독서 클럽입니다.',
+            FALSE,
+            NOW() - interval '3 days',
+            NULL,
+            'WEEKDAY', '[2,4]'::jsonb, TRUE, 3, 4, 7, 1,
+            'RECRUITING',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            'KIMJIY02',
+            NOW() - interval '10 days', NOW()),
+
+          -- C: 채식주의자 이야기 나눔 (ACTIVE, 익명, 운영자 미참여)
+          ('f1000003-0000-4000-f000-000000000003',
+            '채식주의자 이야기 나눔',
+            '한강의 채식주의자를 읽고 서로의 이야기를 나누는 공간입니다.',
+            TRUE,
+            NULL,
+            NOW() - interval '14 days',
+            'N_DAY', NULL, FALSE, 3, NULL, 7, 1,
+            'ACTIVE',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            NULL,
+            NOW() - interval '21 days', NOW()),
+
+          -- D: 봄날의 시 읽기 (ARCHIVED, 2회차 완료)
+          ('f1000004-0000-4000-f000-000000000004',
+            '봄날의 시 읽기',
+            '봄날에 어울리는 시를 함께 읽고 감상을 나눴던 모임입니다.',
+            FALSE,
+            NULL,
+            NOW() - interval '60 days',
+            'N_DAY', NULL, TRUE, 2, NULL, 7, 1,
+            'ARCHIVED',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            NULL,
+            NOW() - interval '70 days', NOW())
+        ON CONFLICT (id) DO NOTHING
+      `);
+
+      // v8-2. 회차 (space_rounds)
+
+      // Space A: 4회차 모두 UPCOMING
+      await client.query(`
+        INSERT INTO space_rounds
+          (id, space_id, round_number, title, description, status,
+           starts_at, ends_at, created_at, updated_at)
+        VALUES
+          ('fa000001-0000-4000-f000-000000000001', 'f1000001-0000-4000-f000-000000000001', 1, '1회차', NULL, 'UPCOMING', NULL, NULL, NOW(), NOW()),
+          ('fa000002-0000-4000-f000-000000000002', 'f1000001-0000-4000-f000-000000000001', 2, '2회차', NULL, 'UPCOMING', NULL, NULL, NOW(), NOW()),
+          ('fa000003-0000-4000-f000-000000000003', 'f1000001-0000-4000-f000-000000000001', 3, '3회차', NULL, 'UPCOMING', NULL, NULL, NOW(), NOW()),
+          ('fa000004-0000-4000-f000-000000000004', 'f1000001-0000-4000-f000-000000000001', 4, '4회차', NULL, 'UPCOMING', NULL, NULL, NOW(), NOW())
+        ON CONFLICT ON CONSTRAINT space_rounds_space_round_unique DO NOTHING
+      `);
+
+      // Space B: 3회차 모두 UPCOMING
+      await client.query(`
+        INSERT INTO space_rounds
+          (id, space_id, round_number, title, description, status,
+           starts_at, ends_at, created_at, updated_at)
+        VALUES
+          ('fb000001-0000-4000-f000-000000000001', 'f1000002-0000-4000-f000-000000000002', 1, '1회차', NULL, 'UPCOMING', NULL, NULL, NOW(), NOW()),
+          ('fb000002-0000-4000-f000-000000000002', 'f1000002-0000-4000-f000-000000000002', 2, '2회차', NULL, 'UPCOMING', NULL, NULL, NOW(), NOW()),
+          ('fb000003-0000-4000-f000-000000000003', 'f1000002-0000-4000-f000-000000000002', 3, '3회차', NULL, 'UPCOMING', NULL, NULL, NOW(), NOW())
+        ON CONFLICT ON CONSTRAINT space_rounds_space_round_unique DO NOTHING
+      `);
+
+      // Space C: 1회차 ACTIVE, 2·3회차 UPCOMING
+      await client.query(`
+        INSERT INTO space_rounds
+          (id, space_id, round_number, title, description, status,
+           starts_at, ends_at, created_at, updated_at)
+        VALUES
+          ('fc000001-0000-4000-f000-000000000001', 'f1000003-0000-4000-f000-000000000003', 1, '1회차', NULL, 'ACTIVE',
+            NOW() - interval '14 days', NULL, NOW() - interval '14 days', NOW()),
+          ('fc000002-0000-4000-f000-000000000002', 'f1000003-0000-4000-f000-000000000003', 2, '2회차', NULL, 'UPCOMING', NULL, NULL, NOW(), NOW()),
+          ('fc000003-0000-4000-f000-000000000003', 'f1000003-0000-4000-f000-000000000003', 3, '3회차', NULL, 'UPCOMING', NULL, NULL, NOW(), NOW())
+        ON CONFLICT ON CONSTRAINT space_rounds_space_round_unique DO NOTHING
+      `);
+
+      // Space D: 2회차 모두 COMPLETED
+      await client.query(`
+        INSERT INTO space_rounds
+          (id, space_id, round_number, title, description, status,
+           starts_at, ends_at, created_at, updated_at)
+        VALUES
+          ('fd000001-0000-4000-f000-000000000001', 'f1000004-0000-4000-f000-000000000004', 1, '1회차', NULL, 'COMPLETED',
+            NOW() - interval '56 days', NOW() - interval '49 days',
+            NOW() - interval '60 days', NOW()),
+          ('fd000002-0000-4000-f000-000000000002', 'f1000004-0000-4000-f000-000000000004', 2, '2회차', NULL, 'COMPLETED',
+            NOW() - interval '49 days', NOW() - interval '42 days',
+            NOW() - interval '60 days', NOW())
+        ON CONFLICT ON CONSTRAINT space_rounds_space_round_unique DO NOTHING
+      `);
+
+      // v8-3. 코드 신청 — 태윤 → 공간 A (PENDING)
+      await client.query(`
+        INSERT INTO space_code_requests
+          (id, space_id, requester_id, code, status, rejection_reason, created_at, updated_at)
+        VALUES
+          ('ce000001-0000-4000-c000-000000000001',
+            'f1000001-0000-4000-f000-000000000001',
+            'e1000004-0000-4000-e000-000000000004',
+            'PACHINK01', 'PENDING', NULL, NOW() - interval '1 day', NOW())
+        ON CONFLICT (id) DO NOTHING
+      `);
+
+      // v8-4. 공간 참여 (space_participations)
+
+      // Space A: 민지(운영자), 서연·지호·수아(APPROVED), 태윤(CODE PENDING)
+      await client.query(`
+        INSERT INTO space_participations
+          (id, space_id, user_id, role, join_path, status,
+           invitation_id, code_request_id, created_at, updated_at)
+        VALUES
+          (gen_random_uuid(), 'f1000001-0000-4000-f000-000000000001',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            'OPERATOR', NULL, 'APPROVED', NULL, NULL,
+            NOW() - interval '3 days', NOW()),
+          (gen_random_uuid(), 'f1000001-0000-4000-f000-000000000001',
+            'e1000001-0000-4000-e000-000000000001',
+            'PARTICIPANT', NULL, 'APPROVED', NULL, NULL,
+            NOW() - interval '2 days', NOW()),
+          (gen_random_uuid(), 'f1000001-0000-4000-f000-000000000001',
+            'e1000002-0000-4000-e000-000000000002',
+            'PARTICIPANT', NULL, 'APPROVED', NULL, NULL,
+            NOW() - interval '2 days', NOW()),
+          (gen_random_uuid(), 'f1000001-0000-4000-f000-000000000001',
+            'e1000003-0000-4000-e000-000000000003',
+            'PARTICIPANT', NULL, 'APPROVED', NULL, NULL,
+            NOW() - interval '2 days', NOW()),
+          (gen_random_uuid(), 'f1000001-0000-4000-f000-000000000001',
+            'e1000004-0000-4000-e000-000000000004',
+            'PARTICIPANT', 'CODE', 'PENDING', NULL,
+            'ce000001-0000-4000-c000-000000000001',
+            NOW() - interval '1 day', NOW())
+        ON CONFLICT ON CONSTRAINT space_participations_space_user_unique DO NOTHING
+      `);
+
+      // Space B: 민지(운영자), 서연·지호(APPROVED)
+      await client.query(`
+        INSERT INTO space_participations
+          (id, space_id, user_id, role, join_path, status,
+           invitation_id, code_request_id, created_at, updated_at)
+        VALUES
+          (gen_random_uuid(), 'f1000002-0000-4000-f000-000000000002',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            'OPERATOR', NULL, 'APPROVED', NULL, NULL,
+            NOW() - interval '10 days', NOW()),
+          (gen_random_uuid(), 'f1000002-0000-4000-f000-000000000002',
+            'e1000001-0000-4000-e000-000000000001',
+            'PARTICIPANT', NULL, 'APPROVED', NULL, NULL,
+            NOW() - interval '9 days', NOW()),
+          (gen_random_uuid(), 'f1000002-0000-4000-f000-000000000002',
+            'e1000002-0000-4000-e000-000000000002',
+            'PARTICIPANT', NULL, 'APPROVED', NULL, NULL,
+            NOW() - interval '9 days', NOW())
+        ON CONFLICT ON CONSTRAINT space_participations_space_user_unique DO NOTHING
+      `);
+
+      // Space C: 서연·태윤·예린(APPROVED), 민지는 operatorParticipates=false 이므로 미등록
+      await client.query(`
+        INSERT INTO space_participations
+          (id, space_id, user_id, role, join_path, status,
+           invitation_id, code_request_id, created_at, updated_at)
+        VALUES
+          (gen_random_uuid(), 'f1000003-0000-4000-f000-000000000003',
+            'e1000001-0000-4000-e000-000000000001',
+            'PARTICIPANT', NULL, 'APPROVED', NULL, NULL,
+            NOW() - interval '21 days', NOW()),
+          (gen_random_uuid(), 'f1000003-0000-4000-f000-000000000003',
+            'e1000004-0000-4000-e000-000000000004',
+            'PARTICIPANT', NULL, 'APPROVED', NULL, NULL,
+            NOW() - interval '21 days', NOW()),
+          (gen_random_uuid(), 'f1000003-0000-4000-f000-000000000003',
+            'e1000005-0000-4000-e000-000000000005',
+            'PARTICIPANT', NULL, 'APPROVED', NULL, NULL,
+            NOW() - interval '21 days', NOW())
+        ON CONFLICT ON CONSTRAINT space_participations_space_user_unique DO NOTHING
+      `);
+
+      // Space D: 민지(운영자), 지호·수아(APPROVED)
+      await client.query(`
+        INSERT INTO space_participations
+          (id, space_id, user_id, role, join_path, status,
+           invitation_id, code_request_id, created_at, updated_at)
+        VALUES
+          (gen_random_uuid(), 'f1000004-0000-4000-f000-000000000004',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            'OPERATOR', NULL, 'APPROVED', NULL, NULL,
+            NOW() - interval '70 days', NOW()),
+          (gen_random_uuid(), 'f1000004-0000-4000-f000-000000000004',
+            'e1000002-0000-4000-e000-000000000002',
+            'PARTICIPANT', NULL, 'APPROVED', NULL, NULL,
+            NOW() - interval '68 days', NOW()),
+          (gen_random_uuid(), 'f1000004-0000-4000-f000-000000000004',
+            'e1000003-0000-4000-e000-000000000003',
+            'PARTICIPANT', NULL, 'APPROVED', NULL, NULL,
+            NOW() - interval '68 days', NOW())
+        ON CONFLICT ON CONSTRAINT space_participations_space_user_unique DO NOTHING
+      `);
+
+      // v8-5. 공간 C 1회차 편지 (articles + space_letters)
+      //   여는 편지: 운영자(민지)가 익명으로 작성 — authorId=민지지만 isAnonymous 공간이므로 UI상 숨김
+      //   중심 편지: 서연이 작성
+      await client.query(`
+        INSERT INTO articles
+          (id, author_id, title, content, status, pages, style, cover,
+           source_article_id, is_notice, notice_date, created_at, updated_at)
+        VALUES
+          ('a3000001-0000-4000-a000-000000000001',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            '1회차를 시작하며',
+            '안녕하세요. 채식주의자 이야기 나눔의 첫 회차를 시작합니다. 한강 작가의 이 작품을 읽으며 어떤 생각이 드셨나요? 자유롭게 써주세요.',
+            'LETTER', '[]', NULL, NULL, NULL, FALSE, NULL,
+            NOW() - interval '14 days', NOW() - interval '14 days'),
+          ('a3000002-0000-4000-a000-000000000002',
+            'e1000001-0000-4000-e000-000000000001',
+            '채식주의자를 읽고',
+            '처음엔 낯설었는데, 읽다 보니 영혜의 선택이 이해되는 것 같기도 했어요. 몸으로 저항한다는 게 어떤 의미일까 한참 생각했습니다.',
+            'LETTER', '[]', NULL, NULL, NULL, FALSE, NULL,
+            NOW() - interval '10 days', NOW() - interval '10 days')
+        ON CONFLICT (id) DO UPDATE SET
+          title = EXCLUDED.title,
+          content = EXCLUDED.content,
+          updated_at = EXCLUDED.updated_at
+      `);
+
+      await client.query(`
+        INSERT INTO space_letters
+          (id, space_id, space_round_id, author_id, source_article_id,
+           letter_type, is_public, created_at, updated_at)
+        VALUES
+          ('cf000001-0000-4000-c000-000000000001',
+            'f1000003-0000-4000-f000-000000000003',
+            'fc000001-0000-4000-f000-000000000001',
+            '92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f',
+            'a3000001-0000-4000-a000-000000000001',
+            'OPENING', TRUE,
+            NOW() - interval '14 days', NOW() - interval '14 days'),
+          ('cf000002-0000-4000-c000-000000000002',
+            'f1000003-0000-4000-f000-000000000003',
+            'fc000001-0000-4000-f000-000000000001',
+            'e1000001-0000-4000-e000-000000000001',
+            'a3000002-0000-4000-a000-000000000002',
+            'CENTER', FALSE,
+            NOW() - interval '10 days', NOW() - interval '10 days')
+        ON CONFLICT (id) DO NOTHING
+      `);
+
+      logger.info("Dev seed data (v8) inserted successfully");
+    }
   } catch (err) {
     logger.error({ err }, "Seed data error");
     throw err;
