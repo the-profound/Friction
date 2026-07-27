@@ -21,6 +21,7 @@ import {
   TouchableWithoutFeedback,
   Keyboard,
 } from "react-native";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { ArticleScheduleSheet } from "@/components/ArticleScheduleSheet/ArticleScheduleSheet";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
@@ -63,6 +64,41 @@ const STEPS = ["운영 설정 확정", "회차 구성", "중심글 순서 배정
 const TOTAL_STEPS = STEPS.length;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Calculate the projected end date (last center article date) for display.
+ * N_DAY: startDate + (roundCount − 1) × interval × centerCount days
+ * WEEKDAY: the (roundCount × centerCount)-th occurrence of selected weekdays
+ */
+function calculateProjectedEndDate(
+  startDate: Date,
+  scheduleType: "N_DAY" | "WEEKDAY",
+  intervalDays: number,
+  weekdays: number[],
+  roundCount: number,
+  centerCount: number,
+): Date | null {
+  if (scheduleType === "N_DAY") {
+    const result = new Date(startDate);
+    result.setDate(result.getDate() + (roundCount - 1) * intervalDays * centerCount);
+    return result;
+  }
+  if (scheduleType === "WEEKDAY" && weekdays.length > 0) {
+    const sorted = [...weekdays].sort((a, b) => a - b);
+    const total = roundCount * centerCount;
+    const cursor = new Date(startDate);
+    cursor.setHours(0, 0, 0, 0);
+    let found = 0;
+    for (let attempt = 0; attempt < 3650; attempt++) {
+      if (sorted.includes(cursor.getDay())) {
+        found++;
+        if (found === total) return new Date(cursor);
+      }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+  }
+  return null;
+}
 
 function calculateScheduleDates(
   scheduleType: "N_DAY" | "WEEKDAY",
@@ -308,6 +344,10 @@ function OperationSettingsStep({
   centerCount,
   setCenterCount,
   operatorParticipates,
+  confirmedCount,
+  maxParticipants,
+  startDate,
+  setStartDate,
 }: {
   roundCount: number;
   setRoundCount: (v: number) => void;
@@ -320,11 +360,51 @@ function OperationSettingsStep({
   centerCount: number;
   setCenterCount: (v: number) => void;
   operatorParticipates: boolean;
+  confirmedCount: number;
+  maxParticipants: number | null | undefined;
+  startDate: Date;
+  setStartDate: (v: Date) => void;
 }) {
+  const [showDatePicker, setShowDatePicker] = useState(false);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const startDay = new Date(startDate);
+  startDay.setHours(0, 0, 0, 0);
+  const isStartDatePast = startDay < today;
+
+  const endDate = useMemo(
+    () => calculateProjectedEndDate(startDate, scheduleType as "N_DAY" | "WEEKDAY", interval, weekdays, roundCount, centerCount),
+    [startDate, scheduleType, interval, weekdays, roundCount, centerCount],
+  );
+
+  const effectiveRecruitCount =
+    maxParticipants != null
+      ? (operatorParticipates ? maxParticipants - 1 : maxParticipants)
+      : null;
+
   return (
     <View style={stepStyles.container}>
       <Text style={stepStyles.stepTitle}>운영 설정 확정</Text>
       <Text style={stepStyles.stepDesc}>공간 생성 시 입력한 설정을 최종 확인하고 조정해요.</Text>
+
+      {/* 참여 인원 요약 */}
+      <View style={opStyles.participantRow}>
+        <Feather name="users" size={14} color={Colors.zinc500} />
+        <Text style={opStyles.participantText}>
+          {"확정 "}
+          <Text style={opStyles.participantEmphasis}>{confirmedCount}명</Text>
+          {effectiveRecruitCount != null && (
+            <>
+              {" / 모집 인원 "}
+              <Text style={opStyles.participantEmphasis}>{maxParticipants}명</Text>
+              {operatorParticipates && (
+                <Text style={opStyles.participantHint}>{` (운영자 참여로 실제 모집 ${effectiveRecruitCount}명)`}</Text>
+              )}
+            </>
+          )}
+        </Text>
+      </View>
 
       <View style={stepStyles.fieldGroup}>
         <Text style={stepStyles.fieldLabel}>회차 수</Text>
@@ -452,6 +532,63 @@ function OperationSettingsStep({
             {operatorParticipates ? "운영자가 회차에 직접 참여해요" : "운영자는 회차에 참여하지 않아요"}
           </Text>
           <Text style={stepStyles.readonlyHint}>(수정 불가)</Text>
+        </View>
+      </View>
+
+      {/* 시작 날짜 선택 */}
+      <View style={stepStyles.fieldGroup}>
+        <Text style={stepStyles.fieldLabel}>시작 예정일</Text>
+        {Platform.OS === "ios" ? (
+          <View style={[opStyles.datePickerWrapper, isStartDatePast && opStyles.datePickerWrapperError]}>
+            <DateTimePicker
+              value={startDate}
+              mode="date"
+              display="spinner"
+              onChange={(_event, date) => {
+                if (date) setStartDate(date);
+              }}
+              locale="ko-KR"
+              style={opStyles.datePicker}
+            />
+          </View>
+        ) : (
+          <>
+            <ScalePressable
+              contentStyle={[opStyles.dateBtn, isStartDatePast && opStyles.dateBtnError]}
+              onPress={() => setShowDatePicker(true)}
+            >
+              <Feather name="calendar" size={15} color={isStartDatePast ? "#ef4444" : Colors.zinc600} />
+              <Text style={[opStyles.dateBtnText, isStartDatePast && opStyles.dateBtnTextError]}>
+                {formatDate(startDate)}
+              </Text>
+            </ScalePressable>
+            {showDatePicker && (
+              <DateTimePicker
+                value={startDate}
+                mode="date"
+                display="default"
+                onChange={(_event, date) => {
+                  setShowDatePicker(false);
+                  if (date) setStartDate(date);
+                }}
+              />
+            )}
+          </>
+        )}
+        {isStartDatePast && (
+          <Text style={opStyles.datePastWarning}>선택한 날짜가 오늘보다 이전이에요.</Text>
+        )}
+      </View>
+
+      {/* 종료 예정일 */}
+      <View style={stepStyles.fieldGroup}>
+        <Text style={stepStyles.fieldLabel}>종료 예정일 (자동 계산)</Text>
+        <View style={opStyles.endDateBox}>
+          <Feather name="flag" size={14} color={Colors.zinc400} />
+          <Text style={opStyles.endDateText}>
+            {endDate ? formatDate(endDate) : "—"}
+          </Text>
+          <Text style={opStyles.endDateHint}>마지막 중심글 예정일</Text>
         </View>
       </View>
     </View>
@@ -895,6 +1032,7 @@ export default function SpaceStartScreen() {
   const [interval, setIntervalVal] = useState(7);
   const [weekdays, setWeekdays] = useState<number[]>([1]);
   const [centerCount, setCenterCount] = useState(1);
+  const [startDate, setStartDate] = useState<Date>(() => new Date());
 
   useEffect(() => {
     if (!space) return;
@@ -905,6 +1043,10 @@ export default function SpaceStartScreen() {
       setWeekdays(space.weekdays as number[]);
     }
     setCenterCount(space.defaultCenterCount ?? 1);
+    if ((space as any).plannedStartsAt) {
+      const d = new Date((space as any).plannedStartsAt);
+      if (!isNaN(d.getTime())) setStartDate(d);
+    }
   }, [space]);
 
   // ── Section 2: 회차 구성 ─────────────────────────────────────────────────
@@ -1144,6 +1286,7 @@ export default function SpaceStartScreen() {
 
   const renderStepContent = () => {
     if (step === 0) {
+      const nonOperatorConfirmed = confirmedMembers.filter((m) => m.role !== "OPERATOR").length;
       return (
         <OperationSettingsStep
           roundCount={roundCount}
@@ -1157,6 +1300,10 @@ export default function SpaceStartScreen() {
           centerCount={centerCount}
           setCenterCount={setCenterCount}
           operatorParticipates={space.operatorParticipates ?? true}
+          confirmedCount={nonOperatorConfirmed}
+          maxParticipants={space.maxParticipants}
+          startDate={startDate}
+          setStartDate={setStartDate}
         />
       );
     }
@@ -1881,6 +2028,100 @@ const calStyles = StyleSheet.create({
     ...Typography.caption,
     fontSize: 12,
     color: Colors.zinc400,
+  },
+});
+
+const opStyles = StyleSheet.create({
+  participantRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    backgroundColor: Colors.zinc50,
+    borderWidth: 1,
+    borderColor: Colors.zinc100,
+  },
+  participantText: {
+    ...Typography.body,
+    fontSize: 13,
+    color: Colors.zinc600,
+    flex: 1,
+    flexWrap: "wrap",
+  },
+  participantEmphasis: {
+    ...Typography.bodySemiBold,
+    color: Colors.zinc800,
+  },
+  participantHint: {
+    ...Typography.body,
+    fontSize: 13,
+    color: Colors.zinc400,
+  },
+  datePickerWrapper: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
+    overflow: "hidden",
+    backgroundColor: Colors.zinc50,
+  },
+  datePickerWrapperError: {
+    borderColor: "#ef4444",
+  },
+  datePicker: {
+    height: 120,
+  },
+  dateBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
+    backgroundColor: Colors.zinc50,
+  },
+  dateBtnError: {
+    borderColor: "#ef4444",
+  },
+  dateBtnText: {
+    ...Typography.body,
+    fontSize: 15,
+    color: Colors.zinc800,
+  },
+  dateBtnTextError: {
+    color: "#ef4444",
+  },
+  datePastWarning: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: "#ef4444",
+    marginTop: 2,
+  },
+  endDateBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    backgroundColor: Colors.zinc50,
+    borderWidth: 1,
+    borderColor: Colors.zinc100,
+  },
+  endDateText: {
+    ...Typography.bodySemiBold,
+    fontSize: 14,
+    color: Colors.zinc800,
+  },
+  endDateHint: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc400,
+    flex: 1,
+    textAlign: "right",
   },
 });
 
