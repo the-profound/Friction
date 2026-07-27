@@ -48,3 +48,9 @@ finalize's snap-back).
 **Why 22%/450:** these are the app's existing pager thresholds (see `friction-reader-pager.md`
 neighbors) — reuse them by default for any new drag-to-dismiss/drag-to-navigate gesture in this
 app rather than inventing new constants, so the "swipe feel" stays consistent app-wide.
+
+## Carousel constant-gap rule
+Carousel slots must be displacement-consistent: onUpdate formulas must equal the parked value at dx=0 (`park + dx`), and commit/snap targets must move both slots by identical displacements with the same duration/easing. Any formula like `dx - W` while parked at `-(W+EXTRA)` makes the parked card jump EXTRA px into view on the first jitter frame (visible flash). A constant inter-slot gap (CAROUSEL_GAP) held through drag+commit keeps sections visually separated at every instant.
+
+## Resting shadow ownership
+The pager card's resting shadow must be owned by the CURRENT slot ({opacity:1} constant), not by a neighbor slot parked behind. Relying on the next slot's shadow at rest broke on the cover page (no shadow until first flip). Next slot's shadow fades in with the current card's exit progress (-currentSlotSV/W) in tilt mode, constant 1 in carousel mode — totals stay ~1 in overlap regions, so no double-shadow and no pop at commit remap.
