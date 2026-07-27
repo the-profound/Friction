@@ -1694,6 +1694,9 @@ export default function SpaceStartScreen() {
           userId={userId ?? ""}
           letters={letters}
           articles={articles}
+          isArticlesLoading={articlesQuery.isLoading}
+          isArticlesError={articlesQuery.isError}
+          onRefetchArticles={() => articlesQuery.refetch()}
           allSends={sends}
           onClose={() => setShowOpeningSheet(false)}
           onSaved={() => {

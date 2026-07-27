@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   Alert,
   Platform,
 } from "react-native";
@@ -12,6 +11,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { useQueryClient } from "@tanstack/react-query";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
+import { LetterPickerSheet } from "@/components/shared/LetterPickerSheet";
 import {
   useCreateSpaceScheduledSend,
   useCreateSpaceLetter,
@@ -61,6 +61,9 @@ export type ArticleScheduleSheetProps = {
   userId: string;
   letters: SpaceLetter[];
   articles: Article[];
+  isArticlesLoading?: boolean;
+  isArticlesError?: boolean;
+  onRefetchArticles?: () => void;
   onClose: () => void;
   onSaved: () => void;
   slotId?: string | null;
@@ -77,6 +80,9 @@ export function ArticleScheduleSheet({
   userId,
   letters,
   articles,
+  isArticlesLoading = false,
+  isArticlesError = false,
+  onRefetchArticles,
   onClose,
   onSaved,
   slotId,
@@ -92,6 +98,9 @@ export function ArticleScheduleSheet({
   );
 
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
+  // Open the picker immediately on mount so the user lands directly in the
+  // OUT-style article list without an extra tap.
+  const [letterPickerVisible, setLetterPickerVisible] = useState(true);
   const [scheduledAt, setScheduledAt] = useState<Date>(() => {
     if (!isOpeningLetter && initialScheduledDate) {
       const d = new Date(initialScheduledDate);
@@ -108,14 +117,20 @@ export function ArticleScheduleSheet({
   const updateSend = useUpdateSpaceScheduledSend();
   const queryClient = useQueryClient();
 
-  const eligibleArticles = useMemo(
+  const pickerArticles = useMemo(
     () =>
       articles.map((a) => ({
-        articleId: a.id,
-        articleTitle: a.title ?? null,
+        id: a.id,
+        title: a.title ?? null,
+        content: (a as unknown as { content?: string | null }).content ?? null,
       })),
     [articles],
   );
+
+  const selectedArticleTitle = useMemo(() => {
+    if (!selectedArticleId) return null;
+    return pickerArticles.find((a) => a.id === selectedArticleId)?.title ?? "제목 없음";
+  }, [selectedArticleId, pickerArticles]);
 
   const handleSave = useCallback(async () => {
     if (!selectedArticleId) {
@@ -224,53 +239,53 @@ export function ArticleScheduleSheet({
 
         <Text style={styles.fieldLabel}>발송할 글 선택</Text>
 
-        {eligibleArticles.length === 0 ? (
-          <View style={styles.emptyArticleState}>
-            <Feather name="book-open" size={28} color={Colors.zinc300} />
-            <Text style={styles.emptyArticleTitle}>완성된 글이 없어요</Text>
-            <Text style={styles.emptyArticleSubtitle}>
-              기록함에서 글을 완성한 뒤{"\n"}돌아오세요
-            </Text>
-            {onGoToArchive && (
-              <ScalePressable
-                style={styles.goToArchiveBtnOuter}
-                contentStyle={styles.goToArchiveBtn}
-                onPress={() => {
-                  onClose();
-                  onGoToArchive();
-                }}
-              >
-                <Text style={styles.goToArchiveBtnText}>기록함으로 이동</Text>
-              </ScalePressable>
-            )}
-          </View>
-        ) : (
-          <>
-            <ScrollView style={styles.letterList} showsVerticalScrollIndicator={false}>
-              {eligibleArticles.map((article) => (
-                <ScalePressable
-                  key={article.articleId}
-                  style={styles.letterOptionOuter}
-                  contentStyle={[
-                    styles.letterOption,
-                    selectedArticleId === article.articleId && styles.letterOptionSelected,
-                  ]}
-                  onPress={() => setSelectedArticleId(article.articleId)}
-                >
-                  <View style={styles.letterOptionRow}>
-                    {selectedArticleId === article.articleId ? (
-                      <Feather name="check-circle" size={16} color={Colors.noticeAccent} />
-                    ) : (
-                      <Feather name="circle" size={16} color={Colors.zinc300} />
-                    )}
-                    <Text style={styles.letterOptionTitle} numberOfLines={1}>
-                      {article.articleTitle ?? "제목 없음"}
-                    </Text>
-                  </View>
-                </ScalePressable>
-              ))}
-            </ScrollView>
+        <ScalePressable
+          style={styles.selectBtnOuter}
+          contentStyle={styles.selectBtn}
+          onPress={() => setLetterPickerVisible(true)}
+        >
+          <Feather
+            name="file-text"
+            size={16}
+            color={selectedArticleId ? Colors.zinc900 : Colors.zinc400}
+          />
+          <Text
+            style={[
+              styles.selectBtnText,
+              selectedArticleId ? styles.selectBtnTextActive : null,
+            ]}
+            numberOfLines={1}
+          >
+            {selectedArticleId ? (selectedArticleTitle ?? "제목 없음") : "보낼 편지를 선택하세요"}
+          </Text>
+          <Feather name="chevron-right" size={16} color={Colors.zinc300} />
+        </ScalePressable>
 
+        <LetterPickerSheet
+          visible={letterPickerVisible}
+          onClose={() => setLetterPickerVisible(false)}
+          articles={pickerArticles}
+          isLoading={isArticlesLoading}
+          isError={isArticlesError}
+          onRefetch={onRefetchArticles ?? (() => {})}
+          selectedId={selectedArticleId}
+          onSelect={(article) => setSelectedArticleId(article.id)}
+          emptyAction={
+            onGoToArchive
+              ? {
+                  label: "기록함으로 이동",
+                  onPress: () => {
+                    setLetterPickerVisible(false);
+                    onClose();
+                    onGoToArchive();
+                  },
+                }
+              : undefined
+          }
+        />
+
+        {selectedArticleId && (
+          <>
             <Text style={styles.fieldLabel}>{dateLabel}</Text>
             <ScalePressable
               contentStyle={styles.dateBtn}
@@ -350,64 +365,29 @@ const styles = StyleSheet.create({
     marginTop: 12,
     marginBottom: 8,
   },
-  letterList: {
-    maxHeight: 200,
+  selectBtnOuter: {
+    marginBottom: 4,
   },
-  letterOptionOuter: {
-    marginBottom: 6,
-  },
-  letterOption: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.zinc200,
-  },
-  letterOptionSelected: {
-    borderColor: Colors.noticeAccent,
-    backgroundColor: "#EFF6FF",
-  },
-  letterOptionRow: {
+  selectBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.zinc200,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: Colors.zinc50,
   },
-  letterOptionTitle: {
+  selectBtnText: {
     ...Typography.body,
     fontSize: 14,
-    color: Colors.zinc900,
+    color: Colors.zinc400,
     flex: 1,
   },
-  emptyArticleState: {
-    alignItems: "center",
-    paddingVertical: 24,
-    gap: 10,
-  },
-  emptyArticleTitle: {
-    ...Typography.bodySemiBold,
-    fontSize: 15,
-    color: Colors.zinc700,
-  },
-  emptyArticleSubtitle: {
-    ...Typography.body,
-    fontSize: 13,
-    color: Colors.zinc400,
-    textAlign: "center",
-    lineHeight: 19,
-  },
-  goToArchiveBtnOuter: {
-    marginTop: 4,
-  },
-  goToArchiveBtn: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: Colors.zinc900,
-  },
-  goToArchiveBtnText: {
-    ...Typography.bodySemiBold,
-    fontSize: 14,
-    color: Colors.white,
+  selectBtnTextActive: {
+    color: Colors.zinc900,
+    fontWeight: "600",
   },
   dateBtn: {
     flexDirection: "row",

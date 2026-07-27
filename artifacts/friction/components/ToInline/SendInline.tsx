@@ -11,6 +11,7 @@ import { useToast } from "@/contexts/ToastContext";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
+import { LetterPickerSheet } from "@/components/shared/LetterPickerSheet";
 import {
   ApiError,
   getListSendRecordsQueryKey,
@@ -332,57 +333,19 @@ export function SendInline({
         />
       </View>
 
-      <BottomSheet
+      <LetterPickerSheet
         visible={letterPickerVisible}
         onClose={() => setLetterPickerVisible(false)}
-        title="편지 선택"
-        snapPoints={[0.85]}
-      >
-        {articlesQuery.isLoading ? (
-          <View style={styles.pickerEmpty}>
-            <Text style={styles.pickerEmptySub}>불러오는 중...</Text>
-          </View>
-        ) : articlesQuery.isError ? (
-          <View style={styles.pickerEmpty}>
-            <Feather name="alert-circle" size={32} color={Colors.zinc300} />
-            <Text style={styles.pickerEmptyTitle}>불러오기 실패</Text>
-            <ScalePressable onPress={() => articlesQuery.refetch()}>
-              <Text style={[styles.pickerEmptySub, { color: Colors.zinc900 }]}>다시 시도</Text>
-            </ScalePressable>
-          </View>
-        ) : articles.length === 0 ? (
-          <View style={styles.pickerEmpty}>
-            <Feather name="file-text" size={32} color={Colors.zinc300} />
-            <Text style={styles.pickerEmptyTitle}>완성된 편지가 없어요</Text>
-            <Text style={styles.pickerEmptySub}>LETTER 상태의 편지만 보낼 수 있어요</Text>
-          </View>
-        ) : (
-          <ScrollView nestedScrollEnabled style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 24 }}>
-            {articles.map((article) => (
-              <ScalePressable
-                key={article.id}
-                style={[
-                  styles.pickerItem,
-                  selectedArticle?.id === article.id && styles.pickerItemSelected,
-                ]}
-                onPress={() => {
-                  setSelectedArticle(article);
-                  setLetterPickerVisible(false);
-                }}
-              >
-                <Text style={styles.pickerItemTitle} numberOfLines={1}>
-                  {article.title || "제목 없음"}
-                </Text>
-                {article.content && (
-                  <Text style={styles.pickerItemSub} numberOfLines={1}>
-                    {article.content.substring(0, 60)}
-                  </Text>
-                )}
-              </ScalePressable>
-            ))}
-          </ScrollView>
-        )}
-      </BottomSheet>
+        articles={articles}
+        isLoading={articlesQuery.isLoading}
+        isError={articlesQuery.isError}
+        onRefetch={() => articlesQuery.refetch()}
+        selectedId={selectedArticle?.id ?? null}
+        onSelect={(article) => {
+          const found = articles.find((a) => a.id === article.id);
+          if (found) setSelectedArticle(found);
+        }}
+      />
 
       <BottomSheet
         visible={recipientPickerVisible}

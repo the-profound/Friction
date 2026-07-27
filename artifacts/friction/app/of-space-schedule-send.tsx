@@ -549,6 +549,9 @@ export default function SpaceScheduleSendScreen() {
           userId={userId ?? ""}
           letters={letters}
           articles={articles}
+          isArticlesLoading={articlesQuery.isLoading}
+          isArticlesError={articlesQuery.isError}
+          onRefetchArticles={() => articlesQuery.refetch()}
           onClose={() => setShowNewSheet(false)}
           onSaved={handleSaved}
           onGoToArchive={handleGoToArchive}
