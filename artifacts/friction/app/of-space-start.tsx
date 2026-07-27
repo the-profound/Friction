@@ -105,9 +105,10 @@ function calculateScheduleDates(
   intervalDays: number,
   weekdays: number[],
   count: number,
+  startDateOverride?: Date,
 ): Date[] {
   const results: Date[] = [];
-  const base = new Date();
+  const base = startDateOverride ? new Date(startDateOverride) : new Date();
   base.setHours(0, 0, 0, 0);
 
   if (scheduleType === "N_DAY") {
@@ -141,6 +142,17 @@ function formatDateShort(d: Date): string {
   const day = d.getDate();
   const weekday = ["일", "월", "화", "수", "목", "금", "토"][d.getDay()];
   return `${m}/${day} (${weekday})`;
+}
+
+function buildMonthGrid(year: number, month: number): (Date | null)[] {
+  const firstDay = new Date(year, month, 1);
+  const startDow = firstDay.getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells: (Date | null)[] = [];
+  for (let i = 0; i < startDow; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(year, month, d));
+  while (cells.length % 7 !== 0) cells.push(null);
+  return cells;
 }
 
 // ─── Confirm Modal ────────────────────────────────────────────────────────────
@@ -751,8 +763,9 @@ function ScheduleCalendarStep({
   scheduleType,
   interval,
   weekdays,
-  roundConfigs,
+  roundConfigs: _roundConfigs,
   centerCount,
+  startDate,
 }: {
   items: SlotRowInfo[];
   roundCount: number;
@@ -761,49 +774,158 @@ function ScheduleCalendarStep({
   weekdays: number[];
   roundConfigs: Array<{ title: string; description: string }>;
   centerCount: number;
+  startDate: Date;
 }) {
-  const dates = useMemo(
-    () => calculateScheduleDates(scheduleType, interval, weekdays, roundCount),
-    [scheduleType, interval, weekdays, roundCount],
+  const endDate = useMemo(
+    () =>
+      calculateProjectedEndDate(
+        startDate,
+        scheduleType as "N_DAY" | "WEEKDAY",
+        interval,
+        weekdays,
+        roundCount,
+        centerCount,
+      ),
+    [startDate, scheduleType, interval, weekdays, roundCount, centerCount],
   );
+
+  const startMonthYear = { year: startDate.getFullYear(), month: startDate.getMonth() };
+  const endMonthYear = endDate
+    ? { year: endDate.getFullYear(), month: endDate.getMonth() }
+    : startMonthYear;
+
+  const [viewYear, setViewYear] = useState(startMonthYear.year);
+  const [viewMonth, setViewMonth] = useState(startMonthYear.month);
+
+  const dates = useMemo(
+    () => calculateScheduleDates(scheduleType, interval, weekdays, roundCount, startDate),
+    [scheduleType, interval, weekdays, roundCount, startDate],
+  );
+
+  const assignmentMap = useMemo(() => {
+    const map: Record<string, SlotRowInfo[]> = {};
+    dates.forEach((date, i) => {
+      const key = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+      if (!map[key]) map[key] = [];
+      const baseIdx = i % (items.length || 1);
+      for (let c = 0; c < centerCount; c++) {
+        const w = items[(baseIdx + c) % (items.length || 1)];
+        if (w && !map[key].find((x) => x.userId === w.userId)) map[key].push(w);
+      }
+    });
+    return map;
+  }, [dates, items, centerCount]);
+
+  const canGoPrev =
+    viewYear > startMonthYear.year ||
+    (viewYear === startMonthYear.year && viewMonth > startMonthYear.month);
+  const canGoNext =
+    viewYear < endMonthYear.year ||
+    (viewYear === endMonthYear.year && viewMonth < endMonthYear.month);
+
+  const handlePrevMonth = useCallback(() => {
+    if (!canGoPrev) return;
+    if (viewMonth === 0) {
+      setViewYear((y) => y - 1);
+      setViewMonth(11);
+    } else {
+      setViewMonth((m) => m - 1);
+    }
+  }, [canGoPrev, viewMonth]);
+
+  const handleNextMonth = useCallback(() => {
+    if (!canGoNext) return;
+    if (viewMonth === 11) {
+      setViewYear((y) => y + 1);
+      setViewMonth(0);
+    } else {
+      setViewMonth((m) => m + 1);
+    }
+  }, [canGoNext, viewMonth]);
+
+  const cells = useMemo(() => buildMonthGrid(viewYear, viewMonth), [viewYear, viewMonth]);
 
   return (
     <View style={stepStyles.container}>
-      <Text style={stepStyles.stepTitle}>배정 일정 확인</Text>
+      <Text style={stepStyles.stepTitle}>일정 확인</Text>
       <Text style={stepStyles.stepDesc}>
-        시작일 기준 예상 일정이에요. 실제 날짜는 시작 시점에 확정돼요.
+        시작일 기준 예상 배정 일정이에요. 실제 날짜는 시작 시점에 확정돼요.
       </Text>
 
-      <View style={calStyles.table}>
-        {Array.from({ length: roundCount }, (_, i) => {
-          const writerIdx = i % (items.length || 1);
-          const writer = items[writerIdx];
-          const roundTitle = roundConfigs[i]?.title?.trim() || `${i + 1}회차`;
-          const dateStr = dates[i] ? formatDateShort(dates[i]) : "-";
-          return (
-            <View key={i} style={calStyles.row}>
-              <View style={calStyles.roundCell}>
-                <Text style={calStyles.roundNum}>{i + 1}</Text>
-              </View>
-              <View style={calStyles.infoCell}>
-                <Text style={calStyles.roundTitle} numberOfLines={1}>
-                  {roundTitle}
+      {/* 시작일 / 종료일 */}
+      <View style={calGridStyles.dateRange}>
+        <View style={calGridStyles.dateRangeItem}>
+          <Text style={calGridStyles.dateRangeLabel}>시작일</Text>
+          <Text style={calGridStyles.dateRangeValue}>{formatDate(startDate)}</Text>
+        </View>
+        <View style={calGridStyles.dateRangeDivider} />
+        <View style={calGridStyles.dateRangeItem}>
+          <Text style={calGridStyles.dateRangeLabel}>종료일</Text>
+          <Text style={calGridStyles.dateRangeValue}>{endDate ? formatDate(endDate) : "—"}</Text>
+        </View>
+      </View>
+
+      {/* 달력 */}
+      <View style={calGridStyles.calCard}>
+        {/* 월 이동 헤더 */}
+        <View style={calGridStyles.monthNav}>
+          <ScalePressable
+            contentStyle={[calGridStyles.monthNavBtn, !canGoPrev && calGridStyles.monthNavBtnDisabled]}
+            onPress={handlePrevMonth}
+            disabled={!canGoPrev}
+          >
+            <Feather name="chevron-left" size={18} color={canGoPrev ? Colors.zinc700 : Colors.zinc300} />
+          </ScalePressable>
+          <Text style={calGridStyles.monthNavTitle}>
+            {viewYear}년 {viewMonth + 1}월
+          </Text>
+          <ScalePressable
+            contentStyle={[calGridStyles.monthNavBtn, !canGoNext && calGridStyles.monthNavBtnDisabled]}
+            onPress={handleNextMonth}
+            disabled={!canGoNext}
+          >
+            <Feather name="chevron-right" size={18} color={canGoNext ? Colors.zinc700 : Colors.zinc300} />
+          </ScalePressable>
+        </View>
+
+        {/* 요일 헤더 */}
+        <View style={calGridStyles.weekRow}>
+          {WEEKDAY_LABELS.map((label, i) => (
+            <Text key={i} style={[calGridStyles.weekLabel, i === 0 && calGridStyles.sunLabel]}>
+              {label}
+            </Text>
+          ))}
+        </View>
+
+        {/* 날짜 그리드 */}
+        <View style={calGridStyles.grid}>
+          {cells.map((date, idx) => {
+            if (!date) {
+              return <View key={`empty-${idx}`} style={calGridStyles.cell} />;
+            }
+            const key = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+            const assignments = assignmentMap[key] ?? [];
+            const isSun = date.getDay() === 0;
+            const hasMark = assignments.length > 0;
+            return (
+              <View key={key} style={[calGridStyles.cell, hasMark && calGridStyles.cellMarked]}>
+                <Text style={[calGridStyles.dayNum, isSun && calGridStyles.sunDay, hasMark && calGridStyles.dayNumMarked]}>
+                  {date.getDate()}
                 </Text>
-                <Text style={calStyles.dateText}>{dateStr}</Text>
+                <View style={calGridStyles.bubbleRow}>
+                  {assignments.slice(0, 2).map((a, ai) => (
+                    <View key={ai} style={calGridStyles.assignBubble}>
+                      <Text style={calGridStyles.assignInitial}>{a.nickname.charAt(0)}</Text>
+                    </View>
+                  ))}
+                  {assignments.length > 2 && (
+                    <Text style={calGridStyles.assignMore}>+{assignments.length - 2}</Text>
+                  )}
+                </View>
               </View>
-              <View style={calStyles.writerCell}>
-                {writer ? (
-                  <Text style={calStyles.writerName} numberOfLines={1}>
-                    {writer.nickname}
-                    {centerCount > 1 ? ` 외 ${centerCount - 1}` : ""}
-                  </Text>
-                ) : (
-                  <Text style={calStyles.noWriter}>미배정</Text>
-                )}
-              </View>
-            </View>
-          );
-        })}
+            );
+          })}
+        </View>
       </View>
 
       <Text style={stepStyles.hint}>
@@ -1438,6 +1560,7 @@ export default function SpaceStartScreen() {
           weekdays={weekdays}
           roundConfigs={roundConfigs}
           centerCount={centerCount}
+          startDate={startDate}
         />
       );
     }
@@ -1478,7 +1601,7 @@ export default function SpaceStartScreen() {
   // Step label suffix
   let stepLabelSuffix = STEPS[step];
   if (step === 1 && roundConfigMode === "custom") stepLabelSuffix = `회차 구성 (${currentRoundIdx + 1}/${roundCount})`;
-  if (step === 2 && slotSubStep === 1) stepLabelSuffix = "배정 일정 확인";
+  if (step === 2 && slotSubStep === 1) stepLabelSuffix = "일정 확인";
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -2011,66 +2134,6 @@ const stepStyles = StyleSheet.create({
   },
 });
 
-const calStyles = StyleSheet.create({
-  table: {
-    gap: 1,
-    borderRadius: 10,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: Colors.zinc100,
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Colors.white,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    gap: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.zinc100,
-  },
-  roundCell: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: Colors.zinc100,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  roundNum: {
-    ...Typography.bodySemiBold,
-    fontSize: 11,
-    color: Colors.zinc600,
-  },
-  infoCell: {
-    flex: 1,
-    gap: 2,
-  },
-  roundTitle: {
-    ...Typography.bodySemiBold,
-    fontSize: 13,
-    color: Colors.zinc800,
-  },
-  dateText: {
-    ...Typography.caption,
-    fontSize: 12,
-    color: Colors.zinc400,
-  },
-  writerCell: {
-    alignItems: "flex-end",
-  },
-  writerName: {
-    ...Typography.body,
-    fontSize: 13,
-    color: Colors.zinc700,
-    maxWidth: 100,
-  },
-  noWriter: {
-    ...Typography.caption,
-    fontSize: 12,
-    color: Colors.zinc400,
-  },
-});
 
 const opStyles = StyleSheet.create({
   participantRow: {
@@ -2209,6 +2272,144 @@ const olStyles = StyleSheet.create({
     ...Typography.body,
     fontSize: 14,
     color: Colors.zinc600,
+  },
+});
+
+const calGridStyles = StyleSheet.create({
+  dateRange: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.zinc100,
+    backgroundColor: Colors.zinc50,
+    gap: 0,
+  },
+  dateRangeItem: {
+    flex: 1,
+    alignItems: "center",
+    gap: 4,
+  },
+  dateRangeLabel: {
+    ...Typography.caption,
+    fontSize: 11,
+    color: Colors.zinc400,
+  },
+  dateRangeValue: {
+    ...Typography.bodySemiBold,
+    fontSize: 14,
+    color: Colors.zinc800,
+  },
+  dateRangeDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: Colors.zinc200,
+    marginHorizontal: 4,
+  },
+  calCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.zinc100,
+    backgroundColor: Colors.white,
+    overflow: "hidden",
+  },
+  monthNav: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.zinc100,
+  },
+  monthNavBtn: {
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 8,
+  },
+  monthNavBtnDisabled: {
+    opacity: 0.4,
+  },
+  monthNavTitle: {
+    ...Typography.bodySemiBold,
+    fontSize: 15,
+    color: Colors.zinc800,
+  },
+  weekRow: {
+    flexDirection: "row",
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.zinc100,
+    backgroundColor: Colors.zinc50,
+  },
+  weekLabel: {
+    flex: 1,
+    textAlign: "center",
+    paddingVertical: 6,
+    ...Typography.caption,
+    fontSize: 11,
+    color: Colors.zinc500,
+  },
+  sunLabel: {
+    color: "#ef4444",
+  },
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  cell: {
+    width: `${100 / 7}%` as any,
+    minHeight: 52,
+    paddingTop: 4,
+    paddingBottom: 4,
+    paddingHorizontal: 2,
+    alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.zinc50,
+    gap: 2,
+  },
+  cellMarked: {
+    backgroundColor: Colors.zinc50,
+  },
+  dayNum: {
+    ...Typography.body,
+    fontSize: 12,
+    color: Colors.zinc700,
+    lineHeight: 16,
+  },
+  dayNumMarked: {
+    ...Typography.bodySemiBold,
+    color: Colors.zinc900,
+  },
+  sunDay: {
+    color: "#ef4444",
+  },
+  bubbleRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 1,
+  },
+  assignBubble: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: Colors.zinc800,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  assignInitial: {
+    ...Typography.bodySemiBold,
+    fontSize: 9,
+    color: Colors.white,
+  },
+  assignMore: {
+    ...Typography.caption,
+    fontSize: 9,
+    color: Colors.zinc400,
   },
 });
 
