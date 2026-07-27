@@ -134,13 +134,15 @@ function SpaceCarousel({
   isAnonymous,
   onCardPress,
   hiddenCardId,
+  openingSlot,
 }: {
   letters: SpaceLetter[];
   isAnonymous: boolean;
   onCardPress: (letter: SpaceLetter, layout: OriginLayout) => void;
   hiddenCardId?: string | null;
+  openingSlot?: React.ReactNode;
 }) {
-  const itemCount = letters.length;
+  const itemCount = letters.length + (openingSlot ? 1 : 0);
   const cardSlotRefs = useRef<(View | null)[]>([]);
   const swipedRef = useRef(false);
 
@@ -219,13 +221,16 @@ function SpaceCarousel({
     }),
   ).current;
 
-  const cards = letters.map((letter, index) => {
+  const letterCards = letters.map((letter, index) => {
     const authorNickname = (letter as any).authorNickname as string | null;
     const displayName = (letter as any).displayName as string | null;
     const title = (letter as any).articleTitle as string | null;
     const authorName = isAnonymous
       ? (displayName ?? "익명")
       : (authorNickname ?? "알 수 없음");
+
+    const globalIndex = (openingSlot ? 1 : 0) + index;
+    const isLast = globalIndex === itemCount - 1;
 
     const handlePress = () => {
       if (Platform.OS === "web" && swipedRef.current) return;
@@ -245,7 +250,7 @@ function SpaceCarousel({
         ref={(ref) => { cardSlotRefs.current[index] = ref; }}
         style={[
           spaceCarouselStyles.cardSlot,
-          index < letters.length - 1 && { marginRight: SC_CARD_GAP },
+          !isLast && { marginRight: SC_CARD_GAP },
           letter.id === hiddenCardId && spaceCarouselStyles.cardSlotHidden,
         ]}
       >
@@ -264,10 +269,27 @@ function SpaceCarousel({
     );
   });
 
+  const cards = [
+    ...(openingSlot
+      ? [
+          <View
+            key="__opening_slot"
+            style={[
+              spaceCarouselStyles.cardSlot,
+              letters.length > 0 && { marginRight: SC_CARD_GAP },
+            ]}
+          >
+            {openingSlot}
+          </View>,
+        ]
+      : []),
+    ...letterCards,
+  ];
+
   const indicator =
     itemCount > 1 ? (
       <View style={spaceCarouselStyles.indicatorRow}>
-        {letters.map((_, i) => (
+        {Array.from({ length: itemCount }, (_, i) => (
           <View
             key={i}
             style={[
@@ -361,6 +383,36 @@ const spaceCarouselStyles = StyleSheet.create({
   indicatorDotActive: {
     backgroundColor: Colors.zinc600,
   },
+
+  // ─── Opening slot card (carousel first item) ──────────────────────────────
+  openingSlotCard: {
+    width: SC_CARD_W,
+    height: SC_CARD_H,
+  },
+  openingSlotCardInner: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.zinc200,
+    borderStyle: "dashed",
+    backgroundColor: Colors.zinc50,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    padding: 16,
+  },
+  openingSlotWriteText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: Colors.zinc500,
+    textAlign: "center",
+  },
+  openingSlotEmptyText: {
+    fontSize: 13,
+    color: Colors.zinc400,
+    textAlign: "center",
+    lineHeight: 19,
+  },
 });
 
 // ─── Upcoming Round Slots ─────────────────────────────────────────────────────
@@ -371,12 +423,14 @@ function UpcomingRoundSlots({
   userId,
   isAnonymous,
   onSchedule,
+  openingSlot,
 }: {
   spaceId: string;
   round: SpaceRound;
   userId: string;
   isAnonymous: boolean;
   onSchedule: (slot: SpaceRoundSlotWithUser) => void;
+  openingSlot?: React.ReactNode;
 }) {
   const slotsQuery = useListSpaceRoundSlots(spaceId, round.id, {
     query: {
@@ -394,20 +448,34 @@ function UpcomingRoundSlots({
     );
   }
 
-  if (slots.length === 0) {
-    return (
-      <View style={styles.lockedArea}>
-        <Feather name="lock" size={20} color={Colors.zinc300} />
-        <Text style={styles.lockedText}>회차 시작 후 공개</Text>
-      </View>
-    );
-  }
-
   const formatSlotDate = (iso: string | null | undefined) => {
     if (!iso) return null;
     const d = new Date(iso);
     return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
   };
+
+  // When no user slots exist yet, render the opening slot (if any) in a
+  // horizontal scroll followed by the locked placeholder card. This ensures
+  // the opening slot is always first even before slot data is available.
+  if (slots.length === 0) {
+    return (
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.slotCarouselContent}
+      >
+        {openingSlot ? (
+          <View style={{ marginRight: SC_CARD_GAP }}>
+            {openingSlot}
+          </View>
+        ) : null}
+        <View style={[styles.slotCard, styles.slotCardOther, { alignItems: "center", justifyContent: "center", gap: 6 }]}>
+          <Feather name="lock" size={20} color={Colors.zinc300} />
+          <Text style={styles.lockedText}>회차 시작 후 공개</Text>
+        </View>
+      </ScrollView>
+    );
+  }
 
   return (
     <ScrollView
@@ -415,6 +483,11 @@ function UpcomingRoundSlots({
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.slotCarouselContent}
     >
+      {openingSlot ? (
+        <View style={{ marginRight: SC_CARD_GAP }}>
+          {openingSlot}
+        </View>
+      ) : null}
       {slots
         .slice()
         .sort((a, b) => {
@@ -510,31 +583,66 @@ function RoundSection({
   const isSpaceRecruiting = spaceStatus === "RECRUITING";
   const isSpaceArchived = spaceStatus === "ARCHIVED";
 
-  const hasOpeningLetter = letters.some((l) => l.letterType === "OPENING");
+  const openingLetter = letters.find((l) => l.letterType === "OPENING") ?? null;
+  const hasOpeningLetter = openingLetter !== null;
 
-  // Opening-letter CTA/notice: shown only for ACTIVE rounds when the opening
-  // letter is missing, regardless of whether CENTER/REPLY letters exist.
-  // Deliberately excludes UPCOMING and COMPLETED rounds so a finished round
-  // without an opening letter never shows the write-CTA.
-  const openingArea: React.ReactNode =
-    round.status === "ACTIVE" && !isSpaceRecruiting && !hasOpeningLetter && !isSpaceArchived
-      ? isOperator
+  // Placeholder card shown when no opening letter exists yet.
+  const openingPlaceholderNode: React.ReactNode =
+    !isSpaceRecruiting
+      ? isOperator && !isSpaceArchived
         ? (
           <ScalePressable
-            style={styles.writeOpeningBtnOuter}
-            contentStyle={styles.writeOpeningBtn}
+            style={spaceCarouselStyles.openingSlotCard}
+            contentStyle={spaceCarouselStyles.openingSlotCardInner}
             onPress={() => onPressWriteOpening(round)}
           >
-            <Feather name="plus" size={14} color={Colors.zinc600} />
-            <Text style={styles.writeOpeningBtnText}>여는 편지 작성</Text>
+            <Feather name="edit-3" size={18} color={Colors.zinc400} />
+            <Text style={spaceCarouselStyles.openingSlotWriteText}>여는 편지 작성</Text>
           </ScalePressable>
         )
         : (
-          <View style={styles.preparingArea}>
-            <Text style={styles.preparingText}>여는 편지를 준비 중이에요</Text>
+          <View style={[spaceCarouselStyles.openingSlotCard, spaceCarouselStyles.openingSlotCardInner]}>
+            <Feather name="mail" size={18} color={Colors.zinc300} />
+            <Text style={spaceCarouselStyles.openingSlotEmptyText}>여는 편지를{"\n"}준비 중이에요</Text>
           </View>
         )
       : null;
+
+  // For SpaceCarousel (ACTIVE/COMPLETED): the opening letter is already the first
+  // item in the letters array, so only pass the placeholder when it's missing.
+  const openingSlotNode: React.ReactNode =
+    !isSpaceRecruiting && !hasOpeningLetter ? openingPlaceholderNode : null;
+
+  // For UpcomingRoundSlots: letters are never shown there, so we must explicitly
+  // render the opening letter card (if it exists) OR the placeholder.
+  const upcomingOpeningSlotNode: React.ReactNode = isSpaceRecruiting
+    ? null
+    : hasOpeningLetter && openingLetter
+      ? (() => {
+          const letter = openingLetter;
+          const authorNickname = (letter as any).authorNickname as string | null;
+          const displayName = (letter as any).displayName as string | null;
+          const title = (letter as any).articleTitle as string | null;
+          const authorName = isAnonymous
+            ? (displayName ?? "익명")
+            : (authorNickname ?? "알 수 없음");
+          return (
+            <ArticleCardItem
+              title={title ?? "제목 없음"}
+              authorName={authorName}
+              cover={((letter as any).articleCover ?? null) as ArticleCover | null}
+              cardWidth={SC_CARD_W}
+              isRead={letter.isRead}
+              isActive={true}
+              onPress={() =>
+                onPressLetter(letter, { x: 0, y: 0, width: SC_CARD_W, height: SC_CARD_H })
+              }
+              letterTypeBadge={letterTypeLabel(letter.letterType)}
+              date={formatLetterDate(letter.createdAt)}
+            />
+          );
+        })()
+      : openingPlaceholderNode;
 
   let letterArea: React.ReactNode;
 
@@ -546,6 +654,7 @@ function RoundSection({
         userId={userId}
         isAnonymous={isAnonymous}
         onSchedule={onScheduleSlot}
+        openingSlot={upcomingOpeningSlotNode}
       />
     );
   } else if (isSpaceRecruiting) {
@@ -555,13 +664,14 @@ function RoundSection({
         <Text style={styles.lockedText}>공간 시작 후 공개</Text>
       </View>
     );
-  } else if (letters.length > 0) {
+  } else if (letters.length > 0 || openingSlotNode) {
     letterArea = (
       <SpaceCarousel
         letters={letters}
         isAnonymous={isAnonymous}
         onCardPress={onPressLetter}
         hiddenCardId={hiddenCardId}
+        openingSlot={openingSlotNode}
       />
     );
   } else {
@@ -609,13 +719,10 @@ function RoundSection({
           {round.description}
         </Text>
       ) : null}
-      {openingArea ? (
-        <View style={styles.roundOpeningArea}>{openingArea}</View>
-      ) : null}
       {letterArea ? (
         <View style={styles.roundLetterArea}>{letterArea}</View>
       ) : null}
-      {!openingArea && !letterArea && !isUpcoming && !isSpaceRecruiting ? (
+      {!letterArea && !isUpcoming && !isSpaceRecruiting ? (
         <View style={styles.preparingArea}>
           <Text style={styles.preparingText}>편지 없음</Text>
         </View>
@@ -2018,9 +2125,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.screenPx,
     marginTop: -4,
   },
-  roundOpeningArea: {
-    marginTop: 2,
-  },
   roundLetterArea: {
     marginTop: 2,
   },
@@ -2127,28 +2231,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.zinc400,
   },
-  writeOpeningBtnOuter: {
-    marginHorizontal: Spacing.screenPx,
-  },
-  writeOpeningBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.zinc300,
-    borderStyle: "dashed",
-    backgroundColor: Colors.white,
-  },
-  writeOpeningBtnText: {
-    ...Typography.body,
-    fontSize: 13,
-    color: Colors.zinc600,
-    fontWeight: "600",
-  },
-
   // ─── Recruitment closed banner ──────────────────────────────────────────────
   recruitmentClosedBanner: {
     flexDirection: "row",
