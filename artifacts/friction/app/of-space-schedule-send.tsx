@@ -15,12 +15,12 @@ import { Feather } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
+import { ArticleScheduleSheet } from "@/components/ArticleScheduleSheet/ArticleScheduleSheet";
 import {
   useListAllSpaceScheduledSends,
   useListSpaceRounds,
   useListSpaceLetters,
   useCreateSpaceScheduledSend,
-  useCreateSpaceLetter,
   useUpdateSpaceScheduledSend,
   useListArticles,
   useGetSpaceJoinContext,
@@ -136,199 +136,6 @@ function SendRow({
                 <Text style={[styles.resendBtnText, styles.resendBtnTextFailed]}>다시 예약</Text>
               </ScalePressable>
             )}
-          </>
-        )}
-      </View>
-    </View>
-  );
-}
-
-// ─── New Send Sheet ───────────────────────────────────────────────────────────
-
-function NewSendSheet({
-  spaceId,
-  userId,
-  letters,
-  articles,
-  onClose,
-  onSaved,
-  onGoToArchive,
-  initialScheduledDate,
-  slotId,
-}: {
-  spaceId: string;
-  userId: string;
-  letters: SpaceLetter[];
-  articles: Article[];
-  onClose: () => void;
-  onSaved: () => void;
-  onGoToArchive: () => void;
-  initialScheduledDate?: string | null;
-  slotId?: string | null;
-}) {
-  const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
-  const [scheduledAt, setScheduledAt] = useState(() => {
-    if (initialScheduledDate) {
-      const d = new Date(initialScheduledDate);
-      if (!isNaN(d.getTime())) return d;
-    }
-    return new Date(Date.now() + 24 * 60 * 60 * 1000);
-  });
-  const [showPicker, setShowPicker] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const createSend = useCreateSpaceScheduledSend();
-  const createLetter = useCreateSpaceLetter();
-  const queryClient = useQueryClient();
-
-  // Show all of the user's completed articles (status=LETTER) directly.
-  const eligibleArticles = useMemo(
-    () =>
-      articles.map((a) => ({
-        articleId: a.id,
-        articleTitle: a.title ?? null,
-      })),
-    [articles],
-  );
-
-  const selectedArticle = eligibleArticles.find((a) => a.articleId === selectedArticleId) ?? null;
-
-  const handleSave = useCallback(async () => {
-    if (!selectedArticleId) {
-      Alert.alert("알림", "발송할 글을 선택해주세요.");
-      return;
-    }
-    setSaving(true);
-    try {
-      // Client-side fast-path: check in-memory letters first to avoid a round-trip.
-      // The server also handles dedup authoritatively (returns existing on 200).
-      const existingLetter = letters.find((l) => l.sourceArticleId === selectedArticleId);
-      let spaceLetterId: string;
-      if (existingLetter) {
-        spaceLetterId = existingLetter.id;
-      } else {
-        const newLetter = await createLetter.mutateAsync({
-          id: spaceId,
-          data: { authorId: userId, sourceArticleId: selectedArticleId, letterType: "CENTER" },
-        });
-        spaceLetterId = newLetter.id;
-        // Invalidate so subsequent opens of the sheet see the new SpaceLetter and
-        // the client-side fast-path correctly avoids a second creation attempt.
-        queryClient.invalidateQueries({ queryKey: getListSpaceLettersQueryKey(spaceId) });
-      }
-      await createSend.mutateAsync({
-        id: spaceId,
-        letterId: spaceLetterId,
-        data: { scheduledAt: scheduledAt.toISOString(), ...(slotId != null ? { slotId } : {}) },
-      });
-      onSaved();
-      onClose();
-    } catch {
-      Alert.alert("오류", "예약에 실패했어요. 다시 시도해주세요.");
-    } finally {
-      setSaving(false);
-    }
-  }, [selectedArticleId, scheduledAt, spaceId, letters, userId, createLetter, createSend, queryClient, onSaved, onClose, slotId]);
-
-  return (
-    <View style={sheetStyles.overlay}>
-      <ScalePressable style={sheetStyles.backdrop} onPress={onClose} />
-      <View style={sheetStyles.sheet}>
-        <View style={sheetStyles.sheetHeader}>
-          <Text style={sheetStyles.sheetTitle}>글 예약 발송</Text>
-          <ScalePressable onPress={onClose} hitSlop={12}>
-            <Feather name="x" size={20} color={Colors.zinc500} />
-          </ScalePressable>
-        </View>
-
-        <Text style={sheetStyles.fieldLabel}>발송할 글 선택</Text>
-
-        {eligibleArticles.length === 0 ? (
-          <View style={sheetStyles.emptyArticleState}>
-            <Feather name="book-open" size={28} color={Colors.zinc300} />
-            <Text style={sheetStyles.emptyArticleTitle}>완성된 글이 없어요</Text>
-            <Text style={sheetStyles.emptyArticleSubtitle}>
-              기록함에서 글을 완성한 뒤{"\n"}돌아오세요
-            </Text>
-            <ScalePressable
-              style={sheetStyles.goToArchiveBtnOuter}
-              contentStyle={sheetStyles.goToArchiveBtn}
-              onPress={() => {
-                onClose();
-                onGoToArchive();
-              }}
-            >
-              <Text style={sheetStyles.goToArchiveBtnText}>기록함으로 이동</Text>
-            </ScalePressable>
-          </View>
-        ) : (
-          <>
-            <ScrollView style={sheetStyles.letterList} showsVerticalScrollIndicator={false}>
-              {eligibleArticles.map((article) => (
-                <ScalePressable
-                  key={article.articleId}
-                  style={sheetStyles.letterOptionOuter}
-                  contentStyle={[
-                    sheetStyles.letterOption,
-                    selectedArticleId === article.articleId && sheetStyles.letterOptionSelected,
-                  ]}
-                  onPress={() => setSelectedArticleId(article.articleId)}
-                >
-                  <View style={sheetStyles.letterOptionRow}>
-                    {selectedArticleId === article.articleId ? (
-                      <Feather name="check-circle" size={16} color={Colors.noticeAccent} />
-                    ) : (
-                      <Feather name="circle" size={16} color={Colors.zinc300} />
-                    )}
-                    <View style={sheetStyles.letterOptionText}>
-                      <Text style={sheetStyles.letterOptionTitle} numberOfLines={1}>
-                        {article.articleTitle ?? "제목 없음"}
-                      </Text>
-                    </View>
-                  </View>
-                </ScalePressable>
-              ))}
-            </ScrollView>
-
-            {selectedArticle && (
-              <View style={sheetStyles.reservationInfo}>
-                <Text style={sheetStyles.reservationInfoTitle}>예약 정보</Text>
-                <View style={sheetStyles.reservationInfoRow}>
-                  <Text style={sheetStyles.reservationInfoLabel}>예정 발송</Text>
-                  <Text style={sheetStyles.reservationInfoValue}>{formatDateTime(scheduledAt.toISOString())}</Text>
-                </View>
-              </View>
-            )}
-
-            <Text style={sheetStyles.fieldLabel}>발송 예약 일시</Text>
-            <ScalePressable
-              contentStyle={sheetStyles.dateBtn}
-              onPress={() => setShowPicker(true)}
-            >
-              <Feather name="calendar" size={15} color={Colors.zinc500} />
-              <Text style={sheetStyles.dateBtnText}>{formatDateTime(scheduledAt.toISOString())}</Text>
-            </ScalePressable>
-
-            {showPicker && (
-              <DateTimePicker
-                value={scheduledAt}
-                mode="datetime"
-                display={Platform.OS === "ios" ? "spinner" : "default"}
-                onChange={(_event, date) => {
-                  setShowPicker(Platform.OS === "ios");
-                  if (date) setScheduledAt(date);
-                }}
-                minimumDate={new Date()}
-              />
-            )}
-
-            <ScalePressable
-              style={sheetStyles.saveBtnOuter}
-              contentStyle={[sheetStyles.saveBtn, saving && sheetStyles.saveBtnDisabled]}
-              onPress={handleSave}
-              disabled={saving}
-            >
-              <Text style={sheetStyles.saveBtnText}>{saving ? "예약 중..." : "예약 등록"}</Text>
-            </ScalePressable>
           </>
         )}
       </View>
@@ -736,7 +543,8 @@ export default function SpaceScheduleSendScreen() {
       )}
 
       {showNewSheet && (
-        <NewSendSheet
+        <ArticleScheduleSheet
+          mode="general"
           spaceId={id}
           userId={userId ?? ""}
           letters={letters}

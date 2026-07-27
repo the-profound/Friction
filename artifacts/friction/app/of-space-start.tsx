@@ -17,6 +17,7 @@ import {
   Animated,
   PanResponder,
 } from "react-native";
+import { ArticleScheduleSheet } from "@/components/ArticleScheduleSheet/ArticleScheduleSheet";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -34,11 +35,18 @@ import {
   useStartSpace,
   ListSpaceCodeRequestsStatus,
   getListSpaceMembersQueryKey,
+  useListArticles,
+  getListArticlesQueryKey,
+  useListAllSpaceScheduledSends,
+  getListAllSpaceScheduledSendsQueryKey,
 } from "@workspace/api-client-react";
 import type {
   SpaceMember,
   SpaceWithCreatorInfo,
   StartSpaceBodyScheduleType,
+  Article,
+  SpaceLetter,
+  SpaceScheduledSendWithLetter,
 } from "@workspace/api-client-react";
 
 const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
@@ -257,6 +265,12 @@ function DraggableSlotList({
   );
 }
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function formatDate(date: Date): string {
+  return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, "0")}.${String(date.getDate()).padStart(2, "0")}`;
+}
+
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function SpaceStartScreen() {
@@ -306,13 +320,31 @@ export default function SpaceStartScreen() {
       queryKey: getListSpaceLettersQueryKey(id),
     },
   });
-  const letters = lettersQuery.data ?? [];
-  const openingLetterExists = (letters as any[]).some((l: any) => l.letterType === "OPENING");
+  const letters = (lettersQuery.data ?? []) as SpaceLetter[];
+  const openingLetter = letters.find((l) => l.letterType === "OPENING") ?? null;
+  const openingLetterExists = openingLetter !== null;
+
+  const sendsQuery = useListAllSpaceScheduledSends(id, {
+    query: { enabled: !!id, queryKey: getListAllSpaceScheduledSendsQueryKey(id) },
+  });
+  const sends = (sendsQuery.data ?? []) as SpaceScheduledSendWithLetter[];
+  const openingScheduledSend = openingLetter
+    ? (sends.find((s) => s.spaceLetterId === openingLetter.id && s.status === "PENDING") ?? null)
+    : null;
+
+  const articlesQuery = useListArticles(
+    { authorId: userId ?? "", status: "LETTER" },
+    { query: { enabled: !!userId, queryKey: getListArticlesQueryKey({ authorId: userId ?? "", status: "LETTER" }) } },
+  );
+  const articles = (articlesQuery.data ?? []) as Article[];
+
+  const [showOpeningSheet, setShowOpeningSheet] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       if (id) {
         queryClient.invalidateQueries({ queryKey: getListSpaceLettersQueryKey(id) });
+        queryClient.invalidateQueries({ queryKey: getListAllSpaceScheduledSendsQueryKey(id) });
       }
     }, [queryClient, id]),
   );
@@ -674,36 +706,46 @@ export default function SpaceStartScreen() {
           <SectionHeader number={4} title="1회차 여는 편지 준비" />
           <Text style={styles.sectionDesc}>공간을 시작하기 전에 1회차 여는 편지를 작성해주세요.</Text>
 
-          <View style={styles.openingLetterBox}>
-            {lettersQuery.isLoading ? (
-              <ActivityIndicator size="small" color={Colors.zinc400} />
-            ) : openingLetterExists ? (
-              <View style={styles.openingLetterReady}>
-                <Feather name="check-circle" size={18} color={Colors.noticeAccent} />
-                <Text style={styles.openingLetterReadyText}>여는 편지 작성 완료</Text>
+          {lettersQuery.isLoading ? (
+            <ActivityIndicator size="small" color={Colors.zinc400} />
+          ) : openingLetterExists ? (
+            <View style={styles.openingLetterDone}>
+              <View style={styles.openingLetterDoneTop}>
+                <Feather name="check-circle" size={16} color={Colors.noticeAccent} />
+                <Text style={styles.openingLetterDoneTitle}>작성 완료</Text>
               </View>
-            ) : (
-              <View style={styles.openingLetterPending}>
-                <View style={styles.openingLetterPendingTop}>
-                  <Feather name="circle" size={18} color={Colors.zinc300} />
-                  <Text style={styles.openingLetterPendingText}>아직 작성하지 않았어요</Text>
-                </View>
-                <ScalePressable
-                  style={styles.writeOpeningBtnOuter}
-                  contentStyle={styles.writeOpeningBtn}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/of-space-schedule-send" as never,
-                      params: { id },
-                    })
-                  }
-                >
-                  <Feather name="edit-3" size={14} color={Colors.zinc600} />
-                  <Text style={styles.writeOpeningBtnText}>여는 편지 작성하기</Text>
-                </ScalePressable>
-              </View>
-            )}
-          </View>
+              {(() => {
+                const send = openingLetter
+                  ? sends.find((s) => s.spaceLetterId === openingLetter.id)
+                  : null;
+                const articleTitle = send?.articleTitle ?? "글 선택됨";
+                const scheduledDate = send ? new Date(send.scheduledAt) : null;
+                return (
+                  <Text style={styles.openingLetterDoneSummary} numberOfLines={1}>
+                    {articleTitle}
+                    {scheduledDate ? `  ·  ${formatDate(scheduledDate)} 06:00 예약` : ""}
+                  </Text>
+                );
+              })()}
+              <ScalePressable
+                style={styles.writeOpeningBtnOuter}
+                contentStyle={styles.writeOpeningBtn}
+                onPress={() => setShowOpeningSheet(true)}
+              >
+                <Feather name="edit-3" size={14} color={Colors.zinc600} />
+                <Text style={styles.writeOpeningBtnText}>수정</Text>
+              </ScalePressable>
+            </View>
+          ) : (
+            <ScalePressable
+              style={styles.writeOpeningBtnOuter}
+              contentStyle={styles.writeOpeningBtn}
+              onPress={() => setShowOpeningSheet(true)}
+            >
+              <Feather name="edit-3" size={14} color={Colors.zinc600} />
+              <Text style={styles.writeOpeningBtnText}>여는 편지 작성하기</Text>
+            </ScalePressable>
+          )}
         </View>
 
         <View style={styles.divider} />
@@ -775,6 +817,23 @@ export default function SpaceStartScreen() {
         onConfirm={doStart}
         loading={isStarting}
       />
+
+      {/* ── 여는 편지 글 선택 시트 ── */}
+      {showOpeningSheet && (
+        <ArticleScheduleSheet
+          mode="opening-letter"
+          spaceId={id}
+          userId={userId ?? ""}
+          letters={letters}
+          articles={articles}
+          allSends={sends}
+          onClose={() => setShowOpeningSheet(false)}
+          onSaved={() => {
+            queryClient.invalidateQueries({ queryKey: getListSpaceLettersQueryKey(id) });
+            queryClient.invalidateQueries({ queryKey: getListAllSpaceScheduledSendsQueryKey(id) });
+          }}
+        />
+      )}
     </View>
   );
 }
@@ -1045,34 +1104,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.zinc400,
   },
-  openingLetterBox: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.zinc200,
-    padding: 16,
+  openingLetterDone: {
+    gap: 10,
   },
-  openingLetterReady: {
+  openingLetterDoneTop: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
-  openingLetterReadyText: {
+  openingLetterDoneTitle: {
     ...Typography.bodySemiBold,
     fontSize: 14,
     color: Colors.zinc800,
   },
-  openingLetterPending: {
-    gap: 12,
-  },
-  openingLetterPendingTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  openingLetterPendingText: {
+  openingLetterDoneSummary: {
     ...Typography.body,
-    fontSize: 14,
+    fontSize: 13,
     color: Colors.zinc500,
+    lineHeight: 18,
   },
   writeOpeningBtnOuter: {},
   writeOpeningBtn: {
@@ -1232,3 +1281,4 @@ const styles = StyleSheet.create({
     color: Colors.white,
   },
 });
+
