@@ -60,7 +60,7 @@ const SLOT_ROW_H = 52;
 const SLOT_ROW_GAP = 6;
 const SLOT_ITEM_H = SLOT_ROW_H + SLOT_ROW_GAP;
 
-const STEPS = ["운영 설정 확정", "회차 구성", "중심글 순서 배정", "여는 편지 준비", "시작 확인"];
+const STEPS = ["운영 설정 확정", "회차 구성", "중심글 순서 배정", "첫 여는 편지 보내기", "시작 확인"];
 const TOTAL_STEPS = STEPS.length;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -738,66 +738,60 @@ function ScheduleCalendarStep({
 function OpeningLetterStep({
   isLoading,
   openingLetterExists,
-  openingLetter,
   openingScheduledSend,
   onOpenSheet,
 }: {
   isLoading: boolean;
   openingLetterExists: boolean;
-  openingLetter: { id: string } | null;
   openingScheduledSend: { scheduledAt: string; articleTitle?: string | null } | null;
   onOpenSheet: () => void;
 }) {
+  const articleTitle = openingScheduledSend?.articleTitle ?? null;
+  const scheduledDate = openingScheduledSend ? new Date(openingScheduledSend.scheduledAt) : null;
+
   return (
     <View style={stepStyles.container}>
-      <Text style={stepStyles.stepTitle}>여는 편지 준비</Text>
-      <Text style={stepStyles.stepDesc}>공간 시작과 함께 전송될 1회차 여는 편지를 확인해요.</Text>
+      <Text style={stepStyles.stepTitle}>첫 여는 편지 보내기</Text>
+      <Text style={stepStyles.stepDesc}>공간 시작과 함께 전송될 1회차 여는 편지를 선택해요.</Text>
 
-      <View style={styles.openingLetterBox}>
+      {/* 편지 선택 — SendInline 스타일 */}
+      <View style={olStyles.section}>
+        <Text style={olStyles.sectionTitle}>편지 선택</Text>
         {isLoading ? (
-          <ActivityIndicator size="small" color={Colors.zinc400} />
-        ) : openingLetterExists ? (
-          <View style={styles.openingLetterDone}>
-            <View style={styles.openingLetterDoneTop}>
-              <Feather name="check-circle" size={16} color={Colors.noticeAccent} />
-              <Text style={styles.openingLetterDoneTitle}>작성 완료</Text>
-            </View>
-            {(() => {
-              const articleTitle = openingScheduledSend?.articleTitle ?? "글 선택됨";
-              const scheduledDate = openingScheduledSend ? new Date(openingScheduledSend.scheduledAt) : null;
-              return (
-                <Text style={styles.openingLetterDoneSummary} numberOfLines={1}>
-                  {articleTitle}
-                  {scheduledDate ? `  ·  ${formatDate(scheduledDate)} 06:00 예약` : ""}
-                </Text>
-              );
-            })()}
-            <ScalePressable
-              style={styles.writeOpeningBtnOuter}
-              contentStyle={styles.writeOpeningBtn}
-              onPress={onOpenSheet}
-            >
-              <Feather name="edit-3" size={14} color={Colors.zinc600} />
-              <Text style={styles.writeOpeningBtnText}>수정</Text>
-            </ScalePressable>
+          <View style={olStyles.selectButton}>
+            <ActivityIndicator size="small" color={Colors.zinc400} />
           </View>
         ) : (
-          <View style={styles.openingLetterPending}>
-            <View style={styles.openingLetterPendingTop}>
-              <Feather name="circle" size={18} color={Colors.zinc300} />
-              <Text style={styles.openingLetterPendingText}>아직 작성하지 않았어요</Text>
-            </View>
-            <ScalePressable
-              style={styles.writeOpeningBtnOuter}
-              contentStyle={styles.writeOpeningBtn}
-              onPress={onOpenSheet}
+          <ScalePressable
+            style={olStyles.selectButton}
+            contentStyle={olStyles.selectButtonContent}
+            onPress={onOpenSheet}
+          >
+            <Feather
+              name="file-text"
+              size={18}
+              color={openingLetterExists ? Colors.zinc900 : Colors.zinc500}
+            />
+            <Text
+              style={[olStyles.selectButtonText, openingLetterExists && olStyles.selectButtonTextActive]}
+              numberOfLines={1}
             >
-              <Feather name="edit-3" size={14} color={Colors.zinc600} />
-              <Text style={styles.writeOpeningBtnText}>여는 편지 작성하기</Text>
-            </ScalePressable>
-          </View>
+              {articleTitle ?? (openingLetterExists ? "글 선택됨" : "보낼 편지를 선택하세요")}
+            </Text>
+            <Feather name="chevron-right" size={18} color={Colors.zinc400} />
+          </ScalePressable>
         )}
       </View>
+
+      {/* 발송 일정 — SendInline deliveryInfo 스타일 */}
+      {openingLetterExists && scheduledDate && (
+        <View style={olStyles.deliveryInfo}>
+          <Feather name="clock" size={16} color={Colors.zinc500} />
+          <Text style={olStyles.deliveryInfoText}>
+            발송 예정: {formatDate(scheduledDate)} 06:00
+          </Text>
+        </View>
+      )}
 
       {!openingLetterExists && !isLoading && (
         <View style={stepStyles.infoBox}>
@@ -1349,7 +1343,6 @@ export default function SpaceStartScreen() {
         <OpeningLetterStep
           isLoading={lettersQuery.isLoading}
           openingLetterExists={openingLetterExists}
-          openingLetter={openingLetter}
           openingScheduledSend={openingScheduledSend}
           onOpenSheet={() => setShowOpeningSheet(true)}
         />
@@ -1636,63 +1629,6 @@ const styles = StyleSheet.create({
     ...Typography.body,
     fontSize: 14,
     color: Colors.zinc400,
-  },
-  // Opening letter
-  openingLetterBox: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.zinc200,
-    padding: 16,
-  },
-  openingLetterDone: {
-    gap: 10,
-  },
-  openingLetterPending: {
-    gap: 12,
-  },
-  openingLetterPendingTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  openingLetterPendingText: {
-    ...Typography.body,
-    fontSize: 14,
-    color: Colors.zinc500,
-  },
-  openingLetterDoneTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  openingLetterDoneTitle: {
-    ...Typography.bodySemiBold,
-    fontSize: 14,
-    color: Colors.zinc800,
-  },
-  openingLetterDoneSummary: {
-    ...Typography.body,
-    fontSize: 13,
-    color: Colors.zinc500,
-    lineHeight: 18,
-  },
-  writeOpeningBtnOuter: {},
-  writeOpeningBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.zinc300,
-    backgroundColor: Colors.zinc50,
-  },
-  writeOpeningBtnText: {
-    ...Typography.bodySemiBold,
-    fontSize: 13,
-    color: Colors.zinc700,
   },
   // Misc
   weekdayRow: {
@@ -2122,6 +2058,52 @@ const opStyles = StyleSheet.create({
     color: Colors.zinc400,
     flex: 1,
     textAlign: "right",
+  },
+});
+
+const olStyles = StyleSheet.create({
+  section: {
+    gap: 10,
+  },
+  sectionTitle: {
+    ...Typography.bodySemiBold,
+    fontSize: 15,
+    color: Colors.zinc900,
+  },
+  selectButton: {
+    backgroundColor: Colors.zinc50,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  selectButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  selectButtonText: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc500,
+    flex: 1,
+  },
+  selectButtonTextActive: {
+    color: Colors.zinc900,
+    fontWeight: "600",
+  },
+  deliveryInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    backgroundColor: Colors.zinc50,
+    borderRadius: 12,
+  },
+  deliveryInfoText: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc600,
   },
 });
 
