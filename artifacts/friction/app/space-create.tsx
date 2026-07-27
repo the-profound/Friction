@@ -484,7 +484,24 @@ function OperationSettingsStep({
           keyboardType="number-pad"
           maxLength={4}
         />
-        <Text style={stepStyles.hint}>비워두면 인원 제한 없이 운영돼요 (최소 1명)</Text>
+        <Text style={stepStyles.hint}>
+          {form.maxParticipants.trim() && form.operatorParticipates
+            ? `운영자 참여 시 실제 모집 인원 = ${form.maxParticipants}명 − 1 = ${Math.max(1, parseInt(form.maxParticipants, 10) - 1)}명`
+            : "비워두면 인원 제한 없이 운영돼요 (최소 1명)"}
+        </Text>
+      </View>
+
+      <View style={stepStyles.toggleRow}>
+        <View style={stepStyles.toggleInfo}>
+          <Text style={stepStyles.fieldLabel}>운영자 참여</Text>
+          <Text style={stepStyles.toggleDesc}>운영자도 회차에 글을 직접 제출해요</Text>
+        </View>
+        <Switch
+          value={form.operatorParticipates}
+          onValueChange={(v) => updateField("operatorParticipates", v)}
+          trackColor={{ false: Colors.zinc200, true: Colors.zinc700 }}
+          thumbColor={Colors.white}
+        />
       </View>
     </View>
   );
@@ -644,19 +661,6 @@ function AdvancedSettingsStep({
           unit="편"
         />
       </View>
-
-      <View style={stepStyles.toggleRow}>
-        <View style={stepStyles.toggleInfo}>
-          <Text style={stepStyles.fieldLabel}>운영자 참여</Text>
-          <Text style={stepStyles.toggleDesc}>운영자도 회차에 글을 제출할 수 있어요</Text>
-        </View>
-        <Switch
-          value={form.operatorParticipates}
-          onValueChange={(v) => updateField("operatorParticipates", v)}
-          trackColor={{ false: Colors.zinc200, true: Colors.zinc700 }}
-          thumbColor={Colors.white}
-        />
-      </View>
     </View>
   );
 }
@@ -722,6 +726,11 @@ function ConfirmStep({
           {form.maxParticipants.trim() ? (
             <Text>{` 최대 ${form.maxParticipants}명까지 참여할 수 있어요.`}</Text>
           ) : null}
+          <Text>
+            {form.operatorParticipates
+              ? " 운영자도 회차에 참여해요."
+              : " 운영자는 회차에 참여하지 않아요."}
+          </Text>
         </Text>
       </View>
 
@@ -737,11 +746,6 @@ function ConfirmStep({
           <Text>{", 회차당 중심글 "}</Text>
           <Text style={confirmStyles.proseBold}>{form.defaultCenterCount}편</Text>
           <Text>{"씩 게시돼요."}</Text>
-          <Text>
-            {form.operatorParticipates
-              ? " 운영자도 회차에 참여해요."
-              : " 운영자는 회차에 참여하지 않아요."}
-          </Text>
         </Text>
       </View>
     </View>

@@ -957,12 +957,16 @@ export default function SpaceDetailScreen() {
 
   // Recruitment is closed when the space is no longer in RECRUITING status
   // OR when the participant cap has been reached.
+  const effectiveMax = space?.maxParticipants != null
+    ? (space.operatorParticipates ? space.maxParticipants - 1 : space.maxParticipants)
+    : null;
+
   const recruitmentClosed =
     space?.status !== "RECRUITING" ||
-    !!(space?.maxParticipants && space.participantCount >= space.maxParticipants);
+    !!(effectiveMax != null && space.participantCount >= effectiveMax);
 
   // Capacity-full flag: participant cap reached (independent of status).
-  const isCapacityFull = !!(space?.maxParticipants && space.participantCount >= space.maxParticipants);
+  const isCapacityFull = !!(effectiveMax != null && space.participantCount >= effectiveMax);
 
   const codeRequestsQuery = useListSpaceCodeRequests(
     id,
@@ -1396,7 +1400,7 @@ export default function SpaceDetailScreen() {
               <Feather name="users" size={12} color={Colors.zinc400} />
               <Text style={styles.metaIconRowText}>
                 참여자 {space.participantCount}
-                {space.maxParticipants ? `/${space.maxParticipants}` : ""}명
+                {effectiveMax != null ? `/${effectiveMax}` : ""}명
                 {" · "}편지 {letters.length}개
               </Text>
             </View>

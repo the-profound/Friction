@@ -67,9 +67,12 @@ function scheduleTypeLabelJoin(
 function SpaceInfoCard({ space }: { space: SpaceWithCreatorInfo }) {
   const isRecruiting = space.status === "RECRUITING";
   const isActive = space.status === "ACTIVE";
+  const effectiveMax = space.maxParticipants != null
+    ? (space.operatorParticipates ? space.maxParticipants - 1 : space.maxParticipants)
+    : null;
   const isFull =
-    space.maxParticipants != null &&
-    space.participantCount >= space.maxParticipants;
+    effectiveMax != null &&
+    space.participantCount >= effectiveMax;
 
   return (
     <View style={styles.infoCard}>
@@ -99,8 +102,8 @@ function SpaceInfoCard({ space }: { space: SpaceWithCreatorInfo }) {
           icon="users"
           label="모집 인원"
           value={
-            space.maxParticipants
-              ? `${space.participantCount} / ${space.maxParticipants}명`
+            effectiveMax
+              ? `${space.participantCount} / ${effectiveMax}명`
               : `${space.participantCount}명 참여 중`
           }
           accent={isFull ? "red" : undefined}
@@ -220,9 +223,12 @@ export default function SpaceJoinScreen() {
           setStep("space_archived");
           return;
         }
+        const effectiveMaxJoin = space.maxParticipants != null
+          ? (space.operatorParticipates ? space.maxParticipants - 1 : space.maxParticipants)
+          : null;
         const isFull =
-          space.maxParticipants != null &&
-          space.participantCount >= space.maxParticipants &&
+          effectiveMaxJoin != null &&
+          space.participantCount >= effectiveMaxJoin &&
           space.status !== "RECRUITING";
 
         // When entering via invitationId, only treat the matching invitation as valid.
@@ -335,9 +341,12 @@ export default function SpaceJoinScreen() {
         setStep("space_archived");
         return;
       }
+      const effectiveMaxCode = space.maxParticipants != null
+        ? (space.operatorParticipates ? space.maxParticipants - 1 : space.maxParticipants)
+        : null;
       const isFull =
-        space.maxParticipants != null &&
-        space.participantCount >= space.maxParticipants &&
+        effectiveMaxCode != null &&
+        space.participantCount >= effectiveMaxCode &&
         space.status !== "RECRUITING";
       if (isFull) {
         setStep("space_full");

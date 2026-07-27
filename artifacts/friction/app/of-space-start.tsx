@@ -338,11 +338,7 @@ export default function SpaceStartScreen() {
     setCenterCount(space.defaultCenterCount ?? 1);
   }, [space]);
 
-  // ── Section 2: 운영자 참여 여부 ──────────────────────────────────────────
-
-  const [operatorParticipates, setOperatorParticipates] = useState(true);
-
-  // ── Section 3: 회차 구성 ─────────────────────────────────────────────────
+  // ── Section 2: 회차 구성 ─────────────────────────────────────────────────
 
   const [roundConfigs, setRoundConfigs] = useState<Array<{ title: string; description: string }>>([]);
 
@@ -355,13 +351,14 @@ export default function SpaceStartScreen() {
     );
   }, [roundCount]);
 
-  // ── Section 4: 중심글 순서 배정 ──────────────────────────────────────────
+  // ── Section 3: 중심글 순서 배정 ──────────────────────────────────────────
 
   const [slotOrder, setSlotOrder] = useState<string[]>([]);
 
   useEffect(() => {
     setSlotOrder((prev) => {
-      const eligible = operatorParticipates
+      const opParticipates = space?.operatorParticipates ?? true;
+      const eligible = opParticipates
         ? confirmedMembers.map((m) => m.userId)
         : confirmedMembers.filter((m) => m.role !== "OPERATOR").map((m) => m.userId);
       const kept = prev.filter((uid) => eligible.includes(uid));
@@ -370,7 +367,7 @@ export default function SpaceStartScreen() {
       if (next.length === prev.length && next.every((uid, i) => uid === prev[i])) return prev;
       return next;
     });
-  }, [confirmedMembers, operatorParticipates]);
+  }, [confirmedMembers, space?.operatorParticipates]);
 
   const memberById = useMemo<Record<string, SpaceMember>>(() => {
     const map: Record<string, SpaceMember> = {};
@@ -416,9 +413,11 @@ export default function SpaceStartScreen() {
     if (hasPendingRequests) {
       setShowAutoRejectModal(true);
     } else {
-      const maxParticipants = space?.maxParticipants;
+      const effectiveMaxStart = space?.maxParticipants != null
+        ? (space.operatorParticipates ? space.maxParticipants - 1 : space.maxParticipants)
+        : null;
       const confirmedCount = slotOrder.length;
-      if (maxParticipants && confirmedCount < maxParticipants) {
+      if (effectiveMaxStart != null && confirmedCount < effectiveMaxStart) {
         setShowUnderCapacityModal(true);
       } else {
         doStart();
@@ -431,9 +430,11 @@ export default function SpaceStartScreen() {
 
   const handleAutoRejectContinue = useCallback(() => {
     setShowAutoRejectModal(false);
-    const maxParticipants = space?.maxParticipants;
+    const effectiveMaxStart = space?.maxParticipants != null
+      ? (space.operatorParticipates ? space.maxParticipants - 1 : space.maxParticipants)
+      : null;
     const confirmedCount = slotOrder.length;
-    if (maxParticipants && confirmedCount < maxParticipants) {
+    if (effectiveMaxStart != null && confirmedCount < effectiveMaxStart) {
       setShowUnderCapacityModal(true);
     } else {
       doStart();
@@ -459,7 +460,7 @@ export default function SpaceStartScreen() {
           weekdays: scheduleType === "WEEKDAY" ? weekdays : undefined,
           defaultCenterCount: centerCount,
           rounds,
-          operatorParticipates,
+          operatorParticipates: space?.operatorParticipates ?? true,
         },
       });
 
@@ -473,7 +474,7 @@ export default function SpaceStartScreen() {
     }
   }, [
     roundConfigs, slotOrder, roundCount, scheduleType, interval, weekdays,
-    centerCount, operatorParticipates, startSpace, id, queryClient, userId, router,
+    centerCount, space, startSpace, id, queryClient, userId, router,
   ]);
 
   // ── Loading / error states ────────────────────────────────────────────────
@@ -619,26 +620,9 @@ export default function SpaceStartScreen() {
 
         <View style={styles.divider} />
 
-        {/* ── Section 2: 운영자 참여 여부 ── */}
+        {/* ── Section 2: 회차 구성 ── */}
         <View style={styles.section}>
-          <SectionHeader number={2} title="운영자 참여 여부" />
-          <Text style={styles.sectionDesc}>운영자가 중심글 작성 순서에 포함될지 여부를 설정해요.</Text>
-          <View style={styles.fieldRow}>
-            <Text style={styles.fieldLabel}>순번에 포함</Text>
-            <ScalePressable
-              contentStyle={[styles.toggleTrack, operatorParticipates && styles.toggleTrackOn]}
-              onPress={() => setOperatorParticipates((v) => !v)}
-            >
-              <View style={[styles.toggleThumb, operatorParticipates && styles.toggleThumbOn]} />
-            </ScalePressable>
-          </View>
-        </View>
-
-        <View style={styles.divider} />
-
-        {/* ── Section 3: 회차 구성 ── */}
-        <View style={styles.section}>
-          <SectionHeader number={3} title="회차 구성" />
+          <SectionHeader number={2} title="회차 구성" />
           <Text style={styles.sectionDesc}>각 회차의 제목과 설명을 입력해요. (선택)</Text>
           {roundConfigs.map((rc, i) => (
             <View key={i} style={styles.roundConfig}>
@@ -670,9 +654,9 @@ export default function SpaceStartScreen() {
 
         <View style={styles.divider} />
 
-        {/* ── Section 4: 중심글 작성 순서 배정 ── */}
+        {/* ── Section 3: 중심글 작성 순서 배정 ── */}
         <View style={styles.section}>
-          <SectionHeader number={4} title="중심글 작성 순서 배정" />
+          <SectionHeader number={3} title="중심글 작성 순서 배정" />
           <Text style={styles.sectionDesc}>
             오른쪽 핸들({"\u2630"})을 드래그해 순서를 조정해요.
           </Text>
@@ -685,9 +669,9 @@ export default function SpaceStartScreen() {
 
         <View style={styles.divider} />
 
-        {/* ── Section 5: 1회차 여는 편지 준비 ── */}
+        {/* ── Section 4: 1회차 여는 편지 준비 ── */}
         <View style={styles.section}>
-          <SectionHeader number={5} title="1회차 여는 편지 준비" />
+          <SectionHeader number={4} title="1회차 여는 편지 준비" />
           <Text style={styles.sectionDesc}>공간을 시작하기 전에 1회차 여는 편지를 작성해주세요.</Text>
 
           <View style={styles.openingLetterBox}>
@@ -785,7 +769,7 @@ export default function SpaceStartScreen() {
       <ConfirmModal
         visible={showUnderCapacityModal}
         title="인원 미달"
-        message={`모집 인원(${space.maxParticipants}명)보다 적은 ${slotOrder.length}명으로 시작할까요?`}
+        message={`모집 인원(${space.operatorParticipates ? (space.maxParticipants ?? 0) - 1 : space.maxParticipants}명)보다 적은 ${slotOrder.length}명으로 시작할까요?`}
         confirmLabel={`${slotOrder.length}명으로 시작`}
         onCancel={() => setShowUnderCapacityModal(false)}
         onConfirm={doStart}

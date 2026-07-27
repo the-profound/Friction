@@ -76,7 +76,7 @@ function ArchivedSpaceCard({
         <View style={styles.metaDot} />
         <Text style={styles.cardMetaText}>
           {item.participantCount}
-          {item.maxParticipants ? `/${item.maxParticipants}` : ""}명
+          {item.maxParticipants ? `/${item.operatorParticipates ? item.maxParticipants - 1 : item.maxParticipants}` : ""}명
         </Text>
       </View>
     </ScalePressable>
