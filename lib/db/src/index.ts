@@ -4,11 +4,11 @@ import * as schema from "./schema";
 
 const { Pool } = pg;
 
-let dbUrl = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
+let dbUrl = process.env.SUPABASE_DB_URL;
 
 if (!dbUrl) {
   throw new Error(
-    "SUPABASE_DB_URL or DATABASE_URL must be set. Did you forget to provision a database?",
+    "SUPABASE_DB_URL must be set.",
   );
 }
 
