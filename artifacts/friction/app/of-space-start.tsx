@@ -647,6 +647,84 @@ function RoundConfigStep({
   );
 }
 
+function RoundConfigModeStep({
+  onSelectDefault,
+  onSelectCustom,
+}: {
+  onSelectDefault: () => void;
+  onSelectCustom: () => void;
+}) {
+  return (
+    <View style={stepStyles.container}>
+      <Text style={stepStyles.stepTitle}>회차 구성</Text>
+      <Text style={stepStyles.stepDesc}>각 회차의 제목과 설명을 어떻게 설정할까요?</Text>
+
+      <View style={{ gap: 12, marginTop: 8 }}>
+        <ScalePressable contentStyle={modeStyles.option} onPress={onSelectDefault}>
+          <View style={modeStyles.optionInner}>
+            <View style={modeStyles.optionIconWrap}>
+              <Feather name="zap" size={20} color={Colors.zinc700} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={modeStyles.optionTitle}>기본으로 사용</Text>
+              <Text style={modeStyles.optionDesc}>회차 번호만 사용하고, 바로 다음 단계로 넘어가요.</Text>
+            </View>
+            <Feather name="chevron-right" size={18} color={Colors.zinc400} />
+          </View>
+        </ScalePressable>
+
+        <ScalePressable contentStyle={modeStyles.option} onPress={onSelectCustom}>
+          <View style={modeStyles.optionInner}>
+            <View style={modeStyles.optionIconWrap}>
+              <Feather name="edit-3" size={20} color={Colors.zinc700} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={modeStyles.optionTitle}>직접 설정</Text>
+              <Text style={modeStyles.optionDesc}>각 회차마다 제목과 설명을 직접 입력해요.</Text>
+            </View>
+            <Feather name="chevron-right" size={18} color={Colors.zinc400} />
+          </View>
+        </ScalePressable>
+      </View>
+    </View>
+  );
+}
+
+const modeStyles = StyleSheet.create({
+  option: {
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
+    borderRadius: 12,
+    backgroundColor: Colors.white,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  optionInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  optionIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: Colors.zinc100,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  optionTitle: {
+    ...Typography.body,
+    fontWeight: "600",
+    color: Colors.zinc800,
+    marginBottom: 2,
+  },
+  optionDesc: {
+    ...Typography.caption,
+    color: Colors.zinc500,
+    lineHeight: 18,
+  },
+});
+
 function SlotOrderStep({
   items,
   onReorder,
@@ -940,7 +1018,7 @@ export default function SpaceStartScreen() {
 
   // ── Step navigation ────────────────────────────────────────────────────────
   // step 0: 운영 설정 확정
-  // step 1: 회차 구성 (sub-stepped by currentRoundIdx)
+  // step 1: 회차 구성 (먼저 기본/직접 선택, 직접 선택 시 sub-stepped by currentRoundIdx)
   // step 2: 중심글 순서 배정 (sub-stepped: 0=order, 1=calendar)
   // step 3: 여는 편지 준비
   // step 4: 시작 확인
@@ -948,6 +1026,7 @@ export default function SpaceStartScreen() {
   const [step, setStep] = useState(0);
   const [currentRoundIdx, setCurrentRoundIdx] = useState(0);
   const [slotSubStep, setSlotSubStep] = useState(0); // 0=order, 1=calendar
+  const [roundConfigMode, setRoundConfigMode] = useState<"default" | "custom" | null>(null);
 
   // ── Data queries ──────────────────────────────────────────────────────────
 
@@ -1112,9 +1191,10 @@ export default function SpaceStartScreen() {
     setShowUnderCapacityModal(false);
     setIsStarting(true);
     try {
+      const isDefaultMode = roundConfigMode !== "custom";
       const rounds = roundConfigs.map((rc) => ({
-        title: rc.title.trim() || undefined,
-        description: rc.description.trim() || undefined,
+        title: isDefaultMode ? undefined : (rc.title.trim() || undefined),
+        description: isDefaultMode ? undefined : (rc.description.trim() || undefined),
         slots: slotOrder,
       }));
 
@@ -1140,7 +1220,7 @@ export default function SpaceStartScreen() {
       setIsStarting(false);
     }
   }, [
-    roundConfigs, slotOrder, roundCount, scheduleType, interval, weekdays,
+    roundConfigs, roundConfigMode, slotOrder, roundCount, scheduleType, interval, weekdays,
     centerCount, space, startSpace, id, queryClient, userId, router,
   ]);
 
@@ -1192,13 +1272,13 @@ export default function SpaceStartScreen() {
 
   const canProceed = useMemo(() => {
     if (step === 0) return hasValidSchedule;
-    if (step === 1) return true;
+    if (step === 1) return roundConfigMode === "custom"; // selection screen uses its own buttons; custom mode allows 다음
     if (step === 2 && slotSubStep === 0) return slotItems.length >= 1;
     if (step === 2 && slotSubStep === 1) return true;
     if (step === 3) return true;
     if (step === 4) return canStart;
     return true;
-  }, [step, slotSubStep, hasValidSchedule, slotItems, canStart]);
+  }, [step, slotSubStep, hasValidSchedule, slotItems, canStart, roundConfigMode]);
 
   const handleNext = useCallback(() => {
     if (step === 0) {
@@ -1228,14 +1308,22 @@ export default function SpaceStartScreen() {
     if (step === 0) {
       router.back();
     } else if (step === 1) {
-      if (currentRoundIdx > 0) {
-        setCurrentRoundIdx((i) => i - 1);
+      if (roundConfigMode === "custom") {
+        if (currentRoundIdx > 0) {
+          setCurrentRoundIdx((i) => i - 1);
+        } else {
+          setRoundConfigMode(null);
+        }
       } else {
+        // null or "default": go back to step 0
         setStep(0);
       }
     } else if (step === 2) {
       if (slotSubStep === 1) {
         setSlotSubStep(0);
+      } else if (roundConfigMode === "default") {
+        setRoundConfigMode(null);
+        setStep(1);
       } else {
         setCurrentRoundIdx(roundCount - 1);
         setStep(1);
@@ -1246,7 +1334,7 @@ export default function SpaceStartScreen() {
     } else if (step === 4) {
       setStep(3);
     }
-  }, [step, currentRoundIdx, roundCount, slotSubStep, router]);
+  }, [step, currentRoundIdx, roundCount, slotSubStep, roundConfigMode, router]);
 
   const goToStep = useCallback((targetStep: number) => {
     if (targetStep === 2) {
@@ -1302,6 +1390,21 @@ export default function SpaceStartScreen() {
       );
     }
     if (step === 1) {
+      if (roundConfigMode !== "custom") {
+        return (
+          <RoundConfigModeStep
+            onSelectDefault={() => {
+              setRoundConfigMode("default");
+              setSlotSubStep(0);
+              setStep(2);
+            }}
+            onSelectCustom={() => {
+              setRoundConfigMode("custom");
+              setCurrentRoundIdx(0);
+            }}
+          />
+        );
+      }
       const config = roundConfigs[currentRoundIdx] ?? { title: "", description: "" };
       return (
         <RoundConfigStep
@@ -1374,7 +1477,7 @@ export default function SpaceStartScreen() {
 
   // Step label suffix
   let stepLabelSuffix = STEPS[step];
-  if (step === 1) stepLabelSuffix = `회차 구성 (${currentRoundIdx + 1}/${roundCount})`;
+  if (step === 1 && roundConfigMode === "custom") stepLabelSuffix = `회차 구성 (${currentRoundIdx + 1}/${roundCount})`;
   if (step === 2 && slotSubStep === 1) stepLabelSuffix = "배정 일정 확인";
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -1423,18 +1526,20 @@ export default function SpaceStartScreen() {
         </ScrollView>
 
         {/* Footer */}
-        <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
-          <SubmitButton
-            style={[styles.nextBtn, !canProceed && styles.nextBtnDisabled]}
-            disabledStyle={styles.nextBtnDisabled}
-            textStyle={styles.nextBtnText}
-            onPress={handleNext}
-            pending={isLastStep && isStarting}
-            disabled={!canProceed || (isLastStep && isStarting)}
-            label={isLastStep ? "공간 시작하기" : "다음"}
-            pendingLabel="시작하는 중..."
-          />
-        </View>
+        {!(step === 1 && roundConfigMode !== "custom") && (
+          <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
+            <SubmitButton
+              style={[styles.nextBtn, !canProceed && styles.nextBtnDisabled]}
+              disabledStyle={styles.nextBtnDisabled}
+              textStyle={styles.nextBtnText}
+              onPress={handleNext}
+              pending={isLastStep && isStarting}
+              disabled={!canProceed || (isLastStep && isStarting)}
+              label={isLastStep ? "공간 시작하기" : "다음"}
+              pendingLabel="시작하는 중..."
+            />
+          </View>
+        )}
       </View>
 
       {/* 자동 거절 안내 모달 */}
