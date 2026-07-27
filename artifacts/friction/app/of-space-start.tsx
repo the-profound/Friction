@@ -16,6 +16,10 @@ import {
   Modal,
   Animated,
   PanResponder,
+  KeyboardAvoidingView,
+  Platform,
+  TouchableWithoutFeedback,
+  Keyboard,
 } from "react-native";
 import { ArticleScheduleSheet } from "@/components/ArticleScheduleSheet/ArticleScheduleSheet";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -24,6 +28,7 @@ import { Feather } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
+import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import { useUser } from "@/contexts/UserContext";
 import {
   useGetSpaceJoinContext,
@@ -54,17 +59,52 @@ const SLOT_ROW_H = 52;
 const SLOT_ROW_GAP = 6;
 const SLOT_ITEM_H = SLOT_ROW_H + SLOT_ROW_GAP;
 
-// ─── Section Header ───────────────────────────────────────────────────────────
+const STEPS = ["운영 설정 확정", "회차 구성", "중심글 순서 배정", "여는 편지 준비", "시작 확인"];
+const TOTAL_STEPS = STEPS.length;
 
-function SectionHeader({ number, title }: { number: number; title: string }) {
-  return (
-    <View style={styles.sectionHeader}>
-      <View style={styles.sectionNumberBadge}>
-        <Text style={styles.sectionNumberText}>{number}</Text>
-      </View>
-      <Text style={styles.sectionTitle}>{title}</Text>
-    </View>
-  );
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function calculateScheduleDates(
+  scheduleType: "N_DAY" | "WEEKDAY",
+  intervalDays: number,
+  weekdays: number[],
+  count: number,
+): Date[] {
+  const results: Date[] = [];
+  const base = new Date();
+  base.setHours(0, 0, 0, 0);
+
+  if (scheduleType === "N_DAY") {
+    for (let i = 0; i < count; i++) {
+      const d = new Date(base);
+      d.setDate(d.getDate() + i * intervalDays);
+      results.push(d);
+    }
+    return results;
+  }
+
+  if (scheduleType === "WEEKDAY" && weekdays.length > 0) {
+    const sorted = [...weekdays].sort((a, b) => a - b);
+    const cursor = new Date(base);
+    let found = 0;
+    for (let attempt = 0; attempt < 3650 && found < count; attempt++) {
+      if (sorted.includes(cursor.getDay())) {
+        results.push(new Date(cursor));
+        found++;
+      }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return results;
+  }
+
+  return results;
+}
+
+function formatDateShort(d: Date): string {
+  const m = d.getMonth() + 1;
+  const day = d.getDate();
+  const weekday = ["일", "월", "화", "수", "목", "금", "토"][d.getDay()];
+  return `${m}/${day} (${weekday})`;
 }
 
 // ─── Confirm Modal ────────────────────────────────────────────────────────────
@@ -115,9 +155,6 @@ function ConfirmModal({
 }
 
 // ─── Draggable Slot List ──────────────────────────────────────────────────────
-// Each row has a drag handle. Long-press + pan vertically to reorder.
-// Uses a single Animated.Value for the dragged row's Y offset.
-// Other rows shift up/down to show where the dragged row will land.
 
 interface SlotRowInfo {
   userId: string;
@@ -141,9 +178,7 @@ function DraggableSlotList({
   const itemsRef = useRef(items);
   itemsRef.current = items;
 
-  // Animated Y value of the dragged row relative to its natural position
   const dragY = useRef(new Animated.Value(0)).current;
-  const startDragY = useRef(0);
 
   const buildPanResponder = useCallback(
     (index: number) =>
@@ -152,7 +187,6 @@ function DraggableSlotList({
         onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dy) > 4,
         onPanResponderGrant: () => {
           dragY.setValue(0);
-          startDragY.current = 0;
           dragIndexRef.current = index;
           hoverIndexRef.current = index;
           setDragIndex(index);
@@ -198,8 +232,6 @@ function DraggableSlotList({
     [dragY, onReorder, onScrollLock],
   );
 
-  // Pre-build one PanResponder per slot position (index stable per render)
-  // We rebuild whenever items.length changes.
   const panResponders = useMemo(
     () => items.map((_, i) => buildPanResponder(i)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -218,7 +250,6 @@ function DraggableSlotList({
     <View style={{ gap: SLOT_ROW_GAP }}>
       {items.map((item, i) => {
         const isDragging = dragIndex === i;
-        // Shift non-dragged rows to visually indicate the drop zone
         let shift = 0;
         if (dragIndex !== null && hoverIndex !== null && !isDragging) {
           const from = dragIndex;
@@ -226,18 +257,14 @@ function DraggableSlotList({
           if (from < to && i > from && i <= to) shift = -SLOT_ITEM_H;
           if (from > to && i >= to && i < from) shift = SLOT_ITEM_H;
         }
-
         const translateY = isDragging ? dragY : shift;
-
         return (
           <Animated.View
             key={item.userId}
             style={[
               styles.slotRow,
               isDragging && styles.slotRowDragging,
-              typeof translateY === "number"
-                ? { transform: [{ translateY }] }
-                : { transform: [{ translateY }] },
+              { transform: [{ translateY: translateY as any }] },
             ]}
           >
             <Text style={styles.slotOrder}>{i + 1}</Text>
@@ -251,11 +278,7 @@ function DraggableSlotList({
                 </View>
               )}
             </View>
-            {/* Drag handle */}
-            <View
-              style={styles.dragHandle}
-              {...panResponders[i].panHandlers}
-            >
+            <View style={styles.dragHandle} {...panResponders[i].panHandlers}>
               <Feather name="menu" size={18} color={Colors.zinc400} />
             </View>
           </Animated.View>
@@ -271,6 +294,509 @@ function formatDate(date: Date): string {
   return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, "0")}.${String(date.getDate()).padStart(2, "0")}`;
 }
 
+// ─── Step Components ──────────────────────────────────────────────────────────
+
+function OperationSettingsStep({
+  roundCount,
+  setRoundCount,
+  scheduleType,
+  setScheduleType,
+  interval,
+  setIntervalVal,
+  weekdays,
+  setWeekdays,
+  centerCount,
+  setCenterCount,
+  operatorParticipates,
+}: {
+  roundCount: number;
+  setRoundCount: (v: number) => void;
+  scheduleType: StartSpaceBodyScheduleType;
+  setScheduleType: (v: StartSpaceBodyScheduleType) => void;
+  interval: number;
+  setIntervalVal: (v: number) => void;
+  weekdays: number[];
+  setWeekdays: (v: number[]) => void;
+  centerCount: number;
+  setCenterCount: (v: number) => void;
+  operatorParticipates: boolean;
+}) {
+  return (
+    <View style={stepStyles.container}>
+      <Text style={stepStyles.stepTitle}>운영 설정 확정</Text>
+      <Text style={stepStyles.stepDesc}>공간 생성 시 입력한 설정을 최종 확인하고 조정해요.</Text>
+
+      <View style={stepStyles.fieldGroup}>
+        <Text style={stepStyles.fieldLabel}>회차 수</Text>
+        <View style={stepStyles.stepperRow}>
+          <ScalePressable
+            contentStyle={styles.stepperBtn}
+            onPress={() => setRoundCount(Math.max(1, roundCount - 1))}
+          >
+            <Feather name="minus" size={14} color={Colors.zinc600} />
+          </ScalePressable>
+          <Text style={styles.stepperValue}>{roundCount}회</Text>
+          <ScalePressable
+            contentStyle={styles.stepperBtn}
+            onPress={() => setRoundCount(Math.min(52, roundCount + 1))}
+          >
+            <Feather name="plus" size={14} color={Colors.zinc600} />
+          </ScalePressable>
+        </View>
+      </View>
+
+      <View style={stepStyles.fieldGroup}>
+        <Text style={stepStyles.fieldLabel}>진행 방식</Text>
+        <View style={stepStyles.optionList}>
+          <ScalePressable
+            contentStyle={[stepStyles.option, scheduleType === "N_DAY" && stepStyles.optionSelected]}
+            onPress={() => setScheduleType("N_DAY")}
+          >
+            <View style={[stepStyles.optionRadio, scheduleType === "N_DAY" && stepStyles.optionRadioActive]}>
+              {scheduleType === "N_DAY" && <View style={stepStyles.optionRadioDot} />}
+            </View>
+            <Text style={stepStyles.optionLabel}>N일 간격</Text>
+          </ScalePressable>
+          <ScalePressable
+            contentStyle={[stepStyles.option, scheduleType === "WEEKDAY" && stepStyles.optionSelected]}
+            onPress={() => setScheduleType("WEEKDAY")}
+          >
+            <View style={[stepStyles.optionRadio, scheduleType === "WEEKDAY" && stepStyles.optionRadioActive]}>
+              {scheduleType === "WEEKDAY" && <View style={stepStyles.optionRadioDot} />}
+            </View>
+            <Text style={stepStyles.optionLabel}>요일 지정</Text>
+          </ScalePressable>
+        </View>
+
+        {scheduleType === "N_DAY" && (
+          <View style={stepStyles.subField}>
+            <Text style={stepStyles.subFieldLabel}>간격 (일)</Text>
+            <View style={stepStyles.stepperRow}>
+              <ScalePressable
+                contentStyle={styles.stepperBtn}
+                onPress={() => setIntervalVal(Math.max(1, interval - 1))}
+              >
+                <Feather name="minus" size={14} color={Colors.zinc600} />
+              </ScalePressable>
+              <Text style={styles.stepperValue}>{interval}일</Text>
+              <ScalePressable
+                contentStyle={styles.stepperBtn}
+                onPress={() => setIntervalVal(Math.min(365, interval + 1))}
+              >
+                <Feather name="plus" size={14} color={Colors.zinc600} />
+              </ScalePressable>
+            </View>
+          </View>
+        )}
+
+        {scheduleType === "WEEKDAY" && (
+          <View style={stepStyles.subField}>
+            <Text style={stepStyles.subFieldLabel}>요일 선택</Text>
+            <View style={styles.weekdayRow}>
+              {WEEKDAY_LABELS.map((label, idx) => {
+                const selected = weekdays.includes(idx);
+                return (
+                  <ScalePressable
+                    key={idx}
+                    contentStyle={[styles.weekdayChip, selected && styles.weekdayChipActive]}
+                    onPress={() =>
+                      setWeekdays(
+                        selected
+                          ? weekdays.filter((d) => d !== idx)
+                          : [...weekdays, idx].sort((a, b) => a - b),
+                      )
+                    }
+                  >
+                    <Text style={[styles.weekdayChipText, selected && styles.weekdayChipTextActive]}>
+                      {label}
+                    </Text>
+                  </ScalePressable>
+                );
+              })}
+            </View>
+            {weekdays.length === 0 && (
+              <Text style={stepStyles.warningText}>요일을 하나 이상 선택해주세요.</Text>
+            )}
+          </View>
+        )}
+      </View>
+
+      <View style={stepStyles.fieldGroup}>
+        <Text style={stepStyles.fieldLabel}>회차당 중심글 수</Text>
+        <View style={stepStyles.stepperRow}>
+          <ScalePressable
+            contentStyle={styles.stepperBtn}
+            onPress={() => setCenterCount(Math.max(1, centerCount - 1))}
+          >
+            <Feather name="minus" size={14} color={Colors.zinc600} />
+          </ScalePressable>
+          <Text style={styles.stepperValue}>{centerCount}편</Text>
+          <ScalePressable
+            contentStyle={styles.stepperBtn}
+            onPress={() => setCenterCount(Math.min(10, centerCount + 1))}
+          >
+            <Feather name="plus" size={14} color={Colors.zinc600} />
+          </ScalePressable>
+        </View>
+      </View>
+
+      <View style={stepStyles.fieldGroup}>
+        <Text style={stepStyles.fieldLabel}>운영자 참여</Text>
+        <View style={[stepStyles.readonlyBox]}>
+          <Feather
+            name={operatorParticipates ? "check-circle" : "circle"}
+            size={16}
+            color={operatorParticipates ? Colors.zinc700 : Colors.zinc400}
+          />
+          <Text style={stepStyles.readonlyText}>
+            {operatorParticipates ? "운영자가 회차에 직접 참여해요" : "운영자는 회차에 참여하지 않아요"}
+          </Text>
+          <Text style={stepStyles.readonlyHint}>(수정 불가)</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function RoundConfigStep({
+  roundIdx,
+  roundCount,
+  config,
+  onChange,
+}: {
+  roundIdx: number;
+  roundCount: number;
+  config: { title: string; description: string };
+  onChange: (title: string, description: string) => void;
+}) {
+  return (
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+      <View style={stepStyles.container}>
+        <Text style={stepStyles.stepTitle}>{roundIdx + 1}회차 구성</Text>
+        <Text style={stepStyles.stepDesc}>
+          {roundCount}회차 중 {roundIdx + 1}번째 회차의 제목과 설명을 입력해요. (선택)
+        </Text>
+
+        <View style={stepStyles.fieldGroup}>
+          <Text style={stepStyles.fieldLabel}>제목 (선택)</Text>
+          <TextInput
+            style={stepStyles.input}
+            value={config.title}
+            onChangeText={(t) => onChange(t, config.description)}
+            placeholder={`예: ${roundIdx + 1}회차`}
+            placeholderTextColor={Colors.zinc400}
+            maxLength={100}
+            returnKeyType="next"
+          />
+          <Text style={stepStyles.charCount}>{config.title.length} / 100</Text>
+        </View>
+
+        <View style={stepStyles.fieldGroup}>
+          <Text style={stepStyles.fieldLabel}>짧은 설명 (선택)</Text>
+          <TextInput
+            style={[stepStyles.input, stepStyles.inputMulti]}
+            value={config.description}
+            onChangeText={(t) => onChange(config.title, t)}
+            placeholder="이 회차에서 다룰 내용을 간단히 설명해주세요"
+            placeholderTextColor={Colors.zinc400}
+            multiline
+            textAlignVertical="top"
+            maxLength={300}
+          />
+          <Text style={stepStyles.charCount}>{config.description.length} / 300</Text>
+        </View>
+      </View>
+    </TouchableWithoutFeedback>
+  );
+}
+
+function SlotOrderStep({
+  items,
+  onReorder,
+  onScrollLock,
+}: {
+  items: SlotRowInfo[];
+  onReorder: (newOrder: string[]) => void;
+  onScrollLock: (locked: boolean) => void;
+}) {
+  return (
+    <View style={stepStyles.container}>
+      <Text style={stepStyles.stepTitle}>중심글 작성 순서</Text>
+      <Text style={stepStyles.stepDesc}>
+        오른쪽 핸들({"\u2630"})을 드래그해 순서를 조정해요.
+      </Text>
+      <DraggableSlotList items={items} onReorder={onReorder} onScrollLock={onScrollLock} />
+    </View>
+  );
+}
+
+function ScheduleCalendarStep({
+  items,
+  roundCount,
+  scheduleType,
+  interval,
+  weekdays,
+  roundConfigs,
+  centerCount,
+}: {
+  items: SlotRowInfo[];
+  roundCount: number;
+  scheduleType: StartSpaceBodyScheduleType;
+  interval: number;
+  weekdays: number[];
+  roundConfigs: Array<{ title: string; description: string }>;
+  centerCount: number;
+}) {
+  const dates = useMemo(
+    () => calculateScheduleDates(scheduleType, interval, weekdays, roundCount),
+    [scheduleType, interval, weekdays, roundCount],
+  );
+
+  return (
+    <View style={stepStyles.container}>
+      <Text style={stepStyles.stepTitle}>배정 일정 확인</Text>
+      <Text style={stepStyles.stepDesc}>
+        시작일 기준 예상 일정이에요. 실제 날짜는 시작 시점에 확정돼요.
+      </Text>
+
+      <View style={calStyles.table}>
+        {Array.from({ length: roundCount }, (_, i) => {
+          const writerIdx = i % (items.length || 1);
+          const writer = items[writerIdx];
+          const roundTitle = roundConfigs[i]?.title?.trim() || `${i + 1}회차`;
+          const dateStr = dates[i] ? formatDateShort(dates[i]) : "-";
+          return (
+            <View key={i} style={calStyles.row}>
+              <View style={calStyles.roundCell}>
+                <Text style={calStyles.roundNum}>{i + 1}</Text>
+              </View>
+              <View style={calStyles.infoCell}>
+                <Text style={calStyles.roundTitle} numberOfLines={1}>
+                  {roundTitle}
+                </Text>
+                <Text style={calStyles.dateText}>{dateStr}</Text>
+              </View>
+              <View style={calStyles.writerCell}>
+                {writer ? (
+                  <Text style={calStyles.writerName} numberOfLines={1}>
+                    {writer.nickname}
+                    {centerCount > 1 ? ` 외 ${centerCount - 1}` : ""}
+                  </Text>
+                ) : (
+                  <Text style={calStyles.noWriter}>미배정</Text>
+                )}
+              </View>
+            </View>
+          );
+        })}
+      </View>
+
+      <Text style={stepStyles.hint}>
+        * 순서는 참여자 수 기준으로 순환 배정돼요. 실제 슬롯은 공간 시작 후 회차마다 동일 순서가 적용돼요.
+      </Text>
+    </View>
+  );
+}
+
+function OpeningLetterStep({
+  isLoading,
+  openingLetterExists,
+  openingLetter,
+  openingScheduledSend,
+  onOpenSheet,
+}: {
+  isLoading: boolean;
+  openingLetterExists: boolean;
+  openingLetter: { id: string } | null;
+  openingScheduledSend: { scheduledAt: string; articleTitle?: string | null } | null;
+  onOpenSheet: () => void;
+}) {
+  return (
+    <View style={stepStyles.container}>
+      <Text style={stepStyles.stepTitle}>여는 편지 준비</Text>
+      <Text style={stepStyles.stepDesc}>공간 시작과 함께 전송될 1회차 여는 편지를 확인해요.</Text>
+
+      <View style={styles.openingLetterBox}>
+        {isLoading ? (
+          <ActivityIndicator size="small" color={Colors.zinc400} />
+        ) : openingLetterExists ? (
+          <View style={styles.openingLetterDone}>
+            <View style={styles.openingLetterDoneTop}>
+              <Feather name="check-circle" size={16} color={Colors.noticeAccent} />
+              <Text style={styles.openingLetterDoneTitle}>작성 완료</Text>
+            </View>
+            {(() => {
+              const articleTitle = openingScheduledSend?.articleTitle ?? "글 선택됨";
+              const scheduledDate = openingScheduledSend ? new Date(openingScheduledSend.scheduledAt) : null;
+              return (
+                <Text style={styles.openingLetterDoneSummary} numberOfLines={1}>
+                  {articleTitle}
+                  {scheduledDate ? `  ·  ${formatDate(scheduledDate)} 06:00 예약` : ""}
+                </Text>
+              );
+            })()}
+            <ScalePressable
+              style={styles.writeOpeningBtnOuter}
+              contentStyle={styles.writeOpeningBtn}
+              onPress={onOpenSheet}
+            >
+              <Feather name="edit-3" size={14} color={Colors.zinc600} />
+              <Text style={styles.writeOpeningBtnText}>수정</Text>
+            </ScalePressable>
+          </View>
+        ) : (
+          <View style={styles.openingLetterPending}>
+            <View style={styles.openingLetterPendingTop}>
+              <Feather name="circle" size={18} color={Colors.zinc300} />
+              <Text style={styles.openingLetterPendingText}>아직 작성하지 않았어요</Text>
+            </View>
+            <ScalePressable
+              style={styles.writeOpeningBtnOuter}
+              contentStyle={styles.writeOpeningBtn}
+              onPress={onOpenSheet}
+            >
+              <Feather name="edit-3" size={14} color={Colors.zinc600} />
+              <Text style={styles.writeOpeningBtnText}>여는 편지 작성하기</Text>
+            </ScalePressable>
+          </View>
+        )}
+      </View>
+
+      {!openingLetterExists && !isLoading && (
+        <View style={stepStyles.infoBox}>
+          <Feather name="info" size={13} color={Colors.zinc400} />
+          <Text style={stepStyles.infoBoxText}>
+            여는 편지 없이도 다음 단계로 이동할 수 있지만, 공간 시작에는 여는 편지가 필요해요.
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+function StartConfirmStep({
+  roundCount,
+  scheduleType,
+  interval,
+  weekdays,
+  centerCount,
+  operatorParticipates,
+  slotItems,
+  openingLetterExists,
+  hasPendingRequests,
+  pendingCount,
+  onGoToStep,
+}: {
+  roundCount: number;
+  scheduleType: StartSpaceBodyScheduleType;
+  interval: number;
+  weekdays: number[];
+  centerCount: number;
+  operatorParticipates: boolean;
+  slotItems: SlotRowInfo[];
+  openingLetterExists: boolean;
+  hasPendingRequests: boolean;
+  pendingCount: number;
+  onGoToStep: (step: number) => void;
+}) {
+  const scheduleSummary =
+    scheduleType === "N_DAY"
+      ? `${interval}일 간격`
+      : weekdays.length > 0
+        ? weekdays.map((d) => WEEKDAY_LABELS[d]).join(", ") + "요일"
+        : "요일 미지정";
+
+  return (
+    <View style={stepStyles.container}>
+      <Text style={stepStyles.stepTitle}>시작 확인</Text>
+      <Text style={stepStyles.stepDesc}>입력한 내용을 확인하고 공간을 시작해요.</Text>
+
+      <View style={confirmStyles.block}>
+        <View style={confirmStyles.blockHeader}>
+          <Text style={confirmStyles.blockTitle}>운영 설정</Text>
+          <ScalePressable onPress={() => onGoToStep(0)}>
+            <Text style={confirmStyles.editBtn}>수정</Text>
+          </ScalePressable>
+        </View>
+        <View style={confirmStyles.summaryRows}>
+          <View style={confirmStyles.summaryRow}>
+            <Text style={confirmStyles.summaryKey}>회차 수</Text>
+            <Text style={confirmStyles.summaryVal}>{roundCount}회</Text>
+          </View>
+          <View style={confirmStyles.summaryRow}>
+            <Text style={confirmStyles.summaryKey}>진행 방식</Text>
+            <Text style={confirmStyles.summaryVal}>{scheduleSummary}</Text>
+          </View>
+          <View style={confirmStyles.summaryRow}>
+            <Text style={confirmStyles.summaryKey}>중심글</Text>
+            <Text style={confirmStyles.summaryVal}>회차당 {centerCount}편</Text>
+          </View>
+          <View style={confirmStyles.summaryRow}>
+            <Text style={confirmStyles.summaryKey}>운영자 참여</Text>
+            <Text style={confirmStyles.summaryVal}>{operatorParticipates ? "참여" : "불참"}</Text>
+          </View>
+        </View>
+      </View>
+
+      <View style={confirmStyles.block}>
+        <View style={confirmStyles.blockHeader}>
+          <Text style={confirmStyles.blockTitle}>중심글 순서</Text>
+          <ScalePressable onPress={() => onGoToStep(2)}>
+            <Text style={confirmStyles.editBtn}>수정</Text>
+          </ScalePressable>
+        </View>
+        {slotItems.length > 0 ? (
+          <Text style={confirmStyles.summaryProse}>
+            {slotItems.map((s) => s.nickname).join(" → ")}
+          </Text>
+        ) : (
+          <Text style={confirmStyles.summaryWarning}>확정 참여자가 없어요.</Text>
+        )}
+      </View>
+
+      <View style={confirmStyles.block}>
+        <View style={confirmStyles.blockHeader}>
+          <Text style={confirmStyles.blockTitle}>여는 편지</Text>
+          <ScalePressable onPress={() => onGoToStep(3)}>
+            <Text style={confirmStyles.editBtn}>확인</Text>
+          </ScalePressable>
+        </View>
+        <View style={confirmStyles.summaryRow}>
+          <Feather
+            name={openingLetterExists ? "check-circle" : "circle"}
+            size={15}
+            color={openingLetterExists ? Colors.noticeAccent : Colors.zinc400}
+          />
+          <Text style={openingLetterExists ? confirmStyles.summaryVal : confirmStyles.summaryWarning}>
+            {openingLetterExists ? "작성 완료" : "미작성"}
+          </Text>
+        </View>
+      </View>
+
+      <View style={confirmStyles.noticeBlock}>
+        <View style={confirmStyles.noticeRow}>
+          <Feather name="info" size={13} color={Colors.zinc400} />
+          <Text style={confirmStyles.noticeText}>시작과 동시에 모집이 마감돼요.</Text>
+        </View>
+        {hasPendingRequests && (
+          <View style={confirmStyles.noticeRow}>
+            <Feather name="info" size={13} color={Colors.zinc400} />
+            <Text style={confirmStyles.noticeText}>
+              승인 대기 중인 코드 신청자({pendingCount}명)가 자동으로 거절 처리돼요.
+            </Text>
+          </View>
+        )}
+        <View style={confirmStyles.noticeRow}>
+          <Feather name="info" size={13} color={Colors.zinc400} />
+          <Text style={confirmStyles.noticeText}>
+            시작 후 회차 수·진행 방식·규칙은 수정할 수 없어요.
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function SpaceStartScreen() {
@@ -280,6 +806,17 @@ export default function SpaceStartScreen() {
   const { userId } = useUser();
   const queryClient = useQueryClient();
   const [scrollEnabled, setScrollEnabled] = useState(true);
+
+  // ── Step navigation ────────────────────────────────────────────────────────
+  // step 0: 운영 설정 확정
+  // step 1: 회차 구성 (sub-stepped by currentRoundIdx)
+  // step 2: 중심글 순서 배정 (sub-stepped: 0=order, 1=calendar)
+  // step 3: 여는 편지 준비
+  // step 4: 시작 확인
+
+  const [step, setStep] = useState(0);
+  const [currentRoundIdx, setCurrentRoundIdx] = useState(0);
+  const [slotSubStep, setSlotSubStep] = useState(0); // 0=order, 1=calendar
 
   // ── Data queries ──────────────────────────────────────────────────────────
 
@@ -424,7 +961,7 @@ export default function SpaceStartScreen() {
     setSlotOrder(newOrder);
   }, []);
 
-  // ── Activation & modal state ──────────────────────────────────────────────
+  // ── Start logic ───────────────────────────────────────────────────────────
 
   const hasEnoughParticipants = slotOrder.length >= 1;
   const hasValidSchedule =
@@ -434,44 +971,6 @@ export default function SpaceStartScreen() {
   const [showAutoRejectModal, setShowAutoRejectModal] = useState(false);
   const [showUnderCapacityModal, setShowUnderCapacityModal] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
-
-  const handleStartPress = useCallback(() => {
-    if (!openingLetterExists) return;
-    if (!hasEnoughParticipants) return;
-    if (scheduleType === "WEEKDAY" && weekdays.length === 0) {
-      Alert.alert("알림", "요일을 하나 이상 선택해주세요.");
-      return;
-    }
-    if (hasPendingRequests) {
-      setShowAutoRejectModal(true);
-    } else {
-      const effectiveMaxStart = space?.maxParticipants != null
-        ? (space.operatorParticipates ? space.maxParticipants - 1 : space.maxParticipants)
-        : null;
-      const confirmedCount = slotOrder.length;
-      if (effectiveMaxStart != null && confirmedCount < effectiveMaxStart) {
-        setShowUnderCapacityModal(true);
-      } else {
-        doStart();
-      }
-    }
-  }, [
-    openingLetterExists, hasEnoughParticipants, scheduleType, weekdays,
-    hasPendingRequests, space, slotOrder,
-  ]);
-
-  const handleAutoRejectContinue = useCallback(() => {
-    setShowAutoRejectModal(false);
-    const effectiveMaxStart = space?.maxParticipants != null
-      ? (space.operatorParticipates ? space.maxParticipants - 1 : space.maxParticipants)
-      : null;
-    const confirmedCount = slotOrder.length;
-    if (effectiveMaxStart != null && confirmedCount < effectiveMaxStart) {
-      setShowUnderCapacityModal(true);
-    } else {
-      doStart();
-    }
-  }, [space, slotOrder]);
 
   const doStart = useCallback(async () => {
     setShowUnderCapacityModal(false);
@@ -509,6 +1008,117 @@ export default function SpaceStartScreen() {
     centerCount, space, startSpace, id, queryClient, userId, router,
   ]);
 
+  const handleAutoRejectContinue = useCallback(() => {
+    setShowAutoRejectModal(false);
+    const effectiveMaxStart = space?.maxParticipants != null
+      ? (space.operatorParticipates ? space.maxParticipants - 1 : space.maxParticipants)
+      : null;
+    const confirmedCount = slotOrder.length;
+    if (effectiveMaxStart != null && confirmedCount < effectiveMaxStart) {
+      setShowUnderCapacityModal(true);
+    } else {
+      doStart();
+    }
+  }, [space, slotOrder, doStart]);
+
+  const handleStartPress = useCallback(() => {
+    if (!openingLetterExists) {
+      Alert.alert("여는 편지 필요", "여는 편지를 먼저 작성해주세요.");
+      return;
+    }
+    if (!hasEnoughParticipants) {
+      Alert.alert("참여자 필요", "확정 참여자가 1명 이상 있어야 해요.");
+      return;
+    }
+    if (scheduleType === "WEEKDAY" && weekdays.length === 0) {
+      Alert.alert("알림", "요일을 하나 이상 선택해주세요.");
+      return;
+    }
+    if (hasPendingRequests) {
+      setShowAutoRejectModal(true);
+    } else {
+      const effectiveMaxStart = space?.maxParticipants != null
+        ? (space.operatorParticipates ? space.maxParticipants - 1 : space.maxParticipants)
+        : null;
+      const confirmedCount = slotOrder.length;
+      if (effectiveMaxStart != null && confirmedCount < effectiveMaxStart) {
+        setShowUnderCapacityModal(true);
+      } else {
+        doStart();
+      }
+    }
+  }, [
+    openingLetterExists, hasEnoughParticipants, scheduleType, weekdays,
+    hasPendingRequests, space, slotOrder, doStart,
+  ]);
+
+  // ── Step navigation logic ─────────────────────────────────────────────────
+
+  const canProceed = useMemo(() => {
+    if (step === 0) return hasValidSchedule;
+    if (step === 1) return true;
+    if (step === 2 && slotSubStep === 0) return slotItems.length >= 1;
+    if (step === 2 && slotSubStep === 1) return true;
+    if (step === 3) return true;
+    if (step === 4) return canStart;
+    return true;
+  }, [step, slotSubStep, hasValidSchedule, slotItems, canStart]);
+
+  const handleNext = useCallback(() => {
+    if (step === 0) {
+      setCurrentRoundIdx(0);
+      setStep(1);
+    } else if (step === 1) {
+      if (currentRoundIdx < roundCount - 1) {
+        setCurrentRoundIdx((i) => i + 1);
+      } else {
+        setSlotSubStep(0);
+        setStep(2);
+      }
+    } else if (step === 2) {
+      if (slotSubStep === 0) {
+        setSlotSubStep(1);
+      } else {
+        setStep(3);
+      }
+    } else if (step === 3) {
+      setStep(4);
+    } else if (step === 4) {
+      handleStartPress();
+    }
+  }, [step, currentRoundIdx, roundCount, slotSubStep, handleStartPress]);
+
+  const handleBack = useCallback(() => {
+    if (step === 0) {
+      router.back();
+    } else if (step === 1) {
+      if (currentRoundIdx > 0) {
+        setCurrentRoundIdx((i) => i - 1);
+      } else {
+        setStep(0);
+      }
+    } else if (step === 2) {
+      if (slotSubStep === 1) {
+        setSlotSubStep(0);
+      } else {
+        setCurrentRoundIdx(roundCount - 1);
+        setStep(1);
+      }
+    } else if (step === 3) {
+      setSlotSubStep(1);
+      setStep(2);
+    } else if (step === 4) {
+      setStep(3);
+    }
+  }, [step, currentRoundIdx, roundCount, slotSubStep, router]);
+
+  const goToStep = useCallback((targetStep: number) => {
+    if (targetStep === 2) {
+      setSlotSubStep(0);
+    }
+    setStep(targetStep);
+  }, []);
+
   // ── Loading / error states ────────────────────────────────────────────────
 
   if (joinContextQuery.isLoading || membersQuery.isLoading) {
@@ -530,274 +1140,164 @@ export default function SpaceStartScreen() {
     );
   }
 
-  // Hint for start button
-  let startHint: string | null = null;
-  if (!openingLetterExists) startHint = "여는 편지를 작성해야 시작할 수 있어요.";
-  else if (!hasEnoughParticipants) startHint = "확정 참여자가 1명 이상 필요해요.";
-  else if (scheduleType === "WEEKDAY" && weekdays.length === 0) startHint = "요일을 하나 이상 선택해주세요.";
+  // ── Step content ──────────────────────────────────────────────────────────
+
+  const renderStepContent = () => {
+    if (step === 0) {
+      return (
+        <OperationSettingsStep
+          roundCount={roundCount}
+          setRoundCount={setRoundCount}
+          scheduleType={scheduleType}
+          setScheduleType={setScheduleType}
+          interval={interval}
+          setIntervalVal={setIntervalVal}
+          weekdays={weekdays}
+          setWeekdays={setWeekdays}
+          centerCount={centerCount}
+          setCenterCount={setCenterCount}
+          operatorParticipates={space.operatorParticipates ?? true}
+        />
+      );
+    }
+    if (step === 1) {
+      const config = roundConfigs[currentRoundIdx] ?? { title: "", description: "" };
+      return (
+        <RoundConfigStep
+          roundIdx={currentRoundIdx}
+          roundCount={roundCount}
+          config={config}
+          onChange={(title, description) =>
+            setRoundConfigs((prev) =>
+              prev.map((c, idx) => (idx === currentRoundIdx ? { title, description } : c)),
+            )
+          }
+        />
+      );
+    }
+    if (step === 2 && slotSubStep === 0) {
+      return (
+        <SlotOrderStep
+          items={slotItems}
+          onReorder={handleReorder}
+          onScrollLock={setScrollEnabled}
+        />
+      );
+    }
+    if (step === 2 && slotSubStep === 1) {
+      return (
+        <ScheduleCalendarStep
+          items={slotItems}
+          roundCount={roundCount}
+          scheduleType={scheduleType}
+          interval={interval}
+          weekdays={weekdays}
+          roundConfigs={roundConfigs}
+          centerCount={centerCount}
+        />
+      );
+    }
+    if (step === 3) {
+      return (
+        <OpeningLetterStep
+          isLoading={lettersQuery.isLoading}
+          openingLetterExists={openingLetterExists}
+          openingLetter={openingLetter}
+          openingScheduledSend={openingScheduledSend}
+          onOpenSheet={() => setShowOpeningSheet(true)}
+        />
+      );
+    }
+    if (step === 4) {
+      return (
+        <StartConfirmStep
+          roundCount={roundCount}
+          scheduleType={scheduleType}
+          interval={interval}
+          weekdays={weekdays}
+          centerCount={centerCount}
+          operatorParticipates={space.operatorParticipates ?? true}
+          slotItems={slotItems}
+          openingLetterExists={openingLetterExists}
+          hasPendingRequests={hasPendingRequests}
+          pendingCount={pendingRequests.length}
+          onGoToStep={goToStep}
+        />
+      );
+    }
+    return null;
+  };
+
+  // Display step index for progress bar (step 2 sub-steps both count as step 2)
+  const displayStep = step;
+  const isLastStep = step === 4;
+
+  // Step label suffix
+  let stepLabelSuffix = STEPS[step];
+  if (step === 1) stepLabelSuffix = `회차 구성 (${currentRoundIdx + 1}/${roundCount})`;
+  if (step === 2 && slotSubStep === 1) stepLabelSuffix = "배정 일정 확인";
 
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <ScalePressable onPress={() => router.back()} hitSlop={12}>
-          <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-        </ScalePressable>
-        <Text style={styles.headerTitle}>공간 시작하기</Text>
-        <View style={{ width: 28 }} />
-      </View>
-
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 120 }]}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        scrollEnabled={scrollEnabled}
-      >
-        {/* ── Section 1: 운영 설정 확정 ── */}
-        <View style={styles.section}>
-          <SectionHeader number={1} title="운영 설정 확정" />
-
-          <View style={styles.fieldRow}>
-            <Text style={styles.fieldLabel}>회차 수</Text>
-            <View style={styles.stepperRow}>
-              <ScalePressable contentStyle={styles.stepperBtn} onPress={() => setRoundCount((v) => Math.max(1, v - 1))}>
-                <Feather name="minus" size={14} color={Colors.zinc600} />
-              </ScalePressable>
-              <Text style={styles.stepperValue}>{roundCount}</Text>
-              <ScalePressable contentStyle={styles.stepperBtn} onPress={() => setRoundCount((v) => Math.min(99, v + 1))}>
-                <Feather name="plus" size={14} color={Colors.zinc600} />
-              </ScalePressable>
-            </View>
-          </View>
-
-          <View style={styles.fieldRow}>
-            <Text style={styles.fieldLabel}>진행 방식</Text>
-            <View style={styles.chipRow}>
-              <ScalePressable
-                contentStyle={[styles.chip, scheduleType === "N_DAY" && styles.chipActive]}
-                onPress={() => setScheduleType("N_DAY")}
-              >
-                <Text style={[styles.chipText, scheduleType === "N_DAY" && styles.chipTextActive]}>N일 간격</Text>
-              </ScalePressable>
-              <ScalePressable
-                contentStyle={[styles.chip, scheduleType === "WEEKDAY" && styles.chipActive]}
-                onPress={() => setScheduleType("WEEKDAY")}
-              >
-                <Text style={[styles.chipText, scheduleType === "WEEKDAY" && styles.chipTextActive]}>요일 지정</Text>
-              </ScalePressable>
-            </View>
-          </View>
-
-          {scheduleType === "N_DAY" && (
-            <View style={styles.fieldRow}>
-              <Text style={styles.fieldLabel}>간격 (일)</Text>
-              <View style={styles.stepperRow}>
-                <ScalePressable contentStyle={styles.stepperBtn} onPress={() => setIntervalVal((v) => Math.max(1, v - 1))}>
-                  <Feather name="minus" size={14} color={Colors.zinc600} />
-                </ScalePressable>
-                <Text style={styles.stepperValue}>{interval}일</Text>
-                <ScalePressable contentStyle={styles.stepperBtn} onPress={() => setIntervalVal((v) => Math.min(365, v + 1))}>
-                  <Feather name="plus" size={14} color={Colors.zinc600} />
-                </ScalePressable>
-              </View>
-            </View>
-          )}
-
-          {scheduleType === "WEEKDAY" && (
-            <View style={styles.fieldRow}>
-              <Text style={styles.fieldLabel}>요일</Text>
-              <View style={styles.weekdayRow}>
-                {WEEKDAY_LABELS.map((label, idx) => {
-                  const selected = weekdays.includes(idx);
-                  return (
-                    <ScalePressable
-                      key={idx}
-                      contentStyle={[styles.weekdayChip, selected && styles.weekdayChipActive]}
-                      onPress={() =>
-                        setWeekdays((prev) =>
-                          selected
-                            ? prev.filter((d) => d !== idx)
-                            : [...prev, idx].sort((a, b) => a - b),
-                        )
-                      }
-                    >
-                      <Text style={[styles.weekdayChipText, selected && styles.weekdayChipTextActive]}>{label}</Text>
-                    </ScalePressable>
-                  );
-                })}
-              </View>
-            </View>
-          )}
-
-          {scheduleType === "WEEKDAY" && weekdays.length === 0 && (
-            <Text style={styles.inlineWarning}>요일을 하나 이상 선택해주세요.</Text>
-          )}
-
-          <View style={styles.fieldRow}>
-            <Text style={styles.fieldLabel}>중심글 수</Text>
-            <View style={styles.stepperRow}>
-              <ScalePressable contentStyle={styles.stepperBtn} onPress={() => setCenterCount((v) => Math.max(1, v - 1))}>
-                <Feather name="minus" size={14} color={Colors.zinc600} />
-              </ScalePressable>
-              <Text style={styles.stepperValue}>{centerCount}</Text>
-              <ScalePressable contentStyle={styles.stepperBtn} onPress={() => setCenterCount((v) => Math.min(99, v + 1))}>
-                <Feather name="plus" size={14} color={Colors.zinc600} />
-              </ScalePressable>
-            </View>
-          </View>
+    <KeyboardAvoidingView
+      style={styles.root}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        {/* Header */}
+        <View style={styles.header}>
+          <ScalePressable style={styles.backBtn} onPress={handleBack} hitSlop={8}>
+            <Feather name="chevron-left" size={24} color={Colors.zinc700} />
+          </ScalePressable>
+          <Text style={styles.headerTitle}>공간 시작하기</Text>
+          <View style={styles.headerRight} />
         </View>
 
-        <View style={styles.divider} />
-
-        {/* ── Section 2: 회차 구성 ── */}
-        <View style={styles.section}>
-          <SectionHeader number={2} title="회차 구성" />
-          <Text style={styles.sectionDesc}>각 회차의 제목과 설명을 입력해요. (선택)</Text>
-          {roundConfigs.map((rc, i) => (
-            <View key={i} style={styles.roundConfig}>
-              <Text style={styles.roundConfigLabel}>{i + 1}회차</Text>
-              <TextInput
-                style={styles.textInput}
-                value={rc.title}
-                onChangeText={(text) =>
-                  setRoundConfigs((prev) => prev.map((c, idx) => (idx === i ? { ...c, title: text } : c)))
-                }
-                placeholder="제목 (선택)"
-                placeholderTextColor={Colors.zinc400}
-                maxLength={100}
-              />
-              <TextInput
-                style={[styles.textInput, styles.textArea, { marginTop: 6 }]}
-                value={rc.description}
-                onChangeText={(text) =>
-                  setRoundConfigs((prev) => prev.map((c, idx) => (idx === i ? { ...c, description: text } : c)))
-                }
-                placeholder="짧은 설명 (선택)"
-                placeholderTextColor={Colors.zinc400}
-                multiline
-                maxLength={300}
-              />
-            </View>
-          ))}
-        </View>
-
-        <View style={styles.divider} />
-
-        {/* ── Section 3: 중심글 작성 순서 배정 ── */}
-        <View style={styles.section}>
-          <SectionHeader number={3} title="중심글 작성 순서 배정" />
-          <Text style={styles.sectionDesc}>
-            오른쪽 핸들({"\u2630"})을 드래그해 순서를 조정해요.
-          </Text>
-          <DraggableSlotList
-            items={slotItems}
-            onReorder={handleReorder}
-            onScrollLock={setScrollEnabled}
+        {/* Progress bar */}
+        <View style={styles.progressBar}>
+          <View
+            style={[
+              styles.progressFill,
+              { width: `${((displayStep + 1) / TOTAL_STEPS) * 100}%` },
+            ]}
           />
         </View>
 
-        <View style={styles.divider} />
-
-        {/* ── Section 4: 1회차 여는 편지 준비 ── */}
-        <View style={styles.section}>
-          <SectionHeader number={4} title="1회차 여는 편지 준비" />
-          <Text style={styles.sectionDesc}>공간을 시작하기 전에 1회차 여는 편지를 작성해주세요.</Text>
-
-          {lettersQuery.isLoading ? (
-            <ActivityIndicator size="small" color={Colors.zinc400} />
-          ) : openingLetterExists ? (
-            <View style={styles.openingLetterDone}>
-              <View style={styles.openingLetterDoneTop}>
-                <Feather name="check-circle" size={16} color={Colors.noticeAccent} />
-                <Text style={styles.openingLetterDoneTitle}>작성 완료</Text>
-              </View>
-              {(() => {
-                const send = openingLetter
-                  ? sends.find((s) => s.spaceLetterId === openingLetter.id)
-                  : null;
-                const articleTitle = send?.articleTitle ?? "글 선택됨";
-                const scheduledDate = send ? new Date(send.scheduledAt) : null;
-                return (
-                  <Text style={styles.openingLetterDoneSummary} numberOfLines={1}>
-                    {articleTitle}
-                    {scheduledDate ? `  ·  ${formatDate(scheduledDate)} 06:00 예약` : ""}
-                  </Text>
-                );
-              })()}
-              <ScalePressable
-                style={styles.writeOpeningBtnOuter}
-                contentStyle={styles.writeOpeningBtn}
-                onPress={() => setShowOpeningSheet(true)}
-              >
-                <Feather name="edit-3" size={14} color={Colors.zinc600} />
-                <Text style={styles.writeOpeningBtnText}>수정</Text>
-              </ScalePressable>
-            </View>
-          ) : (
-            <ScalePressable
-              style={styles.writeOpeningBtnOuter}
-              contentStyle={styles.writeOpeningBtn}
-              onPress={() => setShowOpeningSheet(true)}
-            >
-              <Feather name="edit-3" size={14} color={Colors.zinc600} />
-              <Text style={styles.writeOpeningBtnText}>여는 편지 작성하기</Text>
-            </ScalePressable>
-          )}
+        {/* Step label */}
+        <View style={styles.stepLabel}>
+          <Text style={styles.stepLabelText}>
+            {displayStep + 1} / {TOTAL_STEPS} — {stepLabelSuffix}
+          </Text>
         </View>
 
-        <View style={styles.divider} />
-
-        {/* ── 하단 안내 ── */}
-        <View style={styles.noticeSection}>
-          <View style={styles.noticeRow}>
-            <Feather name="info" size={13} color={Colors.zinc400} />
-            <Text style={styles.noticeText}>시작과 동시에 모집이 마감돼요.</Text>
-          </View>
-          {hasPendingRequests && (
-            <View style={styles.noticeRow}>
-              <Feather name="info" size={13} color={Colors.zinc400} />
-              <Text style={styles.noticeText}>
-                승인 대기 중인 코드 신청자({pendingRequests.length}명)가 자동으로 거절 처리돼요.
-              </Text>
-            </View>
-          )}
-          <View style={styles.noticeRow}>
-            <Feather name="info" size={13} color={Colors.zinc400} />
-            <Text style={styles.noticeText}>시작 후 회차 수·진행 방식은 수정할 수 없어요.</Text>
-          </View>
-        </View>
-
-        {!hasEnoughParticipants && (
-          <View style={styles.warningBox}>
-            <Feather name="alert-triangle" size={14} color={Colors.zinc500} />
-            <Text style={styles.warningText}>확정 참여자가 1명 이상이어야 시작할 수 있어요.</Text>
-          </View>
-        )}
-      </ScrollView>
-
-      {/* ── 시작 버튼 ── */}
-      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 12 }]}>
-        <ScalePressable
-          style={styles.startBtnOuter}
-          contentStyle={[styles.startBtn, !canStart && styles.startBtnDisabled]}
-          onPress={handleStartPress}
-          disabled={!canStart || isStarting}
+        {/* Content */}
+        <ScrollView
+          style={styles.scrollArea}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          scrollEnabled={scrollEnabled}
         >
-          {isStarting ? (
-            <ActivityIndicator size="small" color={Colors.white} />
-          ) : (
-            <Text style={[styles.startBtnText, !canStart && styles.startBtnDisabledText]}>
-              공간 시작하기
-            </Text>
-          )}
-        </ScalePressable>
-        {startHint && <Text style={styles.startBtnHint}>{startHint}</Text>}
+          {renderStepContent()}
+        </ScrollView>
+
+        {/* Footer */}
+        <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
+          <SubmitButton
+            style={[styles.nextBtn, !canProceed && styles.nextBtnDisabled]}
+            disabledStyle={styles.nextBtnDisabled}
+            textStyle={styles.nextBtnText}
+            onPress={handleNext}
+            pending={isLastStep && isStarting}
+            disabled={!canProceed || (isLastStep && isStarting)}
+            label={isLastStep ? "공간 시작하기" : "다음"}
+            pendingLabel="시작하는 중..."
+          />
+        </View>
       </View>
 
-      {/* ── 자동 거절 안내 모달 ── */}
+      {/* 자동 거절 안내 모달 */}
       <ConfirmModal
         visible={showAutoRejectModal}
         title="코드 신청자 자동 거절"
@@ -807,7 +1307,7 @@ export default function SpaceStartScreen() {
         onConfirm={handleAutoRejectContinue}
       />
 
-      {/* ── 인원 미달 확인 모달 ── */}
+      {/* 인원 미달 확인 모달 */}
       <ConfirmModal
         visible={showUnderCapacityModal}
         title="인원 미달"
@@ -834,13 +1334,17 @@ export default function SpaceStartScreen() {
           }}
         />
       )}
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: Colors.white,
+  },
   container: {
     flex: 1,
     backgroundColor: Colors.white,
@@ -852,195 +1356,77 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
     paddingHorizontal: Spacing.screenPx,
-    paddingVertical: 12,
+    paddingTop: 12,
+    paddingBottom: 8,
+    justifyContent: "space-between",
+  },
+  backBtn: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
   },
   headerTitle: {
     ...Typography.bodySemiBold,
     fontSize: 17,
     color: Colors.zinc900,
   },
-  scrollView: {
+  headerRight: {
+    width: 36,
+  },
+  progressBar: {
+    height: 3,
+    backgroundColor: Colors.zinc100,
+    marginHorizontal: Spacing.screenPx,
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    backgroundColor: Colors.zinc900,
+    borderRadius: 2,
+  },
+  stepLabel: {
+    paddingHorizontal: Spacing.screenPx,
+    paddingTop: 10,
+    paddingBottom: 4,
+  },
+  stepLabelText: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc400,
+  },
+  scrollArea: {
     flex: 1,
   },
   scrollContent: {
-    paddingTop: 8,
-  },
-  section: {
     paddingHorizontal: Spacing.screenPx,
-    paddingVertical: 20,
+    paddingBottom: 24,
   },
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 16,
-  },
-  sectionNumberBadge: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: Colors.zinc900,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  sectionNumberText: {
-    ...Typography.bodySemiBold,
-    fontSize: 11,
-    color: Colors.white,
-  },
-  sectionTitle: {
-    ...Typography.bodySemiBold,
-    fontSize: 15,
-    color: Colors.zinc900,
-  },
-  sectionDesc: {
-    ...Typography.body,
-    fontSize: 13,
-    color: Colors.zinc500,
-    marginBottom: 16,
-    lineHeight: 18,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: Colors.zinc100,
-    marginHorizontal: Spacing.screenPx,
-  },
-  fieldRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  fieldLabel: {
-    ...Typography.body,
-    fontSize: 14,
-    color: Colors.zinc700,
-  },
-  stepperRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  stepperBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.zinc200,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  stepperValue: {
-    ...Typography.bodySemiBold,
-    fontSize: 14,
-    color: Colors.zinc800,
-    minWidth: 36,
-    textAlign: "center",
-  },
-  chipRow: {
-    flexDirection: "row",
-    gap: 6,
-  },
-  chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: Colors.zinc200,
-  },
-  chipActive: {
-    backgroundColor: Colors.zinc900,
-    borderColor: Colors.zinc900,
-  },
-  chipText: {
-    ...Typography.body,
-    fontSize: 13,
-    color: Colors.zinc600,
-  },
-  chipTextActive: {
-    color: Colors.white,
-  },
-  weekdayRow: {
-    flexDirection: "row",
-    gap: 4,
-  },
-  weekdayChip: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    borderWidth: 1,
-    borderColor: Colors.zinc200,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  weekdayChipActive: {
-    backgroundColor: Colors.zinc900,
-    borderColor: Colors.zinc900,
-  },
-  weekdayChipText: {
-    ...Typography.body,
-    fontSize: 13,
-    color: Colors.zinc600,
-  },
-  weekdayChipTextActive: {
-    color: Colors.white,
-  },
-  inlineWarning: {
-    ...Typography.body,
-    fontSize: 12,
-    color: Colors.noticeAccent,
-    marginTop: -6,
-    marginBottom: 12,
-  },
-  toggleTrack: {
-    width: 44,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: Colors.zinc200,
-    justifyContent: "center",
-    paddingHorizontal: 3,
-  },
-  toggleTrackOn: {
-    backgroundColor: Colors.zinc900,
-  },
-  toggleThumb: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+  footer: {
+    paddingHorizontal: Spacing.screenPx,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: Colors.zinc100,
     backgroundColor: Colors.white,
-    alignSelf: "flex-start",
   },
-  toggleThumbOn: {
-    alignSelf: "flex-end",
+  nextBtn: {
+    backgroundColor: Colors.zinc900,
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  roundConfig: {
-    marginBottom: 16,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.zinc100,
+  nextBtnDisabled: {
+    backgroundColor: Colors.zinc200,
   },
-  roundConfigLabel: {
+  nextBtnText: {
     ...Typography.bodySemiBold,
-    fontSize: 13,
-    color: Colors.zinc600,
-    marginBottom: 8,
+    fontSize: 16,
+    color: Colors.white,
   },
-  textInput: {
-    ...Typography.body,
-    fontSize: 14,
-    color: Colors.zinc900,
-    borderWidth: 1,
-    borderColor: Colors.zinc200,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  textArea: {
-    minHeight: 64,
-    textAlignVertical: "top",
-  },
+  // Slot list
   slotRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1104,8 +1490,28 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.zinc400,
   },
+  // Opening letter
+  openingLetterBox: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
+    padding: 16,
+  },
   openingLetterDone: {
     gap: 10,
+  },
+  openingLetterPending: {
+    gap: 12,
+  },
+  openingLetterPendingTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  openingLetterPendingText: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc500,
   },
   openingLetterDoneTop: {
     flexDirection: "row",
@@ -1141,88 +1547,50 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.zinc700,
   },
-  noticeSection: {
-    paddingHorizontal: Spacing.screenPx,
-    paddingTop: 20,
-    gap: 8,
-  },
-  noticeRow: {
+  // Misc
+  weekdayRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 6,
+    gap: 4,
+    marginTop: 8,
   },
-  noticeText: {
-    ...Typography.body,
-    fontSize: 12,
-    color: Colors.zinc500,
-    flex: 1,
-    lineHeight: 17,
-  },
-  warningBox: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 6,
-    marginHorizontal: Spacing.screenPx,
-    marginTop: 12,
-    padding: 12,
-    borderRadius: 8,
-    backgroundColor: Colors.zinc100,
-  },
-  warningText: {
-    ...Typography.body,
-    fontSize: 12,
-    color: Colors.zinc600,
-    flex: 1,
-    lineHeight: 17,
-  },
-  bottomBar: {
-    paddingHorizontal: Spacing.screenPx,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: Colors.zinc100,
-    backgroundColor: Colors.white,
-    alignItems: "center",
-    gap: 6,
-  },
-  startBtnOuter: {
-    width: "100%",
-  },
-  startBtn: {
-    backgroundColor: Colors.zinc900,
-    borderRadius: 12,
-    paddingVertical: 14,
+  weekdayChip: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
     alignItems: "center",
     justifyContent: "center",
   },
-  startBtnDisabled: {
-    backgroundColor: Colors.zinc200,
+  weekdayChipActive: {
+    backgroundColor: Colors.zinc900,
+    borderColor: Colors.zinc900,
   },
-  startBtnText: {
-    ...Typography.bodySemiBold,
-    fontSize: 15,
-    color: Colors.white,
-  },
-  startBtnDisabledText: {
-    color: Colors.zinc400,
-  },
-  startBtnHint: {
+  weekdayChipText: {
     ...Typography.body,
-    fontSize: 12,
-    color: Colors.zinc400,
-  },
-  errorText: {
-    ...Typography.body,
-    fontSize: 15,
-    color: Colors.zinc500,
-  },
-  backLink: {
-    ...Typography.bodySemiBold,
-    fontSize: 14,
+    fontSize: 13,
     color: Colors.zinc600,
   },
-  btnOpacity: {
-    opacity: 0.6,
+  weekdayChipTextActive: {
+    color: Colors.white,
   },
+  stepperBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stepperValue: {
+    ...Typography.bodySemiBold,
+    fontSize: 14,
+    color: Colors.zinc800,
+    minWidth: 42,
+    textAlign: "center",
+  },
+  // Modals
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.45)",
@@ -1279,6 +1647,322 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 14,
     color: Colors.white,
+  },
+  btnOpacity: {
+    opacity: 0.6,
+  },
+  // Error/back
+  errorText: {
+    ...Typography.body,
+    fontSize: 15,
+    color: Colors.zinc500,
+  },
+  backLink: {
+    ...Typography.bodySemiBold,
+    fontSize: 14,
+    color: Colors.zinc600,
+  },
+});
+
+const stepStyles = StyleSheet.create({
+  container: {
+    gap: 24,
+    paddingTop: 8,
+  },
+  stepTitle: {
+    ...Typography.bodySemiBold,
+    fontSize: 22,
+    color: Colors.zinc900,
+  },
+  stepDesc: {
+    ...Typography.body,
+    fontSize: 15,
+    color: Colors.zinc500,
+    lineHeight: 22,
+    marginTop: -16,
+  },
+  fieldGroup: {
+    gap: 6,
+  },
+  fieldLabel: {
+    ...Typography.bodySemiBold,
+    fontSize: 14,
+    color: Colors.zinc700,
+  },
+  input: {
+    ...Typography.body,
+    fontSize: 16,
+    color: Colors.zinc900,
+    backgroundColor: Colors.zinc50,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: Colors.zinc100,
+  },
+  inputMulti: {
+    minHeight: 96,
+    lineHeight: 22,
+    textAlignVertical: "top",
+  },
+  charCount: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc400,
+    textAlign: "right",
+  },
+  hint: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc400,
+    lineHeight: 17,
+  },
+  warningText: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.noticeAccent,
+    marginTop: 4,
+  },
+  stepperRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 4,
+  },
+  optionList: {
+    gap: 8,
+    marginTop: 4,
+  },
+  option: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
+    backgroundColor: Colors.zinc50,
+  },
+  optionSelected: {
+    borderColor: Colors.zinc700,
+    backgroundColor: Colors.white,
+  },
+  optionRadio: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: Colors.zinc400,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  optionRadioActive: {
+    borderColor: Colors.zinc900,
+  },
+  optionRadioDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.zinc900,
+  },
+  optionLabel: {
+    ...Typography.body,
+    fontSize: 15,
+    color: Colors.zinc800,
+  },
+  subField: {
+    marginTop: 8,
+    paddingLeft: 4,
+    gap: 4,
+  },
+  subFieldLabel: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc500,
+  },
+  readonlyBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    backgroundColor: Colors.zinc50,
+    borderWidth: 1,
+    borderColor: Colors.zinc100,
+  },
+  readonlyText: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc600,
+    flex: 1,
+  },
+  readonlyHint: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc400,
+  },
+  infoBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: Colors.zinc50,
+    borderWidth: 1,
+    borderColor: Colors.zinc100,
+    marginTop: 4,
+  },
+  infoBoxText: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc500,
+    flex: 1,
+    lineHeight: 17,
+  },
+});
+
+const calStyles = StyleSheet.create({
+  table: {
+    gap: 1,
+    borderRadius: 10,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: Colors.zinc100,
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.white,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    gap: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.zinc100,
+  },
+  roundCell: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: Colors.zinc100,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  roundNum: {
+    ...Typography.bodySemiBold,
+    fontSize: 11,
+    color: Colors.zinc600,
+  },
+  infoCell: {
+    flex: 1,
+    gap: 2,
+  },
+  roundTitle: {
+    ...Typography.bodySemiBold,
+    fontSize: 13,
+    color: Colors.zinc800,
+  },
+  dateText: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc400,
+  },
+  writerCell: {
+    alignItems: "flex-end",
+  },
+  writerName: {
+    ...Typography.body,
+    fontSize: 13,
+    color: Colors.zinc700,
+    maxWidth: 100,
+  },
+  noWriter: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc400,
+  },
+});
+
+const confirmStyles = StyleSheet.create({
+  block: {
+    gap: 8,
+  },
+  blockHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  blockTitle: {
+    ...Typography.bodySemiBold,
+    fontSize: 13,
+    color: Colors.zinc500,
+  },
+  editBtn: {
+    ...Typography.bodySemiBold,
+    fontSize: 13,
+    color: Colors.zinc500,
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+  },
+  summaryRows: {
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: Colors.zinc50,
+    borderWidth: 1,
+    borderColor: Colors.zinc100,
+  },
+  summaryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  summaryKey: {
+    ...Typography.caption,
+    fontSize: 13,
+    color: Colors.zinc500,
+    width: 72,
+  },
+  summaryVal: {
+    ...Typography.body,
+    fontSize: 13,
+    color: Colors.zinc800,
+    flex: 1,
+  },
+  summaryProse: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc700,
+    lineHeight: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: Colors.zinc50,
+    borderWidth: 1,
+    borderColor: Colors.zinc100,
+  },
+  summaryWarning: {
+    ...Typography.body,
+    fontSize: 13,
+    color: Colors.noticeAccent,
+  },
+  noticeBlock: {
+    gap: 8,
+    paddingTop: 4,
+  },
+  noticeRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+  },
+  noticeText: {
+    ...Typography.body,
+    fontSize: 12,
+    color: Colors.zinc500,
+    flex: 1,
+    lineHeight: 17,
   },
 });
 
