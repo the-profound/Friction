@@ -6,6 +6,11 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "typesVersions": {
+    "*": {
+      "*": ["./src/index.ts"]
+    }
+  },
   "dependencies": {
     "@tanstack/react-query": "catalog:"
   },
