@@ -70,6 +70,8 @@ export type ArticleScheduleSheetProps = {
   initialScheduledDate?: string | null;
   allSends?: SpaceScheduledSendWithLetter[];
   onGoToArchive?: () => void;
+  /** Opening-letter mode only: latest allowed scheduled date (inclusive). Saves are clamped to this. */
+  maxScheduledAt?: Date | null;
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -89,6 +91,7 @@ export function ArticleScheduleSheet({
   initialScheduledDate,
   allSends,
   onGoToArchive,
+  maxScheduledAt,
 }: ArticleScheduleSheetProps) {
   const isOpeningLetter = mode === "opening-letter";
 
@@ -96,6 +99,8 @@ export function ArticleScheduleSheet({
     () => (isOpeningLetter ? getMinOpeningDate() : new Date()),
     [isOpeningLetter],
   );
+
+  const maxDate = isOpeningLetter && maxScheduledAt ? maxScheduledAt : undefined;
 
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   // Open the picker immediately on mount so the user lands directly in the
@@ -176,7 +181,11 @@ export function ArticleScheduleSheet({
           ),
         );
 
-        const finalScheduledAt = buildOpeningScheduledAt(scheduledAt);
+        let chosenDate = scheduledAt;
+        if (maxDate && chosenDate > maxDate) {
+          chosenDate = maxDate;
+        }
+        const finalScheduledAt = buildOpeningScheduledAt(chosenDate);
         await createSend.mutateAsync({
           id: spaceId,
           letterId: spaceLetterId,
@@ -301,9 +310,13 @@ export function ArticleScheduleSheet({
                 mode={isOpeningLetter ? "date" : "datetime"}
                 display={Platform.OS === "ios" ? "spinner" : "default"}
                 minimumDate={minDate}
+                maximumDate={maxDate}
                 onChange={(_event, date) => {
                   setShowPicker(Platform.OS === "ios");
-                  if (date) setScheduledAt(date);
+                  if (date) {
+                    const clamped = maxDate && date > maxDate ? maxDate : date;
+                    setScheduledAt(clamped);
+                  }
                 }}
               />
             )}

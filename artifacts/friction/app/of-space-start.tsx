@@ -144,6 +144,18 @@ function formatDateShort(d: Date): string {
   return `${m}/${day} (${weekday})`;
 }
 
+function formatMonthDay(d: Date): string {
+  return `${d.getMonth() + 1}월 ${d.getDate()}일`;
+}
+
+/** Returns the deadline for sending an opening letter: the day before startDate at 06:00 */
+function getOpeningLetterDeadline(startDate: Date): Date {
+  const d = new Date(startDate);
+  d.setDate(d.getDate() - 1);
+  d.setHours(6, 0, 0, 0);
+  return d;
+}
+
 function buildMonthGrid(year: number, month: number): (Date | null)[] {
   const firstDay = new Date(year, month, 1);
   const startDow = firstDay.getDay();
@@ -939,20 +951,44 @@ function OpeningLetterStep({
   isLoading,
   openingLetterExists,
   openingScheduledSend,
+  startDate,
   onOpenSheet,
 }: {
   isLoading: boolean;
   openingLetterExists: boolean;
   openingScheduledSend: { scheduledAt: string; articleTitle?: string | null } | null;
+  startDate: Date;
   onOpenSheet: () => void;
 }) {
   const articleTitle = openingScheduledSend?.articleTitle ?? null;
   const scheduledDate = openingScheduledSend ? new Date(openingScheduledSend.scheduledAt) : null;
+  const deadline = getOpeningLetterDeadline(startDate);
+  const isLate = scheduledDate != null && scheduledDate > deadline;
+
+  let buttonLabel: string;
+  if (openingLetterExists && scheduledDate) {
+    const title = articleTitle ?? "편지 선택됨";
+    buttonLabel = `${title} · ${formatMonthDay(scheduledDate)} 발송 예정`;
+  } else if (openingLetterExists) {
+    buttonLabel = articleTitle ?? "편지 선택됨";
+  } else {
+    buttonLabel = "보낼 편지를 선택하세요";
+  }
 
   return (
     <View style={stepStyles.container}>
       <Text style={stepStyles.stepTitle}>첫 여는 편지 보내기</Text>
       <Text style={stepStyles.stepDesc}>공간 시작과 함께 전송될 1회차 여는 편지를 선택해요.</Text>
+
+      {/* 발송 가능 기간 안내 */}
+      <View style={olStyles.deadlineInfo}>
+        <Feather name="calendar" size={13} color={Colors.zinc400} />
+        <Text style={olStyles.deadlineInfoText}>
+          발송 예정일은 첫 중심글 시작일({formatMonthDay(startDate)}) 하루 전인{" "}
+          <Text style={olStyles.deadlineEmphasis}>{formatMonthDay(deadline)} 06:00</Text>
+          까지 설정할 수 있어요.
+        </Text>
+      </View>
 
       {/* 편지 선택 — SendInline 스타일 */}
       <View style={olStyles.section}>
@@ -976,19 +1012,19 @@ function OpeningLetterStep({
               style={[olStyles.selectButtonText, openingLetterExists && olStyles.selectButtonTextActive]}
               numberOfLines={1}
             >
-              {articleTitle ?? (openingLetterExists ? "글 선택됨" : "보낼 편지를 선택하세요")}
+              {buttonLabel}
             </Text>
             <Feather name="chevron-right" size={18} color={Colors.zinc400} />
           </ScalePressable>
         )}
       </View>
 
-      {/* 발송 일정 — SendInline deliveryInfo 스타일 */}
-      {openingLetterExists && scheduledDate && (
-        <View style={olStyles.deliveryInfo}>
-          <Feather name="clock" size={16} color={Colors.zinc500} />
-          <Text style={olStyles.deliveryInfoText}>
-            발송 예정: {formatDate(scheduledDate)} 06:00
+      {/* 발송일 초과 경고 */}
+      {isLate && (
+        <View style={olStyles.lateWarning}>
+          <Feather name="alert-triangle" size={13} color="#d97706" />
+          <Text style={olStyles.lateWarningText}>
+            현재 예약 발송일({formatMonthDay(scheduledDate!)})이 허용 기한을 초과해요. 편지를 다시 선택하면 발송일이 자동으로 {formatMonthDay(deadline)} 06:00으로 조정돼요.
           </Text>
         </View>
       )}
@@ -1011,9 +1047,11 @@ function StartConfirmStep({
   interval,
   weekdays,
   centerCount,
+  startDate,
   operatorParticipates,
   slotItems,
   openingLetterExists,
+  openingScheduledSend,
   hasPendingRequests,
   pendingCount,
   onGoToStep,
@@ -1023,9 +1061,11 @@ function StartConfirmStep({
   interval: number;
   weekdays: number[];
   centerCount: number;
+  startDate: Date;
   operatorParticipates: boolean;
   slotItems: SlotRowInfo[];
   openingLetterExists: boolean;
+  openingScheduledSend: { scheduledAt: string; articleTitle?: string | null } | null;
   hasPendingRequests: boolean;
   pendingCount: number;
   onGoToStep: (step: number) => void;
@@ -1036,6 +1076,18 @@ function StartConfirmStep({
       : weekdays.length > 0
         ? weekdays.map((d) => WEEKDAY_LABELS[d]).join(", ") + "요일"
         : "요일 미지정";
+
+  const lastDate = calculateProjectedEndDate(
+    startDate,
+    scheduleType as "N_DAY" | "WEEKDAY",
+    interval,
+    weekdays,
+    roundCount,
+    centerCount,
+  );
+
+  const openingTitle = openingScheduledSend?.articleTitle ?? null;
+  const openingScheduledDate = openingScheduledSend ? new Date(openingScheduledSend.scheduledAt) : null;
 
   return (
     <View style={stepStyles.container}>
@@ -1066,6 +1118,14 @@ function StartConfirmStep({
             <Text style={confirmStyles.summaryKey}>운영자 참여</Text>
             <Text style={confirmStyles.summaryVal}>{operatorParticipates ? "참여" : "불참"}</Text>
           </View>
+          <View style={confirmStyles.summaryRow}>
+            <Text style={confirmStyles.summaryKey}>첫 중심글</Text>
+            <Text style={confirmStyles.summaryVal}>{formatMonthDay(startDate)}</Text>
+          </View>
+          <View style={confirmStyles.summaryRow}>
+            <Text style={confirmStyles.summaryKey}>마지막 중심글</Text>
+            <Text style={confirmStyles.summaryVal}>{lastDate ? formatMonthDay(lastDate) : "—"}</Text>
+          </View>
         </View>
       </View>
 
@@ -1092,15 +1152,29 @@ function StartConfirmStep({
             <Text style={confirmStyles.editBtn}>확인</Text>
           </ScalePressable>
         </View>
-        <View style={confirmStyles.summaryRow}>
-          <Feather
-            name={openingLetterExists ? "check-circle" : "circle"}
-            size={15}
-            color={openingLetterExists ? Colors.noticeAccent : Colors.zinc400}
-          />
-          <Text style={openingLetterExists ? confirmStyles.summaryVal : confirmStyles.summaryWarning}>
-            {openingLetterExists ? "작성 완료" : "미작성"}
-          </Text>
+        <View style={confirmStyles.summaryRows}>
+          <View style={confirmStyles.summaryRow}>
+            <Feather
+              name={openingLetterExists ? "check-circle" : "circle"}
+              size={15}
+              color={openingLetterExists ? Colors.noticeAccent : Colors.zinc400}
+            />
+            <Text style={openingLetterExists ? confirmStyles.summaryVal : confirmStyles.summaryWarning}>
+              {openingLetterExists ? "작성 완료" : "미작성"}
+            </Text>
+          </View>
+          {openingLetterExists && openingTitle && (
+            <View style={confirmStyles.summaryRow}>
+              <Text style={confirmStyles.summaryKey}>편지 제목</Text>
+              <Text style={confirmStyles.summaryVal} numberOfLines={1}>{openingTitle}</Text>
+            </View>
+          )}
+          {openingLetterExists && openingScheduledDate && (
+            <View style={confirmStyles.summaryRow}>
+              <Text style={confirmStyles.summaryKey}>발송 예정일</Text>
+              <Text style={confirmStyles.summaryVal}>{formatMonthDay(openingScheduledDate)} 06:00</Text>
+            </View>
+          )}
         </View>
       </View>
 
@@ -1573,6 +1647,7 @@ export default function SpaceStartScreen() {
           isLoading={lettersQuery.isLoading}
           openingLetterExists={openingLetterExists}
           openingScheduledSend={openingScheduledSend}
+          startDate={startDate}
           onOpenSheet={() => setShowOpeningSheet(true)}
         />
       );
@@ -1585,9 +1660,11 @@ export default function SpaceStartScreen() {
           interval={interval}
           weekdays={weekdays}
           centerCount={centerCount}
+          startDate={startDate}
           operatorParticipates={space.operatorParticipates ?? true}
           slotItems={slotItems}
           openingLetterExists={openingLetterExists}
+          openingScheduledSend={openingScheduledSend}
           hasPendingRequests={hasPendingRequests}
           pendingCount={pendingRequests.length}
           onGoToStep={goToStep}
@@ -1701,6 +1778,7 @@ export default function SpaceStartScreen() {
           isArticlesError={articlesQuery.isError}
           onRefetchArticles={() => articlesQuery.refetch()}
           allSends={sends}
+          maxScheduledAt={getOpeningLetterDeadline(startDate)}
           onClose={() => setShowOpeningSheet(false)}
           onSaved={() => {
             queryClient.invalidateQueries({ queryKey: getListSpaceLettersQueryKey(id) });
@@ -2265,19 +2343,45 @@ const olStyles = StyleSheet.create({
     color: Colors.zinc900,
     fontWeight: "600",
   },
-  deliveryInfo: {
+  deadlineInfo: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    alignItems: "flex-start",
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
     backgroundColor: Colors.zinc50,
-    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.zinc100,
   },
-  deliveryInfoText: {
-    ...Typography.body,
-    fontSize: 14,
-    color: Colors.zinc600,
+  deadlineInfoText: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc500,
+    flex: 1,
+    lineHeight: 17,
+  },
+  deadlineEmphasis: {
+    ...Typography.bodySemiBold,
+    color: Colors.zinc700,
+  },
+  lateWarning: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: "#fffbeb",
+    borderWidth: 1,
+    borderColor: "#fde68a",
+  },
+  lateWarningText: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: "#92400e",
+    flex: 1,
+    lineHeight: 17,
   },
 });
 
