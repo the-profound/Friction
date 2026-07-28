@@ -21,8 +21,6 @@ import {
   TouchableWithoutFeedback,
   Keyboard,
 } from "react-native";
-import DateTimePicker from "@react-native-community/datetimepicker";
-import { ArticleScheduleSheet } from "@/components/ArticleScheduleSheet/ArticleScheduleSheet";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -45,6 +43,9 @@ import {
   getListArticlesQueryKey,
   useListAllSpaceScheduledSends,
   getListAllSpaceScheduledSendsQueryKey,
+  useCreateSpaceScheduledSend,
+  useCreateSpaceLetter,
+  useUpdateSpaceScheduledSend,
 } from "@workspace/api-client-react";
 import type {
   SpaceMember,
@@ -67,8 +68,11 @@ const TOTAL_STEPS = STEPS.length;
 
 /**
  * Calculate the projected end date (last center article date) for display.
- * N_DAY: startDate + (roundCount − 1) × interval × centerCount days
- * WEEKDAY: the (roundCount × centerCount)-th occurrence of selected weekdays
+ * participantCount: number of participants in the space (use 1 if 0)
+ * totalArticles = roundCount × participantCount
+ * dailyCenterCount = centerCount (하루에 올라오는 중심글 수)
+ * N_DAY: neededDays = ceil(totalArticles / dailyCenterCount), endDate = startDate + (neededDays − 1) × intervalDays
+ * WEEKDAY: find the ceil(totalArticles / dailyCenterCount)-th occurrence of selected weekdays
  */
 function calculateProjectedEndDate(
   startDate: Date,
@@ -77,22 +81,26 @@ function calculateProjectedEndDate(
   weekdays: number[],
   roundCount: number,
   centerCount: number,
+  participantCount: number,
 ): Date | null {
+  const safeParticipantCount = Math.max(1, participantCount);
+  const totalArticles = roundCount * safeParticipantCount;
+  const neededDays = Math.ceil(totalArticles / Math.max(1, centerCount));
+
   if (scheduleType === "N_DAY") {
     const result = new Date(startDate);
-    result.setDate(result.getDate() + (roundCount - 1) * intervalDays * centerCount);
+    result.setDate(result.getDate() + (neededDays - 1) * intervalDays);
     return result;
   }
   if (scheduleType === "WEEKDAY" && weekdays.length > 0) {
     const sorted = [...weekdays].sort((a, b) => a - b);
-    const total = roundCount * centerCount;
     const cursor = new Date(startDate);
     cursor.setHours(0, 0, 0, 0);
     let found = 0;
     for (let attempt = 0; attempt < 3650; attempt++) {
       if (sorted.includes(cursor.getDay())) {
         found++;
-        if (found === total) return new Date(cursor);
+        if (found === neededDays) return new Date(cursor);
       }
       cursor.setDate(cursor.getDate() + 1);
     }
@@ -389,23 +397,31 @@ function OperationSettingsStep({
   startDate: Date;
   setStartDate: (v: Date) => void;
 }) {
-  const [showDatePicker, setShowDatePicker] = useState(false);
-
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const startDay = new Date(startDate);
   startDay.setHours(0, 0, 0, 0);
   const isStartDatePast = startDay < today;
 
-  const endDate = useMemo(
-    () => calculateProjectedEndDate(startDate, scheduleType as "N_DAY" | "WEEKDAY", interval, weekdays, roundCount, centerCount),
-    [startDate, scheduleType, interval, weekdays, roundCount, centerCount],
-  );
+  const [calViewYear, setCalViewYear] = useState(() => startDate.getFullYear());
+  const [calViewMonth, setCalViewMonth] = useState(() => startDate.getMonth());
 
-  const effectiveRecruitCount =
-    maxParticipants != null
-      ? (operatorParticipates ? maxParticipants - 1 : maxParticipants)
-      : null;
+  const calCells = useMemo(() => buildMonthGrid(calViewYear, calViewMonth), [calViewYear, calViewMonth]);
+
+  const handleCalPrevMonth = useCallback(() => {
+    if (calViewMonth === 0) { setCalViewYear(y => y - 1); setCalViewMonth(11); }
+    else setCalViewMonth(m => m - 1);
+  }, [calViewMonth]);
+
+  const handleCalNextMonth = useCallback(() => {
+    if (calViewMonth === 11) { setCalViewYear(y => y + 1); setCalViewMonth(0); }
+    else setCalViewMonth(m => m + 1);
+  }, [calViewMonth]);
+
+  const endDate = useMemo(
+    () => calculateProjectedEndDate(startDate, scheduleType as "N_DAY" | "WEEKDAY", interval, weekdays, roundCount, centerCount, confirmedCount),
+    [startDate, scheduleType, interval, weekdays, roundCount, centerCount, confirmedCount],
+  );
 
   return (
     <View style={stepStyles.container}>
@@ -416,17 +432,10 @@ function OperationSettingsStep({
       <View style={opStyles.participantRow}>
         <Feather name="users" size={14} color={Colors.zinc500} />
         <Text style={opStyles.participantText}>
-          {"확정 "}
+          {"모집 인원 "}
+          <Text style={opStyles.participantEmphasis}>{maxParticipants != null ? `${maxParticipants}명` : "—"}</Text>
+          {" / 참여 인원 "}
           <Text style={opStyles.participantEmphasis}>{confirmedCount}명</Text>
-          {effectiveRecruitCount != null && (
-            <>
-              {" / 모집 인원 "}
-              <Text style={opStyles.participantEmphasis}>{maxParticipants}명</Text>
-              {operatorParticipates && (
-                <Text style={opStyles.participantHint}>{` (운영자 참여로 실제 모집 ${effectiveRecruitCount}명)`}</Text>
-              )}
-            </>
-          )}
         </Text>
       </View>
 
@@ -526,7 +535,8 @@ function OperationSettingsStep({
       </View>
 
       <View style={stepStyles.fieldGroup}>
-        <Text style={stepStyles.fieldLabel}>회차당 중심글 수</Text>
+        {/* centerCount prop의 의미 = "하루에 올라오는 중심글 수" (일별 발행 편수) */}
+        <Text style={stepStyles.fieldLabel}>하루에 올라오는 중심글 수</Text>
         <View style={stepStyles.stepperRow}>
           <ScalePressable
             contentStyle={styles.stepperBtn}
@@ -542,6 +552,9 @@ function OperationSettingsStep({
             <Feather name="plus" size={14} color={Colors.zinc600} />
           </ScalePressable>
         </View>
+        <Text style={stepStyles.hint}>
+          1회차 = 참여자 전원이 한 번씩 → 총 {Math.max(1, confirmedCount)}편 / 하루 {centerCount}편씩 발행
+        </Text>
       </View>
 
       <View style={stepStyles.fieldGroup}>
@@ -559,46 +572,52 @@ function OperationSettingsStep({
         </View>
       </View>
 
-      {/* 시작 날짜 선택 */}
+      {/* 시작 날짜 선택 — 인라인 캘린더 (iOS/Android 동일 UI) */}
       <View style={stepStyles.fieldGroup}>
         <Text style={stepStyles.fieldLabel}>시작 예정일</Text>
-        {Platform.OS === "ios" ? (
-          <View style={[opStyles.datePickerWrapper, isStartDatePast && opStyles.datePickerWrapperError]}>
-            <DateTimePicker
-              value={startDate}
-              mode="date"
-              display="spinner"
-              onChange={(_event, date) => {
-                if (date) setStartDate(date);
-              }}
-              locale="ko-KR"
-              style={opStyles.datePicker}
-            />
-          </View>
-        ) : (
-          <>
-            <ScalePressable
-              contentStyle={[opStyles.dateBtn, isStartDatePast && opStyles.dateBtnError]}
-              onPress={() => setShowDatePicker(true)}
-            >
-              <Feather name="calendar" size={15} color={isStartDatePast ? "#ef4444" : Colors.zinc600} />
-              <Text style={[opStyles.dateBtnText, isStartDatePast && opStyles.dateBtnTextError]}>
-                {formatDate(startDate)}
-              </Text>
+        <View style={opStyles.calendarCard}>
+          {/* 월 이동 헤더 */}
+          <View style={opStyles.calMonthNav}>
+            <ScalePressable contentStyle={opStyles.calMonthBtn} onPress={handleCalPrevMonth}>
+              <Feather name="chevron-left" size={18} color={Colors.zinc600} />
             </ScalePressable>
-            {showDatePicker && (
-              <DateTimePicker
-                value={startDate}
-                mode="date"
-                display="default"
-                onChange={(_event, date) => {
-                  setShowDatePicker(false);
-                  if (date) setStartDate(date);
-                }}
-              />
-            )}
-          </>
-        )}
+            <Text style={opStyles.calMonthTitle}>{calViewYear}년 {calViewMonth + 1}월</Text>
+            <ScalePressable contentStyle={opStyles.calMonthBtn} onPress={handleCalNextMonth}>
+              <Feather name="chevron-right" size={18} color={Colors.zinc600} />
+            </ScalePressable>
+          </View>
+          {/* 요일 헤더 */}
+          <View style={opStyles.calWeekRow}>
+            {WEEKDAY_LABELS.map((label, i) => (
+              <Text key={i} style={[opStyles.calWeekLabel, i === 0 && opStyles.calSunLabel]}>{label}</Text>
+            ))}
+          </View>
+          {/* 날짜 그리드 */}
+          <View style={opStyles.calGrid}>
+            {calCells.map((date, idx) => {
+              if (!date) return <View key={`e-${idx}`} style={opStyles.calCell} />;
+              const d0 = new Date(date); d0.setHours(0,0,0,0);
+              const isPast = d0 < today;
+              const isSelected =
+                date.getFullYear() === startDate.getFullYear() &&
+                date.getMonth() === startDate.getMonth() &&
+                date.getDate() === startDate.getDate();
+              const isSun = date.getDay() === 0;
+              return (
+                <ScalePressable
+                  key={`${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`}
+                  contentStyle={[opStyles.calCell, isSelected && opStyles.calCellSelected, isPast && opStyles.calCellDisabled]}
+                  onPress={() => { if (!isPast) setStartDate(new Date(date)); }}
+                  disabled={isPast}
+                >
+                  <Text style={[opStyles.calDayNum, isSun && opStyles.calSunDay, isSelected && opStyles.calDayNumSelected, isPast && opStyles.calDayNumDisabled]}>
+                    {date.getDate()}
+                  </Text>
+                </ScalePressable>
+              );
+            })}
+          </View>
+        </View>
         {isStartDatePast && (
           <Text style={opStyles.datePastWarning}>선택한 날짜가 오늘보다 이전이에요.</Text>
         )}
@@ -778,6 +797,7 @@ function ScheduleCalendarStep({
   roundConfigs: _roundConfigs,
   centerCount,
   startDate,
+  participantCount,
 }: {
   items: SlotRowInfo[];
   roundCount: number;
@@ -787,6 +807,7 @@ function ScheduleCalendarStep({
   roundConfigs: Array<{ title: string; description: string }>;
   centerCount: number;
   startDate: Date;
+  participantCount: number;
 }) {
   const endDate = useMemo(
     () =>
@@ -797,8 +818,9 @@ function ScheduleCalendarStep({
         weekdays,
         roundCount,
         centerCount,
+        participantCount,
       ),
-    [startDate, scheduleType, interval, weekdays, roundCount, centerCount],
+    [startDate, scheduleType, interval, weekdays, roundCount, centerCount, participantCount],
   );
 
   const startMonthYear = { year: startDate.getFullYear(), month: startDate.getMonth() };
@@ -809,9 +831,16 @@ function ScheduleCalendarStep({
   const [viewYear, setViewYear] = useState(startMonthYear.year);
   const [viewMonth, setViewMonth] = useState(startMonthYear.month);
 
+  // Under the new model: neededDays = ceil(totalArticles / dailyCenterCount)
+  // where totalArticles = roundCount × participantCount
+  const neededDays = useMemo(
+    () => Math.ceil((roundCount * Math.max(1, participantCount)) / Math.max(1, centerCount)),
+    [roundCount, participantCount, centerCount],
+  );
+
   const dates = useMemo(
-    () => calculateScheduleDates(scheduleType, interval, weekdays, roundCount, startDate),
-    [scheduleType, interval, weekdays, roundCount, startDate],
+    () => calculateScheduleDates(scheduleType, interval, weekdays, neededDays, startDate),
+    [scheduleType, interval, weekdays, neededDays, startDate],
   );
 
   const assignmentMap = useMemo(() => {
@@ -949,31 +978,114 @@ function ScheduleCalendarStep({
 
 function OpeningLetterStep({
   isLoading,
+  isArticlesLoading,
+  isArticlesError,
   openingLetterExists,
   openingScheduledSend,
   startDate,
-  onOpenSheet,
+  articles,
+  letters,
+  allSends,
+  spaceId,
+  userId,
+  onSaved,
 }: {
   isLoading: boolean;
+  isArticlesLoading: boolean;
+  isArticlesError: boolean;
   openingLetterExists: boolean;
   openingScheduledSend: { scheduledAt: string; articleTitle?: string | null } | null;
   startDate: Date;
-  onOpenSheet: () => void;
+  articles: Article[];
+  letters: SpaceLetter[];
+  allSends: SpaceScheduledSendWithLetter[];
+  spaceId: string;
+  userId: string;
+  onSaved: () => void;
 }) {
-  const articleTitle = openingScheduledSend?.articleTitle ?? null;
-  const scheduledDate = openingScheduledSend ? new Date(openingScheduledSend.scheduledAt) : null;
-  const deadline = getOpeningLetterDeadline(startDate);
-  const isLate = scheduledDate != null && scheduledDate > deadline;
+  const queryClient = useQueryClient();
+  const createSend = useCreateSpaceScheduledSend();
+  const createLetter = useCreateSpaceLetter();
+  const updateSend = useUpdateSpaceScheduledSend();
 
-  let buttonLabel: string;
-  if (openingLetterExists && scheduledDate) {
-    const title = articleTitle ?? "편지 선택됨";
-    buttonLabel = `${title} · ${formatMonthDay(scheduledDate)} 발송 예정`;
-  } else if (openingLetterExists) {
-    buttonLabel = articleTitle ?? "편지 선택됨";
-  } else {
-    buttonLabel = "보낼 편지를 선택하세요";
-  }
+  const deadline = getOpeningLetterDeadline(startDate);
+  const maxScheduledAt = deadline;
+
+  const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
+  // Show article list when: no letter registered yet, OR letter exists but has no active pending send
+  const [showArticleList, setShowArticleList] = useState(() => !openingLetterExists || openingScheduledSend === null);
+
+  const minSendDate = useMemo(() => {
+    const now = new Date();
+    const min = new Date(now);
+    min.setHours(0, 0, 0, 0);
+    if (now.getHours() >= 6) min.setDate(min.getDate() + 1);
+    return min;
+  }, []);
+
+  const [scheduledDate, setScheduledDate] = useState<Date>(() => {
+    const d = minSendDate;
+    return d > maxScheduledAt ? maxScheduledAt : d;
+  });
+
+  const [showSendCal, setShowSendCal] = useState(false);
+  const [sendCalYear, setSendCalYear] = useState(() => scheduledDate.getFullYear());
+  const [sendCalMonth, setSendCalMonth] = useState(() => scheduledDate.getMonth());
+  const sendCalCells = useMemo(() => buildMonthGrid(sendCalYear, sendCalMonth), [sendCalYear, sendCalMonth]);
+
+  const [saving, setSaving] = useState(false);
+
+  const existingArticleTitle = openingScheduledSend?.articleTitle ?? null;
+  const existingScheduledDate = openingScheduledSend ? new Date(openingScheduledSend.scheduledAt) : null;
+
+  const selectedTitle = useMemo(() => {
+    if (!selectedArticleId) return null;
+    return articles.find(a => a.id === selectedArticleId)?.title ?? "제목 없음";
+  }, [selectedArticleId, articles]);
+
+  const handleSave = useCallback(async () => {
+    if (!selectedArticleId) {
+      Alert.alert("알림", "발송할 글을 선택해주세요.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const letterType = "OPENING";
+      const existingLetter = letters.find(l => l.sourceArticleId === selectedArticleId && l.letterType === letterType);
+      let spaceLetterId: string;
+      if (existingLetter) {
+        spaceLetterId = existingLetter.id;
+      } else {
+        const newLetter = await createLetter.mutateAsync({
+          id: spaceId,
+          data: { authorId: userId, sourceArticleId: selectedArticleId, letterType },
+        });
+        spaceLetterId = newLetter.id;
+        queryClient.invalidateQueries({ queryKey: getListSpaceLettersQueryKey(spaceId) });
+      }
+
+      const openingLetterIds = new Set(letters.filter(l => l.letterType === "OPENING").map(l => l.id));
+      if (existingLetter) openingLetterIds.add(spaceLetterId);
+      const pendingOpeningSends = allSends.filter(s => s.status === "PENDING" && openingLetterIds.has(s.spaceLetterId));
+      await Promise.all(pendingOpeningSends.map(s =>
+        updateSend.mutateAsync({ id: spaceId, letterId: s.spaceLetterId, sendId: s.id, data: { status: "CANCELLED" } })
+      ));
+
+      const chosenDate = scheduledDate > maxScheduledAt ? maxScheduledAt : scheduledDate;
+      const finalScheduledAt = new Date(chosenDate);
+      finalScheduledAt.setHours(6, 0, 0, 0);
+      await createSend.mutateAsync({ id: spaceId, letterId: spaceLetterId, data: { scheduledAt: finalScheduledAt.toISOString() } });
+      queryClient.invalidateQueries({ queryKey: getListAllSpaceScheduledSendsQueryKey(spaceId) });
+
+      setSelectedArticleId(null);
+      setShowArticleList(false);
+      onSaved();
+    } catch {
+      Alert.alert("오류", "예약에 실패했어요. 다시 시도해주세요.");
+    } finally {
+      setSaving(false);
+    }
+  }, [selectedArticleId, scheduledDate, maxScheduledAt, letters, allSends, spaceId, userId, createLetter, createSend, updateSend, queryClient, onSaved]);
 
   return (
     <View style={stepStyles.container}>
@@ -990,46 +1102,148 @@ function OpeningLetterStep({
         </Text>
       </View>
 
-      {/* 편지 선택 — SendInline 스타일 */}
-      <View style={olStyles.section}>
-        <Text style={olStyles.sectionTitle}>편지 선택</Text>
-        {isLoading ? (
-          <View style={olStyles.selectButton}>
-            <ActivityIndicator size="small" color={Colors.zinc400} />
+      {/* 이미 등록된 편지 정보 */}
+      {openingLetterExists && existingScheduledDate && !showArticleList && (
+        <View style={olStyles.savedCard}>
+          <View style={olStyles.savedCardHeader}>
+            <Feather name="check-circle" size={15} color={Colors.noticeAccent} />
+            <Text style={olStyles.savedCardTitle}>여는 편지 등록됨</Text>
           </View>
-        ) : (
+          {existingArticleTitle && (
+            <Text style={olStyles.savedCardArticle} numberOfLines={1}>{existingArticleTitle}</Text>
+          )}
+          <Text style={olStyles.savedCardDate}>{formatMonthDay(existingScheduledDate)} 06:00 발송 예정</Text>
           <ScalePressable
-            style={olStyles.selectButton}
-            contentStyle={olStyles.selectButtonContent}
-            onPress={onOpenSheet}
+            contentStyle={olStyles.reSelectBtn}
+            onPress={() => { setSelectedArticleId(null); setShowArticleList(true); }}
           >
-            <Feather
-              name="file-text"
-              size={18}
-              color={openingLetterExists ? Colors.zinc900 : Colors.zinc500}
-            />
-            <Text
-              style={[olStyles.selectButtonText, openingLetterExists && olStyles.selectButtonTextActive]}
-              numberOfLines={1}
-            >
-              {buttonLabel}
-            </Text>
-            <Feather name="chevron-right" size={18} color={Colors.zinc400} />
+            <Text style={olStyles.reSelectBtnText}>다른 편지로 변경</Text>
           </ScalePressable>
-        )}
-      </View>
-
-      {/* 발송일 초과 경고 */}
-      {isLate && (
-        <View style={olStyles.lateWarning}>
-          <Feather name="alert-triangle" size={13} color="#d97706" />
-          <Text style={olStyles.lateWarningText}>
-            현재 예약 발송일({formatMonthDay(scheduledDate!)})이 허용 기한을 초과해요. 편지를 다시 선택하면 발송일이 자동으로 {formatMonthDay(deadline)} 06:00으로 조정돼요.
-          </Text>
         </View>
       )}
 
-      {!openingLetterExists && !isLoading && (
+      {/* 글 목록 인라인 */}
+      {showArticleList ? (
+        <View style={olStyles.section}>
+          <Text style={olStyles.sectionTitle}>보낼 편지 선택</Text>
+          {isLoading || isArticlesLoading ? (
+            <View style={olStyles.loadingBox}>
+              <ActivityIndicator size="small" color={Colors.zinc400} />
+            </View>
+          ) : isArticlesError ? (
+            <View style={olStyles.loadingBox}>
+              <Text style={olStyles.errorText}>글 목록을 불러오지 못했어요.</Text>
+            </View>
+          ) : articles.length === 0 ? (
+            <View style={olStyles.loadingBox}>
+              <Text style={olStyles.errorText}>발송 가능한 글이 없어요.</Text>
+            </View>
+          ) : (
+            <View style={olStyles.articleList}>
+              {articles.map(article => {
+                const isSelected = selectedArticleId === article.id;
+                return (
+                  <ScalePressable
+                    key={article.id}
+                    contentStyle={[olStyles.articleItem, isSelected && olStyles.articleItemSelected]}
+                    onPress={() => setSelectedArticleId(isSelected ? null : article.id)}
+                  >
+                    <Feather
+                      name={isSelected ? "check-circle" : "circle"}
+                      size={16}
+                      color={isSelected ? Colors.zinc900 : Colors.zinc300}
+                    />
+                    <Text style={[olStyles.articleItemText, isSelected && olStyles.articleItemTextSelected]} numberOfLines={1}>
+                      {article.title ?? "제목 없음"}
+                    </Text>
+                  </ScalePressable>
+                );
+              })}
+            </View>
+          )}
+
+          {/* 선택된 글 — 발송일 선택 */}
+          {selectedArticleId && (
+            <View style={olStyles.sendDateSection}>
+              <View style={olStyles.selectedArticleTag}>
+                <Feather name="file-text" size={14} color={Colors.zinc700} />
+                <Text style={olStyles.selectedArticleTagTitle} numberOfLines={1}>{selectedTitle ?? "제목 없음"}</Text>
+              </View>
+
+              <Text style={olStyles.sendDateLabel}>발송 예정일 (06:00 발송)</Text>
+              <ScalePressable
+                contentStyle={olStyles.sendDateBtn}
+                onPress={() => setShowSendCal(v => !v)}
+              >
+                <Feather name="calendar" size={14} color={Colors.zinc500} />
+                <Text style={olStyles.sendDateBtnText}>{formatMonthDay(scheduledDate)} 06:00</Text>
+                <Feather name={showSendCal ? "chevron-up" : "chevron-down"} size={14} color={Colors.zinc400} />
+              </ScalePressable>
+
+              {showSendCal && (
+                <View style={olStyles.sendCalCard}>
+                  <View style={opStyles.calMonthNav}>
+                    <ScalePressable contentStyle={opStyles.calMonthBtn} onPress={() => {
+                      if (sendCalMonth === 0) { setSendCalYear(y => y - 1); setSendCalMonth(11); }
+                      else setSendCalMonth(m => m - 1);
+                    }}>
+                      <Feather name="chevron-left" size={18} color={Colors.zinc600} />
+                    </ScalePressable>
+                    <Text style={opStyles.calMonthTitle}>{sendCalYear}년 {sendCalMonth + 1}월</Text>
+                    <ScalePressable contentStyle={opStyles.calMonthBtn} onPress={() => {
+                      if (sendCalMonth === 11) { setSendCalYear(y => y + 1); setSendCalMonth(0); }
+                      else setSendCalMonth(m => m + 1);
+                    }}>
+                      <Feather name="chevron-right" size={18} color={Colors.zinc600} />
+                    </ScalePressable>
+                  </View>
+                  <View style={opStyles.calWeekRow}>
+                    {WEEKDAY_LABELS.map((label, i) => (
+                      <Text key={i} style={[opStyles.calWeekLabel, i === 0 && opStyles.calSunLabel]}>{label}</Text>
+                    ))}
+                  </View>
+                  <View style={opStyles.calGrid}>
+                    {sendCalCells.map((date, idx) => {
+                      if (!date) return <View key={`se-${idx}`} style={opStyles.calCell} />;
+                      const d0 = new Date(date); d0.setHours(0,0,0,0);
+                      const mx = new Date(maxScheduledAt); mx.setHours(0,0,0,0);
+                      const mn = new Date(minSendDate); mn.setHours(0,0,0,0);
+                      const isDisabled = d0 < mn || d0 > mx;
+                      const isSelected =
+                        date.getFullYear() === scheduledDate.getFullYear() &&
+                        date.getMonth() === scheduledDate.getMonth() &&
+                        date.getDate() === scheduledDate.getDate();
+                      const isSun = date.getDay() === 0;
+                      return (
+                        <ScalePressable
+                          key={`${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`}
+                          contentStyle={[opStyles.calCell, isSelected && opStyles.calCellSelected, isDisabled && opStyles.calCellDisabled]}
+                          onPress={() => { if (!isDisabled) { setScheduledDate(new Date(date)); setShowSendCal(false); } }}
+                          disabled={isDisabled}
+                        >
+                          <Text style={[opStyles.calDayNum, isSun && opStyles.calSunDay, isSelected && opStyles.calDayNumSelected, isDisabled && opStyles.calDayNumDisabled]}>
+                            {date.getDate()}
+                          </Text>
+                        </ScalePressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
+
+              <ScalePressable
+                contentStyle={[olStyles.saveBtn, saving && olStyles.saveBtnDisabled]}
+                onPress={handleSave}
+                disabled={saving}
+              >
+                <Text style={olStyles.saveBtnText}>{saving ? "등록 중..." : "여는 편지로 등록"}</Text>
+              </ScalePressable>
+            </View>
+          )}
+        </View>
+      ) : null}
+
+      {!openingLetterExists && !isLoading && !isArticlesLoading && (
         <View style={stepStyles.infoBox}>
           <Feather name="info" size={13} color={Colors.zinc400} />
           <Text style={stepStyles.infoBoxText}>
@@ -1055,6 +1269,7 @@ function StartConfirmStep({
   hasPendingRequests,
   pendingCount,
   onGoToStep,
+  participantCount,
 }: {
   roundCount: number;
   scheduleType: StartSpaceBodyScheduleType;
@@ -1069,6 +1284,7 @@ function StartConfirmStep({
   hasPendingRequests: boolean;
   pendingCount: number;
   onGoToStep: (step: number) => void;
+  participantCount: number;
 }) {
   const scheduleSummary =
     scheduleType === "N_DAY"
@@ -1084,10 +1300,15 @@ function StartConfirmStep({
     weekdays,
     roundCount,
     centerCount,
+    participantCount,
   );
 
   const openingTitle = openingScheduledSend?.articleTitle ?? null;
   const openingScheduledDate = openingScheduledSend ? new Date(openingScheduledSend.scheduledAt) : null;
+
+  const dateRangeText = lastDate
+    ? `${formatMonthDay(startDate)} ~ ${formatMonthDay(lastDate)}`
+    : formatMonthDay(startDate);
 
   return (
     <View style={stepStyles.container}>
@@ -1111,20 +1332,16 @@ function StartConfirmStep({
             <Text style={confirmStyles.summaryVal}>{scheduleSummary}</Text>
           </View>
           <View style={confirmStyles.summaryRow}>
-            <Text style={confirmStyles.summaryKey}>중심글</Text>
-            <Text style={confirmStyles.summaryVal}>회차당 {centerCount}편</Text>
+            <Text style={confirmStyles.summaryKey}>하루 중심글</Text>
+            <Text style={confirmStyles.summaryVal}>하루 {centerCount}편</Text>
           </View>
           <View style={confirmStyles.summaryRow}>
             <Text style={confirmStyles.summaryKey}>운영자 참여</Text>
             <Text style={confirmStyles.summaryVal}>{operatorParticipates ? "참여" : "불참"}</Text>
           </View>
           <View style={confirmStyles.summaryRow}>
-            <Text style={confirmStyles.summaryKey}>첫 중심글</Text>
-            <Text style={confirmStyles.summaryVal}>{formatMonthDay(startDate)}</Text>
-          </View>
-          <View style={confirmStyles.summaryRow}>
-            <Text style={confirmStyles.summaryKey}>마지막 중심글</Text>
-            <Text style={confirmStyles.summaryVal}>{lastDate ? formatMonthDay(lastDate) : "—"}</Text>
+            <Text style={confirmStyles.summaryKey}>시작일</Text>
+            <Text style={confirmStyles.summaryVal}>{dateRangeText}</Text>
           </View>
         </View>
       </View>
@@ -1280,8 +1497,6 @@ export default function SpaceStartScreen() {
     { query: { enabled: !!userId, queryKey: getListArticlesQueryKey({ authorId: userId ?? "", status: "LETTER" }) } },
   );
   const articles = (articlesQuery.data ?? []) as Article[];
-
-  const [showOpeningSheet, setShowOpeningSheet] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -1567,7 +1782,6 @@ export default function SpaceStartScreen() {
 
   const renderStepContent = () => {
     if (step === 0) {
-      const nonOperatorConfirmed = confirmedMembers.filter((m) => m.role !== "OPERATOR").length;
       return (
         <OperationSettingsStep
           roundCount={roundCount}
@@ -1581,7 +1795,7 @@ export default function SpaceStartScreen() {
           centerCount={centerCount}
           setCenterCount={setCenterCount}
           operatorParticipates={space.operatorParticipates ?? true}
-          confirmedCount={nonOperatorConfirmed}
+          confirmedCount={confirmedMembers.length}
           maxParticipants={space.maxParticipants}
           startDate={startDate}
           setStartDate={setStartDate}
@@ -1638,6 +1852,7 @@ export default function SpaceStartScreen() {
           roundConfigs={roundConfigs}
           centerCount={centerCount}
           startDate={startDate}
+          participantCount={confirmedMembers.length}
         />
       );
     }
@@ -1645,10 +1860,20 @@ export default function SpaceStartScreen() {
       return (
         <OpeningLetterStep
           isLoading={lettersQuery.isLoading}
+          isArticlesLoading={articlesQuery.isLoading}
+          isArticlesError={articlesQuery.isError}
           openingLetterExists={openingLetterExists}
           openingScheduledSend={openingScheduledSend}
           startDate={startDate}
-          onOpenSheet={() => setShowOpeningSheet(true)}
+          articles={articles}
+          letters={letters}
+          allSends={sends}
+          spaceId={id}
+          userId={userId ?? ""}
+          onSaved={() => {
+            queryClient.invalidateQueries({ queryKey: getListSpaceLettersQueryKey(id) });
+            queryClient.invalidateQueries({ queryKey: getListAllSpaceScheduledSendsQueryKey(id) });
+          }}
         />
       );
     }
@@ -1668,6 +1893,7 @@ export default function SpaceStartScreen() {
           hasPendingRequests={hasPendingRequests}
           pendingCount={pendingRequests.length}
           onGoToStep={goToStep}
+          participantCount={confirmedMembers.length}
         />
       );
     }
@@ -1766,26 +1992,6 @@ export default function SpaceStartScreen() {
         loading={isStarting}
       />
 
-      {/* ── 여는 편지 글 선택 시트 ── */}
-      {showOpeningSheet && (
-        <ArticleScheduleSheet
-          mode="opening-letter"
-          spaceId={id}
-          userId={userId ?? ""}
-          letters={letters}
-          articles={articles}
-          isArticlesLoading={articlesQuery.isLoading}
-          isArticlesError={articlesQuery.isError}
-          onRefetchArticles={() => articlesQuery.refetch()}
-          allSends={sends}
-          maxScheduledAt={getOpeningLetterDeadline(startDate)}
-          onClose={() => setShowOpeningSheet(false)}
-          onSaved={() => {
-            queryClient.invalidateQueries({ queryKey: getListSpaceLettersQueryKey(id) });
-            queryClient.invalidateQueries({ queryKey: getListAllSpaceScheduledSendsQueryKey(id) });
-          }}
-        />
-      )}
     </KeyboardAvoidingView>
   );
 }
@@ -2247,18 +2453,83 @@ const opStyles = StyleSheet.create({
     fontSize: 13,
     color: Colors.zinc400,
   },
-  datePickerWrapper: {
+  calendarCard: {
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.zinc200,
+    backgroundColor: Colors.white,
     overflow: "hidden",
+  },
+  calMonthNav: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.zinc100,
+  },
+  calMonthBtn: {
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 8,
+  },
+  calMonthTitle: {
+    ...Typography.bodySemiBold,
+    fontSize: 14,
+    color: Colors.zinc800,
+  },
+  calWeekRow: {
+    flexDirection: "row",
     backgroundColor: Colors.zinc50,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.zinc100,
   },
-  datePickerWrapperError: {
-    borderColor: "#ef4444",
+  calWeekLabel: {
+    flex: 1,
+    textAlign: "center",
+    paddingVertical: 5,
+    ...Typography.caption,
+    fontSize: 11,
+    color: Colors.zinc500,
   },
-  datePicker: {
-    height: 120,
+  calSunLabel: {
+    color: "#ef4444",
+  },
+  calGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  calCell: {
+    width: `${100 / 7}%` as any,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+  },
+  calCellSelected: {
+    backgroundColor: Colors.zinc900,
+    borderRadius: 22,
+  },
+  calCellDisabled: {
+    opacity: 0.3,
+  },
+  calDayNum: {
+    ...Typography.body,
+    fontSize: 13,
+    color: Colors.zinc700,
+  },
+  calDayNumSelected: {
+    color: Colors.white,
+    fontWeight: "600",
+  },
+  calSunDay: {
+    color: "#ef4444",
+  },
+  calDayNumDisabled: {
+    color: Colors.zinc300,
   },
   dateBtn: {
     flexDirection: "row",
@@ -2321,6 +2592,149 @@ const olStyles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 15,
     color: Colors.zinc900,
+  },
+  loadingBox: {
+    paddingVertical: 20,
+    alignItems: "center",
+  },
+  errorText: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc400,
+  },
+  articleList: {
+    gap: 6,
+  },
+  articleItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
+    backgroundColor: Colors.zinc50,
+  },
+  articleItemSelected: {
+    borderColor: Colors.zinc900,
+    backgroundColor: Colors.white,
+  },
+  articleItemText: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc600,
+    flex: 1,
+  },
+  articleItemTextSelected: {
+    color: Colors.zinc900,
+    fontWeight: "600",
+  },
+  sendDateSection: {
+    gap: 8,
+    paddingTop: 4,
+  },
+  selectedArticleTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: Colors.zinc100,
+  },
+  selectedArticleTagTitle: {
+    ...Typography.bodySemiBold,
+    fontSize: 13,
+    color: Colors.zinc800,
+    flex: 1,
+  },
+  sendDateLabel: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc500,
+    fontWeight: "600",
+  },
+  sendDateBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
+    backgroundColor: Colors.zinc50,
+  },
+  sendDateBtnText: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc700,
+    flex: 1,
+  },
+  sendCalCard: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
+    overflow: "hidden",
+  },
+  saveBtn: {
+    backgroundColor: Colors.zinc900,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    marginTop: 4,
+  },
+  saveBtnDisabled: {
+    opacity: 0.5,
+  },
+  saveBtnText: {
+    ...Typography.bodySemiBold,
+    fontSize: 15,
+    color: Colors.white,
+  },
+  savedCard: {
+    gap: 6,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
+    backgroundColor: Colors.zinc50,
+  },
+  savedCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  savedCardTitle: {
+    ...Typography.bodySemiBold,
+    fontSize: 14,
+    color: Colors.zinc800,
+  },
+  savedCardArticle: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc700,
+  },
+  savedCardDate: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc500,
+  },
+  reSelectBtn: {
+    marginTop: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
+    alignItems: "center",
+  },
+  reSelectBtnText: {
+    ...Typography.body,
+    fontSize: 13,
+    color: Colors.zinc600,
   },
   selectButton: {
     backgroundColor: Colors.zinc50,
