@@ -447,6 +447,13 @@ router.post("/spaces/:id/start", requireAuth, async (req, res) => {
     return;
   }
 
+  if (effectiveRounds.length < body.roundCount) {
+    res.status(400).json({
+      error: `rounds 배열 길이(${effectiveRounds.length})가 roundCount(${body.roundCount})보다 짧습니다.`,
+    });
+    return;
+  }
+
   // 7. Execute in a transaction
   const now = new Date();
   const intervalDays = body.interval ?? space.defaultCenterInterval;
@@ -519,7 +526,12 @@ router.post("/spaces/:id/start", requireAuth, async (req, res) => {
       rejectedRequesterIds = rejected.map((r) => r.requesterId);
     });
   } catch (err) {
-    console.error("POST /spaces/:id/start transaction error:", err);
+    console.error("POST /spaces/:id/start transaction error:", {
+      message: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+      spaceId: req.params.id,
+      callerId,
+    });
     res.status(500).json({ error: "공간 시작에 실패했습니다." });
     return;
   }

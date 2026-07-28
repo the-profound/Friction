@@ -1314,11 +1314,14 @@ export default function SpaceStartScreen() {
     setIsStarting(true);
     try {
       const isDefaultMode = roundConfigMode !== "custom";
-      const rounds = roundConfigs.map((rc) => ({
-        title: isDefaultMode ? undefined : (rc.title.trim() || undefined),
-        description: isDefaultMode ? undefined : (rc.description.trim() || undefined),
-        slots: slotOrder,
-      }));
+      const rounds = Array.from({ length: roundCount }, (_, i) => {
+        const rc = roundConfigs[i];
+        return {
+          title: isDefaultMode ? undefined : (rc?.title?.trim() || undefined),
+          description: isDefaultMode ? undefined : (rc?.description?.trim() || undefined),
+          slots: slotOrder,
+        };
+      });
 
       await startSpace.mutateAsync({
         id,
