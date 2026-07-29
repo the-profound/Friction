@@ -30,12 +30,12 @@ args = "Publish iOS (App Store)"
 name = "Publish iOS (App Store)"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "bash artifacts/friction/scripts/publish-ios.sh"
-
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash /home/runner/workspace/artifacts/friction/scripts/publish-ios.sh"
 
 [agent]
 stack = "PNPM_WORKSPACE"
