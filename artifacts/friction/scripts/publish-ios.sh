@@ -36,7 +36,11 @@ echo ""
 echo "📦 [1/2] iOS 빌드 시작 (EAS Cloud)..."
 echo "    빌드는 보통 15~30분 소요됩니다."
 echo ""
-$EAS build --platform ios --profile production --non-interactive
+$EAS build \
+  --platform ios \
+  --profile production \
+  --non-interactive \
+  --wait
 
 echo ""
 echo "🚀 [2/2] App Store Connect 제출 시작..."
@@ -51,5 +55,5 @@ $EAS submit \
 
 rm -f /tmp/asc_api_key.p8
 echo ""
-echo "✅ 제출 완료! App Store Connect에서 심사 제출 상태를 확인하세요."
+echo "✅ 제출 완료! App Store Connect에서 심사 상태를 확인하세요."
 echo "   https://appstoreconnect.apple.com"
