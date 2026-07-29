@@ -1,0 +1,23 @@
+{
+  "$schema": "https://raw.githubusercontent.com/expo/eas-cli/main/packages/eas-cli/schema.json",
+  "cli": {
+    "version": ">= 10.0.0"
+  },
+  "build": {
+    "production": {
+      "ios": {
+        "distribution": "store",
+        "credentialsSource": "remote"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "ascApiKeyPath": "/tmp/asc_api_key.p8",
+        "ascApiKeyId": "$APP_STORE_CONNECT_KEY_ID",
+        "ascApiKeyIssuerId": "$APP_STORE_CONNECT_ISSUER_ID"
+      }
+    }
+  }
+}
