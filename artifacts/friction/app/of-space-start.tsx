@@ -27,6 +27,7 @@ import { Feather } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
+import { CalendarGrid, CollapsibleDatePicker, WEEKDAY_LABELS } from "@/components/shared/CalendarGrid";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import { LetterPickerSheet } from "@/components/shared/LetterPickerSheet";
 import { useUser } from "@/contexts/UserContext";
@@ -57,7 +58,6 @@ import type {
   SpaceScheduledSendWithLetter,
 } from "@workspace/api-client-react";
 
-const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
 const SLOT_ROW_H = 52;
 const SLOT_ROW_GAP = 6;
 const SLOT_ITEM_H = SLOT_ROW_H + SLOT_ROW_GAP;
@@ -164,20 +164,6 @@ function getOpeningLetterDeadline(startDate: Date): Date {
   d.setHours(6, 0, 0, 0);
   return d;
 }
-
-function buildMonthGrid(year: number, month: number): (Date | null)[] {
-  const firstDay = new Date(year, month, 1);
-  const startDow = firstDay.getDay();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const cells: (Date | null)[] = [];
-  for (let i = 0; i < startDow; i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(year, month, d));
-  while (cells.length % 7 !== 0) cells.push(null);
-  return cells;
-}
-
-// ─── Confirm Modal ────────────────────────────────────────────────────────────
-
 function ConfirmModal({
   visible,
   title,
@@ -404,21 +390,6 @@ function OperationSettingsStep({
   startDay.setHours(0, 0, 0, 0);
   const isStartDatePast = startDay < today;
 
-  const [calViewYear, setCalViewYear] = useState(() => startDate.getFullYear());
-  const [calViewMonth, setCalViewMonth] = useState(() => startDate.getMonth());
-
-  const calCells = useMemo(() => buildMonthGrid(calViewYear, calViewMonth), [calViewYear, calViewMonth]);
-
-  const handleCalPrevMonth = useCallback(() => {
-    if (calViewMonth === 0) { setCalViewYear(y => y - 1); setCalViewMonth(11); }
-    else setCalViewMonth(m => m - 1);
-  }, [calViewMonth]);
-
-  const handleCalNextMonth = useCallback(() => {
-    if (calViewMonth === 11) { setCalViewYear(y => y + 1); setCalViewMonth(0); }
-    else setCalViewMonth(m => m + 1);
-  }, [calViewMonth]);
-
   const endDate = useMemo(
     () => calculateProjectedEndDate(startDate, scheduleType as "N_DAY" | "WEEKDAY", interval, weekdays, roundCount, centerCount, confirmedCount),
     [startDate, scheduleType, interval, weekdays, roundCount, centerCount, confirmedCount],
@@ -573,52 +544,19 @@ function OperationSettingsStep({
         </View>
       </View>
 
-      {/* 시작 날짜 선택 — 인라인 캘린더 (iOS/Android 동일 UI) */}
+      {/* 시작 날짜 선택 — 기본은 텍스트로 접혀 있고, 탭하면 달력이 펼쳐져요 */}
       <View style={stepStyles.fieldGroup}>
         <Text style={stepStyles.fieldLabel}>시작 예정일</Text>
-        <View style={opStyles.calendarCard}>
-          {/* 월 이동 헤더 */}
-          <View style={opStyles.calMonthNav}>
-            <ScalePressable contentStyle={opStyles.calMonthBtn} onPress={handleCalPrevMonth}>
-              <Feather name="chevron-left" size={18} color={Colors.zinc600} />
-            </ScalePressable>
-            <Text style={opStyles.calMonthTitle}>{calViewYear}년 {calViewMonth + 1}월</Text>
-            <ScalePressable contentStyle={opStyles.calMonthBtn} onPress={handleCalNextMonth}>
-              <Feather name="chevron-right" size={18} color={Colors.zinc600} />
-            </ScalePressable>
-          </View>
-          {/* 요일 헤더 */}
-          <View style={opStyles.calWeekRow}>
-            {WEEKDAY_LABELS.map((label, i) => (
-              <Text key={i} style={[opStyles.calWeekLabel, i === 0 && opStyles.calSunLabel]}>{label}</Text>
-            ))}
-          </View>
-          {/* 날짜 그리드 */}
-          <View style={opStyles.calGrid}>
-            {calCells.map((date, idx) => {
-              if (!date) return <View key={`e-${idx}`} style={opStyles.calCell} />;
-              const d0 = new Date(date); d0.setHours(0,0,0,0);
-              const isPast = d0 < today;
-              const isSelected =
-                date.getFullYear() === startDate.getFullYear() &&
-                date.getMonth() === startDate.getMonth() &&
-                date.getDate() === startDate.getDate();
-              const isSun = date.getDay() === 0;
-              return (
-                <ScalePressable
-                  key={`${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`}
-                  contentStyle={[opStyles.calCell, isSelected && opStyles.calCellSelected, isPast && opStyles.calCellDisabled]}
-                  onPress={() => { if (!isPast) setStartDate(new Date(date)); }}
-                  disabled={isPast}
-                >
-                  <Text style={[opStyles.calDayNum, isSun && opStyles.calSunDay, isSelected && opStyles.calDayNumSelected, isPast && opStyles.calDayNumDisabled]}>
-                    {date.getDate()}
-                  </Text>
-                </ScalePressable>
-              );
-            })}
-          </View>
-        </View>
+        <CollapsibleDatePicker
+          value={startDate}
+          onChange={(date) => setStartDate(date)}
+          isDateDisabled={(date) => {
+            const d0 = new Date(date);
+            d0.setHours(0, 0, 0, 0);
+            return d0 < today;
+          }}
+          formatButtonLabel={(date) => formatDate(date)}
+        />
         {isStartDatePast && (
           <Text style={opStyles.datePastWarning}>선택한 날짜가 오늘보다 이전이에요.</Text>
         )}
@@ -885,8 +823,6 @@ function ScheduleCalendarStep({
     }
   }, [canGoNext, viewMonth]);
 
-  const cells = useMemo(() => buildMonthGrid(viewYear, viewMonth), [viewYear, viewMonth]);
-
   return (
     <View style={stepStyles.container}>
       <Text style={stepStyles.stepTitle}>일정 확인</Text>
@@ -907,68 +843,42 @@ function ScheduleCalendarStep({
         </View>
       </View>
 
-      {/* 달력 */}
-      <View style={calGridStyles.calCard}>
-        {/* 월 이동 헤더 */}
-        <View style={calGridStyles.monthNav}>
-          <ScalePressable
-            contentStyle={[calGridStyles.monthNavBtn, !canGoPrev && calGridStyles.monthNavBtnDisabled]}
-            onPress={handlePrevMonth}
-            disabled={!canGoPrev}
-          >
-            <Feather name="chevron-left" size={18} color={canGoPrev ? Colors.zinc700 : Colors.zinc300} />
-          </ScalePressable>
-          <Text style={calGridStyles.monthNavTitle}>
-            {viewYear}년 {viewMonth + 1}월
-          </Text>
-          <ScalePressable
-            contentStyle={[calGridStyles.monthNavBtn, !canGoNext && calGridStyles.monthNavBtnDisabled]}
-            onPress={handleNextMonth}
-            disabled={!canGoNext}
-          >
-            <Feather name="chevron-right" size={18} color={canGoNext ? Colors.zinc700 : Colors.zinc300} />
-          </ScalePressable>
-        </View>
-
-        {/* 요일 헤더 */}
-        <View style={calGridStyles.weekRow}>
-          {WEEKDAY_LABELS.map((label, i) => (
-            <Text key={i} style={[calGridStyles.weekLabel, i === 0 && calGridStyles.sunLabel]}>
-              {label}
-            </Text>
-          ))}
-        </View>
-
-        {/* 날짜 그리드 */}
-        <View style={calGridStyles.grid}>
-          {cells.map((date, idx) => {
-            if (!date) {
-              return <View key={`empty-${idx}`} style={calGridStyles.cell} />;
-            }
-            const key = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
-            const assignments = assignmentMap[key] ?? [];
-            const isSun = date.getDay() === 0;
-            const hasMark = assignments.length > 0;
-            return (
-              <View key={key} style={[calGridStyles.cell, hasMark && calGridStyles.cellMarked]}>
-                <Text style={[calGridStyles.dayNum, isSun && calGridStyles.sunDay, hasMark && calGridStyles.dayNumMarked]}>
-                  {date.getDate()}
-                </Text>
-                <View style={calGridStyles.bubbleRow}>
-                  {assignments.slice(0, 2).map((a, ai) => (
-                    <View key={ai} style={calGridStyles.assignBubble}>
-                      <Text style={calGridStyles.assignInitial}>{a.nickname.charAt(0)}</Text>
-                    </View>
-                  ))}
-                  {assignments.length > 2 && (
-                    <Text style={calGridStyles.assignMore}>+{assignments.length - 2}</Text>
-                  )}
-                </View>
+      {/* 달력 — 읽기 전용 (배정 미리보기) */}
+      <CalendarGrid
+        year={viewYear}
+        month={viewMonth}
+        onPrevMonth={handlePrevMonth}
+        onNextMonth={handleNextMonth}
+        canGoPrev={canGoPrev}
+        canGoNext={canGoNext}
+        cellContainerStyle={(date) => {
+          const key = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+          const hasMark = (assignmentMap[key]?.length ?? 0) > 0;
+          return [calGridStyles.cellSize, hasMark && calGridStyles.cellMarked];
+        }}
+        renderCellContent={(date, { isSun }) => {
+          const key = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+          const assignments = assignmentMap[key] ?? [];
+          const hasMark = assignments.length > 0;
+          return (
+            <>
+              <Text style={[calGridStyles.dayNum, isSun && calGridStyles.sunDay, hasMark && calGridStyles.dayNumMarked]}>
+                {date.getDate()}
+              </Text>
+              <View style={calGridStyles.bubbleRow}>
+                {assignments.slice(0, 2).map((a, ai) => (
+                  <View key={ai} style={calGridStyles.assignBubble}>
+                    <Text style={calGridStyles.assignInitial}>{a.nickname.charAt(0)}</Text>
+                  </View>
+                ))}
+                {assignments.length > 2 && (
+                  <Text style={calGridStyles.assignMore}>+{assignments.length - 2}</Text>
+                )}
               </View>
-            );
-          })}
-        </View>
-      </View>
+            </>
+          );
+        }}
+      />
 
       <Text style={stepStyles.hint}>
         * 순서는 참여자 수 기준으로 순환 배정돼요. 실제 슬롯은 공간 시작 후 회차마다 동일 순서가 적용돼요.
@@ -1032,10 +942,6 @@ function OpeningLetterStep({
     return d > maxScheduledAt ? maxScheduledAt : d;
   });
 
-  const [showSendCal, setShowSendCal] = useState(false);
-  const [sendCalYear, setSendCalYear] = useState(() => scheduledDate.getFullYear());
-  const [sendCalMonth, setSendCalMonth] = useState(() => scheduledDate.getMonth());
-  const sendCalCells = useMemo(() => buildMonthGrid(sendCalYear, sendCalMonth), [sendCalYear, sendCalMonth]);
 
   const [saving, setSaving] = useState(false);
 
@@ -1152,65 +1058,19 @@ function OpeningLetterStep({
           {selectedArticleId && (
             <View style={olStyles.sendDateSection}>
               <Text style={olStyles.sendDateLabel}>발송 예정일 (06:00 발송)</Text>
-              <ScalePressable
-                contentStyle={olStyles.sendDateBtn}
-                onPress={() => setShowSendCal(v => !v)}
-              >
-                <Feather name="calendar" size={14} color={Colors.zinc500} />
-                <Text style={olStyles.sendDateBtnText}>{formatMonthDay(scheduledDate)} 06:00</Text>
-                <Feather name={showSendCal ? "chevron-up" : "chevron-down"} size={14} color={Colors.zinc400} />
-              </ScalePressable>
-
-              {showSendCal && (
-                <View style={olStyles.sendCalCard}>
-                  <View style={opStyles.calMonthNav}>
-                    <ScalePressable contentStyle={opStyles.calMonthBtn} onPress={() => {
-                      if (sendCalMonth === 0) { setSendCalYear(y => y - 1); setSendCalMonth(11); }
-                      else setSendCalMonth(m => m - 1);
-                    }}>
-                      <Feather name="chevron-left" size={18} color={Colors.zinc600} />
-                    </ScalePressable>
-                    <Text style={opStyles.calMonthTitle}>{sendCalYear}년 {sendCalMonth + 1}월</Text>
-                    <ScalePressable contentStyle={opStyles.calMonthBtn} onPress={() => {
-                      if (sendCalMonth === 11) { setSendCalYear(y => y + 1); setSendCalMonth(0); }
-                      else setSendCalMonth(m => m + 1);
-                    }}>
-                      <Feather name="chevron-right" size={18} color={Colors.zinc600} />
-                    </ScalePressable>
-                  </View>
-                  <View style={opStyles.calWeekRow}>
-                    {WEEKDAY_LABELS.map((label, i) => (
-                      <Text key={i} style={[opStyles.calWeekLabel, i === 0 && opStyles.calSunLabel]}>{label}</Text>
-                    ))}
-                  </View>
-                  <View style={opStyles.calGrid}>
-                    {sendCalCells.map((date, idx) => {
-                      if (!date) return <View key={`se-${idx}`} style={opStyles.calCell} />;
-                      const d0 = new Date(date); d0.setHours(0,0,0,0);
-                      const mx = new Date(maxScheduledAt); mx.setHours(0,0,0,0);
-                      const mn = new Date(minSendDate); mn.setHours(0,0,0,0);
-                      const isDisabled = d0 < mn || d0 > mx;
-                      const isSelected =
-                        date.getFullYear() === scheduledDate.getFullYear() &&
-                        date.getMonth() === scheduledDate.getMonth() &&
-                        date.getDate() === scheduledDate.getDate();
-                      const isSun = date.getDay() === 0;
-                      return (
-                        <ScalePressable
-                          key={`${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`}
-                          contentStyle={[opStyles.calCell, isSelected && opStyles.calCellSelected, isDisabled && opStyles.calCellDisabled]}
-                          onPress={() => { if (!isDisabled) { setScheduledDate(new Date(date)); setShowSendCal(false); } }}
-                          disabled={isDisabled}
-                        >
-                          <Text style={[opStyles.calDayNum, isSun && opStyles.calSunDay, isSelected && opStyles.calDayNumSelected, isDisabled && opStyles.calDayNumDisabled]}>
-                            {date.getDate()}
-                          </Text>
-                        </ScalePressable>
-                      );
-                    })}
-                  </View>
-                </View>
-              )}
+              <CollapsibleDatePicker
+                value={scheduledDate}
+                onChange={(date) => setScheduledDate(date)}
+                isDateDisabled={(date) => {
+                  const d0 = new Date(date); d0.setHours(0, 0, 0, 0);
+                  const mx = new Date(maxScheduledAt); mx.setHours(0, 0, 0, 0);
+                  const mn = new Date(minSendDate); mn.setHours(0, 0, 0, 0);
+                  return d0 < mn || d0 > mx;
+                }}
+                formatButtonLabel={(date) => `${formatMonthDay(date)} 06:00`}
+                triggerStyle={olStyles.sendDateBtn}
+                triggerTextStyle={olStyles.sendDateBtnText}
+              />
 
               <ScalePressable
                 contentStyle={[olStyles.saveBtn, saving && olStyles.saveBtnDisabled]}
@@ -2446,106 +2306,6 @@ const opStyles = StyleSheet.create({
     fontSize: 13,
     color: Colors.zinc400,
   },
-  calendarCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.zinc200,
-    backgroundColor: Colors.white,
-    overflow: "hidden",
-  },
-  calMonthNav: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.zinc100,
-  },
-  calMonthBtn: {
-    width: 32,
-    height: 32,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 8,
-  },
-  calMonthTitle: {
-    ...Typography.bodySemiBold,
-    fontSize: 14,
-    color: Colors.zinc800,
-  },
-  calWeekRow: {
-    flexDirection: "row",
-    backgroundColor: Colors.zinc50,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.zinc100,
-  },
-  calWeekLabel: {
-    flex: 1,
-    textAlign: "center",
-    paddingVertical: 5,
-    ...Typography.caption,
-    fontSize: 11,
-    color: Colors.zinc500,
-  },
-  calSunLabel: {
-    color: "#ef4444",
-  },
-  calGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-  },
-  calCell: {
-    width: `${100 / 7}%` as any,
-    minHeight: 44,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 8,
-  },
-  calCellSelected: {
-    backgroundColor: Colors.zinc900,
-    borderRadius: 22,
-  },
-  calCellDisabled: {
-    opacity: 0.3,
-  },
-  calDayNum: {
-    ...Typography.body,
-    fontSize: 13,
-    color: Colors.zinc700,
-  },
-  calDayNumSelected: {
-    color: Colors.white,
-    fontWeight: "600",
-  },
-  calSunDay: {
-    color: "#ef4444",
-  },
-  calDayNumDisabled: {
-    color: Colors.zinc300,
-  },
-  dateBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.zinc200,
-    backgroundColor: Colors.zinc50,
-  },
-  dateBtnError: {
-    borderColor: "#ef4444",
-  },
-  dateBtnText: {
-    ...Typography.body,
-    fontSize: 15,
-    color: Colors.zinc800,
-  },
-  dateBtnTextError: {
-    color: "#ef4444",
-  },
   datePastWarning: {
     ...Typography.caption,
     fontSize: 12,
@@ -2633,12 +2393,6 @@ const olStyles = StyleSheet.create({
     fontSize: 14,
     color: Colors.zinc700,
     flex: 1,
-  },
-  sendCalCard: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.zinc200,
-    overflow: "hidden",
   },
   saveBtn: {
     backgroundColor: Colors.zinc900,
@@ -2794,67 +2548,9 @@ const calGridStyles = StyleSheet.create({
     backgroundColor: Colors.zinc200,
     marginHorizontal: 4,
   },
-  calCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.zinc100,
-    backgroundColor: Colors.white,
-    overflow: "hidden",
-  },
-  monthNav: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.zinc100,
-  },
-  monthNavBtn: {
-    width: 32,
-    height: 32,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 8,
-  },
-  monthNavBtnDisabled: {
-    opacity: 0.4,
-  },
-  monthNavTitle: {
-    ...Typography.bodySemiBold,
-    fontSize: 15,
-    color: Colors.zinc800,
-  },
-  weekRow: {
-    flexDirection: "row",
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.zinc100,
-    backgroundColor: Colors.zinc50,
-  },
-  weekLabel: {
-    flex: 1,
-    textAlign: "center",
-    paddingVertical: 6,
-    ...Typography.caption,
-    fontSize: 11,
-    color: Colors.zinc500,
-  },
-  sunLabel: {
-    color: "#ef4444",
-  },
-  grid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-  },
-  cell: {
-    width: `${100 / 7}%` as any,
+  cellSize: {
     minHeight: 52,
-    paddingTop: 4,
-    paddingBottom: 4,
     paddingHorizontal: 2,
-    alignItems: "center",
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.zinc50,
     gap: 2,
   },
   cellMarked: {
@@ -2980,4 +2676,3 @@ const confirmStyles = StyleSheet.create({
     lineHeight: 17,
   },
 });
-
