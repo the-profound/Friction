@@ -19,7 +19,8 @@
       "bundleIdentifier": "com.theprofound.friction",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
-      }
+      },
+      "buildNumber": "2"
     },
     "android": {
       "softwareKeyboardLayoutMode": "adjustResize",
