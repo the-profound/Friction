@@ -4,6 +4,7 @@
 - [Friction reading-memo WebView editor](friction-reader-memo-webview.md) — reading-mode memo uses same WebView TipTap engine as 기록 tab (Eulyoo1945 has no italic/bold face); page-turn is button-driven flip, not gesture.
 - [Manual branch integration](friction-manual-branch-integration.md) — when auto-merge of two task branches fails: set WT=base branch, copy other's unique files via `git show`, hand-merge only shared (openapi+codegen, CardSelectOverlay), Supabase usually pre-migrated.
 - [Friction envelope animation](friction-envelope-animation.md) — sealed-envelope open: layer z-order, closed flap rotates & swaps to STATIC open flap at edge-on; mockup PNGs used as full-card layers, seal baked in.
+- [Artifact port config SSOT](friction-artifact-port-config.md) — workflow PORT comes from artifact.toml localPort at runtime; `.replit` text can be stale. Change ports via verifyAndReplaceArtifactToml only.
 - [Friction two-database setup](friction-two-database.md) — executeSql tool hits local DB (DATABASE_URL); API server hits Supabase DB (SUPABASE_DB_URL). Migrations must reach BOTH.
 - [Friction memo overlay rendering](friction-memo-overlay-rendering.md) — RN `color: "transparent"` unreliable for hiding overlay text; use exact background hex match instead.
 - [Friction memo card scroll vs page-flip gesture](friction-memo-gesture-split.md) — keyboard-open drag translates the card (WebView scroll disabled); typing-overflow auto-split only reports the cut, RN must apply it via setMarkdown.
