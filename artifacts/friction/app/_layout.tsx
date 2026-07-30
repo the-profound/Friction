@@ -44,11 +44,25 @@ if (process.env.EXPO_PUBLIC_DOMAIN) {
 }
 
 setAuthTokenGetter(async () => {
-  const { data } = await supabase.auth.getSession();
-  return data.session?.access_token ?? null;
+  try {
+    // supabase.auth.getSession() reads from SecureStore (TurboModule).
+    // Wrap so a native exception during session restore never propagates to the
+    // API client and crashes the app before it can reach the login screen.
+    const { data } = await supabase.auth.getSession();
+    return data.session?.access_token ?? null;
+  } catch (err) {
+    console.warn("[authTokenGetter] getSession failed — returning null:", err);
+    return null;
+  }
 });
 
-SplashScreen.preventAutoHideAsync();
+// SplashScreen is a TurboModule call; guard it so a failure here doesn't abort
+// startup. The splash will simply auto-hide instead.
+try {
+  SplashScreen.preventAutoHideAsync();
+} catch (err) {
+  console.warn("[SplashScreen] preventAutoHideAsync failed:", err);
+}
 
 // Keep cached data "fresh" for 30 seconds so that switching between tabs
 // does not trigger a full refetch (and show a loading spinner) if the data
@@ -243,7 +257,13 @@ loadEditorFonts();
 
 export default function RootLayout() {
   useEffect(() => {
-    trackAppOpen();
+    try {
+      // posthog?.capture() is a TurboModule call; guard so analytics failure
+      // never interrupts the startup render cycle.
+      trackAppOpen();
+    } catch (err) {
+      console.warn("[analytics] trackAppOpen failed:", err);
+    }
   }, []);
 
   useEffect(() => {
@@ -263,7 +283,11 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (fontsLoaded || fontError) {
-      SplashScreen.hideAsync();
+      // Guard: SplashScreen.hideAsync() is a TurboModule call; a failure here
+      // should not leave the app stuck on the splash screen indefinitely.
+      SplashScreen.hideAsync().catch((err) => {
+        console.warn("[SplashScreen] hideAsync failed:", err);
+      });
     }
   }, [fontsLoaded, fontError]);
 

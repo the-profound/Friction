@@ -34,78 +34,97 @@ function decodeValue(encoded: string): string {
   return new TextDecoder().decode(bytes);
 }
 
+// SecureStore operations are TurboModule calls that can throw NSException on iOS
+// if the keychain is temporarily unavailable or if the native module initializes
+// on the wrong thread. All three helpers below catch those errors and return a
+// safe value so Supabase session restoration degrades gracefully to "no session"
+// rather than crashing the app.
+
 async function secureGetChunked(key: string): Promise<string | null> {
-  const countStr = await SecureStore.getItemAsync(chunkCountKey(key));
+  try {
+    const countStr = await SecureStore.getItemAsync(chunkCountKey(key));
 
-  if (countStr !== null && countStr !== undefined) {
-    const count = parseInt(countStr, 10);
-    if (isNaN(count) || count < 1) return null;
+    if (countStr !== null && countStr !== undefined) {
+      const count = parseInt(countStr, 10);
+      if (isNaN(count) || count < 1) return null;
 
-    const chunks: string[] = [];
-    for (let i = 0; i < count; i++) {
-      const chunk = await SecureStore.getItemAsync(chunkDataKey(key, i));
-      if (chunk === null || chunk === undefined) return null;
-      chunks.push(chunk);
+      const chunks: string[] = [];
+      for (let i = 0; i < count; i++) {
+        const chunk = await SecureStore.getItemAsync(chunkDataKey(key, i));
+        if (chunk === null || chunk === undefined) return null;
+        chunks.push(chunk);
+      }
+
+      try {
+        return decodeValue(chunks.join(""));
+      } catch {
+        return null;
+      }
     }
 
-    try {
-      return decodeValue(chunks.join(""));
-    } catch {
-      return null;
+    const legacy = await SecureStore.getItemAsync(key);
+    if (legacy !== null && legacy !== undefined) {
+      await secureSetChunked(key, legacy);
+      await SecureStore.deleteItemAsync(key);
+      return legacy;
     }
-  }
 
-  const legacy = await SecureStore.getItemAsync(key);
-  if (legacy !== null && legacy !== undefined) {
-    await secureSetChunked(key, legacy);
-    await SecureStore.deleteItemAsync(key);
-    return legacy;
+    return null;
+  } catch (err) {
+    console.warn("[SecureStore] secureGetChunked failed — returning null:", err);
+    return null;
   }
-
-  return null;
 }
 
 async function secureSetChunked(key: string, value: string): Promise<void> {
-  const encoded = encodeValue(value);
-  const chunks: string[] = [];
-  for (let i = 0; i < encoded.length; i += CHUNK_SIZE) {
-    chunks.push(encoded.slice(i, i + CHUNK_SIZE));
-  }
-  if (chunks.length === 0) chunks.push("");
+  try {
+    const encoded = encodeValue(value);
+    const chunks: string[] = [];
+    for (let i = 0; i < encoded.length; i += CHUNK_SIZE) {
+      chunks.push(encoded.slice(i, i + CHUNK_SIZE));
+    }
+    if (chunks.length === 0) chunks.push("");
 
-  const oldCountStr = await SecureStore.getItemAsync(chunkCountKey(key));
-  const oldCount =
-    oldCountStr !== null && oldCountStr !== undefined
-      ? parseInt(oldCountStr, 10)
-      : 0;
+    const oldCountStr = await SecureStore.getItemAsync(chunkCountKey(key));
+    const oldCount =
+      oldCountStr !== null && oldCountStr !== undefined
+        ? parseInt(oldCountStr, 10)
+        : 0;
 
-  await Promise.all(
-    chunks.map((chunk, i) =>
-      SecureStore.setItemAsync(chunkDataKey(key, i), chunk)
-    )
-  );
-  await SecureStore.setItemAsync(chunkCountKey(key), String(chunks.length));
+    await Promise.all(
+      chunks.map((chunk, i) =>
+        SecureStore.setItemAsync(chunkDataKey(key, i), chunk)
+      )
+    );
+    await SecureStore.setItemAsync(chunkCountKey(key), String(chunks.length));
 
-  const cleanOldCount = isNaN(oldCount) ? 0 : oldCount;
-  for (let i = chunks.length; i < cleanOldCount; i++) {
-    await SecureStore.deleteItemAsync(chunkDataKey(key, i));
+    const cleanOldCount = isNaN(oldCount) ? 0 : oldCount;
+    for (let i = chunks.length; i < cleanOldCount; i++) {
+      await SecureStore.deleteItemAsync(chunkDataKey(key, i));
+    }
+  } catch (err) {
+    console.warn("[SecureStore] secureSetChunked failed — session will not persist:", err);
   }
 }
 
 async function secureDeleteChunked(key: string): Promise<void> {
-  const countStr = await SecureStore.getItemAsync(chunkCountKey(key));
-  const count =
-    countStr !== null && countStr !== undefined
-      ? parseInt(countStr, 10)
-      : 0;
+  try {
+    const countStr = await SecureStore.getItemAsync(chunkCountKey(key));
+    const count =
+      countStr !== null && countStr !== undefined
+        ? parseInt(countStr, 10)
+        : 0;
 
-  const safeCount = isNaN(count) ? 0 : count;
-  for (let i = 0; i < safeCount; i++) {
-    await SecureStore.deleteItemAsync(chunkDataKey(key, i));
+    const safeCount = isNaN(count) ? 0 : count;
+    for (let i = 0; i < safeCount; i++) {
+      await SecureStore.deleteItemAsync(chunkDataKey(key, i));
+    }
+    await SecureStore.deleteItemAsync(chunkCountKey(key));
+
+    await SecureStore.deleteItemAsync(key).catch(() => undefined);
+  } catch (err) {
+    console.warn("[SecureStore] secureDeleteChunked failed — keychain entry may linger:", err);
   }
-  await SecureStore.deleteItemAsync(chunkCountKey(key));
-
-  await SecureStore.deleteItemAsync(key).catch(() => undefined);
 }
 
 const ExpoSecureStoreAdapter = {
