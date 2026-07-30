@@ -3475,6 +3475,34 @@ export const CreateThoughtBody = zod.object({
 });
 
 /**
+ * @summary Update a thought's content
+ */
+export const UpdateThoughtParams = zod.object({
+  id: zod.coerce.string().uuid(),
+});
+
+export const UpdateThoughtBody = zod.object({
+  content: zod.string(),
+});
+
+export const UpdateThoughtResponse = zod.object({
+  id: zod.string().uuid(),
+  authorId: zod.string().uuid(),
+  content: zod.string().nullish(),
+  createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
+  sourceArticleId: zod.string().uuid().nullish(),
+  createdAt: zod.date(),
+  updatedAt: zod.date(),
+});
+
+/**
+ * @summary Soft-delete a thought
+ */
+export const DeleteThoughtParams = zod.object({
+  id: zod.coerce.string().uuid(),
+});
+
+/**
  * Given a target thought (단상) and a list of candidate thoughts, returns AI-generated connection analysis for each candidate: connection reason (r), mediating keywords (k), and highlight phrases (h). Uses OpenRouter Gemini Flash 1.5 with a fixed system prompt to enable automatic context caching.
  * @summary Analyze AI connections between a target thought and candidate thoughts
  */

@@ -31,6 +31,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   getListThoughtsQueryKey,
   useCreateThought,
+  useDeleteThought,
+  useUpdateThought,
   useListThoughts,
 } from "@workspace/api-client-react";
 import type { Thought } from "@workspace/api-client-react";
@@ -76,25 +78,135 @@ function formatRelativeDate(dateStr: string): string {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
-interface ThoughtCardProps {
+/** 좌 스와이프 시 노출되는 액션 버튼(편집/삭제) 전체 너비 */
+const ACTION_WIDTH = 104;
+
+interface SwipeableThoughtCardProps {
   thought: Thought;
+  openId: string | null;
+  setOpenId: (id: string | null) => void;
+  onEdit: (thought: Thought) => void;
+  onDelete: (id: string) => void;
 }
 
-function ThoughtCard({ thought }: ThoughtCardProps) {
+function SwipeableThoughtCard({
+  thought,
+  openId,
+  setOpenId,
+  onEdit,
+  onDelete,
+}: SwipeableThoughtCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const translateX = useRef(new Animated.Value(0)).current;
+  const isOpen = openId === thought.id;
+  const isOpenRef = useRef(false);
+  isOpenRef.current = isOpen;
+
+  // 외부에서 다른 카드가 열리면 이 카드를 닫는다
+  useEffect(() => {
+    if (!isOpen) {
+      Animated.spring(translateX, {
+        toValue: 0,
+        damping: 24,
+        stiffness: 300,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [isOpen, translateX]);
+
+  const snapTo = (open: boolean) => {
+    const target = open ? -ACTION_WIDTH : 0;
+    setOpenId(open ? thought.id : null);
+    Animated.spring(translateX, {
+      toValue: target,
+      damping: 24,
+      stiffness: 300,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const startXRef = useRef(0);
+  const startOpenRef = useRef(false);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gs) =>
+        Math.abs(gs.dx) > Math.abs(gs.dy) && Math.abs(gs.dx) > 6,
+      onPanResponderGrant: () => {
+        startXRef.current = isOpenRef.current ? -ACTION_WIDTH : 0;
+        startOpenRef.current = isOpenRef.current;
+        translateX.stopAnimation();
+      },
+      onPanResponderMove: (_, gs) => {
+        const raw = startXRef.current + gs.dx;
+        // 오른쪽 스와이프는 0까지만, 왼쪽은 ACTION_WIDTH까지만
+        const clamped = Math.max(-ACTION_WIDTH, Math.min(0, raw));
+        translateX.setValue(clamped);
+      },
+      onPanResponderRelease: (_, gs) => {
+        const currentOffset = startXRef.current + gs.dx;
+        // 절반 이상 열렸으면 열림으로 스냅, 아니면 닫힘
+        const shouldOpen = currentOffset < -(ACTION_WIDTH / 2) || gs.vx < -0.5;
+        snapTo(shouldOpen);
+      },
+      onPanResponderTerminate: () => {
+        snapTo(startOpenRef.current);
+      },
+    }),
+  ).current;
+
   const content = thought.content ?? "";
   const isLong = content.length > 100;
+
+  const handleCardPress = () => {
+    if (isOpen) {
+      snapTo(false);
+      return;
+    }
+    if (isLong) setExpanded((v) => !v);
+  };
+
   return (
-    <Pressable
-      onPress={() => { if (isLong) setExpanded((v) => !v); }}
-      style={styles.card}
-    >
-      <Text style={styles.cardDate}>{formatRelativeDate(thought.createdAt)}</Text>
-      <Text style={styles.cardText} numberOfLines={expanded ? undefined : 3}>
-        {content}
-      </Text>
-      {isLong && !expanded && <Text style={styles.moreLink}>...더보기</Text>}
-    </Pressable>
+    <View style={styles.cardContainer}>
+      {/* 액션 버튼: 카드 우측에 절대 배치, 클리핑 뒤에 숨겨진다 */}
+      <View style={styles.actionBtns}>
+        <Pressable
+          style={[styles.actionBtn, styles.editBtn]}
+          onPress={() => {
+            snapTo(false);
+            onEdit(thought);
+          }}
+          hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+        >
+          <Feather name="edit-2" size={17} color="#fff" />
+        </Pressable>
+        <Pressable
+          style={[styles.actionBtn, styles.deleteBtn]}
+          onPress={() => {
+            snapTo(false);
+            onDelete(thought.id);
+          }}
+          hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+        >
+          <Feather name="trash-2" size={17} color="#fff" />
+        </Pressable>
+      </View>
+
+      {/* 카드 텍스트 박스 — translateX로 밀림 */}
+      <Animated.View
+        style={[styles.cardSlide, { transform: [{ translateX }] }]}
+        {...panResponder.panHandlers}
+      >
+        <Pressable onPress={handleCardPress} style={styles.card}>
+          <Text style={styles.cardDate}>{formatRelativeDate(thought.createdAt)}</Text>
+          <Text style={styles.cardText} numberOfLines={expanded ? undefined : 3}>
+            {content}
+          </Text>
+          {isLong && !expanded && <Text style={styles.moreLink}>...더보기</Text>}
+        </Pressable>
+      </Animated.View>
+    </View>
   );
 }
 
@@ -188,6 +300,13 @@ export default function ThoughtsBottomSheet({
   const inputRef = useRef<TextInput>(null);
   const listScrollYRef = useRef(0);
 
+  /** 현재 열린 스와이프 카드 ID (하나만 열림) */
+  const [openCardId, setOpenCardId] = useState<string | null>(null);
+  /** 편집 중인 단상 (null이면 새 단상 작성 모드) */
+  const [editingThought, setEditingThought] = useState<Thought | null>(null);
+  /** optimistic 삭제: 화면에서 즉시 숨길 ID 집합 */
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
+
   // ── Data ─────────────────────────────────────────────────────────────────
 
   const thoughtsQuery = useListThoughts(
@@ -201,6 +320,8 @@ export default function ThoughtsBottomSheet({
   );
   const thoughts = (thoughtsQuery.data ?? []) as Thought[];
   const createThought = useCreateThought();
+  const updateThought = useUpdateThought();
+  const deleteThought = useDeleteThought();
 
   const invalidateThoughts = useCallback(() => {
     queryClient.invalidateQueries({
@@ -297,6 +418,10 @@ export default function ThoughtsBottomSheet({
     // keyboardWillHide가 mid 복원 애니메이션을 실행하지 않도록 먼저 초기화
     prevSnapStageRef.current = null;
     Keyboard.dismiss();
+    // 시트가 닫힐 때 편집·스와이프 상태를 즉시 초기화 (애니메이션 완료 전에도)
+    setEditingThought(null);
+    setOpenCardId(null);
+    setDeletedIds(new Set());
     const springBase = { damping: 32, stiffness: 400 };
     const animations: Animated.CompositeAnimation[] = [
       Animated.spring(slideAnimRef.current, { toValue: screenHeight, ...springBase, useNativeDriver: true }),
@@ -325,10 +450,20 @@ export default function ThoughtsBottomSheet({
     };
   }, [closeHandleRef]);
 
+  // ── 스와이프·편집 상태 초기화 헬퍼 ─────────────────────────────────────────
+  // 시트가 닫히거나 articleId가 바뀔 때 반드시 호출해 cross-context state leak을 방지한다.
+  const resetTransientState = useCallback(() => {
+    setEditingThought(null);
+    setOpenCardId(null);
+    setDeletedIds(new Set());
+  }, []);
+
   // ── Open ─────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (visible) {
+      // 새 시트 세션 시작 — 이전 편집·스와이프 상태를 모두 초기화
+      resetTransientState();
       setInputText(pendingQuote ?? "");
       // 시트는 defaultPanelHeight(50% = mid) 높이로 열린다 → snapStage = "mid"
       // "full"로 설정하면 키보드 열릴 때 65% 분기가 동작하지 않음
@@ -353,6 +488,10 @@ export default function ThoughtsBottomSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
+  // articleId가 바뀌면 (다른 글로 전환) 편집·스와이프 상태를 즉시 초기화한다.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (visible) resetTransientState(); }, [articleId]);
+
   useEffect(() => {
     if (visible && pendingQuote) {
       setInputText(pendingQuote);
@@ -368,9 +507,25 @@ export default function ThoughtsBottomSheet({
     if (!text || isSending) return;
     setIsSending(true);
     try {
-      await createThought.mutateAsync({
-        data: { content: text, createdFrom: "reading", sourceArticleId: articleId },
-      });
+      // 편집 모드 가드: editingThought가 현재 articleId 소속인 경우만 PATCH 사용.
+      // articleId가 바뀐 뒤 잔류한 stale editingThought를 PATCH하는 cross-context 버그를 방지.
+      const isValidEdit =
+        editingThought != null &&
+        editingThought.sourceArticleId === articleId;
+
+      if (isValidEdit && editingThought) {
+        await updateThought.mutateAsync({
+          id: editingThought.id,
+          data: { content: text },
+        });
+        setEditingThought(null);
+      } else {
+        // 잘못된 편집 상태가 남아있으면 조용히 초기화 후 새 단상으로 저장
+        if (editingThought) setEditingThought(null);
+        await createThought.mutateAsync({
+          data: { content: text, createdFrom: "reading", sourceArticleId: articleId },
+        });
+      }
       invalidateThoughts();
       setInputText("");
     } catch (e) {
@@ -378,7 +533,38 @@ export default function ThoughtsBottomSheet({
     } finally {
       setIsSending(false);
     }
-  }, [inputText, isSending, createThought, articleId, invalidateThoughts]);
+  }, [inputText, isSending, editingThought, updateThought, createThought, articleId, invalidateThoughts]);
+
+  // ── Edit / Delete handlers ────────────────────────────────────────────────
+
+  const handleEdit = useCallback((thought: Thought) => {
+    setEditingThought(thought);
+    setInputText(thought.content ?? "");
+    setTimeout(() => inputRef.current?.focus(), 100);
+  }, []);
+
+  const handleDelete = useCallback(async (id: string) => {
+    // Optimistic: 즉시 목록에서 숨기기
+    setDeletedIds((prev) => new Set([...prev, id]));
+    try {
+      await deleteThought.mutateAsync({ id });
+      invalidateThoughts();
+    } catch (e) {
+      // 실패 시 복원
+      setDeletedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      console.warn("[ThoughtsBottomSheet] delete failed:", e);
+    }
+  }, [deleteThought, invalidateThoughts]);
+
+  const cancelEdit = useCallback(() => {
+    setEditingThought(null);
+    setInputText("");
+    Keyboard.dismiss();
+  }, []);
 
   // ── Handle-bar pan responder ──────────────────────────────────────────────
 
@@ -549,12 +735,23 @@ export default function ThoughtsBottomSheet({
               <View style={styles.emptyWrap}>
                 <ActivityIndicator size="small" color={Colors.zinc300} />
               </View>
-            ) : thoughts.length === 0 ? (
+            ) : thoughts.filter((t) => !deletedIds.has(t.id)).length === 0 ? (
               <View style={styles.emptyWrap}>
                 <Text style={styles.emptyText}>아직 단상이 없어요</Text>
               </View>
             ) : (
-              thoughts.map((t) => <ThoughtCard key={t.id} thought={t} />)
+              thoughts
+                .filter((t) => !deletedIds.has(t.id))
+                .map((t) => (
+                  <SwipeableThoughtCard
+                    key={t.id}
+                    thought={t}
+                    openId={openCardId}
+                    setOpenId={setOpenCardId}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                  />
+                ))
             )}
           </ScrollView>
         </View>
@@ -567,30 +764,44 @@ export default function ThoughtsBottomSheet({
             { paddingBottom: inputPadAnim },
           ]}
         >
-          <TextInput
-            ref={inputRef}
-            style={styles.input}
-            value={inputText}
-            onChangeText={setInputText}
-            placeholder="새 단상 작성하기..."
-            placeholderTextColor={Colors.zinc400}
-            multiline
-            returnKeyType="default"
-          />
-          {inputText.trim().length > 0 && (
-            <Pressable
-              onPress={handleSend}
-              disabled={isSending}
-              style={({ pressed }) => [styles.sendBtn, pressed && { opacity: 0.6 }]}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              {isSending ? (
-                <ActivityIndicator size="small" color={Colors.zinc500} />
-              ) : (
-                <Feather name="arrow-up-circle" size={28} color={Colors.zinc800} />
-              )}
-            </Pressable>
+          {/* 편집 모드 인디케이터 */}
+          {editingThought && (
+            <View style={styles.editingBanner}>
+              <Text style={styles.editingLabel}>편집 중</Text>
+              <Pressable
+                onPress={cancelEdit}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Feather name="x" size={15} color={Colors.zinc500} />
+              </Pressable>
+            </View>
           )}
+          <View style={styles.inputRow}>
+            <TextInput
+              ref={inputRef}
+              style={styles.input}
+              value={inputText}
+              onChangeText={setInputText}
+              placeholder={editingThought ? "단상 수정하기..." : "새 단상 작성하기..."}
+              placeholderTextColor={Colors.zinc400}
+              multiline
+              returnKeyType="default"
+            />
+            {inputText.trim().length > 0 && (
+              <Pressable
+                onPress={handleSend}
+                disabled={isSending}
+                style={({ pressed }) => [styles.sendBtn, pressed && { opacity: 0.6 }]}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                {isSending ? (
+                  <ActivityIndicator size="small" color={Colors.zinc500} />
+                ) : (
+                  <Feather name="arrow-up-circle" size={28} color={Colors.zinc800} />
+                )}
+              </Pressable>
+            )}
+          </View>
         </Animated.View>
       </Animated.View>
     </Animated.View>
@@ -664,8 +875,44 @@ const styles = StyleSheet.create({
     color: Colors.zinc400,
     fontFamily: "Pretendard-Regular",
   },
-  card: {
+  cardContainer: {
+    position: "relative",
+    overflow: "hidden",
+    borderRadius: 12,
+  },
+  cardSlide: {
+    // 카드 텍스트 박스 — translateX 로 밀려남
+    // flex:1로 cardContainer 전체 너비를 채우고, 배경색을 여기에 두어
+    // borderRadius 없는 직사각형으로 버튼 영역을 완전히 덮/가린다.
+    // (borderRadius는 cardContainer의 overflow:hidden이 처리)
+    flex: 1,
     backgroundColor: Colors.zinc50,
+  },
+  actionBtns: {
+    position: "absolute",
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: ACTION_WIDTH,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  },
+  actionBtn: {
+    width: ACTION_WIDTH / 2 - 4,
+    height: ACTION_WIDTH / 2 - 4,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  editBtn: {
+    backgroundColor: Colors.zinc600,
+  },
+  deleteBtn: {
+    backgroundColor: "#ef4444",
+  },
+  card: {
     borderRadius: 12,
     padding: 14,
     gap: 5,
@@ -687,14 +934,31 @@ const styles = StyleSheet.create({
     fontFamily: "Pretendard-Regular",
   },
   inputBar: {
-    flexDirection: "row",
-    alignItems: "flex-end",
+    flexDirection: "column",
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Colors.zinc100,
     paddingHorizontal: Spacing.screenPx,
     paddingTop: 8,
-    gap: 8,
+    gap: 4,
     backgroundColor: Colors.white,
+  },
+  editingBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 2,
+    paddingBottom: 2,
+  },
+  editingLabel: {
+    fontSize: 12,
+    color: Colors.zinc600,
+    fontFamily: "Pretendard-SemiBold",
+    fontWeight: "600",
+  },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 8,
   },
   input: {
     flex: 1,

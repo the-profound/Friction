@@ -160,6 +160,7 @@ export * from "./updateSpaceRoundSlotBody";
 export * from "./updateSpaceScheduledSendBody";
 export * from "./updateSpaceScheduledSendBodyStatus";
 export * from "./updateTeamCollectionBody";
+export * from "./updateThoughtBody";
 export * from "./updateUserBody";
 export * from "./upsertReadingRecordBody";
 export * from "./user";

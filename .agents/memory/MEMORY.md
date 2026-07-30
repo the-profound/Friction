@@ -21,3 +21,4 @@
 - [Dansang sheet snap semantics](friction-dansang-sheet-snaps.md) — "full" snap = maxPanelHeight (notch), not default 58% height; check snap targets are visually distinct before debugging gestures.
 - [RN Animated native/non-native split](friction-animated-driver-split.md) — can't mix native (translateY) and non-native (bottom) animated props on same Animated.View; split into outer (non-native, bottom) + inner (native, transform) wrappers.
 - [Dansang scale translateY formula](friction-dansang-scale-translatey.md) — center-placed card scale: t = -s*frameHeight/2 aligns bottom to sheet top; -(1-s)*h/2 (top-anchor only) leaves bottom overlapping sheet.
+- [RN hidden-component state leak](rn-hidden-component-state-leak.md) — `return null` when hidden still keeps hook state; reset transient edit/swipe state on open, close, and key-prop change — and guard submit handler.

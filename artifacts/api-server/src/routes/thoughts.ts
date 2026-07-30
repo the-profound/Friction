@@ -169,6 +169,73 @@ router.post("/thoughts", requireAuth, async (req, res) => {
   }
 });
 
+router.patch("/thoughts/:id", requireAuth, async (req, res) => {
+  const userId = req.user!.id;
+  const { id } = req.params;
+  const body = req.body as Record<string, unknown> | null | undefined;
+  const content = body?.content;
+  if (typeof content !== "string" || content.trim() === "") {
+    res.status(400).json({ error: "content must be a non-empty string" });
+    return;
+  }
+
+  const [existing] = await db
+    .select({ id: thoughtsTable.id, authorId: thoughtsTable.authorId })
+    .from(thoughtsTable)
+    .where(and(eq(thoughtsTable.id, id), isNull(thoughtsTable.deletedAt)));
+
+  if (!existing) {
+    res.status(404).json({ error: "Thought not found" });
+    return;
+  }
+  if (existing.authorId !== userId) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  const [updated] = await db
+    .update(thoughtsTable)
+    .set({ content: content.trim(), updatedAt: new Date() })
+    .where(eq(thoughtsTable.id, id))
+    .returning({
+      id: thoughtsTable.id,
+      authorId: thoughtsTable.authorId,
+      content: thoughtsTable.content,
+      createdFrom: thoughtsTable.createdFrom,
+      sourceArticleId: thoughtsTable.sourceArticleId,
+      createdAt: thoughtsTable.createdAt,
+      updatedAt: thoughtsTable.updatedAt,
+    });
+
+  res.json(updated);
+});
+
+router.delete("/thoughts/:id", requireAuth, async (req, res) => {
+  const userId = req.user!.id;
+  const { id } = req.params;
+
+  const [existing] = await db
+    .select({ id: thoughtsTable.id, authorId: thoughtsTable.authorId })
+    .from(thoughtsTable)
+    .where(and(eq(thoughtsTable.id, id), isNull(thoughtsTable.deletedAt)));
+
+  if (!existing) {
+    res.status(404).json({ error: "Thought not found" });
+    return;
+  }
+  if (existing.authorId !== userId) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  await db
+    .update(thoughtsTable)
+    .set({ deletedAt: new Date() })
+    .where(eq(thoughtsTable.id, id));
+
+  res.status(204).send();
+});
+
 function isNoteObject(v: unknown): v is { id: string; content: string } {
   return (
     typeof v === "object" &&

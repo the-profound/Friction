@@ -1217,6 +1217,10 @@ export interface SpellCheckResponse {
   error?: string | null;
 }
 
+export interface UpdateThoughtBody {
+  content: string;
+}
+
 export interface CreateThoughtBody {
   content: string;
   createdFrom: ThoughtCreatedFrom;

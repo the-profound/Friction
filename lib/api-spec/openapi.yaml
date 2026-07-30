@@ -2559,6 +2559,66 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /thoughts/{id}:
+    patch:
+      operationId: updateThought
+      tags: [thoughts]
+      summary: Update a thought's content
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateThoughtBody"
+      responses:
+        "200":
+          description: Updated thought
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Thought"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden — thought does not belong to this user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Thought not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteThought
+      tags: [thoughts]
+      summary: Soft-delete a thought
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "204":
+          description: Deleted
+        "403":
+          description: Forbidden — thought does not belong to this user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Thought not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /thoughts/expand:
     post:
       operationId: expandThoughts
@@ -4516,6 +4576,13 @@ components:
           type: string
           nullable: true
       required: []
+
+    UpdateThoughtBody:
+      type: object
+      properties:
+        content:
+          type: string
+      required: [content]
 
     CreateThoughtBody:
       type: object

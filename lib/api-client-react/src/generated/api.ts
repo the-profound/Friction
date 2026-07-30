@@ -121,6 +121,7 @@ import type {
   UpdateSpaceRoundSlotBody,
   UpdateSpaceScheduledSendBody,
   UpdateTeamCollectionBody,
+  UpdateThoughtBody,
   UpdateUserBody,
   UpsertReadingRecordBody,
   User,
@@ -9758,6 +9759,177 @@ export const useCreateThought = <
   TContext
 > => {
   return useMutation(getCreateThoughtMutationOptions(options));
+};
+
+/**
+ * @summary Update a thought's content
+ */
+export const getUpdateThoughtUrl = (id: string) => {
+  return `/api/thoughts/${id}`;
+};
+
+export const updateThought = async (
+  id: string,
+  updateThoughtBody: UpdateThoughtBody,
+  options?: RequestInit,
+): Promise<Thought> => {
+  return customFetch<Thought>(getUpdateThoughtUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateThoughtBody),
+  });
+};
+
+export const getUpdateThoughtMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateThought>>,
+    TError,
+    { id: string; data: BodyType<UpdateThoughtBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateThought>>,
+  TError,
+  { id: string; data: BodyType<UpdateThoughtBody> },
+  TContext
+> => {
+  const mutationKey = ["updateThought"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateThought>>,
+    { id: string; data: BodyType<UpdateThoughtBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateThought(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateThoughtMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateThought>>
+>;
+export type UpdateThoughtMutationBody = BodyType<UpdateThoughtBody>;
+export type UpdateThoughtMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Update a thought's content
+ */
+export const useUpdateThought = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateThought>>,
+    TError,
+    { id: string; data: BodyType<UpdateThoughtBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateThought>>,
+  TError,
+  { id: string; data: BodyType<UpdateThoughtBody> },
+  TContext
+> => {
+  return useMutation(getUpdateThoughtMutationOptions(options));
+};
+
+/**
+ * @summary Soft-delete a thought
+ */
+export const getDeleteThoughtUrl = (id: string) => {
+  return `/api/thoughts/${id}`;
+};
+
+export const deleteThought = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteThoughtUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteThoughtMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteThought>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteThought>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteThought"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteThought>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteThought(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteThoughtMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteThought>>
+>;
+
+export type DeleteThoughtMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Soft-delete a thought
+ */
+export const useDeleteThought = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteThought>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteThought>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteThoughtMutationOptions(options));
 };
 
 /**
