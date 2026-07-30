@@ -237,3 +237,38 @@ BEFORE `onDismissOverlay` — without it, a new gesture starting mid-settle
 fires onDismissOverlay/prevPage() twice and jumps back two pages; (4) the
 card's own gesture ignores input while `entranceX.value > 0.5` (A entrance
 still animating) so it can't fight the entrance timing on the same values.
+
+**Backward remap 1-frame flash: shared slot SVs are stale for the remap commit.**
+When a backward commit finishes and visualPage decrements, slots remap roles but
+the three shared slot values still hold their end-of-animation numbers until the
+slot-reset useLayoutEffect writes land — the page inheriting the "current" role
+can paint one frame at the old off-screen value, and the freshly-mounted new
+"prev" WebView mounts while prevSlotSV is still 0 (center), covering the page.
+Fix pair: (1) in the backward-carousel commit's withTiming completion (UI thread),
+re-park currentSlotSV to 0 while it's invisible (fully off-screen and covered by
+the opaque prev layer) so the remap inherits a correct value; (2) defer mounting
+the new prev slot's content by one React commit (deferPrevMount state, reset in a
+useEffect) so it only mounts after the layout effect parked prevSlotSV.
+
+**Keyed child moving between slots swaps its animated style → 1-frame center flash**
+
+When a slot-based pager keys children by page index, a commit/remap moves the
+same keyed `Animated.View` from one slot to another (e.g. current → next). Its
+`useAnimatedStyle` object identity changes with it. Reanimated detaches the old
+style and attaches the new one, and for one frame the view falls back to its
+static style — no transform — so it paints at translateX 0 (screen centre) even
+though both the old and new slot values are off-screen.
+
+Symptom: a section that should be parked off-screen "ghosts" at centre for a
+single frame right as a slide animation completes.
+
+**Why:** the glitch is in the style attach/detach, not in the shared values, so
+pre-setting or reordering slot SVs cannot fix it. Reordering the withTiming
+completion callbacks addresses a *different* race and will not remove this one.
+
+**How to apply:** gate the offending section with a dedicated opacity shared
+value that is independent of slot position. Close the gate on the UI thread
+inside the completion callback that runs *before* the React remap, and set its
+resting value in the same layout effect that parks the slots. Open it again at
+the first frame of any gesture/programmatic transition that brings the section
+back on screen.

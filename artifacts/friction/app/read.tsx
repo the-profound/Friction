@@ -232,6 +232,14 @@ export default function ReadScreen() {
   // completeScreenVisible: true = 읽기 완료 화면이 슬롯으로 열려 있음
   // (visualPage 계산보다 먼저 선언해야 참조 오류가 생기지 않는다)
   const [completeScreenVisible, setCompleteScreenVisible] = useState(false);
+  // Backward 커밋 직후 1커밋 동안 새 prev 슬롯 콘텐츠 마운트를 지연한다.
+  // 리매핑 시점에 prevSlotSV가 아직 0(중앙)인 채로 새 WebView가 마운트되면
+  // 한 프레임 동안 현재 페이지를 덮어 번쩍임이 생기기 때문 — layout effect가
+  // prevSlotSV를 파킹한 뒤(다음 커밋)에 콘텐츠를 마운트한다.
+  const [deferPrevMount, setDeferPrevMount] = useState(false);
+  useEffect(() => {
+    if (deferPrevMount) setDeferPrevMount(false);
+  }, [deferPrevMount]);
   const [readingCompleteCaseType, setReadingCompleteCaseType] = useState<"answered" | "read">("read");
   // 단일 페이저: letter pages [0..totalPages-1], Q카드 [totalPages], 완독화면 [totalPages+1]
   const visualPage = completeScreenVisible ? totalPages + 1 : currentPage;
@@ -865,6 +873,16 @@ export default function ReadScreen() {
   // isCarouselBackwardSV: true when the CURRENT page is Q-card or complete (visualPage >= totalPages)
   const isCarouselForwardSV = useSharedValue(0);
   const isCarouselBackwardSV = useSharedValue(0);
+  // qCardOpacitySV — Q-카드 "유령" 방지 게이트.
+  // 슬롯 리매핑 시 Q-카드의 Animated.View는 key를 유지한 채 current 슬롯 →
+  // next 슬롯으로 이동하는데, 이때 애니메이티드 스타일 객체 자체가
+  // currentSlotAnimStyle → nextSlotAnimStyle 로 교체된다. Reanimated가 이전
+  // 스타일을 detach하고 새 스타일을 attach하는 한 프레임 동안 transform이
+  // 비어 translateX=0(화면 중앙)으로 그려지며, 편지 페이지 뒤로 Q-카드가
+  // 순간 보인다. 슬롯 위치와 무관하게 opacity로 확실히 차단한다.
+  // 1 = Q-카드 섹션이 화면에 관여함(질문카드/완독화면 or 전진 드래그 중)
+  // 0 = 편지 페이지에 머무는 중 (Q-카드는 어차피 화면 밖에 주차되어 있음)
+  const qCardOpacitySV = useSharedValue(0);
 
   // Tracks which direction the active swipe is going (JS-thread safe, runOnJS:true).
   const activeSwipeRef = useRef<'forward' | 'backward' | null>(null);
@@ -906,6 +924,10 @@ export default function ReadScreen() {
     // Tilt mode: next sits behind current at 0 (overlay reveal).
     // Carousel mode: next parked at +(W + GAP), slides in from the right.
     nextSlotSV.value = isCarouselFwd ? layout.containerWidth + CAROUSEL_GAP : 0;
+    // Q-카드 게이트: Q-카드(totalPages)/완독화면(totalPages+1) 구간에서만 보인다.
+    // 편지 페이지로 되돌아온 순간 0이 되므로, 스타일 교체 프레임에 중앙으로
+    // 잘못 그려지더라도 화면에는 나타나지 않는다.
+    qCardOpacitySV.value = isCarouselBwd ? 1 : 0;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visualPage, totalPages, layout.containerWidth]);
 
@@ -945,6 +967,10 @@ export default function ReadScreen() {
   });
   const nextSlotAnimStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: nextSlotSV.value }],
+  }));
+  // Q-카드 전용 가시성 게이트 (위 qCardOpacitySV 주석 참조)
+  const qCardGateStyle = useAnimatedStyle(() => ({
+    opacity: qCardOpacitySV.value,
   }));
   // Shadow for current: 0 at rest (tilt mode), 1 always (carousel mode)
   const currentShadowStyle = useAnimatedStyle(() => {
@@ -1037,7 +1063,8 @@ export default function ReadScreen() {
           handleSwipeLeftRef.current();
         }
       } else {
-        // Backward
+        // Backward: 리매핑 커밋에서 새 prev 콘텐츠 마운트를 1커밋 지연 (번쩍임 방지)
+        setDeferPrevMount(true);
         const vp = visualPageRef.current;
         const tp = totalPagesRef.current;
         if (vp === tp + 1) {
@@ -1065,6 +1092,8 @@ export default function ReadScreen() {
       const W = containerWidthRef.current || 300;
       isCommittingRef.current = true;
       const easing = Easing.bezier(0.25, 0.46, 0.45, 0.94);
+      // 프로그래매틱 전진: Q-카드가 우측에서 들어오므로 게이트 오픈
+      qCardOpacitySV.value = 1;
       // Same displacement (W+GAP) for both slots ⇒ constant carousel gap.
       nextSlotSV.value = withTiming(0, { duration: 320, easing });
       currentSlotSV.value = withTiming(-(W + CAROUSEL_GAP), { duration: 320, easing }, () => {
@@ -1131,7 +1160,11 @@ export default function ReadScreen() {
         // Carousel only: next slides in from right simultaneously, keeping a
         // constant CAROUSEL_GAP from current (both displace by exactly dx).
         // Tilt/overlay: next stays behind current at 0 — revealed as current moves away.
-        if (gs.isCarouselForward) nextSlotSV.value = W + CAROUSEL_GAP + dx;
+        if (gs.isCarouselForward) {
+          // 전진 드래그로 Q-카드가 우측에서 들어오기 시작 → 게이트 오픈
+          qCardOpacitySV.value = 1;
+          nextSlotSV.value = W + CAROUSEL_GAP + dx;
+        }
       } else if (dx > 0) {
         activeSwipeRef.current = 'backward';
         if (gs.isCarouselBackward) {
@@ -1242,9 +1275,26 @@ export default function ReadScreen() {
         // Tilt: current stays at 0 — prev slides on top.
         if (gs.isCarouselBackward) {
           currentSlotSV.value = withTiming(W + CAROUSEL_GAP, { duration: 240, easing: SLIDE_EASING });
+          // ⚠️ currentSlotSV 콜백에서 직접 0으로 리셋하지 않는다.
+          // 두 withTiming이 "같은 240ms"여도 currentSlotSV 콜백이 먼저 실행되는 경우
+          // prevSlotSV가 아직 0에 도달하지 못한 상태에서 Q-카드가 중앙(0)으로 스냅돼
+          // 잠깐 노출되는 유령 현상이 발생한다.
+          // 대신 prevSlotSV 콜백(편지 페이지가 완전히 중앙에 도달한 시점)에서 리셋한다.
         }
-        prevSlotSV.value = withTiming(0, { duration: 240, easing: SLIDE_EASING },
-          () => { runOnJS(finishPageTurnRef.current)(direction); });
+        const isCarouselBwd = gs.isCarouselBackward;
+        // 편지 페이지로 되돌아가는 커밋이면(Q-카드 → 마지막 편지 페이지),
+        // 리매핑이 일어나기 전에 UI 스레드에서 미리 Q-카드를 감춘다.
+        const hidesQCard = isCarouselBwd && visualPageRef.current === totalPagesRef.current;
+        prevSlotSV.value = withTiming(0, { duration: 240, easing: SLIDE_EASING }, () => {
+          // 편지 페이지(top layer)가 중앙에 완전히 도달한 뒤에 currentSlotSV를 0으로 리셋.
+          // 이 순서를 지키면 Q-카드가 편지 페이지 아래에 가려진 채로 스냅되므로
+          // 유령처럼 순간 보이는 현상이 사라진다.
+          if (isCarouselBwd) currentSlotSV.value = 0;
+          // 리매핑(스타일 교체) 전에 게이트를 닫아 두면, detach/attach 프레임에
+          // Q-카드가 중앙으로 그려지더라도 투명해서 보이지 않는다.
+          if (hidesQCard) qCardOpacitySV.value = 0;
+          runOnJS(finishPageTurnRef.current)(direction);
+        });
       }
     })
     .onFinalize(() => {
@@ -1670,10 +1720,10 @@ export default function ReadScreen() {
                         // (the scale-transform container above has no overflow:hidden, so this works)
                         shadowColor: "#000",
                         shadowOffset: { width: 0, height: 3 },
-                        shadowOpacity: 0.12,
-                        shadowRadius: 10,
+                        shadowOpacity: 0.15,
+                        shadowRadius: 12,
                         // Android
-                        elevation: 6,
+                        elevation: 5,
                       };
                       // Inner wrapper clips text/WebView content to card bounds.
                       // overflow:"hidden" 제거 — slotContent가 WebView와 정확히
@@ -1691,15 +1741,19 @@ export default function ReadScreen() {
                       // 완독화면 [totalPages+1]. visualPage가 슬롯 인덱스로 쓰인다.
                       const makeNode = (pageIdx: number): React.ReactNode => {
                         if (pageIdx === totalPages) {
-                          // Q-card 슬롯 — 제스처로 왼쪽 스와이프하면 완독화면으로 이동
+                          // Q-card 슬롯 — 제스처로 왼쪽 스와이프하면 완독화면으로 이동.
+                          // qCardGateStyle: 슬롯 리매핑 중 스타일 detach/attach 프레임에
+                          // 중앙으로 잘못 그려지는 "유령" 노출을 opacity로 차단한다.
                           return (
-                            <QuestionCardCurl
-                              ref={questionCardRef}
-                              questions={questionCardQuestions}
-                              containerWidth={layout.containerWidth}
-                              containerHeight={layout.containerHeight}
-                              keyboardVisibleRef={keyboardVisibleRef}
-                            />
+                            <Animated.View style={[StyleSheet.absoluteFill, qCardGateStyle]}>
+                              <QuestionCardCurl
+                                ref={questionCardRef}
+                                questions={questionCardQuestions}
+                                containerWidth={layout.containerWidth}
+                                containerHeight={layout.containerHeight}
+                                keyboardVisibleRef={keyboardVisibleRef}
+                              />
+                            </Animated.View>
                           );
                         }
                         if (pageIdx === totalPages + 1) {
@@ -1762,7 +1816,9 @@ export default function ReadScreen() {
 
                       const nextNode = makeNode(nextPageIdx);
                       const currentNode = makeNode(currentPageIdx);
-                      const prevNode = makeNode(prevPageIdx);
+                      // Backward 리매핑 직후 1커밋 동안 prev 콘텐츠 마운트 지연
+                      // (prevSlotSV가 파킹되기 전 새 WebView가 중앙에 그려지는 것 방지)
+                      const prevNode = deferPrevMount ? null : makeNode(prevPageIdx);
 
                       // Letter pages (idx 0..totalPages-1) get the card shadow.
                       // Q-card (totalPages) and complete screen (totalPages+1) do not —
@@ -1794,7 +1850,7 @@ export default function ReadScreen() {
                               Carousel: slides in simultaneously with current exiting right. */}
                           {prevPageIdx !== currentPageIdx && (
                             <Animated.View key={`page-${prevPageIdx}`} style={[slotBase, prevSlotAnimStyle]}>
-                              {isLetterPageIdx(prevPageIdx) && <Animated.View style={[shadowLayer, prevShadowStyle]} />}
+                              {!deferPrevMount && isLetterPageIdx(prevPageIdx) && <Animated.View style={[shadowLayer, prevShadowStyle]} />}
                               {prevNode != null && <View style={slotContent}>{prevNode}</View>}
                             </Animated.View>
                           )}
