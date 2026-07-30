@@ -48,10 +48,8 @@ echo ""
 $EAS submit \
   --platform ios \
   --latest \
-  --non-interactive \
-  --apple-api-key /tmp/asc_api_key.p8 \
-  --apple-api-key-id "$APP_STORE_CONNECT_KEY_ID" \
-  --apple-api-key-issuer-id "$APP_STORE_CONNECT_ISSUER_ID"
+  --profile production \
+  --non-interactive
 
 rm -f /tmp/asc_api_key.p8
 echo ""
