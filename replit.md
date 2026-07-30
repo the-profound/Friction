@@ -18,6 +18,10 @@ The project is structured to ensure maintainability, scalability, and developer 
 4. **DB 규칙 준수** — Replit 내장 DB(database skill, Replit PostgreSQL)는 절대 사용하지 않는다. 모든 DB 작업은 `SUPABASE_DB_URL` 환경변수를 통해 Supabase에만 연결한다.
 5. **기존 컴포넌트 우선 활용** — 새 UI 요소를 만들기 전에 `artifacts/friction/components/`의 공용 컴포넌트(`BottomSheet`, `ConfirmModal`, `SubmitButton`, `ProgressIndicator`, `ArticleCardItem`, `ArticleListItem`, `CoverPreview`, `CoverEditor`, `WebViewMarkdownEditor` 등)를 먼저 확인하고, 재사용 가능한 컴포넌트가 있으면 새로 만들지 않고 기존 것을 활용한다.
 
+### Plan Agent 커뮤니케이션
+
+**계획 설명은 항상 한국어로** — Plan Agent가 태스크를 제안한 뒤 사용자에게 내용을 설명할 때는 쉬운 한국어로 요약해서 전달한다. 기술 용어는 필요한 경우에만 쓰되, 무엇을 왜 바꾸는지 / 완료 후 어떻게 달라지는지를 중심으로 설명한다.
+
 # Developer Setup
 
 ### 개발 데이터 세팅 (최초 1회)
