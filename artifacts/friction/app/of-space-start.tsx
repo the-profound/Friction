@@ -28,6 +28,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
+import { LetterPickerSheet } from "@/components/shared/LetterPickerSheet";
 import { useUser } from "@/contexts/UserContext";
 import {
   useGetSpaceJoinContext,
@@ -980,6 +981,7 @@ function OpeningLetterStep({
   isLoading,
   isArticlesLoading,
   isArticlesError,
+  onRefetchArticles,
   openingLetterExists,
   openingScheduledSend,
   startDate,
@@ -993,6 +995,7 @@ function OpeningLetterStep({
   isLoading: boolean;
   isArticlesLoading: boolean;
   isArticlesError: boolean;
+  onRefetchArticles: () => void;
   openingLetterExists: boolean;
   openingScheduledSend: { scheduledAt: string; articleTitle?: string | null } | null;
   startDate: Date;
@@ -1014,6 +1017,7 @@ function OpeningLetterStep({
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   // Show article list when: no letter registered yet, OR letter exists but has no active pending send
   const [showArticleList, setShowArticleList] = useState(() => !openingLetterExists || openingScheduledSend === null);
+  const [pickerVisible, setPickerVisible] = useState(false);
 
   const minSendDate = useMemo(() => {
     const now = new Date();
@@ -1126,50 +1130,27 @@ function OpeningLetterStep({
       {showArticleList ? (
         <View style={olStyles.section}>
           <Text style={olStyles.sectionTitle}>보낼 편지 선택</Text>
-          {isLoading || isArticlesLoading ? (
-            <View style={olStyles.loadingBox}>
-              <ActivityIndicator size="small" color={Colors.zinc400} />
-            </View>
-          ) : isArticlesError ? (
-            <View style={olStyles.loadingBox}>
-              <Text style={olStyles.errorText}>글 목록을 불러오지 못했어요.</Text>
-            </View>
-          ) : articles.length === 0 ? (
-            <View style={olStyles.loadingBox}>
-              <Text style={olStyles.errorText}>발송 가능한 글이 없어요.</Text>
-            </View>
-          ) : (
-            <View style={olStyles.articleList}>
-              {articles.map(article => {
-                const isSelected = selectedArticleId === article.id;
-                return (
-                  <ScalePressable
-                    key={article.id}
-                    contentStyle={[olStyles.articleItem, isSelected && olStyles.articleItemSelected]}
-                    onPress={() => setSelectedArticleId(isSelected ? null : article.id)}
-                  >
-                    <Feather
-                      name={isSelected ? "check-circle" : "circle"}
-                      size={16}
-                      color={isSelected ? Colors.zinc900 : Colors.zinc300}
-                    />
-                    <Text style={[olStyles.articleItemText, isSelected && olStyles.articleItemTextSelected]} numberOfLines={1}>
-                      {article.title ?? "제목 없음"}
-                    </Text>
-                  </ScalePressable>
-                );
-              })}
-            </View>
-          )}
+          <ScalePressable
+            contentStyle={olStyles.articleSelectBtn}
+            onPress={() => setPickerVisible(true)}
+          >
+            <Feather
+              name="file-text"
+              size={16}
+              color={selectedArticleId ? Colors.zinc800 : Colors.zinc400}
+            />
+            <Text
+              style={[olStyles.articleSelectBtnText, selectedArticleId && olStyles.articleSelectBtnTextActive]}
+              numberOfLines={1}
+            >
+              {selectedTitle ?? "선택된 편지 없음"}
+            </Text>
+            <Feather name="chevron-right" size={16} color={Colors.zinc400} />
+          </ScalePressable>
 
           {/* 선택된 글 — 발송일 선택 */}
           {selectedArticleId && (
             <View style={olStyles.sendDateSection}>
-              <View style={olStyles.selectedArticleTag}>
-                <Feather name="file-text" size={14} color={Colors.zinc700} />
-                <Text style={olStyles.selectedArticleTagTitle} numberOfLines={1}>{selectedTitle ?? "제목 없음"}</Text>
-              </View>
-
               <Text style={olStyles.sendDateLabel}>발송 예정일 (06:00 발송)</Text>
               <ScalePressable
                 contentStyle={olStyles.sendDateBtn}
@@ -1251,6 +1232,17 @@ function OpeningLetterStep({
           </Text>
         </View>
       )}
+
+      <LetterPickerSheet
+        visible={pickerVisible}
+        onClose={() => setPickerVisible(false)}
+        articles={articles}
+        isLoading={isLoading || isArticlesLoading}
+        isError={isArticlesError}
+        onRefetch={onRefetchArticles}
+        selectedId={selectedArticleId}
+        onSelect={(article) => setSelectedArticleId(article.id)}
+      />
     </View>
   );
 }
@@ -1862,6 +1854,7 @@ export default function SpaceStartScreen() {
           isLoading={lettersQuery.isLoading}
           isArticlesLoading={articlesQuery.isLoading}
           isArticlesError={articlesQuery.isError}
+          onRefetchArticles={() => articlesQuery.refetch()}
           openingLetterExists={openingLetterExists}
           openingScheduledSend={openingScheduledSend}
           startDate={startDate}
@@ -2593,61 +2586,30 @@ const olStyles = StyleSheet.create({
     fontSize: 15,
     color: Colors.zinc900,
   },
-  loadingBox: {
-    paddingVertical: 20,
-    alignItems: "center",
-  },
-  errorText: {
-    ...Typography.body,
-    fontSize: 14,
-    color: Colors.zinc400,
-  },
-  articleList: {
-    gap: 6,
-  },
-  articleItem: {
+  articleSelectBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
     paddingVertical: 12,
     paddingHorizontal: 14,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.zinc200,
     backgroundColor: Colors.zinc50,
   },
-  articleItemSelected: {
-    borderColor: Colors.zinc900,
-    backgroundColor: Colors.white,
-  },
-  articleItemText: {
+  articleSelectBtnText: {
     ...Typography.body,
-    fontSize: 14,
-    color: Colors.zinc600,
+    fontSize: 15,
+    color: Colors.zinc400,
     flex: 1,
   },
-  articleItemTextSelected: {
-    color: Colors.zinc900,
+  articleSelectBtnTextActive: {
+    color: Colors.zinc800,
     fontWeight: "600",
   },
   sendDateSection: {
     gap: 8,
     paddingTop: 4,
-  },
-  selectedArticleTag: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: Colors.zinc100,
-  },
-  selectedArticleTagTitle: {
-    ...Typography.bodySemiBold,
-    fontSize: 13,
-    color: Colors.zinc800,
-    flex: 1,
   },
   sendDateLabel: {
     ...Typography.caption,
