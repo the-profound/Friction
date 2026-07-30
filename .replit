@@ -26,6 +26,10 @@ author = "agent"
 task = "workflow.run"
 args = "Publish iOS (App Store)"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Submit iOS (App Store)"
+
 [[workflows.workflow]]
 name = "Publish iOS (App Store)"
 author = "agent"
@@ -36,6 +40,17 @@ outputType = "console"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash /home/runner/workspace/artifacts/friction/scripts/publish-ios.sh"
+
+[[workflows.workflow]]
+name = "Submit iOS (App Store)"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash /home/runner/workspace/artifacts/friction/scripts/submit-ios.sh"
+
+[workflows.workflow.metadata]
+outputType = "console"
 
 [agent]
 stack = "PNPM_WORKSPACE"
