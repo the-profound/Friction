@@ -274,7 +274,7 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
   },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: OVERLAY_BG,
   },
   loading: {

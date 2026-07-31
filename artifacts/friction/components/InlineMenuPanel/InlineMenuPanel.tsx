@@ -176,7 +176,7 @@ export default function InlineMenuPanel({
 
 const styles = StyleSheet.create({
   root: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     // 메모 시트(zIndex 51)·툴바(zIndex 52)보다 아래에 깔리지 않도록
     // 시트보다 높은 zIndex를 부여한다. 툴바는 패널 위에 계속 보여야 하므로
     // 툴바(52)보다는 낮게 둔다 — 패널은 화면 하단, 툴바는 그 위 영역이라

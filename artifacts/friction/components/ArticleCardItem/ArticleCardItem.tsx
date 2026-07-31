@@ -172,7 +172,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   imageOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0,0,0,0.25)",
   },
   solidBackground: {

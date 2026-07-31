@@ -76,7 +76,7 @@ function ToastItem({
 
 const styles = StyleSheet.create({
   root: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: ZIndex.toast,
     pointerEvents: "box-none",
   },

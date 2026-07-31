@@ -57,11 +57,11 @@ export default function PillButton({
 
   return (
     <ScalePressable
-      style={[
+      style={(state) => [
         styles.pill,
         { height },
         variantPillStyles[variant],
-        style,
+        typeof style === "function" ? style(state) : style,
       ]}
       contentStyle={[
         styles.pillContent,

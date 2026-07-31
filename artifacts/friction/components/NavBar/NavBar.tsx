@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   layerAbsolute: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-evenly",

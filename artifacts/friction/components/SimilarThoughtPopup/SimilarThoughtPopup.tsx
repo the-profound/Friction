@@ -9,7 +9,7 @@ import {
   Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useGetSimilarThoughts } from "@workspace/api-client-react";
+import { useGetSimilarThoughts, getGetSimilarThoughtsQueryKey } from "@workspace/api-client-react";
 import { Colors, Typography, Spacing } from "../../constants/tokens";
 import HighlightedText from "../HighlightedText/HighlightedText";
 import type { ThoughtCreatedFrom } from "@workspace/api-client-react";
@@ -48,7 +48,12 @@ export default function SimilarThoughtPopup({
   const { data: similar, isLoading } = useGetSimilarThoughts(
     thoughtId ?? "",
     { limit: 15 },
-    { query: { enabled: visible && thoughtId !== null } }
+    {
+      query: {
+        enabled: visible && thoughtId !== null,
+        queryKey: getGetSimilarThoughtsQueryKey(thoughtId ?? "", { limit: 15 }),
+      },
+    }
   );
 
   useEffect(() => {
@@ -160,7 +165,7 @@ export default function SimilarThoughtPopup({
 
 const styles = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0,0,0,0.45)",
     justifyContent: "flex-end",
     alignItems: "center",

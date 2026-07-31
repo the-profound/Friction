@@ -230,6 +230,7 @@ export default function SpacesScreen() {
 
   const spacesQuery = useListSpaces({ userId }, {
     query: {
+      queryKey: getListSpacesQueryKey({ userId }),
       staleTime: 30_000,
       placeholderData: keepPreviousData,
     },

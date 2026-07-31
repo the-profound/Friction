@@ -51,7 +51,7 @@ export function ReaderTransitionProvider({ children }: { children: React.ReactNo
     <ReaderTransitionContext.Provider value={{ startFadeToBlack }}>
       {children}
       <Animated.View
-        style={[StyleSheet.absoluteFillObject, styles.overlay, overlayStyle]}
+        style={[StyleSheet.absoluteFill, styles.overlay, overlayStyle]}
         pointerEvents="none"
       />
     </ReaderTransitionContext.Provider>

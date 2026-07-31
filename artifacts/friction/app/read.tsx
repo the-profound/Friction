@@ -1910,7 +1910,7 @@ export default function ReadScreen() {
       {/* thoughtsCloseHandleRef.current → 시트 내부 doClose(슬라이드+스프링 후 onClose) */}
       {isThoughtsOpen && (
         <Pressable
-          style={StyleSheet.absoluteFillObject}
+          style={StyleSheet.absoluteFill}
           onPress={() => thoughtsCloseHandleRef.current?.()}
         />
       )}

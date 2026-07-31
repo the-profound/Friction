@@ -942,7 +942,7 @@ export default function CardSelectOverlay({
 
       {/* Full-screen fade-to-black overlay inside the Modal so it renders above all Modal content */}
       <RAnimated.View
-        style={[StyleSheet.absoluteFillObject, styles.readFadeOverlay, fadeOverlayStyle]}
+        style={[StyleSheet.absoluteFill, styles.readFadeOverlay, fadeOverlayStyle]}
         pointerEvents="none"
       />
     </Modal>

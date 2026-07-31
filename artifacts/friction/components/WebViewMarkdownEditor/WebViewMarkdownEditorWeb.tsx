@@ -159,6 +159,16 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
           editor.commands.blur();
         }
       },
+      undo() {
+        if (editor && !editor.isDestroyed) {
+          editor.chain().focus().undo().run();
+        }
+      },
+      redo() {
+        if (editor && !editor.isDestroyed) {
+          editor.chain().focus().redo().run();
+        }
+      },
       setOverflowRanges(_ranges) {
       },
       setOverflowProbeConfig(_availableContentHeightPx, _autoSplit) {

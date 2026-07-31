@@ -222,7 +222,7 @@ const MemoWebEditor = forwardRef<MemoWebEditorRef, MemoWebEditorProps>(
             pointerEvents="none"
             style={[
               styles.card,
-              StyleSheet.absoluteFillObject,
+              StyleSheet.absoluteFill,
               { width: containerWidth, height: containerHeight, backgroundColor: MEMO_BG },
             ]}
           >
@@ -296,7 +296,7 @@ const MemoWebEditor = forwardRef<MemoWebEditorRef, MemoWebEditorProps>(
             <View
               pointerEvents="none"
               style={[
-                StyleSheet.absoluteFillObject,
+                StyleSheet.absoluteFill,
                 styles.editorWrap,
                 {
                   top: hintRowH,

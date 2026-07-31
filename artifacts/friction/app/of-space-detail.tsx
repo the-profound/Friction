@@ -1073,7 +1073,7 @@ export default function SpaceDetailScreen() {
     !!(effectiveMax != null && space.participantCount >= effectiveMax);
 
   // Capacity-full flag: participant cap reached (independent of status).
-  const isCapacityFull = !!(effectiveMax != null && space.participantCount >= effectiveMax);
+  const isCapacityFull = !!(effectiveMax != null && (space?.participantCount ?? 0) >= effectiveMax);
 
   const codeRequestsQuery = useListSpaceCodeRequests(
     id,

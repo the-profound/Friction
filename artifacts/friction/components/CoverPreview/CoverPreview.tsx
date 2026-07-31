@@ -113,7 +113,7 @@ const styles = StyleSheet.create({
     aspectRatio: 4 / 5,
   },
   imageOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0,0,0,0.25)",
   },
   overlay: {

@@ -28,6 +28,7 @@ import {
   getListSpaceRoundsQueryKey,
   getListSpaceLettersQueryKey,
   getListSpaceRoundSlotsQueryKey,
+  getListSpaceMembersQueryKey,
 } from "@workspace/api-client-react";
 import type { SpaceRound, SpaceLetter, SpaceRoundSlotWithUser, SpaceMember } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -106,7 +107,10 @@ function RoundEditSheet({
 
   const needsMembers = isUpcoming && (showAddSlot || editingSlotId !== null);
   const membersQuery = useListSpaceMembers(round.spaceId, {
-    query: { enabled: needsMembers },
+    query: {
+      enabled: needsMembers,
+      queryKey: getListSpaceMembersQueryKey(round.spaceId),
+    },
   });
   const members = (membersQuery.data ?? []) as SpaceMember[];
 
@@ -874,12 +878,12 @@ const styles = StyleSheet.create({
 
 const editStyles = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: "flex-end",
     zIndex: 100,
   },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0,0,0,0.4)",
   },
   sheet: {
