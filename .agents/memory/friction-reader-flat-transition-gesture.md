@@ -52,5 +52,24 @@ app rather than inventing new constants, so the "swipe feel" stays consistent ap
 ## Carousel constant-gap rule
 Carousel slots must be displacement-consistent: onUpdate formulas must equal the parked value at dx=0 (`park + dx`), and commit/snap targets must move both slots by identical displacements with the same duration/easing. Any formula like `dx - W` while parked at `-(W+EXTRA)` makes the parked card jump EXTRA px into view on the first jitter frame (visible flash). A constant inter-slot gap (CAROUSEL_GAP) held through drag+commit keeps sections visually separated at every instant.
 
+## Gesture-cancel guards must be scoped to "before the swipe started"
+
+The reader page sits on top of a WebView. If the finger pauses mid-drag, the WebView decides it
+is a long press and emits text-selection / drag-start messages, which flip the RN-side
+`isTextSelecting` / `isDragging` refs **in the middle of an active pan**. Any guard in
+`onUpdate` that bails unconditionally on those refs makes the card stop following the finger and
+freeze in place — it does not snap back, it just sticks, which reads as a "stuck/laggy swipe" bug.
+
+**Rule:** cancel-guards that exist to *prevent a swipe from starting* (text selection, inner
+drag, axis-lock/`dy` checks) must be gated on the "no swipe yet" condition (`!activeSwipeRef.current`),
+not applied unconditionally. Only guards about a genuinely conflicting **animation already running**
+(`isCommitting`) or a **different surface owning the screen** (`isThoughtsOpen`) stay unconditional.
+
+Apply the same scoping in `onEnd`: if an active swipe is cancelled there just because selection
+turned on mid-drag, a drag that passed the distance/velocity threshold still snaps back.
+
+**Why:** once the finger is down and tracking, the user expects the card to follow until release;
+mid-gesture state changes from a child WebView should never revoke an already-granted swipe.
+
 ## Resting shadow ownership
 The pager card's resting shadow must be owned by the CURRENT slot ({opacity:1} constant), not by a neighbor slot parked behind. Relying on the next slot's shadow at rest broke on the cover page (no shadow until first flip). Next slot's shadow fades in with the current card's exit progress (-currentSlotSV/W) in tilt mode, constant 1 in carousel mode — totals stay ~1 in overlap regions, so no double-shadow and no pop at commit remap.

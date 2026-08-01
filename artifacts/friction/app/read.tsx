@@ -43,6 +43,7 @@ import {
   Colors,
   Spacing,
   ReaderTokens,
+  Shadows,
   readerFontSize,
   readerLetterSpacing,
 } from "@/constants/tokens";
@@ -1142,7 +1143,14 @@ export default function ReadScreen() {
     })
     .onUpdate((e) => {
       if (isThoughtsOpenRef.current) return;
-      if (isDraggingRef.current || isTextSelectingRef.current || isCommittingRef.current) return;
+      if (isCommittingRef.current) return;
+      // 드래그 도중 손가락을 잠깐 멈추면 WebView가 롱프레스로 판단해 텍스트 선택
+      // (onTextSelect) 또는 onDragStart를 올린다. 그때 여기서 무조건 return 하면
+      // 카드가 손가락을 놓친 채 그 자리에 얼어붙는다("틱 걸림").
+      // 이미 스와이프가 시작된 뒤라면(activeSwipeRef 존재) 손가락을 뗄 때까지
+      // 계속 따라오도록, 이 가드는 "스와이프 시작 전"에만 적용한다.
+      // (바로 아래 dy 가드가 쓰는 것과 동일한 규칙)
+      if (!activeSwipeRef.current && (isDraggingRef.current || isTextSelectingRef.current)) return;
       const gs = gestureState.current;
 
       const dx = e.translationX;
@@ -1203,9 +1211,12 @@ export default function ReadScreen() {
         activeSwipeRef.current = null;
       };
 
-      if (isDraggingRef.current || isTextSelectingRef.current) {
-        if (activeSwipeRef.current === 'forward') snapForward();
-        else snapBackward();
+      // onUpdate와 동일 규칙 — 스와이프가 시작되기 "전"에 텍스트 선택/드래그가
+      // 잡힌 경우에만 취소한다. 이미 손가락을 따라오던 스와이프는 아래 정상
+      // 커밋 로직으로 넘겨 거리/속도 판정을 그대로 받게 한다. (그렇지 않으면
+      // 드래그 중 멈칫해서 선택이 켜졌을 때 충분히 끌었어도 항상 스냅백된다.)
+      if (!activeSwipeRef.current && (isDraggingRef.current || isTextSelectingRef.current)) {
+        snapBackward();
         return;
       }
 
@@ -1717,16 +1728,10 @@ export default function ReadScreen() {
                         width: W,
                         height: H,
                         backgroundColor: ReaderTokens.bodyBg,
-                        // Web
-                        boxShadow: "0px 2px 10px rgba(0,0,0,0.13), 0px 8px 24px rgba(0,0,0,0.09)",
-                        // iOS native — must NOT be on a view with overflow:hidden ancestor
-                        // (the scale-transform container above has no overflow:hidden, so this works)
-                        shadowColor: "#000",
-                        shadowOffset: { width: 0, height: 3 },
-                        shadowOpacity: 0.15,
-                        shadowRadius: 12,
-                        // Android
-                        elevation: 5,
+                        // iOS/Android/Web shadow from token — Platform.select ensures each
+                        // platform gets only its own props (boxShadow on web, native shadow
+                        // props on iOS, elevation on Android).
+                        ...Shadows.previewPage,
                       };
                       // Inner wrapper clips text/WebView content to card bounds.
                       // overflow:"hidden" 제거 — slotContent가 WebView와 정확히

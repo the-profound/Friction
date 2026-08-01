@@ -219,10 +219,13 @@ export const Shadows = {
       shadowColor: "#000",
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.12,
-      shadowRadius: 8,
+      shadowRadius: 10,
     },
     android: {
-      elevation: 4,
+      elevation: 5,
+    },
+    web: {
+      boxShadow: "0px 2px 12px rgba(0,0,0,0.09), 0px 8px 28px rgba(0,0,0,0.06)",
     },
     default: {},
   }),
