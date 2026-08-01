@@ -472,34 +472,34 @@ export default function ThoughtsBottomSheet({
       // "full"로 설정하면 키보드 열릴 때 65% 분기가 동작하지 않음
       snapStageRef.current = "mid";
       prevSnapStageRef.current = null;
-      outerHeightAnim.setValue(defaultPanelHeight);
-      inputPadAnim.setValue(restPadRef.current);
-      slideAnim.setValue(defaultPanelHeight);
-      cardSheetHAnimRef.current?.setValue(0);
-      const springBase = { damping: 28, stiffness: 220 };
-      const animations: Animated.CompositeAnimation[] = [
-        Animated.spring(slideAnim, { toValue: 0, ...springBase, useNativeDriver: true }),
-      ];
-      if (cardSheetHAnimRef.current) {
-        animations.push(Animated.spring(cardSheetHAnimRef.current, { toValue: defaultPanelHeight, ...springBase, useNativeDriver: false }));
-      }
-      Animated.parallel(animations).start();
 
-      // 롱프레스 → 메모 경로: 텍스트 선택 중 키보드가 이미 올라와 있으면
-      // keyboardWillShow가 다시 발화되지 않으므로, 여기서 65% 확장 애니메이션을 직접 실행한다.
+      // ⚠️ stopTogether 충돌 방지:
+      //   과거에는 cardSheetHAnim spring을 포함한 parallel 그룹과,
+      //   키보드 분기의 cardSheetHAnim timing을 같은 tick에서 start()했다.
+      //   timing이 시작되는 순간 stopTogether:true(기본값)에 의해 첫 그룹 전체가
+      //   강제 종료되고, slideAnim spring도 함께 중단돼 시트가 슬라이드인되지 않았다.
+      //
+      //   Fix: 애니메이션 시작 전에 키보드 상태를 먼저 평가해
+      //   outerHeightAnim·inputPadAnim·cardSheetHAnim 세 값을 setValue로 즉시 세팅하고,
+      //   slideAnim spring만 단독으로 실행한다. parallel 그룹 자체가 없으므로 충돌 불가.
       if (keyboardVisibleRef.current && lastKbHeightRef.current > 0) {
+        // 롱프레스 → 메모 경로: keyboardWillShow가 다시 발화되지 않으므로 여기서 직접 세팅
         const kh = lastKbHeightRef.current;
+        const openH = Math.min(screenHeight * 0.65, maxPanelHeight);
         prevSnapStageRef.current = "mid";
-        const targetH = Math.min(screenHeight * 0.65, maxPanelHeight);
-        const timingBase = { duration: KB_ANIM_DURATION, easing: Easing.out(Easing.cubic), useNativeDriver: false as const };
-        const kbAnimations: Animated.CompositeAnimation[] = [
-          animKbOptions(targetH, kh + 8),
-        ];
-        if (cardSheetHAnimRef.current) {
-          kbAnimations.push(Animated.timing(cardSheetHAnimRef.current, { toValue: targetH, ...timingBase }));
-        }
-        Animated.parallel(kbAnimations).start();
+        outerHeightAnim.setValue(openH);
+        inputPadAnim.setValue(kh + 8);
+        cardSheetHAnimRef.current?.setValue(openH);
+      } else {
+        // FAB 진입(키보드 미열림): 기본 mid 높이로 즉시 세팅
+        outerHeightAnim.setValue(defaultPanelHeight);
+        inputPadAnim.setValue(restPadRef.current);
+        cardSheetHAnimRef.current?.setValue(defaultPanelHeight);
       }
+
+      // slideAnim 시작 위치 세팅 → spring 하나만 단독 실행
+      slideAnim.setValue(defaultPanelHeight);
+      Animated.spring(slideAnim, { toValue: 0, damping: 28, stiffness: 220, useNativeDriver: true }).start();
 
       if (pendingQuote) {
         setTimeout(() => inputRef.current?.focus(), 300);
