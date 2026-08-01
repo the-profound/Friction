@@ -295,6 +295,8 @@ export default function ThoughtsBottomSheet({
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const keyboardVisibleRef = useRef(false);
   keyboardVisibleRef.current = keyboardVisible;
+  /** 마지막으로 받은 키보드 높이 — 롱프레스 경로처럼 이미 열린 키보드로 진입 시 사용 */
+  const lastKbHeightRef = useRef(0);
   const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const inputRef = useRef<TextInput>(null);
@@ -354,6 +356,7 @@ export default function ThoughtsBottomSheet({
 
     const showSub = Keyboard.addListener(showEvent, (e) => {
       const kh = e.endCoordinates.height;
+      lastKbHeightRef.current = kh;
       setKeyboardVisible(true);
       if (snapStageRef.current === "mid") {
         // 중간 단계에서 키보드 열림 → 65%로 시트 확장, snapStage는 "mid" 유지
@@ -481,6 +484,23 @@ export default function ThoughtsBottomSheet({
         animations.push(Animated.spring(cardSheetHAnimRef.current, { toValue: defaultPanelHeight, ...springBase, useNativeDriver: false }));
       }
       Animated.parallel(animations).start();
+
+      // 롱프레스 → 메모 경로: 텍스트 선택 중 키보드가 이미 올라와 있으면
+      // keyboardWillShow가 다시 발화되지 않으므로, 여기서 65% 확장 애니메이션을 직접 실행한다.
+      if (keyboardVisibleRef.current && lastKbHeightRef.current > 0) {
+        const kh = lastKbHeightRef.current;
+        prevSnapStageRef.current = "mid";
+        const targetH = Math.min(screenHeight * 0.65, maxPanelHeight);
+        const timingBase = { duration: KB_ANIM_DURATION, easing: Easing.out(Easing.cubic), useNativeDriver: false as const };
+        const kbAnimations: Animated.CompositeAnimation[] = [
+          animKbOptions(targetH, kh + 8),
+        ];
+        if (cardSheetHAnimRef.current) {
+          kbAnimations.push(Animated.timing(cardSheetHAnimRef.current, { toValue: targetH, ...timingBase }));
+        }
+        Animated.parallel(kbAnimations).start();
+      }
+
       if (pendingQuote) {
         setTimeout(() => inputRef.current?.focus(), 300);
       }

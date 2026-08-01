@@ -1476,7 +1476,10 @@ export default function ReadScreen() {
     trackMemoCreatedDuringReading({ articleId, page: currentPage });
     // Route quote text into the thoughts sheet's compose field via pendingQuote.
     // The user can edit/augment the quote before saving — no immediate creation.
-    const quoteText = `> ${text.trim()}\n\n— ${author}, <${title}>, ${pageNum}면`;
+    const meta = [author, title].filter(Boolean).join(", ");
+    const quoteText = meta
+      ? `${text.trim()}\n\n${meta}, ${pageNum}면`
+      : text.trim();
     handleOpenThoughts(quoteText);
   }, [currentPage, authorName, article?.title, handleOpenThoughts, articleId]);
 
