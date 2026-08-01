@@ -2536,8 +2536,7 @@ const styles = StyleSheet.create({
 // ─────────────────────────────────────────────────────────────────────────────
 // ReadingCompleteScreen: 읽기 완료 전체화면 오버레이 (목업 ReadingCompletePreview 이식)
 // ─────────────────────────────────────────────────────────────────────────────
-const READ_ALL_IMG = require("@/assets/images/read-all.png");
-const READ_ALL_ANSWERED_IMG = require("@/assets/images/read-all-answered.png");
+const READ_ALL_IMG = require("@/assets/images/splash-icon.png");
 // Matches the pager's own snap-back feel (see `snapConfig` in the main
 // component above). Module-level so it's a stable reference for useMemo deps.
 
@@ -2570,7 +2569,7 @@ function ReadingCompleteScreen({
       {/* 아이콘 + 메시지 */}
       <View style={readingCompleteStyles.center}>
         <Image
-          source={caseType === "answered" ? READ_ALL_ANSWERED_IMG : READ_ALL_IMG}
+          source={READ_ALL_IMG}
           style={readingCompleteStyles.icon}
           resizeMode="contain"
         />
@@ -2638,7 +2637,7 @@ const readingCompleteStyles = StyleSheet.create({
     textAlign: "center",
   },
   bottom: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 16,
     paddingTop: 8,
     gap: 10,
   },
@@ -2646,21 +2645,19 @@ const readingCompleteStyles = StyleSheet.create({
     width: "100%",
     paddingVertical: 15,
     backgroundColor: Colors.zinc900,
-    borderRadius: 14,
+    borderRadius: 12,
     alignItems: "center",
   },
   saveBtnText: {
-    fontSize: 15,
+    fontSize: 16,
     fontFamily: ReaderTokens.fontFamily.sansSemiBold,
     fontWeight: "600",
     color: Colors.white,
-    letterSpacing: 0.1,
   },
   skipBtn: {
     width: "100%",
-    paddingVertical: 15,
-    backgroundColor: "transparent",
-    borderRadius: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
     borderWidth: 1.5,
     borderColor: Colors.zinc200,
     alignItems: "center",
@@ -2668,9 +2665,7 @@ const readingCompleteStyles = StyleSheet.create({
   skipBtnText: {
     fontSize: 15,
     fontFamily: ReaderTokens.fontFamily.sans,
-    fontWeight: "500",
-    color: Colors.zinc600,
-    letterSpacing: 0.1,
+    color: Colors.zinc500,
   },
   rereadBtn: {
     width: "100%",
