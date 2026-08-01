@@ -8,6 +8,7 @@
 - [Friction two-database setup](friction-two-database.md) — executeSql tool hits local DB (DATABASE_URL); API server hits Supabase DB (SUPABASE_DB_URL). Migrations must reach BOTH.
 - [Friction memo overlay rendering](friction-memo-overlay-rendering.md) — RN `color: "transparent"` unreliable for hiding overlay text; use exact background hex match instead.
 - [Friction memo card scroll vs page-flip gesture](friction-memo-gesture-split.md) — keyboard-open drag translates the card (WebView scroll disabled); typing-overflow auto-split only reports the cut, RN must apply it via setMarkdown.
+- [Sheet close dead zone](friction-sheet-close-unlock.md) — dismissed sheet still eats taps: outer container keeps full height while only inner panel slides; RN hit-test never falls through. Not a JS-thread issue.
 - [Reanimated cancelled-callback cleanup](friction-reanimated-cancelled-callback.md) — never gate withTiming cleanup on `finished`; cancellation (finished:false) is common with interruptible gestures and skipping cleanup leaves UI stuck.
 - [Worklet ref mutation](friction-worklet-ref-mutation.md) — `ref.current = x` inside a worklet is silently dropped (only a WARN); commit refs+state via one runOnJS JS function instead.
 - [Friction question card mockup parity](friction-question-card-mockup-parity.md) — tear anim needs single RAF/state progress (not separate Reanimated withTiming calls) to match mockup exactly; drag multipliers are asymmetric, copy literally.

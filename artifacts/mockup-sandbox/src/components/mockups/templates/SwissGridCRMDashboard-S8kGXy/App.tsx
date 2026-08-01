@@ -26,7 +26,7 @@ const STATUS_STYLE = {
   'At risk':  { dot: '#1A1816', bg: 'rgba(26,24,22,0.06)',   text: '#1A1816' },
 };
 
-function SegmentBar({ label, value, total, accent }) {
+function SegmentBar({ label, value, total, accent }: { label: string; value: number; total: number; accent: string }) {
   const pct = Math.round((value / total) * 100);
   return (
     <div className="group">
@@ -61,7 +61,7 @@ export default function App() {
     });
   }, [tab, query]);
 
-  const toggle = (id) =>
+  const toggle = (id: number) =>
     setSelected(s => (s.includes(id) ? s.filter(x => x !== id) : [...s, id]));
 
   const allChecked = filtered.length > 0 && filtered.every(c => selected.includes(c.id));
@@ -266,7 +266,7 @@ export default function App() {
             <div>
               <AnimatePresence initial={false}>
                 {filtered.map((c) => {
-                  const st = STATUS_STYLE[c.status];
+                  const st = STATUS_STYLE[c.status as keyof typeof STATUS_STYLE];
                   const isSel = selected.includes(c.id);
                   return (
                     <motion.div

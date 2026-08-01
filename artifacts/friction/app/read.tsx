@@ -576,6 +576,10 @@ export default function ReadScreen() {
 
   // ── 단상 바텀시트 ────────────────────────────────────────────────────────
   const [isThoughtsOpen, setIsThoughtsOpen] = useState(false);
+  // 컴포넌트 마운트 제어용 — close 애니메이션이 끝날 때까지 true 유지
+  const [isThoughtsVisible, setIsThoughtsVisible] = useState(false);
+  // 열기 요청마다 증가 — close 애니메이션 중 재오픈을 시트에 전달한다
+  const [thoughtsOpenNonce, setThoughtsOpenNonce] = useState(0);
   const [thoughtsQuote, setThoughtsQuote] = useState<string | undefined>(undefined);
   const isThoughtsOpenRef = useRef(false);
   // 배경 탭 시 ThoughtsBottomSheet 내부의 doClose(애니메이션 포함)를 호출하기 위한 ref
@@ -609,15 +613,32 @@ export default function ReadScreen() {
   }));
 
   useEffect(() => { isThoughtsOpenRef.current = isThoughtsOpen; }, [isThoughtsOpen]);
-  useEffect(() => { thoughtsOpenSV.value = isThoughtsOpen ? 1 : 0; }, [isThoughtsOpen, thoughtsOpenSV]);
+  // thoughtsOpenSV는 isThoughtsVisible 기준으로 구동: close 애니메이션이 끝날 때까지
+  // prev 슬롯 숨김을 유지해 카드가 완전히 확대되기 전에 prev 슬롯이 노출되는 아티팩트를 방지한다.
+  useEffect(() => { thoughtsOpenSV.value = isThoughtsVisible ? 1 : 0; }, [isThoughtsVisible, thoughtsOpenSV]);
 
   const handleOpenThoughts = useCallback((quote?: string) => {
     setThoughtsQuote(quote);
     setIsThoughtsOpen(true);
+    setIsThoughtsVisible(true);
+    // close 애니메이션 도중 재오픈하면 isThoughtsVisible이 이미 true라
+    // 시트의 visible 전이가 없다. nonce를 올려 open 시퀀스를 확실히 재구동한다.
+    setThoughtsOpenNonce((n) => n + 1);
   }, []);
 
-  const handleCloseThoughts = useCallback(() => {
+  /**
+   * onWillClose 핸들러: 애니메이션 시작 직후 즉시 상호작용 잠금을 해제한다.
+   * 잠금 해제 state 하나만 갱신한다 — panGesture가 runOnJS(true)라서 이 시점에
+   * 추가 리렌더(예: thoughtsQuote 초기화 → 시트 전체 리렌더)를 유발하면
+   * JS 스레드가 막혀 스와이프·FAB가 씹히는 공백 시간이 다시 생긴다.
+   */
+  const handleWillCloseThoughts = useCallback(() => {
     setIsThoughtsOpen(false);
+  }, []);
+
+  /** onClose 핸들러: 애니메이션 완료 후 마운트 해제 + 나머지 상태를 일괄 초기화한다. */
+  const handleCloseThoughts = useCallback(() => {
+    setIsThoughtsVisible(false);
     setThoughtsQuote(undefined);
     cardSheetHAnim.setValue(0);
   }, [cardSheetHAnim]);
@@ -1916,6 +1937,9 @@ export default function ReadScreen() {
 
       {/* ── 단상 시트 배경 탭 해제 ─────────────────────────────────────── */}
       {/* thoughtsCloseHandleRef.current → 시트 내부 doClose(슬라이드+스프링 후 onClose) */}
+      {/* 완전 투명(시각 요소 없음)이라 isThoughtsOpen 기준으로 즉시 언마운트해도
+          닫기 애니메이션에 영향이 없다. 이렇게 해야 해제 즉시 리더 컨트롤이
+          터치를 받는다 — 마운트를 유지하면 전면 Pressable이 탭을 가로챈다. */}
       {isThoughtsOpen && (
         <Pressable
           style={StyleSheet.absoluteFill}
@@ -1926,8 +1950,11 @@ export default function ReadScreen() {
       {/* ── 단상 바텀시트 ──────────────────────────────────────────────── */}
       {articleId ? (
         <ThoughtsBottomSheet
-          visible={isThoughtsOpen}
+          visible={isThoughtsVisible}
           onClose={handleCloseThoughts}
+          onWillClose={handleWillCloseThoughts}
+          openNonce={thoughtsOpenNonce}
+          interactive={isThoughtsOpen}
           articleId={articleId}
           pendingQuote={thoughtsQuote}
           cardSheetHAnim={cardSheetHAnim}

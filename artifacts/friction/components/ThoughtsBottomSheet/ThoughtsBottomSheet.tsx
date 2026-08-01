@@ -213,6 +213,22 @@ function SwipeableThoughtCard({
 export interface ThoughtsBottomSheetProps {
   visible: boolean;
   onClose: () => void;
+  /** 닫기 애니메이션이 시작되는 순간(애니메이션 완료 전) 호출된다. 상호작용 잠금 해제에 사용. */
+  onWillClose?: () => void;
+  /**
+   * 열기 요청마다 증가하는 카운터. close 애니메이션이 끝나기 전에 다시 열 때는
+   * `visible`이 계속 true라 false→true 전이가 없으므로, 이 값으로 open을 구동한다.
+   */
+  openNonce?: number;
+  /**
+   * 시트가 터치를 받아야 하는지 여부(= 열려 있는 상태).
+   * ⚠️ close 애니메이션 중에는 반드시 false여야 한다. outerWrap은 화면 하단 절반을
+   * 차지하는 absolute 컨테이너인데, close 시 inner panel만 translateY로 내려갈 뿐
+   * outerWrap의 height는 그대로다. RN 히트테스트는 최상단 뷰에서 멈추고 뒤쪽
+   * 형제로 흘려보내지 않으므로, 이 값이 true로 남으면 시트가 보이지 않는데도
+   * FAB·페이지 스와이프 터치를 계속 삼킨다.
+   */
+  interactive?: boolean;
   articleId: string;
   pendingQuote?: string;
   /**
@@ -230,6 +246,9 @@ export interface ThoughtsBottomSheetProps {
 export default function ThoughtsBottomSheet({
   visible,
   onClose,
+  onWillClose,
+  openNonce = 0,
+  interactive = true,
   articleId,
   pendingQuote,
   cardSheetHAnim,
@@ -418,13 +437,19 @@ export default function ThoughtsBottomSheet({
   // ── Close ─────────────────────────────────────────────────────────────────
 
   const doClose = useCallback(() => {
+    // 이 close 세션의 토큰. 닫히는 도중 다시 열리면 open effect가 토큰을 올려
+    // 아래 완료 콜백이 무효화된다 → 새로 열린 시트를 stale 콜백이 닫지 못한다.
+    sessionTokenRef.current += 1;
+    const closeToken = sessionTokenRef.current;
     // keyboardWillHide가 mid 복원 애니메이션을 실행하지 않도록 먼저 초기화
     prevSnapStageRef.current = null;
     Keyboard.dismiss();
-    // 시트가 닫힐 때 편집·스와이프 상태를 즉시 초기화 (애니메이션 완료 전에도)
-    setEditingThought(null);
-    setOpenCardId(null);
-    setDeletedIds(new Set());
+    // 애니메이션 시작 전에 즉시 상호작용 잠금 해제를 알린다.
+    // 여기서는 잠금 해제 외의 setState를 절대 하지 않는다 — reader의 panGesture가
+    // runOnJS(true)라서, close 시점에 리스트/리더가 리렌더되면 JS 스레드가 막혀
+    // 스와이프·FAB 터치가 씹히는 "공백 시간"이 생긴다. 내부 상태 초기화는
+    // 애니메이션 완료 후(아래 start 콜백)로 미룬다 — 재오픈 전에 항상 실행된다.
+    onWillClose?.();
     const springBase = { damping: 32, stiffness: 400 };
     const animations: Animated.CompositeAnimation[] = [
       Animated.spring(slideAnimRef.current, { toValue: screenHeight, ...springBase, useNativeDriver: true }),
@@ -432,13 +457,19 @@ export default function ThoughtsBottomSheet({
     if (cardSheetHAnimRef.current) {
       animations.push(Animated.spring(cardSheetHAnimRef.current, { toValue: 0, ...springBase, useNativeDriver: false }));
     }
-    Animated.parallel(animations).start(({ finished }) => {
-      if (finished) {
-        setInputText("");
-        onClose();
-      }
+    Animated.parallel(animations).start(() => {
+      // 닫히는 도중 재오픈되었다면(토큰 불일치) 이 콜백은 stale — 아무것도 하지 않는다.
+      // finished 가드 대신 토큰을 쓰는 이유: 애니메이션이 취소돼도(finished:false)
+      // 정상 close라면 반드시 정리가 실행되어야 하기 때문.
+      if (closeToken !== sessionTokenRef.current) return;
+      // 애니메이션 완료 후 일괄 초기화
+      setEditingThought(null);
+      setOpenCardId(null);
+      setDeletedIds(new Set());
+      setInputText("");
+      onClose();
     });
-  }, [screenHeight, onClose]);
+  }, [screenHeight, onWillClose, onClose]);
 
   const doCloseRef = useRef(doClose);
   doCloseRef.current = doClose;
@@ -453,6 +484,10 @@ export default function ThoughtsBottomSheet({
     };
   }, [closeHandleRef]);
 
+  // open/close 세션 토큰. doClose가 증가시키고 open effect도 증가시켜,
+  // 닫히는 도중 재오픈된 경우 이전 close의 완료 콜백을 무효화한다.
+  const sessionTokenRef = useRef(0);
+
   // ── 스와이프·편집 상태 초기화 헬퍼 ─────────────────────────────────────────
   // 시트가 닫히거나 articleId가 바뀔 때 반드시 호출해 cross-context state leak을 방지한다.
   const resetTransientState = useCallback(() => {
@@ -465,6 +500,9 @@ export default function ThoughtsBottomSheet({
 
   useEffect(() => {
     if (visible) {
+      // 새 세션 시작 — 진행 중이던 close의 완료 콜백을 무효화한다.
+      // (close 애니메이션 도중 FAB/롱프레스로 재오픈하는 경로)
+      sessionTokenRef.current += 1;
       // 새 시트 세션 시작 — 이전 편집·스와이프 상태를 모두 초기화
       resetTransientState();
       setInputText(pendingQuote ?? "");
@@ -480,8 +518,14 @@ export default function ThoughtsBottomSheet({
       //   강제 종료되고, slideAnim spring도 함께 중단돼 시트가 슬라이드인되지 않았다.
       //
       //   Fix: 애니메이션 시작 전에 키보드 상태를 먼저 평가해
-      //   outerHeightAnim·inputPadAnim·cardSheetHAnim 세 값을 setValue로 즉시 세팅하고,
-      //   slideAnim spring만 단독으로 실행한다. parallel 그룹 자체가 없으므로 충돌 불가.
+      //   outerHeightAnim·inputPadAnim 두 값을 setValue로 즉시 세팅하고,
+      //   slideAnim·cardSheetHAnim 은 각각 독립 spring으로 실행한다.
+      //   parallel 그룹이 없으므로 stopTogether 충돌 없음.
+      //
+      //   cardSheetHAnim은 0→targetH spring: slideAnim이 defaultPanelHeight→0으로
+      //   spring될 때 같은 진폭·파라미터(non-keyboard 경로)라 카드 축소가 시트
+      //   슬라이드인과 정확히 동기화된다. 이전에 setValue로 즉시 세팅하던 방식은
+      //   카드가 시트보다 먼저 작아지는 시각적 튀김을 유발했다.
       if (keyboardVisibleRef.current && lastKbHeightRef.current > 0) {
         // 롱프레스 → 메모 경로: keyboardWillShow가 다시 발화되지 않으므로 여기서 직접 세팅
         const kh = lastKbHeightRef.current;
@@ -489,12 +533,28 @@ export default function ThoughtsBottomSheet({
         prevSnapStageRef.current = "mid";
         outerHeightAnim.setValue(openH);
         inputPadAnim.setValue(kh + 8);
-        cardSheetHAnimRef.current?.setValue(openH);
+        cardSheetHAnimRef.current?.setValue(0);
+        if (cardSheetHAnimRef.current) {
+          Animated.spring(cardSheetHAnimRef.current, {
+            toValue: openH,
+            damping: 28,
+            stiffness: 220,
+            useNativeDriver: false,
+          }).start();
+        }
       } else {
-        // FAB 진입(키보드 미열림): 기본 mid 높이로 즉시 세팅
+        // FAB 진입(키보드 미열림): outer/pad는 즉시, card는 slideAnim과 동기 spring
         outerHeightAnim.setValue(defaultPanelHeight);
         inputPadAnim.setValue(restPadRef.current);
-        cardSheetHAnimRef.current?.setValue(defaultPanelHeight);
+        cardSheetHAnimRef.current?.setValue(0);
+        if (cardSheetHAnimRef.current) {
+          Animated.spring(cardSheetHAnimRef.current, {
+            toValue: defaultPanelHeight,
+            damping: 28,
+            stiffness: 220,
+            useNativeDriver: false,
+          }).start();
+        }
       }
 
       // slideAnim 시작 위치 세팅 → spring 하나만 단독 실행
@@ -505,8 +565,10 @@ export default function ThoughtsBottomSheet({
         setTimeout(() => inputRef.current?.focus(), 300);
       }
     }
+    // openNonce도 dep에 포함: close 애니메이션 중 재오픈 시 visible이 계속 true라
+    // false→true 전이가 없으므로, nonce 변화로 open 시퀀스를 다시 구동한다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible]);
+  }, [visible, openNonce]);
 
   // articleId가 바뀌면 (다른 글로 전환) 편집·스와이프 상태를 즉시 초기화한다.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -728,7 +790,13 @@ export default function ThoughtsBottomSheet({
 
   return (
     // Outer: non-native — height 신축
-    <Animated.View style={[styles.outerWrap, { height: outerHeightAnim }]}>
+    // pointerEvents: close 애니메이션 중(interactive=false)에는 터치를 완전히
+    // 통과시켜야 한다. 이 컨테이너는 닫히는 동안에도 하단 절반을 계속 점유하므로,
+    // 여기서 막지 않으면 FAB·페이지 스와이프가 애니메이션이 끝날 때까지 죽는다.
+    <Animated.View
+      style={[styles.outerWrap, { height: outerHeightAnim }]}
+      pointerEvents={interactive ? "auto" : "none"}
+    >
       {/* Inner: native — translateY open/close */}
       <Animated.View
         style={[styles.panel, { transform: [{ translateY: slideAnim }] }]}
