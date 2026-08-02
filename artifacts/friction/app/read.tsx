@@ -33,6 +33,7 @@ import Animated, {
   withDelay,
   runOnJS,
   Easing,
+  type SharedValue,
 } from "react-native-reanimated";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -233,10 +234,12 @@ export default function ReadScreen() {
   // completeScreenVisible: true = 읽기 완료 화면이 슬롯으로 열려 있음
   // (visualPage 계산보다 먼저 선언해야 참조 오류가 생기지 않는다)
   const [completeScreenVisible, setCompleteScreenVisible] = useState(false);
-  // Backward 커밋 직후 1커밋 동안 새 prev 슬롯 콘텐츠 마운트를 지연한다.
-  // 리매핑 시점에 prevSlotSV가 아직 0(중앙)인 채로 새 WebView가 마운트되면
-  // 한 프레임 동안 현재 페이지를 덮어 번쩍임이 생기기 때문 — layout effect가
-  // prevSlotSV를 파킹한 뒤(다음 커밋)에 콘텐츠를 마운트한다.
+  // Backward 커밋 직후 1커밋 동안 prev 슬롯을 감춘다.
+  // 리매핑 시점에 prevSlotSV가 아직 0(중앙)인 채로 새로 들어온 페이지가
+  // 그려지면 한 프레임 동안 현재 페이지를 덮어 번쩍임이 생기기 때문 —
+  // layout effect가 prevSlotSV를 파킹한 뒤(다음 커밋)에 다시 보여준다.
+  // ⚠️ 언마운트가 아니라 opacity로만 가린다. 언마운트하면 재사용 중인
+  //    WebView 리더 인스턴스가 사라져 되돌아올 때 재로딩 번쩍임이 생긴다.
   const [deferPrevMount, setDeferPrevMount] = useState(false);
   useEffect(() => {
     if (deferPrevMount) setDeferPrevMount(false);
@@ -584,7 +587,7 @@ export default function ReadScreen() {
   const isThoughtsOpenRef = useRef(false);
   // 배경 탭 시 ThoughtsBottomSheet 내부의 doClose(애니메이션 포함)를 호출하기 위한 ref
   const thoughtsCloseHandleRef = useRef<(() => void) | null>(null);
-  // Reanimated SV mirroring isThoughtsOpen — used in prevSlotAnimStyle to hide the
+  // Reanimated SV mirroring isThoughtsOpen — used in PagerSlot's prev style to hide the
   // prev slot while the sheet is open (outer scale shrinks the card and can reveal
   // the parked prev slot in the strip between the scaled card and the screen edge).
   const thoughtsOpenSV = useSharedValue(0);
@@ -896,12 +899,10 @@ export default function ReadScreen() {
   const isCarouselForwardSV = useSharedValue(0);
   const isCarouselBackwardSV = useSharedValue(0);
   // qCardOpacitySV — Q-카드 "유령" 방지 게이트.
-  // 슬롯 리매핑 시 Q-카드의 Animated.View는 key를 유지한 채 current 슬롯 →
-  // next 슬롯으로 이동하는데, 이때 애니메이티드 스타일 객체 자체가
-  // currentSlotAnimStyle → nextSlotAnimStyle 로 교체된다. Reanimated가 이전
-  // 스타일을 detach하고 새 스타일을 attach하는 한 프레임 동안 transform이
-  // 비어 translateX=0(화면 중앙)으로 그려지며, 편지 페이지 뒤로 Q-카드가
-  // 순간 보인다. 슬롯 위치와 무관하게 opacity로 확실히 차단한다.
+  // 슬롯 리매핑 시 Q-카드 뷰는 key를 유지한 채 current 슬롯 → next 슬롯으로
+  // 역할만 바뀐다(PagerSlot이 인스턴스를 살려둔다). 역할 전환 프레임에
+  // 위치가 아직 갱신되지 않아 중앙(translateX=0)으로 그려질 수 있으므로,
+  // 슬롯 위치와 무관하게 opacity로 한 번 더 확실히 차단한다.
   // 1 = Q-카드 섹션이 화면에 관여함(질문카드/완독화면 or 전진 드래그 중)
   // 0 = 편지 페이지에 머무는 중 (Q-카드는 어차피 화면 밖에 주차되어 있음)
   const qCardOpacitySV = useSharedValue(0);
@@ -959,64 +960,26 @@ export default function ReadScreen() {
   // (drag, snap, commit), so the gap never collapses — sections never touch.
   // Also parks neighbors fully off-screen at rest (READER_SIDE_PAD is only 14).
   const CAROUSEL_GAP = 60;
-  const MAX_ROTATE_DEG = 4;
-  // Letter pages: current tilts (negative rotateZ) as it slides left.
-  // Q-card / complete: pure carousel translateX, no rotation.
-  const currentSlotAnimStyle = useAnimatedStyle(() => {
-    const W = containerWidthSV.value || 300;
-    const tx = currentSlotSV.value;
-    const slideOut = -tx; // 0 at rest, W when fully out left
-    const isFwdCarousel = isCarouselForwardSV.value > 0.5;
-    const rotation = (!isFwdCarousel && slideOut > 0.5)
-      ? -(Math.min(1, slideOut / W) * MAX_ROTATE_DEG)
-      : 0;
-    return {
-      transform: [{ translateX: tx }, { rotateZ: `${rotation}deg` }],
-    };
-  });
-  // Letter pages: prev tilts (CCW, starts negative and settles to 0) as it slides in.
-  // Q-card / complete: pure carousel translateX, no rotation.
-  const prevSlotAnimStyle = useAnimatedStyle(() => {
-    const W = containerWidthSV.value || 300;
-    const tx = prevSlotSV.value;
-    const slideIn = tx + W; // 0 when parked, W when fully in center
-    const isBwdCarousel = isCarouselBackwardSV.value > 0.5;
-    const rotation = !isBwdCarousel ? (slideIn / W - 1) * MAX_ROTATE_DEG : 0;
-    return {
-      transform: [{ translateX: tx }, { rotateZ: `${rotation}deg` }],
-      opacity: thoughtsOpenSV.value ? 0 : 1,
-    };
-  });
-  const nextSlotAnimStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: nextSlotSV.value }],
-  }));
+  // 슬롯 애니메이션 스타일은 PagerSlot 내부에서 role별로 계산한다(모듈 하단 참조).
+  // 슬롯 뷰마다 "하나의" useAnimatedStyle이 평생 붙어 있고 role만 바뀌므로,
+  // 역할이 바뀔 때 스타일 객체가 detach/attach 되며 생기던 유령 프레임이 없다.
+  const pagerSV = useMemo(
+    () => ({
+      prevSlotSV,
+      currentSlotSV,
+      nextSlotSV,
+      containerWidthSV,
+      isCarouselForwardSV,
+      isCarouselBackwardSV,
+      thoughtsOpenSV,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
   // Q-카드 전용 가시성 게이트 (위 qCardOpacitySV 주석 참조)
   const qCardGateStyle = useAnimatedStyle(() => ({
     opacity: qCardOpacitySV.value,
   }));
-  // Shadow for current: 0 at rest (tilt mode), 1 always (carousel mode)
-  const currentShadowStyle = useAnimatedStyle(() => {
-    const W = containerWidthSV.value || 300;
-    const slideOut = -currentSlotSV.value;
-    const isFwdCarousel = isCarouselForwardSV.value > 0.5;
-    const opacity = isFwdCarousel ? 1 : Math.min(1, Math.max(0, slideOut / W));
-    return { opacity };
-  });
-  // Shadow for prev: strong while sliding in (tilt), constant (carousel)
-  const prevShadowStyle = useAnimatedStyle(() => {
-    const W = containerWidthSV.value || 300;
-    const slideIn = prevSlotSV.value + W;
-    const isBwdCarousel = isCarouselBackwardSV.value > 0.5;
-    const opacity = isBwdCarousel ? 1 : Math.min(1, Math.max(0, 1 - slideIn / W));
-    return { opacity };
-  });
-  // Next slot: constant shadow — useAnimatedStyle (not a static object) so
-  // Reanimated properly takes ownership when a view moves here from the current
-  // slot (which also had a useAnimatedStyle). If a plain static object is used,
-  // the old worklet from currentShadowStyle can remain "registered" on the
-  // native view and keep opacity=0 after backward navigation.
-  const nextShadowStyle = useAnimatedStyle(() => ({ opacity: 1 }));
-
   // Memo FAB: hide while on Q-card or complete screen (visualPage >= totalPages)
   const fabOpacitySV = useSharedValue(1);
   useEffect(() => {
@@ -1843,46 +1806,48 @@ export default function ReadScreen() {
                       const currentPageIdx = visualPage;
                       const prevPageIdx = visualPage - 1;
 
-                      const nextNode = makeNode(nextPageIdx);
-                      const currentNode = makeNode(currentPageIdx);
-                      // Backward 리매핑 직후 1커밋 동안 prev 콘텐츠 마운트 지연
-                      // (prevSlotSV가 파킹되기 전 새 WebView가 중앙에 그려지는 것 방지)
-                      const prevNode = deferPrevMount ? null : makeNode(prevPageIdx);
-
                       // Letter pages (idx 0..totalPages-1) get the card shadow.
                       // Q-card (totalPages) and complete screen (totalPages+1) do not —
                       // they are full-screen sections, not letter-page cards.
                       const isLetterPageIdx = (idx: number) => idx >= 0 && idx < totalPages;
 
+                      // 슬롯을 "키 배열"로 렌더한다. 정적 JSX 자식으로 두면 React가
+                      // 위치 기준으로 재조정하기 때문에, 같은 페이지가 current →
+                      // next 슬롯으로 옮겨갈 때 key가 달라진 위치로 인식돼
+                      // 언마운트/재마운트된다(= WebView 리더가 새로 로드되며 번쩍임).
+                      // 배열 + key로 렌더하면 React가 인스턴스를 "이동"시키므로
+                      // 마지막 편지 페이지 ↔ 질문 카드를 오가도 살아 있는다.
+                      // 배열 순서(next → current → prev)가 곧 z-order다.
+                      const slots: Array<{
+                        pageIdx: number;
+                        role: PagerSlotRole;
+                        hidden: boolean;
+                      }> = [
+                        { pageIdx: nextPageIdx, role: "next", hidden: false },
+                        { pageIdx: currentPageIdx, role: "current", hidden: false },
+                        // Backward 리매핑 직후 1커밋 동안 prev 슬롯을 감춘다
+                        // (prevSlotSV가 파킹되기 전 새로 들어온 페이지가 중앙에
+                        //  그려지는 것 방지). 언마운트가 아니라 opacity로만 가려서
+                        //  재사용 중인 인스턴스가 사라지지 않게 한다.
+                        { pageIdx: prevPageIdx, role: "prev", hidden: deferPrevMount },
+                      ];
+
                       return (
                         <>
-                          {/* next — bottom layer.
-                              Tilt mode: parked at 0, sits behind current (overlay reveal).
-                              Carousel mode: parked at +W, slides in from the right. */}
-                          <Animated.View key={`page-${nextPageIdx}`} style={[slotBase, nextSlotAnimStyle]}>
-                            {isLetterPageIdx(nextPageIdx) && <Animated.View style={[shadowLayer, nextShadowStyle]} />}
-                            {nextNode != null && (
-                              <View style={slotContent}>{nextNode}</View>
-                            )}
-                          </Animated.View>
-
-                          {/* current — middle layer, center at rest.
-                              Tilt: tilts and slides left on forward; stays at 0 on backward.
-                              Carousel: slides left/right simultaneously with next/prev. */}
-                          <Animated.View key={`page-${currentPageIdx}`} style={[slotBase, currentSlotAnimStyle]}>
-                            {isLetterPageIdx(currentPageIdx) && <Animated.View style={[shadowLayer, currentShadowStyle]} />}
-                            {currentNode != null && <View style={slotContent}>{currentNode}</View>}
-                          </Animated.View>
-
-                          {/* prev — top layer.
-                              Tilt: slides in on top of current from the left (overlay style).
-                              Carousel: slides in simultaneously with current exiting right. */}
-                          {prevPageIdx !== currentPageIdx && (
-                            <Animated.View key={`page-${prevPageIdx}`} style={[slotBase, prevSlotAnimStyle]}>
-                              {!deferPrevMount && isLetterPageIdx(prevPageIdx) && <Animated.View style={[shadowLayer, prevShadowStyle]} />}
-                              {prevNode != null && <View style={slotContent}>{prevNode}</View>}
-                            </Animated.View>
-                          )}
+                          {slots.map((slot) => (
+                            <PagerSlot
+                              key={`page-${slot.pageIdx}`}
+                              role={slot.role}
+                              sv={pagerSV}
+                              slotBase={slotBase}
+                              shadowLayer={shadowLayer}
+                              slotContent={slotContent}
+                              showShadow={isLetterPageIdx(slot.pageIdx)}
+                              hidden={slot.hidden}
+                            >
+                              {makeNode(slot.pageIdx)}
+                            </PagerSlot>
+                          ))}
                         </>
                       );
                     })()}
@@ -2214,6 +2179,16 @@ interface ReaderLayout {
   titleBarHeight: number;
 }
 
+/* ════════════════════════════════════════════════════════════════════════
+ * PagerSlot — 3슬롯 페이저의 개별 슬롯
+ *
+ * 핵심: 슬롯 뷰는 페이지 인덱스(key)로 식별되고, 역할(prev/current/next)은
+ * prop으로만 바뀐다. 애니메이티드 스타일은 뷰당 하나만 만들어 평생 붙어
+ * 있으므로, 역할이 바뀌어도
+ *   1) 컴포넌트(WebView 리더 / 질문 카드 덱)가 언마운트되지 않고,
+ *   2) 스타일 객체가 detach/attach 되며 transform이 비는 유령 프레임도 없다.
+ * ════════════════════════════════════════════════════════════════════════ */
+type PagerSlotRole = "prev" | "current" | "next";
 const PageView = React.memo(function PageView({
   content,
   onTextSelect,
@@ -2731,3 +2706,90 @@ const springCoilStyles = StyleSheet.create({
     height: "100%",
   },
 });
+
+const SLOT_MAX_ROTATE_DEG = 4;
+
+function PagerSlot({
+  role,
+  sv,
+  slotBase,
+  shadowLayer,
+  slotContent,
+  showShadow,
+  hidden,
+  children,
+}: {
+  role: PagerSlotRole;
+  sv: PagerSlotSharedValues;
+  slotBase: object;
+  shadowLayer: object;
+  slotContent: object;
+  showShadow: boolean;
+  hidden: boolean;
+  children: React.ReactNode;
+}) {
+  const slotAnimStyle = useAnimatedStyle(() => {
+    const W = sv.containerWidthSV.value || 300;
+    if (role === "next") {
+      // Tilt mode: parked at 0 behind current. Carousel: parked at +(W+GAP).
+      return { transform: [{ translateX: sv.nextSlotSV.value }, { rotateZ: "0deg" }], opacity: 1 };
+    }
+    if (role === "current") {
+      // Letter pages: tilts (negative rotateZ) as it slides left.
+      // Q-card / complete: pure carousel translateX, no rotation.
+      const tx = sv.currentSlotSV.value;
+      const slideOut = -tx; // 0 at rest, W when fully out left
+      const isFwdCarousel = sv.isCarouselForwardSV.value > 0.5;
+      const rotation = (!isFwdCarousel && slideOut > 0.5)
+        ? -(Math.min(1, slideOut / W) * SLOT_MAX_ROTATE_DEG)
+        : 0;
+      return { transform: [{ translateX: tx }, { rotateZ: `${rotation}deg` }], opacity: 1 };
+    }
+    // prev — letter pages tilt CCW as they slide in; carousel sections don't.
+    const tx = sv.prevSlotSV.value;
+    const slideIn = tx + W; // 0 when parked, W when fully in center
+    const isBwdCarousel = sv.isCarouselBackwardSV.value > 0.5;
+    const rotation = !isBwdCarousel ? (slideIn / W - 1) * SLOT_MAX_ROTATE_DEG : 0;
+    return {
+      transform: [{ translateX: tx }, { rotateZ: `${rotation}deg` }],
+      opacity: sv.thoughtsOpenSV.value ? 0 : 1,
+    };
+  }, [role]);
+
+  const shadowAnimStyle = useAnimatedStyle(() => {
+    const W = sv.containerWidthSV.value || 300;
+    if (role === "next") return { opacity: 1 };
+    if (role === "current") {
+      // 0 at rest (tilt mode), 1 always (carousel mode)
+      const slideOut = -sv.currentSlotSV.value;
+      const isFwdCarousel = sv.isCarouselForwardSV.value > 0.5;
+      return { opacity: isFwdCarousel ? 1 : Math.min(1, Math.max(0, slideOut / W)) };
+    }
+    // prev — strong while sliding in (tilt), constant (carousel)
+    const slideIn = sv.prevSlotSV.value + W;
+    const isBwdCarousel = sv.isCarouselBackwardSV.value > 0.5;
+    return { opacity: isBwdCarousel ? 1 : Math.min(1, Math.max(0, 1 - slideIn / W)) };
+  }, [role]);
+
+  return (
+    <Animated.View
+      style={hidden ? [slotBase, slotAnimStyle, SLOT_HIDDEN_STYLE] : [slotBase, slotAnimStyle]}
+      pointerEvents={hidden ? "none" : "auto"}
+    >
+      {showShadow && <Animated.View style={[shadowLayer, shadowAnimStyle]} />}
+      {children != null && <View style={slotContent}>{children}</View>}
+    </Animated.View>
+  );
+}
+
+interface PagerSlotSharedValues {
+  prevSlotSV: SharedValue<number>;
+  currentSlotSV: SharedValue<number>;
+  nextSlotSV: SharedValue<number>;
+  containerWidthSV: SharedValue<number>;
+  isCarouselForwardSV: SharedValue<number>;
+  isCarouselBackwardSV: SharedValue<number>;
+  thoughtsOpenSV: SharedValue<number>;
+}
+
+const SLOT_HIDDEN_STYLE = { opacity: 0 } as const;

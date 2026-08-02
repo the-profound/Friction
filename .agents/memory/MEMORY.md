@@ -25,4 +25,5 @@
 - [Dansang scale translateY formula](friction-dansang-scale-translatey.md) — center-placed card scale: t = -s*frameHeight/2 aligns bottom to sheet top; -(1-s)*h/2 (top-anchor only) leaves bottom overlapping sheet.
 - [RN hidden-component state leak](rn-hidden-component-state-leak.md) — `return null` when hidden still keeps hook state; reset transient edit/swipe state on open, close, and key-prop change — and guard submit handler.
 - [Friction calendar grid consolidation](friction-calendar-grid-consolidation.md) — garbled date grid = mass per-cell Reanimated mount; use shared CalendarGrid/CollapsibleDatePicker, never duplicate grid code.
+- [Pager slot instance preservation](rn-pager-slot-instance-preservation.md) — static JSX siblings remount on key change; render slots as keyed array + one animated style per view (role as prop).
 - [Friction Expo SDK upgrade playbook](friction-expo-sdk-upgrade.md) — managed workflow (no ios/android dirs); use registry+expo-doctor not memorized versions; absoluteFillObject removed; app.json top-level schema changes in SDK55+.
