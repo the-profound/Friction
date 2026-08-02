@@ -24,6 +24,33 @@ The project is structured to ensure maintainability, scalability, and developer 
 
 # Developer Setup
 
+### iOS TestFlight 배포 트랙
+
+Friction은 SDK 56 / RN 0.85 기반이며, TestFlight을 통해 두 가지 빌드 트랙을 배포합니다.
+
+| 트랙 | 용도 | 명령 |
+|------|------|------|
+| **dev-client** | 엔지니어용 — Metro 연결, 실시간 코드 리로드 | `bash artifacts/friction/scripts/publish-dev.sh` |
+| **preview** | 베타 테스터용 — JS 번들 내장, 완성품 경험 | `bash artifacts/friction/scripts/publish-preview.sh` |
+| **production** | App Store 배포 | `bash artifacts/friction/scripts/publish-ios.sh` |
+
+#### dev-client 빌드 사용법 (엔지니어)
+
+1. `bash artifacts/friction/scripts/publish-dev.sh` 로 TestFlight에 dev-client 빌드 배포 (최초 1회)
+2. 기기에서 TestFlight → Friction(dev) 설치
+3. Replit에서 코드 수정 중 터미널에서 `pnpm --filter @workspace/friction dev:tunnel` 실행
+4. 앱을 열면 "Enter URL manually" 화면이 나타남 — 고정 ngrok 주소(처음 한 번만 입력하면 됨) 입력
+5. 이후 Replit 세션이 바뀌어도 같은 주소로 자동 연결됨
+
+> **고정 주소**: `$NGROK_STATIC_DOMAIN` 환경 변수에 저장된 도메인입니다.
+> ngrok 무료 계정 1개당 정적 도메인 1개 — 세션이 바뀌어도 주소는 변하지 않습니다.
+
+#### EAS 빌드 프로필 (`eas.json`)
+
+- `development` — `developmentClient: true`, store distribution → TestFlight 내부 테스터
+- `preview` — JS 번들 내장(production과 동일 번들링), store distribution → TestFlight 베타 테스터  
+- `production` — App Store 제출용
+
 ### 개발 데이터 세팅 (최초 1회)
 
 API 서버는 시드 데이터를 서버 시작 시 자동으로 주입하지 않습니다.  
