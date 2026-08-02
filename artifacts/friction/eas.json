@@ -5,6 +5,9 @@
   },
   "build": {
     "production": {
+      "env": {
+        "EXPO_USE_PRECOMPILED_MODULES": "0"
+      },
       "ios": {
         "distribution": "store",
         "credentialsSource": "remote",
@@ -12,6 +15,9 @@
       }
     },
     "preview": {
+      "env": {
+        "EXPO_USE_PRECOMPILED_MODULES": "0"
+      },
       "ios": {
         "distribution": "store",
         "credentialsSource": "remote",
@@ -20,6 +26,9 @@
     },
     "development": {
       "developmentClient": true,
+      "env": {
+        "EXPO_USE_PRECOMPILED_MODULES": "0"
+      },
       "ios": {
         "distribution": "store",
         "credentialsSource": "remote",
