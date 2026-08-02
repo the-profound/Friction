@@ -22,7 +22,7 @@ const path = require("path");
 
 const ngrok = require("@ngrok/ngrok");
 
-const METRO_PORT = 8081;
+const METRO_PORT = 8090;
 const projectRoot = path.resolve(__dirname, "..");
 
 // ── Validate env ──────────────────────────────────────────────────────────────

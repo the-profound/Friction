@@ -106,8 +106,8 @@ PORT = "3001"
 
 [[workflows.workflow]]
 name = "Publish iOS (Dev Client)"
-author = "agent"
 mode = "parallel"
+author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
@@ -117,17 +117,9 @@ args = "bash /home/runner/workspace/artifacts/friction/scripts/publish-dev.sh"
 outputType = "console"
 
 [[workflows.workflow]]
-name = "Project"
-mode = "parallel"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Preview Activate"
-
-[[workflows.workflow]]
 name = "Preview Activate"
 author = "agent"
+mode = "parallel"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
