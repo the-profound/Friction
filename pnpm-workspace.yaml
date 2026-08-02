@@ -42,6 +42,7 @@ onlyBuiltDependencies:
   - unrs-resolver
 
 overrides:
+  react-native: 0.86.2
   '@esbuild-kit/esm-loader': npm:tsx@^4.21.0
   '@expo/ngrok-bin>@expo/ngrok-bin-darwin-arm64': '-'
   '@expo/ngrok-bin>@expo/ngrok-bin-darwin-x64': '-'
