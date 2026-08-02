@@ -11,7 +11,7 @@
   "private": true,
   "pnpm": {
     "overrides": {
-      "react-native": "0.85.3"
+      "react-native": "0.86.2"
     }
   },
   "devDependencies": {

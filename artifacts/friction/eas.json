@@ -5,10 +5,6 @@
   },
   "build": {
     "production": {
-      "prebuildCommand": "prebuild --skip-dependency-update react-native,react,expo",
-      "env": {
-        "EXPO_USE_PRECOMPILED_MODULES": "0"
-      },
       "ios": {
         "distribution": "store",
         "credentialsSource": "remote",
@@ -16,10 +12,6 @@
       }
     },
     "preview": {
-      "prebuildCommand": "prebuild --skip-dependency-update react-native,react,expo",
-      "env": {
-        "EXPO_USE_PRECOMPILED_MODULES": "0"
-      },
       "ios": {
         "distribution": "store",
         "credentialsSource": "remote",
@@ -28,10 +20,6 @@
     },
     "development": {
       "developmentClient": true,
-      "prebuildCommand": "prebuild --skip-dependency-update react-native,react,expo",
-      "env": {
-        "EXPO_USE_PRECOMPILED_MODULES": "0"
-      },
       "ios": {
         "distribution": "store",
         "credentialsSource": "remote",

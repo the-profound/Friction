@@ -19,17 +19,25 @@ description: How to safely bump Expo SDK / React Native in artifacts/friction (m
 - A custom native module that legitimately imports from `expo-modules-core` (e.g. `requireNativeModule`) needs it as a **direct** dependency even though expo-doctor warns against installing it directly — that warning is a false positive for this case.
 - `ignoreDeprecations: "6.0"` must be set in tsconfig.json when upgrading to TypeScript 6.x (SDK 56 recommends TS ~6.0.3).
 
-## SDK 56 state (as of upgrade)
+## SDK 56 state (historical)
 - expo ~56.0.18, react-native 0.85.3, react 19.2.3
 - expo-dev-client ~56.0.24 installed; `expo-dev-client` added as first entry in `app.json` plugins
-- eas.json has three build profiles: `production` (App Store), `preview` (TestFlight, JS bundled), `development` (TestFlight, dev-client + Metro)
+- eas.json had three build profiles: `production` (App Store), `preview` (TestFlight, JS bundled), `development` (TestFlight, dev-client + Metro)
 - Fixed-tunnel script: `pnpm --filter @workspace/friction dev:tunnel` → `scripts/dev-tunnel.js` using `@ngrok/ngrok` SDK + `NGROK_STATIC_DOMAIN` secret
+
+## SDK 57 state (2026-08-02)
+- expo ~57.0.9, react-native 0.86.2, react 19.2.3 (unchanged)
+- react-native-reanimated 4.5.1, react-native-worklets 0.10.1, react-native-gesture-handler ~2.32.0
+- @expo/cli 57.0.11, babel-preset-expo ~57.0.5
+- EAS workarounds removed: `prebuildCommand --skip-dependency-update` gone, `EXPO_USE_PRECOMPILED_MODULES=0` gone
+- Root pnpm override updated to `react-native: 0.86.2`
+- Source: `bundledNativeModules.json` from sdk-57 branch on GitHub
 
 ## Baseline typecheck errors (not regressions)
 - 134 errors total, all pre-existing: ~127 from `lib/api-client-react/src/generated/api.ts` (implicit any in orval-generated code), ~5 TS2307 missing `@tanstack/react-query` types in lib/api-client-react, ~1 TS7053 in WebViewMarkdownEditor. None introduced by SDK bump — confirmed by stash-check comparison.
 
 ## Why
-Confirmed via a real upgrade (SDK ~54/RN 0.81 → SDK 56/RN 0.85.3) done to fix an iOS 26 TurboModule threading crash and TestFlight test workflow; these are the exact failure modes hit along the way.
+Confirmed via a real upgrade (SDK ~54/RN 0.81 → SDK 56/RN 0.85.3 → SDK 57/RN 0.86.2) done to fix an iOS 26 TurboModule threading crash and to remove EAS build workarounds.
 
 ## How to apply
 Any future Expo SDK/React Native bump in artifacts/friction — repeat this loop (registry research → expo-doctor iterate → grep for `absoluteFillObject` and other removed APIs → check app.json schema diffs) rather than guessing versions from memory.
