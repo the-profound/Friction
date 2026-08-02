@@ -5,6 +5,7 @@
   },
   "build": {
     "production": {
+      "prebuildCommand": "prebuild --skip-dependency-update react-native,react,expo",
       "env": {
         "EXPO_USE_PRECOMPILED_MODULES": "0"
       },
@@ -15,6 +16,7 @@
       }
     },
     "preview": {
+      "prebuildCommand": "prebuild --skip-dependency-update react-native,react,expo",
       "env": {
         "EXPO_USE_PRECOMPILED_MODULES": "0"
       },
@@ -26,6 +28,7 @@
     },
     "development": {
       "developmentClient": true,
+      "prebuildCommand": "prebuild --skip-dependency-update react-native,react,expo",
       "env": {
         "EXPO_USE_PRECOMPILED_MODULES": "0"
       },
