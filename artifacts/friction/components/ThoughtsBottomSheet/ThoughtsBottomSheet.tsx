@@ -107,8 +107,8 @@ function SwipeableThoughtCard({
     if (!isOpen) {
       Animated.spring(translateX, {
         toValue: 0,
-        damping: 24,
-        stiffness: 300,
+        damping: 35,
+        stiffness: 260,
         useNativeDriver: true,
       }).start();
     }
@@ -119,8 +119,8 @@ function SwipeableThoughtCard({
     setOpenId(open ? thought.id : null);
     Animated.spring(translateX, {
       toValue: target,
-      damping: 24,
-      stiffness: 300,
+      damping: 35,
+      stiffness: 260,
       useNativeDriver: true,
     }).start();
   };
@@ -146,8 +146,8 @@ function SwipeableThoughtCard({
       },
       onPanResponderRelease: (_, gs) => {
         const currentOffset = startXRef.current + gs.dx;
-        // 절반 이상 열렸으면 열림으로 스냅, 아니면 닫힘
-        const shouldOpen = currentOffset < -(ACTION_WIDTH / 2) || gs.vx < -0.5;
+        // 1/3.5 이상 열렸거나 충분한 속도면 열림으로 스냅, 아니면 닫힘
+        const shouldOpen = currentOffset < -(ACTION_WIDTH / 3.5) || gs.vx < -0.3;
         snapTo(shouldOpen);
       },
       onPanResponderTerminate: () => {
