@@ -1,0 +1,26 @@
+Render Error
+
+undefined is not a function
+
+Source:
+/home/runner/workspace/artifacts/friction/app/(tabs)/on.tsx (174:32)
+
+Call Stack:
+useMemo$argument_0 (/home/runner/workspace/artifacts/friction/app/(tabs)/on.tsx:174)
+updateMemo (/home/runner/workspace/node_modules/.pnpm/react-native@0.86.2_@babel+core@7.29.0_@react-native+metro-config@0.86.2_@babel+core@7._4fc113839bac70ba69e36725ef95a558/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-dev.js:6701)
+HooksDispatcherOnUpdateInDEV.useMemo (/home/runner/workspace/node_modules/.pnpm/react-native@0.86.2_@babel+core@7.29.0_@react-native+metro-config@0.86.2_@babel+core@7._4fc113839bac70ba69e36725ef95a558/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-dev.js:17698)
+exports.useMemo (/home/runner/workspace/node_modules/.pnpm/react@19.2.3/node_modules/react/cjs/react.development.js:1251)
+OnScreen (/home/runner/workspace/artifacts/friction/app/(tabs)/on.tsx:172)
+callComponent.react_stack_bottom_frame (/home/runner/workspace/node_modules/.pnpm/react-native@0.86.2_@babel+core@7.29.0_@react-native+metro-config@0.86.2_@babel+core@7._4fc113839bac70ba69e36725ef95a558/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-dev.js:17130)
+renderWithHooks (/home/runner/workspace/node_modules/.pnpm/react-native@0.86.2_@babel+core@7.29.0_@react-native+metro-config@0.86.2_@babel+core@7._4fc113839bac70ba69e36725ef95a558/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-dev.js:5648)
+updateFunctionComponent (/home/runner/workspace/node_modules/.pnpm/react-native@0.86.2_@babel+core@7.29.0_@react-native+metro-config@0.86.2_@babel+core@7._4fc113839bac70ba69e36725ef95a558/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-dev.js:8081)
+beginWork (/home/runner/workspace/node_modules/.pnpm/react-native@0.86.2_@babel+core@7.29.0_@react-native+metro-config@0.86.2_@babel+core@7._4fc113839bac70ba69e36725ef95a558/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-dev.js:9340)
+runWithFiberInDEV (/home/runner/workspace/node_modules/.pnpm/react-native@0.86.2_@babel+core@7.29.0_@react-native+metro-config@0.86.2_@babel+core@7._4fc113839bac70ba69e36725ef95a558/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-dev.js:697)
+performUnitOfWork (/home/runner/workspace/node_modules/.pnpm/react-native@0.86.2_@babel+core@7.29.0_@react-native+metro-config@0.86.2_@babel+core@7._4fc113839bac70ba69e36725ef95a558/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-dev.js:14134)
+workLoopSync (/home/runner/workspace/node_modules/.pnpm/react-native@0.86.2_@babel+core@7.29.0_@react-native+metro-config@0.86.2_@babel+core@7._4fc113839bac70ba69e36725ef95a558/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-dev.js:13966)
+renderRootSync (/home/runner/workspace/node_modules/.pnpm/react-native@0.86.2_@babel+core@7.29.0_@react-native+metro-config@0.86.2_@babel+core@7._4fc113839bac70ba69e36725ef95a558/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-dev.js:13947)
+performWorkOnRoot (/home/runner/workspace/node_modules/.pnpm/react-native@0.86.2_@babel+core@7.29.0_@react-native+metro-config@0.86.2_@babel+core@7._4fc113839bac70ba69e36725ef95a558/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-dev.js:13160)
+performSyncWorkOnRoot (/home/runner/workspace/node_modules/.pnpm/react-native@0.86.2_@babel+core@7.29.0_@react-native+metro-config@0.86.2_@babel+core@7._4fc113839bac70ba69e36725ef95a558/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-dev.js:3688)
+flushSyncWorkAcrossRoots_impl (/home/runner/workspace/node_modules/.pnpm/react-native@0.86.2_@babel+core@7.29.0_@react-native+metro-config@0.86.2_@babel+core@7._4fc113839bac70ba69e36725ef95a558/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-dev.js:3538)
+processRootScheduleInMicrotask (/home/runner/workspace/node_modules/.pnpm/react-native@0.86.2_@babel+core@7.29.0_@react-native+metro-config@0.86.2_@babel+core@7._4fc113839bac70ba69e36725ef95a558/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-dev.js:3570)
+scheduleMicrotask$argument_0 (/home/runner/workspace/node_modules/.pnpm/react-native@0.86.2_@babel+core@7.29.0_@react-native+metro-config@0.86.2_@babel+core@7._4fc113839bac70ba69e36725ef95a558/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-dev.js:3708)
