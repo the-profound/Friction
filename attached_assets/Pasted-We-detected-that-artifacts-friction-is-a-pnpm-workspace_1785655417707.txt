@@ -1,0 +1,40 @@
+We detected that 'artifacts/friction' is a pnpm workspace
+Running "pnpm install --frozen-lockfile" in /Users/expo/workingdir/build directory
+Scope: all 11 workspace projects
+Lockfile is up to date, resolution step is skipped
+Progress: resolved 1, reused 0, downloaded 0, added 0
+Packages: +1193
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Progress: resolved 1193, reused 0, downloaded 218, added 136
+Progress: resolved 1193, reused 0, downloaded 339, added 192
+Progress: resolved 1193, reused 0, downloaded 486, added 249
+Progress: resolved 1193, reused 0, downloaded 600, added 292
+Progress: resolved 1193, reused 0, downloaded 626, added 302
+Progress: resolved 1193, reused 0, downloaded 695, added 342
+Progress: resolved 1193, reused 0, downloaded 802, added 401
+Progress: resolved 1193, reused 0, downloaded 906, added 451
+Progress: resolved 1193, reused 0, downloaded 969, added 481
+Progress: resolved 1193, reused 0, downloaded 1011, added 496
+Progress: resolved 1193, reused 0, downloaded 1143, added 558
+Progress: resolved 1193, reused 0, downloaded 1162, added 668
+Progress: resolved 1193, reused 0, downloaded 1163, added 866
+Progress: resolved 1193, reused 0, downloaded 1163, added 1074
+Progress: resolved 1193, reused 0, downloaded 1163, added 1192
+Progress: resolved 1193, reused 0, downloaded 1163, added 1193, done
+.../esbuild@0.27.3/node_modules/esbuild postinstall$ node install.js
+.../esbuild@0.27.3/node_modules/esbuild postinstall: [esbuild] Failed to find package "@esbuild/darwin-arm64" on the file system
+.../esbuild@0.27.3/node_modules/esbuild postinstall: This can happen if you use the "--no-optional" flag. The "optionalDependencies"
+.../esbuild@0.27.3/node_modules/esbuild postinstall: package.json feature is used by esbuild to install the correct binary executable
+.../esbuild@0.27.3/node_modules/esbuild postinstall: for your current platform. This install script will now attempt to work around
+.../esbuild@0.27.3/node_modules/esbuild postinstall: this. If that fails, you need to remove the "--no-optional" flag to use esbuild.
+.../esbuild@0.27.3/node_modules/esbuild postinstall: [esbuild] Trying to install package "@esbuild/darwin-arm64" using npm
+.../esbuild@0.27.3/node_modules/esbuild postinstall: Done
+dependencies:
++ @replit/connectors-sdk 0.3.0
+
+devDependencies:
++ prettier 3.8.1
++ typescript 5.9.3
+. preinstall$ sh -c 'rm -f package-lock.json yarn.lock; case "$npm_config_user_agent" in pnpm/*) ;; *) echo "Use pnpm instead" >&2; exit 1 ;; esac'
+. preinstall: Done
+Done in 17.1s using pnpm v10.33.3

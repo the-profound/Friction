@@ -19,8 +19,8 @@ runButton = "Project"
 
 [[workflows.workflow]]
 name = "Publish iOS (App Store)"
-author = "agent"
 mode = "parallel"
+author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
@@ -97,25 +97,17 @@ artifactId = "3B4_FFSkEVBkAeYMFRJ2e"
 task = "shell.exec"
 args = "pnpm --filter @workspace/api-server run dev"
 cwd = "./artifacts/api-server"
-waitForPort = 8080
+waitForPort = 3001
 ensurePreviewReachable = "/"
 router = "path"
 
 [workflows.workflow.tasks.env]
-PORT = "8080"
-
-[[workflows.workflow]]
-name = "Project"
-mode = "parallel"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Publish iOS (Dev Client)"
+PORT = "3001"
 
 [[workflows.workflow]]
 name = "Publish iOS (Dev Client)"
 author = "agent"
+mode = "parallel"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
