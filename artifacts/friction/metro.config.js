@@ -7,6 +7,15 @@ const workspaceRoot = path.resolve(projectRoot, "../..");
 
 const config = getDefaultConfig(projectRoot);
 
+// Explicitly opt in to Watchman for file watching. `@expo/cli` only reads
+// `config.resolver.useWatchman` (defaulting to `false` if unset) rather than
+// Metro's own default of `true`, so without this Metro falls back to Node's
+// per-directory `fs.watch` (FallbackWatcher), which burns far more inotify
+// watches than Watchman's single-daemon model — this is what caused ENOSPC
+// crashes when a second Metro instance (the tunnel workflow) ran alongside
+// the main preview workflow in this monorepo's large node_modules tree.
+config.resolver.useWatchman = true;
+
 // Watch all workspace packages so Metro can resolve symlinked libs
 config.watchFolders = [workspaceRoot];
 

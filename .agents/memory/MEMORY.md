@@ -29,3 +29,4 @@
 - [EAS SDK misdetection guard](friction-eas-sdk-misdetection.md) — EAS prebuild rewrites RN version via SDK misdetection; guarded by eas.json prebuildCommand + root pnpm override (update both on SDK bumps).
 - [Friction Expo SDK upgrade playbook](friction-expo-sdk-upgrade.md) — managed workflow (no ios/android dirs); use registry+expo-doctor not memorized versions; absoluteFillObject removed; app.json top-level schema changes in SDK55+.
 - [EAS/corepack pnpm version pin](friction-eas-pnpm-corepack-pin.md) — unpinned corepack resolves latest pnpm major (drift from local); pin `packageManager` in root package.json or EAS silently uses a different pnpm.
+- [Friction Metro Watchman opt-in](friction-metro-watchman-useWatchman.md) — installing Watchman isn't enough; `@expo/cli` defaults `resolver.useWatchman` to false, causing ENOSPC when 2+ Metro instances run.
