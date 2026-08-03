@@ -18,6 +18,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { CollapsibleDatePicker, getMinSpaceStartDate, startOfDay } from "@/components/shared/CalendarGrid";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
+import SubmitProgressOverlay from "@/components/shared/SubmitProgressOverlay";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
 import { useToast } from "@/contexts/ToastContext";
@@ -317,6 +318,12 @@ export default function SpaceCreateScreen() {
           )}
         </View>
       </View>
+
+      <SubmitProgressOverlay
+        visible={isSubmitting}
+        message="공간을 만드는 중이에요"
+        subMessage="잠시만 기다려주세요"
+      />
     </KeyboardAvoidingView>
   );
 }

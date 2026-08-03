@@ -35,6 +35,7 @@ import {
   startOfDay,
 } from "@/components/shared/CalendarGrid";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
+import SubmitProgressOverlay from "@/components/shared/SubmitProgressOverlay";
 import { LetterPickerSheet } from "@/components/shared/LetterPickerSheet";
 import { useUser } from "@/contexts/UserContext";
 import { useToast } from "@/contexts/ToastContext";
@@ -1843,6 +1844,12 @@ export default function SpaceStartScreen() {
         onCancel={() => setShowUnderCapacityModal(false)}
         onConfirm={doStart}
         loading={isStarting}
+      />
+
+      <SubmitProgressOverlay
+        visible={isStarting}
+        message="공간을 시작하는 중이에요"
+        subMessage="잠시만 기다려주세요"
       />
 
     </KeyboardAvoidingView>
