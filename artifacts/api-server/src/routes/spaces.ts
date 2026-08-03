@@ -460,10 +460,14 @@ router.post("/spaces/:id/start", requireAuth, async (req, res) => {
   const weekdays = body.weekdays ?? [];
   let rejectedRequesterIds: string[] = [];
 
+  let alreadyStarted = false;
   try {
     await db.transaction(async (tx) => {
-      // Update space
-      await tx
+      // Conditionally flip RECRUITING -> ACTIVE. This is atomic at the row
+      // level, so if two start requests race (e.g. a double-tap), only one
+      // UPDATE affects a row; the other affects zero rows and we bail out
+      // instead of proceeding to create duplicate rounds/slots.
+      const updatedRows = await tx
         .update(spacesTable)
         .set({
           status: "ACTIVE",
@@ -474,7 +478,29 @@ router.post("/spaces/:id/start", requireAuth, async (req, res) => {
           roundCount: body.roundCount,
           ...(body.defaultCenterCount != null ? { defaultCenterCount: body.defaultCenterCount } : {}),
         })
-        .where(eq(spacesTable.id, req.params.id));
+        .where(
+          and(
+            eq(spacesTable.id, req.params.id),
+            eq(spacesTable.status, "RECRUITING"),
+          ),
+        )
+        .returning({ id: spacesTable.id });
+      if (updatedRows.length === 0) {
+        alreadyStarted = true;
+        return;
+      }
+
+      // A RECRUITING space can already have rounds (and their slots) created
+      // ahead of time — either by the seed data or via POST
+      // /spaces/:id/rounds. Since the space was still RECRUITING, none of
+      // that data can be in progress (no active round, no letters tied to a
+      // round yet), so it's safe to clear it and rebuild from the start
+      // request body, which is meant to be the final source of truth.
+      // Deleting a round cascades to its slots (space_round_slots has
+      // onDelete: "cascade" on space_round_id).
+      await tx
+        .delete(spaceRoundsTable)
+        .where(eq(spaceRoundsTable.spaceId, req.params.id));
 
       // Create rounds and slots
       for (let i = 0; i < body.roundCount; i++) {
@@ -574,6 +600,11 @@ router.post("/spaces/:id/start", requireAuth, async (req, res) => {
       ? detailParts.join(", ")
       : (err instanceof Error ? err.message : String(err));
     res.status(500).json({ error: "공간 시작에 실패했습니다.", detail });
+    return;
+  }
+
+  if (alreadyStarted) {
+    res.status(409).json({ error: "이미 시작되었거나 보관된 공간입니다." });
     return;
   }
 
