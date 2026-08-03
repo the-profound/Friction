@@ -29,3 +29,5 @@ node dist/migrate-xxx.cjs
 drizzle-kit push also reaches the Supabase DB (it uses SUPABASE_DB_URL) but is interactive — pipe newlines to accept defaults or use --force. It may still ask rename-vs-create questions that need manual selection.
 
 **Symptom of missing migration on Supabase:** Drizzle `queryWithCache` throws `Error: Failed query: ...` (wrapping real PG error in `cause`). Direct `executeSql` tests pass (wrong DB). Server returns 500 on the affected endpoint.
+
+**SUPABASE_DB_URL quirk:** the secret has no `postgresql://` scheme prefix (lib/db prepends it), so bare `psql "$SUPABASE_DB_URL"` fails to parse. For ad-hoc queries, use a node script with `pg` from `lib/db/node_modules`, prepending the scheme like lib/db does.

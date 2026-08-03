@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, inArray, count, ne } from "drizzle-orm";
+import { eq, and, inArray, count, ne, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth } from "../middlewares/requireAuth";
 import { generateInviteCode } from "../lib/inviteCodeWords";
@@ -503,6 +503,7 @@ router.post("/spaces/:id/start", requireAuth, async (req, res) => {
         .where(eq(spaceRoundsTable.spaceId, req.params.id));
 
       // Create rounds and slots
+      let firstRoundId: string | null = null;
       for (let i = 0; i < body.roundCount; i++) {
         const roundConfig = effectiveRounds[i] as Exclude<typeof effectiveRounds[number], { error: string }>;
         const roundStartDate = calculateRoundStartDate(
@@ -523,6 +524,7 @@ router.post("/spaces/:id/start", requireAuth, async (req, res) => {
             ...(roundStartDate ? { startsAt: roundStartDate } : {}),
           })
           .returning();
+        if (i === 0) firstRoundId = round.id;
 
         // Create slots for this round (already filtered for operator if needed)
         const slots = roundConfig?.slots ?? [];
@@ -533,6 +535,24 @@ router.post("/spaces/:id/start", requireAuth, async (req, res) => {
             slotOrder: j,
           });
         }
+      }
+
+      // Link round-less OPENING letters to round 1. The start flow creates
+      // (or reuses) the opening letter before any rounds exist, so it has no
+      // spaceRoundId — but the detail screen groups letters strictly by
+      // round, so an unlinked letter would never be shown. Attaching it here
+      // covers both the newly-created and the reused-letter paths.
+      if (firstRoundId) {
+        await tx
+          .update(spaceLettersTable)
+          .set({ spaceRoundId: firstRoundId })
+          .where(
+            and(
+              eq(spaceLettersTable.spaceId, req.params.id),
+              eq(spaceLettersTable.letterType, "OPENING"),
+              isNull(spaceLettersTable.spaceRoundId),
+            ),
+          );
       }
 
       // Reject all pending code requests and collect requester IDs for notification

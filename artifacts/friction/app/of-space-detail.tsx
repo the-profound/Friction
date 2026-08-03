@@ -1094,10 +1094,20 @@ export default function SpaceDetailScreen() {
     codeRequestsQuery.data ?? []
   ) as SpaceCodeRequestWithRequester[];
 
+  // Fallback for legacy data: OPENING letters created by the start flow
+  // before rounds existed have no spaceRoundId. Group them under round 1 so
+  // they don't silently disappear from the detail screen.
+  const firstRoundId = useMemo(() => {
+    if (rounds.length === 0) return null;
+    return [...rounds].sort((a, b) => a.roundNumber - b.roundNumber)[0].id;
+  }, [rounds]);
+
   const lettersByRound = useMemo<Record<string, SpaceLetter[]>>(() => {
     const map: Record<string, SpaceLetter[]> = {};
     for (const letter of letters) {
-      const key = letter.spaceRoundId ?? "__none__";
+      const key =
+        letter.spaceRoundId ??
+        (letter.letterType === "OPENING" && firstRoundId ? firstRoundId : "__none__");
       (map[key] ??= []).push(letter);
     }
     for (const key of Object.keys(map)) {
@@ -1108,7 +1118,7 @@ export default function SpaceDetailScreen() {
       });
     }
     return map;
-  }, [letters]);
+  }, [letters, firstRoundId]);
 
   const isLoading = joinContextQuery.isLoading;
   const isError = joinContextQuery.isError;
