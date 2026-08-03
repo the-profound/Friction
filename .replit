@@ -1,4 +1,4 @@
-modules = ["nodejs-24", "javascript", "python-3.11", "postgresql-16"]
+modules = ["nodejs-24", "javascript", "postgresql-16"]
 
 [[artifacts]]
 id = "artifacts/api-server"
@@ -18,103 +18,25 @@ env = { "CI" = "true" }
 runButton = "Project"
 
 [[workflows.workflow]]
-name = "Publish iOS (App Store)"
+name = "Project"
 mode = "parallel"
 author = "agent"
 
 [[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "bash /home/runner/workspace/artifacts/friction/scripts/publish-ios.sh"
+task = "workflow.run"
+args = "Start application"
+
+[[workflows.workflow]]
+name = "Start application"
+author = "agent"
 
 [workflows.workflow.metadata]
 outputType = "console"
 
-[[workflows.workflow]]
-name = "artifacts/mockup-sandbox: Component Preview Server"
-author = "agent"
-mode = "sequential"
-
-[workflows.workflow.metadata]
-outputType = "webview"
-artifactId = "XegfDyZt7HqfW2Bb8Ghoy"
-isCanvasWorkflow = true
-
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "pnpm --filter @workspace/mockup-sandbox run dev"
-cwd = "./artifacts/mockup-sandbox"
-waitForPort = 8081
-ensurePreviewReachable = "/"
-router = "path"
-
-[workflows.workflow.tasks.env]
-PORT = "8081"
-BASE_PATH = "/__mockup"
-
-[[workflows.workflow]]
-name = "artifacts/friction: expo"
-author = "agent"
-mode = "sequential"
-
-[workflows.workflow.metadata]
-outputType = "webview"
-artifactId = "artifacts/friction"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pnpm --filter @workspace/friction run dev"
-cwd = "./artifacts/friction"
-waitForPort = 21672
-ensurePreviewReachable = "/status"
-router = "expo-domain"
-
-[workflows.workflow.tasks.env]
-PORT = "21672"
-BASE_PATH = "/"
-
-[[workflows.workflow]]
-name = "artifacts/api-server: API Server"
-author = "agent"
-mode = "sequential"
-
-[workflows.workflow.metadata]
-outputType = "webview"
-artifactId = "3B4_FFSkEVBkAeYMFRJ2e"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pnpm --filter @workspace/api-server run dev"
-cwd = "./artifacts/api-server"
-waitForPort = 3001
-ensurePreviewReachable = "/"
-router = "path"
-
-[workflows.workflow.tasks.env]
-PORT = "3001"
-
-[[workflows.workflow]]
-name = "Publish iOS (Dev Client)"
-mode = "parallel"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "bash /home/runner/workspace/artifacts/friction/scripts/publish-dev.sh"
-
-[workflows.workflow.metadata]
-outputType = "console"
-
-[[workflows.workflow]]
-name = "Preview Activate"
-author = "agent"
-mode = "parallel"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "cd /home/runner/workspace/artifacts/friction && pnpm dev:tunnel"
-
-[workflows.workflow.metadata]
-outputType = "console"
+args = "PORT=3000 pnpm --filter @workspace/api-server run dev"
+waitForPort = 3000
 
 [agent]
 stack = "PNPM_WORKSPACE"
@@ -123,18 +45,29 @@ integrations = ["notion:1.0.0"]
 
 [postMerge]
 path = "scripts/post-merge.sh"
-timeoutMs = 180000
+timeoutMs = 20000
 
 [nix]
 channel = "stable-25_05"
-packages = ["pstree", "eas-cli"]
 
 [userenv]
 
 [userenv.shared]
-EXPO_PUBLIC_POSTHOG_TOKEN = "phc_ujzCizkg5fppua6PwidhQAuhegBrVQ3cm78GP9mmr4S5"
-EXPO_PUBLIC_POSTHOG_HOST = "https://us.i.posthog.com"
-EMBEDDING_SERVICE_URL = "http://localhost:8000"
+EXPO_PUBLIC_SUPABASE_URL = "https://jrmdgjfcytbbmphaefbf.supabase.co"
+EXPO_PUBLIC_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpybWRnamZjeXRiYm1waGFlZmJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY2NjQ1MDksImV4cCI6MjA5MjI0MDUwOX0.T2-iS0S76Uw5gv1gzfZ7DeMMlmiIg4ittF5u7g_GSi8"
 
-[objectStorage]
-defaultBucketID = "replit-objstore-4b6c9fed-f757-4bf7-8128-d80078b0642f"
+[[ports]]
+localPort = 3000
+externalPort = 3001
+
+[[ports]]
+localPort = 8080
+externalPort = 8080
+
+[[ports]]
+localPort = 8081
+externalPort = 80
+
+[[ports]]
+localPort = 21672
+externalPort = 3000
