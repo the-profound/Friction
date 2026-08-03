@@ -131,19 +131,23 @@ export default function LoginScreen() {
     try {
       const { error, needsConfirmation } = await signUp(email.trim(), password, trimmedNickname);
       if (error) {
-        const msg = error.message.toLowerCase();
-        if (needsConfirmation && msg.includes("사용자 정보 저장")) {
-          setSignupDone(true);
-        } else if (msg.includes("already registered") || msg.includes("already exists") || msg.includes("user already")) {
-          setErrorMessage("이미 가입된 이메일입니다. 로그인해주세요.");
-        } else if (msg.includes("network") || msg.includes("fetch")) {
-          setErrorMessage("네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.");
-        } else if (msg.includes("password")) {
-          setErrorMessage("비밀번호는 6자 이상이어야 합니다.");
-        } else if (msg.includes("사용자 정보 저장")) {
-          setErrorMessage("계정은 생성됐지만 프로필 저장에 실패했습니다. 잠시 후 로그인해주세요.");
+        if (error.name === "UserSyncError") {
+          // Account creation itself succeeded on Supabase's side, but the
+          // profile row failed to sync to our backend. AuthContext already
+          // signed the user back out if they had been auto-confirmed, so it's
+          // always safe to let them retry from here.
+          setErrorMessage("계정은 생성됐지만 프로필 저장에 실패했습니다. 다시 시도해주세요.");
         } else {
-          setErrorMessage("회원가입에 실패했습니다. 다시 시도해주세요.");
+          const msg = error.message.toLowerCase();
+          if (msg.includes("already registered") || msg.includes("already exists") || msg.includes("user already")) {
+            setErrorMessage("이미 가입된 이메일입니다. 로그인해주세요.");
+          } else if (msg.includes("network") || msg.includes("fetch")) {
+            setErrorMessage("네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.");
+          } else if (msg.includes("password")) {
+            setErrorMessage("비밀번호는 6자 이상이어야 합니다.");
+          } else {
+            setErrorMessage("회원가입에 실패했습니다. 다시 시도해주세요.");
+          }
         }
       } else if (needsConfirmation) {
         setSignupDone(true);

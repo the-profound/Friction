@@ -1,0 +1,29 @@
+---
+name: Friction signup auto-confirm auth race
+description: Why Supabase auto-confirm signup can strand users mid-signup, and the fix pattern used in AuthContext.
+---
+
+Supabase's `supabase.auth.signUp()` fires `onAuthStateChange` (setting a real
+session) **synchronously inside the call, before the `signUp()` promise even
+resolves back to the caller** — this happens whenever auto-confirm is on (no
+email verification required). If the app's auth guard treats a truthy session
+as "fully signed in" and redirects away from the signup screen, it will do so
+**before** any post-signup profile-sync call (e.g. `/api/users/sync`) has run,
+because that sync only starts after `signUp()` returns. The user lands on the
+authenticated app with no backend profile row yet — screens that assume a
+synced profile throw/crash.
+
+**Why:** the redirect-eligibility signal (`session` in `AuthContext`) and the
+one-time signup side effect (profile sync) are two independent async flows
+racing on the same `onAuthStateChange` event; nothing serializes them.
+
+**How to apply:** in `AuthContext.signUp()`, set a ref flag before calling
+`supabase.auth.signUp()` that makes the `onAuthStateChange` listener drop
+events while true. Run the profile sync manually inside `signUp()`, and only
+call `setSession(data.session)` yourself once the sync has actually
+succeeded. If the sync fails after an auto-confirmed session was created,
+sign the user back out and return an error, rather than leaving a
+half-synced authenticated session for the guard to redirect on. This same
+suppress-until-side-effect-completes pattern generalizes to any other
+Supabase auth flow that has a required post-auth side effect (e.g. OAuth
+sign-in that also needs an out-of-band backend sync).
