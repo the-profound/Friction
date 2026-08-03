@@ -37,6 +37,14 @@ import {
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import { LetterPickerSheet } from "@/components/shared/LetterPickerSheet";
 import { useUser } from "@/contexts/UserContext";
+import { useToast } from "@/contexts/ToastContext";
+import {
+  kstToday,
+  kstTomorrow,
+  minOpeningSendDate,
+  kstDateAt6,
+  toKstCalendarDate,
+} from "@/lib/kstDate";
 import {
   useGetSpaceJoinContext,
   getGetSpaceJoinContextQueryKey,
@@ -73,9 +81,6 @@ const SLOT_ITEM_H = SLOT_ROW_H + SLOT_ROW_GAP;
 
 const STEPS = ["운영 설정 확정", "회차 구성", "중심글 순서 배정", "첫 여는 편지 보내기", "시작 확인"];
 const TOTAL_STEPS = STEPS.length;
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 /**
  * Calculate the projected end date (last center article date) for display.
  * participantCount: number of participants in the space (use 1 if 0)
@@ -166,11 +171,15 @@ function formatMonthDay(d: Date): string {
   return `${d.getMonth() + 1}월 ${d.getDate()}일`;
 }
 
-/** Returns the deadline for sending an opening letter: the day before startDate at 06:00 */
+/**
+ * Returns the deadline calendar date for sending an opening letter: the day
+ * before startDate (local-midnight calendar Date). The actual send moment on
+ * that date is always KST 06:00 — build it with `kstDateAt6` when needed.
+ */
 function getOpeningLetterDeadline(startDate: Date): Date {
   const d = new Date(startDate);
   d.setDate(d.getDate() - 1);
-  d.setHours(6, 0, 0, 0);
+  d.setHours(0, 0, 0, 0);
   return d;
 }
 function ConfirmModal({
@@ -402,8 +411,7 @@ function OperationSettingsStep({
   setStartDate: (v: Date) => void;
 }) {
   const minStartDate = useMemo(() => getMinSpaceStartDate(), []);
-  const startDay = startOfDay(startDate);
-  const isStartDateTooSoon = startDay < minStartDate;
+  const isStartDateTooSoon = startOfDay(startDate) < minStartDate;
 
   const endDate = useMemo(
     () => calculateProjectedEndDate(startDate, scheduleType as "N_DAY" | "WEEKDAY", interval, weekdays, roundCount, centerCount, confirmedCount),
@@ -566,7 +574,12 @@ function OperationSettingsStep({
           value={startDate}
           onChange={(date) => setStartDate(date)}
           isDateDisabled={(date) => startOfDay(date) < minStartDate}
+          onOpen={() => {
+            // 유효하지 않은(너무 이른) 날짜인 채로 달력을 열면 최소 시작일로 스냅
+            if (isStartDateTooSoon) return new Date(minStartDate);
+          }}
           formatButtonLabel={(date) => formatDate(date)}
+          triggerStyle={isStartDateTooSoon ? opStyles.datePastTrigger : undefined}
         />
         {isStartDateTooSoon && (
           <Text style={opStyles.datePastWarning}>선택한 날짜는 오늘로부터 3일 후 이후여야 해요.</Text>
@@ -861,13 +874,8 @@ function OpeningLetterStep({
   const [showArticleList, setShowArticleList] = useState(() => !openingLetterExists || openingScheduledSend === null);
   const [pickerVisible, setPickerVisible] = useState(false);
 
-  const minSendDate = useMemo(() => {
-    const now = new Date();
-    const min = new Date(now);
-    min.setHours(0, 0, 0, 0);
-    if (now.getHours() >= 6) min.setDate(min.getDate() + 1);
-    return min;
-  }, []);
+  // KST 기준: 06:00 이전이면 오늘, 이후면 내일부터 발송 예약 가능
+  const minSendDate = useMemo(() => minOpeningSendDate(), []);
 
   const [scheduledDate, setScheduledDate] = useState<Date>(() => {
     const d = minSendDate;
@@ -878,7 +886,10 @@ function OpeningLetterStep({
   const [saving, setSaving] = useState(false);
 
   const existingArticleTitle = openingScheduledSend?.articleTitle ?? null;
-  const existingScheduledDate = openingScheduledSend ? new Date(openingScheduledSend.scheduledAt) : null;
+  // 저장된 발송 instant를 KST 달력 날짜로 변환해 표시 (기기 시간대 무관)
+  const existingScheduledDate = openingScheduledSend
+    ? toKstCalendarDate(new Date(openingScheduledSend.scheduledAt))
+    : null;
 
   const selectedTitle = useMemo(() => {
     if (!selectedArticleId) return null;
@@ -914,8 +925,8 @@ function OpeningLetterStep({
       ));
 
       const chosenDate = scheduledDate > maxScheduledAt ? maxScheduledAt : scheduledDate;
-      const finalScheduledAt = new Date(chosenDate);
-      finalScheduledAt.setHours(6, 0, 0, 0);
+      // 발송 시각은 기기 시간대와 무관하게 항상 "해당 날짜의 KST 06:00"
+      const finalScheduledAt = kstDateAt6(chosenDate);
       await createSend.mutateAsync({ id: spaceId, letterId: spaceLetterId, data: { scheduledAt: finalScheduledAt.toISOString() } });
       queryClient.invalidateQueries({ queryKey: getListAllSpaceScheduledSendsQueryKey(spaceId) });
 
@@ -944,23 +955,25 @@ function OpeningLetterStep({
         </Text>
       </View>
 
-      {/* 이미 등록된 편지 정보 */}
-      {openingLetterExists && existingScheduledDate && !showArticleList && (
+      {/* 이미 등록된 편지 정보 — 변경 중에도 현재 등록된 편지가 항상 보이도록 유지 */}
+      {openingLetterExists && existingScheduledDate && (
         <View style={olStyles.savedCard}>
           <View style={olStyles.savedCardHeader}>
             <Feather name="check-circle" size={15} color={Colors.noticeAccent} />
             <Text style={olStyles.savedCardTitle}>여는 편지 등록됨</Text>
           </View>
-          {existingArticleTitle && (
-            <Text style={olStyles.savedCardArticle} numberOfLines={1}>{existingArticleTitle}</Text>
-          )}
+          <Text style={olStyles.savedCardArticle} numberOfLines={1}>
+            {existingArticleTitle ?? "제목 없음"}
+          </Text>
           <Text style={olStyles.savedCardDate}>{formatMonthDay(existingScheduledDate)} 06:00 발송 예정</Text>
-          <ScalePressable
-            contentStyle={olStyles.reSelectBtn}
-            onPress={() => { setSelectedArticleId(null); setShowArticleList(true); }}
-          >
-            <Text style={olStyles.reSelectBtnText}>다른 편지로 변경</Text>
-          </ScalePressable>
+          {!showArticleList && (
+            <ScalePressable
+              contentStyle={olStyles.reSelectBtn}
+              onPress={() => { setSelectedArticleId(null); setShowArticleList(true); }}
+            >
+              <Text style={olStyles.reSelectBtnText}>다른 편지로 변경</Text>
+            </ScalePressable>
+          )}
         </View>
       )}
 
@@ -1020,7 +1033,7 @@ function OpeningLetterStep({
         <View style={stepStyles.infoBox}>
           <Feather name="info" size={13} color={Colors.zinc400} />
           <Text style={stepStyles.infoBoxText}>
-            여는 편지 없이도 다음 단계로 이동할 수 있지만, 공간 시작에는 여는 편지가 필요해요.
+            여는 편지를 등록해야 다음 단계로 이동할 수 있어요. 위에서 보낼 편지를 선택하고 등록해주세요.
           </Text>
         </View>
       )}
@@ -1088,7 +1101,9 @@ function StartConfirmStep({
   );
 
   const openingTitle = openingScheduledSend?.articleTitle ?? null;
-  const openingScheduledDate = openingScheduledSend ? new Date(openingScheduledSend.scheduledAt) : null;
+  const openingScheduledDate = openingScheduledSend
+    ? toKstCalendarDate(new Date(openingScheduledSend.scheduledAt))
+    : null;
 
   const dateRangeText = lastDate
     ? `${formatMonthDay(startDate)} ~ ${formatMonthDay(lastDate)}`
@@ -1160,16 +1175,13 @@ function StartConfirmStep({
               size={15}
               color={openingLetterExists ? Colors.noticeAccent : Colors.zinc400}
             />
-            <Text style={openingLetterExists ? confirmStyles.summaryVal : confirmStyles.summaryWarning}>
-              {openingLetterExists ? "작성 완료" : "미작성"}
+            <Text
+              style={openingLetterExists ? confirmStyles.summaryVal : confirmStyles.summaryWarning}
+              numberOfLines={1}
+            >
+              {openingLetterExists ? (openingTitle ?? "제목 없음") : "미작성"}
             </Text>
           </View>
-          {openingLetterExists && openingTitle && (
-            <View style={confirmStyles.summaryRow}>
-              <Text style={confirmStyles.summaryKey}>편지 제목</Text>
-              <Text style={confirmStyles.summaryVal} numberOfLines={1}>{openingTitle}</Text>
-            </View>
-          )}
           {openingLetterExists && openingScheduledDate && (
             <View style={confirmStyles.summaryRow}>
               <Text style={confirmStyles.summaryKey}>발송 예정일</Text>
@@ -1207,6 +1219,7 @@ function StartConfirmStep({
 
 export default function SpaceStartScreen() {
   const insets = useSafeAreaInsets();
+  const { showToast } = useToast();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { userId } = useUser();
@@ -1434,6 +1447,7 @@ export default function SpaceStartScreen() {
       });
 
       queryClient.invalidateQueries({ queryKey: getGetSpaceJoinContextQueryKey(id, { userId }) });
+      showToast({ message: "공간이 시작되었습니다", type: "success" });
       router.back();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "공간 시작에 실패했어요. 다시 시도해주세요.";
@@ -1443,7 +1457,7 @@ export default function SpaceStartScreen() {
     }
   }, [
     roundConfigs, slotOrder, roundCount, scheduleType, interval, weekdays,
-    centerCount, space, startSpace, id, queryClient, userId, router,
+    centerCount, space, startSpace, id, queryClient, userId, router, showToast,
   ]);
 
   const handleAutoRejectContinue = useCallback(() => {
@@ -1492,15 +1506,18 @@ export default function SpaceStartScreen() {
 
   // ── Step navigation logic ─────────────────────────────────────────────────
 
+  // 시작 예정일이 최소 시작일(오늘+3일)보다 이르면 다음 단계로 진행 불가
+  const isStartDatePast = useMemo(() => startOfDay(startDate) < getMinSpaceStartDate(), [startDate]);
+
   const canProceed = useMemo(() => {
-    if (step === 0) return hasValidSchedule;
+    if (step === 0) return hasValidSchedule && !isStartDatePast;
     if (step === 1) return true; // only reached in custom-edit mode; fields are optional
     if (step === 2 && slotSubStep === 0) return slotItems.length >= 1;
     if (step === 2 && slotSubStep === 1) return true;
-    if (step === 3) return true;
+    if (step === 3) return openingLetterExists && openingScheduledSend !== null;
     if (step === 4) return canStart;
     return true;
-  }, [step, slotSubStep, hasValidSchedule, slotItems, canStart]);
+  }, [step, slotSubStep, hasValidSchedule, isStartDatePast, slotItems, canStart, openingLetterExists, openingScheduledSend]);
 
   // Entering the 회차 구성 step always asks whether to change the draft that
   // already exists (created with the space / edited from the rounds screen)
@@ -2289,13 +2306,19 @@ const opStyles = StyleSheet.create({
     flexWrap: "wrap",
   },
   participantEmphasis: {
-    ...Typography.bodySemiBold,
+    // 부모 텍스트의 fontSize를 그대로 상속 — 색/굵기만으로 강조
+    fontFamily: Typography.bodySemiBold.fontFamily,
+    fontWeight: "600",
     color: Colors.zinc800,
   },
   participantHint: {
     ...Typography.body,
     fontSize: 13,
     color: Colors.zinc400,
+  },
+  datePastTrigger: {
+    borderColor: "#ef4444",
+    borderWidth: 1.5,
   },
   datePastWarning: {
     ...Typography.caption,
@@ -2483,7 +2506,9 @@ const olStyles = StyleSheet.create({
     lineHeight: 17,
   },
   deadlineEmphasis: {
-    ...Typography.bodySemiBold,
+    // 부모 텍스트의 fontSize를 그대로 상속 — 색/굵기만으로 강조
+    fontFamily: Typography.bodySemiBold.fontFamily,
+    fontWeight: "600",
     color: Colors.zinc700,
   },
   lateWarning: {

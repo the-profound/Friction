@@ -188,6 +188,13 @@ export interface CollapsibleDatePickerProps {
   canGoPrevMonth?: (viewYear: number, viewMonth: number) => boolean;
   canGoNextMonth?: (viewYear: number, viewMonth: number) => boolean;
   formatButtonLabel: (date: Date) => string;
+  /**
+   * Called when the grid is about to open. Return a Date to replace the
+   * current selection (e.g. snap an invalid/past value to tomorrow); the
+   * returned date is committed via `onChange` and used for the initial
+   * visible month. Return nothing to keep the current value.
+   */
+  onOpen?: () => Date | void;
   triggerIcon?: React.ComponentProps<typeof Feather>["name"];
   /** Collapse the grid again once a date is picked. Defaults to true. */
   closeOnSelect?: boolean;
@@ -208,6 +215,7 @@ export function CollapsibleDatePicker({
   canGoPrevMonth,
   canGoNextMonth,
   formatButtonLabel,
+  onOpen,
   triggerIcon = "calendar",
   closeOnSelect = true,
   triggerStyle,
@@ -219,15 +227,19 @@ export function CollapsibleDatePicker({
   const [viewMonth, setViewMonth] = useState(() => value.getMonth());
 
   const handleToggle = () => {
-    setOpen((prev) => {
-      const next = !prev;
-      if (next) {
-        // Re-sync the visible month to the current selection each time it opens.
-        setViewYear(value.getFullYear());
-        setViewMonth(value.getMonth());
+    if (!open) {
+      // Re-sync the visible month to the current selection each time it opens,
+      // allowing the caller to replace an invalid selection first.
+      let target = value;
+      const replacement = onOpen?.();
+      if (replacement) {
+        onChange(replacement);
+        target = replacement;
       }
-      return next;
-    });
+      setViewYear(target.getFullYear());
+      setViewMonth(target.getMonth());
+    }
+    setOpen((prev) => !prev);
   };
 
   const canGoPrev = canGoPrevMonth ? canGoPrevMonth(viewYear, viewMonth) : true;
