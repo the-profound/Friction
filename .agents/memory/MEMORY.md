@@ -30,3 +30,4 @@
 - [Friction Expo SDK upgrade playbook](friction-expo-sdk-upgrade.md) — managed workflow (no ios/android dirs); use registry+expo-doctor not memorized versions; absoluteFillObject removed; app.json top-level schema changes in SDK55+.
 - [EAS/corepack pnpm version pin](friction-eas-pnpm-corepack-pin.md) — unpinned corepack resolves latest pnpm major (drift from local); pin `packageManager` in root package.json or EAS silently uses a different pnpm.
 - [Friction Metro Watchman opt-in](friction-metro-watchman-useWatchman.md) — installing Watchman isn't enough; `@expo/cli` defaults `resolver.useWatchman` to false, causing ENOSPC when 2+ Metro instances run.
+- [Friction drizzle-kit push migration history](friction-drizzle-push-migration-history.md) — a `_journal.json` gap doesn't prove live DB drift; verify against `SUPABASE_DB_URL` directly before assuming a 500 is a schema mismatch.

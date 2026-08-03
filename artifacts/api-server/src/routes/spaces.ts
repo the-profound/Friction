@@ -526,13 +526,54 @@ router.post("/spaces/:id/start", requireAuth, async (req, res) => {
       rejectedRequesterIds = rejected.map((r) => r.requesterId);
     });
   } catch (err) {
+    // Postgres errors (via node-postgres) carry structured fields beyond
+    // `message`/`stack` — code, table, column, constraint, detail — which are
+    // essential for diagnosing schema mismatches (missing column/table/enum
+    // value) without guessing from a generic 500 response. Drizzle wraps the
+    // raw pg error in a DrizzleQueryError, so the structured fields live on
+    // `err.cause`, not on `err` itself.
+    type PgErrorShape = {
+      code?: string;
+      detail?: string;
+      table?: string;
+      column?: string;
+      constraint?: string;
+      schema?: string;
+      routine?: string;
+      cause?: unknown;
+    };
+    const topErr = err as PgErrorShape;
+    const pgErr: PgErrorShape =
+      topErr.code != null ? topErr : ((topErr.cause as PgErrorShape) ?? {});
     console.error("POST /spaces/:id/start transaction error:", {
       message: err instanceof Error ? err.message : String(err),
       stack: err instanceof Error ? err.stack : undefined,
+      code: pgErr.code,
+      detail: pgErr.detail,
+      table: pgErr.table,
+      column: pgErr.column,
+      constraint: pgErr.constraint,
+      schema: pgErr.schema,
+      routine: pgErr.routine,
       spaceId: req.params.id,
       callerId,
     });
-    res.status(500).json({ error: "공간 시작에 실패했습니다." });
+    // Surface the concrete DB failure reason (not just a generic message) so
+    // operators/testers can see exactly what went wrong instead of guessing
+    // from a bare "공간 시작에 실패했습니다." — this app is still being
+    // debugged in the field, so precise diagnostics beat a clean but useless
+    // error message.
+    const detailParts = [
+      pgErr.code ? `code=${pgErr.code}` : undefined,
+      pgErr.table ? `table=${pgErr.table}` : undefined,
+      pgErr.column ? `column=${pgErr.column}` : undefined,
+      pgErr.constraint ? `constraint=${pgErr.constraint}` : undefined,
+      pgErr.detail,
+    ].filter(Boolean);
+    const detail = detailParts.length > 0
+      ? detailParts.join(", ")
+      : (err instanceof Error ? err.message : String(err));
+    res.status(500).json({ error: "공간 시작에 실패했습니다.", detail });
     return;
   }
 
