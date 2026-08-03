@@ -10,15 +10,13 @@ import {
   Platform,
   TouchableWithoutFeedback,
   Keyboard,
-  Modal,
-  Pressable,
 } from "react-native";
-import { Calendar } from "react-native-calendars";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import ScalePressable from "@/components/shared/ScalePressable";
+import { CollapsibleDatePicker, getMinSpaceStartDate, startOfDay } from "@/components/shared/CalendarGrid";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
@@ -53,16 +51,18 @@ const WEEKDAY_LABELS = ["월", "화", "수", "목", "금", "토", "일"];
 const STEPS = ["기본 설정", "운영 설정", "고급 설정", "생성 확인"];
 const TOTAL_STEPS = STEPS.length;
 
-function getTodayDigits(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
+function dateToDigits(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
   return `${y}${m}${d}`;
 }
 
-function digitsToIso(digits: string): string {
-  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
+function digitsToDate(digits: string): Date | null {
+  const iso = parseDateInput(digits);
+  if (!iso) return null;
+  const [y, m, d] = iso.split("-").map((s) => parseInt(s, 10));
+  return new Date(y, m - 1, d);
 }
 
 function parseDateInput(raw: string): string | null {
@@ -109,7 +109,7 @@ export default function SpaceCreateScreen() {
     name: "",
     description: "",
     isAnonymous: false,
-    startsAt: getTodayDigits(),
+    startsAt: dateToDigits(getMinSpaceStartDate()),
     roundCount: 1,
     maxParticipants: "",
     defaultCenterInterval: DEFAULT_CENTER_INTERVAL,
@@ -397,12 +397,11 @@ function OperationSettingsStep({
   roundCountError: string;
   onRoundCountChange: (text: string) => void;
 }) {
-  const [calendarVisible, setCalendarVisible] = useState(false);
-
-  const selectedIso = form.startsAt.length === 8 ? digitsToIso(form.startsAt) : undefined;
-  const markedDates = selectedIso
-    ? { [selectedIso]: { selected: true, selectedColor: Colors.zinc900 } }
-    : {};
+  const minStartDate = useMemo(() => getMinSpaceStartDate(), []);
+  const selectedDate = useMemo(() => {
+    const parsed = digitsToDate(form.startsAt);
+    return parsed ?? minStartDate;
+  }, [form.startsAt, minStartDate]);
 
   return (
     <View style={stepStyles.container}>
@@ -411,43 +410,13 @@ function OperationSettingsStep({
 
       <View style={stepStyles.fieldGroup}>
         <Text style={stepStyles.fieldLabel}>시작 예정일 *</Text>
-        <Pressable
-          style={[stepStyles.input, operationStyles.datePressable]}
-          onPress={() => setCalendarVisible(true)}
-        >
-          <Text style={form.startsAt ? stepStyles.inputText : stepStyles.inputPlaceholder}>
-            {form.startsAt ? formatDateDisplay(form.startsAt) : "날짜를 선택하세요"}
-          </Text>
-        </Pressable>
-
-        <Modal
-          visible={calendarVisible}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setCalendarVisible(false)}
-        >
-          <Pressable
-            style={operationStyles.modalBackdrop}
-            onPress={() => setCalendarVisible(false)}
-          >
-            <Pressable style={operationStyles.calendarContainer} onPress={() => {}}>
-              <Calendar
-                markedDates={markedDates}
-                onDayPress={(day) => {
-                  const digits = day.dateString.replace(/-/g, "");
-                  updateField("startsAt", digits);
-                  setCalendarVisible(false);
-                }}
-                theme={{
-                  selectedDayBackgroundColor: Colors.zinc900,
-                  todayTextColor: Colors.zinc500,
-                  arrowColor: Colors.zinc900,
-                }}
-              />
-            </Pressable>
-          </Pressable>
-        </Modal>
-        <Text style={stepStyles.hint}>과거 날짜를 선택하면 생성 즉시 경과 상태로 간주돼요</Text>
+        <CollapsibleDatePicker
+          value={selectedDate}
+          onChange={(date) => updateField("startsAt", dateToDigits(date))}
+          isDateDisabled={(date) => startOfDay(date) < minStartDate}
+          formatButtonLabel={(date) => formatDateDisplay(dateToDigits(date))}
+        />
+        <Text style={stepStyles.hint}>시작 예정일은 오늘로부터 3일 후부터 선택할 수 있어요</Text>
       </View>
 
       <View style={stepStyles.fieldGroup}>
@@ -569,6 +538,7 @@ function WeekdayToggle({
           <ScalePressable
             key={idx}
             style={[weekdayStyles.pill, selected && weekdayStyles.pillSelected]}
+            contentStyle={weekdayStyles.pillContent}
             onPress={() => toggle(idx)}
           >
             <Text style={[weekdayStyles.pillText, selected && weekdayStyles.pillTextSelected]}>
@@ -701,7 +671,9 @@ function ConfirmStep({
           <Text>{" 공간이에요."}</Text>
           {form.description.trim() ? (
             <Text>{` ${form.description.trim()}`}</Text>
-          ) : null}
+          ) : (
+            <Text>{""}</Text>
+          )}
           <Text>{form.isAnonymous ? " 익명으로 운영돼요." : " 기명으로 운영돼요."}</Text>
         </Text>
       </View>
@@ -725,7 +697,9 @@ function ConfirmStep({
           </Text>
           {form.maxParticipants.trim() ? (
             <Text>{` 최대 ${form.maxParticipants}명까지 참여할 수 있어요.`}</Text>
-          ) : null}
+          ) : (
+            <Text>{""}</Text>
+          )}
           <Text>
             {form.operatorParticipates
               ? " 운영자도 회차에 참여해요."
@@ -872,16 +846,6 @@ const stepStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.zinc100,
   },
-  inputText: {
-    ...Typography.body,
-    fontSize: 16,
-    color: Colors.zinc900,
-  },
-  inputPlaceholder: {
-    ...Typography.body,
-    fontSize: 16,
-    color: Colors.zinc400,
-  },
   inputMulti: {
     minHeight: 96,
     lineHeight: 22,
@@ -975,25 +939,6 @@ const stepperStyles = StyleSheet.create({
   },
 });
 
-const operationStyles = StyleSheet.create({
-  datePressable: {
-    justifyContent: "center",
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-  },
-  calendarContainer: {
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    overflow: "hidden",
-    width: "100%",
-  },
-});
-
 const scheduleStyles = StyleSheet.create({
   optionList: {
     gap: 8,
@@ -1051,10 +996,18 @@ const weekdayStyles = StyleSheet.create({
   pill: {
     width: 40,
     height: 40,
+    flexGrow: 0,
+    flexShrink: 0,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: Colors.zinc200,
     backgroundColor: Colors.zinc50,
+  },
+  pillContent: {
+    width: "100%",
+    height: "100%",
+    flexGrow: 0,
+    flexShrink: 0,
     alignItems: "center",
     justifyContent: "center",
   },

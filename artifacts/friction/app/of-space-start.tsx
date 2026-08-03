@@ -27,7 +27,13 @@ import { Feather } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
-import { CalendarGrid, CollapsibleDatePicker, WEEKDAY_LABELS } from "@/components/shared/CalendarGrid";
+import {
+  CalendarGrid,
+  CollapsibleDatePicker,
+  WEEKDAY_LABELS,
+  getMinSpaceStartDate,
+  startOfDay,
+} from "@/components/shared/CalendarGrid";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import { LetterPickerSheet } from "@/components/shared/LetterPickerSheet";
 import { useUser } from "@/contexts/UserContext";
@@ -384,11 +390,9 @@ function OperationSettingsStep({
   startDate: Date;
   setStartDate: (v: Date) => void;
 }) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const startDay = new Date(startDate);
-  startDay.setHours(0, 0, 0, 0);
-  const isStartDatePast = startDay < today;
+  const minStartDate = useMemo(() => getMinSpaceStartDate(), []);
+  const startDay = startOfDay(startDate);
+  const isStartDateTooSoon = startDay < minStartDate;
 
   const endDate = useMemo(
     () => calculateProjectedEndDate(startDate, scheduleType as "N_DAY" | "WEEKDAY", interval, weekdays, roundCount, centerCount, confirmedCount),
@@ -550,15 +554,11 @@ function OperationSettingsStep({
         <CollapsibleDatePicker
           value={startDate}
           onChange={(date) => setStartDate(date)}
-          isDateDisabled={(date) => {
-            const d0 = new Date(date);
-            d0.setHours(0, 0, 0, 0);
-            return d0 < today;
-          }}
+          isDateDisabled={(date) => startOfDay(date) < minStartDate}
           formatButtonLabel={(date) => formatDate(date)}
         />
-        {isStartDatePast && (
-          <Text style={opStyles.datePastWarning}>선택한 날짜가 오늘보다 이전이에요.</Text>
+        {isStartDateTooSoon && (
+          <Text style={opStyles.datePastWarning}>선택한 날짜는 오늘로부터 3일 후 이후여야 해요.</Text>
         )}
       </View>
 
@@ -1368,7 +1368,7 @@ export default function SpaceStartScreen() {
   const [interval, setIntervalVal] = useState(7);
   const [weekdays, setWeekdays] = useState<number[]>([1]);
   const [centerCount, setCenterCount] = useState(1);
-  const [startDate, setStartDate] = useState<Date>(() => new Date());
+  const [startDate, setStartDate] = useState<Date>(() => getMinSpaceStartDate());
 
   useEffect(() => {
     if (!space) return;
