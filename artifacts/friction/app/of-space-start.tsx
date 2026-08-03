@@ -54,6 +54,8 @@ import {
   useCreateSpaceScheduledSend,
   useCreateSpaceLetter,
   useUpdateSpaceScheduledSend,
+  useListSpaceRounds,
+  getListSpaceRoundsQueryKey,
 } from "@workspace/api-client-react";
 import type {
   SpaceMember,
@@ -62,6 +64,7 @@ import type {
   Article,
   SpaceLetter,
   SpaceScheduledSendWithLetter,
+  SpaceRound,
 } from "@workspace/api-client-react";
 
 const SLOT_ROW_H = 52;
@@ -174,6 +177,7 @@ function ConfirmModal({
   visible,
   title,
   message,
+  cancelLabel = "취소",
   confirmLabel,
   onCancel,
   onConfirm,
@@ -182,6 +186,7 @@ function ConfirmModal({
   visible: boolean;
   title: string;
   message: string;
+  cancelLabel?: string;
   confirmLabel: string;
   onCancel: () => void;
   onConfirm: () => void;
@@ -194,11 +199,17 @@ function ConfirmModal({
           <Text style={styles.modalTitle}>{title}</Text>
           <Text style={styles.modalMessage}>{message}</Text>
           <View style={styles.modalActions}>
-            <ScalePressable contentStyle={styles.modalCancelBtn} onPress={onCancel} disabled={loading}>
-              <Text style={styles.modalCancelText}>취소</Text>
+            <ScalePressable
+              style={styles.modalCancelBtn}
+              contentStyle={styles.modalBtnContent}
+              onPress={onCancel}
+              disabled={loading}
+            >
+              <Text style={styles.modalCancelText}>{cancelLabel}</Text>
             </ScalePressable>
             <ScalePressable
-              contentStyle={[styles.modalConfirmBtn, loading && styles.btnOpacity]}
+              style={[styles.modalConfirmBtn, loading && styles.btnOpacity]}
+              contentStyle={styles.modalBtnContent}
               onPress={onConfirm}
               disabled={loading}
             >
@@ -628,85 +639,6 @@ function RoundConfigStep({
     </TouchableWithoutFeedback>
   );
 }
-
-function RoundConfigModeStep({
-  onSelectDefault,
-  onSelectCustom,
-}: {
-  onSelectDefault: () => void;
-  onSelectCustom: () => void;
-}) {
-  return (
-    <View style={stepStyles.container}>
-      <Text style={stepStyles.stepTitle}>회차 구성</Text>
-      <Text style={stepStyles.stepDesc}>각 회차의 제목과 설명을 어떻게 설정할까요?</Text>
-
-      <View style={{ gap: 12, marginTop: 8 }}>
-        <ScalePressable contentStyle={modeStyles.option} onPress={onSelectDefault}>
-          <View style={modeStyles.optionInner}>
-            <View style={modeStyles.optionIconWrap}>
-              <Feather name="zap" size={20} color={Colors.zinc700} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={modeStyles.optionTitle}>기본으로 사용</Text>
-              <Text style={modeStyles.optionDesc}>회차 번호만 사용하고, 바로 다음 단계로 넘어가요.</Text>
-            </View>
-            <Feather name="chevron-right" size={18} color={Colors.zinc400} />
-          </View>
-        </ScalePressable>
-
-        <ScalePressable contentStyle={modeStyles.option} onPress={onSelectCustom}>
-          <View style={modeStyles.optionInner}>
-            <View style={modeStyles.optionIconWrap}>
-              <Feather name="edit-3" size={20} color={Colors.zinc700} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={modeStyles.optionTitle}>직접 설정</Text>
-              <Text style={modeStyles.optionDesc}>각 회차마다 제목과 설명을 직접 입력해요.</Text>
-            </View>
-            <Feather name="chevron-right" size={18} color={Colors.zinc400} />
-          </View>
-        </ScalePressable>
-      </View>
-    </View>
-  );
-}
-
-const modeStyles = StyleSheet.create({
-  option: {
-    borderWidth: 1,
-    borderColor: Colors.zinc200,
-    borderRadius: 12,
-    backgroundColor: Colors.white,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-  },
-  optionInner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  optionIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    backgroundColor: Colors.zinc100,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  optionTitle: {
-    ...Typography.body,
-    fontWeight: "600",
-    color: Colors.zinc800,
-    marginBottom: 2,
-  },
-  optionDesc: {
-    ...Typography.caption,
-    color: Colors.zinc500,
-    lineHeight: 18,
-  },
-});
-
 function SlotOrderStep({
   items,
   onReorder,
@@ -1292,6 +1224,12 @@ export default function SpaceStartScreen() {
   const [currentRoundIdx, setCurrentRoundIdx] = useState(0);
   const [slotSubStep, setSlotSubStep] = useState(0); // 0=order, 1=calendar
   const [roundConfigMode, setRoundConfigMode] = useState<"default" | "custom" | null>(null);
+  // Whether the user has answered the "회차 구성을 변경하시겠습니까?" gate for
+  // this session. Reset whenever they step back out of the round-config step.
+  const [roundConfigConfirmed, setRoundConfigConfirmed] = useState(false);
+  const [showRoundConfigConfirm, setShowRoundConfigConfirm] = useState(false);
+
+  const scrollViewRef = useRef<ScrollView>(null);
 
   // ── Data queries ──────────────────────────────────────────────────────────
 
@@ -1386,17 +1324,31 @@ export default function SpaceStartScreen() {
   }, [space]);
 
   // ── Section 2: 회차 구성 ─────────────────────────────────────────────────
+  // 공간 생성 시 회차 수만큼 SpaceRound가 이미 만들어져 있고(운영자가 회차
+  // 관리 화면에서 제목/설명을 미리 채워뒀을 수 있음), 이 화면에 진입했을 때
+  // 그 초안을 "회차 구성 초안"으로 사용한다.
+  const roundsQuery = useListSpaceRounds(id, {
+    query: { enabled: !!id, queryKey: getListSpaceRoundsQueryKey(id) },
+  });
+  const existingRounds = useMemo(
+    () => [...((roundsQuery.data ?? []) as SpaceRound[])].sort((a, b) => a.roundNumber - b.roundNumber),
+    [roundsQuery.data],
+  );
 
   const [roundConfigs, setRoundConfigs] = useState<Array<{ title: string; description: string }>>([]);
 
   useEffect(() => {
     setRoundConfigs((prev) =>
-      Array.from({ length: roundCount }, (_, i) => ({
-        title: prev[i]?.title ?? "",
-        description: prev[i]?.description ?? "",
-      })),
+      Array.from({ length: roundCount }, (_, i) => {
+        if (prev[i] && (prev[i].title || prev[i].description)) return prev[i];
+        const draft = existingRounds[i];
+        return {
+          title: draft?.title ?? prev[i]?.title ?? "",
+          description: draft?.description ?? prev[i]?.description ?? "",
+        };
+      }),
     );
-  }, [roundCount]);
+  }, [roundCount, existingRounds]);
 
   // ── Section 3: 중심글 순서 배정 ──────────────────────────────────────────
 
@@ -1454,12 +1406,16 @@ export default function SpaceStartScreen() {
     setShowUnderCapacityModal(false);
     setIsStarting(true);
     try {
-      const isDefaultMode = roundConfigMode !== "custom";
+      // roundConfigs is always pre-populated from the existing round draft
+      // (see the effect above) and only further edited when the user opts
+      // into "회차 구성 변경" — so it already reflects "draft as-is" in the
+      // keep-draft path and the user's edits in the custom-edit path. No
+      // branching on roundConfigMode is needed here.
       const rounds = Array.from({ length: roundCount }, (_, i) => {
         const rc = roundConfigs[i];
         return {
-          title: isDefaultMode ? undefined : (rc?.title?.trim() || undefined),
-          description: isDefaultMode ? undefined : (rc?.description?.trim() || undefined),
+          title: rc?.title?.trim() || undefined,
+          description: rc?.description?.trim() || undefined,
           slots: slotOrder,
         };
       });
@@ -1486,7 +1442,7 @@ export default function SpaceStartScreen() {
       setIsStarting(false);
     }
   }, [
-    roundConfigs, roundConfigMode, slotOrder, roundCount, scheduleType, interval, weekdays,
+    roundConfigs, slotOrder, roundCount, scheduleType, interval, weekdays,
     centerCount, space, startSpace, id, queryClient, userId, router,
   ]);
 
@@ -1538,18 +1494,38 @@ export default function SpaceStartScreen() {
 
   const canProceed = useMemo(() => {
     if (step === 0) return hasValidSchedule;
-    if (step === 1) return roundConfigMode === "custom"; // selection screen uses its own buttons; custom mode allows 다음
+    if (step === 1) return true; // only reached in custom-edit mode; fields are optional
     if (step === 2 && slotSubStep === 0) return slotItems.length >= 1;
     if (step === 2 && slotSubStep === 1) return true;
     if (step === 3) return true;
     if (step === 4) return canStart;
     return true;
-  }, [step, slotSubStep, hasValidSchedule, slotItems, canStart, roundConfigMode]);
+  }, [step, slotSubStep, hasValidSchedule, slotItems, canStart]);
+
+  // Entering the 회차 구성 step always asks whether to change the draft that
+  // already exists (created with the space / edited from the rounds screen)
+  // before showing any editing UI. Answering "아니오" adopts the draft as-is
+  // and skips straight to the next step.
+  const handleRoundConfigKeepDraft = useCallback(() => {
+    setShowRoundConfigConfirm(false);
+    setRoundConfigMode("default");
+    setRoundConfigConfirmed(true);
+    setSlotSubStep(0);
+    setStep(2);
+  }, []);
+
+  const handleRoundConfigWantChange = useCallback(() => {
+    setShowRoundConfigConfirm(false);
+    setRoundConfigMode("custom");
+    setRoundConfigConfirmed(true);
+    setCurrentRoundIdx(0);
+    setStep(1);
+  }, []);
 
   const handleNext = useCallback(() => {
     if (step === 0) {
       setCurrentRoundIdx(0);
-      setStep(1);
+      setShowRoundConfigConfirm(true);
     } else if (step === 1) {
       if (currentRoundIdx < roundCount - 1) {
         setCurrentRoundIdx((i) => i + 1);
@@ -1574,25 +1550,27 @@ export default function SpaceStartScreen() {
     if (step === 0) {
       router.back();
     } else if (step === 1) {
-      if (roundConfigMode === "custom") {
-        if (currentRoundIdx > 0) {
-          setCurrentRoundIdx((i) => i - 1);
-        } else {
-          setRoundConfigMode(null);
-        }
+      // Step 1 is only ever shown in "custom" mode (the draft-keep path skips
+      // straight to step 2), so stepping back out of round 0 returns to step 0
+      // and resets the gate so it's asked again if they advance a second time.
+      if (currentRoundIdx > 0) {
+        setCurrentRoundIdx((i) => i - 1);
       } else {
-        // null or "default": go back to step 0
+        setRoundConfigMode(null);
+        setRoundConfigConfirmed(false);
         setStep(0);
       }
     } else if (step === 2) {
       if (slotSubStep === 1) {
         setSlotSubStep(0);
-      } else if (roundConfigMode === "default") {
-        setRoundConfigMode(null);
-        setStep(1);
-      } else {
+      } else if (roundConfigMode === "custom") {
         setCurrentRoundIdx(roundCount - 1);
         setStep(1);
+      } else {
+        // "default" (draft kept as-is): step 1 was skipped entirely.
+        setRoundConfigMode(null);
+        setRoundConfigConfirmed(false);
+        setStep(0);
       }
     } else if (step === 3) {
       setSlotSubStep(1);
@@ -1608,6 +1586,13 @@ export default function SpaceStartScreen() {
     }
     setStep(targetStep);
   }, []);
+
+  // Reset scroll position to the top whenever the visible step (or sub-step)
+  // changes, so a new step never appears mid-scroll from wherever the
+  // previous step's content happened to leave off.
+  useEffect(() => {
+    scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+  }, [step, currentRoundIdx, slotSubStep]);
 
   // ── Loading / error states ────────────────────────────────────────────────
 
@@ -1655,21 +1640,9 @@ export default function SpaceStartScreen() {
       );
     }
     if (step === 1) {
-      if (roundConfigMode !== "custom") {
-        return (
-          <RoundConfigModeStep
-            onSelectDefault={() => {
-              setRoundConfigMode("default");
-              setSlotSubStep(0);
-              setStep(2);
-            }}
-            onSelectCustom={() => {
-              setRoundConfigMode("custom");
-              setCurrentRoundIdx(0);
-            }}
-          />
-        );
-      }
+      // Only ever reached after the user answers "변경할게요" to the
+      // round-config confirm gate — the draft-keep path skips straight to
+      // step 2, so no mode-selection screen is needed here.
       const config = roundConfigs[currentRoundIdx] ?? { title: "", description: "" };
       return (
         <RoundConfigStep
@@ -1759,7 +1732,7 @@ export default function SpaceStartScreen() {
 
   // Step label suffix
   let stepLabelSuffix = STEPS[step];
-  if (step === 1 && roundConfigMode === "custom") stepLabelSuffix = `회차 구성 (${currentRoundIdx + 1}/${roundCount})`;
+  if (step === 1) stepLabelSuffix = `회차 구성 (${currentRoundIdx + 1}/${roundCount})`;
   if (step === 2 && slotSubStep === 1) stepLabelSuffix = "일정 확인";
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -1798,6 +1771,7 @@ export default function SpaceStartScreen() {
 
         {/* Content */}
         <ScrollView
+          ref={scrollViewRef}
           style={styles.scrollArea}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
@@ -1808,21 +1782,30 @@ export default function SpaceStartScreen() {
         </ScrollView>
 
         {/* Footer */}
-        {!(step === 1 && roundConfigMode !== "custom") && (
-          <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
-            <SubmitButton
-              style={[styles.nextBtn, !canProceed && styles.nextBtnDisabled]}
-              disabledStyle={styles.nextBtnDisabled}
-              textStyle={styles.nextBtnText}
-              onPress={handleNext}
-              pending={isLastStep && isStarting}
-              disabled={!canProceed || (isLastStep && isStarting)}
-              label={isLastStep ? "공간 시작하기" : "다음"}
-              pendingLabel="시작하는 중..."
-            />
-          </View>
-        )}
+        <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
+          <SubmitButton
+            style={[styles.nextBtn, !canProceed && styles.nextBtnDisabled]}
+            disabledStyle={styles.nextBtnDisabled}
+            textStyle={styles.nextBtnText}
+            onPress={handleNext}
+            pending={isLastStep && isStarting}
+            disabled={!canProceed || (isLastStep && isStarting)}
+            label={isLastStep ? "공간 시작하기" : "다음"}
+            pendingLabel="시작하는 중..."
+          />
+        </View>
       </View>
+
+      {/* 회차 구성 변경 여부 확인 모달 */}
+      <ConfirmModal
+        visible={showRoundConfigConfirm}
+        title="회차 구성"
+        message="공간을 만들 때 작성해 둔 회차 구성 초안이 있어요. 회차 구성을 변경하시겠습니까? 변경하지 않으면 초안 그대로 다음 단계로 진행돼요."
+        cancelLabel="아니오"
+        confirmLabel="변경할게요"
+        onCancel={handleRoundConfigKeepDraft}
+        onConfirm={handleRoundConfigWantChange}
+      />
 
       {/* 자동 거절 안내 모달 */}
       <ConfirmModal
@@ -2077,12 +2060,10 @@ const styles = StyleSheet.create({
   },
   modalCancelBtn: {
     flex: 1,
-    paddingVertical: 12,
+    height: 48,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: Colors.zinc200,
-    alignItems: "center",
-    justifyContent: "center",
   },
   modalCancelText: {
     ...Typography.body,
@@ -2091,16 +2072,26 @@ const styles = StyleSheet.create({
   },
   modalConfirmBtn: {
     flex: 1,
-    paddingVertical: 12,
+    height: 48,
     borderRadius: 10,
     backgroundColor: Colors.zinc900,
-    alignItems: "center",
-    justifyContent: "center",
   },
   modalConfirmText: {
     ...Typography.bodySemiBold,
     fontSize: 14,
     color: Colors.white,
+  },
+  // Fixed height on both the outer (flexed) wrapper above and this content
+  // layer avoids ScalePressable's inner Animated.View (flexGrow:1,
+  // alignSelf:"stretch") collapsing/misrendering the button — see
+  // .agents/skills/friction-button-styles/SKILL.md pitfall #1.
+  modalBtnContent: {
+    height: "100%",
+    width: "100%",
+    flexGrow: 0,
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
   },
   btnOpacity: {
     opacity: 0.6,
