@@ -314,28 +314,36 @@ export default function RootLayout() {
 
   if (!fontsLoaded && !fontError) return null;
 
+  const appTree = (
+    <SafeAreaProvider>
+      <ErrorBoundary>
+        <QueryClientProvider client={queryClient}>
+          <GestureHandlerRootView>
+            <AuthProvider>
+              <ActiveReadingProvider>
+                <ToastProvider>
+                  <NavigationProvider>
+                    <ReaderTransitionProvider>
+                      <RootLayoutNav />
+                      <ToastContainer />
+                    </ReaderTransitionProvider>
+                  </NavigationProvider>
+                </ToastProvider>
+              </ActiveReadingProvider>
+            </AuthProvider>
+          </GestureHandlerRootView>
+        </QueryClientProvider>
+      </ErrorBoundary>
+    </SafeAreaProvider>
+  );
+
+  // PostHogProvider throws if given neither a client nor an apiKey, so skip it
+  // entirely when no client was initialized (e.g. EXPO_PUBLIC_POSTHOG_TOKEN unset).
+  if (!posthog) return appTree;
+
   return (
-    <PostHogProvider client={posthog ?? undefined} autocapture>
-      <SafeAreaProvider>
-        <ErrorBoundary>
-          <QueryClientProvider client={queryClient}>
-            <GestureHandlerRootView>
-              <AuthProvider>
-                <ActiveReadingProvider>
-                  <ToastProvider>
-                    <NavigationProvider>
-                      <ReaderTransitionProvider>
-                        <RootLayoutNav />
-                        <ToastContainer />
-                      </ReaderTransitionProvider>
-                    </NavigationProvider>
-                  </ToastProvider>
-                </ActiveReadingProvider>
-              </AuthProvider>
-            </GestureHandlerRootView>
-          </QueryClientProvider>
-        </ErrorBoundary>
-      </SafeAreaProvider>
+    <PostHogProvider client={posthog} autocapture>
+      {appTree}
     </PostHogProvider>
   );
 }
