@@ -2480,6 +2480,24 @@ export const ListAllSpaceScheduledSendsResponseItem = zod.object({
     .string()
     .nullish()
     .describe("Nickname of the letter author"),
+  roundNumber: zod
+    .number()
+    .nullish()
+    .describe("Round number of the letter's round, if any"),
+  totalRounds: zod
+    .number()
+    .nullish()
+    .describe("Total planned round count for the space"),
+  letterType: zod
+    .enum(["OPENING", "CENTER", "REPLY"])
+    .nullish()
+    .describe("Letter role\/type of the underlying letter"),
+  slotScheduledDate: zod
+    .string()
+    .nullish()
+    .describe(
+      "Assigned round-slot date (YYYY-MM-DD) for the letter's author\/round, if any",
+    ),
 });
 export const ListAllSpaceScheduledSendsResponse = zod.array(
   ListAllSpaceScheduledSendsResponseItem,

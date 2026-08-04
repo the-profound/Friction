@@ -113,6 +113,7 @@ export * from "./spaceRoundStatus";
 export * from "./spaceScheduledSend";
 export * from "./spaceScheduledSendStatus";
 export * from "./spaceScheduledSendWithLetter";
+export * from "./spaceScheduledSendWithLetterLetterType";
 export * from "./spaceScheduledSendWithLetterStatus";
 export * from "./spaceScheduleType";
 export * from "./spaceStatus";

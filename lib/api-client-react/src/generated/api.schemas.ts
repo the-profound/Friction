@@ -1104,6 +1104,19 @@ export const SpaceScheduledSendWithLetterStatus = {
   FAILED: "FAILED",
 } as const;
 
+/**
+ * Letter role/type of the underlying letter
+ */
+export type SpaceScheduledSendWithLetterLetterType =
+  | (typeof SpaceScheduledSendWithLetterLetterType)[keyof typeof SpaceScheduledSendWithLetterLetterType]
+  | null;
+
+export const SpaceScheduledSendWithLetterLetterType = {
+  OPENING: "OPENING",
+  CENTER: "CENTER",
+  REPLY: "REPLY",
+} as const;
+
 export interface SpaceScheduledSendWithLetter {
   id: string;
   spaceId: string;
@@ -1119,6 +1132,14 @@ export interface SpaceScheduledSendWithLetter {
   articleTitle?: string | null;
   /** Nickname of the letter author */
   authorNickname?: string | null;
+  /** Round number of the letter's round, if any */
+  roundNumber?: number | null;
+  /** Total planned round count for the space */
+  totalRounds?: number | null;
+  /** Letter role/type of the underlying letter */
+  letterType?: SpaceScheduledSendWithLetterLetterType;
+  /** Assigned round-slot date (YYYY-MM-DD) for the letter's author/round, if any */
+  slotScheduledDate?: string | null;
 }
 
 export type SpaceWithCreatorInfo = Space & {

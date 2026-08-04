@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { SpaceLetter } from "./spaceLetter";
+import type { SpaceScheduledSendWithLetterLetterType } from "./spaceScheduledSendWithLetterLetterType";
 import type { SpaceScheduledSendWithLetterStatus } from "./spaceScheduledSendWithLetterStatus";
 
 export interface SpaceScheduledSendWithLetter {
@@ -23,4 +24,12 @@ export interface SpaceScheduledSendWithLetter {
   articleTitle?: string | null;
   /** Nickname of the letter author */
   authorNickname?: string | null;
+  /** Round number of the letter's round, if any */
+  roundNumber?: number | null;
+  /** Total planned round count for the space */
+  totalRounds?: number | null;
+  /** Letter role/type of the underlying letter */
+  letterType?: SpaceScheduledSendWithLetterLetterType;
+  /** Assigned round-slot date (YYYY-MM-DD) for the letter's author/round, if any */
+  slotScheduledDate?: string | null;
 }

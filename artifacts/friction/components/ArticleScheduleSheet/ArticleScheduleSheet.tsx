@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Alert,
   Platform,
+  ActivityIndicator,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -18,12 +19,14 @@ import {
   useUpdateSpaceScheduledSend,
   getListSpaceLettersQueryKey,
   getListAllSpaceScheduledSendsQueryKey,
+  ApiError,
 } from "@workspace/api-client-react";
 import type {
   Article,
   SpaceLetter,
   SpaceScheduledSendWithLetter,
 } from "@workspace/api-client-react";
+import { kstDateAt6 } from "@/lib/kstDate";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -33,6 +36,16 @@ function formatDateTime(date: Date): string {
 
 function formatDate(date: Date): string {
   return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, "0")}.${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function formatShortDate(ymd: string): string {
+  const [, m, d] = ymd.split("-");
+  return `${m}/${d}`;
+}
+
+function parseYmdToLocalDate(ymd: string): Date {
+  const [y, m, d] = ymd.split("-").map((v) => parseInt(v, 10));
+  return new Date(y, (m || 1) - 1, d || 1);
 }
 
 function getMinOpeningDate(): Date {
@@ -50,6 +63,14 @@ function buildOpeningScheduledAt(date: Date): Date {
   d.setHours(6, 0, 0, 0);
   return d;
 }
+
+/** Duplicate-pending-reservation conflict from the backend (409). */
+function isDuplicateReservationError(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 409;
+}
+
+const DUPLICATE_RESERVATION_MESSAGE =
+  "이미 같은 회차·역할로 대기 중인 예약이 있어요. 기존 예약을 변경하거나 취소한 뒤 다시 시도해주세요.";
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -72,6 +93,15 @@ export type ArticleScheduleSheetProps = {
   onGoToArchive?: () => void;
   /** Opening-letter mode only: latest allowed scheduled date (inclusive). Saves are clamped to this. */
   maxScheduledAt?: Date | null;
+  /**
+   * General (CENTER) mode only: the set of "내 차례" round-slot dates the user
+   * is allowed to pick from, each tied to the round it belongs to.
+   * `undefined` means still loading; an empty array means the user has no
+   * assigned CENTER slot yet.
+   */
+  assignedCenterSlots?: { date: string; roundId: string }[];
+  /** General (CENTER) mode only: true while assigned slot dates are being resolved. */
+  isLoadingCenterDates?: boolean;
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -92,6 +122,8 @@ export function ArticleScheduleSheet({
   allSends,
   onGoToArchive,
   maxScheduledAt,
+  assignedCenterSlots,
+  isLoadingCenterDates = false,
 }: ArticleScheduleSheetProps) {
   const isOpeningLetter = mode === "opening-letter";
 
@@ -107,15 +139,42 @@ export function ArticleScheduleSheet({
   // OUT-style article list without an extra tap.
   const [letterPickerVisible, setLetterPickerVisible] = useState(true);
   const [scheduledAt, setScheduledAt] = useState<Date>(() => {
-    if (!isOpeningLetter && initialScheduledDate) {
-      const d = new Date(initialScheduledDate);
-      if (!isNaN(d.getTime())) return d;
-    }
     if (isOpeningLetter) return minDate;
     return new Date(Date.now() + 24 * 60 * 60 * 1000);
   });
   const [showPicker, setShowPicker] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // ─── CENTER (general mode) date restriction ────────────────────────────────
+  // Only the author's assigned "내 차례" round-slot dates are selectable.
+  const sortedCenterSlots = useMemo(
+    () =>
+      assignedCenterSlots
+        ? [...assignedCenterSlots].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+        : [],
+    [assignedCenterSlots],
+  );
+  const sortedCenterDatesKey = sortedCenterSlots.map((s) => s.date).join(",");
+  const [selectedCenterDate, setSelectedCenterDate] = useState<string | null>(
+    () => initialScheduledDate ?? null,
+  );
+  // Keep the selection in sync once assigned dates resolve: default to the
+  // pre-filled slot date if it's still valid, otherwise the first available one.
+  const centerDatesReady = !isOpeningLetter && assignedCenterSlots !== undefined;
+  React.useEffect(() => {
+    if (isOpeningLetter || !centerDatesReady) return;
+    setSelectedCenterDate((prev) => {
+      const dates = sortedCenterSlots.map((s) => s.date);
+      if (prev && dates.includes(prev)) return prev;
+      return dates[0] ?? null;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [centerDatesReady, sortedCenterDatesKey]);
+
+  const selectedCenterSlot = useMemo(
+    () => sortedCenterSlots.find((s) => s.date === selectedCenterDate) ?? null,
+    [sortedCenterSlots, selectedCenterDate],
+  );
 
   const createSend = useCreateSpaceScheduledSend();
   const createLetter = useCreateSpaceLetter();
@@ -140,6 +199,10 @@ export function ArticleScheduleSheet({
   const handleSave = useCallback(async () => {
     if (!selectedArticleId) {
       Alert.alert("알림", "발송할 글을 선택해주세요.");
+      return;
+    }
+    if (!isOpeningLetter && !selectedCenterSlot) {
+      Alert.alert("알림", "배정된 중심글 차례 날짜를 선택해주세요.");
       return;
     }
     setSaving(true);
@@ -193,23 +256,33 @@ export function ArticleScheduleSheet({
         });
         queryClient.invalidateQueries({ queryKey: getListAllSpaceScheduledSendsQueryKey(spaceId) });
       } else {
-        const existingLetter = letters.find((l) => l.sourceArticleId === selectedArticleId);
+        // selectedCenterSlot is guaranteed non-null here (checked above).
+        const centerSlot = selectedCenterSlot!;
+        const existingLetter = letters.find(
+          (l) => l.sourceArticleId === selectedArticleId && l.spaceRoundId === centerSlot.roundId,
+        );
         let spaceLetterId: string;
         if (existingLetter) {
           spaceLetterId = existingLetter.id;
         } else {
           const newLetter = await createLetter.mutateAsync({
             id: spaceId,
-            data: { authorId: userId, sourceArticleId: selectedArticleId, letterType: "CENTER" },
+            data: {
+              authorId: userId,
+              sourceArticleId: selectedArticleId,
+              letterType: "CENTER",
+              spaceRoundId: centerSlot.roundId,
+            },
           });
           spaceLetterId = newLetter.id;
           queryClient.invalidateQueries({ queryKey: getListSpaceLettersQueryKey(spaceId) });
         }
+        const finalScheduledAt = kstDateAt6(parseYmdToLocalDate(centerSlot.date));
         await createSend.mutateAsync({
           id: spaceId,
           letterId: spaceLetterId,
           data: {
-            scheduledAt: scheduledAt.toISOString(),
+            scheduledAt: finalScheduledAt.toISOString(),
             ...(slotId != null ? { slotId } : {}),
           },
         });
@@ -218,13 +291,17 @@ export function ArticleScheduleSheet({
 
       onSaved();
       onClose();
-    } catch {
-      Alert.alert("오류", "예약에 실패했어요. 다시 시도해주세요.");
+    } catch (err) {
+      if (isDuplicateReservationError(err)) {
+        Alert.alert("이미 예약이 있어요", DUPLICATE_RESERVATION_MESSAGE);
+      } else {
+        Alert.alert("오류", "예약에 실패했어요. 다시 시도해주세요.");
+      }
     } finally {
       setSaving(false);
     }
   }, [
-    selectedArticleId, scheduledAt, isOpeningLetter, spaceId, letters, userId,
+    selectedArticleId, selectedCenterSlot, scheduledAt, isOpeningLetter, spaceId, letters, userId,
     slotId, allSends, createLetter, createSend, updateSend, queryClient, onSaved, onClose,
   ]);
 
@@ -293,7 +370,7 @@ export function ArticleScheduleSheet({
           }
         />
 
-        {selectedArticleId && (
+        {selectedArticleId && isOpeningLetter && (
           <>
             <Text style={styles.fieldLabel}>{dateLabel}</Text>
             <ScalePressable
@@ -307,11 +384,11 @@ export function ArticleScheduleSheet({
             {showPicker && (
               <DateTimePicker
                 value={scheduledAt}
-                mode={isOpeningLetter ? "date" : "datetime"}
+                mode="date"
                 display={Platform.OS === "ios" ? "spinner" : "default"}
                 minimumDate={minDate}
                 maximumDate={maxDate}
-                onChange={(_event, date) => {
+                onChange={(_event: unknown, date?: Date) => {
                   setShowPicker(Platform.OS === "ios");
                   if (date) {
                     const clamped = maxDate && date > maxDate ? maxDate : date;
@@ -326,6 +403,65 @@ export function ArticleScheduleSheet({
               contentStyle={[styles.saveBtn, saving && styles.saveBtnDisabled]}
               onPress={handleSave}
               disabled={saving}
+            >
+              <Text style={styles.saveBtnText}>
+                {saving ? "등록 중..." : saveLabel}
+              </Text>
+            </ScalePressable>
+          </>
+        )}
+
+        {selectedArticleId && !isOpeningLetter && (
+          <>
+            <Text style={styles.fieldLabel}>발송 예정일 (06:00 고정 발송)</Text>
+
+            {isLoadingCenterDates ? (
+              <View style={styles.centerDatesLoading}>
+                <ActivityIndicator size="small" color={Colors.zinc400} />
+                <Text style={styles.centerDatesLoadingText}>배정된 차례를 확인하는 중이에요</Text>
+              </View>
+            ) : sortedCenterSlots.length === 0 ? (
+              <View style={styles.noSlotNotice}>
+                <Feather name="info" size={14} color={Colors.zinc400} />
+                <Text style={styles.noSlotNoticeText}>
+                  아직 배정된 중심글 차례가 없어요. 회차가 시작되고 차례가 배정되면 예약할 수 있어요.
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.centerDateChipRow}>
+                {sortedCenterSlots.map((slot) => {
+                  const isSelected = slot.date === selectedCenterDate;
+                  return (
+                    <ScalePressable
+                      key={`${slot.roundId}:${slot.date}`}
+                      contentStyle={[
+                        styles.centerDateChip,
+                        isSelected && styles.centerDateChipSelected,
+                      ]}
+                      onPress={() => setSelectedCenterDate(slot.date)}
+                    >
+                      <Text
+                        style={[
+                          styles.centerDateChipText,
+                          isSelected && styles.centerDateChipTextSelected,
+                        ]}
+                      >
+                        {formatShortDate(slot.date)} 06:00
+                      </Text>
+                    </ScalePressable>
+                  );
+                })}
+              </View>
+            )}
+
+            <ScalePressable
+              style={styles.saveBtnOuter}
+              contentStyle={[
+                styles.saveBtn,
+                (saving || !selectedCenterSlot) && styles.saveBtnDisabled,
+              ]}
+              onPress={handleSave}
+              disabled={saving || !selectedCenterSlot}
             >
               <Text style={styles.saveBtnText}>
                 {saving ? "등록 중..." : saveLabel}
@@ -432,6 +568,58 @@ const styles = StyleSheet.create({
   saveBtnText: {
     ...Typography.bodySemiBold,
     fontSize: 15,
+    color: Colors.white,
+  },
+  centerDatesLoading: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 12,
+  },
+  centerDatesLoadingText: {
+    ...Typography.body,
+    fontSize: 13,
+    color: Colors.zinc500,
+  },
+  noSlotNotice: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    backgroundColor: Colors.zinc50,
+    borderRadius: 10,
+    padding: 12,
+  },
+  noSlotNoticeText: {
+    ...Typography.body,
+    fontSize: 13,
+    color: Colors.zinc500,
+    flex: 1,
+    lineHeight: 19,
+  },
+  centerDateChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  centerDateChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.zinc300,
+    backgroundColor: Colors.white,
+  },
+  centerDateChipSelected: {
+    borderColor: Colors.zinc900,
+    backgroundColor: Colors.zinc900,
+  },
+  centerDateChipText: {
+    ...Typography.body,
+    fontSize: 13,
+    fontWeight: "600",
+    color: Colors.zinc600,
+  },
+  centerDateChipTextSelected: {
     color: Colors.white,
   },
 });

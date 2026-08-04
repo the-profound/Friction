@@ -4439,6 +4439,23 @@ components:
           type: string
           nullable: true
           description: Nickname of the letter author
+        roundNumber:
+          type: integer
+          nullable: true
+          description: Round number of the letter's round, if any
+        totalRounds:
+          type: integer
+          nullable: true
+          description: Total planned round count for the space
+        letterType:
+          type: string
+          enum: [OPENING, CENTER, REPLY]
+          nullable: true
+          description: Letter role/type of the underlying letter
+        slotScheduledDate:
+          type: string
+          nullable: true
+          description: "Assigned round-slot date (YYYY-MM-DD) for the letter's author/round, if any"
       required: [id, spaceId, spaceLetterId, scheduledAt, status, createdAt, updatedAt]
 
     SpaceWithCreatorInfo:

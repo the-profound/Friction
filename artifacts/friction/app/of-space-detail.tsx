@@ -1454,12 +1454,7 @@ export default function SpaceDetailScreen() {
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[
-          styles.scrollContent,
-          !isOperator && !isArchived && !isRecruiting && { paddingBottom: 80 + insets.bottom },
-          !isOperator && isArchived && { paddingBottom: 56 + insets.bottom },
-          isRecruiting && { paddingBottom: 80 + insets.bottom },
-        ]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: 80 + insets.bottom }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -1735,8 +1730,14 @@ export default function SpaceDetailScreen() {
         </View>
       )}
 
-      {/* ── Floating "글 예약 발송" button (non-operators only, active spaces) ── */}
-      {!isOperator && !isArchived && !isRecruiting && (
+      {/*
+        ── "예약 대기" entry point ──
+        Shown to every eligible user — operator or participant — once the
+        space has left the recruiting stage, regardless of operator role.
+        Archived spaces still get the entry point; the destination screen
+        itself explains that new reservations/changes are blocked there.
+      */}
+      {!isRecruiting && (
         <ScalePressable
           style={[styles.floatingBtnOuter, { bottom: insets.bottom + 16 }]}
           contentStyle={styles.floatingBtn}
@@ -1748,16 +1749,8 @@ export default function SpaceDetailScreen() {
           }
         >
           <Feather name="send" size={15} color={Colors.white} />
-          <Text style={styles.floatingBtnText}>글 예약 발송</Text>
+          <Text style={styles.floatingBtnText}>{isArchived ? "예약 대기 보기" : "예약 대기"}</Text>
         </ScalePressable>
-      )}
-
-      {/* ── Archived notice bar (non-operators only, archived spaces) ── */}
-      {!isOperator && isArchived && (
-        <View style={[styles.archivedNoticeBar, { paddingBottom: insets.bottom + 12 }]}>
-          <Feather name="archive" size={13} color={Colors.zinc500} />
-          <Text style={styles.archivedNoticeText}>종료된 공간이에요</Text>
-        </View>
       )}
 
       {/* ── Operator kebab action sheet ── */}

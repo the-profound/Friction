@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useMemo } from "react";
+import React, { useCallback, useState, useMemo, useEffect } from "react";
 import {
   View,
   Text,
@@ -29,15 +29,36 @@ import {
   getListSpaceRoundsQueryKey,
   getListSpaceLettersQueryKey,
   getListArticlesQueryKey,
+  listSpaceRoundSlots,
 } from "@workspace/api-client-react";
 import type {
   SpaceScheduledSendWithLetter,
   SpaceRound,
   SpaceLetter,
   Article,
+  SpaceRoundSlotWithUser,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useUser } from "@/contexts/UserContext";
+import { ApiError } from "@workspace/api-client-react";
+import { kstDateAt6 } from "@/lib/kstDate";
+
+function dateToYmd(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function parseYmdToLocalDate(ymd: string): Date {
+  const [y, m, d] = ymd.split("-").map((v) => parseInt(v, 10));
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+
+/** Duplicate-pending-reservation conflict from the backend (409). */
+function isDuplicateReservationError(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 409;
+}
+
+const DUPLICATE_RESERVATION_MESSAGE =
+  "이미 같은 회차·역할로 대기 중인 예약이 있어요. 기존 예약을 변경하거나 취소한 뒤 다시 시도해주세요.";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -46,8 +67,32 @@ function formatDateTime(iso: string): string {
   return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
+function formatShortDate(dateOrYmd: string): string {
+  // Plain "YYYY-MM-DD" strings (round-slot dates) must be read as calendar
+  // fields, not parsed as a UTC instant, to avoid an off-by-one day shift.
+  const ymdMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateOrYmd);
+  if (ymdMatch) {
+    return `${ymdMatch[2]}/${ymdMatch[3]}`;
+  }
+  const d = new Date(dateOrYmd);
+  return `${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function letterTypeLabel(type: string | null | undefined): string {
+  if (type === "OPENING") return "여는 편지";
+  if (type === "CENTER") return "중심글";
+  if (type === "REPLY") return "답장";
+  return "글";
+}
+
+/** e.g. "01/04 중심글" — built from the slot's assigned date (falls back to scheduledAt). */
+function slotLabel(send: SpaceScheduledSendWithLetter): string {
+  const dateSource = send.slotScheduledDate ?? send.scheduledAt;
+  return `${formatShortDate(String(dateSource))} ${letterTypeLabel(send.letterType)}`;
+}
+
 function sendStatusLabel(status: string): string {
-  if (status === "PENDING") return "예약 중";
+  if (status === "PENDING") return "대기 중";
   if (status === "SENT") return "발송 완료";
   if (status === "CANCELLED") return "취소됨";
   if (status === "FAILED") return "발송 실패";
@@ -80,9 +125,17 @@ function SendRow({
   const isPending = send.status === "PENDING";
   const isSent = send.status === "SENT";
   const isFailed = send.status === "FAILED";
+  // A letter that references a source article but whose title cannot be
+  // resolved has had that article deleted — the reservation itself is now
+  // invalid. Use strict null/undefined here (not falsy) so a legitimately
+  // blank-titled article isn't mistaken for a deleted one.
+  const isArticleDeleted =
+    !!send.letter?.sourceArticleId &&
+    (send.articleTitle === null || send.articleTitle === undefined);
 
   return (
-    <View style={[styles.sendRow, isFailed && styles.sendRowFailed]}>
+    <View style={[styles.sendRow, (isFailed || isArticleDeleted) && styles.sendRowFailed]}>
+      <Text style={styles.slotLabelText}>{slotLabel(send)}</Text>
       <View style={styles.sendRowTop}>
         <View style={[styles.statusDot, { backgroundColor: color }]} />
         <Text style={[styles.sendStatusText, { color }]}>{sendStatusLabel(send.status)}</Text>
@@ -94,12 +147,20 @@ function SendRow({
           <Text style={styles.failedBannerText}>예약 시각에 발송되지 않았어요. 다시 예약하거나 취소하세요.</Text>
         </View>
       )}
+      {isArticleDeleted && isPending && (
+        <View style={styles.failedBanner}>
+          <Feather name="alert-circle" size={12} color="#EF4444" />
+          <Text style={styles.failedBannerText}>예약된 글이 삭제됐어요. 예약을 취소하고 다른 글로 다시 예약해주세요.</Text>
+        </View>
+      )}
       {send.articleTitle ? (
         <Text style={styles.sendArticleTitle} numberOfLines={1}>
           {send.articleTitle}
         </Text>
       ) : (
-        <Text style={styles.sendArticleTitleEmpty}>제목 없음</Text>
+        <Text style={styles.sendArticleTitleEmpty}>
+          {isArticleDeleted ? "삭제된 글" : "제목 없음"}
+        </Text>
       )}
       {send.authorNickname && (
         <Text style={styles.sendAuthor}>{send.authorNickname}</Text>
@@ -113,7 +174,7 @@ function SendRow({
             <ScalePressable contentStyle={styles.cancelBtn} onPress={onCancel}>
               <Text style={styles.cancelBtnText}>예약 취소</Text>
             </ScalePressable>
-            {!schedulingBlocked && (
+            {!schedulingBlocked && !isArticleDeleted && (
               <ScalePressable contentStyle={styles.changeBtn} onPress={onChangePending}>
                 <Text style={styles.changeBtnText}>예약 변경</Text>
               </ScalePressable>
@@ -145,38 +206,163 @@ function SendRow({
 
 // ─── Resend Sheet (reschedule from sent/cancelled) ────────────────────────────
 
+/** Shared date-selection body used by both resend and change sheets. Time is
+ * always fixed at 06:00 — the user only ever picks a calendar date, and for
+ * CENTER letters that date is further restricted to the assigned slots. */
+function FixedTimeDatePicker({
+  send,
+  selectedDate,
+  onSelectDate,
+  centerSlots,
+}: {
+  send: SpaceScheduledSendWithLetter;
+  selectedDate: Date;
+  onSelectDate: (d: Date) => void;
+  /** Every round the user is assigned a CENTER slot in — this component
+   * narrows it down to the round the being-edited `send` actually belongs
+   * to, so it never offers a date from an unrelated round that the backend
+   * would reject. */
+  centerSlots: { date: string; roundId: string }[] | undefined;
+}) {
+  const [showPicker, setShowPicker] = useState(false);
+  const isCenter = send.letterType === "CENTER";
+  const ownRoundId = send.letter?.spaceRoundId ?? null;
+  const ownRoundSlots = centerSlots?.filter((s) => !ownRoundId || s.roundId === ownRoundId);
+
+  if (isCenter) {
+    if (ownRoundSlots === undefined) {
+      return (
+        <View style={sheetStyles.centerDatesLoading}>
+          <ActivityIndicator size="small" color={Colors.zinc400} />
+          <Text style={sheetStyles.centerDatesLoadingText}>배정된 차례를 확인하는 중이에요</Text>
+        </View>
+      );
+    }
+    if (ownRoundSlots.length === 0) {
+      return (
+        <View style={sheetStyles.noSlotNotice}>
+          <Feather name="info" size={14} color={Colors.zinc400} />
+          <Text style={sheetStyles.noSlotNoticeText}>
+            이 예약의 회차에 배정된 중심글 차례를 더 이상 확인할 수 없어요. 공간 상세에서 배정 상태를
+            확인해주세요.
+          </Text>
+        </View>
+      );
+    }
+    const selectedYmd = dateToYmd(selectedDate);
+    return (
+      <View style={sheetStyles.centerDateChipRow}>
+        {ownRoundSlots.map((slot) => {
+          const isSelected = slot.date === selectedYmd;
+          return (
+            <ScalePressable
+              key={`${slot.roundId}:${slot.date}`}
+              contentStyle={[
+                sheetStyles.centerDateChip,
+                isSelected && sheetStyles.centerDateChipSelected,
+              ]}
+              onPress={() => onSelectDate(parseYmdToLocalDate(slot.date))}
+            >
+              <Text
+                style={[
+                  sheetStyles.centerDateChipText,
+                  isSelected && sheetStyles.centerDateChipTextSelected,
+                ]}
+              >
+                {formatShortDate(slot.date)} 06:00
+              </Text>
+            </ScalePressable>
+          );
+        })}
+      </View>
+    );
+  }
+
+  return (
+    <>
+      <ScalePressable contentStyle={sheetStyles.dateBtn} onPress={() => setShowPicker(true)}>
+        <Feather name="calendar" size={15} color={Colors.zinc500} />
+        <Text style={sheetStyles.dateBtnText}>{formatShortDate(selectedDate.toISOString())} 06:00</Text>
+      </ScalePressable>
+      {showPicker && (
+        <DateTimePicker
+          value={selectedDate}
+          mode="date"
+          display={Platform.OS === "ios" ? "spinner" : "default"}
+          onChange={(_event: unknown, date?: Date) => {
+            setShowPicker(Platform.OS === "ios");
+            if (date) onSelectDate(date);
+          }}
+          minimumDate={new Date()}
+        />
+      )}
+    </>
+  );
+}
+
+// ─── Resend Sheet (reschedule from sent/cancelled) ────────────────────────────
+
 function ResendSheet({
   send,
   spaceId,
+  centerSlots,
   onClose,
   onSaved,
 }: {
   send: SpaceScheduledSendWithLetter;
   spaceId: string;
+  centerSlots: { date: string; roundId: string }[] | undefined;
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [scheduledAt, setScheduledAt] = useState(new Date(Date.now() + 24 * 60 * 60 * 1000));
-  const [showPicker, setShowPicker] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(new Date(Date.now() + 24 * 60 * 60 * 1000));
   const [saving, setSaving] = useState(false);
   const createSend = useCreateSpaceScheduledSend();
+  const isCenter = send.letterType === "CENTER";
+
+  const ownRoundSlots = useMemo(
+    () => centerSlots?.filter((s) => !send.letter?.spaceRoundId || s.roundId === send.letter.spaceRoundId),
+    [centerSlots, send.letter?.spaceRoundId],
+  );
+
+  // For CENTER letters, the selection must always land exactly on one of the
+  // user's assigned slot dates — auto-select the first valid one as soon as
+  // slots resolve, and re-snap if the current selection ever falls outside
+  // the assigned set (e.g. slots reload with different data).
+  useEffect(() => {
+    if (!isCenter || !ownRoundSlots || ownRoundSlots.length === 0) return;
+    const selectedYmd = dateToYmd(selectedDate);
+    if (!ownRoundSlots.some((s) => s.date === selectedYmd)) {
+      setSelectedDate(parseYmdToLocalDate(ownRoundSlots[0].date));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCenter, ownRoundSlots]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
+      const finalScheduledAt = kstDateAt6(selectedDate);
       await createSend.mutateAsync({
         id: spaceId,
         letterId: send.spaceLetterId,
-        data: { scheduledAt: scheduledAt.toISOString() },
+        data: { scheduledAt: finalScheduledAt.toISOString() },
       });
       onSaved();
       onClose();
-    } catch {
-      Alert.alert("오류", "예약에 실패했어요. 다시 시도해주세요.");
+    } catch (err) {
+      if (isDuplicateReservationError(err)) {
+        Alert.alert("이미 예약이 있어요", DUPLICATE_RESERVATION_MESSAGE);
+      } else {
+        Alert.alert("오류", "예약에 실패했어요. 다시 시도해주세요.");
+      }
     } finally {
       setSaving(false);
     }
-  }, [scheduledAt, spaceId, send, createSend, onSaved, onClose]);
+  }, [selectedDate, spaceId, send, createSend, onSaved, onClose]);
+
+  const isValidCenterSelection =
+    isCenter && !!ownRoundSlots?.some((s) => s.date === dateToYmd(selectedDate));
+  const canSave = isCenter ? isValidCenterSelection : true;
 
   return (
     <View style={sheetStyles.overlay}>
@@ -195,33 +381,19 @@ function ResendSheet({
           </Text>
         )}
 
-        <Text style={sheetStyles.fieldLabel}>새 발송 예약 일시</Text>
-        <ScalePressable
-          contentStyle={sheetStyles.dateBtn}
-          onPress={() => setShowPicker(true)}
-        >
-          <Feather name="calendar" size={15} color={Colors.zinc500} />
-          <Text style={sheetStyles.dateBtnText}>{formatDateTime(scheduledAt.toISOString())}</Text>
-        </ScalePressable>
-
-        {showPicker && (
-          <DateTimePicker
-            value={scheduledAt}
-            mode="datetime"
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={(_event, date) => {
-              setShowPicker(Platform.OS === "ios");
-              if (date) setScheduledAt(date);
-            }}
-            minimumDate={new Date()}
-          />
-        )}
+        <Text style={sheetStyles.fieldLabel}>새 발송 예정일 (06:00 고정 발송)</Text>
+        <FixedTimeDatePicker
+          send={send}
+          selectedDate={selectedDate}
+          onSelectDate={setSelectedDate}
+          centerSlots={centerSlots}
+        />
 
         <ScalePressable
           style={sheetStyles.saveBtnOuter}
-          contentStyle={[sheetStyles.saveBtn, saving && sheetStyles.saveBtnDisabled]}
+          contentStyle={[sheetStyles.saveBtn, (saving || !canSave) && sheetStyles.saveBtnDisabled]}
           onPress={handleSave}
-          disabled={saving}
+          disabled={saving || !canSave}
         >
           <Text style={sheetStyles.saveBtnText}>{saving ? "예약 중..." : "예약 등록"}</Text>
         </ScalePressable>
@@ -235,36 +407,64 @@ function ResendSheet({
 function ChangeSheet({
   send,
   spaceId,
+  centerSlots,
   onClose,
   onSaved,
 }: {
   send: SpaceScheduledSendWithLetter;
   spaceId: string;
+  centerSlots: { date: string; roundId: string }[] | undefined;
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [scheduledAt, setScheduledAt] = useState(new Date(send.scheduledAt));
-  const [showPicker, setShowPicker] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(new Date(send.scheduledAt));
   const [saving, setSaving] = useState(false);
   const updateSend = useUpdateSpaceScheduledSend();
+  const isCenter = send.letterType === "CENTER";
+
+  const ownRoundSlots = useMemo(
+    () => centerSlots?.filter((s) => !send.letter?.spaceRoundId || s.roundId === send.letter.spaceRoundId),
+    [centerSlots, send.letter?.spaceRoundId],
+  );
+
+  // For CENTER letters, the selection must always land exactly on one of the
+  // user's assigned slot dates — snap to the first valid one (or to the
+  // send's current date if it's still valid) as soon as slots resolve.
+  useEffect(() => {
+    if (!isCenter || !ownRoundSlots || ownRoundSlots.length === 0) return;
+    const selectedYmd = dateToYmd(selectedDate);
+    if (!ownRoundSlots.some((s) => s.date === selectedYmd)) {
+      setSelectedDate(parseYmdToLocalDate(ownRoundSlots[0].date));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCenter, ownRoundSlots]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
+      const finalScheduledAt = kstDateAt6(selectedDate);
       await updateSend.mutateAsync({
         id: spaceId,
         letterId: send.spaceLetterId,
         sendId: send.id,
-        data: { status: "PENDING", scheduledAt: scheduledAt.toISOString() },
+        data: { status: "PENDING", scheduledAt: finalScheduledAt.toISOString() },
       });
       onSaved();
       onClose();
-    } catch {
-      Alert.alert("오류", "예약 변경에 실패했어요. 다시 시도해주세요.");
+    } catch (err) {
+      if (isDuplicateReservationError(err)) {
+        Alert.alert("이미 예약이 있어요", DUPLICATE_RESERVATION_MESSAGE);
+      } else {
+        Alert.alert("오류", "예약 변경에 실패했어요. 다시 시도해주세요.");
+      }
     } finally {
       setSaving(false);
     }
-  }, [scheduledAt, spaceId, send, updateSend, onSaved, onClose]);
+  }, [selectedDate, spaceId, send, updateSend, onSaved, onClose]);
+
+  const isValidCenterSelection =
+    isCenter && !!ownRoundSlots?.some((s) => s.date === dateToYmd(selectedDate));
+  const canSave = isCenter ? isValidCenterSelection : true;
 
   return (
     <View style={sheetStyles.overlay}>
@@ -283,33 +483,19 @@ function ChangeSheet({
           </Text>
         )}
 
-        <Text style={sheetStyles.fieldLabel}>새 발송 예약 일시</Text>
-        <ScalePressable
-          contentStyle={sheetStyles.dateBtn}
-          onPress={() => setShowPicker(true)}
-        >
-          <Feather name="calendar" size={15} color={Colors.zinc500} />
-          <Text style={sheetStyles.dateBtnText}>{formatDateTime(scheduledAt.toISOString())}</Text>
-        </ScalePressable>
-
-        {showPicker && (
-          <DateTimePicker
-            value={scheduledAt}
-            mode="datetime"
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={(_event, date) => {
-              setShowPicker(Platform.OS === "ios");
-              if (date) setScheduledAt(date);
-            }}
-            minimumDate={new Date()}
-          />
-        )}
+        <Text style={sheetStyles.fieldLabel}>새 발송 예정일 (06:00 고정 발송)</Text>
+        <FixedTimeDatePicker
+          send={send}
+          selectedDate={selectedDate}
+          onSelectDate={setSelectedDate}
+          centerSlots={centerSlots}
+        />
 
         <ScalePressable
           style={sheetStyles.saveBtnOuter}
-          contentStyle={[sheetStyles.saveBtn, saving && sheetStyles.saveBtnDisabled]}
+          contentStyle={[sheetStyles.saveBtn, (saving || !canSave) && sheetStyles.saveBtnDisabled]}
           onPress={handleSave}
-          disabled={saving}
+          disabled={saving || !canSave}
         >
           <Text style={sheetStyles.saveBtnText}>{saving ? "변경 중..." : "변경 저장"}</Text>
         </ScalePressable>
@@ -323,9 +509,10 @@ function ChangeSheet({
 export default function SpaceScheduleSendScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { id, slotId, scheduledDate } = useLocalSearchParams<{
+  const { id, slotId, roundId, scheduledDate } = useLocalSearchParams<{
     id: string;
     slotId?: string;
+    roundId?: string;
     scheduledDate?: string;
   }>();
   const { userId } = useUser();
@@ -340,7 +527,8 @@ export default function SpaceScheduleSendScreen() {
     { userId },
     { query: { enabled: !!id && !!userId, queryKey: getGetSpaceJoinContextQueryKey(id, { userId }) } },
   );
-  const spaceStatus = joinContextQuery.data?.space?.status ?? null;
+  const space = joinContextQuery.data?.space ?? null;
+  const spaceStatus = space?.status ?? null;
   const isSpaceArchived = spaceStatus === "ARCHIVED";
 
   const sendsQuery = useListAllSpaceScheduledSends(id, { query: { enabled: !!id, queryKey: getListAllSpaceScheduledSendsQueryKey(id) } });
@@ -357,6 +545,83 @@ export default function SpaceScheduleSendScreen() {
   const rounds = (roundsQuery.data ?? []) as SpaceRound[];
   const letters = (lettersQuery.data ?? []) as SpaceLetter[];
   const articles = (articlesQuery.data ?? []) as Article[];
+
+  // The round being highlighted in the header: the one the user navigated in
+  // for (roundId param), otherwise the current ACTIVE round, otherwise the
+  // nearest UPCOMING one.
+  const currentRound = useMemo(() => {
+    if (roundId) {
+      const match = rounds.find((r) => r.id === roundId);
+      if (match) return match;
+    }
+    return (
+      rounds.find((r) => r.status === "ACTIVE") ??
+      rounds.find((r) => r.status === "UPCOMING") ??
+      null
+    );
+  }, [rounds, roundId]);
+
+  // ─── "내 차례" CENTER slot dates, gathered across ACTIVE/UPCOMING rounds ────
+  // `allCenterSlots` always includes every round the user is assigned a CENTER
+  // slot in (regardless of existing reservations) — it's the source of truth
+  // used to resolve "which date belongs to which round" for editing an
+  // existing reservation. `newReservationCenterSlots` (derived below) narrows
+  // that down to rounds that don't already have a pending reservation, and is
+  // only used when creating a brand-new reservation.
+  const [allCenterSlots, setAllCenterSlots] = useState<
+    { date: string; roundId: string }[] | undefined
+  >(undefined);
+  useEffect(() => {
+    let cancelled = false;
+    async function run() {
+      if (!id || !userId) {
+        setAllCenterSlots([]);
+        return;
+      }
+      const targetRounds = rounds.filter((r) => r.status === "ACTIVE" || r.status === "UPCOMING");
+      if (targetRounds.length === 0) {
+        setAllCenterSlots([]);
+        return;
+      }
+      setAllCenterSlots(undefined);
+      const results = await Promise.all(
+        targetRounds.map((r) =>
+          listSpaceRoundSlots(id, r.id).catch(() => [] as SpaceRoundSlotWithUser[]),
+        ),
+      );
+      if (cancelled) return;
+      const mine: { date: string; roundId: string }[] = [];
+      targetRounds.forEach((r, idx) => {
+        const mySlot = results[idx].find((s) => s.assignedUserId === userId);
+        if (mySlot?.scheduledDate) {
+          mine.push({ date: mySlot.scheduledDate, roundId: r.id });
+        }
+      });
+      setAllCenterSlots(mine);
+    }
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, userId, rounds]);
+
+  // Rounds where the user already has a PENDING CENTER reservation — picking
+  // one of these again for a *new* reservation would just trigger the
+  // backend's duplicate-slot rejection, so exclude them from that flow only.
+  const pendingCenterRoundIds = useMemo(
+    () =>
+      new Set(
+        sends
+          .filter((s) => s.status === "PENDING" && s.letterType === "CENTER")
+          .map((s) => s.letter?.spaceRoundId)
+          .filter((v): v is string => !!v),
+      ),
+    [sends],
+  );
+  const newReservationCenterSlots = useMemo(
+    () => allCenterSlots?.filter((s) => !pendingCenterRoundIds.has(s.roundId)),
+    [allCenterSlots, pendingCenterRoundIds],
+  );
 
   // Derive round state: only block scheduling when all existing rounds are COMPLETED
   // (i.e., no ACTIVE and no UPCOMING rounds remain). UPCOMING rounds mean more rounds
@@ -423,6 +688,16 @@ export default function SpaceScheduleSendScreen() {
   const pendingSends = sends.filter((s) => s.status === "PENDING");
   const failedSends = sends.filter((s) => s.status === "FAILED");
   const completedSends = sends.filter((s) => s.status === "SENT" || s.status === "CANCELLED");
+  const [showCompleted, setShowCompleted] = useState(false);
+
+  const handleBackToSpaceDetail = useCallback(() => {
+    router.push({ pathname: "/of-space-detail", params: { id } });
+  }, [router, id]);
+
+  // Slot label for the header sub-line — prefer the slot the user navigated
+  // here for; otherwise fall back to the most relevant pending reservation.
+  const headerSlotSource =
+    (slotId && pendingSends.find((s) => s.slotId === slotId)) || pendingSends[0] || null;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -431,7 +706,7 @@ export default function SpaceScheduleSendScreen() {
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
         </ScalePressable>
         <Text style={styles.headerTitle} numberOfLines={1}>
-          글 예약 발송
+          예약 대기
         </Text>
         <ScalePressable
           onPress={() => {
@@ -444,6 +719,27 @@ export default function SpaceScheduleSendScreen() {
           <Feather name="plus" size={22} color={Colors.zinc700} />
         </ScalePressable>
       </View>
+
+      {space && (
+        <View style={styles.contextHeader}>
+          <Text style={styles.contextSpaceName} numberOfLines={1}>
+            {space.name}
+          </Text>
+          <View style={styles.contextMetaRow}>
+            {currentRound && (
+              <Text style={styles.contextMetaText}>
+                {currentRound.roundNumber}/{space.roundCount}회차
+              </Text>
+            )}
+            {headerSlotSource && (
+              <>
+                {currentRound && <Text style={styles.contextMetaDot}>·</Text>}
+                <Text style={styles.contextMetaText}>{slotLabel(headerSlotSource)}</Text>
+              </>
+            )}
+          </View>
+        </View>
+      )}
 
       {schedulingBlockReason && (
         <View style={styles.blockBanner}>
@@ -469,78 +765,107 @@ export default function SpaceScheduleSendScreen() {
             />
           }
         >
-          {sends.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Feather name="send" size={40} color={Colors.zinc300} />
-              <Text style={styles.emptyTitle}>예약된 발송이 없어요</Text>
-              <Text style={styles.emptySubtitle}>
-                {isSchedulingBlocked
-                  ? schedulingBlockReason
-                  : "오른쪽 상단 + 버튼으로\n새 예약 발송을 등록하세요"}
-              </Text>
-            </View>
-          ) : (
+          {failedSends.length > 0 && (
             <>
-              {failedSends.length > 0 && (
-                <>
-                  <Text style={[styles.sectionHeader, styles.sectionHeaderFailed]}>
-                    발송 실패 {failedSends.length}
-                  </Text>
-                  <View style={styles.sendList}>
-                    {failedSends.map((send) => (
-                      <SendRow
-                        key={send.id}
-                        send={send}
-                        onCancel={() => handleCancel(send)}
-                        onResend={() => setResendTarget(send)}
-                        onChangePending={() => setChangeTarget(send)}
-                        schedulingBlocked={isSchedulingBlocked}
-                      />
-                    ))}
-                  </View>
-                </>
-              )}
+              <Text style={[styles.sectionHeader, styles.sectionHeaderFailed]}>
+                발송 실패 {failedSends.length}
+              </Text>
+              <View style={styles.sendList}>
+                {failedSends.map((send) => (
+                  <SendRow
+                    key={send.id}
+                    send={send}
+                    onCancel={() => handleCancel(send)}
+                    onResend={() => setResendTarget(send)}
+                    onChangePending={() => setChangeTarget(send)}
+                    schedulingBlocked={isSchedulingBlocked}
+                  />
+                ))}
+              </View>
+            </>
+          )}
 
-              {pendingSends.length > 0 && (
-                <>
-                  <Text style={styles.sectionHeader}>예약 중 {pendingSends.length}</Text>
-                  <View style={styles.sendList}>
-                    {pendingSends.map((send) => (
-                      <SendRow
-                        key={send.id}
-                        send={send}
-                        onCancel={() => handleCancel(send)}
-                        onResend={() => setResendTarget(send)}
-                        onChangePending={() => setChangeTarget(send)}
-                        schedulingBlocked={isSchedulingBlocked}
-                      />
-                    ))}
-                  </View>
-                </>
-              )}
+          {pendingSends.length > 0 ? (
+            <>
+              <Text style={styles.sectionHeader}>대기 중 {pendingSends.length}</Text>
+              <View style={styles.sendList}>
+                {pendingSends.map((send) => (
+                  <SendRow
+                    key={send.id}
+                    send={send}
+                    onCancel={() => handleCancel(send)}
+                    onResend={() => setResendTarget(send)}
+                    onChangePending={() => setChangeTarget(send)}
+                    schedulingBlocked={isSchedulingBlocked}
+                  />
+                ))}
+              </View>
+            </>
+          ) : (
+            failedSends.length === 0 && (
+              <View style={styles.emptyState}>
+                <Feather name="send" size={40} color={Colors.zinc300} />
+                <Text style={styles.emptyTitle}>현재 대기 중인 예약이 없어요</Text>
+                <Text style={styles.emptySubtitle}>
+                  {isSchedulingBlocked
+                    ? schedulingBlockReason
+                    : "오른쪽 상단 + 버튼으로\n새 예약을 등록하세요"}
+                </Text>
+                <ScalePressable
+                  style={styles.footerBtnOuter}
+                  contentStyle={styles.footerBtn}
+                  onPress={handleBackToSpaceDetail}
+                >
+                  <Text style={styles.footerBtnText}>공간 상세로 돌아가기</Text>
+                </ScalePressable>
+              </View>
+            )
+          )}
 
-              {completedSends.length > 0 && (
-                <>
-                  <Text style={styles.sectionHeader}>완료·취소</Text>
-                  <View style={styles.sendList}>
-                    {completedSends.map((send) => (
-                      <SendRow
-                        key={send.id}
-                        send={send}
-                        onCancel={() => handleCancel(send)}
-                        onResend={() => setResendTarget(send)}
-                        onChangePending={() => setChangeTarget(send)}
-                        schedulingBlocked={isSchedulingBlocked}
-                      />
-                    ))}
-                  </View>
-                </>
+          {completedSends.length > 0 && (
+            <>
+              <ScalePressable
+                style={styles.completedToggle}
+                onPress={() => setShowCompleted((v) => !v)}
+              >
+                <Text style={styles.completedToggleText}>
+                  완료·취소 내역 {completedSends.length}
+                </Text>
+                <Feather
+                  name={showCompleted ? "chevron-up" : "chevron-down"}
+                  size={14}
+                  color={Colors.zinc400}
+                />
+              </ScalePressable>
+              {showCompleted && (
+                <View style={styles.sendList}>
+                  {completedSends.map((send) => (
+                    <SendRow
+                      key={send.id}
+                      send={send}
+                      onCancel={() => handleCancel(send)}
+                      onResend={() => setResendTarget(send)}
+                      onChangePending={() => setChangeTarget(send)}
+                      schedulingBlocked={isSchedulingBlocked}
+                    />
+                  ))}
+                </View>
               )}
             </>
           )}
           <View style={{ height: 40 }} />
         </ScrollView>
       )}
+
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+        <ScalePressable
+          style={styles.footerBtnOuter}
+          contentStyle={styles.footerBtn}
+          onPress={handleBackToSpaceDetail}
+        >
+          <Text style={styles.footerBtnText}>공간 상세로 돌아가기</Text>
+        </ScalePressable>
+      </View>
 
       {showNewSheet && (
         <ArticleScheduleSheet
@@ -557,6 +882,8 @@ export default function SpaceScheduleSendScreen() {
           onGoToArchive={handleGoToArchive}
           initialScheduledDate={scheduledDate || null}
           slotId={slotId || null}
+          assignedCenterSlots={newReservationCenterSlots}
+          isLoadingCenterDates={allCenterSlots === undefined}
         />
       )}
 
@@ -564,6 +891,7 @@ export default function SpaceScheduleSendScreen() {
         <ResendSheet
           send={resendTarget}
           spaceId={id}
+          centerSlots={allCenterSlots}
           onClose={() => setResendTarget(null)}
           onSaved={handleSaved}
         />
@@ -573,6 +901,7 @@ export default function SpaceScheduleSendScreen() {
         <ChangeSheet
           send={changeTarget}
           spaceId={id}
+          centerSlots={allCenterSlots}
           onClose={() => setChangeTarget(null)}
           onSaved={handleSaved}
         />
@@ -621,6 +950,76 @@ const styles = StyleSheet.create({
     color: Colors.zinc500,
     flex: 1,
     lineHeight: 16,
+  },
+  contextHeader: {
+    paddingHorizontal: Spacing.screenPx,
+    paddingTop: 14,
+    paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.zinc100,
+    gap: 4,
+  },
+  contextSpaceName: {
+    ...Typography.bodySemiBold,
+    fontSize: 15,
+    color: Colors.zinc900,
+  },
+  contextMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  contextMetaText: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc500,
+  },
+  contextMetaDot: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc300,
+  },
+  completedToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: Spacing.screenPx,
+    paddingTop: 20,
+    paddingBottom: 10,
+  },
+  completedToggleText: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc400,
+    fontWeight: "600",
+  },
+  slotLabelText: {
+    ...Typography.caption,
+    fontSize: 11,
+    fontWeight: "700",
+    color: Colors.zinc500,
+    marginBottom: 2,
+  },
+  footer: {
+    paddingHorizontal: Spacing.screenPx,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.zinc200,
+    backgroundColor: Colors.white,
+  },
+  footerBtnOuter: {},
+  footerBtn: {
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.zinc300,
+    backgroundColor: Colors.white,
+  },
+  footerBtnText: {
+    ...Typography.bodySemiBold,
+    fontSize: 15,
+    color: Colors.zinc700,
   },
   scrollView: {
     flex: 1,
@@ -983,6 +1382,58 @@ const sheetStyles = StyleSheet.create({
   saveBtnText: {
     ...Typography.bodySemiBold,
     fontSize: 15,
+    color: Colors.white,
+  },
+  centerDatesLoading: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 12,
+  },
+  centerDatesLoadingText: {
+    ...Typography.body,
+    fontSize: 13,
+    color: Colors.zinc500,
+  },
+  noSlotNotice: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    backgroundColor: Colors.zinc50,
+    borderRadius: 10,
+    padding: 12,
+  },
+  noSlotNoticeText: {
+    ...Typography.body,
+    fontSize: 13,
+    color: Colors.zinc500,
+    flex: 1,
+    lineHeight: 19,
+  },
+  centerDateChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  centerDateChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.zinc300,
+    backgroundColor: Colors.white,
+  },
+  centerDateChipSelected: {
+    borderColor: Colors.zinc900,
+    backgroundColor: Colors.zinc900,
+  },
+  centerDateChipText: {
+    ...Typography.body,
+    fontSize: 13,
+    fontWeight: "600",
+    color: Colors.zinc600,
+  },
+  centerDateChipTextSelected: {
     color: Colors.white,
   },
 });
