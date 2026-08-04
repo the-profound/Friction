@@ -1,0 +1,22 @@
+Render Error
+
+Cannot read property 'ErrorBoundary' of undefined
+
+Source:
+/home/runner/workspace/node_modules/.pnpm/expo-router@57.0.9_ca3116a6146716dc3e0f22c8d198aa86/node_modules/expo-router/build/useScreens.js (141:0)
+
+Call Stack:
+fromImport (/home/runner/workspace/node_modules/.pnpm/expo-router@57.0.9_ca3116a6146716dc3e0f22c8d198aa86/node_modules/expo-router/build/useScreens.js:141)
+getQualifiedRouteComponent (/home/runner/workspace/node_modules/.pnpm/expo-router@57.0.9_ca3116a6146716dc3e0f22c8d198aa86/node_modules/expo-router/build/useScreens.js:206)
+useStore (/home/runner/workspace/node_modules/.pnpm/expo-router@57.0.9_ca3116a6146716dc3e0f22c8d198aa86/node_modules/expo-router/build/global-state/useStore.js:55)
+ContextNavigator (/home/runner/workspace/node_modules/.pnpm/expo-router@57.0.9_ca3116a6146716dc3e0f22c8d198aa86/node_modules/expo-router/build/ExpoRoot.js:122)
+callComponent.react_stack_bottom_frame (/home/runner/workspace/node_modules/.pnpm/react-native@0.86.2_@babel+core@7.29.0_@react-native+metro-config@0.86.2_@babel+core@7._4fc113839bac70ba69e36725ef95a558/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-dev.js:17130)
+renderWithHooks (/home/runner/workspace/node_modules/.pnpm/react-native@0.86.2_@babel+core@7.29.0_@react-native+metro-config@0.86.2_@babel+core@7._4fc113839bac70ba69e36725ef95a558/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-dev.js:5648)
+updateFunctionComponent (/home/runner/workspace/node_modules/.pnpm/react-native@0.86.2_@babel+core@7.29.0_@react-native+metro-config@0.86.2_@babel+core@7._4fc113839bac70ba69e36725ef95a558/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-dev.js:8081)
+beginWork (/home/runner/workspace/node_modules/.pnpm/react-native@0.86.2_@babel+core@7.29.0_@react-native+metro-config@0.86.2_@babel+core@7._4fc113839bac70ba69e36725ef95a558/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-dev.js:9340)
+runWithFiberInDEV (/home/runner/workspace/node_modules/.pnpm/react-native@0.86.2_@babel+core@7.29.0_@react-native+metro-config@0.86.2_@babel+core@7._4fc113839bac70ba69e36725ef95a558/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-dev.js:697)
+performUnitOfWork (/home/runner/workspace/node_modules/.pnpm/react-native@0.86.2_@babel+core@7.29.0_@react-native+metro-config@0.86.2_@babel+core@7._4fc113839bac70ba69e36725ef95a558/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-dev.js:14134)
+workLoopSync (/home/runner/workspace/node_modules/.pnpm/react-native@0.86.2_@babel+core@7.29.0_@react-native+metro-config@0.86.2_@babel+core@7._4fc113839bac70ba69e36725ef95a558/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-dev.js:13966)
+renderRootSync (/home/runner/workspace/node_modules/.pnpm/react-native@0.86.2_@babel+core@7.29.0_@react-native+metro-config@0.86.2_@babel+core@7._4fc113839bac70ba69e36725ef95a558/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-dev.js:13947)
+performWorkOnRoot (/home/runner/workspace/node_modules/.pnpm/react-native@0.86.2_@babel+core@7.29.0_@react-native+metro-config@0.86.2_@babel+core@7._4fc113839bac70ba69e36725ef95a558/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-dev.js:13160)
+performWorkOnRootViaSchedulerTask (/home/runner/workspace/node_modules/.pnpm/react-native@0.86.2_@babel+core@7.29.0_@react-native+metro-config@0.86.2_@babel+core@7._4fc113839bac70ba69e36725ef95a558/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-dev.js:3673)

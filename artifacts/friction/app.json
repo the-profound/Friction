@@ -12,9 +12,11 @@
       "bundleIdentifier": "friction.by.theprofound",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "UIBackgroundModes": ["remote-notification"]
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
       },
-      "buildNumber": "13"
+      "buildNumber": "14"
     },
     "android": {
       "softwareKeyboardLayoutMode": "resize",
