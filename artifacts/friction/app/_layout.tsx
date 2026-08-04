@@ -8,7 +8,7 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter, usePathname, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import * as Notifications from "expo-notifications";
+import { getNotificationsModule } from "@/lib/safeNotifications";
 import React, { useEffect, useRef } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -275,6 +275,8 @@ export default function RootLayout() {
   // delivered; creating it multiple times is idempotent.
   useEffect(() => {
     if (Platform.OS !== "android") return;
+    const Notifications = getNotificationsModule();
+    if (!Notifications) return;
     Notifications.setNotificationChannelAsync("letter-arrived-silent", {
       name: "편지 도착 알림",
       importance: Notifications.AndroidImportance.LOW,

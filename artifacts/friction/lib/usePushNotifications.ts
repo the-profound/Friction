@@ -8,13 +8,15 @@
  *   - permission is denied
  *   - the device has no projectId configured
  *   - the server request fails
+ *   - the expo-notifications native module is unavailable (e.g. a stale
+ *     dev-client/TestFlight binary built before this module was added)
  *
  * Call this hook once after the user is authenticated (e.g. in the root layout
  * inside AuthGuard when session exists).
  */
 import { useEffect } from "react";
 import { Platform } from "react-native";
-import * as Notifications from "expo-notifications";
+import { getNotificationsModule } from "@/lib/safeNotifications";
 import Constants from "expo-constants";
 import { customFetch } from "@workspace/api-client-react";
 
@@ -31,6 +33,14 @@ export function usePushNotifications(userId: string | null | undefined): void {
 
     async function registerToken(): Promise<void> {
       try {
+        const Notifications = getNotificationsModule();
+        if (!Notifications) {
+          // Native module unavailable (e.g. stale dev-client/TestFlight
+          // binary built before expo-notifications was added) — exit
+          // silently, same as permission-denied / no-project-id.
+          return;
+        }
+
         // Request permission
         const { status: existingStatus } = await Notifications.getPermissionsAsync();
         let finalStatus = existingStatus;
