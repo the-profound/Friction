@@ -5,6 +5,7 @@ import { requireAuth } from "../middlewares/requireAuth";
 import { generateInviteCode } from "../lib/inviteCodeWords";
 import { logger } from "../lib/logger";
 import { dispatchNotification } from "../lib/notifications";
+import { normalizeToKst6, kstDateString } from "../lib/deliverySlot";
 import {
   db,
   spacesTable,
@@ -1330,6 +1331,53 @@ router.get("/spaces/:id/letters/:letterId/scheduled-sends", requireAuth, async (
   res.json(sends);
 });
 
+/**
+ * Finds the round slot assigned to `authorId` within `spaceRoundId`, if any.
+ */
+async function findAssignedSlot(spaceRoundId: string, authorId: string) {
+  const [slot] = await db
+    .select()
+    .from(spaceRoundSlotsTable)
+    .where(
+      and(
+        eq(spaceRoundSlotsTable.spaceRoundId, spaceRoundId),
+        eq(spaceRoundSlotsTable.assignedUserId, authorId),
+      ),
+    )
+    .limit(1);
+  return slot ?? null;
+}
+
+/**
+ * Validates that a CENTER-role reservation's requested date matches the
+ * author's assigned slot date for that round. Returns an error message
+ * string on failure, or null on success (also returning the matched slot so
+ * callers can persist its id).
+ */
+type CenterSlotValidation =
+  | { ok: true; slot: typeof spaceRoundSlotsTable.$inferSelect }
+  | { ok: false; error: string };
+
+async function validateCenterSlotDate(
+  letter: { spaceRoundId: string | null; authorId: string },
+  normalizedScheduledAt: Date | undefined,
+): Promise<CenterSlotValidation> {
+  if (!letter.spaceRoundId) {
+    return { ok: false, error: "회차 정보가 없는 글은 예약할 수 없습니다." };
+  }
+  const slot = await findAssignedSlot(letter.spaceRoundId, letter.authorId);
+  if (!slot) {
+    return { ok: false, error: "이 회차에 배정된 슬롯이 없습니다." };
+  }
+  if (!slot.scheduledDate) {
+    return { ok: false, error: "슬롯에 배정된 발송일이 없습니다." };
+  }
+  if (normalizedScheduledAt && kstDateString(normalizedScheduledAt) !== slot.scheduledDate) {
+    return { ok: false, error: "요청한 발송 예정일이 배정된 슬롯 날짜와 일치하지 않습니다." };
+  }
+  return { ok: true, slot };
+}
+
 router.post("/spaces/:id/letters/:letterId/scheduled-sends", requireAuth, async (req, res) => {
   const callerId = req.user!.id;
   const allowed = await canManageLetterSends(req.params.id, req.params.letterId, callerId);
@@ -1337,15 +1385,75 @@ router.post("/spaces/:id/letters/:letterId/scheduled-sends", requireAuth, async 
     res.status(403).json({ error: "You can only schedule sends for your own letters" });
     return;
   }
+
+  const [letter] = await db
+    .select()
+    .from(spaceLettersTable)
+    .where(
+      and(
+        eq(spaceLettersTable.id, req.params.letterId),
+        eq(spaceLettersTable.spaceId, req.params.id),
+      ),
+    )
+    .limit(1);
+  if (!letter) {
+    res.status(404).json({ error: "Letter not found" });
+    return;
+  }
+
   const { scheduledAt, slotId, ...sendRest } = req.body;
+  if (scheduledAt == null) {
+    res.status(400).json({ error: "scheduledAt is required" });
+    return;
+  }
+  const parsedScheduledAt = toDate(scheduledAt);
+  if (!parsedScheduledAt) {
+    res.status(400).json({ error: "잘못된 발송 시각입니다." });
+    return;
+  }
+  // Reservation send times are always normalized to KST 06:00, regardless of
+  // whatever date/time value the client actually sent.
+  const normalizedScheduledAt = normalizeToKst6(parsedScheduledAt);
+
+  // Reject duplicate PENDING reservations for the same author/space/round/role.
+  const dupConditions = [
+    eq(spaceScheduledSendsTable.spaceId, req.params.id),
+    eq(spaceScheduledSendsTable.status, "PENDING"),
+    eq(spaceLettersTable.authorId, letter.authorId),
+    eq(spaceLettersTable.letterType, letter.letterType),
+    letter.spaceRoundId
+      ? eq(spaceLettersTable.spaceRoundId, letter.spaceRoundId)
+      : isNull(spaceLettersTable.spaceRoundId),
+  ];
+  const [duplicate] = await db
+    .select({ id: spaceScheduledSendsTable.id })
+    .from(spaceScheduledSendsTable)
+    .innerJoin(spaceLettersTable, eq(spaceScheduledSendsTable.spaceLetterId, spaceLettersTable.id))
+    .where(and(...dupConditions))
+    .limit(1);
+  if (duplicate) {
+    res.status(409).json({ error: "이미 같은 회차·역할로 대기 중인 예약이 있습니다." });
+    return;
+  }
+
+  let resolvedSlotId: string | undefined = slotId ?? undefined;
+  if (letter.letterType === "CENTER") {
+    const validation = await validateCenterSlotDate(letter, normalizedScheduledAt);
+    if (!validation.ok) {
+      res.status(400).json({ error: validation.error });
+      return;
+    }
+    resolvedSlotId = validation.slot.id;
+  }
+
   const [send] = await db
     .insert(spaceScheduledSendsTable)
     .values({
       ...sendRest,
       spaceId: req.params.id,
       spaceLetterId: req.params.letterId,
-      ...(scheduledAt != null ? { scheduledAt: toDate(scheduledAt) } : {}),
-      ...(slotId != null ? { slotId } : {}),
+      scheduledAt: normalizedScheduledAt,
+      ...(resolvedSlotId != null ? { slotId: resolvedSlotId } : {}),
     })
     .returning();
   res.status(201).json(send);
@@ -1360,7 +1468,34 @@ router.patch("/spaces/:id/letters/:letterId/scheduled-sends/:sendId", requireAut
   }
   const { status, scheduledAt } = req.body;
   const updateFields: Record<string, unknown> = { status };
-  if (scheduledAt !== undefined) updateFields.scheduledAt = toDate(scheduledAt);
+  if (scheduledAt !== undefined) {
+    const parsedScheduledAt = toDate(scheduledAt);
+    if (!parsedScheduledAt) {
+      res.status(400).json({ error: "잘못된 발송 시각입니다." });
+      return;
+    }
+    const normalizedScheduledAt = normalizeToKst6(parsedScheduledAt);
+
+    const [letter] = await db
+      .select()
+      .from(spaceLettersTable)
+      .where(
+        and(
+          eq(spaceLettersTable.id, req.params.letterId),
+          eq(spaceLettersTable.spaceId, req.params.id),
+        ),
+      )
+      .limit(1);
+    if (letter?.letterType === "CENTER") {
+      const validation = await validateCenterSlotDate(letter, normalizedScheduledAt);
+      if (!validation.ok) {
+        res.status(400).json({ error: validation.error });
+        return;
+      }
+      updateFields.slotId = validation.slot.id;
+    }
+    updateFields.scheduledAt = normalizedScheduledAt;
+  }
   const [send] = await db
     .update(spaceScheduledSendsTable)
     .set(updateFields)
@@ -1423,8 +1558,10 @@ router.get("/spaces/:id/scheduled-sends", requireAuth, async (req, res) => {
 
   const articleIds = [...new Set(letters.map((l) => l.sourceArticleId).filter(Boolean) as string[])];
   const authorIds = [...new Set(letters.map((l) => l.authorId))];
+  const roundIds = [...new Set(letters.map((l) => l.spaceRoundId).filter(Boolean) as string[])];
+  const slotIds = [...new Set(sends.map((s) => s.slotId).filter(Boolean) as string[])];
 
-  const [articles, authors] = await Promise.all([
+  const [articles, authors, space, rounds, slots] = await Promise.all([
     articleIds.length > 0
       ? db
           .select({ id: articlesTable.id, title: articlesTable.title })
@@ -1437,16 +1574,63 @@ router.get("/spaces/:id/scheduled-sends", requireAuth, async (req, res) => {
           .from(usersTable)
           .where(inArray(usersTable.id, authorIds))
       : Promise.resolve([]),
+    db.select().from(spacesTable).where(eq(spacesTable.id, req.params.id)).then((r) => r[0] ?? null),
+    roundIds.length > 0
+      ? db.select().from(spaceRoundsTable).where(inArray(spaceRoundsTable.id, roundIds))
+      : Promise.resolve([]),
+    slotIds.length > 0
+      ? db.select().from(spaceRoundSlotsTable).where(inArray(spaceRoundSlotsTable.id, slotIds))
+      : Promise.resolve([]),
   ]);
 
   const articleMap = new Map(articles.map((a) => [a.id, a.title]));
   const authorMap = new Map(authors.map((u) => [u.id, u.nickname]));
+  const roundMap = new Map(rounds.map((r) => [r.id, r]));
+  const slotMap = new Map(slots.map((s) => [s.id, s]));
+
+  // Fallback slot lookup for sends created before slotId was auto-populated
+  // (or without one on record): resolve via round + author assignment.
+  const missingRoundAuthorPairs = letters
+    .filter((l) => l.letterType === "CENTER" && l.spaceRoundId)
+    .map((l) => ({ spaceRoundId: l.spaceRoundId as string, authorId: l.authorId }));
+  const fallbackSlots =
+    missingRoundAuthorPairs.length > 0
+      ? await db
+          .select()
+          .from(spaceRoundSlotsTable)
+          .where(
+            inArray(
+              spaceRoundSlotsTable.spaceRoundId,
+              [...new Set(missingRoundAuthorPairs.map((p) => p.spaceRoundId))],
+            ),
+          )
+      : [];
+  const fallbackSlotMap = new Map(
+    fallbackSlots.map((s) => [`${s.spaceRoundId}:${s.assignedUserId}`, s]),
+  );
 
   const result = sends.map((send) => {
     const letter = letterMap.get(send.spaceLetterId) ?? null;
     const articleTitle = letter?.sourceArticleId ? (articleMap.get(letter.sourceArticleId) ?? null) : null;
     const authorNickname = letter ? (authorMap.get(letter.authorId) ?? null) : null;
-    return { ...send, letter, articleTitle, authorNickname };
+
+    const round = letter?.spaceRoundId ? (roundMap.get(letter.spaceRoundId) ?? null) : null;
+    const slot =
+      (send.slotId ? slotMap.get(send.slotId) : null) ??
+      (letter?.spaceRoundId
+        ? (fallbackSlotMap.get(`${letter.spaceRoundId}:${letter.authorId}`) ?? null)
+        : null);
+
+    return {
+      ...send,
+      letter,
+      articleTitle,
+      authorNickname,
+      roundNumber: round?.roundNumber ?? null,
+      totalRounds: space?.roundCount ?? null,
+      letterType: letter?.letterType ?? null,
+      slotScheduledDate: slot?.scheduledDate ?? null,
+    };
   });
 
   res.json(result);
