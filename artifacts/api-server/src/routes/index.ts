@@ -13,6 +13,7 @@ import storageRouter from "./storage";
 import spellCheckRouter from "./spell-check";
 import spacesRouter from "./spaces";
 import thoughtsRouter from "./thoughts";
+import pushTokensRouter from "./pushTokens";
 
 const router: IRouter = Router();
 
@@ -30,5 +31,6 @@ router.use(storageRouter);
 router.use(spellCheckRouter);
 router.use(spacesRouter);
 router.use(thoughtsRouter);
+router.use(pushTokensRouter);
 
 export default router;

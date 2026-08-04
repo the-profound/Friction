@@ -8,6 +8,7 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter, usePathname, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
+import * as Notifications from "expo-notifications";
 import React, { useEffect, useRef } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -17,6 +18,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import { setEditorFonts, setEditorFontsError } from "@/lib/editorFontStore";
 import { posthog, PostHogProvider } from "@/lib/posthog";
 import { trackAppOpen } from "@/lib/analytics";
+import { usePushNotifications } from "@/lib/usePushNotifications";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import ToastContainer from "@/components/Toast/Toast";
@@ -117,6 +119,8 @@ const AUTH_BYPASS_ROUTES = new Set(["login", "login-callback"]);
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { session, isLoading } = useAuth();
+  // Register push token once the user is authenticated
+  usePushNotifications(session?.user?.id ?? (DEV_WEB_BYPASS ? DEV_WEB_BYPASS_USER_ID : null));
   const router = useRouter();
   const segments = useSegments();
   const hasRedirectedRef = useRef(false);
@@ -264,6 +268,23 @@ export default function RootLayout() {
     } catch (err) {
       console.warn("[analytics] trackAppOpen failed:", err);
     }
+  }, []);
+
+  // Register the Android silent-notification channel on startup.
+  // The channel must exist before any notification with this channelId is
+  // delivered; creating it multiple times is idempotent.
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    Notifications.setNotificationChannelAsync("letter-arrived-silent", {
+      name: "편지 도착 알림",
+      importance: Notifications.AndroidImportance.LOW,
+      vibrationPattern: null,
+      sound: null,
+      enableLights: false,
+      enableVibrate: false,
+    }).catch((err) => {
+      console.warn("[notifications] setNotificationChannelAsync failed:", err);
+    });
   }, []);
 
   useEffect(() => {

@@ -1227,6 +1227,22 @@ export interface CreateThoughtBody {
   sourceArticleId?: string | null;
 }
 
+export type RegisterPushTokenBodyPlatform =
+  (typeof RegisterPushTokenBodyPlatform)[keyof typeof RegisterPushTokenBodyPlatform];
+
+export const RegisterPushTokenBodyPlatform = {
+  ios: "ios",
+  android: "android",
+} as const;
+
+export interface RegisterPushTokenBody {
+  /** Expo push token (ExponentPushToken[...]) */
+  token: string;
+  platform: RegisterPushTokenBodyPlatform;
+  /** Optional device identifier for de-duplication */
+  deviceId?: string | null;
+}
+
 export type ListArticlesParams = {
   authorId?: string;
   status?: ListArticlesStatus;

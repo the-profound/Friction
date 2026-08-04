@@ -79,6 +79,8 @@ export * from "./readingMemoParams";
 export * from "./readingRecord";
 export * from "./readingRecordNullable";
 export * from "./recentSavedCollectionResponse";
+export * from "./registerPushTokenBody";
+export * from "./registerPushTokenBodyPlatform";
 export * from "./sendArticleBody";
 export * from "./sendRecord";
 export * from "./sendRecordTargetType";

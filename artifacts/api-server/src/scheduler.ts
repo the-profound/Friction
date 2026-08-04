@@ -1,29 +1,34 @@
 /**
- * Space operator inactivity notification scheduler.
+ * Scheduler: space inactivity alerts + letter-arrived push notifications.
  *
- * Polls once per hour for RECRUITING spaces whose planned_starts_at has
- * already passed and dispatches notifications at 1 / 3 / 7 / 14 day marks.
+ * Space inactivity:
+ *   Polls once per hour for RECRUITING spaces whose planned_starts_at has
+ *   already passed and dispatches notifications at 1 / 3 / 7 / 14 day marks.
+ *
+ * Letter-arrived push:
+ *   Runs daily at 06:00 KST.  For users who received ≥1 new letter in the
+ *   past 24 hours (visible_at within window), sends a silent Expo push.
+ *   A random message from 5 templates is chosen per user.
  *
  * Deduplication: each (spaceId, dayMilestone) pair is tracked in an
  * in-memory Set so that repeated hourly polls never dispatch the same
- * alert more than once per server process lifetime.  A future version
- * should persist sent milestones to the DB for durability across restarts.
- *
- * Actual push delivery is wired up via the notification infrastructure.
- * Until that integration is available the events are logged so they can
- * be picked up by a future adapter.
+ * alert more than once per server process lifetime.
  */
 import { db, spacesTable, spaceParticipationsTable } from "@workspace/db";
 import { eq, and, lt, isNotNull } from "drizzle-orm";
 import { logger } from "./lib/logger";
 import { dispatchNotification } from "./lib/notifications";
+import { getNewLetterRecipients } from "./lib/letterNotificationQuery";
+import { pickLetterArrivedMessage, SEND_HOUR_KST, WINDOW_HOURS } from "./lib/notificationMessages";
+import { sendSilentPush } from "./lib/pushSender";
+
+// ─── Space inactivity ────────────────────────────────────────────────────────
 
 const OPERATOR_ALERT_DAYS = [1, 3, 7];
 const PARTICIPANT_ALERT_DAY = 14;
 const POLL_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
 // Tracks (spaceId:days) milestones already dispatched in this process.
-// Prevents duplicate notifications across hourly poll cycles.
 const dispatchedMilestones = new Set<string>();
 
 function milestoneKey(spaceId: string, days: number): string {
@@ -71,7 +76,6 @@ async function checkInactiveSpaces() {
         if (!dispatchedMilestones.has(key)) {
           dispatchedMilestones.add(key);
 
-          // Fetch approved non-operator participants
           const participants = await db
             .select({ userId: spaceParticipationsTable.userId, role: spaceParticipationsTable.role })
             .from(spaceParticipationsTable)
@@ -108,10 +112,103 @@ async function checkInactiveSpaces() {
   }
 }
 
+// ─── Letter-arrived push notification ────────────────────────────────────────
+
+/**
+ * Computes the milliseconds until the next 06:00 KST.
+ * KST = UTC+9.
+ */
+function msUntilNextKst6am(): number {
+  const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+  const nowUtcMs = Date.now();
+  const nowKstMs = nowUtcMs + KST_OFFSET_MS;
+
+  const nowKstDate = new Date(nowKstMs);
+  // Midnight KST today (in KST wall time)
+  const midnightKstMs =
+    nowKstMs -
+    ((nowKstDate.getUTCHours() * 60 + nowKstDate.getUTCMinutes()) * 60 +
+      nowKstDate.getUTCSeconds()) *
+      1000 -
+    nowKstDate.getUTCMilliseconds();
+
+  const next6amKstMs = midnightKstMs + SEND_HOUR_KST * 60 * 60 * 1000;
+
+  const diff = next6amKstMs - nowKstMs;
+  // If 06:00 already passed today, schedule for tomorrow
+  return diff > 0 ? diff : diff + 24 * 60 * 60 * 1000;
+}
+
+async function sendLetterArrivedNotifications(): Promise<void> {
+  logger.info("scheduler: running letter-arrived push job");
+  try {
+    const recipients = await getNewLetterRecipients(WINDOW_HOURS);
+    logger.info({ recipientCount: recipients.length }, "scheduler: letter-arrived recipients found");
+
+    for (const recipient of recipients) {
+      if (recipient.pushTokens.length === 0) {
+        logger.info(
+          { userId: recipient.userId },
+          "scheduler: no push tokens — skipping user",
+        );
+        continue;
+      }
+
+      const [messageIdx, message] = pickLetterArrivedMessage(
+        recipient.nickname,
+        recipient.newLetterCount,
+      );
+
+      const targets = recipient.pushTokens.map((t) => ({
+        userId: recipient.userId,
+        token: t.token,
+        platform: t.platform,
+      }));
+
+      const results = await sendSilentPush(targets, message, {
+        type: "LETTER_ARRIVED",
+        newLetterCount: recipient.newLetterCount,
+      });
+
+      const successCount = results.filter((r) => r.success).length;
+      const failCount = results.length - successCount;
+
+      logger.info(
+        {
+          userId: recipient.userId,
+          newLetterCount: recipient.newLetterCount,
+          messageIdx,
+          successCount,
+          failCount,
+        },
+        "scheduler: letter-arrived push dispatched",
+      );
+    }
+  } catch (err) {
+    logger.error({ err }, "scheduler: sendLetterArrivedNotifications failed");
+  }
+}
+
+// ─── Startup ──────────────────────────────────────────────────────────────────
+
 export function startScheduler() {
-  // Run once shortly after startup, then on the hourly interval
+  // Space inactivity: run once shortly after startup, then every hour
   setTimeout(() => {
     checkInactiveSpaces();
     setInterval(checkInactiveSpaces, POLL_INTERVAL_MS);
   }, 5000);
+
+  // Letter-arrived push: schedule for the next 06:00 KST, then every 24h
+  const msToFirst = msUntilNextKst6am();
+  const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+
+  logger.info(
+    { msToFirst, nextRunInMinutes: Math.round(msToFirst / 60_000) },
+    "scheduler: letter-arrived push scheduled",
+  );
+
+  setTimeout(() => {
+    sendLetterArrivedNotifications();
+    setInterval(sendLetterArrivedNotifications, TWENTY_FOUR_HOURS);
+  }, msToFirst);
 }

@@ -3534,3 +3534,16 @@ export const ExpandThoughtsResponse = zod.object({
     }),
   ),
 });
+
+/**
+ * Upserts an Expo push token for the authenticated user. Safe to call on every app launch.
+ * @summary Register an Expo push token
+ */
+export const RegisterPushTokenBody = zod.object({
+  token: zod.string().describe("Expo push token (ExponentPushToken[...])"),
+  platform: zod.enum(["ios", "android"]),
+  deviceId: zod
+    .string()
+    .nullish()
+    .describe("Optional device identifier for de-duplication"),
+});
