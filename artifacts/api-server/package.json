@@ -10,7 +10,8 @@
     "seed": "NODE_ENV=development node --enable-source-maps ./dist/seed-runner.mjs",
     "migrate:rounds-backfill": "tsx src/migrate-spaces-rounds-backfill.ts",
     "backfill:embeddings": "tsx src/backfill-embeddings.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.19.0",
@@ -37,6 +38,7 @@
     "esbuild-plugin-pino": "^2.3.3",
     "pino-pretty": "^13",
     "thread-stream": "3.1.0",
-    "tsx": "catalog:"
+    "tsx": "catalog:",
+    "vitest": "^4.1.5"
   }
 }

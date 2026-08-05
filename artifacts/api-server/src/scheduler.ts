@@ -19,7 +19,7 @@ import { eq, and, lt, isNotNull } from "drizzle-orm";
 import { logger } from "./lib/logger";
 import { dispatchNotification } from "./lib/notifications";
 import { getNewLetterRecipients } from "./lib/letterNotificationQuery";
-import { pickLetterArrivedMessage, SEND_HOUR_KST, WINDOW_HOURS } from "./lib/notificationMessages";
+import { buildLetterArrivedMessage, SEND_HOUR_KST, WINDOW_HOURS } from "./lib/notificationMessages";
 import { sendSilentPush } from "./lib/pushSender";
 
 // ─── Space inactivity ────────────────────────────────────────────────────────
@@ -154,10 +154,10 @@ async function sendLetterArrivedNotifications(): Promise<void> {
         continue;
       }
 
-      const [messageIdx, message] = pickLetterArrivedMessage(
-        recipient.nickname,
-        recipient.newLetterCount,
-      );
+      const [messageIdx, message] = buildLetterArrivedMessage({
+        userName: recipient.nickname,
+        letterCount: recipient.newLetterCount,
+      });
 
       const targets = recipient.pushTokens.map((t) => ({
         userId: recipient.userId,
