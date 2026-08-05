@@ -5,11 +5,13 @@ import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { Colors, Typography } from "@/constants/tokens";
 
-/** A single reservable slot: either the space's one opening-letter slot, or
- * one of the user's assigned CENTER round slots. Only slots that don't
- * already have a PENDING or SENT reservation should ever appear here. */
+/** A single reservable slot: either one round's opening-letter slot (one per
+ * round, only offered while that round doesn't already have a PENDING/SENT
+ * opening reservation), or one of the user's assigned CENTER round slots.
+ * Only slots that don't already have a PENDING or SENT reservation should
+ * ever appear here. */
 export type EmptySlot =
-  | { kind: "opening" }
+  | { kind: "opening"; roundId: string; roundNumber: number | null; maxDate: string | null }
   | { kind: "center"; date: string; roundId: string; roundNumber: number | null };
 
 function formatShortDate(ymd: string): string {
@@ -18,7 +20,10 @@ function formatShortDate(ymd: string): string {
 }
 
 function slotItemLabel(slot: EmptySlot): string {
-  if (slot.kind === "opening") return "여는 편지";
+  if (slot.kind === "opening") {
+    const roundLabel = slot.roundNumber != null ? `${slot.roundNumber}회차` : "";
+    return `${roundLabel} 여는 편지`;
+  }
   const roundLabel = slot.roundNumber != null ? `${slot.roundNumber}회차` : "중심글";
   return `${roundLabel} 중심글 · ${formatShortDate(slot.date)} 06:00`;
 }
@@ -59,7 +64,7 @@ export function SlotPickerSheet({
         >
           {slots.map((slot, idx) => (
             <ScalePressable
-              key={slot.kind === "opening" ? "opening" : `${slot.roundId}:${slot.date}`}
+              key={slot.kind === "opening" ? `opening:${slot.roundId}` : `${slot.roundId}:${slot.date}`}
               style={[styles.item, idx === 0 && styles.itemFirst]}
               onPress={() => onSelect(slot)}
             >

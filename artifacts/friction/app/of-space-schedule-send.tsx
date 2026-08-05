@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useMemo, useEffect } from "react";
+import React, { useCallback, useState, useMemo, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { ArticleScheduleSheet } from "@/components/ArticleScheduleSheet/ArticleScheduleSheet";
 import { SlotPickerSheet, type EmptySlot } from "@/components/ArticleScheduleSheet/SlotPickerSheet";
+import { CollapsibleDatePicker, startOfDay } from "@/components/shared/CalendarGrid";
 import {
   useListAllSpaceScheduledSends,
   useListSpaceRounds,
@@ -42,7 +43,7 @@ import type {
 import { useQueryClient } from "@tanstack/react-query";
 import { useUser } from "@/contexts/UserContext";
 import { ApiError } from "@workspace/api-client-react";
-import { kstDateAt6 } from "@/lib/kstDate";
+import { kstDateAt6, minOpeningSendDate, toKstCalendarDate } from "@/lib/kstDate";
 
 function dateToYmd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -210,13 +211,16 @@ function SendRow({
 // ─── Resend Sheet (reschedule from sent/cancelled) ────────────────────────────
 
 /** Shared date-selection body used by both resend and change sheets. Time is
- * always fixed at 06:00 — the user only ever picks a calendar date, and for
- * CENTER letters that date is further restricted to the assigned slots. */
+ * always fixed at 06:00 — the user only ever picks a calendar date. CENTER
+ * letters are further restricted to the assigned slots (chip picker);
+ * OPENING letters use the shared calendar grid, capped at the round's start
+ * date; anything else falls back to the shared calendar grid unbounded. */
 function FixedTimeDatePicker({
   send,
   selectedDate,
   onSelectDate,
   centerSlots,
+  rounds,
 }: {
   send: SpaceScheduledSendWithLetter;
   selectedDate: Date;
@@ -226,11 +230,34 @@ function FixedTimeDatePicker({
    * to, so it never offers a date from an unrelated round that the backend
    * would reject. */
   centerSlots: { date: string; roundId: string }[] | undefined;
+  /** All space rounds — used to resolve an OPENING letter's round start date
+   * (the upper bound for its reservation date). */
+  rounds: SpaceRound[];
 }) {
-  const [showPicker, setShowPicker] = useState(false);
   const isCenter = send.letterType === "CENTER";
+  const isOpening = send.letterType === "OPENING";
   const ownRoundId = send.letter?.spaceRoundId ?? null;
   const ownRoundSlots = centerSlots?.filter((s) => !ownRoundId || s.roundId === ownRoundId);
+  const ownRound = ownRoundId ? rounds.find((r) => r.id === ownRoundId) : null;
+  const maxDate = isOpening && ownRound?.startsAt ? toKstCalendarDate(new Date(ownRound.startsAt)) : undefined;
+
+  if (isOpening) {
+    return (
+      <CollapsibleDatePicker
+        value={selectedDate}
+        onChange={onSelectDate}
+        isDateDisabled={(date) => {
+          const d0 = startOfDay(date);
+          if (d0 < startOfDay(minOpeningSendDate())) return true;
+          if (maxDate && d0 > startOfDay(maxDate)) return true;
+          return false;
+        }}
+        formatButtonLabel={(date) => `${formatShortDate(date.toISOString())} 06:00`}
+        triggerStyle={sheetStyles.dateBtn}
+        triggerTextStyle={sheetStyles.dateBtnText}
+      />
+    );
+  }
 
   if (isCenter) {
     if (ownRoundSlots === undefined) {
@@ -281,6 +308,21 @@ function FixedTimeDatePicker({
     );
   }
 
+  return <FallbackNativeDatePicker selectedDate={selectedDate} onSelectDate={onSelectDate} />;
+}
+
+/** Native date picker fallback used only for letter types with no dedicated
+ * calendar UI (currently none in practice — CENTER uses chips, OPENING uses
+ * the shared CalendarGrid). Kept for forward-compat with any future letter
+ * type that reaches this component. */
+function FallbackNativeDatePicker({
+  selectedDate,
+  onSelectDate,
+}: {
+  selectedDate: Date;
+  onSelectDate: (d: Date) => void;
+}) {
+  const [showPicker, setShowPicker] = useState(false);
   return (
     <>
       <ScalePressable contentStyle={sheetStyles.dateBtn} onPress={() => setShowPicker(true)}>
@@ -302,19 +344,18 @@ function FixedTimeDatePicker({
     </>
   );
 }
-
-// ─── Resend Sheet (reschedule from sent/cancelled) ────────────────────────────
-
 function ResendSheet({
   send,
   spaceId,
   centerSlots,
+  rounds,
   onClose,
   onSaved,
 }: {
   send: SpaceScheduledSendWithLetter;
   spaceId: string;
   centerSlots: { date: string; roundId: string }[] | undefined;
+  rounds: SpaceRound[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -322,11 +363,14 @@ function ResendSheet({
   const [saving, setSaving] = useState(false);
   const createSend = useCreateSpaceScheduledSend();
   const isCenter = send.letterType === "CENTER";
+  const isOpening = send.letterType === "OPENING";
 
   const ownRoundSlots = useMemo(
     () => centerSlots?.filter((s) => !send.letter?.spaceRoundId || s.roundId === send.letter.spaceRoundId),
     [centerSlots, send.letter?.spaceRoundId],
   );
+  const ownRound = send.letter?.spaceRoundId ? rounds.find((r) => r.id === send.letter!.spaceRoundId) : null;
+  const openingMaxDate = isOpening && ownRound?.startsAt ? toKstCalendarDate(new Date(ownRound.startsAt)) : undefined;
 
   // For CENTER letters, the selection must always land exactly on one of the
   // user's assigned slot dates — auto-select the first valid one as soon as
@@ -365,7 +409,10 @@ function ResendSheet({
 
   const isValidCenterSelection =
     isCenter && !!ownRoundSlots?.some((s) => s.date === dateToYmd(selectedDate));
-  const canSave = isCenter ? isValidCenterSelection : true;
+  const isValidOpeningSelection =
+    !isOpening || startOfDay(selectedDate) >= startOfDay(minOpeningSendDate()) &&
+      (!openingMaxDate || startOfDay(selectedDate) <= startOfDay(openingMaxDate));
+  const canSave = isCenter ? isValidCenterSelection : isValidOpeningSelection;
 
   return (
     <View style={sheetStyles.overlay}>
@@ -390,6 +437,7 @@ function ResendSheet({
           selectedDate={selectedDate}
           onSelectDate={setSelectedDate}
           centerSlots={centerSlots}
+          rounds={rounds}
         />
 
         <ScalePressable
@@ -411,12 +459,14 @@ function ChangeSheet({
   send,
   spaceId,
   centerSlots,
+  rounds,
   onClose,
   onSaved,
 }: {
   send: SpaceScheduledSendWithLetter;
   spaceId: string;
   centerSlots: { date: string; roundId: string }[] | undefined;
+  rounds: SpaceRound[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -424,11 +474,14 @@ function ChangeSheet({
   const [saving, setSaving] = useState(false);
   const updateSend = useUpdateSpaceScheduledSend();
   const isCenter = send.letterType === "CENTER";
+  const isOpening = send.letterType === "OPENING";
 
   const ownRoundSlots = useMemo(
     () => centerSlots?.filter((s) => !send.letter?.spaceRoundId || s.roundId === send.letter.spaceRoundId),
     [centerSlots, send.letter?.spaceRoundId],
   );
+  const ownRound = send.letter?.spaceRoundId ? rounds.find((r) => r.id === send.letter!.spaceRoundId) : null;
+  const openingMaxDate = isOpening && ownRound?.startsAt ? toKstCalendarDate(new Date(ownRound.startsAt)) : undefined;
 
   // For CENTER letters, the selection must always land exactly on one of the
   // user's assigned slot dates — snap to the first valid one (or to the
@@ -467,7 +520,10 @@ function ChangeSheet({
 
   const isValidCenterSelection =
     isCenter && !!ownRoundSlots?.some((s) => s.date === dateToYmd(selectedDate));
-  const canSave = isCenter ? isValidCenterSelection : true;
+  const isValidOpeningSelection =
+    !isOpening || startOfDay(selectedDate) >= startOfDay(minOpeningSendDate()) &&
+      (!openingMaxDate || startOfDay(selectedDate) <= startOfDay(openingMaxDate));
+  const canSave = isCenter ? isValidCenterSelection : isValidOpeningSelection;
 
   return (
     <View style={sheetStyles.overlay}>
@@ -492,6 +548,7 @@ function ChangeSheet({
           selectedDate={selectedDate}
           onSelectDate={setSelectedDate}
           centerSlots={centerSlots}
+          rounds={rounds}
         />
 
         <ScalePressable
@@ -512,11 +569,12 @@ function ChangeSheet({
 export default function SpaceScheduleSendScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { id, slotId, roundId, scheduledDate } = useLocalSearchParams<{
+  const { id, slotId, roundId, scheduledDate, openingRoundId } = useLocalSearchParams<{
     id: string;
     slotId?: string;
     roundId?: string;
     scheduledDate?: string;
+    openingRoundId?: string;
   }>();
   const { userId } = useUser();
   const queryClient = useQueryClient();
@@ -652,21 +710,53 @@ export default function SpaceScheduleSendScreen() {
     [allCenterSlots, pendingCenterRoundIds, sentCenterRoundIds],
   );
 
-  // Whether the space's single opening-letter slot is still open to reserve:
-  // only an operator may fill it, and only while it has no PENDING or SENT
-  // reservation yet.
-  const isOpeningLetterTaken = useMemo(
-    () => sends.some((s) => s.letterType === "OPENING" && (s.status === "PENDING" || s.status === "SENT")),
+  // Opening letters are reservable per-round: only an operator may fill
+  // them, and only for rounds (ACTIVE/UPCOMING) that don't already have a
+  // PENDING or SENT opening reservation.
+  const openingRoundIdsWithSend = useMemo(
+    () =>
+      new Set(
+        sends
+          .filter((s) => s.letterType === "OPENING" && (s.status === "PENDING" || s.status === "SENT"))
+          .map((s) => s.letter?.spaceRoundId)
+          .filter((v): v is string => !!v),
+      ),
     [sends],
   );
-  const canPickOpeningSlot = isOperator && !isOpeningLetterTaken;
+  const openingEligibleRounds = useMemo(
+    () =>
+      isOperator
+        ? rounds.filter((r) => {
+            if (r.status !== "ACTIVE" && r.status !== "UPCOMING") return false;
+            if (openingRoundIdsWithSend.has(r.id)) return false;
+            // A round whose start date has already passed has no valid
+            // reservation window left (must be on/before startsAt and not
+            // in the past) — don't offer it as a new opening-letter slot.
+            if (!r.startsAt) return false;
+            // Must leave at least one feasible reservation day: the round's
+            // start date has to be on/after the earliest date a new opening
+            // letter could even be scheduled for (same rule ArticleScheduleSheet
+            // enforces), otherwise there is no valid date left to pick.
+            if (toKstCalendarDate(new Date(r.startsAt)) < startOfDay(minOpeningSendDate())) return false;
+            return true;
+          })
+        : [],
+    [isOperator, rounds, openingRoundIdsWithSend],
+  );
 
   // ─── Empty slots available for a brand-new reservation ─────────────────────
   // `undefined` while the assigned CENTER slot dates are still resolving.
   const emptySlots = useMemo((): EmptySlot[] | undefined => {
     if (newReservationCenterSlots === undefined) return undefined;
     const list: EmptySlot[] = [];
-    if (canPickOpeningSlot) list.push({ kind: "opening" });
+    openingEligibleRounds.forEach((r) => {
+      list.push({
+        kind: "opening",
+        roundId: r.id,
+        roundNumber: r.roundNumber,
+        maxDate: r.startsAt ?? null,
+      });
+    });
     newReservationCenterSlots.forEach((s) => {
       list.push({
         kind: "center",
@@ -676,7 +766,7 @@ export default function SpaceScheduleSendScreen() {
       });
     });
     return list;
-  }, [newReservationCenterSlots, canPickOpeningSlot, rounds]);
+  }, [newReservationCenterSlots, openingEligibleRounds, rounds]);
 
   // Derive round state: only block scheduling when all existing rounds are COMPLETED
   // (i.e., no ACTIVE and no UPCOMING rounds remain). UPCOMING rounds mean more rounds
@@ -753,6 +843,35 @@ export default function SpaceScheduleSendScreen() {
     setShowSlotPicker(false);
     setPickedSlot(slot);
   }, []);
+
+  // Deep-link from the round card's "여는 편지 작성" button: preselect that
+  // round's opening slot and jump straight into article/date selection,
+  // skipping the slot picker sheet entirely. Re-validated against the same
+  // eligibility list the slot picker itself uses (operator role, round
+  // status, no existing pending/sent opening reservation, feasible date
+  // window) so this entry point can never bypass those checks — if the
+  // round isn't eligible, silently do nothing and let the screen render
+  // normally without a deep-linked sheet.
+  //
+  // This is a one-shot action, consumed via `consumedOpeningRoundIdRef`: once
+  // it has auto-picked (or attempted to, for a given value), it never fires
+  // again for that value — otherwise, since the `openingRoundId` route param
+  // persists after the user closes the compose sheet (pickedSlot resets to
+  // null on close), this effect would immediately reopen the sheet in a loop.
+  const consumedOpeningRoundIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!openingRoundId || roundsQuery.isLoading || sendsQuery.isLoading) return;
+    if (consumedOpeningRoundIdRef.current === openingRoundId) return;
+    consumedOpeningRoundIdRef.current = openingRoundId;
+    const round = openingEligibleRounds.find((r) => r.id === openingRoundId);
+    if (!round) return;
+    setPickedSlot({
+      kind: "opening",
+      roundId: round.id,
+      roundNumber: round.roundNumber,
+      maxDate: round.startsAt ?? null,
+    });
+  }, [openingRoundId, roundsQuery.isLoading, sendsQuery.isLoading, openingEligibleRounds]);
 
   const pendingSends = sends.filter((s) => s.status === "PENDING");
   const failedSends = sends.filter((s) => s.status === "FAILED");
@@ -926,6 +1045,12 @@ export default function SpaceScheduleSendScreen() {
           assignedCenterSlots={pickedSlot.kind === "center" ? [pickedSlot] : undefined}
           initialScheduledDate={pickedSlot.kind === "center" ? pickedSlot.date : null}
           isLoadingCenterDates={false}
+          openingRoundId={pickedSlot.kind === "opening" ? pickedSlot.roundId : null}
+          maxScheduledAt={
+            pickedSlot.kind === "opening" && pickedSlot.maxDate
+              ? toKstCalendarDate(new Date(pickedSlot.maxDate))
+              : null
+          }
         />
       )}
 
@@ -954,6 +1079,7 @@ export default function SpaceScheduleSendScreen() {
           send={resendTarget}
           spaceId={id}
           centerSlots={allCenterSlots}
+          rounds={rounds}
           onClose={() => setResendTarget(null)}
           onSaved={handleSaved}
         />
@@ -964,6 +1090,7 @@ export default function SpaceScheduleSendScreen() {
           send={changeTarget}
           spaceId={id}
           centerSlots={allCenterSlots}
+          rounds={rounds}
           onClose={() => setChangeTarget(null)}
           onSaved={handleSaved}
         />

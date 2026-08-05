@@ -5,7 +5,7 @@ import { requireAuth } from "../middlewares/requireAuth";
 import { generateInviteCode } from "../lib/inviteCodeWords";
 import { logger } from "../lib/logger";
 import { dispatchNotification } from "../lib/notifications";
-import { normalizeToKst6, kstDateString } from "../lib/deliverySlot";
+import { normalizeToKst6, kstDateString, computeDeliverySlot } from "../lib/deliverySlot";
 import { processDueScheduledSends } from "../lib/scheduledSendProcessor";
 import {
   db,
@@ -1306,8 +1306,19 @@ router.post("/spaces/:id/letters", requireAuth, async (req, res) => {
     return;
   }
 
+  // Opening letters "open" a round for everyone in the space, so only an
+  // operator may author/reserve one — unlike CENTER letters, which any
+  // participant may write for their own assigned slot.
+  if (parsed.data.letterType === "OPENING" && participation.role !== "OPERATOR") {
+    res.status(403).json({ error: "여는 편지는 운영자만 작성할 수 있습니다." });
+    return;
+  }
+
   // If a sourceArticleId is provided, reuse any existing SpaceLetter for
-  // (space, article, author) instead of creating a duplicate.
+  // (space, article, author, round) instead of creating a duplicate. The
+  // round is part of the matching key so that, e.g., reusing the same
+  // article as an OPENING letter for round 2 doesn't accidentally pick up
+  // round 1's letter row for that article.
   if (parsed.data.sourceArticleId) {
     const [existing] = await db
       .select()
@@ -1317,6 +1328,9 @@ router.post("/spaces/:id/letters", requireAuth, async (req, res) => {
           eq(spaceLettersTable.spaceId, req.params.id),
           eq(spaceLettersTable.sourceArticleId, parsed.data.sourceArticleId),
           eq(spaceLettersTable.authorId, req.user!.id),
+          parsed.data.spaceRoundId
+            ? eq(spaceLettersTable.spaceRoundId, parsed.data.spaceRoundId)
+            : isNull(spaceLettersTable.spaceRoundId),
         ),
       )
       .limit(1);
@@ -1435,6 +1449,45 @@ async function validateCenterSlotDate(
   return { ok: true, slot };
 }
 
+/**
+ * Validates that an OPENING-role reservation's requested date is on or
+ * before the letter's round's start date — an opening letter "opens" the
+ * round, so it can never be scheduled after the round has already started.
+ * Returns an error message string on failure, or null on success.
+ */
+type OpeningRoundValidation = { ok: true } | { ok: false; error: string };
+
+async function validateOpeningRoundDate(
+  letter: { spaceRoundId: string | null },
+  normalizedScheduledAt: Date | undefined,
+): Promise<OpeningRoundValidation> {
+  if (!letter.spaceRoundId) {
+    return { ok: false, error: "회차 정보가 없는 여는 편지는 예약할 수 없습니다." };
+  }
+  const [round] = await db
+    .select()
+    .from(spaceRoundsTable)
+    .where(eq(spaceRoundsTable.id, letter.spaceRoundId))
+    .limit(1);
+  if (!round) {
+    return { ok: false, error: "회차 정보를 찾을 수 없습니다." };
+  }
+  if (!round.startsAt) {
+    return { ok: false, error: "회차 시작일 정보가 없어 여는 편지를 예약할 수 없습니다." };
+  }
+  // Mirrors the client's getMinOpeningDate(): before 06:00 KST, today is
+  // still a valid earliest date; at/after 06:00 KST, only tomorrow onward.
+  // computeDeliverySlot() already encodes exactly this cutoff.
+  const minAllowedDate = kstDateString(computeDeliverySlot());
+  if (normalizedScheduledAt && kstDateString(normalizedScheduledAt) < minAllowedDate) {
+    return { ok: false, error: "선택한 날짜는 더 이상 예약할 수 없어요. 다른 날짜를 선택해주세요." };
+  }
+  if (normalizedScheduledAt && kstDateString(normalizedScheduledAt) > kstDateString(round.startsAt)) {
+    return { ok: false, error: "여는 편지는 회차 시작일 이전까지만 예약할 수 있어요." };
+  }
+  return { ok: true };
+}
+
 router.post("/spaces/:id/letters/:letterId/scheduled-sends", requireAuth, async (req, res) => {
   const callerId = req.user!.id;
   const allowed = await canManageLetterSends(req.params.id, req.params.letterId, callerId);
@@ -1501,6 +1554,12 @@ router.post("/spaces/:id/letters/:letterId/scheduled-sends", requireAuth, async 
       return;
     }
     resolvedSlotId = validation.slot.id;
+  } else if (letter.letterType === "OPENING") {
+    const validation = await validateOpeningRoundDate(letter, normalizedScheduledAt);
+    if (!validation.ok) {
+      res.status(400).json({ error: validation.error });
+      return;
+    }
   }
 
   const [send] = await db
@@ -1550,6 +1609,12 @@ router.patch("/spaces/:id/letters/:letterId/scheduled-sends/:sendId", requireAut
         return;
       }
       updateFields.slotId = validation.slot.id;
+    } else if (letter?.letterType === "OPENING") {
+      const validation = await validateOpeningRoundDate(letter, normalizedScheduledAt);
+      if (!validation.ok) {
+        res.status(400).json({ error: validation.error });
+        return;
+      }
     }
     updateFields.scheduledAt = normalizedScheduledAt;
   }

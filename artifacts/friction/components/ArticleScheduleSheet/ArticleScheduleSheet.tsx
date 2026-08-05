@@ -4,15 +4,14 @@ import {
   Text,
   StyleSheet,
   Alert,
-  Platform,
   ActivityIndicator,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import { useQueryClient } from "@tanstack/react-query";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { LetterPickerSheet } from "@/components/shared/LetterPickerSheet";
+import { CollapsibleDatePicker, startOfDay } from "@/components/shared/CalendarGrid";
 import {
   useCreateSpaceScheduledSend,
   useCreateSpaceLetter,
@@ -26,13 +25,9 @@ import type {
   SpaceLetter,
   SpaceScheduledSendWithLetter,
 } from "@workspace/api-client-react";
-import { kstDateAt6 } from "@/lib/kstDate";
+import { kstDateAt6, minOpeningSendDate } from "@/lib/kstDate";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatDateTime(date: Date): string {
-  return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, "0")}.${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-}
 
 function formatDate(date: Date): string {
   return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, "0")}.${String(date.getDate()).padStart(2, "0")}`;
@@ -48,21 +43,12 @@ function parseYmdToLocalDate(ymd: string): Date {
   return new Date(y, (m || 1) - 1, d || 1);
 }
 
-function getMinOpeningDate(): Date {
-  const now = new Date();
-  const min = new Date(now);
-  min.setHours(0, 0, 0, 0);
-  if (now.getHours() >= 6) {
-    min.setDate(min.getDate() + 1);
-  }
-  return min;
-}
-
-function buildOpeningScheduledAt(date: Date): Date {
-  const d = new Date(date);
-  d.setHours(6, 0, 0, 0);
-  return d;
-}
+// Earliest selectable date and KST-06:00 send-instant construction for
+// opening letters both come from lib/kstDate.ts (minOpeningSendDate /
+// kstDateAt6) — the project's single KST-safe SSOT — rather than any
+// device-local-time computation, so this sheet's rule matches exactly what
+// the API enforces (computeDeliverySlot on the server) regardless of the
+// device's timezone.
 
 /** Duplicate-pending-reservation conflict from the backend (409). */
 function isDuplicateReservationError(err: unknown): boolean {
@@ -93,6 +79,10 @@ export type ArticleScheduleSheetProps = {
   onGoToArchive?: () => void;
   /** Opening-letter mode only: latest allowed scheduled date (inclusive). Saves are clamped to this. */
   maxScheduledAt?: Date | null;
+  /** Opening-letter mode only: the round this opening letter belongs to. Persisted
+   * as the new letter's spaceRoundId, and used to scope article-reuse matching
+   * and pending-reservation cancellation to this round only. */
+  openingRoundId?: string | null;
   /**
    * General (CENTER) mode only: the set of "내 차례" round-slot dates the user
    * is allowed to pick from, each tied to the round it belongs to.
@@ -122,13 +112,14 @@ export function ArticleScheduleSheet({
   allSends,
   onGoToArchive,
   maxScheduledAt,
+  openingRoundId = null,
   assignedCenterSlots,
   isLoadingCenterDates = false,
 }: ArticleScheduleSheetProps) {
   const isOpeningLetter = mode === "opening-letter";
 
   const minDate = useMemo(
-    () => (isOpeningLetter ? getMinOpeningDate() : new Date()),
+    () => (isOpeningLetter ? minOpeningSendDate() : new Date()),
     [isOpeningLetter],
   );
 
@@ -142,7 +133,6 @@ export function ArticleScheduleSheet({
     if (isOpeningLetter) return minDate;
     return new Date(Date.now() + 24 * 60 * 60 * 1000);
   });
-  const [showPicker, setShowPicker] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // ─── CENTER (general mode) date restriction ────────────────────────────────
@@ -205,13 +195,31 @@ export function ArticleScheduleSheet({
       Alert.alert("알림", "배정된 중심글 차례 날짜를 선택해주세요.");
       return;
     }
+    // Guard against a stale selection landing outside the valid window (e.g.
+    // the sheet stayed open across a day boundary): never silently clamp a
+    // date, since that could silently create a past-dated or post-round
+    // reservation the user never actually chose — block the save instead.
+    if (isOpeningLetter) {
+      const d0 = startOfDay(scheduledAt);
+      if (d0 < startOfDay(minDate) || (maxDate && d0 > startOfDay(maxDate))) {
+        Alert.alert("알림", "선택한 날짜가 더 이상 유효하지 않아요. 날짜를 다시 선택해주세요.");
+        return;
+      }
+    }
     setSaving(true);
     try {
       if (isOpeningLetter) {
         const letterType = "OPENING";
 
+        // Reuse matching (and the cancellation scope right below) is keyed
+        // to the specific round this opening letter belongs to, so reusing
+        // the same article for a different round's opening letter never
+        // picks up another round's letter row.
         const existingLetter = letters.find(
-          (l) => l.sourceArticleId === selectedArticleId && l.letterType === letterType,
+          (l) =>
+            l.sourceArticleId === selectedArticleId &&
+            l.letterType === letterType &&
+            (!openingRoundId || l.spaceRoundId === openingRoundId),
         );
         let spaceLetterId: string;
         if (existingLetter) {
@@ -219,14 +227,23 @@ export function ArticleScheduleSheet({
         } else {
           const newLetter = await createLetter.mutateAsync({
             id: spaceId,
-            data: { authorId: userId, sourceArticleId: selectedArticleId, letterType },
+            data: {
+              authorId: userId,
+              sourceArticleId: selectedArticleId,
+              letterType,
+              spaceRoundId: openingRoundId ?? null,
+            },
           });
           spaceLetterId = newLetter.id;
           queryClient.invalidateQueries({ queryKey: getListSpaceLettersQueryKey(spaceId) });
         }
 
         const openingLetterIds = new Set(
-          letters.filter((l) => l.letterType === "OPENING").map((l) => l.id),
+          letters
+            .filter(
+              (l) => l.letterType === "OPENING" && (!openingRoundId || l.spaceRoundId === openingRoundId),
+            )
+            .map((l) => l.id),
         );
         if (existingLetter) openingLetterIds.add(spaceLetterId);
 
@@ -244,11 +261,8 @@ export function ArticleScheduleSheet({
           ),
         );
 
-        let chosenDate = scheduledAt;
-        if (maxDate && chosenDate > maxDate) {
-          chosenDate = maxDate;
-        }
-        const finalScheduledAt = buildOpeningScheduledAt(chosenDate);
+        // scheduledAt is already validated above to be within [minDate, maxDate].
+        const finalScheduledAt = kstDateAt6(scheduledAt);
         await createSend.mutateAsync({
           id: spaceId,
           letterId: spaceLetterId,
@@ -303,14 +317,12 @@ export function ArticleScheduleSheet({
   }, [
     selectedArticleId, selectedCenterSlot, scheduledAt, isOpeningLetter, spaceId, letters, userId,
     slotId, allSends, createLetter, createSend, updateSend, queryClient, onSaved, onClose,
+    openingRoundId, maxDate, minDate,
   ]);
 
   const title = isOpeningLetter ? "여는 편지 글 선택" : "글 예약 발송";
   const saveLabel = isOpeningLetter ? "여는 편지로 등록" : "예약 등록";
   const dateLabel = isOpeningLetter ? "발송 예약 날짜 (06:00 발송)" : "발송 예약 일시";
-  const dateBtnText = isOpeningLetter
-    ? `${formatDate(scheduledAt)} 06:00`
-    : formatDateTime(scheduledAt);
 
   return (
     <View style={styles.overlay}>
@@ -373,30 +385,26 @@ export function ArticleScheduleSheet({
         {selectedArticleId && isOpeningLetter && (
           <>
             <Text style={styles.fieldLabel}>{dateLabel}</Text>
-            <ScalePressable
-              contentStyle={styles.dateBtn}
-              onPress={() => setShowPicker(true)}
-            >
-              <Feather name="calendar" size={15} color={Colors.zinc500} />
-              <Text style={styles.dateBtnText}>{dateBtnText}</Text>
-            </ScalePressable>
-
-            {showPicker && (
-              <DateTimePicker
-                value={scheduledAt}
-                mode="date"
-                display={Platform.OS === "ios" ? "spinner" : "default"}
-                minimumDate={minDate}
-                maximumDate={maxDate}
-                onChange={(_event: unknown, date?: Date) => {
-                  setShowPicker(Platform.OS === "ios");
-                  if (date) {
-                    const clamped = maxDate && date > maxDate ? maxDate : date;
-                    setScheduledAt(clamped);
-                  }
-                }}
-              />
-            )}
+            <CollapsibleDatePicker
+              value={scheduledAt}
+              onChange={setScheduledAt}
+              isDateDisabled={(date) => {
+                const d0 = startOfDay(date);
+                if (d0 < startOfDay(minDate)) return true;
+                if (maxDate && d0 > startOfDay(maxDate)) return true;
+                return false;
+              }}
+              onOpen={() => {
+                // 최소/최대 범위를 벗어난 채로 열리면 최소 허용일로 스냅한다.
+                const d0 = startOfDay(scheduledAt);
+                if (d0 < startOfDay(minDate) || (maxDate && d0 > startOfDay(maxDate))) {
+                  return minDate;
+                }
+              }}
+              formatButtonLabel={(date) => `${formatDate(date)} 06:00`}
+              triggerStyle={styles.dateBtn}
+              triggerTextStyle={styles.dateBtnText}
+            />
 
             <ScalePressable
               style={styles.saveBtnOuter}

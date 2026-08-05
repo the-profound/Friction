@@ -1331,10 +1331,10 @@ export default function SpaceDetailScreen() {
   }, [space?.inviteCode, showToast]);
 
   const handlePressWriteOpening = useCallback(
-    (_round: SpaceRound) => {
+    (round: SpaceRound) => {
       router.push({
         pathname: "/of-space-schedule-send" as never,
-        params: { id },
+        params: { id, openingRoundId: round.id },
       });
     },
     [router, id],
