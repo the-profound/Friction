@@ -6,6 +6,7 @@ import { generateInviteCode } from "../lib/inviteCodeWords";
 import { logger } from "../lib/logger";
 import { dispatchNotification } from "../lib/notifications";
 import { normalizeToKst6, kstDateString } from "../lib/deliverySlot";
+import { processDueScheduledSends } from "../lib/scheduledSendProcessor";
 import {
   db,
   spacesTable,
@@ -1142,13 +1143,65 @@ router.get("/spaces/:id/letters", requireAuth, async (req, res) => {
     res.status(403).json({ error: "Only approved participants can view letters" });
     return;
   }
-  const letters = await db
+  const isOperator = callerParticipation.role === "OPERATOR";
+
+  // Catch up any reservation whose scheduledAt has passed but hasn't been
+  // processed by the periodic sweep yet, so gating below reflects reality.
+  await processDueScheduledSends({ spaceId: req.params.id });
+
+  let letters = await db
     .select()
     .from(spaceLettersTable)
     .where(eq(spaceLettersTable.spaceId, req.params.id));
   if (letters.length === 0) {
     res.json([]);
     return;
+  }
+
+  // Gate visibility: a letter authored by someone else is hidden from other
+  // participants until its CURRENT reservation's time has actually arrived.
+  // "Current" means the most recently created non-cancelled reservation for
+  // that letter — a letter that was already SENT once but has since been
+  // re-reserved (e.g. re-sent to a later date) must go back to hidden until
+  // the new date arrives; an old SENT record must not keep it visible.
+  // Letters with no reservation at all (never scheduled) remain immediately
+  // visible, matching prior behavior. Operators and the letter's own author
+  // always see it regardless of reservation state.
+  if (!isOperator) {
+    const otherLetterIds = letters.filter((l) => l.authorId !== callerId).map((l) => l.id);
+    if (otherLetterIds.length > 0) {
+      const sends = await db
+        .select({
+          spaceLetterId: spaceScheduledSendsTable.spaceLetterId,
+          status: spaceScheduledSendsTable.status,
+          scheduledAt: spaceScheduledSendsTable.scheduledAt,
+          createdAt: spaceScheduledSendsTable.createdAt,
+        })
+        .from(spaceScheduledSendsTable)
+        .where(inArray(spaceScheduledSendsTable.spaceLetterId, otherLetterIds));
+
+      const now = new Date();
+      const hiddenLetterIds = new Set<string>();
+      const sendsByLetter = new Map<string, typeof sends>();
+      for (const s of sends) {
+        const bucket = sendsByLetter.get(s.spaceLetterId) ?? [];
+        bucket.push(s);
+        sendsByLetter.set(s.spaceLetterId, bucket);
+      }
+      for (const [letterId, letterSends] of sendsByLetter) {
+        const activeSends = letterSends.filter((s) => s.status !== "CANCELLED");
+        if (activeSends.length === 0) continue; // only cancelled reservations exist — treat as unscheduled
+        const current = activeSends.reduce((latest, s) =>
+          new Date(s.createdAt) > new Date(latest.createdAt) ? s : latest,
+        );
+        const isVisible =
+          current.status === "SENT" || (current.status === "PENDING" && new Date(current.scheduledAt) <= now);
+        if (!isVisible) hiddenLetterIds.add(letterId);
+      }
+      if (hiddenLetterIds.size > 0) {
+        letters = letters.filter((l) => l.authorId === callerId || !hiddenLetterIds.has(l.id));
+      }
+    }
   }
   const articleIds = [...new Set(letters.map((l) => l.sourceArticleId).filter(Boolean) as string[])];
   const authorIds = [...new Set(letters.map((l) => l.authorId))];
@@ -1319,6 +1372,10 @@ router.get("/spaces/:id/letters/:letterId/scheduled-sends", requireAuth, async (
     res.status(403).json({ error: "You can only view scheduled sends for your own letters" });
     return;
   }
+  // Defensive: catch up any reservation for this space whose scheduledAt has
+  // passed but hasn't been processed by the periodic sweep yet, so it never
+  // shows as "대기 중" (pending) after its time has come.
+  await processDueScheduledSends({ spaceId: req.params.id });
   const sends = await db
     .select()
     .from(spaceScheduledSendsTable)
@@ -1521,6 +1578,10 @@ router.get("/spaces/:id/scheduled-sends", requireAuth, async (req, res) => {
     res.status(403).json({ error: "Only space participants can list scheduled sends" });
     return;
   }
+  // Defensive: catch up any reservation whose scheduledAt has passed but
+  // hasn't been processed by the periodic sweep yet, so it never shows as
+  // "대기 중" (pending) after its time has come.
+  await processDueScheduledSends({ spaceId: req.params.id });
   let sends;
   if (access.isOperator) {
     sends = await db

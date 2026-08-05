@@ -1,5 +1,6 @@
 /**
- * Scheduler: space inactivity alerts + letter-arrived push notifications.
+ * Scheduler: space inactivity alerts + letter-arrived push notifications +
+ * space-letter reservation processing.
  *
  * Space inactivity:
  *   Polls once per hour for RECRUITING spaces whose planned_starts_at has
@@ -9,6 +10,13 @@
  *   Runs daily at 06:00 KST.  For users who received ≥1 new letter in the
  *   past 24 hours (visible_at within window), sends a silent Expo push.
  *   A random message from 5 templates is chosen per user.
+ *
+ * Reservation processing:
+ *   Polls every 5 minutes for PENDING `space_scheduled_sends` rows whose
+ *   `scheduledAt` has passed, and transitions them to SENT/FAILED. Because
+ *   the sweep re-scans the whole table (not just "since last run"), a missed
+ *   poll (process restart/downtime) is caught up automatically on the next
+ *   run — no reservation is permanently skipped.
  *
  * Deduplication: each (spaceId, dayMilestone) pair is tracked in an
  * in-memory Set so that repeated hourly polls never dispatch the same
@@ -21,6 +29,7 @@ import { dispatchNotification } from "./lib/notifications";
 import { getNewLetterRecipients } from "./lib/letterNotificationQuery";
 import { buildLetterArrivedMessage, SEND_HOUR_KST, WINDOW_HOURS } from "./lib/notificationMessages";
 import { sendSilentPush } from "./lib/pushSender";
+import { processDueScheduledSends } from "./lib/scheduledSendProcessor";
 
 // ─── Space inactivity ────────────────────────────────────────────────────────
 
@@ -189,6 +198,18 @@ async function sendLetterArrivedNotifications(): Promise<void> {
   }
 }
 
+// ─── Space-letter reservation processing ─────────────────────────────────────
+
+const SCHEDULED_SEND_POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
+async function runScheduledSendSweep() {
+  try {
+    await processDueScheduledSends();
+  } catch (err) {
+    logger.error({ err }, "scheduler: processDueScheduledSends failed");
+  }
+}
+
 // ─── Startup ──────────────────────────────────────────────────────────────────
 
 export function startScheduler() {
@@ -197,6 +218,13 @@ export function startScheduler() {
     checkInactiveSpaces();
     setInterval(checkInactiveSpaces, POLL_INTERVAL_MS);
   }, 5000);
+
+  // Reservation processing: run once shortly after startup (catches up any
+  // reservations that came due while the process was down), then every 5min.
+  setTimeout(() => {
+    runScheduledSendSweep();
+    setInterval(runScheduledSendSweep, SCHEDULED_SEND_POLL_INTERVAL_MS);
+  }, 8000);
 
   // Letter-arrived push: schedule for the next 06:00 KST, then every 24h
   const msToFirst = msUntilNextKst6am();

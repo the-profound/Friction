@@ -145,7 +145,9 @@ function SendRow({
       {isFailed && (
         <View style={styles.failedBanner}>
           <Feather name="alert-circle" size={12} color="#EF4444" />
-          <Text style={styles.failedBannerText}>예약 시각에 발송되지 않았어요. 다시 예약하거나 취소하세요.</Text>
+          <Text style={styles.failedBannerText}>
+            {send.failureReason ?? "예약 시각에 발송되지 않았어요."} 다시 예약하거나 취소하세요.
+          </Text>
         </View>
       )}
       {isArticleDeleted && isPending && (

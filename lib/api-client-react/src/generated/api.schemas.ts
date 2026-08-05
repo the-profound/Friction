@@ -1071,6 +1071,7 @@ export interface SpaceScheduledSend {
   scheduledAt: string;
   status: SpaceScheduledSendStatus;
   sentAt?: string | null;
+  failureReason?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -1125,6 +1126,7 @@ export interface SpaceScheduledSendWithLetter {
   scheduledAt: string;
   status: SpaceScheduledSendWithLetterStatus;
   sentAt?: string | null;
+  failureReason?: string | null;
   createdAt: string;
   updatedAt: string;
   letter?: SpaceLetter | null;

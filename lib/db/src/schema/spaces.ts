@@ -145,6 +145,7 @@ export const spaceScheduledSendsTable = pgTable("space_scheduled_sends", {
   scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
   status: spaceScheduledSendStatusEnum("status").notNull().default("PENDING"),
   sentAt: timestamp("sent_at", { withTimezone: true }),
+  failureReason: text("failure_reason"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

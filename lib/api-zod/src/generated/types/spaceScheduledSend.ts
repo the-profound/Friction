@@ -14,6 +14,7 @@ export interface SpaceScheduledSend {
   scheduledAt: Date;
   status: SpaceScheduledSendStatus;
   sentAt?: Date | null;
+  failureReason?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
