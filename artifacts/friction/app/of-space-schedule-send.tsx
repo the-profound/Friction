@@ -16,6 +16,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { ArticleScheduleSheet } from "@/components/ArticleScheduleSheet/ArticleScheduleSheet";
+import { SlotPickerSheet, type EmptySlot } from "@/components/ArticleScheduleSheet/SlotPickerSheet";
 import {
   useListAllSpaceScheduledSends,
   useListSpaceRounds,
@@ -521,6 +522,9 @@ export default function SpaceScheduleSendScreen() {
   const [showNewSheet, setShowNewSheet] = useState(() => !!slotId);
   const [resendTarget, setResendTarget] = useState<SpaceScheduledSendWithLetter | null>(null);
   const [changeTarget, setChangeTarget] = useState<SpaceScheduledSendWithLetter | null>(null);
+  // "새 글 예약하기" flow: pick an empty slot first, then the article to fill it.
+  const [showSlotPicker, setShowSlotPicker] = useState(false);
+  const [pickedSlot, setPickedSlot] = useState<EmptySlot | null>(null);
 
   const joinContextQuery = useGetSpaceJoinContext(
     id,
@@ -530,6 +534,7 @@ export default function SpaceScheduleSendScreen() {
   const space = joinContextQuery.data?.space ?? null;
   const spaceStatus = space?.status ?? null;
   const isSpaceArchived = spaceStatus === "ARCHIVED";
+  const isOperator = joinContextQuery.data?.participation?.role === "OPERATOR";
 
   const sendsQuery = useListAllSpaceScheduledSends(id, { query: { enabled: !!id, queryKey: getListAllSpaceScheduledSendsQueryKey(id) } });
   const roundsQuery = useListSpaceRounds(id, { query: { enabled: !!id, queryKey: getListSpaceRoundsQueryKey(id) } });
@@ -625,10 +630,51 @@ export default function SpaceScheduleSendScreen() {
       ),
     [sends],
   );
-  const newReservationCenterSlots = useMemo(
-    () => allCenterSlots?.filter((s) => !pendingCenterRoundIds.has(s.roundId)),
-    [allCenterSlots, pendingCenterRoundIds],
+  // Rounds where the user's CENTER letter has already been sent — that slot
+  // is used up and shouldn't be offered again for a *new* reservation either.
+  const sentCenterRoundIds = useMemo(
+    () =>
+      new Set(
+        sends
+          .filter((s) => s.status === "SENT" && s.letterType === "CENTER")
+          .map((s) => s.letter?.spaceRoundId)
+          .filter((v): v is string => !!v),
+      ),
+    [sends],
   );
+  const newReservationCenterSlots = useMemo(
+    () =>
+      allCenterSlots?.filter(
+        (s) => !pendingCenterRoundIds.has(s.roundId) && !sentCenterRoundIds.has(s.roundId),
+      ),
+    [allCenterSlots, pendingCenterRoundIds, sentCenterRoundIds],
+  );
+
+  // Whether the space's single opening-letter slot is still open to reserve:
+  // only an operator may fill it, and only while it has no PENDING or SENT
+  // reservation yet.
+  const isOpeningLetterTaken = useMemo(
+    () => sends.some((s) => s.letterType === "OPENING" && (s.status === "PENDING" || s.status === "SENT")),
+    [sends],
+  );
+  const canPickOpeningSlot = isOperator && !isOpeningLetterTaken;
+
+  // ─── Empty slots available for a brand-new reservation ─────────────────────
+  // `undefined` while the assigned CENTER slot dates are still resolving.
+  const emptySlots = useMemo((): EmptySlot[] | undefined => {
+    if (newReservationCenterSlots === undefined) return undefined;
+    const list: EmptySlot[] = [];
+    if (canPickOpeningSlot) list.push({ kind: "opening" });
+    newReservationCenterSlots.forEach((s) => {
+      list.push({
+        kind: "center",
+        date: s.date,
+        roundId: s.roundId,
+        roundNumber: rounds.find((r) => r.id === s.roundId)?.roundNumber ?? null,
+      });
+    });
+    return list;
+  }, [newReservationCenterSlots, canPickOpeningSlot, rounds]);
 
   // Derive round state: only block scheduling when all existing rounds are COMPLETED
   // (i.e., no ACTIVE and no UPCOMING rounds remain). UPCOMING rounds mean more rounds
@@ -692,6 +738,20 @@ export default function SpaceScheduleSendScreen() {
     router.push("/(tabs)/on");
   }, [router]);
 
+  const handleStartNewReservation = useCallback(() => {
+    if (isSchedulingBlocked || emptySlots === undefined) return;
+    if (emptySlots.length === 0) {
+      Alert.alert("알림", "이미 글을 모두 올렸어요!");
+      return;
+    }
+    setShowSlotPicker(true);
+  }, [isSchedulingBlocked, emptySlots]);
+
+  const handlePickSlot = useCallback((slot: EmptySlot) => {
+    setShowSlotPicker(false);
+    setPickedSlot(slot);
+  }, []);
+
   const pendingSends = sends.filter((s) => s.status === "PENDING");
   const failedSends = sends.filter((s) => s.status === "FAILED");
   const completedSends = sends.filter((s) => s.status === "SENT" || s.status === "CANCELLED");
@@ -715,16 +775,7 @@ export default function SpaceScheduleSendScreen() {
         <Text style={styles.headerTitle} numberOfLines={1}>
           예약 대기
         </Text>
-        <ScalePressable
-          onPress={() => {
-            if (!isSchedulingBlocked) setShowNewSheet(true);
-          }}
-          hitSlop={8}
-          style={isSchedulingBlocked ? { opacity: 0.35 } : undefined}
-          disabled={isSchedulingBlocked}
-        >
-          <Feather name="plus" size={22} color={Colors.zinc700} />
-        </ScalePressable>
+        <View style={{ width: 20 }} />
       </View>
 
       {space && (
@@ -816,14 +867,18 @@ export default function SpaceScheduleSendScreen() {
                 <Text style={styles.emptySubtitle}>
                   {isSchedulingBlocked
                     ? schedulingBlockReason
-                    : "오른쪽 상단 + 버튼으로\n새 예약을 등록하세요"}
+                    : "아래 버튼으로\n새 예약을 등록하세요"}
                 </Text>
                 <ScalePressable
                   style={styles.footerBtnOuter}
-                  contentStyle={styles.footerBtn}
-                  onPress={handleBackToSpaceDetail}
+                  contentStyle={[
+                    styles.footerBtn,
+                    (isSchedulingBlocked || emptySlots === undefined) && styles.footerBtnDisabled,
+                  ]}
+                  onPress={handleStartNewReservation}
+                  disabled={isSchedulingBlocked || emptySlots === undefined}
                 >
-                  <Text style={styles.footerBtnText}>공간 상세로 돌아가기</Text>
+                  <Text style={styles.footerBtnText}>새 글 예약하기</Text>
                 </ScalePressable>
               </View>
             )
@@ -867,12 +922,44 @@ export default function SpaceScheduleSendScreen() {
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
         <ScalePressable
           style={styles.footerBtnOuter}
-          contentStyle={styles.footerBtn}
-          onPress={handleBackToSpaceDetail}
+          contentStyle={[
+            styles.footerBtn,
+            (isSchedulingBlocked || emptySlots === undefined) && styles.footerBtnDisabled,
+          ]}
+          onPress={handleStartNewReservation}
+          disabled={isSchedulingBlocked || emptySlots === undefined}
         >
-          <Text style={styles.footerBtnText}>공간 상세로 돌아가기</Text>
+          <Text style={styles.footerBtnText}>새 글 예약하기</Text>
         </ScalePressable>
       </View>
+
+      <SlotPickerSheet
+        visible={showSlotPicker}
+        isLoading={emptySlots === undefined}
+        slots={emptySlots ?? []}
+        onSelect={handlePickSlot}
+        onClose={() => setShowSlotPicker(false)}
+      />
+
+      {pickedSlot && (
+        <ArticleScheduleSheet
+          mode={pickedSlot.kind === "opening" ? "opening-letter" : "general"}
+          spaceId={id}
+          userId={userId ?? ""}
+          letters={letters}
+          articles={articles}
+          isArticlesLoading={articlesQuery.isLoading}
+          isArticlesError={articlesQuery.isError}
+          onRefetchArticles={() => articlesQuery.refetch()}
+          onClose={() => setPickedSlot(null)}
+          onSaved={handleSaved}
+          onGoToArchive={handleGoToArchive}
+          allSends={sends}
+          assignedCenterSlots={pickedSlot.kind === "center" ? [pickedSlot] : undefined}
+          initialScheduledDate={pickedSlot.kind === "center" ? pickedSlot.date : null}
+          isLoadingCenterDates={false}
+        />
+      )}
 
       {showNewSheet && (
         <ArticleScheduleSheet
@@ -1022,6 +1109,9 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.zinc300,
     backgroundColor: Colors.white,
+  },
+  footerBtnDisabled: {
+    opacity: 0.4,
   },
   footerBtnText: {
     ...Typography.bodySemiBold,
