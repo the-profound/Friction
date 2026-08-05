@@ -754,8 +754,6 @@ export default function SpaceScheduleSendScreen() {
 
   const pendingSends = sends.filter((s) => s.status === "PENDING");
   const failedSends = sends.filter((s) => s.status === "FAILED");
-  const completedSends = sends.filter((s) => s.status === "SENT" || s.status === "CANCELLED");
-  const [showCompleted, setShowCompleted] = useState(false);
 
   const handleBackToSpaceDetail = useCallback(() => {
     router.push({ pathname: "/of-space-detail", params: { id } });
@@ -882,38 +880,6 @@ export default function SpaceScheduleSendScreen() {
                 </ScalePressable>
               </View>
             )
-          )}
-
-          {completedSends.length > 0 && (
-            <>
-              <ScalePressable
-                style={styles.completedToggle}
-                onPress={() => setShowCompleted((v) => !v)}
-              >
-                <Text style={styles.completedToggleText}>
-                  완료·취소 내역 {completedSends.length}
-                </Text>
-                <Feather
-                  name={showCompleted ? "chevron-up" : "chevron-down"}
-                  size={14}
-                  color={Colors.zinc400}
-                />
-              </ScalePressable>
-              {showCompleted && (
-                <View style={styles.sendList}>
-                  {completedSends.map((send) => (
-                    <SendRow
-                      key={send.id}
-                      send={send}
-                      onCancel={() => handleCancel(send)}
-                      onResend={() => setResendTarget(send)}
-                      onChangePending={() => setChangeTarget(send)}
-                      schedulingBlocked={isSchedulingBlocked}
-                    />
-                  ))}
-                </View>
-              )}
-            </>
           )}
           <View style={{ height: 40 }} />
         </ScrollView>
@@ -1072,20 +1038,6 @@ const styles = StyleSheet.create({
     ...Typography.caption,
     fontSize: 12,
     color: Colors.zinc300,
-  },
-  completedToggle: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: Spacing.screenPx,
-    paddingTop: 20,
-    paddingBottom: 10,
-  },
-  completedToggleText: {
-    ...Typography.caption,
-    fontSize: 12,
-    color: Colors.zinc400,
-    fontWeight: "600",
   },
   slotLabelText: {
     ...Typography.caption,
