@@ -1,9 +1,24 @@
 ---
 name: Friction space-round draft data flow
-description: Where the "회차 구성 초안" (round title/description draft) actually lives and how it flows into space-start.
+description: SpaceRound rows exist from space creation onward; how "draft" state relates to DB rows; loading-vs-empty pitfall for rounds-derived queries.
 ---
 
-- `SpaceRound` rows are created (one per round) at space-creation time with `title: null, description: null` — they exist in the DB well before the operator reaches the "공간 시작하기" flow.
-- Operators can pre-fill a round's title/description earlier via the 회차 관리 screen (`of-space-rounds.tsx`'s `RoundEditSheet`, `PATCH /spaces/:id/rounds/:roundId`). So the real "draft" the user means by "이미 작성된 초안" is the current state of these DB rows, not anything local-only in the start-flow UI.
-- `POST /spaces/:id/start` deletes and recreates all `SpaceRound` rows from whatever `rounds` array the client submits — the start screen's local state is authoritative at submit time, but it must be *seeded* from the existing draft rows on entry, or it silently overwrites real data with blanks.
-- **How to apply:** when a start/onboarding-style screen edits data that already exists from an earlier step (rounds, drafts, etc.), always fetch and seed local component state from the live records first; don't assume "not yet visited this screen" means "no data exists yet."
+SpaceRound rows exist from space creation onward (title/description nullable); "draft" = current DB rows, not local-only UI state — seed local state from them, don't reintroduce blank defaults.
+
+## Loading vs. empty pitfall
+
+`useListSpaceRounds(...).data ?? []` makes `rounds` look like "no rounds" both while the
+query is still loading (no data yet) and after it resolves with a genuinely empty list.
+Any downstream `useEffect`/`useMemo` that derives an "assigned/available" list from `rounds`
+must check `roundsQuery.isLoading` explicitly and stay in an undefined/loading state until
+the query actually resolves — otherwise it will emit a confident-looking empty result before
+real data arrives (e.g. an "아직 배정된 차례가 없어요" empty-state flashing for users who do
+have data, right after navigating to the screen).
+
+**Why:** happened in `of-space-schedule-send.tsx`'s CENTER-slot-assignment calculation, which
+is reused by later "assigned turn" scheduling screens — the same pattern is likely to recur
+wherever a query's `?? []` fallback feeds a "does the user have any X" branch.
+
+**How to apply:** when deriving a "does the user have X" boolean/list from a paginated/query
+result, gate on the source query's `isLoading` (not just presence of `!id`/`!userId`) before
+concluding the list is empty.

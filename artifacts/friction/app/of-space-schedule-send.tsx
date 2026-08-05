@@ -578,6 +578,13 @@ export default function SpaceScheduleSendScreen() {
         setAllCenterSlots([]);
         return;
       }
+      // The rounds query hasn't resolved yet — `rounds` is just the `?? []`
+      // fallback, not a real "no rounds" answer. Stay in the loading state
+      // (undefined) instead of prematurely deciding there's nothing assigned.
+      if (roundsQuery.isLoading) {
+        setAllCenterSlots(undefined);
+        return;
+      }
       const targetRounds = rounds.filter((r) => r.status === "ACTIVE" || r.status === "UPCOMING");
       if (targetRounds.length === 0) {
         setAllCenterSlots([]);
@@ -603,7 +610,7 @@ export default function SpaceScheduleSendScreen() {
     return () => {
       cancelled = true;
     };
-  }, [id, userId, rounds]);
+  }, [id, userId, rounds, roundsQuery.isLoading]);
 
   // Rounds where the user already has a PENDING CENTER reservation — picking
   // one of these again for a *new* reservation would just trigger the
