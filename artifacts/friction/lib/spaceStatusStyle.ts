@@ -10,7 +10,7 @@ export type SpaceStatusStyle = {
 export function spaceStatusLabel(status: string): string {
   if (status === "ACTIVE") return "진행 중";
   if (status === "RECRUITING") return "모집 중";
-  if (status === "ARCHIVED") return "종료됨";
+  if (status === "ARCHIVED") return "종료";
   return status;
 }
 
@@ -32,8 +32,8 @@ export function spaceStatusStyle(status: string): SpaceStatusStyle {
     };
   }
   return {
-    backgroundColor: Colors.zinc900,
-    borderColor: Colors.zinc900,
+    backgroundColor: Colors.zinc700,
+    borderColor: Colors.zinc700,
     borderWidth: 0,
     textColor: Colors.white,
   };

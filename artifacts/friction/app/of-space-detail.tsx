@@ -26,6 +26,7 @@ import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import CardSelectOverlay, { type OriginLayout, type ChainArticleMeta } from "@/components/CardSelectOverlay/CardSelectOverlay";
+import DotIndicator from "@/components/DotIndicator/DotIndicator";
 import { useUser } from "@/contexts/UserContext";
 import {
   useGetSpaceJoinContext,
@@ -84,19 +85,6 @@ function roundStatusColor(status: string): string {
   if (status === "UPCOMING") return Colors.zinc400;
   return Colors.zinc300;
 }
-
-function letterTypeLabel(type: string): string {
-  if (type === "OPENING") return "여는 편지";
-  if (type === "CENTER") return "중심 편지";
-  if (type === "REPLY") return "답장";
-  return type;
-}
-
-function formatLetterDate(iso: string | Date): string {
-  const d = typeof iso === "string" ? new Date(iso) : iso;
-  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
-}
-
 function formatPlannedDate(val: Date | string | null | undefined): string {
   if (!val) return "미정";
   const d = typeof val === "string" ? new Date(val) : val;
@@ -262,8 +250,6 @@ function SpaceCarousel({
           isRead={letter.isRead}
           isActive={true}
           onPress={handlePress}
-          letterTypeBadge={letterTypeLabel(letter.letterType)}
-          date={formatLetterDate(letter.createdAt)}
         />
       </View>
     );
@@ -285,21 +271,6 @@ function SpaceCarousel({
       : []),
     ...letterCards,
   ];
-
-  const indicator =
-    itemCount > 1 ? (
-      <View style={spaceCarouselStyles.indicatorRow}>
-        {Array.from({ length: itemCount }, (_, i) => (
-          <View
-            key={i}
-            style={[
-              spaceCarouselStyles.indicatorDot,
-              i === currentIndex && spaceCarouselStyles.indicatorDotActive,
-            ]}
-          />
-        ))}
-      </View>
-    ) : null;
 
   return (
     <View>
@@ -339,7 +310,7 @@ function SpaceCarousel({
           {cards}
         </ScrollView>
       )}
-      {indicator}
+      <DotIndicator total={itemCount} activeIndex={currentIndex} />
     </View>
   );
 }
@@ -366,22 +337,6 @@ const spaceCarouselStyles = StyleSheet.create({
   },
   cardSlotHidden: {
     opacity: 0,
-  },
-  indicatorRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 12,
-  },
-  indicatorDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Colors.zinc300,
-  },
-  indicatorDotActive: {
-    backgroundColor: Colors.zinc600,
   },
 
   // ─── Opening slot card (carousel first item) ──────────────────────────────
@@ -637,8 +592,6 @@ function RoundSection({
               onPress={() =>
                 onPressLetter(letter, { x: 0, y: 0, width: SC_CARD_W, height: SC_CARD_H })
               }
-              letterTypeBadge={letterTypeLabel(letter.letterType)}
-              date={formatLetterDate(letter.createdAt)}
             />
           );
         })()
@@ -1226,7 +1179,15 @@ export default function SpaceDetailScreen() {
     (letter: SpaceLetter, layout: OriginLayout) => {
       setTapLetter(letter);
       setTapLetterOrigin(layout);
-      setTapArticle(null);
+      // The carousel response already has the title and cover visible to the
+      // user. Seed the overlay with that exact presentation immediately so its
+      // origin-scale animation never flashes a loading card or a refetched cover.
+      setTapArticle({
+        id: letter.sourceArticleId ?? letter.id,
+        title: (letter as any).articleTitle ?? "제목 없음",
+        cover: ((letter as any).articleCover ?? null) as ArticleCover | null,
+        sourceArticleId: null,
+      } as Article);
       if (letter.sourceArticleId) {
         queryClient.fetchQuery({
           queryKey: getGetArticleQueryKey(letter.sourceArticleId),
@@ -1288,7 +1249,15 @@ export default function SpaceDetailScreen() {
     const authorName = isAnonymousSpace
       ? (displayName ?? "익명")
       : (authorNickname ?? "알 수 없음");
-    artList.push(tapArticle);
+    // Keep the entry presentation pinned to the exact carousel cover. The
+    // fetched article is still used for its sourceArticleId above, but it must
+    // not replace the card during the opening animation.
+    artList.push({
+      ...(tapArticle ?? {}),
+      id: tapLetter.sourceArticleId ?? tapLetter.id,
+      title: (tapLetter as any).articleTitle ?? "제목 없음",
+      cover: ((tapLetter as any).articleCover ?? null) as ArticleCover | null,
+    } as Article);
     metaList.push({
       authorName,
       date: tapLetter.createdAt,
@@ -1482,9 +1451,11 @@ export default function SpaceDetailScreen() {
                 {statusText}
               </Text>
             </View>
-            <Text style={styles.roleBadge}>
-              {isOperator ? "운영자" : "참여자"}
-            </Text>
+            {isOperator ? (
+              <View style={styles.roleBadge}>
+                <Text style={styles.roleBadgeText}>내 공간</Text>
+              </View>
+            ) : null}
             {space.isAnonymous && (
               <View style={styles.anonBadge}>
                 <Feather name="eye-off" size={10} color={Colors.zinc400} />
@@ -1896,9 +1867,16 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   roleBadge: {
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    backgroundColor: "#92323D",
+  },
+  roleBadgeText: {
     ...Typography.caption,
     fontSize: 11,
-    color: Colors.zinc400,
+    fontWeight: "600",
+    color: Colors.white,
   },
   anonBadge: {
     flexDirection: "row",

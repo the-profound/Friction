@@ -26,10 +26,6 @@ import type { SpaceListItem } from "@workspace/api-client-react";
 const GRID_H_PADDING = Spacing.screenPx;
 const GRID_COLUMN_GAP = 10;
 
-function roleLabel(role: string): string {
-  return role === "OPERATOR" ? "운영자" : "참여자";
-}
-
 function ArchivedSpaceCard({
   item,
   onPress,
@@ -39,7 +35,7 @@ function ArchivedSpaceCard({
   onPress: () => void;
   cardSize: number;
 }) {
-  const role = roleLabel(item.myRole);
+  const isOperator = item.myRole === "OPERATOR";
   const avatarLetter = item.name.charAt(0);
 
   return (
@@ -61,9 +57,11 @@ function ArchivedSpaceCard({
               <Text style={styles.anonymousBadgeText}>익명</Text>
             </View>
           )}
-          <View style={styles.roleBadge}>
-            <Text style={styles.roleBadgeText}>{role}</Text>
-          </View>
+          {isOperator ? (
+            <View style={styles.roleBadge}>
+              <Text style={styles.roleBadgeText}>내 공간</Text>
+            </View>
+          ) : null}
         </View>
       </View>
       <Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>
@@ -233,7 +231,7 @@ const styles = StyleSheet.create({
   retryButton: {
     paddingHorizontal: 20,
     paddingVertical: 10,
-    backgroundColor: Colors.zinc900,
+    backgroundColor: Colors.zinc700,
     borderRadius: 10,
   },
   retryButtonText: {
@@ -284,17 +282,16 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   archivedBadge: {
-    borderWidth: 1,
     borderRadius: 6,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderColor: Colors.zinc300,
+    backgroundColor: Colors.zinc900,
   },
   archivedBadgeText: {
     ...Typography.caption,
     fontSize: 10,
     fontWeight: "600",
-    color: Colors.zinc400,
+    color: Colors.white,
   },
   anonymousBadge: {
     borderWidth: 1,
@@ -320,13 +317,13 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    backgroundColor: Colors.zinc100,
+    backgroundColor: "#92323D",
   },
   roleBadgeText: {
     ...Typography.caption,
     fontSize: 10,
-    color: Colors.zinc500,
-    fontWeight: "500",
+    color: Colors.white,
+    fontWeight: "600",
   },
   cardName: {
     ...Typography.bodySemiBold,
