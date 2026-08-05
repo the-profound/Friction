@@ -1731,7 +1731,7 @@ export default function SpaceDetailScreen() {
       )}
 
       {/*
-        ── "예약 대기" entry point ──
+        ── "예약 목록" entry point ──
         Shown to every eligible user — operator or participant — once the
         space has left the recruiting stage, regardless of operator role.
         Archived spaces still get the entry point; the destination screen
@@ -1749,7 +1749,7 @@ export default function SpaceDetailScreen() {
           }
         >
           <Feather name="send" size={15} color={Colors.white} />
-          <Text style={styles.floatingBtnText}>{isArchived ? "예약 대기 보기" : "예약 대기"}</Text>
+          <Text style={styles.floatingBtnText}>{isArchived ? "예약 목록 보기" : "예약 목록"}</Text>
         </ScalePressable>
       )}
 

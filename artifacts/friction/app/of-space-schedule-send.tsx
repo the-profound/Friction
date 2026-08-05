@@ -771,7 +771,7 @@ export default function SpaceScheduleSendScreen() {
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
         </ScalePressable>
         <Text style={styles.headerTitle} numberOfLines={1}>
-          예약 대기
+          예약 목록
         </Text>
         <View style={{ width: 20 }} />
       </View>
