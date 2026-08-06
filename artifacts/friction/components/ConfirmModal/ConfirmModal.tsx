@@ -93,7 +93,7 @@ export default function ConfirmModal({
         <View style={styles.contentWrapper}>
           <Pressable style={styles.card} onPress={(e) => e.stopPropagation()}>
             <Text style={styles.title}>{displayTitle}</Text>
-            {displayDescription && <Text style={styles.description}>{displayDescription}</Text>}
+            {displayDescription ? <Text style={styles.description}>{displayDescription}</Text> : null}
 
             {isNewLayout ? (
               <View style={styles.actionRow}>
@@ -141,9 +141,9 @@ export default function ConfirmModal({
             )}
           </Pressable>
 
-          {displayHint && (
+          {displayHint ? (
             <Text style={styles.hint}>{displayHint}</Text>
-          )}
+          ) : null}
         </View>
       </Pressable>
     </Modal>

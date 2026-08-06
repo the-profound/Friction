@@ -742,7 +742,7 @@ export default function ArchiveScreen() {
                 <Feather name="edit" size={18} color={Colors.zinc700} />
                 <Text style={styles.sentenceSheetActionLabel}>인용해서 메모 작성</Text>
               </ScalePressable>
-              {selectedSentence.articleId && (
+              {selectedSentence.articleId ? (
                 <ScalePressable
                   style={styles.sentenceSheetRow}
                   onPress={() => {
@@ -757,7 +757,7 @@ export default function ArchiveScreen() {
                   <Feather name="external-link" size={18} color={Colors.zinc700} />
                   <Text style={styles.sentenceSheetActionLabel}>원본으로 이동</Text>
                 </ScalePressable>
-              )}
+              ) : null}
               <ScalePressable
                 style={styles.sentenceSheetRow}
                 onPress={() => {

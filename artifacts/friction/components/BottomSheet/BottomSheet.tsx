@@ -309,7 +309,7 @@ export default function BottomSheet({
             {(title || closeButton) && (
               <View style={styles.titleRow}>
                 {closeButton ? <View style={styles.titleSpacer} /> : null}
-                {title && <Text style={[styles.title, titleStyle]}>{title}</Text>}
+                {title ? <Text style={[styles.title, titleStyle]}>{title}</Text> : null}
                 {closeButton && (
                   <ScalePressable
                     onPress={close}

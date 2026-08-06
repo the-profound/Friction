@@ -730,7 +730,7 @@ export default function PersonalCollectionDetailScreen() {
         </View>
       </BottomSheet>
 
-      {userId && (
+      {userId ? (
         <SourceArticlePickerSheet
           visible={isSourcePickerVisible}
           onClose={() => setIsSourcePickerVisible(false)}
@@ -740,7 +740,7 @@ export default function PersonalCollectionDetailScreen() {
           onSelect={handleSourceArticleSelect}
           onUnlink={handleSourceArticleUnlink}
         />
-      )}
+      ) : null}
 
       {longPressTargetArticle && (
         <SaveAsPhotosModal

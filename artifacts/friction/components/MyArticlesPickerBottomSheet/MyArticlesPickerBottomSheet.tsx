@@ -87,11 +87,11 @@ export function MyArticlesPickerBottomSheet({
                   <Text style={[styles.itemTitle, isAdded && styles.itemDisabled]} numberOfLines={1}>
                     {item.title || "제목 없음"}
                   </Text>
-                  {item.excerpt && (
+                  {item.excerpt ? (
                     <Text style={styles.itemExcerpt} numberOfLines={1}>
                       {item.excerpt}
                     </Text>
-                  )}
+                  ) : null}
                 </View>
                 {isAdded ? (
                   <Text style={styles.addedLabel}>추가됨</Text>

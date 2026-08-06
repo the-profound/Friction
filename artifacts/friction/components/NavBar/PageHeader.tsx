@@ -71,11 +71,11 @@ export function PageHeader({
           <Text style={styles.title}>{title}</Text>
         )}
         <View style={styles.actions}>
-          {rightText && (
+          {rightText ? (
             <ScalePressable onPress={onRightTextPress} hitSlop={8} style={styles.rightTextButton}>
               <Text style={styles.rightText}>{rightText}</Text>
             </ScalePressable>
-          )}
+          ) : null}
           {showAdd && (
             <ScalePressable
               style={[styles.actionButton, addDisabled && styles.actionButtonDisabled]}

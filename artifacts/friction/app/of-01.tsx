@@ -95,9 +95,9 @@ export default function PersonalCollectionListScreen() {
       </View>
       <View style={styles.collectionInfo}>
         <Text style={styles.collectionName} numberOfLines={1}>{item.name}</Text>
-        {item.description && (
+        {item.description ? (
           <Text style={styles.collectionDesc} numberOfLines={1}>{item.description}</Text>
-        )}
+        ) : null}
       </View>
       <View style={styles.collectionRight}>
         <Text style={styles.collectionCount}>{item.articleCount ?? 0}편</Text>

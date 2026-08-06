@@ -57,30 +57,30 @@ function ArticleListItem({
             <Text style={styles.title} numberOfLines={3}>
               {title}
             </Text>
-            {rightMeta && <Text style={styles.rightMeta}>{rightMeta}</Text>}
+            {rightMeta ? <Text style={styles.rightMeta}>{rightMeta}</Text> : null}
           </View>
-          {preview && (
+          {preview ? (
             <Text style={styles.preview} numberOfLines={1}>
               {preview}
             </Text>
-          )}
+          ) : null}
           <View style={styles.metaRow}>
-            {author && <Text style={styles.metaText}>{author.name}</Text>}
-            {timestamp && <Text style={styles.metaText}>{formatDate(timestamp)}</Text>}
-            {statusBadge && (
+            {author ? <Text style={styles.metaText}>{author.name}</Text> : null}
+            {timestamp ? <Text style={styles.metaText}>{formatDate(timestamp)}</Text> : null}
+            {statusBadge ? (
               <View style={[styles.badge, { backgroundColor: STATUS_BADGE_COLORS[statusBadge].bg }]}>
                 <Text style={[styles.badgeText, { color: STATUS_BADGE_COLORS[statusBadge].text }]}>
                   {statusBadge === "DRAFT" ? "작성 중" : statusBadge === "DIVIDING" ? "검토 중" : statusBadge === "CLOSING" ? "마감 중" : "완성"}
                 </Text>
               </View>
-            )}
-            {deliveryBadge && (
+            ) : null}
+            {deliveryBadge ? (
               <View style={[styles.badge, { backgroundColor: DELIVERY_BADGE_COLORS[deliveryBadge].bg }]}>
                 <Text style={[styles.badgeText, { color: DELIVERY_BADGE_COLORS[deliveryBadge].text }]}>
                   {deliveryBadge === "sent" ? "발신됨" : "발신 예정"}
                 </Text>
               </View>
-            )}
+            ) : null}
           </View>
         </View>
         {coverImageUrl ? (

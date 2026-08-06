@@ -46,20 +46,20 @@ export default function ActionSheetModal({
       <Pressable style={styles.overlay} onPress={onClose}>
         <View style={styles.contentWrapper}>
           <Pressable style={styles.card} onPress={(e) => e.stopPropagation()}>
-            {(displayTitle || displayDescription) && (
+            {displayTitle || displayDescription ? (
               <View style={styles.header}>
-                {displayTitle && <Text style={styles.title}>{displayTitle}</Text>}
-                {displayDescription && (
+                {displayTitle ? <Text style={styles.title}>{displayTitle}</Text> : null}
+                {displayDescription ? (
                   <Text style={styles.description}>{displayDescription}</Text>
-                )}
+                ) : null}
               </View>
-            )}
+            ) : null}
 
             {mainActions.map((action, index) => (
               <React.Fragment key={index}>
-                {(index > 0 || displayTitle || displayDescription) && (
+                {index > 0 || displayTitle || displayDescription ? (
                   <View style={styles.divider} />
-                )}
+                ) : null}
                 <ScalePressable
                   style={styles.actionRow}
                   contentStyle={styles.actionRowContent}

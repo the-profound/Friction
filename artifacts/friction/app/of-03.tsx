@@ -537,14 +537,14 @@ function SentenceDetailSheet({
           <Text style={sheet.actionLabel}>인용해서 메모 작성</Text>
         </ScalePressable>
 
-        {sentence.articleId && (
+        {sentence.articleId ? (
           <ScalePressable style={sheet.actionRow} onPress={onGoToSource}>
             <Feather name="external-link" size={18} color={Colors.zinc700} />
             <Text style={sheet.actionLabel}>
               {page !== undefined ? `원본으로 이동 (${page + 1}페이지)` : "원본으로 이동"}
             </Text>
           </ScalePressable>
-        )}
+        ) : null}
 
         <ScalePressable style={sheet.actionRow} onPress={onDelete}>
           <Feather name="trash-2" size={18} color="#DC2626" />

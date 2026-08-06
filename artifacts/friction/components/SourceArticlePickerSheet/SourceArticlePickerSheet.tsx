@@ -195,7 +195,7 @@ export default function SourceArticlePickerSheet({
       keyboardAware
     >
       <View style={styles.container}>
-        {currentSourceArticleId && (
+        {currentSourceArticleId ? (
           <View style={styles.currentCard}>
             <View style={styles.currentCardLeft}>
               <Text style={styles.currentCardLabel}>현재 연결됨</Text>
@@ -207,7 +207,7 @@ export default function SourceArticlePickerSheet({
               <Text style={styles.unlinkButtonText}>연결 해제</Text>
             </ScalePressable>
           </View>
-        )}
+        ) : null}
 
         <View style={styles.searchRow}>
           <Feather name="search" size={14} color={Colors.zinc400} style={styles.searchIcon} />

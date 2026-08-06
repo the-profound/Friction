@@ -382,7 +382,7 @@ export function ArticleScheduleSheet({
           }
         />
 
-        {selectedArticleId && isOpeningLetter && (
+        {selectedArticleId && isOpeningLetter ? (
           <>
             <Text style={styles.fieldLabel}>{dateLabel}</Text>
             <CollapsibleDatePicker
@@ -417,9 +417,9 @@ export function ArticleScheduleSheet({
               </Text>
             </ScalePressable>
           </>
-        )}
+        ) : null}
 
-        {selectedArticleId && !isOpeningLetter && (
+        {selectedArticleId && !isOpeningLetter ? (
           <>
             <Text style={styles.fieldLabel}>발송 예정일 (06:00 고정 발송)</Text>
 
@@ -476,7 +476,7 @@ export function ArticleScheduleSheet({
               </Text>
             </ScalePressable>
           </>
-        )}
+        ) : null}
       </View>
     </View>
   );

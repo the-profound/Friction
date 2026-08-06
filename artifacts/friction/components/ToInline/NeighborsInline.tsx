@@ -686,9 +686,9 @@ export function NeighborsInline({
             </View>
             <Text style={styles.profileName}>{profileTarget.nickname}</Text>
             <Text style={styles.profileEmail}>{profileTarget.email}</Text>
-            {profileTarget.joinedAt && (
+            {profileTarget.joinedAt ? (
               <Text style={styles.profileJoined}>이웃이 된 날: {profileTarget.joinedAt}</Text>
-            )}
+            ) : null}
             <View style={styles.profileIdRow}>
               <Text style={styles.profileIdLabel}>ID</Text>
               <Text style={styles.profileIdValue} selectable>
