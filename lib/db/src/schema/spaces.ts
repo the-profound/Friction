@@ -1,4 +1,4 @@
-import { boolean, check, date, integer, jsonb, pgEnum, pgTable, text, timestamp, unique, uuid, varchar } from "drizzle-orm/pg-core";
+import { boolean, check, date, integer, jsonb, pgEnum, pgTable, text, timestamp, unique, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -131,7 +131,15 @@ export const spaceLettersTable = pgTable("space_letters", {
   isPublic: boolean("is_public").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-});
+}, (t) => [
+  // At most one OPENING letter per round. Rows with a NULL spaceRoundId
+  // (pre-start drafts created before any round exists) are exempt — Postgres
+  // treats NULLs as distinct for uniqueness purposes, so this only guards
+  // rounds that have actually been assigned.
+  uniqueIndex("space_letters_opening_per_round_unique")
+    .on(t.spaceRoundId)
+    .where(sql`${t.letterType} = 'OPENING'`),
+]);
 
 export const insertSpaceLetterSchema = createInsertSchema(spaceLettersTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertSpaceLetter = z.infer<typeof insertSpaceLetterSchema>;

@@ -583,10 +583,18 @@ router.post("/spaces/:id/start", requireAuth, async (req, res) => {
       // spaceRoundId — but the detail screen groups letters strictly by
       // round, so an unlinked letter would never be shown. Attaching it here
       // covers both the newly-created and the reused-letter paths.
+      //
+      // Only one OPENING letter may ever be linked per round (DB-enforced by
+      // space_letters_opening_per_round_unique), so if drafting left behind
+      // more than one round-less OPENING letter (e.g. the operator switched
+      // their selected article more than once before starting), link only
+      // the one with an active pending send — the one actually chosen — or
+      // else the most recently created draft. The rest are abandoned drafts
+      // and are left round-less rather than crashing the start transaction.
       if (firstRoundId) {
-        await tx
-          .update(spaceLettersTable)
-          .set({ spaceRoundId: firstRoundId })
+        const roundlessOpeningLetters = await tx
+          .select({ id: spaceLettersTable.id, createdAt: spaceLettersTable.createdAt })
+          .from(spaceLettersTable)
           .where(
             and(
               eq(spaceLettersTable.spaceId, req.params.id),
@@ -594,6 +602,37 @@ router.post("/spaces/:id/start", requireAuth, async (req, res) => {
               isNull(spaceLettersTable.spaceRoundId),
             ),
           );
+        if (roundlessOpeningLetters.length > 0) {
+          let winnerId = roundlessOpeningLetters[0]!.id;
+          if (roundlessOpeningLetters.length > 1) {
+            const pendingSendLetterIds = new Set(
+              (
+                await tx
+                  .select({ spaceLetterId: spaceScheduledSendsTable.spaceLetterId })
+                  .from(spaceScheduledSendsTable)
+                  .where(
+                    and(
+                      eq(spaceScheduledSendsTable.spaceId, req.params.id),
+                      eq(spaceScheduledSendsTable.status, "PENDING"),
+                      inArray(
+                        spaceScheduledSendsTable.spaceLetterId,
+                        roundlessOpeningLetters.map((l) => l.id),
+                      ),
+                    ),
+                  )
+              ).map((s) => s.spaceLetterId),
+            );
+            const withPendingSend = roundlessOpeningLetters.find((l) => pendingSendLetterIds.has(l.id));
+            winnerId = (
+              withPendingSend ??
+              [...roundlessOpeningLetters].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0]!
+            ).id;
+          }
+          await tx
+            .update(spaceLettersTable)
+            .set({ spaceRoundId: firstRoundId })
+            .where(eq(spaceLettersTable.id, winnerId));
+        }
       }
 
       // Reject all pending code requests and collect requester IDs for notification
@@ -1414,6 +1453,54 @@ router.post("/spaces/:id/letters", requireAuth, async (req, res) => {
     return;
   }
 
+  const [targetSpace] = await db
+    .select({ status: spacesTable.status })
+    .from(spacesTable)
+    .where(eq(spacesTable.id, req.params.id))
+    .limit(1);
+  if (!targetSpace) {
+    res.status(404).json({ error: "Space not found" });
+    return;
+  }
+
+  // OPENING letters must be tied to a round once the space is ACTIVE —
+  // otherwise the letter would never surface on the detail/reservation
+  // screens (both group strictly by round) and could pile up indefinitely
+  // without ever being picked up. A null spaceRoundId is tolerated while the
+  // space is still RECRUITING, even if rounds already exist (they can be
+  // pre-created via POST /spaces/:id/rounds ahead of time): the start flow
+  // creates/reuses the draft opening letter before rounds are (re)built,
+  // deletes all existing rounds, then links the winning draft to round 1 —
+  // so a round reference on a draft would just be wiped out by that delete.
+  if (
+    parsed.data.letterType === "OPENING" &&
+    !parsed.data.spaceRoundId &&
+    targetSpace.status === "ACTIVE"
+  ) {
+    res.status(400).json({ error: "여는 편지를 작성할 회차를 지정해야 합니다." });
+    return;
+  }
+
+  // A caller-supplied spaceRoundId must actually belong to this space —
+  // otherwise the letter (and, for OPENING, the global per-round unique
+  // index) would reference/lock a round in a different space entirely.
+  if (parsed.data.spaceRoundId) {
+    const [round] = await db
+      .select({ id: spaceRoundsTable.id })
+      .from(spaceRoundsTable)
+      .where(
+        and(
+          eq(spaceRoundsTable.id, parsed.data.spaceRoundId),
+          eq(spaceRoundsTable.spaceId, req.params.id),
+        ),
+      )
+      .limit(1);
+    if (!round) {
+      res.status(400).json({ error: "존재하지 않거나 다른 공간의 회차입니다." });
+      return;
+    }
+  }
+
   // If a sourceArticleId is provided, reuse any existing SpaceLetter for
   // (space, article, author, round) instead of creating a duplicate. The
   // round is part of the matching key so that, e.g., reusing the same
@@ -1440,11 +1527,25 @@ router.post("/spaces/:id/letters", requireAuth, async (req, res) => {
     }
   }
 
-  const [letter] = await db
-    .insert(spaceLettersTable)
-    .values({ ...parsed.data, spaceId: req.params.id, authorId: req.user!.id })
-    .returning();
-  res.status(201).json(letter);
+  try {
+    const [letter] = await db
+      .insert(spaceLettersTable)
+      .values({ ...parsed.data, spaceId: req.params.id, authorId: req.user!.id })
+      .returning();
+    res.status(201).json(letter);
+  } catch (err) {
+    // Concurrent double-taps/retries can race past the sourceArticleId reuse
+    // check above; the DB-level partial unique index is the real guard
+    // against two OPENING letters landing on the same round. drizzle-orm
+    // wraps the underlying pg error in `.cause`, so the Postgres error code
+    // (23505 = unique_violation) is at `err.cause.code`, not `err.code`.
+    const pgErrorCode = (err as { cause?: { code?: string } } | null)?.cause?.code;
+    if (parsed.data.letterType === "OPENING" && pgErrorCode === "23505") {
+      res.status(409).json({ error: "이미 해당 회차에 여는 편지가 있습니다." });
+      return;
+    }
+    throw err;
+  }
 });
 
 async function getScheduledSendAccess(spaceId: string, callerId: string) {
