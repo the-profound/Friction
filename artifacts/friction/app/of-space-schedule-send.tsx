@@ -899,8 +899,20 @@ export default function SpaceScheduleSendScreen() {
   // null on close), this effect would immediately reopen the sheet in a loop.
   const consumedOpeningRoundIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!openingRoundId || roundsQuery.isLoading || sendsQuery.isLoading) return;
+    if (!openingRoundId) return;
     if (consumedOpeningRoundIdRef.current === openingRoundId) return;
+    // `openingEligibleRounds` is only trustworthy once every data source it
+    // (transitively) depends on has finished loading:
+    //   - roundsQuery / sendsQuery: rounds + existing opening sends
+    //   - joinContextQuery: the operator role check (`isOperator`) — without
+    //     this, isOperator defaults to false and every round looks
+    //     ineligible, so an operator's deep link would be wrongly
+    //     "consumed" as a no-op before their role ever loads.
+    // While any of these are still loading, bail WITHOUT marking this
+    // openingRoundId as consumed, so the effect re-runs and gets a real
+    // shot once all the data is in — instead of only ever getting one
+    // (premature) attempt.
+    if (roundsQuery.isLoading || sendsQuery.isLoading || joinContextQuery.isLoading) return;
     consumedOpeningRoundIdRef.current = openingRoundId;
     const round = openingEligibleRounds.find((r) => r.id === openingRoundId);
     if (!round) return;
@@ -910,7 +922,13 @@ export default function SpaceScheduleSendScreen() {
       roundNumber: round.roundNumber,
       maxDate: round.startsAt ?? null,
     });
-  }, [openingRoundId, roundsQuery.isLoading, sendsQuery.isLoading, openingEligibleRounds]);
+  }, [
+    openingRoundId,
+    roundsQuery.isLoading,
+    sendsQuery.isLoading,
+    joinContextQuery.isLoading,
+    openingEligibleRounds,
+  ]);
 
   const pendingSends = sends.filter((s) => s.status === "PENDING");
   const failedSends = sends.filter((s) => s.status === "FAILED");
