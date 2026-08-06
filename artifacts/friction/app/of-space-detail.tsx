@@ -51,6 +51,11 @@ import type {
 import { useAncestorChain } from "@/hooks/useAncestorChain";
 import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
 import { spaceStatusLabel, spaceStatusStyle } from "@/lib/spaceStatusStyle";
+import {
+  roundStatusLabel,
+  shouldDimSpaceRoundLetter,
+  sortSpaceRoundsNewestFirst,
+} from "@/lib/spaceRoundPresentation";
 
 // ─── Space Carousel constants ─────────────────────────────────────────────────
 // Card width is derived so that exactly 2 full cards + the centre of the 3rd
@@ -66,13 +71,6 @@ const SC_CARD_W = Math.floor((SCREEN_W - SC_LEFT_PAD - 2 * SC_CARD_GAP) / 2.5);
 const SC_CARD_H = SC_CARD_W * (8 / 5);
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function roundStatusLabel(status: string): string {
-  if (status === "ACTIVE") return "진행 중";
-  if (status === "UPCOMING") return "예정";
-  if (status === "COMPLETED") return "완료";
-  return status;
-}
 
 function roundStatusColor(status: string): string {
   if (status === "ACTIVE") return Colors.noticeAccent;
@@ -113,12 +111,14 @@ const SC_SNAP_STEP = SC_CARD_W + SC_CARD_GAP;
 
 function SpaceCarousel({
   letters,
+  roundStatus,
   isAnonymous,
   onCardPress,
   hiddenCardId,
   openingSlot,
 }: {
   letters: SpaceLetter[];
+  roundStatus: string;
   isAnonymous: boolean;
   onCardPress: (letter: SpaceLetter, layout: OriginLayout) => void;
   hiddenCardId?: string | null;
@@ -241,7 +241,7 @@ function SpaceCarousel({
           authorName={authorName}
           cover={((letter as any).articleCover ?? null) as ArticleCover | null}
           cardWidth={SC_CARD_W}
-          isRead={letter.isRead}
+          isRead={shouldDimSpaceRoundLetter(roundStatus, letter.isRead)}
           isActive={true}
           onPress={handlePress}
         />
@@ -627,6 +627,7 @@ function RoundSection({
     letterArea = (
       <SpaceCarousel
         letters={letters}
+        roundStatus={round.status}
         isAnonymous={isAnonymous}
         onCardPress={onPressLetter}
         hiddenCardId={hiddenCardId}
@@ -1377,10 +1378,7 @@ export default function SpaceDetailScreen() {
               </View>
             ) : (
               <View style={styles.roundsList}>
-                {rounds
-                  .slice()
-                  .sort((a, b) => a.roundNumber - b.roundNumber)
-                  .map((round) => (
+                {sortSpaceRoundsNewestFirst(rounds).map((round) => (
                     <RoundSection
                       key={round.id}
                       round={round}

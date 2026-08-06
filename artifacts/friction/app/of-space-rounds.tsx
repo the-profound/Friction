@@ -32,15 +32,12 @@ import {
 } from "@workspace/api-client-react";
 import type { SpaceRound, SpaceLetter, SpaceRoundSlotWithUser, SpaceMember } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import {
+  roundStatusLabel,
+  sortSpaceRoundsNewestFirst,
+} from "@/lib/spaceRoundPresentation";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function roundStatusLabel(status: string): string {
-  if (status === "ACTIVE") return "진행 중";
-  if (status === "UPCOMING") return "예정";
-  if (status === "COMPLETED") return "완료";
-  return status;
-}
 
 function roundStatusColor(status: string): string {
   if (status === "ACTIVE") return Colors.noticeAccent;
@@ -51,7 +48,7 @@ function roundStatusColor(status: string): string {
 const STATUS_OPTIONS: { value: "UPCOMING" | "ACTIVE" | "COMPLETED"; label: string }[] = [
   { value: "UPCOMING", label: "예정" },
   { value: "ACTIVE", label: "진행 중" },
-  { value: "COMPLETED", label: "완료" },
+  { value: "COMPLETED", label: "종료" },
 ];
 
 // ─── Edit Sheet ───────────────────────────────────────────────────────────────
@@ -702,10 +699,7 @@ export default function SpaceRoundsScreen() {
             </View>
           ) : (
             <View style={styles.roundList}>
-              {rounds
-                .slice()
-                .sort((a, b) => a.roundNumber - b.roundNumber)
-                .map((round) => (
+              {sortSpaceRoundsNewestFirst(rounds).map((round) => (
                   <RoundRow
                     key={round.id}
                     round={round}
