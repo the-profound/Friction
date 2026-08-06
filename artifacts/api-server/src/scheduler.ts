@@ -177,6 +177,7 @@ async function sendLetterArrivedNotifications(): Promise<void> {
       const results = await sendSilentPush(targets, message, {
         type: "LETTER_ARRIVED",
         newLetterCount: recipient.newLetterCount,
+        target: "inbox",
       });
 
       const successCount = results.filter((r) => r.success).length;

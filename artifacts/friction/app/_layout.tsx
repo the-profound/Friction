@@ -19,6 +19,7 @@ import { setEditorFonts, setEditorFontsError } from "@/lib/editorFontStore";
 import { posthog, PostHogProvider } from "@/lib/posthog";
 import { trackAppOpen } from "@/lib/analytics";
 import { usePushNotifications } from "@/lib/usePushNotifications";
+import { useNotificationDeepLink } from "@/lib/useNotificationDeepLink";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import ToastContainer from "@/components/Toast/Toast";
@@ -121,6 +122,8 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   const { session, isLoading } = useAuth();
   // Register push token once the user is authenticated
   usePushNotifications(session?.user?.id ?? (DEV_WEB_BYPASS ? DEV_WEB_BYPASS_USER_ID : null));
+  // Navigate to inbox when a LETTER_ARRIVED notification is tapped
+  useNotificationDeepLink(session?.user?.id ?? (DEV_WEB_BYPASS ? DEV_WEB_BYPASS_USER_ID : null));
   const router = useRouter();
   const segments = useSegments();
   const hasRedirectedRef = useRef(false);
