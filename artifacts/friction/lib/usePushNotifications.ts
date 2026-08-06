@@ -24,6 +24,12 @@ const EXPO_PROJECT_ID: string | undefined =
   Constants.expoConfig?.extra?.eas?.projectId ??
   (Constants.easConfig as { projectId?: string } | undefined)?.projectId;
 
+let _currentDeviceToken: string | null = null;
+
+export function getCurrentDevicePushToken(): string | null {
+  return _currentDeviceToken;
+}
+
 export function usePushNotifications(userId: string | null | undefined): void {
   useEffect(() => {
     if (!userId) return;
@@ -65,6 +71,8 @@ export function usePushNotifications(userId: string | null | undefined): void {
         });
 
         if (cancelled) return;
+
+        _currentDeviceToken = tokenData.data;
 
         await customFetch("/api/push-tokens", {
           method: "POST",

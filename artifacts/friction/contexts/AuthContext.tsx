@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useRef, useState } from "r
 import { Session, AuthError } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { customFetch } from "@workspace/api-client-react";
+import { getCurrentDevicePushToken } from "@/lib/usePushNotifications";
 
 export type SignUpError = AuthError | { message: string; name: string };
 
@@ -107,6 +108,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function signOut() {
+    const token = getCurrentDevicePushToken();
+    if (token) {
+      try {
+        await customFetch("/api/push-tokens", {
+          method: "DELETE",
+          body: JSON.stringify({ token }),
+          headers: { "Content-Type": "application/json" },
+        });
+      } catch (err) {
+        console.warn("[signOut] Failed to delete push token:", err);
+      }
+    }
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
   }
