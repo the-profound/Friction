@@ -31,22 +31,31 @@ function toDate(val: unknown): Date | undefined {
   return isNaN(d.getTime()) ? undefined : d;
 }
 
-// ─── Round start date calculation ────────────────────────────────────────────
+// ─── Occasion date calculation ───────────────────────────────────────────────
 
 /**
- * Calculate the scheduled start date for a round (0-indexed) given the start
- * time and the schedule config (N_DAY or WEEKDAY).
+ * Calculate the date of the Nth (0-indexed) "occasion" in the space's
+ * schedule (N_DAY: every `intervalDays` days; WEEKDAY: the Nth matching
+ * weekday from `startedAt`).
+ *
+ * This is the single source of truth for every date the schedule config
+ * produces: a round's start/end date is just the occasion date of its first
+ * / last slot, and each slot's `scheduledDate` is the occasion date at its
+ * global position in the sequence (previous rounds' slot counts + its own
+ * slotOrder). Deriving both from the same occasion index guarantees round
+ * dates and slot dates never disagree, and that slot dates strictly advance
+ * slot-by-slot across the whole space (never overlapping or going backwards).
  */
-function calculateRoundStartDate(
+function calculateOccasionDate(
   startedAt: Date,
   scheduleType: "N_DAY" | "WEEKDAY",
   intervalDays: number,
   weekdays: number[],
-  roundIndex: number,
+  occasionIndex: number,
 ): Date | null {
   if (scheduleType === "N_DAY") {
     const date = new Date(startedAt);
-    date.setDate(date.getDate() + roundIndex * intervalDays);
+    date.setDate(date.getDate() + occasionIndex * intervalDays);
     return date;
   }
   if (scheduleType === "WEEKDAY" && weekdays.length > 0) {
@@ -56,7 +65,7 @@ function calculateRoundStartDate(
     let found = 0;
     for (let attempt = 0; attempt < 3650; attempt++) {
       if (sorted.includes(date.getDay())) {
-        if (found === roundIndex) return new Date(date);
+        if (found === occasionIndex) return new Date(date);
         found++;
       }
       date.setDate(date.getDate() + 1);
@@ -504,17 +513,35 @@ router.post("/spaces/:id/start", requireAuth, async (req, res) => {
         .delete(spaceRoundsTable)
         .where(eq(spaceRoundsTable.spaceId, req.params.id));
 
-      // Create rounds and slots
+      // Create rounds and slots. `occasionCursor` tracks the global position
+      // in the schedule's occasion sequence (N_DAY interval / WEEKDAY match)
+      // across ALL rounds' slots, so slot dates are assigned sequentially
+      // slot-by-slot from the very start of the space, never resetting or
+      // overlapping at round boundaries. A round's own start/end date is
+      // just the occasion date of its first/last slot.
       let firstRoundId: string | null = null;
+      let occasionCursor = 0;
       for (let i = 0; i < body.roundCount; i++) {
         const roundConfig = effectiveRounds[i] as Exclude<typeof effectiveRounds[number], { error: string }>;
-        const roundStartDate = calculateRoundStartDate(
+        const slots = roundConfig?.slots ?? [];
+
+        const roundStartDate = calculateOccasionDate(
           now,
           body.scheduleType,
           intervalDays,
           weekdays,
-          i,
+          occasionCursor,
         );
+        const roundEndDate =
+          slots.length > 0
+            ? calculateOccasionDate(
+                now,
+                body.scheduleType,
+                intervalDays,
+                weekdays,
+                occasionCursor + slots.length - 1,
+              )
+            : roundStartDate;
 
         const [round] = await tx
           .insert(spaceRoundsTable)
@@ -524,19 +551,31 @@ router.post("/spaces/:id/start", requireAuth, async (req, res) => {
             title: roundConfig?.title ?? null,
             description: roundConfig?.description ?? null,
             ...(roundStartDate ? { startsAt: roundStartDate } : {}),
+            ...(roundEndDate ? { endsAt: roundEndDate } : {}),
           })
           .returning();
         if (i === 0) firstRoundId = round.id;
 
-        // Create slots for this round (already filtered for operator if needed)
-        const slots = roundConfig?.slots ?? [];
+        // Create slots for this round (already filtered for operator if
+        // needed), each pinned to its own occasion date so the detail
+        // screen's "내 차례" state and the reservation screen's assignment
+        // check always agree (both key off `scheduledDate` being present).
         for (let j = 0; j < slots.length; j++) {
+          const slotDate = calculateOccasionDate(
+            now,
+            body.scheduleType,
+            intervalDays,
+            weekdays,
+            occasionCursor + j,
+          );
           await tx.insert(spaceRoundSlotsTable).values({
             spaceRoundId: round.id,
             assignedUserId: slots[j],
             slotOrder: j,
+            ...(slotDate ? { scheduledDate: kstDateString(slotDate) } : {}),
           });
         }
+        occasionCursor += slots.length;
       }
 
       // Link round-less OPENING letters to round 1. The start flow creates

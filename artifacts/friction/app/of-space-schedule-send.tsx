@@ -636,11 +636,21 @@ export default function SpaceScheduleSendScreen() {
   const [allCenterSlots, setAllCenterSlots] = useState<
     { date: string; roundId: string }[] | undefined
   >(undefined);
+  // Rounds where the user IS the assigned CENTER slot (same criterion the
+  // space detail screen uses: `assignedUserId === userId`, independent of
+  // whether `scheduledDate` is set) but the slot has no date yet — leftover
+  // data from before slot dates were assigned at space-start time. These
+  // must NOT be treated as "no assignment": surface a distinct message
+  // instead of the generic "already posted everything" one.
+  const [unresolvedCenterRoundIds, setUnresolvedCenterRoundIds] = useState<Set<string> | undefined>(
+    undefined,
+  );
   useEffect(() => {
     let cancelled = false;
     async function run() {
       if (!id || !userId) {
         setAllCenterSlots([]);
+        setUnresolvedCenterRoundIds(new Set());
         return;
       }
       // The rounds query hasn't resolved yet — `rounds` is just the `?? []`
@@ -648,14 +658,17 @@ export default function SpaceScheduleSendScreen() {
       // (undefined) instead of prematurely deciding there's nothing assigned.
       if (roundsQuery.isLoading) {
         setAllCenterSlots(undefined);
+        setUnresolvedCenterRoundIds(undefined);
         return;
       }
       const targetRounds = rounds.filter((r) => r.status === "ACTIVE" || r.status === "UPCOMING");
       if (targetRounds.length === 0) {
         setAllCenterSlots([]);
+        setUnresolvedCenterRoundIds(new Set());
         return;
       }
       setAllCenterSlots(undefined);
+      setUnresolvedCenterRoundIds(undefined);
       const results = await Promise.all(
         targetRounds.map((r) =>
           listSpaceRoundSlots(id, r.id).catch(() => [] as SpaceRoundSlotWithUser[]),
@@ -663,13 +676,17 @@ export default function SpaceScheduleSendScreen() {
       );
       if (cancelled) return;
       const mine: { date: string; roundId: string }[] = [];
+      const unresolved = new Set<string>();
       targetRounds.forEach((r, idx) => {
         const mySlot = results[idx].find((s) => s.assignedUserId === userId);
         if (mySlot?.scheduledDate) {
           mine.push({ date: mySlot.scheduledDate, roundId: r.id });
+        } else if (mySlot) {
+          unresolved.add(r.id);
         }
       });
       setAllCenterSlots(mine);
+      setUnresolvedCenterRoundIds(unresolved);
     }
     run();
     return () => {
@@ -708,6 +725,17 @@ export default function SpaceScheduleSendScreen() {
         (s) => !pendingCenterRoundIds.has(s.roundId) && !sentCenterRoundIds.has(s.roundId),
       ),
     [allCenterSlots, pendingCenterRoundIds, sentCenterRoundIds],
+  );
+  // Assigned CENTER slots that still have no `scheduledDate` and aren't
+  // already covered by a pending/sent reservation — these are the ones the
+  // "이미 글을 모두 올렸어요!" check must NOT silently swallow.
+  const hasUnresolvedCenterAssignment = useMemo(
+    () =>
+      !!unresolvedCenterRoundIds &&
+      [...unresolvedCenterRoundIds].some(
+        (rid) => !pendingCenterRoundIds.has(rid) && !sentCenterRoundIds.has(rid),
+      ),
+    [unresolvedCenterRoundIds, pendingCenterRoundIds, sentCenterRoundIds],
   );
 
   // Opening letters are reservable per-round: only an operator may fill
@@ -833,11 +861,22 @@ export default function SpaceScheduleSendScreen() {
   const handleStartNewReservation = useCallback(() => {
     if (isSchedulingBlocked || emptySlots === undefined) return;
     if (emptySlots.length === 0) {
+      // Don't tell an assigned-but-undated member "you already posted
+      // everything" — that's only true when there really is no open slot.
+      // A leftover slot with no `scheduledDate` (pre-fix data) still means
+      // they have a turn; they just can't self-serve a date here.
+      if (hasUnresolvedCenterAssignment) {
+        Alert.alert(
+          "알림",
+          "배정된 자리가 있지만 날짜가 아직 설정되지 않았어요. 운영자에게 문의해주세요.",
+        );
+        return;
+      }
       Alert.alert("알림", "이미 글을 모두 올렸어요!");
       return;
     }
     setShowSlotPicker(true);
-  }, [isSchedulingBlocked, emptySlots]);
+  }, [isSchedulingBlocked, emptySlots, hasUnresolvedCenterAssignment]);
 
   const handlePickSlot = useCallback((slot: EmptySlot) => {
     setShowSlotPicker(false);
