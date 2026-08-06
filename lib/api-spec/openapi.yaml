@@ -4024,6 +4024,10 @@ components:
     SpaceMember:
       type: object
       properties:
+        id:
+          type: string
+          format: uuid
+          description: Participation ID (used to remove/withdraw this member)
         userId:
           type: string
           format: uuid
@@ -4034,7 +4038,15 @@ components:
           type: string
         status:
           type: string
-      required: [userId, role, status]
+        displayName:
+          type: string
+          nullable: true
+          description: "Pseudonymous display name (\"참여자 N\") for anonymous spaces, based on join order. Null for non-anonymous spaces."
+        createdAt:
+          type: string
+          format: date-time
+          description: When this participation was created (join order)
+      required: [id, userId, role, status, createdAt]
 
     SpaceRoundSlotWithUser:
       type: object

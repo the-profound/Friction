@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   RefreshControl,
   Platform,
-  Modal,
   Animated,
   PanResponder,
   Dimensions,
@@ -35,11 +34,7 @@ import {
   getListSpaceRoundsQueryKey,
   useListSpaceLetters,
   getListSpaceLettersQueryKey,
-  useListSpaceCodeRequests,
-  getListSpaceCodeRequestsQueryKey,
-  useUpdateSpaceCodeRequest,
   useUpdateSpace,
-  ListSpaceCodeRequestsStatus,
   getArticle,
   getGetArticleQueryKey,
   useListSpaceRoundSlots,
@@ -48,7 +43,6 @@ import {
 import type {
   SpaceRound,
   SpaceLetter,
-  SpaceCodeRequestWithRequester,
   SpaceWithCreatorInfo,
   Article,
   ArticleCover,
@@ -683,126 +677,6 @@ function RoundSection({
     </View>
   );
 }
-
-// ─── Code Request Item ────────────────────────────────────────────────────────
-
-function CodeRequestItem({
-  item,
-  onApprove,
-  onReject,
-  processing,
-  recruitmentClosed,
-}: {
-  item: SpaceCodeRequestWithRequester;
-  onApprove: () => void;
-  onReject: () => void;
-  processing: boolean;
-  recruitmentClosed: boolean;
-}) {
-  return (
-    <View style={styles.codeRequestItem}>
-      <View style={styles.codeRequestLeft}>
-        <View style={styles.codeRequestAvatarPlaceholder}>
-          <Feather name="user" size={14} color={Colors.zinc500} />
-        </View>
-        <View style={styles.codeRequestMeta}>
-          <Text style={styles.codeRequestNickname} numberOfLines={1}>
-            {item.requesterNickname ?? "알 수 없음"}
-          </Text>
-          <Text style={styles.codeRequestCode}>
-            코드: {item.codeRequest.code}
-          </Text>
-        </View>
-      </View>
-      <View style={styles.codeRequestActions}>
-        <ScalePressable
-          contentStyle={[styles.actionBtn, styles.rejectBtn]}
-          onPress={onReject}
-          disabled={processing}
-        >
-          <Text style={styles.rejectBtnText}>거절</Text>
-        </ScalePressable>
-        <ScalePressable
-          contentStyle={[
-            styles.actionBtn,
-            styles.approveBtn,
-            recruitmentClosed && styles.approveBtnDisabled,
-          ]}
-          onPress={recruitmentClosed ? undefined : onApprove}
-          disabled={processing || recruitmentClosed}
-        >
-          <Text style={styles.approveBtnText}>
-            {processing ? "처리 중" : recruitmentClosed ? "마감" : "승인"}
-          </Text>
-        </ScalePressable>
-      </View>
-    </View>
-  );
-}
-
-// ─── Android Rejection Reason Modal ──────────────────────────────────────────
-
-function RejectReasonModal({
-  visible,
-  onCancel,
-  onConfirm,
-}: {
-  visible: boolean;
-  onCancel: () => void;
-  onConfirm: (reason: string) => void;
-}) {
-  const [reason, setReason] = useState("");
-  const insets = useSafeAreaInsets();
-
-  const handleConfirm = () => {
-    const trimmed = reason.trim();
-    if (!trimmed) {
-      Alert.alert("알림", "거절 사유를 입력해주세요.");
-      return;
-    }
-    onConfirm(trimmed);
-    setReason("");
-  };
-
-  const handleCancel = () => {
-    setReason("");
-    onCancel();
-  };
-
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleCancel}>
-      <View style={modalStyles.backdrop}>
-        <View style={[modalStyles.sheet, { paddingBottom: insets.bottom + 16 }]}>
-          <Text style={modalStyles.title}>거절 사유 입력</Text>
-          <Text style={modalStyles.subtitle}>
-            사유를 입력해주세요. 현재는 운영자에게만 기록됩니다.
-          </Text>
-          <TextInput
-            style={modalStyles.input}
-            value={reason}
-            onChangeText={setReason}
-            placeholder="거절 사유를 입력하세요"
-            placeholderTextColor={Colors.zinc400}
-            multiline
-            autoFocus
-            maxLength={200}
-          />
-          <View style={modalStyles.btnRow}>
-            <ScalePressable style={modalStyles.btnOuter} contentStyle={[modalStyles.btn, modalStyles.cancelBtn]} onPress={handleCancel}>
-              <Text style={modalStyles.cancelBtnText}>취소</Text>
-            </ScalePressable>
-            <ScalePressable style={modalStyles.btnOuter} contentStyle={[modalStyles.btn, modalStyles.confirmBtn]} onPress={handleConfirm}>
-              <Text style={modalStyles.confirmBtnText}>거절</Text>
-            </ScalePressable>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-// ─── Description section ──────────────────────────────────────────────────────
-
 function DescriptionSection({
   space,
   isOperator,
@@ -964,8 +838,6 @@ export default function SpaceDetailScreen() {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
 
-  const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
-  const [rejectTargetId, setRejectTargetId] = useState<string | null>(null);
   const [showKebabSheet, setShowKebabSheet] = useState(false);
 
   // ── Track navigation to reader so we can refetch letters on return ───────
@@ -1021,31 +893,11 @@ export default function SpaceDetailScreen() {
     ? (space.operatorParticipates ? space.maxParticipants - 1 : space.maxParticipants)
     : null;
 
-  const recruitmentClosed =
-    space?.status !== "RECRUITING" ||
-    !!(effectiveMax != null && space.participantCount >= effectiveMax);
-
   // Capacity-full flag: participant cap reached (independent of status).
   const isCapacityFull = !!(effectiveMax != null && (space?.participantCount ?? 0) >= effectiveMax);
 
-  const codeRequestsQuery = useListSpaceCodeRequests(
-    id,
-    { status: ListSpaceCodeRequestsStatus.PENDING },
-    {
-      query: {
-        enabled: !!id && isOperator,
-        queryKey: getListSpaceCodeRequestsQueryKey(id, { status: ListSpaceCodeRequestsStatus.PENDING }),
-      },
-    },
-  );
-
-  const updateCodeRequest = useUpdateSpaceCodeRequest();
-
   const rounds = (roundsQuery.data ?? []) as SpaceRound[];
   const letters = (lettersQuery.data ?? []) as SpaceLetter[];
-  const codeRequests = (
-    codeRequestsQuery.data ?? []
-  ) as SpaceCodeRequestWithRequester[];
 
   // Fallback for legacy data: OPENING letters created by the start flow
   // before rounds existed have no spaceRoundId. Group them under round 1 so
@@ -1078,102 +930,21 @@ export default function SpaceDetailScreen() {
   const isRefreshing =
     joinContextQuery.isFetching ||
     roundsQuery.isFetching ||
-    lettersQuery.isFetching ||
-    (isOperator && codeRequestsQuery.isFetching);
+    lettersQuery.isFetching;
 
   const refetchAll = useCallback(async () => {
     await Promise.all([
       joinContextQuery.refetch(),
       roundsQuery.refetch(),
       lettersQuery.refetch(),
-      isOperator ? codeRequestsQuery.refetch() : Promise.resolve(),
     ]);
-  }, [joinContextQuery, roundsQuery, lettersQuery, codeRequestsQuery, isOperator]);
+  }, [joinContextQuery, roundsQuery, lettersQuery]);
 
   const handleDescriptionSaved = useCallback(() => {
     queryClient.invalidateQueries({
       queryKey: getGetSpaceJoinContextQueryKey(id, { userId }),
     });
   }, [queryClient, id, userId]);
-
-  const handleApprove = useCallback(
-    async (requestId: string) => {
-      if (processingRequestId) return;
-      setProcessingRequestId(requestId);
-      try {
-        await updateCodeRequest.mutateAsync({
-          id,
-          requestId,
-          data: { status: "APPROVED" },
-        });
-        await codeRequestsQuery.refetch();
-      } catch {
-        Alert.alert("오류", "승인에 실패했어요. 다시 시도해주세요.");
-      } finally {
-        setProcessingRequestId(null);
-      }
-    },
-    [processingRequestId, updateCodeRequest, id, codeRequestsQuery],
-  );
-
-  const handleReject = useCallback(
-    (requestId: string) => {
-      if (processingRequestId) return;
-      if (Platform.OS === "ios") {
-        Alert.prompt(
-          "거절 사유",
-          "사유를 입력해주세요. 현재는 운영자에게만 기록됩니다.",
-          async (reason) => {
-            if (reason === undefined) return;
-            const trimmed = reason.trim();
-            if (!trimmed) {
-              Alert.alert("알림", "거절 사유를 입력해주세요.");
-              return;
-            }
-            setProcessingRequestId(requestId);
-            try {
-              await updateCodeRequest.mutateAsync({
-                id,
-                requestId,
-                data: { status: "REJECTED", rejectionReason: trimmed },
-              });
-              await codeRequestsQuery.refetch();
-            } catch {
-              Alert.alert("오류", "거절에 실패했어요. 다시 시도해주세요.");
-            } finally {
-              setProcessingRequestId(null);
-            }
-          },
-          "plain-text",
-        );
-      } else {
-        setRejectTargetId(requestId);
-      }
-    },
-    [processingRequestId, updateCodeRequest, id, codeRequestsQuery],
-  );
-
-  const handleRejectConfirm = useCallback(
-    async (reason: string) => {
-      const requestId = rejectTargetId;
-      if (!requestId) return;
-      setRejectTargetId(null);
-      setProcessingRequestId(requestId);
-      try {
-        await updateCodeRequest.mutateAsync({
-          id,
-          requestId,
-          data: { status: "REJECTED", rejectionReason: reason },
-        });
-        await codeRequestsQuery.refetch();
-      } catch {
-        Alert.alert("오류", "거절에 실패했어요. 다시 시도해주세요.");
-      } finally {
-        setProcessingRequestId(null);
-      }
-    },
-    [rejectTargetId, updateCodeRequest, id, codeRequestsQuery],
-  );
 
   const handlePressLetter = useCallback(
     (letter: SpaceLetter, layout: OriginLayout) => {
@@ -1362,8 +1133,12 @@ export default function SpaceDetailScreen() {
     );
   }
 
-  // ─── Non-participant ────────────────────────────────────────────────────────
-  if (!myParticipation) {
+  // ─── Non-participant / removed participant ─────────────────────────────────
+  // Withdrawn (kicked) participants keep a truthy participation row, so we
+  // must also check status here — not just presence — or a removed user
+  // could still view this screen.
+  if (!myParticipation || myParticipation.status !== "APPROVED") {
+    const wasRemoved = myParticipation?.status === "WITHDRAWN";
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.header}>
@@ -1377,9 +1152,13 @@ export default function SpaceDetailScreen() {
         </View>
         <View style={styles.centerContainer}>
           <Feather name="lock" size={36} color={Colors.zinc300} />
-          <Text style={styles.errorText}>참여하지 않은 공간이에요</Text>
+          <Text style={styles.errorText}>
+            {wasRemoved ? "더 이상 참여할 수 없는 공간이에요" : "참여하지 않은 공간이에요"}
+          </Text>
           <Text style={styles.errorSubText}>
-            초대 문구로 참여 신청 후 운영자 승인을 받으세요
+            {wasRemoved
+              ? "운영자에 의해 공간 참여가 종료됐어요"
+              : "초대 문구로 참여 신청 후 운영자 승인을 받으세요"}
           </Text>
           <ScalePressable style={styles.retryButtonOuter} contentStyle={styles.retryButton} onPress={() => router.back()}>
             <Text style={styles.retryButtonText}>돌아가기</Text>
@@ -1395,13 +1174,6 @@ export default function SpaceDetailScreen() {
   // ─── Main content ───────────────────────────────────────────────────────────
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* Android rejection reason modal */}
-      <RejectReasonModal
-        visible={!!rejectTargetId}
-        onCancel={() => setRejectTargetId(null)}
-        onConfirm={handleRejectConfirm}
-      />
-
       {/* Header */}
       <View style={styles.header}>
         <ScalePressable onPress={() => router.back()} hitSlop={12}>
@@ -1547,50 +1319,6 @@ export default function SpaceDetailScreen() {
         {/* ── Info / rounds separator ── */}
         <View style={styles.infoSeparator} />
 
-        {/* ── Code requests (operator only) ── */}
-        {isOperator && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionLabel}>참여 요청</Text>
-              {codeRequests.length > 0 && (
-                <View style={styles.countBadge}>
-                  <Text style={styles.countBadgeText}>{codeRequests.length}</Text>
-                </View>
-              )}
-            </View>
-            {recruitmentClosed && (
-              <View style={styles.recruitmentClosedBanner}>
-                <Feather name="slash" size={13} color={Colors.zinc500} />
-                <Text style={styles.recruitmentClosedText}>모집이 마감되었어요</Text>
-              </View>
-            )}
-            {codeRequestsQuery.isLoading ? (
-              <View style={styles.sectionLoading}>
-                <ActivityIndicator size="small" color={Colors.zinc400} />
-              </View>
-            ) : codeRequests.length === 0 ? (
-              <View style={styles.emptySection}>
-                <Text style={styles.emptySectionText}>
-                  대기 중인 요청이 없어요
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.codeRequestList}>
-                {codeRequests.map((item) => (
-                  <CodeRequestItem
-                    key={item.codeRequest.id}
-                    item={item}
-                    onApprove={() => handleApprove(item.codeRequest.id)}
-                    onReject={() => handleReject(item.codeRequest.id)}
-                    processing={processingRequestId === item.codeRequest.id}
-                    recruitmentClosed={recruitmentClosed}
-                  />
-                ))}
-              </View>
-            )}
-          </View>
-        )}
-
         {/* ── Rounds sections / Recruiting planned info ── */}
         {isRecruiting ? (
           <View style={styles.section}>
@@ -1734,6 +1462,14 @@ export default function SpaceDetailScreen() {
             onPress: () =>
               router.push({
                 pathname: "/of-space-rounds" as never,
+                params: { id, spaceName: space.name },
+              }),
+          },
+          {
+            label: "참여자 관리",
+            onPress: () =>
+              router.push({
+                pathname: "/of-space-participants" as never,
                 params: { id, spaceName: space.name },
               }),
           },
@@ -2029,21 +1765,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.zinc400,
   },
-  countBadge: {
-    backgroundColor: Colors.noticeAccentSoft,
-    borderRadius: 10,
-    paddingHorizontal: 7,
-    paddingVertical: 1,
-    minWidth: 20,
-    alignItems: "center",
-  },
-  countBadgeText: {
-    ...Typography.caption,
-    fontSize: 11,
-    color: Colors.noticeAccent,
-    fontWeight: "600",
-  },
-
   // ─── Rounds list ───────────────────────────────────────────────────────────
   roundsList: {
     gap: 24,
@@ -2229,83 +1950,6 @@ const styles = StyleSheet.create({
     color: Colors.zinc500,
   },
 
-  // ─── Code request items ────────────────────────────────────────────────────
-  codeRequestList: {
-    marginHorizontal: Spacing.screenPx,
-    gap: 8,
-  },
-  codeRequestItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: Colors.zinc50,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.zinc200,
-    padding: 14,
-    gap: 10,
-  },
-  codeRequestLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    flex: 1,
-  },
-  codeRequestAvatarPlaceholder: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: Colors.zinc100,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  codeRequestMeta: {
-    flex: 1,
-    gap: 2,
-  },
-  codeRequestNickname: {
-    ...Typography.bodySemiBold,
-    fontSize: 14,
-    color: Colors.zinc800,
-  },
-  codeRequestCode: {
-    ...Typography.caption,
-    fontSize: 11,
-    color: Colors.zinc400,
-  },
-  codeRequestActions: {
-    flexDirection: "row",
-    gap: 6,
-  },
-  actionBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  rejectBtn: {
-    backgroundColor: Colors.white,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.zinc300,
-  },
-  rejectBtnText: {
-    ...Typography.caption,
-    fontSize: 13,
-    color: Colors.zinc500,
-    fontWeight: "600",
-  },
-  approveBtn: {
-    backgroundColor: Colors.zinc900,
-  },
-  approveBtnDisabled: {
-    backgroundColor: Colors.zinc300,
-  },
-  approveBtnText: {
-    ...Typography.caption,
-    fontSize: 13,
-    color: Colors.white,
-    fontWeight: "600",
-  },
-
   // ─── Operator actions ──────────────────────────────────────────────────────
   operatorActions: {
     marginHorizontal: Spacing.screenPx,
@@ -2466,76 +2110,5 @@ const styles = StyleSheet.create({
     ...Typography.caption,
     fontSize: 12,
     color: Colors.zinc500,
-  },
-});
-
-// ─── Modal Styles ─────────────────────────────────────────────────────────────
-
-const modalStyles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
-    justifyContent: "flex-end",
-  },
-  sheet: {
-    backgroundColor: Colors.white,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 24,
-    paddingTop: 20,
-    gap: 12,
-  },
-  title: {
-    ...Typography.bodySemiBold,
-    fontSize: 17,
-    color: Colors.zinc900,
-  },
-  subtitle: {
-    ...Typography.body,
-    fontSize: 13,
-    color: Colors.zinc500,
-    lineHeight: 18,
-    marginTop: -4,
-  },
-  input: {
-    ...Typography.body,
-    fontSize: 14,
-    color: Colors.zinc800,
-    borderWidth: 1,
-    borderColor: Colors.zinc300,
-    borderRadius: 10,
-    padding: 12,
-    minHeight: 80,
-    textAlignVertical: "top",
-    backgroundColor: Colors.zinc50,
-  },
-  btnRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 4,
-  },
-  btnOuter: {
-    flex: 1,
-  },
-  btn: {
-    paddingVertical: 13,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  cancelBtn: {
-    backgroundColor: Colors.zinc100,
-  },
-  cancelBtnText: {
-    ...Typography.bodySemiBold,
-    fontSize: 15,
-    color: Colors.zinc600,
-  },
-  confirmBtn: {
-    backgroundColor: Colors.zinc900,
-  },
-  confirmBtnText: {
-    ...Typography.bodySemiBold,
-    fontSize: 15,
-    color: Colors.white,
   },
 });

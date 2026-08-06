@@ -859,13 +859,38 @@ router.delete("/spaces/:id/rounds/:roundId/slots/:slotId", requireAuth, async (r
 
 // ─── Space Members (with nicknames, for slot assignment) ──────────────────────
 
-router.get("/spaces/:id/members", async (req, res) => {
+router.get("/spaces/:id/members", requireAuth, async (req, res) => {
+  const callerId = req.user!.id;
+  const [callerParticipation] = await db
+    .select()
+    .from(spaceParticipationsTable)
+    .where(
+      and(
+        eq(spaceParticipationsTable.spaceId, req.params.id),
+        eq(spaceParticipationsTable.userId, callerId),
+        eq(spaceParticipationsTable.role, "OPERATOR"),
+        eq(spaceParticipationsTable.status, "APPROVED"),
+      ),
+    )
+    .limit(1);
+  if (!callerParticipation) {
+    res.status(403).json({ error: "Only operators can view the member list" });
+    return;
+  }
+
+  const [space] = await db
+    .select({ isAnonymous: spacesTable.isAnonymous })
+    .from(spacesTable)
+    .where(eq(spacesTable.id, req.params.id))
+    .limit(1);
   const participations = await db
     .select({
+      id: spaceParticipationsTable.id,
       userId: spaceParticipationsTable.userId,
       role: spaceParticipationsTable.role,
       status: spaceParticipationsTable.status,
       nickname: usersTable.nickname,
+      createdAt: spaceParticipationsTable.createdAt,
     })
     .from(spaceParticipationsTable)
     .innerJoin(usersTable, eq(spaceParticipationsTable.userId, usersTable.id))
@@ -874,8 +899,25 @@ router.get("/spaces/:id/members", async (req, res) => {
         eq(spaceParticipationsTable.spaceId, req.params.id),
         eq(spaceParticipationsTable.status, "APPROVED"),
       ),
-    );
-  res.json(participations);
+    )
+    .orderBy(spaceParticipationsTable.createdAt);
+
+  // For anonymous spaces: derive a stable pseudonymous display name per
+  // participant, based on join order across the FULL confirmed roster (not
+  // just letter authors) so the same person's pseudonym is consistent
+  // wherever it's shown in the app.
+  const displayNameMap = new Map<string, string>();
+  if (space?.isAnonymous) {
+    participations.forEach((p, i) => {
+      displayNameMap.set(p.userId, `참여자 ${i + 1}`);
+    });
+  }
+
+  const result = participations.map((p) => ({
+    ...p,
+    displayName: displayNameMap.get(p.userId) ?? null,
+  }));
+  res.json(result);
 });
 
 router.get("/spaces/:id/participations", async (req, res) => {
@@ -894,7 +936,24 @@ router.post("/spaces/:id/participations", async (req, res) => {
   res.status(201).json(participation);
 });
 
-router.patch("/spaces/:id/participations/:participationId", async (req, res) => {
+router.patch("/spaces/:id/participations/:participationId", requireAuth, async (req, res) => {
+  const callerId = req.user!.id;
+  const [callerParticipation] = await db
+    .select()
+    .from(spaceParticipationsTable)
+    .where(
+      and(
+        eq(spaceParticipationsTable.spaceId, req.params.id),
+        eq(spaceParticipationsTable.userId, callerId),
+        eq(spaceParticipationsTable.role, "OPERATOR"),
+        eq(spaceParticipationsTable.status, "APPROVED"),
+      ),
+    )
+    .limit(1);
+  if (!callerParticipation) {
+    res.status(403).json({ error: "Only operators can update participations" });
+    return;
+  }
   const [participation] = await db
     .update(spaceParticipationsTable)
     .set(req.body)
@@ -1222,27 +1281,29 @@ router.get("/spaces/:id/letters", requireAuth, async (req, res) => {
   const articleMap = new Map(articles.map((a) => [a.id, a]));
   const authorMap = new Map(authors.map((u) => [u.id, u.nickname]));
 
-  // For anonymous spaces: derive a stable pseudonymous display name per author
+  // For anonymous spaces: derive a stable pseudonymous display name per
+  // author, based on join order across the FULL confirmed roster (not just
+  // letter authors) so the same person's pseudonym stays consistent with
+  // what's shown on the participant management screen.
   const [space] = await db
     .select({ isAnonymous: spacesTable.isAnonymous })
     .from(spacesTable)
     .where(eq(spacesTable.id, req.params.id))
     .limit(1);
 
-  let displayNameMap = new Map<string, string>();
+  const displayNameMap = new Map<string, string>();
   if (space?.isAnonymous) {
-    const allAuthorIds = [...new Set(letters.map((l) => l.authorId))];
-    const participations = await db
+    const allParticipations = await db
       .select({ userId: spaceParticipationsTable.userId, createdAt: spaceParticipationsTable.createdAt })
       .from(spaceParticipationsTable)
       .where(
         and(
           eq(spaceParticipationsTable.spaceId, req.params.id),
-          inArray(spaceParticipationsTable.userId, allAuthorIds),
+          eq(spaceParticipationsTable.status, "APPROVED"),
         ),
       )
       .orderBy(spaceParticipationsTable.createdAt);
-    participations.forEach((p, i) => {
+    allParticipations.forEach((p, i) => {
       displayNameMap.set(p.userId, `참여자 ${i + 1}`);
     });
   }

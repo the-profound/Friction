@@ -7,8 +7,14 @@
  */
 
 export interface SpaceMember {
+  /** Participation ID (used to remove/withdraw this member) */
+  id: string;
   userId: string;
   nickname?: string | null;
   role: string;
   status: string;
+  /** Pseudonymous display name ("참여자 N") for anonymous spaces, based on join order. Null for non-anonymous spaces. */
+  displayName?: string | null;
+  /** When this participation was created (join order) */
+  createdAt: Date;
 }

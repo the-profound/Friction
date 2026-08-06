@@ -2512,10 +2512,23 @@ export const ListSpaceMembersParams = zod.object({
 });
 
 export const ListSpaceMembersResponseItem = zod.object({
+  id: zod
+    .string()
+    .uuid()
+    .describe("Participation ID (used to remove\/withdraw this member)"),
   userId: zod.string().uuid(),
   nickname: zod.string().nullish(),
   role: zod.string(),
   status: zod.string(),
+  displayName: zod
+    .string()
+    .nullish()
+    .describe(
+      'Pseudonymous display name (\"참여자 N\") for anonymous spaces, based on join order. Null for non-anonymous spaces.',
+    ),
+  createdAt: zod
+    .date()
+    .describe("When this participation was created (join order)"),
 });
 export const ListSpaceMembersResponse = zod.array(ListSpaceMembersResponseItem);
 
