@@ -36,3 +36,4 @@
 - [Friction space-round draft data flow](friction-space-round-draft.md) — SpaceRound rows exist from space creation onward (title/description nullable); "draft" = current DB rows, not local-only UI state — seed local state from them, don't reintroduce blank defaults.
 - [Friction signup auto-confirm auth race](friction-signup-auth-race.md) — Supabase auto-confirm fires onAuthStateChange mid-signUp(), before profile sync runs; suppress session propagation until sync completes.
 - [Per-round letter scoping](friction-per-round-letter-scoping.md) — making a SpaceLetter type "one per round" touches 5 call sites (reuse match, dup-check, POST+PATCH date validation, cancel scope, frontend eligibility); fix all or the constraint half-holds.
+- [Space slot scheduledDate backfill](friction-space-slot-date-backfill.md) — reuse the exported `calculateOccasionDate`, reconstruct the same global occasion cursor (advance by total slots, not just NULLs) or later dates drift.

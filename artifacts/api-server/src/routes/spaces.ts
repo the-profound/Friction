@@ -46,7 +46,7 @@ function toDate(val: unknown): Date | undefined {
  * dates and slot dates never disagree, and that slot dates strictly advance
  * slot-by-slot across the whole space (never overlapping or going backwards).
  */
-function calculateOccasionDate(
+export function calculateOccasionDate(
   startedAt: Date,
   scheduleType: "N_DAY" | "WEEKDAY",
   intervalDays: number,
