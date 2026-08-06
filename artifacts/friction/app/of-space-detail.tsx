@@ -535,20 +535,32 @@ function RoundSection({
   const openingLetter = letters.find((l) => l.letterType === "OPENING") ?? null;
   const hasOpeningLetter = openingLetter !== null;
 
-  // Placeholder card shown when no opening letter exists yet.
+  // Placeholder card shown when no opening letter exists yet. The write
+  // button is only offered while the round is still UPCOMING — once it has
+  // started (ACTIVE) or finished (COMPLETED), the reservation screen no
+  // longer accepts a new opening-letter booking for it, so showing a
+  // pressable button here would deep-link into a dead end. Show an
+  // explanatory notice instead.
   const openingPlaceholderNode: React.ReactNode =
     !isSpaceRecruiting
       ? isOperator && !isSpaceArchived
-        ? (
-          <ScalePressable
-            style={spaceCarouselStyles.openingSlotCard}
-            contentStyle={spaceCarouselStyles.openingSlotCardInner}
-            onPress={() => onPressWriteOpening(round)}
-          >
-            <Feather name="edit-3" size={18} color={Colors.zinc400} />
-            <Text style={spaceCarouselStyles.openingSlotWriteText}>여는 편지 작성</Text>
-          </ScalePressable>
-        )
+        ? isUpcoming
+          ? (
+            <ScalePressable
+              style={spaceCarouselStyles.openingSlotCard}
+              contentStyle={spaceCarouselStyles.openingSlotCardInner}
+              onPress={() => onPressWriteOpening(round)}
+            >
+              <Feather name="edit-3" size={18} color={Colors.zinc400} />
+              <Text style={spaceCarouselStyles.openingSlotWriteText}>여는 편지 작성</Text>
+            </ScalePressable>
+          )
+          : (
+            <View style={[spaceCarouselStyles.openingSlotCard, spaceCarouselStyles.openingSlotCardInner]}>
+              <Feather name="clock" size={18} color={Colors.zinc300} />
+              <Text style={spaceCarouselStyles.openingSlotEmptyText}>이미 회차가{"\n"}시작했어요!</Text>
+            </View>
+          )
         : (
           <View style={[spaceCarouselStyles.openingSlotCard, spaceCarouselStyles.openingSlotCardInner]}>
             <Feather name="mail" size={18} color={Colors.zinc300} />

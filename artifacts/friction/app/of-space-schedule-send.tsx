@@ -739,8 +739,11 @@ export default function SpaceScheduleSendScreen() {
   );
 
   // Opening letters are reservable per-round: only an operator may fill
-  // them, and only for rounds (ACTIVE/UPCOMING) that don't already have a
-  // PENDING or SENT opening reservation.
+  // them, and only for rounds that haven't started yet (UPCOMING) and
+  // don't already have a PENDING or SENT opening reservation. Once a round
+  // is ACTIVE or COMPLETED there's no reservation window left, matching
+  // the "여는 편지 작성" button on the space-detail screen, which also only
+  // shows for UPCOMING rounds.
   const openingRoundIdsWithSend = useMemo(
     () =>
       new Set(
@@ -755,7 +758,7 @@ export default function SpaceScheduleSendScreen() {
     () =>
       isOperator
         ? rounds.filter((r) => {
-            if (r.status !== "ACTIVE" && r.status !== "UPCOMING") return false;
+            if (r.status !== "UPCOMING") return false;
             if (openingRoundIdsWithSend.has(r.id)) return false;
             // A round whose start date has already passed has no valid
             // reservation window left (must be on/before startsAt and not
@@ -889,8 +892,12 @@ export default function SpaceScheduleSendScreen() {
   // eligibility list the slot picker itself uses (operator role, round
   // status, no existing pending/sent opening reservation, feasible date
   // window) so this entry point can never bypass those checks — if the
-  // round isn't eligible, silently do nothing and let the screen render
-  // normally without a deep-linked sheet.
+  // round isn't eligible, tell the user why instead of silently leaving
+  // them stranded on the reservation-list screen. The space-detail button
+  // is only shown for UPCOMING rounds without an opening letter, so this
+  // should normally always succeed; the alert only fires for the narrow
+  // race where the round started or someone else reserved it between the
+  // button being shown and this screen's data finishing its load.
   //
   // This is a one-shot action, consumed via `consumedOpeningRoundIdRef`: once
   // it has auto-picked (or attempted to, for a given value), it never fires
@@ -915,19 +922,32 @@ export default function SpaceScheduleSendScreen() {
     if (roundsQuery.isLoading || sendsQuery.isLoading || joinContextQuery.isLoading) return;
     consumedOpeningRoundIdRef.current = openingRoundId;
     const round = openingEligibleRounds.find((r) => r.id === openingRoundId);
-    if (!round) return;
-    setPickedSlot({
-      kind: "opening",
-      roundId: round.id,
-      roundNumber: round.roundNumber,
-      maxDate: round.startsAt ?? null,
-    });
+    if (round) {
+      setPickedSlot({
+        kind: "opening",
+        roundId: round.id,
+        roundNumber: round.roundNumber,
+        maxDate: round.startsAt ?? null,
+      });
+      return;
+    }
+    // Not eligible after all — figure out the most likely reason so the
+    // message isn't a generic dead end.
+    const targetRound = rounds.find((r) => r.id === openingRoundId);
+    const message = openingRoundIdsWithSend.has(openingRoundId)
+      ? "다른 사람이 방금 이 회차의 여는 편지를 예약했어요."
+      : targetRound && targetRound.status !== "UPCOMING"
+        ? "이미 회차가 시작해서 여는 편지를 예약할 수 없어요."
+        : "지금은 이 회차에 여는 편지를 예약할 수 없어요.";
+    Alert.alert("예약할 수 없어요", message);
   }, [
     openingRoundId,
     roundsQuery.isLoading,
     sendsQuery.isLoading,
     joinContextQuery.isLoading,
     openingEligibleRounds,
+    rounds,
+    openingRoundIdsWithSend,
   ]);
 
   const pendingSends = sends.filter((s) => s.status === "PENDING");
