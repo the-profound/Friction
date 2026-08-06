@@ -324,12 +324,17 @@ export default function CardSelectOverlay({
       swipeY.setValue(0);
       progress.setValue(0);
       resetEnvelopeAnim();
-      Animated.spring(progress, {
-        toValue: 1,
-        tension: 70,
-        friction: 12,
-        useNativeDriver: false,
-      }).start();
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          if (!openedRef.current) return;
+          Animated.spring(progress, {
+            toValue: 1,
+            tension: 70,
+            friction: 12,
+            useNativeDriver: false,
+          }).start();
+        }),
+      );
     } else {
       openedRef.current = false;
       if (rendered && !closingRef.current) {
