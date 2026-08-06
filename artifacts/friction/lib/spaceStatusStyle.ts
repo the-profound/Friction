@@ -32,8 +32,8 @@ export function spaceStatusStyle(status: string): SpaceStatusStyle {
     };
   }
   return {
-    backgroundColor: Colors.zinc700,
-    borderColor: Colors.zinc700,
+    backgroundColor: Colors.zinc600,
+    borderColor: Colors.zinc600,
     borderWidth: 0,
     textColor: Colors.white,
   };

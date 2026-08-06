@@ -285,7 +285,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    backgroundColor: Colors.zinc900,
+    backgroundColor: Colors.zinc600,
   },
   archivedBadgeText: {
     ...Typography.caption,
