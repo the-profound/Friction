@@ -1650,10 +1650,13 @@ export default function ReadScreen() {
             {/* Card: shadow wrapper gives floating-paper feel */}
             {/* 측정용 래퍼 — transform 바깥이므로 measureInWindow가 원래 위치를 반환 */}
             <View ref={cardWrapRef} collapsable={false} onLayout={handleCardWrapLayout}>
+            {/* 래스터 힌트는 단상 시트 축소 구간에서만 켠다. 질문 카드 단계에서는
+                카드 자체가 0.88배로 연속 축소되므로, 여기서 래스터화가 켜져 있으면
+                축소 스냅샷 위에 또 축소가 겹쳐 텍스트 해상도가 깨진다. */}
             <Animated.View
               style={pageSheetAnimStyle}
-              shouldRasterizeIOS={shouldRasterize}
-              renderToHardwareTextureAndroid={shouldRasterize}
+              shouldRasterizeIOS={shouldRasterize && visualPage < totalPages}
+              renderToHardwareTextureAndroid={shouldRasterize && visualPage < totalPages}
             >
               <View
                 style={[

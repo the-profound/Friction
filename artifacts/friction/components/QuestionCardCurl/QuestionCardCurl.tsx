@@ -164,22 +164,46 @@ function QuestionCardCurlInner({
 
   const answersRef = useRef(answers);
   answersRef.current = answers;
-  const cursorRef = useRef(0);
-  const animatingRef = useRef(false);
-
-  /* ── 스크롤 추적 refs ────────────────────────────────────────────────── */
-  const contentHeightRef = useRef(0);
-  const availableHeightRef = useRef(0);
-  const scrollStartRef = useRef(0);
-  const gestureScrolledRef = useRef(false);
-  const gestureHandledRef = useRef(false);
-  const dragAxisRef = useRef<"horizontal" | "vertical" | null>(null);
 
   /* ── Shared values ──────────────────────────────────────────────────
    * pos: 덱 전체 배치의 단일 소스 (카드 단위 float).
-   * scrollOffsetSV: 키보드 열림 상태에서 답변 영역 스크롤.               */
+   * scrollOffsetSV: 키보드 열림 상태에서 답변 영역 스크롤.
+   *
+   * ⚠️ 상하 제스처는 UI 스레드(worklet)에서 실행된다. 따라서 제스처가 읽는
+   *    모든 상태는 ref가 아니라 shared value여야 한다 — 워클릿에서 JS ref를
+   *    읽으면 값이 캡처 시점에 고정되고, 쓰기는 조용히 무시된다.            */
   const pos = useSharedValue(0);
   const scrollOffsetSV = useSharedValue(0);
+  const cursorSV = useSharedValue(0);
+  const animatingSV = useSharedValue(0);
+  const keyboardVisibleSV = useSharedValue(0);
+  const contentHeightSV = useSharedValue(0);
+  const availableHeightSV = useSharedValue(0);
+  const scrollStartSV = useSharedValue(0);
+  const gestureScrolledSV = useSharedValue(0);
+  const gestureHandledSV = useSharedValue(0);
+
+  /* 답변 영역 클립 마스크(overflow:"hidden")는 "실제로 스크롤 중일 때"에만 건다.
+   * 마스크가 걸린 레이어는 iOS/Android에서 offscreen 합성 대상이 되는데,
+   * 드래그로 카드 스케일이 연속 변하면 매 프레임 축소 크기 기준으로 다시
+   * 래스터화되어 텍스트가 뭉개진다. 스크롤 오프셋이 0이면 클리핑할 내용이
+   * 없으므로 마스크를 아예 떼어 원본 해상도를 유지한다. */
+  const [maskActive, setMaskActive] = useState(false);
+  const maskActiveSV = useSharedValue(0);
+  const setMask = useCallback((on: boolean) => {
+    setMaskActive(on);
+  }, []);
+  /* worklet — 마스크는 "활성 카드의 스크롤 오프셋이 0이 아닐 때"에만 유지한다.
+   * 오프셋이 0으로 돌아오거나 경계에 닿아 덱 드래그로 전환되는 순간 즉시
+   * 해제해야, 카드 축소 전환이 마스크 없는 상태에서 시작된다. */
+  const setMaskState = useCallback((on: boolean) => {
+    "worklet";
+    const next = on ? 1 : 0;
+    if (maskActiveSV.value !== next) {
+      maskActiveSV.value = next;
+      runOnJS(setMask)(on);
+    }
+  }, [maskActiveSV, setMask]);
 
   /* ── 키보드 회피 ────────────────────────────────────────────────────
    * 질문 카드 단계에서는 리더 프레임 전체를 축소하지 않는다(읽기 본문 단계의
@@ -226,6 +250,7 @@ function QuestionCardCurlInner({
     const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
 
     const showSub = Keyboard.addListener(showEvent, (e) => {
+      keyboardVisibleSV.value = 1;
       /* 키보드 상단의 "윈도우 좌표" — measureInWindow와 같은 좌표계여야 한다.
        *  iOS: 윈도우 == 화면이므로 endCoordinates.screenY가 곧 키보드 상단.
        *  Android: app.json의 softwareKeyboardLayoutMode="resize"로 윈도우 자체가
@@ -244,11 +269,12 @@ function QuestionCardCurlInner({
     });
 
     const hideSub = Keyboard.addListener(hideEvent, () => {
+      keyboardVisibleSV.value = 0;
       kbOffsetSV.value = withTiming(0, { duration: 260, easing: Easing.out(Easing.cubic) });
     });
 
     return () => { showSub.remove(); hideSub.remove(); };
-  }, [applyKeyboardOffset, kbOffsetSV, windowHeight]);
+  }, [applyKeyboardOffset, kbOffsetSV, keyboardVisibleSV, windowHeight]);
 
   const answerScrollStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: scrollOffsetSV.value }],
@@ -258,29 +284,34 @@ function QuestionCardCurlInner({
    * pos는 이미 목표 정수값에 도달해 있으므로 리셋하지 않는다. cursor 상태만
    * 갱신하면 렌더 윈도우가 이동하고, 화면상 아무것도 튀지 않는다.        */
   const commitMove = useCallback((next: number) => {
-    cursorRef.current = next;
+    cursorSV.value = next;
     setCursor(next);
     scrollOffsetSV.value = 0;
-    animatingRef.current = false;
-  }, [scrollOffsetSV]);
+    maskActiveSV.value = 0;
+    setMaskActive(false);
+    animatingSV.value = 0;
+  }, [scrollOffsetSV, cursorSV, animatingSV, maskActiveSV]);
 
-  /* ── 정착 애니메이션 ───────────────────────────────────────────────── */
+  /* ── 정착 애니메이션 ─────────────────────────────────────────────────
+   * worklet — UI 스레드(제스처)와 JS 스레드(탭) 양쪽에서 호출된다.        */
   const settleTo = useCallback((delta: -1 | 0 | 1) => {
-    const target = cursorRef.current + delta;
+    "worklet";
+    const cur = cursorSV.value;
     if (delta === 0) {
       /* 취소: 현재 카드로 스프링 복귀 */
-      pos.value = withSpring(cursorRef.current, { damping: 30, stiffness: 250 });
+      pos.value = withSpring(cur, { damping: 30, stiffness: 250 });
       return;
     }
-    animatingRef.current = true;
+    const target = cur + delta;
+    animatingSV.value = 1;
     pos.value = withTiming(target, {
       duration: SLIDE_DURATION,
       easing: SLIDE_EASING,
-    }, (finished) => {
+    }, () => {
       /* 취소되더라도 커밋은 반드시 실행 (finished 게이트 금지) */
       runOnJS(commitMove)(target);
     });
-  }, [pos, commitMove]);
+  }, [pos, commitMove, cursorSV, animatingSV]);
 
   const settleToRef = useRef(settleTo);
   settleToRef.current = settleTo;
@@ -310,7 +341,7 @@ function QuestionCardCurlInner({
       Gesture.Tap()
         .runOnJS(true)
         .onEnd((e) => {
-          if (animatingRef.current) return;
+          if (animatingSV.value === 1) return;
           if (keyboardVisibleRef.current) {
             Keyboard.dismiss();
             return;
@@ -318,13 +349,14 @@ function QuestionCardCurlInner({
           // 중앙 카드가 차지하는 수직 범위
           const centerY = screenHeight / 2;
           const halfCard = cardSmallH / 2;
-          if (e.y < centerY - halfCard && cursorRef.current > 0) {
+          const cur = cursorSV.value;
+          if (e.y < centerY - halfCard && cur > 0) {
             settleToRef.current(-1);
-          } else if (e.y > centerY + halfCard && cursorRef.current < questionCountRef.current - 1) {
+          } else if (e.y > centerY + halfCard && cur < questionCountRef.current - 1) {
             settleToRef.current(1);
           }
         }),
-    [keyboardVisibleRef, screenHeight, cardSmallH],
+    [keyboardVisibleRef, screenHeight, cardSmallH, animatingSV, cursorSV],
   );
 
   /* ── Pan gesture (수직 전용) ──────────────────────────────────────────
@@ -334,29 +366,38 @@ function QuestionCardCurlInner({
   const panGesture = useMemo(
     () =>
       Gesture.Pan()
-        .runOnJS(true)
+        /* runOnJS(true) 제거 — 제스처 전체가 UI 스레드에서 실행되어야 손가락을
+         * 프레임 드랍 없이 따라간다. JS가 필요한 작업(키보드 닫기, cursor 커밋)만
+         * runOnJS로 넘긴다. */
         .failOffsetX([-8, 8])
         .activeOffsetY([-8, 8])
         .onBegin(() => {
-          dragAxisRef.current = null;
-          gestureScrolledRef.current = false;
-          gestureHandledRef.current = false;
-          scrollStartRef.current = scrollOffsetSV.value;
+          "worklet";
+          gestureScrolledSV.value = 0;
+          gestureHandledSV.value = 0;
+          scrollStartSV.value = scrollOffsetSV.value;
         })
         .onUpdate((e) => {
-          if (animatingRef.current) return;
+          "worklet";
+          if (animatingSV.value === 1) return;
           const dy = e.translationY;
 
-          const overflowH = Math.max(0, contentHeightRef.current - availableHeightRef.current);
+          const overflowH = Math.max(0, contentHeightSV.value - availableHeightSV.value);
+
+          const markScrolled = () => {
+            "worklet";
+            gestureScrolledSV.value = 1;
+          };
 
           /* ── 키보드 열린 상태 ──────────────────────────────────────────
            * 아래→위 + 오버플로 있음: 스크롤 오프셋 업데이트.              */
-          if (keyboardVisibleRef.current) {
+          if (keyboardVisibleSV.value === 1) {
             if (dy < 0 && overflowH > 0) {
               const liveOffset = scrollOffsetSV.value;
               if (liveOffset > -overflowH) {
-                gestureScrolledRef.current = true;
-                scrollOffsetSV.value = Math.max(-overflowH, scrollStartRef.current + dy);
+                markScrolled();
+                scrollOffsetSV.value = Math.max(-overflowH, scrollStartSV.value + dy);
+                setMaskState(scrollOffsetSV.value !== 0);
               }
             }
             return;
@@ -364,17 +405,18 @@ function QuestionCardCurlInner({
 
           /* ── 드래그 → pos 이동 (damping 적용) ─────────────────────── */
           const applyDrag = (dyv: number) => {
+            "worklet";
             let damped: number;
             if (dyv < 0) {
               damped = dyv * 0.10;
             } else {
               const restTy = cardSmallH + 60;
-              const canBack = cursorRef.current > 0;
+              const canBack = cursorSV.value > 0;
               damped = canBack
                 ? dyv * 0.12
                 : Math.min(dyv * 0.22, restTy * 0.28);
             }
-            pos.value = cursorRef.current - damped / peekOffset;
+            pos.value = cursorSV.value - damped / peekOffset;
           };
 
           /* ── 키보드 꺼진 상태 ─────────────────────────────────────── */
@@ -385,58 +427,85 @@ function QuestionCardCurlInner({
 
             if (dy < 0) {
               if (!atBottom) {
-                gestureScrolledRef.current = true;
-                scrollOffsetSV.value = Math.max(-overflowH, scrollStartRef.current + dy);
+                markScrolled();
+                scrollOffsetSV.value = Math.max(-overflowH, scrollStartSV.value + dy);
+                setMaskState(scrollOffsetSV.value !== 0);
               } else {
-                gestureScrolledRef.current = false;
+                gestureScrolledSV.value = 0;
+                setMaskState(false);
                 applyDrag(dy);
               }
             } else if (dy > 0) {
               if (!atTop) {
-                gestureScrolledRef.current = true;
-                scrollOffsetSV.value = Math.min(0, scrollStartRef.current + dy);
+                markScrolled();
+                scrollOffsetSV.value = Math.min(0, scrollStartSV.value + dy);
+                setMaskState(scrollOffsetSV.value !== 0);
               } else {
-                gestureScrolledRef.current = false;
+                gestureScrolledSV.value = 0;
+                setMaskState(false);
                 applyDrag(dy);
               }
             }
           } else {
+            /* 오버플로가 없으면 클리핑할 내용도 없다 — 마스크 해제 */
+            setMaskState(false);
             applyDrag(dy);
           }
         })
         .onEnd((e) => {
-          gestureHandledRef.current = true;
-          if (animatingRef.current) return;
+          "worklet";
+          gestureHandledSV.value = 1;
+          if (animatingSV.value === 1) return;
           const dy = e.translationY;
 
           /* ── 키보드 열린 상태 ────────────────────────────────────── */
-          if (keyboardVisibleRef.current) {
+          if (keyboardVisibleSV.value === 1) {
             if (dy > 0) {
-              Keyboard.dismiss();
-            } else if (gestureScrolledRef.current) {
+              runOnJS(Keyboard.dismiss)();
+            } else if (gestureScrolledSV.value === 1) {
               scrollOffsetSV.value = withSpring(scrollOffsetSV.value, { damping: 20, stiffness: 300 });
             }
+            setMaskState(scrollOffsetSV.value !== 0);
             return;
           }
 
           /* ── 키보드 꺼진 상태 ─────────────────────────────────────── */
-          if (gestureScrolledRef.current) {
+          if (gestureScrolledSV.value === 1) {
             scrollOffsetSV.value = withSpring(scrollOffsetSV.value, { damping: 20, stiffness: 300 });
-            settleToRef.current(0);
-          } else if (dy < -THRESHOLD && cursorRef.current < questionCountRef.current - 1) {
-            settleToRef.current(1);
-          } else if (dy > THRESHOLD && cursorRef.current > 0) {
-            settleToRef.current(-1);
+            setMaskState(scrollOffsetSV.value !== 0);
+            settleTo(0);
+          } else if (dy < -THRESHOLD && cursorSV.value < questionCount - 1) {
+            settleTo(1);
+          } else if (dy > THRESHOLD && cursorSV.value > 0) {
+            settleTo(-1);
           } else {
-            settleToRef.current(0);
+            settleTo(0);
           }
         })
         .onFinalize(() => {
-          if (gestureHandledRef.current) return;
-          if (animatingRef.current) return;
-          settleToRef.current(0);
+          "worklet";
+          if (gestureHandledSV.value === 1) return;
+          if (animatingSV.value === 1) return;
+          settleTo(0);
         }),
-    [cardSmallH, peekOffset, pos, scrollOffsetSV, keyboardVisibleRef],
+    [
+      cardSmallH,
+      peekOffset,
+      pos,
+      scrollOffsetSV,
+      cursorSV,
+      animatingSV,
+      keyboardVisibleSV,
+      contentHeightSV,
+      availableHeightSV,
+      scrollStartSV,
+      gestureScrolledSV,
+      gestureHandledSV,
+      maskActiveSV,
+      setMaskState,
+      settleTo,
+      questionCount,
+    ],
   );
 
   /* ── 카드 공통 스타일 ─────────────────────────────────────────────── */
@@ -522,9 +591,9 @@ function QuestionCardCurlInner({
                       offscreen 합성해 답변/플레이스홀더 텍스트가 흐려진다.
                       peek 카드는 TextInput 자체 높이 제한으로 클리핑된다. */}
                   <View
-                    style={isActive ? s.answerScrollClip : s.answerScrollPlain}
+                    style={isActive && maskActive ? s.answerScrollClip : s.answerScrollPlain}
                     onLayout={isActive ? (ev) => {
-                      availableHeightRef.current = ev.nativeEvent.layout.height;
+                      availableHeightSV.value = ev.nativeEvent.layout.height;
                     } : undefined}
                   >
                     <Animated.View style={isActive ? answerScrollStyle : s.answerFill}>
@@ -540,7 +609,7 @@ function QuestionCardCurlInner({
                           });
                         } : undefined}
                         onContentSizeChange={isActive ? (ev) => {
-                          contentHeightRef.current = ev.nativeEvent.contentSize.height;
+                          contentHeightSV.value = ev.nativeEvent.contentSize.height;
                         } : undefined}
                         placeholder="생각을 자유롭게 적어보세요..."
                         placeholderTextColor={Colors.zinc400}
