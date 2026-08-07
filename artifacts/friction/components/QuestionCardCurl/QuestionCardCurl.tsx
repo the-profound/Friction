@@ -99,10 +99,11 @@ interface DeckCardProps {
   peekOffset: number;
   peekRightOffset: number;
   cardBaseStyle: object;
+  shadowStyle: object;
   children: React.ReactNode;
 }
 
-function DeckCard({ idx, pos, peekOffset, peekRightOffset, cardBaseStyle, children }: DeckCardProps) {
+function DeckCard({ idx, pos, peekOffset, peekRightOffset, cardBaseStyle, shadowStyle, children }: DeckCardProps) {
   const posStyle = useAnimatedStyle(() => {
     const e = idx - pos.value; // 중앙(0) 기준 상대 슬롯 (연속값)
     // |e|=0 → scale 1.0, |e|≥1 → PEEK_SCALE. 드래그 중 연속 보간.
@@ -116,9 +117,16 @@ function DeckCard({ idx, pos, peekOffset, peekRightOffset, cardBaseStyle, childr
       ],
     };
   });
+  /* 그림자는 내용과 분리된 형제 레이어에 둔다.
+   * 그림자가 걸린 레이어는 iOS에서 offscreen 합성 대상이 되는데, 이 버퍼가
+   * "현재 화면상 크기"(peek 상태에서 0.88배) 기준으로 잡히기 때문에 같은
+   * 레이어 안의 텍스트가 저해상도로 래스터화된다. 그림자를 빈 레이어로
+   * 분리하면 텍스트 레이어는 offscreen 합성을 거치지 않아 축소 상태에서도
+   * 원본 해상도로 렌더된다. (읽기 화면 편지 카드와 동일한 접근) */
   return (
     <Animated.View style={[cardBaseStyle, posStyle]}>
-      {children}
+      <View style={shadowStyle} pointerEvents="none" />
+      <View style={s.cardSurface}>{children}</View>
     </Animated.View>
   );
 }
@@ -441,6 +449,22 @@ function QuestionCardCurlInner({
       height: cardSmallH,
       marginTop: -(cardSmallH / 2),
       borderRadius: 0,
+      // 배경/그림자는 아래 cardShadow(빈 형제 레이어)가 담당한다 —
+      // 텍스트가 든 레이어에 그림자를 걸면 축소 시 해상도가 깨진다.
+      backgroundColor: "transparent",
+    }),
+    [cardSmallH, cardSmallW],
+  );
+
+  /* 그림자 전용 레이어 — 자식이 없으므로 offscreen 합성 비용이 낮고,
+   * 텍스트 해상도에 영향을 주지 않는다. */
+  const cardShadow = useMemo(
+    () => ({
+      position: "absolute" as const,
+      top: 0,
+      left: 0,
+      width: cardSmallW,
+      height: cardSmallH,
       backgroundColor: Colors.white,
       ...Platform.select({
         web: {
@@ -485,21 +509,27 @@ function QuestionCardCurlInner({
                 peekOffset={peekOffset}
                 peekRightOffset={PEEK_RIGHT_OFFSET}
                 cardBaseStyle={cardBase}
+                shadowStyle={cardShadow}
               >
                 <View style={s.cardInner}>
                   <Text style={s.questionText} numberOfLines={6}>
                     {activeQuestions[idx] ?? ""}
                   </Text>
                   {/* 답변 스크롤 클립 컨테이너 */}
+                  {/* 답변 스크롤 클립 컨테이너 — overflow:"hidden"(레이어 마스크)은
+                      스크롤 오프셋이 실제로 적용되는 중앙 카드에만 건다. 축소된
+                      peek 카드에 마스크가 걸리면 iOS가 축소된 크기 기준으로
+                      offscreen 합성해 답변/플레이스홀더 텍스트가 흐려진다.
+                      peek 카드는 TextInput 자체 높이 제한으로 클리핑된다. */}
                   <View
-                    style={s.answerScrollClip}
+                    style={isActive ? s.answerScrollClip : s.answerScrollPlain}
                     onLayout={isActive ? (ev) => {
                       availableHeightRef.current = ev.nativeEvent.layout.height;
                     } : undefined}
                   >
-                    <Animated.View style={isActive ? answerScrollStyle : undefined}>
+                    <Animated.View style={isActive ? answerScrollStyle : s.answerFill}>
                       <TextInput
-                        style={s.answerInput}
+                        style={isActive ? s.answerInput : [s.answerInput, s.answerFill]}
                         value={answers[idx] ?? ""}
                         editable={isActive}
                         onChangeText={isActive ? (v) => {
@@ -549,6 +579,10 @@ const s = StyleSheet.create({
     right: 0,
     bottom: 0,
   },
+  cardSurface: {
+    flex: 1,
+    backgroundColor: Colors.white,
+  },
   cardInner: {
     flex: 1,
     paddingHorizontal: 28,
@@ -567,6 +601,12 @@ const s = StyleSheet.create({
   answerScrollClip: {
     flex: 1,
     overflow: "hidden",
+  },
+  answerScrollPlain: {
+    flex: 1,
+  },
+  answerFill: {
+    height: "100%",
   },
   answerInput: {
     fontSize: 15,
