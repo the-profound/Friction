@@ -20,6 +20,7 @@
 import React, {
   forwardRef,
   useCallback,
+  useEffect,
   useImperativeHandle,
   useMemo,
   useRef,
@@ -32,6 +33,7 @@ import {
   StyleSheet,
   Platform,
   Keyboard,
+  useWindowDimensions,
 } from "react-native";
 import Animated, {
   useSharedValue,
@@ -170,6 +172,75 @@ function QuestionCardCurlInner({
    * scrollOffsetSV: 키보드 열림 상태에서 답변 영역 스크롤.               */
   const pos = useSharedValue(0);
   const scrollOffsetSV = useSharedValue(0);
+
+  /* ── 키보드 회피 ────────────────────────────────────────────────────
+   * 질문 카드 단계에서는 리더 프레임 전체를 축소하지 않는다(읽기 본문 단계의
+   * 단상 시트 축소와 분리). 대신 덱 전체를 키보드 높이만큼 위로 이동시켜
+   * 활성 카드와 입력 텍스트가 가려지지 않게 한다.                        */
+  const { height: windowHeight } = useWindowDimensions();
+  const kbOffsetSV = useSharedValue(0);
+  const deckOffsetStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: kbOffsetSV.value }],
+  }));
+
+  /* 덱 컨테이너(= 리더 프레임)의 윈도우 절대 좌표. 프레임은 안전영역/레터박스
+   * 때문에 화면 중앙과 일치하지 않으므로 화면 크기로 추정하지 않고 실측한다. */
+  const rootRef = useRef<View>(null);
+  const deckBoundsRef = useRef<{ top: number; height: number } | null>(null);
+  const measureDeck = useCallback(() => {
+    rootRef.current?.measureInWindow((_x, y, _w, h) => {
+      if (typeof y === "number" && !Number.isNaN(y) && h > 0) {
+        deckBoundsRef.current = { top: y, height: h };
+      }
+    });
+  }, []);
+
+  const applyKeyboardOffset = useCallback((keyboardTop: number) => {
+    const timing = { duration: 260, easing: Easing.out(Easing.cubic) };
+    const bounds = deckBoundsRef.current;
+    if (!bounds) {
+      kbOffsetSV.value = withTiming(0, timing);
+      return;
+    }
+    // 활성 카드는 덱(프레임) 중앙에 배치된다 → 윈도우 좌표 기준 카드 상·하단.
+    const deckCenterY = bounds.top + bounds.height / 2;
+    const cardTop = deckCenterY - cardSmallH / 2;
+    const cardBottom = deckCenterY + cardSmallH / 2;
+    // 필요한 만큼만, 위로만 이동 (키보드 위 12px 여백).
+    let shift = Math.min(0, keyboardTop - 12 - cardBottom);
+    // 카드 상단이 화면 위로 잘려나가지 않도록 클램프.
+    shift = Math.max(shift, -Math.max(0, cardTop - 8));
+    kbOffsetSV.value = withTiming(shift, timing);
+  }, [cardSmallH, kbOffsetSV]);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      /* 키보드 상단의 "윈도우 좌표" — measureInWindow와 같은 좌표계여야 한다.
+       *  iOS: 윈도우 == 화면이므로 endCoordinates.screenY가 곧 키보드 상단.
+       *  Android: app.json의 softwareKeyboardLayoutMode="resize"로 윈도우 자체가
+       *           줄어들기 때문에 키보드 상단은 (줄어든) 윈도우 하단과 같다.
+       *           screenY나 windowHeight-height를 쓰면 이중으로 빼게 된다. */
+      const keyboardTop = Platform.OS === "android"
+        ? windowHeight
+        : (e.endCoordinates?.screenY ?? windowHeight - (e.endCoordinates?.height ?? 0));
+      // 최신 위치로 재측정한 뒤(콜백에서) 오프셋을 적용한다.
+      rootRef.current?.measureInWindow((_x, y, _w, h) => {
+        if (typeof y === "number" && !Number.isNaN(y) && h > 0) {
+          deckBoundsRef.current = { top: y, height: h };
+        }
+        applyKeyboardOffset(keyboardTop);
+      });
+    });
+
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      kbOffsetSV.value = withTiming(0, { duration: 260, easing: Easing.out(Easing.cubic) });
+    });
+
+    return () => { showSub.remove(); hideSub.remove(); };
+  }, [applyKeyboardOffset, kbOffsetSV, windowHeight]);
 
   const answerScrollStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: scrollOffsetSV.value }],
@@ -401,9 +472,9 @@ function QuestionCardCurlInner({
    * Render — 모든 카드는 동일한 구조로 항상 마운트 (전환 트리 교체 없음)
    * ───────────────────────────────────────────────────────────────────── */
   return (
-    <View style={s.root}>
+    <View ref={rootRef} style={s.root} onLayout={measureDeck} collapsable={false}>
       <GestureDetector gesture={Gesture.Simultaneous(tapGesture, panGesture)}>
-        <View style={s.gestureLayer}>
+        <Animated.View style={[s.gestureLayer, deckOffsetStyle]}>
           {windowIndices.map((idx) => {
             const isActive = idx === cursor;
             return (
@@ -453,7 +524,7 @@ function QuestionCardCurlInner({
               </DeckCard>
             );
           })}
-        </View>
+        </Animated.View>
       </GestureDetector>
     </View>
   );

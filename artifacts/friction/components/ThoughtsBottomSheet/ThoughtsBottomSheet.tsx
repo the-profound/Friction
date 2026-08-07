@@ -303,6 +303,10 @@ export default function ThoughtsBottomSheet({
   // always accesses the latest value without needing to re-create the callback.
   const cardSheetHAnimRef = useRef(cardSheetHAnim);
   cardSheetHAnimRef.current = cardSheetHAnim;
+  // 시트가 화면에 떠 있는지 여부 — 전역 키보드 리스너가 시트와 무관한 키보드
+  // (질문 카드 답변 입력 등)에 반응하지 않도록 게이트로 쓴다.
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
 
   useEffect(() => {
     const sub = outerHeightAnim.addListener(({ value }) => {
@@ -374,6 +378,9 @@ export default function ThoughtsBottomSheet({
     const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
 
     const showSub = Keyboard.addListener(showEvent, (e) => {
+      // 시트가 닫혀 있을 때 발생한 키보드(예: 질문 카드 답변 입력)에는 반응하지
+      // 않는다. 반응하면 cardSheetHAnim이 움직여 리더 프레임 전체가 축소된다.
+      if (!visibleRef.current) return;
       const kh = e.endCoordinates.height;
       lastKbHeightRef.current = kh;
       setKeyboardVisible(true);
@@ -404,6 +411,7 @@ export default function ThoughtsBottomSheet({
     });
 
     const hideSub = Keyboard.addListener(hideEvent, () => {
+      if (!visibleRef.current) return;
       setKeyboardVisible(false);
       if (prevSnapStageRef.current === "mid") {
         // 중간 단계에서 키보드가 열렸다가 닫힘 → mid 높이(50%)로 복원

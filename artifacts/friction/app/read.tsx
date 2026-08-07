@@ -602,6 +602,15 @@ export default function ReadScreen() {
     return () => { showSub.remove(); hideSub.remove(); };
   }, []);
 
+  // Q-card·완독화면 단계에서는 단상 시트 기반 프레임 축소를 적용하지 않는다.
+  // (질문 카드 답변 입력 키보드가 프레임 전체를 축소시키던 문제 방지 — 키보드
+  //  회피는 QuestionCardCurl 내부에서 덱을 위로 이동시켜 처리한다.)
+  useEffect(() => {
+    if (totalPages > 0 && visualPage >= totalPages) {
+      cardSheetHAnim.setValue(0);
+    }
+  }, [visualPage, totalPages, cardSheetHAnim]);
+
   // 메모 모드 진입/종료, 또는 Q-card·완독화면 진입 시 하단 진행률 바를 fade out/in 한다.
   const progressBarOpacity = useSharedValue(1);
   useEffect(() => {
