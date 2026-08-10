@@ -5,6 +5,7 @@ import {
   StyleSheet,
   FlatList,
   RefreshControl,
+  useWindowDimensions,
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar";
@@ -18,6 +19,8 @@ import { PageHeader } from "@/components/NavBar/PageHeader";
 import ArticleListItem from "@/components/ArticleListItem/ArticleListItem";
 import ThoughtListItem from "@/components/ThoughtListItem/ThoughtListItem";
 import ThoughtDetailModal from "@/components/ThoughtDetailModal/ThoughtDetailModal";
+import ThoughtCard from "@/components/ThoughtCard/ThoughtCard";
+import ThoughtsBottomSheet from "@/components/ThoughtsBottomSheet/ThoughtsBottomSheet";
 import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import RefreshableEmpty from "@/components/RefreshableEmpty";
@@ -95,7 +98,7 @@ export default function OnScreen() {
 
   const { tab: tabParam } = useLocalSearchParams<{ tab?: string }>();
 
-  const [topTab, setTopTab] = useState<TopTab>("memo");
+  const [topTab, setTopTab] = useState<TopTab>("thought");
   const [filter, setFilter] = useState<FilterMode>("all");
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [deleteTargetType, setDeleteTargetType] = useState<"memo" | "my_article">("memo");
@@ -119,6 +122,14 @@ export default function OnScreen() {
 
   const [selectedThought, setSelectedThought] = useState<Thought | null>(null);
   const [similarPopupThoughtId, setSimilarPopupThoughtId] = useState<string | null>(null);
+
+  const [thoughtsSheetVisible, setThoughtsSheetVisible] = useState(false);
+  const [thoughtsSheetNonce, setThoughtsSheetNonce] = useState(0);
+  const [thoughtsSheetInteractive, setThoughtsSheetInteractive] = useState(false);
+  const [thoughtCardSlotHeight, setThoughtCardSlotHeight] = useState(400);
+
+  // windowHeight used only indirectly via onLayout measuring thoughtCardSlotHeight
+  useWindowDimensions(); // trigger re-render on orientation change
 
   const { data: articles, isLoading, refetch, isRefetching } = useListArticles({
     authorId: userId,
@@ -162,12 +173,21 @@ export default function OnScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      // 단상 탭에서는 전역 FAB 숨김 — 탭 자체에서 내부 FAB 렌더
       setShowRecordFab(topTab === "memo" && !selectionMode);
       return () => {
         setShowRecordFab(false);
       };
     }, [topTab, selectionMode, setShowRecordFab]),
   );
+
+  const fabBottom = useNavBarBottomSafeArea(8);
+
+  const openThoughtsSheet = useCallback(() => {
+    setThoughtsSheetVisible(true);
+    setThoughtsSheetInteractive(true);
+    setThoughtsSheetNonce((n) => n + 1);
+  }, []);
 
   const filteredArticles = useMemo(() => {
     if (!articles) return [];
@@ -563,7 +583,10 @@ export default function OnScreen() {
             content={item.thought.content}
             createdFrom={item.thought.createdFrom}
             rightMeta={formatRelativeDate(item.thought.createdAt)}
-            onPress={() => setSelectedThought(item.thought)}
+            onPress={() => {
+              // TODO: 단상 상세 진입 비활성화 (Task 1408 out of scope)
+              // setSelectedThought(item.thought);
+            }}
           />
         );
       }
@@ -655,6 +678,22 @@ export default function OnScreen() {
           <View style={{ flex: 1 }}>
             <ScalePressable
               style={[styles.topTabItem, { paddingLeft: 16, paddingRight: 8 }]}
+              onPress={() => switchTopTab("thought")}
+              contentStyle={styles.topTabItemContent}
+            >
+              <Text
+                style={[styles.topTabText, topTab === "thought" && styles.topTabTextActive]}
+                allowFontScaling={false}
+                numberOfLines={1}
+              >
+                단상
+              </Text>
+              {topTab === "thought" && <View style={styles.topTabUnderline} />}
+            </ScalePressable>
+          </View>
+          <View style={{ flex: 1 }}>
+            <ScalePressable
+              style={[styles.topTabItem, { paddingHorizontal: 8 }]}
               onPress={() => switchTopTab("memo")}
               contentStyle={styles.topTabItemContent}
             >
@@ -670,7 +709,7 @@ export default function OnScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <ScalePressable
-              style={[styles.topTabItem, { paddingHorizontal: 8 }]}
+              style={[styles.topTabItem, { paddingLeft: 8, paddingRight: 16 }]}
               onPress={() => switchTopTab("my_article")}
               contentStyle={styles.topTabItemContent}
             >
@@ -682,22 +721,6 @@ export default function OnScreen() {
                 편지
               </Text>
               {topTab === "my_article" && <View style={styles.topTabUnderline} />}
-            </ScalePressable>
-          </View>
-          <View style={{ flex: 1 }}>
-            <ScalePressable
-              style={[styles.topTabItem, { paddingLeft: 8, paddingRight: 16 }]}
-              onPress={() => switchTopTab("thought")}
-              contentStyle={styles.topTabItemContent}
-            >
-              <Text
-                style={[styles.topTabText, topTab === "thought" && styles.topTabTextActive]}
-                allowFontScaling={false}
-                numberOfLines={1}
-              >
-                단상
-              </Text>
-              {topTab === "thought" && <View style={styles.topTabUnderline} />}
             </ScalePressable>
           </View>
         </View>
@@ -805,6 +828,41 @@ export default function OnScreen() {
             독서 중 떠오른 생각들이{"\n"}여기에 모아집니다
           </Text>
         </RefreshableEmpty>
+      ) : topTab === "thought" ? (
+        /* ── 단상 카드 페이저 ──────────────────────────────────────────── */
+        <View style={styles.thoughtPagerContainer}>
+          <FlatList
+            data={thoughts ?? []}
+            keyExtractor={(t: Thought) => `thought-${t.id}`}
+            pagingEnabled
+            snapToAlignment="start"
+            decelerationRate="fast"
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={isThoughtsRefetching}
+                onRefresh={refetchThoughts}
+              />
+            }
+            renderItem={({ item }: { item: Thought }) => (
+              <ThoughtCard
+                content={item.content}
+                createdFrom={item.createdFrom}
+                createdAt={item.createdAt}
+                slotHeight={thoughtCardSlotHeight}
+              />
+            )}
+            getItemLayout={(_data, index) => ({
+              length: thoughtCardSlotHeight,
+              offset: thoughtCardSlotHeight * index,
+              index,
+            })}
+            onLayout={(e) => {
+              const h = e.nativeEvent.layout.height;
+              if (h > 0) setThoughtCardSlotHeight(h);
+            }}
+          />
+        </View>
       ) : (
         <FlatList
           {...LIST_PERF_PRESET}
@@ -814,8 +872,8 @@ export default function OnScreen() {
           refreshControl={
             !selectionMode ? (
               <RefreshControl
-                refreshing={topTab === "thought" ? isThoughtsRefetching : isRefetching}
-                onRefresh={topTab === "thought" ? refetchThoughts : refetch}
+                refreshing={isRefetching}
+                onRefresh={refetch}
               />
             ) : undefined
           }
@@ -946,6 +1004,7 @@ export default function OnScreen() {
         onCancel={handleBulkDeleteCancel}
       />
 
+      {/* ThoughtDetailModal — 단상 탭 카드뷰 구현 후 비활성화 (Task 1408)
       <ThoughtDetailModal
         thought={selectedThought}
         onClose={() => setSelectedThought(null)}
@@ -954,6 +1013,36 @@ export default function OnScreen() {
         }}
         similarPopupThoughtId={similarPopupThoughtId}
         onCloseSimilarPopup={() => setSimilarPopupThoughtId(null)}
+      />
+      */}
+
+      {/* 단상 탭 전용 FAB */}
+      {topTab === "thought" && !selectionMode && (
+        <ScalePressable
+          style={[styles.thoughtFab, { bottom: fabBottom }]}
+          contentStyle={styles.thoughtFabContent}
+          onPress={openThoughtsSheet}
+          accessibilityRole="button"
+          accessibilityLabel="단상 추가"
+        >
+          <Feather name="plus" size={22} color={Colors.white} />
+        </ScalePressable>
+      )}
+
+      {/* 단상 작성 시트 — articleId 없음: sourceArticleId 생략, createdFrom:"direct"로 저장 */}
+      <ThoughtsBottomSheet
+        visible={thoughtsSheetVisible}
+        interactive={thoughtsSheetInteractive}
+        openNonce={thoughtsSheetNonce}
+        onClose={() => {
+          setThoughtsSheetVisible(false);
+          setThoughtsSheetInteractive(false);
+          // 새로 저장된 단상을 카드뷰에 즉시 반영
+          refetchThoughts();
+        }}
+        onWillClose={() => {
+          setThoughtsSheetInteractive(false);
+        }}
       />
     </View>
   );
@@ -1195,5 +1284,26 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 15,
     color: Colors.white,
+  },
+  thoughtPagerContainer: {
+    flex: 1,
+  },
+  thoughtFab: {
+    position: "absolute",
+    right: Spacing.screenPx,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: Colors.zinc900,
+    zIndex: Sizing.navBarZIndex + 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  thoughtFabContent: {
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

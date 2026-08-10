@@ -229,7 +229,11 @@ export interface ThoughtsBottomSheetProps {
    * FAB·페이지 스와이프 터치를 계속 삼킨다.
    */
   interactive?: boolean;
-  articleId: string;
+  /**
+   * 연관 글 ID. 글 읽기 화면에서 열 때 필요. 단상 탭 FAB처럼 글과 무관하게
+   * 열 때는 생략하면 된다 (sourceArticleId 없이 createdFrom:"direct"로 저장).
+   */
+  articleId?: string;
   pendingQuote?: string;
   /**
    * 카드 애니메이션 단일 소스:
@@ -601,7 +605,9 @@ export default function ThoughtsBottomSheet({
       // articleId가 바뀐 뒤 잔류한 stale editingThought를 PATCH하는 cross-context 버그를 방지.
       const isValidEdit =
         editingThought != null &&
-        editingThought.sourceArticleId === articleId;
+        (articleId
+          ? editingThought.sourceArticleId === articleId
+          : editingThought.sourceArticleId == null);
 
       if (isValidEdit && editingThought) {
         await updateThought.mutateAsync({
@@ -612,9 +618,17 @@ export default function ThoughtsBottomSheet({
       } else {
         // 잘못된 편집 상태가 남아있으면 조용히 초기화 후 새 단상으로 저장
         if (editingThought) setEditingThought(null);
-        await createThought.mutateAsync({
-          data: { content: text, createdFrom: "reading", sourceArticleId: articleId },
-        });
+        if (articleId) {
+          // 글 읽기 화면 컨텍스트: sourceArticleId 포함
+          await createThought.mutateAsync({
+            data: { content: text, createdFrom: "reading", sourceArticleId: articleId },
+          });
+        } else {
+          // 단상 탭 FAB 컨텍스트: sourceArticleId 없이 direct 단상으로 저장
+          await createThought.mutateAsync({
+            data: { content: text, createdFrom: "direct" },
+          });
+        }
       }
       invalidateThoughts();
       setInputText("");
