@@ -1,6 +1,7 @@
 import React from "react";
 import { View, Text, StyleSheet, Platform } from "react-native";
-import { Colors, Typography, Spacing } from "@/constants/tokens";
+import { Feather } from "@expo/vector-icons";
+import { Colors, Typography } from "@/constants/tokens";
 import type { ThoughtCreatedFrom } from "@workspace/api-client-react";
 
 const CREATED_FROM_LABEL: Record<ThoughtCreatedFrom, string> = {
@@ -30,15 +31,51 @@ interface ThoughtCardProps {
   createdAt: string;
   /** Height of each pager slot — must match FlatList item height */
   slotHeight: number;
+  /** Whether this card is the first in the list (hide up-hint) */
+  isFirst?: boolean;
+  /** Whether this card is the last in the list (hide down-hint) */
+  isLast?: boolean;
 }
 
-export default function ThoughtCard({ content, createdFrom, createdAt, slotHeight }: ThoughtCardProps) {
+const CARD_MARGIN_H = 36;
+/** Vertical margin as fraction of slotHeight — gives ~60% card height */
+const CARD_MARGIN_V_RATIO = 0.20;
+
+export default function ThoughtCard({
+  content,
+  createdFrom,
+  createdAt,
+  slotHeight,
+  isFirst,
+  isLast,
+}: ThoughtCardProps) {
+  const cardMarginV = slotHeight * CARD_MARGIN_V_RATIO;
+
   return (
     <View style={[styles.slot, { height: slotHeight }]}>
+      {/* Up-navigation hint */}
+      {!isFirst && (
+        <View style={styles.hintAbove} pointerEvents="none">
+          <Feather name="chevron-up" size={18} color={Colors.zinc300} />
+        </View>
+      )}
+
       {/* Shadow layer — separated from content to avoid re-rasterization at scale */}
-      <View style={styles.cardShadow} pointerEvents="none" />
+      <View
+        style={[
+          styles.cardShadow,
+          { top: cardMarginV, bottom: cardMarginV, left: CARD_MARGIN_H, right: CARD_MARGIN_H },
+        ]}
+        pointerEvents="none"
+      />
+
       {/* Content surface */}
-      <View style={styles.cardSurface}>
+      <View
+        style={[
+          styles.cardSurface,
+          { top: cardMarginV, bottom: cardMarginV, left: CARD_MARGIN_H, right: CARD_MARGIN_H },
+        ]}
+      >
         <View style={styles.topRow}>
           <View style={styles.tag}>
             <Text style={styles.tagText} allowFontScaling={false}>
@@ -53,24 +90,38 @@ export default function ThoughtCard({ content, createdFrom, createdAt, slotHeigh
           {content ?? ""}
         </Text>
       </View>
+
+      {/* Down-navigation hint */}
+      {!isLast && (
+        <View style={styles.hintBelow} pointerEvents="none">
+          <Feather name="chevron-down" size={18} color={Colors.zinc300} />
+        </View>
+      )}
     </View>
   );
 }
-
-const CARD_MARGIN_H = 32;
-const CARD_MARGIN_V = 32;
 
 const styles = StyleSheet.create({
   slot: {
     alignItems: "center",
     justifyContent: "center",
   },
+  hintAbove: {
+    position: "absolute",
+    top: 6,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+  },
+  hintBelow: {
+    position: "absolute",
+    bottom: 6,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+  },
   cardShadow: {
     position: "absolute",
-    top: CARD_MARGIN_V,
-    left: CARD_MARGIN_H,
-    right: CARD_MARGIN_H,
-    bottom: CARD_MARGIN_V,
     backgroundColor: Colors.white,
     borderRadius: 4,
     ...Platform.select({
@@ -88,20 +139,16 @@ const styles = StyleSheet.create({
   },
   cardSurface: {
     position: "absolute",
-    top: CARD_MARGIN_V,
-    left: CARD_MARGIN_H,
-    right: CARD_MARGIN_H,
-    bottom: CARD_MARGIN_V,
     backgroundColor: Colors.white,
     borderRadius: 4,
-    paddingHorizontal: 28,
-    paddingVertical: 28,
+    paddingHorizontal: 24,
+    paddingVertical: 24,
   },
   topRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 24,
+    marginBottom: 20,
   },
   tag: {
     backgroundColor: Colors.zinc100,

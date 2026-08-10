@@ -127,6 +127,10 @@ export default function OnScreen() {
   const [thoughtsSheetNonce, setThoughtsSheetNonce] = useState(0);
   const [thoughtsSheetInteractive, setThoughtsSheetInteractive] = useState(false);
   const [thoughtCardSlotHeight, setThoughtCardSlotHeight] = useState(400);
+  const [thoughtSortOrder, setThoughtSortOrder] = useState<"latest" | "oldest">("latest");
+  const [thoughtCurrentIndex, setThoughtCurrentIndex] = useState(0);
+  const thoughtFlatListRef = useRef<FlatList<Thought>>(null);
+  const thoughtViewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 });
 
   // windowHeight used only indirectly via onLayout measuring thoughtCardSlotHeight
   useWindowDimensions(); // trigger re-render on orientation change
@@ -189,6 +193,21 @@ export default function OnScreen() {
     setThoughtsSheetNonce((n) => n + 1);
   }, []);
 
+  const toggleThoughtSortOrder = useCallback(() => {
+    setThoughtSortOrder((prev) => (prev === "latest" ? "oldest" : "latest"));
+    setThoughtCurrentIndex(0);
+    thoughtFlatListRef.current?.scrollToIndex({ index: 0, animated: false });
+  }, []);
+
+  const onThoughtViewableItemsChanged = useCallback(
+    ({ viewableItems }: { viewableItems: Array<{ index: number | null }> }) => {
+      if (viewableItems.length > 0 && viewableItems[0].index !== null) {
+        setThoughtCurrentIndex(viewableItems[0].index);
+      }
+    },
+    [],
+  );
+
   const filteredArticles = useMemo(() => {
     if (!articles) return [];
     const list = articles.filter((a) => a.status !== "LETTER");
@@ -233,6 +252,16 @@ export default function OnScreen() {
     const q = trimmed.toLowerCase();
     return myLetterArticles.filter((a) => (a.title ?? "").toLowerCase().includes(q));
   }, [myLetterArticles, searchQuery]);
+
+  const sortedThoughts = useMemo(() => {
+    const list = [...(thoughts ?? [])];
+    if (thoughtSortOrder === "latest") {
+      list.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+    } else {
+      list.sort((a, b) => new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime());
+    }
+    return list;
+  }, [thoughts, thoughtSortOrder]);
 
   const listData = useMemo((): ListItem[] => {
     if (topTab === "my_article") {
@@ -723,6 +752,22 @@ export default function OnScreen() {
               {topTab === "my_article" && <View style={styles.topTabUnderline} />}
             </ScalePressable>
           </View>
+          {/* 단상 탭 정렬 버튼 */}
+          {topTab === "thought" && (
+            <ScalePressable
+              style={styles.thoughtSortButton}
+              contentStyle={styles.thoughtSortButtonContent}
+              onPress={toggleThoughtSortOrder}
+              accessibilityRole="button"
+              accessibilityLabel={thoughtSortOrder === "latest" ? "최신순 정렬" : "오래된순 정렬"}
+            >
+              <Feather
+                name={thoughtSortOrder === "latest" ? "arrow-down" : "arrow-up"}
+                size={15}
+                color={Colors.zinc500}
+              />
+            </ScalePressable>
+          )}
         </View>
       )}
 
@@ -832,24 +877,30 @@ export default function OnScreen() {
         /* ── 단상 카드 페이저 ──────────────────────────────────────────── */
         <View style={styles.thoughtPagerContainer}>
           <FlatList
-            data={thoughts ?? []}
+            ref={thoughtFlatListRef}
+            data={sortedThoughts}
             keyExtractor={(t: Thought) => `thought-${t.id}`}
-            pagingEnabled
+            snapToInterval={thoughtCardSlotHeight}
             snapToAlignment="start"
             decelerationRate="fast"
             showsVerticalScrollIndicator={false}
+            scrollEnabled
+            onViewableItemsChanged={onThoughtViewableItemsChanged}
+            viewabilityConfig={thoughtViewabilityConfig.current}
             refreshControl={
               <RefreshControl
                 refreshing={isThoughtsRefetching}
                 onRefresh={refetchThoughts}
               />
             }
-            renderItem={({ item }: { item: Thought }) => (
+            renderItem={({ item, index }: { item: Thought; index: number }) => (
               <ThoughtCard
                 content={item.content}
                 createdFrom={item.createdFrom}
                 createdAt={item.createdAt}
                 slotHeight={thoughtCardSlotHeight}
+                isFirst={index === 0}
+                isLast={index === sortedThoughts.length - 1}
               />
             )}
             getItemLayout={(_data, index) => ({
@@ -1287,6 +1338,17 @@ const styles = StyleSheet.create({
   },
   thoughtPagerContainer: {
     flex: 1,
+  },
+  thoughtSortButton: {
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 0,
+    justifyContent: "flex-start",
+  },
+  thoughtSortButtonContent: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingBottom: 10,
   },
   thoughtFab: {
     position: "absolute",
