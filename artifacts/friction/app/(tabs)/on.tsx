@@ -880,6 +880,7 @@ export default function OnScreen() {
             ref={thoughtFlatListRef}
             data={sortedThoughts}
             keyExtractor={(t: Thought) => `thought-${t.id}`}
+            style={styles.thoughtFlatList}
             snapToInterval={thoughtCardSlotHeight}
             snapToAlignment="start"
             decelerationRate="fast"
@@ -1337,6 +1338,9 @@ const styles = StyleSheet.create({
     color: Colors.white,
   },
   thoughtPagerContainer: {
+    flex: 1,
+  },
+  thoughtFlatList: {
     flex: 1,
   },
   thoughtSortButton: {
