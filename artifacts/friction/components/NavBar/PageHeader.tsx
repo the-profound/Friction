@@ -1,7 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import React from "react";
 import { Image, ImageSourcePropType, Keyboard, StyleSheet, Text, TouchableWithoutFeedback, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ScalePressable from "@/components/shared/ScalePressable";
 
 import { Colors, Shadows, Sizing, Spacing, Typography } from "@/constants/tokens";
@@ -52,12 +51,11 @@ export function PageHeader({
   onRightTextPress,
   searchLast = false,
 }: PageHeaderProps) {
-  const insets = useSafeAreaInsets();
   const { headerScrolled } = useNavigation();
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-      <View style={[styles.container, { paddingTop: 50 }, headerScrolled && Shadows.headerScrolled]}>
+      <View style={[styles.container, { paddingTop: Spacing.headerPt }, headerScrolled && Shadows.headerScrolled]}>
         {hideTitle ? (
           <View />
         ) : titleImage ? (
