@@ -141,6 +141,7 @@ export * from "./thoughtCreatedFrom";
 export * from "./thoughtExpansionResult";
 export * from "./thoughtNote";
 export * from "./thoughtQuestion";
+export * from "./thoughtsWidgetResponse";
 export * from "./toggleStoredSentenceFavoriteBody";
 export * from "./toggleTeamArticlePinBody";
 export * from "./transitionArticleBody";

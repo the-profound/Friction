@@ -1162,6 +1162,13 @@ export interface SpaceJoinContext {
   codeRequest?: SpaceCodeRequest | null;
 }
 
+export interface ThoughtsWidgetResponse {
+  /** AI-generated re-ignition question (null when unavailable) */
+  question: string | null;
+  /** One-sentence sub-explanation that makes the question easier to answer (null when unavailable) */
+  subtext: string | null;
+}
+
 export interface ThoughtQuestion {
   /** AI-generated thought-expansion question (null when unavailable) */
   question: string | null;

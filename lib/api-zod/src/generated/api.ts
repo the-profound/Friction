@@ -3424,6 +3424,28 @@ export const DeleteSendRecordParams = zod.object({
 });
 
 /**
+ * Uses OpenRouter to generate a personalized question and a sub-explanation based on
+the authenticated user's most recent thoughts. Returns null for both fields when
+thoughts are unavailable, the API key is missing, or AI generation fails.
+Always succeeds (no 5xx) — treat null fields as "widget unavailable".
+Clients should cache this response for at least 1 hour (use staleTime).
+
+ * @summary Generate an AI-powered widget question from the user's recent thoughts
+ */
+export const GetThoughtsWidgetResponse = zod.object({
+  question: zod
+    .string()
+    .nullable()
+    .describe("AI-generated re-ignition question (null when unavailable)"),
+  subtext: zod
+    .string()
+    .nullable()
+    .describe(
+      "One-sentence sub-explanation that makes the question easier to answer (null when unavailable)",
+    ),
+});
+
+/**
  * Uses OpenRouter to generate a single thought-expansion question based on the thought's content. Returns null when content is missing, the API key is unavailable, or AI generation fails. Always succeeds (no 5xx) — callers should treat null as "no question available".
  * @summary Generate an AI thought-expansion question for a single thought
  */

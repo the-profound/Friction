@@ -109,6 +109,7 @@ import type {
   TeamMemberWithUser,
   Thought,
   ThoughtQuestion,
+  ThoughtsWidgetResponse,
   ToggleStoredSentenceFavoriteBody,
   ToggleTeamArticlePinBody,
   TransitionArticleBody,
@@ -9470,6 +9471,87 @@ export const useDeleteSendRecord = <
 > => {
   return useMutation(getDeleteSendRecordMutationOptions(options));
 };
+
+/**
+ * Uses OpenRouter to generate a personalized question and a sub-explanation based on
+the authenticated user's most recent thoughts. Returns null for both fields when
+thoughts are unavailable, the API key is missing, or AI generation fails.
+Always succeeds (no 5xx) — treat null fields as "widget unavailable".
+Clients should cache this response for at least 1 hour (use staleTime).
+
+ * @summary Generate an AI-powered widget question from the user's recent thoughts
+ */
+export const getGetThoughtsWidgetUrl = () => {
+  return `/api/thoughts/widget`;
+};
+
+export const getThoughtsWidget = async (
+  options?: RequestInit,
+): Promise<ThoughtsWidgetResponse> => {
+  return customFetch<ThoughtsWidgetResponse>(getGetThoughtsWidgetUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetThoughtsWidgetQueryKey = () => {
+  return [`/api/thoughts/widget`] as const;
+};
+
+export const getGetThoughtsWidgetQueryOptions = <
+  TData = Awaited<ReturnType<typeof getThoughtsWidget>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getThoughtsWidget>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetThoughtsWidgetQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getThoughtsWidget>>
+  > = ({ signal }) => getThoughtsWidget({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getThoughtsWidget>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetThoughtsWidgetQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getThoughtsWidget>>
+>;
+export type GetThoughtsWidgetQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Generate an AI-powered widget question from the user's recent thoughts
+ */
+
+export function useGetThoughtsWidget<
+  TData = Awaited<ReturnType<typeof getThoughtsWidget>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getThoughtsWidget>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetThoughtsWidgetQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * Uses OpenRouter to generate a single thought-expansion question based on the thought's content. Returns null when content is missing, the API key is unavailable, or AI generation fails. Always succeeds (no 5xx) — callers should treat null as "no question available".

@@ -2471,6 +2471,31 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
   # ─── Thoughts ──────────────────────────────────────
+  /thoughts/widget:
+    get:
+      operationId: getThoughtsWidget
+      tags: [thoughts]
+      summary: Generate an AI-powered widget question from the user's recent thoughts
+      description: |
+        Uses OpenRouter to generate a personalized question and a sub-explanation based on
+        the authenticated user's most recent thoughts. Returns null for both fields when
+        thoughts are unavailable, the API key is missing, or AI generation fails.
+        Always succeeds (no 5xx) — treat null fields as "widget unavailable".
+        Clients should cache this response for at least 1 hour (use staleTime).
+      responses:
+        "200":
+          description: Widget question and sub-explanation (either or both may be null)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ThoughtsWidgetResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /thoughts/{id}/question:
     get:
       operationId: getThoughtQuestion
@@ -4536,6 +4561,19 @@ components:
       required: [space]
 
     # ─── Thoughts ────────────────────────────────────
+    ThoughtsWidgetResponse:
+      type: object
+      properties:
+        question:
+          type: string
+          nullable: true
+          description: AI-generated re-ignition question (null when unavailable)
+        subtext:
+          type: string
+          nullable: true
+          description: One-sentence sub-explanation that makes the question easier to answer (null when unavailable)
+      required: [question, subtext]
+
     ThoughtQuestion:
       type: object
       properties:

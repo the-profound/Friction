@@ -6,6 +6,7 @@ import { CreateThoughtBody } from "@workspace/api-zod";
 import { generateDenseEmbedding, generateSparseEmbedding } from "../lib/embeddings";
 import { analyzeThoughtExpansion } from "../services/analyze-thought-expansion";
 import { generateThoughtQuestion } from "../services/generate-thought-question";
+import { generateWidgetQuestion } from "../services/generate-widget-question";
 
 const router: IRouter = Router();
 
@@ -91,6 +92,34 @@ router.get("/thoughts/:id/similar", requireAuth, async (req, res) => {
   }));
 
   res.json(response);
+});
+
+router.get("/thoughts/widget", requireAuth, async (req, res) => {
+  const userId = req.user!.id;
+
+  const recentThoughts = await db
+    .select({ content: thoughtsTable.content })
+    .from(thoughtsTable)
+    .where(and(eq(thoughtsTable.authorId, userId), isNull(thoughtsTable.deletedAt)))
+    .orderBy(desc(thoughtsTable.createdAt))
+    .limit(10);
+
+  const contents = recentThoughts
+    .map((t) => t.content?.trim())
+    .filter((c): c is string => !!c && c.length > 0);
+
+  if (contents.length === 0 || !process.env.OPENROUTER_API_KEY) {
+    res.json({ question: null, subtext: null });
+    return;
+  }
+
+  try {
+    const result = await generateWidgetQuestion(contents);
+    res.json({ question: result?.question ?? null, subtext: result?.subtext ?? null });
+  } catch (err) {
+    console.warn("[thoughts/widget] AI widget question generation failed:", err);
+    res.json({ question: null, subtext: null });
+  }
 });
 
 router.get("/thoughts/:id/question", requireAuth, async (req, res) => {

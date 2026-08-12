@@ -1080,6 +1080,8 @@ export default function OnScreen() {
                   <DansangWidget
                     slotHeight={thoughtCardSlotHeight}
                     hasThoughts={sortedThoughts.length > 0}
+                    visible={thoughtCurrentIndex === 0}
+                    onWritePress={openThoughtsSheet}
                   />
                 );
               }
