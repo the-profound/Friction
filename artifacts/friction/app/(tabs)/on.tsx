@@ -16,7 +16,7 @@ import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar"
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useReaderTransition } from "@/contexts/ReaderTransitionContext";
-import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { PageHeader } from "@/components/NavBar/PageHeader";
@@ -48,6 +48,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { useNavigation } from "@/contexts/NavigationContext";
 import type { ArticleStatus } from "@/lib/policies";
 import { LIST_PERF_PRESET } from "@/lib/listPerf";
+import DansangWidget from "@/components/DansangWidget/DansangWidget";
 
 type TopTab = "memo" | "my_article" | "thought";
 type FilterMode = "all" | "DRAFT" | "DIVIDING" | "CLOSING";
@@ -64,6 +65,9 @@ type ListItem =
   | { type: "my_article"; article: Article }
   | { type: "thought"; thought: Thought };
 
+type ThoughtPagerItem =
+  | { kind: "widget" }
+  | { kind: "thought"; thought: Thought };
 function getScreenForStatus(status: ArticleStatus): string {
   switch (status) {
     case "DRAFT":
@@ -139,11 +143,8 @@ export default function OnScreen() {
   const [editingThoughtId, setEditingThoughtId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
   const [editKeyboardHeight, setEditKeyboardHeight] = useState(0);
-  // controlled selection — 줄바꿈 삽입 직후에만 설정, onSelectionChange 후 undefined로 해제
-  const [editSelection, setEditSelection] = useState<{ start: number; end: number } | undefined>(undefined);
-  const thoughtFlatListRef = useRef<FlatList<Thought>>(null);
+  const thoughtFlatListRef = useRef<FlatList<ThoughtPagerItem>>(null);
   const editTextInputRef = useRef<TextInput>(null);
-  // blur 후에도 마지막 커서 위치를 보존하기 위해 ref 사용
   const editSelectionRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
   const thoughtViewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 });
   const EDIT_TOOLBAR_HEIGHT = 52; // inputToolbar paddingVertical(8*2) + 버튼 높이
@@ -251,18 +252,14 @@ export default function OnScreen() {
 
   // 툴바 [↵ 줄바꿈]: 커서 위치에 개행 삽입
   const handleEditInsertNewline = useCallback(() => {
-    // blur 전 마지막 커서 위치를 ref에서 읽음
     const sel = editSelectionRef.current;
-    const newPos = sel.start + 1;
     setEditingText((prev) => {
       const before = prev.slice(0, sel.start);
       const after = prev.slice(sel.end);
+      const newPos = sel.start + 1;
+      editSelectionRef.current = { start: newPos, end: newPos };
       return before + "\n" + after;
     });
-    // controlled selection으로 커서를 삽입 위치로 명시적 이동
-    setEditSelection({ start: newPos, end: newPos });
-    // blur됐을 수 있으므로 재포커스
-    editTextInputRef.current?.focus();
   }, []);
 
   const handleThoughtEditSave = useCallback(async () => {
@@ -344,6 +341,11 @@ export default function OnScreen() {
     }
     return list;
   }, [thoughts, thoughtSortOrder]);
+
+  const thoughtPagerData = useMemo((): ThoughtPagerItem[] => [
+    { kind: "widget" },
+    ...sortedThoughts.map((t): ThoughtPagerItem => ({ kind: "thought", thought: t })),
+  ], [sortedThoughts]);
 
   const listData = useMemo((): ListItem[] => {
     if (topTab === "my_article") {
@@ -758,11 +760,6 @@ export default function OnScreen() {
     searchQuery.trim().length === 0 &&
     myLetterArticles.length === 0;
 
-  const showThoughtEmpty =
-    topTab === "thought" &&
-    !isThoughtsLoading &&
-    (thoughts ?? []).length === 0;
-
   const editingThought = editingThoughtId !== null
     ? sortedThoughts.find((t) => t.id === editingThoughtId) ?? null
     : null;
@@ -872,8 +869,8 @@ export default function OnScreen() {
           </View>
         )}
 
-        {/* 단상 탭 정렬 드롭다운 — 탭바 아래 우측 */}
-        {!selectionMode && editingThoughtId === null && topTab === "thought" && (
+        {/* 단상 탭 정렬 드롭다운 — 탭바 아래 우측 (위젯이 보이는 동안 숨김) */}
+        {!selectionMode && editingThoughtId === null && topTab === "thought" && thoughtCurrentIndex !== 0 && (
           <View style={styles.sortTriggerRow}>
             <View style={styles.sortTriggerWrap}>
               <Pressable
@@ -951,7 +948,7 @@ export default function OnScreen() {
 
       {editingThoughtId !== null ? (
         /* ── 단상 카드 모양 인라인 편집 ───────────────────────────────── */
-        <View style={[styles.editModeContainer, { paddingBottom: editKeyboardHeight > 0 ? editKeyboardHeight + EDIT_TOOLBAR_HEIGHT : 0 }]}>
+        <View style={[styles.editModeContainer, { paddingBottom: editKeyboardHeight > 0 ? (Platform.OS === "android" ? EDIT_TOOLBAR_HEIGHT : editKeyboardHeight + EDIT_TOOLBAR_HEIGHT) : 0 }]}>
           {editingThought && (
             /* 카드 전체를 누르면 TextInput 재포커스 → 키보드 재등장 */
             <Pressable
@@ -983,11 +980,8 @@ export default function OnScreen() {
                   scrollEnabled
                   returnKeyType="default"
                   blurOnSubmit={false}
-                  selection={editSelection}
                   onSelectionChange={(e) => {
                     editSelectionRef.current = e.nativeEvent.selection;
-                    // controlled selection 적용 후 해제 → 이후 사용자 커서 이동 자유롭게
-                    if (editSelection !== undefined) setEditSelection(undefined);
                   }}
                 />
               </View>
@@ -1056,25 +1050,15 @@ export default function OnScreen() {
             메모를 완성해 편지로 내보내면{"\n"}여기에 모아볼 수 있어요
           </Text>
         </RefreshableEmpty>
-      ) : showThoughtEmpty ? (
-        <RefreshableEmpty
-          refreshing={isThoughtsRefetching}
-          onRefresh={refetchThoughts}
-          contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
-        >
-          <Feather name="feather" size={40} color={Colors.zinc300} />
-          <Text style={styles.emptyTitle}>단상이 없어요</Text>
-          <Text style={styles.emptySubtitle}>
-            독서 중 떠오른 생각들이{"\n"}여기에 모아집니다
-          </Text>
-        </RefreshableEmpty>
       ) : topTab === "thought" ? (
-        /* ── 단상 카드 페이저 ──────────────────────────────────────────── */
+        /* ── 단상 카드 페이저 (위젯 슬롯 포함) ───────────────────────────── */
         <View style={[styles.thoughtPagerContainer, { paddingBottom: navBottom }]}>
           <FlatList
             ref={thoughtFlatListRef}
-            data={sortedThoughts}
-            keyExtractor={(t: Thought) => `thought-${t.id}`}
+            data={thoughtPagerData}
+            keyExtractor={(item: ThoughtPagerItem) =>
+              item.kind === "widget" ? "__widget__" : `thought-${item.thought.id}`
+            }
             style={styles.thoughtFlatList}
             snapToInterval={thoughtCardSlotHeight}
             snapToAlignment="start"
@@ -1089,17 +1073,27 @@ export default function OnScreen() {
                 onRefresh={refetchThoughts}
               />
             }
-            renderItem={({ item, index }: { item: Thought; index: number }) => (
-              <ThoughtCard
-                content={item.content}
-                createdFrom={item.createdFrom}
-                createdAt={item.createdAt}
-                slotHeight={thoughtCardSlotHeight}
-                isFirst={index === 0}
-                isLast={index === sortedThoughts.length - 1}
-                onPress={() => handleThoughtCardPress(item)}
-              />
-            )}
+            renderItem={({ item, index }: { item: ThoughtPagerItem; index: number }) => {
+              if (item.kind === "widget") {
+                return (
+                  <DansangWidget
+                    slotHeight={thoughtCardSlotHeight}
+                    hasThoughts={sortedThoughts.length > 0}
+                  />
+                );
+              }
+              return (
+                <ThoughtCard
+                  content={item.thought.content}
+                  createdFrom={item.thought.createdFrom}
+                  createdAt={item.thought.createdAt}
+                  slotHeight={thoughtCardSlotHeight}
+                  isFirst={false}
+                  isLast={index === sortedThoughts.length}
+                  onPress={() => handleThoughtCardPress(item.thought)}
+                />
+              );
+            }}
             getItemLayout={(_data, index) => ({
               length: thoughtCardSlotHeight,
               offset: thoughtCardSlotHeight * index,
@@ -1293,44 +1287,32 @@ export default function OnScreen() {
         }}
       />
 
-      {/* ── 편집 툴바 — 기록함(on-01a)과 동일하게 position:absolute + bottom:keyboardHeight */}
+      {/* ── 편집 툴바 — iOS: absolute+bottom:keyboardHeight / Android(resize): bottom:0 (레이아웃이 이미 축소됨) */}
       {editingThoughtId !== null && editKeyboardHeight > 0 && Platform.OS !== "web" && (
-        <View style={[styles.editToolbarWrap, { bottom: editKeyboardHeight }]}>
-          {/* MemoToolbar와 동일한 캡슐 레이아웃 */}
-          <View style={styles.inputToolbarOuter}>
-            <View style={styles.inputToolbarCapsule}>
-              {/* 왼쪽 버튼 영역 */}
-              <View style={styles.inputToolbarBtns}>
-                <ScalePressable
-                  style={styles.inputToolbarBtn}
-                  contentStyle={styles.inputToolbarBtnContent}
-                  onPress={handleEditInsertNewline}
-                  hitSlop={6}
-                >
-                  <Feather name="corner-down-left" size={15} color={Colors.zinc700} />
-                  <Text style={styles.inputToolbarBtnText}> 줄바꿈</Text>
-                </ScalePressable>
-                <ScalePressable
-                  style={[styles.inputToolbarBtn, styles.inputToolbarBtnDisabled]}
-                  contentStyle={styles.inputToolbarBtnContent}
-                  hitSlop={6}
-                >
-                  <Text style={[styles.inputToolbarBtnText, styles.inputToolbarBtnTextDisabled]}>
-                    삽입
-                  </Text>
-                </ScalePressable>
-              </View>
-              {/* 구분선 + 키보드 닫기 — MemoToolbar와 동일 */}
-              <View style={styles.inputToolbarSep} />
-              <ScalePressable
-                style={styles.inputToolbarKbBtn}
-                contentStyle={styles.inputToolbarBtnContent}
-                onPress={() => Keyboard.dismiss()}
-                hitSlop={8}
-              >
-                <MaterialCommunityIcons name="keyboard-off-outline" size={20} color={Colors.zinc700} />
-              </ScalePressable>
-            </View>
+        <View style={[styles.editToolbarWrap, { bottom: Platform.OS === "android" ? 0 : editKeyboardHeight }]}>
+          <View style={styles.inputToolbar}>
+            <Pressable
+              onPress={handleEditInsertNewline}
+              style={styles.inputToolbarBtn}
+              hitSlop={8}
+            >
+              <Text style={styles.inputToolbarBtnText}>↵ 줄바꿈</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.inputToolbarBtn, styles.inputToolbarBtnDisabled]}
+              hitSlop={8}
+            >
+              <Text style={[styles.inputToolbarBtnText, styles.inputToolbarBtnTextDisabled]}>
+                삽입
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => Keyboard.dismiss()}
+              style={styles.inputToolbarBtn}
+              hitSlop={8}
+            >
+              <Feather name="chevron-down" size={18} color={Colors.zinc600} />
+            </Pressable>
           </View>
         </View>
       )}
@@ -1750,68 +1732,33 @@ const styles = StyleSheet.create({
     zIndex: 53,
     ...Platform.select({ android: { elevation: 8 } }),
   },
-  /* MemoToolbar와 동일한 캡슐 스타일 */
-  inputToolbarOuter: {
-    alignItems: "stretch",
+  inputToolbar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 8,
-  },
-  inputToolbarCapsule: {
-    backgroundColor: "#ffffff",
-    borderRadius: 24,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingLeft: 8,
-    paddingRight: 8,
-    paddingVertical: 4,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.12,
-        shadowRadius: 8,
-      },
-      android: { elevation: 6 },
-    }),
-  },
-  inputToolbarBtns: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 2,
+    backgroundColor: Colors.zinc50,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.zinc200,
   },
   inputToolbarBtn: {
-    height: 36,
-    borderRadius: 18,
-    paddingHorizontal: 10,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  inputToolbarBtnContent: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    minWidth: 44,
     alignItems: "center",
     justifyContent: "center",
-    flexDirection: "row",
   },
   inputToolbarBtnDisabled: {
     opacity: 0.35,
   },
   inputToolbarBtnText: {
+    ...Typography.body,
     fontSize: 14,
     color: Colors.zinc700,
-    fontFamily: Platform.select({ ios: "Pretendard-Regular", default: "Pretendard" }),
   },
   inputToolbarBtnTextDisabled: {
     color: Colors.zinc400,
-  },
-  inputToolbarSep: {
-    width: StyleSheet.hairlineWidth,
-    height: 20,
-    backgroundColor: "#d4d4d8",
-    marginHorizontal: 4,
-  },
-  inputToolbarKbBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
   },
 });
