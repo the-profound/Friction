@@ -139,8 +139,11 @@ export default function OnScreen() {
   const [editingThoughtId, setEditingThoughtId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
   const [editKeyboardHeight, setEditKeyboardHeight] = useState(0);
+  // controlled selection — 줄바꿈 삽입 직후에만 설정, onSelectionChange 후 undefined로 해제
+  const [editSelection, setEditSelection] = useState<{ start: number; end: number } | undefined>(undefined);
   const thoughtFlatListRef = useRef<FlatList<Thought>>(null);
   const editTextInputRef = useRef<TextInput>(null);
+  // blur 후에도 마지막 커서 위치를 보존하기 위해 ref 사용
   const editSelectionRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
   const thoughtViewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 });
   const EDIT_TOOLBAR_HEIGHT = 52; // inputToolbar paddingVertical(8*2) + 버튼 높이
@@ -248,14 +251,18 @@ export default function OnScreen() {
 
   // 툴바 [↵ 줄바꿈]: 커서 위치에 개행 삽입
   const handleEditInsertNewline = useCallback(() => {
+    // blur 전 마지막 커서 위치를 ref에서 읽음
     const sel = editSelectionRef.current;
+    const newPos = sel.start + 1;
     setEditingText((prev) => {
       const before = prev.slice(0, sel.start);
       const after = prev.slice(sel.end);
-      const newPos = sel.start + 1;
-      editSelectionRef.current = { start: newPos, end: newPos };
       return before + "\n" + after;
     });
+    // controlled selection으로 커서를 삽입 위치로 명시적 이동
+    setEditSelection({ start: newPos, end: newPos });
+    // blur됐을 수 있으므로 재포커스
+    editTextInputRef.current?.focus();
   }, []);
 
   const handleThoughtEditSave = useCallback(async () => {
@@ -976,8 +983,11 @@ export default function OnScreen() {
                   scrollEnabled
                   returnKeyType="default"
                   blurOnSubmit={false}
+                  selection={editSelection}
                   onSelectionChange={(e) => {
                     editSelectionRef.current = e.nativeEvent.selection;
+                    // controlled selection 적용 후 해제 → 이후 사용자 커서 이동 자유롭게
+                    if (editSelection !== undefined) setEditSelection(undefined);
                   }}
                 />
               </View>
