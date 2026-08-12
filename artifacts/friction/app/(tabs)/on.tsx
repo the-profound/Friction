@@ -7,7 +7,6 @@ import {
   RefreshControl,
   useWindowDimensions,
   Platform,
-  InputAccessoryView,
   Keyboard,
   TextInput,
   Pressable,
@@ -144,7 +143,7 @@ export default function OnScreen() {
   const editTextInputRef = useRef<TextInput>(null);
   const editSelectionRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
   const thoughtViewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 });
-  const EDIT_TOOLBAR_ID = "dansang-edit-toolbar";
+  const EDIT_TOOLBAR_HEIGHT = 52; // inputToolbar paddingVertical(8*2) + 버튼 높이
 
   // windowHeight used only indirectly via onLayout measuring thoughtCardSlotHeight
   const { width: screenWidth } = useWindowDimensions();
@@ -945,7 +944,7 @@ export default function OnScreen() {
 
       {editingThoughtId !== null ? (
         /* ── 단상 카드 모양 인라인 편집 ───────────────────────────────── */
-        <View style={[styles.editModeContainer, { paddingBottom: editKeyboardHeight }]}>
+        <View style={[styles.editModeContainer, { paddingBottom: editKeyboardHeight > 0 ? editKeyboardHeight + EDIT_TOOLBAR_HEIGHT : 0 }]}>
           {editingThought && (
             /* 카드 전체를 누르면 TextInput 재포커스 → 키보드 재등장 */
             <Pressable
@@ -977,7 +976,6 @@ export default function OnScreen() {
                   scrollEnabled
                   returnKeyType="default"
                   blurOnSubmit={false}
-                  inputAccessoryViewID={Platform.OS === "ios" ? EDIT_TOOLBAR_ID : undefined}
                   onSelectionChange={(e) => {
                     editSelectionRef.current = e.nativeEvent.selection;
                   }}
@@ -1285,11 +1283,9 @@ export default function OnScreen() {
         }}
       />
 
-      {/* ── 편집 툴바 (iOS 전용 InputAccessoryView) ────────────────────────
-           InputAccessoryView는 키보드 표시 전부터 트리에 있어야 native가 연결함.
-           editingThoughtId 조건부로 마운트하면 autoFocus 타이밍과 엇갈려 툴바가 뜨지 않음. */}
-      {Platform.OS === "ios" && (
-        <InputAccessoryView nativeID={EDIT_TOOLBAR_ID}>
+      {/* ── 편집 툴바 — 기록함(on-01a)과 동일하게 position:absolute + bottom:keyboardHeight */}
+      {editingThoughtId !== null && editKeyboardHeight > 0 && Platform.OS !== "web" && (
+        <View style={[styles.editToolbarWrap, { bottom: editKeyboardHeight }]}>
           <View style={styles.inputToolbar}>
             <Pressable
               onPress={handleEditInsertNewline}
@@ -1314,7 +1310,7 @@ export default function OnScreen() {
               <Feather name="chevron-down" size={18} color={Colors.zinc600} />
             </Pressable>
           </View>
-        </InputAccessoryView>
+        </View>
       )}
     </View>
   );
@@ -1724,7 +1720,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  /* ── 편집 InputAccessoryView 툴바 ──────────────────────────────── */
+  /* ── 편집 툴바 (기록함과 동일 패턴: absolute + bottom:keyboardHeight) ── */
+  editToolbarWrap: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    zIndex: 53,
+    ...Platform.select({ android: { elevation: 8 } }),
+  },
   inputToolbar: {
     flexDirection: "row",
     alignItems: "center",
