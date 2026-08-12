@@ -1285,8 +1285,10 @@ export default function OnScreen() {
         }}
       />
 
-      {/* ── 편집 툴바 (iOS 전용 InputAccessoryView) ────────────────────── */}
-      {Platform.OS === "ios" && editingThoughtId !== null && (
+      {/* ── 편집 툴바 (iOS 전용 InputAccessoryView) ────────────────────────
+           InputAccessoryView는 키보드 표시 전부터 트리에 있어야 native가 연결함.
+           editingThoughtId 조건부로 마운트하면 autoFocus 타이밍과 엇갈려 툴바가 뜨지 않음. */}
+      {Platform.OS === "ios" && (
         <InputAccessoryView nativeID={EDIT_TOOLBAR_ID}>
           <View style={styles.inputToolbar}>
             <Pressable
@@ -1647,7 +1649,7 @@ const styles = StyleSheet.create({
   },
   editCardWrapper: {
     /* 크기는 렌더 시 width/height로 주입 */
-    overflow: "hidden",
+    /* overflow:hidden 금지 — shadow layer를 클리핑하여 외곽선이 사라짐 */
     borderRadius: 4,
   },
   editCardShadow: {
