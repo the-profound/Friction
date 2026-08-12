@@ -49,6 +49,7 @@ import { useNavigation } from "@/contexts/NavigationContext";
 import type { ArticleStatus } from "@/lib/policies";
 import { LIST_PERF_PRESET } from "@/lib/listPerf";
 import DansangWidget from "@/components/DansangWidget/DansangWidget";
+import ThoughtQuestionBanner from "@/components/ThoughtQuestionBanner/ThoughtQuestionBanner";
 
 type TopTab = "memo" | "my_article" | "thought";
 type FilterMode = "all" | "DRAFT" | "DIVIDING" | "CLOSING";
@@ -1083,15 +1084,21 @@ export default function OnScreen() {
                 );
               }
               return (
-                <ThoughtCard
-                  content={item.thought.content}
-                  createdFrom={item.thought.createdFrom}
-                  createdAt={item.thought.createdAt}
-                  slotHeight={thoughtCardSlotHeight}
-                  isFirst={false}
-                  isLast={index === sortedThoughts.length}
-                  onPress={() => handleThoughtCardPress(item.thought)}
-                />
+                <View style={{ height: thoughtCardSlotHeight }}>
+                  <ThoughtCard
+                    content={item.thought.content}
+                    createdFrom={item.thought.createdFrom}
+                    createdAt={item.thought.createdAt}
+                    slotHeight={thoughtCardSlotHeight}
+                    isFirst={false}
+                    isLast={index === sortedThoughts.length}
+                    onPress={() => handleThoughtCardPress(item.thought)}
+                  />
+                  <ThoughtQuestionBanner
+                    thoughtId={item.thought.id}
+                    visible={index === thoughtCurrentIndex}
+                  />
+                </View>
               );
             }}
             getItemLayout={(_data, index) => ({

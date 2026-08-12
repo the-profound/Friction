@@ -5,6 +5,7 @@ import { requireAuth } from "../middlewares/requireAuth";
 import { CreateThoughtBody } from "@workspace/api-zod";
 import { generateDenseEmbedding, generateSparseEmbedding } from "../lib/embeddings";
 import { analyzeThoughtExpansion } from "../services/analyze-thought-expansion";
+import { generateThoughtQuestion } from "../services/generate-thought-question";
 
 const router: IRouter = Router();
 
@@ -90,6 +91,34 @@ router.get("/thoughts/:id/similar", requireAuth, async (req, res) => {
   }));
 
   res.json(response);
+});
+
+router.get("/thoughts/:id/question", requireAuth, async (req, res) => {
+  const userId = req.user!.id;
+  const { id } = req.params;
+
+  const [source] = await db
+    .select({ id: thoughtsTable.id, content: thoughtsTable.content })
+    .from(thoughtsTable)
+    .where(and(eq(thoughtsTable.id, id), eq(thoughtsTable.authorId, userId), isNull(thoughtsTable.deletedAt)));
+
+  if (!source) {
+    res.status(404).json({ error: "Thought not found" });
+    return;
+  }
+
+  if (!source.content || !process.env.OPENROUTER_API_KEY) {
+    res.json({ question: null });
+    return;
+  }
+
+  try {
+    const question = await generateThoughtQuestion(source.content);
+    res.json({ question });
+  } catch (err) {
+    console.warn("[thoughts/question] AI question generation failed:", err);
+    res.json({ question: null });
+  }
 });
 
 router.get("/thoughts", requireAuth, async (req, res) => {

@@ -1162,6 +1162,11 @@ export interface SpaceJoinContext {
   codeRequest?: SpaceCodeRequest | null;
 }
 
+export interface ThoughtQuestion {
+  /** AI-generated thought-expansion question (null when unavailable) */
+  question: string | null;
+}
+
 export type ThoughtCreatedFrom =
   (typeof ThoughtCreatedFrom)[keyof typeof ThoughtCreatedFrom];
 

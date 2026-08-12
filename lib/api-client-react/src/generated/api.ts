@@ -108,6 +108,7 @@ import type {
   TeamCollectionWithRole,
   TeamMemberWithUser,
   Thought,
+  ThoughtQuestion,
   ToggleStoredSentenceFavoriteBody,
   ToggleTeamArticlePinBody,
   TransitionArticleBody,
@@ -9469,6 +9470,94 @@ export const useDeleteSendRecord = <
 > => {
   return useMutation(getDeleteSendRecordMutationOptions(options));
 };
+
+/**
+ * Uses OpenRouter to generate a single thought-expansion question based on the thought's content. Returns null when content is missing, the API key is unavailable, or AI generation fails. Always succeeds (no 5xx) — callers should treat null as "no question available".
+ * @summary Generate an AI thought-expansion question for a single thought
+ */
+export const getGetThoughtQuestionUrl = (id: string) => {
+  return `/api/thoughts/${id}/question`;
+};
+
+export const getThoughtQuestion = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ThoughtQuestion> => {
+  return customFetch<ThoughtQuestion>(getGetThoughtQuestionUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetThoughtQuestionQueryKey = (id: string) => {
+  return [`/api/thoughts/${id}/question`] as const;
+};
+
+export const getGetThoughtQuestionQueryOptions = <
+  TData = Awaited<ReturnType<typeof getThoughtQuestion>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getThoughtQuestion>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetThoughtQuestionQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getThoughtQuestion>>
+  > = ({ signal }) => getThoughtQuestion(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getThoughtQuestion>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetThoughtQuestionQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getThoughtQuestion>>
+>;
+export type GetThoughtQuestionQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Generate an AI thought-expansion question for a single thought
+ */
+
+export function useGetThoughtQuestion<
+  TData = Awaited<ReturnType<typeof getThoughtQuestion>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getThoughtQuestion>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetThoughtQuestionQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * Returns the authenticated user's own thoughts ordered by cosine similarity to the given thought's dense embedding. Excludes the source thought itself. Returns an empty array if the source thought has no embedding. Each item includes AI-generated r/k/h fields when analysis succeeds; fields are null on failure or when AI is unavailable.

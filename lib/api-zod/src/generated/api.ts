@@ -3424,6 +3424,23 @@ export const DeleteSendRecordParams = zod.object({
 });
 
 /**
+ * Uses OpenRouter to generate a single thought-expansion question based on the thought's content. Returns null when content is missing, the API key is unavailable, or AI generation fails. Always succeeds (no 5xx) — callers should treat null as "no question available".
+ * @summary Generate an AI thought-expansion question for a single thought
+ */
+export const GetThoughtQuestionParams = zod.object({
+  id: zod.coerce.string().uuid(),
+});
+
+export const GetThoughtQuestionResponse = zod.object({
+  question: zod
+    .string()
+    .nullable()
+    .describe(
+      "AI-generated thought-expansion question (null when unavailable)",
+    ),
+});
+
+/**
  * Returns the authenticated user's own thoughts ordered by cosine similarity to the given thought's dense embedding. Excludes the source thought itself. Returns an empty array if the source thought has no embedding. Each item includes AI-generated r/k/h fields when analysis succeeds; fields are null on failure or when AI is unavailable.
  * @summary Get similar thoughts by vector cosine similarity
  */

@@ -140,6 +140,7 @@ export * from "./thought";
 export * from "./thoughtCreatedFrom";
 export * from "./thoughtExpansionResult";
 export * from "./thoughtNote";
+export * from "./thoughtQuestion";
 export * from "./toggleStoredSentenceFavoriteBody";
 export * from "./toggleTeamArticlePinBody";
 export * from "./transitionArticleBody";

@@ -2471,6 +2471,34 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
   # ─── Thoughts ──────────────────────────────────────
+  /thoughts/{id}/question:
+    get:
+      operationId: getThoughtQuestion
+      tags: [thoughts]
+      summary: Generate an AI thought-expansion question for a single thought
+      description: Uses OpenRouter to generate a single thought-expansion question based on the thought's content. Returns null when content is missing, the API key is unavailable, or AI generation fails. Always succeeds (no 5xx) — callers should treat null as "no question available".
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Generated question (or null when unavailable)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ThoughtQuestion"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Thought not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /thoughts/{id}/similar:
     get:
       operationId: getSimilarThoughts
@@ -4508,6 +4536,15 @@ components:
       required: [space]
 
     # ─── Thoughts ────────────────────────────────────
+    ThoughtQuestion:
+      type: object
+      properties:
+        question:
+          type: string
+          nullable: true
+          description: AI-generated thought-expansion question (null when unavailable)
+      required: [question]
+
     SimilarThought:
       allOf:
         - $ref: "#/components/schemas/Thought"
