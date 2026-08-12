@@ -16,7 +16,7 @@ import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar"
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useReaderTransition } from "@/contexts/ReaderTransitionContext";
-import { Feather } from "@expo/vector-icons";
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { PageHeader } from "@/components/NavBar/PageHeader";
@@ -1286,29 +1286,41 @@ export default function OnScreen() {
       {/* ── 편집 툴바 — 기록함(on-01a)과 동일하게 position:absolute + bottom:keyboardHeight */}
       {editingThoughtId !== null && editKeyboardHeight > 0 && Platform.OS !== "web" && (
         <View style={[styles.editToolbarWrap, { bottom: editKeyboardHeight }]}>
-          <View style={styles.inputToolbar}>
-            <Pressable
-              onPress={handleEditInsertNewline}
-              style={styles.inputToolbarBtn}
-              hitSlop={8}
-            >
-              <Text style={styles.inputToolbarBtnText}>↵ 줄바꿈</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.inputToolbarBtn, styles.inputToolbarBtnDisabled]}
-              hitSlop={8}
-            >
-              <Text style={[styles.inputToolbarBtnText, styles.inputToolbarBtnTextDisabled]}>
-                삽입
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => Keyboard.dismiss()}
-              style={styles.inputToolbarBtn}
-              hitSlop={8}
-            >
-              <Feather name="chevron-down" size={18} color={Colors.zinc600} />
-            </Pressable>
+          {/* MemoToolbar와 동일한 캡슐 레이아웃 */}
+          <View style={styles.inputToolbarOuter}>
+            <View style={styles.inputToolbarCapsule}>
+              {/* 왼쪽 버튼 영역 */}
+              <View style={styles.inputToolbarBtns}>
+                <ScalePressable
+                  style={styles.inputToolbarBtn}
+                  contentStyle={styles.inputToolbarBtnContent}
+                  onPress={handleEditInsertNewline}
+                  hitSlop={6}
+                >
+                  <Feather name="corner-down-left" size={15} color={Colors.zinc700} />
+                  <Text style={styles.inputToolbarBtnText}> 줄바꿈</Text>
+                </ScalePressable>
+                <ScalePressable
+                  style={[styles.inputToolbarBtn, styles.inputToolbarBtnDisabled]}
+                  contentStyle={styles.inputToolbarBtnContent}
+                  hitSlop={6}
+                >
+                  <Text style={[styles.inputToolbarBtnText, styles.inputToolbarBtnTextDisabled]}>
+                    삽입
+                  </Text>
+                </ScalePressable>
+              </View>
+              {/* 구분선 + 키보드 닫기 — MemoToolbar와 동일 */}
+              <View style={styles.inputToolbarSep} />
+              <ScalePressable
+                style={styles.inputToolbarKbBtn}
+                contentStyle={styles.inputToolbarBtnContent}
+                onPress={() => Keyboard.dismiss()}
+                hitSlop={8}
+              >
+                <MaterialCommunityIcons name="keyboard-off-outline" size={20} color={Colors.zinc700} />
+              </ScalePressable>
+            </View>
           </View>
         </View>
       )}
@@ -1728,33 +1740,68 @@ const styles = StyleSheet.create({
     zIndex: 53,
     ...Platform.select({ android: { elevation: 8 } }),
   },
-  inputToolbar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+  /* MemoToolbar와 동일한 캡슐 스타일 */
+  inputToolbarOuter: {
+    alignItems: "stretch",
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: Colors.zinc50,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.zinc200,
+  },
+  inputToolbarCapsule: {
+    backgroundColor: "#ffffff",
+    borderRadius: 24,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingLeft: 8,
+    paddingRight: 8,
+    paddingVertical: 4,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.12,
+        shadowRadius: 8,
+      },
+      android: { elevation: 6 },
+    }),
+  },
+  inputToolbarBtns: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
   },
   inputToolbarBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    minWidth: 44,
+    height: 36,
+    borderRadius: 18,
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  inputToolbarBtnContent: {
     alignItems: "center",
     justifyContent: "center",
+    flexDirection: "row",
   },
   inputToolbarBtnDisabled: {
     opacity: 0.35,
   },
   inputToolbarBtnText: {
-    ...Typography.body,
     fontSize: 14,
     color: Colors.zinc700,
+    fontFamily: Platform.select({ ios: "Pretendard-Regular", default: "Pretendard" }),
   },
   inputToolbarBtnTextDisabled: {
     color: Colors.zinc400,
+  },
+  inputToolbarSep: {
+    width: StyleSheet.hairlineWidth,
+    height: 20,
+    backgroundColor: "#d4d4d8",
+    marginHorizontal: 4,
+  },
+  inputToolbarKbBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
   },
 });
