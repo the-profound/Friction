@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, StyleSheet, Platform } from "react-native";
+import { View, Text, StyleSheet, Platform, Pressable } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography } from "@/constants/tokens";
 import type { ThoughtCreatedFrom } from "@workspace/api-client-react";
@@ -35,6 +35,8 @@ interface ThoughtCardProps {
   isFirst?: boolean;
   /** Whether this card is the last in the list (hide down-hint) */
   isLast?: boolean;
+  /** Tap handler — enters inline edit mode */
+  onPress?: () => void;
 }
 
 const CARD_MARGIN_H = 36;
@@ -48,11 +50,16 @@ export default function ThoughtCard({
   slotHeight,
   isFirst,
   isLast,
+  onPress,
 }: ThoughtCardProps) {
   const cardMarginV = slotHeight * CARD_MARGIN_V_RATIO;
 
   return (
-    <View style={[styles.slot, { height: slotHeight }]}>
+    <Pressable
+      onPress={onPress}
+      android_ripple={null}
+      style={[styles.slot, { height: slotHeight }]}
+    >
       {/* Up-navigation hint */}
       {!isFirst && (
         <View style={styles.hintAbove} pointerEvents="none">
@@ -97,7 +104,7 @@ export default function ThoughtCard({
           <Feather name="chevron-down" size={18} color={Colors.zinc300} />
         </View>
       )}
-    </View>
+    </Pressable>
   );
 }
 

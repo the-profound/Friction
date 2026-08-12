@@ -6,6 +6,10 @@ import {
   FlatList,
   RefreshControl,
   useWindowDimensions,
+  Platform,
+  KeyboardAvoidingView,
+  TextInput,
+  Pressable,
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar";
@@ -35,6 +39,7 @@ import {
   useListMyCollections,
   useAddArticleToMyCollection,
   useListThoughts,
+  useUpdateThought,
 } from "@workspace/api-client-react";
 import { invalidateArticleLists } from "@/lib/queryInvalidation";
 import type { Article, MyCollection, Thought } from "@workspace/api-client-react";
@@ -129,7 +134,12 @@ export default function OnScreen() {
   const [thoughtCardSlotHeight, setThoughtCardSlotHeight] = useState(400);
   const [thoughtSortOrder, setThoughtSortOrder] = useState<"latest" | "oldest">("latest");
   const [thoughtCurrentIndex, setThoughtCurrentIndex] = useState(0);
+  const [thoughtSortDropdownOpen, setThoughtSortDropdownOpen] = useState(false);
+  const [headerAreaHeight, setHeaderAreaHeight] = useState(0);
+  const [editingThoughtId, setEditingThoughtId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState("");
   const thoughtFlatListRef = useRef<FlatList<Thought>>(null);
+  const editTextInputRef = useRef<TextInput>(null);
   const thoughtViewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 });
 
   // windowHeight used only indirectly via onLayout measuring thoughtCardSlotHeight
@@ -159,6 +169,7 @@ export default function OnScreen() {
 
   const createArticle = useCreateArticle();
   const deleteArticle = useDeleteArticle();
+  const updateThought = useUpdateThought();
   const collectionsQuery = useListMyCollections({ ownerId: userId });
   const addToCollection = useAddArticleToMyCollection();
 
@@ -193,11 +204,39 @@ export default function OnScreen() {
     setThoughtsSheetNonce((n) => n + 1);
   }, []);
 
-  const toggleThoughtSortOrder = useCallback(() => {
-    setThoughtSortOrder((prev) => (prev === "latest" ? "oldest" : "latest"));
+  const selectThoughtSortOrder = useCallback((order: "latest" | "oldest") => {
+    setThoughtSortOrder(order);
+    setThoughtSortDropdownOpen(false);
     setThoughtCurrentIndex(0);
     thoughtFlatListRef.current?.scrollToIndex({ index: 0, animated: false });
   }, []);
+
+  const handleThoughtCardPress = useCallback((thought: Thought) => {
+    setEditingThoughtId(thought.id);
+    setEditingText(thought.content ?? "");
+  }, []);
+
+  const handleThoughtEditCancel = useCallback(() => {
+    setEditingThoughtId(null);
+    setEditingText("");
+    setThoughtSortDropdownOpen(false);
+  }, []);
+
+  const handleThoughtEditSave = useCallback(async () => {
+    if (!editingThoughtId || updateThought.isPending) return;
+    const id = editingThoughtId;
+    const text = editingText;
+    try {
+      await updateThought.mutateAsync({ id, data: { content: text } });
+      // Clear editor state only after a successful save
+      setEditingThoughtId(null);
+      setEditingText("");
+      refetchThoughts();
+    } catch {
+      // Preserve editor state so the user can retry without losing their edits
+      showToast({ message: "저장에 실패했습니다. 다시 시도해주세요.", type: "error" });
+    }
+  }, [editingThoughtId, editingText, updateThought, refetchThoughts, showToast]);
 
   const onThoughtViewableItemsChanged = useCallback(
     ({ viewableItems }: { viewableItems: Array<{ index: number | null }> }) => {
@@ -681,97 +720,162 @@ export default function OnScreen() {
     !isThoughtsLoading &&
     (thoughts ?? []).length === 0;
 
+  const editingThought = editingThoughtId !== null
+    ? sortedThoughts.find((t) => t.id === editingThoughtId) ?? null
+    : null;
+
+  const CREATED_FROM_LABEL: Record<string, string> = {
+    quoted: "인용",
+    question: "질문",
+    reading: "메모",
+    direct: "직접",
+  };
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      {selectionMode ? (
-        <PageHeader
-          title={selectedCount > 0 ? `${selectedCount}개 선택됨` : ""}
-          rightText="취소"
-          onRightTextPress={exitSelectionMode}
-        />
-      ) : (
-        <PageHeader
-          title="기록"
-          titleImage={require("@/assets/images/wordmark_maroon.png")}
-          showSearch
-          onSearchPress={handleSearchPress}
-          searchActive={searchActive}
-          searchLast
-          showKebab
-          onKebabPress={enterSelectionMode}
-        />
-      )}
+      {/* ── 헤더 영역 (높이 측정 대상) ───────────────────────────────── */}
+      <View
+        onLayout={(e) => {
+          const h = e.nativeEvent.layout.height;
+          if (h > 0) setHeaderAreaHeight(h);
+        }}
+      >
+        {editingThoughtId !== null ? (
+          /* 편집 모드 상단 바 */
+          <View style={styles.editTopBar}>
+            <Pressable onPress={handleThoughtEditCancel} style={styles.editTopBarBtn} hitSlop={8}>
+              <Text style={styles.editTopBarCancel}>취소</Text>
+            </Pressable>
+            <Pressable
+              onPress={handleThoughtEditSave}
+              style={styles.editTopBarBtn}
+              disabled={updateThought.isPending}
+              hitSlop={8}
+            >
+              <Text style={[styles.editTopBarSave, updateThought.isPending && { opacity: 0.4 }]}>
+                완료
+              </Text>
+            </Pressable>
+          </View>
+        ) : selectionMode ? (
+          <PageHeader
+            title={selectedCount > 0 ? `${selectedCount}개 선택됨` : ""}
+            rightText="취소"
+            onRightTextPress={exitSelectionMode}
+          />
+        ) : (
+          <PageHeader
+            title="기록"
+            titleImage={require("@/assets/images/wordmark_maroon.png")}
+            showSearch
+            onSearchPress={handleSearchPress}
+            searchActive={searchActive}
+            searchLast
+            showKebab
+            onKebabPress={enterSelectionMode}
+          />
+        )}
 
-      {!selectionMode && (
-        <View style={styles.topTabBar}>
-          <View style={{ flex: 1 }}>
-            <ScalePressable
-              style={[styles.topTabItem, { paddingLeft: 16, paddingRight: 8 }]}
-              onPress={() => switchTopTab("thought")}
-              contentStyle={styles.topTabItemContent}
-            >
-              <Text
-                style={[styles.topTabText, topTab === "thought" && styles.topTabTextActive]}
-                allowFontScaling={false}
-                numberOfLines={1}
+        {!selectionMode && editingThoughtId === null && (
+          <View style={styles.topTabBar}>
+            <View style={{ flex: 1 }}>
+              <ScalePressable
+                style={[styles.topTabItem, { paddingLeft: 16, paddingRight: 8 }]}
+                onPress={() => switchTopTab("thought")}
+                contentStyle={styles.topTabItemContent}
               >
-                단상
-              </Text>
-              {topTab === "thought" && <View style={styles.topTabUnderline} />}
-            </ScalePressable>
-          </View>
-          <View style={{ flex: 1 }}>
-            <ScalePressable
-              style={[styles.topTabItem, { paddingHorizontal: 8 }]}
-              onPress={() => switchTopTab("memo")}
-              contentStyle={styles.topTabItemContent}
-            >
-              <Text
-                style={[styles.topTabText, topTab === "memo" && styles.topTabTextActive]}
-                allowFontScaling={false}
-                numberOfLines={1}
+                <Text
+                  style={[styles.topTabText, topTab === "thought" && styles.topTabTextActive]}
+                  allowFontScaling={false}
+                  numberOfLines={1}
+                >
+                  단상
+                </Text>
+                {topTab === "thought" && <View style={styles.topTabUnderline} />}
+              </ScalePressable>
+            </View>
+            <View style={{ flex: 1 }}>
+              <ScalePressable
+                style={[styles.topTabItem, { paddingHorizontal: 8 }]}
+                onPress={() => switchTopTab("memo")}
+                contentStyle={styles.topTabItemContent}
               >
-                메모
-              </Text>
-              {topTab === "memo" && <View style={styles.topTabUnderline} />}
-            </ScalePressable>
-          </View>
-          <View style={{ flex: 1 }}>
-            <ScalePressable
-              style={[styles.topTabItem, { paddingLeft: 8, paddingRight: 16 }]}
-              onPress={() => switchTopTab("my_article")}
-              contentStyle={styles.topTabItemContent}
-            >
-              <Text
-                style={[styles.topTabText, topTab === "my_article" && styles.topTabTextActive]}
-                allowFontScaling={false}
-                numberOfLines={1}
+                <Text
+                  style={[styles.topTabText, topTab === "memo" && styles.topTabTextActive]}
+                  allowFontScaling={false}
+                  numberOfLines={1}
+                >
+                  메모
+                </Text>
+                {topTab === "memo" && <View style={styles.topTabUnderline} />}
+              </ScalePressable>
+            </View>
+            <View style={{ flex: 1 }}>
+              <ScalePressable
+                style={[styles.topTabItem, { paddingLeft: 8, paddingRight: 16 }]}
+                onPress={() => switchTopTab("my_article")}
+                contentStyle={styles.topTabItemContent}
               >
-                편지
-              </Text>
-              {topTab === "my_article" && <View style={styles.topTabUnderline} />}
-            </ScalePressable>
+                <Text
+                  style={[styles.topTabText, topTab === "my_article" && styles.topTabTextActive]}
+                  allowFontScaling={false}
+                  numberOfLines={1}
+                >
+                  편지
+                </Text>
+                {topTab === "my_article" && <View style={styles.topTabUnderline} />}
+              </ScalePressable>
+            </View>
+            {/* 단상 탭 정렬 트리거 — 탭바 오른쪽 */}
+            {topTab === "thought" && (
+              <View style={styles.sortTriggerWrap}>
+                <Pressable
+                  onPress={() => setThoughtSortDropdownOpen((o) => !o)}
+                  style={styles.sortTriggerBtn}
+                  hitSlop={8}
+                >
+                  <Text style={styles.sortTriggerText}>
+                    {thoughtSortOrder === "latest" ? "최신순" : "오래된순"}
+                  </Text>
+                </Pressable>
+                {thoughtSortDropdownOpen && (
+                  <View style={styles.sortDropdownMenu}>
+                    <Pressable
+                      onPress={() => selectThoughtSortOrder("latest")}
+                      style={styles.sortDropdownItem}
+                    >
+                      <Text
+                        style={[
+                          styles.sortDropdownItemText,
+                          thoughtSortOrder === "latest" && styles.sortDropdownItemTextActive,
+                        ]}
+                      >
+                        최신순
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => selectThoughtSortOrder("oldest")}
+                      style={styles.sortDropdownItem}
+                    >
+                      <Text
+                        style={[
+                          styles.sortDropdownItemText,
+                          thoughtSortOrder === "oldest" && styles.sortDropdownItemTextActive,
+                        ]}
+                      >
+                        오래된순
+                      </Text>
+                    </Pressable>
+                  </View>
+                )}
+              </View>
+            )}
           </View>
-          {/* 단상 탭 정렬 버튼 */}
-          {topTab === "thought" && (
-            <ScalePressable
-              style={styles.thoughtSortButton}
-              contentStyle={styles.thoughtSortButtonContent}
-              onPress={toggleThoughtSortOrder}
-              accessibilityRole="button"
-              accessibilityLabel={thoughtSortOrder === "latest" ? "최신순 정렬" : "오래된순 정렬"}
-            >
-              <Feather
-                name={thoughtSortOrder === "latest" ? "arrow-down" : "arrow-up"}
-                size={15}
-                color={Colors.zinc500}
-              />
-            </ScalePressable>
-          )}
-        </View>
-      )}
+        )}
+      </View>
+      {/* ── 헤더 영역 끝 ───────────────────────────────────────────── */}
 
-      {!selectionMode && (
+      {!selectionMode && editingThoughtId === null && (
         <AnimatedSearchBar
           active={searchActive}
           value={searchQuery}
@@ -780,7 +884,7 @@ export default function OnScreen() {
         />
       )}
 
-      {!selectionMode && topTab === "memo" && (
+      {!selectionMode && editingThoughtId === null && topTab === "memo" && (
         <View style={styles.filterBar}>
           {FILTER_OPTIONS.map((opt) => (
             <ScalePressable
@@ -799,7 +903,46 @@ export default function OnScreen() {
         </View>
       )}
 
-      {(isLoading && topTab !== "thought") || (isThoughtsLoading && topTab === "thought") ? (
+      {editingThoughtId !== null ? (
+        /* ── 단상 카드 모양 인라인 편집 ───────────────────────────────── */
+        <KeyboardAvoidingView
+          style={styles.editModeContainer}
+          behavior={Platform.OS === "ios" ? "padding" : Platform.OS === "android" ? "height" : undefined}
+          keyboardVerticalOffset={headerAreaHeight + insets.top}
+        >
+          {editingThought && (
+            <View style={styles.editCardWrapper}>
+              {/* Shadow layer — separated to avoid rasterization issues */}
+              <View style={[StyleSheet.absoluteFill, styles.editCardShadow]} pointerEvents="none" />
+              {/* Content surface — card appearance */}
+              <View style={styles.editCardSurface}>
+                <View style={styles.editCardTopRow}>
+                  <View style={styles.editCardTagPill}>
+                    <Text style={styles.editCardTagText} allowFontScaling={false}>
+                      {CREATED_FROM_LABEL[editingThought.createdFrom] ?? editingThought.createdFrom}
+                    </Text>
+                  </View>
+                  <Text style={styles.editCardDateText} allowFontScaling={false}>
+                    {formatRelativeDate(editingThought.createdAt)}
+                  </Text>
+                </View>
+                <TextInput
+                  ref={editTextInputRef}
+                  style={styles.editCardTextInput}
+                  multiline
+                  value={editingText}
+                  onChangeText={setEditingText}
+                  autoFocus
+                  textAlignVertical="top"
+                  scrollEnabled
+                  returnKeyType="default"
+                  blurOnSubmit={false}
+                />
+              </View>
+            </View>
+          )}
+        </KeyboardAvoidingView>
+      ) : (isLoading && topTab !== "thought") || (isThoughtsLoading && topTab === "thought") ? (
         <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
           <Text style={styles.emptySubtitle}>불러오는 중...</Text>
         </View>
@@ -875,7 +1018,7 @@ export default function OnScreen() {
         </RefreshableEmpty>
       ) : topTab === "thought" ? (
         /* ── 단상 카드 페이저 ──────────────────────────────────────────── */
-        <View style={styles.thoughtPagerContainer}>
+        <View style={[styles.thoughtPagerContainer, { paddingBottom: navBottom }]}>
           <FlatList
             ref={thoughtFlatListRef}
             data={sortedThoughts}
@@ -902,6 +1045,7 @@ export default function OnScreen() {
                 slotHeight={thoughtCardSlotHeight}
                 isFirst={index === 0}
                 isLast={index === sortedThoughts.length - 1}
+                onPress={() => handleThoughtCardPress(item)}
               />
             )}
             getItemLayout={(_data, index) => ({
@@ -1069,7 +1213,7 @@ export default function OnScreen() {
       */}
 
       {/* 단상 탭 전용 FAB */}
-      {topTab === "thought" && !selectionMode && (
+      {topTab === "thought" && !selectionMode && editingThoughtId === null && (
         <ScalePressable
           style={[styles.thoughtFab, { bottom: fabBottom }]}
           contentStyle={styles.thoughtFabContent}
@@ -1343,16 +1487,145 @@ const styles = StyleSheet.create({
   thoughtFlatList: {
     flex: 1,
   },
-  thoughtSortButton: {
-    paddingHorizontal: 12,
+  /* ── 정렬 트리거 (탭바 우측) ──────────────────────────────────── */
+  sortTriggerWrap: {
+    position: "relative",
+    justifyContent: "center",
+    paddingRight: 16,
+    paddingLeft: 8,
     paddingTop: 12,
     paddingBottom: 0,
-    justifyContent: "flex-start",
+    zIndex: 20,
   },
-  thoughtSortButtonContent: {
-    alignItems: "center",
-    justifyContent: "center",
+  sortTriggerBtn: {
     paddingBottom: 10,
+    justifyContent: "center",
+  },
+  sortTriggerText: {
+    ...Typography.body,
+    fontSize: 13,
+    color: Colors.zinc500,
+  },
+  sortDropdownMenu: {
+    position: "absolute",
+    top: "100%",
+    right: 0,
+    backgroundColor: Colors.white,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.zinc100,
+    zIndex: 30,
+    minWidth: 96,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.12,
+        shadowRadius: 8,
+      },
+      android: { elevation: 6 },
+      default: {},
+    }),
+  },
+  sortDropdownItem: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  sortDropdownItemText: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc500,
+  },
+  sortDropdownItemTextActive: {
+    ...Typography.bodySemiBold,
+    color: Colors.zinc900,
+  },
+  /* ── 편집 모드 ───────────────────────────────────────────────────── */
+  editTopBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: Spacing.screenPx,
+    paddingTop: 14,
+    paddingBottom: 14,
+    backgroundColor: Colors.white,
+  },
+  editTopBarBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+  },
+  editTopBarCancel: {
+    ...Typography.body,
+    fontSize: 15,
+    color: Colors.zinc500,
+  },
+  editTopBarSave: {
+    ...Typography.bodySemiBold,
+    fontSize: 15,
+    color: Colors.zinc900,
+  },
+  editModeContainer: {
+    flex: 1,
+    paddingHorizontal: 28,
+    paddingTop: 20,
+    paddingBottom: 20,
+  },
+  editCardWrapper: {
+    flex: 1,
+  },
+  editCardShadow: {
+    backgroundColor: Colors.white,
+    borderRadius: 4,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+      },
+      android: { elevation: 5 },
+      default: {
+        // @ts-ignore web boxShadow
+        boxShadow: "0 6px 44px rgba(0,0,0,0.18), 0 1px 8px rgba(0,0,0,0.1)",
+      },
+    }),
+  },
+  editCardSurface: {
+    flex: 1,
+    backgroundColor: Colors.white,
+    borderRadius: 4,
+    paddingHorizontal: 24,
+    paddingVertical: 24,
+  },
+  editCardTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 20,
+  },
+  editCardTagPill: {
+    backgroundColor: Colors.zinc100,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  editCardTagText: {
+    fontSize: 12,
+    fontWeight: "600",
+    fontFamily: Platform.select({ ios: "Pretendard-SemiBold", default: "Pretendard-SemiBold" }),
+    color: Colors.zinc500,
+  },
+  editCardDateText: {
+    ...Typography.caption,
+    color: Colors.zinc400,
+  },
+  editCardTextInput: {
+    flex: 1,
+    ...Typography.body,
+    fontSize: 16,
+    color: Colors.zinc800,
+    lineHeight: 26,
+    textAlignVertical: "top",
   },
   thoughtFab: {
     position: "absolute",
