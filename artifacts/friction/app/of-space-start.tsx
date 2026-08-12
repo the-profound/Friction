@@ -614,8 +614,7 @@ function RoundConfigStep({
   onChange: (title: string, description: string) => void;
 }) {
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-      <View style={stepStyles.container}>
+    <View style={stepStyles.container}>
         <Text style={stepStyles.stepTitle}>{roundIdx + 1}회차 구성</Text>
         <Text style={stepStyles.stepDesc}>
           {roundCount}회차 중 {roundIdx + 1}번째 회차의 제목과 설명을 입력해요. (선택)
@@ -649,8 +648,7 @@ function RoundConfigStep({
           />
           <Text style={stepStyles.charCount}>{config.description.length} / 300</Text>
         </View>
-      </View>
-    </TouchableWithoutFeedback>
+    </View>
   );
 }
 function SlotOrderStep({
@@ -1285,15 +1283,19 @@ export default function SpaceStartScreen() {
     },
   });
   const letters = (lettersQuery.data ?? []) as SpaceLetter[];
-  const openingLetter = letters.find((l) => l.letterType === "OPENING") ?? null;
-  const openingLetterExists = openingLetter !== null;
+  const openingLetters = letters.filter((l) => l.letterType === "OPENING");
+  const openingLetter = openingLetters[0] ?? null;
+  const openingLetterExists = openingLetters.length > 0;
 
   const sendsQuery = useListAllSpaceScheduledSends(id, {
     query: { enabled: !!id, queryKey: getListAllSpaceScheduledSendsQueryKey(id) },
   });
   const sends = (sendsQuery.data ?? []) as SpaceScheduledSendWithLetter[];
-  const openingScheduledSend = openingLetter
-    ? (sends.find((s) => s.spaceLetterId === openingLetter.id && s.status === "PENDING") ?? null)
+  // Find a PENDING send for ANY opening letter — the user may have changed
+  // their article selection, creating a new letter row each time, so we must
+  // not lock the search to only the first letter in the array.
+  const openingScheduledSend = openingLetterExists
+    ? (sends.find((s) => openingLetters.some((l) => l.id === s.spaceLetterId) && s.status === "PENDING") ?? null)
     : null;
 
   const articlesQuery = useListArticles(
@@ -1778,13 +1780,6 @@ export default function SpaceStartScreen() {
               { width: `${((displayStep + 1) / TOTAL_STEPS) * 100}%` },
             ]}
           />
-        </View>
-
-        {/* Step label */}
-        <View style={styles.stepLabel}>
-          <Text style={styles.stepLabelText}>
-            {displayStep + 1} / {TOTAL_STEPS} — {stepLabelSuffix}
-          </Text>
         </View>
 
         {/* Content */}

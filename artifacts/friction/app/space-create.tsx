@@ -562,7 +562,7 @@ function AdvancedSettingsStep({
         <Text style={stepStyles.fieldLabel}>진행 방식</Text>
         <View style={scheduleStyles.optionList}>
           <ScalePressable
-            style={[
+            contentStyle={[
               scheduleStyles.option,
               form.scheduleType === "N_DAY" && scheduleStyles.optionSelected,
             ]}
@@ -577,7 +577,7 @@ function AdvancedSettingsStep({
           </ScalePressable>
 
           <ScalePressable
-            style={[
+            contentStyle={[
               scheduleStyles.option,
               form.scheduleType === "WEEKDAY" && scheduleStyles.optionSelected,
             ]}
