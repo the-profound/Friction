@@ -7,7 +7,8 @@ import {
   RefreshControl,
   useWindowDimensions,
   Platform,
-  KeyboardAvoidingView,
+  InputAccessoryView,
+  Keyboard,
   TextInput,
   Pressable,
 } from "react-native";
@@ -138,12 +139,15 @@ export default function OnScreen() {
   const [headerAreaHeight, setHeaderAreaHeight] = useState(0);
   const [editingThoughtId, setEditingThoughtId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
+  const [editKeyboardHeight, setEditKeyboardHeight] = useState(0);
   const thoughtFlatListRef = useRef<FlatList<Thought>>(null);
   const editTextInputRef = useRef<TextInput>(null);
+  const editSelectionRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
   const thoughtViewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 });
+  const EDIT_TOOLBAR_ID = "dansang-edit-toolbar";
 
   // windowHeight used only indirectly via onLayout measuring thoughtCardSlotHeight
-  useWindowDimensions(); // trigger re-render on orientation change
+  const { width: screenWidth } = useWindowDimensions();
 
   const { data: articles, isLoading, refetch, isRefetching } = useListArticles({
     authorId: userId,
@@ -219,7 +223,40 @@ export default function OnScreen() {
   const handleThoughtEditCancel = useCallback(() => {
     setEditingThoughtId(null);
     setEditingText("");
+    setEditKeyboardHeight(0);
     setThoughtSortDropdownOpen(false);
+  }, []);
+
+  // 편집 모드 진입/퇴장 시 키보드 높이 추적
+  useEffect(() => {
+    if (editingThoughtId === null) {
+      setEditKeyboardHeight(0);
+      return;
+    }
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      setEditKeyboardHeight(e.endCoordinates.height);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setEditKeyboardHeight(0);
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [editingThoughtId]);
+
+  // 툴바 [↵ 줄바꿈]: 커서 위치에 개행 삽입
+  const handleEditInsertNewline = useCallback(() => {
+    const sel = editSelectionRef.current;
+    setEditingText((prev) => {
+      const before = prev.slice(0, sel.start);
+      const after = prev.slice(sel.end);
+      const newPos = sel.start + 1;
+      editSelectionRef.current = { start: newPos, end: newPos };
+      return before + "\n" + after;
+    });
   }, []);
 
   const handleThoughtEditSave = useCallback(async () => {
@@ -908,15 +945,15 @@ export default function OnScreen() {
 
       {editingThoughtId !== null ? (
         /* ── 단상 카드 모양 인라인 편집 ───────────────────────────────── */
-        <KeyboardAvoidingView
-          style={styles.editModeContainer}
-          behavior={Platform.OS === "ios" ? "padding" : Platform.OS === "android" ? "height" : undefined}
-          keyboardVerticalOffset={headerAreaHeight + insets.top}
-        >
+        <View style={[styles.editModeContainer, { paddingBottom: editKeyboardHeight }]}>
           {editingThought && (
-            <View style={styles.editCardWrapper}>
+            /* 카드 전체를 누르면 TextInput 재포커스 → 키보드 재등장 */
+            <Pressable
+              style={[styles.editCardWrapper, { width: screenWidth - 56, height: screenWidth - 56 }]}
+              onPress={() => editTextInputRef.current?.focus()}
+            >
               {/* Shadow layer — separated to avoid rasterization issues */}
-              <View style={[StyleSheet.absoluteFill, styles.editCardShadow]} pointerEvents="none" />
+              <View style={[styles.editCardShadow, { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }]} pointerEvents="none" />
               {/* Content surface — card appearance */}
               <View style={styles.editCardSurface}>
                 <View style={styles.editCardTopRow}>
@@ -940,11 +977,15 @@ export default function OnScreen() {
                   scrollEnabled
                   returnKeyType="default"
                   blurOnSubmit={false}
+                  inputAccessoryViewID={Platform.OS === "ios" ? EDIT_TOOLBAR_ID : undefined}
+                  onSelectionChange={(e) => {
+                    editSelectionRef.current = e.nativeEvent.selection;
+                  }}
                 />
               </View>
-            </View>
+            </Pressable>
           )}
-        </KeyboardAvoidingView>
+        </View>
       ) : (isLoading && topTab !== "thought") || (isThoughtsLoading && topTab === "thought") ? (
         <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
           <Text style={styles.emptySubtitle}>불러오는 중...</Text>
@@ -1243,6 +1284,36 @@ export default function OnScreen() {
           setThoughtsSheetInteractive(false);
         }}
       />
+
+      {/* ── 편집 툴바 (iOS 전용 InputAccessoryView) ────────────────────── */}
+      {Platform.OS === "ios" && editingThoughtId !== null && (
+        <InputAccessoryView nativeID={EDIT_TOOLBAR_ID}>
+          <View style={styles.inputToolbar}>
+            <Pressable
+              onPress={handleEditInsertNewline}
+              style={styles.inputToolbarBtn}
+              hitSlop={8}
+            >
+              <Text style={styles.inputToolbarBtnText}>↵ 줄바꿈</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.inputToolbarBtn, styles.inputToolbarBtnDisabled]}
+              hitSlop={8}
+            >
+              <Text style={[styles.inputToolbarBtnText, styles.inputToolbarBtnTextDisabled]}>
+                삽입
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => Keyboard.dismiss()}
+              style={styles.inputToolbarBtn}
+              hitSlop={8}
+            >
+              <Feather name="chevron-down" size={18} color={Colors.zinc600} />
+            </Pressable>
+          </View>
+        </InputAccessoryView>
+      )}
     </View>
   );
 }
@@ -1570,12 +1641,14 @@ const styles = StyleSheet.create({
   },
   editModeContainer: {
     flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: 28,
-    paddingTop: 20,
-    paddingBottom: 20,
   },
   editCardWrapper: {
-    flex: 1,
+    /* 크기는 렌더 시 width/height로 주입 */
+    overflow: "hidden",
+    borderRadius: 4,
   },
   editCardShadow: {
     backgroundColor: Colors.white,
@@ -1648,5 +1721,35 @@ const styles = StyleSheet.create({
   thoughtFabContent: {
     alignItems: "center",
     justifyContent: "center",
+  },
+  /* ── 편집 InputAccessoryView 툴바 ──────────────────────────────── */
+  inputToolbar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: Colors.zinc50,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.zinc200,
+  },
+  inputToolbarBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    minWidth: 44,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  inputToolbarBtnDisabled: {
+    opacity: 0.35,
+  },
+  inputToolbarBtnText: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc700,
+  },
+  inputToolbarBtnTextDisabled: {
+    color: Colors.zinc400,
   },
 });
