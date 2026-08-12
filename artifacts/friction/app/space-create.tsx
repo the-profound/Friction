@@ -5,11 +5,8 @@ import {
   StyleSheet,
   ScrollView,
   TextInput,
-  Switch,
   KeyboardAvoidingView,
   Platform,
-  TouchableWithoutFeedback,
-  Keyboard,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -19,6 +16,7 @@ import ScalePressable from "@/components/shared/ScalePressable";
 import { CollapsibleDatePicker, getMinSpaceStartDate, startOfDay } from "@/components/shared/CalendarGrid";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import SubmitProgressOverlay from "@/components/shared/SubmitProgressOverlay";
+import Toggle from "@/components/shared/Toggle";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
 import { useToast } from "@/contexts/ToastContext";
@@ -278,14 +276,7 @@ export default function SpaceCreateScreen() {
           />
         </View>
 
-        <View style={styles.stepLabel}>
-          <Text style={styles.stepLabelText}>
-            {step + 1} / {TOTAL_STEPS} — {STEPS[step]}
-          </Text>
-        </View>
-
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-          <ScrollView
+        <ScrollView
             style={styles.scrollArea}
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
@@ -293,7 +284,6 @@ export default function SpaceCreateScreen() {
           >
             {renderStepContent()}
           </ScrollView>
-        </TouchableWithoutFeedback>
 
         <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
           {isLastStep ? (
@@ -380,11 +370,10 @@ function BasicSettingsStep({
             </Text>
           )}
         </View>
-        <Switch
+        <Toggle
           value={form.isAnonymous}
           onValueChange={(v) => updateField("isAnonymous", v)}
-          trackColor={{ false: Colors.zinc200, true: Colors.zinc700 }}
-          thumbColor={Colors.white}
+          accessibilityLabel="익명 운영"
         />
       </View>
     </View>
@@ -472,11 +461,10 @@ function OperationSettingsStep({
           <Text style={stepStyles.fieldLabel}>운영자 참여</Text>
           <Text style={stepStyles.toggleDesc}>운영자도 회차에 글을 직접 제출해요</Text>
         </View>
-        <Switch
+        <Toggle
           value={form.operatorParticipates}
           onValueChange={(v) => updateField("operatorParticipates", v)}
-          trackColor={{ false: Colors.zinc200, true: Colors.zinc700 }}
-          thumbColor={Colors.white}
+          accessibilityLabel="운영자 참여"
         />
       </View>
     </View>
@@ -775,16 +763,6 @@ const styles = StyleSheet.create({
     height: "100%",
     backgroundColor: Colors.zinc900,
     borderRadius: 2,
-  },
-  stepLabel: {
-    paddingHorizontal: Spacing.screenPx,
-    paddingTop: 10,
-    paddingBottom: 4,
-  },
-  stepLabelText: {
-    ...Typography.caption,
-    fontSize: 12,
-    color: Colors.zinc400,
   },
   scrollArea: {
     flex: 1,
