@@ -24,7 +24,6 @@ import ArticleListItem from "@/components/ArticleListItem/ArticleListItem";
 import ThoughtListItem from "@/components/ThoughtListItem/ThoughtListItem";
 import ThoughtDetailModal from "@/components/ThoughtDetailModal/ThoughtDetailModal";
 import ThoughtCard from "@/components/ThoughtCard/ThoughtCard";
-import ThoughtsBottomSheet from "@/components/ThoughtsBottomSheet/ThoughtsBottomSheet";
 import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import RefreshableEmpty from "@/components/RefreshableEmpty";
@@ -40,6 +39,7 @@ import {
   useAddArticleToMyCollection,
   useListThoughts,
   useUpdateThought,
+  useCreateThought,
 } from "@workspace/api-client-react";
 import { invalidateArticleLists } from "@/lib/queryInvalidation";
 import type { Article, MyCollection, Thought } from "@workspace/api-client-react";
@@ -133,9 +133,6 @@ export default function OnScreen() {
   const [selectedThought, setSelectedThought] = useState<Thought | null>(null);
   const [similarPopupThoughtId, setSimilarPopupThoughtId] = useState<string | null>(null);
 
-  const [thoughtsSheetVisible, setThoughtsSheetVisible] = useState(false);
-  const [thoughtsSheetNonce, setThoughtsSheetNonce] = useState(0);
-  const [thoughtsSheetInteractive, setThoughtsSheetInteractive] = useState(false);
   const [thoughtCardSlotHeight, setThoughtCardSlotHeight] = useState(400);
   const [thoughtSortOrder, setThoughtSortOrder] = useState<"latest" | "oldest">("latest");
   const [thoughtCurrentIndex, setThoughtCurrentIndex] = useState(0);
@@ -178,6 +175,7 @@ export default function OnScreen() {
   const createArticle = useCreateArticle();
   const deleteArticle = useDeleteArticle();
   const updateThought = useUpdateThought();
+  const createThought = useCreateThought();
   const collectionsQuery = useListMyCollections({ ownerId: userId });
   const addToCollection = useAddArticleToMyCollection();
 
@@ -206,11 +204,17 @@ export default function OnScreen() {
 
   const fabBottom = useNavBarBottomSafeArea(8);
 
-  const openThoughtsSheet = useCallback(() => {
-    setThoughtsSheetVisible(true);
-    setThoughtsSheetInteractive(true);
-    setThoughtsSheetNonce((n) => n + 1);
-  }, []);
+  const handleNewThought = useCallback(async (createdFrom: "direct" | "question") => {
+    if (createThought.isPending) return;
+    try {
+      const newThought = await createThought.mutateAsync({ data: { content: "", createdFrom } });
+      await refetchThoughts();
+      setEditingThoughtId(newThought.id);
+      setEditingText("");
+    } catch {
+      showToast({ message: "단상 생성에 실패했습니다.", type: "error" });
+    }
+  }, [createThought, refetchThoughts, showToast]);
 
   const selectThoughtSortOrder = useCallback((order: "latest" | "oldest") => {
     setThoughtSortOrder(order);
@@ -1081,7 +1085,8 @@ export default function OnScreen() {
                     slotHeight={thoughtCardSlotHeight}
                     hasThoughts={sortedThoughts.length > 0}
                     visible={thoughtCurrentIndex === 0}
-                    onWritePress={openThoughtsSheet}
+                    onWritePress={() => handleNewThought("direct")}
+                  onAnswerQuestionPress={() => handleNewThought("question")}
                   />
                 );
               }
@@ -1272,7 +1277,7 @@ export default function OnScreen() {
         <ScalePressable
           style={[styles.thoughtFab, { bottom: fabBottom }]}
           contentStyle={styles.thoughtFabContent}
-          onPress={openThoughtsSheet}
+          onPress={() => handleNewThought("direct")}
           accessibilityRole="button"
           accessibilityLabel="단상 추가"
         >
@@ -1280,21 +1285,6 @@ export default function OnScreen() {
         </ScalePressable>
       )}
 
-      {/* 단상 작성 시트 — articleId 없음: sourceArticleId 생략, createdFrom:"direct"로 저장 */}
-      <ThoughtsBottomSheet
-        visible={thoughtsSheetVisible}
-        interactive={thoughtsSheetInteractive}
-        openNonce={thoughtsSheetNonce}
-        onClose={() => {
-          setThoughtsSheetVisible(false);
-          setThoughtsSheetInteractive(false);
-          // 새로 저장된 단상을 카드뷰에 즉시 반영
-          refetchThoughts();
-        }}
-        onWillClose={() => {
-          setThoughtsSheetInteractive(false);
-        }}
-      />
 
       {/* ── 편집 툴바 — iOS: absolute+bottom:keyboardHeight / Android(resize): bottom:0 (레이아웃이 이미 축소됨) */}
       {editingThoughtId !== null && editKeyboardHeight > 0 && Platform.OS !== "web" && (

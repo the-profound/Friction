@@ -21,8 +21,10 @@ interface DansangWidgetProps {
   hasThoughts?: boolean;
   /** Whether this widget slot is currently visible (controls fetch activation) */
   visible?: boolean;
-  /** Called when the user taps the write button */
+  /** Called when the user taps the write button (both states) */
   onWritePress?: () => void;
+  /** Called when the user taps "이 질문에 답해보기". Falls back to onWritePress if omitted. */
+  onAnswerQuestionPress?: () => void;
 }
 
 const CARD_MARGIN_H = 36;
@@ -37,6 +39,7 @@ export default function DansangWidget({
   hasThoughts,
   visible = false,
   onWritePress,
+  onAnswerQuestionPress,
 }: DansangWidgetProps) {
   const cardMarginV = slotHeight * CARD_MARGIN_V_RATIO;
 
@@ -95,7 +98,7 @@ export default function DansangWidget({
             {/* Write CTA button */}
             <Pressable
               style={({ pressed }) => [styles.writeButton, pressed && styles.writeButtonPressed]}
-              onPress={onWritePress}
+              onPress={onAnswerQuestionPress ?? onWritePress}
               hitSlop={8}
             >
               <Text style={styles.writeButtonText} allowFontScaling={false}>
