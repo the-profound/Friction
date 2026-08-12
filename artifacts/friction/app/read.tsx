@@ -1388,7 +1388,9 @@ export default function ReadScreen() {
         }
       }
 
-      setCompleteScreenVisible(false);
+      // 완독 화면을 유지한 채 fade-out — 슬롯을 되돌리면 편지 페이지가
+      // 잠깐 보이는 점프가 생기므로 completeScreenVisible은 건드리지 않는다.
+      // (화면을 떠나므로 되돌릴 필요 없음)
       trackArticleAction({ articleId, action: "save", msSinceComplete: Date.now() - completionTimeRef.current });
       invalidateInbox(queryClient);
       clearActiveSession();
@@ -1407,7 +1409,8 @@ export default function ReadScreen() {
     setIsDeleting(true);
     try {
       const result = await reading.commitCompletion();
-      setCompleteScreenVisible(false);
+      // 완독 화면을 유지한 채 fade-out — 슬롯을 되돌리면 편지 페이지가
+      // 잠깐 보이는 점프가 생긴다. 실패 시에도 완독 화면에 남아 재시도한다.
       if (result.success) {
         trackArticleAction({ articleId, action: "skip", msSinceComplete: Date.now() - completionTimeRef.current });
         if (!isListEntry) {
@@ -1771,7 +1774,7 @@ export default function ReadScreen() {
                               onSave={handleCommitAndSave}
                               onSkip={mode === "re_read"
                                 ? async () => {
-                                    setCompleteScreenVisible(false);
+                                    // 완독 화면 유지한 채 fade-out (슬롯 되돌리면 편지 페이지 점프)
                                     applyAnsweredQuestionCardsToMemo();
                                     overlayOpacity.value = withTiming(1, { duration: 700, easing: Easing.in(Easing.ease) }, (finished) => {
                                       if (finished) runOnJS(navigateBackDelayed)();
