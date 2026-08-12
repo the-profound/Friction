@@ -826,50 +826,53 @@ export default function OnScreen() {
                 {topTab === "my_article" && <View style={styles.topTabUnderline} />}
               </ScalePressable>
             </View>
-            {/* 단상 탭 정렬 트리거 — 탭바 오른쪽 */}
-            {topTab === "thought" && (
-              <View style={styles.sortTriggerWrap}>
-                <Pressable
-                  onPress={() => setThoughtSortDropdownOpen((o) => !o)}
-                  style={styles.sortTriggerBtn}
-                  hitSlop={8}
-                >
-                  <Text style={styles.sortTriggerText}>
-                    {thoughtSortOrder === "latest" ? "최신순" : "오래된순"}
-                  </Text>
-                </Pressable>
-                {thoughtSortDropdownOpen && (
-                  <View style={styles.sortDropdownMenu}>
-                    <Pressable
-                      onPress={() => selectThoughtSortOrder("latest")}
-                      style={styles.sortDropdownItem}
+          </View>
+        )}
+
+        {/* 단상 탭 정렬 드롭다운 — 탭바 아래 우측 */}
+        {!selectionMode && editingThoughtId === null && topTab === "thought" && (
+          <View style={styles.sortTriggerRow}>
+            <View style={styles.sortTriggerWrap}>
+              <Pressable
+                onPress={() => setThoughtSortDropdownOpen((o) => !o)}
+                style={styles.sortTriggerBtn}
+                hitSlop={8}
+              >
+                <Text style={styles.sortTriggerText}>
+                  {thoughtSortOrder === "latest" ? "최신순" : "오래된순"}
+                </Text>
+              </Pressable>
+              {thoughtSortDropdownOpen && (
+                <View style={styles.sortDropdownMenu}>
+                  <Pressable
+                    onPress={() => selectThoughtSortOrder("latest")}
+                    style={styles.sortDropdownItem}
+                  >
+                    <Text
+                      style={[
+                        styles.sortDropdownItemText,
+                        thoughtSortOrder === "latest" && styles.sortDropdownItemTextActive,
+                      ]}
                     >
-                      <Text
-                        style={[
-                          styles.sortDropdownItemText,
-                          thoughtSortOrder === "latest" && styles.sortDropdownItemTextActive,
-                        ]}
-                      >
-                        최신순
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      onPress={() => selectThoughtSortOrder("oldest")}
-                      style={styles.sortDropdownItem}
+                      최신순
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => selectThoughtSortOrder("oldest")}
+                    style={styles.sortDropdownItem}
+                  >
+                    <Text
+                      style={[
+                        styles.sortDropdownItemText,
+                        thoughtSortOrder === "oldest" && styles.sortDropdownItemTextActive,
+                      ]}
                     >
-                      <Text
-                        style={[
-                          styles.sortDropdownItemText,
-                          thoughtSortOrder === "oldest" && styles.sortDropdownItemTextActive,
-                        ]}
-                      >
-                        오래된순
-                      </Text>
-                    </Pressable>
-                  </View>
-                )}
-              </View>
-            )}
+                      오래된순
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
+            </View>
           </View>
         )}
       </View>
@@ -1487,18 +1490,19 @@ const styles = StyleSheet.create({
   thoughtFlatList: {
     flex: 1,
   },
-  /* ── 정렬 트리거 (탭바 우측) ──────────────────────────────────── */
+  /* ── 정렬 트리거 (탭바 아래 우측) ─────────────────────────────── */
+  sortTriggerRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+  },
   sortTriggerWrap: {
     position: "relative",
     justifyContent: "center",
-    paddingRight: 16,
-    paddingLeft: 8,
-    paddingTop: 12,
-    paddingBottom: 0,
     zIndex: 20,
   },
   sortTriggerBtn: {
-    paddingBottom: 10,
     justifyContent: "center",
   },
   sortTriggerText: {
