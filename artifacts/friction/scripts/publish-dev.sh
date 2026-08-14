@@ -41,15 +41,27 @@ echo "✅ App Store Connect API Key 임시 파일 생성 완료"
 cd "$APP_DIR"
 
 echo ""
-echo "📦 iOS dev-client 빌드 및 TestFlight 제출 시작 (EAS Cloud)..."
+echo "📦 [1/2] iOS dev-client 빌드 시작 (EAS Cloud)..."
 echo "    빌드는 보통 15~30분 소요됩니다."
 echo ""
-$EAS build \
+BUILD_JSON=$($EAS build \
   --platform ios \
   --profile development \
   --non-interactive \
   --wait \
-  --auto-submit
+  --json 2>/dev/null)
+BUILD_ID=$(echo "$BUILD_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d[0]['id'] if isinstance(d,list) else d['id'])" 2>/dev/null)
+
+echo ""
+echo "✅ 빌드 완료 (ID: $BUILD_ID)"
+echo ""
+echo "🚀 [2/2] TestFlight (internal testers) 제출 시작..."
+echo ""
+$EAS submit \
+  --platform ios \
+  --id "$BUILD_ID" \
+  --profile development \
+  --non-interactive
 
 rm -f /tmp/asc_api_key.p8
 echo ""
