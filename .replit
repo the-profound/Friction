@@ -91,6 +91,15 @@ router = "path"
 [workflows.workflow.tasks.env]
 PORT = "3001"
 
+[[workflows.workflow]]
+name = "Publish iOS (Dev Client)"
+author = "agent"
+mode = "parallel"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash /home/runner/workspace/artifacts/friction/scripts/publish-dev.sh"
+
 [agent]
 stack = "PNPM_WORKSPACE"
 expertMode = true
