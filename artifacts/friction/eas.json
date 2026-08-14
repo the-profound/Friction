@@ -8,16 +8,14 @@
       "ios": {
         "distribution": "store",
         "credentialsSource": "remote",
-        "autoIncrement": true,
-        "appleTeamId": "D9P94YPN8F"
+        "autoIncrement": true
       }
     },
     "preview": {
       "ios": {
         "distribution": "store",
         "credentialsSource": "remote",
-        "autoIncrement": true,
-        "appleTeamId": "D9P94YPN8F"
+        "autoIncrement": true
       }
     },
     "development": {
@@ -28,8 +26,7 @@
       "ios": {
         "distribution": "store",
         "credentialsSource": "remote",
-        "autoIncrement": true,
-        "appleTeamId": "D9P94YPN8F"
+        "autoIncrement": true
       }
     }
   },

@@ -14,6 +14,7 @@ module.exports = {
       bundleIdentifier: IS_DEV
         ? "com.theprofound.friction"
         : "friction.by.theprofound",
+      appleTeamId: "D9P94YPN8F",
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
         UIBackgroundModes: ["remote-notification"],
