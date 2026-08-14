@@ -19,6 +19,16 @@ module.exports = {
         ITSAppUsesNonExemptEncryption: false,
         UIBackgroundModes: ["remote-notification"],
       },
+      entitlements: {
+        // Required for expo-notifications to access APNs and its Keychain entries.
+        // Without this, ServerRegistrationModule.swift throws errSecMissingEntitlement
+        // (-34018) when reading push-registration data from Keychain on launch,
+        // which propagates through the TurboModule layer as an RCTFatal crash.
+        //
+        // Both dev and production profiles use distribution:"store" (TestFlight),
+        // so the provisioning profile is always an App Store profile → always "production".
+        "aps-environment": "production",
+      },
       buildNumber: "17",
     },
     android: {
