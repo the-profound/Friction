@@ -36,22 +36,66 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // until the profile sync has actually finished (success or failure), then
   // apply (or drop) it deliberately. See signUp() below.
   const suppressAuthEventsRef = useRef(false);
+  // getSession() and onAuthStateChange() can both observe the auth session
+  // while signUp() is waiting for /api/users/sync. Keep those observations
+  // out of React state until signUp() has made the authoritative decision.
+  const pendingAuthSessionRef = useRef<Session | null | undefined>(undefined);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setIsLoading(false);
-    });
+    let mounted = true;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    const restoreSession = async (): Promise<void> => {
+      try {
+        // A rejected or indefinitely pending SecureStore read must not leave
+        // AuthGuard in its full-screen loading state forever.
+        const result = await Promise.race([
+          supabase.auth.getSession(),
+          new Promise<never>((_, reject) => {
+            timeoutId = setTimeout(
+              () => reject(new Error("Supabase session restore timed out")),
+              10000,
+            );
+          }),
+        ]);
+
+        if (!mounted) return;
+        const restoredSession = result.data.session;
+        if (suppressAuthEventsRef.current) {
+          pendingAuthSessionRef.current = restoredSession;
+          return;
+        }
+        setSession(restoredSession);
+      } catch (error) {
+        if (!mounted) return;
+        console.warn("[AuthProvider] Initial session restore failed:", error);
+        if (!suppressAuthEventsRef.current) {
+          setSession(null);
+        }
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+        if (mounted && !suppressAuthEventsRef.current) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void restoreSession();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
-        if (suppressAuthEventsRef.current) return;
+        if (suppressAuthEventsRef.current) {
+          pendingAuthSessionRef.current = session;
+          return;
+        }
         setSession(session);
         setIsLoading(false);
       }
     );
 
     return () => {
+      mounted = false;
+      if (timeoutId) clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
   }, []);
@@ -63,6 +107,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function signUp(email: string, password: string, nickname: string) {
     suppressAuthEventsRef.current = true;
+    pendingAuthSessionRef.current = undefined;
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -100,10 +145,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (data.session) {
         setSession(data.session);
         setIsLoading(false);
+      } else {
+        // Keep the login screen renderable when email confirmation is
+        // required, even if initial session restoration was still pending.
+        setSession(null);
+        setIsLoading(false);
       }
       return { error: null, needsConfirmation };
     } finally {
+      // The deliberate session decision above is authoritative. Discard
+      // session observations collected while profile sync was in flight so a
+      // stale getSession() result cannot re-authenticate the app prematurely.
+      pendingAuthSessionRef.current = undefined;
       suppressAuthEventsRef.current = false;
+      setIsLoading(false);
     }
   }
 

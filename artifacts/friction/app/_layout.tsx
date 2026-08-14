@@ -9,8 +9,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter, usePathname, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { getNotificationsModule } from "@/lib/safeNotifications";
-import React, { useEffect, useRef } from "react";
-import { ActivityIndicator, StyleSheet, View } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Asset } from "expo-asset";
@@ -124,6 +124,15 @@ function ActiveReadingGuard({ children }: { children: React.ReactNode }) {
 
 const AUTH_BYPASS_ROUTES = new Set(["login", "login-callback"]);
 
+function AuthLoadingView({ message }: { message: string }) {
+  return (
+    <View style={styles.loadingContainer}>
+      <ActivityIndicator size="large" color={Colors.zinc400} />
+      <Text style={styles.loadingLabel}>{message}</Text>
+    </View>
+  );
+}
+
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { session, isLoading } = useAuth();
   // Register push token once the user is authenticated
@@ -159,11 +168,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
   // Block rendering while auth state is resolving (개발 바이패스 시 스킵)
   if (isLoading && !DEV_WEB_BYPASS) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.zinc400} />
-      </View>
-    );
+    return <AuthLoadingView message="로그인 상태를 확인하고 있어요" />;
   }
 
   // Authenticated: wrap ALL routes (including login/bypass) in UserProvider so
@@ -180,11 +185,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
   // Block rendering protected routes while redirecting to login
   if (!isAuthed && !inBypassRoute) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.zinc400} />
-      </View>
-    );
+    return <AuthLoadingView message="화면을 불러오고 있어요" />;
   }
 
   // Unauthenticated login/bypass routes — no UserProvider needed
@@ -193,11 +194,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   }
 
   // Transient: authenticated state resolving
-  return (
-    <View style={styles.loadingContainer}>
-      <ActivityIndicator size="large" color={Colors.zinc400} />
-    </View>
-  );
+  return <AuthLoadingView message="화면을 준비하고 있어요" />;
 }
 
 function RootLayoutNav() {
@@ -242,6 +239,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     alignItems: "center",
     justifyContent: "center",
+    gap: 12,
+  },
+  loadingLabel: {
+    color: Colors.zinc500,
+    fontSize: 14,
   },
 });
 
@@ -312,18 +314,37 @@ export default function RootLayout() {
     NotoSerifKR_600SemiBold,
     NotoSerifKR_800ExtraBold,
   });
+  const [fontLoadTimedOut, setFontLoadTimedOut] = useState(false);
 
   useEffect(() => {
-    if (fontsLoaded || fontError) {
+    if (fontsLoaded || fontError) return;
+    const timeoutId = setTimeout(() => {
+      console.warn(
+        "[fonts] Font loading exceeded 10 seconds; continuing with system fallbacks.",
+      );
+      setFontLoadTimedOut(true);
+    }, 10000);
+    return () => clearTimeout(timeoutId);
+  }, [fontsLoaded, fontError]);
+
+  useEffect(() => {
+    if (fontsLoaded || fontError || fontLoadTimedOut) {
       // Guard: SplashScreen.hideAsync() is a TurboModule call; a failure here
       // should not leave the app stuck on the splash screen indefinitely.
       SplashScreen.hideAsync().catch((err) => {
         console.warn("[SplashScreen] hideAsync failed:", err);
       });
     }
-  }, [fontsLoaded, fontError]);
+  }, [fontsLoaded, fontError, fontLoadTimedOut]);
 
-  if (!fontsLoaded && !fontError) return null;
+  if (!fontsLoaded && !fontError && !fontLoadTimedOut) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={Colors.zinc400} />
+        <Text style={styles.loadingLabel}>앱을 준비하고 있어요</Text>
+      </View>
+    );
+  }
 
   const appTree = (
     <SafeAreaProvider>

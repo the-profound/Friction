@@ -13,6 +13,11 @@ because that sync only starts after `signUp()` returns. The user lands on the
 authenticated app with no backend profile row yet — screens that assume a
 synced profile throw/crash.
 
+The initial `supabase.auth.getSession()` restore must be treated as part of the
+same gate. On a slow native startup it can resolve after signup has begun and
+publish the newly-created session before the profile sync, or reject/hang and
+leave the auth guard rendering its full-screen loading state forever.
+
 **Why:** the redirect-eligibility signal (`session` in `AuthContext`) and the
 one-time signup side effect (profile sync) are two independent async flows
 racing on the same `onAuthStateChange` event; nothing serializes them.
@@ -27,3 +32,7 @@ half-synced authenticated session for the guard to redirect on. This same
 suppress-until-side-effect-completes pattern generalizes to any other
 Supabase auth flow that has a required post-auth side effect (e.g. OAuth
 sign-in that also needs an out-of-band backend sync).
+
+Bound the initial session restore and clear the loading state on both resolve
+and reject; if the restore is still in flight during signup, discard its
+observed session and let the signup flow make the authoritative decision.
