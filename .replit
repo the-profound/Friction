@@ -18,17 +18,6 @@ env = { "CI" = "true" }
 runButton = "Project"
 
 [[workflows.workflow]]
-name = "Publish iOS (App Store)"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "bash /home/runner/workspace/artifacts/friction/scripts/publish-ios.sh"
-
-[workflows.workflow.metadata]
-outputType = "console"
-
-[[workflows.workflow]]
 name = "artifacts/mockup-sandbox: Component Preview Server"
 author = "agent"
 mode = "sequential"
@@ -92,9 +81,18 @@ router = "path"
 PORT = "3001"
 
 [[workflows.workflow]]
-name = "Publish iOS (Dev Client)"
-author = "agent"
+name = "Publish iOS"
 mode = "parallel"
+author = 56922764
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash /home/runner/workspace/artifacts/friction/scripts/publish-ios.sh"
+
+[[workflows.workflow]]
+name = "Publish iOS(dev)"
+mode = "parallel"
+author = 56922764
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
