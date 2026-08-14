@@ -1284,6 +1284,25 @@ export interface RegisterPushTokenBody {
   deviceId?: string | null;
 }
 
+/**
+ * A diagnostic event captured on-device. Currently only used to report a fatal JS error persisted right before the app crashed, uploaded on the next app launch.
+
+ */
+export interface ClientLogBody {
+  /** Where this log came from, e.g. "fatal-js-error" */
+  source: string;
+  message: string;
+  name?: string | null;
+  stack?: string | null;
+  isFatal?: boolean | null;
+  /** ISO timestamp captured on-device */
+  timestamp?: string | null;
+  platform?: string | null;
+  platformVersion?: string | null;
+  appVersion?: string | null;
+  buildNumber?: string | null;
+}
+
 export type ListArticlesParams = {
   authorId?: string;
   status?: ListArticlesStatus;

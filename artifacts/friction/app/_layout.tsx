@@ -29,6 +29,7 @@ import { UserProvider } from "@/contexts/UserContext";
 import { ActiveReadingProvider, useActiveReading } from "@/contexts/ActiveReadingContext";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { setBaseUrl, setAuthTokenGetter } from "@workspace/api-client-react";
+import { uploadPendingCrashLogIfAny } from "@/lib/crashDiagnostics";
 import { supabase } from "@/lib/supabase";
 import { Colors } from "@/constants/tokens";
 import { Platform } from "react-native";
@@ -45,6 +46,11 @@ if (process.env.EXPO_PUBLIC_DOMAIN) {
     : `https://${domain}`;
   setBaseUrl(baseUrl);
 }
+
+// Best-effort: if the previous launch crashed with a fatal JS error, upload
+// the diagnostic captured for it (see lib/crashDiagnostics.ts) now that the
+// API base URL is configured.
+uploadPendingCrashLogIfAny();
 
 setAuthTokenGetter(async () => {
   try {

@@ -14,6 +14,7 @@ import spellCheckRouter from "./spell-check";
 import spacesRouter from "./spaces";
 import thoughtsRouter from "./thoughts";
 import pushTokensRouter from "./pushTokens";
+import clientLogsRouter from "./clientLogs";
 
 const router: IRouter = Router();
 
@@ -32,5 +33,6 @@ router.use(spellCheckRouter);
 router.use(spacesRouter);
 router.use(thoughtsRouter);
 router.use(pushTokensRouter);
+router.use(clientLogsRouter);
 
 export default router;

@@ -42,3 +42,4 @@
 - [Space slot scheduledDate backfill](friction-space-slot-date-backfill.md) — reuse the exported `calculateOccasionDate`, reconstruct the same global occasion cursor (advance by total slots, not just NULLs) or later dates drift.
 - [RN Web Switch thumbColor override](rn-web-switch-thumbcolor-override.md) — web Switch forces teal #009688 active thumb and ignores thumbColor (track still obeys); use the shared custom Toggle.
 - [Drizzle pg error codes & shared Supabase DB](friction-drizzle-error-code-and-shared-db.md) — catch `err.cause.code` not `err.code`; a new index can vanish mid-task when another concurrent task's merge re-syncs the shared Supabase schema.
+- [Friction startup crash diagnostics](friction-startup-crash-diagnostics.md) — ASC crash-log API doesn't add the JS exception reason; capture it yourself via ErrorUtils + sync expo-file-system write from index.js before RCTFatal aborts.

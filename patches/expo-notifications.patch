@@ -1,0 +1,51 @@
+diff --git a/ios/ExpoNotifications/ServerRegistration/ServerRegistrationModule.swift b/ios/ExpoNotifications/ServerRegistration/ServerRegistrationModule.swift
+index f3caefdf3a4c176f8dc6866f6c0a73ca16035d1e..9ea34a1953a67ef982ef8bbeaad02952c3d3c8a2 100644
+--- a/ios/ExpoNotifications/ServerRegistration/ServerRegistrationModule.swift
++++ b/ios/ExpoNotifications/ServerRegistration/ServerRegistrationModule.swift
+@@ -132,6 +132,24 @@ open class ServerRegistrationModule: Module {
+     return query as CFDictionary
+   }
+ 
++  // Non-fatal Keychain statuses that can occur transiently (e.g. device locked,
++  // securityd still starting up right after a cold launch, background app
++  // refresh with no user interaction yet). None of these mean the app is
++  // misconfigured, so auto-registration side effects (which this app does not
++  // otherwise consume) should degrade to "no value" instead of throwing and
++  // rejecting a promise this early in app startup.
++  private func isNonFatalKeychainStatus(_ status: OSStatus) -> Bool {
++    switch status {
++    case errSecInteractionNotAllowed,
++      errSecMissingEntitlement,
++      errSecNotAvailable,
++      errSecUserCanceled:
++      return true
++    default:
++      return false
++    }
++  }
++
+   private func fetchStringWithQuery(_ query: CFDictionary) throws -> String? {
+     var item: CFTypeRef?
+     let status = SecItemCopyMatching(query, &item)
+@@ -145,6 +163,10 @@ open class ServerRegistrationModule: Module {
+     if status == errSecItemNotFound {
+       return nil
+     }
++    if isNonFatalKeychainStatus(status) {
++      NSLog("[ExpoNotifications] Non-fatal Keychain read failure (OSStatus \(status)); treating as no value.")
++      return nil
++    }
+     throw keychainException(status)
+   }
+ 
+@@ -152,6 +174,10 @@ open class ServerRegistrationModule: Module {
+     SecItemDelete(search)
+     let status = SecItemAdd(set, nil)
+     if status != errSecSuccess {
++      if isNonFatalKeychainStatus(status) {
++        NSLog("[ExpoNotifications] Non-fatal Keychain write failure (OSStatus \(status)); skipping.")
++        return
++      }
+       throw keychainException(status)
+     }
+   }

@@ -36,6 +36,8 @@ tags:
     description: Thought (단상) operations
   - name: push-tokens
     description: Expo push token registration
+  - name: diagnostics
+    description: Client-side diagnostics and crash reporting
 
 paths:
   /healthz:
@@ -2714,6 +2716,28 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  # ─── Diagnostics ──────────────────────────────────
+  /client-logs:
+    post:
+      operationId: reportClientLog
+      tags: [diagnostics]
+      summary: Report a client-side diagnostic event
+      description: >
+        Best-effort, unauthenticated endpoint for the mobile app to report diagnostic
+        events (currently: fatal JS errors captured just before an app crash) that were
+        persisted on-device and are uploaded on the next launch. No auth is required
+        because a crash can happen before the user is signed in. Never rejects on bad
+        input; always returns 204.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientLogBody"
+      responses:
+        "204":
+          description: Logged
+
   # ─── Push Tokens ──────────────────────────────────
   /push-tokens:
     post:
@@ -4761,3 +4785,41 @@ components:
           nullable: true
           description: Optional device identifier for de-duplication
       required: [token, platform]
+
+    ClientLogBody:
+      type: object
+      description: >
+        A diagnostic event captured on-device. Currently only used to report a fatal JS
+        error persisted right before the app crashed, uploaded on the next app launch.
+      properties:
+        source:
+          type: string
+          description: Where this log came from, e.g. "fatal-js-error"
+        message:
+          type: string
+        name:
+          type: string
+          nullable: true
+        stack:
+          type: string
+          nullable: true
+        isFatal:
+          type: boolean
+          nullable: true
+        timestamp:
+          type: string
+          nullable: true
+          description: ISO timestamp captured on-device
+        platform:
+          type: string
+          nullable: true
+        platformVersion:
+          type: string
+          nullable: true
+        appVersion:
+          type: string
+          nullable: true
+        buildNumber:
+          type: string
+          nullable: true
+      required: [source, message]

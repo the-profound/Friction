@@ -3,8 +3,23 @@ import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? "";
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "";
+// `createClient` throws synchronously ("supabaseUrl is required.") if either
+// value is empty. That would happen at module-import time — before any
+// try/catch in app code can catch it — and crash the app on launch. Fall
+// back to an inert-but-valid placeholder so the client can always be
+// constructed; every real request will then fail with a normal network/auth
+// error instead of an unrecoverable startup crash.
+const rawSupabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const rawSupabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+if (!rawSupabaseUrl || !rawSupabaseAnonKey) {
+  console.warn(
+    "[supabase] EXPO_PUBLIC_SUPABASE_URL and/or EXPO_PUBLIC_SUPABASE_ANON_KEY are missing from this build; falling back to a placeholder client so startup does not crash."
+  );
+}
+
+const supabaseUrl = rawSupabaseUrl || "https://placeholder.supabase.co";
+const supabaseAnonKey = rawSupabaseAnonKey || "placeholder-anon-key";
 
 const CHUNK_SIZE = 1800;
 

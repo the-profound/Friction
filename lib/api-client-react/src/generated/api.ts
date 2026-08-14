@@ -24,6 +24,7 @@ import type {
   ArticleQuestionsResponse,
   CheckArticleRead200,
   CheckArticleReadParams,
+  ClientLogBody,
   CreateArticleBody,
   CreateMyCollectionBody,
   CreateNeighborRequestBody,
@@ -10189,6 +10190,94 @@ export const useExpandThoughts = <
   TContext
 > => {
   return useMutation(getExpandThoughtsMutationOptions(options));
+};
+
+/**
+ * Best-effort, unauthenticated endpoint for the mobile app to report diagnostic events (currently: fatal JS errors captured just before an app crash) that were persisted on-device and are uploaded on the next launch. No auth is required because a crash can happen before the user is signed in. Never rejects on bad input; always returns 204.
+
+ * @summary Report a client-side diagnostic event
+ */
+export const getReportClientLogUrl = () => {
+  return `/api/client-logs`;
+};
+
+export const reportClientLog = async (
+  clientLogBody: ClientLogBody,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getReportClientLogUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(clientLogBody),
+  });
+};
+
+export const getReportClientLogMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reportClientLog>>,
+    TError,
+    { data: BodyType<ClientLogBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof reportClientLog>>,
+  TError,
+  { data: BodyType<ClientLogBody> },
+  TContext
+> => {
+  const mutationKey = ["reportClientLog"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof reportClientLog>>,
+    { data: BodyType<ClientLogBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return reportClientLog(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ReportClientLogMutationResult = NonNullable<
+  Awaited<ReturnType<typeof reportClientLog>>
+>;
+export type ReportClientLogMutationBody = BodyType<ClientLogBody>;
+export type ReportClientLogMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Report a client-side diagnostic event
+ */
+export const useReportClientLog = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reportClientLog>>,
+    TError,
+    { data: BodyType<ClientLogBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof reportClientLog>>,
+  TError,
+  { data: BodyType<ClientLogBody> },
+  TContext
+> => {
+  return useMutation(getReportClientLogMutationOptions(options));
 };
 
 /**
