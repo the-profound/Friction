@@ -34,26 +34,17 @@
   "submit": {
     "production": {
       "ios": {
-        "ascAppId": "6795505833",
-        "ascApiKeyPath": "/tmp/asc_api_key.p8",
-        "ascApiKeyId": "$APP_STORE_CONNECT_KEY_ID",
-        "ascApiKeyIssuerId": "$APP_STORE_CONNECT_ISSUER_ID"
+        "ascAppId": "6795505833"
       }
     },
     "preview": {
       "ios": {
-        "ascAppId": "6795505833",
-        "ascApiKeyPath": "/tmp/asc_api_key.p8",
-        "ascApiKeyId": "$APP_STORE_CONNECT_KEY_ID",
-        "ascApiKeyIssuerId": "$APP_STORE_CONNECT_ISSUER_ID"
+        "ascAppId": "6795505833"
       }
     },
     "development": {
       "ios": {
-        "ascAppId": "6801383039",
-        "ascApiKeyPath": "/tmp/asc_api_key.p8",
-        "ascApiKeyId": "$APP_STORE_CONNECT_KEY_ID",
-        "ascApiKeyIssuerId": "$APP_STORE_CONNECT_ISSUER_ID"
+        "ascAppId": "6801383039"
       }
     }
   }
