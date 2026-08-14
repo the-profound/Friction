@@ -3,7 +3,7 @@ const IS_DEV = process.env.APP_VARIANT === "development";
 module.exports = {
   expo: {
     name: IS_DEV ? "Friction Dev" : "Friction",
-    slug: "friction",
+    slug: IS_DEV ? "friction-dev" : "friction",
     version: "1.0.0",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
