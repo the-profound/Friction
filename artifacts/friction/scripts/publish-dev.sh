@@ -21,6 +21,7 @@ if [ -z "$EXPO_TOKEN" ]; then
 fi
 
 export EXPO_APPLE_TEAM_ID="D9P94YPN8F"
+export APP_VARIANT="development"
 
 cd "$APP_DIR"
 
