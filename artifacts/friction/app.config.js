@@ -6,7 +6,9 @@ module.exports = {
     slug: IS_DEV ? "friction-dev" : "friction",
     version: "1.0.0",
     orientation: "portrait",
-    icon: "./assets/images/icon.png",
+    icon: IS_DEV
+      ? "./assets/images/splash-icon.png"
+      : "./assets/images/wax-seal.png",
     scheme: IS_DEV ? "friction-dev" : "friction",
     userInterfaceStyle: "automatic",
     ios: {
