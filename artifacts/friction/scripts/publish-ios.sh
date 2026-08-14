@@ -28,10 +28,6 @@ fi
 
 export EXPO_APPLE_TEAM_ID="D9P94YPN8F"
 
-echo "$APP_STORE_CONNECT_P8_KEY" > /tmp/asc_api_key.p8
-chmod 600 /tmp/asc_api_key.p8
-echo "✅ App Store Connect API Key 임시 파일 생성 완료"
-
 cd "$APP_DIR"
 
 echo ""
@@ -51,6 +47,11 @@ echo "✅ 빌드 완료 (ID: $BUILD_ID)"
 echo ""
 echo "🚀 [2/2] App Store Connect 제출 시작..."
 echo ""
+
+echo "$APP_STORE_CONNECT_P8_KEY" > /tmp/asc_api_key.p8
+chmod 600 /tmp/asc_api_key.p8
+echo "✅ App Store Connect API Key 임시 파일 생성 완료"
+
 $EAS submit \
   --platform ios \
   --id "$BUILD_ID" \
