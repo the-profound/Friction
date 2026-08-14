@@ -32,6 +32,8 @@ if [ -z "$APP_STORE_CONNECT_P8_KEY" ]; then
   exit 1
 fi
 
+export EXPO_APPLE_TEAM_ID="D9P94YPN8F"
+
 echo "$APP_STORE_CONNECT_P8_KEY" > /tmp/asc_api_key.p8
 chmod 600 /tmp/asc_api_key.p8
 echo "✅ App Store Connect API Key 임시 파일 생성 완료"
