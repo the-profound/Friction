@@ -81,17 +81,17 @@ function SpaceCard({
   const isOverdue = isOverduePlannedStart(item);
 
   return (
-    <View style={[styles.cardWrapper, { width: cardWidth }]}>
+    <ScalePressable
+      style={[styles.cardWrapper, { width: cardWidth }]}
+      onPress={onPress}
+      contentStyle={styles.card}
+    >
       {isOperator && (
         <View style={styles.crownBadge}>
           <MaterialCommunityIcons name="crown" size={14} color={OPERATOR_CROWN_COLOR} />
         </View>
       )}
-      <ScalePressable
-        style={styles.card}
-        onPress={onPress}
-        contentStyle={styles.cardContent}
-      >
+      <View style={styles.cardContent}>
         <View style={styles.cardTopRow}>
           <Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>
           <View style={styles.cardBadgeGroup}>
@@ -138,8 +138,8 @@ function SpaceCard({
             </Text>
           </View>
         </View>
-      </ScalePressable>
-    </View>
+      </View>
+    </ScalePressable>
   );
 }
 
