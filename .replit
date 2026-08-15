@@ -81,6 +81,15 @@ router = "path"
 PORT = "3001"
 
 [[workflows.workflow]]
+name = "Friction Dev Tunnel"
+author = "agent"
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm --filter @workspace/friction dev:tunnel"
+
+[[workflows.workflow]]
 name = "Publish iOS"
 mode = "parallel"
 author = 56922764
