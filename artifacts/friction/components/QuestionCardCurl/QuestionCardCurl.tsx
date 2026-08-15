@@ -227,6 +227,11 @@ function QuestionCardCurlInner({
     });
   }, []);
 
+  // Worklet 클로저에 `Keyboard`(KeyboardImpl) 객체가 캡처되면 Reanimated가
+  // UI 스레드로 직렬화할 때 "Cannot copy value of type KeyboardImpl" 오류가
+  // 발생한다. JS 스레드 전용 래퍼를 정의해 runOnJS에 이 함수만 넘긴다.
+  const kbDismiss = useCallback(() => { Keyboard.dismiss(); }, []);
+
   const applyKeyboardOffset = useCallback((keyboardTop: number) => {
     const timing = { duration: 260, easing: Easing.out(Easing.cubic) };
     const bounds = deckBoundsRef.current;
@@ -461,7 +466,7 @@ function QuestionCardCurlInner({
           /* ── 키보드 열린 상태 ────────────────────────────────────── */
           if (keyboardVisibleSV.value === 1) {
             if (dy > 0) {
-              runOnJS(Keyboard.dismiss)();
+              runOnJS(kbDismiss)();
             } else if (gestureScrolledSV.value === 1) {
               scrollOffsetSV.value = withSpring(scrollOffsetSV.value, { damping: 20, stiffness: 300 });
             }
@@ -505,6 +510,7 @@ function QuestionCardCurlInner({
       setMaskState,
       settleTo,
       questionCount,
+      kbDismiss,
     ],
   );
 
