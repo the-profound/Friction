@@ -17,7 +17,6 @@ import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { useUser } from "@/contexts/UserContext";
-import { SpaceInfoNote } from "@/components/SpaceInfoNote/SpaceInfoNote";
 import { SpaceCopy } from "@/constants/spaceCopy";
 import {
   useGetSpaceJoinContext,
@@ -463,7 +462,6 @@ export default function SpaceParticipantsScreen() {
                   <Text style={styles.countBadgeText}>{members.length}</Text>
                 </View>
               )}
-              <SpaceInfoNote variant="popup" text={SpaceCopy.participants_confirmed} />
             </View>
             {membersQuery.isLoading ? (
               <View style={styles.sectionLoading}>
@@ -491,13 +489,12 @@ export default function SpaceParticipantsScreen() {
           {/* ── Code request queue ── */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionLabel}>코드 신청</Text>
+              <Text style={styles.sectionLabel}>참여 신청</Text>
               {codeRequests.length > 0 && (
                 <View style={styles.countBadge}>
                   <Text style={styles.countBadgeText}>{codeRequests.length}</Text>
                 </View>
               )}
-              <SpaceInfoNote variant="popup" text={SpaceCopy.participants_codeRequest} />
             </View>
             {recruitmentClosed && (
               <View style={styles.recruitmentClosedBanner}>

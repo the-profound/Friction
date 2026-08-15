@@ -539,8 +539,11 @@ function OperationSettingsStep({
       </View>
 
       <View style={stepStyles.fieldGroup}>
-        {/* centerCount prop의 의미 = "하루에 올라오는 중심글 수" (일별 발행 편수) */}
-        <Text style={stepStyles.fieldLabel}>하루에 올라오는 중심글 수</Text>
+        {/* centerCount prop의 의미 = "한 번에 올라오는 중심글 수" (일별 발행 편수) */}
+        <View style={stepStyles.labelRow}>
+          <Text style={stepStyles.fieldLabel}>한 번에 올라오는 중심글 수</Text>
+          <SpaceInfoNote variant="popup" text={SpaceCopy.centerCount_what} />
+        </View>
         <View style={stepStyles.stepperRow}>
           <ScalePressable
             contentStyle={styles.stepperBtn}
@@ -671,7 +674,7 @@ function SlotOrderStep({
   return (
     <View style={stepStyles.container}>
       <View style={stepStyles.labelRow}>
-        <Text style={stepStyles.stepTitle}>중심글 작성 순서</Text>
+        <Text style={stepStyles.stepTitle}>중심글 발신 순서</Text>
         <SpaceInfoNote variant="popup" text={SpaceCopy.slotOrder_what} />
       </View>
       <Text style={stepStyles.stepDesc}>
@@ -952,10 +955,7 @@ function OpeningLetterStep({
 
   return (
     <View style={stepStyles.container}>
-      <View style={stepStyles.labelRow}>
-        <Text style={stepStyles.stepTitle}>첫 여는 편지 보내기</Text>
-        <SpaceInfoNote variant="popup" text={SpaceCopy.openingLetter_what} />
-      </View>
+      <Text style={stepStyles.stepTitle}>첫 여는 편지 보내기</Text>
       <Text style={stepStyles.stepDesc}>공간 시작과 함께 전송될 1회차 여는 편지를 선택해요.</Text>
 
       {/* 발송 가능 기간 안내 */}
@@ -1041,14 +1041,6 @@ function OpeningLetterStep({
           )}
         </View>
       ) : null}
-
-      {!openingLetterExists && !isLoading && !isArticlesLoading && (
-        <SpaceInfoNote
-          variant="inline"
-          text={SpaceCopy.openingLetter_required}
-          style={{ marginTop: 4 }}
-        />
-      )}
 
       <LetterPickerSheet
         visible={pickerVisible}
