@@ -118,7 +118,7 @@ export default function MemoToolbar({
 
   const normalBtnW = calcBtnW(scrollAreaWidth);
   const btnW = aaActive ? EXPANDED_BTN_W : normalBtnW;
-  const btn = { width: btnW, height: 36, borderRadius: 18, marginRight: BTN_GAP };
+  const btn = { width: btnW, height: 36, marginRight: BTN_GAP };
 
   const isBoldActive = selectionState.isBold || activeFormats?.has("bold");
   const isItalicActive = selectionState.isItalic || activeFormats?.has("italic");
@@ -143,8 +143,8 @@ export default function MemoToolbar({
         >
           {/* 블록 타입 */}
           <ScalePressable
-            style={[styles.blockTypeBtn, inlineMenuMode === "blockType" && styles.btnActive]}
-            contentStyle={styles.btnContent}
+            style={styles.blockTypeBtn}
+            contentStyle={[styles.btnContent, inlineMenuMode === "blockType" && styles.btnActive]}
             onPress={onFormatPress}
             hitSlop={6}
           >
@@ -158,8 +158,8 @@ export default function MemoToolbar({
 
           {/* Aa */}
           <ScalePressable
-            style={[btn, aaActive && styles.btnActive]}
-            contentStyle={styles.btnContent}
+            style={btn}
+            contentStyle={[styles.btnContent, aaActive && styles.btnActive]}
             onPress={() => setAaActive((v) => !v)}
             hitSlop={6}
           >
@@ -225,8 +225,8 @@ export default function MemoToolbar({
           {/* + */}
           <View ref={addMenuBtnRef} collapsable={false}>
             <ScalePressable
-              style={[btn, inlineMenuMode === "addMenu" && styles.btnActive]}
-              contentStyle={styles.btnContent}
+              style={btn}
+              contentStyle={[styles.btnContent, inlineMenuMode === "addMenu" && styles.btnActive]}
               onPress={onOpenAddMenu}
               hitSlop={6}
             >
@@ -273,7 +273,7 @@ export default function MemoToolbar({
           {/* enter */}
           {onShiftEnter != null && (
             <ScalePressable
-              style={{ width: btnW, height: 36, borderRadius: 18 }}
+              style={{ width: btnW, height: 36 }}
               contentStyle={styles.btnContent}
               onPress={onShiftEnter}
               hitSlop={6}
@@ -332,8 +332,6 @@ const styles = StyleSheet.create({
   blockTypeBtn: {
     width: BLOCK_BTN_W,
     height: 36,
-    borderRadius: 18,
-    overflow: "hidden",
     marginRight: BTN_GAP,
   },
   // B / I / U / 인용 그룹 컨테이너
@@ -349,14 +347,12 @@ const styles = StyleSheet.create({
   expandBtn: {
     width: EXPANDED_BTN_W,
     height: 36,
-    borderRadius: 18,
     marginRight: BTN_GAP,
   },
   // 인용 — 마지막 버튼, marginRight 없음 (컨테이너 paddingRight이 gap 담당)
   expandBtnLast: {
     width: EXPANDED_BTN_W,
     height: 36,
-    borderRadius: 18,
   },
   keyboardSeparator: {
     width: StyleSheet.hairlineWidth,
@@ -375,9 +371,11 @@ const styles = StyleSheet.create({
   keyboardBtn: {
     width: 36,
     height: 36,
-    borderRadius: 18,
   },
   btnContent: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
   },

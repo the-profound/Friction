@@ -138,9 +138,9 @@ export default function SourceArticlePickerSheet({
       const isSelected = item.article?.id === currentSourceArticleId;
       return (
         <ScalePressable
-          style={[styles.listItem, isSelected && styles.listItemSelected]}
+          style={styles.listItem}
           onPress={() => handleSelect(item.article?.id ?? item.articleId, title)}
-        contentStyle={styles.listItemRow}
+          contentStyle={[styles.listItemRow, isSelected && styles.listItemSelected]}
         >
           <View style={styles.listItemContent}>
             <Text style={styles.listItemTitle} numberOfLines={1}>
@@ -164,9 +164,9 @@ export default function SourceArticlePickerSheet({
       const isSelected = item.id === currentSourceArticleId;
       return (
         <ScalePressable
-          style={[styles.listItem, isSelected && styles.listItemSelected]}
+          style={styles.listItem}
           onPress={() => handleSelect(item.id, item.title)}
-        contentStyle={styles.listItemRow}
+          contentStyle={[styles.listItemRow, isSelected && styles.listItemSelected]}
         >
           <View style={styles.listItemContent}>
             <Text style={styles.listItemTitle} numberOfLines={1}>
@@ -203,7 +203,7 @@ export default function SourceArticlePickerSheet({
                 {resolvedCurrentTitle ?? "(제목 없음)"}
               </Text>
             </View>
-            <ScalePressable style={styles.unlinkButton} onPress={handleUnlink}>
+            <ScalePressable contentStyle={styles.unlinkButtonContent} onPress={handleUnlink}>
               <Text style={styles.unlinkButtonText}>연결 해제</Text>
             </ScalePressable>
           </View>
@@ -224,8 +224,8 @@ export default function SourceArticlePickerSheet({
 
         <View style={styles.tabRow}>
           <ScalePressable
-            style={[styles.tab, activeTab === "inbox" && styles.tabActive]}
             onPress={() => setActiveTab("inbox")}
+            contentStyle={[styles.tabContent, activeTab === "inbox" && styles.tabActive]}
           >
             <Text
               style={[styles.tabText, activeTab === "inbox" && styles.tabTextActive]}
@@ -234,8 +234,8 @@ export default function SourceArticlePickerSheet({
             </Text>
           </ScalePressable>
           <ScalePressable
-            style={[styles.tab, activeTab === "myArticles" && styles.tabActive]}
             onPress={() => setActiveTab("myArticles")}
+            contentStyle={[styles.tabContent, activeTab === "myArticles" && styles.tabActive]}
           >
             <Text
               style={[styles.tabText, activeTab === "myArticles" && styles.tabTextActive]}
@@ -313,7 +313,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.zinc800,
   },
-  unlinkButton: {
+  unlinkButtonContent: {
+    alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: 12,
     paddingVertical: 6,
     backgroundColor: Colors.white,
@@ -349,7 +351,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 4,
   },
-  tab: {
+  tabContent: {
+    alignItems: "center",
+    justifyContent: "center",
+    flexGrow: 0,
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 999,
@@ -388,8 +393,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listItem: {
-    paddingVertical: 12,
-    paddingHorizontal: 4,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
   },
@@ -397,6 +400,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
   },
   listItemSelected: {
     backgroundColor: Colors.zinc50,

@@ -2011,9 +2011,9 @@ export default function ReadScreen() {
           </Text>
           <View style={styles.sentenceActions}>
             <ScalePressable
-              style={[styles.sentenceButton, styles.sentenceButtonCancel]}
+              style={styles.sentenceButton}
               onPress={handleCancelSentence}
-            contentStyle={styles.sentenceButtonContent}
+              contentStyle={[styles.sentenceButtonContent, styles.sentenceButtonCancel]}
             >
               <Text style={dynamicStyles.sentenceButtonCancelText}>취소</Text>
             </ScalePressable>
@@ -2372,15 +2372,16 @@ const styles = StyleSheet.create({
   },
   sentenceButton: {
     flex: 1,
-    backgroundColor: Colors.zinc900,
-    borderRadius: 10,
-    paddingVertical: 12,
   },
   sentenceButtonContent: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,},
+    gap: 6,
+    backgroundColor: Colors.zinc900,
+    borderRadius: 10,
+    paddingVertical: 12,
+  },
   sentenceButtonCancel: {
     backgroundColor: Colors.zinc100,
   },
@@ -2486,16 +2487,17 @@ const styles = StyleSheet.create({
       default: {},
     }),
   },
-  selectionPillButton: {
+  selectionPillButton: {},
+  selectionPillButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
     backgroundColor: Colors.zinc700,
     borderRadius: 6,
     paddingHorizontal: 16,
     paddingVertical: 8,
   },
-  selectionPillButtonContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,},
   selectionPillButtonText: {
     fontSize: 12,
     fontFamily: ReaderTokens.fontFamily.sansSemiBold,

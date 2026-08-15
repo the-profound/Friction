@@ -418,7 +418,7 @@ export default function PersonalCollectionDetailScreen() {
         onScrollLock={(locked) => setScrollEnabled(!locked)}
       >
         <ScalePressable
-          style={styles.articleItem}
+          style={styles.articleItemOuter}
           onPress={() => { closeOpenRow(); setTapArticleEntry(item); }}
           onLongPress={() => handleLongPress(item)}
           delayLongPress={400}
@@ -567,20 +567,20 @@ export default function PersonalCollectionDetailScreen() {
         <View style={[styles.selectionBar, { paddingBottom: insets.bottom + 12 }]}>
           <View style={styles.selectionBarButtons}>
             <ScalePressable
-              style={[styles.bulkActionButton, styles.bulkDeleteButton, (selectedCount === 0 || isBulkDeleting || isBulkMoving) && styles.bulkActionButtonDisabled]}
+              style={styles.bulkActionButton}
               onPress={handleBulkDeletePress}
               disabled={selectedCount === 0 || isBulkDeleting || isBulkMoving}
-            contentStyle={styles.bulkActionButtonContent}
+            contentStyle={[styles.bulkActionButtonContent, styles.bulkDeleteButtonContent, (selectedCount === 0 || isBulkDeleting || isBulkMoving) && styles.bulkActionButtonDisabledContent]}
             >
               <Text style={styles.bulkDeleteText}>
                 {isBulkDeleting ? "삭제 중..." : "삭제"}
               </Text>
             </ScalePressable>
             <ScalePressable
-              style={[styles.bulkActionButton, styles.bulkMoveButton, (selectedCount === 0 || isBulkDeleting || isBulkMoving) && styles.bulkActionButtonDisabled]}
+              style={styles.bulkActionButton}
               onPress={handleBulkMovePress}
               disabled={selectedCount === 0 || isBulkDeleting || isBulkMoving}
-            contentStyle={styles.bulkActionButtonContent}
+            contentStyle={[styles.bulkActionButtonContent, styles.bulkMoveButtonContent, (selectedCount === 0 || isBulkDeleting || isBulkMoving) && styles.bulkActionButtonDisabledContent]}
             >
               <Text style={styles.bulkMoveText}>
                 {isBulkMoving ? "이동 중..." : "이동"}
@@ -704,6 +704,7 @@ export default function PersonalCollectionDetailScreen() {
           {longPressTargetArticle?.article?.authorId === userId && (
             <ScalePressable
               style={styles.actionSheetItem}
+              contentStyle={styles.actionSheetItemContent}
               onPress={() => {
                 setIsLongPressMenuVisible(false);
                 setIsSourcePickerVisible(true);
@@ -714,6 +715,7 @@ export default function PersonalCollectionDetailScreen() {
           )}
           <ScalePressable
             style={styles.actionSheetItem}
+            contentStyle={styles.actionSheetItemContent}
             onPress={() => {
               setIsLongPressMenuVisible(false);
               setIsSaveAsPhotosVisible(true);
@@ -723,6 +725,7 @@ export default function PersonalCollectionDetailScreen() {
           </ScalePressable>
           <ScalePressable
             style={[styles.actionSheetItem, styles.actionSheetCancelItem]}
+            contentStyle={styles.actionSheetItemContent}
             onPress={() => setIsLongPressMenuVisible(false)}
           >
             <Text style={styles.actionSheetCancelText}>닫기</Text>
@@ -859,7 +862,14 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.zinc100,
     backgroundColor: Colors.white,
   },
+  articleItemOuter: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.zinc100,
+  },
   articleItemContent: {
+    paddingVertical: 14,
+    paddingHorizontal: Spacing.screenPx,
+    backgroundColor: Colors.white,
     flexDirection: "row",
     alignItems: "center",},
   articleInfo: {
@@ -942,10 +952,10 @@ const styles = StyleSheet.create({
     color: Colors.white,
   },
   selectionRow: {
-    paddingLeft: Spacing.screenPx,
-    backgroundColor: Colors.white,
   },
   selectionRowContent: {
+    paddingLeft: Spacing.screenPx,
+    backgroundColor: Colors.white,
     flexDirection: "row",
     alignItems: "center",},
   checkbox: {
@@ -981,15 +991,16 @@ const styles = StyleSheet.create({
   bulkActionButton: {
     flex: 1,
     height: 52,
-    borderRadius: 14,
   },
   bulkActionButtonContent: {
+    height: "100%",
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",},
-  bulkActionButtonDisabled: {
+  bulkActionButtonDisabledContent: {
     backgroundColor: Colors.zinc200,
   },
-  bulkDeleteButton: {
+  bulkDeleteButtonContent: {
     backgroundColor: "#DC2626",
   },
   bulkDeleteText: {
@@ -997,7 +1008,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.white,
   },
-  bulkMoveButton: {
+  bulkMoveButtonContent: {
     backgroundColor: Colors.zinc800,
   },
   bulkMoveText: {
@@ -1021,12 +1032,12 @@ const styles = StyleSheet.create({
     color: Colors.zinc400,
   },
   moveCollectionItem: {
-    paddingVertical: 16,
-    paddingHorizontal: Spacing.screenPx,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
   },
   moveCollectionItemContent: {
+    paddingVertical: 16,
+    paddingHorizontal: Spacing.screenPx,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,},
@@ -1049,10 +1060,12 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   actionSheetItem: {
-    paddingVertical: 16,
-    paddingHorizontal: 4,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
+  },
+  actionSheetItemContent: {
+    paddingVertical: 16,
+    paddingHorizontal: 4,
   },
   actionSheetItemText: {
     ...Typography.body,

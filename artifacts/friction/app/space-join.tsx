@@ -604,6 +604,7 @@ export default function SpaceJoinScreen() {
           )}
           <ScalePressable
             style={styles.secondaryButton}
+            contentStyle={styles.secondaryButtonContent}
             onPress={() => {
               setStep("code_input");
               setFoundSpace(null);
@@ -651,6 +652,7 @@ export default function SpaceJoinScreen() {
           {!isClosed && (
             <ScalePressable
               style={styles.secondaryButton}
+              contentStyle={styles.secondaryButtonContent}
               onPress={() => setDeclineConfirmVisible(true)}
             >
               <Text style={styles.secondaryButtonTextDestructive}>거절하기</Text>
@@ -674,6 +676,7 @@ export default function SpaceJoinScreen() {
           <SpaceInfoCard space={joinContext.space} />
           <ScalePressable
             style={styles.cancelRequestButton}
+            contentStyle={styles.cancelRequestButtonContent}
             onPress={() => setCancelConfirmVisible(true)}
           >
             <Text style={styles.cancelRequestText}>신청 취소하기</Text>
@@ -698,7 +701,7 @@ export default function SpaceJoinScreen() {
             </Text>
           </View>
           <SpaceInfoCard space={joinContext.space} />
-          <ScalePressable style={styles.secondaryButton} onPress={() => router.back()}>
+          <ScalePressable style={styles.secondaryButton} contentStyle={styles.secondaryButtonContent} onPress={() => router.back()}>
             <Text style={styles.secondaryButtonText}>돌아가기</Text>
           </ScalePressable>
         </View>
@@ -777,7 +780,7 @@ function BoundaryView({
       <Text style={styles.boundaryTitle}>{title}</Text>
       <Text style={styles.boundarySubtitle}>{subtitle}</Text>
       {action ? (
-        <ScalePressable style={styles.boundaryButton} onPress={action.onPress}>
+        <ScalePressable style={styles.boundaryButton} contentStyle={styles.boundaryButtonContent} onPress={action.onPress}>
           <Text style={styles.boundaryButtonText}>{action.label}</Text>
         </ScalePressable>
       ) : null}
@@ -802,12 +805,12 @@ const styles = StyleSheet.create({
   backButton: {
     width: 36,
     height: 36,
-    borderRadius: 10,
-    backgroundColor: Colors.zinc100,
-    alignItems: "center",
-    justifyContent: "center",
   },
   backButtonContent: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: Colors.zinc100,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -903,9 +906,12 @@ const styles = StyleSheet.create({
     color: Colors.white,
   },
   secondaryButton: {
+    width: "100%",
+  },
+  secondaryButtonContent: {
     paddingVertical: 12,
     alignItems: "center",
-    width: "100%",
+    justifyContent: "center",
   },
   secondaryButtonText: {
     ...Typography.body,
@@ -1064,9 +1070,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   cancelRequestButton: {
+    marginTop: 8,
+  },
+  cancelRequestButtonContent: {
     paddingVertical: 14,
     alignItems: "center",
-    marginTop: 8,
+    justifyContent: "center",
   },
   cancelRequestText: {
     ...Typography.body,
@@ -1148,10 +1157,14 @@ const styles = StyleSheet.create({
   },
   boundaryButton: {
     marginTop: 16,
+  },
+  boundaryButtonContent: {
     paddingHorizontal: 24,
     paddingVertical: 12,
     backgroundColor: Colors.zinc900,
     borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
   },
   boundaryButtonText: {
     ...Typography.bodySemiBold,

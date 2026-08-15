@@ -132,12 +132,12 @@ export default function CoverEditor({
           {COVER_TYPES.map((t) => (
             <ScalePressable
               key={t.key}
-              style={[
-                styles.typeChip,
+              style={styles.typeChip}
+              onPress={() => update({ type: t.key })}
+              contentStyle={[
+                styles.typeChipContent,
                 local.type === t.key && styles.typeChipActive,
               ]}
-              onPress={() => update({ type: t.key })}
-            contentStyle={styles.typeChipContent}
             >
               <Feather
                 name={t.icon}
@@ -161,12 +161,12 @@ export default function CoverEditor({
           {TEXT_ALIGNS.map((a) => (
             <ScalePressable
               key={a.key}
-              style={[
-                styles.alignChip,
+              style={styles.alignChip}
+              onPress={() => update({ align: a.key })}
+              contentStyle={[
+                styles.alignChipContent,
                 local.align === a.key && styles.alignChipActive,
               ]}
-              onPress={() => update({ align: a.key })}
-            contentStyle={styles.alignChipContent}
             >
               <Feather
                 name={a.icon}
@@ -182,14 +182,14 @@ export default function CoverEditor({
           {TEXT_COLORS.map((c) => (
             <ScalePressable
               key={c.key}
-              style={[
-                styles.colorChip,
+              style={styles.colorChip}
+              onPress={() => update({ textColor: c.color })}
+              contentStyle={[
+                styles.colorChipContent,
                 { backgroundColor: c.color },
                 LIGHT_COLORS.has(c.color) && styles.colorChipLight,
                 local.textColor === c.color && styles.colorChipActive,
               ]}
-              onPress={() => update({ textColor: c.color })}
-            contentStyle={styles.colorChipContent}
             >
               {local.textColor === c.color && (
                 <Feather
@@ -209,14 +209,14 @@ export default function CoverEditor({
               {BG_COLORS.map((c) => (
                 <ScalePressable
                   key={c.key}
-                  style={[
-                    styles.colorChip,
+                  style={styles.colorChip}
+                  onPress={() => update({ bgColor: c.color })}
+                  contentStyle={[
+                    styles.colorChipContent,
                     { backgroundColor: c.color },
                     LIGHT_COLORS.has(c.color) && styles.colorChipLight,
                     local.bgColor === c.color && styles.colorChipActive,
                   ]}
-                  onPress={() => update({ bgColor: c.color })}
-                contentStyle={styles.colorChipContent}
                 >
                   {local.bgColor === c.color && (
                     <Feather
@@ -242,10 +242,10 @@ export default function CoverEditor({
                 />
                 <View style={styles.imageActions}>
                   <ScalePressable
-                    style={[styles.imageButton, styles.imageButtonSecondary]}
+                    style={styles.imageButton}
                     onPress={pickAndUpload}
                     disabled={isUploading}
-                  contentStyle={styles.imageButtonContent}
+                    contentStyle={[styles.imageButtonContent, styles.imageButtonSecondary]}
                   >
                     {isUploading ? (
                       <ActivityIndicator size="small" color={Colors.zinc600} />
@@ -257,10 +257,10 @@ export default function CoverEditor({
                     </Text>
                   </ScalePressable>
                   <ScalePressable
-                    style={[styles.imageButton, styles.imageButtonDanger]}
+                    style={styles.imageButton}
                     onPress={handleRemoveImage}
                     disabled={isUploading}
-                  contentStyle={styles.imageButtonContent}
+                    contentStyle={[styles.imageButtonContent, styles.imageButtonDanger]}
                   >
                     <Feather name="trash-2" size={15} color="#dc2626" />
                     <Text style={styles.imageButtonDangerLabel}>이미지 제거</Text>
@@ -269,10 +269,10 @@ export default function CoverEditor({
               </>
             ) : (
               <ScalePressable
-                style={[styles.imagePickerButton, isUploading && styles.imagePickerButtonDisabled]}
+                style={styles.imagePickerButton}
                 onPress={pickAndUpload}
                 disabled={isUploading}
-              contentStyle={styles.imagePickerButtonContent}
+                contentStyle={[styles.imagePickerButtonContent, isUploading && styles.imagePickerButtonDisabled]}
               >
                 {isUploading ? (
                   <ActivityIndicator size="small" color={Colors.zinc600} />
@@ -320,15 +320,21 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   typeChip: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  typeChipContent: {
+    flexGrow: 0,
+    flexShrink: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: Colors.zinc100,
   },
-  typeChipContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,},
   typeChipActive: {
     backgroundColor: Colors.zinc900,
   },
@@ -343,12 +349,15 @@ const styles = StyleSheet.create({
   alignChip: {
     width: 44,
     height: 44,
-    borderRadius: 12,
-    backgroundColor: Colors.zinc100,
   },
   alignChipContent: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: Colors.zinc100,
     alignItems: "center",
-    justifyContent: "center",},
+    justifyContent: "center",
+  },
   alignChipActive: {
     backgroundColor: Colors.zinc200,
     borderWidth: 2,
@@ -362,11 +371,14 @@ const styles = StyleSheet.create({
   colorChip: {
     width: 36,
     height: 36,
-    borderRadius: 18,
   },
   colorChipContent: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
-    justifyContent: "center",},
+    justifyContent: "center",
+  },
   colorChipLight: {
     borderWidth: 1,
     borderColor: Colors.zinc200,
@@ -379,7 +391,11 @@ const styles = StyleSheet.create({
     marginTop: 16,
     gap: 12,
   },
-  imagePickerButton: {
+  imagePickerButton: {},
+  imagePickerButtonContent: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
     borderWidth: 1,
     borderColor: Colors.zinc200,
     borderStyle: "dashed",
@@ -387,9 +403,6 @@ const styles = StyleSheet.create({
     padding: 20,
     backgroundColor: Colors.zinc50,
   },
-  imagePickerButtonContent: {
-    alignItems: "center",
-    gap: 8,},
   imagePickerButtonDisabled: {
     opacity: 0.6,
   },
@@ -415,14 +428,15 @@ const styles = StyleSheet.create({
   },
   imageButton: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
   },
   imageButtonContent: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,},
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
   imageButtonSecondary: {
     backgroundColor: Colors.zinc100,
   },

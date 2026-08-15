@@ -108,11 +108,11 @@ export default function ConfirmModal({
 
                 {displayDeleteButton && (
                   <ScalePressable
-                    style={[
-                      styles.deleteButton,
+                    style={styles.deleteButton}
+                    contentStyle={[
+                      styles.deleteButtonContent,
                       displayDeleteButton.disabled && styles.deleteButtonDisabled,
                     ]}
-                    contentStyle={styles.deleteButtonContent}
                     onPress={displayDeleteButton.onPress}
                   >
                     <Feather name="trash-2" size={20} color={Colors.white} />
@@ -122,15 +122,15 @@ export default function ConfirmModal({
             ) : (
               <View style={styles.buttons}>
                 <ScalePressable
-                  style={[styles.button, styles.cancelButton]}
-                  contentStyle={styles.buttonContent}
+                  style={styles.button}
+                  contentStyle={[styles.buttonContent, styles.cancelButton]}
                   onPress={onCancel}
                 >
                   <Text style={styles.cancelText}>{displayCancelLabel}</Text>
                 </ScalePressable>
                 <ScalePressable
-                  style={[styles.button, displayDestructive ? styles.destructiveButton : styles.confirmButton]}
-                  contentStyle={styles.buttonContent}
+                  style={styles.button}
+                  contentStyle={[styles.buttonContent, displayDestructive ? styles.destructiveButton : styles.confirmButton]}
                   onPress={onConfirm}
                 >
                   <Text style={[styles.confirmText, displayDestructive && styles.destructiveText]}>
@@ -200,15 +200,15 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: Colors.zinc100,
   },
   actionButtonContent: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: Colors.zinc100,
   },
   actionButtonEmoji: {
     fontSize: 18,
@@ -221,10 +221,12 @@ const styles = StyleSheet.create({
   deleteButton: {
     width: 52,
     height: 52,
-    borderRadius: 12,
-    backgroundColor: "#DC2626",
   },
   deleteButtonContent: {
+    width: 52,
+    height: 52,
+    borderRadius: 12,
+    backgroundColor: "#DC2626",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -238,11 +240,12 @@ const styles = StyleSheet.create({
   },
   button: {
     flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
   },
   buttonContent: {
     alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    borderRadius: 12,
   },
   cancelButton: {
     backgroundColor: Colors.zinc100,

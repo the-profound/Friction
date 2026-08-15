@@ -1605,10 +1605,10 @@ export default function WritingScreen() {
               <Text style={styles.pageCountLabel}>{pages.length}페이지</Text>
               <View style={styles.toolbarSpacer} />
               <ScalePressable
-                style={[styles.autoSplitButton, spellTabVisible && styles.autoSplitButtonDisabled]}
+                style={styles.autoSplitButton}
                 onPress={handleRunSpellCheck}
                 disabled={spellTabVisible || spellState.status === "loading"}
-                contentStyle={styles.autoSplitButtonContent}
+                contentStyle={[styles.autoSplitButtonContent, spellTabVisible && styles.autoSplitButtonDisabled]}
               >
                 <Feather name="check-circle" size={14} color={Colors.zinc600} />
                 <Text style={styles.autoSplitText}>
@@ -1616,7 +1616,7 @@ export default function WritingScreen() {
                 </Text>
               </ScalePressable>
               <ScalePressable
-                style={[styles.autoSplitButton, (splitting || !hasOverflowPages) && styles.autoSplitButtonDisabled]}
+                style={styles.autoSplitButton}
                 onPress={handleAutoSplit}
                 disabled={splitting || !hasOverflowPages}
                 accessibilityState={{ disabled: splitting || !hasOverflowPages }}
@@ -1680,9 +1680,9 @@ export default function WritingScreen() {
                         onPress={() => handleSplitPage(idx)}
                         disabled={splitting}
                         hitSlop={6}
-                        style={[styles.chipSplitButton, splitting && styles.chipSplitButtonDisabled]}
+                        style={styles.chipSplitButton}
                         accessibilityLabel={`페이지 ${idx + 1} 나누기`}
-                        contentStyle={styles.chipSplitButtonContent}
+                        contentStyle={[styles.chipSplitButtonContent, splitting && styles.chipSplitButtonDisabled]}
                       >
                         <Feather name="scissors" size={11} color={Colors.zinc600} />
                         <Text style={styles.chipSplitText}>나누기</Text>
@@ -1855,7 +1855,7 @@ export default function WritingScreen() {
               <View style={styles.spellCenter}>
                 <Feather name="alert-circle" size={28} color="#ef4444" />
                 <Text style={[styles.spellHintText, { color: "#b91c1c" }]}>{spellState.message}</Text>
-                <ScalePressable onPress={handleRunSpellCheck} style={styles.spellRetryBtn}>
+                <ScalePressable onPress={handleRunSpellCheck} style={styles.spellRetryBtn} contentStyle={styles.spellRetryBtnContent}>
                   <Text style={styles.spellRetryBtnText}>다시 시도</Text>
                 </ScalePressable>
               </View>
@@ -1897,10 +1897,10 @@ export default function WritingScreen() {
                   </View>
                   <Text style={styles.spellReasonText} numberOfLines={2}>{item.reason}</Text>
                   <View style={styles.spellActions}>
-                    <ScalePressable style={styles.spellSkipButton} onPress={handleSpellSkip}>
+                    <ScalePressable style={styles.spellSkipButton} contentStyle={styles.spellSkipButtonContent} onPress={handleSpellSkip}>
                       <Text style={styles.spellSkipText}>건너뛰기</Text>
                     </ScalePressable>
-                    <ScalePressable style={styles.spellApplyButton} onPress={handleSpellApply}>
+                    <ScalePressable style={styles.spellApplyButton} contentStyle={styles.spellApplyButtonContent} onPress={handleSpellApply}>
                       <Text style={styles.spellApplyText}>적용</Text>
                     </ScalePressable>
                   </View>
@@ -1977,17 +1977,17 @@ const styles = StyleSheet.create({
   toolbarSpacer: {
     flex: 1,
   },
-  autoSplitButton: {
+  autoSplitButton: {},
+  autoSplitButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.zinc200,
-  },
-  autoSplitButtonContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
   },
   autoSplitButtonDisabled: {
     opacity: 0.5,
@@ -2098,10 +2098,12 @@ const styles = StyleSheet.create({
   chipMergeButton: {
     width: 18,
     height: 18,
-    borderRadius: 9,
-    backgroundColor: Colors.zinc200,
   },
   chipMergeButtonContent: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: Colors.zinc200,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2116,13 +2118,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: Colors.zinc500,
   },
-  chipSplitButton: {
+  chipSplitButton: {},
+  chipSplitButtonContent: {
     paddingHorizontal: 6,
     paddingVertical: 3,
     borderRadius: 10,
     backgroundColor: Colors.zinc200,
-  },
-  chipSplitButtonContent: {
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
@@ -2179,10 +2180,14 @@ const styles = StyleSheet.create({
   },
   spellRetryBtn: {
     marginTop: 10,
+  },
+  spellRetryBtnContent: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
     backgroundColor: Colors.zinc100,
+    alignItems: "center",
+    justifyContent: "center",
   },
   spellRetryBtnText: {
     ...Typography.caption,
@@ -2266,23 +2271,29 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
     paddingTop: 2,
   },
-  spellSkipButton: {
+  spellSkipButton: {},
+  spellSkipButtonContent: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: Colors.zinc200,
+    alignItems: "center",
+    justifyContent: "center",
   },
   spellSkipText: {
     ...Typography.caption,
     fontSize: 13,
     color: Colors.zinc600,
   },
-  spellApplyButton: {
+  spellApplyButton: {},
+  spellApplyButtonContent: {
     paddingHorizontal: 20,
     paddingVertical: 8,
     borderRadius: 8,
     backgroundColor: "#3b82f6",
+    alignItems: "center",
+    justifyContent: "center",
   },
   spellApplyText: {
     ...Typography.caption,

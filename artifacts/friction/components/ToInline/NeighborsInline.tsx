@@ -285,6 +285,7 @@ export function NeighborsInline({
       </View>
       <ScalePressable
         style={styles.deleteButton}
+        contentStyle={styles.deleteButtonContent}
         onPress={(e) => {
           e.stopPropagation();
           setDeleteTarget({ id: item.id, name: item.user?.nickname ?? "이름 없음" });
@@ -343,6 +344,7 @@ export function NeighborsInline({
       </View>
       <ScalePressable
         style={styles.rejectButton}
+        contentStyle={styles.rejectButtonContent}
         onPress={() =>
           setCancelTarget({ id: item.id, name: item.recipient?.nickname ?? "알 수 없음" })
         }
@@ -368,7 +370,7 @@ export function NeighborsInline({
 
     return (
       <ScalePressable
-        style={[styles.searchResultItem, isDisabled && styles.searchResultDisabled]}
+        style={styles.searchResultItem}
         onPress={handlePress}
         onLongPress={
           isPending && item.requestId
@@ -377,7 +379,7 @@ export function NeighborsInline({
         }
         delayLongPress={1000}
         disabled={isDisabled}
-      contentStyle={styles.searchResultItemContent}
+        contentStyle={[styles.searchResultItemContent, isDisabled && styles.searchResultDisabled]}
       >
         <View style={styles.avatarCircle}>
           <Feather name="user" size={18} color={Colors.zinc500} />
@@ -771,18 +773,23 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.navBarPaddingBottom,
   },
   neighborItem: {
-    paddingVertical: 14,
-    paddingHorizontal: Spacing.screenPx,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
   },
   neighborItemContent: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,},
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: Spacing.screenPx,
+  },
   deleteButton: {
-    padding: 4,
     marginLeft: 2,
+  },
+  deleteButtonContent: {
+    padding: 4,
+    alignItems: "center",
+    justifyContent: "center",
   },
   avatarCircle: {
     width: 40,
@@ -835,11 +842,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.white,
   },
-  rejectButton: {
+  rejectButton: {},
+  rejectButtonContent: {
     paddingHorizontal: 14,
     paddingVertical: 8,
     backgroundColor: Colors.zinc100,
     borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
   },
   rejectText: {
     ...Typography.body,
@@ -866,6 +876,10 @@ const styles = StyleSheet.create({
     right: Spacing.screenPx,
     width: 52,
     height: 52,
+  },
+  fabContent: {
+    width: 52,
+    height: 52,
     borderRadius: 26,
     backgroundColor: Colors.zinc900,
     shadowColor: "#000",
@@ -873,8 +887,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.18,
     shadowRadius: 6,
     elevation: 4,
-  },
-  fabContent: {
     alignItems: "center",
     justifyContent: "center",
   },
@@ -915,14 +927,15 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   searchResultItem: {
-    paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
   },
   searchResultItemContent: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,},
+    gap: 12,
+    paddingVertical: 12,
+  },
   searchResultDisabled: {
     opacity: 0.6,
   },

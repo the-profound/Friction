@@ -355,8 +355,8 @@ export function SendInline({
       >
         <View style={styles.segmentRow}>
           <ScalePressable
-            style={[styles.segmentButton, segmentTab === "collection" && styles.segmentButtonActive]}
-            contentStyle={styles.segmentButtonContent}
+            style={styles.segmentButton}
+            contentStyle={[styles.segmentButtonContent, segmentTab === "collection" && styles.segmentButtonActive]}
             onPress={() => setSegmentTab("collection")}
           >
             <Text
@@ -369,8 +369,8 @@ export function SendInline({
             </Text>
           </ScalePressable>
           <ScalePressable
-            style={[styles.segmentButton, segmentTab === "neighbor" && styles.segmentButtonActive]}
-            contentStyle={styles.segmentButtonContent}
+            style={styles.segmentButton}
+            contentStyle={[styles.segmentButtonContent, segmentTab === "neighbor" && styles.segmentButtonActive]}
             onPress={() => setSegmentTab("neighbor")}
           >
             <Text
@@ -413,7 +413,8 @@ export function SendInline({
                   return (
                     <ScalePressable
                       key={neighbor.id}
-                      style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
+                      style={styles.pickerItem}
+                      contentStyle={[styles.pickerItemContent, isSelected && styles.pickerItemSelected]}
                       onPress={() => setPendingRecipient({ type: "neighbor", data: neighbor })}
                     >
                       <View style={styles.pickerNeighborRow}>
@@ -460,7 +461,8 @@ export function SendInline({
                 return (
                   <ScalePressable
                     key={col.id}
-                    style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
+                    style={styles.pickerItem}
+                    contentStyle={[styles.pickerItemContent, isSelected && styles.pickerItemSelected]}
                     onPress={() =>
                       setPendingRecipient({
                         type: "collection",
@@ -492,11 +494,11 @@ export function SendInline({
         </View>
 
         <ScalePressable
-          style={[
-            styles.confirmPickerButton,
+          style={styles.confirmPickerButton}
+          contentStyle={[
+            styles.confirmPickerButtonContent,
             !pendingRecipient && styles.confirmPickerButtonDisabled,
           ]}
-          contentStyle={styles.confirmPickerButtonContent}
           disabled={!pendingRecipient}
           onPress={handleConfirmRecipient}
         >
@@ -566,16 +568,15 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.zinc900,
   },
-  selectButton: {
-    backgroundColor: Colors.zinc50,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 12,
-  },
+  selectButton: {},
   selectButtonContent: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+    backgroundColor: Colors.zinc50,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 12,
   },
   selectButtonText: {
     ...Typography.body,
@@ -636,11 +637,12 @@ const styles = StyleSheet.create({
   },
   segmentButton: {
     flex: 1,
-    paddingVertical: 8,
-    borderRadius: 8,
   },
   segmentButtonContent: {
     alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+    borderRadius: 8,
   },
   segmentButtonActive: {
     backgroundColor: Colors.white,
@@ -676,12 +678,13 @@ const styles = StyleSheet.create({
   confirmPickerButton: {
     marginTop: 12,
     marginBottom: 16,
-    paddingVertical: 16,
-    backgroundColor: Colors.zinc900,
-    borderRadius: 12,
   },
   confirmPickerButtonContent: {
     alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
+    backgroundColor: Colors.zinc900,
+    borderRadius: 12,
   },
   confirmPickerButtonDisabled: {
     backgroundColor: Colors.zinc100,
@@ -711,10 +714,12 @@ const styles = StyleSheet.create({
     color: Colors.zinc500,
   },
   pickerItem: {
-    paddingVertical: 14,
-    paddingHorizontal: 4,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
+  },
+  pickerItemContent: {
+    paddingVertical: 14,
+    paddingHorizontal: 4,
   },
   pickerItemSelected: {
     backgroundColor: Colors.zinc50,

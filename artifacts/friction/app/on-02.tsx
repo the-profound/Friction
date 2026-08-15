@@ -160,7 +160,8 @@ export default function MemoCollectionScreen() {
         {SORT_OPTIONS.map((opt) => (
           <ScalePressable
             key={opt.key}
-            style={[styles.sortChip, sortMode === opt.key && styles.sortChipActive]}
+            style={styles.sortChip}
+            contentStyle={[styles.sortChipContent, sortMode === opt.key && styles.sortChipActive]}
             onPress={() => {
               closeOpenRow();
               setSortMode(opt.key);
@@ -246,10 +247,18 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   sortChip: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  sortChipContent: {
+    flexGrow: 0,
+    flexShrink: 0,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
     backgroundColor: Colors.zinc50,
+    alignItems: "center",
+    justifyContent: "center",
   },
   sortChipActive: {
     backgroundColor: Colors.zinc900,

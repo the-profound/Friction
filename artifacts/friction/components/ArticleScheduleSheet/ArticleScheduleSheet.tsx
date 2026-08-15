@@ -326,7 +326,7 @@ export function ArticleScheduleSheet({
 
   return (
     <View style={styles.overlay}>
-      <ScalePressable style={styles.backdrop} onPress={onClose} />
+      <ScalePressable style={styles.backdrop} contentStyle={styles.backdropContent} onPress={onClose} />
       <View style={styles.sheet}>
         <View style={styles.sheetHeader}>
           <Text style={styles.sheetTitle}>{title}</Text>
@@ -492,6 +492,8 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     ...StyleSheet.absoluteFill,
+  },
+  backdropContent: {
     backgroundColor: "rgba(0,0,0,0.4)",
   },
   sheet: {

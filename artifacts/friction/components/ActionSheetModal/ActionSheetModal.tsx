@@ -61,7 +61,6 @@ export default function ActionSheetModal({
                   <View style={styles.divider} />
                 ) : null}
                 <ScalePressable
-                  style={styles.actionRow}
                   contentStyle={styles.actionRowContent}
                   onPress={() => {
                     onClose();
@@ -86,7 +85,6 @@ export default function ActionSheetModal({
                 {cancelActions.map((action, index) => (
                   <ScalePressable
                     key={`cancel-${index}`}
-                    style={styles.actionRow}
                     contentStyle={styles.actionRowContent}
                     onPress={() => {
                       onClose();
@@ -152,12 +150,10 @@ const styles = StyleSheet.create({
     height: 6,
     backgroundColor: Colors.zinc100,
   },
-  actionRow: {
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-  },
   actionRowContent: {
     alignItems: "center",
+    paddingVertical: 16,
+    paddingHorizontal: 20,
   },
   actionLabel: {
     ...Typography.body,

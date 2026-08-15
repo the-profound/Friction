@@ -177,9 +177,9 @@ const styles = StyleSheet.create({
   },
   tabItem: {
     flex: 1,
-    minHeight: Sizing.touchTargetMin,
   },
   tabItemContent: {
+    minHeight: Sizing.touchTargetMin,
     alignItems: "center",
     justifyContent: "center",
     gap: 2,
@@ -190,10 +190,12 @@ const styles = StyleSheet.create({
   backButton: {
     width: Sizing.backButtonW,
     height: Sizing.backButtonH,
-    borderRadius: Sizing.navBarRadius,
-    backgroundColor: Colors.backButtonBg,
   },
   backButtonContent: {
+    width: "100%",
+    height: "100%",
+    borderRadius: Sizing.navBarRadius,
+    backgroundColor: Colors.backButtonBg,
     alignItems: "center",
     justifyContent: "center",
   },

@@ -78,10 +78,10 @@ export function MyArticlesPickerBottomSheet({
             return (
               <ScalePressable
                 key={item.id}
-                style={[styles.item, isSelected && styles.itemSelected]}
+                style={styles.item}
                 onPress={() => !isAdded && toggleSelect(item.id)}
                 disabled={isAdded}
-              contentStyle={styles.itemRow}
+                contentStyle={[styles.itemRow, isSelected && styles.itemSelected]}
               >
                 <View style={styles.itemContent}>
                   <Text style={[styles.itemTitle, isAdded && styles.itemDisabled]} numberOfLines={1}>
@@ -125,14 +125,14 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   item: {
-    paddingVertical: 14,
-    paddingHorizontal: 4,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
   },
   itemRow: {
     flexDirection: "row",
     alignItems: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 4,
   },
   itemSelected: {
     backgroundColor: Colors.zinc50,
@@ -178,12 +178,12 @@ const styles = StyleSheet.create({
     marginTop: 12,
     marginBottom: 20,
     marginHorizontal: 0,
-    paddingVertical: 16,
-    backgroundColor: Colors.zinc900,
-    borderRadius: 12,
   },
   confirmButtonContent: {
     alignItems: "center",
+    paddingVertical: 16,
+    backgroundColor: Colors.zinc900,
+    borderRadius: 12,
   },
   confirmButtonText: {
     ...Typography.bodySemiBold,

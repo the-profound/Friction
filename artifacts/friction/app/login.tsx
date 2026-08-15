@@ -216,15 +216,15 @@ export default function LoginScreen() {
 
         <View style={styles.tabRow}>
           <ScalePressable
-            style={[styles.tab, mode === "login" && styles.tabActive]}
-            contentStyle={styles.tabContent}
+            style={styles.tab}
+            contentStyle={[styles.tabContent, mode === "login" && styles.tabActiveContent]}
             onPress={() => switchMode("login")}
           >
             <Text style={[styles.tabText, mode === "login" && styles.tabTextActive]}>로그인</Text>
           </ScalePressable>
           <ScalePressable
-            style={[styles.tab, mode === "signup" && styles.tabActive]}
-            contentStyle={styles.tabContent}
+            style={styles.tab}
+            contentStyle={[styles.tabContent, mode === "signup" && styles.tabActiveContent]}
             onPress={() => switchMode("signup")}
           >
             <Text style={[styles.tabText, mode === "signup" && styles.tabTextActive]}>회원가입</Text>
@@ -300,12 +300,11 @@ export default function LoginScreen() {
             ) : null}
 
             <ScalePressable
-              style={({ pressed }) => [
-                styles.button,
-                !canSubmitLogin && styles.buttonDisabled,
-                pressed && styles.buttonPressed,
+              style={styles.button}
+              contentStyle={[
+                styles.buttonContent,
+                !canSubmitLogin && styles.buttonDisabledContent,
               ]}
-              contentStyle={styles.buttonContent}
               onPress={handleLogin}
               disabled={!canSubmitLogin}
               accessibilityRole="button"
@@ -401,12 +400,11 @@ export default function LoginScreen() {
             ) : null}
 
             <ScalePressable
-              style={({ pressed }) => [
-                styles.button,
-                !canSubmitSignupStep1 && styles.buttonDisabled,
-                pressed && styles.buttonPressed,
+              style={styles.button}
+              contentStyle={[
+                styles.buttonContent,
+                !canSubmitSignupStep1 && styles.buttonDisabledContent,
               ]}
-              contentStyle={styles.buttonContent}
               onPress={handleSignUpStep1}
               disabled={!canSubmitSignupStep1}
               accessibilityRole="button"
@@ -499,12 +497,11 @@ export default function LoginScreen() {
             ) : null}
 
             <ScalePressable
-              style={({ pressed }) => [
-                styles.button,
-                !canSubmitSignupStep2 && styles.buttonDisabled,
-                pressed && styles.buttonPressed,
+              style={styles.button}
+              contentStyle={[
+                styles.buttonContent,
+                !canSubmitSignupStep2 && styles.buttonDisabledContent,
               ]}
-              contentStyle={styles.buttonContent}
               onPress={handleSignUpStep2}
               disabled={!canSubmitSignupStep2}
               accessibilityRole="button"
@@ -586,13 +583,13 @@ const styles = StyleSheet.create({
   },
   tab: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: 11,
   },
   tabContent: {
     alignItems: "center",
+    paddingVertical: 10,
+    borderRadius: 11,
   },
-  tabActive: {
+  tabActiveContent: {
     backgroundColor: Colors.white,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
@@ -645,10 +642,11 @@ const styles = StyleSheet.create({
     color: Colors.zinc900,
   },
   eyeButton: {
-    paddingHorizontal: 14,
     height: "100%",
   },
   eyeButtonContent: {
+    paddingHorizontal: 14,
+    height: "100%",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -667,19 +665,17 @@ const styles = StyleSheet.create({
   button: {
     width: "100%",
     height: 52,
-    backgroundColor: Colors.zinc900,
-    borderRadius: 14,
     marginTop: 4,
   },
   buttonContent: {
+    height: "100%",
+    backgroundColor: Colors.zinc900,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
   },
-  buttonDisabled: {
+  buttonDisabledContent: {
     opacity: 0.45,
-  },
-  buttonPressed: {
-    opacity: 0.8,
   },
   buttonText: {
     ...Typography.bodySemiBold,
@@ -763,10 +759,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
   },
   devButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
   },
   devButtonContent: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     alignItems: "center",
   },
   devButtonText: {

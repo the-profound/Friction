@@ -106,7 +106,6 @@ export default function DropdownFilter<T extends string>({
               return (
                 <React.Fragment key={option.key}>
                   <ScalePressable
-                    style={styles.row}
                     contentStyle={styles.rowContent}
                     onPress={() => handleSelect(option.key)}
                   >
@@ -180,14 +179,12 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: Colors.white,
   },
-  row: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-  },
   rowContent: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
   },
   rowLabel: {
     ...Typography.body,

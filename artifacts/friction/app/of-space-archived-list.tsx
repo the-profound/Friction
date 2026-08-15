@@ -248,13 +248,12 @@ const styles = StyleSheet.create({
     marginBottom: GRID_COLUMN_GAP,
   },
   // ─── Archived space card ─────────────────────────────────────────────────────
-  card: {
+  card: {},
+  cardContent: {
+    flex: 1,
     borderRadius: 16,
     backgroundColor: Colors.zinc50,
     overflow: "hidden",
-  },
-  cardContent: {
-    flex: 1,
     padding: 14,
   },
   cardTopRow: {

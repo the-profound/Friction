@@ -79,9 +79,8 @@ export default function MyCollectionsModal({
       const isSelected = item.id === selectedCollectionId;
       return (
         <ScalePressable
-          style={[styles.item, isSelected && styles.itemSelected]}
           onPress={() => handleSelect(item)}
-        contentStyle={styles.itemContent}
+          contentStyle={[styles.itemContent, isSelected && styles.itemSelected]}
         >
           <View style={styles.itemLeft}>
             <Feather
@@ -224,15 +223,14 @@ const styles = StyleSheet.create({
   listContent: {
     paddingVertical: 4,
   },
-  item: {
+  itemContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingVertical: 14,
     paddingHorizontal: 4,
     borderRadius: 8,
   },
-  itemContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",},
   itemSelected: {
     backgroundColor: Colors.zinc50,
   },

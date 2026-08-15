@@ -89,14 +89,14 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   item: {
-    paddingVertical: 14,
-    paddingHorizontal: 4,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
   },
   itemContent: {
     alignItems: "flex-start",
     gap: 4,
+    paddingVertical: 14,
+    paddingHorizontal: 4,
   },
   itemText: {
     ...Typography.body,

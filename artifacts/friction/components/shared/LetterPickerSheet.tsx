@@ -77,8 +77,9 @@ export function LetterPickerSheet({
           {articles.map((article) => (
             <ScalePressable
               key={article.id}
-              style={[
-                styles.item,
+              style={styles.item}
+              contentStyle={[
+                styles.itemContent,
                 selectedId === article.id && styles.itemSelected,
               ]}
               onPress={() => {
@@ -134,10 +135,12 @@ const styles = StyleSheet.create({
     color: Colors.white,
   },
   item: {
-    paddingVertical: 14,
-    paddingHorizontal: 4,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
+  },
+  itemContent: {
+    paddingVertical: 14,
+    paddingHorizontal: 4,
   },
   itemSelected: {
     backgroundColor: Colors.zinc50,

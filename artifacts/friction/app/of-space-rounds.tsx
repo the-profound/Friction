@@ -616,7 +616,7 @@ function RoundRow({
           </View>
         </View>
       </View>
-      <ScalePressable style={styles.editIconBtn} onPress={onEdit} hitSlop={8}>
+      <ScalePressable style={styles.editIconBtn} contentStyle={styles.editIconBtnContent} onPress={onEdit} hitSlop={8}>
         <Feather name="edit-2" size={15} color={Colors.zinc400} />
       </ScalePressable>
     </View>
@@ -854,7 +854,8 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: Colors.zinc300,
   },
-  editIconBtn: {
+  editIconBtn: {},
+  editIconBtnContent: {
     padding: 4,
   },
   emptyState: {

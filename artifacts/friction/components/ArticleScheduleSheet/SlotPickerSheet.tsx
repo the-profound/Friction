@@ -66,6 +66,7 @@ export function SlotPickerSheet({
             <ScalePressable
               key={slot.kind === "opening" ? `opening:${slot.roundId}` : `${slot.roundId}:${slot.date}`}
               style={[styles.item, idx === 0 && styles.itemFirst]}
+              contentStyle={styles.itemContent}
               onPress={() => onSelect(slot)}
             >
               <Feather
@@ -101,13 +102,15 @@ const styles = StyleSheet.create({
     color: Colors.zinc500,
   },
   item: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.zinc100,
+  },
+  itemContent: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
     paddingVertical: 16,
     paddingHorizontal: 4,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.zinc100,
   },
   itemFirst: {
     borderTopWidth: 0,

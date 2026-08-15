@@ -234,6 +234,7 @@ export default function SentenceCollectionScreen() {
           <View style={styles.rightActions}>
             <ScalePressable
               style={styles.actionBtn}
+              contentStyle={styles.actionBtnContent}
               onPress={() => handleCopy(item.text)}
               hitSlop={8}
             >
@@ -241,6 +242,7 @@ export default function SentenceCollectionScreen() {
             </ScalePressable>
             <ScalePressable
               style={styles.actionBtn}
+              contentStyle={styles.actionBtnContent}
               onPress={() => handleToggleFavorite(item.id, favOverrides.has(item.id) ? favOverrides.get(item.id)! : item.isFavorite)}
               hitSlop={8}
             >
@@ -318,9 +320,9 @@ export default function SentenceCollectionScreen() {
       {!selectionMode && (
         <View style={styles.filterBar}>
           <ScalePressable
-            style={[styles.filterChip, filter === "all" && styles.filterChipActive]}
+            style={styles.filterChip}
             onPress={() => setFilter("all")}
-          contentStyle={styles.filterChipContent}
+          contentStyle={[styles.filterChipContent, filter === "all" && styles.filterChipActiveContent]}
           >
             <Text
               style={[
@@ -332,9 +334,9 @@ export default function SentenceCollectionScreen() {
             </Text>
           </ScalePressable>
           <ScalePressable
-            style={[styles.filterChip, filter === "favorites" && styles.filterChipActive]}
+            style={styles.filterChip}
             onPress={() => setFilter("favorites")}
-          contentStyle={styles.filterChipContent}
+          contentStyle={[styles.filterChipContent, filter === "favorites" && styles.filterChipActiveContent]}
           >
             <Feather
               name="star"
@@ -363,6 +365,7 @@ export default function SentenceCollectionScreen() {
           <Text style={styles.emptyTitle}>불러오기에 실패했어요</Text>
           <ScalePressable
             style={styles.retryButton}
+            contentStyle={styles.retryButtonContent}
             onPress={() => sentencesQuery.refetch()}
           >
             <Text style={styles.retryButtonText}>다시 시도</Text>
@@ -406,13 +409,13 @@ export default function SentenceCollectionScreen() {
       {selectionMode && (
         <View style={[styles.selectionBar, { paddingBottom: insets.bottom + 12 }]}>
           <ScalePressable
-            style={[
-              styles.bulkDeleteButton,
-              (selectedCount === 0 || isBulkDeleting) && styles.bulkDeleteButtonDisabled,
-            ]}
+            style={styles.bulkDeleteButton}
             onPress={handleBulkDeletePress}
             disabled={selectedCount === 0 || isBulkDeleting}
-          contentStyle={styles.bulkDeleteButtonContent}
+          contentStyle={[
+            styles.bulkDeleteButtonContent,
+            (selectedCount === 0 || isBulkDeleting) && styles.bulkDeleteButtonDisabledContent,
+          ]}
           >
             {isBulkDeleting ? (
               <Text style={styles.bulkDeleteText}>삭제 중...</Text>
@@ -584,16 +587,16 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   filterChip: {
+  },
+  filterChipContent: {
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: Colors.zinc50,
-  },
-  filterChipContent: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,},
-  filterChipActive: {
+  filterChipActiveContent: {
     backgroundColor: Colors.zinc900,
   },
   filterChipText: {
@@ -609,22 +612,22 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   sentenceItem: {
-    paddingVertical: 16,
-    paddingHorizontal: Spacing.screenPx,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
   },
   sentenceItemContent: {
+    paddingVertical: 16,
+    paddingHorizontal: Spacing.screenPx,
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 8,},
   selectionRow: {
-    paddingVertical: 16,
-    paddingHorizontal: Spacing.screenPx,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
   },
   selectionRowContent: {
+    paddingVertical: 16,
+    paddingHorizontal: Spacing.screenPx,
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 12,},
@@ -676,6 +679,8 @@ const styles = StyleSheet.create({
     paddingTop: 2,
   },
   actionBtn: {
+  },
+  actionBtnContent: {
     padding: 4,
   },
   centerContainer: {
@@ -705,6 +710,8 @@ const styles = StyleSheet.create({
   },
   retryButton: {
     marginTop: 16,
+  },
+  retryButtonContent: {
     paddingHorizontal: 20,
     paddingVertical: 12,
     backgroundColor: Colors.zinc900,
@@ -727,15 +734,15 @@ const styles = StyleSheet.create({
     borderTopColor: Colors.zinc100,
   },
   bulkDeleteButton: {
+  },
+  bulkDeleteButtonContent: {
     backgroundColor: "#EF4444",
     borderRadius: 12,
     paddingVertical: 14,
-  },
-  bulkDeleteButtonContent: {
     alignItems: "center",
     justifyContent: "center",
   },
-  bulkDeleteButtonDisabled: {
+  bulkDeleteButtonDisabledContent: {
     opacity: 0.4,
   },
   bulkDeleteText: {

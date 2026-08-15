@@ -60,12 +60,12 @@ export default function PillButton({
       style={(state) => [
         styles.pill,
         { height },
-        variantPillStyles[variant],
         typeof style === "function" ? style(state) : style,
       ]}
       contentStyle={[
         styles.pillContent,
         { paddingHorizontal: paddingH },
+        variantPillStyles[variant],
         contentStyle,
       ]}
       {...rest}
@@ -92,7 +92,6 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     flexGrow: 0,
     flexShrink: 0,
-    borderRadius: 999,
     justifyContent: "center",
   },
   pillContent: {
@@ -100,6 +99,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     alignSelf: "auto",
     height: "100%",
+    borderRadius: 999,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",

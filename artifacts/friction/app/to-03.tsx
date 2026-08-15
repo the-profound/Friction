@@ -109,7 +109,7 @@ export default function SendHistoryScreen() {
           <Feather name="alert-circle" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>불러오기 실패</Text>
           <Text style={styles.emptySubtitle}>네트워크를 확인하고 다시 시도해주세요</Text>
-          <ScalePressable style={styles.retryButton} onPress={() => sendRecordsQuery.refetch()}>
+          <ScalePressable style={styles.retryButton} contentStyle={styles.retryButtonContent} onPress={() => sendRecordsQuery.refetch()}>
             <Text style={styles.retryButtonText}>다시 시도</Text>
           </ScalePressable>
         </View>
@@ -196,12 +196,12 @@ const styles = StyleSheet.create({
     color: Colors.zinc500,
   },
   recordItem: {
-    paddingVertical: 14,
-    paddingHorizontal: Spacing.screenPx,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
   },
   recordItemContent: {
+    paddingVertical: 14,
+    paddingHorizontal: Spacing.screenPx,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,},
@@ -250,6 +250,8 @@ const styles = StyleSheet.create({
   },
   retryButton: {
     marginTop: 8,
+  },
+  retryButtonContent: {
     paddingHorizontal: 20,
     paddingVertical: 12,
     backgroundColor: Colors.zinc900,

@@ -207,13 +207,13 @@ const styles = StyleSheet.create({
     color: Colors.zinc500,
   },
   actionButton: {
+    marginTop: 8,
+  },
+  actionButtonContent: {
     backgroundColor: Colors.zinc900,
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 12,
-    marginTop: 8,
-  },
-  actionButtonContent: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
@@ -227,13 +227,13 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
   },
   listItem: {
-    paddingVertical: 14,
-    paddingHorizontal: Spacing.screenPx,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
-    backgroundColor: Colors.white,
   },
   listItemContent: {
+    paddingVertical: 14,
+    paddingHorizontal: Spacing.screenPx,
+    backgroundColor: Colors.white,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,

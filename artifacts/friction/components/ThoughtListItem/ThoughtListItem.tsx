@@ -22,19 +22,25 @@ function ThoughtListItem({ content, createdFrom, rightMeta, onPress }: ThoughtLi
   return (
     <ScalePressable
       onPress={onPress}
-      style={({ pressed }) => [styles.container, pressed && styles.pressed]}
+      style={styles.container}
+      contentStyle={styles.containerContent}
     >
-      <View style={styles.topRow}>
-        <View style={styles.tag}>
-          <Text style={styles.tagText} allowFontScaling={false}>
-            {CREATED_FROM_LABEL[createdFrom]}
+      {({ pressed }) => (
+        <>
+          {pressed ? <View style={styles.pressed} pointerEvents="none" /> : null}
+          <View style={styles.topRow}>
+            <View style={styles.tag}>
+              <Text style={styles.tagText} allowFontScaling={false}>
+                {CREATED_FROM_LABEL[createdFrom]}
+              </Text>
+            </View>
+            <Text style={styles.rightMeta}>{rightMeta}</Text>
+          </View>
+          <Text style={styles.content} numberOfLines={2}>
+            {content ?? ""}
           </Text>
-        </View>
-        <Text style={styles.rightMeta}>{rightMeta}</Text>
-      </View>
-      <Text style={styles.content} numberOfLines={2}>
-        {content ?? ""}
-      </Text>
+        </>
+      )}
     </ScalePressable>
   );
 }
@@ -43,14 +49,21 @@ export default React.memo(ThoughtListItem);
 
 const styles = StyleSheet.create({
   container: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.zinc100,
+  },
+  containerContent: {
     paddingHorizontal: Spacing.screenPx,
     paddingVertical: 14,
     backgroundColor: Colors.white,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.zinc100,
     gap: 6,
   },
   pressed: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: Colors.zinc50,
   },
   topRow: {

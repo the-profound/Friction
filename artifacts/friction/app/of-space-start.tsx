@@ -211,15 +211,15 @@ function ConfirmModal({
           <View style={styles.modalActions}>
             <ScalePressable
               style={styles.modalCancelBtn}
-              contentStyle={styles.modalBtnContent}
+              contentStyle={[styles.modalBtnContent, styles.modalCancelBtnContent]}
               onPress={onCancel}
               disabled={loading}
             >
               <Text style={styles.modalCancelText}>{cancelLabel}</Text>
             </ScalePressable>
             <ScalePressable
-              style={[styles.modalConfirmBtn, loading && styles.btnOpacity]}
-              contentStyle={styles.modalBtnContent}
+              style={styles.modalConfirmBtn}
+              contentStyle={[styles.modalBtnContent, styles.modalConfirmBtnContent, loading && styles.btnOpacity]}
               onPress={onConfirm}
               disabled={loading}
             >
@@ -2080,6 +2080,8 @@ const styles = StyleSheet.create({
   modalCancelBtn: {
     flex: 1,
     height: 48,
+  },
+  modalCancelBtnContent: {
     borderRadius: 10,
     borderWidth: 1,
     borderColor: Colors.zinc200,
@@ -2092,6 +2094,8 @@ const styles = StyleSheet.create({
   modalConfirmBtn: {
     flex: 1,
     height: 48,
+  },
+  modalConfirmBtnContent: {
     borderRadius: 10,
     backgroundColor: Colors.zinc900,
   },

@@ -543,10 +543,10 @@ export default function ClosingScreen() {
       {totalVirtualPages > 1 && (
         <View style={[styles.pageNav, { paddingBottom: insets.bottom + 16 }]}>
           <ScalePressable
-            style={[styles.pageNavButton, clampedPreviewPage === 0 && styles.pageNavButtonDisabled]}
+            style={styles.pageNavButton}
             onPress={() => setPreviewPage((p) => Math.max(0, p - 1))}
             disabled={clampedPreviewPage === 0}
-          contentStyle={styles.pageNavButtonContent}
+          contentStyle={[styles.pageNavButtonContent, clampedPreviewPage === 0 && styles.pageNavButtonDisabled]}
           >
             <Feather
               name="chevron-left"
@@ -558,13 +558,13 @@ export default function ClosingScreen() {
             {isCoverPage ? "표지" : `${Math.max(0, contentPageIndex) + 1} / ${pages.length}`}
           </Text>
           <ScalePressable
-            style={[
-              styles.pageNavButton,
-              clampedPreviewPage >= totalVirtualPages - 1 && styles.pageNavButtonDisabled,
-            ]}
+            style={styles.pageNavButton}
             onPress={() => setPreviewPage((p) => Math.min(totalVirtualPages - 1, p + 1))}
             disabled={clampedPreviewPage >= totalVirtualPages - 1}
-          contentStyle={styles.pageNavButtonContent}
+          contentStyle={[
+              styles.pageNavButtonContent,
+              clampedPreviewPage >= totalVirtualPages - 1 && styles.pageNavButtonDisabled,
+            ]}
           >
             <Feather
               name="chevron-right"
@@ -668,10 +668,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
   },
-  coverActionButton: {
-    paddingVertical: 6,
-  },
+  coverActionButton: {},
   coverActionButtonContent: {
+    paddingVertical: 6,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,},
@@ -740,10 +739,12 @@ const styles = StyleSheet.create({
   pageNavButton: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.zinc50,
   },
   pageNavButtonContent: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.zinc50,
     alignItems: "center",
     justifyContent: "center",},
   pageNavButtonDisabled: {

@@ -118,8 +118,8 @@ export default function InlineMenuPanel({
               return (
                 <ScalePressable
                   key={item.key}
-                  style={[styles.row, isActive && styles.activeRow]}
-                  contentStyle={styles.rowContent}
+                  style={styles.row}
+                  contentStyle={[styles.rowContent, isActive && styles.activeRow]}
                   onPress={() => onSelectBlock(item.key)}
                 >
                   <Text style={[styles.label, isActive && styles.activeLabel]}>
@@ -213,23 +213,23 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   row: {
-    paddingVertical: 14,
-    paddingHorizontal: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
   },
   rowContent: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
   addMenuRow: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
   },
   addMenuRowContent: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-start",
@@ -268,12 +268,12 @@ const styles = StyleSheet.create({
     color: Colors.zinc900,
   },
   sentenceItem: {
-    paddingVertical: 14,
-    paddingHorizontal: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
   },
   sentenceItemContent: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     alignItems: "flex-start",
     gap: 4,
   },

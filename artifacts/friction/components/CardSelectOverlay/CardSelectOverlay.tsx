@@ -930,8 +930,8 @@ export default function CardSelectOverlay({
         {isEnvelopeSealed ? (
           <Animated.View style={{ opacity: ctaButtonOpacity }}>
             <ScalePressable
-              style={[styles.ctaButton, styles.ctaButtonEnvelope]}
-              contentStyle={styles.ctaButtonContent}
+              style={styles.ctaButton}
+              contentStyle={[styles.ctaButtonContent, styles.ctaButtonEnvelope]}
               onPress={handleEnvelopeOpen}
               disabled={envelopeOpening}
             >
@@ -1000,9 +1000,9 @@ const styles = StyleSheet.create({
   dotActive: { backgroundColor: Colors.zinc700 },
   dotInactive: { backgroundColor: Colors.zinc300 },
   ctaWrapper: { position: "absolute" },
-  ctaButton: { width: "100%", height: 56, borderRadius: 18, backgroundColor: Colors.noticeAccent },
+  ctaButton: { width: "100%", height: 56 },
   ctaButtonEnvelope: { backgroundColor: "#3a342d" },
   ctaButtonDisabled: { opacity: 0.6 },
-  ctaButtonContent: { flexDirection: "row", justifyContent: "center", alignItems: "center", flex: 1 },
+  ctaButtonContent: { flexDirection: "row", justifyContent: "center", alignItems: "center", flex: 1, height: 56, borderRadius: 18, backgroundColor: Colors.noticeAccent },
   ctaLabel: { ...Typography.bodySemiBold, fontSize: 17, letterSpacing: 0.5, color: Colors.white, textAlign: "center" },
 });

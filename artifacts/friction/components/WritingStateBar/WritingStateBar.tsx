@@ -42,7 +42,7 @@ export default function WritingStateBar({
         return (
           <ScalePressable
             key={stage}
-            style={isIndirectlyReachable ? { opacity: 0.4 } : undefined}
+            contentStyle={isIndirectlyReachable ? styles.tabIndirect : undefined}
             onPress={() => !isCurrent && !disabled && onPress(stage)}
             disabled={disabled}
             hitSlop={6}

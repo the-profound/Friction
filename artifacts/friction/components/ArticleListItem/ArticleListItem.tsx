@@ -49,8 +49,12 @@ function ArticleListItem({
   return (
     <ScalePressable
       onPress={onPress}
-      style={({ pressed }) => [styles.container, pressed && styles.pressed]}
+      style={styles.container}
+      contentStyle={styles.containerContent}
     >
+      {({ pressed }) => (
+      <>
+      {pressed ? <View style={styles.pressed} pointerEvents="none" /> : null}
       <View style={styles.inner}>
         <View style={styles.content}>
           <View style={styles.topRow}>
@@ -91,6 +95,8 @@ function ArticleListItem({
           />
         ) : null}
       </View>
+      </>
+      )}
     </ScalePressable>
   );
 }
@@ -105,13 +111,20 @@ function formatDate(date: Date): string {
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: Spacing.screenPx,
-    paddingVertical: 14,
-    backgroundColor: Colors.white,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
   },
+  containerContent: {
+    paddingHorizontal: Spacing.screenPx,
+    paddingVertical: 14,
+    backgroundColor: Colors.white,
+  },
   pressed: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: Colors.zinc50,
   },
   inner: {

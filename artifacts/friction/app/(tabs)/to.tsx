@@ -675,12 +675,13 @@ const styles = StyleSheet.create({
   actionButton: {
     flex: 1,
     height: 38,
+  },
+  actionButtonContent: {
+    height: 38,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.zinc200,
     backgroundColor: Colors.white,
-  },
-  actionButtonContent: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -738,12 +739,12 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   groupRow: {
-    paddingHorizontal: Spacing.screenPx,
-    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: Colors.zinc100,
   },
   groupRowContent: {
+    paddingHorizontal: Spacing.screenPx,
+    paddingVertical: 16,
     flexDirection: "row",
     alignItems: "center",
     gap: 14,

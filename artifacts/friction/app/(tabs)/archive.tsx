@@ -398,6 +398,7 @@ export default function ArchiveScreen() {
           onPress={() => handleSentenceToggleFavorite(item.id, favOverrides.has(item.id) ? favOverrides.get(item.id)! : item.isFavorite)}
           hitSlop={8}
           style={styles.sentenceStarBtn}
+          contentStyle={styles.sentenceStarBtnContent}
         >
           {(favOverrides.has(item.id) ? favOverrides.get(item.id) : item.isFavorite) ? (
             <AntDesign name="star" size={22} color="#F59E0B" />
@@ -445,7 +446,7 @@ export default function ArchiveScreen() {
       <Feather name="folder" size={40} color={Colors.zinc300} />
       <Text style={styles.emptyTitle}>내 폴더가 없어요</Text>
       <Text style={styles.emptySubtitle}>완성된 편지를 모아두는 나만의 공간을 만들어보세요</Text>
-      <ScalePressable style={styles.emptyButton} onPress={handleAdd}>
+      <ScalePressable style={styles.emptyButton} contentStyle={styles.emptyButtonContent} onPress={handleAdd}>
         <Text style={styles.emptyButtonText}>새 폴더 만들기</Text>
       </ScalePressable>
     </RefreshableEmpty>
@@ -477,7 +478,7 @@ export default function ArchiveScreen() {
         <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
           <Feather name="alert-circle" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>불러오기에 실패했어요</Text>
-          <ScalePressable style={styles.emptyButton} onPress={handleRefresh}>
+          <ScalePressable style={styles.emptyButton} contentStyle={styles.emptyButtonContent} onPress={handleRefresh}>
             <Text style={styles.emptyButtonText}>다시 시도</Text>
           </ScalePressable>
         </View>
@@ -599,9 +600,9 @@ export default function ArchiveScreen() {
         <View style={styles.subTabBar}>
           <View style={{ flex: 1 }}>
             <ScalePressable
-              style={[styles.subTabItem, { paddingLeft: 16, paddingRight: 8 }]}
+              style={styles.subTabItem}
+              contentStyle={[styles.subTabItemContent, { paddingLeft: 16, paddingRight: 8 }]}
               onPress={() => { setActiveSubTab("personal"); setSearchQuery(""); setSearchActive(false); }}
-            contentStyle={styles.subTabItemContent}
             >
               <Text style={[styles.subTabText, activeSubTab === "personal" && styles.subTabTextActive]}>
                 폴더
@@ -611,9 +612,9 @@ export default function ArchiveScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <ScalePressable
-              style={[styles.subTabItem, { paddingLeft: 8, paddingRight: 16 }]}
+              style={styles.subTabItem}
+              contentStyle={[styles.subTabItemContent, { paddingLeft: 8, paddingRight: 16 }]}
               onPress={() => { setActiveSubTab("sentence"); setSearchQuery(""); setSearchActive(false); exitSelectionMode(); }}
-            contentStyle={styles.subTabItemContent}
             >
               <Text style={[styles.subTabText, activeSubTab === "sentence" && styles.subTabTextActive]}>
                 수집한 문장
@@ -640,13 +641,13 @@ export default function ArchiveScreen() {
       {isSentenceSelectionMode && (
         <View style={[styles.selectionBar, { paddingBottom: insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + 12 }]}>
           <ScalePressable
-            style={[
-              styles.bulkDeleteButton,
-              (selectedCount === 0 || isBulkDeleting) && styles.bulkDeleteButtonDisabled,
-            ]}
+            style={styles.bulkDeleteButton}
             onPress={handleBulkDeletePress}
             disabled={selectedCount === 0 || isBulkDeleting}
-          contentStyle={styles.bulkDeleteButtonContent}
+            contentStyle={[
+              styles.bulkDeleteButtonContent,
+              (selectedCount === 0 || isBulkDeleting) && styles.bulkDeleteButtonDisabled,
+            ]}
           >
             <Text style={styles.bulkDeleteText}>
               {isBulkDeleting
@@ -829,13 +830,12 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.zinc100,
     marginBottom: 8,
   },
-  subTabItem: {
-    paddingHorizontal: 0,
+  subTabItem: {},
+  subTabItemContent: {
+    alignItems: "center",
     paddingTop: 12,
     paddingBottom: 0,
   },
-  subTabItemContent: {
-    alignItems: "center",},
   subTabText: {
     ...Typography.body,
     fontSize: 15,
@@ -864,22 +864,24 @@ const styles = StyleSheet.create({
   },
   collectionCard: {
     flex: 1,
-    backgroundColor: Colors.zinc50,
-    borderRadius: 16,
-    padding: 16,
-    minHeight: 110,
   },
   collectionCardContent: {
-    gap: 8,},
-  impressionCard: {
-    width: '100%',
+    gap: 8,
     backgroundColor: Colors.zinc50,
     borderRadius: 16,
     padding: 16,
     minHeight: 110,
   },
+  impressionCard: {
+    width: '100%',
+  },
   impressionCardContent: {
-    gap: 8,},
+    gap: 8,
+    backgroundColor: Colors.zinc50,
+    borderRadius: 16,
+    padding: 16,
+    minHeight: 110,
+  },
   collectionIcon: {
     width: 36,
     height: 36,
@@ -908,8 +910,6 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   sentenceItem: {
-    paddingVertical: 14,
-    paddingHorizontal: Spacing.screenPx,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
   },
@@ -917,6 +917,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: Spacing.screenPx,
   },
   sentenceItemContent: {
     flex: 1,
@@ -943,19 +945,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.zinc400,
   },
-  sentenceStarBtn: {
+  sentenceStarBtn: {},
+  sentenceStarBtnContent: {
     padding: 4,
   },
   selectionRow: {
-    paddingVertical: 14,
-    paddingHorizontal: Spacing.screenPx,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
   },
   selectionRowContent: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,},
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: Spacing.screenPx,
+  },
   checkbox: {
     width: 22,
     height: 22,
@@ -980,13 +984,14 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Colors.zinc100,
   },
-  bulkDeleteButton: {
+  bulkDeleteButton: {},
+  bulkDeleteButtonContent: {
+    alignItems: "center",
+    justifyContent: "center",
     backgroundColor: "#EF4444",
     borderRadius: 12,
     paddingVertical: 14,
   },
-  bulkDeleteButtonContent: {
-    alignItems: "center",},
   bulkDeleteButtonDisabled: {
     backgroundColor: Colors.zinc200,
   },
@@ -1017,10 +1022,14 @@ const styles = StyleSheet.create({
   },
   emptyButton: {
     marginTop: 8,
+  },
+  emptyButtonContent: {
     paddingHorizontal: 20,
     paddingVertical: 10,
     backgroundColor: Colors.zinc900,
     borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
   },
   emptyButtonText: {
     ...Typography.bodySemiBold,
@@ -1090,14 +1099,14 @@ const styles = StyleSheet.create({
   sentenceSheetActions: {
     gap: 4,
   },
-  sentenceSheetRow: {
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-  },
+  sentenceSheetRow: {},
   sentenceSheetRowContent: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,},
+    gap: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+  },
   sentenceSheetActionLabel: {
     ...Typography.body,
     fontSize: 15,

@@ -70,14 +70,14 @@ export function PageHeader({
         )}
         <View style={styles.actions}>
           {rightText ? (
-            <ScalePressable onPress={onRightTextPress} hitSlop={8} style={styles.rightTextButton}>
+            <ScalePressable onPress={onRightTextPress} hitSlop={8} contentStyle={styles.rightTextButtonContent}>
               <Text style={styles.rightText}>{rightText}</Text>
             </ScalePressable>
           ) : null}
           {showAdd && (
             <ScalePressable
-              style={[styles.actionButton, addDisabled && styles.actionButtonDisabled]}
-              contentStyle={styles.actionButtonContent}
+              style={styles.actionButton}
+              contentStyle={[styles.actionButtonContent, addDisabled && styles.actionButtonDisabled]}
               onPress={addDisabled ? undefined : onAddPress}
               hitSlop={8}
             >
@@ -110,8 +110,8 @@ export function PageHeader({
           )}
           {!searchLast && showSearch && (
             <ScalePressable
-              style={[styles.actionButton, searchActive && styles.actionButtonActive]}
-              contentStyle={styles.actionButtonContent}
+              style={styles.actionButton}
+              contentStyle={[styles.actionButtonContent, searchActive && styles.actionButtonActive]}
               onPress={onSearchPress}
               hitSlop={8}
             >
@@ -130,8 +130,8 @@ export function PageHeader({
           )}
           {searchLast && showSearch && (
             <ScalePressable
-              style={[styles.actionButton, searchActive && styles.actionButtonActive]}
-              contentStyle={styles.actionButtonContent}
+              style={styles.actionButton}
+              contentStyle={[styles.actionButtonContent, searchActive && styles.actionButtonActive]}
               onPress={onSearchPress}
               hitSlop={8}
             >
@@ -180,10 +180,12 @@ const styles = StyleSheet.create({
   actionButton: {
     width: Sizing.searchButtonSize,
     height: Sizing.searchButtonSize,
-    borderRadius: Sizing.searchButtonSize / 2,
-    backgroundColor: Colors.searchBgInactive,
   },
   actionButtonContent: {
+    width: "100%",
+    height: "100%",
+    borderRadius: Sizing.searchButtonSize / 2,
+    backgroundColor: Colors.searchBgInactive,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -193,9 +195,11 @@ const styles = StyleSheet.create({
   actionButtonDisabled: {
     opacity: 0.5,
   },
-  rightTextButton: {
+  rightTextButtonContent: {
     paddingHorizontal: 4,
     paddingVertical: 4,
+    alignItems: "center",
+    justifyContent: "center",
   },
   rightText: {
     ...Typography.body,
@@ -205,7 +209,5 @@ const styles = StyleSheet.create({
   profileButton: {
     width: Sizing.searchButtonSize,
     height: Sizing.searchButtonSize,
-    borderRadius: Sizing.searchButtonSize / 2,
-    backgroundColor: Colors.searchBgInactive,
   },
 });

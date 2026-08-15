@@ -825,9 +825,9 @@ export default function OnScreen() {
           <View style={styles.topTabBar}>
             <View style={{ flex: 1 }}>
               <ScalePressable
-                style={[styles.topTabItem, { paddingLeft: 16, paddingRight: 8 }]}
+                style={styles.topTabItem}
                 onPress={() => switchTopTab("thought")}
-                contentStyle={styles.topTabItemContent}
+                contentStyle={[styles.topTabItemContent, { paddingLeft: 16, paddingRight: 8 }]}
               >
                 <Text
                   style={[styles.topTabText, topTab === "thought" && styles.topTabTextActive]}
@@ -841,9 +841,9 @@ export default function OnScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <ScalePressable
-                style={[styles.topTabItem, { paddingHorizontal: 8 }]}
+                style={styles.topTabItem}
                 onPress={() => switchTopTab("memo")}
-                contentStyle={styles.topTabItemContent}
+                contentStyle={[styles.topTabItemContent, { paddingHorizontal: 8 }]}
               >
                 <Text
                   style={[styles.topTabText, topTab === "memo" && styles.topTabTextActive]}
@@ -857,9 +857,9 @@ export default function OnScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <ScalePressable
-                style={[styles.topTabItem, { paddingLeft: 8, paddingRight: 16 }]}
+                style={styles.topTabItem}
                 onPress={() => switchTopTab("my_article")}
-                contentStyle={styles.topTabItemContent}
+                contentStyle={[styles.topTabItemContent, { paddingLeft: 8, paddingRight: 16 }]}
               >
                 <Text
                   style={[styles.topTabText, topTab === "my_article" && styles.topTabTextActive]}
@@ -937,7 +937,8 @@ export default function OnScreen() {
           {FILTER_OPTIONS.map((opt) => (
             <ScalePressable
               key={opt.key}
-              style={[styles.filterChip, filter === opt.key && styles.filterChipActive]}
+              style={styles.filterChip}
+              contentStyle={[styles.filterChipContent, filter === opt.key && styles.filterChipActive]}
               onPress={() => {
                 closeOpenRow();
                 setFilter(opt.key);
@@ -1146,10 +1147,10 @@ export default function OnScreen() {
       {selectionMode && (
         <View style={[styles.selectionBar, { paddingBottom: insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + 12 }]}>
           <ScalePressable
-            style={[styles.bulkDeleteButton, selectedCount === 0 && styles.bulkDeleteButtonDisabled]}
+            style={styles.bulkDeleteButton}
             onPress={handleBulkDeletePress}
             disabled={selectedCount === 0 || isBulkDeleting}
-          contentStyle={styles.bulkDeleteButtonContent}
+            contentStyle={[styles.bulkDeleteButtonContent, selectedCount === 0 && styles.bulkDeleteButtonDisabled]}
           >
             {isBulkDeleting ? (
               <Text style={styles.bulkDeleteText}>삭제 중...</Text>
@@ -1205,9 +1206,9 @@ export default function OnScreen() {
                 const isSelected = item.id === selectedCollectionId;
                 return (
                   <ScalePressable
-                    style={[styles.archiveItem, isSelected && styles.archiveItemSelected]}
+                    style={styles.archiveItem}
                     onPress={() => setSelectedCollectionId(item.id)}
-                  contentStyle={styles.archiveItemContent}
+                    contentStyle={[styles.archiveItemContent, isSelected && styles.archiveItemSelected]}
                   >
                     <View style={styles.archiveItemLeft}>
                       <Feather
@@ -1234,13 +1235,13 @@ export default function OnScreen() {
             />
           )}
           <ScalePressable
-            style={[
-              styles.archiveConfirmButton,
-              (!selectedCollectionId || isArchiving) && styles.archiveConfirmButtonDisabled,
-            ]}
+            style={styles.archiveConfirmButton}
             onPress={handleArchiveConfirm}
             disabled={!selectedCollectionId || isArchiving}
-          contentStyle={styles.archiveConfirmButtonContent}
+            contentStyle={[
+              styles.archiveConfirmButtonContent,
+              (!selectedCollectionId || isArchiving) && styles.archiveConfirmButtonDisabled,
+            ]}
           >
             <Text style={styles.archiveConfirmButtonText}>
               {isArchiving ? "보관 중..." : "보관하기"}
@@ -1330,13 +1331,12 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.zinc100,
     marginBottom: 8,
   },
-  topTabItem: {
-    paddingHorizontal: 0,
+  topTabItem: {},
+  topTabItemContent: {
+    alignItems: "center",
     paddingTop: 12,
     paddingBottom: 0,
   },
-  topTabItemContent: {
-    alignItems: "center",},
   topTabText: {
     ...Typography.body,
     fontSize: 15,
@@ -1363,10 +1363,18 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   filterChip: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  filterChipContent: {
+    flexGrow: 0,
+    flexShrink: 0,
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 16,
     backgroundColor: Colors.zinc50,
+    alignItems: "center",
+    justifyContent: "center",
   },
   filterChipActive: {
     backgroundColor: Colors.zinc900,
@@ -1408,29 +1416,30 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   createButton: {
-    backgroundColor: Colors.zinc900,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
     marginTop: 8,
   },
   createButtonContent: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 6,
     flexGrow: 0,
+    backgroundColor: Colors.zinc900,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
   },
   createButtonText: {
     ...Typography.bodySemiBold,
     fontSize: 15,
     color: Colors.white,
   },
-  selectionRow: {
-    paddingLeft: Spacing.screenPx,
-  },
+  selectionRow: {},
   selectionRowContent: {
     flexDirection: "row",
-    alignItems: "center",},
+    alignItems: "center",
+    paddingLeft: Spacing.screenPx,
+  },
   checkbox: {
     width: 22,
     height: 22,
@@ -1459,12 +1468,14 @@ const styles = StyleSheet.create({
   },
   bulkDeleteButton: {
     height: 52,
+  },
+  bulkDeleteButtonContent: {
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
     backgroundColor: "#DC2626",
     borderRadius: 14,
   },
-  bulkDeleteButtonContent: {
-    alignItems: "center",
-    justifyContent: "center",},
   bulkDeleteButtonDisabled: {
     backgroundColor: Colors.zinc200,
   },
@@ -1502,15 +1513,15 @@ const styles = StyleSheet.create({
     height: StyleSheet.hairlineWidth,
     backgroundColor: Colors.zinc100,
   },
-  archiveItem: {
+  archiveItem: {},
+  archiveItemContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingVertical: 14,
     paddingHorizontal: 4,
     borderRadius: 8,
   },
-  archiveItemContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",},
   archiveItemSelected: {
     backgroundColor: Colors.zinc50,
   },
@@ -1541,13 +1552,15 @@ const styles = StyleSheet.create({
     color: Colors.zinc400,
   },
   archiveConfirmButton: {
-    backgroundColor: Colors.zinc900,
-    paddingVertical: 14,
-    borderRadius: 12,
     marginTop: 12,
   },
   archiveConfirmButtonContent: {
-    alignItems: "center",},
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.zinc900,
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
   archiveConfirmButtonDisabled: {
     opacity: 0.4,
   },
@@ -1710,16 +1723,18 @@ const styles = StyleSheet.create({
     right: Spacing.screenPx,
     width: 52,
     height: 52,
+    zIndex: Sizing.navBarZIndex + 1,
+  },
+  thoughtFabContent: {
+    width: 52,
+    height: 52,
     borderRadius: 26,
     backgroundColor: Colors.zinc900,
-    zIndex: Sizing.navBarZIndex + 1,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.18,
     shadowRadius: 6,
     elevation: 4,
-  },
-  thoughtFabContent: {
     alignItems: "center",
     justifyContent: "center",
   },

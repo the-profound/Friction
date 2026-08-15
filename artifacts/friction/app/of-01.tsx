@@ -135,7 +135,8 @@ export default function PersonalCollectionListScreen() {
           <Text style={styles.emptyTitle}>{emptyTitle}</Text>
           <Text style={styles.emptySubtitle}>{emptySubtitle}</Text>
           <ScalePressable
-            style={styles.createButton}
+            style={styles.createButtonOuter}
+            contentStyle={styles.createButton}
             onPress={() => { setNewName(""); setNewDescription(""); setNewIsPublic(activeTab === "public"); setCreateSheetVisible(true); }}
           >
             <Text style={styles.createButtonText}>새 폴더 만들기</Text>
@@ -312,12 +313,12 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   collectionItem: {
-    paddingVertical: 14,
-    paddingHorizontal: Spacing.screenPx,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
   },
   collectionItemContent: {
+    paddingVertical: 14,
+    paddingHorizontal: Spacing.screenPx,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,},

@@ -64,14 +64,11 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
           onPress={() => setIsModalVisible(true)}
           accessibilityLabel="View error details"
           accessibilityRole="button"
-          style={[
-            styles.topButton,
-            {
-              top: insets.top + 16,
-              backgroundColor: theme.backgroundSecondary,
-            },
+          style={[styles.topButton, { top: insets.top + 16 }]}
+          contentStyle={[
+            styles.topButtonContent,
+            { backgroundColor: theme.backgroundSecondary },
           ]}
-        contentStyle={styles.topButtonContent}
         >
           <Feather name="alert-circle" size={20} color={theme.text} />
         </ScalePressable>
@@ -88,7 +85,8 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
 
         <ScalePressable
           onPress={handleRestart}
-          style={[styles.button, { backgroundColor: theme.link }]}
+          style={styles.button}
+          contentStyle={[styles.buttonContent, { backgroundColor: theme.link }]}
         >
           <Text style={[styles.buttonText, { color: theme.buttonText }]}>
             Try Again
@@ -202,18 +200,24 @@ const styles = StyleSheet.create({
     right: 16,
     width: 44,
     height: 44,
-    borderRadius: 8,
     zIndex: 10,
   },
   topButtonContent: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",},
-  button: {
+    justifyContent: "center",
+  },
+  button: {},
+  buttonContent: {
     paddingVertical: 16,
     borderRadius: 8,
     paddingHorizontal: 24,
     minWidth: 200,
+    alignItems: "center",
+    justifyContent: "center",
     shadowColor: "#000",
     shadowOffset: {
       width: 0,

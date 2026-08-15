@@ -151,7 +151,7 @@ export default function MyPageScreen() {
           ) : userError ? (
             <View style={styles.errorRow}>
               <Text style={styles.errorText}>정보를 불러오지 못했습니다.</Text>
-              <ScalePressable style={styles.retryButton} onPress={() => refetchUser()}>
+              <ScalePressable style={styles.retryButton} contentStyle={styles.retryButtonContent} onPress={() => refetchUser()}>
                 <Text style={styles.retryText}>다시 시도</Text>
               </ScalePressable>
             </View>
@@ -254,14 +254,14 @@ export default function MyPageScreen() {
                 <View style={styles.devButtonRow}>
                   <ScalePressable
                     style={styles.devCancelBtn}
-                    contentStyle={styles.devBtnContent}
+                    contentStyle={[styles.devBtnContent, styles.devCancelBtnContent]}
                     onPress={() => { setDevModalVisible(false); setDevPassword(""); }}
                   >
                     <Text style={styles.devCancelText}>취소</Text>
                   </ScalePressable>
                   <ScalePressable
-                    style={[styles.devConfirmBtn, devLoading && styles.devBtnDisabled]}
-                    contentStyle={styles.devBtnContent}
+                    style={styles.devConfirmBtn}
+                    contentStyle={[styles.devConfirmBtnContent, devLoading && styles.devBtnDisabled]}
                     onPress={handleDevResealConfirm}
                     disabled={devLoading}
                   >
@@ -303,10 +303,9 @@ function SettingRow({
 }) {
   return (
     <ScalePressable
-      style={({ pressed }) => [
-        styles.row,
+      style={[
+        styles.rowOuter,
         !isLast && styles.rowBorder,
-        pressed && styles.rowPressed,
       ]}
       contentStyle={styles.rowContent}
       onPress={onPress}
@@ -402,11 +401,16 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     minHeight: 52,
   },
+  rowOuter: {
+  },
   rowContent: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     flex: 1,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: 15,
+    minHeight: 52,
   },
   infoRow: {
     gap: 12,
@@ -414,9 +418,6 @@ const styles = StyleSheet.create({
   rowBorder: {
     borderBottomWidth: 1,
     borderBottomColor: Colors.zinc100,
-  },
-  rowPressed: {
-    backgroundColor: Colors.zinc50,
   },
   rowLabel: {
     ...Typography.body,
@@ -457,10 +458,14 @@ const styles = StyleSheet.create({
   },
   retryButton: {
     alignSelf: "flex-start",
+  },
+  retryButtonContent: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     backgroundColor: Colors.zinc100,
     borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
   },
   retryText: {
     ...Typography.caption,
@@ -521,6 +526,8 @@ const styles = StyleSheet.create({
   },
   devCancelBtn: {
     flex: 1,
+  },
+  devCancelBtnContent: {
     paddingVertical: 13,
     borderRadius: 10,
     backgroundColor: Colors.zinc100,
@@ -532,6 +539,11 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   devConfirmBtn: {
+    flex: 1,
+  },
+  devConfirmBtnContent: {
+    alignItems: "center",
+    justifyContent: "center",
     flex: 1,
     paddingVertical: 13,
     borderRadius: 10,
