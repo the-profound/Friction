@@ -86,6 +86,74 @@ describe("ScalePressable: module exports", () => {
   });
 });
 
+describe("computeAdaptiveScale: adaptive press scale calculation", () => {
+  it("returns DEFAULT_SCALE (0.95) when maxDimension is 0 (not yet measured)", async () => {
+    const { computeAdaptiveScale } = await import("../ScalePressable");
+    expect(computeAdaptiveScale(0)).toBe(0.95);
+  });
+
+  it("returns DEFAULT_SCALE (0.95) when maxDimension is negative", async () => {
+    const { computeAdaptiveScale } = await import("../ScalePressable");
+    expect(computeAdaptiveScale(-1)).toBe(0.95);
+  });
+
+  it("applies scale floor (0.90) for small elements (32px icon button)", async () => {
+    const { computeAdaptiveScale } = await import("../ScalePressable");
+    // 32 * 0.025 = 0.8px < 2px minimum → clamp to 2px
+    // raw scale = 1 - (2 * 2) / 32 = 0.875 → floored to 0.90
+    expect(computeAdaptiveScale(32)).toBeCloseTo(0.9, 5);
+  });
+
+  it("applies scale floor (0.90) for 40px pill button (edge movement below minimum)", async () => {
+    const { computeAdaptiveScale } = await import("../ScalePressable");
+    // 40 * 0.025 = 1px < 2px → clamp to 2px
+    // scale = 1 - 4/40 = 0.90 exactly (right at the floor)
+    expect(computeAdaptiveScale(40)).toBeCloseTo(0.9, 5);
+  });
+
+  it("returns 0.95 for mid-size elements (120px), matching current default behaviour", async () => {
+    const { computeAdaptiveScale } = await import("../ScalePressable");
+    // 120 * 0.025 = 3px ∈ [2, 5] → no clamping
+    // scale = 1 - (2 * 3) / 120 = 0.95 exactly
+    expect(computeAdaptiveScale(120)).toBeCloseTo(0.95, 5);
+  });
+
+  it("returns 0.95 for any size in the 80–200px neutral zone", async () => {
+    const { computeAdaptiveScale } = await import("../ScalePressable");
+    // In [80, 200], rawEdge = size * 0.025 ∈ [2, 5] → no clamping
+    // scale = 1 - 2 * 0.025 = 0.95 regardless of size
+    expect(computeAdaptiveScale(80)).toBeCloseTo(0.95, 5);
+    expect(computeAdaptiveScale(160)).toBeCloseTo(0.95, 5);
+    expect(computeAdaptiveScale(200)).toBeCloseTo(0.95, 5);
+  });
+
+  it("returns a scale noticeably closer to 1 for large elements (350px space card)", async () => {
+    const { computeAdaptiveScale } = await import("../ScalePressable");
+    // 350 * 0.025 = 8.75px > 5px → clamp to 5px
+    // scale = 1 - (2 * 5) / 350 ≈ 0.9714
+    const result = computeAdaptiveScale(350);
+    expect(result).toBeGreaterThan(0.95);
+    expect(result).toBeCloseTo(1 - 10 / 350, 5);
+  });
+
+  it("returns a scale very close to 1 for very large elements (600px full-width card)", async () => {
+    const { computeAdaptiveScale } = await import("../ScalePressable");
+    // 600 * 0.025 = 15px > 5px → clamp to 5px
+    // scale = 1 - (2 * 5) / 600 ≈ 0.9833
+    const result = computeAdaptiveScale(600);
+    expect(result).toBeGreaterThan(0.97);
+    expect(result).toBeCloseTo(1 - 10 / 600, 5);
+  });
+
+  it("never returns a scale below SCALE_FLOOR (0.90)", async () => {
+    const { computeAdaptiveScale } = await import("../ScalePressable");
+    // Very small elements would compute < 0.90 without the floor
+    expect(computeAdaptiveScale(1)).toBeCloseTo(0.9, 5);
+    expect(computeAdaptiveScale(10)).toBeCloseTo(0.9, 5);
+    expect(computeAdaptiveScale(20)).toBeCloseTo(0.9, 5);
+  });
+});
+
 describe("ScalePressable: props type compatibility", () => {
   it("accepts function children (pressed-state render prop)", async () => {
     const mod = await import("../ScalePressable");
