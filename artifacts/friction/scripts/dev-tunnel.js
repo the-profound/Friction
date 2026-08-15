@@ -40,6 +40,13 @@ if (!process.env.NGROK_STATIC_DOMAIN) {
 const staticDomain = process.env.NGROK_STATIC_DOMAIN.replace(/^https?:\/\//, "");
 const tunnelUrl = `https://${staticDomain}`;
 
+// EXPO_PUBLIC_DOMAIN controls the API base URL inside the JS bundle.
+// The ngrok tunnel only forwards Metro (bundle) traffic — API routes hit Metro
+// and get back HTML 200, which customFetch parses as a string, causing
+// "undefined is not a function" when the app calls .filter() on that string.
+// Always point EXPO_PUBLIC_DOMAIN at the live deployed API server instead.
+const API_DOMAIN = "friction-1.replit.app";
+
 // ── Signal handling ───────────────────────────────────────────────────────────
 let metroProcess = null;
 
@@ -78,7 +85,8 @@ async function waitForMetro(timeoutMs = 120_000) {
 (async () => {
   console.log("=== Friction dev-client tunnel ===");
   console.log(`Metro port   : ${METRO_PORT}`);
-  console.log(`Tunnel URL   : ${tunnelUrl}`);
+  console.log(`Tunnel URL   : ${tunnelUrl}  (Metro bundles only)`);
+  console.log(`API domain   : https://${API_DOMAIN}  (all /api/* calls)`);
   console.log("");
 
   // Start Metro (dev mode, no minify)
@@ -91,11 +99,12 @@ async function waitForMetro(timeoutMs = 120_000) {
       stdio: ["ignore", "pipe", "pipe"],
       env: {
         ...process.env,
-        // Tell Metro/Expo its public address is the ngrok tunnel.
-        // This is the same pattern used by the Replit web-preview `dev` script.
+        // Tell Metro/Expo its public address is the ngrok tunnel (bundle only).
         REACT_NATIVE_PACKAGER_HOSTNAME: staticDomain,
         EXPO_PACKAGER_PROXY_URL: tunnelUrl,
-        EXPO_PUBLIC_DOMAIN: staticDomain,
+        // API calls must go to the live deployment, NOT through the ngrok
+        // tunnel (which only forwards Metro port and returns HTML for /api/*).
+        EXPO_PUBLIC_DOMAIN: API_DOMAIN,
       },
     },
   );
