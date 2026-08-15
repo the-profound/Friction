@@ -970,7 +970,7 @@ export default function SpaceScheduleSendScreen() {
         <Text style={styles.headerTitle} numberOfLines={1}>
           예약 목록
         </Text>
-        <View style={{ width: 20 }} />
+        <SpaceInfoNote variant="popup" text={SpaceCopy.scheduledSend_slotRelation} />
       </View>
 
       {space && (

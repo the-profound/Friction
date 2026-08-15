@@ -23,6 +23,8 @@ import { useUser } from "@/contexts/UserContext";
 import { isQueryStale } from "@/lib/useScreenFocused";
 import { LIST_PERF_PRESET } from "@/lib/listPerf";
 import DropdownFilter from "@/components/DropdownFilter/DropdownFilter";
+import { SpaceInfoNote } from "@/components/SpaceInfoNote/SpaceInfoNote";
+import { SpaceCopy } from "@/constants/spaceCopy";
 import {
   useListSpaces,
   useListMySpaceInvitations,
@@ -329,18 +331,24 @@ export default function SpacesScreen() {
 
   const filterBars = (
     <View style={styles.filterRow}>
-      <DropdownFilter
-        label="참여 방법"
-        value={roleFilter}
-        options={ROLE_FILTER_OPTIONS}
-        onChange={setRoleFilter}
-      />
-      <DropdownFilter
-        label="공간 상태"
-        value={statusFilter}
-        options={STATUS_FILTER_OPTIONS}
-        onChange={setStatusFilter}
-      />
+      <View style={styles.filterWithInfo}>
+        <DropdownFilter
+          label="참여 방법"
+          value={roleFilter}
+          options={ROLE_FILTER_OPTIONS}
+          onChange={setRoleFilter}
+        />
+        <SpaceInfoNote variant="popup" text={SpaceCopy.statusBadge_roleMeaning} />
+      </View>
+      <View style={styles.filterWithInfo}>
+        <DropdownFilter
+          label="공간 상태"
+          value={statusFilter}
+          options={STATUS_FILTER_OPTIONS}
+          onChange={setStatusFilter}
+        />
+        <SpaceInfoNote variant="popup" text={SpaceCopy.statusBadge_statusMeaning} />
+      </View>
     </View>
   );
 
@@ -550,6 +558,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.screenPx,
     gap: 8,
     paddingVertical: 10,
+  },
+  filterWithInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
   // ─── Space card ─────────────────────────────────────────────────────────────
   cardWrapper: {

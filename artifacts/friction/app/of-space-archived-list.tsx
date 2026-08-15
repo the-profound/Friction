@@ -17,6 +17,8 @@ import ScalePressable from "@/components/shared/ScalePressable";
 import { useUser } from "@/contexts/UserContext";
 import { isQueryStale } from "@/lib/useScreenFocused";
 import { LIST_PERF_PRESET } from "@/lib/listPerf";
+import { SpaceInfoNote } from "@/components/SpaceInfoNote/SpaceInfoNote";
+import { SpaceCopy } from "@/constants/spaceCopy";
 import {
   useListSpaces,
   getListSpacesQueryKey,
@@ -135,7 +137,7 @@ export default function ArchivedSpacesScreen() {
           <Feather name="arrow-left" size={20} color={Colors.zinc600} />
         </ScalePressable>
         <Text style={styles.headerTitle}>보관된 공간</Text>
-        <View style={styles.headerSpacer} />
+        <SpaceInfoNote variant="popup" text={SpaceCopy.archive_what} />
       </View>
 
       {spacesQuery.isLoading ? (

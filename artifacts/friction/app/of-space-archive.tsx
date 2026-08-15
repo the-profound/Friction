@@ -10,6 +10,8 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
+import { SpaceInfoNote } from "@/components/SpaceInfoNote/SpaceInfoNote";
+import { SpaceCopy } from "@/constants/spaceCopy";
 import {
   useUpdateSpace,
   getListSpacesQueryKey,
@@ -79,7 +81,10 @@ export default function SpaceArchiveScreen() {
           <Feather name="archive" size={48} color={Colors.zinc400} />
         </View>
 
-        <Text style={styles.title}>공간을 보관하시겠어요?</Text>
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>공간을 보관하시겠어요?</Text>
+          <SpaceInfoNote variant="popup" text={SpaceCopy.archive_confirmEffects} />
+        </View>
         <Text style={styles.subtitle}>
           {spaceName ? `'${spaceName}'` : "이 공간"}을 보관 상태로 전환합니다.
         </Text>
@@ -166,11 +171,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 24,
   },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 8,
+  },
   title: {
     ...Typography.bodySemiBold,
     fontSize: 20,
     color: Colors.zinc900,
-    marginBottom: 8,
   },
   subtitle: {
     ...Typography.body,

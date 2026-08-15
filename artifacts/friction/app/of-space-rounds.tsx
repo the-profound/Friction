@@ -16,6 +16,8 @@ import { Feather } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
+import { SpaceInfoNote } from "@/components/SpaceInfoNote/SpaceInfoNote";
+import { SpaceCopy } from "@/constants/spaceCopy";
 import {
   useListSpaceRounds,
   useUpdateSpaceRound,
@@ -295,7 +297,10 @@ function RoundEditSheet({
           {isUpcoming && (
             <>
               <View style={editStyles.slotSectionHeader}>
-                <Text style={editStyles.fieldLabel}>슬롯 관리</Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                  <Text style={editStyles.fieldLabel}>슬롯 관리</Text>
+                  <SpaceInfoNote variant="popup" text={SpaceCopy.rounds_slotManagement} />
+                </View>
                 <ScalePressable
                   contentStyle={editStyles.addSlotBtn}
                   onPress={() => setShowAddSlot((v) => !v)}
@@ -688,9 +693,12 @@ export default function SpaceRoundsScreen() {
             />
           }
         >
-          <Text style={styles.sectionHeader}>
-            전체 {rounds.length}개 회차
-          </Text>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionHeader}>
+              전체 {rounds.length}개 회차
+            </Text>
+            <SpaceInfoNote variant="popup" text={SpaceCopy.round_what} />
+          </View>
 
           {rounds.length === 0 ? (
             <View style={styles.emptyState}>
@@ -760,14 +768,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingTop: 20,
+    paddingBottom: 12,
+  },
   sectionHeader: {
     ...Typography.caption,
     fontSize: 12,
     color: Colors.zinc400,
     fontWeight: "600",
     paddingHorizontal: Spacing.screenPx,
-    paddingTop: 20,
-    paddingBottom: 12,
     textTransform: "uppercase",
     letterSpacing: 0.6,
   },

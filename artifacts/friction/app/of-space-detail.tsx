@@ -50,6 +50,8 @@ import type {
 } from "@workspace/api-client-react";
 import { useAncestorChain } from "@/hooks/useAncestorChain";
 import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
+import { SpaceInfoNote } from "@/components/SpaceInfoNote/SpaceInfoNote";
+import { SpaceCopy } from "@/constants/spaceCopy";
 import { spaceStatusLabel, spaceStatusStyle } from "@/lib/spaceStatusStyle";
 import {
   roundStatusLabel,
@@ -712,6 +714,7 @@ function RoundSection({
       <View style={styles.roundSectionHeader}>
         <View style={styles.roundSectionLeft}>
           <Text style={styles.roundNumberText}>{round.roundNumber}회차</Text>
+          <SpaceInfoNote variant="popup" text={SpaceCopy.round_what} />
           <Text style={[styles.roundStatusText, { color: statusColor }]}>
             {roundStatusLabel(round.status)}
           </Text>
@@ -1366,6 +1369,7 @@ export default function SpaceDetailScreen() {
               <View style={styles.inviteCodeRowLeft}>
                 <Feather name="key" size={12} color={Colors.zinc400} />
                 <Text style={styles.inviteCodeLabel}>초대 문구</Text>
+                <SpaceInfoNote variant="popup" text={SpaceCopy.spaceDetail_inviteCode} />
                 <Text style={styles.inviteCodeValue}>{space.inviteCode}</Text>
               </View>
               <ScalePressable contentStyle={styles.inviteCopyBtn} onPress={handleCopyInviteCode} hitSlop={8}>
@@ -1391,6 +1395,7 @@ export default function SpaceDetailScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionLabel}>공간 예정 정보</Text>
+              {isOperator && <SpaceInfoNote variant="popup" text={SpaceCopy.spaceDetail_startCta} />}
             </View>
             <View style={styles.recruitingInfoCard}>
               <View style={styles.recruitingInfoRow}>

@@ -120,6 +120,12 @@ function SpaceInfoCard({ space }: { space: SpaceWithCreatorInfo }) {
         ) : space.creatorNickname ? (
           <InfoRow icon="shield" label="운영자" value={space.creatorNickname} />
         ) : null}
+        {space.isAnonymous && (
+          <View style={styles.anonymousNoteRow}>
+            <SpaceInfoNote variant="popup" text={SpaceCopy.join_anonymous} />
+            <Text style={styles.anonymousNoteText}>익명 참여 공간이에요</Text>
+          </View>
+        )}
         <InfoRow
           icon="activity"
           label="모집 상태"
@@ -463,9 +469,12 @@ export default function SpaceJoinScreen() {
             <Feather name="hash" size={32} color="#7C3AED" />
           </View>
           <Text style={styles.codeInputTitle}>초대 문구로 신청</Text>
-          <Text style={styles.codeInputSubtitle}>
-            운영자에게 받은 초대 문구를 입력하면{"\n"}운영자의 승인 후 공간에 참여할 수 있어요
-          </Text>
+          <View style={styles.codeInputSubtitleRow}>
+            <Text style={[styles.codeInputSubtitle, { flex: 1 }]}>
+              운영자에게 받은 초대 문구를 입력하면{"\n"}운영자의 승인 후 공간에 참여할 수 있어요
+            </Text>
+            <SpaceInfoNote variant="popup" text={SpaceCopy.join_approvalProcess} />
+          </View>
           <TextInput
             style={[styles.codeInput, !!codeError && styles.codeInputError]}
             placeholder="초대 문구 입력"
@@ -865,6 +874,23 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 22,
     marginBottom: 8,
+  },
+  codeInputSubtitleRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 4,
+    marginBottom: 8,
+  },
+  anonymousNoteRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingTop: 2,
+  },
+  anonymousNoteText: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc400,
   },
   codeInput: {
     ...Typography.body,
