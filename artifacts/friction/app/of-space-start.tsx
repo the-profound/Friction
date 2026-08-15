@@ -27,6 +27,8 @@ import { Feather } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
+import { SpaceInfoNote } from "@/components/SpaceInfoNote/SpaceInfoNote";
+import { SpaceCopy } from "@/constants/spaceCopy";
 import {
   CalendarGrid,
   CollapsibleDatePicker,
@@ -1029,12 +1031,11 @@ function OpeningLetterStep({
       ) : null}
 
       {!openingLetterExists && !isLoading && !isArticlesLoading && (
-        <View style={stepStyles.infoBox}>
-          <Feather name="info" size={13} color={Colors.zinc400} />
-          <Text style={stepStyles.infoBoxText}>
-            여는 편지를 등록해야 다음 단계로 이동할 수 있어요. 위에서 보낼 편지를 선택하고 등록해주세요.
-          </Text>
-        </View>
+        <SpaceInfoNote
+          variant="inline"
+          text={SpaceCopy.openingLetter_required}
+          style={{ marginTop: 4 }}
+        />
       )}
 
       <LetterPickerSheet
@@ -1191,24 +1192,14 @@ function StartConfirmStep({
       </View>
 
       <View style={confirmStyles.noticeBlock}>
-        <View style={confirmStyles.noticeRow}>
-          <Feather name="info" size={13} color={Colors.zinc400} />
-          <Text style={confirmStyles.noticeText}>시작과 동시에 모집이 마감돼요.</Text>
-        </View>
+        <SpaceInfoNote variant="bare" text={SpaceCopy.spaceStart_recruitCloses} />
         {hasPendingRequests && (
-          <View style={confirmStyles.noticeRow}>
-            <Feather name="info" size={13} color={Colors.zinc400} />
-            <Text style={confirmStyles.noticeText}>
-              승인 대기 중인 코드 신청자({pendingCount}명)가 자동으로 거절 처리돼요.
-            </Text>
-          </View>
+          <SpaceInfoNote
+            variant="bare"
+            text={SpaceCopy.spaceStart_pendingReject(pendingCount)}
+          />
         )}
-        <View style={confirmStyles.noticeRow}>
-          <Feather name="info" size={13} color={Colors.zinc400} />
-          <Text style={confirmStyles.noticeText}>
-            시작 후 회차 수·진행 방식·규칙은 수정할 수 없어요.
-          </Text>
-        </View>
+        <SpaceInfoNote variant="bare" text={SpaceCopy.spaceStart_noEdit} />
       </View>
     </View>
   );
@@ -2271,24 +2262,6 @@ const stepStyles = StyleSheet.create({
     fontSize: 12,
     color: Colors.zinc400,
   },
-  infoBox: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 6,
-    padding: 12,
-    borderRadius: 8,
-    backgroundColor: Colors.zinc50,
-    borderWidth: 1,
-    borderColor: Colors.zinc100,
-    marginTop: 4,
-  },
-  infoBoxText: {
-    ...Typography.caption,
-    fontSize: 12,
-    color: Colors.zinc500,
-    flex: 1,
-    lineHeight: 17,
-  },
 });
 
 
@@ -2684,17 +2657,5 @@ const confirmStyles = StyleSheet.create({
   noticeBlock: {
     gap: 8,
     paddingTop: 4,
-  },
-  noticeRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 6,
-  },
-  noticeText: {
-    ...Typography.body,
-    fontSize: 12,
-    color: Colors.zinc500,
-    flex: 1,
-    lineHeight: 17,
   },
 });

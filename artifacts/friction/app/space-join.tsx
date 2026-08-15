@@ -12,6 +12,8 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
+import { SpaceInfoNote } from "@/components/SpaceInfoNote/SpaceInfoNote";
+import { SpaceCopy } from "@/constants/spaceCopy";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import { useToast } from "@/contexts/ToastContext";
@@ -133,10 +135,7 @@ function SpaceInfoCard({ space }: { space: SpaceWithCreatorInfo }) {
       </View>
       {!isActive && (
         <View style={styles.roundsDisclaimerRow}>
-          <Feather name="info" size={12} color={Colors.zinc400} />
-          <Text style={styles.roundsDisclaimerText}>
-            실제 회차 구성은 공간 시작 시점에 확정됩니다
-          </Text>
+          <SpaceInfoNote variant="bare" text={SpaceCopy.round_notFinalizedYet} />
         </View>
       )}
     </View>
@@ -924,20 +923,10 @@ const styles = StyleSheet.create({
     color: "#DC2626",
   },
   roundsDisclaimerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Colors.zinc200,
-  },
-  roundsDisclaimerText: {
-    ...Typography.caption,
-    fontSize: 12,
-    color: Colors.zinc400,
-    flex: 1,
-    lineHeight: 16,
   },
   closedNoticeBanner: {
     flexDirection: "row",

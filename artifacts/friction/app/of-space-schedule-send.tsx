@@ -15,6 +15,8 @@ import { Feather } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
+import { SpaceInfoNote } from "@/components/SpaceInfoNote/SpaceInfoNote";
+import { SpaceCopy } from "@/constants/spaceCopy";
 import { ArticleScheduleSheet } from "@/components/ArticleScheduleSheet/ArticleScheduleSheet";
 import { SlotPickerSheet, type EmptySlot } from "@/components/ArticleScheduleSheet/SlotPickerSheet";
 import { CollapsibleDatePicker, startOfDay } from "@/components/shared/CalendarGrid";
@@ -270,13 +272,10 @@ function FixedTimeDatePicker({
     }
     if (ownRoundSlots.length === 0) {
       return (
-        <View style={sheetStyles.noSlotNotice}>
-          <Feather name="info" size={14} color={Colors.zinc400} />
-          <Text style={sheetStyles.noSlotNoticeText}>
-            이 예약의 회차에 배정된 중심글 차례를 더 이상 확인할 수 없어요. 공간 상세에서 배정 상태를
-            확인해주세요.
-          </Text>
-        </View>
+        <SpaceInfoNote
+          variant="inline"
+          text={SpaceCopy.centerArticle_noSlotContext}
+        />
       );
     }
     const selectedYmd = dateToYmd(selectedDate);
@@ -1649,21 +1648,6 @@ const sheetStyles = StyleSheet.create({
     ...Typography.body,
     fontSize: 13,
     color: Colors.zinc500,
-  },
-  noSlotNotice: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    backgroundColor: Colors.zinc50,
-    borderRadius: 10,
-    padding: 12,
-  },
-  noSlotNoticeText: {
-    ...Typography.body,
-    fontSize: 13,
-    color: Colors.zinc500,
-    flex: 1,
-    lineHeight: 19,
   },
   centerDateChipRow: {
     flexDirection: "row",

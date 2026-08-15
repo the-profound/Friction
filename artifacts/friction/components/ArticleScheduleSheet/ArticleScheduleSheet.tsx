@@ -10,6 +10,8 @@ import { Feather } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
+import { SpaceInfoNote } from "@/components/SpaceInfoNote/SpaceInfoNote";
+import { SpaceCopy } from "@/constants/spaceCopy";
 import { LetterPickerSheet } from "@/components/shared/LetterPickerSheet";
 import { CollapsibleDatePicker, startOfDay } from "@/components/shared/CalendarGrid";
 import {
@@ -429,12 +431,10 @@ export function ArticleScheduleSheet({
                 <Text style={styles.centerDatesLoadingText}>배정된 차례를 확인하는 중이에요</Text>
               </View>
             ) : sortedCenterSlots.length === 0 ? (
-              <View style={styles.noSlotNotice}>
-                <Feather name="info" size={14} color={Colors.zinc400} />
-                <Text style={styles.noSlotNoticeText}>
-                  아직 배정된 중심글 차례가 없어요. 회차가 시작되고 차례가 배정되면 예약할 수 있어요.
-                </Text>
-              </View>
+              <SpaceInfoNote
+                variant="inline"
+                text={SpaceCopy.centerArticle_noSlot}
+              />
             ) : (
               <View style={styles.centerDateChipRow}>
                 {sortedCenterSlots.map((slot) => {
@@ -590,21 +590,6 @@ const styles = StyleSheet.create({
     ...Typography.body,
     fontSize: 13,
     color: Colors.zinc500,
-  },
-  noSlotNotice: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    backgroundColor: Colors.zinc50,
-    borderRadius: 10,
-    padding: 12,
-  },
-  noSlotNoticeText: {
-    ...Typography.body,
-    fontSize: 13,
-    color: Colors.zinc500,
-    flex: 1,
-    lineHeight: 19,
   },
   centerDateChipRow: {
     flexDirection: "row",
