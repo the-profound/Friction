@@ -438,7 +438,10 @@ function OperationSettingsStep({
       </View>
 
       <View style={stepStyles.fieldGroup}>
-        <Text style={stepStyles.fieldLabel}>회차 수</Text>
+        <View style={stepStyles.labelRow}>
+          <Text style={stepStyles.fieldLabel}>회차 수</Text>
+          <SpaceInfoNote variant="popup" text={SpaceCopy.round_what} />
+        </View>
         <View style={stepStyles.stepperRow}>
           <ScalePressable
             contentStyle={styles.stepperBtn}
@@ -457,7 +460,10 @@ function OperationSettingsStep({
       </View>
 
       <View style={stepStyles.fieldGroup}>
-        <Text style={stepStyles.fieldLabel}>진행 방식</Text>
+        <View style={stepStyles.labelRow}>
+          <Text style={stepStyles.fieldLabel}>진행 방식</Text>
+          <SpaceInfoNote variant="popup" text={SpaceCopy.scheduleType_what} />
+        </View>
         <View style={stepStyles.optionList}>
           <ScalePressable
             contentStyle={[stepStyles.option, scheduleType === "N_DAY" && stepStyles.optionSelected]}
@@ -664,7 +670,10 @@ function SlotOrderStep({
 }) {
   return (
     <View style={stepStyles.container}>
-      <Text style={stepStyles.stepTitle}>중심글 작성 순서</Text>
+      <View style={stepStyles.labelRow}>
+        <Text style={stepStyles.stepTitle}>중심글 작성 순서</Text>
+        <SpaceInfoNote variant="popup" text={SpaceCopy.slotOrder_what} />
+      </View>
       <Text style={stepStyles.stepDesc}>
         오른쪽 핸들({"\u2630"})을 드래그해 순서를 조정해요.
       </Text>
@@ -943,7 +952,10 @@ function OpeningLetterStep({
 
   return (
     <View style={stepStyles.container}>
-      <Text style={stepStyles.stepTitle}>첫 여는 편지 보내기</Text>
+      <View style={stepStyles.labelRow}>
+        <Text style={stepStyles.stepTitle}>첫 여는 편지 보내기</Text>
+        <SpaceInfoNote variant="popup" text={SpaceCopy.openingLetter_what} />
+      </View>
       <Text style={stepStyles.stepDesc}>공간 시작과 함께 전송될 1회차 여는 편지를 선택해요.</Text>
 
       {/* 발송 가능 기간 안내 */}
@@ -2261,6 +2273,11 @@ const stepStyles = StyleSheet.create({
     ...Typography.caption,
     fontSize: 12,
     color: Colors.zinc400,
+  },
+  labelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
 });
 

@@ -9,6 +9,7 @@ export const modules: ModuleMap = {
   "./components/mockups/reader-swipe-next/ReaderSwipeNextPreview.tsx": () => import("../components/mockups/reader-swipe-next/ReaderSwipeNextPreview.tsx"),
   "./components/mockups/question-block-popup/QuestionBlockPopupPreview.tsx": () => import("../components/mockups/question-block-popup/QuestionBlockPopupPreview.tsx"),
   "./components/mockups/reading-complete/ReadingCompletePreview.tsx": () => import("../components/mockups/reading-complete/ReadingCompletePreview.tsx"),
-  "./components/mockups/templates/MissionControlBentoDashboard-kWBE4B/Dashboard.tsx": () => import("../components/mockups/templates/MissionControlBentoDashboard-kWBE4B/Dashboard.tsx"),
-  "./components/mockups/templates/SwissGridCRMDashboard-S8kGXy/App.tsx": () => import("../components/mockups/templates/SwissGridCRMDashboard-S8kGXy/App.tsx")
+  "./components/mockups/question-block-popup/QuestionBlockPopupPreview.tsx": () => import("../components/mockups/question-block-popup/QuestionBlockPopupPreview.tsx"),
+  "./components/mockups/templates/SwissGridCRMDashboard-S8kGXy/App.tsx": () => import("../components/mockups/templates/SwissGridCRMDashboard-S8kGXy/App.tsx"),
+  "./components/mockups/templates/MissionControlBentoDashboard-kWBE4B/Dashboard.tsx": () => import("../components/mockups/templates/MissionControlBentoDashboard-kWBE4B/Dashboard.tsx")
 };

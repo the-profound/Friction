@@ -25,6 +25,8 @@ import {
   useCreateSpaceRound,
   getListSpacesQueryKey,
 } from "@workspace/api-client-react";
+import { SpaceInfoNote } from "@/components/SpaceInfoNote/SpaceInfoNote";
+import { SpaceCopy } from "@/constants/spaceCopy";
 
 type ScheduleType = "N_DAY" | "WEEKDAY";
 
@@ -331,7 +333,10 @@ function BasicSettingsStep({
       <Text style={stepStyles.stepDesc}>공간의 이름과 소개를 입력하세요.</Text>
 
       <View style={stepStyles.fieldGroup}>
-        <Text style={stepStyles.fieldLabel}>공간 이름 *</Text>
+        <View style={stepStyles.labelRow}>
+          <Text style={stepStyles.fieldLabel}>공간 이름 *</Text>
+          <SpaceInfoNote variant="popup" text={SpaceCopy.space_what} />
+        </View>
         <TextInput
           style={stepStyles.input}
           placeholder="예: 2025 독서 모임"
@@ -362,7 +367,10 @@ function BasicSettingsStep({
 
       <View style={stepStyles.toggleRow}>
         <View style={stepStyles.toggleInfo}>
-          <Text style={stepStyles.fieldLabel}>익명 운영</Text>
+          <View style={stepStyles.labelRow}>
+            <Text style={stepStyles.fieldLabel}>익명 운영</Text>
+            <SpaceInfoNote variant="popup" text={SpaceCopy.anonymous_what} />
+          </View>
           <Text style={stepStyles.toggleDesc}>참여자 이름이 공개되지 않아요</Text>
           {form.isAnonymous && (
             <Text style={stepStyles.toggleNotice}>
@@ -405,7 +413,10 @@ function OperationSettingsStep({
       <Text style={stepStyles.stepDesc}>공간 운영 조건을 설정하세요.</Text>
 
       <View style={stepStyles.fieldGroup}>
-        <Text style={stepStyles.fieldLabel}>시작 예정일 *</Text>
+        <View style={stepStyles.labelRow}>
+          <Text style={stepStyles.fieldLabel}>시작 예정일 *</Text>
+          <SpaceInfoNote variant="popup" text={SpaceCopy.startsAt_what} />
+        </View>
         <CollapsibleDatePicker
           value={selectedDate}
           onChange={(date) => updateField("startsAt", dateToDigits(date))}
@@ -416,7 +427,10 @@ function OperationSettingsStep({
       </View>
 
       <View style={stepStyles.fieldGroup}>
-        <Text style={stepStyles.fieldLabel}>전체 회차 수 *</Text>
+        <View style={stepStyles.labelRow}>
+          <Text style={stepStyles.fieldLabel}>전체 회차 수 *</Text>
+          <SpaceInfoNote variant="popup" text={SpaceCopy.round_what} />
+        </View>
         <TextInput
           style={stepStyles.input}
           placeholder="예: 12"
@@ -434,7 +448,10 @@ function OperationSettingsStep({
       </View>
 
       <View style={stepStyles.fieldGroup}>
-        <Text style={stepStyles.fieldLabel}>몇 명까지 참여할 수 있나요? (선택)</Text>
+        <View style={stepStyles.labelRow}>
+          <Text style={stepStyles.fieldLabel}>몇 명까지 참여할 수 있나요? (선택)</Text>
+          <SpaceInfoNote variant="popup" text={SpaceCopy.maxParticipants_what} />
+        </View>
         <TextInput
           style={stepStyles.input}
           placeholder="제한 없음"
@@ -458,7 +475,10 @@ function OperationSettingsStep({
 
       <View style={stepStyles.toggleRow}>
         <View style={stepStyles.toggleInfo}>
-          <Text style={stepStyles.fieldLabel}>운영자 참여</Text>
+          <View style={stepStyles.labelRow}>
+            <Text style={stepStyles.fieldLabel}>운영자 참여</Text>
+            <SpaceInfoNote variant="popup" text={SpaceCopy.operatorParticipates_what} />
+          </View>
           <Text style={stepStyles.toggleDesc}>운영자도 회차에 글을 직접 제출해요</Text>
         </View>
         <Toggle
@@ -559,7 +579,10 @@ function AdvancedSettingsStep({
       <Text style={stepStyles.stepDesc}>진행 방식과 중심글 설정을 조정해요.</Text>
 
       <View style={stepStyles.fieldGroup}>
-        <Text style={stepStyles.fieldLabel}>진행 방식</Text>
+        <View style={stepStyles.labelRow}>
+          <Text style={stepStyles.fieldLabel}>진행 방식</Text>
+          <SpaceInfoNote variant="popup" text={SpaceCopy.scheduleType_what} />
+        </View>
         <View style={scheduleStyles.optionList}>
           <ScalePressable
             contentStyle={[
@@ -617,7 +640,10 @@ function AdvancedSettingsStep({
       </View>
 
       <View style={stepStyles.fieldGroup}>
-        <Text style={stepStyles.fieldLabel}>회차당 중심글 수</Text>
+        <View style={stepStyles.labelRow}>
+          <Text style={stepStyles.fieldLabel}>회차당 중심글 수</Text>
+          <SpaceInfoNote variant="popup" text={SpaceCopy.centerCount_what} />
+        </View>
         <Stepper
           value={form.defaultCenterCount}
           min={1}
@@ -654,6 +680,8 @@ function ConfirmStep({
     <View style={stepStyles.container}>
       <Text style={stepStyles.stepTitle}>생성 확인</Text>
       <Text style={stepStyles.stepDesc}>입력한 내용을 확인하고 공간을 만들어요.</Text>
+
+      <SpaceInfoNote variant="inline" text={SpaceCopy.create_afterCreate} />
 
       <View style={confirmStyles.block}>
         <View style={confirmStyles.blockEditRow}>
@@ -873,6 +901,11 @@ const stepStyles = StyleSheet.create({
     color: Colors.zinc500,
     lineHeight: 18,
     marginTop: 4,
+  },
+  labelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
 });
 
