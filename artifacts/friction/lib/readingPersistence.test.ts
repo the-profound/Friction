@@ -1,0 +1,59 @@
+import { describe, expect, it } from "vitest";
+import {
+  advancePage,
+  clampReadingPage,
+  createInitialSession,
+  getProgress,
+  getVisualReadingPage,
+  goToPreviousPage,
+  isCurrentReadingPagerTransition,
+  isLastPage,
+} from "./readingPersistence";
+
+describe("reader virtual-page bounds", () => {
+  it("keeps stale session pages within the letter-plus-question range", () => {
+    expect(clampReadingPage(-4, 3)).toBe(0);
+    expect(clampReadingPage(99, 3)).toBe(3);
+    expect(clampReadingPage(Number.NaN, 3)).toBe(0);
+    expect(clampReadingPage(2.8, 3)).toBe(2);
+  });
+
+  it("keeps the completion screen as the only page after the question card", () => {
+    expect(getVisualReadingPage(-1, 3, false)).toBe(0);
+    expect(getVisualReadingPage(99, 3, false)).toBe(3);
+    expect(getVisualReadingPage(1, 3, true)).toBe(4);
+    expect(getVisualReadingPage(1, 0, true)).toBe(0);
+  });
+
+  it("normalizes corrupted positions while moving at either end", () => {
+    const tooFarForward = createInitialSession("article", "basic", 3, {
+      currentPage: 99,
+      scrollPosition: 0,
+    });
+    expect(tooFarForward.position.currentPage).toBe(3);
+    expect(goToPreviousPage(tooFarForward).position.currentPage).toBe(2);
+
+    const tooFarBackward = {
+      ...tooFarForward,
+      position: { ...tooFarForward.position, currentPage: -4 },
+    };
+    expect(advancePage(tooFarBackward).position.currentPage).toBe(1);
+  });
+
+  it("does not treat an empty article as complete or report negative progress", () => {
+    expect(isLastPage(0, 0)).toBe(false);
+    expect(getProgress(-10, 4)).toBe(0.25);
+    expect(getProgress(10, 4)).toBe(1);
+    expect(getProgress(0, 0)).toBe(0);
+  });
+
+  it("rejects an in-flight turn when the reader's virtual-page topology changes", () => {
+    expect(isCurrentReadingPagerTransition(4, 5, 4, 5)).toBe(true);
+    expect(isCurrentReadingPagerTransition(6, 5, 6, 5)).toBe(true);
+    // A former last-letter page can become the question page after a shrink.
+    expect(isCurrentReadingPagerTransition(4, 5, 3, 3)).toBe(false);
+    expect(isCurrentReadingPagerTransition(4, 5, 4, 5)).toBe(true);
+    expect(isCurrentReadingPagerTransition(4, 5, 5, 5)).toBe(false);
+    expect(isCurrentReadingPagerTransition(7, 5, 7, 5)).toBe(false);
+  });
+});

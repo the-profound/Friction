@@ -45,3 +45,4 @@
 - [Friction startup crash diagnostics](friction-startup-crash-diagnostics.md) — ASC crash-log API doesn't add the JS exception reason; capture it yourself via ErrorUtils + sync expo-file-system write from index.js before RCTFatal aborts.
 - [Friction dev-tunnel API domain](friction-dev-tunnel-api-domain.md) — EXPO_PUBLIC_DOMAIN must be the deployed API (friction-1.replit.app), never the ngrok domain; ngrok only tunnels Metro.
 - [EAS build environment isolation](friction-eas-build-env.md) — Replit Secrets are not automatically available to EAS Cloud builds; configure each Expo project/environment explicitly.
+- [Friction gesture native-module capture](friction-gesture-native-module-capture.md) — Reanimated can serialize gesture closures before `runOnJS`; never let them capture React Native native modules.

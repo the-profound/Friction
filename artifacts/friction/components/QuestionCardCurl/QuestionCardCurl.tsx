@@ -175,6 +175,7 @@ function QuestionCardCurlInner({
   const pos = useSharedValue(0);
   const scrollOffsetSV = useSharedValue(0);
   const cursorSV = useSharedValue(0);
+  const questionCountSV = useSharedValue(questionCount);
   const animatingSV = useSharedValue(0);
   const keyboardVisibleSV = useSharedValue(0);
   const contentHeightSV = useSharedValue(0);
@@ -205,6 +206,34 @@ function QuestionCardCurlInner({
     }
   }, [maskActiveSV, setMask]);
 
+  // Questions may arrive after the fallback deck is already open, and the
+  // server can legitimately return fewer questions. Keep both React state and
+  // UI-thread values inside the current list so a late animation callback can
+  // never point beyond the rendered deck.
+  useEffect(() => {
+    questionCountSV.value = questionCount;
+    const maxCursor = Math.max(0, questionCount - 1);
+    const clampedCursor = Math.min(Math.max(cursor, 0), maxCursor);
+    if (clampedCursor === cursor) return;
+
+    cursorSV.value = clampedCursor;
+    pos.value = clampedCursor;
+    scrollOffsetSV.value = 0;
+    maskActiveSV.value = 0;
+    animatingSV.value = 0;
+    setMaskActive(false);
+    setCursor(clampedCursor);
+  }, [
+    animatingSV,
+    cursor,
+    cursorSV,
+    maskActiveSV,
+    pos,
+    questionCount,
+    questionCountSV,
+    scrollOffsetSV,
+  ]);
+
   /* ── 키보드 회피 ────────────────────────────────────────────────────
    * 질문 카드 단계에서는 리더 프레임 전체를 축소하지 않는다(읽기 본문 단계의
    * 단상 시트 축소와 분리). 대신 덱 전체를 키보드 높이만큼 위로 이동시켜
@@ -227,10 +256,19 @@ function QuestionCardCurlInner({
     });
   }, []);
 
-  // Worklet 클로저에 `Keyboard`(KeyboardImpl) 객체가 캡처되면 Reanimated가
-  // UI 스레드로 직렬화할 때 "Cannot copy value of type KeyboardImpl" 오류가
-  // 발생한다. JS 스레드 전용 래퍼를 정의해 runOnJS에 이 함수만 넘긴다.
-  const kbDismiss = useCallback(() => { Keyboard.dismiss(); }, []);
+  // No gesture callback may capture `Keyboard` (KeyboardImpl): Reanimated
+  // serializes those closures before choosing their runtime. Gestures only
+  // increment this request; a normal React effect is the sole place that
+  // touches the native Keyboard module.
+  const [keyboardDismissRequest, setKeyboardDismissRequest] = useState(0);
+  const requestKeyboardDismiss = useCallback(() => {
+    setKeyboardDismissRequest((request) => request + 1);
+  }, []);
+  useEffect(() => {
+    if (keyboardDismissRequest > 0) {
+      Keyboard.dismiss();
+    }
+  }, [keyboardDismissRequest]);
 
   const applyKeyboardOffset = useCallback((keyboardTop: number) => {
     const timing = { duration: 260, easing: Easing.out(Easing.cubic) };
@@ -289,25 +327,29 @@ function QuestionCardCurlInner({
    * pos는 이미 목표 정수값에 도달해 있으므로 리셋하지 않는다. cursor 상태만
    * 갱신하면 렌더 윈도우가 이동하고, 화면상 아무것도 튀지 않는다.        */
   const commitMove = useCallback((next: number) => {
-    cursorSV.value = next;
-    setCursor(next);
+    const maxCursor = Math.max(0, questionCountRef.current - 1);
+    const clampedCursor = Math.min(Math.max(next, 0), maxCursor);
+    cursorSV.value = clampedCursor;
+    pos.value = clampedCursor;
+    setCursor(clampedCursor);
     scrollOffsetSV.value = 0;
     maskActiveSV.value = 0;
     setMaskActive(false);
     animatingSV.value = 0;
-  }, [scrollOffsetSV, cursorSV, animatingSV, maskActiveSV]);
+  }, [scrollOffsetSV, cursorSV, pos, animatingSV, maskActiveSV]);
 
   /* ── 정착 애니메이션 ─────────────────────────────────────────────────
    * worklet — UI 스레드(제스처)와 JS 스레드(탭) 양쪽에서 호출된다.        */
   const settleTo = useCallback((delta: -1 | 0 | 1) => {
     "worklet";
-    const cur = cursorSV.value;
-    if (delta === 0) {
+    const maxCursor = Math.max(0, questionCountSV.value - 1);
+    const cur = Math.min(Math.max(cursorSV.value, 0), maxCursor);
+    const target = Math.min(Math.max(cur + delta, 0), maxCursor);
+    if (delta === 0 || target === cur) {
       /* 취소: 현재 카드로 스프링 복귀 */
       pos.value = withSpring(cur, { damping: 30, stiffness: 250 });
       return;
     }
-    const target = cur + delta;
     animatingSV.value = 1;
     pos.value = withTiming(target, {
       duration: SLIDE_DURATION,
@@ -316,7 +358,7 @@ function QuestionCardCurlInner({
       /* 취소되더라도 커밋은 반드시 실행 (finished 게이트 금지) */
       runOnJS(commitMove)(target);
     });
-  }, [pos, commitMove, cursorSV, animatingSV]);
+  }, [pos, commitMove, cursorSV, questionCountSV, animatingSV]);
 
   const settleToRef = useRef(settleTo);
   settleToRef.current = settleTo;
@@ -348,7 +390,7 @@ function QuestionCardCurlInner({
         .onEnd((e) => {
           if (animatingSV.value === 1) return;
           if (keyboardVisibleRef.current) {
-            Keyboard.dismiss();
+            requestKeyboardDismiss();
             return;
           }
           // 중앙 카드가 차지하는 수직 범위
@@ -361,7 +403,7 @@ function QuestionCardCurlInner({
             settleToRef.current(1);
           }
         }),
-    [keyboardVisibleRef, screenHeight, cardSmallH, animatingSV, cursorSV],
+    [keyboardVisibleRef, screenHeight, cardSmallH, animatingSV, cursorSV, requestKeyboardDismiss],
   );
 
   /* ── Pan gesture (수직 전용) ──────────────────────────────────────────
@@ -466,7 +508,7 @@ function QuestionCardCurlInner({
           /* ── 키보드 열린 상태 ────────────────────────────────────── */
           if (keyboardVisibleSV.value === 1) {
             if (dy > 0) {
-              runOnJS(kbDismiss)();
+              runOnJS(requestKeyboardDismiss)();
             } else if (gestureScrolledSV.value === 1) {
               scrollOffsetSV.value = withSpring(scrollOffsetSV.value, { damping: 20, stiffness: 300 });
             }
@@ -479,7 +521,10 @@ function QuestionCardCurlInner({
             scrollOffsetSV.value = withSpring(scrollOffsetSV.value, { damping: 20, stiffness: 300 });
             setMaskState(scrollOffsetSV.value !== 0);
             settleTo(0);
-          } else if (dy < -THRESHOLD && cursorSV.value < questionCount - 1) {
+          } else if (
+            dy < -THRESHOLD
+            && cursorSV.value < Math.max(0, questionCountSV.value - 1)
+          ) {
             settleTo(1);
           } else if (dy > THRESHOLD && cursorSV.value > 0) {
             settleTo(-1);
@@ -509,8 +554,8 @@ function QuestionCardCurlInner({
       maskActiveSV,
       setMaskState,
       settleTo,
-      questionCount,
-      kbDismiss,
+      questionCountSV,
+      requestKeyboardDismiss,
     ],
   );
 

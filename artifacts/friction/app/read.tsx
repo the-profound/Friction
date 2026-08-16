@@ -83,6 +83,11 @@ import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
 import { useUser } from "@/contexts/UserContext";
 import { useActiveReading } from "@/contexts/ActiveReadingContext";
 import type { ReadingMode } from "@/lib/policies";
+import {
+  clampReadingPage,
+  getVisualReadingPage,
+  isCurrentReadingPagerTransition,
+} from "@/lib/readingPersistence";
 import { useToast } from "@/contexts/ToastContext";
 
 // Horizontal padding on each side of the reader card so the drop-shadow is
@@ -226,11 +231,14 @@ export default function ReadScreen() {
     teamCollectionId,
   });
 
-  const currentPage = totalPages > 0
-    ? Math.min(reading.session.position.currentPage, totalPages)
-    : reading.session.position.currentPage;
+  // `totalPages` is the question-card virtual page. Never let a stale saved
+  // value fall outside [0, totalPages] and reach the pager slot calculations.
+  const currentPage = clampReadingPage(reading.session.position.currentPage, totalPages);
   const isOnCoverPage = currentPage === 0;
-  const contentPageIndex = Math.max(0, currentPage - 1);
+  const contentPageIndex = Math.min(
+    Math.max(0, currentPage - 1),
+    Math.max(0, contentPages.length - 1),
+  );
   // completeScreenVisible: true = 읽기 완료 화면이 슬롯으로 열려 있음
   // (visualPage 계산보다 먼저 선언해야 참조 오류가 생기지 않는다)
   const [completeScreenVisible, setCompleteScreenVisible] = useState(false);
@@ -246,7 +254,7 @@ export default function ReadScreen() {
   }, [deferPrevMount]);
   const [readingCompleteCaseType, setReadingCompleteCaseType] = useState<"answered" | "read">("read");
   // 단일 페이저: letter pages [0..totalPages-1], Q카드 [totalPages], 완독화면 [totalPages+1]
-  const visualPage = completeScreenVisible ? totalPages + 1 : currentPage;
+  const visualPage = getVisualReadingPage(currentPage, totalPages, completeScreenVisible);
   const isOnLastLetterPage = totalPages > 0 && visualPage === totalPages - 1;
   // 모든 글은 표지 페이지를 가진다(명시적 표지가 없으면 기본 표지로 자동 생성).
   // 페이지 0은 항상 표지 슬롯이므로 빈 슬롯/점프 hack/스와이프 차단이 필요 없다.
@@ -839,7 +847,9 @@ export default function ReadScreen() {
   const showingCover = hasCover && currentPage === 0;
 
   const handleSwipeLeft = useCallback(() => {
-    if (!canNavigate) return;
+    // Only actual letter pages may advance the reading session. The question
+    // card and completion screen have their own virtual-page transitions.
+    if (!canNavigate || currentPage < 0 || currentPage >= totalPages) return;
     const dwellMs = Date.now() - pageEnterTimeRef.current;
     if (showingCover) {
       reading.nextPage();
@@ -858,7 +868,7 @@ export default function ReadScreen() {
   }, [canNavigate, showingCover, reading, articleId, currentPage, totalPages, contentPages, contentPageIndex]);
 
   const handleSwipeRight = useCallback(() => {
-    if (!canNavigate) return;
+    if (!canNavigate || currentPage <= 0 || currentPage > totalPages) return;
     const dwellMs = Date.now() - pageEnterTimeRef.current;
     trackPageTurn({
       articleId,
@@ -870,7 +880,7 @@ export default function ReadScreen() {
       pageCharCount: contentPages[contentPageIndex]?.length,
     });
     reading.prevPage();
-  }, [canNavigate, hasCover, currentPage, reading, articleId, totalPages, contentPages, contentPageIndex]);
+  }, [canNavigate, currentPage, reading, articleId, totalPages, contentPages, contentPageIndex]);
 
   const handleSwipeLeftRef = useRef(handleSwipeLeft);
   const handleSwipeRightRef = useRef(handleSwipeRight);
@@ -932,9 +942,9 @@ export default function ReadScreen() {
   useEffect(() => { hasCoverRef.current = hasCover; }, [hasCover]);
   // stale-closure-safe refs for gesture handler
   const visualPageRef = useRef(visualPage);
-  useEffect(() => { visualPageRef.current = visualPage; }, [visualPage]);
+  useLayoutEffect(() => { visualPageRef.current = visualPage; }, [visualPage]);
   const totalPagesRef = useRef(totalPages);
-  useEffect(() => { totalPagesRef.current = totalPages; }, [totalPages]);
+  useLayoutEffect(() => { totalPagesRef.current = totalPages; }, [totalPages]);
   const completeScreenVisibleRef = useRef(completeScreenVisible);
   useEffect(() => { completeScreenVisibleRef.current = completeScreenVisible; }, [completeScreenVisible]);
 
@@ -1032,42 +1042,67 @@ export default function ReadScreen() {
     isCarouselBackward: visualPage >= totalPages,
   };
   const isCommittingRef = useRef(false);
+  const pageTurnGenerationRef = useRef(0);
+  const committedTotalPagesRef = useRef(totalPages);
+  useLayoutEffect(() => {
+    if (committedTotalPagesRef.current === totalPages) return;
+
+    committedTotalPagesRef.current = totalPages;
+    // The existing slot-reset layout effect restores the visual positions.
+    // Invalidate the old callback so it cannot reinterpret a new page topology.
+    pageTurnGenerationRef.current += 1;
+    isCommittingRef.current = false;
+    activeSwipeRef.current = null;
+  }, [totalPages]);
 
   // Callbacks invoked via runOnJS after UI-thread animation completes
-  const finishPageTurnRef = useRef((_direction: -1 | 1) => {});
+  const finishPageTurnRef = useRef((
+    _direction: -1 | 1,
+    _sourceVisualPage: number,
+    _sourceTotalPages: number,
+    _generation: number,
+  ) => {});
   const openMemoRef = useRef(() => {});
   useEffect(() => {
-    finishPageTurnRef.current = (direction: -1 | 1) => {
+    finishPageTurnRef.current = (
+      direction: -1 | 1,
+      sourceVisualPage: number,
+      sourceTotalPages: number,
+      generation: number,
+    ) => {
+      // A newer gesture or a data-driven page-count change owns the pager now.
+      if (generation !== pageTurnGenerationRef.current) return;
       isCommittingRef.current = false;
       activeSwipeRef.current = null;
+      const vp = visualPageRef.current;
+      const tp = totalPagesRef.current;
+      if (!isCurrentReadingPagerTransition(sourceVisualPage, sourceTotalPages, vp, tp)) {
+        return;
+      }
+
       if (direction === -1) {
-        // Forward: check if we're committing letter→Q-card or Q-card→complete
-        const vp = visualPageRef.current;
-        const tp = totalPagesRef.current;
-        if (vp === tp - 1) {
+        if (sourceVisualPage === sourceTotalPages - 1) {
           // last letter page → Q-card: advance reading session
           handleSwipeLeftRef.current();
-        } else if (vp === tp) {
+        } else if (sourceVisualPage === sourceTotalPages) {
           // Q-card → complete screen: determine case type from answered cards
           const answeredCards = questionCardRef.current?.getAnsweredCards() ?? [];
           const hasSubstantialAnswer = answeredCards.some((c) => c.answer.trim().length > 0);
           setReadingCompleteCaseType(hasSubstantialAnswer ? "answered" : "read");
           setCompleteScreenVisible(true);
-        } else {
+        } else if (sourceVisualPage >= 0 && sourceVisualPage < sourceTotalPages - 1) {
           handleSwipeLeftRef.current();
         }
       } else {
         // Backward: 리매핑 커밋에서 새 prev 콘텐츠 마운트를 1커밋 지연 (번쩍임 방지)
         setDeferPrevMount(true);
-        const vp = visualPageRef.current;
-        const tp = totalPagesRef.current;
-        if (vp === tp + 1) {
+        if (sourceVisualPage === sourceTotalPages + 1) {
           // complete screen → Q-card
           setCompleteScreenVisible(false);
-        } else if (vp === tp) {
+        } else if (sourceVisualPage === sourceTotalPages) {
           // Q-card → last letter page: go back in reading session
           handleSwipeRightRef.current();
-        } else {
+        } else if (sourceVisualPage > 0 && sourceVisualPage < sourceTotalPages) {
           handleSwipeRightRef.current();
         }
       }
@@ -1083,15 +1118,30 @@ export default function ReadScreen() {
   useEffect(() => {
     triggerProgrammaticForwardRef.current = () => {
       if (isCommittingRef.current) return;
+      const currentVisualPage = visualPageRef.current;
+      const currentTotalPages = totalPagesRef.current;
+      if (
+        currentTotalPages <= 0
+        || currentVisualPage !== currentTotalPages - 1
+      ) {
+        return;
+      }
       const W = containerWidthRef.current || 300;
       isCommittingRef.current = true;
+      const generation = pageTurnGenerationRef.current + 1;
+      pageTurnGenerationRef.current = generation;
       const easing = Easing.bezier(0.25, 0.46, 0.45, 0.94);
       // 프로그래매틱 전진: Q-카드가 우측에서 들어오므로 게이트 오픈
       qCardOpacitySV.value = 1;
       // Same displacement (W+GAP) for both slots ⇒ constant carousel gap.
       nextSlotSV.value = withTiming(0, { duration: 320, easing });
       currentSlotSV.value = withTiming(-(W + CAROUSEL_GAP), { duration: 320, easing }, () => {
-        runOnJS(finishPageTurnRef.current)(-1);
+        runOnJS(finishPageTurnRef.current)(
+          -1,
+          currentVisualPage,
+          currentTotalPages,
+          generation,
+        );
       });
     };
   });
@@ -1256,7 +1306,23 @@ export default function ReadScreen() {
       }
 
       const direction: -1 | 1 = goingNext ? -1 : 1;
+      const sourceVisualPage = visualPageRef.current;
+      const sourceTotalPages = totalPagesRef.current;
+      if (
+        !isCurrentReadingPagerTransition(
+          sourceVisualPage,
+          sourceTotalPages,
+          sourceVisualPage,
+          sourceTotalPages,
+        )
+      ) {
+        if (goingNext) snapForward();
+        else snapBackward();
+        return;
+      }
       isCommittingRef.current = true;
+      const generation = pageTurnGenerationRef.current + 1;
+      pageTurnGenerationRef.current = generation;
 
       const SLIDE_EASING = Easing.bezier(0.25, 0.46, 0.45, 0.94);
       if (direction === -1) {
@@ -1268,10 +1334,24 @@ export default function ReadScreen() {
           // displacement + same duration/easing ⇒ gap stays constant, never touches.
           nextSlotSV.value = withTiming(0, { duration: 240, easing: SLIDE_EASING });
           currentSlotSV.value = withTiming(-(W + CAROUSEL_GAP), { duration: 240, easing: SLIDE_EASING },
-            () => { runOnJS(finishPageTurnRef.current)(direction); });
+            () => {
+              runOnJS(finishPageTurnRef.current)(
+                direction,
+                sourceVisualPage,
+                sourceTotalPages,
+                generation,
+              );
+            });
         } else {
           currentSlotSV.value = withTiming(-(W + PARK_EXTRA), { duration: 240, easing: SLIDE_EASING },
-            () => { runOnJS(finishPageTurnRef.current)(direction); });
+            () => {
+              runOnJS(finishPageTurnRef.current)(
+                direction,
+                sourceVisualPage,
+                sourceTotalPages,
+                generation,
+              );
+            });
         }
       } else {
         // Backward commit: prev always enters center.
@@ -1288,7 +1368,7 @@ export default function ReadScreen() {
         const isCarouselBwd = gs.isCarouselBackward;
         // 편지 페이지로 되돌아가는 커밋이면(Q-카드 → 마지막 편지 페이지),
         // 리매핑이 일어나기 전에 UI 스레드에서 미리 Q-카드를 감춘다.
-        const hidesQCard = isCarouselBwd && visualPageRef.current === totalPagesRef.current;
+        const hidesQCard = isCarouselBwd && sourceVisualPage === sourceTotalPages;
         prevSlotSV.value = withTiming(0, { duration: 240, easing: SLIDE_EASING }, () => {
           // 편지 페이지(top layer)가 중앙에 완전히 도달한 뒤에 currentSlotSV를 0으로 리셋.
           // 이 순서를 지키면 Q-카드가 편지 페이지 아래에 가려진 채로 스냅되므로
@@ -1297,7 +1377,12 @@ export default function ReadScreen() {
           // 리매핑(스타일 교체) 전에 게이트를 닫아 두면, detach/attach 프레임에
           // Q-카드가 중앙으로 그려지더라도 투명해서 보이지 않는다.
           if (hidesQCard) qCardOpacitySV.value = 0;
-          runOnJS(finishPageTurnRef.current)(direction);
+          runOnJS(finishPageTurnRef.current)(
+            direction,
+            sourceVisualPage,
+            sourceTotalPages,
+            generation,
+          );
         });
       }
     })

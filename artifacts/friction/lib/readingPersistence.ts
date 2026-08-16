@@ -20,6 +20,67 @@ export interface ReadingSession {
   position: ReadingPosition;
 }
 
+/**
+ * Normalizes a reader page index. The reader reserves `totalPages` as the
+ * question-card virtual page, so it is intentionally included in the range.
+ * Keeping this normalization here makes stale persisted positions harmless
+ * before they reach the reader pager.
+ */
+export function clampReadingPage(currentPage: number, totalPages: number): number {
+  const safeTotalPages = Number.isFinite(totalPages)
+    ? Math.max(0, Math.floor(totalPages))
+    : 0;
+  const safeCurrentPage = Number.isFinite(currentPage)
+    ? Math.floor(currentPage)
+    : 0;
+  return Math.min(safeTotalPages, Math.max(0, safeCurrentPage));
+}
+
+/**
+ * Maps the reading-session page to the single pager's visible page. Letter
+ * pages and the question card share the session index; the completion screen
+ * is the one additional virtual page.
+ */
+export function getVisualReadingPage(
+  currentPage: number,
+  totalPages: number,
+  completeScreenVisible: boolean,
+): number {
+  const safeTotalPages = Number.isFinite(totalPages)
+    ? Math.max(0, Math.floor(totalPages))
+    : 0;
+  if (safeTotalPages === 0) return 0;
+  return completeScreenVisible
+    ? safeTotalPages + 1
+    : clampReadingPage(currentPage, safeTotalPages);
+}
+
+/**
+ * An in-flight pager animation is valid only while the virtual-page topology
+ * it started from is still current. A page-count change can otherwise turn a
+ * last-letter transition into a question/completion transition before its
+ * animation callback reaches JS.
+ */
+export function isCurrentReadingPagerTransition(
+  sourceVisualPage: number,
+  sourceTotalPages: number,
+  currentVisualPage: number,
+  currentTotalPages: number,
+): boolean {
+  const safeSourceTotalPages = Number.isFinite(sourceTotalPages)
+    ? Math.max(0, Math.floor(sourceTotalPages))
+    : 0;
+  const safeCurrentTotalPages = Number.isFinite(currentTotalPages)
+    ? Math.max(0, Math.floor(currentTotalPages))
+    : 0;
+  return safeSourceTotalPages > 0
+    && safeSourceTotalPages === safeCurrentTotalPages
+    && Number.isInteger(sourceVisualPage)
+    && sourceVisualPage >= 0
+    && sourceVisualPage <= safeSourceTotalPages + 1
+    && sourceVisualPage === currentVisualPage;
+}
+
 const TRANSITIONS: Record<ReadingSessionState, ReadingSessionState[]> = {
   IDLE: ["READING"],
   READING: ["PAUSED", "COMPLETED_READY"],
@@ -69,8 +130,11 @@ export function isReading(state: ReadingSessionState): boolean {
 }
 
 export function getProgress(currentPage: number, totalPages: number): number {
-  if (totalPages <= 0) return 0;
-  return Math.min(1, (currentPage + 1) / totalPages);
+  const safeTotalPages = Number.isFinite(totalPages)
+    ? Math.max(0, Math.floor(totalPages))
+    : 0;
+  if (safeTotalPages <= 0) return 0;
+  return Math.min(1, (clampReadingPage(currentPage, safeTotalPages) + 1) / safeTotalPages);
 }
 
 export function shouldShowExitUI(mode: ReadingMode): boolean {
@@ -78,7 +142,11 @@ export function shouldShowExitUI(mode: ReadingMode): boolean {
 }
 
 export function isLastPage(currentPage: number, totalPages: number): boolean {
-  return currentPage >= totalPages - 1;
+  const safeTotalPages = Number.isFinite(totalPages)
+    ? Math.max(0, Math.floor(totalPages))
+    : 0;
+  return safeTotalPages > 0
+    && clampReadingPage(currentPage, safeTotalPages) >= safeTotalPages - 1;
 }
 
 export function createInitialSession(
@@ -92,7 +160,7 @@ export function createInitialSession(
     mode,
     state: "IDLE",
     position: {
-      currentPage: savedPosition?.currentPage ?? 0,
+      currentPage: clampReadingPage(savedPosition?.currentPage ?? 0, totalPages),
       scrollPosition: savedPosition?.scrollPosition ?? 0,
       totalPages,
     },
@@ -101,14 +169,20 @@ export function createInitialSession(
 
 export function advancePage(session: ReadingSession): ReadingSession {
   const { position } = session;
-  if (position.currentPage >= position.totalPages) {
-    return session;
+  const currentPage = clampReadingPage(position.currentPage, position.totalPages);
+  if (currentPage >= position.totalPages) {
+    return currentPage === position.currentPage
+      ? session
+      : {
+          ...session,
+          position: { ...position, currentPage, scrollPosition: 0 },
+        };
   }
   return {
     ...session,
     position: {
       ...position,
-      currentPage: position.currentPage + 1,
+      currentPage: currentPage + 1,
       scrollPosition: 0,
     },
   };
@@ -116,12 +190,20 @@ export function advancePage(session: ReadingSession): ReadingSession {
 
 export function goToPreviousPage(session: ReadingSession): ReadingSession {
   const { position } = session;
-  if (position.currentPage <= 0) return session;
+  const currentPage = clampReadingPage(position.currentPage, position.totalPages);
+  if (currentPage <= 0) {
+    return currentPage === position.currentPage
+      ? session
+      : {
+          ...session,
+          position: { ...position, currentPage, scrollPosition: 0 },
+        };
+  }
   return {
     ...session,
     position: {
       ...position,
-      currentPage: position.currentPage - 1,
+      currentPage: currentPage - 1,
       scrollPosition: 0,
     },
   };

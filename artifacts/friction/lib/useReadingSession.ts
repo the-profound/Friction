@@ -13,6 +13,7 @@ import {
   transitionSession,
   isLastPage,
   getProgress,
+  clampReadingPage,
   shouldBlockExit,
   shouldShowExitUI,
 } from "./readingPersistence";
@@ -92,7 +93,11 @@ export function useReadingSession({
       if (prev.position.totalPages === totalPages) return prev;
       return {
         ...prev,
-        position: { ...prev.position, totalPages },
+        position: {
+          ...prev.position,
+          currentPage: clampReadingPage(prev.position.currentPage, totalPages),
+          totalPages,
+        },
       };
     });
   }, [totalPages]);
