@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 
 import { Colors, Sizing, Spacing, Typography } from "@/constants/tokens";
@@ -65,13 +65,6 @@ function describeApiError(e: unknown, fallback: string): string {
 
 type SectionKey = "neighbors" | "requests" | "sent";
 
-interface ProfileTarget {
-  nickname: string;
-  email: string;
-  id: string;
-  joinedAt?: string;
-}
-
 interface NeighborsInlineProps {
   initialSection?: SectionKey;
   /** Bumps when an external trigger (e.g. parent screen) wants to focus the requests section. */
@@ -83,6 +76,7 @@ export function NeighborsInline({
   focusRequestsSignal,
 }: NeighborsInlineProps) {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const navBottom = useNavBarBottomSafeArea();
   const { userId } = useUser();
   const queryClient = useQueryClient();
@@ -93,7 +87,6 @@ export function NeighborsInline({
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [rejectTarget, setRejectTarget] = useState<{ id: string; name: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
-  const [profileTarget, setProfileTarget] = useState<ProfileTarget | null>(null);
   const [sendingToUserId, setSendingToUserId] = useState<string | null>(null);
   const [cancelTarget, setCancelTarget] = useState<{ id: string; name: string } | null>(null);
 
@@ -245,14 +238,12 @@ export function NeighborsInline({
     [deleteNeighborRequest, searchResults, sentRequestsQuery],
   );
 
-  const handleNeighborPress = useCallback((item: NeighborWithUser) => {
-    setProfileTarget({
-      nickname: item.user?.nickname ?? "이름 없음",
-      email: item.user?.email ?? "",
-      id: item.neighborUserId,
-      joinedAt: item.acceptedAt ? new Date(item.acceptedAt).toLocaleDateString("ko-KR") : undefined,
-    });
-  }, []);
+  const handleNeighborPress = useCallback(
+    (item: NeighborWithUser) => {
+      router.push(`/user-profile/${item.neighborUserId}`);
+    },
+    [router],
+  );
 
   const handleDeleteNeighborConfirm = useCallback(async () => {
     if (!deleteTarget || removeNeighbor.isPending) return;
@@ -675,32 +666,6 @@ export function NeighborsInline({
         onCancel={() => setCancelTarget(null)}
       />
 
-      <BottomSheet
-        visible={profileTarget !== null}
-        onClose={() => setProfileTarget(null)}
-        title="이웃 프로필"
-        snapPoints={[0.4]}
-      >
-        {profileTarget && (
-          <View style={styles.profileContent}>
-            <View style={styles.profileAvatarLarge}>
-              <Feather name="user" size={36} color={Colors.zinc500} />
-            </View>
-            <Text style={styles.profileName}>{profileTarget.nickname}</Text>
-            <Text style={styles.profileEmail}>{profileTarget.email}</Text>
-            {profileTarget.joinedAt ? (
-              <Text style={styles.profileJoined}>이웃이 된 날: {profileTarget.joinedAt}</Text>
-            ) : null}
-            <View style={styles.profileIdRow}>
-              <Text style={styles.profileIdLabel}>ID</Text>
-              <Text style={styles.profileIdValue} selectable>
-                {profileTarget.id}
-              </Text>
-            </View>
-          </View>
-        )}
-      </BottomSheet>
-
       <ScalePressable
         style={[styles.fab, { bottom: insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + Spacing.xl }]}
         onPress={() => setAddSheetVisible(true)}
@@ -958,60 +923,5 @@ const styles = StyleSheet.create({
   },
   statusBadgePendingText: {
     color: Colors.zinc500,
-  },
-  profileContent: {
-    alignItems: "center",
-    paddingVertical: 16,
-    gap: 8,
-  },
-  profileAvatarLarge: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: Colors.zinc100,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 4,
-  },
-  profileAvatarLargeText: {
-    ...Typography.bodySemiBold,
-    fontSize: 24,
-    color: Colors.zinc600,
-  },
-  profileName: {
-    ...Typography.bodySemiBold,
-    fontSize: 18,
-    color: Colors.zinc900,
-  },
-  profileEmail: {
-    ...Typography.body,
-    fontSize: 14,
-    color: Colors.zinc500,
-  },
-  profileJoined: {
-    ...Typography.caption,
-    fontSize: 12,
-    color: Colors.zinc400,
-    marginTop: 4,
-  },
-  profileIdRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginTop: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: Colors.zinc50,
-    borderRadius: 10,
-  },
-  profileIdLabel: {
-    ...Typography.bodySemiBold,
-    fontSize: 12,
-    color: Colors.zinc500,
-  },
-  profileIdValue: {
-    ...Typography.body,
-    fontSize: 12,
-    color: Colors.zinc600,
   },
 });
