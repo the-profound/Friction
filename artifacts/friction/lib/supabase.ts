@@ -166,7 +166,12 @@ const ExpoSecureStoreAdapter = {
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: ExpoSecureStoreAdapter,
-    autoRefreshToken: true,
+    // On React Native, the SDK refreshes an expired token while it initializes
+    // and logs a non-retryable refresh error before app code can handle it.
+    // AuthProvider restores and validates the session explicitly, then starts
+    // this refresher only while the app is active. Browser visibility handling
+    // remains the SDK default.
+    autoRefreshToken: Platform.OS === "web",
     persistSession: true,
     detectSessionInUrl: Platform.OS === "web",
   },

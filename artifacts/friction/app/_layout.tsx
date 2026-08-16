@@ -31,6 +31,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { setBaseUrl, setAuthTokenGetter } from "@workspace/api-client-react";
 import { uploadPendingCrashLogIfAny } from "@/lib/crashDiagnostics";
 import { supabase } from "@/lib/supabase";
+import { getCurrentAuthAccessToken } from "@/lib/authTokenStore";
 import { Colors } from "@/constants/tokens";
 import { Platform } from "react-native";
 import { ReaderTransitionProvider } from "@/contexts/ReaderTransitionContext";
@@ -53,16 +54,10 @@ if (process.env.EXPO_PUBLIC_DOMAIN) {
 uploadPendingCrashLogIfAny();
 
 setAuthTokenGetter(async () => {
-  try {
-    // supabase.auth.getSession() reads from SecureStore (TurboModule).
-    // Wrap so a native exception during session restore never propagates to the
-    // API client and crashes the app before it can reach the login screen.
-    const { data } = await supabase.auth.getSession();
-    return data.session?.access_token ?? null;
-  } catch (err) {
-    console.warn("[authTokenGetter] getSession failed — returning null:", err);
-    return null;
-  }
+  // AuthProvider is the single native restore authority. Do not read a
+  // persisted session here: that could race AppState handling and hand an
+  // expired token to an API request before recovery has finished.
+  return getCurrentAuthAccessToken();
 });
 
 // SplashScreen is a TurboModule call; guard it so a failure here doesn't abort

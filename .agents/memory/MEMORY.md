@@ -46,3 +46,4 @@
 - [Friction dev-tunnel API domain](friction-dev-tunnel-api-domain.md) — EXPO_PUBLIC_DOMAIN must be the deployed API (friction-1.replit.app), never the ngrok domain; ngrok only tunnels Metro.
 - [EAS build environment isolation](friction-eas-build-env.md) — Replit Secrets are not automatically available to EAS Cloud builds; configure each Expo project/environment explicitly.
 - [Friction gesture native-module capture](friction-gesture-native-module-capture.md) — Reanimated can serialize gesture closures before `runOnJS`; never let them capture React Native native modules.
+- [Friction native session recovery](friction-native-session-recovery.md) — native refresh must be app-active and explicitly resolved; API bearer tokens come only from validated in-memory state.
