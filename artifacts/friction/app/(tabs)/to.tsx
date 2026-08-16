@@ -23,7 +23,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetUser,
   useListArticles,
-  useListTeamCollections,
+  useListSpaces,
   useListSendRecords,
   useListNeighbors,
   useListUserArticleReads,
@@ -31,12 +31,13 @@ import {
   getGetArticleQueryKey,
   getGetUserQueryKey,
   getListArticlesQueryKey,
-  getListTeamCollectionsQueryKey,
+  getListSpacesQueryKey,
   getListSendRecordsQueryKey,
   getListNeighborsQueryKey,
 } from "@workspace/api-client-react";
 import { isQueryStale } from "@/lib/useScreenFocused";
-import type { Article, TeamCollectionWithRole, SendRecordWithDetails } from "@workspace/api-client-react";
+import type { Article, SpaceListItem, SendRecordWithDetails } from "@workspace/api-client-react";
+import { spaceStatusLabel, spaceStatusStyle } from "@/lib/spaceStatusStyle";
 import type { OriginLayout } from "@/components/CardSelectOverlay/CardSelectOverlay";
 
 // getListUserArticleReadsQueryKey is not in the compiled dist types — define locally.
@@ -45,12 +46,12 @@ const getListUserArticleReadsQueryKey = (params: { userId: string }) =>
   ["/api/user-article-reads", params] as const;
 
 
-type MyTab = "letters" | "publications" | "groups";
+type MyTab = "letters" | "publications" | "spaces";
 
 const MY_TABS: { key: MyTab; label: string }[] = [
   { key: "letters", label: "편지" },
   { key: "publications", label: "간행물" },
-  { key: "groups", label: "모임" },
+  { key: "spaces", label: "공간" },
 ];
 
 const GRID_PAD = 12;
@@ -76,14 +77,14 @@ export default function MyScreen() {
 
   const userQuery = useGetUser(userId);
   const articlesQuery = useListArticles({ authorId: userId });
-  const teamsQuery = useListTeamCollections({ userId });
+  const spacesQuery = useListSpaces({ userId });
   const sendRecordsQuery = useListSendRecords({ senderId: userId });
   const neighborsQuery = useListNeighbors({ userId });
   const userReadsQuery = useListUserArticleReads({ userId });
 
   const refetchUser = userQuery.refetch;
   const refetchArticles = articlesQuery.refetch;
-  const refetchTeams = teamsQuery.refetch;
+  const refetchSpaces = spacesQuery.refetch;
   const refetchSendRecords = sendRecordsQuery.refetch;
   const refetchNeighbors = neighborsQuery.refetch;
   const refetchUserReads = userReadsQuery.refetch;
@@ -95,8 +96,8 @@ export default function MyScreen() {
       if (isQueryStale(queryClient, getListArticlesQueryKey({ authorId: userId }))) {
         refetchArticles();
       }
-      if (isQueryStale(queryClient, getListTeamCollectionsQueryKey({ userId }))) {
-        refetchTeams();
+      if (isQueryStale(queryClient, getListSpacesQueryKey({ userId }))) {
+        refetchSpaces();
       }
       if (isQueryStale(queryClient, getListSendRecordsQueryKey({ senderId: userId }))) {
         refetchSendRecords();
@@ -107,7 +108,7 @@ export default function MyScreen() {
       if (isQueryStale(queryClient, getListUserArticleReadsQueryKey({ userId }))) {
         refetchUserReads();
       }
-    }, [queryClient, userId, refetchUser, refetchArticles, refetchTeams, refetchSendRecords, refetchNeighbors, refetchUserReads]),
+    }, [queryClient, userId, refetchUser, refetchArticles, refetchSpaces, refetchSendRecords, refetchNeighbors, refetchUserReads]),
   );
 
   const sendRecordByArticleId = useMemo<
@@ -150,9 +151,11 @@ export default function MyScreen() {
     });
   }, [articlesQuery.data, sendRecordByArticleId]);
 
-  const teams = useMemo<TeamCollectionWithRole[]>(() => {
-    return (teamsQuery.data ?? []) as TeamCollectionWithRole[];
-  }, [teamsQuery.data]);
+  const spaces = useMemo<SpaceListItem[]>(() => {
+    return ((spacesQuery.data ?? []) as SpaceListItem[]).filter(
+      (s) => s.status !== "ARCHIVED",
+    );
+  }, [spacesQuery.data]);
 
   const neighborCount = (neighborsQuery.data ?? []).length;
   const readCount = (userReadsQuery.data ?? []).length;
@@ -349,9 +352,9 @@ export default function MyScreen() {
     });
   }, [toChainArticles, startFadeToBlack, router]);
 
-  const handleGroupPress = useCallback(
-    (team: TeamCollectionWithRole) => {
-      router.push({ pathname: "/of-02-detail", params: { id: team.id } });
+  const handleSpacePress = useCallback(
+    (space: SpaceListItem) => {
+      router.push({ pathname: "/of-space-detail" as never, params: { id: space.id } });
     },
     [router],
   );
@@ -383,53 +386,54 @@ export default function MyScreen() {
     [cellWidth, handleLetterPress, selectedArticle?.id, collectionNameByArticleId, user?.nickname],
   );
 
-  const renderGroup = useCallback(
-    ({ item }: { item: TeamCollectionWithRole }) => (
-      <ScalePressable
-        style={styles.groupRow}
-        contentStyle={styles.groupRowContent}
-        onPress={() => handleGroupPress(item)}
-        accessibilityRole="button"
-        accessibilityLabel={item.name}
-      >
-        <View style={styles.groupIcon}>
-          <Feather name="share-2" size={20} color={Colors.zinc500} />
-        </View>
-        <View style={styles.groupTextWrap}>
-          <Text style={styles.groupTitle} numberOfLines={1}>
-            {item.name}
-          </Text>
-          <Text style={styles.groupMeta} numberOfLines={1}>
-            참여자 {item.memberCount ?? 0}명
-          </Text>
-        </View>
-        <View
-          style={[
-            styles.groupTag,
-            item.role === "OWNER" ? styles.groupTagOwner : styles.groupTagMember,
-          ]}
+  const renderSpace = useCallback(
+    ({ item }: { item: SpaceListItem }) => {
+      const statusStyle = spaceStatusStyle(item.status);
+      const statusText = spaceStatusLabel(item.status);
+      return (
+        <ScalePressable
+          style={styles.groupRow}
+          contentStyle={styles.groupRowContent}
+          onPress={() => handleSpacePress(item)}
+          accessibilityRole="button"
+          accessibilityLabel={item.name}
         >
-          <Text
+          <View style={styles.groupIcon}>
+            <Feather name="layers" size={20} color={Colors.zinc500} />
+          </View>
+          <View style={styles.groupTextWrap}>
+            <Text style={styles.groupTitle} numberOfLines={1}>
+              {item.name}
+            </Text>
+            <Text style={styles.groupMeta} numberOfLines={1}>
+              참여자 {item.participantCount}명
+            </Text>
+          </View>
+          <View
             style={[
-              styles.groupTagText,
-              item.role === "OWNER"
-                ? styles.groupTagTextOwner
-                : styles.groupTagTextMember,
+              styles.groupTag,
+              {
+                backgroundColor: statusStyle.backgroundColor,
+                borderColor: statusStyle.borderColor,
+                borderWidth: statusStyle.borderWidth,
+              },
             ]}
           >
-            {item.role === "OWNER" ? "소유자" : "멤버"}
-          </Text>
-        </View>
-      </ScalePressable>
-    ),
-    [handleGroupPress],
+            <Text style={[styles.groupTagText, { color: statusStyle.textColor }]}>
+              {statusText}
+            </Text>
+          </View>
+        </ScalePressable>
+      );
+    },
+    [handleSpacePress],
   );
 
   const renderEmpty = useCallback(
     (message: string, subtitle?: string) => {
       const loading =
         (myTab === "letters" && articlesQuery.isLoading) ||
-        (myTab === "groups" && teamsQuery.isLoading);
+        (myTab === "spaces" && spacesQuery.isLoading);
       if (loading) {
         return (
           <View style={styles.emptyWrap}>
@@ -444,7 +448,7 @@ export default function MyScreen() {
         </View>
       );
     },
-    [myTab, articlesQuery.isLoading, teamsQuery.isLoading],
+    [myTab, articlesQuery.isLoading, spacesQuery.isLoading],
   );
 
   const contentPadding = { paddingBottom: navBottom + 24 };
@@ -559,16 +563,13 @@ export default function MyScreen() {
           showsVerticalScrollIndicator={false}
         />
       )}
-      {myTab === "groups" && (
+      {myTab === "spaces" && (
         <FlatList
-          key="my-groups"
-          data={teams}
+          key="my-spaces"
+          data={spaces}
           keyExtractor={(item) => item.id}
-          renderItem={renderGroup}
-          ListEmptyComponent={renderEmpty(
-            "참여 중인 모임이 없어요",
-            "모임 탭에서 모임을 만들거나 참여해보세요",
-          )}
+          renderItem={renderSpace}
+          ListEmptyComponent={renderEmpty("참여 중인 공간이 없어요")}
           contentContainerStyle={contentPadding}
           showsVerticalScrollIndicator={false}
         />
