@@ -742,6 +742,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.zinc100,
     paddingHorizontal: GRID_PAD,
+    marginBottom: 8,
   },
   subTabItem: {
     flex: 1,
