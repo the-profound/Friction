@@ -81,15 +81,6 @@ router = "path"
 PORT = "3001"
 
 [[workflows.workflow]]
-name = "Friction Dev Tunnel"
-mode = "sequential"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pnpm --filter @workspace/friction dev:tunnel"
-
-[[workflows.workflow]]
 name = "Publish iOS"
 mode = "parallel"
 author = 56922764
@@ -106,6 +97,26 @@ author = 56922764
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash /home/runner/workspace/artifacts/friction/scripts/publish-dev.sh"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Touch Only This for Test"
+
+[[workflows.workflow]]
+name = "Touch Only This for Test"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm --filter @workspace/friction dev:tunnel"
+
+[workflows.workflow.metadata]
+outputType = "console"
 
 [agent]
 stack = "PNPM_WORKSPACE"
