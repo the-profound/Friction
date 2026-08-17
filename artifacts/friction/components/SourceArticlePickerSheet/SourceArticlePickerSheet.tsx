@@ -304,9 +304,9 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   currentCardLabel: {
-    fontSize: 11,
+    ...Typography.caption,
+    fontSize: 12,
     color: Colors.zinc500,
-    fontFamily: "Pretendard",
   },
   currentCardTitle: {
     ...Typography.body,
@@ -324,9 +324,9 @@ const styles = StyleSheet.create({
     borderColor: Colors.zinc300,
   },
   unlinkButtonText: {
+    ...Typography.body,
     fontSize: 13,
     color: Colors.zinc700,
-    fontFamily: "Pretendard",
   },
   searchRow: {
     flexDirection: "row",
@@ -341,10 +341,9 @@ const styles = StyleSheet.create({
     marginRight: 2,
   },
   searchInput: {
+    ...Typography.searchInput,
     flex: 1,
-    fontSize: 14,
     color: Colors.zinc900,
-    fontFamily: "Pretendard",
     padding: 0,
   },
   tabRow: {
@@ -364,13 +363,12 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.zinc900,
   },
   tabText: {
+    ...Typography.body,
     fontSize: 13,
     color: Colors.zinc500,
-    fontFamily: "Pretendard",
   },
   tabTextActive: {
     color: Colors.white,
-    fontFamily: "Pretendard",
   },
   loadingContainer: {
     flex: 1,
@@ -385,9 +383,9 @@ const styles = StyleSheet.create({
     paddingVertical: 24,
   },
   emptyText: {
+    ...Typography.body,
     fontSize: 14,
-    color: Colors.zinc400,
-    fontFamily: "Pretendard",
+    color: Colors.zinc500,
   },
   list: {
     flex: 1,
@@ -411,13 +409,13 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   listItemTitle: {
+    ...Typography.body,
     fontSize: 14,
     color: Colors.zinc900,
-    fontFamily: "Pretendard",
   },
   listItemSub: {
+    ...Typography.caption,
     fontSize: 12,
-    color: Colors.zinc400,
-    fontFamily: "Pretendard",
+    color: Colors.zinc500,
   },
 });

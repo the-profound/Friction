@@ -701,8 +701,8 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     ...Typography.caption,
-    fontSize: 11,
-    color: Colors.zinc400,
+    fontSize: 12,
+    color: Colors.zinc500,
     letterSpacing: -0.1,
   },
   statDivider: {
@@ -815,7 +815,7 @@ const styles = StyleSheet.create({
   groupMeta: {
     ...Typography.caption,
     fontSize: 12,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   groupTag: {
     paddingHorizontal: 8,
@@ -829,7 +829,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.zinc100,
   },
   groupTagText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
   },
   groupTagTextOwner: {

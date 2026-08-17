@@ -1623,7 +1623,7 @@ const styles = StyleSheet.create({
   errorSubText: {
     ...Typography.body,
     fontSize: 13,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     textAlign: "center",
     lineHeight: 18,
     marginTop: -4,
@@ -1673,7 +1673,7 @@ const styles = StyleSheet.create({
   },
   statusBadgeText: {
     ...Typography.caption,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
   },
   roleBadge: {
@@ -1684,7 +1684,7 @@ const styles = StyleSheet.create({
   },
   roleBadgeText: {
     ...Typography.caption,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
     color: Colors.white,
   },
@@ -1699,8 +1699,8 @@ const styles = StyleSheet.create({
   },
   anonBadgeText: {
     ...Typography.caption,
-    fontSize: 11,
-    color: Colors.zinc400,
+    fontSize: 12,
+    color: Colors.zinc500,
   },
   spaceName: {
     fontFamily: Platform.select({ ios: "Pretendard-Black", default: "Pretendard-Black" }),
@@ -1719,9 +1719,9 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   metaIconRowText: {
-    ...Typography.caption,
+    ...Typography.captionMedium,
     fontSize: 12,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   infoSeparator: {
     height: StyleSheet.hairlineWidth,
@@ -1815,9 +1815,9 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     ...Typography.caption,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
@@ -1837,7 +1837,7 @@ const styles = StyleSheet.create({
   emptySectionText: {
     ...Typography.body,
     fontSize: 13,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   // ─── Rounds list ───────────────────────────────────────────────────────────
   roundsList: {
@@ -1867,7 +1867,7 @@ const styles = StyleSheet.create({
   },
   roundStatusText: {
     ...Typography.caption,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
   },
   roundNumberText: {
@@ -1878,25 +1878,25 @@ const styles = StyleSheet.create({
   roundTitleText: {
     ...Typography.body,
     fontSize: 13,
-    color: Colors.zinc500,
+    color: Colors.zinc600,
     flex: 1,
   },
   roundLetterCount: {
     ...Typography.caption,
-    fontSize: 11,
-    color: Colors.zinc400,
+    fontSize: 12,
+    color: Colors.zinc500,
   },
   roundDateRange: {
     ...Typography.caption,
-    fontSize: 11,
-    color: Colors.zinc400,
+    fontSize: 12,
+    color: Colors.zinc500,
     paddingHorizontal: Spacing.screenPx,
     marginTop: -4,
   },
   roundDescription: {
     ...Typography.body,
     fontSize: 12,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     lineHeight: 17,
     paddingHorizontal: Spacing.screenPx,
     marginTop: -4,
@@ -1992,8 +1992,8 @@ const styles = StyleSheet.create({
   },
   slotDate: {
     ...Typography.caption,
-    fontSize: 11,
-    color: Colors.zinc400,
+    fontSize: 12,
+    color: Colors.zinc500,
   },
 
   preparingArea: {
@@ -2086,7 +2086,7 @@ const styles = StyleSheet.create({
   recruitingInfoLabel: {
     ...Typography.body,
     fontSize: 13,
-    color: Colors.zinc500,
+    color: Colors.zinc600,
     flex: 1,
   },
   recruitingInfoValue: {

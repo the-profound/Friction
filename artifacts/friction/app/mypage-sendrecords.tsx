@@ -274,7 +274,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.zinc100,
   },
   deliveryBadgeText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
   },
   deliveredBadgeText: {
@@ -296,7 +296,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#EDE9FE",
   },
   typeBadgeText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
   },
   personTypeBadgeText: {

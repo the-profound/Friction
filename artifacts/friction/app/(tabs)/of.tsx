@@ -626,9 +626,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   cardDesc: {
-    ...Typography.body,
+    ...Typography.caption,
     fontSize: 12,
-    color: Colors.zinc500,
+    color: Colors.zinc600,
     lineHeight: 16,
     marginTop: 2,
   },
@@ -648,9 +648,9 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   cardMetaText: {
-    ...Typography.caption,
-    fontSize: 11,
-    color: Colors.zinc400,
+    ...Typography.captionMedium,
+    fontSize: 12,
+    color: Colors.zinc500,
   },
   // ─── Invitation bar ──────────────────────────────────────────────────────────
   inviteSection: {
@@ -659,9 +659,9 @@ const styles = StyleSheet.create({
   },
   inviteSectionLabel: {
     ...Typography.caption,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     textTransform: "uppercase",
     letterSpacing: 0.8,
     paddingHorizontal: Spacing.screenPx,
@@ -736,7 +736,7 @@ const styles = StyleSheet.create({
   },
   pendingBadgeText: {
     ...Typography.caption,
-    fontSize: 11,
+    fontSize: 12,
     color: Colors.zinc500,
     fontWeight: "600",
   },

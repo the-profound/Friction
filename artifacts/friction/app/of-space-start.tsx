@@ -1980,7 +1980,7 @@ const styles = StyleSheet.create({
   },
   slotRoleTagText: {
     ...Typography.body,
-    fontSize: 11,
+    fontSize: 12,
     color: Colors.zinc600,
   },
   dragHandle: {
@@ -2538,8 +2538,8 @@ const calGridStyles = StyleSheet.create({
   },
   dateRangeLabel: {
     ...Typography.caption,
-    fontSize: 11,
-    color: Colors.zinc400,
+    fontSize: 12,
+    color: Colors.zinc500,
   },
   dateRangeValue: {
     ...Typography.bodySemiBold,

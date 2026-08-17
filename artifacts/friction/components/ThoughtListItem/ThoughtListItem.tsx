@@ -78,13 +78,13 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   tagText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
     color: Colors.zinc500,
   },
   rightMeta: {
     ...Typography.caption,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   content: {
     ...Typography.body,

@@ -182,8 +182,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   label: {
-    fontSize: 11,
-    color: Colors.zinc400,
+    fontSize: 12,
+    color: Colors.zinc500,
     fontFamily: Platform.select({
       ios: "Pretendard-Regular",
       default: "Pretendard-Regular",
@@ -210,8 +210,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.zinc800,
     fontFamily: Platform.select({
-      ios: "Pretendard-ExtraLight",
-      default: "Pretendard-ExtraLight",
+      ios: "Pretendard-Regular",
+      default: "Pretendard-Regular",
     }),
     lineHeight: 20,
   },
@@ -219,8 +219,8 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.zinc500,
     fontFamily: Platform.select({
-      ios: "Pretendard-ExtraLight",
-      default: "Pretendard-ExtraLight",
+      ios: "Pretendard-Regular",
+      default: "Pretendard-Regular",
     }),
     lineHeight: 24,
   },

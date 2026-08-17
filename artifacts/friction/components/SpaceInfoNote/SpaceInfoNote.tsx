@@ -256,7 +256,7 @@ const styles = StyleSheet.create({
   inlineText: {
     ...Typography.body,
     fontSize: 13,
-    color: Colors.zinc500,
+    color: Colors.zinc600,
     flex: 1,
     lineHeight: 19,
   },
@@ -268,9 +268,9 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   bareText: {
-    ...Typography.caption,
+    ...Typography.captionMedium,
     fontSize: 12,
-    color: Colors.zinc500,
+    color: Colors.zinc600,
     flex: 1,
     lineHeight: 17,
   },

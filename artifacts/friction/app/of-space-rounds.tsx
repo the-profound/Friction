@@ -844,7 +844,7 @@ const styles = StyleSheet.create({
   roundTitleEmpty: {
     ...Typography.body,
     fontSize: 13,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     fontStyle: "italic",
     marginTop: 2,
   },
@@ -854,8 +854,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   roundLetterText: {
-    ...Typography.caption,
-    fontSize: 11,
+    ...Typography.captionMedium,
+    fontSize: 12,
     color: Colors.zinc500,
     backgroundColor: Colors.zinc100,
     paddingHorizontal: 6,
@@ -863,9 +863,9 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   roundLetterTextEmpty: {
-    ...Typography.caption,
-    fontSize: 11,
-    color: Colors.zinc300,
+    ...Typography.captionMedium,
+    fontSize: 12,
+    color: Colors.zinc500,
   },
   editIconBtn: {},
   editIconBtnContent: {
@@ -1062,14 +1062,14 @@ const editStyles = StyleSheet.create({
     fontWeight: "600" as const,
   },
   memberRoleTag: {
-    ...Typography.body,
-    fontSize: 11,
-    color: Colors.zinc400,
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc500,
   },
   noMembersText: {
     ...Typography.body,
     fontSize: 13,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     textAlign: "center" as const,
     padding: 12,
   },
@@ -1148,8 +1148,8 @@ const editStyles = StyleSheet.create({
   },
   slotDateText: {
     ...Typography.caption,
-    fontSize: 11,
-    color: Colors.zinc400,
+    fontSize: 12,
+    color: Colors.zinc500,
   },
   slotRowActions: {
     flexDirection: "row",

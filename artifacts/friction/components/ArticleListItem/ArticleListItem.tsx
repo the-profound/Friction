@@ -174,7 +174,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   badgeText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
   },
   coverThumbnail: {

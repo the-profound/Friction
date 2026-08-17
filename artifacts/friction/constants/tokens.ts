@@ -143,11 +143,12 @@ export const Typography = {
   },
   searchInput: {
     fontSize: 14,
-    fontFamily: Platform.select({ ios: "Pretendard-ExtraLight", default: "Pretendard-ExtraLight" }),
+    fontFamily: Platform.select({ ios: "Pretendard-Regular", default: "Pretendard-Regular" }),
   },
   body: {
+    // Body text — Pretendard Regular(400); use bodyExtraLight for decorative large text only
     fontSize: 16,
-    fontFamily: Platform.select({ ios: "Pretendard-ExtraLight", default: "Pretendard-ExtraLight" }),
+    fontFamily: Platform.select({ ios: "Pretendard-Regular", default: "Pretendard-Regular" }),
   },
   bodyMedium: {
     fontSize: 16,
@@ -159,9 +160,20 @@ export const Typography = {
     fontWeight: "600" as const,
     fontFamily: Platform.select({ ios: "Pretendard-SemiBold", default: "Pretendard-SemiBold" }),
   },
-  caption: {
-    fontSize: 12,
+  // Decorative — use only for large display text where ExtraLight is an intentional design choice
+  bodyExtraLight: {
+    fontSize: 16,
     fontFamily: Platform.select({ ios: "Pretendard-ExtraLight", default: "Pretendard-ExtraLight" }),
+  },
+  caption: {
+    // Caption — Pretendard Regular(400) for readability at small sizes
+    fontSize: 12,
+    fontFamily: Platform.select({ ios: "Pretendard-Regular", default: "Pretendard-Regular" }),
+  },
+  captionMedium: {
+    // Caption with Medium(500) weight — for metadata labels that need extra emphasis
+    fontSize: 12,
+    fontFamily: Platform.select({ ios: "Pretendard-Medium", default: "Pretendard-Medium" }),
   },
 } as const;
 
@@ -301,11 +313,16 @@ export const ReaderTokens = {
       ios: "NotoSerifKR_800ExtraBold",
       default: "NotoSerifKR_800ExtraBold",
     }),
+    // sans = Regular(400) for body/caption text; use sansExtraLight for decorative large text
     sans: Platform.select({
-      ios: "Pretendard-ExtraLight",
-      default: "Pretendard-ExtraLight",
+      ios: "Pretendard-Regular",
+      default: "Pretendard-Regular",
     }),
     sansMedium: Platform.select({
+      ios: "Pretendard-Medium",
+      default: "Pretendard-Medium",
+    }),
+    sansExtraLight: Platform.select({
       ios: "Pretendard-ExtraLight",
       default: "Pretendard-ExtraLight",
     }),

@@ -2115,7 +2115,7 @@ const styles = StyleSheet.create({
   },
   chipCharCount: {
     ...Typography.caption,
-    fontSize: 11,
+    fontSize: 12,
     color: Colors.zinc500,
   },
   chipSplitButton: {},
@@ -2133,7 +2133,7 @@ const styles = StyleSheet.create({
   },
   chipSplitText: {
     ...Typography.caption,
-    fontSize: 11,
+    fontSize: 12,
     color: Colors.zinc700,
   },
   spellPanel: {
@@ -2228,7 +2228,7 @@ const styles = StyleSheet.create({
   },
   spellTypeBadgeText: {
     ...Typography.caption,
-    fontSize: 11,
+    fontSize: 12,
     color: Colors.zinc600,
     fontWeight: "600",
   },

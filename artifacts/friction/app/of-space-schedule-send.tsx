@@ -1246,7 +1246,7 @@ const styles = StyleSheet.create({
   },
   slotLabelText: {
     ...Typography.caption,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
     color: Colors.zinc500,
     marginBottom: 2,
@@ -1322,13 +1322,13 @@ const styles = StyleSheet.create({
   },
   sendStatusText: {
     ...Typography.caption,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
   },
   sendDateText: {
     ...Typography.caption,
-    fontSize: 11,
-    color: Colors.zinc400,
+    fontSize: 12,
+    color: Colors.zinc500,
     marginLeft: "auto",
   },
   sendArticleTitle: {
@@ -1349,8 +1349,8 @@ const styles = StyleSheet.create({
   },
   sentAtText: {
     ...Typography.caption,
-    fontSize: 11,
-    color: Colors.zinc400,
+    fontSize: 12,
+    color: Colors.zinc500,
     marginTop: 2,
   },
   sendRowActions: {
@@ -1423,7 +1423,7 @@ const styles = StyleSheet.create({
   },
   failedBannerText: {
     ...Typography.caption,
-    fontSize: 11,
+    fontSize: 12,
     color: "#EF4444",
     flex: 1,
     lineHeight: 15,
@@ -1524,8 +1524,8 @@ const sheetStyles = StyleSheet.create({
   },
   letterOptionRound: {
     ...Typography.caption,
-    fontSize: 11,
-    color: Colors.zinc400,
+    fontSize: 12,
+    color: Colors.zinc500,
   },
   emptyText: {
     ...Typography.body,
@@ -1576,9 +1576,9 @@ const sheetStyles = StyleSheet.create({
   },
   reservationInfoTitle: {
     ...Typography.caption,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     marginBottom: 2,
     textTransform: "uppercase",
     letterSpacing: 0.5,

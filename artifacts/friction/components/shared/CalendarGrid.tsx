@@ -360,7 +360,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingVertical: 5,
     ...Typography.caption,
-    fontSize: 11,
+    fontSize: 12,
     color: Colors.zinc500,
   },
   sunLabel: {

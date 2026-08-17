@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
   reasonText: {
     fontSize: 13,
     color: Colors.zinc800,
-    fontFamily: Platform.select({ ios: "Pretendard-ExtraLight", default: "Pretendard-ExtraLight" }),
+    fontFamily: Platform.select({ ios: "Pretendard-Regular", default: "Pretendard-Regular" }),
     lineHeight: 20,
   },
   popup: {
@@ -214,8 +214,8 @@ const styles = StyleSheet.create({
   },
   emptySubtitle: {
     fontSize: 13,
-    color: Colors.zinc400,
-    fontFamily: Platform.select({ ios: "Pretendard-ExtraLight", default: "Pretendard-ExtraLight" }),
+    color: Colors.zinc500,
+    fontFamily: Platform.select({ ios: "Pretendard-Regular", default: "Pretendard-Regular" }),
     textAlign: "center",
     lineHeight: 20,
   },
@@ -232,21 +232,21 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   tagText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
     color: Colors.zinc500,
     fontFamily: Platform.select({ ios: "Pretendard-SemiBold", default: "Pretendard-SemiBold" }),
   },
   dateText: {
     fontSize: 12,
-    color: Colors.zinc400,
-    fontFamily: Platform.select({ ios: "Pretendard-ExtraLight", default: "Pretendard-ExtraLight" }),
+    color: Colors.zinc500,
+    fontFamily: Platform.select({ ios: "Pretendard-Regular", default: "Pretendard-Regular" }),
     flex: 1,
   },
   counterText: {
     fontSize: 12,
-    color: Colors.zinc400,
-    fontFamily: Platform.select({ ios: "Pretendard-ExtraLight", default: "Pretendard-ExtraLight" }),
+    color: Colors.zinc500,
+    fontFamily: Platform.select({ ios: "Pretendard-Regular", default: "Pretendard-Regular" }),
   },
   scrollView: {
     maxHeight: 200,
@@ -276,7 +276,7 @@ const styles = StyleSheet.create({
   exitText: {
     fontSize: 14,
     color: Colors.zinc600,
-    fontFamily: Platform.select({ ios: "Pretendard-ExtraLight", default: "Pretendard-ExtraLight" }),
+    fontFamily: Platform.select({ ios: "Pretendard-Regular", default: "Pretendard-Regular" }),
   },
   nextButton: {
     paddingHorizontal: 20,

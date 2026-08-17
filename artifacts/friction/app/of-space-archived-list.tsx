@@ -310,8 +310,8 @@ const styles = StyleSheet.create({
   },
   cardOperator: {
     ...Typography.caption,
-    fontSize: 11,
-    color: Colors.zinc400,
+    fontSize: 12,
+    color: Colors.zinc500,
     marginTop: 2,
   },
   roleBadge: {
@@ -349,8 +349,8 @@ const styles = StyleSheet.create({
   },
   cardMetaText: {
     ...Typography.caption,
-    fontSize: 11,
-    color: Colors.zinc400,
+    fontSize: 12,
+    color: Colors.zinc500,
   },
   metaDot: {
     width: 2,

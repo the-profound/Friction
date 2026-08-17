@@ -627,7 +627,7 @@ const styles = StyleSheet.create({
   },
   recruitmentBadgeText: {
     ...Typography.caption,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
   },
   recruitmentBadgeTextOpen: {
@@ -650,9 +650,9 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     ...Typography.caption,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
@@ -666,7 +666,7 @@ const styles = StyleSheet.create({
   },
   countBadgeText: {
     ...Typography.caption,
-    fontSize: 11,
+    fontSize: 12,
     color: Colors.noticeAccent,
     fontWeight: "600",
   },
@@ -745,8 +745,8 @@ const styles = StyleSheet.create({
   },
   rowCardSubtitle: {
     ...Typography.caption,
-    fontSize: 11,
-    color: Colors.zinc400,
+    fontSize: 12,
+    color: Colors.zinc500,
   },
   rowCardActions: {
     flexDirection: "row",

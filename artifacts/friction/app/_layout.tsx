@@ -301,6 +301,8 @@ export default function RootLayout() {
 
   const [fontsLoaded, fontError] = useFonts({
     "Pretendard-ExtraLight": require("../assets/fonts/Pretendard-ExtraLight.otf"),
+    "Pretendard-Regular": require("../assets/fonts/Pretendard-Regular.otf"),
+    "Pretendard-Medium": require("../assets/fonts/Pretendard-Medium.otf"),
     "Pretendard-SemiBold": require("../assets/fonts/Pretendard-SemiBold.otf"),
     "Pretendard-Black": require("../assets/fonts/Pretendard-Black.otf"),
     "Eulyoo1945-Regular": require("../assets/fonts/Eulyoo1945-Regular.otf"),

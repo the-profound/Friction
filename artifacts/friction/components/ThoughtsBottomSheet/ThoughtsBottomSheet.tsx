@@ -1028,8 +1028,8 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   cardDate: {
-    fontSize: 11,
-    color: Colors.zinc400,
+    fontSize: 12,
+    color: Colors.zinc500,
     fontFamily: "Pretendard-Regular",
   },
   cardText: {

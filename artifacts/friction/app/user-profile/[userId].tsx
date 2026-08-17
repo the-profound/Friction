@@ -837,7 +837,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.zinc100,
   },
   groupTagText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
   },
   groupTagTextOwner: {
