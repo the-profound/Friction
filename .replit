@@ -15,7 +15,7 @@ args = ["pnpm", "store", "prune"]
 env = { "CI" = "true" }
 
 [workflows]
-runButton = "Project"
+runButton = "Touch Only This for Test"
 
 [[workflows.workflow]]
 name = "artifacts/mockup-sandbox: Component Preview Server"
@@ -99,16 +99,16 @@ task = "shell.exec"
 args = "bash /home/runner/workspace/artifacts/friction/scripts/publish-dev.sh"
 
 [[workflows.workflow]]
-name = "Project"
+name = "Touch Only This for Test"
 mode = "parallel"
 author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Touch Only This for Test"
+args = "Friction Dev Tunnel"
 
 [[workflows.workflow]]
-name = "Touch Only This for Test"
+name = "Friction Dev Tunnel"
 author = "agent"
 
 [[workflows.workflow.tasks]]
