@@ -45,6 +45,11 @@ import type { OriginLayout } from "@/components/CardSelectOverlay/CardSelectOver
 
 type ProfileTab = "letters" | "publications" | "spaces";
 
+// Row types for the unified FlatList (avoids numColumns changes and header remount)
+type LetterRowData = { _type: "lr"; items: Article[] };
+type SpaceRowData = { _type: "sp"; item: SpaceListItem };
+type ProfileListRow = LetterRowData | SpaceRowData;
+
 const PROFILE_TABS: { key: ProfileTab; label: string }[] = [
   { key: "letters", label: "편지" },
   { key: "publications", label: "간행물" },
@@ -349,75 +354,6 @@ export default function UserProfileScreen() {
   );
 
 
-  const renderLetter = useCallback(
-    ({ item }: { item: Article }) => {
-      const isHidden = selectedArticle?.id === item.id;
-      const itemCollectionName = collectionNameByArticleId[item.id] ?? null;
-      return (
-        <View
-          ref={(ref) => { cardSlotRefs.current.set(item.id, ref); }}
-          style={[styles.gridCell, { width: cellWidth, opacity: isHidden ? 0 : 1 }]}
-          accessibilityRole="button"
-          accessibilityLabel={item.title || "제목 없음"}
-        >
-          <ArticleCardItem
-            title={item.title || "제목 없음"}
-            authorName={item.authorNickname ?? user?.nickname ?? undefined}
-            collectionName={itemCollectionName}
-            cover={item.cover}
-            cardWidth={cellWidth}
-            isActive
-            onPress={() => handleLetterPress(item)}
-          />
-        </View>
-      );
-    },
-    [cellWidth, handleLetterPress, selectedArticle?.id, collectionNameByArticleId, user?.nickname],
-  );
-
-  const renderSpace = useCallback(
-    ({ item }: { item: SpaceListItem }) => {
-      const statusStyle = spaceStatusStyle(item.status);
-      const statusText = spaceStatusLabel(item.status);
-      return (
-        <ScalePressable
-          style={styles.groupRow}
-          contentStyle={styles.groupRowContent}
-          onPress={() => handleSpacePress(item)}
-          accessibilityRole="button"
-          accessibilityLabel={item.name}
-        >
-          <View style={styles.groupIcon}>
-            <Feather name="layers" size={20} color={Colors.zinc500} />
-          </View>
-          <View style={styles.groupTextWrap}>
-            <Text style={styles.groupTitle} numberOfLines={1}>
-              {item.name}
-            </Text>
-            <Text style={styles.groupMeta} numberOfLines={1}>
-              참여자 {item.participantCount}명
-            </Text>
-          </View>
-          <View
-            style={[
-              styles.groupTag,
-              {
-                backgroundColor: statusStyle.backgroundColor,
-                borderColor: statusStyle.borderColor,
-                borderWidth: statusStyle.borderWidth,
-              },
-            ]}
-          >
-            <Text style={[styles.groupTagText, { color: statusStyle.textColor }]}>
-              {statusText}
-            </Text>
-          </View>
-        </ScalePressable>
-      );
-    },
-    [handleSpacePress],
-  );
-
   const renderEmpty = useCallback(
     (message: string, subtitle?: string) => {
       const loading =
@@ -440,9 +376,134 @@ export default function UserProfileScreen() {
     [profileTab, articlesQuery.isLoading, spacesQuery.isLoading],
   );
 
-  const contentPadding = { paddingTop: 8, paddingBottom: navBottom + 24 };
+  const contentPadding = useMemo(
+    () => ({ paddingBottom: navBottom + 24 }),
+    [navBottom],
+  );
 
-  const NavHeader = (
+  // Build a flat data array for the single unified FlatList.
+  // Letters are chunked into rows of GRID_COLS so we never need to change
+  // numColumns (which would force a FlatList remount and header flicker).
+  const listData = useMemo<ProfileListRow[]>(() => {
+    if (profileTab === "letters") {
+      const rows: LetterRowData[] = [];
+      for (let i = 0; i < letters.length; i += GRID_COLS) {
+        rows.push({ _type: "lr", items: letters.slice(i, i + GRID_COLS) });
+      }
+      return rows;
+    }
+    if (profileTab === "spaces") {
+      return spaces.map((item) => ({ _type: "sp" as const, item }));
+    }
+    return [];
+  }, [profileTab, letters, spaces]);
+
+  const renderRow = useCallback(
+    ({ item }: { item: ProfileListRow }) => {
+      if (item._type === "lr") {
+        return (
+          <View style={styles.gridRow}>
+            {item.items.map((article) => {
+              const isHidden = selectedArticle?.id === article.id;
+              const itemCollectionName =
+                collectionNameByArticleId[article.id] ?? null;
+              return (
+                <View
+                  key={article.id}
+                  ref={(ref) => {
+                    cardSlotRefs.current.set(article.id, ref);
+                  }}
+                  style={[
+                    styles.gridCell,
+                    { width: cellWidth, opacity: isHidden ? 0 : 1 },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={article.title || "제목 없음"}
+                >
+                  <ArticleCardItem
+                    title={article.title || "제목 없음"}
+                    authorName={
+                      article.authorNickname ?? user?.nickname ?? undefined
+                    }
+                    collectionName={itemCollectionName}
+                    cover={article.cover}
+                    cardWidth={cellWidth}
+                    isActive
+                    onPress={() => handleLetterPress(article)}
+                  />
+                </View>
+              );
+            })}
+            {/* Filler views keep the last incomplete row left-aligned */}
+            {Array.from({ length: GRID_COLS - item.items.length }).map(
+              (_, i) => (
+                <View key={`filler-${i}`} style={{ width: cellWidth }} />
+              ),
+            )}
+          </View>
+        );
+      }
+      // Space row
+      const space = item.item;
+      const statusStyle = spaceStatusStyle(space.status);
+      const statusText = spaceStatusLabel(space.status);
+      return (
+        <ScalePressable
+          style={styles.groupRow}
+          contentStyle={styles.groupRowContent}
+          onPress={() => handleSpacePress(space)}
+          accessibilityRole="button"
+          accessibilityLabel={space.name}
+        >
+          <View style={styles.groupIcon}>
+            <Feather name="layers" size={20} color={Colors.zinc500} />
+          </View>
+          <View style={styles.groupTextWrap}>
+            <Text style={styles.groupTitle} numberOfLines={1}>
+              {space.name}
+            </Text>
+            <Text style={styles.groupMeta} numberOfLines={1}>
+              참여자 {space.participantCount}명
+            </Text>
+          </View>
+          <View
+            style={[
+              styles.groupTag,
+              {
+                backgroundColor: statusStyle.backgroundColor,
+                borderColor: statusStyle.borderColor,
+                borderWidth: statusStyle.borderWidth,
+              },
+            ]}
+          >
+            <Text
+              style={[styles.groupTagText, { color: statusStyle.textColor }]}
+            >
+              {statusText}
+            </Text>
+          </View>
+        </ScalePressable>
+      );
+    },
+    [
+      selectedArticle?.id,
+      collectionNameByArticleId,
+      cellWidth,
+      user?.nickname,
+      handleLetterPress,
+      handleSpacePress,
+    ],
+  );
+
+  const listEmpty =
+    profileTab === "letters"
+      ? renderEmpty("아직 보낸 편지가 없어요")
+      : profileTab === "spaces"
+        ? renderEmpty("참여 중인 공간이 없어요")
+        : renderEmpty("아직 비어있어요", "간행물 기능은 곧 만나볼 수 있어요");
+
+  // Shared back-button header JSX used in both the error state and the FlatList
+  const navHeaderJsx = (
     <View style={styles.header}>
       <ScalePressable onPress={() => router.back()} hitSlop={12}>
         <Feather name="arrow-left" size={20} color={Colors.zinc600} />
@@ -453,7 +514,7 @@ export default function UserProfileScreen() {
   if (!profileUserId) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        {NavHeader}
+        {navHeaderJsx}
         <View style={styles.emptyWrap}>
           <Text style={styles.emptyTitle}>사용자를 찾을 수 없어요</Text>
         </View>
@@ -462,141 +523,124 @@ export default function UserProfileScreen() {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      {NavHeader}
-
-      {/* Fixed header — lives outside FlatList so it never re-layouts on tab switch */}
-      <View>
-        <View style={styles.profileSection}>
-          {user?.avatarUrl ? (
-            <Image source={{ uri: user.avatarUrl }} style={styles.avatar} />
-          ) : (
-            <View style={[styles.avatar, styles.avatarFallback]}>
-              <Feather name="user" size={34} color={Colors.zinc500} />
+    <View style={styles.container}>
+      <FlatList
+        data={listData as ProfileListRow[]}
+        keyExtractor={(item, index) => {
+          if (item._type === "lr") return `lr-${item.items[0]?.id ?? index}`;
+          return `sp-${item.item.id}`;
+        }}
+        renderItem={renderRow}
+        ListHeaderComponent={
+          <View>
+            {/* Top safe-area padding lives here so the background colour
+                shows behind the notch while content still scrolls under it */}
+            <View style={{ paddingTop: insets.top }}>
+              {navHeaderJsx}
             </View>
-          )}
-          <Text style={styles.profileName} numberOfLines={1}>
-            {displayName}
-          </Text>
-          {handle ? (
-            <Text style={styles.profileHandle} numberOfLines={1}>
-              {handle}
-            </Text>
-          ) : null}
-        </View>
 
-        <View style={styles.actionRow}>
-          {isNeighbor ? (
-            <ScalePressable
-              style={styles.actionButton}
-              contentStyle={styles.actionButtonContent}
-              onPress={() => setRemoveConfirmVisible(true)}
-              accessibilityRole="button"
-              accessibilityLabel="이웃 맺음"
-            >
-              <Text style={styles.actionButtonText}>이웃 맺음</Text>
-            </ScalePressable>
-          ) : isPending ? (
-            <ScalePressable
-              style={styles.actionButton}
-              contentStyle={styles.actionButtonContent}
-              onPress={() => setCancelConfirmVisible(true)}
-              accessibilityRole="button"
-              accessibilityLabel="이웃 신청 취소"
-            >
-              <Text style={styles.actionButtonText}>이웃 신청 취소</Text>
-            </ScalePressable>
-          ) : (
-            <ScalePressable
-              style={styles.actionButton}
-              contentStyle={styles.actionButtonContent}
-              onPress={handleSendNeighborRequest}
-              disabled={createNeighborRequest.isPending}
-              accessibilityRole="button"
-              accessibilityLabel="이웃 신청"
-            >
-              <Text style={styles.actionButtonText}>이웃 신청</Text>
-            </ScalePressable>
-          )}
-          <ScalePressable
-            style={styles.actionButton}
-            contentStyle={styles.actionButtonContent}
-            onPress={handleSendLetter}
-            accessibilityRole="button"
-            accessibilityLabel="편지 발신"
-          >
-            <Text style={styles.actionButtonText}>편지 발신</Text>
-          </ScalePressable>
-        </View>
-
-        <View style={styles.subTabBar}>
-          {PROFILE_TABS.map((t) => {
-            const active = profileTab === t.key;
-            return (
-              <ScalePressable
-                key={t.key}
-                style={styles.subTabItem}
-                contentStyle={styles.subTabItemContent}
-                onPress={() => setProfileTab(t.key)}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: active }}
-              >
-                <Text
-                  style={[styles.subTabText, active && styles.subTabTextActive]}
-                  allowFontScaling={false}
-                >
-                  {t.label}
-                </Text>
-                <View
-                  style={[
-                    styles.subTabUnderline,
-                    active && styles.subTabUnderlineActive,
-                  ]}
+            <View style={styles.profileSection}>
+              {user?.avatarUrl ? (
+                <Image
+                  source={{ uri: user.avatarUrl }}
+                  style={styles.avatar}
                 />
-              </ScalePressable>
-            );
-          })}
-        </View>
-      </View>
+              ) : (
+                <View style={[styles.avatar, styles.avatarFallback]}>
+                  <Feather name="user" size={34} color={Colors.zinc500} />
+                </View>
+              )}
+              <Text style={styles.profileName} numberOfLines={1}>
+                {displayName}
+              </Text>
+              {handle ? (
+                <Text style={styles.profileHandle} numberOfLines={1}>
+                  {handle}
+                </Text>
+              ) : null}
+            </View>
 
-      {profileTab === "letters" && (
-        <FlatList
-          key="profile-letters"
-          data={letters}
-          keyExtractor={(item) => item.id}
-          renderItem={renderLetter}
-          numColumns={GRID_COLS}
-          columnWrapperStyle={styles.gridRow}
-          ListEmptyComponent={renderEmpty("아직 보낸 편지가 없어요")}
-          contentContainerStyle={contentPadding}
-          showsVerticalScrollIndicator={false}
-        />
-      )}
-      {profileTab === "spaces" && (
-        <FlatList
-          key="profile-spaces"
-          data={spaces}
-          keyExtractor={(item) => item.id}
-          renderItem={renderSpace}
-          ListEmptyComponent={renderEmpty("참여 중인 공간이 없어요")}
-          contentContainerStyle={contentPadding}
-          showsVerticalScrollIndicator={false}
-        />
-      )}
-      {profileTab === "publications" && (
-        <FlatList
-          key="profile-publications"
-          data={[]}
-          keyExtractor={() => "none"}
-          renderItem={null}
-          ListEmptyComponent={renderEmpty(
-            "아직 비어있어요",
-            "간행물 기능은 곧 만나볼 수 있어요",
-          )}
-          contentContainerStyle={contentPadding}
-          showsVerticalScrollIndicator={false}
-        />
-      )}
+            <View style={styles.actionRow}>
+              {isNeighbor ? (
+                <ScalePressable
+                  style={styles.actionButton}
+                  contentStyle={styles.actionButtonContent}
+                  onPress={() => setRemoveConfirmVisible(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="이웃 맺음"
+                >
+                  <Text style={styles.actionButtonText}>이웃 맺음</Text>
+                </ScalePressable>
+              ) : isPending ? (
+                <ScalePressable
+                  style={styles.actionButton}
+                  contentStyle={styles.actionButtonContent}
+                  onPress={() => setCancelConfirmVisible(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="이웃 신청 취소"
+                >
+                  <Text style={styles.actionButtonText}>이웃 신청 취소</Text>
+                </ScalePressable>
+              ) : (
+                <ScalePressable
+                  style={styles.actionButton}
+                  contentStyle={styles.actionButtonContent}
+                  onPress={handleSendNeighborRequest}
+                  disabled={createNeighborRequest.isPending}
+                  accessibilityRole="button"
+                  accessibilityLabel="이웃 신청"
+                >
+                  <Text style={styles.actionButtonText}>이웃 신청</Text>
+                </ScalePressable>
+              )}
+              <ScalePressable
+                style={styles.actionButton}
+                contentStyle={styles.actionButtonContent}
+                onPress={handleSendLetter}
+                accessibilityRole="button"
+                accessibilityLabel="편지 발신"
+              >
+                <Text style={styles.actionButtonText}>편지 발신</Text>
+              </ScalePressable>
+            </View>
+
+            <View style={styles.subTabBar}>
+              {PROFILE_TABS.map((t) => {
+                const active = profileTab === t.key;
+                return (
+                  <ScalePressable
+                    key={t.key}
+                    style={styles.subTabItem}
+                    contentStyle={styles.subTabItemContent}
+                    onPress={() => setProfileTab(t.key)}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: active }}
+                  >
+                    <Text
+                      style={[
+                        styles.subTabText,
+                        active && styles.subTabTextActive,
+                      ]}
+                      allowFontScaling={false}
+                    >
+                      {t.label}
+                    </Text>
+                    <View
+                      style={[
+                        styles.subTabUnderline,
+                        active && styles.subTabUnderlineActive,
+                      ]}
+                    />
+                  </ScalePressable>
+                );
+              })}
+            </View>
+          </View>
+        }
+        ListEmptyComponent={listEmpty}
+        contentContainerStyle={contentPadding}
+        showsVerticalScrollIndicator={false}
+      />
 
       <CardSelectOverlay
         articles={chainArticles}
@@ -738,6 +782,7 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   gridRow: {
+    flexDirection: "row",
     gap: GRID_GAP,
     marginBottom: GRID_GAP,
     paddingHorizontal: GRID_PAD,
