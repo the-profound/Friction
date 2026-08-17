@@ -451,7 +451,7 @@ export default function MyScreen() {
     [myTab, articlesQuery.isLoading, spacesQuery.isLoading],
   );
 
-  const contentPadding = { paddingBottom: navBottom + 24 };
+  const contentPadding = { paddingTop: 8, paddingBottom: navBottom + 24 };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>

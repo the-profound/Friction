@@ -440,7 +440,7 @@ export default function UserProfileScreen() {
     [profileTab, articlesQuery.isLoading, spacesQuery.isLoading],
   );
 
-  const contentPadding = { paddingBottom: navBottom + 24 };
+  const contentPadding = { paddingTop: 8, paddingBottom: navBottom + 24 };
 
   const NavHeader = (
     <View style={styles.header}>
