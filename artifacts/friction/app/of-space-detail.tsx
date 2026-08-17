@@ -1578,6 +1578,8 @@ export default function SpaceDetailScreen() {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
+const RETRY_BTN_H = 40;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -1628,12 +1630,16 @@ const styles = StyleSheet.create({
   },
   retryButtonOuter: {
     marginTop: 4,
+    height: RETRY_BTN_H,
+    alignSelf: "center",
   },
   retryButton: {
     paddingHorizontal: 20,
-    paddingVertical: 10,
     backgroundColor: Colors.zinc900,
     borderRadius: 10,
+    flexGrow: 0,
+    height: "100%",
+    justifyContent: "center",
   },
   retryButtonText: {
     ...Typography.bodySemiBold,
