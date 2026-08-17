@@ -82,8 +82,8 @@ PORT = "3001"
 
 [[workflows.workflow]]
 name = "Friction Dev Tunnel"
-author = "agent"
 mode = "sequential"
+author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
