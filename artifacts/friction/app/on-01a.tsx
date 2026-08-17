@@ -2008,7 +2008,7 @@ const styles = StyleSheet.create({
   sourceArticleText: {
     flex: 1,
     fontSize: 13,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     fontFamily: "Pretendard",
   },
   sourceArticleGear: {
@@ -2047,7 +2047,7 @@ const styles = StyleSheet.create({
   charCountText: {
     ...Typography.caption,
     fontSize: 12,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   warningBanner: {
     flexDirection: "row",

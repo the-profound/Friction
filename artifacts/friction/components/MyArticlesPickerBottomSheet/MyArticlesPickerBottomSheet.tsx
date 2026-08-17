@@ -152,12 +152,12 @@ const styles = StyleSheet.create({
     color: Colors.zinc500,
   },
   itemDisabled: {
-    color: Colors.zinc400,
+    color: Colors.zinc400, // typography-ok: disabled item text
   },
   addedLabel: {
     ...Typography.caption,
     fontSize: 12,
-    color: Colors.zinc400,
+    color: Colors.zinc400, // typography-ok: already-added status label
     marginLeft: 8,
   },
   checkbox: {

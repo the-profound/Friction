@@ -677,7 +677,7 @@ const styles = StyleSheet.create({
   profileHandle: {
     ...Typography.caption,
     fontSize: 12,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     marginTop: 4,
   },
   statsRow: {
@@ -753,7 +753,7 @@ const styles = StyleSheet.create({
   subTabText: {
     ...Typography.body,
     fontSize: 14,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     letterSpacing: -0.2,
     paddingVertical: 12,
   },
@@ -853,7 +853,7 @@ const styles = StyleSheet.create({
   emptyText: {
     ...Typography.body,
     fontSize: 14,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     textAlign: "center",
     lineHeight: 20,
   },

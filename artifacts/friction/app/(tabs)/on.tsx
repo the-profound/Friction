@@ -1339,7 +1339,7 @@ const styles = StyleSheet.create({
   topTabText: {
     ...Typography.body,
     fontSize: 15,
-    color: Colors.zinc400,
+    color: Colors.zinc400, // typography-ok: inactive top-tab label
     paddingBottom: 10,
   },
   topTabTextActive: {
@@ -1549,7 +1549,7 @@ const styles = StyleSheet.create({
   archiveItemCount: {
     ...Typography.body,
     fontSize: 13,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   archiveConfirmButton: {
     marginTop: 12,
@@ -1708,7 +1708,7 @@ const styles = StyleSheet.create({
   },
   editCardDateText: {
     ...Typography.caption,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   editCardTextInput: {
     flex: 1,
@@ -1773,6 +1773,6 @@ const styles = StyleSheet.create({
     color: Colors.zinc700,
   },
   inputToolbarBtnTextDisabled: {
-    color: Colors.zinc400,
+    color: Colors.zinc400, // typography-ok: disabled button text
   },
 });

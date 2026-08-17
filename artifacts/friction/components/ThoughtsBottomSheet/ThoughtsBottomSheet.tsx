@@ -982,7 +982,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     fontFamily: "Pretendard-Regular",
   },
   cardContainer: {
@@ -1040,7 +1040,7 @@ const styles = StyleSheet.create({
   },
   moreLink: {
     fontSize: 13,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     fontFamily: "Pretendard-Regular",
   },
   inputBar: {

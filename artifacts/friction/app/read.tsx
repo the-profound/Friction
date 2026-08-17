@@ -1612,7 +1612,7 @@ export default function ReadScreen() {
           fontSize: layout.captionFontSize,
           fontFamily: ReaderTokens.fontFamily.sans,
           letterSpacing: layout.titleLetterSpacing,
-          color: Colors.zinc400,
+          color: Colors.zinc500,
           textAlign: "center" as const,
         },
         modeBadgeText: {
@@ -1677,7 +1677,7 @@ export default function ReadScreen() {
         memoPageInfo: {
           fontSize: layout.captionFontSize,
           fontFamily: ReaderTokens.fontFamily.sans,
-          color: Colors.zinc400,
+          color: Colors.zinc500,
           textAlign: "right" as const,
         },
         completeButtonText: {
@@ -2167,7 +2167,7 @@ const newMemoStyles = StyleSheet.create({
   closeText: {
     fontSize: 14,
     fontFamily: "Pretendard",
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     flexShrink: 0,
   },
   divider: {
@@ -2249,7 +2249,7 @@ const floatingCardStyles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontFamily: ReaderTokens.fontFamily.serif,
-    color: Colors.zinc400,
+    color: Colors.zinc400, // typography-ok: ghost/placeholder answer text
     lineHeight: 28,
     letterSpacing: 0.5,
   },
@@ -2753,7 +2753,7 @@ const readingCompleteStyles = StyleSheet.create({
     fontSize: 14,
     fontFamily: ReaderTokens.fontFamily.sans,
     fontWeight: "400",
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     textDecorationLine: "underline",
   },
   btnDisabled: {

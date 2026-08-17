@@ -409,7 +409,7 @@ const spaceCarouselStyles = StyleSheet.create({
   },
   openingSlotEmptyText: {
     fontSize: 13,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     textAlign: "center",
     lineHeight: 19,
   },
@@ -1731,7 +1731,7 @@ const styles = StyleSheet.create({
   descMoreBtn: {
     ...Typography.caption,
     fontSize: 12,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     marginTop: 4,
   },
   descRowOuter: {
@@ -1752,7 +1752,7 @@ const styles = StyleSheet.create({
   spaceDescEmpty: {
     ...Typography.body,
     fontSize: 14,
-    color: Colors.zinc400,
+    color: Colors.zinc400, // typography-ok: empty-description placeholder
     flex: 1,
   },
   descEditIcon: {
@@ -1918,7 +1918,7 @@ const styles = StyleSheet.create({
   lockedText: {
     ...Typography.body,
     fontSize: 13,
-    color: Colors.zinc400,
+    color: Colors.zinc400, // typography-ok: locked/disabled state
   },
 
   // ─── Slot carousel ────────────────────────────────────────────────────────
@@ -1965,7 +1965,7 @@ const styles = StyleSheet.create({
   slotCardOtherText: {
     ...Typography.body,
     fontSize: 13,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   slotCtaOuter: {
     marginBottom: 8,
@@ -2005,7 +2005,7 @@ const styles = StyleSheet.create({
   preparingText: {
     ...Typography.body,
     fontSize: 13,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   // ─── Recruitment closed banner ──────────────────────────────────────────────
   recruitmentClosedBanner: {
@@ -2160,7 +2160,7 @@ const styles = StyleSheet.create({
   inviteCodeLabel: {
     ...Typography.caption,
     fontSize: 12,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   inviteCodeValue: {
     ...Typography.bodySemiBold,

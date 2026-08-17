@@ -600,7 +600,7 @@ const styles = StyleSheet.create({
   tabText: {
     ...Typography.body,
     fontSize: 15,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   tabTextActive: {
     ...Typography.bodySemiBold,
@@ -653,7 +653,7 @@ const styles = StyleSheet.create({
   hint: {
     ...Typography.caption,
     fontSize: 13,
-    color: Colors.zinc400,
+    color: Colors.zinc400, // typography-ok: form hint text
     alignSelf: "flex-start",
   },
   errorText: {

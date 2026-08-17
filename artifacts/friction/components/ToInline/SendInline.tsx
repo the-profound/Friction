@@ -626,7 +626,7 @@ const styles = StyleSheet.create({
     color: Colors.white,
   },
   sendButtonTextDisabled: {
-    color: Colors.zinc400,
+    color: Colors.zinc400, // typography-ok: disabled button label
   },
   segmentRow: {
     flexDirection: "row",
@@ -695,7 +695,7 @@ const styles = StyleSheet.create({
     color: Colors.white,
   },
   confirmPickerButtonTextDisabled: {
-    color: Colors.zinc400,
+    color: Colors.zinc400, // typography-ok: disabled button label
   },
   pickerEmpty: {
     alignItems: "center",

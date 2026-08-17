@@ -388,14 +388,14 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   hintText: {
-    color: Colors.zinc400,
+    color: Colors.zinc400, // typography-ok: hint text for empty memo
     fontFamily: Platform.select({
       ios: "Pretendard-Regular",
       default: "Pretendard",
     }),
   },
   turnHint: {
-    color: Colors.zinc300,
+    color: Colors.zinc300, // typography-ok: page-turn navigation hint
     fontFamily: Platform.select({
       ios: "Pretendard-Regular",
       default: "Pretendard",

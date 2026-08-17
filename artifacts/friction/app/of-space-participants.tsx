@@ -686,7 +686,7 @@ const styles = StyleSheet.create({
   emptySectionText: {
     ...Typography.body,
     fontSize: 13,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   recruitmentClosedBanner: {
     flexDirection: "row",
@@ -806,7 +806,7 @@ const styles = StyleSheet.create({
   },
   operatorTagText: {
     ...Typography.caption,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
     color: Colors.zinc600,
   },

@@ -1903,7 +1903,7 @@ const styles = StyleSheet.create({
   stepLabelText: {
     ...Typography.caption,
     fontSize: 12,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   scrollArea: {
     flex: 1,
@@ -1956,7 +1956,7 @@ const styles = StyleSheet.create({
   slotOrder: {
     ...Typography.bodySemiBold,
     fontSize: 13,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     width: 18,
     textAlign: "center",
   },
@@ -1996,7 +1996,7 @@ const styles = StyleSheet.create({
   emptyBoxText: {
     ...Typography.body,
     fontSize: 14,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   // Misc
   weekdayRow: {
@@ -2171,13 +2171,13 @@ const stepStyles = StyleSheet.create({
   charCount: {
     ...Typography.caption,
     fontSize: 12,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     textAlign: "right",
   },
   hint: {
     ...Typography.caption,
     fontSize: 12,
-    color: Colors.zinc400,
+    color: Colors.zinc400, // typography-ok: form hint text
     lineHeight: 17,
   },
   warningText: {
@@ -2264,7 +2264,7 @@ const stepStyles = StyleSheet.create({
   readonlyHint: {
     ...Typography.caption,
     fontSize: 12,
-    color: Colors.zinc400,
+    color: Colors.zinc400, // typography-ok: read-only field hint
   },
   labelRow: {
     flexDirection: "row",
@@ -2302,7 +2302,7 @@ const opStyles = StyleSheet.create({
   participantHint: {
     ...Typography.body,
     fontSize: 13,
-    color: Colors.zinc400,
+    color: Colors.zinc400, // typography-ok: participant count hint
   },
   datePastTrigger: {
     borderColor: "#ef4444",
@@ -2333,7 +2333,7 @@ const opStyles = StyleSheet.create({
   endDateHint: {
     ...Typography.caption,
     fontSize: 12,
-    color: Colors.zinc400,
+    color: Colors.zinc400, // typography-ok: end-date hint
     flex: 1,
     textAlign: "right",
   },
@@ -2362,7 +2362,7 @@ const olStyles = StyleSheet.create({
   articleSelectBtnText: {
     ...Typography.body,
     fontSize: 15,
-    color: Colors.zinc400,
+    color: Colors.zinc400, // typography-ok: unselected article placeholder
     flex: 1,
   },
   articleSelectBtnTextActive: {
@@ -2589,13 +2589,13 @@ const calGridStyles = StyleSheet.create({
   },
   assignInitial: {
     ...Typography.bodySemiBold,
-    fontSize: 9,
+    fontSize: 9, // typography-ok: initial letter in 18x18 avatar chip, space-constrained
     color: Colors.white,
   },
   assignMore: {
     ...Typography.caption,
-    fontSize: 9,
-    color: Colors.zinc400,
+    fontSize: 9, // typography-ok: overflow count in 18x18 avatar chip, space-constrained
+    color: Colors.zinc400, // typography-ok: overflow count in 18x18 avatar chip
   },
 });
 

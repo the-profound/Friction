@@ -763,7 +763,7 @@ const styles = StyleSheet.create({
   },
   dateHeaderCount: {
     ...Typography.caption,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   // Web carousel (PanResponder + Animated)
   carouselWindow: {

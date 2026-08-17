@@ -213,7 +213,7 @@ const styles = StyleSheet.create({
   infoTextDisabled: {
     ...Typography.body,
     fontSize: 14,
-    color: Colors.zinc400,
+    color: Colors.zinc400, // typography-ok: explicitly disabled info text
   },
   actions: {
     width: "100%",

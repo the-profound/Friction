@@ -838,7 +838,7 @@ const styles = StyleSheet.create({
   subTabText: {
     ...Typography.body,
     fontSize: 15,
-    color: Colors.zinc400,
+    color: Colors.zinc400, // typography-ok: inactive sub-tab label
     paddingBottom: 10,
   },
   subTabTextActive: {
@@ -904,7 +904,7 @@ const styles = StyleSheet.create({
   collectionCount: {
     ...Typography.caption,
     fontSize: 12,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   listContent: {
     paddingTop: 4,
@@ -933,7 +933,7 @@ const styles = StyleSheet.create({
   sentenceSource: {
     ...Typography.caption,
     fontSize: 12,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   sentenceMeta: {
     flexDirection: "row",
@@ -943,7 +943,7 @@ const styles = StyleSheet.create({
   sentenceDate: {
     ...Typography.caption,
     fontSize: 12,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   sentenceStarBtn: {},
   sentenceStarBtnContent: {
@@ -1016,7 +1016,7 @@ const styles = StyleSheet.create({
   emptySubtitle: {
     ...Typography.body,
     fontSize: 14,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     textAlign: "center",
     lineHeight: 20,
   },
@@ -1039,7 +1039,7 @@ const styles = StyleSheet.create({
   loadingText: {
     ...Typography.body,
     fontSize: 14,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   createForm: {
     paddingVertical: 12,
@@ -1087,7 +1087,7 @@ const styles = StyleSheet.create({
   sentenceSheetDate: {
     ...Typography.caption,
     fontSize: 13,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     paddingHorizontal: 4,
     marginTop: 4,
   },

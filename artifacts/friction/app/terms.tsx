@@ -171,7 +171,7 @@ const styles = StyleSheet.create({
   meta: {
     ...Typography.caption,
     fontSize: 12,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     marginBottom: 12,
   },
   divider: {

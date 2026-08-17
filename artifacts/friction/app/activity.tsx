@@ -83,7 +83,7 @@ const styles = StyleSheet.create({
   emptySubtitle: {
     ...Typography.body,
     fontSize: 14,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     textAlign: "center",
     lineHeight: 20,
   },

@@ -124,6 +124,45 @@ export const Sizing = {
   snapPeek: 56,
 } as const;
 
+/**
+ * Minimum readability rules — every UI text element must satisfy these.
+ *
+ * Checked automatically by `pnpm --filter @workspace/friction check:typography`
+ * (scripts/check-typography.mjs). Add `// typography-ok: <reason>` to the
+ * end of a line to suppress a check when the exception is intentional.
+ *
+ * Background: Pretendard ExtraLight (200) renders significantly thinner on
+ * native iOS/Android than in the browser. A combination of ExtraLight +
+ * small size + light gray fails on-device readability even when it looks fine
+ * in the web preview.
+ */
+export const ReadabilityMinimums = {
+  /** Minimum font size (px) for any readable UI text. Reader body is exempt. */
+  fontSizePx: 12,
+
+  /**
+   * Minimum font weight for non-display body/secondary text.
+   * Regular (400) is the floor; ExtraLight (200) is only for large display text.
+   */
+  fontWeightRegular: 400 as const,
+
+  /**
+   * For small text (12–13 px), Medium (500) is recommended over Regular (400)
+   * to preserve on-device readability — native renders thinner than web preview.
+   */
+  fontWeightSmallRecommended: 500 as const,
+
+  /**
+   * Lightest zinc step allowed for body/secondary text.
+   * zinc300 (#d4d4d8) and zinc400 (#a1a1aa) are reserved for:
+   *   - placeholder / ghost text
+   *   - disabled / inactive states
+   *   - decorative dots, icon colors, non-readable chrome
+   * All readable body/secondary text must be zinc500 (#71717a) or darker.
+   */
+  textColorMinStep: "zinc500" as const,
+} as const;
+
 export const Typography = {
   headerTitle: {
     fontSize: 28,
@@ -131,6 +170,12 @@ export const Typography = {
     fontFamily: Platform.select({ ios: "Pretendard-Black", default: "Pretendard-Black" }),
     letterSpacing: -0.5,
   },
+  /**
+   * tabLabel — intentional design exception to ReadabilityMinimums.
+   * Navigation tab labels use ExtraLight 10 px as a deliberate minimalist
+   * design choice; the icon carries the primary affordance, the label is
+   * supplementary chrome. This is the ONLY approved ExtraLight usage at sub-12 px.
+   */
   tabLabel: {
     fontSize: 10,
     fontWeight: "200" as const,

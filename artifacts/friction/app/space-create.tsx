@@ -857,13 +857,13 @@ const stepStyles = StyleSheet.create({
   charCount: {
     ...Typography.caption,
     fontSize: 12,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     textAlign: "right",
   },
   hint: {
     ...Typography.caption,
     fontSize: 12,
-    color: Colors.zinc400,
+    color: Colors.zinc400, // typography-ok: form hint text
   },
   errorText: {
     ...Typography.caption,
@@ -884,7 +884,7 @@ const stepStyles = StyleSheet.create({
   toggleDesc: {
     ...Typography.caption,
     fontSize: 13,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   toggleNotice: {
     ...Typography.caption,

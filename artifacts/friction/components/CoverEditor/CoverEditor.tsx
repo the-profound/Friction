@@ -414,7 +414,7 @@ const styles = StyleSheet.create({
   imagePickerHint: {
     ...Typography.caption,
     fontSize: 12,
-    color: Colors.zinc400,
+    color: Colors.zinc400, // typography-ok: image-picker hint text
   },
   imageThumbnail: {
     width: "100%",

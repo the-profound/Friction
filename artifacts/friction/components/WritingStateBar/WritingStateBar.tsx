@@ -111,6 +111,6 @@ const styles = StyleSheet.create({
     color: Colors.zinc700,
   },
   tabTextIndirect: {
-    color: Colors.zinc400,
+    color: Colors.zinc400, // typography-ok: indirect/inactive tab text
   },
 });

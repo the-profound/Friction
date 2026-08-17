@@ -498,7 +498,7 @@ const styles = StyleSheet.create({
   loadingText: {
     ...Typography.body,
     fontSize: 14,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   emptyTitle: {
     ...Typography.bodySemiBold,
@@ -509,7 +509,7 @@ const styles = StyleSheet.create({
   emptySubtitle: {
     ...Typography.body,
     fontSize: 14,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     textAlign: "center",
     lineHeight: 20,
   },
@@ -541,7 +541,7 @@ const styles = StyleSheet.create({
   filteredEmptyText: {
     ...Typography.body,
     fontSize: 14,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   // ─── Filter row ──────────────────────────────────────────────────────────────
   filterRow: {
@@ -605,7 +605,7 @@ const styles = StyleSheet.create({
   },
   overdueBadgeText: {
     ...Typography.caption,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
     color: "#B45309",
   },
@@ -616,7 +616,7 @@ const styles = StyleSheet.create({
   },
   statusBadgeText: {
     ...Typography.caption,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
   },
   cardName: {

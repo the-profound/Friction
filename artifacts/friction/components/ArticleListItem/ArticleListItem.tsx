@@ -149,7 +149,7 @@ const styles = StyleSheet.create({
   },
   rightMeta: {
     ...Typography.caption,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     marginLeft: 8,
   },
   preview: {
@@ -166,7 +166,7 @@ const styles = StyleSheet.create({
   },
   metaText: {
     ...Typography.caption,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   badge: {
     paddingHorizontal: 8,

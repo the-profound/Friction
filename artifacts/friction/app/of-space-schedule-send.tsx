@@ -1242,7 +1242,7 @@ const styles = StyleSheet.create({
   contextMetaDot: {
     ...Typography.caption,
     fontSize: 12,
-    color: Colors.zinc300,
+    color: Colors.zinc300, // typography-ok: decorative metadata dot
   },
   slotLabelText: {
     ...Typography.caption,
@@ -1289,7 +1289,7 @@ const styles = StyleSheet.create({
   sectionHeader: {
     ...Typography.caption,
     fontSize: 12,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     fontWeight: "600",
     paddingHorizontal: Spacing.screenPx,
     paddingTop: 20,
@@ -1339,7 +1339,7 @@ const styles = StyleSheet.create({
   sendArticleTitleEmpty: {
     ...Typography.body,
     fontSize: 14,
-    color: Colors.zinc400,
+    color: Colors.zinc400, // typography-ok: unselected/placeholder text
     fontStyle: "italic",
   },
   sendAuthor: {
@@ -1447,7 +1447,7 @@ const styles = StyleSheet.create({
   emptySubtitle: {
     ...Typography.body,
     fontSize: 14,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     textAlign: "center",
     lineHeight: 20,
   },
@@ -1530,7 +1530,7 @@ const sheetStyles = StyleSheet.create({
   emptyText: {
     ...Typography.body,
     fontSize: 14,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     textAlign: "center",
     paddingVertical: 16,
   },
@@ -1547,7 +1547,7 @@ const sheetStyles = StyleSheet.create({
   emptyArticleSubtitle: {
     ...Typography.body,
     fontSize: 13,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     textAlign: "center",
     lineHeight: 19,
   },

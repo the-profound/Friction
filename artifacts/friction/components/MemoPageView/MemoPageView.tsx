@@ -519,14 +519,14 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   hintText: {
-    color: Colors.zinc400,
+    color: Colors.zinc400, // typography-ok: hint text for empty memo
     fontFamily: Platform.select({
       ios: "Pretendard-Regular",
       default: "Pretendard",
     }),
   },
   swipeHint: {
-    color: Colors.zinc300,
+    color: Colors.zinc300, // typography-ok: swipe navigation hint
     fontFamily: Platform.select({
       ios: "Pretendard-Regular",
       default: "Pretendard",

@@ -294,6 +294,6 @@ const styles = StyleSheet.create({
     fontFamily: Platform.select({ ios: "Pretendard-SemiBold", default: "Pretendard-SemiBold" }),
   },
   nextTextDisabled: {
-    color: Colors.zinc400,
+    color: Colors.zinc400, // typography-ok: disabled next-action text
   },
 });

@@ -884,7 +884,7 @@ const styles = StyleSheet.create({
   articleDate: {
     ...Typography.caption,
     fontSize: 12,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   emptyContainer: {
     flex: 1,
@@ -1029,7 +1029,7 @@ const styles = StyleSheet.create({
   moveEmptyText: {
     ...Typography.body,
     fontSize: 14,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   moveCollectionItem: {
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -1078,6 +1078,6 @@ const styles = StyleSheet.create({
   actionSheetCancelText: {
     ...Typography.body,
     fontSize: 16,
-    color: Colors.zinc400,
+    color: Colors.zinc400, // typography-ok: cancel action inactive color
   },
 });

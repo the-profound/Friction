@@ -256,7 +256,7 @@ const styles = StyleSheet.create({
   },
   itemCount: {
     fontSize: 13,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   separator: {
     height: 1,
@@ -271,7 +271,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 14,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   emptyContainer: {
     flex: 1,
@@ -286,7 +286,7 @@ const styles = StyleSheet.create({
   },
   emptySubtext: {
     fontSize: 13,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   createForm: {
     paddingTop: 4,

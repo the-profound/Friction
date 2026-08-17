@@ -444,7 +444,7 @@ const styles = StyleSheet.create({
   loadingText: {
     ...Typography.body,
     fontSize: 14,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   errorRow: {
     paddingHorizontal: Spacing.xl,

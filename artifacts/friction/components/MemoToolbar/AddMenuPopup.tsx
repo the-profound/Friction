@@ -126,6 +126,6 @@ const styles = StyleSheet.create({
     fontFamily: Platform.select({ ios: "Pretendard-Regular", default: "Pretendard" }),
   },
   labelDisabled: {
-    color: Colors.zinc400,
+    color: Colors.zinc400, // typography-ok: disabled menu item label
   },
 });

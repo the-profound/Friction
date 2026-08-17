@@ -353,7 +353,7 @@ const styles = StyleSheet.create({
   collectionCount: {
     ...Typography.caption,
     fontSize: 13,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   emptyContainer: {
     flex: 1,

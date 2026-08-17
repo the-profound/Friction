@@ -778,7 +778,7 @@ const styles = StyleSheet.create({
   sectionHeader: {
     ...Typography.caption,
     fontSize: 12,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     fontWeight: "600",
     paddingHorizontal: Spacing.screenPx,
     textTransform: "uppercase",
@@ -832,7 +832,7 @@ const styles = StyleSheet.create({
   },
   roundStatusText: {
     ...Typography.caption,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
   },
   roundTitle: {
@@ -880,7 +880,7 @@ const styles = StyleSheet.create({
   emptyText: {
     ...Typography.body,
     fontSize: 15,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
 });
 
@@ -1103,7 +1103,7 @@ const editStyles = StyleSheet.create({
   noSlotsText: {
     ...Typography.body,
     fontSize: 13,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     marginTop: 8,
     marginBottom: 4,
     textAlign: "center",
@@ -1133,7 +1133,7 @@ const editStyles = StyleSheet.create({
   slotOrder: {
     ...Typography.bodySemiBold,
     fontSize: 13,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     width: 18,
     textAlign: "center",
   },

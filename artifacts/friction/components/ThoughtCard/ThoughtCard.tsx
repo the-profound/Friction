@@ -171,7 +171,7 @@ const styles = StyleSheet.create({
   },
   dateText: {
     ...Typography.caption,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   contentText: {
     ...Typography.body,

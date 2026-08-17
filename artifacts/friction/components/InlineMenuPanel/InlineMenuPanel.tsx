@@ -286,7 +286,7 @@ const styles = StyleSheet.create({
   sentenceSource: {
     ...Typography.caption,
     fontSize: 12,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   centerContainer: {
     flex: 1,

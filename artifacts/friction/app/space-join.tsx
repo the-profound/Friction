@@ -845,7 +845,7 @@ const styles = StyleSheet.create({
   loadingText: {
     ...Typography.body,
     fontSize: 14,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   codeInputContainer: {
     flex: 1,
@@ -890,7 +890,7 @@ const styles = StyleSheet.create({
   anonymousNoteText: {
     ...Typography.caption,
     fontSize: 12,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   codeInput: {
     ...Typography.body,
@@ -1034,7 +1034,7 @@ const styles = StyleSheet.create({
     color: "#DC2626",
   },
   infoRowValueGray: {
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   spacePreviewContainer: {
     flex: 1,
@@ -1095,7 +1095,7 @@ const styles = StyleSheet.create({
   cancelRequestText: {
     ...Typography.body,
     fontSize: 14,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     textDecorationLine: "underline",
   },
   rejectedContainer: {
@@ -1132,7 +1132,7 @@ const styles = StyleSheet.create({
   rejectionReasonLabel: {
     ...Typography.bodySemiBold,
     fontSize: 12,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },

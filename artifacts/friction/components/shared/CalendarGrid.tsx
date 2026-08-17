@@ -397,7 +397,7 @@ const styles = StyleSheet.create({
     color: "#ef4444",
   },
   dayNumDisabled: {
-    color: Colors.zinc300,
+    color: Colors.zinc300, // typography-ok: disabled calendar day number
   },
   trigger: {
     flexDirection: "row",

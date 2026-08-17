@@ -889,7 +889,7 @@ const styles = StyleSheet.create({
   searchPlaceholderText: {
     ...Typography.body,
     fontSize: 14,
-    color: Colors.zinc400,
+    color: Colors.zinc400, // typography-ok: disabled calendar day number
     textAlign: "center",
   },
   searchResultItem: {

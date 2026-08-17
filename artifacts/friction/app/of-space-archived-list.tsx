@@ -212,7 +212,7 @@ const styles = StyleSheet.create({
   loadingText: {
     ...Typography.body,
     fontSize: 14,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   emptyTitle: {
     ...Typography.bodySemiBold,
@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
   emptySubtitle: {
     ...Typography.body,
     fontSize: 14,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     textAlign: "center",
     lineHeight: 20,
   },
@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
   },
   archivedBadgeText: {
     ...Typography.caption,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
     color: Colors.white,
   },
@@ -304,7 +304,7 @@ const styles = StyleSheet.create({
   },
   anonymousBadgeText: {
     ...Typography.caption,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "500",
     color: Colors.zinc500,
   },
@@ -322,7 +322,7 @@ const styles = StyleSheet.create({
   },
   roleBadgeText: {
     ...Typography.caption,
-    fontSize: 10,
+    fontSize: 12,
     color: Colors.white,
     fontWeight: "600",
   },
@@ -334,7 +334,7 @@ const styles = StyleSheet.create({
   cardDesc: {
     ...Typography.body,
     fontSize: 12,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
     lineHeight: 16,
     marginTop: 2,
   },

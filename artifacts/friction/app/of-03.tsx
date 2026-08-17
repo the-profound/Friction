@@ -666,12 +666,12 @@ const styles = StyleSheet.create({
   sentenceDate: {
     ...Typography.caption,
     fontSize: 12,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   sentencePage: {
     ...Typography.caption,
     fontSize: 12,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   rightActions: {
     gap: 8,
@@ -775,12 +775,12 @@ const sheet = StyleSheet.create({
   metaDate: {
     ...Typography.caption,
     fontSize: 12,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   metaPage: {
     ...Typography.caption,
     fontSize: 12,
-    color: Colors.zinc400,
+    color: Colors.zinc500,
   },
   divider: {
     height: StyleSheet.hairlineWidth,

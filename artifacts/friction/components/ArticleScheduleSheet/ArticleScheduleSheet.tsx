@@ -541,7 +541,7 @@ const styles = StyleSheet.create({
   selectBtnText: {
     ...Typography.body,
     fontSize: 14,
-    color: Colors.zinc400,
+    color: Colors.zinc400, // typography-ok: unselected picker placeholder
     flex: 1,
   },
   selectBtnTextActive: {

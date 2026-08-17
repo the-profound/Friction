@@ -10,7 +10,8 @@
     "build:editor": "node components/WebViewMarkdownEditor/buildEditorHtml.mjs",
     "serve": "node server/serve.js",
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "check:typography": "node scripts/check-typography.mjs"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
