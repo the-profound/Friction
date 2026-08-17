@@ -870,7 +870,7 @@ export default function SpaceScheduleSendScreen() {
       if (hasUnresolvedCenterAssignment) {
         Alert.alert(
           "알림",
-          "배정된 자리가 있지만 날짜가 아직 설정되지 않았어요. 운영자에게 문의해주세요.",
+          "배정된 자리가 있지만 날짜가 아직 설정되지 않았어요. 공간장에게 문의해주세요.",
         );
         return;
       }

@@ -130,7 +130,7 @@ function RejectReasonModal({
         <View style={[modalStyles.sheet, { paddingBottom: insets.bottom + 16 }]}>
           <Text style={modalStyles.title}>거절 사유 입력</Text>
           <Text style={modalStyles.subtitle}>
-            사유를 입력해주세요. 현재는 운영자에게만 기록됩니다.
+            사유를 입력해주세요. 현재는 공간장에게만 기록됩니다.
           </Text>
           <TextInput
             style={modalStyles.input}
@@ -187,7 +187,7 @@ function MemberRow({
             </Text>
             {isOperatorRow && (
               <View style={styles.operatorTag}>
-                <Text style={styles.operatorTagText}>운영자</Text>
+                <Text style={styles.operatorTagText}>공간장</Text>
               </View>
             )}
           </View>
@@ -335,7 +335,7 @@ export default function SpaceParticipantsScreen() {
       if (Platform.OS === "ios") {
         Alert.prompt(
           "거절 사유",
-          "사유를 입력해주세요. 현재는 운영자에게만 기록됩니다.",
+          "사유를 입력해주세요. 현재는 공간장에게만 기록됩니다.",
           async (reason) => {
             if (reason === undefined) return;
             const trimmed = reason.trim();
@@ -423,7 +423,7 @@ export default function SpaceParticipantsScreen() {
       ) : !isOperator ? (
         <View style={styles.centerContainer}>
           <Feather name="lock" size={36} color={Colors.zinc300} />
-          <Text style={styles.errorText}>운영자만 볼 수 있는 화면이에요</Text>
+          <Text style={styles.errorText}>공간장만 볼 수 있는 화면이에요</Text>
           <ScalePressable style={styles.retryButtonOuter} contentStyle={styles.retryButton} onPress={() => router.back()}>
             <Text style={styles.retryButtonText}>돌아가기</Text>
           </ScalePressable>

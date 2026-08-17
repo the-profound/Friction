@@ -362,7 +362,7 @@ function RoundEditSheet({
                               {m.nickname ?? m.userId.slice(0, 8)}
                             </Text>
                             {m.role === "OPERATOR" && (
-                              <Text style={editStyles.memberRoleTag}>운영자</Text>
+                              <Text style={editStyles.memberRoleTag}>공간장</Text>
                             )}
                           </ScalePressable>
                         ))
@@ -475,7 +475,7 @@ function RoundEditSheet({
                                           {m.nickname ?? m.userId.slice(0, 8)}
                                         </Text>
                                         {m.role === "OPERATOR" && (
-                                          <Text style={editStyles.memberRoleTag}>운영자</Text>
+                                          <Text style={editStyles.memberRoleTag}>공간장</Text>
                                         )}
                                       </ScalePressable>
                                     ))
@@ -771,7 +771,7 @@ const styles = StyleSheet.create({
   sectionHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 0,
     paddingTop: 20,
     paddingBottom: 12,
   },
@@ -780,7 +780,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.zinc500,
     fontWeight: "600",
-    paddingHorizontal: Spacing.screenPx,
+    paddingLeft: Spacing.screenPx,
+    paddingRight: 0,
     textTransform: "uppercase",
     letterSpacing: 0.6,
   },

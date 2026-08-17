@@ -116,9 +116,9 @@ function SpaceInfoCard({ space }: { space: SpaceWithCreatorInfo }) {
           value={space.isAnonymous ? "익명 참여" : "실명 참여"}
         />
         {space.isAnonymous ? (
-          <InfoRow icon="shield" label="운영자" value="익명 운영자" />
+          <InfoRow icon="shield" label="공간장" value="익명 공간장" />
         ) : space.creatorNickname ? (
-          <InfoRow icon="shield" label="운영자" value={space.creatorNickname} />
+          <InfoRow icon="shield" label="공간장" value={space.creatorNickname} />
         ) : null}
         {space.isAnonymous && (
           <View style={styles.anonymousNoteRow}>
@@ -465,16 +465,10 @@ export default function SpaceJoinScreen() {
     if (step === "code_input") {
       return (
         <View style={styles.codeInputContainer}>
-          <View style={styles.codeInputIcon}>
-            <Feather name="hash" size={32} color="#7C3AED" />
-          </View>
           <Text style={styles.codeInputTitle}>초대 문구로 신청</Text>
-          <View style={styles.codeInputSubtitleRow}>
-            <Text style={[styles.codeInputSubtitle, { flex: 1 }]}>
-              운영자에게 받은 초대 문구를 입력하면{"\n"}운영자의 승인 후 공간에 참여할 수 있어요
-            </Text>
-            <SpaceInfoNote variant="popup" text={SpaceCopy.join_approvalProcess} />
-          </View>
+          <Text style={styles.codeInputSubtitle}>
+            공간장에게 받은 초대 문구를 입력하면{"\n"}공간장의 승인 후 공간에 참여할 수 있어요
+          </Text>
           <TextInput
             style={[styles.codeInput, !!codeError && styles.codeInputError]}
             placeholder="초대 문구 입력"
@@ -493,16 +487,6 @@ export default function SpaceJoinScreen() {
           {codeError ? (
             <Text style={styles.errorText}>{codeError}</Text>
           ) : null}
-          <SubmitButton
-            style={styles.primaryButton}
-            disabledStyle={styles.primaryButtonDisabled}
-            textStyle={styles.primaryButtonText}
-            onPress={handleCodeLookup}
-            disabled={!inviteCode.trim()}
-            label="다음"
-            pendingLabel="확인 중..."
-            pending={false}
-          />
         </View>
       );
     }
@@ -632,7 +616,7 @@ export default function SpaceJoinScreen() {
             <Feather name="mail" size={16} color="#7C3AED" />
             <Text style={styles.invitationBannerText}>
               {joinContext.space.isAnonymous
-                ? "익명 운영자님이 초대했어요"
+                ? "익명 공간장님이 초대했어요"
                 : joinContext.space.creatorNickname
                 ? `${joinContext.space.creatorNickname}님이 초대했어요`
                 : "초대받은 공간이에요"}
@@ -678,7 +662,7 @@ export default function SpaceJoinScreen() {
           </View>
           <Text style={styles.pendingTitle}>승인 대기 중이에요</Text>
           <Text style={styles.pendingSubtitle}>
-            운영자가 신청을 확인한 후 참여 여부를 결정해요.{"\n"}
+            공간장이 신청을 확인한 후 참여 여부를 결정해요.{"\n"}
             승인되면 바로 알려드릴게요.
           </Text>
           <SpaceInfoCard space={joinContext.space} />
@@ -705,7 +689,7 @@ export default function SpaceJoinScreen() {
             <Text style={styles.rejectionReasonText}>
               {joinContext.codeRequest?.rejectionReason
                 ? joinContext.codeRequest.rejectionReason
-                : "운영자가 별도의 사유를 남기지 않았어요."}
+                : "공간장이 별도의 사유를 남기지 않았어요."}
             </Text>
           </View>
           <SpaceInfoCard space={joinContext.space} />
@@ -731,7 +715,7 @@ export default function SpaceJoinScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <ScalePressable style={styles.backButton} onPress={() => router.back()} hitSlop={8} contentStyle={styles.backButtonContent}>
+        <ScalePressable onPress={() => router.back()} hitSlop={8}>
           <Feather name="chevron-left" size={24} color={Colors.zinc700} />
         </ScalePressable>
         <Text style={styles.headerTitle}>{title}</Text>
@@ -744,6 +728,20 @@ export default function SpaceJoinScreen() {
       >
         {renderContent()}
       </ScrollView>
+      {step === "code_input" && (
+        <View style={[styles.bottomButtonArea, { paddingBottom: insets.bottom + 16 }]}>
+          <SubmitButton
+            style={styles.primaryButton}
+            disabledStyle={styles.primaryButtonDisabled}
+            textStyle={styles.primaryButtonText}
+            onPress={handleCodeLookup}
+            disabled={!inviteCode.trim()}
+            label="다음"
+            pendingLabel="확인 중..."
+            pending={false}
+          />
+        </View>
+      )}
 
       <ConfirmModal
         visible={declineConfirmVisible}
@@ -914,13 +912,20 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     marginTop: -4,
   },
+  bottomButtonArea: {
+    paddingHorizontal: Spacing.screenPx,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.zinc100,
+    backgroundColor: Colors.white,
+  },
   primaryButton: {
     backgroundColor: Colors.zinc900,
     borderRadius: 12,
     paddingVertical: 15,
     alignItems: "center",
     width: "100%",
-    marginTop: 8,
+    marginTop: 0,
   },
   primaryButtonDisabled: {
     backgroundColor: Colors.zinc300,

@@ -368,7 +368,7 @@ function BasicSettingsStep({
           <Text style={stepStyles.toggleDesc}>참여자 이름이 공개되지 않아요</Text>
           {form.isAnonymous && (
             <Text style={stepStyles.toggleNotice}>
-              운영자도 익명으로 참여하며, 다른 참여자에게 운영자 표시가 보이지 않습니다
+              공간장도 익명으로 참여하며, 다른 참여자에게 공간장 표시가 보이지 않습니다
             </Text>
           )}
         </View>
@@ -459,7 +459,7 @@ function OperationSettingsStep({
         />
         <Text style={stepStyles.hint}>
           {form.maxParticipants.trim() && form.operatorParticipates
-            ? `운영자 참여 시 실제 모집 인원 = ${form.maxParticipants}명 − 1 = ${Math.max(1, parseInt(form.maxParticipants, 10) - 1)}명`
+            ? `공간장 참여 시 실제 모집 인원 = ${form.maxParticipants}명 − 1 = ${Math.max(1, parseInt(form.maxParticipants, 10) - 1)}명`
             : "비워두면 인원 제한 없이 운영돼요 (최소 1명)"}
         </Text>
       </View>
@@ -467,15 +467,15 @@ function OperationSettingsStep({
       <View style={stepStyles.toggleRow}>
         <View style={stepStyles.toggleInfo}>
           <View style={stepStyles.labelRow}>
-            <Text style={stepStyles.fieldLabel}>운영자 참여</Text>
+            <Text style={stepStyles.fieldLabel}>공간장 참여</Text>
             <SpaceInfoNote variant="popup" text={SpaceCopy.operatorParticipates_what} />
           </View>
-          <Text style={stepStyles.toggleDesc}>운영자도 회차에 글을 직접 제출해요</Text>
+          <Text style={stepStyles.toggleDesc}>공간장도 회차에 글을 직접 제출해요</Text>
         </View>
         <Toggle
           value={form.operatorParticipates}
           onValueChange={(v) => updateField("operatorParticipates", v)}
-          accessibilityLabel="운영자 참여"
+          accessibilityLabel="공간장 참여"
         />
       </View>
     </View>
@@ -714,8 +714,8 @@ function ConfirmStep({
           )}
           <Text>
             {form.operatorParticipates
-              ? " 운영자도 회차에 참여해요."
-              : " 운영자는 회차에 참여하지 않아요."}
+               ? " 공간장도 회차에 참여해요."
+               : " 공간장은 회차에 참여하지 않아요."}
           </Text>
         </Text>
       </View>

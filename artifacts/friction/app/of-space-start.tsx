@@ -358,7 +358,7 @@ function DraggableSlotList({
               </Text>
               {item.isOperator && (
                 <View style={styles.slotRoleTag}>
-                  <Text style={styles.slotRoleTagText}>운영자</Text>
+                  <Text style={styles.slotRoleTagText}>공간장</Text>
                 </View>
               )}
             </View>
@@ -560,12 +560,12 @@ function OperationSettingsStep({
           </ScalePressable>
         </View>
         <Text style={stepStyles.hint}>
-          1회차 = 참여자 전원이 한 번씩 → 총 {Math.max(1, confirmedCount)}편 / 하루 {centerCount}편씩 발행
+          1회차 = 참여자 전원이 한 번씩 → 총 {Math.max(1, confirmedCount)}편 / 하루 {centerCount}편씩 수신
         </Text>
       </View>
 
       <View style={stepStyles.fieldGroup}>
-        <Text style={stepStyles.fieldLabel}>운영자 참여</Text>
+        <Text style={stepStyles.fieldLabel}>공간장 참여</Text>
         <View style={[stepStyles.readonlyBox]}>
           <Feather
             name={operatorParticipates ? "check-circle" : "circle"}
@@ -573,7 +573,7 @@ function OperationSettingsStep({
             color={operatorParticipates ? Colors.zinc700 : Colors.zinc400}
           />
           <Text style={stepStyles.readonlyText}>
-            {operatorParticipates ? "운영자가 회차에 직접 참여해요" : "운영자는 회차에 참여하지 않아요"}
+            {operatorParticipates ? "공간장도 회차에 직접 참여해요" : "공간장은 회차에 참여하지 않아요"}
           </Text>
           <Text style={stepStyles.readonlyHint}>(수정 불가)</Text>
         </View>
@@ -600,7 +600,7 @@ function OperationSettingsStep({
 
       {/* 종료 예정일 */}
       <View style={stepStyles.fieldGroup}>
-        <Text style={stepStyles.fieldLabel}>종료 예정일 (자동 계산)</Text>
+        <Text style={stepStyles.fieldLabel}>종료 예정일</Text>
         <View style={opStyles.endDateBox}>
           <Feather name="flag" size={14} color={Colors.zinc400} />
           <Text style={opStyles.endDateText}>
@@ -628,7 +628,7 @@ function RoundConfigStep({
     <View style={stepStyles.container}>
         <Text style={stepStyles.stepTitle}>{roundIdx + 1}회차 구성</Text>
         <Text style={stepStyles.stepDesc}>
-          {roundCount}회차 중 {roundIdx + 1}번째 회차의 제목과 설명을 입력해요. (선택)
+          {roundCount}회차 중 {roundIdx + 1}번째 회차의 제목과 설명을 입력해요.
         </Text>
 
         <View style={stepStyles.fieldGroup}>
@@ -675,7 +675,6 @@ function SlotOrderStep({
     <View style={stepStyles.container}>
       <View style={stepStyles.labelRow}>
         <Text style={stepStyles.stepTitle}>중심글 발신 순서</Text>
-        <SpaceInfoNote variant="popup" text={SpaceCopy.slotOrder_what} />
       </View>
       <Text style={stepStyles.stepDesc}>
         오른쪽 핸들({"\u2630"})을 드래그해 순서를 조정해요.
@@ -1139,7 +1138,7 @@ function StartConfirmStep({
             <Text style={confirmStyles.summaryVal}>하루 {centerCount}편</Text>
           </View>
           <View style={confirmStyles.summaryRow}>
-            <Text style={confirmStyles.summaryKey}>운영자 참여</Text>
+            <Text style={confirmStyles.summaryKey}>공간장 참여</Text>
             <Text style={confirmStyles.summaryVal}>{operatorParticipates ? "참여" : "불참"}</Text>
           </View>
           <View style={confirmStyles.summaryRow}>

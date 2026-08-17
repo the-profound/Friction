@@ -714,7 +714,6 @@ function RoundSection({
       <View style={styles.roundSectionHeader}>
         <View style={styles.roundSectionLeft}>
           <Text style={styles.roundNumberText}>{round.roundNumber}회차</Text>
-          <SpaceInfoNote variant="popup" text={SpaceCopy.round_what} />
           <Text style={[styles.roundStatusText, { color: statusColor }]}>
             {roundStatusLabel(round.status)}
           </Text>
@@ -912,13 +911,19 @@ export default function SpaceDetailScreen() {
 
   // ── Track navigation to reader so we can refetch letters on return ───────
   const wentToReaderRef = useRef(false);
+  // ── Track navigation to archive screen so we can refetch space state on return ──
+  const wentToArchiveRef = useRef(false);
   useFocusEffect(
     useCallback(() => {
       if (wentToReaderRef.current) {
         wentToReaderRef.current = false;
         queryClient.invalidateQueries({ queryKey: getListSpaceLettersQueryKey(id) });
       }
-    }, [queryClient, id]),
+      if (wentToArchiveRef.current) {
+        wentToArchiveRef.current = false;
+        queryClient.invalidateQueries({ queryKey: getGetSpaceJoinContextQueryKey(id, { userId }) });
+      }
+    }, [queryClient, id, userId]),
   );
 
   // ── Card select overlay state ─────────────────────────────────────────────
@@ -1227,8 +1232,8 @@ export default function SpaceDetailScreen() {
           </Text>
           <Text style={styles.errorSubText}>
             {wasRemoved
-              ? "운영자에 의해 공간 참여가 종료됐어요"
-              : "초대 문구로 참여 신청 후 운영자 승인을 받으세요"}
+              ? "공간장에 의해 공간 참여가 종료됐어요"
+              : "초대 문구로 참여 신청 후 공간장 승인을 받으세요"}
           </Text>
           <ScalePressable style={styles.retryButtonOuter} contentStyle={styles.retryButton} onPress={() => router.back()}>
             <Text style={styles.retryButtonText}>돌아가기</Text>
@@ -1359,7 +1364,7 @@ export default function SpaceDetailScreen() {
             ) : space.isAnonymous && !isOperator ? (
               <View style={styles.metaIconRow}>
                 <Feather name="user-check" size={12} color={Colors.zinc400} />
-                <Text style={styles.metaIconRowText}>익명 운영자</Text>
+                <Text style={styles.metaIconRowText}>익명 공간장</Text>
               </View>
             ) : null}
           </View>
@@ -1367,14 +1372,16 @@ export default function SpaceDetailScreen() {
           {isOperator && isRecruiting && space.inviteCode ? (
             <View style={[styles.inviteCodeRow, { marginTop: 12 }]}>
               <View style={styles.inviteCodeRowLeft}>
-                <Feather name="key" size={12} color={Colors.zinc400} />
                 <Text style={styles.inviteCodeLabel}>초대 문구</Text>
-                <Text style={styles.inviteCodeValue}>{space.inviteCode}</Text>
+                <ScalePressable
+                  style={styles.inviteCodeValuePressable}
+                  contentStyle={styles.inviteCodeValuePressableContent}
+                  onPress={handleCopyInviteCode}
+                  hitSlop={8}
+                >
+                  <Text style={styles.inviteCodeValue}>{space.inviteCode}</Text>
+                </ScalePressable>
               </View>
-              <ScalePressable contentStyle={styles.inviteCopyBtn} onPress={handleCopyInviteCode} hitSlop={8}>
-                <Feather name="copy" size={13} color={Colors.zinc500} />
-                <Text style={styles.inviteCopyBtnText}>복사</Text>
-              </ScalePressable>
             </View>
           ) : null}
 
@@ -1397,26 +1404,19 @@ export default function SpaceDetailScreen() {
             </View>
             <View style={styles.recruitingInfoCard}>
               <View style={styles.recruitingInfoRow}>
-                <Feather name="calendar" size={13} color={Colors.zinc400} />
                 <Text style={styles.recruitingInfoLabel}>시작 예정일</Text>
                 <Text style={styles.recruitingInfoValue}>
                   {formatPlannedDate((space as any).plannedStartsAt)}
                 </Text>
               </View>
               <View style={styles.recruitingInfoRow}>
-                <Feather name="list" size={13} color={Colors.zinc400} />
                 <Text style={styles.recruitingInfoLabel}>예정 회차 수</Text>
                 <Text style={styles.recruitingInfoValue}>{space.roundCount}회</Text>
               </View>
               <View style={styles.recruitingInfoRow}>
-                <Feather name="repeat" size={13} color={Colors.zinc400} />
-                <Text style={styles.recruitingInfoLabel}>진행 방식</Text>
+                <Text style={styles.recruitingInfoLabel}>중심글 간격</Text>
                 <Text style={styles.recruitingInfoValue}>
-                  {scheduleTypeLabel(
-                    (space as any).scheduleType,
-                    (space as any).weekdays,
-                    space.defaultCenterInterval,
-                  )}
+                  {`${space.defaultCenterInterval}일`}
                 </Text>
               </View>
             </View>
@@ -1493,7 +1493,7 @@ export default function SpaceDetailScreen() {
       {!isOperator && isRecruiting && (
         <View style={[styles.archivedNoticeBar, { paddingBottom: insets.bottom + 12 }]}>
           <Feather name="clock" size={13} color={Colors.zinc500} />
-          <Text style={styles.archivedNoticeText}>운영자가 곧 시작할 예정입니다</Text>
+          <Text style={styles.archivedNoticeText}>공간장이 곧 시작할 예정입니다</Text>
         </View>
       )}
 
@@ -1545,11 +1545,13 @@ export default function SpaceDetailScreen() {
             ? [
                 {
                   label: "공간 보관",
-                  onPress: () =>
+                  onPress: () => {
+                    wentToArchiveRef.current = true;
                     router.push({
                       pathname: "/of-space-archive" as never,
                       params: { id, spaceName: space.name },
-                    }),
+                    });
+                  },
                 },
               ]
             : []),
@@ -2084,15 +2086,15 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.zinc200,
   },
   recruitingInfoLabel: {
-    ...Typography.body,
-    fontSize: 13,
-    color: Colors.zinc600,
-    flex: 1,
-  },
-  recruitingInfoValue: {
     ...Typography.bodySemiBold,
     fontSize: 13,
     color: Colors.zinc800,
+    flex: 1,
+  },
+  recruitingInfoValue: {
+    ...Typography.body,
+    fontSize: 13,
+    color: Colors.zinc600,
     textAlign: "right",
   },
 
@@ -2154,35 +2156,30 @@ const styles = StyleSheet.create({
   inviteCodeRowLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    flexShrink: 1,
+    justifyContent: "space-between",
+    flex: 1,
   },
   inviteCodeLabel: {
-    ...Typography.caption,
-    fontSize: 12,
-    color: Colors.zinc500,
+    ...Typography.bodySemiBold,
+    fontSize: 13,
+    color: Colors.zinc800,
+    flex: 1,
   },
   inviteCodeValue: {
-    ...Typography.bodySemiBold,
-    fontSize: 14,
-    color: Colors.zinc800,
+    ...Typography.body,
+    fontSize: 13,
+    color: Colors.zinc600,
     letterSpacing: 1.5,
+    textAlign: "right",
+    textDecorationLine: "underline",
   },
-  inviteCopyBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.zinc300,
-    backgroundColor: Colors.white,
-    alignSelf: "flex-start",
+  inviteCodeValuePressable: {
+    flexShrink: 1,
+    alignSelf: "stretch",
   },
-  inviteCopyBtnText: {
-    ...Typography.caption,
-    fontSize: 12,
-    color: Colors.zinc500,
+  inviteCodeValuePressableContent: {
+    alignItems: "flex-end",
+    justifyContent: "center",
+    paddingLeft: 8,
   },
 });

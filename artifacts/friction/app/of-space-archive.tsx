@@ -10,8 +10,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
-import { SpaceInfoNote } from "@/components/SpaceInfoNote/SpaceInfoNote";
-import { SpaceCopy } from "@/constants/spaceCopy";
 import {
   useUpdateSpace,
   getListSpacesQueryKey,
@@ -76,15 +74,8 @@ export default function SpaceArchiveScreen() {
         <View style={{ width: 28 }} />
       </View>
 
-      <View style={styles.content}>
-        <View style={styles.iconContainer}>
-          <Feather name="archive" size={48} color={Colors.zinc400} />
-        </View>
-
-        <View style={styles.titleRow}>
-          <Text style={styles.title}>공간을 보관하시겠어요?</Text>
-          <SpaceInfoNote variant="popup" text={SpaceCopy.archive_confirmEffects} />
-        </View>
+      <View style={[styles.content, { paddingBottom: insets.bottom + 16 }]}>
+        <Text style={styles.title}>공간을 보관하시겠어요?</Text>
         <Text style={styles.subtitle}>
           {spaceName ? `'${spaceName}'` : "이 공간"}을 보관 상태로 전환합니다.
         </Text>
@@ -123,7 +114,6 @@ export default function SpaceArchiveScreen() {
             onPress={handleArchive}
             disabled={archiving}
           >
-            <Feather name="archive" size={15} color={Colors.white} />
             <Text style={styles.archiveButtonText}>
               {archiving ? "처리 중..." : "보관하기"}
             </Text>
@@ -162,25 +152,11 @@ const styles = StyleSheet.create({
     paddingTop: 48,
     alignItems: "center",
   },
-  iconContainer: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: Colors.zinc100,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 24,
-  },
-  titleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 8,
-  },
   title: {
     ...Typography.bodySemiBold,
     fontSize: 20,
     color: Colors.zinc900,
+    marginBottom: 8,
   },
   subtitle: {
     ...Typography.body,
@@ -219,12 +195,17 @@ const styles = StyleSheet.create({
     width: "100%",
     flexDirection: "row",
     gap: 12,
+    marginTop: "auto",
+    alignItems: "stretch",
   },
   cancelButtonOuter: {
     flex: 1,
+    height: 52,
+    flexGrow: 1,
+    flexShrink: 0,
   },
   cancelButton: {
-    paddingVertical: 14,
+    height: "100%",
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.zinc300,
@@ -239,15 +220,16 @@ const styles = StyleSheet.create({
   },
   archiveButtonOuter: {
     flex: 2,
+    height: 52,
+    flexGrow: 1,
+    flexShrink: 0,
   },
   archiveButton: {
-    paddingVertical: 14,
+    height: "100%",
     borderRadius: 12,
     backgroundColor: Colors.zinc900,
     alignItems: "center",
     justifyContent: "center",
-    flexDirection: "row",
-    gap: 8,
   },
   archiveButtonDisabled: {
     opacity: 0.5,

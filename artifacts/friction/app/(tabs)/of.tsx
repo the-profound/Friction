@@ -145,7 +145,7 @@ function SpaceCard({
 
 const ROLE_FILTER_OPTIONS: { key: RoleFilter; label: string }[] = [
   { key: "all", label: "전체" },
-  { key: "OPERATOR", label: "운영자" },
+  { key: "OPERATOR", label: "공간장" },
   { key: "PARTICIPANT", label: "참여자" },
 ];
 

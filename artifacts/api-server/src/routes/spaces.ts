@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, inArray, count, ne, isNull } from "drizzle-orm";
+import { eq, and, inArray, count, ne, isNull, isNotNull, asc } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth } from "../middlewares/requireAuth";
 import { generateInviteCode } from "../lib/inviteCodeWords";
@@ -1659,21 +1659,41 @@ async function validateCenterSlotDate(
 type OpeningRoundValidation = { ok: true } | { ok: false; error: string };
 
 async function validateOpeningRoundDate(
-  letter: { spaceRoundId: string | null },
+  letter: { spaceRoundId: string | null; spaceId: string },
   normalizedScheduledAt: Date | undefined,
 ): Promise<OpeningRoundValidation> {
-  if (!letter.spaceRoundId) {
-    return { ok: false, error: "회차 정보가 없는 여는 편지는 예약할 수 없습니다." };
+  // Determine the deadline: use the assigned round's startsAt if present,
+  // otherwise fall back to the first scheduled round of the space.
+  // RECRUITING-phase draft opening letters intentionally have no spaceRoundId
+  // (it is linked to round 1 by startSpace later), so we must not reject them.
+  let startsAt: Date | null | undefined;
+  if (letter.spaceRoundId) {
+    const [round] = await db
+      .select({ startsAt: spaceRoundsTable.startsAt })
+      .from(spaceRoundsTable)
+      .where(eq(spaceRoundsTable.id, letter.spaceRoundId))
+      .limit(1);
+    if (!round) {
+      return { ok: false, error: "회차 정보를 찾을 수 없습니다." };
+    }
+    startsAt = round.startsAt;
+  } else {
+    // No round assigned yet — find the earliest round in this space that has
+    // a start date set, which represents the first round's planned start.
+    const [firstRound] = await db
+      .select({ startsAt: spaceRoundsTable.startsAt })
+      .from(spaceRoundsTable)
+      .where(
+        and(
+          eq(spaceRoundsTable.spaceId, letter.spaceId),
+          isNotNull(spaceRoundsTable.startsAt),
+        ),
+      )
+      .orderBy(asc(spaceRoundsTable.startsAt))
+      .limit(1);
+    startsAt = firstRound?.startsAt;
   }
-  const [round] = await db
-    .select()
-    .from(spaceRoundsTable)
-    .where(eq(spaceRoundsTable.id, letter.spaceRoundId))
-    .limit(1);
-  if (!round) {
-    return { ok: false, error: "회차 정보를 찾을 수 없습니다." };
-  }
-  if (!round.startsAt) {
+  if (!startsAt) {
     return { ok: false, error: "회차 시작일 정보가 없어 여는 편지를 예약할 수 없습니다." };
   }
   // Mirrors the client's getMinOpeningDate(): before 06:00 KST, today is
@@ -1683,7 +1703,7 @@ async function validateOpeningRoundDate(
   if (normalizedScheduledAt && kstDateString(normalizedScheduledAt) < minAllowedDate) {
     return { ok: false, error: "선택한 날짜는 더 이상 예약할 수 없어요. 다른 날짜를 선택해주세요." };
   }
-  if (normalizedScheduledAt && kstDateString(normalizedScheduledAt) > kstDateString(round.startsAt)) {
+  if (normalizedScheduledAt && kstDateString(normalizedScheduledAt) > kstDateString(startsAt)) {
     return { ok: false, error: "여는 편지는 회차 시작일 이전까지만 예약할 수 있어요." };
   }
   return { ok: true };
