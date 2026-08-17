@@ -1329,7 +1329,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     borderBottomWidth: 1,
     borderBottomColor: Colors.zinc100,
-    marginBottom: 8,
   },
   topTabItem: {},
   topTabItemContent: {

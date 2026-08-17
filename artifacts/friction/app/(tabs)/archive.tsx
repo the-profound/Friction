@@ -498,7 +498,7 @@ export default function ArchiveScreen() {
           renderItem={renderPersonalItem}
           numColumns={2}
           columnWrapperStyle={styles.gridRow}
-          contentContainerStyle={[styles.gridContent, { paddingBottom: navBottom, paddingTop: impressionCollection ? 0 : 12 }]}
+          contentContainerStyle={[styles.gridContent, { paddingBottom: navBottom }]}
           refreshControl={<RefreshControl refreshing={isManualRefreshing} onRefresh={handleRefresh} tintColor={Colors.zinc400} />}
           showsVerticalScrollIndicator={false}
           ListFooterComponent={
@@ -828,7 +828,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     borderBottomWidth: 1,
     borderBottomColor: Colors.zinc100,
-    marginBottom: 8,
   },
   subTabItem: {},
   subTabItemContent: {
