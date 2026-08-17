@@ -855,6 +855,7 @@ const styles = StyleSheet.create({
     borderRadius: 1,
   },
   gridContent: {
+    paddingTop: 8,
     paddingHorizontal: Spacing.screenPx,
     gap: 12,
   },

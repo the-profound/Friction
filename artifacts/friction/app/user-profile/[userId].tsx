@@ -377,7 +377,7 @@ export default function UserProfileScreen() {
   );
 
   const contentPadding = useMemo(
-    () => ({ paddingBottom: navBottom + 24 }),
+    () => ({ paddingTop: 8, paddingBottom: navBottom + 24 }),
     [navBottom],
   );
 

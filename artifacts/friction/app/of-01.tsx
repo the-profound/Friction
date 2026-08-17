@@ -310,6 +310,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   listContent: {
+    paddingTop: 8,
     paddingBottom: 40,
   },
   collectionItem: {

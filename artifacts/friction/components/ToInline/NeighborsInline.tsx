@@ -735,6 +735,7 @@ const styles = StyleSheet.create({
     color: Colors.zinc500,
   },
   listContent: {
+    paddingTop: 8,
     paddingBottom: Spacing.navBarPaddingBottom,
   },
   neighborItem: {
