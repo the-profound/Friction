@@ -1694,7 +1694,13 @@ async function validateOpeningRoundDate(
     startsAt = firstRound?.startsAt;
   }
   if (!startsAt) {
-    return { ok: false, error: "회차 시작일 정보가 없어 여는 편지를 예약할 수 없습니다." };
+    if (letter.spaceRoundId) {
+      // Round is assigned but has no start date — unexpected state.
+      return { ok: false, error: "회차 시작일 정보가 없어 여는 편지를 예약할 수 없습니다." };
+    }
+    // RECRUITING phase: no round has a start date yet.
+    // Per the comment above, we must not reject these letters.
+    // Skip the upper-bound check and apply only the min-date guard below.
   }
   // Mirrors the client's getMinOpeningDate(): before 06:00 KST, today is
   // still a valid earliest date; at/after 06:00 KST, only tomorrow onward.
@@ -1703,7 +1709,7 @@ async function validateOpeningRoundDate(
   if (normalizedScheduledAt && kstDateString(normalizedScheduledAt) < minAllowedDate) {
     return { ok: false, error: "선택한 날짜는 더 이상 예약할 수 없어요. 다른 날짜를 선택해주세요." };
   }
-  if (normalizedScheduledAt && kstDateString(normalizedScheduledAt) > kstDateString(startsAt)) {
+  if (startsAt && normalizedScheduledAt && kstDateString(normalizedScheduledAt) > kstDateString(startsAt)) {
     return { ok: false, error: "여는 편지는 회차 시작일 이전까지만 예약할 수 있어요." };
   }
   return { ok: true };
