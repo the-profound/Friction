@@ -2,6 +2,58 @@ export type CustomFetchOptions = RequestInit & {
   responseType?: "json" | "text" | "blob" | "auto";
 };
 
+// ---------------------------------------------------------------------------
+// Default request timeout
+// ---------------------------------------------------------------------------
+
+const DEFAULT_TIMEOUT_MS = 15_000;
+
+/**
+ * Returns an AbortSignal that fires after `ms` milliseconds.
+ * Uses `AbortSignal.timeout` when available (Node 17.3+, modern browsers),
+ * otherwise falls back to a manual AbortController + setTimeout.
+ */
+function buildTimeoutSignal(ms: number): AbortSignal {
+  if (typeof AbortSignal.timeout === "function") {
+    return AbortSignal.timeout(ms);
+  }
+  const controller = new AbortController();
+  setTimeout(
+    () =>
+      controller.abort(
+        new DOMException("The operation was aborted due to timeout", "TimeoutError"),
+      ),
+    ms,
+  );
+  return controller.signal;
+}
+
+/**
+ * Returns an AbortSignal that aborts as soon as either `a` or `b` aborts.
+ * Uses `AbortSignal.any` when available; otherwise wires up manual listeners.
+ */
+function combineSignals(a: AbortSignal, b: AbortSignal): AbortSignal {
+  if (typeof (AbortSignal as unknown as { any?: unknown }).any === "function") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (AbortSignal as any).any([a, b]);
+  }
+  const controller = new AbortController();
+  const onAbort = function (this: AbortSignal) {
+    controller.abort(this.reason);
+  };
+  if (a.aborted) {
+    controller.abort(a.reason);
+    return controller.signal;
+  }
+  if (b.aborted) {
+    controller.abort(b.reason);
+    return controller.signal;
+  }
+  a.addEventListener("abort", onAbort, { once: true });
+  b.addEventListener("abort", onAbort, { once: true });
+  return controller.signal;
+}
+
 export type ErrorType<T = unknown> = ApiError<T>;
 
 export type BodyType<T> = T;
@@ -357,7 +409,14 @@ export async function customFetch<T = unknown>(
 
   const requestInfo = { method, url: resolveUrl(input) };
 
-  const response = await fetch(input, { ...init, method, headers });
+  // Inject a default 15-second timeout when the caller hasn't supplied one.
+  // If the caller did supply a signal, race both so whichever fires first wins.
+  const timeoutSignal = buildTimeoutSignal(DEFAULT_TIMEOUT_MS);
+  const effectiveSignal = init.signal
+    ? combineSignals(init.signal, timeoutSignal)
+    : timeoutSignal;
+
+  const response = await fetch(input, { ...init, method, headers, signal: effectiveSignal });
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);

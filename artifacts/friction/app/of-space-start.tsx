@@ -874,6 +874,7 @@ function OpeningLetterStep({
   onSaved: () => void;
 }) {
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const createSend = useCreateSpaceScheduledSend();
   const createLetter = useCreateSpaceLetter();
   const updateSend = useUpdateSpaceScheduledSend();
@@ -910,7 +911,11 @@ function OpeningLetterStep({
 
   const handleSave = useCallback(async () => {
     if (!selectedArticleId) {
-      Alert.alert("알림", "발송할 글을 선택해주세요.");
+      if (Platform.OS === "web") {
+        showToast({ message: "발송할 글을 선택해주세요.", type: "error", duration: 5000, position: "top" });
+      } else {
+        Alert.alert("알림", "발송할 글을 선택해주세요.");
+      }
       return;
     }
     setSaving(true);
@@ -946,11 +951,15 @@ function OpeningLetterStep({
       setShowArticleList(false);
       onSaved();
     } catch {
-      Alert.alert("오류", "예약에 실패했어요. 다시 시도해주세요.");
+      if (Platform.OS === "web") {
+        showToast({ message: "예약에 실패했어요. 다시 시도해주세요.", type: "error", duration: 5000, position: "top" });
+      } else {
+        Alert.alert("오류", "예약에 실패했어요. 다시 시도해주세요.");
+      }
     } finally {
       setSaving(false);
     }
-  }, [selectedArticleId, scheduledDate, maxScheduledAt, letters, allSends, spaceId, userId, createLetter, createSend, updateSend, queryClient, onSaved]);
+  }, [selectedArticleId, scheduledDate, maxScheduledAt, letters, allSends, spaceId, userId, createLetter, createSend, updateSend, queryClient, onSaved, showToast]);
 
   return (
     <View style={stepStyles.container}>
@@ -1070,6 +1079,7 @@ function StartConfirmStep({
   pendingCount,
   onGoToStep,
   participantCount,
+  hasEnoughParticipants,
 }: {
   roundCount: number;
   scheduleType: StartSpaceBodyScheduleType;
@@ -1085,6 +1095,7 @@ function StartConfirmStep({
   pendingCount: number;
   onGoToStep: (step: number) => void;
   participantCount: number;
+  hasEnoughParticipants: boolean;
 }) {
   const scheduleSummary =
     scheduleType === "N_DAY"
@@ -1161,6 +1172,13 @@ function StartConfirmStep({
           </Text>
         ) : (
           <Text style={confirmStyles.summaryWarning}>확정 참여자가 없어요.</Text>
+        )}
+        {/* Warn when only the operator is in slotItems — server requires
+            at least one non-operator APPROVED participant to start */}
+        {!hasEnoughParticipants && slotItems.length > 0 && (
+          <Text style={confirmStyles.summaryWarning}>
+            비운영자 참여자가 없어요. 참여 신청을 수락해야 시작할 수 있어요.
+          </Text>
         )}
       </View>
 
@@ -1403,7 +1421,12 @@ export default function SpaceStartScreen() {
 
   // ── Start logic ───────────────────────────────────────────────────────────
 
-  const hasEnoughParticipants = slotOrder.length >= 1;
+  // Mirror the server's check: at least one APPROVED non-operator participant
+  // must exist before the space can be started. Counting only slotOrder.length
+  // was incorrect because slotOrder includes the operator when
+  // operatorParticipates=true, making the check pass even when the operator
+  // is the sole approved member.
+  const hasEnoughParticipants = confirmedMembers.some((m) => m.role !== "OPERATOR");
   const hasValidSchedule =
     scheduleType === "N_DAY" || (scheduleType === "WEEKDAY" && weekdays.length > 0);
   const canStart = openingLetterExists && hasEnoughParticipants && hasValidSchedule;
@@ -1447,8 +1470,36 @@ export default function SpaceStartScreen() {
       showToast({ message: "공간이 시작되었습니다", type: "success" });
       router.back();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "공간 시작에 실패했어요. 다시 시도해주세요.";
-      Alert.alert("오류", msg);
+      // AbortError is thrown when the 15-second customFetch timeout fires.
+      // TimeoutError is the reason name set by AbortSignal.timeout().
+      const isTimeout =
+        err instanceof Error &&
+        (err.name === "AbortError" || err.name === "TimeoutError");
+      // Extract the server's Korean error string from ApiError.data when
+      // present, so the Alert shows e.g. "확정된 참여자가 없습니다." rather
+      // than the raw "HTTP 400 Bad Request: …" prefix.
+      const serverMsg: string | null =
+        err != null && typeof err === "object" && "data" in err
+          ? (() => {
+              const d = (err as { data: unknown }).data;
+              return d != null &&
+                typeof d === "object" &&
+                "error" in d &&
+                typeof (d as Record<string, unknown>).error === "string"
+                ? ((d as Record<string, unknown>).error as string)
+                : null;
+            })()
+          : null;
+      const msg = isTimeout
+        ? "시간이 초과됐어요. 다시 시도해주세요."
+        : serverMsg ??
+          (err instanceof Error ? err.message : "공간 시작에 실패했어요. 다시 시도해주세요.");
+      // web 프리뷰는 cross-origin iframe이라 window.alert()가 차단됨 → showToast 사용
+      if (Platform.OS === "web") {
+        showToast({ message: msg, type: "error", duration: 5000, position: "top" });
+      } else {
+        Alert.alert("오류", msg);
+      }
     } finally {
       setIsStarting(false);
     }
@@ -1472,15 +1523,27 @@ export default function SpaceStartScreen() {
 
   const handleStartPress = useCallback(() => {
     if (!openingLetterExists) {
-      Alert.alert("여는 편지 필요", "여는 편지를 먼저 작성해주세요.");
+      if (Platform.OS === "web") {
+        showToast({ message: "여는 편지를 먼저 작성해주세요.", type: "error", duration: 5000, position: "top" });
+      } else {
+        Alert.alert("여는 편지 필요", "여는 편지를 먼저 작성해주세요.");
+      }
       return;
     }
     if (!hasEnoughParticipants) {
-      Alert.alert("참여자 필요", "확정 참여자가 1명 이상 있어야 해요.");
+      if (Platform.OS === "web") {
+        showToast({ message: "확정 참여자가 1명 이상 있어야 해요.", type: "error", duration: 5000, position: "top" });
+      } else {
+        Alert.alert("참여자 필요", "확정 참여자가 1명 이상 있어야 해요.");
+      }
       return;
     }
     if (scheduleType === "WEEKDAY" && weekdays.length === 0) {
-      Alert.alert("알림", "요일을 하나 이상 선택해주세요.");
+      if (Platform.OS === "web") {
+        showToast({ message: "요일을 하나 이상 선택해주세요.", type: "error", duration: 5000, position: "top" });
+      } else {
+        Alert.alert("알림", "요일을 하나 이상 선택해주세요.");
+      }
       return;
     }
     if (hasPendingRequests) {
@@ -1498,7 +1561,7 @@ export default function SpaceStartScreen() {
     }
   }, [
     openingLetterExists, hasEnoughParticipants, scheduleType, weekdays,
-    hasPendingRequests, space, slotOrder, doStart,
+    hasPendingRequests, space, slotOrder, doStart, showToast,
   ]);
 
   // ── Step navigation logic ─────────────────────────────────────────────────
@@ -1734,6 +1797,7 @@ export default function SpaceStartScreen() {
           pendingCount={pendingRequests.length}
           onGoToStep={goToStep}
           participantCount={confirmedMembers.length}
+          hasEnoughParticipants={hasEnoughParticipants}
         />
       );
     }
@@ -1932,6 +1996,23 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 16,
     color: Colors.white,
+  },
+  // Start blockers — reasons shown above the disabled "공간 시작하기" button
+  startBlockers: {
+    gap: 6,
+    paddingBottom: 10,
+  },
+  startBlockerRow: {
+    flexDirection: "row" as const,
+    alignItems: "flex-start" as const,
+    gap: 6,
+  },
+  startBlockerText: {
+    ...Typography.caption,
+    fontSize: 13,
+    color: Colors.noticeAccent,
+    flex: 1,
+    lineHeight: 18,
   },
   // Slot list
   slotRow: {

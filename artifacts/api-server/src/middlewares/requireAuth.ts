@@ -27,7 +27,25 @@ export const requireAuth: RequestHandler = async (req, res, next) => {
     return;
   }
   const token = authHeader.slice(7);
-  const { data, error } = await supabase.auth.getUser(token);
+
+  const AUTH_TIMEOUT_MS = 10_000;
+  let getUserResult: Awaited<ReturnType<typeof supabase.auth.getUser>>;
+  try {
+    getUserResult = await Promise.race([
+      supabase.auth.getUser(token),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error("Authentication service timeout")),
+          AUTH_TIMEOUT_MS,
+        ),
+      ),
+    ]);
+  } catch {
+    res.status(503).json({ error: "Authentication service timeout" });
+    return;
+  }
+
+  const { data, error } = getUserResult;
   if (error || !data.user) {
     res.status(401).json({ error: "Invalid or expired token" });
     return;

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, inArray, count, ne, isNull, isNotNull, asc } from "drizzle-orm";
+import { eq, and, inArray, count, ne, isNull, isNotNull, asc, sql } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth } from "../middlewares/requireAuth";
 import { generateInviteCode } from "../lib/inviteCodeWords";
@@ -474,6 +474,13 @@ router.post("/spaces/:id/start", requireAuth, async (req, res) => {
   let alreadyStarted = false;
   try {
     await db.transaction(async (tx) => {
+      // Prevent indefinite blocking when the background scheduler holds row
+      // locks on space_scheduled_sends (which cascades through space_rounds /
+      // space_round_slots). 8 s is generous enough for the scheduler's own
+      // short transactions to complete, while still surfacing a real lock
+      // contention as a fast error rather than a multi-minute hang.
+      await tx.execute(sql`SET LOCAL lock_timeout = '8000ms'`);
+
       // Conditionally flip RECRUITING -> ACTIVE. This is atomic at the row
       // level, so if two start requests race (e.g. a double-tap), only one
       // UPDATE affects a row; the other affects zero rows and we bail out
