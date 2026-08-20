@@ -71,15 +71,14 @@ export function sortSpaceRoundSlotsForPresentation<T extends SpaceRoundSlotPrese
   });
 }
 
-/** Anonymous opening letters intentionally have no author label anywhere in detail UI. */
+/** Anonymous letters always use the server-provided safe per-space display name. */
 export function getSpaceLetterAuthorName(
-  letterType: string | null | undefined,
+  _letterType: string | null | undefined,
   isAnonymous: boolean,
   displayName: string | null | undefined,
   authorNickname: string | null | undefined,
 ): string | undefined {
-  if (isAnonymous && letterType === "OPENING") return undefined;
-  if (isAnonymous) return displayName ?? "익명";
+  if (isAnonymous) return displayName ?? "참여자";
   return authorNickname ?? "알 수 없음";
 }
 

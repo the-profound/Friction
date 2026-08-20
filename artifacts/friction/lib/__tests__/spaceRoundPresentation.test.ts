@@ -85,9 +85,10 @@ describe("space round presentation", () => {
     ).toEqual(["future", "past"]);
   });
 
-  it("hides only anonymous opening-letter authors", () => {
-    expect(getSpaceLetterAuthorName("OPENING", true, "참여자 1", "실명")).toBeUndefined();
-    expect(getSpaceLetterAuthorName("CENTER", true, "참여자 2", "실명")).toBe("참여자 2");
+  it("uses the safe anonymous display name for every letter type", () => {
+    expect(getSpaceLetterAuthorName("OPENING", true, "달빛", "실명")).toBe("달빛");
+    expect(getSpaceLetterAuthorName("CENTER", true, "참여자", "실명")).toBe("참여자");
+    expect(getSpaceLetterAuthorName("OPENING", true, null, "실명")).toBe("참여자");
     expect(getSpaceLetterAuthorName("OPENING", false, "참여자 1", "실명")).toBe("실명");
   });
 });

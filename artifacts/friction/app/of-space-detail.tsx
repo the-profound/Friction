@@ -458,20 +458,17 @@ function formatSlotDate(iso: string | null | undefined): string | null {
 function SpaceRoundSlotCard({
   slot,
   userId,
-  isAnonymous,
   now,
   onSchedule,
 }: {
   slot: SpaceRoundSlotWithUser;
   userId: string;
-  isAnonymous: boolean;
   now: Date;
   onSchedule: (slot: SpaceRoundSlotWithUser) => void;
 }) {
   const isMySlot = slot.assignedUserId === userId;
   const isPastEmptySlot =
     !!slot.scheduledDate && !isKstSlotReservable(slot.scheduledDate, now);
-  const showNickname = !isAnonymous || isMySlot;
 
   return (
     <View
@@ -504,11 +501,9 @@ function SpaceRoundSlotCard({
         </ScalePressable>
       )}
       <View style={styles.slotCardFooter}>
-        {showNickname && (
-          <Text style={styles.slotNickname} numberOfLines={1}>
-            {isMySlot ? "나" : (slot.assignedUserNickname ?? "멤버")}
-          </Text>
-        )}
+        <Text style={styles.slotNickname} numberOfLines={1}>
+          {isMySlot ? "나" : (slot.assignedUserNickname ?? "참여자")}
+        </Text>
         {slot.scheduledDate ? (
           <Text style={styles.slotDate}>{formatSlotDate(slot.scheduledDate)}</Text>
         ) : null}
@@ -523,7 +518,6 @@ function UpcomingRoundSlots({
   spaceId,
   round,
   userId,
-  isAnonymous,
   now,
   onSchedule,
   openingSlot,
@@ -532,7 +526,6 @@ function UpcomingRoundSlots({
   spaceId: string;
   round: SpaceRound;
   userId: string;
-  isAnonymous: boolean;
   now: Date;
   onSchedule: (slot: SpaceRoundSlotWithUser) => void;
   openingSlot?: React.ReactNode;
@@ -588,7 +581,6 @@ function UpcomingRoundSlots({
       key={slot.id}
       slot={slot}
       userId={userId}
-      isAnonymous={isAnonymous}
       now={now}
       onSchedule={onSchedule}
     />
@@ -672,7 +664,6 @@ function RoundSection({
       <SpaceRoundSlotCard
         slot={slot}
         userId={userId}
-        isAnonymous={isAnonymous}
         now={now}
         onSchedule={onScheduleSlot}
       />
@@ -758,7 +749,6 @@ function RoundSection({
         spaceId={spaceId}
         round={round}
         userId={userId}
-        isAnonymous={isAnonymous}
         now={now}
         onSchedule={onScheduleSlot}
         openingSlot={upcomingOpeningSlotNode}

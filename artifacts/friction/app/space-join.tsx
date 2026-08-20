@@ -10,6 +10,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
+import { useQueryClient } from "@tanstack/react-query";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { SpaceInfoNote } from "@/components/SpaceInfoNote/SpaceInfoNote";
@@ -21,6 +22,8 @@ import { useUser } from "@/contexts/UserContext";
 import {
   getSpaceByInviteCode,
   getSpaceJoinContext,
+  getGetSpaceJoinContextQueryKey,
+  getListSpacesQueryKey,
   useCreateSpaceCodeRequest,
   useUpdateSpaceCodeRequest,
   useUpdateSpaceInvitation,
@@ -77,6 +80,10 @@ function getJoinMutationErrorMessage(error: unknown, fallback: string): string {
   const status = (error as { status?: number }).status;
   if (status === 409) return "이미 사용 중인 공간 닉네임이에요. 다른 이름을 입력해주세요.";
   return fallback;
+}
+
+function isSpaceNicknameConflict(error: unknown): boolean {
+  return (error as { status?: number }).status === 409;
 }
 
 function SpaceNicknameField({
@@ -225,6 +232,7 @@ function InfoRow({
 export default function SpaceJoinScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { userId } = useUser();
   const { showToast } = useToast();
   const params = useLocalSearchParams<{
@@ -255,6 +263,17 @@ export default function SpaceJoinScreen() {
   const createCodeRequest = useCreateSpaceCodeRequest();
   const updateCodeRequest = useUpdateSpaceCodeRequest();
   const updateInvitation = useUpdateSpaceInvitation();
+
+  const refreshJoinCaches = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: getListSpacesQueryKey() }),
+      spaceId
+        ? queryClient.invalidateQueries({
+            queryKey: getGetSpaceJoinContextQueryKey(spaceId, { userId }),
+          })
+        : Promise.resolve(),
+    ]);
+  }, [queryClient, spaceId, userId]);
 
   const loadJoinContext = useCallback(
     async (
@@ -351,6 +370,7 @@ export default function SpaceJoinScreen() {
           const req = ctx.codeRequest;
           if (req?.status === "APPROVED") {
             clearInterval(pollTimerRef.current!);
+            await refreshJoinCaches();
             showToast({ message: "참여가 승인되었어요!", type: "success" });
             router.replace("/(tabs)/of");
           } else if (req?.status === "REJECTED") {
@@ -366,7 +386,7 @@ export default function SpaceJoinScreen() {
     return () => {
       if (pollTimerRef.current) clearInterval(pollTimerRef.current);
     };
-  }, [step, spaceId, userId, showToast, router]);
+  }, [step, spaceId, userId, showToast, router, refreshJoinCaches]);
 
   const handleCodeLookup = useCallback(async () => {
     const raw = inviteCode.trim();
@@ -447,8 +467,13 @@ export default function SpaceJoinScreen() {
       });
       const ctx = await getSpaceJoinContext(spaceId, { userId });
       setJoinContext(ctx);
+      await refreshJoinCaches();
       setStep("code_pending");
     } catch (error) {
+      if (foundSpace.isAnonymous && isSpaceNicknameConflict(error)) {
+        setSpaceNicknameError(getJoinMutationErrorMessage(error, "신청에 실패했어요. 다시 시도해주세요."));
+        return;
+      }
       showToast({
         message: getJoinMutationErrorMessage(error, "신청에 실패했어요. 다시 시도해주세요."),
         type: "error",
@@ -456,7 +481,7 @@ export default function SpaceJoinScreen() {
     } finally {
       setActionLoading(false);
     }
-  }, [foundSpace, spaceId, inviteCode, spaceNickname, createCodeRequest, showToast]);
+  }, [foundSpace, spaceId, inviteCode, spaceNickname, createCodeRequest, showToast, userId, refreshJoinCaches]);
 
   const handleCancelRequest = useCallback(async () => {
     if (!spaceId || !joinContext?.codeRequest) return;
@@ -502,9 +527,14 @@ export default function SpaceJoinScreen() {
           ...(joinContext.space.isAnonymous ? { spaceNickname: spaceNickname.trim() } : {}),
         },
       });
+      await refreshJoinCaches();
       showToast({ message: "공간에 참여했어요!", type: "success" });
       router.replace("/(tabs)/of");
     } catch (error) {
+      if (joinContext.space.isAnonymous && isSpaceNicknameConflict(error)) {
+        setSpaceNicknameError(getJoinMutationErrorMessage(error, "수락에 실패했어요. 다시 시도해주세요."));
+        return;
+      }
       showToast({
         message: getJoinMutationErrorMessage(error, "수락에 실패했어요. 다시 시도해주세요."),
         type: "error",
@@ -512,7 +542,7 @@ export default function SpaceJoinScreen() {
     } finally {
       setActionLoading(false);
     }
-  }, [spaceId, joinContext, spaceNickname, updateInvitation, showToast, router]);
+  }, [spaceId, joinContext, spaceNickname, updateInvitation, showToast, router, refreshJoinCaches]);
 
   const handleDeclineInvitation = useCallback(async () => {
     if (!spaceId || !joinContext?.invitation) return;
