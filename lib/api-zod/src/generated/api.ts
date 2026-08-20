@@ -716,6 +716,11 @@ export const ListInboxResponseItem = zod.object({
       updatedAt: zod.date(),
     })
     .optional(),
+  senderDisplayName: zod
+    .string()
+    .describe(
+      "Safe sender name for inbox display. Anonymous recruiting spaces return 참여자; active\/archived spaces return the space nickname or 참여자 when unavailable.",
+    ),
   collectionName: zod.string().nullish(),
   isReplyToMe: zod.boolean(),
   replyToArticleId: zod.string().uuid().nullish(),
@@ -825,6 +830,11 @@ export const GetInboxItemResponse = zod.object({
       updatedAt: zod.date(),
     })
     .optional(),
+  senderDisplayName: zod
+    .string()
+    .describe(
+      "Safe sender name for inbox display. Anonymous recruiting spaces return 참여자; active\/archived spaces return the space nickname or 참여자 when unavailable.",
+    ),
   collectionName: zod.string().nullish(),
   isReplyToMe: zod.boolean(),
   replyToArticleId: zod.string().uuid().nullish(),
@@ -940,6 +950,11 @@ export const MarkInboxOpenedResponse = zod.object({
       updatedAt: zod.date(),
     })
     .optional(),
+  senderDisplayName: zod
+    .string()
+    .describe(
+      "Safe sender name for inbox display. Anonymous recruiting spaces return 참여자; active\/archived spaces return the space nickname or 참여자 when unavailable.",
+    ),
   collectionName: zod.string().nullish(),
   isReplyToMe: zod.boolean(),
   replyToArticleId: zod.string().uuid().nullish(),
@@ -1049,6 +1064,11 @@ export const MarkInboxReadResponse = zod.object({
       updatedAt: zod.date(),
     })
     .optional(),
+  senderDisplayName: zod
+    .string()
+    .describe(
+      "Safe sender name for inbox display. Anonymous recruiting spaces return 참여자; active\/archived spaces return the space nickname or 참여자 when unavailable.",
+    ),
   collectionName: zod.string().nullish(),
   isReplyToMe: zod.boolean(),
   replyToArticleId: zod.string().uuid().nullish(),

@@ -1,12 +1,101 @@
 import { Router, type IRouter } from "express";
 import { and, desc, eq, ilike, inArray, lte, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { db, inboxTable, articlesTable, usersTable, userArticleReadsTable } from "@workspace/db";
+import {
+  db,
+  inboxTable,
+  articlesTable,
+  usersTable,
+  userArticleReadsTable,
+} from "@workspace/db";
 
 const router: IRouter = Router();
 
 const sourceArticle = alias(articlesTable, "source_article");
 const sourceArticleRead = alias(userArticleReadsTable, "source_article_read");
+const ANONYMOUS_PARTICIPANT_NAME = "참여자";
+
+// Space-backed inbox rows normally carry sourceTeamCollectionId. Older rows
+// predate that column, so use the article's space-letter source relation as a
+// deterministic fallback. This keeps mixed-space inboxes isolated per row.
+const inboxSpaceIdSubquery = sql<string | null>`(
+  COALESCE(
+    (
+      SELECT s.id
+      FROM spaces s
+      WHERE s.id = ${inboxTable.sourceTeamCollectionId}
+      LIMIT 1
+    ),
+    (
+      SELECT s.id
+      FROM spaces s
+      JOIN space_letters sl ON sl.space_id = s.id
+      WHERE sl.source_article_id = ${inboxTable.articleId}
+      ORDER BY sl.created_at ASC
+      LIMIT 1
+    )
+  )
+)`;
+const inboxSpaceAnonymousSubquery = sql<boolean | null>`(
+  SELECT s.is_anonymous
+  FROM spaces s
+  WHERE s.id = ${inboxSpaceIdSubquery}
+  LIMIT 1
+)`;
+const inboxSpaceStatusSubquery = sql<string | null>`(
+  SELECT s.status::text
+  FROM spaces s
+  WHERE s.id = ${inboxSpaceIdSubquery}
+  LIMIT 1
+)`;
+const inboxSpaceNicknameSubquery = sql<string | null>`(
+  COALESCE(
+    (
+      SELECT sp.space_nickname
+      FROM space_participations sp
+      WHERE sp.space_id = ${inboxSpaceIdSubquery}
+        AND sp.user_id = ${inboxTable.senderId}
+        AND sp.status IN ('PENDING', 'APPROVED')
+      ORDER BY sp.updated_at DESC
+      LIMIT 1
+    ),
+    (
+      SELECT scr.space_nickname
+      FROM space_code_requests scr
+      WHERE scr.space_id = ${inboxSpaceIdSubquery}
+        AND scr.requester_id = ${inboxTable.senderId}
+        AND scr.status IN ('PENDING', 'APPROVED')
+      ORDER BY scr.updated_at DESC
+      LIMIT 1
+    )
+  )
+)`;
+const senderDisplayName = sql<string>`(
+  CASE
+    WHEN ${inboxSpaceAnonymousSubquery} IS TRUE THEN
+      CASE
+        WHEN ${inboxSpaceStatusSubquery} = 'RECRUITING' THEN ${ANONYMOUS_PARTICIPANT_NAME}
+        ELSE COALESCE(NULLIF(btrim(${inboxSpaceNicknameSubquery}), ''), ${ANONYMOUS_PARTICIPANT_NAME})
+      END
+    ELSE COALESCE(${usersTable.nickname}, ${ANONYMOUS_PARTICIPANT_NAME})
+  END
+)`;
+
+type InboxRow = {
+  sender?: typeof usersTable.$inferSelect | null;
+  isAnonymousSpace: boolean | null;
+  [key: string]: unknown;
+};
+
+function sanitizeInboxRow<T extends InboxRow>(row: T) {
+  const { isAnonymousSpace, ...item } = row;
+  // Anonymous inbox responses must not expose the account nickname/email
+  // through the sender object. senderDisplayName is the sole display path.
+  return {
+    ...item,
+    ...(isAnonymousSpace ? { sender: undefined } : {}),
+  };
+}
 
 // Resolves the "출처 모임명" shown next to each inbox card.
 // New rows carry sourceTeamCollectionId for team-collection deliveries; for
@@ -67,6 +156,8 @@ router.get("/inbox", async (req, res) => {
       createdAt: inboxTable.createdAt,
       article: articlesTable,
       sender: usersTable,
+      senderDisplayName,
+      isAnonymousSpace: inboxSpaceAnonymousSubquery,
       collectionName: collectionNameSubquery,
       isReplyToMe: sql<boolean>`(${sourceArticle.id} IS NOT NULL AND ${sourceArticle.authorId} = ${inboxTable.recipientId})`,
       replyToArticleId: articlesTable.sourceArticleId,
@@ -94,7 +185,7 @@ router.get("/inbox", async (req, res) => {
     .where(and(...whereConditions))
     .orderBy(inboxTable.visibleAt);
 
-  res.json(items);
+  res.json(items.map(sanitizeInboxRow));
 });
 
 router.get("/inbox/:id", async (req, res) => {
@@ -112,6 +203,8 @@ router.get("/inbox/:id", async (req, res) => {
       createdAt: inboxTable.createdAt,
       article: articlesTable,
       sender: usersTable,
+      senderDisplayName,
+      isAnonymousSpace: inboxSpaceAnonymousSubquery,
       collectionName: collectionNameSubquery,
       isReplyToMe: sql<boolean>`(${sourceArticle.id} IS NOT NULL AND ${sourceArticle.authorId} = ${inboxTable.recipientId})`,
       replyToArticleId: articlesTable.sourceArticleId,
@@ -126,7 +219,7 @@ router.get("/inbox/:id", async (req, res) => {
     res.status(404).json({ error: "Inbox item not found" });
     return;
   }
-  res.json(items[0]);
+  res.json(sanitizeInboxRow(items[0]));
 });
 
 router.delete("/inbox/:id", async (req, res) => {

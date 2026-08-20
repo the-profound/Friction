@@ -3081,6 +3081,9 @@ components:
           $ref: "#/components/schemas/Article"
         sender:
           $ref: "#/components/schemas/User"
+        senderDisplayName:
+          type: string
+          description: "Safe sender name for inbox display. Anonymous recruiting spaces return 참여자; active/archived spaces return the space nickname or 참여자 when unavailable."
         collectionName:
           type: string
           nullable: true
@@ -3099,7 +3102,7 @@ components:
         isEnvelope:
           type: boolean
           description: Whether this inbox item was sent as a sealed envelope. When true and openedAt is null, the recipient sees the envelope front face first.
-      required: [id, recipientId, articleId, senderId, visibleAt, isRead, createdAt, isReplyToMe, hasReadBefore, isEnvelope]
+      required: [id, recipientId, articleId, senderId, visibleAt, isRead, createdAt, senderDisplayName, isReplyToMe, hasReadBefore, isEnvelope]
 
     MarkInboxOthersReadResponse:
       type: object

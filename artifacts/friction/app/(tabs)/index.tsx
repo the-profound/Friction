@@ -44,6 +44,10 @@ function findAllDescendants(rootArticleId: string, allItems: InboxItem[]): Inbox
   return direct.flatMap((it) => [it, ...findAllDescendants(it.articleId, allItems)]);
 }
 
+function getInboxSenderName(item: InboxItem): string {
+  return item.senderDisplayName ?? item.sender?.nickname ?? item.sender?.id ?? "참여자";
+}
+
 const { width: SCREEN_W } = Dimensions.get("window");
 const CARD_W = Sizing.cardSlotW;
 const CARD_H = Sizing.cardH;
@@ -264,7 +268,7 @@ function CarouselGroup({
       >
         {isSealed ? (
           <EnvelopeFrontCard
-            senderName={item.sender?.nickname ?? item.sender?.id}
+            senderName={getInboxSenderName(item)}
             senderLocation={item.collectionName}
             recipientName={recipientName}
             isActive={index === activeIndex}
@@ -274,7 +278,7 @@ function CarouselGroup({
           <ArticleCardItem
             title={item.article?.title ?? "제목 없음"}
             onPress={handlePress}
-            authorName={item.sender?.nickname ?? item.sender?.id}
+            authorName={getInboxSenderName(item)}
             collectionName={item.collectionName}
             cover={item.article?.cover}
             isRead={item.isRead}
@@ -384,7 +388,7 @@ export default function InboxScreen() {
     const q = searchQuery.toLowerCase();
     return visibleItems.filter((item) => {
       const title = item.article?.title?.toLowerCase() ?? "";
-      const senderName = item.sender?.nickname?.toLowerCase() ?? "";
+      const senderName = getInboxSenderName(item).toLowerCase();
       return title.includes(q) || senderName.includes(q);
     });
   }, [visibleItems, searchQuery]);
@@ -576,6 +580,7 @@ export default function InboxScreen() {
         slot.article
           ? {
               authorName:
+                inboxItem?.senderDisplayName ??
                 inboxItem?.sender?.nickname ??
                 slot.article.authorNickname ??
                 null,
@@ -593,7 +598,7 @@ export default function InboxScreen() {
     // Tapped article
     artList.push(tapItem.article);
     metaList.push({
-      authorName: tapItem.sender?.nickname ?? tapItem.sender?.id ?? null,
+      authorName: tapItem.senderDisplayName ?? tapItem.sender?.nickname ?? tapItem.sender?.id ?? null,
       authorId: tapItem.sender?.id ?? tapItem.senderId ?? null,
       collectionName: tapItem.collectionName ?? tapItem.article?.collectionName ?? null,
       collectionId: tapItem.sourceTeamCollectionId ?? tapItem.article?.collectionId ?? null,
@@ -607,7 +612,7 @@ export default function InboxScreen() {
       if (!desc.article) continue;
       artList.push(desc.article);
       metaList.push({
-        authorName: desc.sender?.nickname ?? desc.article.authorNickname ?? null,
+        authorName: desc.senderDisplayName ?? desc.sender?.nickname ?? desc.article.authorNickname ?? null,
         authorId: desc.sender?.id ?? desc.senderId ?? desc.article?.authorId ?? null,
         collectionName: desc.collectionName ?? desc.article.collectionName ?? null,
         collectionId: desc.sourceTeamCollectionId ?? desc.article?.collectionId ?? null,
@@ -706,7 +711,7 @@ export default function InboxScreen() {
         envelopeInfo={
           tapItem && (tapItem as any).isEnvelope && !tapItem.openedAt
             ? {
-                senderName: tapItem.sender?.nickname ?? tapItem.sender?.id ?? null,
+                senderName: tapItem.senderDisplayName ?? tapItem.sender?.nickname ?? tapItem.sender?.id ?? null,
                 senderLocation: tapItem.collectionName ?? null,
                 recipientName: nickname ?? null,
                 onOpen: async () => {

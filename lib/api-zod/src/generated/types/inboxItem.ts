@@ -21,6 +21,8 @@ export interface InboxItem {
   createdAt: Date;
   article?: Article;
   sender?: User;
+  /** Safe sender name for inbox display. Anonymous recruiting spaces return 참여자; active/archived spaces return the space nickname or 참여자 when unavailable. */
+  senderDisplayName: string;
   collectionName?: string | null;
   isReplyToMe: boolean;
   replyToArticleId?: string | null;

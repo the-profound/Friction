@@ -134,7 +134,8 @@ export default function SourceArticlePickerSheet({
   const renderInboxItem = useCallback(
     ({ item }: { item: InboxItem }) => {
       const title = item.article?.title ?? "(제목 없음)";
-      const senderName = item.sender?.nickname ?? item.sender?.email ?? "알 수 없음";
+      const senderName =
+        item.senderDisplayName ?? item.sender?.nickname ?? item.sender?.email ?? "참여자";
       const isSelected = item.article?.id === currentSourceArticleId;
       return (
         <ScalePressable
