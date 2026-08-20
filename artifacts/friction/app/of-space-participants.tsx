@@ -171,7 +171,7 @@ function MemberRow({
 }) {
   const isOperatorRow = member.role === "OPERATOR";
   const label = isAnonymous
-    ? (member.displayName ?? "참여자")
+    ? (member.accountNickname ?? "알 수 없음")
     : (member.nickname ?? "알 수 없음");
 
   return (
@@ -229,9 +229,16 @@ export default function SpaceParticipantsScreen() {
   const myParticipation = joinContextQuery.data?.participation;
   const isOperator = myParticipation?.status === "APPROVED" && myParticipation?.role === "OPERATOR";
 
-  const membersQuery = useListSpaceMembers(id, {
-    query: { enabled: !!id && isOperator, queryKey: getListSpaceMembersQueryKey(id) },
-  });
+  const membersQuery = useListSpaceMembers(
+    id,
+    { displayContext: "PARTICIPANT_MANAGEMENT" },
+    {
+      query: {
+        enabled: !!id && isOperator,
+        queryKey: getListSpaceMembersQueryKey(id, { displayContext: "PARTICIPANT_MANAGEMENT" }),
+      },
+    },
+  );
 
   const codeRequestsQuery = useListSpaceCodeRequests(
     id,
@@ -274,7 +281,9 @@ export default function SpaceParticipantsScreen() {
 
   const handleRemoveMember = useCallback(
     (member: SpaceMember) => {
-      const label = isAnonymous ? (member.displayName ?? "이 참여자") : (member.nickname ?? "이 참여자");
+      const label = isAnonymous
+        ? (member.accountNickname ?? "이 참여자")
+        : (member.nickname ?? "이 참여자");
       Alert.alert(
         "참여자 내보내기",
         `${label}님을 공간에서 내보낼까요? 내보낸 참여자는 더 이상 이 공간에 접근할 수 없어요.`,

@@ -1157,6 +1157,11 @@ router.get("/spaces/:id/members", requireAuth, async (req, res) => {
     .from(spacesTable)
     .where(eq(spacesTable.id, req.params.id))
     .limit(1);
+  const displayContext = req.query.displayContext === "PARTICIPANT_MANAGEMENT"
+    ? "PARTICIPANT_MANAGEMENT"
+    : req.query.displayContext === "START_ORDER"
+      ? "START_ORDER"
+      : "SAFE";
   const participations = await db
     .select({
       id: spaceParticipationsTable.id,
@@ -1179,16 +1184,18 @@ router.get("/spaces/:id/members", requireAuth, async (req, res) => {
 
   const result = participations.map((p) => ({
     ...p,
-    // Never expose users.nickname from an anonymous space response.
-    nickname: space?.isAnonymous
+    // The member endpoint is operator-only. Raw identity is returned only for
+    // the explicitly requested screen context; every other context stays safe.
+    nickname: space?.isAnonymous && displayContext !== "PARTICIPANT_MANAGEMENT"
       ? getAnonymousDisplayName(space, p.spaceNickname)
       : p.nickname,
     spaceNickname: space?.isAnonymous
-      ? getAnonymousDisplayName(space, p.spaceNickname)
+      ? displayContext === "START_ORDER" ? p.spaceNickname : getAnonymousDisplayName(space, p.spaceNickname)
       : null,
     displayName: space?.isAnonymous
-      ? getAnonymousDisplayName(space, p.spaceNickname)
+      ? displayContext === "START_ORDER" ? p.spaceNickname : getAnonymousDisplayName(space, p.spaceNickname)
       : null,
+    accountNickname: displayContext === "PARTICIPANT_MANAGEMENT" ? p.nickname : null,
   }));
   res.json(result);
 });

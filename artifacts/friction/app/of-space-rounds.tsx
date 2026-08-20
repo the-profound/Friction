@@ -105,12 +105,16 @@ function RoundEditSheet({
   const slots = (slotsQuery.data ?? []) as SpaceRoundSlotWithUser[];
 
   const needsMembers = isUpcoming && (showAddSlot || editingSlotId !== null);
-  const membersQuery = useListSpaceMembers(round.spaceId, {
-    query: {
-      enabled: needsMembers,
-      queryKey: getListSpaceMembersQueryKey(round.spaceId),
+  const membersQuery = useListSpaceMembers(
+    round.spaceId,
+    undefined,
+    {
+      query: {
+        enabled: needsMembers,
+        queryKey: getListSpaceMembersQueryKey(round.spaceId),
+      },
     },
-  });
+  );
   const members = (membersQuery.data ?? []) as SpaceMember[];
 
   const createSlot = useCreateSpaceRoundSlot();

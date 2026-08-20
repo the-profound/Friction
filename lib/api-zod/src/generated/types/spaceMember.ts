@@ -18,6 +18,8 @@ export interface SpaceMember {
   status: string;
   /** 익명 공간의 안전한 표시명. 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임. 비익명 공간에서는 null. */
   displayName?: string | null;
+  /** 참여자 관리 화면에서만 제공되는 가입 계정 이름. 다른 문맥에서는 null. */
+  accountNickname?: string | null;
   /** When this participation was created (join order) */
   createdAt: Date;
 }

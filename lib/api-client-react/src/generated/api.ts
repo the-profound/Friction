@@ -59,6 +59,7 @@ import type {
   ListNeighborsParams,
   ListSendRecordsParams,
   ListSpaceCodeRequestsParams,
+  ListSpaceMembersParams,
   ListSpacesParams,
   ListStoredSentencesParams,
   ListTeamArticlesParams,
@@ -6531,22 +6532,41 @@ export function useListAllSpaceScheduledSends<
 /**
  * @summary List approved members of a space (with nicknames)
  */
-export const getListSpaceMembersUrl = (id: string) => {
-  return `/api/spaces/${id}/members`;
+export const getListSpaceMembersUrl = (
+  id: string,
+  params?: ListSpaceMembersParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/spaces/${id}/members?${stringifiedParams}`
+    : `/api/spaces/${id}/members`;
 };
 
 export const listSpaceMembers = async (
   id: string,
+  params?: ListSpaceMembersParams,
   options?: RequestInit,
 ): Promise<SpaceMember[]> => {
-  return customFetch<SpaceMember[]>(getListSpaceMembersUrl(id), {
+  return customFetch<SpaceMember[]>(getListSpaceMembersUrl(id, params), {
     ...options,
     method: "GET",
   });
 };
 
-export const getListSpaceMembersQueryKey = (id: string) => {
-  return [`/api/spaces/${id}/members`] as const;
+export const getListSpaceMembersQueryKey = (
+  id: string,
+  params?: ListSpaceMembersParams,
+) => {
+  return [`/api/spaces/${id}/members`, ...(params ? [params] : [])] as const;
 };
 
 export const getListSpaceMembersQueryOptions = <
@@ -6554,6 +6574,7 @@ export const getListSpaceMembersQueryOptions = <
   TError = ErrorType<unknown>,
 >(
   id: string,
+  params?: ListSpaceMembersParams,
   options?: {
     query?: UseQueryOptions<
       Awaited<ReturnType<typeof listSpaceMembers>>,
@@ -6565,11 +6586,13 @@ export const getListSpaceMembersQueryOptions = <
 ) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getListSpaceMembersQueryKey(id);
+  const queryKey =
+    queryOptions?.queryKey ?? getListSpaceMembersQueryKey(id, params);
 
   const queryFn: QueryFunction<
     Awaited<ReturnType<typeof listSpaceMembers>>
-  > = ({ signal }) => listSpaceMembers(id, { signal, ...requestOptions });
+  > = ({ signal }) =>
+    listSpaceMembers(id, params, { signal, ...requestOptions });
 
   return {
     queryKey,
@@ -6597,6 +6620,7 @@ export function useListSpaceMembers<
   TError = ErrorType<unknown>,
 >(
   id: string,
+  params?: ListSpaceMembersParams,
   options?: {
     query?: UseQueryOptions<
       Awaited<ReturnType<typeof listSpaceMembers>>,
@@ -6606,7 +6630,7 @@ export function useListSpaceMembers<
     request?: SecondParameter<typeof customFetch>;
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getListSpaceMembersQueryOptions(id, options);
+  const queryOptions = getListSpaceMembersQueryOptions(id, params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

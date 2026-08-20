@@ -2568,6 +2568,15 @@ export const ListSpaceMembersParams = zod.object({
   id: zod.coerce.string().uuid(),
 });
 
+export const ListSpaceMembersQueryParams = zod.object({
+  displayContext: zod
+    .enum(["START_ORDER", "PARTICIPANT_MANAGEMENT"])
+    .optional()
+    .describe(
+      "Operator-only presentation context. START_ORDER exposes the selected anonymous room nickname; PARTICIPANT_MANAGEMENT exposes the account nickname. Omit for safe display names.",
+    ),
+});
+
 export const ListSpaceMembersResponseItem = zod.object({
   id: zod
     .string()
@@ -2593,6 +2602,12 @@ export const ListSpaceMembersResponseItem = zod.object({
     .nullish()
     .describe(
       "익명 공간의 안전한 표시명. 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임. 비익명 공간에서는 null.",
+    ),
+  accountNickname: zod
+    .string()
+    .nullish()
+    .describe(
+      "참여자 관리 화면에서만 제공되는 가입 계정 이름. 다른 문맥에서는 null.",
     ),
   createdAt: zod
     .date()

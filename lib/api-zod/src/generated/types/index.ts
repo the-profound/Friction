@@ -57,6 +57,8 @@ export * from "./listNeighborsParams";
 export * from "./listSendRecordsParams";
 export * from "./listSpaceCodeRequestsParams";
 export * from "./listSpaceCodeRequestsStatus";
+export * from "./listSpaceMembersDisplayContext";
+export * from "./listSpaceMembersParams";
 export * from "./listSpacesParams";
 export * from "./listStoredSentencesParams";
 export * from "./listTeamArticlesParams";

@@ -244,6 +244,7 @@ interface SlotRowInfo {
   userId: string;
   nickname: string;
   isOperator: boolean;
+  isMine: boolean;
 }
 
 function DraggableSlotList({
@@ -354,7 +355,7 @@ function DraggableSlotList({
             <Text style={styles.slotOrder}>{i + 1}</Text>
             <View style={styles.slotInfo}>
               <Text style={styles.slotNickname} numberOfLines={1}>
-                {item.nickname}
+                {item.isMine ? `(나) ${item.nickname}` : item.nickname}
               </Text>
               {item.isOperator && (
                 <View style={styles.slotRoleTag}>
@@ -1264,12 +1265,16 @@ export default function SpaceStartScreen() {
   );
   const space = joinContextQuery.data?.space as SpaceWithCreatorInfo | undefined;
 
-  const membersQuery = useListSpaceMembers(id, {
-    query: {
-      enabled: !!id,
-      queryKey: getListSpaceMembersQueryKey(id),
+  const membersQuery = useListSpaceMembers(
+    id,
+    { displayContext: "START_ORDER" },
+    {
+      query: {
+        enabled: !!id,
+        queryKey: getListSpaceMembersQueryKey(id, { displayContext: "START_ORDER" }),
+      },
     },
-  });
+  );
   const confirmedMembers = useMemo(
     () => ((membersQuery.data ?? []) as SpaceMember[]).filter((m) => m.status === "APPROVED"),
     [membersQuery.data],
@@ -1408,8 +1413,11 @@ export default function SpaceStartScreen() {
         const m = memberById[uid];
         return {
           userId: uid,
-          nickname: m?.nickname ?? uid.slice(0, 8),
+          nickname: space?.isAnonymous
+            ? (m?.spaceNickname ?? "참여자")
+            : (m?.nickname ?? uid.slice(0, 8)),
           isOperator: m?.role === "OPERATOR",
+          isMine: uid === userId,
         };
       }),
     [slotOrder, memberById],

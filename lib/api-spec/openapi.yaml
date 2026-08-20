@@ -1787,6 +1787,12 @@ paths:
       summary: List approved members of a space (with nicknames)
       parameters:
         - $ref: "#/components/parameters/IdPath"
+        - name: displayContext
+          in: query
+          description: "Operator-only presentation context. START_ORDER exposes the selected anonymous room nickname; PARTICIPANT_MANAGEMENT exposes the account nickname. Omit for safe display names."
+          schema:
+            type: string
+            enum: [START_ORDER, PARTICIPANT_MANAGEMENT]
       responses:
         "200":
           description: Member list
@@ -4148,6 +4154,10 @@ components:
           type: string
           nullable: true
           description: "익명 공간의 안전한 표시명. 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임. 비익명 공간에서는 null."
+        accountNickname:
+          type: string
+          nullable: true
+          description: "참여자 관리 화면에서만 제공되는 가입 계정 이름. 다른 문맥에서는 null."
         createdAt:
           type: string
           format: date-time

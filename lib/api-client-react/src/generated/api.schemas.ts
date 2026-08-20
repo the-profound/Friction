@@ -863,6 +863,8 @@ export interface SpaceMember {
   status: string;
   /** 익명 공간의 안전한 표시명. 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임. 비익명 공간에서는 null. */
   displayName?: string | null;
+  /** 참여자 관리 화면에서만 제공되는 가입 계정 이름. 다른 문맥에서는 null. */
+  accountNickname?: string | null;
   /** When this participation was created (join order) */
   createdAt: string;
 }
@@ -1405,6 +1407,21 @@ export type ListMySpaceCodeRequestsParams = {
 export type ListSpacesParams = {
   userId: string;
 };
+
+export type ListSpaceMembersParams = {
+  /**
+   * Operator-only presentation context. START_ORDER exposes the selected anonymous room nickname; PARTICIPANT_MANAGEMENT exposes the account nickname. Omit for safe display names.
+   */
+  displayContext?: ListSpaceMembersDisplayContext;
+};
+
+export type ListSpaceMembersDisplayContext =
+  (typeof ListSpaceMembersDisplayContext)[keyof typeof ListSpaceMembersDisplayContext];
+
+export const ListSpaceMembersDisplayContext = {
+  START_ORDER: "START_ORDER",
+  PARTICIPANT_MANAGEMENT: "PARTICIPANT_MANAGEMENT",
+} as const;
 
 export type ListSpaceCodeRequestsParams = {
   status?: ListSpaceCodeRequestsStatus;
