@@ -4,6 +4,7 @@ set -e
 EAS="/home/runner/workspace/.config/npm/node_global/bin/eas"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_DIR="$(dirname "$SCRIPT_DIR")"
+export EXPO_PUBLIC_DOMAIN="${EXPO_PUBLIC_DOMAIN:-friction-1.replit.app}"
 
 echo "========================================"
 echo "  Friction iOS Preview Build (EAS)"
@@ -30,6 +31,10 @@ if [ -z "$APP_STORE_CONNECT_P8_KEY" ]; then
   echo "❌ APP_STORE_CONNECT_P8_KEY 환경변수가 없습니다."
   exit 1
 fi
+
+echo ""
+echo "🔎 릴리즈 환경 변수 검증 중..."
+node "$SCRIPT_DIR/validate-release-env.mjs"
 
 echo "$APP_STORE_CONNECT_P8_KEY" > /tmp/asc_api_key.p8
 chmod 600 /tmp/asc_api_key.p8

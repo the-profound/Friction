@@ -1,5 +1,75 @@
 const IS_DEV = process.env.APP_VARIANT === "development";
 
+function validateEasReleaseEnvironment() {
+  const profile = process.env.EAS_BUILD_PROFILE;
+  if (profile !== "preview" && profile !== "production") return;
+
+  const missing = [
+    "EXPO_PUBLIC_SUPABASE_URL",
+    "EXPO_PUBLIC_SUPABASE_ANON_KEY",
+    "EXPO_PUBLIC_DOMAIN",
+  ].filter((name) => {
+    const value = process.env[name]?.trim().toLowerCase() ?? "";
+    return (
+      value === "" ||
+      value === "placeholder" ||
+      value === "placeholder-anon-key" ||
+      value === "undefined" ||
+      value === "null"
+    );
+  });
+
+  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim() ?? "";
+  try {
+    const url = new URL(supabaseUrl);
+    if (
+      (url.protocol !== "https:" && url.protocol !== "http:") ||
+      !url.hostname ||
+      url.hostname.toLowerCase().includes("placeholder") ||
+      url.hostname.toLowerCase().endsWith(".invalid") ||
+      url.pathname !== "/" ||
+      url.search ||
+      url.hash ||
+      url.username ||
+      url.password
+    ) {
+      missing.push("EXPO_PUBLIC_SUPABASE_URL");
+    }
+  } catch {
+    missing.push("EXPO_PUBLIC_SUPABASE_URL");
+  }
+
+  const domain = process.env.EXPO_PUBLIC_DOMAIN?.trim() ?? "";
+  const normalizedDomain = /^https?:\/\//i.test(domain) ? domain : `https://${domain}`;
+  try {
+    const url = new URL(normalizedDomain);
+    if (
+      !url.hostname ||
+      url.hostname.toLowerCase().includes("placeholder") ||
+      url.hostname.toLowerCase().endsWith(".invalid") ||
+      url.pathname !== "/" ||
+      url.search ||
+      url.hash ||
+      url.username ||
+      url.password
+    ) {
+      missing.push("EXPO_PUBLIC_DOMAIN");
+    }
+  } catch {
+    missing.push("EXPO_PUBLIC_DOMAIN");
+  }
+
+  if (missing.length > 0) {
+    throw new Error(
+      `Release configuration is incomplete for EAS ${profile}: ${[
+        ...new Set(missing),
+      ].join(", ")}. Values are intentionally not printed.`,
+    );
+  }
+}
+
+validateEasReleaseEnvironment();
+
 module.exports = {
   expo: {
     name: IS_DEV ? "Friction Dev" : "Friction",

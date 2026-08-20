@@ -127,6 +127,13 @@ function resolveUrl(input: RequestInfo | URL): string {
   return input.url;
 }
 
+function isReactNativeRuntime(): boolean {
+  return (
+    typeof navigator !== "undefined" &&
+    (navigator as Navigator & { product?: string }).product === "ReactNative"
+  );
+}
+
 function mergeHeaders(...sources: Array<HeadersInit | undefined>): Headers {
   const headers = new Headers();
 
@@ -376,6 +383,15 @@ export async function customFetch<T = unknown>(
   options: CustomFetchOptions = {},
 ): Promise<T> {
   input = applyBaseUrl(input);
+  if (
+    isReactNativeRuntime() &&
+    !_baseUrl &&
+    resolveUrl(input).startsWith("/")
+  ) {
+    throw new Error(
+      "API base URL is not configured for the native release bundle.",
+    );
+  }
   const { responseType = "auto", headers: headersInit, ...init } = options;
 
   const method = resolveMethod(input, init.method);

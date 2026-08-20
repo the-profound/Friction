@@ -38,6 +38,152 @@ export interface NativeSessionRestoreOptions {
   canRefresh?: boolean | (() => boolean);
 }
 
+export type AuthSessionEvent =
+  | "INITIAL_SESSION"
+  | "SIGNED_IN"
+  | "SIGNED_OUT"
+  | "TOKEN_REFRESHED"
+  | "USER_UPDATED"
+  | "PASSWORD_RECOVERY"
+  | (string & {});
+
+export interface AuthSessionEventResult<T extends SessionLike> {
+  accepted: boolean;
+  session: T | null;
+}
+
+export interface RestoreDecision<T extends SessionLike> {
+  accepted: boolean;
+  restoreComplete: boolean;
+  session: T | null;
+}
+
+/**
+ * Serializes the two asynchronous authorities that can write auth state:
+ * native restore and Supabase auth events. Once a sign-in/sign-up operation
+ * commits a decision, an older restore result can only mark itself complete;
+ * it cannot replace that decision.
+ */
+export function createAuthSessionCoordinator<T extends SessionLike>() {
+  let revision = 0;
+  let restoreRevision: number | null = null;
+  let restorePending = false;
+  let restoreDecisionMade = false;
+  let authOperationRevision: number | null = null;
+  let hasAuthoritativeDecision = false;
+  let blockAuthEventsUntilNextOperation = false;
+  let currentSession: T | null = null;
+
+  return {
+    beginRestore(): number {
+      const operation = ++revision;
+      restoreRevision = operation;
+      restorePending = true;
+      restoreDecisionMade = false;
+      return operation;
+    },
+
+    beginAuthOperation(): number {
+      const operation = ++revision;
+      authOperationRevision = operation;
+      hasAuthoritativeDecision = false;
+      blockAuthEventsUntilNextOperation = false;
+      currentSession = null;
+      return operation;
+    },
+
+    commitAuthOperation(operation: number, session: T | null): boolean {
+      if (
+        authOperationRevision !== operation ||
+        revision !== operation
+      ) {
+        return false;
+      }
+
+      authOperationRevision = null;
+      hasAuthoritativeDecision = true;
+      blockAuthEventsUntilNextOperation = session === null;
+      currentSession = session;
+      return true;
+    },
+
+    completeRestore(
+      operation: number,
+      session: T | null,
+    ): RestoreDecision<T> {
+      if (restoreRevision !== operation) {
+        return {
+          accepted: false,
+          restoreComplete: restorePending === false,
+          session: currentSession,
+        };
+      }
+
+      restorePending = false;
+      restoreDecisionMade = true;
+
+      // A later auth operation has already made the authoritative decision.
+      // The restore still completes, but its result is stale by definition.
+      if (revision !== operation || hasAuthoritativeDecision) {
+        return {
+          accepted: false,
+          restoreComplete: true,
+          session: currentSession,
+        };
+      }
+
+      currentSession = session;
+      blockAuthEventsUntilNextOperation = session === null;
+      return { accepted: true, restoreComplete: true, session };
+    },
+
+    receiveAuthEvent(
+      event: AuthSessionEvent,
+      session: T | null,
+    ): AuthSessionEventResult<T> {
+      if (
+        authOperationRevision !== null ||
+        restorePending ||
+        blockAuthEventsUntilNextOperation
+      ) {
+        return { accepted: false, session: currentSession };
+      }
+
+      // INITIAL_SESSION is a replay of the SDK's persisted state. The
+      // explicit restore or a just-completed auth operation is authoritative,
+      // so a late INITIAL_SESSION event must not undo it.
+      if (
+        event === "INITIAL_SESSION" &&
+        (restoreDecisionMade || hasAuthoritativeDecision)
+      ) {
+        return { accepted: false, session: currentSession };
+      }
+
+      if (event === "SIGNED_OUT") {
+        hasAuthoritativeDecision = true;
+      }
+      currentSession = session;
+      return { accepted: true, session };
+    },
+
+    markExplicitSignOut(): void {
+      ++revision;
+      authOperationRevision = null;
+      hasAuthoritativeDecision = true;
+      blockAuthEventsUntilNextOperation = true;
+      currentSession = null;
+    },
+
+    isRestorePending(): boolean {
+      return restorePending;
+    },
+
+    getCurrentSession(): T | null {
+      return currentSession;
+    },
+  };
+}
+
 function errorName(error: unknown): string | null {
   if (typeof error !== "object" || error === null || !("name" in error)) {
     return null;

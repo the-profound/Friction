@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  createAuthSessionCoordinator,
   createNativeAutoRefreshController,
   createActiveSessionRestoreGate,
   isAccessTokenUsable,
@@ -153,5 +154,111 @@ describe("createActiveSessionRestoreGate", () => {
     await gate.setAppState("active");
     await gate.setAppState("active");
     expect(restore).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("createAuthSessionCoordinator", () => {
+  it("does not let a late native restore replace a completed signup", () => {
+    const coordinator = createAuthSessionCoordinator<TestSession>();
+    const restoreOperation = coordinator.beginRestore();
+    const signupOperation = coordinator.beginAuthOperation();
+    const signupSession = session(60 * 60 * 1000);
+
+    expect(coordinator.commitAuthOperation(signupOperation, signupSession)).toBe(true);
+    expect(coordinator.completeRestore(restoreOperation, null)).toEqual({
+      accepted: false,
+      restoreComplete: true,
+      session: signupSession,
+    });
+    expect(coordinator.getCurrentSession()).toBe(signupSession);
+  });
+
+  it("keeps a profile-sync failure authoritative over a late restore", () => {
+    const coordinator = createAuthSessionCoordinator<TestSession>();
+    const restoreOperation = coordinator.beginRestore();
+    const signupOperation = coordinator.beginAuthOperation();
+
+    expect(coordinator.commitAuthOperation(signupOperation, null)).toBe(true);
+    expect(coordinator.completeRestore(restoreOperation, session(60 * 60 * 1000))).toEqual({
+      accepted: false,
+      restoreComplete: true,
+      session: null,
+    });
+  });
+
+  it("ignores delayed auth events after a failed operation until a new operation starts", () => {
+    const coordinator = createAuthSessionCoordinator<TestSession>();
+    const restoreOperation = coordinator.beginRestore();
+    coordinator.completeRestore(restoreOperation, null);
+    const failedOperation = coordinator.beginAuthOperation();
+
+    expect(coordinator.commitAuthOperation(failedOperation, null)).toBe(true);
+    expect(coordinator.receiveAuthEvent("SIGNED_IN", session(60 * 60 * 1000))).toEqual({
+      accepted: false,
+      session: null,
+    });
+    expect(coordinator.receiveAuthEvent("TOKEN_REFRESHED", session(60 * 60 * 1000))).toEqual({
+      accepted: false,
+      session: null,
+    });
+
+    const retryOperation = coordinator.beginAuthOperation();
+    expect(coordinator.receiveAuthEvent("SIGNED_IN", session(60 * 60 * 1000))).toEqual({
+      accepted: false,
+      session: null,
+    });
+    const retrySession = session(60 * 60 * 1000);
+    expect(coordinator.commitAuthOperation(retryOperation, retrySession)).toBe(true);
+    expect(coordinator.receiveAuthEvent("TOKEN_REFRESHED", retrySession)).toEqual({
+      accepted: true,
+      session: retrySession,
+    });
+  });
+
+  it("keeps explicit sign-out authoritative over delayed auth events", () => {
+    const coordinator = createAuthSessionCoordinator<TestSession>();
+    const restoreOperation = coordinator.beginRestore();
+    const restored = session(60 * 60 * 1000);
+    coordinator.completeRestore(restoreOperation, restored);
+
+    coordinator.markExplicitSignOut();
+
+    expect(coordinator.getCurrentSession()).toBeNull();
+    expect(coordinator.receiveAuthEvent("SIGNED_OUT", null)).toEqual({
+      accepted: false,
+      session: null,
+    });
+    expect(coordinator.receiveAuthEvent("TOKEN_REFRESHED", restored)).toEqual({
+      accepted: false,
+      session: null,
+    });
+  });
+
+  it("ignores duplicate initial auth events after explicit restore", () => {
+    const coordinator = createAuthSessionCoordinator<TestSession>();
+    const restoreOperation = coordinator.beginRestore();
+    const restored = session(60 * 60 * 1000);
+
+    expect(coordinator.completeRestore(restoreOperation, restored).accepted).toBe(true);
+    expect(coordinator.receiveAuthEvent("INITIAL_SESSION", null)).toEqual({
+      accepted: false,
+      session: restored,
+    });
+    expect(coordinator.receiveAuthEvent("TOKEN_REFRESHED", restored)).toEqual({
+      accepted: true,
+      session: restored,
+    });
+  });
+
+  it("does not apply auth events while a signup operation is in flight", () => {
+    const coordinator = createAuthSessionCoordinator<TestSession>();
+    const restoreOperation = coordinator.beginRestore();
+    coordinator.completeRestore(restoreOperation, null);
+    coordinator.beginAuthOperation();
+
+    expect(coordinator.receiveAuthEvent("SIGNED_IN", session(60 * 60 * 1000))).toEqual({
+      accepted: false,
+      session: null,
+    });
   });
 });

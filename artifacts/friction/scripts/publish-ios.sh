@@ -4,6 +4,7 @@ set -e
 EAS="/home/runner/workspace/.config/npm/node_global/bin/eas"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_DIR="$(dirname "$SCRIPT_DIR")"
+export EXPO_PUBLIC_DOMAIN="${EXPO_PUBLIC_DOMAIN:-friction-1.replit.app}"
 
 echo "========================================"
 echo "  Friction iOS Publish (EAS)"
@@ -13,6 +14,10 @@ if [ -z "$EXPO_TOKEN" ]; then
   echo "❌ EXPO_TOKEN 환경변수가 없습니다."
   exit 1
 fi
+
+echo ""
+echo "🔎 릴리즈 환경 변수 검증 중..."
+node "$SCRIPT_DIR/validate-release-env.mjs"
 
 export EXPO_APPLE_TEAM_ID="D9P94YPN8F"
 

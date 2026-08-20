@@ -15,7 +15,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 declare global {
   namespace Express {
     interface Request {
-      user?: { id: string };
+      user?: { id: string; email?: string };
     }
   }
 }
@@ -50,6 +50,6 @@ export const requireAuth: RequestHandler = async (req, res, next) => {
     res.status(401).json({ error: "Invalid or expired token" });
     return;
   }
-  req.user = { id: data.user.id };
+  req.user = { id: data.user.id, email: data.user.email ?? undefined };
   next();
 };

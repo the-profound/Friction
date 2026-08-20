@@ -28,7 +28,7 @@ events while true. Run the profile sync manually inside `signUp()`, and only
 call `setSession(data.session)` yourself once the sync has actually
 succeeded. If the sync fails after an auto-confirmed session was created,
 sign the user back out and return an error, rather than leaving a
-half-synced authenticated session for the guard to redirect on. This same
+half-synced authenticated session for the guard to redirect on; the later password sign-in path must retry the idempotent profile sync. After any authoritative null decision, delayed `SIGNED_IN` and `TOKEN_REFRESHED` events must be ignored until a new explicit auth operation starts; explicit sign-out must clear React state immediately before those events are blocked. This same
 suppress-until-side-effect-completes pattern generalizes to any other
 Supabase auth flow that has a required post-auth side effect (e.g. OAuth
 sign-in that also needs an out-of-band backend sync).

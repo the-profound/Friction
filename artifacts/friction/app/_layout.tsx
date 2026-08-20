@@ -20,6 +20,7 @@ import { posthog, PostHogProvider } from "@/lib/posthog";
 import { trackAppOpen } from "@/lib/analytics";
 import { usePushNotifications } from "@/lib/usePushNotifications";
 import { useNotificationDeepLink } from "@/lib/useNotificationDeepLink";
+import { runtimeConfig } from "@/lib/runtimeConfig";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import ToastContainer from "@/components/Toast/Toast";
@@ -40,18 +41,14 @@ import { ReaderTransitionProvider } from "@/contexts/ReaderTransitionContext";
 const DEV_WEB_BYPASS = false;
 const DEV_WEB_BYPASS_USER_ID = "92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f";
 
-if (process.env.EXPO_PUBLIC_DOMAIN) {
-  const domain = process.env.EXPO_PUBLIC_DOMAIN;
-  const baseUrl = domain.startsWith("http://") || domain.startsWith("https://")
-    ? domain
-    : `https://${domain}`;
-  setBaseUrl(baseUrl);
-}
+setBaseUrl(runtimeConfig.apiBaseUrl);
 
 // Best-effort: if the previous launch crashed with a fatal JS error, upload
 // the diagnostic captured for it (see lib/crashDiagnostics.ts) now that the
 // API base URL is configured.
-uploadPendingCrashLogIfAny();
+if (runtimeConfig.apiBaseUrl) {
+  uploadPendingCrashLogIfAny();
+}
 
 setAuthTokenGetter(async () => {
   // AuthProvider is the single native restore authority. Do not read a
@@ -128,8 +125,20 @@ function AuthLoadingView({ message }: { message: string }) {
   );
 }
 
+function AuthConfigurationErrorView({ message }: { message: string }) {
+  return (
+    <View style={styles.loadingContainer}>
+      <Text style={styles.configurationTitle}>앱을 시작할 수 없어요</Text>
+      <Text style={styles.loadingLabel}>{message}</Text>
+      <Text style={styles.configurationHint}>
+        최신 버전으로 다시 설치하거나 잠시 후 다시 시도해주세요.
+      </Text>
+    </View>
+  );
+}
+
 function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { session, isLoading } = useAuth();
+  const { session, isLoading, configurationError } = useAuth();
   // Register push token once the user is authenticated
   usePushNotifications(session?.user?.id ?? (DEV_WEB_BYPASS ? DEV_WEB_BYPASS_USER_ID : null));
   // Navigate to inbox when a LETTER_ARRIVED notification is tapped
@@ -137,6 +146,10 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const segments = useSegments();
   const hasRedirectedRef = useRef(false);
+
+  if (configurationError) {
+    return <AuthConfigurationErrorView message={configurationError} />;
+  }
 
   const inBypassRoute = segments[0] != null && AUTH_BYPASS_ROUTES.has(segments[0] as string);
   const isAuthed = DEV_WEB_BYPASS || !!session;
@@ -239,6 +252,17 @@ const styles = StyleSheet.create({
   loadingLabel: {
     color: Colors.zinc500,
     fontSize: 14,
+  },
+  configurationTitle: {
+    color: Colors.zinc900,
+    fontSize: 20,
+    fontWeight: "600",
+  },
+  configurationHint: {
+    color: Colors.zinc400,
+    fontSize: 13,
+    textAlign: "center",
+    marginTop: 4,
   },
 });
 

@@ -77,15 +77,21 @@ export default function LoginScreen() {
     try {
       const { error } = await signInWithPassword(email.trim(), password);
       if (error) {
-        const msg = error.message.toLowerCase();
-        if (msg.includes("invalid login credentials") || msg.includes("invalid credentials")) {
-          setErrorMessage("이메일 또는 비밀번호가 올바르지 않아요.");
-        } else if (msg.includes("email not confirmed")) {
-          setErrorMessage("이메일 인증이 완료되지 않은 계정이에요. 메일함을 확인해주세요.");
-        } else if (msg.includes("network") || msg.includes("fetch")) {
+        if (error.name === "UserSyncNetworkError") {
           setErrorMessage("네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.");
+        } else if (error.name === "UserSyncError") {
+          setErrorMessage("계정은 확인됐지만 프로필 저장에 실패했습니다. 로그인 탭에서 다시 시도해주세요.");
         } else {
-          setErrorMessage("로그인에 실패했습니다. 다시 시도해주세요.");
+          const msg = error.message.toLowerCase();
+          if (msg.includes("invalid login credentials") || msg.includes("invalid credentials")) {
+            setErrorMessage("이메일 또는 비밀번호가 올바르지 않아요.");
+          } else if (msg.includes("email not confirmed")) {
+            setErrorMessage("이메일 인증이 완료되지 않은 계정이에요. 메일함을 확인해주세요.");
+          } else if (msg.includes("network") || msg.includes("fetch")) {
+            setErrorMessage("네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.");
+          } else {
+            setErrorMessage("로그인에 실패했습니다. 다시 시도해주세요.");
+          }
         }
       }
     } catch {
@@ -131,12 +137,10 @@ export default function LoginScreen() {
     try {
       const { error, needsConfirmation } = await signUp(email.trim(), password, trimmedNickname);
       if (error) {
-        if (error.name === "UserSyncError") {
-          // Account creation itself succeeded on Supabase's side, but the
-          // profile row failed to sync to our backend. AuthContext already
-          // signed the user back out if they had been auto-confirmed, so it's
-          // always safe to let them retry from here.
-          setErrorMessage("계정은 생성됐지만 프로필 저장에 실패했습니다. 다시 시도해주세요.");
+        if (error.name === "UserSyncNetworkError") {
+          setErrorMessage("네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.");
+        } else if (error.name === "UserSyncError") {
+          setErrorMessage("계정은 생성됐지만 프로필 저장에 실패했습니다. 로그인 탭에서 다시 시도해주세요.");
         } else {
           const msg = error.message.toLowerCase();
           if (msg.includes("already registered") || msg.includes("already exists") || msg.includes("user already")) {

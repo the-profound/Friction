@@ -6,17 +6,22 @@ import { customFetch } from "@workspace/api-client-react";
 import { getCurrentDevicePushToken } from "@/lib/usePushNotifications";
 import {
   createActiveSessionRestoreGate,
+  createAuthSessionCoordinator,
   createNativeAutoRefreshController,
   restoreNativeSession,
 } from "@/lib/authSessionRecovery";
 import { setCurrentAuthSession } from "@/lib/authTokenStore";
+import { runtimeConfig } from "@/lib/runtimeConfig";
+import { reportAuthDiagnostic } from "@/lib/authDiagnostics";
 
 export type SignUpError = AuthError | { message: string; name: string };
+export type AuthFlowError = AuthError | { message: string; name: string };
 
 interface AuthContextValue {
   session: Session | null;
   isLoading: boolean;
-  signInWithPassword: (email: string, password: string) => Promise<{ error: AuthError | null }>;
+  configurationError: string | null;
+  signInWithPassword: (email: string, password: string) => Promise<{ error: AuthFlowError | null }>;
   signUp: (email: string, password: string, nickname: string) => Promise<{ error: SignUpError | null; needsConfirmation: boolean }>;
   signOut: () => Promise<void>;
 }
@@ -24,17 +29,77 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue>({
   session: null,
   isLoading: true,
+  configurationError: null,
   signInWithPassword: async () => ({ error: null }),
   signUp: async () => ({ error: null, needsConfirmation: false }),
   signOut: async () => {},
 });
 
+function isNetworkFailure(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) {
+    const message = String(error).toLowerCase();
+    return (
+      message.includes("network") ||
+      message.includes("fetch") ||
+      message.includes("timeout") ||
+      message.includes("abort")
+    );
+  }
+
+  const candidate = error as { name?: unknown; message?: unknown; status?: unknown };
+  const name = typeof candidate.name === "string" ? candidate.name.toLowerCase() : "";
+  const message =
+    typeof candidate.message === "string" ? candidate.message.toLowerCase() : "";
+  const status = typeof candidate.status === "number" ? candidate.status : null;
+
+  return (
+    name.includes("network") ||
+    name.includes("fetch") ||
+    name.includes("abort") ||
+    message.includes("network") ||
+    message.includes("fetch") ||
+    message.includes("timeout") ||
+    message.includes("abort") ||
+    status === 0 ||
+    status === 408 ||
+    status === 429 ||
+    (status !== null && status >= 500)
+  );
+}
+
+async function syncUserProfile(session: Session, nickname?: string): Promise<void> {
+  const { id, email } = session.user;
+  if (!email) {
+    throw {
+      message: "인증된 계정 이메일을 확인하지 못했습니다.",
+      name: "UserSyncError",
+    } satisfies SignUpError;
+  }
+
+  const rawNickname = nickname ?? session.user.user_metadata?.nickname;
+  const normalizedNickname =
+    typeof rawNickname === "string" && rawNickname.trim().length > 0
+      ? rawNickname.trim()
+      : undefined;
+
+  await customFetch("/api/users/sync", {
+    method: "POST",
+    body: JSON.stringify({
+      id,
+      email,
+      ...(normalizedNickname ? { nickname: normalizedNickname } : {}),
+    }),
+  });
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [configurationError] = useState<string | null>(runtimeConfig.errorMessage);
   const nativeAutoRefreshRef = useRef<ReturnType<
     typeof createNativeAutoRefreshController
   > | null>(null);
+  const authCoordinatorRef = useRef(createAuthSessionCoordinator<Session>());
 
   // Supabase fires onAuthStateChange synchronously as part of
   // supabase.auth.signUp() *before* our own signUp() function below gets a
@@ -64,7 +129,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let mounted = true;
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     setCurrentAuthSession(null);
+
+    if (configurationError) {
+      console.error("[auth] Invalid app configuration:", configurationError);
+      reportAuthDiagnostic("config", "invalid-build", "RuntimeConfigError");
+      initialRestoreCompleteRef.current = true;
+      setIsLoading(false);
+      return () => {
+        mounted = false;
+      };
+    }
+
     const isNative = Platform.OS !== "web";
+    const authCoordinator = authCoordinatorRef.current;
+    const restoreOperation = authCoordinator.beginRestore();
     const autoRefresh = isNative
       ? createNativeAutoRefreshController(supabase.auth)
       : null;
@@ -99,22 +177,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const restoredSession =
           result.session ??
           (!isNative && pendingSession !== undefined ? pendingSession : null);
-        if (!suppressAuthEventsRef.current) applySession(restoredSession);
+        const restoreDecision = authCoordinator.completeRestore(
+          restoreOperation,
+          restoredSession,
+        );
+        if (restoreDecision.accepted && !suppressAuthEventsRef.current) {
+          applySession(restoreDecision.session);
+        }
         pendingAuthSessionRef.current = undefined;
         // Set this after the explicit session decision so an event already
         // queued by the refresh cannot overwrite it with an older session.
-        initialRestoreCompleteRef.current = true;
-        if (isNative && (restoredSession || result.shouldRetryRefresh)) {
+        initialRestoreCompleteRef.current = restoreDecision.restoreComplete;
+        const currentSession = authCoordinator.getCurrentSession();
+        if (
+          isNative &&
+          (restoreDecision.accepted
+            ? Boolean(currentSession || result.shouldRetryRefresh)
+            : Boolean(currentSession))
+        ) {
           void autoRefresh?.setAppState(AppState.currentState).catch(() => undefined);
         }
+        reportAuthDiagnostic(
+          "restore",
+          restoreDecision.accepted
+            ? currentSession
+              ? "authenticated"
+              : result.shouldRetryRefresh
+                ? "retryable-failure"
+                : "logged-out"
+            : "stale-result-ignored",
+        );
       } catch (error) {
         if (!mounted) return;
         // Treat an unavailable storage/auth service as logged out. In
         // particular, never forward refresh-token failures to LogBox.
-        initialRestoreCompleteRef.current = true;
-        if (!suppressAuthEventsRef.current) {
+        const restoreDecision = authCoordinator.completeRestore(
+          restoreOperation,
+          null,
+        );
+        initialRestoreCompleteRef.current = restoreDecision.restoreComplete;
+        if (restoreDecision.accepted && !suppressAuthEventsRef.current) {
           applySession(null);
         }
+        reportAuthDiagnostic(
+          "restore",
+          restoreDecision.accepted ? "failed-logged-out" : "stale-failure-ignored",
+          isNetworkFailure(error) ? "NetworkError" : "AuthRestoreError",
+        );
       } finally {
         if (timeoutId) clearTimeout(timeoutId);
         if (mounted && !suppressAuthEventsRef.current) {
@@ -140,16 +249,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        if (
-          suppressAuthEventsRef.current ||
-          !initialRestoreCompleteRef.current
-        ) {
+      (event, session) => {
+        const decision = authCoordinator.receiveAuthEvent(event, session);
+        if (!decision.accepted) {
           pendingAuthSessionRef.current = session;
           return;
         }
-        applySession(session);
+        applySession(decision.session);
         setIsLoading(false);
+        reportAuthDiagnostic("auth-event", event);
       }
     );
 
@@ -184,13 +292,81 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [session]);
 
   async function signInWithPassword(email: string, password: string) {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error };
+    const authCoordinator = authCoordinatorRef.current;
+    const operation = authCoordinator.beginAuthOperation();
+    suppressAuthEventsRef.current = true;
+    pendingAuthSessionRef.current = undefined;
+    setCurrentAuthSession(null);
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        authCoordinator.commitAuthOperation(operation, null);
+        reportAuthDiagnostic(
+          "sign-in",
+          "failed",
+          isNetworkFailure(error) ? "NetworkError" : error.name,
+        );
+        return { error };
+      }
+
+      setCurrentAuthSession(data.session);
+      try {
+        await syncUserProfile(data.session);
+      } catch (syncError) {
+        authCoordinator.commitAuthOperation(operation, null);
+        await supabase.auth.signOut().catch(() => {});
+        setCurrentAuthSession(null);
+        reportAuthDiagnostic(
+          "profile-sync",
+          "failed-during-sign-in",
+          isNetworkFailure(syncError) ? "NetworkError" : "UserSyncError",
+        );
+        return {
+          error: {
+            message: isNetworkFailure(syncError)
+              ? "네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요."
+              : "사용자 정보 저장에 실패했습니다. 다시 시도해주세요.",
+            name: isNetworkFailure(syncError)
+              ? "UserSyncNetworkError"
+              : "UserSyncError",
+          },
+        };
+      }
+
+      if (!authCoordinator.commitAuthOperation(operation, data.session)) {
+        return {
+          error: {
+            message: "로그인 상태를 확정하지 못했습니다. 다시 시도해주세요.",
+            name: "AuthTransitionError",
+          } as AuthError,
+        };
+      }
+      applySession(data.session);
+      setIsLoading(false);
+      reportAuthDiagnostic("sign-in", "success");
+      return { error: null };
+    } catch (error) {
+      authCoordinator.commitAuthOperation(operation, null);
+      reportAuthDiagnostic(
+        "sign-in",
+        "failed",
+        isNetworkFailure(error) ? "NetworkError" : "AuthSignInError",
+      );
+      throw error;
+    } finally {
+      pendingAuthSessionRef.current = undefined;
+      suppressAuthEventsRef.current = false;
+      setIsLoading(false);
+    }
   }
 
   async function signUp(email: string, password: string, nickname: string) {
+    const authCoordinator = authCoordinatorRef.current;
+    const operation = authCoordinator.beginAuthOperation();
     suppressAuthEventsRef.current = true;
     pendingAuthSessionRef.current = undefined;
+    setCurrentAuthSession(null);
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -198,6 +374,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         options: { data: { nickname } },
       });
       if (error) {
+        authCoordinator.commitAuthOperation(operation, null);
+        reportAuthDiagnostic(
+          "sign-up",
+          "failed",
+          isNetworkFailure(error) ? "NetworkError" : error.name,
+        );
         return { error, needsConfirmation: false };
       }
       const needsConfirmation = !data.session;
@@ -206,13 +388,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // React auth state remains suppressed until that sync has succeeded.
       if (data.session) setCurrentAuthSession(data.session);
 
-      if (data.user) {
+      if (data.user && data.session) {
         try {
-          await customFetch("/api/users/sync", {
-            method: "POST",
-            body: JSON.stringify({ id: data.user.id, email, nickname }),
-          });
-        } catch {
+          await syncUserProfile(data.session, nickname);
+        } catch (syncError) {
+          authCoordinator.commitAuthOperation(operation, null);
           if (data.session) {
             // The account was auto-confirmed (session already created) but the
             // profile row failed to sync. Sign out immediately so the app never
@@ -221,8 +401,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             await supabase.auth.signOut().catch(() => {});
             setCurrentAuthSession(null);
           }
+          reportAuthDiagnostic(
+            "profile-sync",
+            "failed",
+            isNetworkFailure(syncError) ? "NetworkError" : "UserSyncError",
+          );
           return {
-            error: { message: "사용자 정보 저장에 실패했습니다. 다시 시도해주세요.", name: "UserSyncError" },
+            error: {
+              message: isNetworkFailure(syncError)
+                ? "네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요."
+                : "사용자 정보 저장에 실패했습니다. 다시 시도해주세요.",
+              name: isNetworkFailure(syncError)
+                ? "UserSyncNetworkError"
+                : "UserSyncError",
+            },
             needsConfirmation,
           };
         }
@@ -230,17 +422,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Only now — after the profile sync has succeeded — do we let the app
       // see this session and treat the user as authenticated.
+      if (!authCoordinator.commitAuthOperation(operation, data.session)) {
+        return {
+          error: {
+            message: "가입 상태를 확정하지 못했습니다. 다시 시도해주세요.",
+            name: "AuthTransitionError",
+          },
+          needsConfirmation,
+        };
+      }
       if (data.session) {
-        setCurrentAuthSession(data.session);
         applySession(data.session);
         setIsLoading(false);
+        reportAuthDiagnostic("sign-up", "success-auto-confirmed");
       } else {
         // Keep the login screen renderable when email confirmation is
         // required, even if initial session restoration was still pending.
         applySession(null);
         setIsLoading(false);
+        reportAuthDiagnostic("sign-up", "confirmation-required");
       }
       return { error: null, needsConfirmation };
+    } catch (error) {
+      authCoordinator.commitAuthOperation(operation, null);
+      reportAuthDiagnostic(
+        "sign-up",
+        "failed",
+        isNetworkFailure(error) ? "NetworkError" : "AuthSignUpError",
+      );
+      throw error;
     } finally {
       // The deliberate session decision above is authoritative. Discard
       // session observations collected while profile sync was in flight so a
@@ -252,6 +462,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function signOut() {
+    authCoordinatorRef.current.markExplicitSignOut();
+    applySession(null);
     const token = getCurrentDevicePushToken();
     if (token) {
       try {
@@ -269,7 +481,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ session, isLoading, signInWithPassword, signUp, signOut }}>
+    <AuthContext.Provider
+      value={{
+        session,
+        isLoading,
+        configurationError,
+        signInWithPassword,
+        signUp,
+        signOut,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

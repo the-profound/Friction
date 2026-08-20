@@ -6,6 +6,9 @@
   },
   "build": {
     "production": {
+      "env": {
+        "EXPO_PUBLIC_DOMAIN": "friction-1.replit.app"
+      },
       "ios": {
         "distribution": "store",
         "credentialsSource": "remote",
@@ -13,6 +16,9 @@
       }
     },
     "preview": {
+      "env": {
+        "EXPO_PUBLIC_DOMAIN": "friction-1.replit.app"
+      },
       "ios": {
         "distribution": "store",
         "credentialsSource": "remote",

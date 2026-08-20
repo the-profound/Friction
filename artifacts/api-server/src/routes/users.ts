@@ -3,6 +3,7 @@ import { and, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
 import { db, usersTable, myCollectionsTable, neighborsTable, neighborRequestsTable, teamCollectionMembershipsTable } from "@workspace/db";
 import type { Neighbor, NeighborRequest } from "@workspace/db";
 import { CreateUserBody, UpdateUserBody, UpdateUserRecentCollectionBody } from "@workspace/api-zod";
+import { requireAuth } from "../middlewares/requireAuth";
 
 const router: IRouter = Router();
 
@@ -13,10 +14,19 @@ function deriveNicknameFromEmail(email: string): string {
   return fallback.slice(0, 20);
 }
 
-router.post("/users/sync", async (req, res) => {
+router.post("/users/sync", requireAuth, async (req, res) => {
   const { id, email, nickname } = req.body ?? {};
   if (!id || typeof id !== "string" || !email || typeof email !== "string") {
     res.status(400).json({ error: "id and email are required" });
+    return;
+  }
+  const authenticatedEmail = req.user?.email;
+  if (
+    req.user?.id !== id ||
+    !authenticatedEmail ||
+    authenticatedEmail.toLowerCase() !== email.toLowerCase()
+  ) {
+    res.status(403).json({ error: "Authenticated user does not match sync payload" });
     return;
   }
 

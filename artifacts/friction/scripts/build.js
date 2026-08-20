@@ -74,6 +74,52 @@ function getDeploymentDomain() {
   process.exit(1);
 }
 
+function validateReleaseEnvironment() {
+  const required = [
+    "EXPO_PUBLIC_SUPABASE_URL",
+    "EXPO_PUBLIC_SUPABASE_ANON_KEY",
+  ];
+  const missing = required.filter((name) => !process.env[name]?.trim());
+  if (missing.length > 0) {
+    exitWithError(
+      `ERROR: Missing release environment value(s): ${missing.join(", ")}. ` +
+        "The mobile bundle must not be built with an inert Supabase client.",
+    );
+  }
+}
+
+function validateBundleConfiguration(timestamp) {
+  const expectedValues = [
+    process.env.EXPO_PUBLIC_SUPABASE_URL,
+    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+    `https://${getDeploymentDomain()}`,
+  ];
+
+  for (const platform of ["ios", "android"]) {
+    const bundlePath = path.join(
+      projectRoot,
+      "static-build",
+      timestamp,
+      "_expo",
+      "static",
+      "js",
+      platform,
+      "bundle.js",
+    );
+    const bundle = fs.readFileSync(bundlePath, "utf8");
+    const missing = expectedValues.some(
+      (value) => !value || !bundle.includes(value),
+    );
+    if (missing) {
+      exitWithError(
+        `ERROR: ${platform} release bundle does not contain the validated ` +
+          "Supabase/API configuration. Refusing to publish it.",
+      );
+    }
+  }
+  console.log("Validated Supabase/API configuration in iOS and Android bundles.");
+}
+
 function prepareDirectories(timestamp) {
   console.log("Preparing build directories...");
 
@@ -513,6 +559,7 @@ async function main() {
 
   setupSignalHandlers();
 
+  validateReleaseEnvironment();
   const domain = getDeploymentDomain();
   const expoPublicReplId = getExpoPublicReplId();
   const baseUrl = `https://${domain}`;
@@ -537,6 +584,7 @@ async function main() {
   });
 
   const manifests = await Promise.race([downloadPromise, timeoutPromise]);
+  validateBundleConfiguration(timestamp);
 
   console.log("Processing assets...");
   const assets = extractAssets(timestamp);

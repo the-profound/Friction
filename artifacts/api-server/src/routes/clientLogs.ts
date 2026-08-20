@@ -28,7 +28,11 @@ router.post("/client-logs", (req, res) => {
     return;
   }
 
-  logger.error({ clientLog: parsed.data }, "client-logs: fatal JS error reported by client");
+  if (parsed.data.source === "fatal-js-error") {
+    logger.error({ clientLog: parsed.data }, "client-logs: fatal JS error reported by client");
+  } else {
+    logger.warn({ clientLog: parsed.data }, "client-logs: client diagnostic reported");
+  }
   res.status(204).send();
 });
 
