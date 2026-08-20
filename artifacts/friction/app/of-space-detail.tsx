@@ -161,7 +161,6 @@ function SpaceCarousel({
   letters,
   roundStatus,
   isAnonymous,
-  spaceName,
   onCardPress,
   hiddenCardId,
   openingSlot,
@@ -169,7 +168,6 @@ function SpaceCarousel({
   letters: SpaceLetter[];
   roundStatus: string;
   isAnonymous: boolean;
-  spaceName?: string | null;
   onCardPress: (letter: SpaceLetter, layout: OriginLayout) => void;
   hiddenCardId?: string | null;
   openingSlot?: React.ReactNode;
@@ -290,7 +288,6 @@ function SpaceCarousel({
           <ArticleCardItem
             title={title ?? "제목 없음"}
             authorName={authorName}
-            collectionName={spaceName ?? undefined}
             cover={((letter as any).articleCover ?? null) as ArticleCover | null}
             isRead={shouldDimSpaceRoundLetter(roundStatus, letter.isRead)}
             isActive={true}
@@ -559,7 +556,6 @@ function RoundSection({
   spaceStatus,
   isOperator,
   isAnonymous,
-  spaceName,
   onPressLetter,
   onPressWriteOpening,
   hiddenCardId,
@@ -572,7 +568,6 @@ function RoundSection({
   spaceStatus: string;
   isOperator: boolean;
   isAnonymous: boolean;
-  spaceName?: string | null;
   onPressLetter: (letter: SpaceLetter, layout: OriginLayout) => void;
   onPressWriteOpening: (round: SpaceRound) => void;
   hiddenCardId?: string | null;
@@ -645,7 +640,6 @@ function RoundSection({
               <ArticleCardItem
                 title={title ?? "제목 없음"}
                 authorName={authorName}
-                collectionName={spaceName ?? undefined}
                 cover={((letter as any).articleCover ?? null) as ArticleCover | null}
                 isRead={letter.isRead}
                 isActive={true}
@@ -684,7 +678,6 @@ function RoundSection({
         letters={letters}
         roundStatus={round.status}
         isAnonymous={isAnonymous}
-        spaceName={spaceName}
         onCardPress={onPressLetter}
         hiddenCardId={hiddenCardId}
         openingSlot={openingSlotNode}
@@ -1081,8 +1074,6 @@ export default function SpaceDetailScreen() {
           ? {
               authorName: (slot.article as any).authorNickname ?? null,
               authorId: slot.article.authorId ?? null,
-              collectionName: slot.article.collectionName ?? null,
-              collectionId: slot.article.collectionId ?? null,
               date: slot.article.letterAt ?? null,
             }
           : {},
@@ -1107,11 +1098,10 @@ export default function SpaceDetailScreen() {
     metaList.push({
       authorName,
       date: tapLetter.createdAt,
-      collectionName: space?.name ?? null,
     });
 
     return { chainArticles: artList, chainMetas: metaList, chainInitialIndex: initIdx };
-  }, [tapLetter, tapArticle, ancestorChain, isAnonymousSpace, space?.name]);
+  }, [tapLetter, tapArticle, ancestorChain, isAnonymousSpace]);
 
   const handleOverlayRead = useCallback(
     (chainIdx: number) => {
@@ -1443,7 +1433,6 @@ export default function SpaceDetailScreen() {
                       spaceStatus={space.status}
                       isOperator={isOperator}
                       isAnonymous={space.isAnonymous}
-                      spaceName={space.name}
                       onPressLetter={handlePressLetter}
                       onPressWriteOpening={handlePressWriteOpening}
                       hiddenCardId={tapLetter?.id ?? null}
