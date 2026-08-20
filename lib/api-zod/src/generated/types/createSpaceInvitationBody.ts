@@ -8,5 +8,4 @@
 
 export interface CreateSpaceInvitationBody {
   invitedUserId: string;
-  invitedBy: string;
 }

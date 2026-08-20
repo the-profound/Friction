@@ -9,4 +9,10 @@ import type { UpdateSpaceInvitationBodyStatus } from "./updateSpaceInvitationBod
 
 export interface UpdateSpaceInvitationBody {
   status?: UpdateSpaceInvitationBodyStatus;
+  /**
+   * 익명 초대를 수락할 때 정하는 최초 공간 닉네임. ACCEPTED + 익명 공간에서는 필수.
+   * @minLength 1
+   * @maxLength 20
+   */
+  spaceNickname?: string;
 }

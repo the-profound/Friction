@@ -12,6 +12,8 @@ export interface SpaceCodeRequest {
   spaceId: string;
   requesterId: string;
   code: string;
+  /** 안전한 공간 표시명. 익명 공간 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임. */
+  spaceNickname?: string | null;
   status: SpaceCodeRequestStatus;
   rejectionReason?: string | null;
   createdAt: Date;

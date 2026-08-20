@@ -9,5 +9,6 @@ import type { SpaceCodeRequest } from "./spaceCodeRequest";
 
 export interface SpaceCodeRequestWithRequester {
   codeRequest: SpaceCodeRequest;
+  /** 신청자의 안전한 표시명. 익명 공간에서 계정 닉네임은 제공하지 않음. */
   requesterNickname?: string | null;
 }

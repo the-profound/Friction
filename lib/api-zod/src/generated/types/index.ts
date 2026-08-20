@@ -28,8 +28,6 @@ export * from "./createSpaceInvitationBody";
 export * from "./createSpaceLetterBody";
 export * from "./createSpaceLetterBodyLetterType";
 export * from "./createSpaceParticipationBody";
-export * from "./createSpaceParticipationBodyJoinPath";
-export * from "./createSpaceParticipationBodyRole";
 export * from "./createSpaceRoundBody";
 export * from "./createSpaceRoundSlotBody";
 export * from "./createSpaceScheduledSendBody";

@@ -42,6 +42,7 @@ type FormData = {
   scheduleType: ScheduleType;
   weekdays: number[];
   operatorParticipates: boolean;
+  spaceNickname: string;
 };
 
 const DEFAULT_CENTER_INTERVAL = 1;
@@ -118,6 +119,7 @@ export default function SpaceCreateScreen() {
     scheduleType: "N_DAY",
     weekdays: [],
     operatorParticipates: true,
+    spaceNickname: "",
   });
 
   const updateField = useCallback(<K extends keyof FormData>(key: K, value: FormData[K]) => {
@@ -131,9 +133,13 @@ export default function SpaceCreateScreen() {
   }, [roundCountError]);
 
   const canProceed = useMemo(() => {
-    if (step === 0) return form.name.trim().length > 0;
+    if (step === 0) {
+      const nickname = form.spaceNickname.trim();
+      return form.name.trim().length > 0 &&
+        (!form.isAnonymous || (nickname.length > 0 && nickname.length <= 20));
+    }
     return true;
-  }, [step, form.name]);
+  }, [step, form.name, form.isAnonymous, form.spaceNickname]);
 
   const handleNext = useCallback(() => {
     if (step === 1) {
@@ -164,6 +170,11 @@ export default function SpaceCreateScreen() {
       showToast({ message: "로그인이 필요합니다.", type: "error" });
       return;
     }
+    const spaceNickname = form.spaceNickname.trim();
+    if (form.isAnonymous && (!spaceNickname || spaceNickname.length > 20)) {
+      showToast({ message: "공간 닉네임은 1~20자로 입력해주세요.", type: "error" });
+      return;
+    }
     setIsSubmitting(true);
     try {
       const startsAtStr = form.startsAt.trim() ? parseDateInput(form.startsAt) : null;
@@ -191,7 +202,7 @@ export default function SpaceCreateScreen() {
           maxParticipants: maxParticipants ?? null,
           defaultCenterInterval: form.defaultCenterInterval,
           defaultCenterCount: form.defaultCenterCount,
-          creatorId: userId,
+          ...(form.isAnonymous ? { spaceNickname } : {}),
           // Additional fields stored in DB but not yet in generated API types:
           scheduleType: form.scheduleType,
           weekdays: backendWeekdays ?? null,
@@ -378,6 +389,27 @@ function BasicSettingsStep({
           accessibilityLabel="익명 운영"
         />
       </View>
+      {form.isAnonymous ? (
+        <View style={stepStyles.fieldGroup}>
+          <Text style={stepStyles.fieldLabel}>이 공간에서 사용할 닉네임 *</Text>
+          <TextInput
+            style={stepStyles.input}
+            placeholder="예: 달빛"
+            placeholderTextColor={Colors.zinc400}
+            value={form.spaceNickname}
+            onChangeText={(v) => updateField("spaceNickname", v)}
+            maxLength={20}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="done"
+            accessibilityLabel="공간 닉네임"
+          />
+          <Text style={stepStyles.hint}>
+            시작 전에는 모두 ‘참여자’로 표시되고, 시작 후 이 닉네임으로 표시돼요.
+          </Text>
+          <Text style={stepStyles.charCount}>{form.spaceNickname.trim().length} / 20</Text>
+        </View>
+      ) : null}
     </View>
   );
 }

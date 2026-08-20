@@ -13,6 +13,7 @@ export interface SpaceRoundSlotWithUser {
   slotOrder: number;
   /** ISO date string (YYYY-MM-DD), null if not set */
   scheduledDate?: string | null;
+  /** 배정된 사용자의 안전한 표시명. 익명 공간에서 계정 닉네임은 제공하지 않음. */
   assignedUserNickname?: string | null;
   createdAt: Date;
   updatedAt: Date;

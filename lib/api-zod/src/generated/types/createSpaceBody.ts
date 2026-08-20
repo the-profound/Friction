@@ -23,5 +23,10 @@ export interface CreateSpaceBody {
   defaultCenterInterval?: number;
   /** @minimum 1 */
   defaultCenterCount?: number;
-  creatorId: string;
+  /**
+   * 익명 공간 생성자가 최초 입장 시 정하는 공간 전용 닉네임. isAnonymous=true이면 필수.
+   * @minLength 1
+   * @maxLength 20
+   */
+  spaceNickname?: string;
 }

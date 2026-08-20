@@ -8,6 +8,7 @@
 import type { Space } from "./space";
 
 export type SpaceWithCreatorInfo = Space & {
+  /** 생성자의 안전한 표시명. 익명 공간에서 계정 닉네임은 제공하지 않음. */
   creatorNickname?: string | null;
   participantCount: number;
 };

@@ -1883,6 +1883,12 @@ export const ListMySpaceCodeRequestsResponseItem = zod.object({
     spaceId: zod.string().uuid(),
     requesterId: zod.string().uuid(),
     code: zod.string(),
+    spaceNickname: zod
+      .string()
+      .nullish()
+      .describe(
+        "안전한 공간 표시명. 익명 공간 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임.",
+      ),
     status: zod.enum(["PENDING", "APPROVED", "REJECTED", "CANCELLED"]),
     rejectionReason: zod.string().nullish(),
     createdAt: zod.date(),
@@ -2006,7 +2012,12 @@ export const ListSpacesResponseItem = zod.object({
       updatedAt: zod.date(),
     })
     .nullish(),
-  operatorNickname: zod.string().nullish(),
+  operatorNickname: zod
+    .string()
+    .nullish()
+    .describe(
+      "운영자 표시명. 익명 공간은 모집 중 '참여자', 시작 후 공간 닉네임이며 계정 닉네임은 절대 제공하지 않음.",
+    ),
 });
 export const ListSpacesResponse = zod.array(ListSpacesResponseItem);
 
@@ -2014,6 +2025,8 @@ export const ListSpacesResponse = zod.array(ListSpacesResponseItem);
  * @summary Create a new space
  */
 export const createSpaceBodyNameMax = 50;
+
+export const createSpaceBodySpaceNicknameMax = 20;
 
 export const CreateSpaceBody = zod.object({
   name: zod.string().min(1).max(createSpaceBodyNameMax),
@@ -2027,7 +2040,14 @@ export const CreateSpaceBody = zod.object({
   maxParticipants: zod.number().nullish(),
   defaultCenterInterval: zod.number().min(1).optional(),
   defaultCenterCount: zod.number().min(1).optional(),
-  creatorId: zod.string().uuid(),
+  spaceNickname: zod
+    .string()
+    .min(1)
+    .max(createSpaceBodySpaceNicknameMax)
+    .optional()
+    .describe(
+      "익명 공간 생성자가 최초 입장 시 정하는 공간 전용 닉네임. isAnonymous=true이면 필수.",
+    ),
 });
 
 /**
@@ -2341,7 +2361,12 @@ export const ListSpaceRoundSlotsResponseItem = zod.object({
     .string()
     .nullish()
     .describe("ISO date string (YYYY-MM-DD), null if not set"),
-  assignedUserNickname: zod.string().nullish(),
+  assignedUserNickname: zod
+    .string()
+    .nullish()
+    .describe(
+      "배정된 사용자의 안전한 표시명. 익명 공간에서 계정 닉네임은 제공하지 않음.",
+    ),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -2397,7 +2422,12 @@ export const UpdateSpaceRoundSlotResponse = zod.object({
     .string()
     .nullish()
     .describe("ISO date string (YYYY-MM-DD), null if not set"),
-  assignedUserNickname: zod.string().nullish(),
+  assignedUserNickname: zod
+    .string()
+    .nullish()
+    .describe(
+      "배정된 사용자의 안전한 표시명. 익명 공간에서 계정 닉네임은 제공하지 않음.",
+    ),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -2459,12 +2489,17 @@ export const ListAllSpaceScheduledSendsResponseItem = zod.object({
         })
         .nullish()
         .describe("Article cover display settings. null means default cover."),
-      authorNickname: zod.string().nullish(),
+      authorNickname: zod
+        .string()
+        .nullish()
+        .describe(
+          "작성자의 안전한 표시명. 익명 공간 모집 중에는 '참여자', 시작 후 공간 닉네임.",
+        ),
       displayName: zod
         .string()
         .nullish()
         .describe(
-          'Pseudonymous display name for anonymous spaces (e.g. \"참여자 1\"). Null in non-anonymous spaces.',
+          "익명 공간의 안전한 표시명. 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임. 비익명 공간에서는 null.",
         ),
       isRead: zod
         .boolean()
@@ -2480,7 +2515,9 @@ export const ListAllSpaceScheduledSendsResponseItem = zod.object({
   authorNickname: zod
     .string()
     .nullish()
-    .describe("Nickname of the letter author"),
+    .describe(
+      "작성자의 안전한 표시명. 익명 공간에서 계정 닉네임은 제공하지 않음.",
+    ),
   roundNumber: zod
     .number()
     .nullish()
@@ -2517,14 +2554,25 @@ export const ListSpaceMembersResponseItem = zod.object({
     .uuid()
     .describe("Participation ID (used to remove\/withdraw this member)"),
   userId: zod.string().uuid(),
-  nickname: zod.string().nullish(),
+  nickname: zod
+    .string()
+    .nullish()
+    .describe(
+      "안전한 표시명. 익명 공간에서는 계정 닉네임이 아닌 상태별 익명 표시명.",
+    ),
+  spaceNickname: zod
+    .string()
+    .nullish()
+    .describe(
+      "안전한 공간 표시명. 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임. 기존 데이터는 '참여자'.",
+    ),
   role: zod.string(),
   status: zod.string(),
   displayName: zod
     .string()
     .nullish()
     .describe(
-      'Pseudonymous display name (\"참여자 N\") for anonymous spaces, based on join order. Null for non-anonymous spaces.',
+      "익명 공간의 안전한 표시명. 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임. 비익명 공간에서는 null.",
     ),
   createdAt: zod
     .date()
@@ -2548,6 +2596,13 @@ export const ListSpaceParticipationsResponseItem = zod.object({
   status: zod.enum(["PENDING", "APPROVED", "REJECTED", "WITHDRAWN"]),
   invitationId: zod.string().uuid().nullish(),
   codeRequestId: zod.string().uuid().nullish(),
+  spaceNickname: zod
+    .string()
+    .nullish()
+    .describe(
+      "안전한 공간 표시명. 익명 공간 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임.",
+    ),
+  displayName: zod.string().nullish().describe("상태별 안전한 표시명."),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -2562,12 +2617,17 @@ export const CreateSpaceParticipationParams = zod.object({
   id: zod.coerce.string().uuid(),
 });
 
+export const createSpaceParticipationBodySpaceNicknameMax = 20;
+
 export const CreateSpaceParticipationBody = zod.object({
-  userId: zod.string().uuid(),
-  role: zod.enum(["OPERATOR", "PARTICIPANT"]).optional(),
-  joinPath: zod.enum(["INVITATION", "CODE"]).nullish(),
-  invitationId: zod.string().uuid().nullish(),
-  codeRequestId: zod.string().uuid().nullish(),
+  spaceNickname: zod
+    .string()
+    .min(1)
+    .max(createSpaceParticipationBodySpaceNicknameMax)
+    .optional()
+    .describe(
+      "익명 공간에 직접 참여할 때 최초 입장 닉네임. 익명 공간에서는 필수.",
+    ),
 });
 
 /**
@@ -2592,6 +2652,13 @@ export const UpdateSpaceParticipationResponse = zod.object({
   status: zod.enum(["PENDING", "APPROVED", "REJECTED", "WITHDRAWN"]),
   invitationId: zod.string().uuid().nullish(),
   codeRequestId: zod.string().uuid().nullish(),
+  spaceNickname: zod
+    .string()
+    .nullish()
+    .describe(
+      "안전한 공간 표시명. 익명 공간 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임.",
+    ),
+  displayName: zod.string().nullish().describe("상태별 안전한 표시명."),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -2625,7 +2692,6 @@ export const CreateSpaceInvitationParams = zod.object({
 
 export const CreateSpaceInvitationBody = zod.object({
   invitedUserId: zod.string().uuid(),
-  invitedBy: zod.string().uuid(),
 });
 
 /**
@@ -2636,8 +2702,18 @@ export const UpdateSpaceInvitationParams = zod.object({
   invitationId: zod.coerce.string().uuid(),
 });
 
+export const updateSpaceInvitationBodySpaceNicknameMax = 20;
+
 export const UpdateSpaceInvitationBody = zod.object({
   status: zod.enum(["ACCEPTED", "DECLINED"]).optional(),
+  spaceNickname: zod
+    .string()
+    .min(1)
+    .max(updateSpaceInvitationBodySpaceNicknameMax)
+    .optional()
+    .describe(
+      "익명 초대를 수락할 때 정하는 최초 공간 닉네임. ACCEPTED + 익명 공간에서는 필수.",
+    ),
 });
 
 export const UpdateSpaceInvitationResponse = zod.object({
@@ -2667,12 +2743,23 @@ export const ListSpaceCodeRequestsResponseItem = zod.object({
     spaceId: zod.string().uuid(),
     requesterId: zod.string().uuid(),
     code: zod.string(),
+    spaceNickname: zod
+      .string()
+      .nullish()
+      .describe(
+        "안전한 공간 표시명. 익명 공간 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임.",
+      ),
     status: zod.enum(["PENDING", "APPROVED", "REJECTED", "CANCELLED"]),
     rejectionReason: zod.string().nullish(),
     createdAt: zod.date(),
     updatedAt: zod.date(),
   }),
-  requesterNickname: zod.string().nullish(),
+  requesterNickname: zod
+    .string()
+    .nullish()
+    .describe(
+      "신청자의 안전한 표시명. 익명 공간에서 계정 닉네임은 제공하지 않음.",
+    ),
 });
 export const ListSpaceCodeRequestsResponse = zod.array(
   ListSpaceCodeRequestsResponseItem,
@@ -2687,9 +2774,18 @@ export const CreateSpaceCodeRequestParams = zod.object({
 
 export const createSpaceCodeRequestBodyCodeMax = 20;
 
+export const createSpaceCodeRequestBodySpaceNicknameMax = 20;
+
 export const CreateSpaceCodeRequestBody = zod.object({
-  requesterId: zod.string().uuid(),
   code: zod.string().min(1).max(createSpaceCodeRequestBodyCodeMax),
+  spaceNickname: zod
+    .string()
+    .min(1)
+    .max(createSpaceCodeRequestBodySpaceNicknameMax)
+    .optional()
+    .describe(
+      "익명 공간 신청 시 정하는 최초 공간 닉네임. 익명 공간에서는 필수.",
+    ),
 });
 
 /**
@@ -2710,6 +2806,12 @@ export const UpdateSpaceCodeRequestResponse = zod.object({
   spaceId: zod.string().uuid(),
   requesterId: zod.string().uuid(),
   code: zod.string(),
+  spaceNickname: zod
+    .string()
+    .nullish()
+    .describe(
+      "안전한 공간 표시명. 익명 공간 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임.",
+    ),
   status: zod.enum(["PENDING", "APPROVED", "REJECTED", "CANCELLED"]),
   rejectionReason: zod.string().nullish(),
   createdAt: zod.date(),
@@ -2752,12 +2854,17 @@ export const ListSpaceLettersResponseItem = zod.object({
     })
     .nullish()
     .describe("Article cover display settings. null means default cover."),
-  authorNickname: zod.string().nullish(),
+  authorNickname: zod
+    .string()
+    .nullish()
+    .describe(
+      "작성자의 안전한 표시명. 익명 공간 모집 중에는 '참여자', 시작 후 공간 닉네임.",
+    ),
   displayName: zod
     .string()
     .nullish()
     .describe(
-      'Pseudonymous display name for anonymous spaces (e.g. \"참여자 1\"). Null in non-anonymous spaces.',
+      "익명 공간의 안전한 표시명. 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임. 비익명 공간에서는 null.",
     ),
   isRead: zod
     .boolean()
@@ -2901,7 +3008,12 @@ export const GetSpaceByInviteCodeResponse = zod
   })
   .and(
     zod.object({
-      creatorNickname: zod.string().nullish(),
+      creatorNickname: zod
+        .string()
+        .nullish()
+        .describe(
+          "생성자의 안전한 표시명. 익명 공간에서 계정 닉네임은 제공하지 않음.",
+        ),
       participantCount: zod.number(),
     }),
   );
@@ -2968,7 +3080,12 @@ export const GetSpaceJoinContextResponse = zod.object({
     })
     .and(
       zod.object({
-        creatorNickname: zod.string().nullish(),
+        creatorNickname: zod
+          .string()
+          .nullish()
+          .describe(
+            "생성자의 안전한 표시명. 익명 공간에서 계정 닉네임은 제공하지 않음.",
+          ),
         participantCount: zod.number(),
       }),
     ),
@@ -2982,6 +3099,13 @@ export const GetSpaceJoinContextResponse = zod.object({
       status: zod.enum(["PENDING", "APPROVED", "REJECTED", "WITHDRAWN"]),
       invitationId: zod.string().uuid().nullish(),
       codeRequestId: zod.string().uuid().nullish(),
+      spaceNickname: zod
+        .string()
+        .nullish()
+        .describe(
+          "안전한 공간 표시명. 익명 공간 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임.",
+        ),
+      displayName: zod.string().nullish().describe("상태별 안전한 표시명."),
       createdAt: zod.date(),
       updatedAt: zod.date(),
     })
@@ -3003,6 +3127,12 @@ export const GetSpaceJoinContextResponse = zod.object({
       spaceId: zod.string().uuid(),
       requesterId: zod.string().uuid(),
       code: zod.string(),
+      spaceNickname: zod
+        .string()
+        .nullish()
+        .describe(
+          "안전한 공간 표시명. 익명 공간 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임.",
+        ),
       status: zod.enum(["PENDING", "APPROVED", "REJECTED", "CANCELLED"]),
       rejectionReason: zod.string().nullish(),
       createdAt: zod.date(),

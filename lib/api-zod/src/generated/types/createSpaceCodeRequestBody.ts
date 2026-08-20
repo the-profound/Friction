@@ -7,10 +7,15 @@
  */
 
 export interface CreateSpaceCodeRequestBody {
-  requesterId: string;
   /**
    * @minLength 1
    * @maxLength 20
    */
   code: string;
+  /**
+   * 익명 공간 신청 시 정하는 최초 공간 닉네임. 익명 공간에서는 필수.
+   * @minLength 1
+   * @maxLength 20
+   */
+  spaceNickname?: string;
 }

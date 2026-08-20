@@ -625,6 +625,7 @@ export interface SpaceListItem {
   myRole: SpaceListItemMyRole;
   participantCount: number;
   activeRound?: SpaceRound | null;
+  /** 운영자 표시명. 익명 공간은 모집 중 '참여자', 시작 후 공간 닉네임이며 계정 닉네임은 절대 제공하지 않음. */
   operatorNickname?: string | null;
 }
 
@@ -714,6 +715,8 @@ export interface SpaceCodeRequest {
   spaceId: string;
   requesterId: string;
   code: string;
+  /** 안전한 공간 표시명. 익명 공간 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임. */
+  spaceNickname?: string | null;
   status: SpaceCodeRequestStatus;
   rejectionReason?: string | null;
   createdAt: string;
@@ -742,7 +745,12 @@ export interface CreateSpaceBody {
   defaultCenterInterval?: number;
   /** @minimum 1 */
   defaultCenterCount?: number;
-  creatorId: string;
+  /**
+   * 익명 공간 생성자가 최초 입장 시 정하는 공간 전용 닉네임. isAnonymous=true이면 필수.
+   * @minLength 1
+   * @maxLength 20
+   */
+  spaceNickname?: string;
 }
 
 export type UpdateSpaceBodyStatus =
@@ -845,10 +853,13 @@ export interface SpaceMember {
   /** Participation ID (used to remove/withdraw this member) */
   id: string;
   userId: string;
+  /** 안전한 표시명. 익명 공간에서는 계정 닉네임이 아닌 상태별 익명 표시명. */
   nickname?: string | null;
+  /** 안전한 공간 표시명. 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임. 기존 데이터는 '참여자'. */
+  spaceNickname?: string | null;
   role: string;
   status: string;
-  /** Pseudonymous display name ("참여자 N") for anonymous spaces, based on join order. Null for non-anonymous spaces. */
+  /** 익명 공간의 안전한 표시명. 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임. 비익명 공간에서는 null. */
   displayName?: string | null;
   /** When this participation was created (join order) */
   createdAt: string;
@@ -861,6 +872,7 @@ export interface SpaceRoundSlotWithUser {
   slotOrder: number;
   /** ISO date string (YYYY-MM-DD), null if not set */
   scheduledDate?: string | null;
+  /** 배정된 사용자의 안전한 표시명. 익명 공간에서 계정 닉네임은 제공하지 않음. */
   assignedUserNickname?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -918,33 +930,21 @@ export interface SpaceParticipation {
   status: SpaceParticipationStatus;
   invitationId?: string | null;
   codeRequestId?: string | null;
+  /** 안전한 공간 표시명. 익명 공간 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임. */
+  spaceNickname?: string | null;
+  /** 상태별 안전한 표시명. */
+  displayName?: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
-export type CreateSpaceParticipationBodyRole =
-  (typeof CreateSpaceParticipationBodyRole)[keyof typeof CreateSpaceParticipationBodyRole];
-
-export const CreateSpaceParticipationBodyRole = {
-  OPERATOR: "OPERATOR",
-  PARTICIPANT: "PARTICIPANT",
-} as const;
-
-export type CreateSpaceParticipationBodyJoinPath =
-  | (typeof CreateSpaceParticipationBodyJoinPath)[keyof typeof CreateSpaceParticipationBodyJoinPath]
-  | null;
-
-export const CreateSpaceParticipationBodyJoinPath = {
-  INVITATION: "INVITATION",
-  CODE: "CODE",
-} as const;
-
 export interface CreateSpaceParticipationBody {
-  userId: string;
-  role?: CreateSpaceParticipationBodyRole;
-  joinPath?: CreateSpaceParticipationBodyJoinPath;
-  invitationId?: string | null;
-  codeRequestId?: string | null;
+  /**
+   * 익명 공간에 직접 참여할 때 최초 입장 닉네임. 익명 공간에서는 필수.
+   * @minLength 1
+   * @maxLength 20
+   */
+  spaceNickname?: string;
 }
 
 export type UpdateSpaceParticipationBodyStatus =
@@ -971,7 +971,6 @@ export interface UpdateSpaceParticipationBody {
 
 export interface CreateSpaceInvitationBody {
   invitedUserId: string;
-  invitedBy: string;
 }
 
 export type UpdateSpaceInvitationBodyStatus =
@@ -984,20 +983,32 @@ export const UpdateSpaceInvitationBodyStatus = {
 
 export interface UpdateSpaceInvitationBody {
   status?: UpdateSpaceInvitationBodyStatus;
+  /**
+   * 익명 초대를 수락할 때 정하는 최초 공간 닉네임. ACCEPTED + 익명 공간에서는 필수.
+   * @minLength 1
+   * @maxLength 20
+   */
+  spaceNickname?: string;
 }
 
 export interface SpaceCodeRequestWithRequester {
   codeRequest: SpaceCodeRequest;
+  /** 신청자의 안전한 표시명. 익명 공간에서 계정 닉네임은 제공하지 않음. */
   requesterNickname?: string | null;
 }
 
 export interface CreateSpaceCodeRequestBody {
-  requesterId: string;
   /**
    * @minLength 1
    * @maxLength 20
    */
   code: string;
+  /**
+   * 익명 공간 신청 시 정하는 최초 공간 닉네임. 익명 공간에서는 필수.
+   * @minLength 1
+   * @maxLength 20
+   */
+  spaceNickname?: string;
 }
 
 export type UpdateSpaceCodeRequestBodyStatus =
@@ -1036,8 +1047,9 @@ export interface SpaceLetter {
   articleTitle?: string | null;
   articleExcerpt?: string | null;
   articleCover?: ArticleCover | null;
+  /** 작성자의 안전한 표시명. 익명 공간 모집 중에는 '참여자', 시작 후 공간 닉네임. */
   authorNickname?: string | null;
-  /** Pseudonymous display name for anonymous spaces (e.g. "참여자 1"). Null in non-anonymous spaces. */
+  /** 익명 공간의 안전한 표시명. 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임. 비익명 공간에서는 null. */
   displayName?: string | null;
   /** Whether the calling user has already read the source article. Always false when there is no sourceArticleId. */
   isRead: boolean;
@@ -1138,7 +1150,7 @@ export interface SpaceScheduledSendWithLetter {
   letter?: SpaceLetter | null;
   /** Title of the source article, if available */
   articleTitle?: string | null;
-  /** Nickname of the letter author */
+  /** 작성자의 안전한 표시명. 익명 공간에서 계정 닉네임은 제공하지 않음. */
   authorNickname?: string | null;
   /** Round number of the letter's round, if any */
   roundNumber?: number | null;
@@ -1151,6 +1163,7 @@ export interface SpaceScheduledSendWithLetter {
 }
 
 export type SpaceWithCreatorInfo = Space & {
+  /** 생성자의 안전한 표시명. 익명 공간에서 계정 닉네임은 제공하지 않음. */
   creatorNickname?: string | null;
   participantCount: number;
 };

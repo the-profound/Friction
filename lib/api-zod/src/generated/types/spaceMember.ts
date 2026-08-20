@@ -10,10 +10,13 @@ export interface SpaceMember {
   /** Participation ID (used to remove/withdraw this member) */
   id: string;
   userId: string;
+  /** 안전한 표시명. 익명 공간에서는 계정 닉네임이 아닌 상태별 익명 표시명. */
   nickname?: string | null;
+  /** 안전한 공간 표시명. 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임. 기존 데이터는 '참여자'. */
+  spaceNickname?: string | null;
   role: string;
   status: string;
-  /** Pseudonymous display name ("참여자 N") for anonymous spaces, based on join order. Null for non-anonymous spaces. */
+  /** 익명 공간의 안전한 표시명. 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임. 비익명 공간에서는 null. */
   displayName?: string | null;
   /** When this participation was created (join order) */
   createdAt: Date;

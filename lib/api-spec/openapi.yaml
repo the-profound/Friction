@@ -1459,6 +1459,8 @@ paths:
       operationId: createSpace
       tags: [spaces]
       summary: Create a new space
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -1815,6 +1817,8 @@ paths:
       operationId: createSpaceParticipation
       tags: [spaces]
       summary: Join or request to join a space
+      security:
+        - bearerAuth: []
       parameters:
         - $ref: "#/components/parameters/IdPath"
       requestBody:
@@ -1884,6 +1888,8 @@ paths:
       operationId: createSpaceInvitation
       tags: [spaces]
       summary: Invite a user to a space
+      security:
+        - bearerAuth: []
       parameters:
         - $ref: "#/components/parameters/IdPath"
       requestBody:
@@ -1905,6 +1911,8 @@ paths:
       operationId: updateSpaceInvitation
       tags: [spaces]
       summary: Accept or decline an invitation
+      security:
+        - bearerAuth: []
       parameters:
         - $ref: "#/components/parameters/IdPath"
         - name: invitationId
@@ -1959,6 +1967,8 @@ paths:
       operationId: createSpaceCodeRequest
       tags: [spaces]
       summary: Request to join a space using an invite code
+      security:
+        - bearerAuth: []
       parameters:
         - $ref: "#/components/parameters/IdPath"
       requestBody:
@@ -1980,6 +1990,8 @@ paths:
       operationId: updateSpaceCodeRequest
       tags: [spaces]
       summary: Approve or reject a code request (operator only)
+      security:
+        - bearerAuth: []
       parameters:
         - $ref: "#/components/parameters/IdPath"
         - name: requestId
@@ -2776,6 +2788,12 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
   parameters:
     IdPath:
       name: id
@@ -3827,6 +3845,7 @@ components:
         operatorNickname:
           type: string
           nullable: true
+          description: "운영자 표시명. 익명 공간은 모집 중 '참여자', 시작 후 공간 닉네임이며 계정 닉네임은 절대 제공하지 않음."
       required: [id, name, isAnonymous, operatorParticipates, roundCount, defaultCenterInterval, defaultCenterCount, status, creatorId, createdAt, updatedAt, myRole, participantCount]
 
     SpaceInvitationWithSpace:
@@ -3942,10 +3961,12 @@ components:
         defaultCenterCount:
           type: integer
           minimum: 1
-        creatorId:
+        spaceNickname:
           type: string
-          format: uuid
-      required: [name, creatorId]
+          minLength: 1
+          maxLength: 20
+          description: "익명 공간 생성자가 최초 입장 시 정하는 공간 전용 닉네임. isAnonymous=true이면 필수."
+      required: [name]
 
     UpdateSpaceBody:
       type: object
@@ -4111,6 +4132,11 @@ components:
         nickname:
           type: string
           nullable: true
+          description: "안전한 표시명. 익명 공간에서는 계정 닉네임이 아닌 상태별 익명 표시명."
+        spaceNickname:
+          type: string
+          nullable: true
+          description: "안전한 공간 표시명. 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임. 기존 데이터는 '참여자'."
         role:
           type: string
         status:
@@ -4118,7 +4144,7 @@ components:
         displayName:
           type: string
           nullable: true
-          description: "Pseudonymous display name (\"참여자 N\") for anonymous spaces, based on join order. Null for non-anonymous spaces."
+          description: "익명 공간의 안전한 표시명. 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임. 비익명 공간에서는 null."
         createdAt:
           type: string
           format: date-time
@@ -4146,6 +4172,7 @@ components:
         assignedUserNickname:
           type: string
           nullable: true
+          description: "배정된 사용자의 안전한 표시명. 익명 공간에서 계정 닉네임은 제공하지 않음."
         createdAt:
           type: string
           format: date-time
@@ -4213,6 +4240,14 @@ components:
           type: string
           format: uuid
           nullable: true
+        spaceNickname:
+          type: string
+          nullable: true
+          description: "안전한 공간 표시명. 익명 공간 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임."
+        displayName:
+          type: string
+          nullable: true
+          description: "상태별 안전한 표시명."
         createdAt:
           type: string
           format: date-time
@@ -4224,25 +4259,11 @@ components:
     CreateSpaceParticipationBody:
       type: object
       properties:
-        userId:
+        spaceNickname:
           type: string
-          format: uuid
-        role:
-          type: string
-          enum: [OPERATOR, PARTICIPANT]
-        joinPath:
-          type: string
-          enum: [INVITATION, CODE]
-          nullable: true
-        invitationId:
-          type: string
-          format: uuid
-          nullable: true
-        codeRequestId:
-          type: string
-          format: uuid
-          nullable: true
-      required: [userId]
+          minLength: 1
+          maxLength: 20
+          description: "익명 공간에 직접 참여할 때 최초 입장 닉네임. 익명 공간에서는 필수."
 
     UpdateSpaceParticipationBody:
       type: object
@@ -4286,10 +4307,7 @@ components:
         invitedUserId:
           type: string
           format: uuid
-        invitedBy:
-          type: string
-          format: uuid
-      required: [invitedUserId, invitedBy]
+      required: [invitedUserId]
 
     UpdateSpaceInvitationBody:
       type: object
@@ -4297,6 +4315,11 @@ components:
         status:
           type: string
           enum: [ACCEPTED, DECLINED]
+        spaceNickname:
+          type: string
+          minLength: 1
+          maxLength: 20
+          description: "익명 초대를 수락할 때 정하는 최초 공간 닉네임. ACCEPTED + 익명 공간에서는 필수."
 
     SpaceCodeRequestWithRequester:
       type: object
@@ -4306,6 +4329,7 @@ components:
         requesterNickname:
           type: string
           nullable: true
+          description: "신청자의 안전한 표시명. 익명 공간에서 계정 닉네임은 제공하지 않음."
       required: [codeRequest]
 
     SpaceCodeRequest:
@@ -4322,6 +4346,10 @@ components:
           format: uuid
         code:
           type: string
+        spaceNickname:
+          type: string
+          nullable: true
+          description: "안전한 공간 표시명. 익명 공간 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임."
         status:
           type: string
           enum: [PENDING, APPROVED, REJECTED, CANCELLED]
@@ -4339,14 +4367,16 @@ components:
     CreateSpaceCodeRequestBody:
       type: object
       properties:
-        requesterId:
-          type: string
-          format: uuid
         code:
           type: string
           minLength: 1
           maxLength: 20
-      required: [requesterId, code]
+        spaceNickname:
+          type: string
+          minLength: 1
+          maxLength: 20
+          description: "익명 공간 신청 시 정하는 최초 공간 닉네임. 익명 공간에서는 필수."
+      required: [code]
 
     UpdateSpaceCodeRequestBody:
       type: object
@@ -4402,10 +4432,11 @@ components:
         authorNickname:
           type: string
           nullable: true
+          description: "작성자의 안전한 표시명. 익명 공간 모집 중에는 '참여자', 시작 후 공간 닉네임."
         displayName:
           type: string
           nullable: true
-          description: Pseudonymous display name for anonymous spaces (e.g. "참여자 1"). Null in non-anonymous spaces.
+          description: "익명 공간의 안전한 표시명. 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임. 비익명 공간에서는 null."
         isRead:
           type: boolean
           description: Whether the calling user has already read the source article. Always false when there is no sourceArticleId.
@@ -4533,7 +4564,7 @@ components:
         authorNickname:
           type: string
           nullable: true
-          description: Nickname of the letter author
+          description: "작성자의 안전한 표시명. 익명 공간에서 계정 닉네임은 제공하지 않음."
         roundNumber:
           type: integer
           nullable: true
@@ -4561,6 +4592,7 @@ components:
             creatorNickname:
               type: string
               nullable: true
+              description: "생성자의 안전한 표시명. 익명 공간에서 계정 닉네임은 제공하지 않음."
             participantCount:
               type: integer
           required: [participantCount]

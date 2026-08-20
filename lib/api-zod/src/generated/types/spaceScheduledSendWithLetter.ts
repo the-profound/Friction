@@ -23,7 +23,7 @@ export interface SpaceScheduledSendWithLetter {
   letter?: SpaceLetter | null;
   /** Title of the source article, if available */
   articleTitle?: string | null;
-  /** Nickname of the letter author */
+  /** 작성자의 안전한 표시명. 익명 공간에서 계정 닉네임은 제공하지 않음. */
   authorNickname?: string | null;
   /** Round number of the letter's round, if any */
   roundNumber?: number | null;

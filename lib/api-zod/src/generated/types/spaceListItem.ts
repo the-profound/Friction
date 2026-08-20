@@ -38,5 +38,6 @@ export interface SpaceListItem {
   myRole: SpaceListItemMyRole;
   participantCount: number;
   activeRound?: SpaceRound | null;
+  /** 운영자 표시명. 익명 공간은 모집 중 '참여자', 시작 후 공간 닉네임이며 계정 닉네임은 절대 제공하지 않음. */
   operatorNickname?: string | null;
 }

@@ -66,6 +66,50 @@ function scheduleTypeLabelJoin(
   return `${centerInterval}일 간격`;
 }
 
+function validateSpaceNickname(value: string): string | null {
+  const nickname = value.trim();
+  if (!nickname) return "공간 닉네임을 입력해주세요.";
+  if (nickname.length > 20) return "공간 닉네임은 20자까지 입력할 수 있어요.";
+  return null;
+}
+
+function getJoinMutationErrorMessage(error: unknown, fallback: string): string {
+  const status = (error as { status?: number }).status;
+  if (status === 409) return "이미 사용 중인 공간 닉네임이에요. 다른 이름을 입력해주세요.";
+  return fallback;
+}
+
+function SpaceNicknameField({
+  value,
+  error,
+  onChangeText,
+}: {
+  value: string;
+  error: string | null;
+  onChangeText: (value: string) => void;
+}) {
+  return (
+    <View style={styles.nicknameField}>
+      <Text style={styles.nicknameLabel}>이 공간에서 사용할 닉네임 *</Text>
+      <TextInput
+        style={[styles.codeInput, !!error && styles.codeInputError]}
+        placeholder="예: 달빛"
+        placeholderTextColor={Colors.zinc400}
+        value={value}
+        onChangeText={onChangeText}
+        maxLength={20}
+        autoCapitalize="none"
+        autoCorrect={false}
+        accessibilityLabel="공간 닉네임"
+      />
+      <Text style={styles.nicknameHint}>
+        시작 전에는 모두 ‘참여자’로 표시되고, 시작 후 이 닉네임으로 표시돼요.
+      </Text>
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+    </View>
+  );
+}
+
 function SpaceInfoCard({ space }: { space: SpaceWithCreatorInfo }) {
   const isRecruiting = space.status === "RECRUITING";
   const isActive = space.status === "ACTIVE";
@@ -198,6 +242,8 @@ export default function SpaceJoinScreen() {
   );
   const [inviteCode, setInviteCode] = useState(params.inviteCode ?? "");
   const [codeError, setCodeError] = useState<string | null>(null);
+  const [spaceNickname, setSpaceNickname] = useState("");
+  const [spaceNicknameError, setSpaceNicknameError] = useState<string | null>(null);
   const [spaceId, setSpaceId] = useState<string | null>(params.spaceId ?? null);
   const [foundSpace, setFoundSpace] = useState<SpaceWithCreatorInfo | null>(null);
   const [joinContext, setJoinContext] = useState<SpaceJoinContext | null>(null);
@@ -383,21 +429,34 @@ export default function SpaceJoinScreen() {
 
   const handleApply = useCallback(async () => {
     if (!foundSpace || !spaceId) return;
+    const nicknameError = foundSpace.isAnonymous
+      ? validateSpaceNickname(spaceNickname)
+      : null;
+    if (nicknameError) {
+      setSpaceNicknameError(nicknameError);
+      return;
+    }
     setActionLoading(true);
     try {
       await createCodeRequest.mutateAsync({
         id: spaceId,
-        data: { requesterId: userId, code: inviteCode.trim() },
+        data: {
+          code: inviteCode.trim(),
+          ...(foundSpace.isAnonymous ? { spaceNickname: spaceNickname.trim() } : {}),
+        },
       });
       const ctx = await getSpaceJoinContext(spaceId, { userId });
       setJoinContext(ctx);
       setStep("code_pending");
-    } catch {
-      showToast({ message: "신청에 실패했어요. 다시 시도해주세요.", type: "error" });
+    } catch (error) {
+      showToast({
+        message: getJoinMutationErrorMessage(error, "신청에 실패했어요. 다시 시도해주세요."),
+        type: "error",
+      });
     } finally {
       setActionLoading(false);
     }
-  }, [foundSpace, spaceId, userId, inviteCode, createCodeRequest, showToast]);
+  }, [foundSpace, spaceId, inviteCode, spaceNickname, createCodeRequest, showToast]);
 
   const handleCancelRequest = useCallback(async () => {
     if (!spaceId || !joinContext?.codeRequest) return;
@@ -426,21 +485,34 @@ export default function SpaceJoinScreen() {
 
   const handleAcceptInvitation = useCallback(async () => {
     if (!spaceId || !joinContext?.invitation) return;
+    const nicknameError = joinContext.space.isAnonymous
+      ? validateSpaceNickname(spaceNickname)
+      : null;
+    if (nicknameError) {
+      setSpaceNicknameError(nicknameError);
+      return;
+    }
     setActionLoading(true);
     try {
       await updateInvitation.mutateAsync({
         id: spaceId,
         invitationId: joinContext.invitation.id,
-        data: { status: "ACCEPTED" },
+        data: {
+          status: "ACCEPTED",
+          ...(joinContext.space.isAnonymous ? { spaceNickname: spaceNickname.trim() } : {}),
+        },
       });
       showToast({ message: "공간에 참여했어요!", type: "success" });
       router.replace("/(tabs)/of");
-    } catch {
-      showToast({ message: "수락에 실패했어요. 다시 시도해주세요.", type: "error" });
+    } catch (error) {
+      showToast({
+        message: getJoinMutationErrorMessage(error, "수락에 실패했어요. 다시 시도해주세요."),
+        type: "error",
+      });
     } finally {
       setActionLoading(false);
     }
-  }, [spaceId, joinContext, updateInvitation, showToast, router]);
+  }, [spaceId, joinContext, spaceNickname, updateInvitation, showToast, router]);
 
   const handleDeclineInvitation = useCallback(async () => {
     if (!spaceId || !joinContext?.invitation) return;
@@ -576,6 +648,16 @@ export default function SpaceJoinScreen() {
       return (
         <View style={styles.spacePreviewContainer}>
           <SpaceInfoCard space={foundSpace} />
+          {foundSpace.isAnonymous ? (
+            <SpaceNicknameField
+              value={spaceNickname}
+              error={spaceNicknameError}
+              onChangeText={(value) => {
+                setSpaceNickname(value);
+                setSpaceNicknameError(null);
+              }}
+            />
+          ) : null}
           {isClosed ? (
             <View style={styles.closedNoticeBanner}>
               <Feather name="slash" size={14} color={Colors.zinc500} />
@@ -623,6 +705,16 @@ export default function SpaceJoinScreen() {
             </Text>
           </View>
           <SpaceInfoCard space={joinContext.space} />
+          {joinContext.space.isAnonymous ? (
+            <SpaceNicknameField
+              value={spaceNickname}
+              error={spaceNicknameError}
+              onChangeText={(value) => {
+                setSpaceNickname(value);
+                setSpaceNicknameError(null);
+              }}
+            />
+          ) : null}
           {isClosed ? (
             <View style={styles.closedNoticeBanner}>
               <Feather name="slash" size={14} color={Colors.zinc500} />
@@ -904,6 +996,21 @@ const styles = StyleSheet.create({
   },
   codeInputError: {
     borderColor: "#DC2626",
+  },
+  nicknameField: {
+    width: "100%",
+    gap: 6,
+  },
+  nicknameLabel: {
+    ...Typography.bodySemiBold,
+    fontSize: 14,
+    color: Colors.zinc700,
+  },
+  nicknameHint: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc500,
+    lineHeight: 18,
   },
   errorText: {
     ...Typography.body,

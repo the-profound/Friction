@@ -18,6 +18,10 @@ export interface SpaceParticipation {
   status: SpaceParticipationStatus;
   invitationId?: string | null;
   codeRequestId?: string | null;
+  /** 안전한 공간 표시명. 익명 공간 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임. */
+  spaceNickname?: string | null;
+  /** 상태별 안전한 표시명. */
+  displayName?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -21,8 +21,9 @@ export interface SpaceLetter {
   articleTitle?: string | null;
   articleExcerpt?: string | null;
   articleCover?: ArticleCover | null;
+  /** 작성자의 안전한 표시명. 익명 공간 모집 중에는 '참여자', 시작 후 공간 닉네임. */
   authorNickname?: string | null;
-  /** Pseudonymous display name for anonymous spaces (e.g. "참여자 1"). Null in non-anonymous spaces. */
+  /** 익명 공간의 안전한 표시명. 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임. 비익명 공간에서는 null. */
   displayName?: string | null;
   /** Whether the calling user has already read the source article. Always false when there is no sourceArticleId. */
   isRead: boolean;

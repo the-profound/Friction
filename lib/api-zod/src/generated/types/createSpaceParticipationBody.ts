@@ -5,13 +5,12 @@
  * Friction MVP 1.0.0 API
  * OpenAPI spec version: 0.1.0
  */
-import type { CreateSpaceParticipationBodyJoinPath } from "./createSpaceParticipationBodyJoinPath";
-import type { CreateSpaceParticipationBodyRole } from "./createSpaceParticipationBodyRole";
 
 export interface CreateSpaceParticipationBody {
-  userId: string;
-  role?: CreateSpaceParticipationBodyRole;
-  joinPath?: CreateSpaceParticipationBodyJoinPath;
-  invitationId?: string | null;
-  codeRequestId?: string | null;
+  /**
+   * 익명 공간에 직접 참여할 때 최초 입장 닉네임. 익명 공간에서는 필수.
+   * @minLength 1
+   * @maxLength 20
+   */
+  spaceNickname?: string;
 }

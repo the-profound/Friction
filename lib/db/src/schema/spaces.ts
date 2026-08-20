@@ -82,11 +82,16 @@ export const spaceCodeRequestsTable = pgTable("space_code_requests", {
   spaceId: uuid("space_id").notNull().references(() => spacesTable.id),
   requesterId: uuid("requester_id").notNull().references(() => usersTable.id),
   code: varchar("code", { length: 20 }).notNull(),
+  spaceNickname: varchar("space_nickname", { length: 20 }),
   status: spaceCodeRequestStatusEnum("status").notNull().default("PENDING"),
   rejectionReason: text("rejection_reason"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-});
+}, (t) => [
+  uniqueIndex("space_code_requests_active_nickname_unique")
+    .on(t.spaceId, sql`lower(btrim(${t.spaceNickname}))`)
+    .where(sql`${t.spaceNickname} IS NOT NULL AND ${t.status} IN ('PENDING', 'APPROVED')`),
+]);
 
 export const insertSpaceCodeRequestSchema = createInsertSchema(spaceCodeRequestsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertSpaceCodeRequest = z.infer<typeof insertSpaceCodeRequestSchema>;
@@ -99,12 +104,16 @@ export const spaceParticipationsTable = pgTable("space_participations", {
   role: spaceMemberRoleEnum("role").notNull().default("PARTICIPANT"),
   joinPath: spaceJoinPathEnum("join_path"),
   status: spaceParticipationStatusEnum("status").notNull().default("PENDING"),
+  spaceNickname: varchar("space_nickname", { length: 20 }),
   invitationId: uuid("invitation_id").references(() => spaceInvitationsTable.id),
   codeRequestId: uuid("code_request_id").references(() => spaceCodeRequestsTable.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (t) => [
   unique("space_participations_space_user_unique").on(t.spaceId, t.userId),
+  uniqueIndex("space_participations_active_nickname_unique")
+    .on(t.spaceId, sql`lower(btrim(${t.spaceNickname}))`)
+    .where(sql`${t.spaceNickname} IS NOT NULL AND ${t.status} IN ('PENDING', 'APPROVED')`),
   check(
     "space_participations_join_path_fk_check",
     sql`(${t.joinPath} = 'INVITATION' AND ${t.invitationId} IS NOT NULL AND ${t.codeRequestId} IS NULL)
