@@ -30,6 +30,7 @@ import { getNewLetterRecipients } from "./lib/letterNotificationQuery";
 import { buildLetterArrivedMessage, SEND_HOUR_KST, WINDOW_HOURS } from "./lib/notificationMessages";
 import { sendSilentPush } from "./lib/pushSender";
 import { processDueScheduledSends } from "./lib/scheduledSendProcessor";
+import { synchronizeSpaceRoundStatuses } from "./lib/spaceRoundStatus";
 
 // ─── Space inactivity ────────────────────────────────────────────────────────
 
@@ -205,7 +206,10 @@ const SCHEDULED_SEND_POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 async function runScheduledSendSweep() {
   try {
-    await processDueScheduledSends();
+    await Promise.all([
+      processDueScheduledSends(),
+      synchronizeSpaceRoundStatuses(),
+    ]);
   } catch (err) {
     logger.error({ err }, "scheduler: processDueScheduledSends failed");
   }

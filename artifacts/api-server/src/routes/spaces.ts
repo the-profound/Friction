@@ -5,8 +5,14 @@ import { requireAuth } from "../middlewares/requireAuth";
 import { generateInviteCode } from "../lib/inviteCodeWords";
 import { logger } from "../lib/logger";
 import { dispatchNotification } from "../lib/notifications";
-import { normalizeToKst6, kstDateString, computeDeliverySlot } from "../lib/deliverySlot";
+import {
+  normalizeToKst6,
+  kstDateString,
+  computeDeliverySlot,
+  isKstDateReservable,
+} from "../lib/deliverySlot";
 import { processDueScheduledSends } from "../lib/scheduledSendProcessor";
+import { synchronizeSpaceRoundStatuses } from "../lib/spaceRoundStatus";
 import {
   db,
   spacesTable,
@@ -734,6 +740,9 @@ router.post("/spaces/:id/start", requireAuth, async (req, res) => {
 });
 
 router.get("/spaces/:id/rounds", async (req, res) => {
+  // Keep read paths in sync even if the periodic scheduler was briefly down.
+  const spaceId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  await synchronizeSpaceRoundStatuses(new Date(), spaceId);
   const rounds = await db
     .select()
     .from(spaceRoundsTable)
@@ -1651,6 +1660,9 @@ async function validateCenterSlotDate(
   if (!slot.scheduledDate) {
     return { ok: false, error: "슬롯에 배정된 발송일이 없습니다." };
   }
+  if (!isKstDateReservable(slot.scheduledDate)) {
+    return { ok: false, error: "이 슬롯의 예약 가능 시간이 지났습니다." };
+  }
   if (normalizedScheduledAt && kstDateString(normalizedScheduledAt) !== slot.scheduledDate) {
     return { ok: false, error: "요청한 발송 예정일이 배정된 슬롯 날짜와 일치하지 않습니다." };
   }
@@ -1817,40 +1829,68 @@ router.patch("/spaces/:id/letters/:letterId/scheduled-sends/:sendId", requireAut
     return;
   }
   const { status, scheduledAt } = req.body;
-  const updateFields: Record<string, unknown> = { status };
+  const [existingSend] = await db
+    .select()
+    .from(spaceScheduledSendsTable)
+    .where(
+      and(
+        eq(spaceScheduledSendsTable.id, req.params.sendId),
+        eq(spaceScheduledSendsTable.spaceLetterId, req.params.letterId),
+        eq(spaceScheduledSendsTable.spaceId, req.params.id),
+      ),
+    )
+    .limit(1);
+  if (!existingSend) {
+    res.status(404).json({ error: "Scheduled send not found" });
+    return;
+  }
+
+  const [letter] = await db
+    .select()
+    .from(spaceLettersTable)
+    .where(
+      and(
+        eq(spaceLettersTable.id, req.params.letterId),
+        eq(spaceLettersTable.spaceId, req.params.id),
+      ),
+    )
+    .limit(1);
+  if (!letter) {
+    res.status(404).json({ error: "Letter not found" });
+    return;
+  }
+
+  const updateFields: Record<string, unknown> =
+    status !== undefined ? { status } : {};
+  let normalizedScheduledAt: Date | undefined;
   if (scheduledAt !== undefined) {
     const parsedScheduledAt = toDate(scheduledAt);
     if (!parsedScheduledAt) {
       res.status(400).json({ error: "잘못된 발송 시각입니다." });
       return;
     }
-    const normalizedScheduledAt = normalizeToKst6(parsedScheduledAt);
-
-    const [letter] = await db
-      .select()
-      .from(spaceLettersTable)
-      .where(
-        and(
-          eq(spaceLettersTable.id, req.params.letterId),
-          eq(spaceLettersTable.spaceId, req.params.id),
-        ),
-      )
-      .limit(1);
-    if (letter?.letterType === "CENTER") {
-      const validation = await validateCenterSlotDate(letter, normalizedScheduledAt);
+    normalizedScheduledAt = normalizeToKst6(parsedScheduledAt);
+    updateFields.scheduledAt = normalizedScheduledAt;
+  }
+  // A status-only transition back to PENDING must not bypass the same date
+  // checks as a new or rescheduled reservation. In that case validate the
+  // stored date; otherwise validate the requested normalized date.
+  if (scheduledAt !== undefined || status === "PENDING") {
+    const effectiveScheduledAt = normalizedScheduledAt ?? existingSend.scheduledAt;
+    if (letter.letterType === "CENTER") {
+      const validation = await validateCenterSlotDate(letter, effectiveScheduledAt);
       if (!validation.ok) {
         res.status(400).json({ error: validation.error });
         return;
       }
       updateFields.slotId = validation.slot.id;
-    } else if (letter?.letterType === "OPENING") {
-      const validation = await validateOpeningRoundDate(letter, normalizedScheduledAt);
+    } else if (letter.letterType === "OPENING") {
+      const validation = await validateOpeningRoundDate(letter, effectiveScheduledAt);
       if (!validation.ok) {
         res.status(400).json({ error: validation.error });
         return;
       }
     }
-    updateFields.scheduledAt = normalizedScheduledAt;
   }
   const [send] = await db
     .update(spaceScheduledSendsTable)
@@ -1863,10 +1903,6 @@ router.patch("/spaces/:id/letters/:letterId/scheduled-sends/:sendId", requireAut
       ),
     )
     .returning();
-  if (!send) {
-    res.status(404).json({ error: "Scheduled send not found" });
-    return;
-  }
   res.json(send);
 });
 

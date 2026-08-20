@@ -39,3 +39,8 @@ export function kstDateString(date: Date): string {
   const d = String(kst.getUTCDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 }
+
+/** True only while the given KST calendar date's 06:00 delivery slot is ahead. */
+export function isKstDateReservable(ymd: string, now: Date = new Date()): boolean {
+  return ymd >= kstDateString(computeDeliverySlot(now));
+}

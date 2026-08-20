@@ -54,10 +54,16 @@ import { SpaceInfoNote } from "@/components/SpaceInfoNote/SpaceInfoNote";
 import { SpaceCopy } from "@/constants/spaceCopy";
 import { spaceStatusLabel, spaceStatusStyle } from "@/lib/spaceStatusStyle";
 import {
+  getSpaceLetterAuthorName,
+  getSpaceRoundPresentationStatus,
+  isKstSlotReservable,
+  isOpeningSlotReservable,
   roundStatusLabel,
+  sortSpaceRoundSlotsForPresentation,
   shouldDimSpaceRoundLetter,
   sortSpaceRoundsNewestFirst,
 } from "@/lib/spaceRoundPresentation";
+import { toKstCalendarDate } from "@/lib/kstDate";
 
 // ─── Space Carousel constants ─────────────────────────────────────────────────
 // Card width is derived so that exactly 2 full cards + the centre of the 3rd
@@ -164,6 +170,8 @@ function SpaceCarousel({
   onCardPress,
   hiddenCardId,
   openingSlot,
+  openingSlotAtEnd = false,
+  trailingSlots = [],
 }: {
   letters: SpaceLetter[];
   roundStatus: string;
@@ -171,8 +179,10 @@ function SpaceCarousel({
   onCardPress: (letter: SpaceLetter, layout: OriginLayout) => void;
   hiddenCardId?: string | null;
   openingSlot?: React.ReactNode;
+  openingSlotAtEnd?: boolean;
+  trailingSlots?: { id: string; node: React.ReactNode }[];
 }) {
-  const itemCount = letters.length + (openingSlot ? 1 : 0);
+  const itemCount = letters.length + trailingSlots.length + (openingSlot ? 1 : 0);
   const cardSlotRefs = useRef<(View | null)[]>([]);
   const swipedRef = useRef(false);
 
@@ -255,11 +265,14 @@ function SpaceCarousel({
     const authorNickname = (letter as any).authorNickname as string | null;
     const displayName = (letter as any).displayName as string | null;
     const title = (letter as any).articleTitle as string | null;
-    const authorName = isAnonymous
-      ? (displayName ?? "익명")
-      : (authorNickname ?? "알 수 없음");
+    const authorName = getSpaceLetterAuthorName(
+      letter.letterType,
+      isAnonymous,
+      displayName,
+      authorNickname,
+    );
 
-    const globalIndex = (openingSlot ? 1 : 0) + index;
+    const globalIndex = (openingSlot && !openingSlotAtEnd ? 1 : 0) + index;
     const isLast = globalIndex === itemCount - 1;
 
     const handlePress = () => {
@@ -299,13 +312,13 @@ function SpaceCarousel({
   });
 
   const cards = [
-    ...(openingSlot
+    ...(openingSlot && !openingSlotAtEnd
       ? [
           <View
             key="__opening_slot"
             style={[
               spaceCarouselStyles.cardSlot,
-              letters.length > 0 && { marginRight: SC_CARD_GAP },
+              itemCount > 1 && { marginRight: SC_CARD_GAP },
             ]}
           >
             {openingSlot}
@@ -313,6 +326,26 @@ function SpaceCarousel({
         ]
       : []),
     ...letterCards,
+    ...trailingSlots.map((slot, index) => (
+      <View
+        key={slot.id}
+        style={[
+          spaceCarouselStyles.cardSlot,
+          index < trailingSlots.length - 1 || openingSlotAtEnd
+            ? { marginRight: SC_CARD_GAP }
+            : null,
+        ]}
+      >
+        {slot.node}
+      </View>
+    )),
+    ...(openingSlot && openingSlotAtEnd
+      ? [
+          <View key="__opening_slot" style={spaceCarouselStyles.cardSlot}>
+            {openingSlot}
+          </View>,
+        ]
+      : []),
   ];
 
   return (
@@ -412,6 +445,78 @@ const spaceCarouselStyles = StyleSheet.create({
   },
 });
 
+// ─── Empty round slots ─────────────────────────────────────────────────────────
+
+function formatSlotDate(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const plainDate = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (plainDate) return `${plainDate[1]}.${plainDate[2]}.${plainDate[3]}`;
+  const d = toKstCalendarDate(new Date(iso));
+  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function SpaceRoundSlotCard({
+  slot,
+  userId,
+  isAnonymous,
+  now,
+  onSchedule,
+}: {
+  slot: SpaceRoundSlotWithUser;
+  userId: string;
+  isAnonymous: boolean;
+  now: Date;
+  onSchedule: (slot: SpaceRoundSlotWithUser) => void;
+}) {
+  const isMySlot = slot.assignedUserId === userId;
+  const isPastEmptySlot =
+    !!slot.scheduledDate && !isKstSlotReservable(slot.scheduledDate, now);
+  const showNickname = !isAnonymous || isMySlot;
+
+  return (
+    <View
+      style={[
+        styles.slotCard,
+        isMySlot ? styles.slotCardMine : styles.slotCardOther,
+      ]}
+    >
+      <View style={styles.slotCardTop}>
+        {isPastEmptySlot ? (
+          <Feather name="clock" size={18} color={Colors.zinc300} />
+        ) : isMySlot ? (
+          <Feather name="edit-3" size={18} color={Colors.zinc500} />
+        ) : (
+          <Feather name="lock" size={18} color={Colors.zinc300} />
+        )}
+      </View>
+      <View style={styles.slotCardMiddle}>
+        <Text style={isMySlot ? styles.slotCardMyText : styles.slotCardOtherText}>
+          {isPastEmptySlot ? "글 없음" : isMySlot ? "내 차례" : "추후 공개"}
+        </Text>
+      </View>
+      {isMySlot && !isPastEmptySlot && (
+        <ScalePressable
+          style={styles.slotCtaOuter}
+          contentStyle={styles.slotCta}
+          onPress={() => onSchedule(slot)}
+        >
+          <Text style={styles.slotCtaText}>글 예약하기</Text>
+        </ScalePressable>
+      )}
+      <View style={styles.slotCardFooter}>
+        {showNickname && (
+          <Text style={styles.slotNickname} numberOfLines={1}>
+            {isMySlot ? "나" : (slot.assignedUserNickname ?? "멤버")}
+          </Text>
+        )}
+        {slot.scheduledDate ? (
+          <Text style={styles.slotDate}>{formatSlotDate(slot.scheduledDate)}</Text>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
 // ─── Upcoming Round Slots ─────────────────────────────────────────────────────
 
 function UpcomingRoundSlots({
@@ -419,15 +524,19 @@ function UpcomingRoundSlots({
   round,
   userId,
   isAnonymous,
+  now,
   onSchedule,
   openingSlot,
+  openingSlotIsExpired = false,
 }: {
   spaceId: string;
   round: SpaceRound;
   userId: string;
   isAnonymous: boolean;
+  now: Date;
   onSchedule: (slot: SpaceRoundSlotWithUser) => void;
   openingSlot?: React.ReactNode;
+  openingSlotIsExpired?: boolean;
 }) {
   const slotsQuery = useListSpaceRoundSlots(spaceId, round.id, {
     query: {
@@ -444,12 +553,6 @@ function UpcomingRoundSlots({
       </View>
     );
   }
-
-  const formatSlotDate = (iso: string | null | undefined) => {
-    if (!iso) return null;
-    const d = new Date(iso);
-    return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
-  };
 
   // When no user slots exist yet, render the opening slot (if any) in a
   // horizontal scroll followed by the locked placeholder card. This ensures
@@ -474,76 +577,32 @@ function UpcomingRoundSlots({
     );
   }
 
+  const orderedSlots = sortSpaceRoundSlotsForPresentation(slots, now);
+  const openingCard = openingSlot ? (
+    <View key="__opening_slot" style={{ marginRight: SC_CARD_GAP }}>
+      {openingSlot}
+    </View>
+  ) : null;
+  const slotCards = orderedSlots.map((slot) => (
+    <SpaceRoundSlotCard
+      key={slot.id}
+      slot={slot}
+      userId={userId}
+      isAnonymous={isAnonymous}
+      now={now}
+      onSchedule={onSchedule}
+    />
+  ));
+
   return (
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.slotCarouselContent}
     >
-      {openingSlot ? (
-        <View style={{ marginRight: SC_CARD_GAP }}>
-          {openingSlot}
-        </View>
-      ) : null}
-      {slots
-        .slice()
-        .sort((a, b) => {
-          if (a.scheduledDate && b.scheduledDate) {
-            return a.scheduledDate < b.scheduledDate ? -1 : a.scheduledDate > b.scheduledDate ? 1 : 0;
-          }
-          if (a.scheduledDate) return -1;
-          if (b.scheduledDate) return 1;
-          return a.slotOrder - b.slotOrder;
-        })
-        .map((slot) => {
-          const isMySlot = slot.assignedUserId === userId;
-          const showNickname = !isAnonymous || isMySlot;
-          return (
-            <View
-              key={slot.id}
-              style={[
-                styles.slotCard,
-                isMySlot ? styles.slotCardMine : styles.slotCardOther,
-              ]}
-            >
-              <View style={styles.slotCardTop}>
-                {isMySlot ? (
-                  <Feather name="edit-3" size={18} color={Colors.zinc500} />
-                ) : (
-                  <Feather name="lock" size={18} color={Colors.zinc300} />
-                )}
-              </View>
-              <View style={styles.slotCardMiddle}>
-                {isMySlot ? (
-                  <Text style={styles.slotCardMyText}>내 차례</Text>
-                ) : (
-                  <Text style={styles.slotCardOtherText}>추후 공개</Text>
-                )}
-              </View>
-              {isMySlot && (
-                <ScalePressable
-                  style={styles.slotCtaOuter}
-                  contentStyle={styles.slotCta}
-                  onPress={() => onSchedule(slot)}
-                >
-                  <Text style={styles.slotCtaText}>글 예약하기</Text>
-                </ScalePressable>
-              )}
-              <View style={styles.slotCardFooter}>
-                {showNickname && (
-                  <Text style={styles.slotNickname} numberOfLines={1}>
-                    {isMySlot ? "나" : (slot.assignedUserNickname ?? "멤버")}
-                  </Text>
-                )}
-                {slot.scheduledDate ? (
-                  <Text style={styles.slotDate}>
-                    {formatSlotDate(slot.scheduledDate)}
-                  </Text>
-                ) : null}
-              </View>
-            </View>
-          );
-        })}
+      {!openingSlotIsExpired ? openingCard : null}
+      {slotCards}
+      {openingSlotIsExpired ? openingCard : null}
     </ScrollView>
   );
 }
@@ -556,6 +615,7 @@ function RoundSection({
   spaceStatus,
   isOperator,
   isAnonymous,
+  now,
   onPressLetter,
   onPressWriteOpening,
   hiddenCardId,
@@ -568,6 +628,7 @@ function RoundSection({
   spaceStatus: string;
   isOperator: boolean;
   isAnonymous: boolean;
+  now: Date;
   onPressLetter: (letter: SpaceLetter, layout: OriginLayout) => void;
   onPressWriteOpening: (round: SpaceRound) => void;
   hiddenCardId?: string | null;
@@ -575,24 +636,58 @@ function RoundSection({
   userId: string;
   onScheduleSlot: (slot: SpaceRoundSlotWithUser) => void;
 }) {
-  const statusColor = roundStatusColor(round.status);
-  const isUpcoming = round.status === "UPCOMING";
+  const roundStatus = getSpaceRoundPresentationStatus(round, now);
+  const statusColor = roundStatusColor(roundStatus);
+  const isUpcoming = roundStatus === "UPCOMING";
   const isSpaceRecruiting = spaceStatus === "RECRUITING";
   const isSpaceArchived = spaceStatus === "ARCHIVED";
+  const slotsQuery = useListSpaceRoundSlots(spaceId, round.id, {
+    query: {
+      enabled: !!spaceId && !!round.id && !isSpaceRecruiting,
+      queryKey: getListSpaceRoundSlotsQueryKey(spaceId, round.id),
+    },
+  });
+  const roundSlots = (slotsQuery.data ?? []) as SpaceRoundSlotWithUser[];
 
   const openingLetter = letters.find((l) => l.letterType === "OPENING") ?? null;
   const hasOpeningLetter = openingLetter !== null;
+  const openingReservationAvailable =
+    roundStatus !== "COMPLETED" &&
+    !isSpaceArchived &&
+    isOpeningSlotReservable(round.startsAt, now);
+  const emptyRoundSlots = sortSpaceRoundSlotsForPresentation(
+    roundSlots.filter(
+      (slot) =>
+        !letters.some(
+          (letter) =>
+            letter.letterType === "CENTER" &&
+            letter.authorId === slot.assignedUserId,
+        ),
+    ),
+    now,
+  );
+  const trailingSlotCards = emptyRoundSlots.map((slot) => ({
+    id: `slot:${slot.id}`,
+    node: (
+      <SpaceRoundSlotCard
+        slot={slot}
+        userId={userId}
+        isAnonymous={isAnonymous}
+        now={now}
+        onSchedule={onScheduleSlot}
+      />
+    ),
+  }));
 
   // Placeholder card shown when no opening letter exists yet. The write
-  // button is only offered while the round is still UPCOMING — once it has
-  // started (ACTIVE) or finished (COMPLETED), the reservation screen no
-  // longer accepts a new opening-letter booking for it, so showing a
-  // pressable button here would deep-link into a dead end. Show an
-  // explanatory notice instead.
+  // button is offered only while the opening letter's KST 06:00 deadline is
+  // still ahead. This deliberately includes the first six hours of the round's
+  // start date, when the period is already ACTIVE but the 06:00 send slot has
+  // not yet elapsed.
   const openingPlaceholderNode: React.ReactNode =
     !isSpaceRecruiting
       ? isOperator && !isSpaceArchived
-        ? isUpcoming
+        ? openingReservationAvailable
           ? (
             <ScalePressable
               style={spaceCarouselStyles.openingSlotCard}
@@ -606,7 +701,7 @@ function RoundSection({
           : (
             <View style={[spaceCarouselStyles.openingSlotCard, spaceCarouselStyles.openingSlotCardInner]}>
               <Feather name="clock" size={18} color={Colors.zinc300} />
-              <Text style={spaceCarouselStyles.openingSlotEmptyText}>이미 회차가{"\n"}시작했어요!</Text>
+              <Text style={spaceCarouselStyles.openingSlotEmptyText}>글 없음</Text>
             </View>
           )
         : (
@@ -632,9 +727,12 @@ function RoundSection({
           const authorNickname = (letter as any).authorNickname as string | null;
           const displayName = (letter as any).displayName as string | null;
           const title = (letter as any).articleTitle as string | null;
-          const authorName = isAnonymous
-            ? (displayName ?? "익명")
-            : (authorNickname ?? "알 수 없음");
+          const authorName = getSpaceLetterAuthorName(
+            letter.letterType,
+            isAnonymous,
+            displayName,
+            authorNickname,
+          );
           return (
             <ScaledCardSlot>
               <ArticleCardItem
@@ -661,8 +759,10 @@ function RoundSection({
         round={round}
         userId={userId}
         isAnonymous={isAnonymous}
+        now={now}
         onSchedule={onScheduleSlot}
         openingSlot={upcomingOpeningSlotNode}
+        openingSlotIsExpired={!hasOpeningLetter && !openingReservationAvailable}
       />
     );
   } else if (isSpaceRecruiting) {
@@ -672,15 +772,23 @@ function RoundSection({
         <Text style={styles.lockedText}>공간 시작 후 공개</Text>
       </View>
     );
-  } else if (letters.length > 0 || openingSlotNode) {
+  } else if (slotsQuery.isLoading) {
+    letterArea = (
+      <View style={styles.slotLoadingRow}>
+        <ActivityIndicator size="small" color={Colors.zinc300} />
+      </View>
+    );
+  } else if (letters.length > 0 || openingSlotNode || trailingSlotCards.length > 0) {
     letterArea = (
       <SpaceCarousel
         letters={letters}
-        roundStatus={round.status}
+        roundStatus={roundStatus}
         isAnonymous={isAnonymous}
         onCardPress={onPressLetter}
         hiddenCardId={hiddenCardId}
         openingSlot={openingSlotNode}
+        openingSlotAtEnd={!hasOpeningLetter && !openingReservationAvailable}
+        trailingSlots={trailingSlotCards}
       />
     );
   } else {
@@ -688,7 +796,7 @@ function RoundSection({
   }
 
   const formatRoundDate = (iso: string) => {
-    const d = new Date(iso);
+    const d = toKstCalendarDate(new Date(iso));
     return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
   };
 
@@ -708,7 +816,7 @@ function RoundSection({
         <View style={styles.roundSectionLeft}>
           <Text style={styles.roundNumberText}>{round.roundNumber}회차</Text>
           <Text style={[styles.roundStatusText, { color: statusColor }]}>
-            {roundStatusLabel(round.status)}
+            {roundStatusLabel(roundStatus)}
           </Text>
           {round.title ? (
             <Text style={styles.roundTitleText} numberOfLines={1}>
@@ -899,6 +1007,14 @@ export default function SpaceDetailScreen() {
   const { userId } = useUser();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  const [now, setNow] = useState(() => new Date());
+
+  // Refresh KST-derived dates while this screen remains open, including the
+  // 06:00 reservation cutoff, without making users pull to refresh.
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(interval);
+  }, []);
 
   const [showKebabSheet, setShowKebabSheet] = useState(false);
 
@@ -1083,9 +1199,12 @@ export default function SpaceDetailScreen() {
     const initIdx = artList.length;
     const authorNickname = (tapLetter as any).authorNickname as string | null;
     const displayName = (tapLetter as any).displayName as string | null;
-    const authorName = isAnonymousSpace
-      ? (displayName ?? "익명")
-      : (authorNickname ?? "알 수 없음");
+    const authorName = getSpaceLetterAuthorName(
+      tapLetter.letterType,
+      isAnonymousSpace,
+      displayName,
+      authorNickname,
+    );
     // Keep the entry presentation pinned to the exact carousel cover. The
     // fetched article is still used for its sourceArticleId above, but it must
     // not replace the card during the opening animation.
@@ -1433,6 +1552,7 @@ export default function SpaceDetailScreen() {
                       spaceStatus={space.status}
                       isOperator={isOperator}
                       isAnonymous={space.isAnonymous}
+                      now={now}
                       onPressLetter={handlePressLetter}
                       onPressWriteOpening={handlePressWriteOpening}
                       hiddenCardId={tapLetter?.id ?? null}

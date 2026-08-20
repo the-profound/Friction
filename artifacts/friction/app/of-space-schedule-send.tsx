@@ -46,6 +46,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useUser } from "@/contexts/UserContext";
 import { ApiError } from "@workspace/api-client-react";
 import { kstDateAt6, minOpeningSendDate, toKstCalendarDate } from "@/lib/kstDate";
+import {
+  getSpaceRoundPresentationStatus,
+  isKstSlotReservable,
+  isOpeningSlotReservable,
+} from "@/lib/spaceRoundPresentation";
 
 function dateToYmd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -578,7 +583,7 @@ export default function SpaceScheduleSendScreen() {
   const { userId } = useUser();
   const queryClient = useQueryClient();
 
-  const [showNewSheet, setShowNewSheet] = useState(() => !!slotId);
+  const [showNewSheet, setShowNewSheet] = useState(false);
   const [resendTarget, setResendTarget] = useState<SpaceScheduledSendWithLetter | null>(null);
   const [changeTarget, setChangeTarget] = useState<SpaceScheduledSendWithLetter | null>(null);
   // "새 글 예약하기" flow: pick an empty slot first, then the article to fill it.
@@ -609,21 +614,36 @@ export default function SpaceScheduleSendScreen() {
   const rounds = (roundsQuery.data ?? []) as SpaceRound[];
   const letters = (lettersQuery.data ?? []) as SpaceLetter[];
   const articles = (articlesQuery.data ?? []) as Article[];
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const presentationRounds = useMemo<SpaceRound[]>(
+    () =>
+      rounds.map((round) => ({
+        ...round,
+        status: getSpaceRoundPresentationStatus(round, now) as SpaceRound["status"],
+      })),
+    [rounds, now],
+  );
 
   // The round being highlighted in the header: the one the user navigated in
   // for (roundId param), otherwise the current ACTIVE round, otherwise the
   // nearest UPCOMING one.
   const currentRound = useMemo(() => {
     if (roundId) {
-      const match = rounds.find((r) => r.id === roundId);
+      const match = presentationRounds.find((r) => r.id === roundId);
       if (match) return match;
     }
     return (
-      rounds.find((r) => r.status === "ACTIVE") ??
-      rounds.find((r) => r.status === "UPCOMING") ??
+      presentationRounds.find((r) => r.status === "ACTIVE") ??
+      presentationRounds.find((r) => r.status === "UPCOMING") ??
       null
     );
-  }, [rounds, roundId]);
+  }, [presentationRounds, roundId]);
 
   // ─── "내 차례" CENTER slot dates, gathered across ACTIVE/UPCOMING rounds ────
   // `allCenterSlots` always includes every round the user is assigned a CENTER
@@ -660,7 +680,9 @@ export default function SpaceScheduleSendScreen() {
         setUnresolvedCenterRoundIds(undefined);
         return;
       }
-      const targetRounds = rounds.filter((r) => r.status === "ACTIVE" || r.status === "UPCOMING");
+      const targetRounds = presentationRounds.filter(
+        (r) => r.status === "ACTIVE" || r.status === "UPCOMING",
+      );
       if (targetRounds.length === 0) {
         setAllCenterSlots([]);
         setUnresolvedCenterRoundIds(new Set());
@@ -678,7 +700,7 @@ export default function SpaceScheduleSendScreen() {
       const unresolved = new Set<string>();
       targetRounds.forEach((r, idx) => {
         const mySlot = results[idx].find((s) => s.assignedUserId === userId);
-        if (mySlot?.scheduledDate) {
+        if (mySlot?.scheduledDate && isKstSlotReservable(mySlot.scheduledDate, now)) {
           mine.push({ date: mySlot.scheduledDate, roundId: r.id });
         } else if (mySlot) {
           unresolved.add(r.id);
@@ -691,7 +713,7 @@ export default function SpaceScheduleSendScreen() {
     return () => {
       cancelled = true;
     };
-  }, [id, userId, rounds, roundsQuery.isLoading]);
+  }, [id, userId, presentationRounds, roundsQuery.isLoading, now]);
 
   // Rounds where the user already has a PENDING CENTER reservation — picking
   // one of these again for a *new* reservation would just trigger the
@@ -721,9 +743,12 @@ export default function SpaceScheduleSendScreen() {
   const newReservationCenterSlots = useMemo(
     () =>
       allCenterSlots?.filter(
-        (s) => !pendingCenterRoundIds.has(s.roundId) && !sentCenterRoundIds.has(s.roundId),
+        (s) =>
+          isKstSlotReservable(s.date, now) &&
+          !pendingCenterRoundIds.has(s.roundId) &&
+          !sentCenterRoundIds.has(s.roundId),
       ),
-    [allCenterSlots, pendingCenterRoundIds, sentCenterRoundIds],
+    [allCenterSlots, pendingCenterRoundIds, sentCenterRoundIds, now],
   );
   // Assigned CENTER slots that still have no `scheduledDate` and aren't
   // already covered by a pending/sent reservation — these are the ones the
@@ -738,11 +763,10 @@ export default function SpaceScheduleSendScreen() {
   );
 
   // Opening letters are reservable per-round: only an operator may fill
-  // them, and only for rounds that haven't started yet (UPCOMING) and
-  // don't already have a PENDING or SENT opening reservation. Once a round
-  // is ACTIVE or COMPLETED there's no reservation window left, matching
-  // the "여는 편지 작성" button on the space-detail screen, which also only
-  // shows for UPCOMING rounds.
+  // them, only while the round's KST 06:00 opening deadline is still ahead,
+  // and only when there is no PENDING or SENT opening reservation. The first
+  // six hours of the start date are ACTIVE as a round period but still valid
+  // for its 06:00 opening send slot.
   const openingRoundIdsWithSend = useMemo(
     () =>
       new Set(
@@ -756,22 +780,13 @@ export default function SpaceScheduleSendScreen() {
   const openingEligibleRounds = useMemo(
     () =>
       isOperator
-        ? rounds.filter((r) => {
-            if (r.status !== "UPCOMING") return false;
+        ? presentationRounds.filter((r) => {
+            if (r.status === "COMPLETED") return false;
             if (openingRoundIdsWithSend.has(r.id)) return false;
-            // A round whose start date has already passed has no valid
-            // reservation window left (must be on/before startsAt and not
-            // in the past) — don't offer it as a new opening-letter slot.
-            if (!r.startsAt) return false;
-            // Must leave at least one feasible reservation day: the round's
-            // start date has to be on/after the earliest date a new opening
-            // letter could even be scheduled for (same rule ArticleScheduleSheet
-            // enforces), otherwise there is no valid date left to pick.
-            if (toKstCalendarDate(new Date(r.startsAt)) < startOfDay(minOpeningSendDate())) return false;
-            return true;
+            return isOpeningSlotReservable(r.startsAt, now);
           })
         : [],
-    [isOperator, rounds, openingRoundIdsWithSend],
+    [isOperator, presentationRounds, openingRoundIdsWithSend, now],
   );
 
   // ─── Empty slots available for a brand-new reservation ─────────────────────
@@ -792,19 +807,19 @@ export default function SpaceScheduleSendScreen() {
         kind: "center",
         date: s.date,
         roundId: s.roundId,
-        roundNumber: rounds.find((r) => r.id === s.roundId)?.roundNumber ?? null,
+        roundNumber: presentationRounds.find((r) => r.id === s.roundId)?.roundNumber ?? null,
       });
     });
     return list;
-  }, [newReservationCenterSlots, openingEligibleRounds, rounds]);
+  }, [newReservationCenterSlots, openingEligibleRounds, presentationRounds]);
 
   // Derive round state: only block scheduling when all existing rounds are COMPLETED
   // (i.e., no ACTIVE and no UPCOMING rounds remain). UPCOMING rounds mean more rounds
   // are planned, so we should not treat that as a hard block.
-  const hasAnyRound = rounds.length > 0;
+  const hasAnyRound = presentationRounds.length > 0;
   const isRoundCompleted =
     hasAnyRound &&
-    rounds.every((r) => r.status === "COMPLETED");
+    presentationRounds.every((r) => r.status === "COMPLETED");
 
   // Scheduling is blocked when space is archived or all rounds are completed
   const isSchedulingBlocked = isSpaceArchived || isRoundCompleted;
@@ -932,7 +947,7 @@ export default function SpaceScheduleSendScreen() {
     }
     // Not eligible after all — figure out the most likely reason so the
     // message isn't a generic dead end.
-    const targetRound = rounds.find((r) => r.id === openingRoundId);
+    const targetRound = presentationRounds.find((r) => r.id === openingRoundId);
     const message = openingRoundIdsWithSend.has(openingRoundId)
       ? "다른 사람이 방금 이 회차의 여는 편지를 예약했어요."
       : targetRound && targetRound.status !== "UPCOMING"
@@ -945,8 +960,33 @@ export default function SpaceScheduleSendScreen() {
     sendsQuery.isLoading,
     joinContextQuery.isLoading,
     openingEligibleRounds,
-    rounds,
+    presentationRounds,
     openingRoundIdsWithSend,
+  ]);
+
+  // A direct route from a slot card is only a shortcut. It must wait for the
+  // same resolved, still-reservable slot list used by the regular picker so a
+  // stale link can never open a past slot's reservation sheet.
+  const consumedSlotIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!slotId || consumedSlotIdRef.current === slotId) return;
+    if (roundsQuery.isLoading || allCenterSlots === undefined) return;
+    consumedSlotIdRef.current = slotId;
+    const target = newReservationCenterSlots?.find(
+      (slot) => slot.roundId === roundId && slot.date === scheduledDate,
+    );
+    if (target) {
+      setShowNewSheet(true);
+      return;
+    }
+    Alert.alert("예약할 수 없어요", "이 슬롯의 예약 가능 시간이 지났거나 이미 사용되었어요.");
+  }, [
+    slotId,
+    roundId,
+    scheduledDate,
+    roundsQuery.isLoading,
+    allCenterSlots,
+    newReservationCenterSlots,
   ]);
 
   const pendingSends = sends.filter((s) => s.status === "PENDING");
@@ -1155,7 +1195,7 @@ export default function SpaceScheduleSendScreen() {
           send={resendTarget}
           spaceId={id}
           centerSlots={allCenterSlots}
-          rounds={rounds}
+          rounds={presentationRounds}
           onClose={() => setResendTarget(null)}
           onSaved={handleSaved}
         />
@@ -1166,7 +1206,7 @@ export default function SpaceScheduleSendScreen() {
           send={changeTarget}
           spaceId={id}
           centerSlots={allCenterSlots}
-          rounds={rounds}
+          rounds={presentationRounds}
           onClose={() => setChangeTarget(null)}
           onSaved={handleSaved}
         />
