@@ -128,20 +128,15 @@ export function ProposedNavBar() {
                     onClick={() => selectTab(tab.key)}
                     aria-label={`${tab.label} 탭`}
                     aria-current={isActive ? "page" : undefined}
-                    style={{ ...styles.tab, color: isActive ? colors.ink : colors.muted }}
+                    style={styles.tab}
                   >
-                    <span style={{ ...styles.iconWrap, background: isActive ? colors.blush : "transparent" }}>
-                      <FeatherIcon name={tab.icon} size={18} color={isActive ? colors.ink : colors.muted} />
-                    </span>
-                    <span style={{ ...styles.tabLabel, fontWeight: isActive ? 650 : 450 }}>{tab.label}</span>
+                    <FeatherIcon name={tab.icon} size={22} color={isActive ? "#18181b" : "#d4d4d8"} />
                   </button>
                 );
               })}
             </div>
-            <div style={styles.ctaDivider} />
-            <button type="button" onClick={openComposer} aria-expanded={composerOpen} style={styles.cta}>
-              <span style={styles.ctaIcon}><FeatherIcon name={composerOpen ? "edit-3" : "plus"} size={18} color={colors.white} /></span>
-              <span>새 단상 작성</span>
+            <button type="button" onClick={openComposer} aria-label="새 단상 작성" aria-expanded={composerOpen} style={styles.cta}>
+              <FeatherIcon name="edit-3" size={22} color={colors.white} />
             </button>
           </nav>
         </div>
@@ -182,14 +177,10 @@ const styles: Record<string, CSSProperties> = {
   pageHint: { marginTop: 18, color: colors.muted, fontSize: 10, letterSpacing: 1.1, display: "flex", gap: 8, alignItems: "center" },
   pageHintSpan: { display: "inline-block", width: 23, height: 1, background: colors.muted },
   bottomArea: { position: "absolute", left: 0, right: 0, bottom: 0, padding: "0 16px 22px", background: "linear-gradient(transparent, rgba(248,247,244,0.97) 22%)", paddingTop: 38 },
-  navShell: { height: 70, display: "flex", alignItems: "center", background: colors.white, border: `1px solid ${colors.line}`, borderRadius: 20, padding: "0 8px 0 5px", boxShadow: "0 9px 22px rgba(38,31,27,0.1)" },
-  menuGroup: { flex: 1, display: "flex", alignItems: "center", justifyContent: "space-around", minWidth: 0 },
-  tab: { appearance: "none", border: 0, background: "transparent", padding: "3px 2px", display: "flex", flexDirection: "column", alignItems: "center", gap: 1, cursor: "pointer", minWidth: 39, fontFamily: "inherit" },
-  iconWrap: { width: 30, height: 27, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 10, transition: "background 160ms ease" },
-  tabLabel: { fontSize: 9, lineHeight: 1.2, letterSpacing: -0.4 },
-  ctaDivider: { width: 1, height: 34, background: colors.line, margin: "0 7px 0 4px" },
-  cta: { appearance: "none", border: 0, background: colors.ink, color: colors.white, borderRadius: 15, height: 48, padding: "0 13px 0 8px", display: "flex", alignItems: "center", gap: 7, fontFamily: "inherit", fontSize: 11, fontWeight: 650, whiteSpace: "nowrap", cursor: "pointer", boxShadow: "0 5px 10px rgba(24,24,27,0.16)" },
-  ctaIcon: { width: 29, height: 29, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 10, background: "rgba(255,255,255,0.12)" },
+  navShell: { height: 70, display: "flex", alignItems: "center", gap: 12 },
+  menuGroup: { flex: 1, height: 70, display: "flex", alignItems: "center", justifyContent: "space-around", minWidth: 0, background: colors.white, border: `1px solid ${colors.line}`, borderRadius: 20, padding: "0 5px", boxShadow: "0 9px 22px rgba(38,31,27,0.1)" },
+  tab: { appearance: "none", border: 0, background: "transparent", padding: "14px 4px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", minWidth: 39, fontFamily: "inherit" },
+  cta: { appearance: "none", border: 0, background: colors.ink, color: colors.white, borderRadius: 26, width: 52, minWidth: 52, height: 52, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: "0 5px 12px rgba(24,24,27,0.2)" },
   composerCard: { position: "absolute", bottom: 98, left: 16, right: 16, background: colors.ink, color: colors.white, borderRadius: 18, padding: "18px 18px 16px", boxShadow: "0 14px 30px rgba(24,24,27,0.2)" },
   composerKicker: { color: "#cdb7ae", fontSize: 10, letterSpacing: 1.2, marginBottom: 9 },
   composerLine: { fontFamily: "'Playfair Display', serif", fontSize: 19, lineHeight: 1.35, marginBottom: 15 },
