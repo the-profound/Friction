@@ -180,7 +180,7 @@ const styles: Record<string, CSSProperties> = {
   navShell: { height: 70, display: "flex", alignItems: "center", gap: 12 },
   menuGroup: { flex: 1, height: 70, display: "flex", alignItems: "center", justifyContent: "space-around", minWidth: 0, background: colors.white, border: `1px solid ${colors.line}`, borderRadius: 32, padding: "0 5px", boxShadow: "0 9px 22px rgba(38,31,27,0.1)" },
   tab: { appearance: "none", border: 0, background: "transparent", padding: "14px 4px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", minWidth: 39, fontFamily: "inherit" },
-  cta: { appearance: "none", border: 0, background: colors.ink, color: colors.white, borderRadius: 26, width: 52, minWidth: 52, height: 52, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: "0 5px 12px rgba(24,24,27,0.2)" },
+  cta: { appearance: "none", border: 0, background: colors.ink, color: colors.white, borderRadius: 35, width: 70, minWidth: 70, height: 70, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: "0 5px 12px rgba(24,24,27,0.2)" },
   composerCard: { position: "absolute", bottom: 98, left: 16, right: 16, background: colors.ink, color: colors.white, borderRadius: 18, padding: "18px 18px 16px", boxShadow: "0 14px 30px rgba(24,24,27,0.2)" },
   composerKicker: { color: "#cdb7ae", fontSize: 10, letterSpacing: 1.2, marginBottom: 9 },
   composerLine: { fontFamily: "'Playfair Display', serif", fontSize: 19, lineHeight: 1.35, marginBottom: 15 },
