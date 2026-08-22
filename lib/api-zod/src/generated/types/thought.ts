@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ThoughtCreatedFrom } from "./thoughtCreatedFrom";
+import type { ThoughtStatus } from "./thoughtStatus";
 
 export interface Thought {
   id: string;
@@ -13,6 +14,8 @@ export interface Thought {
   content?: string | null;
   createdFrom: ThoughtCreatedFrom;
   sourceArticleId?: string | null;
+  status: ThoughtStatus;
+  migratedFromArticleId?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

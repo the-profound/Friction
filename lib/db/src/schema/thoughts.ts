@@ -1,4 +1,5 @@
-import { customType, integer, jsonb, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { customType, integer, jsonb, pgEnum, pgTable, text, timestamp, uuid, uniqueIndex } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 import { articlesTable } from "./articles";
 import { usersTable } from "./users";
@@ -29,6 +30,11 @@ export const thoughtCreatedFromEnum = pgEnum("thought_created_from", [
   "direct",
 ]);
 
+export const thoughtStatusEnum = pgEnum("thought_status", [
+  "NORMAL",
+  "PRELIMINARY",
+]);
+
 export const thoughtPromotionTypeEnum = pgEnum("thought_promotion_type", [
   "promote",
   "cite",
@@ -42,12 +48,21 @@ export const thoughtsTable = pgTable("thoughts", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  status: thoughtStatusEnum("status").notNull().default("NORMAL"),
+  migratedFromArticleId: uuid("migrated_from_article_id").references(() => articlesTable.id),
   recommendedAtWidget: timestamp("recommended_at_widget", { withTimezone: true }),
   recommendedTimesWidget: integer("recommended_times_widget").notNull().default(0),
   textEmbeddingDense: vector("text_embedding_dense", 1024),
   textEmbeddingSparse: jsonb("text_embedding_sparse").$type<Record<string, number>>(),
   createdFrom: thoughtCreatedFromEnum("created_from").notNull(),
-});
+}, (t) => [
+  uniqueIndex("thoughts_migrated_from_article_unique_idx")
+    .on(t.migratedFromArticleId)
+    .where(sql`${t.migratedFromArticleId} IS NOT NULL`),
+    uniqueIndex("thoughts_writing_source_unique_idx")
+      .on(t.authorId, t.sourceArticleId)
+      .where(sql`${t.sourceArticleId} IS NOT NULL AND (${t.status} = 'PRELIMINARY' OR ${t.migratedFromArticleId} IS NOT NULL)`),
+]);
 
 export const thoughtPromotionsTable = pgTable("thought_promotions", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -55,11 +70,14 @@ export const thoughtPromotionsTable = pgTable("thought_promotions", {
   toDraftId: uuid("to_draft_id").notNull().references(() => articlesTable.id),
   promotionType: thoughtPromotionTypeEnum("promotion_type").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [
+  uniqueIndex("thought_promotions_from_thought_unique_idx").on(t.fromThoughtId),
+]);
 
 export type Thought = typeof thoughtsTable.$inferSelect;
 export type InsertThought = typeof thoughtsTable.$inferInsert;
 export type ThoughtPromotion = typeof thoughtPromotionsTable.$inferSelect;
 export type InsertThoughtPromotion = typeof thoughtPromotionsTable.$inferInsert;
 export type ThoughtCreatedFrom = "quoted" | "question" | "reading" | "direct";
+export type ThoughtStatus = "NORMAL" | "PRELIMINARY";
 export type ThoughtPromotionType = "promote" | "cite";

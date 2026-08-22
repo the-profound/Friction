@@ -207,7 +207,13 @@ export default function OnScreen() {
   const handleNewThought = useCallback(async (createdFrom: "direct" | "question") => {
     if (createThought.isPending) return;
     try {
-      const newThought = await createThought.mutateAsync({ data: { content: "", createdFrom } });
+      const newThought = await createThought.mutateAsync({
+        data: {
+          content: "",
+          createdFrom,
+          status: createdFrom === "question" ? "PRELIMINARY" : "NORMAL",
+        },
+      });
       await refetchThoughts();
       setEditingThoughtId(newThought.id);
       setEditingText("");

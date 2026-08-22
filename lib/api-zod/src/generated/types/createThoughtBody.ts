@@ -6,9 +6,11 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ThoughtCreatedFrom } from "./thoughtCreatedFrom";
+import type { ThoughtStatus } from "./thoughtStatus";
 
 export interface CreateThoughtBody {
   content: string;
   createdFrom: ThoughtCreatedFrom;
   sourceArticleId?: string | null;
+  status?: ThoughtStatus;
 }

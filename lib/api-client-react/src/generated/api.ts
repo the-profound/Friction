@@ -897,7 +897,8 @@ export function useListArticles<
 }
 
 /**
- * @summary Create a new article (DRAFT)
+ * Compatibility endpoint. The response is a virtual DRAFT article, but the record is stored as a PRELIMINARY Markdown thought.
+ * @summary Create a writing-stage thought through the legacy article API
  */
 export const getCreateArticleUrl = () => {
   return `/api/articles`;
@@ -960,7 +961,7 @@ export type CreateArticleMutationBody = BodyType<CreateArticleBody>;
 export type CreateArticleMutationError = ErrorType<ErrorResponse>;
 
 /**
- * @summary Create a new article (DRAFT)
+ * @summary Create a writing-stage thought through the legacy article API
  */
 export const useCreateArticle = <
   TError = ErrorType<ErrorResponse>,
@@ -983,8 +984,8 @@ export const useCreateArticle = <
 };
 
 /**
- * Returns the existing DRAFT reading memo for the given user and source article if one exists. Returns 404 if no reading memo has been created yet (memo is created lazily on first non-empty save via POST /articles).
- * @summary Get a ReadingMemo for a source article
+ * Returns the existing PRELIMINARY thought as a virtual DRAFT article. Returns 404 until the memo is first saved.
+ * @summary Get a reading memo through the legacy article API
  */
 export const getReadingMemoUrl = (params: ReadingMemoParams) => {
   const normalizedParams = new URLSearchParams();
@@ -1051,7 +1052,7 @@ export type ReadingMemoQueryResult = NonNullable<
 export type ReadingMemoQueryError = ErrorType<ErrorResponse>;
 
 /**
- * @summary Get a ReadingMemo for a source article
+ * @summary Get a reading memo through the legacy article API
  */
 
 export function useReadingMemo<
@@ -10305,6 +10306,91 @@ export const useDeleteThought = <
   TContext
 > => {
   return useMutation(getDeleteThoughtMutationOptions(options));
+};
+
+/**
+ * Atomically validates the thought's first H1 title, creates a DIVIDING article, and records the promotion. A thought can only be promoted once and a DIVIDING article cannot be moved back to a thought.
+ * @summary Promote a Markdown thought to the DIVIDING article stage
+ */
+export const getPromoteThoughtUrl = (id: string) => {
+  return `/api/thoughts/${id}/promote`;
+};
+
+export const promoteThought = async (
+  id: string,
+  options?: RequestInit,
+): Promise<Article> => {
+  return customFetch<Article>(getPromoteThoughtUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getPromoteThoughtMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof promoteThought>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof promoteThought>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["promoteThought"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof promoteThought>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return promoteThought(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PromoteThoughtMutationResult = NonNullable<
+  Awaited<ReturnType<typeof promoteThought>>
+>;
+
+export type PromoteThoughtMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Promote a Markdown thought to the DIVIDING article stage
+ */
+export const usePromoteThought = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof promoteThought>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof promoteThought>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getPromoteThoughtMutationOptions(options));
 };
 
 /**

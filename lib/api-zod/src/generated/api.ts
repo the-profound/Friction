@@ -186,7 +186,8 @@ export const ListArticlesResponseItem = zod.object({
 export const ListArticlesResponse = zod.array(ListArticlesResponseItem);
 
 /**
- * @summary Create a new article (DRAFT)
+ * Compatibility endpoint. The response is a virtual DRAFT article, but the record is stored as a PRELIMINARY Markdown thought.
+ * @summary Create a writing-stage thought through the legacy article API
  */
 export const CreateArticleBody = zod.object({
   authorId: zod.string().uuid(),
@@ -202,8 +203,8 @@ export const CreateArticleBody = zod.object({
 });
 
 /**
- * Returns the existing DRAFT reading memo for the given user and source article if one exists. Returns 404 if no reading memo has been created yet (memo is created lazily on first non-empty save via POST /articles).
- * @summary Get a ReadingMemo for a source article
+ * Returns the existing PRELIMINARY thought as a virtual DRAFT article. Returns 404 until the memo is first saved.
+ * @summary Get a reading memo through the legacy article API
  */
 export const ReadingMemoQueryParams = zod.object({
   userId: zod.coerce.string().uuid(),
@@ -3733,6 +3734,8 @@ export const GetSimilarThoughtsResponseItem = zod
     content: zod.string().nullish(),
     createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
     sourceArticleId: zod.string().uuid().nullish(),
+    status: zod.enum(["NORMAL", "PRELIMINARY"]),
+    migratedFromArticleId: zod.string().uuid().nullish(),
     createdAt: zod.date(),
     updatedAt: zod.date(),
   })
@@ -3780,6 +3783,8 @@ export const ListThoughtsResponseItem = zod.object({
   content: zod.string().nullish(),
   createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
   sourceArticleId: zod.string().uuid().nullish(),
+  status: zod.enum(["NORMAL", "PRELIMINARY"]),
+  migratedFromArticleId: zod.string().uuid().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -3792,6 +3797,7 @@ export const CreateThoughtBody = zod.object({
   content: zod.string(),
   createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
   sourceArticleId: zod.string().uuid().nullish(),
+  status: zod.enum(["NORMAL", "PRELIMINARY"]).optional(),
 });
 
 /**
@@ -3811,6 +3817,8 @@ export const UpdateThoughtResponse = zod.object({
   content: zod.string().nullish(),
   createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
   sourceArticleId: zod.string().uuid().nullish(),
+  status: zod.enum(["NORMAL", "PRELIMINARY"]),
+  migratedFromArticleId: zod.string().uuid().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -3819,6 +3827,14 @@ export const UpdateThoughtResponse = zod.object({
  * @summary Soft-delete a thought
  */
 export const DeleteThoughtParams = zod.object({
+  id: zod.coerce.string().uuid(),
+});
+
+/**
+ * Atomically validates the thought's first H1 title, creates a DIVIDING article, and records the promotion. A thought can only be promoted once and a DIVIDING article cannot be moved back to a thought.
+ * @summary Promote a Markdown thought to the DIVIDING article stage
+ */
+export const PromoteThoughtParams = zod.object({
   id: zod.coerce.string().uuid(),
 });
 

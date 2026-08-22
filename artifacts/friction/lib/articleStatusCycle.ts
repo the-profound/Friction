@@ -16,7 +16,7 @@ interface TransitionRule {
 
 const TRANSITIONS: Record<ArticleStatus, TransitionRule> = {
   DRAFT: { forward: "DIVIDING", back: null },
-  DIVIDING: { forward: "CLOSING", back: "DRAFT" },
+  DIVIDING: { forward: "CLOSING", back: null },
   CLOSING: { forward: "LETTER", back: "DIVIDING" },
   LETTER: { forward: null, back: null },
 };
@@ -149,7 +149,7 @@ export function getNextActionLabel(status: ArticleStatus): string | null {
 export function getBackActionLabel(status: ArticleStatus): string | null {
   const labels: Record<ArticleStatus, string | null> = {
     DRAFT: null,
-    DIVIDING: "작성으로 돌아가기",
+    DIVIDING: null,
     CLOSING: "검토로 돌아가기",
     LETTER: null,
   };

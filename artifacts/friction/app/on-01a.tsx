@@ -967,17 +967,6 @@ export default function WritingScreen() {
     isNavigatingRef.current = false;
     setIsNavigating(false);
 
-    if (id) {
-      transitionStatus
-        .mutateAsync({ id, data: { targetStatus: TransitionArticleBodyTargetStatus.DRAFT } })
-        .then(() => {
-          invalidateArticleAndLists(queryClient, id);
-        })
-        .catch(() => {
-          showToast({ message: "상태 전환에 실패했어요. 새로고침해주세요.", type: "error" });
-          invalidateArticleAndLists(queryClient, id);
-        });
-    }
   }, [getEditorContent, markDirty, flush, id, queryClient, transitionStatus, showToast, setModeBoth, spellTabVisible]);
 
   // ── 분할 → 마감 (on-01c 이동) ──────────────────────────────────────────────
@@ -1530,7 +1519,7 @@ export default function WritingScreen() {
       // dividing
       if (target === "DIVIDING") return;
       if (target === "DRAFT") {
-        exitToDraftMode();
+        showToast({ message: "검토 단계로 승격한 글은 작성 단계로 되돌릴 수 없어요.", type: "info" });
         return;
       }
       if (target === "CLOSING") {

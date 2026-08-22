@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { and, desc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
-import { db, thoughtsTable } from "@workspace/db";
+import { db, articlesTable, thoughtPromotionsTable, thoughtsTable, type ThoughtStatus } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth";
 import { CreateThoughtBody } from "@workspace/api-zod";
 import { generateDenseEmbedding, generateSparseEmbedding } from "../lib/embeddings";
@@ -9,6 +9,28 @@ import { generateThoughtQuestion } from "../services/generate-thought-question";
 import { generateWidgetQuestion } from "../services/generate-widget-question";
 
 const router: IRouter = Router();
+
+type ThoughtMarkdown = {
+  title: string;
+  body: string;
+};
+
+/**
+ * A writing-stage thought stores its title as the first Markdown H1. Keeping
+ * this rule on the server prevents clients from creating an article with a
+ * title that cannot be represented by the thought record.
+ */
+function parseThoughtMarkdown(markdown: string): ThoughtMarkdown | null {
+  const firstLineEnd = markdown.indexOf("\n");
+  const firstLine = (firstLineEnd < 0 ? markdown : markdown.slice(0, firstLineEnd)).replace(/\r$/, "");
+  const match = /^#(?!#)\s+(.+?)\s*$/.exec(firstLine.trim());
+  if (!match) return null;
+
+  const title = match[1].trim();
+  const body = firstLineEnd < 0 ? "" : markdown.slice(firstLineEnd + 1).replace(/^\s*\n/, "");
+  if (!title || !body.trim()) return null;
+  return { title, body };
+}
 
 router.get("/thoughts/:id/similar", requireAuth, async (req, res) => {
   const userId = req.user!.id;
@@ -43,6 +65,8 @@ router.get("/thoughts/:id/similar", requireAuth, async (req, res) => {
       content: thoughtsTable.content,
       createdFrom: thoughtsTable.createdFrom,
       sourceArticleId: thoughtsTable.sourceArticleId,
+      status: thoughtsTable.status,
+      migratedFromArticleId: thoughtsTable.migratedFromArticleId,
       createdAt: thoughtsTable.createdAt,
       updatedAt: thoughtsTable.updatedAt,
     })
@@ -167,6 +191,8 @@ router.get("/thoughts", requireAuth, async (req, res) => {
       content: thoughtsTable.content,
       createdFrom: thoughtsTable.createdFrom,
       sourceArticleId: thoughtsTable.sourceArticleId,
+      status: thoughtsTable.status,
+      migratedFromArticleId: thoughtsTable.migratedFromArticleId,
       createdAt: thoughtsTable.createdAt,
       updatedAt: thoughtsTable.updatedAt,
     })
@@ -183,7 +209,7 @@ router.post("/thoughts", requireAuth, async (req, res) => {
     res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
     return;
   }
-  const { content, createdFrom, sourceArticleId } = parsed.data;
+  const { content, createdFrom, sourceArticleId, status } = parsed.data;
   const authorId = req.user!.id;
 
   const [thought] = await db.insert(thoughtsTable).values({
@@ -191,6 +217,7 @@ router.post("/thoughts", requireAuth, async (req, res) => {
     content,
     createdFrom,
     sourceArticleId: sourceArticleId ?? null,
+    status: (status ?? "NORMAL") as ThoughtStatus,
   }).returning();
 
   res.status(201).json(thought);
@@ -238,7 +265,11 @@ router.patch("/thoughts/:id", requireAuth, async (req, res) => {
   }
 
   const [existing] = await db
-    .select({ id: thoughtsTable.id, authorId: thoughtsTable.authorId })
+    .select({
+      id: thoughtsTable.id,
+      authorId: thoughtsTable.authorId,
+      migratedFromArticleId: thoughtsTable.migratedFromArticleId,
+    })
     .from(thoughtsTable)
     .where(and(eq(thoughtsTable.id, id), isNull(thoughtsTable.deletedAt)));
 
@@ -261,6 +292,8 @@ router.patch("/thoughts/:id", requireAuth, async (req, res) => {
       content: thoughtsTable.content,
       createdFrom: thoughtsTable.createdFrom,
       sourceArticleId: thoughtsTable.sourceArticleId,
+      status: thoughtsTable.status,
+      migratedFromArticleId: thoughtsTable.migratedFromArticleId,
       createdAt: thoughtsTable.createdAt,
       updatedAt: thoughtsTable.updatedAt,
     });
@@ -268,12 +301,108 @@ router.patch("/thoughts/:id", requireAuth, async (req, res) => {
   res.json(updated);
 });
 
+router.post("/thoughts/:id/promote", requireAuth, async (req, res) => {
+  const userId = req.user!.id;
+  const thoughtId = req.params.id;
+
+  try {
+    const result = await db.transaction(async (tx) => {
+      const [thought] = await tx
+        .select()
+        .from(thoughtsTable)
+        .where(and(eq(thoughtsTable.id, thoughtId), isNull(thoughtsTable.deletedAt)));
+
+      if (!thought) return { status: 404, body: { error: "Thought not found" } } as const;
+      if (thought.authorId !== userId) return { status: 403, body: { error: "Forbidden" } } as const;
+
+      const parsedMarkdown = parseThoughtMarkdown(thought.content ?? "");
+      if (!parsedMarkdown) {
+        return {
+          status: 400,
+          body: { error: "Thought must start with a non-empty H1 title and contain a non-empty body" },
+        } as const;
+      }
+
+      const [existingPromotion] = await tx
+        .select({ id: thoughtPromotionsTable.id, articleId: thoughtPromotionsTable.toDraftId })
+        .from(thoughtPromotionsTable)
+        .where(eq(thoughtPromotionsTable.fromThoughtId, thoughtId))
+        .limit(1);
+      if (existingPromotion) {
+        return { status: 409, body: { error: "Thought has already been promoted" } } as const;
+      }
+
+      const article = thought.migratedFromArticleId
+        ? await tx
+          .update(articlesTable)
+          .set({
+            title: parsedMarkdown.title,
+            content: parsedMarkdown.body,
+            status: "DIVIDING",
+          })
+          .where(
+            and(
+              eq(articlesTable.id, thought.migratedFromArticleId),
+              eq(articlesTable.status, "DRAFT"),
+              isNull(articlesTable.deletedAt),
+            ),
+          )
+          .returning()
+          .then(([updated]) => updated)
+        : await tx
+          .insert(articlesTable)
+          .values({
+            id: thought.id,
+            authorId: thought.authorId,
+            title: parsedMarkdown.title,
+            content: parsedMarkdown.body,
+            status: "DIVIDING",
+            sourceArticleId: thought.sourceArticleId,
+          })
+          .returning()
+          .then(([created]) => created);
+
+      if (!article) {
+        return {
+          status: 409,
+          body: { error: "The migrated article can no longer be promoted" },
+        } as const;
+      }
+
+      await tx.insert(thoughtPromotionsTable).values({
+        fromThoughtId: thought.id,
+        toDraftId: article.id,
+        promotionType: "promote",
+      });
+      await tx
+        .update(thoughtsTable)
+        .set({ status: "NORMAL", updatedAt: new Date() })
+        .where(eq(thoughtsTable.id, thought.id));
+
+      return { status: 201, body: article } as const;
+    });
+
+    res.status(result.status).json(result.body);
+  } catch (error) {
+    if ((error as { cause?: { code?: string } }).cause?.code === "23505") {
+      res.status(409).json({ error: "Thought has already been promoted" });
+      return;
+    }
+    req.log.error({ err: error, thoughtId }, "Error promoting thought");
+    res.status(500).json({ error: "Failed to promote thought" });
+  }
+});
+
 router.delete("/thoughts/:id", requireAuth, async (req, res) => {
   const userId = req.user!.id;
   const { id } = req.params;
 
   const [existing] = await db
-    .select({ id: thoughtsTable.id, authorId: thoughtsTable.authorId })
+    .select({
+      id: thoughtsTable.id,
+      authorId: thoughtsTable.authorId,
+      migratedFromArticleId: thoughtsTable.migratedFromArticleId,
+    })
     .from(thoughtsTable)
     .where(and(eq(thoughtsTable.id, id), isNull(thoughtsTable.deletedAt)));
 
@@ -286,10 +415,25 @@ router.delete("/thoughts/:id", requireAuth, async (req, res) => {
     return;
   }
 
-  await db
-    .update(thoughtsTable)
-    .set({ deletedAt: new Date() })
-    .where(eq(thoughtsTable.id, id));
+  await db.transaction(async (tx) => {
+    const deletedAt = new Date();
+    await tx
+      .update(thoughtsTable)
+      .set({ deletedAt })
+      .where(eq(thoughtsTable.id, id));
+    if (existing.migratedFromArticleId) {
+      await tx
+        .update(articlesTable)
+        .set({ deletedAt })
+        .where(
+          and(
+            eq(articlesTable.id, existing.migratedFromArticleId),
+            eq(articlesTable.status, "DRAFT"),
+            isNull(articlesTable.deletedAt),
+          ),
+        );
+    }
+  });
 
   res.status(204).send();
 });

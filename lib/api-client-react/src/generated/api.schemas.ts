@@ -1228,12 +1228,21 @@ export const ThoughtCreatedFrom = {
   direct: "direct",
 } as const;
 
+export type ThoughtStatus = (typeof ThoughtStatus)[keyof typeof ThoughtStatus];
+
+export const ThoughtStatus = {
+  NORMAL: "NORMAL",
+  PRELIMINARY: "PRELIMINARY",
+} as const;
+
 export interface Thought {
   id: string;
   authorId: string;
   content?: string | null;
   createdFrom: ThoughtCreatedFrom;
   sourceArticleId?: string | null;
+  status: ThoughtStatus;
+  migratedFromArticleId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -1310,6 +1319,7 @@ export interface CreateThoughtBody {
   content: string;
   createdFrom: ThoughtCreatedFrom;
   sourceArticleId?: string | null;
+  status?: ThoughtStatus;
 }
 
 export type RegisterPushTokenBodyPlatform =

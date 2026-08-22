@@ -1,9 +1,10 @@
-import { Router, type IRouter } from "express";
-import { and, eq, ilike, isNull, ne, sql } from "drizzle-orm";
-import { db, articlesTable, myCollectionArticlesTable, myCollectionsTable, usersTable, type ArticleStatus } from "@workspace/db";
+import { Router, type IRouter, type Request, type Response } from "express";
+import { and, eq, exists, ilike, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { db, articlesTable, myCollectionArticlesTable, myCollectionsTable, thoughtPromotionsTable, thoughtsTable, usersTable, type ArticleStatus } from "@workspace/db";
 import { CreateArticleBody, UpdateArticleBody, TransitionArticleStatusBody, FinalizeArticleBody, ReadingMemoQueryParams } from "@workspace/api-zod";
 import { ObjectStorageService } from "../lib/objectStorage";
 import { generateArticleQuestions, getArticleQuestionsOrFallback } from "../services/generate-article-questions";
+import { requireAuth } from "../middlewares/requireAuth";
 
 // Resolves a display collection name for a standalone article fetched via
 // getArticle. Team-collection membership is preferred (matches the chain
@@ -54,38 +55,123 @@ const BACK_TRANSITIONS: Record<string, string> = {
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
 
-router.get("/articles/reading-memo", async (req, res) => {
+function splitThoughtMarkdown(markdown: string | null): { title: string; content: string } {
+  const value = markdown ?? "";
+  const firstLineEnd = value.indexOf("\n");
+  const firstLine = (firstLineEnd < 0 ? value : value.slice(0, firstLineEnd)).replace(/\r$/, "");
+  const match = /^#(?!#)\s+(.+?)\s*$/.exec(firstLine.trim());
+  if (!match) return { title: "", content: value };
+
+  return {
+    title: match[1].trim(),
+    content: firstLineEnd < 0 ? "" : value.slice(firstLineEnd + 1).replace(/^\s*\n/, ""),
+  };
+}
+
+function toThoughtMarkdown(title: string, content: string): string {
+  const trimmedTitle = title.trim();
+  return trimmedTitle ? `# ${trimmedTitle}\n\n${content}` : content;
+}
+
+function preliminaryThoughtAsDraft(thought: typeof thoughtsTable.$inferSelect, id = thought.id) {
+  const { title, content } = splitThoughtMarkdown(thought.content);
+  return {
+    id,
+    authorId: thought.authorId,
+    title,
+    content,
+    status: "DRAFT" as const,
+    pages: null,
+    layoutWidth: null,
+    style: null,
+    cover: null,
+    letterAt: null,
+    sourceArticleId: thought.sourceArticleId,
+    createdAt: thought.createdAt,
+    updatedAt: thought.updatedAt,
+  };
+}
+
+function unpromotedThoughtCondition() {
+  return or(
+    eq(thoughtsTable.status, "PRELIMINARY"),
+    and(
+      isNotNull(thoughtsTable.migratedFromArticleId),
+      exists(
+        db
+          .select({ id: articlesTable.id })
+          .from(articlesTable)
+          .where(
+            and(
+              eq(articlesTable.id, thoughtsTable.migratedFromArticleId),
+              eq(articlesTable.status, "DRAFT"),
+              isNull(articlesTable.deletedAt),
+            ),
+          ),
+      ),
+    ),
+  );
+}
+
+function canAccessPreliminaryThought(
+  req: Request,
+  res: Response,
+  thought: typeof thoughtsTable.$inferSelect,
+): boolean {
+  if (!req.user) {
+    res.status(401).json({ error: "Authentication required" });
+    return false;
+  }
+  if (req.user.id !== thought.authorId) {
+    res.status(403).json({ error: "Forbidden" });
+    return false;
+  }
+  return true;
+}
+
+router.get("/articles/reading-memo", requireAuth, async (req, res) => {
   const parsed = ReadingMemoQueryParams.safeParse(req.query);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
     return;
   }
-  const { userId, sourceArticleId } = parsed.data;
+  const { sourceArticleId } = parsed.data;
+  const userId = req.user!.id;
 
   const [existingMemo] = await db
     .select()
-    .from(articlesTable)
+    .from(thoughtsTable)
     .where(
       and(
-        eq(articlesTable.authorId, userId),
-        eq(articlesTable.sourceArticleId, sourceArticleId),
-        eq(articlesTable.status, "DRAFT"),
-        isNull(articlesTable.deletedAt),
+        eq(thoughtsTable.authorId, userId),
+        eq(thoughtsTable.sourceArticleId, sourceArticleId),
+        unpromotedThoughtCondition(),
+        isNull(thoughtsTable.deletedAt),
       ),
-    );
+    )
+    .orderBy(sql`${thoughtsTable.updatedAt} DESC`)
+    .limit(1);
 
   if (!existingMemo) {
     res.status(404).json({ error: "Reading memo not found" });
     return;
   }
-  res.json(existingMemo);
+  res.json(preliminaryThoughtAsDraft(existingMemo, existingMemo.migratedFromArticleId ?? existingMemo.id));
 });
 
-router.get("/articles", async (req, res) => {
+router.get("/articles", requireAuth, async (req, res) => {
   const { authorId, status, titleQuery } = req.query;
   const conditions = [];
   if (authorId) conditions.push(eq(articlesTable.authorId, authorId as string));
-  if (status) conditions.push(eq(articlesTable.status, status as ArticleStatus));
+  if (status) {
+    if (status !== "DRAFT") {
+      conditions.push(eq(articlesTable.status, status as ArticleStatus));
+    }
+  } else {
+    // DRAFT records were migrated to thoughts. Hiding any surviving legacy
+    // rows prevents a memo from appearing twice during the rollout.
+    conditions.push(ne(articlesTable.status, "DRAFT"));
+  }
   if (titleQuery) conditions.push(ilike(articlesTable.title, `%${titleQuery as string}%`));
 
   conditions.push(isNull(articlesTable.deletedAt));
@@ -103,42 +189,49 @@ router.get("/articles", async (req, res) => {
     ...r.article,
     authorNickname: r.authorNickname ?? null,
   }));
-  res.json(articles);
+
+  const preliminaryThoughts = req.user?.id === authorId
+    ? await db
+    .select()
+    .from(thoughtsTable)
+    .where(
+      and(
+        ...(authorId ? [eq(thoughtsTable.authorId, authorId as string)] : []),
+        unpromotedThoughtCondition(),
+        isNull(thoughtsTable.deletedAt),
+      ),
+    )
+    : [];
+
+  const drafts = preliminaryThoughts
+    .map((thought) => preliminaryThoughtAsDraft(thought, thought.migratedFromArticleId ?? thought.id))
+    .filter((draft) => !titleQuery || draft.title.toLowerCase().includes(String(titleQuery).toLowerCase()));
+
+  res.json(status === "DRAFT" ? drafts : [...articles, ...drafts]);
 });
 
-router.post("/articles", async (req, res) => {
+router.post("/articles", requireAuth, async (req, res) => {
   const parsed = CreateArticleBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
     return;
   }
-  const { authorId, content, sourceArticleId } = parsed.data;
+  const { content, sourceArticleId } = parsed.data;
+  const authorId = req.user!.id;
   let { title } = parsed.data;
 
-  // 읽기 메모 자동 제목: 클라이언트가 별도 제목을 지정하지 않은 경우(빈 문자열이거나
-  // 기본 placeholder "읽기 메모")에만 서버가 "읽기 메모 — {원글 제목}" 형식으로
-  // 채워준다. 사용자가 MemoBottomSheet 등에서 별도 제목을 지정한 경우에는
-  // 그 제목을 그대로 보존해 기록함에서도 동일하게 노출되도록 한다.
   if (sourceArticleId) {
-    const trimmedTitle = title.trim();
-    const isPlaceholderTitle = trimmedTitle === "" || trimmedTitle === "읽기 메모";
-    if (isPlaceholderTitle) {
-      const [sourceArticle] = await db
-        .select()
-        .from(articlesTable)
-        .where(eq(articlesTable.id, sourceArticleId));
-      if (sourceArticle) {
-        title = `읽기 메모 — ${sourceArticle.title}`;
-      }
+    const [sourceArticle] = await db
+      .select({ title: articlesTable.title })
+      .from(articlesTable)
+      .where(eq(articlesTable.id, sourceArticleId));
+    if (sourceArticle && (title.trim() === "" || title.trim() === "읽기 메모")) {
+      title = `읽기 메모 — ${sourceArticle.title}`;
     }
   }
 
-  const article = await db.transaction(async (tx) => {
+  const thought = await db.transaction(async (tx) => {
     if (sourceArticleId) {
-      // Intentionally unlink all prior source-linked drafts for this (author, source) pair before
-      // inserting the new one. This satisfies the unique index on (authorId, sourceArticleId) and
-      // implements the "always start a fresh memo per re-read" policy — old memos are preserved in
-      // the archive but are no longer linked to this source article.
       await tx
         .update(articlesTable)
         .set({ sourceArticleId: null })
@@ -148,22 +241,34 @@ router.post("/articles", async (req, res) => {
             eq(articlesTable.sourceArticleId, sourceArticleId),
           ),
         );
+      await tx
+        .update(thoughtsTable)
+        .set({ sourceArticleId: null })
+        .where(
+          and(
+            eq(thoughtsTable.authorId, authorId),
+            eq(thoughtsTable.sourceArticleId, sourceArticleId),
+          ),
+        );
     }
 
-    const [created] = await tx.insert(articlesTable).values({
-      authorId,
-      title,
-      content: content ?? "",
-      status: "DRAFT",
-      ...(sourceArticleId ? { sourceArticleId } : {}),
-    }).returning();
+    const [created] = await tx
+      .insert(thoughtsTable)
+      .values({
+        authorId,
+        content: toThoughtMarkdown(title, content ?? ""),
+        sourceArticleId: sourceArticleId ?? null,
+        createdFrom: sourceArticleId ? "reading" : "direct",
+        status: "PRELIMINARY",
+      })
+      .returning();
     return created;
   });
 
-  res.status(201).json(article);
+  res.status(201).json(preliminaryThoughtAsDraft(thought));
 });
 
-router.get("/articles/:id", async (req, res) => {
+router.get("/articles/:id", requireAuth, async (req, res) => {
   const [row] = await db
     .select({
       article: articlesTable,
@@ -174,22 +279,125 @@ router.get("/articles/:id", async (req, res) => {
     .from(articlesTable)
     .leftJoin(usersTable, eq(usersTable.id, articlesTable.authorId))
     .where(eq(articlesTable.id, req.params.id));
-  if (!row) {
+  if (row) {
+    if (row.article.status === "DRAFT") {
+      const [migrated] = await db.select().from(thoughtsTable)
+      .where(and(
+        eq(thoughtsTable.migratedFromArticleId, row.article.id),
+        isNull(thoughtsTable.deletedAt),
+      )).limit(1);
+      if (migrated) {
+        if (!canAccessPreliminaryThought(req, res, migrated)) return;
+        res.json(preliminaryThoughtAsDraft(migrated, row.article.id));
+        return;
+      }
+    }
+    res.json({
+      ...row.article,
+      authorNickname: row.authorNickname ?? null,
+      collectionName: row.collectionName ?? null,
+      collectionId: row.collectionId ?? null,
+    });
+    return;
+  }
+
+  const [thought] = await db
+    .select()
+    .from(thoughtsTable)
+    .where(
+      and(
+        eq(thoughtsTable.id, req.params.id),
+        eq(thoughtsTable.status, "PRELIMINARY"),
+        isNull(thoughtsTable.deletedAt),
+      ),
+    );
+  if (!thought) {
     res.status(404).json({ error: "Article not found" });
     return;
   }
-  res.json({
-    ...row.article,
-    authorNickname: row.authorNickname ?? null,
-    collectionName: row.collectionName ?? null,
-    collectionId: row.collectionId ?? null,
-  });
+  if (!canAccessPreliminaryThought(req, res, thought)) return;
+  res.json(preliminaryThoughtAsDraft(thought));
 });
 
-router.patch("/articles/:id", async (req, res) => {
+router.patch("/articles/:id", requireAuth, async (req, res) => {
   const [existing] = await db.select().from(articlesTable).where(and(eq(articlesTable.id, req.params.id), isNull(articlesTable.deletedAt)));
   if (!existing) {
-    res.status(404).json({ error: "Article not found" });
+    const [thought] = await db
+      .select()
+      .from(thoughtsTable)
+      .where(
+        and(
+          eq(thoughtsTable.id, req.params.id),
+          eq(thoughtsTable.status, "PRELIMINARY"),
+          isNull(thoughtsTable.deletedAt),
+        ),
+      );
+    if (!thought) {
+      res.status(404).json({ error: "Article not found" });
+      return;
+    }
+    if (!canAccessPreliminaryThought(req, res, thought)) return;
+
+    const parsed = UpdateArticleBody.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
+      return;
+    }
+    if (
+      parsed.data.pages !== undefined ||
+      parsed.data.layoutWidth !== undefined ||
+      parsed.data.style !== undefined ||
+      parsed.data.cover !== undefined
+    ) {
+      res.status(400).json({ error: "Formatting data can only be set after promotion to DIVIDING" });
+      return;
+    }
+
+    const current = splitThoughtMarkdown(thought.content);
+    const title = parsed.data.title ?? current.title;
+    const content = parsed.data.content ?? current.content;
+    const sourceArticleId = "sourceArticleId" in parsed.data
+      ? parsed.data.sourceArticleId
+      : thought.sourceArticleId;
+    const [updated] = await db
+      .update(thoughtsTable)
+      .set({
+        content: toThoughtMarkdown(title, content),
+        sourceArticleId,
+        updatedAt: new Date(),
+      })
+      .where(eq(thoughtsTable.id, thought.id))
+      .returning();
+    res.json(preliminaryThoughtAsDraft(updated));
+    return;
+  }
+  if (existing.status === "DRAFT") {
+    const [migratedThought] = await db
+      .select()
+      .from(thoughtsTable)
+      .where(and(
+        eq(thoughtsTable.migratedFromArticleId, existing.id),
+        isNull(thoughtsTable.deletedAt),
+      ))
+      .limit(1);
+    if (migratedThought) {
+      if (!canAccessPreliminaryThought(req, res, migratedThought)) return;
+      const parsed = UpdateArticleBody.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
+        return;
+      }
+      const current = splitThoughtMarkdown(migratedThought.content);
+      const [updated] = await db.update(thoughtsTable).set({
+        content: toThoughtMarkdown(parsed.data.title ?? current.title, parsed.data.content ?? current.content),
+        updatedAt: new Date(),
+      }).where(eq(thoughtsTable.id, migratedThought.id)).returning();
+      res.json(preliminaryThoughtAsDraft(updated, existing.id));
+      return;
+    }
+  }
+  if (existing.authorId !== req.user!.id) {
+    res.status(403).json({ error: "Forbidden" });
     return;
   }
   if (existing.status === "LETTER") {
@@ -240,7 +448,7 @@ router.patch("/articles/:id", async (req, res) => {
   res.json(article);
 });
 
-router.post("/articles/:id/cover-image", async (req, res) => {
+router.post("/articles/:id/cover-image", requireAuth, async (req, res) => {
   const { id } = req.params;
   const { name, size, contentType } = req.body ?? {};
 
@@ -263,6 +471,10 @@ router.post("/articles/:id/cover-image", async (req, res) => {
     res.status(404).json({ error: "Article not found" });
     return;
   }
+  if (article.authorId !== req.user!.id) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
   if (article.status === "LETTER") {
     res.status(400).json({ error: "Cannot change cover image of a finalized letter" });
     return;
@@ -279,20 +491,72 @@ router.post("/articles/:id/cover-image", async (req, res) => {
   }
 });
 
-router.delete("/articles/:id", async (req, res) => {
+router.delete("/articles/:id", requireAuth, async (req, res) => {
+  const [existingArticle] = await db
+    .select({ id: articlesTable.id, status: articlesTable.status, authorId: articlesTable.authorId })
+    .from(articlesTable)
+    .where(and(eq(articlesTable.id, req.params.id), isNull(articlesTable.deletedAt)));
+  if (existingArticle && existingArticle.authorId !== req.user!.id) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  if (existingArticle?.status === "DRAFT") {
+    const [migratedThought] = await db
+      .select({ id: thoughtsTable.id })
+      .from(thoughtsTable)
+      .where(and(
+        eq(thoughtsTable.migratedFromArticleId, existingArticle.id),
+        isNull(thoughtsTable.deletedAt),
+      ))
+      .limit(1);
+    if (migratedThought) {
+      await db.transaction(async (tx) => {
+        const deletedAt = new Date();
+        await tx
+          .update(thoughtsTable)
+          .set({ deletedAt })
+          .where(eq(thoughtsTable.id, migratedThought.id));
+        await tx
+          .update(articlesTable)
+          .set({ deletedAt })
+          .where(and(eq(articlesTable.id, existingArticle.id), eq(articlesTable.status, "DRAFT")));
+      });
+      res.status(204).send();
+      return;
+    }
+  }
+
   const [updated] = await db
     .update(articlesTable)
     .set({ deletedAt: new Date() })
     .where(and(eq(articlesTable.id, req.params.id), isNull(articlesTable.deletedAt)))
     .returning({ id: articlesTable.id });
   if (!updated) {
-    res.status(404).json({ error: "Article not found" });
-    return;
+    const [thought] = await db
+      .select()
+      .from(thoughtsTable)
+      .where(
+        and(
+          eq(thoughtsTable.id, req.params.id),
+          unpromotedThoughtCondition(),
+          isNull(thoughtsTable.deletedAt),
+        ),
+      );
+    if (!thought) {
+      res.status(404).json({ error: "Article not found" });
+      return;
+    }
+    if (!canAccessPreliminaryThought(req, res, thought)) return;
+
+    await db
+      .update(thoughtsTable)
+      .set({ deletedAt: new Date() })
+      .where(eq(thoughtsTable.id, thought.id));
   }
   res.status(204).send();
 });
 
-router.post("/articles/:id/transition", async (req, res) => {
+router.post("/articles/:id/transition", requireAuth, async (req, res) => {
   const parsed = TransitionArticleStatusBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
@@ -302,7 +566,129 @@ router.post("/articles/:id/transition", async (req, res) => {
 
   const [article] = await db.select().from(articlesTable).where(and(eq(articlesTable.id, req.params.id), isNull(articlesTable.deletedAt)));
   if (!article) {
-    res.status(404).json({ error: "Article not found" });
+    const [thought] = await db
+      .select()
+      .from(thoughtsTable)
+      .where(
+        and(
+          eq(thoughtsTable.id, req.params.id),
+          eq(thoughtsTable.status, "PRELIMINARY"),
+          isNull(thoughtsTable.deletedAt),
+        ),
+      );
+    if (!thought) {
+      res.status(404).json({ error: "Article not found" });
+      return;
+    }
+    if (!canAccessPreliminaryThought(req, res, thought)) return;
+    if (targetStatus !== "DIVIDING") {
+      res.status(400).json({ error: "A preliminary thought can only be promoted to DIVIDING" });
+      return;
+    }
+
+    const { title, content } = splitThoughtMarkdown(thought.content);
+    if (!title || !content.trim()) {
+      res.status(400).json({ error: "Thought must start with a non-empty H1 title and contain a non-empty body" });
+      return;
+    }
+
+    try {
+      const promoted = await db.transaction(async (tx) => {
+        const [existingPromotion] = await tx
+          .select({ id: thoughtsTable.id })
+          .from(thoughtsTable)
+          .where(and(eq(thoughtsTable.id, thought.id), eq(thoughtsTable.status, "PRELIMINARY")))
+          .limit(1);
+        if (!existingPromotion) return null;
+
+        const [created] = await tx
+          .insert(articlesTable)
+          .values({
+            id: thought.id,
+            authorId: thought.authorId,
+            title,
+            content,
+            status: "DIVIDING",
+            sourceArticleId: thought.sourceArticleId,
+          })
+          .returning();
+
+        await tx
+          .insert(thoughtPromotionsTable)
+          .values({ fromThoughtId: thought.id, toDraftId: created.id, promotionType: "promote" });
+        await tx
+          .update(thoughtsTable)
+          .set({ status: "NORMAL", updatedAt: new Date() })
+          .where(eq(thoughtsTable.id, thought.id));
+        return created;
+      });
+      if (!promoted) {
+        res.status(409).json({ error: "Thought has already been promoted" });
+        return;
+      }
+      res.json(promoted);
+      return;
+    } catch (error) {
+      if ((error as { cause?: { code?: string } }).cause?.code === "23505") {
+        res.status(409).json({ error: "Thought has already been promoted" });
+        return;
+      }
+      req.log.error({ err: error, thoughtId: thought.id }, "Error promoting preliminary thought");
+      res.status(500).json({ error: "Failed to promote thought" });
+      return;
+    }
+  }
+
+  if (article.status === "DRAFT") {
+    const [migratedThought] = await db
+      .select()
+      .from(thoughtsTable)
+      .where(and(
+        eq(thoughtsTable.migratedFromArticleId, article.id),
+        isNull(thoughtsTable.deletedAt),
+      ))
+      .limit(1);
+    if (migratedThought) {
+      if (!canAccessPreliminaryThought(req, res, migratedThought)) return;
+      if (targetStatus !== "DIVIDING") {
+        res.status(400).json({ error: "A migrated draft can only be promoted to DIVIDING" });
+        return;
+      }
+      const { title, content } = splitThoughtMarkdown(migratedThought.content);
+      if (!title || !content.trim()) {
+        res.status(400).json({ error: "Thought must start with a non-empty H1 title and contain a non-empty body" });
+        return;
+      }
+      const promoted = await db.transaction(async (tx) => {
+        const [existingPromotion] = await tx
+          .select({ id: thoughtPromotionsTable.id })
+          .from(thoughtPromotionsTable)
+          .where(eq(thoughtPromotionsTable.fromThoughtId, migratedThought.id))
+          .limit(1);
+        if (existingPromotion) return null;
+        const [updated] = await tx
+          .update(articlesTable)
+          .set({ title, content, status: "DIVIDING" })
+          .where(and(eq(articlesTable.id, article.id), eq(articlesTable.status, "DRAFT")))
+          .returning();
+        if (!updated) return null;
+        await tx.insert(thoughtPromotionsTable).values({
+          fromThoughtId: migratedThought.id,
+          toDraftId: updated.id,
+          promotionType: "promote",
+        });
+        return updated;
+      });
+      if (!promoted) {
+        res.status(409).json({ error: "Thought has already been promoted" });
+        return;
+      }
+      res.json(promoted);
+      return;
+    }
+  }
+  if (article.authorId !== req.user!.id) {
+    res.status(403).json({ error: "Forbidden" });
     return;
   }
 
@@ -313,6 +699,11 @@ router.post("/articles/:id/transition", async (req, res) => {
     res.status(400).json({
       error: `Invalid transition: ${article.status} → ${targetStatus}. Allowed: forward or 1-step back.`,
     });
+    return;
+  }
+
+  if (article.status === "DIVIDING" && targetStatus === "DRAFT") {
+    res.status(400).json({ error: "DIVIDING articles cannot be moved back to a thought" });
     return;
   }
 
@@ -352,7 +743,7 @@ router.post("/articles/:id/transition", async (req, res) => {
   res.json(updated);
 });
 
-router.post("/articles/:id/finalize", async (req, res) => {
+router.post("/articles/:id/finalize", requireAuth, async (req, res) => {
   const parsed = FinalizeArticleBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
@@ -366,6 +757,9 @@ router.post("/articles/:id/finalize", async (req, res) => {
       const [article] = await tx.select().from(articlesTable).where(and(eq(articlesTable.id, articleId), isNull(articlesTable.deletedAt)));
       if (!article) {
         return { status: 404, body: { error: "Article not found" } } as const;
+      }
+      if (article.authorId !== req.user!.id) {
+        return { status: 403, body: { error: "Forbidden" } } as const;
       }
 
       let updatedArticle = article;
@@ -391,6 +785,9 @@ router.post("/articles/:id/finalize", async (req, res) => {
         const [collection] = await tx.select().from(myCollectionsTable).where(eq(myCollectionsTable.id, myCollectionId));
         if (!collection) {
           return { status: 404, body: { error: "Collection not found" } } as const;
+        }
+        if (collection.ownerId !== req.user!.id) {
+          return { status: 403, body: { error: "Forbidden" } } as const;
         }
 
         const existingLink = await tx

@@ -582,6 +582,7 @@ export default function ReadScreen() {
               content: `> ${card.question}\n\n${card.answer.trim()}`,
               createdFrom: "question",
               sourceArticleId: articleId,
+              status: "PRELIMINARY",
             },
           },
           { onError: (e) => console.warn("[thought] question creation failed:", e) },
