@@ -643,6 +643,13 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: articleId
+          in: query
+          required: false
+          description: When provided, each collection includes whether it contains this article.
+          schema:
+            type: string
+            format: uuid
       responses:
         "200":
           description: Collections
@@ -3223,6 +3230,9 @@ components:
           nullable: true
         articleCount:
           type: integer
+        containsArticle:
+          type: boolean
+          description: Whether this collection contains the requested articleId. Present only when articleId is provided.
         createdAt:
           type: string
           format: date-time

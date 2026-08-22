@@ -201,6 +201,8 @@ export interface MyCollection {
   isImpression: boolean;
   coverImageUrl?: string | null;
   articleCount?: number;
+  /** Whether this collection contains the requested articleId. Present only when articleId is provided. */
+  containsArticle?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -1384,6 +1386,10 @@ export type MarkInboxOthersReadParams = {
 
 export type ListMyCollectionsParams = {
   ownerId: string;
+  /**
+   * When provided, each collection includes whether it contains this article.
+   */
+  articleId?: string;
 };
 
 export type ListStoredSentencesParams = {

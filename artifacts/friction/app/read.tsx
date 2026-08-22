@@ -474,7 +474,10 @@ export default function ReadScreen() {
 
   const createSentence = useCreateStoredSentence();
   const createThought = useCreateThought();
-  const collectionsQuery = useListMyCollections({ ownerId: userId });
+  const collectionsQuery = useListMyCollections(
+    { ownerId: userId, ...(articleId ? { articleId } : {}) },
+    { query: { enabled: !!userId && !!articleId } },
+  );
   const addToCollection = useAddArticleToMyCollection();
   const createCollection = useCreateMyCollection();
   const recentCollectionQuery = useGetUserRecentCollection(userId, {
@@ -1416,7 +1419,8 @@ export default function ReadScreen() {
     [panGesture, tapGesture],
   );
 
-  const isCollectionsReady = !collectionsQuery.isLoading && !collectionsQuery.isError;
+  const isCollectionsReady = !!userId && !!articleId && !collectionsQuery.isLoading && !collectionsQuery.isError;
+  const isAlreadySaved = collectionsQuery.data?.some((collection) => collection.containsArticle) ?? false;
 
   const handleCommitAndSave = useCallback(async () => {
     if (isSaving) return;
@@ -1424,6 +1428,7 @@ export default function ReadScreen() {
       showToast({ message: "보관함 정보를 불러오는 중입니다. 잠시 후 다시 시도해주세요.", type: "info" });
       return;
     }
+    if (isAlreadySaved) return;
     setIsSaving(true);
     try {
       const result = await reading.commitCompletion();
@@ -1487,7 +1492,7 @@ export default function ReadScreen() {
     } finally {
       setIsSaving(false);
     }
-  }, [isSaving, isCollectionsReady, reading, selectedCollectionId, collectionsQuery.data, articleId, userId, createCollection, addToCollection, updateRecentCollection, queryClient, clearActiveSession, router, applyAnsweredQuestionCardsToMemo]);
+  }, [isSaving, isCollectionsReady, isAlreadySaved, reading, selectedCollectionId, collectionsQuery.data, articleId, userId, createCollection, addToCollection, updateRecentCollection, queryClient, clearActiveSession, router, applyAnsweredQuestionCardsToMemo]);
 
   const handleCommitAndSkip = useCallback(async () => {
     if (isDeleting) return;
@@ -1856,6 +1861,7 @@ export default function ReadScreen() {
                               isSaving={isSaving}
                               isDeleting={isDeleting}
                               isCollectionsReady={isCollectionsReady}
+                              isAlreadySaved={isAlreadySaved}
                               onSave={handleCommitAndSave}
                               onSkip={mode === "re_read"
                                 ? async () => {
@@ -2622,6 +2628,7 @@ interface ReadingCompleteScreenProps {
   isSaving: boolean;
   isDeleting: boolean;
   isCollectionsReady: boolean;
+  isAlreadySaved: boolean;
   onSave: () => void;
   onSkip: () => void;
   onReread: () => void;
@@ -2632,6 +2639,7 @@ function ReadingCompleteScreen({
   isSaving,
   isDeleting,
   isCollectionsReady,
+  isAlreadySaved,
   onSave,
   onSkip,
   onReread,
@@ -2657,12 +2665,12 @@ function ReadingCompleteScreen({
       <View style={[readingCompleteStyles.bottom, { paddingBottom: Math.max(insets.bottom, 24) }]}>
         {/* 보관하기 (primary) */}
         <Pressable
-          style={[readingCompleteStyles.saveBtn, (isSaving || !isCollectionsReady) && readingCompleteStyles.btnDisabled]}
+          style={[readingCompleteStyles.saveBtn, (isSaving || !isCollectionsReady || isAlreadySaved) && readingCompleteStyles.btnDisabled]}
           onPress={onSave}
-          disabled={isSaving || !isCollectionsReady}
+          disabled={isSaving || !isCollectionsReady || isAlreadySaved}
         >
           <Text style={readingCompleteStyles.saveBtnText}>
-            {isSaving ? "저장 중..." : !isCollectionsReady ? "불러오는 중..." : "보관하기"}
+            {isSaving ? "저장 중..." : !isCollectionsReady ? "불러오는 중..." : isAlreadySaved ? "이미 보관된 글이에요" : "보관하기"}
           </Text>
         </Pressable>
 

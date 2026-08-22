@@ -1112,6 +1112,13 @@ export const MarkInboxOthersReadResponse = zod.object({
  */
 export const ListMyCollectionsQueryParams = zod.object({
   ownerId: zod.coerce.string().uuid(),
+  articleId: zod.coerce
+    .string()
+    .uuid()
+    .optional()
+    .describe(
+      "When provided, each collection includes whether it contains this article.",
+    ),
 });
 
 export const ListMyCollectionsResponseItem = zod.object({
@@ -1124,6 +1131,12 @@ export const ListMyCollectionsResponseItem = zod.object({
   isImpression: zod.boolean(),
   coverImageUrl: zod.string().nullish(),
   articleCount: zod.number().optional(),
+  containsArticle: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Whether this collection contains the requested articleId. Present only when articleId is provided.",
+    ),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -1162,6 +1175,12 @@ export const GetMyCollectionResponse = zod.object({
   isImpression: zod.boolean(),
   coverImageUrl: zod.string().nullish(),
   articleCount: zod.number().optional(),
+  containsArticle: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Whether this collection contains the requested articleId. Present only when articleId is provided.",
+    ),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -1192,6 +1211,12 @@ export const UpdateMyCollectionResponse = zod.object({
   isImpression: zod.boolean(),
   coverImageUrl: zod.string().nullish(),
   articleCount: zod.number().optional(),
+  containsArticle: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Whether this collection contains the requested articleId. Present only when articleId is provided.",
+    ),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });

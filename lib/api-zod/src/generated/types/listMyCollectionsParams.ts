@@ -8,4 +8,8 @@
 
 export type ListMyCollectionsParams = {
   ownerId: string;
+  /**
+   * When provided, each collection includes whether it contains this article.
+   */
+  articleId?: string;
 };

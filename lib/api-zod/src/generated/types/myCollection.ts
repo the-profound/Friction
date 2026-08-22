@@ -16,6 +16,8 @@ export interface MyCollection {
   isImpression: boolean;
   coverImageUrl?: string | null;
   articleCount?: number;
+  /** Whether this collection contains the requested articleId. Present only when articleId is provided. */
+  containsArticle?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

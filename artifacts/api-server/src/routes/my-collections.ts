@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, count } from "drizzle-orm";
+import { and, eq, count, sql } from "drizzle-orm";
 import { db, myCollectionsTable, myCollectionArticlesTable, articlesTable } from "@workspace/db";
 import { CreateMyCollectionBody, UpdateMyCollectionBody, AddArticleToMyCollectionBody } from "@workspace/api-zod";
 
@@ -7,10 +7,16 @@ const router: IRouter = Router();
 
 router.get("/my-collections", async (req, res) => {
   const { ownerId } = req.query;
+  const articleIdParam = req.query.articleId;
   if (!ownerId || typeof ownerId !== "string") {
     res.status(400).json({ error: "ownerId is required" });
     return;
   }
+  if (articleIdParam !== undefined && typeof articleIdParam !== "string") {
+    res.status(400).json({ error: "articleId must be a string" });
+    return;
+  }
+  const articleId = articleIdParam;
 
   const collections = await db
     .select({
@@ -25,13 +31,23 @@ router.get("/my-collections", async (req, res) => {
       createdAt: myCollectionsTable.createdAt,
       updatedAt: myCollectionsTable.updatedAt,
       articleCount: count(myCollectionArticlesTable.id),
+      containsArticle: articleId
+        ? sql<boolean>`EXISTS (
+            SELECT 1
+            FROM ${myCollectionArticlesTable} AS requested_article
+            WHERE requested_article.my_collection_id = ${myCollectionsTable.id}
+              AND requested_article.article_id = ${articleId}
+          )`
+        : sql<boolean>`false`,
     })
     .from(myCollectionsTable)
     .leftJoin(myCollectionArticlesTable, eq(myCollectionsTable.id, myCollectionArticlesTable.myCollectionId))
     .where(eq(myCollectionsTable.ownerId, ownerId))
     .groupBy(myCollectionsTable.id);
 
-  res.json(collections);
+  res.json(articleId
+    ? collections
+    : collections.map(({ containsArticle: _containsArticle, ...collection }) => collection));
 });
 
 router.post("/my-collections", async (req, res) => {
