@@ -12,5 +12,6 @@ export interface CreateThoughtBody {
   content: string;
   createdFrom: ThoughtCreatedFrom;
   sourceArticleId?: string | null;
+  sourceStoredSentenceId?: string | null;
   status?: ThoughtStatus;
 }

@@ -17,6 +17,7 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  ActivateThoughtQuestionResponse,
   AddArticleBody,
   AddTeamArticleBody,
   AddTeamMemberBody,
@@ -79,6 +80,8 @@ import type {
   ReadingRecord,
   ReadingRecordNullable,
   RecentSavedCollectionResponse,
+  RefreshThoughtQuestionQueueBody,
+  RefreshThoughtQuestionQueueResponse,
   RegisterPushTokenBody,
   SendArticleBody,
   SendRecordWithDetails,
@@ -111,8 +114,7 @@ import type {
   TeamCollectionWithRole,
   TeamMemberWithUser,
   Thought,
-  ThoughtQuestion,
-  ThoughtsWidgetResponse,
+  ThoughtQuestionQueueResponse,
   ToggleStoredSentenceFavoriteBody,
   ToggleTeamArticlePinBody,
   TransitionArticleBody,
@@ -9677,37 +9679,35 @@ export const useDeleteSendRecord = <
 };
 
 /**
- * Uses OpenRouter to generate a personalized question and a sub-explanation based on
-the authenticated user's most recent thoughts. Returns null for both fields when
-thoughts are unavailable, the API key is missing, or AI generation fails.
-Always succeeds (no 5xx) — treat null fields as "widget unavailable".
-Clients should cache this response for at least 1 hour (use staleTime).
-
- * @summary Generate an AI-powered widget question from the user's recent thoughts
+ * Creates up to two source-backed preliminary questions when useful source thoughts exist. Creation is idempotent across display retries.
+ * @summary Get the authenticated user's current and next preliminary thought questions
  */
-export const getGetThoughtsWidgetUrl = () => {
-  return `/api/thoughts/widget`;
+export const getGetThoughtQuestionQueueUrl = () => {
+  return `/api/thoughts/question-queue`;
 };
 
-export const getThoughtsWidget = async (
+export const getThoughtQuestionQueue = async (
   options?: RequestInit,
-): Promise<ThoughtsWidgetResponse> => {
-  return customFetch<ThoughtsWidgetResponse>(getGetThoughtsWidgetUrl(), {
-    ...options,
-    method: "GET",
-  });
+): Promise<ThoughtQuestionQueueResponse> => {
+  return customFetch<ThoughtQuestionQueueResponse>(
+    getGetThoughtQuestionQueueUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
 };
 
-export const getGetThoughtsWidgetQueryKey = () => {
-  return [`/api/thoughts/widget`] as const;
+export const getGetThoughtQuestionQueueQueryKey = () => {
+  return [`/api/thoughts/question-queue`] as const;
 };
 
-export const getGetThoughtsWidgetQueryOptions = <
-  TData = Awaited<ReturnType<typeof getThoughtsWidget>>,
+export const getGetThoughtQuestionQueueQueryOptions = <
+  TData = Awaited<ReturnType<typeof getThoughtQuestionQueue>>,
   TError = ErrorType<ErrorResponse>,
 >(options?: {
   query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getThoughtsWidget>>,
+    Awaited<ReturnType<typeof getThoughtQuestionQueue>>,
     TError,
     TData
   >;
@@ -9715,40 +9715,41 @@ export const getGetThoughtsWidgetQueryOptions = <
 }) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getGetThoughtsWidgetQueryKey();
+  const queryKey =
+    queryOptions?.queryKey ?? getGetThoughtQuestionQueueQueryKey();
 
   const queryFn: QueryFunction<
-    Awaited<ReturnType<typeof getThoughtsWidget>>
-  > = ({ signal }) => getThoughtsWidget({ signal, ...requestOptions });
+    Awaited<ReturnType<typeof getThoughtQuestionQueue>>
+  > = ({ signal }) => getThoughtQuestionQueue({ signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof getThoughtsWidget>>,
+    Awaited<ReturnType<typeof getThoughtQuestionQueue>>,
     TError,
     TData
   > & { queryKey: QueryKey };
 };
 
-export type GetThoughtsWidgetQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getThoughtsWidget>>
+export type GetThoughtQuestionQueueQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getThoughtQuestionQueue>>
 >;
-export type GetThoughtsWidgetQueryError = ErrorType<ErrorResponse>;
+export type GetThoughtQuestionQueueQueryError = ErrorType<ErrorResponse>;
 
 /**
- * @summary Generate an AI-powered widget question from the user's recent thoughts
+ * @summary Get the authenticated user's current and next preliminary thought questions
  */
 
-export function useGetThoughtsWidget<
-  TData = Awaited<ReturnType<typeof getThoughtsWidget>>,
+export function useGetThoughtQuestionQueue<
+  TData = Awaited<ReturnType<typeof getThoughtQuestionQueue>>,
   TError = ErrorType<ErrorResponse>,
 >(options?: {
   query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getThoughtsWidget>>,
+    Awaited<ReturnType<typeof getThoughtQuestionQueue>>,
     TError,
     TData
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetThoughtsWidgetQueryOptions(options);
+  const queryOptions = getGetThoughtQuestionQueueQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
@@ -9758,92 +9759,183 @@ export function useGetThoughtsWidget<
 }
 
 /**
- * Uses OpenRouter to generate a single thought-expansion question based on the thought's content. Returns null when content is missing, the API key is unavailable, or AI generation fails. Always succeeds (no 5xx) — callers should treat null as "no question available".
- * @summary Generate an AI thought-expansion question for a single thought
+ * The current thought ID makes retries safe. A request with a stale ID does not move the newly current question.
+ * @summary Move the unanswered current question to the end of the queue
  */
-export const getGetThoughtQuestionUrl = (id: string) => {
-  return `/api/thoughts/${id}/question`;
+export const getRefreshThoughtQuestionQueueUrl = () => {
+  return `/api/thoughts/question-queue/refresh`;
 };
 
-export const getThoughtQuestion = async (
+export const refreshThoughtQuestionQueue = async (
+  refreshThoughtQuestionQueueBody: RefreshThoughtQuestionQueueBody,
+  options?: RequestInit,
+): Promise<RefreshThoughtQuestionQueueResponse> => {
+  return customFetch<RefreshThoughtQuestionQueueResponse>(
+    getRefreshThoughtQuestionQueueUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(refreshThoughtQuestionQueueBody),
+    },
+  );
+};
+
+export const getRefreshThoughtQuestionQueueMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof refreshThoughtQuestionQueue>>,
+    TError,
+    { data: BodyType<RefreshThoughtQuestionQueueBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof refreshThoughtQuestionQueue>>,
+  TError,
+  { data: BodyType<RefreshThoughtQuestionQueueBody> },
+  TContext
+> => {
+  const mutationKey = ["refreshThoughtQuestionQueue"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof refreshThoughtQuestionQueue>>,
+    { data: BodyType<RefreshThoughtQuestionQueueBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return refreshThoughtQuestionQueue(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RefreshThoughtQuestionQueueMutationResult = NonNullable<
+  Awaited<ReturnType<typeof refreshThoughtQuestionQueue>>
+>;
+export type RefreshThoughtQuestionQueueMutationBody =
+  BodyType<RefreshThoughtQuestionQueueBody>;
+export type RefreshThoughtQuestionQueueMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Move the unanswered current question to the end of the queue
+ */
+export const useRefreshThoughtQuestionQueue = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof refreshThoughtQuestionQueue>>,
+    TError,
+    { data: BodyType<RefreshThoughtQuestionQueueBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof refreshThoughtQuestionQueue>>,
+  TError,
+  { data: BodyType<RefreshThoughtQuestionQueueBody> },
+  TContext
+> => {
+  return useMutation(getRefreshThoughtQuestionQueueMutationOptions(options));
+};
+
+/**
+ * Removes the question from the queue, preserves its source relations, and prepares the next question. Safe to retry after a successful activation.
+ * @summary Turn a queued preliminary question into a normal thought
+ */
+export const getActivateThoughtQuestionUrl = (id: string) => {
+  return `/api/thoughts/${id}/activate`;
+};
+
+export const activateThoughtQuestion = async (
   id: string,
   options?: RequestInit,
-): Promise<ThoughtQuestion> => {
-  return customFetch<ThoughtQuestion>(getGetThoughtQuestionUrl(id), {
-    ...options,
-    method: "GET",
-  });
+): Promise<ActivateThoughtQuestionResponse> => {
+  return customFetch<ActivateThoughtQuestionResponse>(
+    getActivateThoughtQuestionUrl(id),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
 };
 
-export const getGetThoughtQuestionQueryKey = (id: string) => {
-  return [`/api/thoughts/${id}/question`] as const;
-};
-
-export const getGetThoughtQuestionQueryOptions = <
-  TData = Awaited<ReturnType<typeof getThoughtQuestion>>,
+export const getActivateThoughtQuestionMutationOptions = <
   TError = ErrorType<ErrorResponse>,
->(
-  id: string,
-  options?: {
-    query?: UseQueryOptions<
-      Awaited<ReturnType<typeof getThoughtQuestion>>,
-      TError,
-      TData
-    >;
-    request?: SecondParameter<typeof customFetch>;
-  },
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getGetThoughtQuestionQueryKey(id);
-
-  const queryFn: QueryFunction<
-    Awaited<ReturnType<typeof getThoughtQuestion>>
-  > = ({ signal }) => getThoughtQuestion(id, { signal, ...requestOptions });
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: !!id,
-    ...queryOptions,
-  } as UseQueryOptions<
-    Awaited<ReturnType<typeof getThoughtQuestion>>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof activateThoughtQuestion>>,
     TError,
-    TData
-  > & { queryKey: QueryKey };
-};
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof activateThoughtQuestion>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["activateThoughtQuestion"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-export type GetThoughtQuestionQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getThoughtQuestion>>
->;
-export type GetThoughtQuestionQueryError = ErrorType<ErrorResponse>;
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof activateThoughtQuestion>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
 
-/**
- * @summary Generate an AI thought-expansion question for a single thought
- */
-
-export function useGetThoughtQuestion<
-  TData = Awaited<ReturnType<typeof getThoughtQuestion>>,
-  TError = ErrorType<ErrorResponse>,
->(
-  id: string,
-  options?: {
-    query?: UseQueryOptions<
-      Awaited<ReturnType<typeof getThoughtQuestion>>,
-      TError,
-      TData
-    >;
-    request?: SecondParameter<typeof customFetch>;
-  },
-): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetThoughtQuestionQueryOptions(id, options);
-
-  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
+    return activateThoughtQuestion(id, requestOptions);
   };
 
-  return { ...query, queryKey: queryOptions.queryKey };
-}
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ActivateThoughtQuestionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof activateThoughtQuestion>>
+>;
+
+export type ActivateThoughtQuestionMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Turn a queued preliminary question into a normal thought
+ */
+export const useActivateThoughtQuestion = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof activateThoughtQuestion>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof activateThoughtQuestion>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getActivateThoughtQuestionMutationOptions(options));
+};
 
 /**
  * Returns the authenticated user's own thoughts ordered by cosine similarity to the given thought's dense embedding. Excludes the source thought itself. Returns an empty array if the source thought has no embedding. Each item includes AI-generated r/k/h fields when analysis succeeds; fields are null on failure or when AI is unavailable.

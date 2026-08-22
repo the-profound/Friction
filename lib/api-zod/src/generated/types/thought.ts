@@ -14,6 +14,7 @@ export interface Thought {
   content?: string | null;
   createdFrom: ThoughtCreatedFrom;
   sourceArticleId?: string | null;
+  sourceStoredSentenceId?: string | null;
   status: ThoughtStatus;
   migratedFromArticleId?: string | null;
   createdAt: Date;

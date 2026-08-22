@@ -3672,43 +3672,140 @@ export const DeleteSendRecordParams = zod.object({
 });
 
 /**
- * Uses OpenRouter to generate a personalized question and a sub-explanation based on
-the authenticated user's most recent thoughts. Returns null for both fields when
-thoughts are unavailable, the API key is missing, or AI generation fails.
-Always succeeds (no 5xx) — treat null fields as "widget unavailable".
-Clients should cache this response for at least 1 hour (use staleTime).
-
- * @summary Generate an AI-powered widget question from the user's recent thoughts
+ * Creates up to two source-backed preliminary questions when useful source thoughts exist. Creation is idempotent across display retries.
+ * @summary Get the authenticated user's current and next preliminary thought questions
  */
-export const GetThoughtsWidgetResponse = zod.object({
-  question: zod
-    .string()
-    .nullable()
-    .describe("AI-generated re-ignition question (null when unavailable)"),
-  subtext: zod
-    .string()
-    .nullable()
-    .describe(
-      "One-sentence sub-explanation that makes the question easier to answer (null when unavailable)",
-    ),
+export const GetThoughtQuestionQueueResponse = zod.object({
+  current: zod
+    .object({
+      id: zod.string().uuid(),
+      authorId: zod.string().uuid(),
+      content: zod.string().nullish(),
+      createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
+      sourceArticleId: zod.string().uuid().nullish(),
+      sourceStoredSentenceId: zod.string().uuid().nullish(),
+      status: zod.enum(["NORMAL", "PRELIMINARY"]),
+      migratedFromArticleId: zod.string().uuid().nullish(),
+      createdAt: zod.date(),
+      updatedAt: zod.date(),
+    })
+    .nullable(),
+  next: zod
+    .object({
+      id: zod.string().uuid(),
+      authorId: zod.string().uuid(),
+      content: zod.string().nullish(),
+      createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
+      sourceArticleId: zod.string().uuid().nullish(),
+      sourceStoredSentenceId: zod.string().uuid().nullish(),
+      status: zod.enum(["NORMAL", "PRELIMINARY"]),
+      migratedFromArticleId: zod.string().uuid().nullish(),
+      createdAt: zod.date(),
+      updatedAt: zod.date(),
+    })
+    .nullable(),
 });
 
 /**
- * Uses OpenRouter to generate a single thought-expansion question based on the thought's content. Returns null when content is missing, the API key is unavailable, or AI generation fails. Always succeeds (no 5xx) — callers should treat null as "no question available".
- * @summary Generate an AI thought-expansion question for a single thought
+ * The current thought ID makes retries safe. A request with a stale ID does not move the newly current question.
+ * @summary Move the unanswered current question to the end of the queue
  */
-export const GetThoughtQuestionParams = zod.object({
+export const RefreshThoughtQuestionQueueBody = zod.object({
+  currentThoughtId: zod.string().uuid(),
+});
+
+export const RefreshThoughtQuestionQueueResponse = zod
+  .object({
+    current: zod
+      .object({
+        id: zod.string().uuid(),
+        authorId: zod.string().uuid(),
+        content: zod.string().nullish(),
+        createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
+        sourceArticleId: zod.string().uuid().nullish(),
+        sourceStoredSentenceId: zod.string().uuid().nullish(),
+        status: zod.enum(["NORMAL", "PRELIMINARY"]),
+        migratedFromArticleId: zod.string().uuid().nullish(),
+        createdAt: zod.date(),
+        updatedAt: zod.date(),
+      })
+      .nullable(),
+    next: zod
+      .object({
+        id: zod.string().uuid(),
+        authorId: zod.string().uuid(),
+        content: zod.string().nullish(),
+        createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
+        sourceArticleId: zod.string().uuid().nullish(),
+        sourceStoredSentenceId: zod.string().uuid().nullish(),
+        status: zod.enum(["NORMAL", "PRELIMINARY"]),
+        migratedFromArticleId: zod.string().uuid().nullish(),
+        createdAt: zod.date(),
+        updatedAt: zod.date(),
+      })
+      .nullable(),
+  })
+  .and(
+    zod.object({
+      requeued: zod.boolean(),
+    }),
+  );
+
+/**
+ * Removes the question from the queue, preserves its source relations, and prepares the next question. Safe to retry after a successful activation.
+ * @summary Turn a queued preliminary question into a normal thought
+ */
+export const ActivateThoughtQuestionParams = zod.object({
   id: zod.coerce.string().uuid(),
 });
 
-export const GetThoughtQuestionResponse = zod.object({
-  question: zod
-    .string()
-    .nullable()
-    .describe(
-      "AI-generated thought-expansion question (null when unavailable)",
-    ),
-});
+export const ActivateThoughtQuestionResponse = zod
+  .object({
+    current: zod
+      .object({
+        id: zod.string().uuid(),
+        authorId: zod.string().uuid(),
+        content: zod.string().nullish(),
+        createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
+        sourceArticleId: zod.string().uuid().nullish(),
+        sourceStoredSentenceId: zod.string().uuid().nullish(),
+        status: zod.enum(["NORMAL", "PRELIMINARY"]),
+        migratedFromArticleId: zod.string().uuid().nullish(),
+        createdAt: zod.date(),
+        updatedAt: zod.date(),
+      })
+      .nullable(),
+    next: zod
+      .object({
+        id: zod.string().uuid(),
+        authorId: zod.string().uuid(),
+        content: zod.string().nullish(),
+        createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
+        sourceArticleId: zod.string().uuid().nullish(),
+        sourceStoredSentenceId: zod.string().uuid().nullish(),
+        status: zod.enum(["NORMAL", "PRELIMINARY"]),
+        migratedFromArticleId: zod.string().uuid().nullish(),
+        createdAt: zod.date(),
+        updatedAt: zod.date(),
+      })
+      .nullable(),
+  })
+  .and(
+    zod.object({
+      activatedThought: zod.object({
+        id: zod.string().uuid(),
+        authorId: zod.string().uuid(),
+        content: zod.string().nullish(),
+        createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
+        sourceArticleId: zod.string().uuid().nullish(),
+        sourceStoredSentenceId: zod.string().uuid().nullish(),
+        status: zod.enum(["NORMAL", "PRELIMINARY"]),
+        migratedFromArticleId: zod.string().uuid().nullish(),
+        createdAt: zod.date(),
+        updatedAt: zod.date(),
+      }),
+    }),
+  );
 
 /**
  * Returns the authenticated user's own thoughts ordered by cosine similarity to the given thought's dense embedding. Excludes the source thought itself. Returns an empty array if the source thought has no embedding. Each item includes AI-generated r/k/h fields when analysis succeeds; fields are null on failure or when AI is unavailable.
@@ -3734,6 +3831,7 @@ export const GetSimilarThoughtsResponseItem = zod
     content: zod.string().nullish(),
     createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
     sourceArticleId: zod.string().uuid().nullish(),
+    sourceStoredSentenceId: zod.string().uuid().nullish(),
     status: zod.enum(["NORMAL", "PRELIMINARY"]),
     migratedFromArticleId: zod.string().uuid().nullish(),
     createdAt: zod.date(),
@@ -3783,6 +3881,7 @@ export const ListThoughtsResponseItem = zod.object({
   content: zod.string().nullish(),
   createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
   sourceArticleId: zod.string().uuid().nullish(),
+  sourceStoredSentenceId: zod.string().uuid().nullish(),
   status: zod.enum(["NORMAL", "PRELIMINARY"]),
   migratedFromArticleId: zod.string().uuid().nullish(),
   createdAt: zod.date(),
@@ -3797,6 +3896,7 @@ export const CreateThoughtBody = zod.object({
   content: zod.string(),
   createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
   sourceArticleId: zod.string().uuid().nullish(),
+  sourceStoredSentenceId: zod.string().uuid().nullish(),
   status: zod.enum(["NORMAL", "PRELIMINARY"]).optional(),
 });
 
@@ -3817,6 +3917,7 @@ export const UpdateThoughtResponse = zod.object({
   content: zod.string().nullish(),
   createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
   sourceArticleId: zod.string().uuid().nullish(),
+  sourceStoredSentenceId: zod.string().uuid().nullish(),
   status: zod.enum(["NORMAL", "PRELIMINARY"]),
   migratedFromArticleId: zod.string().uuid().nullish(),
   createdAt: zod.date(),

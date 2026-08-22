@@ -40,6 +40,9 @@ import {
   useListThoughts,
   useUpdateThought,
   useCreateThought,
+  useGetThoughtQuestionQueue,
+  useRefreshThoughtQuestionQueue,
+  useActivateThoughtQuestion,
 } from "@workspace/api-client-react";
 import { invalidateArticleLists } from "@/lib/queryInvalidation";
 import type { Article, MyCollection, Thought } from "@workspace/api-client-react";
@@ -48,8 +51,6 @@ import { useToast } from "@/contexts/ToastContext";
 import { useNavigation } from "@/contexts/NavigationContext";
 import type { ArticleStatus } from "@/lib/policies";
 import { LIST_PERF_PRESET } from "@/lib/listPerf";
-import DansangWidget from "@/components/DansangWidget/DansangWidget";
-import ThoughtQuestionBanner from "@/components/ThoughtQuestionBanner/ThoughtQuestionBanner";
 
 type TopTab = "memo" | "my_article" | "thought";
 type FilterMode = "all" | "DRAFT" | "DIVIDING" | "CLOSING";
@@ -67,7 +68,7 @@ type ListItem =
   | { type: "thought"; thought: Thought };
 
 type ThoughtPagerItem =
-  | { kind: "widget" }
+  | { kind: "question"; thought: Thought }
   | { kind: "thought"; thought: Thought };
 function getScreenForStatus(status: ArticleStatus): string {
   switch (status) {
@@ -155,6 +156,14 @@ export default function OnScreen() {
   });
 
   const { data: thoughts, isLoading: isThoughtsLoading, refetch: refetchThoughts, isRefetching: isThoughtsRefetching } = useListThoughts();
+  const {
+    data: questionQueue,
+    isLoading: isQuestionQueueLoading,
+    isRefetching: isQuestionQueueRefetching,
+    refetch: refetchQuestionQueue,
+  } = useGetThoughtQuestionQueue({
+    query: { enabled: !!userId },
+  });
 
   const { data: sendRecords } = useListSendRecords({ senderId: userId });
 
@@ -176,6 +185,8 @@ export default function OnScreen() {
   const deleteArticle = useDeleteArticle();
   const updateThought = useUpdateThought();
   const createThought = useCreateThought();
+  const refreshThoughtQuestionQueue = useRefreshThoughtQuestionQueue();
+  const activateThoughtQuestion = useActivateThoughtQuestion();
   const collectionsQuery = useListMyCollections({ ownerId: userId });
   const addToCollection = useAddArticleToMyCollection();
 
@@ -204,14 +215,14 @@ export default function OnScreen() {
 
   const fabBottom = useNavBarBottomSafeArea(8);
 
-  const handleNewThought = useCallback(async (createdFrom: "direct" | "question") => {
+  const handleNewThought = useCallback(async () => {
     if (createThought.isPending) return;
     try {
       const newThought = await createThought.mutateAsync({
         data: {
           content: "",
-          createdFrom,
-          status: createdFrom === "question" ? "PRELIMINARY" : "NORMAL",
+          createdFrom: "direct",
+          status: "NORMAL",
         },
       });
       await refetchThoughts();
@@ -233,6 +244,32 @@ export default function OnScreen() {
     setEditingThoughtId(thought.id);
     setEditingText(thought.content ?? "");
   }, []);
+
+  const handleQuestionCardPress = useCallback(async (thought: Thought) => {
+    if (activateThoughtQuestion.isPending) return;
+    try {
+      const result = await activateThoughtQuestion.mutateAsync({ id: thought.id });
+      await Promise.all([refetchThoughts(), refetchQuestionQueue()]);
+      setEditingThoughtId(result.activatedThought.id);
+      setEditingText(result.activatedThought.content ?? "");
+    } catch {
+      showToast({ message: "질문을 시작하지 못했습니다. 다시 시도해주세요.", type: "error" });
+    }
+  }, [activateThoughtQuestion, refetchThoughts, refetchQuestionQueue, showToast]);
+
+  const handleThoughtRefresh = useCallback(async () => {
+    const currentQuestion = questionQueue?.current;
+    try {
+      if (currentQuestion) {
+        await refreshThoughtQuestionQueue.mutateAsync({
+          data: { currentThoughtId: currentQuestion.id },
+        });
+      }
+      await Promise.all([refetchThoughts(), refetchQuestionQueue()]);
+    } catch {
+      showToast({ message: "질문을 바꾸지 못했습니다. 다시 시도해주세요.", type: "error" });
+    }
+  }, [questionQueue?.current, refreshThoughtQuestionQueue, refetchThoughts, refetchQuestionQueue, showToast]);
 
   const handleThoughtEditCancel = useCallback(() => {
     setEditingThoughtId(null);
@@ -353,10 +390,20 @@ export default function OnScreen() {
     return list;
   }, [thoughts, thoughtSortOrder]);
 
+  const queuedQuestionIds = useMemo(
+    () => new Set([questionQueue?.current?.id, questionQueue?.next?.id].filter((id): id is string => !!id)),
+    [questionQueue?.current?.id, questionQueue?.next?.id],
+  );
+
+  const visibleThoughts = useMemo(
+    () => sortedThoughts.filter((thought) => !queuedQuestionIds.has(thought.id)),
+    [sortedThoughts, queuedQuestionIds],
+  );
+
   const thoughtPagerData = useMemo((): ThoughtPagerItem[] => [
-    { kind: "widget" },
-    ...sortedThoughts.map((t): ThoughtPagerItem => ({ kind: "thought", thought: t })),
-  ], [sortedThoughts]);
+    ...(questionQueue?.current ? [{ kind: "question" as const, thought: questionQueue.current }] : []),
+    ...visibleThoughts.map((thought): ThoughtPagerItem => ({ kind: "thought", thought })),
+  ], [questionQueue?.current, visibleThoughts]);
 
   const listData = useMemo((): ListItem[] => {
     if (topTab === "my_article") {
@@ -772,7 +819,8 @@ export default function OnScreen() {
     myLetterArticles.length === 0;
 
   const editingThought = editingThoughtId !== null
-    ? sortedThoughts.find((t) => t.id === editingThoughtId) ?? null
+    ? [...sortedThoughts, questionQueue?.current, questionQueue?.next]
+      .find((thought): thought is Thought => !!thought && thought.id === editingThoughtId) ?? null
     : null;
 
   const CREATED_FROM_LABEL: Record<string, string> = {
@@ -881,7 +929,8 @@ export default function OnScreen() {
         )}
 
         {/* 단상 탭 정렬 드롭다운 — 탭바 아래 우측 (위젯이 보이는 동안 숨김) */}
-        {!selectionMode && editingThoughtId === null && topTab === "thought" && thoughtCurrentIndex !== 0 && (
+        {!selectionMode && editingThoughtId === null && topTab === "thought" &&
+          (!questionQueue?.current || thoughtCurrentIndex !== 0) && (
           <View style={styles.sortTriggerRow}>
             <View style={styles.sortTriggerWrap}>
               <Pressable
@@ -1000,7 +1049,8 @@ export default function OnScreen() {
             </Pressable>
           )}
         </View>
-      ) : (isLoading && topTab !== "thought") || (isThoughtsLoading && topTab === "thought") ? (
+      ) : (isLoading && topTab !== "thought") ||
+        ((isThoughtsLoading || isQuestionQueueLoading) && topTab === "thought") ? (
         <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
           <Text style={styles.emptySubtitle}>불러오는 중...</Text>
         </View>
@@ -1062,14 +1112,34 @@ export default function OnScreen() {
             메모를 완성해 편지로 내보내면{"\n"}여기에 모아볼 수 있어요
           </Text>
         </RefreshableEmpty>
+      ) : topTab === "thought" && thoughtPagerData.length === 0 ? (
+        <RefreshableEmpty
+          refreshing={isThoughtsRefetching || isQuestionQueueRefetching}
+          onRefresh={handleThoughtRefresh}
+          contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
+        >
+          <Feather name="edit-3" size={40} color={Colors.zinc300} />
+          <Text style={styles.emptyTitle}>첫 단상을 남겨보세요</Text>
+          <Text style={styles.emptySubtitle}>
+            기록을 쌓아두면 이어서 생각할{"\n"}질문도 함께 건넬게요
+          </Text>
+          <ScalePressable
+            style={styles.createButton}
+            onPress={handleNewThought}
+            contentStyle={styles.createButtonContent}
+          >
+            <Feather name="edit-3" size={16} color={Colors.white} />
+            <Text style={styles.createButtonText}>단상 쓰기</Text>
+          </ScalePressable>
+        </RefreshableEmpty>
       ) : topTab === "thought" ? (
-        /* ── 단상 카드 페이저 (위젯 슬롯 포함) ───────────────────────────── */
+        /* ── 단상 카드 페이저 (현재 질문 + 일반 단상) ─────────────────────── */
         <View style={[styles.thoughtPagerContainer, { paddingBottom: navBottom }]}>
           <FlatList
             ref={thoughtFlatListRef}
             data={thoughtPagerData}
             keyExtractor={(item: ThoughtPagerItem) =>
-              item.kind === "widget" ? "__widget__" : `thought-${item.thought.id}`
+              `${item.kind}-${item.thought.id}`
             }
             style={styles.thoughtFlatList}
             snapToInterval={thoughtCardSlotHeight}
@@ -1081,22 +1151,11 @@ export default function OnScreen() {
             viewabilityConfig={thoughtViewabilityConfig.current}
             refreshControl={
               <RefreshControl
-                refreshing={isThoughtsRefetching}
-                onRefresh={refetchThoughts}
+                refreshing={isThoughtsRefetching || isQuestionQueueRefetching || refreshThoughtQuestionQueue.isPending}
+                onRefresh={handleThoughtRefresh}
               />
             }
             renderItem={({ item, index }: { item: ThoughtPagerItem; index: number }) => {
-              if (item.kind === "widget") {
-                return (
-                  <DansangWidget
-                    slotHeight={thoughtCardSlotHeight}
-                    hasThoughts={sortedThoughts.length > 0}
-                    visible={thoughtCurrentIndex === 0}
-                    onWritePress={() => handleNewThought("direct")}
-                  onAnswerQuestionPress={() => handleNewThought("question")}
-                  />
-                );
-              }
               return (
                 <View style={{ height: thoughtCardSlotHeight }}>
                   <ThoughtCard
@@ -1104,13 +1163,11 @@ export default function OnScreen() {
                     createdFrom={item.thought.createdFrom}
                     createdAt={item.thought.createdAt}
                     slotHeight={thoughtCardSlotHeight}
-                    isFirst={false}
-                    isLast={index === sortedThoughts.length}
-                    onPress={() => handleThoughtCardPress(item.thought)}
-                  />
-                  <ThoughtQuestionBanner
-                    thoughtId={item.thought.id}
-                    visible={index === thoughtCurrentIndex}
+                    isFirst={index === 0}
+                    isLast={index === thoughtPagerData.length - 1}
+                    onPress={() => item.kind === "question"
+                      ? handleQuestionCardPress(item.thought)
+                      : handleThoughtCardPress(item.thought)}
                   />
                 </View>
               );
@@ -1284,7 +1341,7 @@ export default function OnScreen() {
         <ScalePressable
           style={[styles.thoughtFab, { bottom: fabBottom }]}
           contentStyle={styles.thoughtFabContent}
-          onPress={() => handleNewThought("direct")}
+          onPress={handleNewThought}
           accessibilityRole="button"
           accessibilityLabel="단상 추가"
         >

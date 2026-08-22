@@ -2579,24 +2579,19 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
   # ─── Thoughts ──────────────────────────────────────
-  /thoughts/widget:
+  /thoughts/question-queue:
     get:
-      operationId: getThoughtsWidget
+      operationId: getThoughtQuestionQueue
       tags: [thoughts]
-      summary: Generate an AI-powered widget question from the user's recent thoughts
-      description: |
-        Uses OpenRouter to generate a personalized question and a sub-explanation based on
-        the authenticated user's most recent thoughts. Returns null for both fields when
-        thoughts are unavailable, the API key is missing, or AI generation fails.
-        Always succeeds (no 5xx) — treat null fields as "widget unavailable".
-        Clients should cache this response for at least 1 hour (use staleTime).
+      summary: Get the authenticated user's current and next preliminary thought questions
+      description: Creates up to two source-backed preliminary questions when useful source thoughts exist. Creation is idempotent across display retries.
       responses:
         "200":
-          description: Widget question and sub-explanation (either or both may be null)
+          description: Current and next queue entries, either of which can be null when there is not enough usable source material
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ThoughtsWidgetResponse"
+                $ref: "#/components/schemas/ThoughtQuestionQueueResponse"
         "401":
           description: Unauthorized
           content:
@@ -2604,21 +2599,53 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /thoughts/{id}/question:
-    get:
-      operationId: getThoughtQuestion
+  /thoughts/question-queue/refresh:
+    post:
+      operationId: refreshThoughtQuestionQueue
       tags: [thoughts]
-      summary: Generate an AI thought-expansion question for a single thought
-      description: Uses OpenRouter to generate a single thought-expansion question based on the thought's content. Returns null when content is missing, the API key is unavailable, or AI generation fails. Always succeeds (no 5xx) — callers should treat null as "no question available".
+      summary: Move the unanswered current question to the end of the queue
+      description: The current thought ID makes retries safe. A request with a stale ID does not move the newly current question.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshThoughtQuestionQueueBody"
+      responses:
+        "200":
+          description: Replaced queue state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefreshThoughtQuestionQueueResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /thoughts/{id}/activate:
+    post:
+      operationId: activateThoughtQuestion
+      tags: [thoughts]
+      summary: Turn a queued preliminary question into a normal thought
+      description: Removes the question from the queue, preserves its source relations, and prepares the next question. Safe to retry after a successful activation.
       parameters:
         - $ref: "#/components/parameters/IdPath"
       responses:
         "200":
-          description: Generated question (or null when unavailable)
+          description: Activated thought and updated question queue
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ThoughtQuestion"
+                $ref: "#/components/schemas/ActivateThoughtQuestionResponse"
         "401":
           description: Unauthorized
           content:
@@ -2627,6 +2654,12 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Thought not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: The thought is not a queued preliminary question
           content:
             application/json:
               schema:
@@ -4794,27 +4827,44 @@ components:
       required: [space]
 
     # ─── Thoughts ────────────────────────────────────
-    ThoughtsWidgetResponse:
+    ThoughtQuestionQueueResponse:
       type: object
       properties:
-        question:
-          type: string
+        current:
+          allOf:
+            - $ref: "#/components/schemas/Thought"
           nullable: true
-          description: AI-generated re-ignition question (null when unavailable)
-        subtext:
-          type: string
+        next:
+          allOf:
+            - $ref: "#/components/schemas/Thought"
           nullable: true
-          description: One-sentence sub-explanation that makes the question easier to answer (null when unavailable)
-      required: [question, subtext]
+      required: [current, next]
 
-    ThoughtQuestion:
+    RefreshThoughtQuestionQueueBody:
       type: object
       properties:
-        question:
+        currentThoughtId:
           type: string
-          nullable: true
-          description: AI-generated thought-expansion question (null when unavailable)
-      required: [question]
+          format: uuid
+      required: [currentThoughtId]
+
+    RefreshThoughtQuestionQueueResponse:
+      allOf:
+        - $ref: "#/components/schemas/ThoughtQuestionQueueResponse"
+        - type: object
+          properties:
+            requeued:
+              type: boolean
+          required: [requeued]
+
+    ActivateThoughtQuestionResponse:
+      allOf:
+        - $ref: "#/components/schemas/ThoughtQuestionQueueResponse"
+        - type: object
+          properties:
+            activatedThought:
+              $ref: "#/components/schemas/Thought"
+          required: [activatedThought]
 
     SimilarThought:
       allOf:
@@ -4861,6 +4911,10 @@ components:
         createdFrom:
           $ref: "#/components/schemas/ThoughtCreatedFrom"
         sourceArticleId:
+          type: string
+          format: uuid
+          nullable: true
+        sourceStoredSentenceId:
           type: string
           format: uuid
           nullable: true
@@ -4984,6 +5038,10 @@ components:
         createdFrom:
           $ref: "#/components/schemas/ThoughtCreatedFrom"
         sourceArticleId:
+          type: string
+          format: uuid
+          nullable: true
+        sourceStoredSentenceId:
           type: string
           format: uuid
           nullable: true

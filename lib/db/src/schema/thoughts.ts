@@ -1,7 +1,8 @@
-import { customType, integer, jsonb, pgEnum, pgTable, text, timestamp, uuid, uniqueIndex } from "drizzle-orm/pg-core";
+import { customType, integer, jsonb, pgEnum, pgTable, text, timestamp, uuid, uniqueIndex, check } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 import { articlesTable } from "./articles";
+import { storedSentencesTable } from "./stored-sentences";
 import { usersTable } from "./users";
 
 const vector = (name: string, dimensions: number) =>
@@ -50,8 +51,7 @@ export const thoughtsTable = pgTable("thoughts", {
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   status: thoughtStatusEnum("status").notNull().default("NORMAL"),
   migratedFromArticleId: uuid("migrated_from_article_id").references(() => articlesTable.id),
-  recommendedAtWidget: timestamp("recommended_at_widget", { withTimezone: true }),
-  recommendedTimesWidget: integer("recommended_times_widget").notNull().default(0),
+  sourceStoredSentenceId: uuid("source_stored_sentence_id").references(() => storedSentencesTable.id),
   textEmbeddingDense: vector("text_embedding_dense", 1024),
   textEmbeddingSparse: jsonb("text_embedding_sparse").$type<Record<string, number>>(),
   createdFrom: thoughtCreatedFromEnum("created_from").notNull(),
@@ -74,10 +74,54 @@ export const thoughtPromotionsTable = pgTable("thought_promotions", {
   uniqueIndex("thought_promotions_from_thought_unique_idx").on(t.fromThoughtId),
 ]);
 
+/**
+ * Immutable provenance for a generated question. A question may be based on
+ * several thoughts, quotes, and source articles; keeping these as rows rather
+ * than copying them into the question makes promotion preserve its context.
+ */
+export const thoughtQuestionSourcesTable = pgTable("thought_question_sources", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  questionThoughtId: uuid("question_thought_id").notNull().references(() => thoughtsTable.id),
+  sourceThoughtId: uuid("source_thought_id").references(() => thoughtsTable.id),
+  sourceStoredSentenceId: uuid("source_stored_sentence_id").references(() => storedSentencesTable.id),
+  sourceArticleId: uuid("source_article_id").references(() => articlesTable.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("thought_question_sources_unique_idx").on(
+    t.questionThoughtId,
+    t.sourceThoughtId,
+    t.sourceStoredSentenceId,
+    t.sourceArticleId,
+  ),
+  check(
+    "thought_question_sources_one_source_check",
+    sql`num_nonnulls(${t.sourceThoughtId}, ${t.sourceStoredSentenceId}, ${t.sourceArticleId}) = 1`,
+  ),
+]);
+
+/**
+ * FIFO order is owned by the server, not by the client. Positions are
+ * compacted transactionally whenever a question is appended or requeued.
+ */
+export const thoughtQuestionQueueTable = pgTable("thought_question_queue", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull().references(() => usersTable.id),
+  thoughtId: uuid("thought_id").notNull().references(() => thoughtsTable.id),
+  position: integer("position").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("thought_question_queue_user_thought_unique_idx").on(t.userId, t.thoughtId),
+  uniqueIndex("thought_question_queue_user_position_unique_idx").on(t.userId, t.position),
+]);
+
 export type Thought = typeof thoughtsTable.$inferSelect;
 export type InsertThought = typeof thoughtsTable.$inferInsert;
 export type ThoughtPromotion = typeof thoughtPromotionsTable.$inferSelect;
 export type InsertThoughtPromotion = typeof thoughtPromotionsTable.$inferInsert;
+export type ThoughtQuestionSource = typeof thoughtQuestionSourcesTable.$inferSelect;
+export type InsertThoughtQuestionSource = typeof thoughtQuestionSourcesTable.$inferInsert;
+export type ThoughtQuestionQueue = typeof thoughtQuestionQueueTable.$inferSelect;
+export type InsertThoughtQuestionQueue = typeof thoughtQuestionQueueTable.$inferInsert;
 export type ThoughtCreatedFrom = "quoted" | "question" | "reading" | "direct";
 export type ThoughtStatus = "NORMAL" | "PRELIMINARY";
 export type ThoughtPromotionType = "promote" | "cite";

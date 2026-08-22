@@ -1206,18 +1206,6 @@ export interface SpaceJoinContext {
   codeRequest?: SpaceCodeRequest | null;
 }
 
-export interface ThoughtsWidgetResponse {
-  /** AI-generated re-ignition question (null when unavailable) */
-  question: string | null;
-  /** One-sentence sub-explanation that makes the question easier to answer (null when unavailable) */
-  subtext: string | null;
-}
-
-export interface ThoughtQuestion {
-  /** AI-generated thought-expansion question (null when unavailable) */
-  question: string | null;
-}
-
 export type ThoughtCreatedFrom =
   (typeof ThoughtCreatedFrom)[keyof typeof ThoughtCreatedFrom];
 
@@ -1241,11 +1229,30 @@ export interface Thought {
   content?: string | null;
   createdFrom: ThoughtCreatedFrom;
   sourceArticleId?: string | null;
+  sourceStoredSentenceId?: string | null;
   status: ThoughtStatus;
   migratedFromArticleId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
+
+export interface ThoughtQuestionQueueResponse {
+  current: Thought | null;
+  next: Thought | null;
+}
+
+export interface RefreshThoughtQuestionQueueBody {
+  currentThoughtId: string;
+}
+
+export type RefreshThoughtQuestionQueueResponse =
+  ThoughtQuestionQueueResponse & {
+    requeued: boolean;
+  };
+
+export type ActivateThoughtQuestionResponse = ThoughtQuestionQueueResponse & {
+  activatedThought: Thought;
+};
 
 export type SimilarThought = Thought & {
   /** 연결 이유 — AI가 생성한 추천 사유 문장 (null if AI failed or no connection) */
@@ -1319,6 +1326,7 @@ export interface CreateThoughtBody {
   content: string;
   createdFrom: ThoughtCreatedFrom;
   sourceArticleId?: string | null;
+  sourceStoredSentenceId?: string | null;
   status?: ThoughtStatus;
 }
 

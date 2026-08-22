@@ -1,12 +1,23 @@
 import { Router, type IRouter } from "express";
-import { and, desc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
-import { db, articlesTable, thoughtPromotionsTable, thoughtsTable, type ThoughtStatus } from "@workspace/db";
+import { and, asc, desc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import {
+  db,
+  articlesTable,
+  thoughtPromotionsTable,
+  thoughtQuestionQueueTable,
+  thoughtQuestionSourcesTable,
+  thoughtsTable,
+  type ThoughtStatus,
+} from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth";
 import { CreateThoughtBody } from "@workspace/api-zod";
 import { generateDenseEmbedding, generateSparseEmbedding } from "../lib/embeddings";
 import { analyzeThoughtExpansion } from "../services/analyze-thought-expansion";
-import { generateThoughtQuestion } from "../services/generate-thought-question";
-import { generateWidgetQuestion } from "../services/generate-widget-question";
+import { generatePreliminaryThoughtQuestion } from "../services/generate-preliminary-thought-question";
+import {
+  formatPreliminaryQuestionMarkdown,
+  isQuestionThoughtMarkdown,
+} from "../services/preliminary-question-format";
 
 const router: IRouter = Router();
 
@@ -14,6 +25,193 @@ type ThoughtMarkdown = {
   title: string;
   body: string;
 };
+
+const QUESTION_QUEUE_TARGET_SIZE = 2;
+
+type ThoughtRow = typeof thoughtsTable.$inferSelect;
+
+async function lockQuestionQueue(tx: Parameters<Parameters<typeof db.transaction>[0]>[0], userId: string) {
+  // Queue mutations for one user must serialize. This prevents concurrent
+  // display/refresh retries from creating two "next" questions.
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`thought-question-queue:${userId}`}))`);
+}
+
+async function getQueuedQuestions(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  userId: string,
+): Promise<Array<{ queueId: string; position: number; thought: ThoughtRow }>> {
+  const rows = await tx
+    .select({
+      queueId: thoughtQuestionQueueTable.id,
+      position: thoughtQuestionQueueTable.position,
+      thought: thoughtsTable,
+    })
+    .from(thoughtQuestionQueueTable)
+    .innerJoin(thoughtsTable, eq(thoughtQuestionQueueTable.thoughtId, thoughtsTable.id))
+    .where(
+      and(
+        eq(thoughtQuestionQueueTable.userId, userId),
+        eq(thoughtsTable.authorId, userId),
+        eq(thoughtsTable.status, "PRELIMINARY"),
+        isNull(thoughtsTable.deletedAt),
+      ),
+    )
+    .orderBy(asc(thoughtQuestionQueueTable.position));
+
+  return rows;
+}
+
+async function queueSnapshot(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  userId: string,
+) {
+  const rows = await getQueuedQuestions(tx, userId);
+  return {
+    current: rows[0]?.thought ?? null,
+    next: rows[1]?.thought ?? null,
+  };
+}
+
+async function fillQuestionQueue(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  userId: string,
+) {
+  // Defensive cleanup for rows left by an older client or a soft-deleted/
+  // activated thought. This runs under the caller's per-user advisory lock.
+  await tx.execute(sql`
+    DELETE FROM thought_question_queue AS queue
+    WHERE queue.user_id = ${userId}
+      AND NOT EXISTS (
+        SELECT 1
+        FROM thoughts AS thought
+        WHERE thought.id = queue.thought_id
+          AND thought.author_id = ${userId}
+          AND thought.status = 'PRELIMINARY'
+          AND thought.deleted_at IS NULL
+      )
+  `);
+  let queued = await getQueuedQuestions(tx, userId);
+  const needed = QUESTION_QUEUE_TARGET_SIZE - queued.length;
+  if (needed <= 0) return queued;
+
+  const candidates = await tx
+    .select({
+      id: thoughtsTable.id,
+      content: thoughtsTable.content,
+      sourceArticleId: thoughtsTable.sourceArticleId,
+      sourceStoredSentenceId: thoughtsTable.sourceStoredSentenceId,
+    })
+    .from(thoughtsTable)
+    .where(
+      and(
+        eq(thoughtsTable.authorId, userId),
+        eq(thoughtsTable.status, "NORMAL"),
+        isNull(thoughtsTable.deletedAt),
+        isNotNull(thoughtsTable.content),
+      ),
+    )
+    .orderBy(desc(thoughtsTable.updatedAt))
+    .limit(12);
+
+  const usedSourceRows = await tx
+    .select({ sourceThoughtId: thoughtQuestionSourcesTable.sourceThoughtId })
+    .from(thoughtQuestionSourcesTable)
+    .innerJoin(
+      thoughtsTable,
+      eq(thoughtQuestionSourcesTable.questionThoughtId, thoughtsTable.id),
+    )
+    .where(eq(thoughtsTable.authorId, userId));
+  const usedSourceThoughtIds = new Set(
+    usedSourceRows.flatMap((row) => row.sourceThoughtId ? [row.sourceThoughtId] : []),
+  );
+  const sourceCandidates = candidates.filter(
+    (candidate): candidate is typeof candidate & { content: string } =>
+      !!candidate.content?.trim() &&
+      !isQuestionThoughtMarkdown(candidate.content) &&
+      !usedSourceThoughtIds.has(candidate.id),
+  );
+  if (sourceCandidates.length === 0) return queued;
+
+  const sourceGroups = Array.from(
+    { length: needed },
+    (_, index) => sourceCandidates.slice(index * 3, index * 3 + 3),
+  ).filter((sources) => sources.length > 0);
+
+  for (const selectedSources of sourceGroups) {
+    let generated;
+    try {
+      generated = await generatePreliminaryThoughtQuestion(selectedSources);
+    } catch {
+      // AI availability and low-signal input are intentionally non-fatal:
+      // callers receive the existing queue rather than a failing record.
+      break;
+    }
+    if (!generated) break;
+
+    const [question] = await tx
+      .insert(thoughtsTable)
+      .values({
+        authorId: userId,
+        content: formatPreliminaryQuestionMarkdown(generated.title, generated.description),
+        createdFrom: "question",
+        status: "PRELIMINARY",
+      })
+      .returning();
+
+    const provenance = [
+      ...selectedSources.map((source) => ({
+        questionThoughtId: question.id,
+        sourceThoughtId: source.id,
+      })),
+      ...Array.from(new Set(selectedSources.map((source) => source.sourceArticleId).filter(Boolean))).map(
+        (sourceArticleId) => ({
+          questionThoughtId: question.id,
+          sourceArticleId: sourceArticleId!,
+        }),
+      ),
+      ...Array.from(new Set(selectedSources.map((source) => source.sourceStoredSentenceId).filter(Boolean))).map(
+        (sourceStoredSentenceId) => ({
+          questionThoughtId: question.id,
+          sourceStoredSentenceId: sourceStoredSentenceId!,
+        }),
+      ),
+    ];
+    if (provenance.length > 0) await tx.insert(thoughtQuestionSourcesTable).values(provenance);
+
+    const lastPosition = queued.at(-1)?.position ?? -1;
+    const [queueRow] = await tx
+      .insert(thoughtQuestionQueueTable)
+      .values({ userId, thoughtId: question.id, position: lastPosition + 1 })
+      .returning({ id: thoughtQuestionQueueTable.id, position: thoughtQuestionQueueTable.position });
+    queued = [...queued, { queueId: queueRow.id, position: queueRow.position, thought: question }];
+  }
+
+  return queued;
+}
+
+async function compactQuestionQueue(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  userId: string,
+) {
+  // Move to a disjoint negative range first so the per-user unique position
+  // index is never temporarily violated while the FIFO positions are compacted.
+  await tx.execute(sql`
+    UPDATE thought_question_queue
+    SET position = -position - 1
+    WHERE user_id = ${userId}
+  `);
+  await tx.execute(sql`
+    WITH ordered AS (
+      SELECT id, row_number() OVER (ORDER BY position DESC) - 1 AS next_position
+      FROM thought_question_queue
+      WHERE user_id = ${userId}
+    )
+    UPDATE thought_question_queue AS queue
+    SET position = ordered.next_position
+    FROM ordered
+    WHERE queue.id = ordered.id
+  `);
+}
 
 /**
  * A writing-stage thought stores its title as the first Markdown H1. Keeping
@@ -65,6 +263,7 @@ router.get("/thoughts/:id/similar", requireAuth, async (req, res) => {
       content: thoughtsTable.content,
       createdFrom: thoughtsTable.createdFrom,
       sourceArticleId: thoughtsTable.sourceArticleId,
+      sourceStoredSentenceId: thoughtsTable.sourceStoredSentenceId,
       status: thoughtsTable.status,
       migratedFromArticleId: thoughtsTable.migratedFromArticleId,
       createdAt: thoughtsTable.createdAt,
@@ -118,60 +317,95 @@ router.get("/thoughts/:id/similar", requireAuth, async (req, res) => {
   res.json(response);
 });
 
-router.get("/thoughts/widget", requireAuth, async (req, res) => {
+router.get("/thoughts/question-queue", requireAuth, async (req, res) => {
   const userId = req.user!.id;
 
-  const recentThoughts = await db
-    .select({ content: thoughtsTable.content })
-    .from(thoughtsTable)
-    .where(and(eq(thoughtsTable.authorId, userId), isNull(thoughtsTable.deletedAt)))
-    .orderBy(desc(thoughtsTable.createdAt))
-    .limit(10);
-
-  const contents = recentThoughts
-    .map((t) => t.content?.trim())
-    .filter((c): c is string => !!c && c.length > 0);
-
-  if (contents.length === 0 || !process.env.OPENROUTER_API_KEY) {
-    res.json({ question: null, subtext: null });
-    return;
-  }
-
-  try {
-    const result = await generateWidgetQuestion(contents);
-    res.json({ question: result?.question ?? null, subtext: result?.subtext ?? null });
-  } catch (err) {
-    console.warn("[thoughts/widget] AI widget question generation failed:", err);
-    res.json({ question: null, subtext: null });
-  }
+  const snapshot = await db.transaction(async (tx) => {
+    await lockQuestionQueue(tx, userId);
+    await fillQuestionQueue(tx, userId);
+    return queueSnapshot(tx, userId);
+  });
+  res.json(snapshot);
 });
 
-router.get("/thoughts/:id/question", requireAuth, async (req, res) => {
+router.post("/thoughts/question-queue/refresh", requireAuth, async (req, res) => {
   const userId = req.user!.id;
-  const { id } = req.params;
-
-  const [source] = await db
-    .select({ id: thoughtsTable.id, content: thoughtsTable.content })
-    .from(thoughtsTable)
-    .where(and(eq(thoughtsTable.id, id), eq(thoughtsTable.authorId, userId), isNull(thoughtsTable.deletedAt)));
-
-  if (!source) {
-    res.status(404).json({ error: "Thought not found" });
+  const currentThoughtId = (req.body as Record<string, unknown> | undefined)?.currentThoughtId;
+  if (typeof currentThoughtId !== "string") {
+    res.status(400).json({ error: "currentThoughtId must be a UUID string" });
     return;
   }
 
-  if (!source.content || !process.env.OPENROUTER_API_KEY) {
-    res.json({ question: null });
-    return;
-  }
+  const result = await db.transaction(async (tx) => {
+    await lockQuestionQueue(tx, userId);
+    await fillQuestionQueue(tx, userId);
+    const before = await getQueuedQuestions(tx, userId);
+    const current = before[0];
+    if (!current || current.thought.id !== currentThoughtId) {
+      return { ...(await queueSnapshot(tx, userId)), requeued: false };
+    }
 
-  try {
-    const question = await generateThoughtQuestion(source.content);
-    res.json({ question });
-  } catch (err) {
-    console.warn("[thoughts/question] AI question generation failed:", err);
-    res.json({ question: null });
-  }
+    const lastPosition = before.at(-1)?.position ?? current.position;
+    await tx
+      .update(thoughtQuestionQueueTable)
+      .set({ position: lastPosition + 1 })
+      .where(eq(thoughtQuestionQueueTable.id, current.queueId));
+    await compactQuestionQueue(tx, userId);
+    await fillQuestionQueue(tx, userId);
+    return { ...(await queueSnapshot(tx, userId)), requeued: true };
+  });
+
+  res.json(result);
+});
+
+router.post("/thoughts/:id/activate", requireAuth, async (req, res) => {
+  const userId = req.user!.id;
+  const thoughtId = req.params.id;
+
+  const result = await db.transaction(async (tx) => {
+    await lockQuestionQueue(tx, userId);
+    const [thought] = await tx
+      .select()
+      .from(thoughtsTable)
+      .where(and(eq(thoughtsTable.id, thoughtId), eq(thoughtsTable.authorId, userId), isNull(thoughtsTable.deletedAt)))
+      .limit(1);
+
+    if (!thought) return { status: 404, body: { error: "Thought not found" } } as const;
+
+    const [queued] = await tx
+      .select({ id: thoughtQuestionQueueTable.id })
+      .from(thoughtQuestionQueueTable)
+      .where(and(eq(thoughtQuestionQueueTable.userId, userId), eq(thoughtQuestionQueueTable.thoughtId, thoughtId)))
+      .limit(1);
+
+    // A network retry after a successful activation sees the same normal
+    // thought and returns the canonical queue state instead of activating twice.
+    if (!queued && thought.status === "NORMAL" && thought.createdFrom === "question") {
+      await fillQuestionQueue(tx, userId);
+      return {
+        status: 200,
+        body: { activatedThought: thought, ...(await queueSnapshot(tx, userId)) },
+      } as const;
+    }
+    if (!queued || thought.status !== "PRELIMINARY") {
+      return { status: 409, body: { error: "Thought is not an active queued question" } } as const;
+    }
+
+    const [activatedThought] = await tx
+      .update(thoughtsTable)
+      .set({ status: "NORMAL", updatedAt: new Date() })
+      .where(eq(thoughtsTable.id, thought.id))
+      .returning();
+    await tx.delete(thoughtQuestionQueueTable).where(eq(thoughtQuestionQueueTable.id, queued.id));
+    await fillQuestionQueue(tx, userId);
+
+    return {
+      status: 200,
+      body: { activatedThought, ...(await queueSnapshot(tx, userId)) },
+    } as const;
+  });
+
+  res.status(result.status).json(result.body);
 });
 
 router.get("/thoughts", requireAuth, async (req, res) => {
@@ -191,6 +425,7 @@ router.get("/thoughts", requireAuth, async (req, res) => {
       content: thoughtsTable.content,
       createdFrom: thoughtsTable.createdFrom,
       sourceArticleId: thoughtsTable.sourceArticleId,
+      sourceStoredSentenceId: thoughtsTable.sourceStoredSentenceId,
       status: thoughtsTable.status,
       migratedFromArticleId: thoughtsTable.migratedFromArticleId,
       createdAt: thoughtsTable.createdAt,
@@ -209,7 +444,7 @@ router.post("/thoughts", requireAuth, async (req, res) => {
     res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
     return;
   }
-  const { content, createdFrom, sourceArticleId, status } = parsed.data;
+  const { content, createdFrom, sourceArticleId, sourceStoredSentenceId, status } = parsed.data;
   const authorId = req.user!.id;
 
   const [thought] = await db.insert(thoughtsTable).values({
@@ -217,6 +452,7 @@ router.post("/thoughts", requireAuth, async (req, res) => {
     content,
     createdFrom,
     sourceArticleId: sourceArticleId ?? null,
+    sourceStoredSentenceId: sourceStoredSentenceId ?? null,
     status: (status ?? "NORMAL") as ThoughtStatus,
   }).returning();
 
@@ -292,6 +528,7 @@ router.patch("/thoughts/:id", requireAuth, async (req, res) => {
       content: thoughtsTable.content,
       createdFrom: thoughtsTable.createdFrom,
       sourceArticleId: thoughtsTable.sourceArticleId,
+      sourceStoredSentenceId: thoughtsTable.sourceStoredSentenceId,
       status: thoughtsTable.status,
       migratedFromArticleId: thoughtsTable.migratedFromArticleId,
       createdAt: thoughtsTable.createdAt,
@@ -421,6 +658,9 @@ router.delete("/thoughts/:id", requireAuth, async (req, res) => {
       .update(thoughtsTable)
       .set({ deletedAt })
       .where(eq(thoughtsTable.id, id));
+    await tx
+      .delete(thoughtQuestionQueueTable)
+      .where(and(eq(thoughtQuestionQueueTable.userId, userId), eq(thoughtQuestionQueueTable.thoughtId, id)));
     if (existing.migratedFromArticleId) {
       await tx
         .update(articlesTable)
