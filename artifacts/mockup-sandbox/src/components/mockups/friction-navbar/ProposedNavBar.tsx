@@ -72,7 +72,7 @@ function MiniLetter({ title, author, tone }: { title: string; author: string; to
   );
 }
 
-export function ProposedNavBar() {
+export function ProposedNavBar({ ctaColor = colors.ink }: { ctaColor?: string }) {
   const [active, setActive] = useState<TabKey>("IN");
   const [composerOpen, setComposerOpen] = useState(false);
   const [toast, setToast] = useState("");
@@ -135,7 +135,7 @@ export function ProposedNavBar() {
                 );
               })}
             </div>
-            <button type="button" onClick={openComposer} aria-label="새 단상 작성" aria-expanded={composerOpen} style={styles.cta}>
+            <button type="button" onClick={openComposer} aria-label="새 단상 작성" aria-expanded={composerOpen} style={{ ...styles.cta, background: ctaColor }}>
               <FeatherIcon name="edit-3" size={22} color={colors.white} />
             </button>
           </nav>
