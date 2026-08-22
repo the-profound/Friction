@@ -706,6 +706,7 @@ export default function InboxScreen() {
         originLayout={tapItemOrigin}
         onClose={handleModalClose}
         onRead={handleRead}
+        onCardTap={handleRead}
         onNavigateToCollection={handleNavigateToCollection}
         onNavigateToAuthor={(authorId) => router.push(`/user-profile/${authorId}` as never)}
         envelopeInfo={

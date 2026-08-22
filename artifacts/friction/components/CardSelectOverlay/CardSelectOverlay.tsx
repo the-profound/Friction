@@ -87,6 +87,8 @@ interface CardSelectOverlayProps {
   originLayout: OriginLayout | null;
   onClose: () => void;
   onRead: (index: number) => void;
+  /** Optional card-tap action for flows that want to mirror the "읽기" CTA. */
+  onCardTap?: (index: number) => void;
   onNavigateToCollection?: (id: string) => void;
   onNavigateToAuthor?: (authorId: string) => void;
   /**
@@ -104,6 +106,7 @@ export default function CardSelectOverlay({
   originLayout,
   onClose,
   onRead,
+  onCardTap,
   onNavigateToCollection,
   onNavigateToAuthor,
   envelopeInfo,
@@ -548,19 +551,27 @@ export default function CardSelectOverlay({
     }
   }, [rendered, fadeOverlayOpacity]);
 
-  const handleRead = useCallback(() => {
+  const isEnvelopeSealed = !!envelopeInfo && envelopePhase !== "revealed";
+
+  const runReadTransition = useCallback((callback: (index: number) => void) => {
     const idx = activeIndexRef.current;
     fadeOverlayOpacity.value = withTiming(
       1,
       { duration: 700, easing: REasing.in(REasing.ease) },
       (finished) => {
-        if (finished) runOnJS(onRead)(idx);
+        if (finished) runOnJS(callback)(idx);
       },
     );
-  }, [onRead, fadeOverlayOpacity]);
+  }, [fadeOverlayOpacity]);
 
-  // ── Whether the tapped card is a sealed envelope ──────────────────────────
-  const isEnvelopeSealed = !!envelopeInfo && envelopePhase !== "revealed";
+  const handleRead = useCallback(() => {
+    runReadTransition(onRead);
+  }, [onRead, runReadTransition]);
+
+  const handleCardTap = useCallback(() => {
+    if (isEnvelopeSealed || !onCardTap) return;
+    runReadTransition(onCardTap);
+  }, [isEnvelopeSealed, onCardTap, runReadTransition]);
 
   // ── Envelope overlay — rendered absolutely over the card at initialIndex ──
   const renderEnvelopeLayer = (slotIndex: number) => {
@@ -688,7 +699,7 @@ export default function CardSelectOverlay({
                 cover={envArticle.cover}
                 isRead={false}
                 isActive
-                onPress={() => {}}
+                onPress={handleCardTap}
               />
             </Animated.View>
           </Animated.View>
@@ -823,7 +834,7 @@ export default function CardSelectOverlay({
                           cover={art.cover}
                           isRead={false}
                           isActive
-                          onPress={() => {}}
+                          onPress={handleCardTap}
                         />,
                         i,
                       )}
@@ -846,7 +857,7 @@ export default function CardSelectOverlay({
                 cover={displayArticles[0].cover}
                 isRead={false}
                 isActive
-                onPress={() => {}}
+                onPress={handleCardTap}
               />,
               0,
             )}
