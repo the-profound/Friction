@@ -7,6 +7,11 @@ import {
   getAnonymousDisplayName,
   parseAnonymousSpaceNickname,
 } from "../lib/anonymousSpaceIdentity";
+import {
+  getSpaceBasicSettingsAccessIssue,
+  parseSpaceBasicSettingsInput,
+  shouldBlockAnonymousConversion,
+} from "../lib/spaceBasicSettings";
 import { generateInviteCode } from "../lib/inviteCodeWords";
 import { logger } from "../lib/logger";
 import { dispatchNotification } from "../lib/notifications";
@@ -55,11 +60,27 @@ function isSpaceNicknameConflict(err: unknown): boolean {
   );
 }
 
-async function lockSpaceForNicknameMutation(
+function toSpaceBasicSettingsResponse(
+  space: Pick<typeof spacesTable.$inferSelect, "name" | "description" | "isAnonymous">,
+) {
+  return {
+    name: space.name,
+    description: space.description,
+    isAnonymous: space.isAnonymous,
+  };
+}
+
+async function getLockedSpaceForNicknameMutation(
   tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
   spaceId: string,
 ) {
   await tx.execute(sql`SELECT id FROM spaces WHERE id = ${spaceId} FOR UPDATE`);
+  const [space] = await tx
+    .select()
+    .from(spacesTable)
+    .where(eq(spacesTable.id, spaceId))
+    .limit(1);
+  return space;
 }
 
 async function hasReservedSpaceNickname(
@@ -464,6 +485,175 @@ router.get("/spaces/:id", async (req, res) => {
     return;
   }
   res.json(space);
+});
+
+// ─── Recruiting basic settings (operator only) ────────────────────────────────
+//
+// This is intentionally separate from PATCH /spaces/:id. The latter is used by
+// the existing inline description editor, while this endpoint protects the
+// creation-time settings with a recruiting-state gate.
+router.get("/spaces/:id/basic-settings", requireAuth, async (req, res) => {
+  const callerId = req.user!.id;
+  const spaceId = String(req.params.id);
+  const [space] = await db
+    .select()
+    .from(spacesTable)
+    .where(eq(spacesTable.id, spaceId))
+    .limit(1);
+  if (!space) {
+    res.status(404).json({ error: "공간을 찾을 수 없어요." });
+    return;
+  }
+
+  const [participation] = await db
+    .select()
+    .from(spaceParticipationsTable)
+    .where(
+      and(
+        eq(spaceParticipationsTable.spaceId, space.id),
+        eq(spaceParticipationsTable.userId, callerId),
+        eq(spaceParticipationsTable.role, "OPERATOR"),
+        eq(spaceParticipationsTable.status, "APPROVED"),
+      ),
+    )
+    .limit(1);
+  const accessIssue = getSpaceBasicSettingsAccessIssue(space.status, participation);
+  if (accessIssue === "FORBIDDEN") {
+    res.status(403).json({ error: "공간장만 기본 설정을 확인할 수 있어요." });
+    return;
+  }
+  if (accessIssue === "NOT_RECRUITING") {
+    res.status(409).json({ error: "모집 중인 공간에서만 기본 설정을 확인할 수 있어요." });
+    return;
+  }
+
+  res.json(toSpaceBasicSettingsResponse(space));
+});
+
+router.patch("/spaces/:id/basic-settings", requireAuth, async (req, res) => {
+  const parsed = parseSpaceBasicSettingsInput(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error });
+    return;
+  }
+
+  const callerId = req.user!.id;
+  const spaceId = String(req.params.id);
+  const { name, description, isAnonymous } = parsed.data;
+
+  type UpdateResult =
+    | { kind: "updated"; settings: ReturnType<typeof toSpaceBasicSettingsResponse> }
+    | { kind: "not_found" }
+    | { kind: "forbidden" }
+    | { kind: "not_recruiting" }
+    | { kind: "incomplete_anonymous_conversion" };
+
+  try {
+    const result: UpdateResult = await db.transaction(async (tx) => {
+      // Serializes this edit with start-space and nickname-reservation updates.
+      const space = await getLockedSpaceForNicknameMutation(tx, spaceId);
+      if (!space) return { kind: "not_found" };
+
+      const [operatorParticipation] = await tx
+        .select()
+        .from(spaceParticipationsTable)
+        .where(
+          and(
+            eq(spaceParticipationsTable.spaceId, space.id),
+            eq(spaceParticipationsTable.userId, callerId),
+            eq(spaceParticipationsTable.role, "OPERATOR"),
+            eq(spaceParticipationsTable.status, "APPROVED"),
+          ),
+        )
+        .limit(1);
+      const accessIssue = getSpaceBasicSettingsAccessIssue(space.status, operatorParticipation);
+      if (accessIssue === "FORBIDDEN") return { kind: "forbidden" };
+      if (accessIssue === "NOT_RECRUITING") return { kind: "not_recruiting" };
+
+      if (!space.isAnonymous && isAnonymous) {
+        if (!operatorParticipation.spaceNickname?.trim()) {
+          return { kind: "incomplete_anonymous_conversion" };
+        }
+        const [[incompleteParticipation], [incompleteCodeRequest]] = await Promise.all([
+          tx
+            .select({ id: spaceParticipationsTable.id })
+            .from(spaceParticipationsTable)
+            .where(
+              and(
+                eq(spaceParticipationsTable.spaceId, space.id),
+                inArray(spaceParticipationsTable.status, ["PENDING", "APPROVED"]),
+                ne(spaceParticipationsTable.userId, callerId),
+                sql`coalesce(btrim(${spaceParticipationsTable.spaceNickname}), '') = ''`,
+              ),
+            )
+            .limit(1),
+          tx
+            .select({ id: spaceCodeRequestsTable.id })
+            .from(spaceCodeRequestsTable)
+            .where(
+              and(
+                eq(spaceCodeRequestsTable.spaceId, space.id),
+                inArray(spaceCodeRequestsTable.status, ["PENDING", "APPROVED"]),
+                ne(spaceCodeRequestsTable.requesterId, callerId),
+                sql`coalesce(btrim(${spaceCodeRequestsTable.spaceNickname}), '') = ''`,
+              ),
+            )
+            .limit(1),
+        ]);
+        if (
+          shouldBlockAnonymousConversion(
+            space.isAnonymous,
+            isAnonymous,
+            !!incompleteParticipation,
+            !!incompleteCodeRequest,
+          )
+        ) {
+          return { kind: "incomplete_anonymous_conversion" };
+        }
+      }
+
+      const [updatedSpace] = await tx
+        .update(spacesTable)
+        .set({
+          name,
+          description,
+          isAnonymous,
+        })
+        .where(eq(spacesTable.id, space.id))
+        .returning();
+      return {
+        kind: "updated",
+        settings: toSpaceBasicSettingsResponse(updatedSpace),
+      };
+    });
+
+    if (result.kind === "not_found") {
+      res.status(404).json({ error: "공간을 찾을 수 없어요." });
+      return;
+    }
+    if (result.kind === "forbidden") {
+      res.status(403).json({ error: "공간장만 기본 설정을 바꿀 수 있어요." });
+      return;
+    }
+    if (result.kind === "not_recruiting") {
+      res.status(409).json({ error: "모집 중인 공간에서만 기본 설정을 바꿀 수 있어요." });
+      return;
+    }
+    if (result.kind === "incomplete_anonymous_conversion") {
+      res.status(409).json({
+        error: "운영자 또는 기존 참여자·신청자 중 공간 닉네임이 없는 사람이 있어 익명 공간으로 전환할 수 없어요.",
+      });
+      return;
+    }
+    res.json(result.settings);
+  } catch (err) {
+    if (isSpaceNicknameConflict(err)) {
+      res.status(409).json({ error: "이미 사용 중인 공간 닉네임입니다." });
+      return;
+    }
+    console.error("PATCH /spaces/:id/basic-settings error:", err);
+    res.status(500).json({ error: "기본 설정 저장에 실패했어요." });
+  }
 });
 
 router.patch("/spaces/:id", requireAuth, async (req, res) => {
@@ -1241,16 +1431,17 @@ router.post("/spaces/:id/participations", requireAuth, async (req, res) => {
     res.status(404).json({ error: "Space not found" });
     return;
   }
-  const spaceNickname = space.isAnonymous ? parseAnonymousSpaceNickname(req.body.spaceNickname) : null;
-  if (space.isAnonymous && !spaceNickname) {
-    res.status(400).json({ error: "익명 공간에 참여하려면 공간 닉네임이 필요합니다." });
-    return;
-  }
+  const requestedSpaceNickname = parseAnonymousSpaceNickname(req.body.spaceNickname);
   try {
-    const participation = await db.transaction(async (tx) => {
-      await lockSpaceForNicknameMutation(tx, space.id);
+    const result = await db.transaction(async (tx) => {
+      const currentSpace = await getLockedSpaceForNicknameMutation(tx, space.id);
+      if (!currentSpace) return "SPACE_NOT_FOUND" as const;
+      const spaceNickname = currentSpace.isAnonymous ? requestedSpaceNickname : null;
+      if (currentSpace.isAnonymous && !spaceNickname) {
+        return "MISSING_NICKNAME" as const;
+      }
       if (spaceNickname && await hasReservedSpaceNickname(tx, space.id, spaceNickname)) {
-        return null;
+        return "NICKNAME_CONFLICT" as const;
       }
       const [created] = await tx
         .insert(spaceParticipationsTable)
@@ -1262,15 +1453,25 @@ router.post("/spaces/:id/participations", requireAuth, async (req, res) => {
           ...(spaceNickname ? { spaceNickname } : {}),
         })
         .returning();
-      return created;
+      return { participation: created, space: currentSpace };
     });
-    if (!participation) {
+    if (result === "SPACE_NOT_FOUND") {
+      res.status(404).json({ error: "Space not found" });
+      return;
+    }
+    if (result === "MISSING_NICKNAME") {
+      res.status(400).json({ error: "익명 공간에 참여하려면 공간 닉네임이 필요합니다." });
+      return;
+    }
+    if (result === "NICKNAME_CONFLICT") {
       res.status(409).json({ error: "이미 사용 중인 공간 닉네임입니다." });
       return;
     }
     res.status(201).json(sanitizeParticipationDisplay(
-      participation,
-      space.isAnonymous ? getAnonymousDisplayName(space, participation.spaceNickname) : undefined,
+      result.participation,
+      result.space.isAnonymous
+        ? getAnonymousDisplayName(result.space, result.participation.spaceNickname)
+        : undefined,
     ));
   } catch (err) {
     if (isSpaceNicknameConflict(err)) {
@@ -1313,7 +1514,8 @@ router.patch("/spaces/:id/participations/:participationId", requireAuth, async (
     return;
   }
   const participation = await db.transaction(async (tx) => {
-    await lockSpaceForNicknameMutation(tx, space.id);
+    const currentSpace = await getLockedSpaceForNicknameMutation(tx, space.id);
+    if (!currentSpace) return null;
     const [target] = await tx
       .select()
       .from(spaceParticipationsTable)
@@ -1331,11 +1533,15 @@ router.patch("/spaces/:id/participations/:participationId", requireAuth, async (
     ) {
       return "INVALID_STATUS" as const;
     }
-    if (space.isAnonymous && ["PENDING", "APPROVED"].includes(nextStatus) && !target.spaceNickname) {
+    if (
+      currentSpace.isAnonymous &&
+      ["PENDING", "APPROVED"].includes(nextStatus) &&
+      !target.spaceNickname
+    ) {
       return "MISSING_NICKNAME" as const;
     }
     if (
-      space.isAnonymous &&
+      currentSpace.isAnonymous &&
       ["PENDING", "APPROVED"].includes(nextStatus) &&
       target.spaceNickname &&
       await hasReservedSpaceNickname(tx, space.id, target.spaceNickname, {
@@ -1349,7 +1555,7 @@ router.patch("/spaces/:id/participations/:participationId", requireAuth, async (
       .set({ status: req.body.status, role: req.body.role })
       .where(eq(spaceParticipationsTable.id, target.id))
       .returning();
-    return updated;
+    return { participation: updated, space: currentSpace };
   });
   if (!participation) {
     res.status(404).json({ error: "Participation not found" });
@@ -1368,8 +1574,10 @@ router.patch("/spaces/:id/participations/:participationId", requireAuth, async (
     return;
   }
   res.json(sanitizeParticipationDisplay(
-    participation,
-    space.isAnonymous ? getAnonymousDisplayName(space, participation.spaceNickname) : undefined,
+    participation.participation,
+    participation.space.isAnonymous
+      ? getAnonymousDisplayName(participation.space, participation.participation.spaceNickname)
+      : undefined,
   ));
 });
 
@@ -1428,16 +1636,19 @@ router.patch("/spaces/:id/invitations/:invitationId", requireAuth, async (req, r
     res.status(404).json({ error: "Space not found" });
     return;
   }
-  const spaceNickname = status === "ACCEPTED" && space.isAnonymous
+  const requestedSpaceNickname = status === "ACCEPTED"
     ? parseAnonymousSpaceNickname(req.body.spaceNickname)
     : null;
-  if (status === "ACCEPTED" && space.isAnonymous && !spaceNickname) {
-    res.status(400).json({ error: "익명 공간에 참여하려면 공간 닉네임이 필요합니다." });
-    return;
-  }
   try {
     const result = await db.transaction(async (tx) => {
-      await lockSpaceForNicknameMutation(tx, space.id);
+      const currentSpace = await getLockedSpaceForNicknameMutation(tx, space.id);
+      if (!currentSpace) return null;
+      const spaceNickname = status === "ACCEPTED" && currentSpace.isAnonymous
+        ? requestedSpaceNickname
+        : null;
+      if (status === "ACCEPTED" && currentSpace.isAnonymous && !spaceNickname) {
+        return "MISSING_NICKNAME" as const;
+      }
       const [invitation] = await tx
         .select()
         .from(spaceInvitationsTable)
@@ -1487,6 +1698,10 @@ router.patch("/spaces/:id/invitations/:invitationId", requireAuth, async (req, r
     }
     if (result === "NICKNAME_CONFLICT") {
       res.status(409).json({ error: "이미 사용 중인 공간 닉네임입니다." });
+      return;
+    }
+    if (result === "MISSING_NICKNAME") {
+      res.status(400).json({ error: "익명 공간에 참여하려면 공간 닉네임이 필요합니다." });
       return;
     }
     if (result === "ALREADY_RESPONDED") {
@@ -1565,14 +1780,15 @@ router.post("/spaces/:id/code-requests", requireAuth, async (req, res) => {
     res.status(404).json({ error: "Space not found" });
     return;
   }
-  const spaceNickname = space.isAnonymous ? parseAnonymousSpaceNickname(req.body.spaceNickname) : null;
-  if (space.isAnonymous && !spaceNickname) {
-    res.status(400).json({ error: "익명 공간에 참여하려면 공간 닉네임이 필요합니다." });
-    return;
-  }
+  const requestedSpaceNickname = parseAnonymousSpaceNickname(req.body.spaceNickname);
   try {
     const request = await db.transaction(async (tx) => {
-      await lockSpaceForNicknameMutation(tx, space.id);
+      const currentSpace = await getLockedSpaceForNicknameMutation(tx, space.id);
+      if (!currentSpace) return "SPACE_NOT_FOUND" as const;
+      const spaceNickname = currentSpace.isAnonymous ? requestedSpaceNickname : null;
+      if (currentSpace.isAnonymous && !spaceNickname) {
+        return "MISSING_NICKNAME" as const;
+      }
       const [existingParticipation] = await tx
         .select({ id: spaceParticipationsTable.id })
         .from(spaceParticipationsTable)
@@ -1587,7 +1803,7 @@ router.post("/spaces/:id/code-requests", requireAuth, async (req, res) => {
         return "ALREADY_PARTICIPATING" as const;
       }
       if (spaceNickname && await hasReservedSpaceNickname(tx, space.id, spaceNickname)) {
-        return null;
+        return "NICKNAME_CONFLICT" as const;
       }
       const [created] = await tx
         .insert(spaceCodeRequestsTable)
@@ -1598,9 +1814,17 @@ router.post("/spaces/:id/code-requests", requireAuth, async (req, res) => {
           ...(spaceNickname ? { spaceNickname } : {}),
         })
         .returning();
-      return created;
+      return { request: created, space: currentSpace };
     });
-    if (!request) {
+    if (request === "SPACE_NOT_FOUND") {
+      res.status(404).json({ error: "Space not found" });
+      return;
+    }
+    if (request === "MISSING_NICKNAME") {
+      res.status(400).json({ error: "익명 공간에 참여하려면 공간 닉네임이 필요합니다." });
+      return;
+    }
+    if (request === "NICKNAME_CONFLICT") {
       res.status(409).json({ error: "이미 사용 중인 공간 닉네임입니다." });
       return;
     }
@@ -1609,8 +1833,10 @@ router.post("/spaces/:id/code-requests", requireAuth, async (req, res) => {
       return;
     }
     res.status(201).json({
-      ...request,
-      spaceNickname: space.isAnonymous ? getAnonymousDisplayName(space, request.spaceNickname) : null,
+      ...request.request,
+      spaceNickname: request.space.isAnonymous
+        ? getAnonymousDisplayName(request.space, request.request.spaceNickname)
+        : null,
     });
   } catch (err) {
     if (isSpaceNicknameConflict(err)) {
@@ -1655,7 +1881,8 @@ router.patch("/spaces/:id/code-requests/:requestId", requireAuth, async (req, re
   }
   try {
     const result = await db.transaction(async (tx) => {
-      await lockSpaceForNicknameMutation(tx, space.id);
+      const currentSpace = await getLockedSpaceForNicknameMutation(tx, space.id);
+      if (!currentSpace) return null;
       const [codeRequest] = await tx
         .select()
         .from(spaceCodeRequestsTable)
@@ -1683,12 +1910,12 @@ router.patch("/spaces/:id/code-requests/:requestId", requireAuth, async (req, re
       if (existingParticipation) {
         return "ALREADY_PARTICIPATING" as const;
       }
-      if (status === "APPROVED" && space.isAnonymous && !codeRequest.spaceNickname) {
+      if (status === "APPROVED" && currentSpace.isAnonymous && !codeRequest.spaceNickname) {
         return "MISSING_NICKNAME" as const;
       }
       if (
         status === "APPROVED" &&
-        space.isAnonymous &&
+        currentSpace.isAnonymous &&
         codeRequest.spaceNickname &&
         await hasReservedSpaceNickname(tx, space.id, codeRequest.spaceNickname, {
           exceptCodeRequestId: codeRequest.id,
@@ -1714,7 +1941,7 @@ router.patch("/spaces/:id/code-requests/:requestId", requireAuth, async (req, re
           ...(codeRequest.spaceNickname ? { spaceNickname: codeRequest.spaceNickname } : {}),
         });
       }
-      return updated;
+      return { request: updated, space: currentSpace };
     });
     if (!result) {
       res.status(404).json({ error: "Code request not found" });
@@ -1737,9 +1964,9 @@ router.patch("/spaces/:id/code-requests/:requestId", requireAuth, async (req, re
       return;
     }
     res.json({
-      ...result,
-      spaceNickname: space.isAnonymous
-        ? getAnonymousDisplayName(space, result.spaceNickname)
+      ...result.request,
+      spaceNickname: result.space.isAnonymous
+        ? getAnonymousDisplayName(result.space, result.request.spaceNickname)
         : null,
     });
   } catch (err) {

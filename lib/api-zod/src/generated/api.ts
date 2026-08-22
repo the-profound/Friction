@@ -2198,6 +2198,63 @@ export const UpdateSpaceResponse = zod.object({
 });
 
 /**
+ * @summary Get recruiting space basic settings (operator only)
+ */
+export const GetSpaceBasicSettingsParams = zod.object({
+  id: zod.coerce.string().uuid(),
+});
+
+export const getSpaceBasicSettingsResponseNameMax = 50;
+
+export const getSpaceBasicSettingsResponseDescriptionMax = 300;
+
+export const GetSpaceBasicSettingsResponse = zod
+  .object({
+    name: zod.string().min(1).max(getSpaceBasicSettingsResponseNameMax),
+    description: zod
+      .string()
+      .max(getSpaceBasicSettingsResponseDescriptionMax)
+      .nullable(),
+    isAnonymous: zod.boolean(),
+  })
+  .describe("모집 중인 공간의 운영자에게만 제공되는 기본 설정입니다.");
+
+/**
+ * @summary Update recruiting space basic settings (operator only)
+ */
+export const UpdateSpaceBasicSettingsParams = zod.object({
+  id: zod.coerce.string().uuid(),
+});
+
+export const updateSpaceBasicSettingsBodyNameMax = 50;
+
+export const updateSpaceBasicSettingsBodyDescriptionMax = 300;
+
+export const UpdateSpaceBasicSettingsBody = zod.object({
+  name: zod.string().min(1).max(updateSpaceBasicSettingsBodyNameMax),
+  description: zod
+    .string()
+    .max(updateSpaceBasicSettingsBodyDescriptionMax)
+    .nullable(),
+  isAnonymous: zod.boolean(),
+});
+
+export const updateSpaceBasicSettingsResponseNameMax = 50;
+
+export const updateSpaceBasicSettingsResponseDescriptionMax = 300;
+
+export const UpdateSpaceBasicSettingsResponse = zod
+  .object({
+    name: zod.string().min(1).max(updateSpaceBasicSettingsResponseNameMax),
+    description: zod
+      .string()
+      .max(updateSpaceBasicSettingsResponseDescriptionMax)
+      .nullable(),
+    isAnonymous: zod.boolean(),
+  })
+  .describe("모집 중인 공간의 운영자에게만 제공되는 기본 설정입니다.");
+
+/**
  * @summary 공간 시작 (운영자 전용) — ACTIVE 전환, 회차 틀 생성, 코드 신청 자동 거절
  */
 export const StartSpaceParams = zod.object({

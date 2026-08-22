@@ -784,6 +784,31 @@ export interface UpdateSpaceBody {
   status?: UpdateSpaceBodyStatus;
 }
 
+/**
+ * 모집 중인 공간의 운영자에게만 제공되는 기본 설정입니다.
+ */
+export interface SpaceBasicSettings {
+  /**
+   * @minLength 1
+   * @maxLength 50
+   */
+  name: string;
+  /** @maxLength 300 */
+  description: string | null;
+  isAnonymous: boolean;
+}
+
+export interface UpdateSpaceBasicSettingsBody {
+  /**
+   * @minLength 1
+   * @maxLength 50
+   */
+  name: string;
+  /** @maxLength 300 */
+  description: string | null;
+  isAnonymous: boolean;
+}
+
 export interface StartSpaceRoundConfig {
   /** @maxLength 100 */
   title?: string | null;

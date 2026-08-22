@@ -84,6 +84,7 @@ import type {
   SendRecordWithDetails,
   SimilarThought,
   Space,
+  SpaceBasicSettings,
   SpaceCodeRequest,
   SpaceCodeRequestWithRequester,
   SpaceCodeRequestWithSpace,
@@ -118,6 +119,7 @@ import type {
   UpdateArticleBody,
   UpdateMyCollectionBody,
   UpdateRecentCollectionBody,
+  UpdateSpaceBasicSettingsBody,
   UpdateSpaceBody,
   UpdateSpaceCodeRequestBody,
   UpdateSpaceInvitationBody,
@@ -5687,6 +5689,182 @@ export const useUpdateSpace = <
   TContext
 > => {
   return useMutation(getUpdateSpaceMutationOptions(options));
+};
+
+/**
+ * @summary Get recruiting space basic settings (operator only)
+ */
+export const getGetSpaceBasicSettingsUrl = (id: string) => {
+  return `/api/spaces/${id}/basic-settings`;
+};
+
+export const getSpaceBasicSettings = async (
+  id: string,
+  options?: RequestInit,
+): Promise<SpaceBasicSettings> => {
+  return customFetch<SpaceBasicSettings>(getGetSpaceBasicSettingsUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetSpaceBasicSettingsQueryKey = (id: string) => {
+  return [`/api/spaces/${id}/basic-settings`] as const;
+};
+
+export const getGetSpaceBasicSettingsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSpaceBasicSettings>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getSpaceBasicSettings>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetSpaceBasicSettingsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getSpaceBasicSettings>>
+  > = ({ signal }) => getSpaceBasicSettings(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSpaceBasicSettings>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetSpaceBasicSettingsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getSpaceBasicSettings>>
+>;
+export type GetSpaceBasicSettingsQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get recruiting space basic settings (operator only)
+ */
+
+export function useGetSpaceBasicSettings<
+  TData = Awaited<ReturnType<typeof getSpaceBasicSettings>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getSpaceBasicSettings>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetSpaceBasicSettingsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Update recruiting space basic settings (operator only)
+ */
+export const getUpdateSpaceBasicSettingsUrl = (id: string) => {
+  return `/api/spaces/${id}/basic-settings`;
+};
+
+export const updateSpaceBasicSettings = async (
+  id: string,
+  updateSpaceBasicSettingsBody: UpdateSpaceBasicSettingsBody,
+  options?: RequestInit,
+): Promise<SpaceBasicSettings> => {
+  return customFetch<SpaceBasicSettings>(getUpdateSpaceBasicSettingsUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateSpaceBasicSettingsBody),
+  });
+};
+
+export const getUpdateSpaceBasicSettingsMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSpaceBasicSettings>>,
+    TError,
+    { id: string; data: BodyType<UpdateSpaceBasicSettingsBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateSpaceBasicSettings>>,
+  TError,
+  { id: string; data: BodyType<UpdateSpaceBasicSettingsBody> },
+  TContext
+> => {
+  const mutationKey = ["updateSpaceBasicSettings"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateSpaceBasicSettings>>,
+    { id: string; data: BodyType<UpdateSpaceBasicSettingsBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateSpaceBasicSettings(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateSpaceBasicSettingsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateSpaceBasicSettings>>
+>;
+export type UpdateSpaceBasicSettingsMutationBody =
+  BodyType<UpdateSpaceBasicSettingsBody>;
+export type UpdateSpaceBasicSettingsMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Update recruiting space basic settings (operator only)
+ */
+export const useUpdateSpaceBasicSettings = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSpaceBasicSettings>>,
+    TError,
+    { id: string; data: BodyType<UpdateSpaceBasicSettingsBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateSpaceBasicSettings>>,
+  TError,
+  { id: string; data: BodyType<UpdateSpaceBasicSettingsBody> },
+  TContext
+> => {
+  return useMutation(getUpdateSpaceBasicSettingsMutationOptions(options));
 };
 
 /**

@@ -17,6 +17,9 @@ import { CollapsibleDatePicker, getMinSpaceStartDate, startOfDay } from "@/compo
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import SubmitProgressOverlay from "@/components/shared/SubmitProgressOverlay";
 import Toggle from "@/components/shared/Toggle";
+import SpaceBasicSettingsForm, {
+  type SpaceBasicSettingsValues,
+} from "@/components/SpaceBasicSettingsForm/SpaceBasicSettingsForm";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
 import { useToast } from "@/contexts/ToastContext";
@@ -124,6 +127,16 @@ export default function SpaceCreateScreen() {
 
   const updateField = useCallback(<K extends keyof FormData>(key: K, value: FormData[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
+  const updateBasicSettings = useCallback((value: SpaceBasicSettingsValues) => {
+    setForm((prev) => ({
+      ...prev,
+      name: value.name,
+      description: value.description,
+      isAnonymous: value.isAnonymous,
+      spaceNickname: value.spaceNickname ?? prev.spaceNickname,
+    }));
   }, []);
 
   const handleRoundCountChange = useCallback((text: string) => {
@@ -237,7 +250,7 @@ export default function SpaceCreateScreen() {
 
   const renderStepContent = () => {
     if (step === 0) {
-      return <BasicSettingsStep form={form} updateField={updateField} />;
+      return <BasicSettingsStep form={form} onChange={updateBasicSettings} />;
     }
     if (step === 1) {
       return (
@@ -333,83 +346,16 @@ export default function SpaceCreateScreen() {
 
 function BasicSettingsStep({
   form,
-  updateField,
+  onChange,
 }: {
-  form: FormData;
-  updateField: <K extends keyof FormData>(key: K, value: FormData[K]) => void;
+  form: Pick<FormData, "name" | "description" | "isAnonymous" | "spaceNickname">;
+  onChange: (value: SpaceBasicSettingsValues) => void;
 }) {
   return (
     <View style={stepStyles.container}>
       <Text style={stepStyles.stepTitle}>기본 설정</Text>
       <Text style={stepStyles.stepDesc}>공간의 이름과 소개를 입력하세요.</Text>
-
-      <View style={stepStyles.fieldGroup}>
-        <Text style={stepStyles.fieldLabel}>공간 이름 *</Text>
-        <TextInput
-          style={stepStyles.input}
-          placeholder="예: 2025 독서 모임"
-          placeholderTextColor={Colors.zinc400}
-          value={form.name}
-          onChangeText={(v) => updateField("name", v)}
-          maxLength={50}
-          autoFocus
-          returnKeyType="next"
-        />
-        <Text style={stepStyles.charCount}>{form.name.length} / 50</Text>
-      </View>
-
-      <View style={stepStyles.fieldGroup}>
-        <Text style={stepStyles.fieldLabel}>설명 (선택)</Text>
-        <TextInput
-          style={[stepStyles.input, stepStyles.inputMulti]}
-          placeholder="이 공간은 어떤 목적으로 운영되나요?"
-          placeholderTextColor={Colors.zinc400}
-          value={form.description}
-          onChangeText={(v) => updateField("description", v)}
-          multiline
-          textAlignVertical="top"
-          maxLength={300}
-        />
-        <Text style={stepStyles.charCount}>{form.description.length} / 300</Text>
-      </View>
-
-      <View style={stepStyles.toggleRow}>
-        <View style={stepStyles.toggleInfo}>
-          <Text style={stepStyles.fieldLabel}>익명 운영</Text>
-          <Text style={stepStyles.toggleDesc}>참여자 이름이 공개되지 않아요</Text>
-          {form.isAnonymous && (
-            <Text style={stepStyles.toggleNotice}>
-              공간장도 익명으로 참여하며, 다른 참여자에게 공간장 표시가 보이지 않습니다
-            </Text>
-          )}
-        </View>
-        <Toggle
-          value={form.isAnonymous}
-          onValueChange={(v) => updateField("isAnonymous", v)}
-          accessibilityLabel="익명 운영"
-        />
-      </View>
-      {form.isAnonymous ? (
-        <View style={stepStyles.fieldGroup}>
-          <Text style={stepStyles.fieldLabel}>이 공간에서 사용할 닉네임 *</Text>
-          <TextInput
-            style={stepStyles.input}
-            placeholder="예: 달빛"
-            placeholderTextColor={Colors.zinc400}
-            value={form.spaceNickname}
-            onChangeText={(v) => updateField("spaceNickname", v)}
-            maxLength={20}
-            autoCapitalize="none"
-            autoCorrect={false}
-            returnKeyType="done"
-            accessibilityLabel="공간 닉네임"
-          />
-          <Text style={stepStyles.hint}>
-            시작 전에는 모두 ‘참여자’로 표시되고, 시작 후 이 닉네임으로 표시돼요.
-          </Text>
-          <Text style={stepStyles.charCount}>{form.spaceNickname.trim().length} / 20</Text>
-        </View>
-      ) : null}
+      <SpaceBasicSettingsForm value={form} onChange={onChange} autoFocus />
     </View>
   );
 }

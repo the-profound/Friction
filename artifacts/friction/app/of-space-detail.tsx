@@ -1624,6 +1624,18 @@ export default function SpaceDetailScreen() {
         visible={showKebabSheet}
         onClose={() => setShowKebabSheet(false)}
         actions={[
+          ...(isRecruiting
+            ? [
+                {
+                  label: "기본 설정",
+                  onPress: () =>
+                    router.push({
+                      pathname: "/of-space-basic-settings" as never,
+                      params: { id },
+                    }),
+                },
+              ]
+            : []),
           {
             label: "회차 관리",
             onPress: () =>

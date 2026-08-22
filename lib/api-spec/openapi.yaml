@@ -1521,6 +1521,86 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /spaces/{id}/basic-settings:
+    get:
+      operationId: getSpaceBasicSettings
+      tags: [spaces]
+      summary: Get recruiting space basic settings (operator only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Current recruiting space basic settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpaceBasicSettings"
+        "403":
+          description: Operator permission required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Space not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Space has already started or been archived
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateSpaceBasicSettings
+      tags: [spaces]
+      summary: Update recruiting space basic settings (operator only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSpaceBasicSettingsBody"
+      responses:
+        "200":
+          description: Updated basic settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpaceBasicSettings"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Operator permission required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Space not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Nickname conflict, incomplete anonymous conversion, or a space that has already started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /spaces/{id}/start:
     post:
       operationId: startSpace
@@ -4009,6 +4089,38 @@ components:
         status:
           type: string
           enum: [RECRUITING, ACTIVE, ARCHIVED]
+
+    SpaceBasicSettings:
+      type: object
+      description: "모집 중인 공간의 운영자에게만 제공되는 기본 설정입니다."
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+        description:
+          type: string
+          nullable: true
+          maxLength: 300
+        isAnonymous:
+          type: boolean
+      required: [name, description, isAnonymous]
+
+    UpdateSpaceBasicSettingsBody:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+        description:
+          type: string
+          nullable: true
+          maxLength: 300
+        isAnonymous:
+          type: boolean
+      required: [name, description, isAnonymous]
 
     StartSpaceRoundConfig:
       type: object
