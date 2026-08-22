@@ -581,8 +581,9 @@ export default function WritingScreen() {
       fontSize: bodyFontSize,
       lineHeight: bodyLineHeight,
       letterSpacing: bodyLetterSpacing,
+      titleFontSize,
     };
-  }, [mode, measurePages, pageBlockMap, safeAreaWidth, paddingX, textColumnWidth, blockGap, bodyFontSize, bodyLineHeight, bodyLetterSpacing]);
+  }, [mode, measurePages, pageBlockMap, safeAreaWidth, paddingX, textColumnWidth, blockGap, bodyFontSize, bodyLineHeight, bodyLetterSpacing, titleFontSize]);
 
   const handleWarningMeasured = useCallback((heights: Record<string, number>) => {
     setBlockHeights((prev) => {
@@ -657,10 +658,11 @@ export default function WritingScreen() {
           fontSize: bodyFontSize,
           lineHeight: bodyLineHeight,
           letterSpacing: bodyLetterSpacing,
+          titleFontSize,
         });
       });
     },
-    [safeAreaWidth, paddingX, textColumnWidth, bodyFontSize, bodyLineHeight, bodyLetterSpacing],
+    [safeAreaWidth, paddingX, textColumnWidth, bodyFontSize, bodyLineHeight, bodyLetterSpacing, titleFontSize],
   );
 
   const handleEngineMeasured = useCallback((heights: Record<string, number>) => {

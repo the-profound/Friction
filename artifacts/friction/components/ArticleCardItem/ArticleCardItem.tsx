@@ -6,7 +6,7 @@ import {
   ImageBackground,
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
-import { Colors, Sizing, ReaderTokens } from "../../constants/tokens";
+import { Colors, Sizing, ReaderTokens, readerFontSize } from "../../constants/tokens";
 import type { ArticleCover } from "@workspace/api-client-react";
 
 interface ArticleCardItemProps {
@@ -45,7 +45,10 @@ function ArticleCardItem({
   const coverType = cover?.type ?? "default";
 
   const scale = w / CARD_W;
-  const titleSize = Math.max(8, Math.round(TITLE_SIZE * scale));
+  const titleSize = Math.max(
+    8,
+    Math.round(readerFontSize(ReaderTokens.typeScale.titleCqi, w)),
+  );
   const authorSize = Math.max(6, Math.round(AUTHOR_SIZE * scale));
   const collectionSize = Math.max(5, Math.round(COLLECTION_SIZE * scale));
   const pad = Math.max(6, Math.round(24 * scale));
@@ -157,7 +160,6 @@ export default React.memo(ArticleCardItem);
 const CARD_W = Sizing.cardSlotW;
 const CARD_H = CARD_W * Sizing.cardRatio;
 
-const TITLE_SIZE = 32;
 const AUTHOR_SIZE = 24;
 const COLLECTION_SIZE = 16;
 

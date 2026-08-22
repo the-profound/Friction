@@ -36,7 +36,11 @@ export default function CoverPreview({
   const alignItems = cover.align === "left" ? "flex-start" : "center";
   const textAlign = cover.align === "left" ? "left" as const : "center" as const;
 
-  const titleSize = containerWidth > 0 ? readerFontSize(6.5, containerWidth) : (compact ? 16 : 22);
+  const fallbackContainerWidth = compact ? 250 : 300;
+  const titleSize = readerFontSize(
+    ReaderTokens.typeScale.titleCqi,
+    containerWidth > 0 ? containerWidth : fallbackContainerWidth,
+  );
   const authorSize = containerWidth > 0 ? readerFontSize(3.6, containerWidth) : (compact ? 11 : 14);
   const paddingX = containerWidth > 0 ? cqiToPx(ReaderTokens.padding.xCqi, containerWidth) * 2 : 24;
   const paddingY = containerWidth > 0 ? cqiToPx(ReaderTokens.padding.yCqi, containerWidth) * 2 : 32;

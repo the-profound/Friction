@@ -46,6 +46,8 @@ export type MeasureRequest = {
   lineHeight: number;
   /** 본문 letter-spacing. */
   letterSpacing: number;
+  /** 제목/제목1 폰트 크기. 본문 측정과 동일한 WebView CSS를 유지한다. */
+  titleFontSize?: number;
 };
 
 interface Props {

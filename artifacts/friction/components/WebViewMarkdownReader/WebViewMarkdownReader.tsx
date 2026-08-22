@@ -15,6 +15,7 @@ export interface WebViewMarkdownReaderProps {
   markdown: string;
   bodyFontSize?: number;
   bodyLetterSpacing?: number;
+  titleFontSize?: number;
   onTextSelect?: (text: string, isEmpty: boolean) => void;
   onReady?: () => void;
   clearSelectionSignal?: number;
@@ -31,6 +32,7 @@ export default function WebViewMarkdownReader({
   markdown,
   bodyFontSize,
   bodyLetterSpacing,
+  titleFontSize,
   onTextSelect,
   onReady,
   clearSelectionSignal,
@@ -165,9 +167,14 @@ export default function WebViewMarkdownReader({
 
   useEffect(() => {
     if (bridge.isReady() && bodyFontSize != null && bodyLetterSpacing != null) {
-      bridge.send({ type: "setBodyMetrics", fontSizePx: bodyFontSize, letterSpacingPx: bodyLetterSpacing });
+      bridge.send({
+        type: "setBodyMetrics",
+        fontSizePx: bodyFontSize,
+        letterSpacingPx: bodyLetterSpacing,
+        titleFontSizePx: titleFontSize,
+      });
     }
-  }, [bridge, bodyFontSize, bodyLetterSpacing]);
+  }, [bridge, bodyFontSize, bodyLetterSpacing, titleFontSize]);
 
   useEffect(() => {
     if (clearSelectionSignal === prevClearSignalRef.current) return;
@@ -236,8 +243,13 @@ export default function WebViewMarkdownReader({
           // Fades out when the WebView reports the new DOM is in place.
           const version = beginContentSwap();
           injectContent(htmlRef.current, version);
-          if (bodyFontSize != null && bodyLetterSpacing != null) {
-            bridge.send({ type: "setBodyMetrics", fontSizePx: bodyFontSize, letterSpacingPx: bodyLetterSpacing });
+            if (bodyFontSize != null && bodyLetterSpacing != null) {
+              bridge.send({
+                type: "setBodyMetrics",
+                fontSizePx: bodyFontSize,
+                letterSpacingPx: bodyLetterSpacing,
+                titleFontSizePx: titleFontSize,
+              });
           }
         }}
         originWhitelist={["*"]}

@@ -15,6 +15,12 @@ import fs from "fs";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const entryPoint = path.join(__dirname, "editorWebviewSrc", "index.ts");
 const outputFile = path.join(__dirname, "editorHtml.ts");
+const tokensSource = fs.readFileSync(path.join(__dirname, "../../constants/tokens.ts"), "utf8");
+const titleCqiMatch = tokensSource.match(/titleCqi:\s*([\d.]+)/);
+if (!titleCqiMatch) {
+  throw new Error("ReaderTokens.typeScale.titleCqi was not found");
+}
+const titleCqi = Number(titleCqiMatch[1]);
 
 const result = await esbuild.build({
   entryPoints: [entryPoint],
@@ -43,7 +49,7 @@ html,body{height:100%;background:transparent;container-type:inline-size}
   display:block;
   width:100%;
   font-family:'Eulyoo1945-SemiBold',serif;
-  font-size:var(--title-font-size,6.4cqi);
+  font-size:var(--title-font-size,${titleCqi}cqi);
   font-weight:600;
   line-height:1.25;
   letter-spacing:-0.01em;
@@ -83,7 +89,7 @@ html,body{height:100%;background:transparent;container-type:inline-size}
   white-space:pre-wrap !important;
 }
 .ProseMirror p{margin-bottom:1em;text-align:justify;overflow-wrap:break-word;text-justify:inter-ideograph}
-.ProseMirror h1{font-family:'Eulyoo1945-SemiBold',serif;font-size:1.6em;font-weight:600;letter-spacing:0.025em;margin:1em 0 0.4em;line-height:1.25;text-align:left}
+ .ProseMirror h1{font-family:'Eulyoo1945-SemiBold',serif;font-size:var(--title-font-size,${titleCqi}cqi);font-weight:600;letter-spacing:0.025em;margin:1em 0 0.4em;line-height:1.25;text-align:left}
 .ProseMirror h2{font-family:'Eulyoo1945-SemiBold',serif;font-size:1.3em;font-weight:600;letter-spacing:0.025em;margin:0.8em 0 0.3em;line-height:1.3;text-align:left}
 .ProseMirror h3{font-family:'Eulyoo1945-SemiBold',serif;font-size:1.1em;font-weight:600;letter-spacing:0.025em;margin:0.6em 0 0.3em;line-height:1.35;text-align:left}
 .ProseMirror ul,.ProseMirror ol{padding-left:1.5em;margin-bottom:1em;text-align:left}

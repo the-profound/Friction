@@ -103,6 +103,7 @@ post({type:"onContentReady",version:cmd.version});
 bridge.register("setBodyMetrics",function(cmd){
 document.documentElement.style.setProperty("--body-font-size",cmd.fontSizePx+"px");
 document.documentElement.style.setProperty("--body-letter-spacing",cmd.letterSpacingPx+"px");
+if(cmd.titleFontSizePx!=null)document.documentElement.style.setProperty("--title-font-size",cmd.titleFontSizePx+"px");
 });
 bridge.register("clearSelection",function(){
 var sel=window.getSelection();if(sel)sel.removeAllRanges();

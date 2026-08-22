@@ -22,7 +22,7 @@ export default function CoverPage({
   onImageLoad,
 }: CoverPageProps) {
   const dynamicStyles = useMemo(() => {
-    const titleSize = readerFontSize(6.5, containerWidth);
+    const titleSize = readerFontSize(ReaderTokens.typeScale.titleCqi, containerWidth);
     const authorSize = readerFontSize(3.6, containerWidth);
     const paddingX = cqiToPx(ReaderTokens.padding.xCqi, containerWidth);
     const paddingY = cqiToPx(ReaderTokens.padding.yCqi, containerWidth);

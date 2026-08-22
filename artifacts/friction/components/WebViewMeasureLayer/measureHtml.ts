@@ -64,6 +64,7 @@ bridge.register("measure",function(cmd){
 var root=document.documentElement;
 if(cmd.fontSizePx!=null)root.style.setProperty("--body-font-size",cmd.fontSizePx+"px");
 if(cmd.letterSpacingPx!=null)root.style.setProperty("--body-letter-spacing",cmd.letterSpacingPx+"px");
+if(cmd.titleFontSizePx!=null)root.style.setProperty("--title-font-size",cmd.titleFontSizePx+"px");
 var w=cmd.containerWidth||300;
 var gap=cmd.blockGap||0;
 var items=cmd.items||[];

@@ -6,6 +6,7 @@
  * 방식으로 네이티브 구현과 동일한 결과를 반환한다.
  */
 import React, { useRef, useLayoutEffect, useCallback } from "react";
+import { buildBodyTypographyCss } from "@/components/shared/bodyTypographyCss";
 import { blockToHtml, markdownToHtml } from "@/lib/markdownRenderer";
 import type { MeasureRequest } from "../PretextMeasureLayer/PretextMeasureLayer";
 
@@ -22,6 +23,13 @@ const CONTAINER_STYLE: React.CSSProperties = {
   visibility: "hidden",
   zIndex: -1,
 };
+
+const measureTypographyCss = buildBodyTypographyCss({
+  rootSelector: ".webview-measure-layer",
+  blockSelector: ".webview-measure-layer",
+  blockMargins: "zero",
+  hrStyle: "measure",
+});
 
 export default function WebViewMeasureLayerWeb({ request, onMeasured }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -46,6 +54,11 @@ export default function WebViewMeasureLayerWeb({ request, onMeasured }: Props) {
     wrapper.style.width = containerWidth + "px";
     wrapper.style.fontSize = request.fontSize + "px";
     wrapper.style.letterSpacing = request.letterSpacing + "px";
+    if (request.titleFontSize != null) {
+      wrapper.style.setProperty("--title-font-size", request.titleFontSize + "px");
+    } else {
+      wrapper.style.removeProperty("--title-font-size");
+    }
     wrapper.innerHTML = "";
 
     const els: { key: string; el: HTMLDivElement }[] = [];
@@ -71,17 +84,21 @@ export default function WebViewMeasureLayerWeb({ request, onMeasured }: Props) {
   });
 
   return (
-    <div
-      ref={containerRef}
-      style={{
-        ...CONTAINER_STYLE,
-        fontFamily: "'Eulyoo1945-Regular','NotoSerifKR_400Regular',serif",
-        lineHeight: 1.8,
-        color: "#1A1A1A",
-        overflowWrap: "break-word" as const,
-        wordWrap: "break-word" as const,
-        textAlign: "justify" as const,
-      }}
-    />
+    <>
+      <style>{measureTypographyCss}</style>
+      <div
+        ref={containerRef}
+        className="webview-measure-layer"
+        style={{
+          ...CONTAINER_STYLE,
+          fontFamily: "'Eulyoo1945-Regular','NotoSerifKR_400Regular',serif",
+          lineHeight: 1.8,
+          color: "#1A1A1A",
+          overflowWrap: "break-word" as const,
+          wordWrap: "break-word" as const,
+          textAlign: "justify" as const,
+        }}
+      />
+    </>
   );
 }

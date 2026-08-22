@@ -128,6 +128,7 @@ export default function WebViewMeasureLayer({ request, onMeasured }: Props) {
         containerWidth,
         fontSizePx: req.fontSize,
         letterSpacingPx: req.letterSpacing,
+        titleFontSizePx: req.titleFontSize,
         blockGap,
         items,
       })

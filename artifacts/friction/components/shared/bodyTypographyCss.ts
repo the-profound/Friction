@@ -1,3 +1,5 @@
+import { ReaderTokens } from "@/constants/tokens";
+
 /**
  * 작성(on-01a) · 분할(on-01b) · 마감(on-01c) · 읽기(read) 4개 화면이 모두
  * 동일한 본문 타이포그래피로 줄넘김을 결정해야 한다.
@@ -35,6 +37,7 @@ export interface BodyTypographyCssOptions {
 
 export function buildBodyTypographyCss(opts: BodyTypographyCssOptions): string {
   const { rootSelector: r, blockSelector: b, blockMargins, hrStyle, readerUnderline } = opts;
+  const titleScaleEm = ReaderTokens.typeScale.titleScaleEm;
   const spaced = blockMargins === "spaced";
   const pMargin = spaced ? "margin-bottom:1em" : "margin:0";
   const h1Margin = spaced ? "margin:1em 0 0.4em" : "margin:0";
@@ -54,7 +57,7 @@ export function buildBodyTypographyCss(opts: BodyTypographyCssOptions): string {
   return [
     `${r}{font-family:'Eulyoo1945-Regular','NotoSerifKR_400Regular',serif;font-size:var(--body-font-size,16px);line-height:1.8;letter-spacing:var(--body-letter-spacing,0.8px);color:#1A1A1A;background:transparent;-webkit-text-size-adjust:100%;text-align:justify;overflow-wrap:break-word;word-wrap:break-word;word-break:normal;-webkit-hyphens:auto;hyphens:auto;text-justify:inter-ideograph}`,
     `${b} p{${pMargin};text-align:justify;overflow-wrap:break-word;word-break:normal;-webkit-hyphens:auto;hyphens:auto;text-justify:inter-ideograph}`,
-    `${b} h1{font-family:'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif;font-size:1.6em;font-weight:600;letter-spacing:0.025em;${h1Margin};line-height:1.25;text-align:left}`,
+    `${b} h1{font-family:'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif;font-size:var(--title-font-size,${titleScaleEm}em);font-weight:600;letter-spacing:0.025em;${h1Margin};line-height:1.25;text-align:left}`,
     `${b} h2{font-family:'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif;font-size:1.3em;font-weight:600;letter-spacing:0.025em;${h2Margin};line-height:1.3;text-align:left}`,
     `${b} h3{font-family:'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif;font-size:1.1em;font-weight:600;letter-spacing:0.025em;${h3Margin};line-height:1.35;text-align:left}`,
     `${b} ul,${b} ol{padding-left:1.5em;${listMargin};text-align:left}`,

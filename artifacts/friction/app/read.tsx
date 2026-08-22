@@ -148,6 +148,7 @@ function computeReaderLayout(availableWidth: number, availableHeight: number, ov
     safeAreaHeight: body.safeAreaHeight,
     textColumnWidth: body.textColumnWidth,
     bodyFontSize: body.bodyFontSize,
+    titleFontSize: body.titleFontSize,
     captionFontSize,
     metadataFontSize,
     bodyLineHeight: body.bodyLineHeight,
@@ -2276,6 +2277,7 @@ interface ReaderLayout {
    *  paddingHorizontal, so Yoga pixel-snapping is consistent across different parent positions. */
   textColumnWidth: number;
   bodyFontSize: number;
+  titleFontSize: number;
   captionFontSize: number;
   metadataFontSize: number;
   bodyLineHeight: number;
@@ -2341,6 +2343,7 @@ const PageView = React.memo(function PageView({
               markdown={content}
               bodyFontSize={layout.bodyFontSize}
               bodyLetterSpacing={layout.bodyLetterSpacing}
+              titleFontSize={layout.titleFontSize}
               onTextSelect={onTextSelect}
               onDragStateChange={onDragStateChange}
               clearSelectionSignal={clearSignal}
