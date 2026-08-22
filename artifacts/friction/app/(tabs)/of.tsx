@@ -332,12 +332,14 @@ export default function SpacesScreen() {
       <DropdownFilter
         label="참여 방법"
         value={roleFilter}
+        defaultValue="all"
         options={ROLE_FILTER_OPTIONS}
         onChange={setRoleFilter}
       />
       <DropdownFilter
         label="공간 상태"
         value={statusFilter}
+        defaultValue="all"
         options={STATUS_FILTER_OPTIONS}
         onChange={setStatusFilter}
       />

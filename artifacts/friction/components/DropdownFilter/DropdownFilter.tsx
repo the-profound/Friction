@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -6,11 +6,18 @@ import {
   Modal,
   Pressable,
   Platform,
+  useWindowDimensions,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import ScalePressable from "@/components/shared/ScalePressable";
 import PillButton from "@/components/shared/PillButton";
 import { Colors, Typography, ZIndex } from "@/constants/tokens";
+import {
+  getDropdownFilterLabel,
+  isDropdownFilterActive,
+} from "./dropdownFilterUtils";
+
+export { getDropdownFilterLabel, isDropdownFilterActive } from "./dropdownFilterUtils";
 
 export interface DropdownOption<T extends string> {
   key: T;
@@ -24,52 +31,126 @@ interface Anchor {
   height: number;
 }
 
-const DROPDOWN_WIDTH = 140;
+const DEFAULT_DROPDOWN_WIDTH = 140;
 const DROPDOWN_GAP = 6;
+const DROPDOWN_MARGIN = 12;
+const DROPDOWN_ROW_HEIGHT = 44;
 
-interface DropdownFilterProps<T extends string> {
+export interface DropdownFilterProps<T extends string> {
   label: string;
   value: T;
+  /** The value that represents the filter's unfiltered/default state. */
+  defaultValue: T;
   options: DropdownOption<T>[];
   onChange: (value: T) => void;
+  /** Replaces the option label in the capsule when an active value is selected. */
+  selectedLabel?: string;
+  /** Width of the options menu before it is clamped to the viewport. */
+  dropdownWidth?: number;
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
 }
 
 export default function DropdownFilter<T extends string>({
   label,
   value,
+  defaultValue,
   options,
   onChange,
+  selectedLabel,
+  dropdownWidth = DEFAULT_DROPDOWN_WIDTH,
+  accessibilityLabel,
+  accessibilityHint,
 }: DropdownFilterProps<T>) {
   const [open, setOpen] = useState(false);
   const [anchor, setAnchor] = useState<Anchor | null>(null);
   const pillRef = useRef<View>(null);
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
 
-  const isFiltered = value !== ("all" as T);
+  const isFiltered = isDropdownFilterActive(value, defaultValue);
   const selectedOption = options.find((o) => o.key === value);
-  const buttonLabel = isFiltered && selectedOption ? selectedOption.label : label;
+  const buttonLabel = getDropdownFilterLabel({
+    label,
+    value,
+    defaultValue,
+    selectedLabel,
+    selectedOptionLabel: selectedOption?.label,
+  });
 
-  const handleOpen = () => {
-    pillRef.current?.measureInWindow((x, y, width, height) => {
+  const handleClose = useCallback(() => setOpen(false), []);
+
+  const handleOpen = useCallback(() => {
+    if (open) {
+      handleClose();
+      return;
+    }
+
+    const pill = pillRef.current;
+    if (!pill) {
+      setOpen(true);
+      return;
+    }
+
+    // collapsable={false} keeps this measurement available on Android.
+    pill.measureInWindow((x, y, width, height) => {
       setAnchor({ x, y, width, height });
       setOpen(true);
     });
-  };
+  }, [handleClose, open]);
 
-  const handleSelect = (key: T) => {
+  const handleSelect = useCallback((key: T) => {
     onChange(key);
-    setOpen(false);
-  };
+    handleClose();
+  }, [handleClose, onChange]);
 
-  const dropdownTop = anchor ? anchor.y + anchor.height + DROPDOWN_GAP : 0;
-  const dropdownLeft = anchor ? anchor.x : 0;
+  // Modal's onRequestClose handles Android's hardware back button. React
+  // Native Web does not consistently forward Escape to that callback, so
+  // explicitly provide the equivalent keyboard dismissal there.
+  useEffect(() => {
+    if (!open || Platform.OS !== "web") return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") handleClose();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [handleClose, open]);
+
+  const menuWidth = Math.max(
+    1,
+    Math.min(
+      dropdownWidth,
+      screenWidth > DROPDOWN_MARGIN * 2
+        ? screenWidth - DROPDOWN_MARGIN * 2
+        : dropdownWidth,
+    ),
+  );
+  const menuHeight =
+    options.length * DROPDOWN_ROW_HEIGHT +
+    Math.max(0, options.length - 1) * StyleSheet.hairlineWidth;
+  const dropdownTop = anchor
+    ? getDropdownTop(anchor, menuHeight, screenHeight)
+    : 0;
+  const dropdownLeft = anchor
+    ? getDropdownLeft(anchor, menuWidth, screenWidth)
+    : 0;
+
 
   return (
-    <View ref={pillRef} collapsable={false}>
+    <View
+      ref={pillRef}
+      collapsable={false}
+      style={styles.wrapper}
+    >
       <PillButton
         size="sm"
         variant={isFiltered ? "primary" : "outline"}
         contentStyle={styles.pillContent}
         onPress={handleOpen}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel ?? label}
+        accessibilityHint={accessibilityHint ?? `${label} 필터 옵션 열기`}
+        accessibilityState={{ expanded: open, selected: isFiltered }}
       >
         <Text
           style={[styles.pillText, isFiltered && styles.pillTextActive]}
@@ -89,27 +170,43 @@ export default function DropdownFilter<T extends string>({
         transparent
         animationType="none"
         statusBarTranslucent
-        onRequestClose={() => setOpen(false)}
+        onRequestClose={handleClose}
       >
-        <Pressable style={StyleSheet.absoluteFill} onPress={() => setOpen(false)} />
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={handleClose}
+          accessibilityRole="button"
+          accessibilityLabel="필터 메뉴 닫기"
+        />
         <View
           style={[
             styles.dropdownShadow,
-            { top: dropdownTop, left: dropdownLeft },
+            { top: dropdownTop, left: dropdownLeft, width: menuWidth },
           ]}
           pointerEvents="box-none"
         >
-          <View style={styles.dropdownClip}>
+          <View
+            style={styles.dropdownClip}
+            accessibilityRole="menu"
+            accessibilityLabel={`${label} 옵션`}
+          >
             {options.map((option, index) => {
               const active = option.key === value;
               const isLast = index === options.length - 1;
               return (
                 <React.Fragment key={option.key}>
                   <ScalePressable
+                    style={styles.row}
                     contentStyle={styles.rowContent}
                     onPress={() => handleSelect(option.key)}
+                    accessibilityRole="menuitem"
+                    accessibilityLabel={option.label}
+                    accessibilityState={{ selected: active }}
                   >
-                    <Text style={[styles.rowLabel, active && styles.rowLabelActive]}>
+                    <Text
+                      style={[styles.rowLabel, active && styles.rowLabelActive]}
+                      numberOfLines={1}
+                    >
                       {option.label}
                     </Text>
                     {active && (
@@ -127,12 +224,41 @@ export default function DropdownFilter<T extends string>({
   );
 }
 
+function getDropdownLeft(
+  anchor: Anchor,
+  menuWidth: number,
+  screenWidth: number,
+): number {
+  const maxLeft = Math.max(DROPDOWN_MARGIN, screenWidth - menuWidth - DROPDOWN_MARGIN);
+  return Math.max(DROPDOWN_MARGIN, Math.min(anchor.x, maxLeft));
+}
+
+function getDropdownTop(
+  anchor: Anchor,
+  menuHeight: number,
+  screenHeight: number,
+): number {
+  const below = anchor.y + anchor.height + DROPDOWN_GAP;
+  const above = anchor.y - menuHeight - DROPDOWN_GAP;
+  const bottomLimit = Math.max(DROPDOWN_MARGIN, screenHeight - menuHeight - DROPDOWN_MARGIN);
+
+  if (below <= bottomLimit) return below;
+  if (above >= DROPDOWN_MARGIN) return above;
+  return Math.min(Math.max(DROPDOWN_MARGIN, below), bottomLimit);
+}
+
 const styles = StyleSheet.create({
+  wrapper: {
+    alignSelf: "flex-start",
+    height: 33,
+    flexGrow: 0,
+    flexShrink: 0,
+  },
   pillContent: {
     flexGrow: 0,
     flexShrink: 0,
     alignSelf: "auto",
-    height: "100%",
+    height: 33,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -157,7 +283,6 @@ const styles = StyleSheet.create({
   },
   dropdownShadow: {
     position: "absolute",
-    width: DROPDOWN_WIDTH,
     borderRadius: 14,
     backgroundColor: Colors.white,
     zIndex: ZIndex.modal,
@@ -175,11 +300,20 @@ const styles = StyleSheet.create({
     }),
   },
   dropdownClip: {
+    width: "100%",
     borderRadius: 14,
     overflow: "hidden",
     backgroundColor: Colors.white,
   },
+  row: {
+    height: DROPDOWN_ROW_HEIGHT,
+    flexGrow: 0,
+    flexShrink: 0,
+  },
   rowContent: {
+    height: DROPDOWN_ROW_HEIGHT,
+    flexGrow: 0,
+    flexShrink: 0,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",

@@ -59,14 +59,20 @@ export default function PillButton({
     <ScalePressable
       style={(state) => [
         styles.pill,
-        { height },
         typeof style === "function" ? style(state) : style,
+        // Keep the outer Pressable in sync with the inner Animated.View.
+        // Native flex parents otherwise may stretch a pill vertically.
+        { height },
       ]}
       contentStyle={[
         styles.pillContent,
-        { paddingHorizontal: paddingH },
+        { height, paddingHorizontal: paddingH },
         variantPillStyles[variant],
         contentStyle,
+        // Keep the inner Animated.View constrained even when a caller adds
+        // custom content styles. This prevents native flex parents from
+        // stretching capsule buttons vertically.
+        { height },
       ]}
       {...rest}
     >
