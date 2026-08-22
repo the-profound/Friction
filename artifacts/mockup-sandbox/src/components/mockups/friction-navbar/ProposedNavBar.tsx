@@ -1,6 +1,6 @@
 import { useState, type CSSProperties } from "react";
 
-type TabKey = "IN" | "SR" | "ON" | "MO" | "MY";
+type TabKey = "IN" | "OF" | "ON" | "AR" | "TO";
 
 const colors = {
   ink: "#18181b",
@@ -15,10 +15,10 @@ const colors = {
 
 const tabs: { key: TabKey; label: string; icon: string }[] = [
   { key: "IN", label: "수신", icon: "inbox" },
-  { key: "SR", label: "시리즈", icon: "layers" },
+  { key: "OF", label: "공간", icon: "grid" },
   { key: "ON", label: "기록", icon: "edit-3" },
-  { key: "MO", label: "모임", icon: "share-2" },
-  { key: "MY", label: "마이", icon: "user" },
+  { key: "AR", label: "보관", icon: "archive" },
+  { key: "TO", label: "마이", icon: "user" },
 ];
 
 function FeatherIcon({
@@ -44,12 +44,12 @@ function FeatherIcon({
   switch (name) {
     case "inbox":
       return <svg viewBox="0 0 24 24" style={base}><polyline points="22 12 16 12 14 15 10 15 8 12 2 12" /><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z" /></svg>;
-    case "layers":
-      return <svg viewBox="0 0 24 24" style={base}><polygon points="12 2 2 7 12 12 22 7 12 2" /><polyline points="2 17 12 22 22 17" /><polyline points="2 12 12 17 22 12" /></svg>;
+    case "grid":
+      return <svg viewBox="0 0 24 24" style={base}><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></svg>;
     case "edit-3":
       return <svg viewBox="0 0 24 24" style={base}><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5Z" /></svg>;
-    case "share-2":
-      return <svg viewBox="0 0 24 24" style={base}><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" /></svg>;
+    case "archive":
+      return <svg viewBox="0 0 24 24" style={base}><polyline points="21 8 21 21 3 21 3 8" /><rect x="1" y="3" width="22" height="5" /><line x1="10" y1="12" x2="14" y2="12" /></svg>;
     case "user":
       return <svg viewBox="0 0 24 24" style={base}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>;
     case "plus":
@@ -178,7 +178,7 @@ const styles: Record<string, CSSProperties> = {
   pageHintSpan: { display: "inline-block", width: 23, height: 1, background: colors.muted },
   bottomArea: { position: "absolute", left: 0, right: 0, bottom: 0, padding: "0 16px 22px", background: "linear-gradient(transparent, rgba(248,247,244,0.97) 22%)", paddingTop: 38 },
   navShell: { height: 70, display: "flex", alignItems: "center", gap: 12 },
-  menuGroup: { flex: 1, height: 70, display: "flex", alignItems: "center", justifyContent: "space-around", minWidth: 0, background: colors.white, border: `1px solid ${colors.line}`, borderRadius: 20, padding: "0 5px", boxShadow: "0 9px 22px rgba(38,31,27,0.1)" },
+  menuGroup: { flex: 1, height: 70, display: "flex", alignItems: "center", justifyContent: "space-around", minWidth: 0, background: colors.white, border: `1px solid ${colors.line}`, borderRadius: 32, padding: "0 5px", boxShadow: "0 9px 22px rgba(38,31,27,0.1)" },
   tab: { appearance: "none", border: 0, background: "transparent", padding: "14px 4px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", minWidth: 39, fontFamily: "inherit" },
   cta: { appearance: "none", border: 0, background: colors.ink, color: colors.white, borderRadius: 26, width: 52, minWidth: 52, height: 52, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: "0 5px 12px rgba(24,24,27,0.2)" },
   composerCard: { position: "absolute", bottom: 98, left: 16, right: 16, background: colors.ink, color: colors.white, borderRadius: 18, padding: "18px 18px 16px", boxShadow: "0 14px 30px rgba(24,24,27,0.2)" },
