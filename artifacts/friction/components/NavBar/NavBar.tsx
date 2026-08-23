@@ -230,6 +230,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.noticeAccent,
     alignItems: "center",
     justifyContent: "center",
-    ...Shadows.card,
+    ...Shadows.navBarIos,
+    ...Shadows.navBarAndroid,
   },
 });
