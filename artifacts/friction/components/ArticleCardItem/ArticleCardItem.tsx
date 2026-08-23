@@ -6,7 +6,7 @@ import {
   ImageBackground,
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
-import { Colors, Sizing, ReaderTokens, readerFontSize } from "../../constants/tokens";
+import { Colors, Shadows, Sizing, ReaderTokens, readerFontSize } from "../../constants/tokens";
 import type { ArticleCover } from "@workspace/api-client-react";
 
 interface ArticleCardItemProps {
@@ -57,7 +57,14 @@ function ArticleCardItem({
   const borderRadius = Math.max(8, Math.round(16 * scale));
 
   return (
-    <View style={[{ width: w, height: h }, !isActive && styles.inactive, isRead && styles.read]}>
+    <View
+      style={[
+        styles.cardShadowHost,
+        { width: w, height: h, borderRadius },
+        !isActive && styles.inactive,
+        isRead && styles.read,
+      ]}
+    >
       <ScalePressable
         onPress={onPress}
         onLongPress={onLongPress}
@@ -165,6 +172,10 @@ const AUTHOR_SIZE = 24;
 const COLLECTION_SIZE = 16;
 
 const styles = StyleSheet.create({
+  cardShadowHost: {
+    backgroundColor: DEFAULT_BG,
+    ...Shadows.card,
+  },
   inactive: {
     opacity: Colors.cardInactiveOpacity,
   },

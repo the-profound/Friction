@@ -1,6 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Animated,
   FlatList,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  PanResponder,
   Platform,
   RefreshControl,
   ScrollView,
@@ -33,11 +37,12 @@ import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar"
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
+import DotIndicator from "@/components/DotIndicator/DotIndicator";
 import DropdownFilter from "@/components/DropdownFilter/DropdownFilter";
 import { PageHeader } from "@/components/NavBar/PageHeader";
 import RefreshableEmpty from "@/components/RefreshableEmpty";
 import ScalePressable from "@/components/shared/ScalePressable";
-import { Colors, ReaderTokens, Sizing, Spacing, Typography, readerFontSize } from "@/constants/tokens";
+import { Colors, ReaderTokens, Shadows, Sizing, Spacing, Typography, readerFontSize } from "@/constants/tokens";
 import { useReaderTransition } from "@/contexts/ReaderTransitionContext";
 import { useThoughtComposer } from "@/contexts/ThoughtComposerContext";
 import { useToast } from "@/contexts/ToastContext";
@@ -46,9 +51,11 @@ import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { invalidateArticleLists } from "@/lib/queryInvalidation";
 import {
   buildUnifiedRecords,
+  buildRecordDateGroups,
   filterRecords,
   getRecordPreview,
   recordMatchesQuery,
+  type RecordDateGroup,
   type RecordKind,
   type RecordView,
   type UnifiedRecord,
@@ -65,6 +72,12 @@ const VIEW_OPTIONS: { key: RecordView; label: string }[] = [
   { key: "content", label: "내용도" },
   { key: "title", label: "제목만" },
 ];
+
+const CARD_SWIPE_THRESHOLD = 48;
+const CARD_FLING_VELOCITY = 0.5;
+const CARD_ACTION_AREA_H = 64;
+
+type CardRecord = UnifiedRecord & { isQuestion: boolean };
 
 function getScreenForStatus(status: ArticleStatus): "/on-01a" | "/on-01b" | "/on-01c" {
   if (status === "DIVIDING") return "/on-01b";
@@ -119,24 +132,23 @@ function ThoughtRecordCard({
 
   return (
     <ScalePressable
-      style={[styles.thoughtCard, { width, height }, question && styles.questionCardShadow]}
-      contentStyle={styles.thoughtCardContent}
+      style={[styles.thoughtCard, { width, height }]}
+      contentStyle={[styles.thoughtCardContent, question && styles.questionCardContent]}
       onPress={onPress}
       onLongPress={onLongPress}
       accessibilityLabel={`${question ? "현재 질문 단상" : "단상 열기"}${overflowed ? ", 내용 일부 생략" : ""}`}
     >
-      {question ? <Text style={styles.questionLabel}>현재 질문</Text> : null}
       <View style={styles.thoughtCardBodyWrap}>
         {preview.hasTitle ? (
           <>
             <Text
-              style={[styles.thoughtCardTitleMeasure, { fontSize: titleSize, lineHeight: titleLineHeight }]}
+              style={[styles.thoughtCardTitleMeasure, { fontSize: titleSize, lineHeight: titleLineHeight, color: question ? Colors.white : Colors.zinc900 }]}
               onTextLayout={(event) => setTitleOverflowed(event.nativeEvent.lines.length > titleLines)}
             >
               {preview.title}
             </Text>
             <Text
-              style={[styles.thoughtCardTitle, { fontSize: titleSize, lineHeight: titleLineHeight }]}
+              style={[styles.thoughtCardTitle, { fontSize: titleSize, lineHeight: titleLineHeight, color: question ? Colors.white : Colors.zinc900 }]}
               numberOfLines={titleLines}
               ellipsizeMode="tail"
             >
@@ -145,7 +157,7 @@ function ThoughtRecordCard({
           </>
         ) : null}
         <Text
-          style={[styles.thoughtCardMeasure, { fontSize: bodySize, lineHeight: bodyLineHeight }]}
+          style={[styles.thoughtCardMeasure, { fontSize: bodySize, lineHeight: bodyLineHeight, color: question ? Colors.white : Colors.zinc800 }]}
           onTextLayout={(event) => setBodyOverflowed(event.nativeEvent.lines.length > maxBodyLines)}
         >
           {preview.body || "아직 적힌 내용이 없어요."}
@@ -153,7 +165,7 @@ function ThoughtRecordCard({
         <Text
           style={[
             styles.thoughtCardBody,
-            { fontSize: bodySize, lineHeight: bodyLineHeight, marginTop: preview.hasTitle ? 8 : 0 },
+            { fontSize: bodySize, lineHeight: bodyLineHeight, marginTop: preview.hasTitle ? 8 : 0, color: question ? Colors.white : Colors.zinc800 },
           ]}
           numberOfLines={maxBodyLines}
           ellipsizeMode="tail"
@@ -244,6 +256,164 @@ function RecordRow({
   );
 }
 
+/**
+ * The same nested-navigation model used by the inbox: a vertical date list
+ * contains native snapping carousels, while the web branch provides a
+ * PanResponder-based mouse drag fallback.
+ */
+function RecordCarouselGroup({
+  group,
+  cardWidth,
+  renderCard,
+}: {
+  group: RecordDateGroup<CardRecord>;
+  cardWidth: number;
+  renderCard: (record: CardRecord, shouldIgnorePress: () => boolean) => React.ReactNode;
+}) {
+  const { width: windowWidth } = useWindowDimensions();
+  const cardHeight = cardWidth * Sizing.cardRatio;
+  const snapInterval = cardWidth + Spacing.cardGap;
+  const itemCount = group.records.length;
+  const groupSignature = group.records.map((record) => `${record.kind}:${record.id}`).join("|");
+  const [activeIndex, setActiveIndex] = useState(0);
+  const activeIndexRef = useRef(0);
+  const itemCountRef = useRef(itemCount);
+  const geometryRef = useRef({ cardWidth, windowWidth });
+  const translateX = useRef(new Animated.Value(0)).current;
+  const nativeScrollRef = useRef<ScrollView>(null);
+  const swipedRef = useRef(false);
+  const snapToRef = useRef((_index: number) => {});
+
+  geometryRef.current = { cardWidth, windowWidth };
+  itemCountRef.current = itemCount;
+
+  const getBaseX = (index: number) => {
+    const geometry = geometryRef.current;
+    return -(index * (geometry.cardWidth + Spacing.cardGap)) + (geometry.windowWidth - geometry.cardWidth) / 2;
+  };
+
+  snapToRef.current = (index: number) => {
+    const nextIndex = Math.max(0, Math.min(index, itemCountRef.current - 1));
+    activeIndexRef.current = nextIndex;
+    setActiveIndex(nextIndex);
+    Animated.spring(translateX, {
+      toValue: getBaseX(nextIndex),
+      useNativeDriver: false,
+      overshootClamping: true,
+      tension: 100,
+      friction: 20,
+    }).start();
+  };
+
+  useEffect(() => {
+    // A refetch, filter, or question replacement can change records while this
+    // group stays mounted. Reset so no index points at a different card.
+    activeIndexRef.current = 0;
+    setActiveIndex(0);
+    translateX.setValue(getBaseX(0));
+    nativeScrollRef.current?.scrollTo({ x: 0, animated: false });
+  }, [groupSignature, cardWidth, windowWidth, translateX]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => {
+        swipedRef.current = false;
+        return false;
+      },
+      onMoveShouldSetPanResponder: (_, gesture) =>
+        itemCountRef.current > 1 &&
+        Math.abs(gesture.dx) > Math.abs(gesture.dy) &&
+        Math.abs(gesture.dx) > 5,
+      onPanResponderGrant: () => {
+        translateX.setValue(getBaseX(activeIndexRef.current));
+      },
+      onPanResponderMove: (_, gesture) => {
+        if (Math.abs(gesture.dx) > 15) swipedRef.current = true;
+        const raw = getBaseX(activeIndexRef.current) + gesture.dx;
+        const maximum = getBaseX(0);
+        const minimum = getBaseX(itemCountRef.current - 1);
+        translateX.setValue(
+          raw > maximum
+            ? maximum + (raw - maximum) * 0.3
+            : raw < minimum
+              ? minimum + (raw - minimum) * 0.3
+              : raw,
+        );
+      },
+      onPanResponderRelease: (_, gesture) => {
+        const shouldAdvance = Math.abs(gesture.vx) > CARD_FLING_VELOCITY || Math.abs(gesture.dx) >= CARD_SWIPE_THRESHOLD;
+        const direction = gesture.vx < 0 || (Math.abs(gesture.vx) <= CARD_FLING_VELOCITY && gesture.dx < 0) ? 1 : -1;
+        snapToRef.current(activeIndexRef.current + (shouldAdvance ? direction : 0));
+        setTimeout(() => { swipedRef.current = false; }, 100);
+      },
+      onPanResponderTerminate: (_, gesture) => {
+        const shouldAdvance = Math.abs(gesture.vx) > CARD_FLING_VELOCITY || Math.abs(gesture.dx) >= CARD_SWIPE_THRESHOLD;
+        const direction = gesture.vx < 0 || (Math.abs(gesture.vx) <= CARD_FLING_VELOCITY && gesture.dx < 0) ? 1 : -1;
+        snapToRef.current(activeIndexRef.current + (shouldAdvance ? direction : 0));
+        setTimeout(() => { swipedRef.current = false; }, 100);
+      },
+    }),
+  ).current;
+
+  const onNativeScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const index = Math.round(event.nativeEvent.contentOffset.x / snapInterval);
+    const nextIndex = Math.max(0, Math.min(index, itemCount - 1));
+    activeIndexRef.current = nextIndex;
+    setActiveIndex(nextIndex);
+  }, [itemCount, snapInterval]);
+
+  const cards = group.records.map((record, index) => (
+    <View
+      key={`${record.kind}-${record.id}`}
+      style={[
+        styles.recordCardSlot,
+        { width: cardWidth, height: cardHeight + CARD_ACTION_AREA_H },
+        index < itemCount - 1 && { marginRight: Spacing.cardGap },
+      ]}
+    >
+      {renderCard(record, () => Platform.OS === "web" && swipedRef.current)}
+    </View>
+  ));
+
+  const carouselHeight = cardHeight + CARD_ACTION_AREA_H;
+
+  return (
+    <View style={styles.recordGroup}>
+      <View style={styles.recordDateHeader}>
+        <Text style={styles.recordDateHeaderText}>{group.label}</Text>
+        <Text style={styles.recordDateHeaderCount}>{group.records.length}개</Text>
+      </View>
+      {Platform.OS === "web" ? (
+        <View
+          style={[styles.recordCarouselWindow, { width: windowWidth, height: carouselHeight, userSelect: "none", cursor: "grab" } as object]}
+          {...panResponder.panHandlers}
+        >
+          <Animated.View style={[styles.recordCarouselTrack, { height: carouselHeight, transform: [{ translateX }] }]}>
+            {cards}
+          </Animated.View>
+        </View>
+      ) : (
+        <ScrollView
+          ref={nativeScrollRef}
+          horizontal
+          nestedScrollEnabled
+          showsHorizontalScrollIndicator={false}
+          snapToInterval={snapInterval}
+          snapToAlignment="start"
+          decelerationRate="fast"
+          scrollEventThrottle={16}
+          onScroll={onNativeScroll}
+          contentContainerStyle={[styles.recordCarouselContent, { paddingHorizontal: (windowWidth - cardWidth) / 2 }]}
+          style={[styles.recordCarouselScroll, { height: carouselHeight }]}
+        >
+          {cards}
+        </ScrollView>
+      )}
+      <DotIndicator total={itemCount} activeIndex={activeIndex} />
+    </View>
+  );
+}
+
 export default function OnScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -259,7 +429,6 @@ export default function OnScreen() {
   const [view, setView] = useState<RecordView>("card");
   const [searchActive, setSearchActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [cardIndex, setCardIndex] = useState(0);
   const [deleteTarget, setDeleteTarget] = useState<UnifiedRecord | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const deletePendingRef = useRef(false);
@@ -285,10 +454,6 @@ export default function OnScreen() {
   }, [articlesQuery.data, queryClient]);
 
   useEffect(() => {
-    setCardIndex(0);
-  }, [kind, searchQuery]);
-
-  useEffect(() => {
     if (tab === "my_article") setKind("letter");
     else if (tab === "memo") setKind("editing");
     else if (tab === "thought") setKind("thought");
@@ -309,7 +474,7 @@ export default function OnScreen() {
     ).filter((record) => recordMatchesQuery(record, searchQuery)),
     [articlesQuery.data, kind, listedThoughts, queuedIds, searchQuery],
   );
-  const visibleRecords = useMemo(
+  const visibleRecords = useMemo<CardRecord[]>(
     () => kind === "thought" && questionQuery.data?.current
       ? [{
           id: questionQuery.data.current.id,
@@ -321,7 +486,10 @@ export default function OnScreen() {
       : records.map((record) => ({ ...record, isQuestion: false })),
     [kind, questionQuery.data?.current, records],
   );
-  const selectedCard = visibleRecords[Math.min(cardIndex, Math.max(0, visibleRecords.length - 1))];
+  const cardGroups = useMemo(
+    () => buildRecordDateGroups(visibleRecords),
+    [visibleRecords],
+  );
   const sortedCollections = useMemo(() => [...((collectionsQuery.data ?? []) as MyCollection[])]
     .filter((collection) => !collection.isArchive)
     .sort((a, b) => Number(Boolean(b.isImpression)) - Number(Boolean(a.isImpression)) || (b.articleCount ?? 0) - (a.articleCount ?? 0)), [collectionsQuery.data]);
@@ -417,6 +585,71 @@ export default function OnScreen() {
 
   const isLoading = articlesQuery.isLoading || thoughtsQuery.isLoading || questionQuery.isLoading;
   const emptyTitle = kind === "thought" ? "첫 단상을 남겨보세요" : kind === "editing" ? "편집 중인 글이 없어요" : "아직 내보낸 편지가 없어요";
+  const cardWidth = Math.min(width - Spacing.screenPx * 2, Sizing.cardSlotW);
+
+  const renderRecordCard = useCallback((record: CardRecord, shouldIgnorePress: () => boolean) => (
+    <View style={styles.recordCardFrame}>
+      {record.kind === "thought" ? (
+        <ThoughtRecordCard
+          thought={record.thought}
+          question={record.isQuestion}
+          width={cardWidth}
+          onPress={() => {
+            if (!shouldIgnorePress()) {
+              record.isQuestion ? openQuestion(record.thought) : openRecord(record);
+            }
+          }}
+          onLongPress={record.isQuestion ? undefined : () => {
+            if (!shouldIgnorePress()) setDeleteTarget(record);
+          }}
+        />
+      ) : (
+        <ArticleCardItem
+          title={record.article.title || "제목 없음"}
+          cover={record.article.cover}
+          onPress={() => {
+            if (!shouldIgnorePress()) openRecord(record);
+          }}
+          onLongPress={() => {
+            if (!shouldIgnorePress()) setDeleteTarget(record);
+          }}
+          cardWidth={cardWidth}
+          letterTypeBadge={record.kind === "letter" ? deliveryMap.get(record.article.id) === "sent" ? "발신됨" : "편지" : "편집"}
+        />
+      )}
+      <View style={styles.recordCardActionArea}>
+        {record.kind === "letter" ? (
+          <View style={styles.letterActions}>
+            <ScalePressable
+              style={styles.letterAction}
+              contentStyle={styles.letterActionContent}
+              onPress={() => {
+                if (!shouldIgnorePress()) {
+                  router.push({ pathname: "/to-send", params: { prefillArticleId: record.article.id } });
+                }
+              }}
+            >
+              <Feather name="send" size={16} color={Colors.zinc700} />
+              <Text style={styles.letterActionText}>보내기</Text>
+            </ScalePressable>
+            <ScalePressable
+              style={styles.letterAction}
+              contentStyle={styles.letterActionContent}
+              onPress={() => {
+                if (!shouldIgnorePress()) {
+                  setArchiveArticleId(record.article.id);
+                  setSelectedCollectionId(null);
+                }
+              }}
+            >
+              <Feather name="folder" size={16} color={Colors.zinc700} />
+              <Text style={styles.letterActionText}>보관</Text>
+            </ScalePressable>
+          </View>
+        ) : null}
+      </View>
+    </View>
+  ), [cardWidth, deliveryMap, openQuestion, openRecord, router]);
 
   return (
     <View style={styles.container}>
@@ -439,65 +672,22 @@ export default function OnScreen() {
 
       {isLoading ? (
         <View style={styles.center}><Text style={styles.muted}>불러오는 중...</Text></View>
-      ) : view === "card" && selectedCard ? (
-        <ScrollView
-          style={styles.cardScroll}
-          contentContainerStyle={[styles.cardStage, { paddingBottom: navBottom }]}
-          refreshControl={<RefreshControl refreshing={articlesQuery.isRefetching || thoughtsQuery.isRefetching || refreshQuestion.isPending} onRefresh={() => refreshAll(kind === "thought")} />}
-          showsVerticalScrollIndicator={false}
-          alwaysBounceVertical
-        >
-          {selectedCard.kind === "thought" ? (
-            <ThoughtRecordCard
-              thought={selectedCard.thought}
-              question={selectedCard.isQuestion}
-              width={Math.min(width - Spacing.screenPx * 2, Sizing.cardSlotW)}
-              onPress={() => selectedCard.isQuestion ? openQuestion(selectedCard.thought) : openRecord(selectedCard)}
-              onLongPress={selectedCard.isQuestion ? undefined : () => setDeleteTarget(selectedCard)}
-            />
-          ) : (
-            <ArticleCardItem
-              title={selectedCard.article.title || "제목 없음"}
-              cover={selectedCard.article.cover}
-              onPress={() => openRecord(selectedCard)}
-              onLongPress={() => setDeleteTarget(selectedCard)}
-              cardWidth={Math.min(width - Spacing.screenPx * 2, Sizing.cardSlotW)}
-              letterTypeBadge={selectedCard.kind === "letter" ? deliveryMap.get(selectedCard.article.id) === "sent" ? "발신됨" : "편지" : "편집"}
+      ) : view === "card" && cardGroups.length > 0 ? (
+        <FlatList
+          data={cardGroups}
+          nestedScrollEnabled
+          keyExtractor={(group) => group.dateKey}
+          renderItem={({ item }) => (
+            <RecordCarouselGroup
+              group={item}
+              cardWidth={cardWidth}
+              renderCard={renderRecordCard}
             />
           )}
-          <View style={styles.cardNav}>
-            <ScalePressable style={styles.cardNavButton} contentStyle={styles.cardNavButtonContent} onPress={() => setCardIndex((index) => Math.max(0, index - 1))} disabled={cardIndex === 0}>
-              <Feather name="chevron-left" size={20} color={cardIndex === 0 ? Colors.zinc300 : Colors.zinc700} />
-            </ScalePressable>
-            <Text style={styles.cardCount}>{cardIndex + 1} / {visibleRecords.length}</Text>
-            <ScalePressable style={styles.cardNavButton} contentStyle={styles.cardNavButtonContent} onPress={() => setCardIndex((index) => Math.min(visibleRecords.length - 1, index + 1))} disabled={cardIndex >= visibleRecords.length - 1}>
-              <Feather name="chevron-right" size={20} color={cardIndex >= visibleRecords.length - 1 ? Colors.zinc300 : Colors.zinc700} />
-            </ScalePressable>
-          </View>
-          {selectedCard.kind === "letter" ? (
-            <View style={styles.letterActions}>
-              <ScalePressable
-                style={styles.letterAction}
-                contentStyle={styles.letterActionContent}
-                onPress={() => router.push({ pathname: "/to-send", params: { prefillArticleId: selectedCard.article.id } })}
-              >
-                <Feather name="send" size={16} color={Colors.zinc700} />
-                <Text style={styles.letterActionText}>보내기</Text>
-              </ScalePressable>
-              <ScalePressable
-                style={styles.letterAction}
-                contentStyle={styles.letterActionContent}
-                onPress={() => {
-                  setArchiveArticleId(selectedCard.article.id);
-                  setSelectedCollectionId(null);
-                }}
-              >
-                <Feather name="folder" size={16} color={Colors.zinc700} />
-                <Text style={styles.letterActionText}>보관</Text>
-              </ScalePressable>
-            </View>
-          ) : null}
-        </ScrollView>
+          refreshControl={<RefreshControl refreshing={articlesQuery.isRefetching || thoughtsQuery.isRefetching || refreshQuestion.isPending} onRefresh={() => refreshAll(kind === "thought")} />}
+          contentContainerStyle={[styles.recordGroupList, { paddingBottom: navBottom }]}
+          showsVerticalScrollIndicator={false}
+        />
       ) : visibleRecords.length > 0 ? (
         <FlatList
           data={visibleRecords}
@@ -569,21 +759,34 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, paddingHorizontal: Spacing.screenPx },
   muted: { ...Typography.body, color: Colors.zinc500, textAlign: "center" },
   emptyTitle: { ...Typography.bodySemiBold, color: Colors.zinc900, fontSize: 17, textAlign: "center" },
-  cardStage: { flex: 1, alignItems: "center", justifyContent: "center", gap: 18, paddingHorizontal: Spacing.screenPx, paddingTop: 18 },
-  cardScroll: { flex: 1 },
-  thoughtCard: { flexGrow: 0, flexShrink: 0, borderRadius: 16 },
+  recordGroupList: { paddingTop: 8 },
+  recordGroup: { marginBottom: 8 },
+  recordDateHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    height: Sizing.dateHeaderH,
+    paddingTop: Spacing.dateHeaderPt,
+    paddingBottom: Spacing.dateHeaderPb,
+    paddingHorizontal: Spacing.screenPx,
+  },
+  recordDateHeaderText: { ...Typography.dateHeader, color: Colors.zinc600 },
+  recordDateHeaderCount: { ...Typography.caption, color: Colors.zinc500 },
+  recordCarouselWindow: { overflow: "hidden" },
+  recordCarouselTrack: { flexDirection: "row" },
+  recordCarouselScroll: {},
+  recordCarouselContent: {},
+  recordCardSlot: {},
+  recordCardFrame: { flex: 1, alignItems: "center" },
+  recordCardActionArea: { height: CARD_ACTION_AREA_H, alignItems: "center", justifyContent: "center" },
+  thoughtCard: { flexGrow: 0, flexShrink: 0, borderRadius: 16, ...Shadows.card },
   thoughtCardContent: { flex: 1, backgroundColor: Colors.zinc50, borderRadius: 16, padding: 24 },
-  questionCardShadow: { ...Platform.select({ ios: { shadowColor: "#8F1D2C", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.34, shadowRadius: 16 }, android: { elevation: 9 }, default: { boxShadow: "0 8px 20px rgba(143,29,44,0.34)" } as object }) },
-  questionLabel: { position: "absolute", top: 18, right: 20, ...Typography.caption, color: Colors.zinc500, fontWeight: "600" },
+  questionCardContent: { backgroundColor: Colors.noticeAccent },
   thoughtCardBodyWrap: { flex: 1, justifyContent: "center" },
   thoughtCardTitle: { fontFamily: ReaderTokens.fontFamily.serifBold, color: Colors.zinc900 },
   thoughtCardBody: { fontFamily: ReaderTokens.fontFamily.serif, color: Colors.zinc800 },
   thoughtCardTitleMeasure: { position: "absolute", opacity: 0, width: "100%", fontFamily: ReaderTokens.fontFamily.serifBold, color: Colors.zinc900, pointerEvents: "none" },
   thoughtCardMeasure: { position: "absolute", opacity: 0, width: "100%", fontFamily: ReaderTokens.fontFamily.serif, color: Colors.zinc800, pointerEvents: "none" },
-  cardNav: { flexDirection: "row", alignItems: "center", gap: 16 },
-  cardNavButton: { width: 42, height: 42, flexGrow: 0, flexShrink: 0 },
-  cardNavButtonContent: { width: 42, height: 42, flexGrow: 0, flexShrink: 0, borderRadius: 21, borderWidth: 1, borderColor: Colors.zinc200, alignItems: "center", justifyContent: "center" },
-  cardCount: { ...Typography.caption, color: Colors.zinc500, minWidth: 48, textAlign: "center" },
   letterActions: { flexDirection: "row", gap: 8 },
   letterAction: { height: 40, flexGrow: 0, flexShrink: 0 },
   letterActionContent: { height: 40, flexGrow: 0, flexShrink: 0, paddingHorizontal: 14, borderRadius: 20, backgroundColor: Colors.zinc100, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },

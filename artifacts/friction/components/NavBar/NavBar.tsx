@@ -227,10 +227,9 @@ const styles = StyleSheet.create({
     flexGrow: 0,
     flexShrink: 0,
     borderRadius: Sizing.navBarRadius,
-    backgroundColor: Colors.zinc900,
+    backgroundColor: Colors.noticeAccent,
     alignItems: "center",
     justifyContent: "center",
-    ...Shadows.navBarIos,
-    ...Shadows.navBarAndroid,
+    ...Shadows.card,
   },
 });

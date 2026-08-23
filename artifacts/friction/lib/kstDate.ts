@@ -64,3 +64,10 @@ export function toKstCalendarDate(instant: Date): Date {
   const k = getKstNow(instant);
   return new Date(k.getFullYear(), k.getMonth(), k.getDate());
 }
+
+/** 절대 시각을 기기 시간대와 무관한 KST 달력 키(YYYY-MM-DD)로 변환한다. */
+export function toKstCalendarDateKey(instant: string | Date): string {
+  const value = typeof instant === "string" ? new Date(instant) : instant;
+  const k = getKstNow(value);
+  return `${k.getFullYear()}-${String(k.getMonth() + 1).padStart(2, "0")}-${String(k.getDate()).padStart(2, "0")}`;
+}

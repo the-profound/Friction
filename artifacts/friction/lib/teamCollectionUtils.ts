@@ -8,8 +8,7 @@
  */
 
 import type { TeamCollectionArticleWithDetails } from "@workspace/api-client-react";
-
-const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+import { KST_OFFSET_MS, toKstCalendarDateKey as toSharedKstCalendarDateKey } from "./kstDate";
 
 /**
  * ISO 타임스탬프(또는 Date)를 KST 달력 날짜(YYYY-MM-DD)로 변환
@@ -25,9 +24,7 @@ export function toKstDateKey(ts: string | Date): string {
  * 18:00 컷오프 없이 순수 KST 날짜만 반환 — addedAt fallback 전용
  */
 export function toKstCalendarDateKey(ts: string | Date): string {
-  const ms = typeof ts === "string" ? new Date(ts).getTime() : ts.getTime();
-  const kst = new Date(ms + KST_OFFSET_MS);
-  return `${kst.getUTCFullYear()}-${String(kst.getUTCMonth() + 1).padStart(2, "0")}-${String(kst.getUTCDate()).padStart(2, "0")}`;
+  return toSharedKstCalendarDateKey(ts);
 }
 
 export function formatDateLabel(dateKey: string): string {

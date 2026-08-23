@@ -286,6 +286,22 @@ export const Shadows = {
     },
     default: {},
   }),
+  /** Standard raised card surface, including React Native Web's CSS shadow. */
+  card: Platform.select({
+    ios: {
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.12,
+      shadowRadius: 12,
+    },
+    android: {
+      elevation: 5,
+    },
+    web: {
+      boxShadow: "0px 4px 14px rgba(0,0,0,0.12)",
+    } as object,
+    default: {},
+  }),
 } as const;
 
 export const Borders = {

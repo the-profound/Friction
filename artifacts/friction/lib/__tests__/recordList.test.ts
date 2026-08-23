@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildRecordDateGroups,
   buildUnifiedRecords,
   compareRecordsNewestFirst,
   getThoughtPreview,
@@ -27,6 +28,67 @@ describe("record list model", () => {
       ] as never,
     );
     expect(records.map((record) => `${record.kind}:${record.id}`)).toEqual(["letter:letter", "editing:editing"]);
+  });
+});
+
+describe("record card date groups", () => {
+  const thought = (id: string, updatedAt: string): UnifiedRecord => ({
+    id,
+    kind: "thought",
+    updatedAt,
+    thought: {} as never,
+  });
+  const editing = (id: string, updatedAt: string): UnifiedRecord => ({
+    id,
+    kind: "editing",
+    updatedAt,
+    article: {} as never,
+  });
+
+  it("uses KST midnight boundaries and orders days and records newest first", () => {
+    const groups = buildRecordDateGroups([
+      thought("previous-day", "2026-01-01T14:59:59.000Z"), // KST 1/1 23:59:59
+      editing("newest", "2026-01-02T01:00:00.000Z"), // KST 1/2 10:00
+      thought("same-day-older", "2026-01-01T15:00:00.000Z"), // KST 1/2 00:00
+    ]);
+
+    expect(groups.map((group) => group.dateKey)).toEqual(["2026-01-02", "2026-01-01"]);
+    expect(groups[0].records.map((record) => record.id)).toEqual(["newest", "same-day-older"]);
+    expect(groups[1].records.map((record) => record.id)).toEqual(["previous-day"]);
+  });
+
+  it("keeps mixed record kinds and timestamp ties deterministic within a date", () => {
+    const groups = buildRecordDateGroups([
+      thought("b", "2026-02-03T01:00:00.000Z"),
+      editing("a", "2026-02-03T01:00:00.000Z"),
+      thought("latest", "2026-02-03T02:00:00.000Z"),
+    ]);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].records.map((record) => `${record.kind}:${record.id}`)).toEqual([
+      "thought:latest",
+      "editing:a",
+      "thought:b",
+    ]);
+  });
+
+  it("preserves current-question metadata while grouping filtered card records", () => {
+    const currentQuestion = {
+      ...thought("question", "2026-03-04T01:00:00.000Z"),
+      isQuestion: true,
+    };
+    const regularThought = {
+      ...thought("regular", "2026-03-04T00:00:00.000Z"),
+      isQuestion: false,
+    };
+
+    const groups = buildRecordDateGroups([regularThought, currentQuestion]);
+
+    expect(groups[0].records.map((record) => record.isQuestion)).toEqual([true, false]);
+  });
+
+  it("returns no groups when a filter or search has no matching records", () => {
+    expect(buildRecordDateGroups([])).toEqual([]);
   });
 });
 

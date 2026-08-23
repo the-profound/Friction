@@ -1,5 +1,6 @@
 import type { Article, Thought } from "@workspace/api-client-react";
 import { parseMarkdownBlocks, tokensToPlainText } from "../utils/markdownParser";
+import { toKstCalendarDateKey } from "./kstDate";
 
 export type RecordKind = "thought" | "editing" | "letter";
 export type RecordView = "card" | "content" | "title";
@@ -7,6 +8,12 @@ export type RecordView = "card" | "content" | "title";
 export type UnifiedRecord =
   | { id: string; kind: "thought"; updatedAt: string; thought: Thought }
   | { id: string; kind: "editing" | "letter"; updatedAt: string; article: Article };
+
+export interface RecordDateGroup<T extends UnifiedRecord = UnifiedRecord> {
+  dateKey: string;
+  label: string;
+  records: T[];
+}
 
 export interface RecordPreview {
   /** Single-line form used for title-only mode and search. */
@@ -49,6 +56,35 @@ export function buildUnifiedRecords(
 
 export function filterRecords(records: UnifiedRecord[], kind: RecordKind): UnifiedRecord[] {
   return records.filter((record) => record.kind === kind);
+}
+
+/** Displays the same compact calendar date label used by the record card groups. */
+export function formatRecordDateLabel(dateKey: string): string {
+  const [, month, day] = dateKey.split("-");
+  return `${Number(month)}월 ${Number(day)}일`;
+}
+
+/**
+ * Builds the card-only date hierarchy. Records stay deterministically ordered
+ * within each KST day and the newest KST day always appears first.
+ */
+export function buildRecordDateGroups<T extends UnifiedRecord>(records: T[]): RecordDateGroup<T>[] {
+  const grouped = new Map<string, T[]>();
+
+  for (const record of [...records].sort(compareRecordsNewestFirst)) {
+    const dateKey = toKstCalendarDateKey(record.updatedAt);
+    const dateRecords = grouped.get(dateKey);
+    if (dateRecords) dateRecords.push(record);
+    else grouped.set(dateKey, [record]);
+  }
+
+  return Array.from(grouped.entries())
+    .sort(([left], [right]) => right.localeCompare(left))
+    .map(([dateKey, dateRecords]) => ({
+      dateKey,
+      label: formatRecordDateLabel(dateKey),
+      records: dateRecords,
+    }));
 }
 
 /**
