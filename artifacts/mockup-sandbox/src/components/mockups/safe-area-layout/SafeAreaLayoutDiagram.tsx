@@ -164,7 +164,12 @@ export function SafeAreaLayoutDiagram() {
             <h2 style={styles.h2}>{panel.title}</h2>
             <p style={styles.sub}>{panel.subtitle}</p>
             <Device type={panel.type} />
-            <ul style={styles.specs}>{panel.specs.map(([name, value]) => <li key={name}><b>{name}</b><code>{value}</code></li>)}</ul>
+            <ul style={styles.specs}>{panel.specs.map(([name, value]) => (
+              <li key={name} style={styles.specRow}>
+                <b style={styles.specName}>{name}</b>
+                <code style={styles.specCode}>{value}</code>
+              </li>
+            ))}</ul>
             <p style={styles.callout}>{panel.note}</p>
           </article>
         ))}
@@ -197,6 +202,9 @@ const styles: Record<string, React.CSSProperties> = {
   circle: { position: "absolute", zIndex: 3, width: 30, height: 30, display: "grid", placeItems: "center", border: `2px solid ${colors.chrome}`, borderRadius: "50%", background: "#fff", color: colors.chrome, fontSize: 9, fontWeight: 900 },
   pill: { position: "absolute", zIndex: 3, left: "50%", width: 90, height: 22, transform: "translateX(-50%)", display: "grid", placeItems: "center", border: `2px solid ${colors.chrome}`, borderRadius: 13, background: "#fff", color: "#a14528", fontSize: 8, fontWeight: 800 },
   specs: { listStyle: "none", margin: 0, padding: 0, borderTop: "1px solid #e3e8f2" },
+  specRow: { display: "grid", gridTemplateColumns: "72px 1fr", gap: 6, padding: "7px 0", borderBottom: "1px solid #e3e8f2", fontSize: 10, lineHeight: 1.35 },
+  specName: { fontSize: 9, color: "#40516a" },
+  specCode: { padding: "1px 3px", borderRadius: 3, background: "#eef2f8", color: "#263f66", font: "600 9px ui-monospace, monospace", overflowWrap: "anywhere" },
   callout: { margin: "11px 0 0", padding: "8px 9px", borderLeft: `3px solid ${colors.chrome}`, background: "#fff4f5", color: "#5f3b43", fontSize: 10, lineHeight: 1.4 },
   note: { margin: "0 40px 34px", padding: "14px 16px", border: "1px solid #bad9d5", borderRadius: 10, background: "#effaf8", fontSize: 12, lineHeight: 1.55 },
 };
