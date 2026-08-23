@@ -13,8 +13,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "check:typography": "node scripts/check-typography.mjs",
     "validate:release": "node scripts/validate-release-env.mjs",
-    "eas-build-post-install": "node scripts/validate-release-env.mjs",
-    "eas-build-on-success": "node scripts/validate-eas-bundle.mjs"
+    "validate:resolved-release": "node scripts/validate-resolved-release-config.mjs",
+    "test:release-publication-guards": "bash scripts/test-release-publication-guards.sh",
+    "eas-build-post-install": "node scripts/validate-release-env.mjs && node scripts/validate-resolved-release-config.mjs",
+    "eas-build-on-success": "node scripts/validate-eas-bundle.mjs && node scripts/validate-resolved-release-config.mjs"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

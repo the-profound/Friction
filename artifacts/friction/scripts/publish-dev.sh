@@ -13,6 +13,7 @@ echo "  This produces an expo-dev-client binary distributed via"
 echo "  TestFlight (internal testers).  Once installed, the app"
 echo "  shows the dev-client UI and can connect to a live Metro"
 echo "  server via the fixed ngrok tunnel."
+echo "  It is not a release-candidate signup test: it runs code from Metro."
 echo ""
 
 if [ -z "$EXPO_TOKEN" ]; then

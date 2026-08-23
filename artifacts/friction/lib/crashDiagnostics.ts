@@ -13,17 +13,18 @@
  *
  * This module installs a wrapper around React Native's `global.ErrorUtils`
  * handler — the same mechanism RN's default fatal-error reporting uses — so
- * that whenever a *fatal* JS error is about to crash the app, its message and
- * stack are persisted to disk SYNCHRONOUSLY (via `expo-file-system`'s JSI
+ * that whenever a *fatal* JS error is about to crash the app, a safe error
+ * class is persisted to disk SYNCHRONOUSLY (via `expo-file-system`'s JSI
  * `File.write`, not the async `expo-file-system/legacy` API) before control
  * is handed back to the default handler that calls `RCTFatal`/aborts the
- * process a moment later.
+ * process a moment later. Error messages and stacks are intentionally not
+ * persisted because they can contain personal or authentication data.
  *
  * On the *next* app launch, `uploadPendingCrashLogIfAny()` reads that file
  * (if present), uploads it to the API server's `/client-logs` endpoint, and
  * deletes it so it is never re-uploaded. Check server logs
  * (`client-logs: fatal JS error reported by client`) after a crash + relaunch
- * cycle to see the real error.
+ * cycle to see the fatal error class.
  *
  * `installGlobalErrorHandler()` MUST run as early as possible — before
  * `expo-router/entry` requires any app code — so it is imported as a side
@@ -38,7 +39,6 @@ export type PersistedCrashLog = {
   source: "fatal-js-error";
   message: string;
   name?: string;
-  stack?: string;
   isFatal: boolean;
   timestamp: string;
   platform: string;
@@ -59,18 +59,19 @@ function getCrashLogFile(): import("expo-file-system").File | null {
   }
 }
 
-function serializeError(error: unknown): { message: string; name?: string; stack?: string } {
-  if (error instanceof Error) {
-    return { message: error.message, name: error.name, stack: error.stack };
-  }
-  if (typeof error === "string") {
-    return { message: error };
-  }
-  try {
-    return { message: JSON.stringify(error) };
-  } catch {
-    return { message: String(error) };
-  }
+function classifyFatalError(error: unknown): { message: string; name: string } {
+  const knownErrorNames = new Set([
+    "Error",
+    "TypeError",
+    "ReferenceError",
+    "SyntaxError",
+    "RangeError",
+    "URIError",
+    "EvalError",
+  ]);
+  const name =
+    error instanceof Error && knownErrorNames.has(error.name) ? error.name : "UnknownError";
+  return { message: "fatal-js-error", name };
 }
 
 function persistFatalError(error: unknown, isFatal: boolean): void {
@@ -80,7 +81,7 @@ function persistFatalError(error: unknown, isFatal: boolean): void {
 
     const payload: PersistedCrashLog = {
       source: "fatal-js-error",
-      ...serializeError(error),
+      ...classifyFatalError(error),
       isFatal,
       timestamp: new Date().toISOString(),
       platform: Platform.OS,
@@ -160,13 +161,27 @@ export async function uploadPendingCrashLogIfAny(): Promise<void> {
       console.warn("[crashDiagnostics] Failed to delete persisted crash log:", deleteErr);
     }
 
-    const parsed = JSON.parse(contents) as PersistedCrashLog;
+    const parsed = JSON.parse(contents) as Partial<PersistedCrashLog>;
+    // Older app versions may have persisted raw message/stack data. Never
+    // forward that legacy payload into an operational log.
+    const safePayload: PersistedCrashLog = {
+      source: "fatal-js-error",
+      message: "fatal-js-error",
+      name: "FatalJavaScriptError",
+      isFatal: true,
+      timestamp: typeof parsed.timestamp === "string" ? parsed.timestamp : new Date().toISOString(),
+      platform: typeof parsed.platform === "string" ? parsed.platform : Platform.OS,
+      platformVersion:
+        typeof parsed.platformVersion === "string" || typeof parsed.platformVersion === "number"
+          ? parsed.platformVersion
+          : Platform.Version,
+    };
 
     const { customFetch } = await import("@workspace/api-client-react");
     await customFetch("/api/client-logs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(parsed),
+      body: JSON.stringify(safePayload),
     });
   } catch (err) {
     console.warn("[crashDiagnostics] Failed to upload pending crash log:", err);

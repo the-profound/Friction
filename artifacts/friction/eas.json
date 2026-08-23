@@ -7,7 +7,7 @@
   "build": {
     "production": {
       "env": {
-        "EXPO_PUBLIC_DOMAIN": "friction-1.replit.app"
+        "APP_RELEASE_TRACK": "production"
       },
       "ios": {
         "distribution": "store",
@@ -17,7 +17,7 @@
     },
     "preview": {
       "env": {
-        "EXPO_PUBLIC_DOMAIN": "friction-1.replit.app"
+        "APP_RELEASE_TRACK": "preview"
       },
       "ios": {
         "distribution": "store",
@@ -28,7 +28,8 @@
     "development": {
       "developmentClient": true,
       "env": {
-        "APP_VARIANT": "development"
+        "APP_VARIANT": "development",
+        "APP_RELEASE_TRACK": "development"
       },
       "ios": {
         "distribution": "store",

@@ -3916,6 +3916,12 @@ export const ExpandThoughtsResponse = zod.object({
 
  * @summary Report a client-side diagnostic event
  */
+export const reportClientLogBodyReleaseConfigurationFingerprintRegExp =
+  new RegExp("^[a-f0-9]{16}$");
+export const reportClientLogBodyReleaseSupabaseHostMax = 253;
+
+export const reportClientLogBodyReleaseApiHostMax = 253;
+
 export const ReportClientLogBody = zod
   .object({
     source: zod
@@ -3933,9 +3939,30 @@ export const ReportClientLogBody = zod
     platformVersion: zod.string().nullish(),
     appVersion: zod.string().nullish(),
     buildNumber: zod.string().nullish(),
+    release: zod
+      .object({
+        track: zod.enum(["development", "preview", "production"]),
+        configurationState: zod.enum(["valid", "invalid", "unavailable"]),
+        configurationFingerprint: zod
+          .string()
+          .regex(reportClientLogBodyReleaseConfigurationFingerprintRegExp)
+          .nullish(),
+        supabaseHost: zod
+          .string()
+          .max(reportClientLogBodyReleaseSupabaseHostMax)
+          .nullish(),
+        apiHost: zod
+          .string()
+          .max(reportClientLogBodyReleaseApiHostMax)
+          .nullish(),
+      })
+      .optional()
+      .describe(
+        "Safe build identity included with native release diagnostics. Host names and short fingerprints identify the deployed target without exposing configuration values or credentials.\n",
+      ),
   })
   .describe(
-    "A diagnostic event captured on-device. Currently only used to report a fatal JS error persisted right before the app crashed, uploaded on the next app launch.\n",
+    "A diagnostic event captured on-device. Release diagnostics deliberately contain only a deployment track, host names, short configuration fingerprint, outcome, and error class; they never contain emails, access tokens, response bodies, or raw exception messages.\n",
   );
 
 /**

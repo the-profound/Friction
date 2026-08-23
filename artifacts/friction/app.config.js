@@ -1,8 +1,90 @@
-const IS_DEV = process.env.APP_VARIANT === "development";
+const { createHash } = require("node:crypto");
+
+const buildProfile = process.env.EAS_BUILD_PROFILE;
+const releaseTrack =
+  buildProfile === "preview" || buildProfile === "production" || buildProfile === "development"
+    ? buildProfile
+    : process.env.APP_VARIANT === "preview"
+      ? "preview"
+      : process.env.APP_VARIANT === "development"
+        ? "development"
+        : "production";
+const IS_DEV = releaseTrack === "development";
+const IS_PREVIEW = releaseTrack === "preview";
+
+function releaseFingerprint(value) {
+  return createHash("sha256").update(value).digest("hex").slice(0, 16);
+}
+
+function parseReleaseHostname(value, allowDomainOnly = false) {
+  const trimmed = value?.trim().toLowerCase();
+  if (
+    !trimmed ||
+    trimmed === "placeholder" ||
+    trimmed === "placeholder-anon-key" ||
+    trimmed === "configuration-invalid" ||
+    trimmed === "undefined" ||
+    trimmed === "null"
+  ) {
+    return null;
+  }
+  const normalized =
+    allowDomainOnly && !/^https?:\/\//i.test(trimmed) ? `https://${trimmed}` : trimmed;
+  try {
+    const url = new URL(normalized);
+    if (
+      url.protocol !== "https:" ||
+      !url.hostname ||
+      url.username ||
+      url.password ||
+      url.pathname !== "/" ||
+      url.search ||
+      url.hash ||
+      url.hostname.includes("placeholder") ||
+      url.hostname.endsWith(".invalid")
+    ) {
+      return null;
+    }
+    return url.hostname;
+  } catch {
+    return null;
+  }
+}
+
+function buildReleaseDiagnostics() {
+  const supabaseHost = parseReleaseHostname(process.env.EXPO_PUBLIC_SUPABASE_URL);
+  const apiHost = parseReleaseHostname(process.env.EXPO_PUBLIC_DOMAIN, true);
+  const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim();
+  const anonKeyFingerprint =
+    anonKey &&
+    !["placeholder", "placeholder-anon-key", "configuration-invalid", "undefined", "null"].includes(
+      anonKey.toLowerCase(),
+    )
+      ? releaseFingerprint(anonKey)
+      : null;
+  const configurationFingerprint =
+    supabaseHost && apiHost && anonKeyFingerprint
+      ? releaseFingerprint(
+          `${releaseTrack}|${supabaseHost}|${apiHost}|${anonKeyFingerprint}`,
+        )
+      : null;
+
+  return {
+    track: releaseTrack,
+    supabaseHost,
+    apiHost,
+    configurationFingerprint,
+  };
+}
 
 function validateEasReleaseEnvironment() {
   const profile = process.env.EAS_BUILD_PROFILE;
   if (profile !== "preview" && profile !== "production") return;
+  if (process.env.APP_RELEASE_TRACK !== profile) {
+    throw new Error(
+      `Release track does not match EAS ${profile}. APP_RELEASE_TRACK must be ${profile}.`,
+    );
+  }
 
   const missing = [
     "EXPO_PUBLIC_SUPABASE_URL",
@@ -23,7 +105,7 @@ function validateEasReleaseEnvironment() {
   try {
     const url = new URL(supabaseUrl);
     if (
-      (url.protocol !== "https:" && url.protocol !== "http:") ||
+       url.protocol !== "https:" ||
       !url.hostname ||
       url.hostname.toLowerCase().includes("placeholder") ||
       url.hostname.toLowerCase().endsWith(".invalid") ||
@@ -69,10 +151,11 @@ function validateEasReleaseEnvironment() {
 }
 
 validateEasReleaseEnvironment();
+const releaseDiagnostics = buildReleaseDiagnostics();
 
 module.exports = {
   expo: {
-    name: IS_DEV ? "Friction Dev" : "Friction",
+    name: IS_DEV ? "Friction Dev" : IS_PREVIEW ? "Friction Preview" : "Friction",
     slug: IS_DEV ? "friction-dev" : "friction",
     version: "1.0.0",
     orientation: "portrait",
@@ -182,6 +265,7 @@ module.exports = {
       reactCompiler: true,
     },
     extra: {
+      releaseDiagnostics,
       eas: {
         projectId: IS_DEV
           ? "bfb7f9ff-060d-4e45-af6a-621b1be92e93"

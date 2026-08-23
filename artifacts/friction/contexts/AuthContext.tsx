@@ -12,7 +12,11 @@ import {
 } from "@/lib/authSessionRecovery";
 import { setCurrentAuthSession } from "@/lib/authTokenStore";
 import { runtimeConfig } from "@/lib/runtimeConfig";
-import { reportAuthDiagnostic } from "@/lib/authDiagnostics";
+import {
+  probeApiReachability,
+  reportAuthDiagnostic,
+  type ApiReachability,
+} from "@/lib/authDiagnostics";
 
 export type SignUpError = AuthError | { message: string; name: string };
 export type AuthFlowError = AuthError | { message: string; name: string };
@@ -21,6 +25,7 @@ interface AuthContextValue {
   session: Session | null;
   isLoading: boolean;
   configurationError: string | null;
+  apiReachability: ApiReachability;
   signInWithPassword: (email: string, password: string) => Promise<{ error: AuthFlowError | null }>;
   signUp: (email: string, password: string, nickname: string) => Promise<{ error: SignUpError | null; needsConfirmation: boolean }>;
   signOut: () => Promise<void>;
@@ -30,6 +35,7 @@ const AuthContext = createContext<AuthContextValue>({
   session: null,
   isLoading: true,
   configurationError: null,
+  apiReachability: "checking",
   signInWithPassword: async () => ({ error: null }),
   signUp: async () => ({ error: null, needsConfirmation: false }),
   signOut: async () => {},
@@ -96,6 +102,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [configurationError] = useState<string | null>(runtimeConfig.errorMessage);
+  const [apiReachability, setApiReachability] = useState<ApiReachability>(
+    Platform.OS === "web" ? "not-applicable" : "checking",
+  );
   const nativeAutoRefreshRef = useRef<ReturnType<
     typeof createNativeAutoRefreshController
   > | null>(null);
@@ -291,6 +300,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [session]);
 
+  useEffect(() => {
+    if (configurationError || Platform.OS === "web") return;
+    let mounted = true;
+    void probeApiReachability().then((result) => {
+      if (mounted) setApiReachability(result);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [configurationError]);
+
   async function signInWithPassword(email: string, password: string) {
     const authCoordinator = authCoordinatorRef.current;
     const operation = authCoordinator.beginAuthOperation();
@@ -307,7 +327,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           "failed",
           isNetworkFailure(error) ? "NetworkError" : error.name,
         );
-        return { error };
+        return {
+          error: isNetworkFailure(error)
+            ? {
+                name: "SupabaseNetworkError",
+                message: "인증 서버에 연결하지 못했습니다. 인터넷 연결을 확인해주세요.",
+              }
+            : error,
+        };
       }
 
       setCurrentAuthSession(data.session);
@@ -328,7 +355,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               ? "네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요."
               : "사용자 정보 저장에 실패했습니다. 다시 시도해주세요.",
             name: isNetworkFailure(syncError)
-              ? "UserSyncNetworkError"
+              ? "ApiNetworkError"
               : "UserSyncError",
           },
         };
@@ -353,7 +380,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         "failed",
         isNetworkFailure(error) ? "NetworkError" : "AuthSignInError",
       );
-      throw error;
+      return {
+        error: {
+          name: isNetworkFailure(error) ? "SupabaseNetworkError" : "AuthSignInError",
+          message: isNetworkFailure(error)
+            ? "인증 서버에 연결하지 못했습니다. 인터넷 연결을 확인해주세요."
+            : "로그인에 실패했습니다. 다시 시도해주세요.",
+        },
+      };
     } finally {
       pendingAuthSessionRef.current = undefined;
       suppressAuthEventsRef.current = false;
@@ -380,7 +414,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           "failed",
           isNetworkFailure(error) ? "NetworkError" : error.name,
         );
-        return { error, needsConfirmation: false };
+        return {
+          error: isNetworkFailure(error)
+            ? {
+                name: "SupabaseNetworkError",
+                message: "인증 서버에 연결하지 못했습니다. 인터넷 연결을 확인해주세요.",
+              }
+            : error,
+          needsConfirmation: false,
+        };
       }
       const needsConfirmation = !data.session;
 
@@ -412,7 +454,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 ? "네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요."
                 : "사용자 정보 저장에 실패했습니다. 다시 시도해주세요.",
               name: isNetworkFailure(syncError)
-                ? "UserSyncNetworkError"
+                ? "ApiNetworkError"
                 : "UserSyncError",
             },
             needsConfirmation,
@@ -450,7 +492,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         "failed",
         isNetworkFailure(error) ? "NetworkError" : "AuthSignUpError",
       );
-      throw error;
+      return {
+        error: {
+          name: isNetworkFailure(error) ? "SupabaseNetworkError" : "AuthSignUpError",
+          message: isNetworkFailure(error)
+            ? "인증 서버에 연결하지 못했습니다. 인터넷 연결을 확인해주세요."
+            : "회원가입에 실패했습니다. 다시 시도해주세요.",
+        },
+        needsConfirmation: false,
+      };
     } finally {
       // The deliberate session decision above is authoritative. Discard
       // session observations collected while profile sync was in flight so a
@@ -486,6 +536,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         session,
         isLoading,
         configurationError,
+        apiReachability,
         signInWithPassword,
         signUp,
         signOut,

@@ -1,0 +1,105 @@
+import { createHash } from "node:crypto";
+
+const INVALID_VALUES = new Set([
+  "",
+  "placeholder",
+  "placeholder-anon-key",
+  "configuration-invalid",
+  "undefined",
+  "null",
+]);
+
+export const RELEASE_TRACKS = ["development", "preview", "production"];
+export const RELEASE_REQUIRED_VARIABLES = [
+  "EXPO_PUBLIC_SUPABASE_URL",
+  "EXPO_PUBLIC_SUPABASE_ANON_KEY",
+  "EXPO_PUBLIC_DOMAIN",
+];
+
+function hash(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function isInvalidValue(value) {
+  return INVALID_VALUES.has((value ?? "").trim().toLowerCase());
+}
+
+function parseReleaseUrl(value, { allowDomainOnly = false } = {}) {
+  if (isInvalidValue(value)) return null;
+
+  const normalized = allowDomainOnly && !/^https?:\/\//i.test(value.trim())
+    ? `https://${value.trim()}`
+    : value.trim();
+
+  try {
+    const url = new URL(normalized);
+    if (
+      url.protocol !== "https:" ||
+      !url.hostname ||
+      url.username ||
+      url.password ||
+      url.pathname !== "/" ||
+      url.search ||
+      url.hash ||
+      url.hostname.toLowerCase().includes("placeholder") ||
+      url.hostname.toLowerCase().endsWith(".invalid")
+    ) {
+      return null;
+    }
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+export function resolveReleaseTrack(env = process.env) {
+  const profile = env.EAS_BUILD_PROFILE?.trim();
+  const declaredTrack = env.APP_RELEASE_TRACK?.trim();
+
+  if (profile && RELEASE_TRACKS.includes(profile)) return profile;
+  if (declaredTrack && RELEASE_TRACKS.includes(declaredTrack)) return declaredTrack;
+  return env.APP_VARIANT === "development" ? "development" : "development";
+}
+
+export function buildReleaseConfigSummary(env = process.env, expectedTrack) {
+  const track = resolveReleaseTrack(env);
+  const declaredTrack = env.APP_RELEASE_TRACK?.trim() ?? "";
+  const issues = [];
+
+  if (expectedTrack && track !== expectedTrack) {
+    issues.push("release track does not match the requested profile");
+  }
+  if (
+    env.EAS_BUILD_PROFILE &&
+    RELEASE_TRACKS.includes(env.EAS_BUILD_PROFILE) &&
+    declaredTrack !== env.EAS_BUILD_PROFILE
+  ) {
+    issues.push("APP_RELEASE_TRACK does not match EAS_BUILD_PROFILE");
+  }
+
+  const supabaseUrl = parseReleaseUrl(env.EXPO_PUBLIC_SUPABASE_URL);
+  const apiUrl = parseReleaseUrl(env.EXPO_PUBLIC_DOMAIN ?? "", { allowDomainOnly: true });
+  const anonKey = env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim() ?? "";
+
+  if (!supabaseUrl) issues.push("EXPO_PUBLIC_SUPABASE_URL");
+  if (isInvalidValue(anonKey)) issues.push("EXPO_PUBLIC_SUPABASE_ANON_KEY");
+  if (!apiUrl) issues.push("EXPO_PUBLIC_DOMAIN");
+
+  const supabaseHost = supabaseUrl?.hostname.toLowerCase() ?? null;
+  const apiHost = apiUrl?.hostname.toLowerCase() ?? null;
+  const anonKeyFingerprint = isInvalidValue(anonKey) ? null : hash(anonKey).slice(0, 16);
+  const configurationFingerprint =
+    supabaseHost && apiHost && anonKeyFingerprint
+      ? hash(`${track}|${supabaseHost}|${apiHost}|${anonKeyFingerprint}`).slice(0, 16)
+      : null;
+
+  return {
+    track,
+    valid: issues.length === 0,
+    issues: [...new Set(issues)],
+    supabaseHost,
+    apiHost,
+    anonKeyFingerprint,
+    configurationFingerprint,
+  };
+}

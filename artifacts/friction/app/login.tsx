@@ -31,7 +31,7 @@ const PRIVACY_URL = "https://friction.app/privacy";
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { signInWithPassword, signUp } = useAuth();
+  const { signInWithPassword, signUp, apiReachability } = useAuth();
 
   const [mode, setMode] = useState<Mode>("login");
   const [signupStep, setSignupStep] = useState<SignupStep>(1);
@@ -77,8 +77,10 @@ export default function LoginScreen() {
     try {
       const { error } = await signInWithPassword(email.trim(), password);
       if (error) {
-        if (error.name === "UserSyncNetworkError") {
-          setErrorMessage("네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.");
+        if (error.name === "SupabaseNetworkError") {
+          setErrorMessage("인증 서버에 연결하지 못했습니다. 인터넷 연결을 확인해주세요.");
+        } else if (error.name === "ApiNetworkError") {
+          setErrorMessage("앱 서버에 연결하지 못했습니다. 잠시 후 다시 시도해주세요.");
         } else if (error.name === "UserSyncError") {
           setErrorMessage("계정은 확인됐지만 프로필 저장에 실패했습니다. 로그인 탭에서 다시 시도해주세요.");
         } else {
@@ -137,8 +139,10 @@ export default function LoginScreen() {
     try {
       const { error, needsConfirmation } = await signUp(email.trim(), password, trimmedNickname);
       if (error) {
-        if (error.name === "UserSyncNetworkError") {
-          setErrorMessage("네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.");
+        if (error.name === "SupabaseNetworkError") {
+          setErrorMessage("인증 서버에 연결하지 못했습니다. 인터넷 연결을 확인해주세요.");
+        } else if (error.name === "ApiNetworkError") {
+          setErrorMessage("계정은 생성됐지만 앱 서버에 연결하지 못했습니다. 로그인 탭에서 다시 시도해주세요.");
         } else if (error.name === "UserSyncError") {
           setErrorMessage("계정은 생성됐지만 프로필 저장에 실패했습니다. 로그인 탭에서 다시 시도해주세요.");
         } else {
@@ -447,6 +451,11 @@ export default function LoginScreen() {
               editable={!isLoading}
             />
             <Text style={styles.hint}>이웃 검색 시 표시되는 이름입니다. (최대 20자)</Text>
+            {apiReachability === "unreachable" ? (
+              <Text style={styles.connectionWarning}>
+                앱 서버에 연결하지 못하고 있어요. 연결을 확인한 뒤 가입을 다시 시도해주세요.
+              </Text>
+            ) : null}
 
             <View style={styles.agreementBox}>
               <View style={styles.checkRow}>
@@ -664,6 +673,12 @@ const styles = StyleSheet.create({
     ...Typography.caption,
     fontSize: 13,
     color: "#DC2626",
+    alignSelf: "flex-start",
+  },
+  connectionWarning: {
+    ...Typography.caption,
+    fontSize: 13,
+    color: Colors.zinc500,
     alignSelf: "flex-start",
   },
   button: {

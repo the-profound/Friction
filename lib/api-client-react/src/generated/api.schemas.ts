@@ -1336,8 +1336,41 @@ export interface RegisterPushTokenBody {
   deviceId?: string | null;
 }
 
+export type ReleaseDiagnosticContextTrack =
+  (typeof ReleaseDiagnosticContextTrack)[keyof typeof ReleaseDiagnosticContextTrack];
+
+export const ReleaseDiagnosticContextTrack = {
+  development: "development",
+  preview: "preview",
+  production: "production",
+} as const;
+
+export type ReleaseDiagnosticContextConfigurationState =
+  (typeof ReleaseDiagnosticContextConfigurationState)[keyof typeof ReleaseDiagnosticContextConfigurationState];
+
+export const ReleaseDiagnosticContextConfigurationState = {
+  valid: "valid",
+  invalid: "invalid",
+  unavailable: "unavailable",
+} as const;
+
 /**
- * A diagnostic event captured on-device. Currently only used to report a fatal JS error persisted right before the app crashed, uploaded on the next app launch.
+ * Safe build identity included with native release diagnostics. Host names and short fingerprints identify the deployed target without exposing configuration values or credentials.
+
+ */
+export interface ReleaseDiagnosticContext {
+  track: ReleaseDiagnosticContextTrack;
+  configurationState: ReleaseDiagnosticContextConfigurationState;
+  /** @pattern ^[a-f0-9]{16}$ */
+  configurationFingerprint?: string | null;
+  /** @maxLength 253 */
+  supabaseHost?: string | null;
+  /** @maxLength 253 */
+  apiHost?: string | null;
+}
+
+/**
+ * A diagnostic event captured on-device. Release diagnostics deliberately contain only a deployment track, host names, short configuration fingerprint, outcome, and error class; they never contain emails, access tokens, response bodies, or raw exception messages.
 
  */
 export interface ClientLogBody {
@@ -1353,6 +1386,7 @@ export interface ClientLogBody {
   platformVersion?: string | null;
   appVersion?: string | null;
   buildNumber?: string | null;
+  release?: ReleaseDiagnosticContext;
 }
 
 export type ListArticlesParams = {

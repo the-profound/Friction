@@ -1,10 +1,9 @@
 #!/bin/bash
 set -e
 
-EAS="/home/runner/workspace/.config/npm/node_global/bin/eas"
+EAS="${EAS_BIN:-/home/runner/workspace/.config/npm/node_global/bin/eas}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_DIR="$(dirname "$SCRIPT_DIR")"
-export EXPO_PUBLIC_DOMAIN="${EXPO_PUBLIC_DOMAIN:-friction-1.replit.app}"
 
 echo "========================================"
 echo "  Friction iOS Preview Build (EAS)"
@@ -34,10 +33,14 @@ fi
 
 echo ""
 echo "🔎 릴리즈 환경 변수 검증 중..."
-node "$SCRIPT_DIR/validate-release-env.mjs"
+APP_RELEASE_TRACK=preview EAS_BUILD_PROFILE=preview \
+  node "$SCRIPT_DIR/validate-release-env.mjs" --track preview
+bash "$SCRIPT_DIR/validate-eas-cloud-env.sh" preview
 
-echo "$APP_STORE_CONNECT_P8_KEY" > /tmp/asc_api_key.p8
-chmod 600 /tmp/asc_api_key.p8
+ASC_KEY_FILE="$(mktemp /tmp/asc_api_key.XXXXXX.p8)"
+trap 'rm -f "$ASC_KEY_FILE"' EXIT
+printf '%s' "$APP_STORE_CONNECT_P8_KEY" > "$ASC_KEY_FILE"
+chmod 600 "$ASC_KEY_FILE"
 echo "✅ App Store Connect API Key 임시 파일 생성 완료"
 
 cd "$APP_DIR"
@@ -61,8 +64,7 @@ $EAS submit \
   --profile preview \
   --non-interactive
 
-rm -f /tmp/asc_api_key.p8
 echo ""
 echo "✅ 제출 완료!"
-echo "   TestFlight 앱에서 'Friction (preview)' 빌드를 확인하세요."
+echo "   TestFlight 앱에서 'Friction Preview'와 새 빌드 번호를 확인하세요."
 echo "   App Store Connect에서 외부 테스터 그룹을 설정하면 더 넓게 배포됩니다."

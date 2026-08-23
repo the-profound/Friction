@@ -1,10 +1,9 @@
 #!/bin/bash
 set -e
 
-EAS="/home/runner/workspace/.config/npm/node_global/bin/eas"
+EAS="${EAS_BIN:-/home/runner/workspace/.config/npm/node_global/bin/eas}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_DIR="$(dirname "$SCRIPT_DIR")"
-export EXPO_PUBLIC_DOMAIN="${EXPO_PUBLIC_DOMAIN:-friction-1.replit.app}"
 
 echo "========================================"
 echo "  Friction iOS Publish (EAS)"
@@ -17,7 +16,9 @@ fi
 
 echo ""
 echo "🔎 릴리즈 환경 변수 검증 중..."
-node "$SCRIPT_DIR/validate-release-env.mjs"
+APP_RELEASE_TRACK=production EAS_BUILD_PROFILE=production \
+  node "$SCRIPT_DIR/validate-release-env.mjs" --track production
+bash "$SCRIPT_DIR/validate-eas-cloud-env.sh" production
 
 export EXPO_APPLE_TEAM_ID="D9P94YPN8F"
 
