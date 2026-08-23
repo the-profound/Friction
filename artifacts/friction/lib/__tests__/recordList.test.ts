@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
+import type { Thought } from "@workspace/api-client-react";
 import {
   buildRecordDateGroups,
   buildUnifiedRecords,
   compareRecordsNewestFirst,
+  getQueuedThoughtIds,
   getThoughtPreview,
   normalizePreviewTitle,
   normalizePreviewText,
@@ -10,6 +12,32 @@ import {
 } from "../recordList";
 
 describe("record list model", () => {
+  it("keeps every entry in a six-question queue out of ordinary archive records", () => {
+    const queuedThoughts = Array.from({ length: 6 }, (_, index) => ({
+      id: `queued-${index + 1}`,
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    })) as unknown as Thought[];
+    const listedThoughts = [
+      ...queuedThoughts,
+      { id: "regular-thought", updatedAt: "2026-01-02T00:00:00.000Z" },
+    ] as unknown as Thought[];
+
+    const queuedIds = getQueuedThoughtIds(queuedThoughts, queuedThoughts[0], queuedThoughts[1]);
+    const records = buildUnifiedRecords(
+      listedThoughts.filter((thought) => !queuedIds.has(thought.id)),
+      [],
+    );
+
+    expect(records.map((record) => record.id)).toEqual(["regular-thought"]);
+  });
+
+  it("falls back to current and next while an older cached queue response is in use", () => {
+    const current = { id: "current" } as never;
+    const next = { id: "next" } as never;
+
+    expect(getQueuedThoughtIds(undefined, current, next)).toEqual(new Set(["current", "next"]));
+  });
+
   it("sorts kinds together by newest update time with a deterministic tie-break", () => {
     const records: UnifiedRecord[] = [
       { id: "b", kind: "thought", updatedAt: "2026-01-01T00:00:00.000Z", thought: {} as never },

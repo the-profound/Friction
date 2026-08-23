@@ -58,6 +58,20 @@ export function filterRecords(records: UnifiedRecord[], kind: RecordKind): Unifi
   return records.filter((record) => record.kind === kind);
 }
 
+/**
+ * Questions in the server-owned queue are shown only through the question
+ * flow, never as regular archive thoughts. The aliases keep older cached API
+ * responses safe during a client/server rollout.
+ */
+export function getQueuedThoughtIds(
+  queue: Thought[] | null | undefined,
+  current: Thought | null | undefined,
+  next: Thought | null | undefined,
+): Set<string> {
+  const queuedThoughts = queue ?? [current, next].filter((thought): thought is Thought => Boolean(thought));
+  return new Set(queuedThoughts.map((thought) => thought.id));
+}
+
 /** Displays the same compact calendar date label used by the record card groups. */
 export function formatRecordDateLabel(dateKey: string): string {
   const [, month, day] = dateKey.split("-");

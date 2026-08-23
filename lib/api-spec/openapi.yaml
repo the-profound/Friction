@@ -2519,11 +2519,11 @@ paths:
     get:
       operationId: getThoughtQuestionQueue
       tags: [thoughts]
-      summary: Get the authenticated user's current and next preliminary thought questions
-      description: Creates up to two source-backed preliminary questions when useful source thoughts exist. Creation is idempotent across display retries.
+      summary: Get the authenticated user's ordered preliminary thought question queue
+      description: Creates a bounded, source-backed backlog of preliminary questions when useful source thoughts exist. Creation is idempotent across display retries.
       responses:
         "200":
-          description: Current and next queue entries, either of which can be null when there is not enough usable source material
+          description: Ordered queue entries and legacy current/next aliases. Any entry can be absent when there is not enough usable source material.
           content:
             application/json:
               schema:
@@ -4790,7 +4790,12 @@ components:
           allOf:
             - $ref: "#/components/schemas/Thought"
           nullable: true
-      required: [current, next]
+        queue:
+          type: array
+          description: All unanswered preliminary questions in FIFO position order. current and next are aliases for the first two entries for backwards compatibility.
+          items:
+            $ref: "#/components/schemas/Thought"
+      required: [current, next, queue]
 
     RefreshThoughtQuestionQueueBody:
       type: object

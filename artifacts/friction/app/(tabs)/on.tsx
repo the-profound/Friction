@@ -53,6 +53,7 @@ import {
   buildUnifiedRecords,
   buildRecordDateGroups,
   filterRecords,
+  getQueuedThoughtIds,
   getRecordPreview,
   recordMatchesQuery,
   type RecordDateGroup,
@@ -469,8 +470,12 @@ export default function OnScreen() {
   }, [tab]);
 
   const queuedIds = useMemo(
-    () => new Set([questionQuery.data?.current?.id, questionQuery.data?.next?.id].filter(Boolean)),
-    [questionQuery.data?.current?.id, questionQuery.data?.next?.id],
+    () => getQueuedThoughtIds(
+      questionQuery.data?.queue,
+      questionQuery.data?.current,
+      questionQuery.data?.next,
+    ),
+    [questionQuery.data?.current, questionQuery.data?.next, questionQuery.data?.queue],
   );
   const listedThoughts = (thoughtsQuery.data ?? []) as Thought[];
   const records = useMemo(

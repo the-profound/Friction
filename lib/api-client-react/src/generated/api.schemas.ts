@@ -1229,6 +1229,8 @@ export interface Thought {
 export interface ThoughtQuestionQueueResponse {
   current: Thought | null;
   next: Thought | null;
+  /** All unanswered preliminary questions in FIFO position order. current and next are aliases for the first two entries for backwards compatibility. */
+  queue: Thought[];
 }
 
 export interface RefreshThoughtQuestionQueueBody {

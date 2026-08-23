@@ -3590,8 +3590,8 @@ export const DeleteSendRecordParams = zod.object({
 });
 
 /**
- * Creates up to two source-backed preliminary questions when useful source thoughts exist. Creation is idempotent across display retries.
- * @summary Get the authenticated user's current and next preliminary thought questions
+ * Creates a bounded, source-backed backlog of preliminary questions when useful source thoughts exist. Creation is idempotent across display retries.
+ * @summary Get the authenticated user's ordered preliminary thought question queue
  */
 export const GetThoughtQuestionQueueResponse = zod.object({
   current: zod
@@ -3622,6 +3622,24 @@ export const GetThoughtQuestionQueueResponse = zod.object({
       updatedAt: zod.date(),
     })
     .nullable(),
+  queue: zod
+    .array(
+      zod.object({
+        id: zod.string().uuid(),
+        authorId: zod.string().uuid(),
+        content: zod.string(),
+        createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
+        sourceArticleId: zod.string().uuid().nullish(),
+        sourceStoredSentenceId: zod.string().uuid().nullish(),
+        status: zod.enum(["NORMAL", "PRELIMINARY"]),
+        migratedFromArticleId: zod.string().uuid().nullish(),
+        createdAt: zod.date(),
+        updatedAt: zod.date(),
+      }),
+    )
+    .describe(
+      "All unanswered preliminary questions in FIFO position order. current and next are aliases for the first two entries for backwards compatibility.",
+    ),
 });
 
 /**
@@ -3662,6 +3680,24 @@ export const RefreshThoughtQuestionQueueResponse = zod
         updatedAt: zod.date(),
       })
       .nullable(),
+    queue: zod
+      .array(
+        zod.object({
+          id: zod.string().uuid(),
+          authorId: zod.string().uuid(),
+          content: zod.string(),
+          createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
+          sourceArticleId: zod.string().uuid().nullish(),
+          sourceStoredSentenceId: zod.string().uuid().nullish(),
+          status: zod.enum(["NORMAL", "PRELIMINARY"]),
+          migratedFromArticleId: zod.string().uuid().nullish(),
+          createdAt: zod.date(),
+          updatedAt: zod.date(),
+        }),
+      )
+      .describe(
+        "All unanswered preliminary questions in FIFO position order. current and next are aliases for the first two entries for backwards compatibility.",
+      ),
   })
   .and(
     zod.object({
@@ -3707,6 +3743,24 @@ export const ActivateThoughtQuestionResponse = zod
         updatedAt: zod.date(),
       })
       .nullable(),
+    queue: zod
+      .array(
+        zod.object({
+          id: zod.string().uuid(),
+          authorId: zod.string().uuid(),
+          content: zod.string(),
+          createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
+          sourceArticleId: zod.string().uuid().nullish(),
+          sourceStoredSentenceId: zod.string().uuid().nullish(),
+          status: zod.enum(["NORMAL", "PRELIMINARY"]),
+          migratedFromArticleId: zod.string().uuid().nullish(),
+          createdAt: zod.date(),
+          updatedAt: zod.date(),
+        }),
+      )
+      .describe(
+        "All unanswered preliminary questions in FIFO position order. current and next are aliases for the first two entries for backwards compatibility.",
+      ),
   })
   .and(
     zod.object({

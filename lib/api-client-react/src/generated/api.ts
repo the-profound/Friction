@@ -9495,8 +9495,8 @@ export const useDeleteSendRecord = <
 };
 
 /**
- * Creates up to two source-backed preliminary questions when useful source thoughts exist. Creation is idempotent across display retries.
- * @summary Get the authenticated user's current and next preliminary thought questions
+ * Creates a bounded, source-backed backlog of preliminary questions when useful source thoughts exist. Creation is idempotent across display retries.
+ * @summary Get the authenticated user's ordered preliminary thought question queue
  */
 export const getGetThoughtQuestionQueueUrl = () => {
   return `/api/thoughts/question-queue`;
@@ -9551,7 +9551,7 @@ export type GetThoughtQuestionQueueQueryResult = NonNullable<
 export type GetThoughtQuestionQueueQueryError = ErrorType<ErrorResponse>;
 
 /**
- * @summary Get the authenticated user's current and next preliminary thought questions
+ * @summary Get the authenticated user's ordered preliminary thought question queue
  */
 
 export function useGetThoughtQuestionQueue<

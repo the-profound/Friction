@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { and, asc, desc, eq, isNotNull, isNull, ne, notExists, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import {
   db,
   articlesTable,
@@ -26,9 +27,13 @@ type ThoughtMarkdown = {
   body: string;
 };
 
-const QUESTION_QUEUE_TARGET_SIZE = 2;
+// A bounded backlog lets the archive browse questions continuously without
+// letting display retries trigger unbounded AI work.
+const QUESTION_QUEUE_TARGET_SIZE = 6;
+const QUESTION_QUEUE_SOURCE_CANDIDATE_LIMIT = QUESTION_QUEUE_TARGET_SIZE * 3;
 
 type ThoughtRow = typeof thoughtsTable.$inferSelect;
+const questionSourceThought = alias(thoughtsTable, "question_source_thought");
 
 async function lockQuestionQueue(tx: Parameters<Parameters<typeof db.transaction>[0]>[0], userId: string) {
   // Queue mutations for one user must serialize. This prevents concurrent
@@ -69,15 +74,16 @@ async function queueSnapshot(
   return {
     current: rows[0]?.thought ?? null,
     next: rows[1]?.thought ?? null,
+    queue: rows.map((row) => row.thought),
   };
 }
 
-async function fillQuestionQueue(
+async function cleanupQuestionQueue(
   tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
   userId: string,
 ) {
   // Defensive cleanup for rows left by an older client or a soft-deleted/
-  // activated thought. This runs under the caller's per-user advisory lock.
+  // activated thought. Callers hold the per-user advisory lock.
   await tx.execute(sql`
     DELETE FROM thought_question_queue AS queue
     WHERE queue.user_id = ${userId}
@@ -90,6 +96,13 @@ async function fillQuestionQueue(
           AND thought.deleted_at IS NULL
       )
   `);
+}
+
+async function fillQuestionQueue(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  userId: string,
+) {
+  await cleanupQuestionQueue(tx, userId);
   let queued = await getQueuedQuestions(tx, userId);
   const needed = QUESTION_QUEUE_TARGET_SIZE - queued.length;
   if (needed <= 0) return queued;
@@ -106,29 +119,33 @@ async function fillQuestionQueue(
       and(
         eq(thoughtsTable.authorId, userId),
         eq(thoughtsTable.status, "NORMAL"),
+        ne(thoughtsTable.createdFrom, "question"),
         isNull(thoughtsTable.deletedAt),
         isNotNull(thoughtsTable.content),
+        notExists(
+          tx
+            .select({ id: thoughtQuestionSourcesTable.id })
+            .from(thoughtQuestionSourcesTable)
+            .innerJoin(
+              questionSourceThought,
+              eq(thoughtQuestionSourcesTable.questionThoughtId, questionSourceThought.id),
+            )
+            .where(
+              and(
+                eq(thoughtQuestionSourcesTable.sourceThoughtId, thoughtsTable.id),
+                eq(questionSourceThought.authorId, userId),
+              ),
+            ),
+        ),
       ),
     )
     .orderBy(desc(thoughtsTable.updatedAt))
-    .limit(12);
+    .limit(QUESTION_QUEUE_SOURCE_CANDIDATE_LIMIT);
 
-  const usedSourceRows = await tx
-    .select({ sourceThoughtId: thoughtQuestionSourcesTable.sourceThoughtId })
-    .from(thoughtQuestionSourcesTable)
-    .innerJoin(
-      thoughtsTable,
-      eq(thoughtQuestionSourcesTable.questionThoughtId, thoughtsTable.id),
-    )
-    .where(eq(thoughtsTable.authorId, userId));
-  const usedSourceThoughtIds = new Set(
-    usedSourceRows.flatMap((row) => row.sourceThoughtId ? [row.sourceThoughtId] : []),
-  );
   const sourceCandidates = candidates.filter(
     (candidate): candidate is typeof candidate & { content: string } =>
       !!candidate.content?.trim() &&
-      !isQuestionThoughtMarkdown(candidate.content) &&
-      !usedSourceThoughtIds.has(candidate.id),
+      !isQuestionThoughtMarkdown(candidate.content),
   );
   if (sourceCandidates.length === 0) return queued;
 
@@ -338,13 +355,13 @@ router.post("/thoughts/question-queue/refresh", requireAuth, async (req, res) =>
 
   const result = await db.transaction(async (tx) => {
     await lockQuestionQueue(tx, userId);
-    await fillQuestionQueue(tx, userId);
     const before = await getQueuedQuestions(tx, userId);
     const current = before[0];
     if (!current || current.thought.id !== currentThoughtId) {
       return { ...(await queueSnapshot(tx, userId)), requeued: false };
     }
 
+    await cleanupQuestionQueue(tx, userId);
     const lastPosition = before.at(-1)?.position ?? current.position;
     await tx
       .update(thoughtQuestionQueueTable)
@@ -379,9 +396,8 @@ router.post("/thoughts/:id/activate", requireAuth, async (req, res) => {
       .limit(1);
 
     // A network retry after a successful activation sees the same normal
-    // thought and returns the canonical queue state instead of activating twice.
+    // thought and returns the queue snapshot without a second refill.
     if (!queued && thought.status === "NORMAL" && thought.createdFrom === "question") {
-      await fillQuestionQueue(tx, userId);
       return {
         status: 200,
         body: { activatedThought: thought, ...(await queueSnapshot(tx, userId)) },
@@ -397,6 +413,7 @@ router.post("/thoughts/:id/activate", requireAuth, async (req, res) => {
       .where(eq(thoughtsTable.id, thought.id))
       .returning();
     await tx.delete(thoughtQuestionQueueTable).where(eq(thoughtQuestionQueueTable.id, queued.id));
+    await compactQuestionQueue(tx, userId);
     await fillQuestionQueue(tx, userId);
 
     return {
