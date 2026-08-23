@@ -29,7 +29,7 @@ import {
   useCreateMyCollection,
   useDeleteStoredSentence,
   useToggleStoredSentenceFavorite,
-  useCreateArticle,
+  useCreateThought,
   getListMyCollectionsQueryKey,
   getListStoredSentencesQueryKey,
 } from "@workspace/api-client-react";
@@ -77,7 +77,7 @@ export default function ArchiveScreen() {
   const createMyCollection = useCreateMyCollection();
   const deleteSentence = useDeleteStoredSentence();
   const toggleFavorite = useToggleStoredSentenceFavorite();
-  const createArticle = useCreateArticle();
+  const createThought = useCreateThought();
 
   const myCollections = (myCollectionsQuery.data ?? []) as MyCollection[];
   const sentences = (sentencesQuery.data ?? []) as StoredSentence[];
@@ -277,17 +277,21 @@ export default function ArchiveScreen() {
       ? `> ${sentence.text.trim()}\n>\n> <${sentence.articleTitle}>${page !== undefined ? `, ${page + 1}면` : ""}`
       : `> ${sentence.text.trim()}\n`;
     try {
-      const rawText = sentence.text.trim();
-      const truncated = rawText.length > 50 ? rawText.slice(0, 50) + "…" : rawText;
-      const article = await createArticle.mutateAsync({
-        data: { authorId: userId, title: `문장 수집 - ${truncated}`, content: quoteBlock },
+      const thought = await createThought.mutateAsync({
+        data: {
+          content: `# \n\n${quoteBlock}`,
+          createdFrom: "quoted",
+          sourceArticleId: sentence.articleId ?? undefined,
+          sourceStoredSentenceId: sentence.id,
+          status: "PRELIMINARY",
+        },
       });
       setSelectedSentence(null);
-      router.push({ pathname: "/on-01a", params: { id: article.id } });
+      router.push({ pathname: "/on-01a", params: { id: thought.id } });
     } catch {
       showToast({ message: "메모 생성에 실패했습니다.", type: "error" });
     }
-  }, [createArticle, userId, router, showToast]);
+  }, [createThought, router, showToast]);
 
   const handleSentenceDeleteConfirm = useCallback(async () => {
     if (!sentenceDeleteTarget || deleteSentence.isPending) return;

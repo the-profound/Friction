@@ -21,18 +21,24 @@ interface WritingStateBarProps {
   current: WritingStage;
   onPress: (target: WritingStage) => void;
   disabled?: boolean;
+  /** The first stage is a thought before it has been promoted to an article. */
+  draftLabel?: string;
 }
 
 export default function WritingStateBar({
   current,
   onPress,
   disabled = false,
+  draftLabel = "작성",
 }: WritingStateBarProps) {
+  const tabs = TABS.map((tab) =>
+    tab.stage === "DRAFT" ? { ...tab, label: draftLabel } : tab,
+  );
   const currentOrder = STAGE_ORDER[current];
 
   return (
     <View style={styles.bar}>
-      {TABS.map(({ stage, label }) => {
+      {tabs.map(({ stage, label }) => {
         const isCurrent = stage === current;
         const targetOrder = STAGE_ORDER[stage];
         const distance = Math.abs(targetOrder - currentOrder);

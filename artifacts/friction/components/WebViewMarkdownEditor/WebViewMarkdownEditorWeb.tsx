@@ -61,6 +61,7 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
       onError,
       belowTitleSlot,
       titleFontSize,
+      hideTitle = false,
     },
     ref,
   ) {
@@ -174,9 +175,22 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
       },
       setOverflowProbeConfig(_availableContentHeightPx, _autoSplit) {
       },
-      setBlockType(_blockType: string) {
+      setBlockType(blockType: string) {
+        if (editor && !editor.isDestroyed) {
+          const level = blockType === "h1" ? 1 : blockType === "h2" ? 2 : blockType === "h3" ? 3 : null;
+          if (level) {
+            editor.chain().focus().toggleHeading({ level }).run();
+          } else {
+            editor.chain().focus().setParagraph().run();
+          }
+        }
       },
-      toggleMark(_mark: string) {
+      toggleMark(mark: string) {
+        if (editor && !editor.isDestroyed) {
+          if (mark === "bold") editor.chain().focus().toggleBold().run();
+          if (mark === "italic") editor.chain().focus().toggleItalic().run();
+          if (mark === "underline") editor.chain().focus().toggleUnderline().run();
+        }
       },
       insertDivider() {
         if (editor && !editor.isDestroyed) {
@@ -225,12 +239,12 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
       <div
         style={
           titleFontSize != null
-            ? { ...containerStyle, "--title-font-size": `${titleFontSize}px` }
+            ? ({ ...containerStyle, "--title-font-size": `${titleFontSize}px` } as React.CSSProperties)
             : containerStyle
         }
       >
         <style>{proseMirrorCss}</style>
-        {onTitleChange !== undefined && (
+        {!hideTitle && onTitleChange !== undefined && (
           <textarea
             ref={titleRef}
             defaultValue={titleValue || ""}

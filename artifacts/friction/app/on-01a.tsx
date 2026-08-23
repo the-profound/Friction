@@ -9,6 +9,7 @@ import {
   Platform,
   ScrollView,
   BackHandler,
+  AppState,
   useWindowDimensions,
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
@@ -165,6 +166,11 @@ export default function WritingScreen() {
   const [initialized, setInitialized] = useState(false);
   const [selectionState, setSelectionState] = useState<OnSelectionUpdatePayload>(DEFAULT_SELECTION);
   const [isNavigating, setIsNavigating] = useState(false);
+  // All DRAFT article facades are backed by a thought until promotion.  The
+  // API deliberately exposes those records as DRAFT so old links still work.
+  const isThoughtDraft = article?.status === "DRAFT";
+  const isThoughtDraftRef = useRef(false);
+  isThoughtDraftRef.current = isThoughtDraft;
 
   // ── 서식 툴바 인라인 메뉴 시스템 (read.tsx 메모 모드와 동일 구조) ─────────
   const { height: screenHeight } = useWindowDimensions();
@@ -281,7 +287,7 @@ export default function WritingScreen() {
   // ── article 데이터 초기화 ──────────────────────────────────────────────────
   useEffect(() => {
     if (!article) return;
-    const t = article.title || "";
+       const t = isThoughtDraft ? "" : article.title || "";
     const c = article.content || "";
     if (!initializedRef.current) {
       initializedRef.current = true;
@@ -294,7 +300,7 @@ export default function WritingScreen() {
       setContent(c);
       setCharCount(c.length);
       // 초기 모드 결정: mode 파라미터 또는 서버 status(DIVIDING) 기준.
-      const initialMode: EditorMode =
+       const initialMode: EditorMode =
         modeParam === "dividing" || article.status === "DIVIDING" ? "dividing" : "draft";
       setModeBoth(initialMode);
       if (editorReady) {
@@ -322,7 +328,7 @@ export default function WritingScreen() {
         console.log("[on-01 init] re-inject from server dirty?=false injected:", JSON.stringify(c.slice(0, 60)));
       }
     }
-  }, [article, editorReady, modeParam, setModeBoth]);
+   }, [article, editorReady, modeParam, setModeBoth, isThoughtDraft]);
 
   useEffect(() => {
     const showSub = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
@@ -464,7 +470,11 @@ export default function WritingScreen() {
   const handleSave = useCallback(
     async (data: { title: string; content: string }) => {
       if (!id) return;
-      if (modeRef.current === "dividing") {
+      if (isThoughtDraftRef.current && modeRef.current === "draft") {
+        // Thought Markdown already contains its leading H1.  Sending a
+        // separate title would cause the facade endpoint to add a duplicate.
+        await updateArticle.mutateAsync({ id, data: { content: data.content } });
+      } else if (modeRef.current === "dividing") {
         if (!data.title.trim()) return;
         const pgs = splitContentToPages(data.content).map((p) => p.content);
         await updateArticle.mutateAsync({
@@ -806,13 +816,6 @@ export default function WritingScreen() {
     editorRef.current?.blur();
     Keyboard.dismiss();
 
-    if (!titleRef.current.trim()) {
-      isNavigatingRef.current = false;
-      setIsNavigating(false);
-      showToast({ message: "제목을 입력해주세요.", type: "info" });
-      return;
-    }
-
     // 검토 단계 진입 전: 이미지를 단독 페이지(블록)로 자동 분할한다.
     const splitResult = await editorRef.current?.autoSplitImages();
     if (splitResult?.hadConsecutiveImages) {
@@ -848,9 +851,26 @@ export default function WritingScreen() {
       );
     });
 
+    const firstLine = cur.split(/\r?\n/, 1)[0]?.trim() ?? "";
+    const heading = /^#(?!#)\s+(.+?)\s*$/.exec(firstLine);
+    const thoughtTitle = heading?.[1]?.trim() ?? "";
+    const thoughtBody = heading ? cur.slice(cur.indexOf("\n") + 1).replace(/^\s*\n/, "") : cur;
+    const resolvedTitle = isThoughtDraftRef.current ? thoughtTitle : titleRef.current.trim();
+    if (!resolvedTitle || !thoughtBody.trim()) {
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
+      showToast({
+        message: isThoughtDraftRef.current
+          ? "첫 줄을 제목1로 작성하고, 아래에 본문을 적어주세요."
+          : "제목과 본문을 입력해주세요.",
+        type: "info",
+      });
+      return;
+    }
+
     // markDirty → flush 순서 보장: latestDataRef 를 최신값으로 갱신한 뒤에야
     // flush 를 호출해야 최신 콘텐츠가 서버에 저장된다.
-    markDirty(titleRef.current, cur);
+    markDirty(isThoughtDraftRef.current ? "" : titleRef.current, cur);
     const flushResult = await flush();
     if (!flushResult.ok) {
       isNavigatingRef.current = false;
@@ -860,9 +880,9 @@ export default function WritingScreen() {
     }
     console.log("[enterDividingMode] flush ok — saved title=%j contentLen=%d", titleRef.current, cur.length);
 
-    const currentTitle = titleRef.current;
+    const currentTitle = resolvedTitle;
     const result = canTransitionForward("DRAFT" as ArticleStatus, {
-      content: cur,
+       content: isThoughtDraftRef.current ? thoughtBody : cur,
       title: currentTitle,
       pages: [],
       hasRedWarnings: false,
@@ -877,43 +897,55 @@ export default function WritingScreen() {
     // 서버 저장 완료 직후 캐시 즉시 갱신 — invalidateQueries 는 목록 동기화 전용.
     // 이 setQueryData 가 없으면 백그라운드 refetch 가 구 캐시(빈 content)로
     // initializedRef 패턴을 우회해 에디터를 빈 값으로 덮어쓸 수 있다.
-    if (id) {
-      queryClient.setQueryData(
-        getGetArticleQueryKey(id),
-        (old: unknown) => {
-          if (!old || typeof old !== "object") return old;
-          return { ...old, title: currentTitle, content: cur, status: "DIVIDING", pages: [] };
-        },
-        { updatedAt: Date.now() },
-      );
-      console.log("[enterDividingMode] setQueryData applied — cache now has latest content");
+    let promoted = article;
+    try {
+      if (id && article?.status !== "DIVIDING") {
+        promoted = await transitionStatus.mutateAsync({
+          id,
+          data: { targetStatus: TransitionArticleBodyTargetStatus.DIVIDING },
+        });
+      }
+    } catch (e) {
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
+      // Promotion is a single transaction: a failed response leaves the
+      // thought untouched instead of creating a duplicate partial article.
+      showToast({ message: e instanceof Error ? e.message : "검토 단계로 옮기지 못했어요. 단상은 저장되어 있습니다.", type: "error" });
+      return;
+    }
+    const promotedContent = promoted?.content ?? (isThoughtDraftRef.current ? thoughtBody : cur);
+    const promotedTitle = promoted?.title ?? currentTitle;
+    if (promoted?.id) {
+      queryClient.setQueryData(getGetArticleQueryKey(promoted.id), {
+        ...(promoted ?? {}),
+        id: promoted.id,
+        title: promotedTitle,
+        content: promotedContent,
+        status: "DIVIDING",
+        pages: [],
+      });
     }
 
     // 에디터를 언마운트하지 않고 모드만 전환한다 — 본문이 절대 사라지지 않는다.
     // setMarkdown 을 호출하지 않으므로 편집기 내용은 그대로 유지된다.
-    setContent(cur);
-    setDebouncedContent(cur);
-    serverContentRef.current = cur;
+    titleRef.current = promotedTitle;
+    setTitle(promotedTitle);
+    contentRef.current = promotedContent;
+    articleContentRef.current = promotedContent;
+    setContent(promotedContent);
+    setDebouncedContent(promotedContent);
+    serverContentRef.current = promotedContent;
+    editorRef.current?.setTitle(promotedTitle);
+    editorRef.current?.setMarkdown(promotedContent);
     setModeBoth("dividing");
     isNavigatingRef.current = false;
     setIsNavigating(false);
 
-    if (id && article?.status !== "DIVIDING") {
-      transitionStatus
-        .mutateAsync({
-          id,
-          data: { targetStatus: TransitionArticleBodyTargetStatus.DIVIDING },
-        })
-        .catch((e: unknown) => {
-          const status = (e as { status?: number } | null)?.status;
-          if (status === 400) return;
-          console.warn("[on-01] background DIVIDING transition failed:", e);
-        })
-        .finally(() => {
-          invalidateArticleLists(queryClient);
-        });
-    } else {
-      invalidateArticleLists(queryClient);
+    invalidateArticleLists(queryClient);
+    // Promotion creates a real article with a new ID.  Replace the virtual
+    // thought route so a refresh can never re-open the pre-promotion facade.
+    if (isThoughtDraftRef.current && promoted?.id && promoted.id !== id) {
+      router.replace({ pathname: "/on-01a", params: { id: promoted.id, mode: "dividing" } });
     }
   }, [getEditorContent, markDirty, flush, id, queryClient, transitionStatus, article, showToast, setModeBoth]);
 
@@ -1119,7 +1151,7 @@ export default function WritingScreen() {
     const currentTitle = titleRef.current.trim();
     const currentContent = cur.trim();
 
-    if (source === "quote") {
+    if (!isThoughtDraftRef.current && source === "quote") {
       if (!currentTitle) {
         isNavigatingRef.current = false;
         setIsNavigating(false);
@@ -1143,7 +1175,7 @@ export default function WritingScreen() {
 
     // markDirty → flush 순서 보장: latestDataRef 를 최신값으로 갱신한 뒤에야
     // flush 를 호출해야 최신 콘텐츠가 서버에 저장된다.
-    markDirty(titleRef.current, cur);
+    markDirty(isThoughtDraftRef.current ? "" : titleRef.current, cur);
     const flushResult = await flush();
     if (!flushResult.ok) {
       isNavigatingRef.current = false;
@@ -1177,6 +1209,21 @@ export default function WritingScreen() {
       router.replace("/(tabs)/on");
     }
   }, [flush, router, queryClient, getEditorContent, markDirty, id, deleteArticle, source, showToast]);
+
+  // Native lifecycle events have no reliable "before unload" hook.  Export the
+  // WebView snapshot while the app is still active and flush it to the thought
+  // record; useAutoSave keeps a retry snapshot if the network is unavailable.
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active" || modeRef.current === "dividing" || !initializedRef.current) return;
+      void (async () => {
+        const latest = await getEditorContent();
+        markDirty(isThoughtDraftRef.current ? "" : titleRef.current, latest);
+        await flush();
+      })();
+    });
+    return () => sub.remove();
+  }, [getEditorContent, markDirty, flush]);
 
   // ── 헤더/하드웨어 뒤로가기 통합 ────────────────────────────────────────────
   const handleHeaderBack = useCallback(() => {
@@ -1578,6 +1625,7 @@ export default function WritingScreen() {
             current={isDividing ? "DIVIDING" : "DRAFT"}
             onPress={handleStateBarPress}
             disabled={isNavigating}
+            draftLabel="단상"
           />
           {keyboardVisible ? (
             <ScalePressable onPress={handleDismissKeyboard} hitSlop={12}>
@@ -1710,12 +1758,13 @@ export default function WritingScreen() {
                 onReady={handleEditorReady}
                 onChange={handleEditorChange}
                 onExportMarkdown={handleExportMarkdown}
-                onTitleChange={handleTitleChange}
+                onTitleChange={isThoughtDraft && !isDividing ? undefined : handleTitleChange}
                 onKeyboardVisibilityChange={setKeyboardVisible}
                 onSelectionUpdate={handleSelectionUpdate}
                 bodyFontSize={bodyFontSize}
                 bodyLetterSpacing={bodyLetterSpacing}
                 titleFontSize={titleFontSize}
+                hideTitle={isThoughtDraft && !isDividing}
                 sourceArticleSlotText={
                   isDividing
                     ? ""

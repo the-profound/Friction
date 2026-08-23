@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { and, desc, eq, sql } from "drizzle-orm";
-import { db, storedSentencesTable, articlesTable } from "@workspace/db";
+import { db, storedSentencesTable, articlesTable, thoughtQuestionSourcesTable, thoughtsTable } from "@workspace/db";
 import { CreateStoredSentenceBody, ToggleStoredSentenceFavoriteBody } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -87,7 +87,28 @@ router.get("/stored-sentences/:id", async (req, res) => {
 });
 
 router.delete("/stored-sentences/:id", async (req, res) => {
-  const [deleted] = await db.delete(storedSentencesTable).where(eq(storedSentencesTable.id, req.params.id)).returning();
+  const sentenceId = req.params.id;
+  const [thoughtReference, questionReference] = await Promise.all([
+    db
+      .select({ id: thoughtsTable.id })
+      .from(thoughtsTable)
+      .where(eq(thoughtsTable.sourceStoredSentenceId, sentenceId))
+      .limit(1),
+    db
+      .select({ id: thoughtQuestionSourcesTable.id })
+      .from(thoughtQuestionSourcesTable)
+      .where(eq(thoughtQuestionSourcesTable.sourceStoredSentenceId, sentenceId))
+      .limit(1),
+  ]);
+
+  if (thoughtReference || questionReference) {
+    res.status(409).json({
+      error: "This sentence is used as thought provenance and cannot be deleted",
+    });
+    return;
+  }
+
+  const [deleted] = await db.delete(storedSentencesTable).where(eq(storedSentencesTable.id, sentenceId)).returning();
   if (!deleted) {
     res.status(404).json({ error: "Sentence not found" });
     return;

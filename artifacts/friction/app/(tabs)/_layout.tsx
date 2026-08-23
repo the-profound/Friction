@@ -11,29 +11,29 @@ import { useNavigation } from "@/contexts/NavigationContext";
 import { useUser } from "@/contexts/UserContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
-import { useCreateArticle } from "@workspace/api-client-react";
+import { useCreateThought } from "@workspace/api-client-react";
 import { invalidateArticleLists } from "@/lib/queryInvalidation";
 
 export default function TabLayout() {
   const { showRecordFab, activeTab } = useNavigation();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { userId } = useUser();
+  useUser();
   const { showToast } = useToast();
-  const createArticle = useCreateArticle();
+  const createThought = useCreateThought();
 
   const handleNewMemo = useCallback(async () => {
-    if (createArticle.isPending) return;
+    if (createThought.isPending) return;
     try {
-      const article = await createArticle.mutateAsync({
-        data: { authorId: userId, title: "" },
+      const thought = await createThought.mutateAsync({
+        data: { content: "# \n\n", createdFrom: "direct", status: "PRELIMINARY" },
       });
       invalidateArticleLists(queryClient);
-      router.push({ pathname: "/on-01a", params: { id: article.id } });
+      router.push({ pathname: "/on-01a", params: { id: thought.id } });
     } catch {
       showToast({ message: "메모 생성에 실패했습니다.", type: "error" });
     }
-  }, [createArticle, userId, queryClient, router, showToast]);
+  }, [createThought, queryClient, router, showToast]);
 
   const fabBottom = useNavBarBottomSafeArea(8);
 

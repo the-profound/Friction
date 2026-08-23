@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { and, eq, exists, ilike, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { and, eq, exists, ilike, isNotNull, isNull, ne, notExists, or, sql } from "drizzle-orm";
 import { db, articlesTable, myCollectionArticlesTable, myCollectionsTable, thoughtPromotionsTable, thoughtsTable, usersTable, type ArticleStatus } from "@workspace/db";
 import { CreateArticleBody, UpdateArticleBody, TransitionArticleStatusBody, FinalizeArticleBody, ReadingMemoQueryParams } from "@workspace/api-zod";
 import { ObjectStorageService } from "../lib/objectStorage";
@@ -74,12 +74,13 @@ function toThoughtMarkdown(title: string, content: string): string {
 }
 
 function preliminaryThoughtAsDraft(thought: typeof thoughtsTable.$inferSelect, id = thought.id) {
-  const { title, content } = splitThoughtMarkdown(thought.content);
   return {
     id,
     authorId: thought.authorId,
-    title,
-    content,
+    // A thought owns one Markdown document.  Do not split its leading H1 into
+    // the article title until the atomic promotion transaction runs.
+    title: "",
+    content: thought.content ?? "",
     status: "DRAFT" as const,
     pages: null,
     layoutWidth: null,
@@ -95,6 +96,16 @@ function preliminaryThoughtAsDraft(thought: typeof thoughtsTable.$inferSelect, i
 function unpromotedThoughtCondition() {
   return or(
     eq(thoughtsTable.status, "PRELIMINARY"),
+    and(
+      eq(thoughtsTable.status, "NORMAL"),
+      eq(thoughtsTable.createdFrom, "question"),
+      notExists(
+        db
+          .select({ id: thoughtPromotionsTable.id })
+          .from(thoughtPromotionsTable)
+          .where(eq(thoughtPromotionsTable.fromThoughtId, thoughtsTable.id)),
+      ),
+    ),
     and(
       isNotNull(thoughtsTable.migratedFromArticleId),
       exists(
@@ -307,7 +318,7 @@ router.get("/articles/:id", requireAuth, async (req, res) => {
     .where(
       and(
         eq(thoughtsTable.id, req.params.id),
-        eq(thoughtsTable.status, "PRELIMINARY"),
+        unpromotedThoughtCondition(),
         isNull(thoughtsTable.deletedAt),
       ),
     );
@@ -328,7 +339,7 @@ router.patch("/articles/:id", requireAuth, async (req, res) => {
       .where(
         and(
           eq(thoughtsTable.id, req.params.id),
-          eq(thoughtsTable.status, "PRELIMINARY"),
+          unpromotedThoughtCondition(),
           isNull(thoughtsTable.deletedAt),
         ),
       );
@@ -353,16 +364,16 @@ router.patch("/articles/:id", requireAuth, async (req, res) => {
       return;
     }
 
-    const current = splitThoughtMarkdown(thought.content);
-    const title = parsed.data.title ?? current.title;
-    const content = parsed.data.content ?? current.content;
     const sourceArticleId = "sourceArticleId" in parsed.data
       ? parsed.data.sourceArticleId
       : thought.sourceArticleId;
     const [updated] = await db
       .update(thoughtsTable)
       .set({
-        content: toThoughtMarkdown(title, content),
+        // Thought-mode editors own one canonical Markdown document, including
+        // its leading H1.  Article facades expose an empty title, so rebuilding
+        // with `toThoughtMarkdown` would add a second heading on every save.
+        content: parsed.data.content ?? thought.content,
         sourceArticleId,
         updatedAt: new Date(),
       })
@@ -387,9 +398,10 @@ router.patch("/articles/:id", requireAuth, async (req, res) => {
         res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
         return;
       }
-      const current = splitThoughtMarkdown(migratedThought.content);
       const [updated] = await db.update(thoughtsTable).set({
-        content: toThoughtMarkdown(parsed.data.title ?? current.title, parsed.data.content ?? current.content),
+        // Migrated DRAFT facades use the same canonical Markdown document
+        // contract as newly created thoughts.
+        content: parsed.data.content ?? migratedThought.content,
         updatedAt: new Date(),
       }).where(eq(thoughtsTable.id, migratedThought.id)).returning();
       res.json(preliminaryThoughtAsDraft(updated, existing.id));
@@ -572,7 +584,7 @@ router.post("/articles/:id/transition", requireAuth, async (req, res) => {
       .where(
         and(
           eq(thoughtsTable.id, req.params.id),
-          eq(thoughtsTable.status, "PRELIMINARY"),
+          unpromotedThoughtCondition(),
           isNull(thoughtsTable.deletedAt),
         ),
       );
@@ -597,7 +609,7 @@ router.post("/articles/:id/transition", requireAuth, async (req, res) => {
         const [existingPromotion] = await tx
           .select({ id: thoughtsTable.id })
           .from(thoughtsTable)
-          .where(and(eq(thoughtsTable.id, thought.id), eq(thoughtsTable.status, "PRELIMINARY")))
+          .where(and(eq(thoughtsTable.id, thought.id), unpromotedThoughtCondition()))
           .limit(1);
         if (!existingPromotion) return null;
 

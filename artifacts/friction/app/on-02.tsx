@@ -8,7 +8,7 @@ import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ArticleListItem from "@/components/ArticleListItem/ArticleListItem";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
-import { useListArticles, useDeleteArticle, useCreateArticle } from "@workspace/api-client-react";
+import { useListArticles, useDeleteArticle, useCreateThought } from "@workspace/api-client-react";
 import { invalidateArticleLists } from "@/lib/queryInvalidation";
 import type { Article, ArticleCover } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
@@ -60,7 +60,7 @@ export default function MemoCollectionScreen() {
   });
 
   const deleteArticle = useDeleteArticle();
-  const createArticle = useCreateArticle();
+  const createThought = useCreateThought();
 
   const sortedArticles = useMemo(() => {
     if (!articles) return [];
@@ -190,15 +190,15 @@ export default function MemoCollectionScreen() {
             textStyle={styles.writeButtonText}
             onPress={async () => {
               try {
-                const article = await createArticle.mutateAsync({
-                  data: { authorId: userId, title: "" },
+                const thought = await createThought.mutateAsync({
+                  data: { content: "# \n\n", createdFrom: "direct", status: "PRELIMINARY" },
                 });
-                router.push({ pathname: "/on-01a", params: { id: article.id } });
+                router.push({ pathname: "/on-01a", params: { id: thought.id } });
               } catch {
                 showToast({ message: "메모 생성에 실패했습니다.", type: "error" });
               }
             }}
-            pending={createArticle.isPending}
+            pending={createThought.isPending}
             label="새 메모 쓰기"
             pendingLabel="만드는 중..."
             renderIcon={({ disabled }) => (

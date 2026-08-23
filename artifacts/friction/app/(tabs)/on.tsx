@@ -220,18 +220,17 @@ export default function OnScreen() {
     try {
       const newThought = await createThought.mutateAsync({
         data: {
-          content: "",
+          content: "# \n\n",
           createdFrom: "direct",
-          status: "NORMAL",
+          status: "PRELIMINARY",
         },
       });
       await refetchThoughts();
-      setEditingThoughtId(newThought.id);
-      setEditingText("");
+      router.push({ pathname: "/on-01a", params: { id: newThought.id } });
     } catch {
       showToast({ message: "단상 생성에 실패했습니다.", type: "error" });
     }
-  }, [createThought, refetchThoughts, showToast]);
+  }, [createThought, refetchThoughts, router, showToast]);
 
   const selectThoughtSortOrder = useCallback((order: "latest" | "oldest") => {
     setThoughtSortOrder(order);
@@ -241,21 +240,19 @@ export default function OnScreen() {
   }, []);
 
   const handleThoughtCardPress = useCallback((thought: Thought) => {
-    setEditingThoughtId(thought.id);
-    setEditingText(thought.content ?? "");
-  }, []);
+    router.push({ pathname: "/on-01a", params: { id: thought.id } });
+  }, [router]);
 
   const handleQuestionCardPress = useCallback(async (thought: Thought) => {
     if (activateThoughtQuestion.isPending) return;
     try {
       const result = await activateThoughtQuestion.mutateAsync({ id: thought.id });
       await Promise.all([refetchThoughts(), refetchQuestionQueue()]);
-      setEditingThoughtId(result.activatedThought.id);
-      setEditingText(result.activatedThought.content ?? "");
+      router.push({ pathname: "/on-01a", params: { id: result.activatedThought.id } });
     } catch {
       showToast({ message: "질문을 시작하지 못했습니다. 다시 시도해주세요.", type: "error" });
     }
-  }, [activateThoughtQuestion, refetchThoughts, refetchQuestionQueue, showToast]);
+  }, [activateThoughtQuestion, refetchThoughts, refetchQuestionQueue, router, showToast]);
 
   const handleThoughtRefresh = useCallback(async () => {
     const currentQuestion = questionQueue?.current;
@@ -458,18 +455,18 @@ export default function OnScreen() {
   }, []);
 
   const handleNewMemo = useCallback(async () => {
-    if (createArticle.isPending) return;
+    if (createThought.isPending) return;
     closeOpenRow();
     try {
-      const article = await createArticle.mutateAsync({
-        data: { authorId: userId, title: "" },
+      const thought = await createThought.mutateAsync({
+        data: { content: "# \n\n", createdFrom: "direct", status: "PRELIMINARY" },
       });
       invalidateArticleLists(queryClient);
-      router.push({ pathname: "/on-01a", params: { id: article.id } });
+      router.push({ pathname: "/on-01a", params: { id: thought.id } });
     } catch {
       showToast({ message: "메모 생성에 실패했습니다.", type: "error" });
     }
-  }, [createArticle, userId, router, queryClient, closeOpenRow, showToast]);
+  }, [createThought, router, queryClient, closeOpenRow, showToast]);
 
   const handleSearchPress = useCallback(() => {
     closeOpenRow();

@@ -26,13 +26,13 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   getListThoughtsQueryKey,
   useCreateThought,
   useDeleteThought,
-  useUpdateThought,
   useListThoughts,
 } from "@workspace/api-client-react";
 import type { Thought } from "@workspace/api-client-react";
@@ -258,6 +258,7 @@ export default function ThoughtsBottomSheet({
   cardSheetHAnim,
   closeHandleRef,
 }: ThoughtsBottomSheetProps) {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const { height: screenHeight } = useWindowDimensions();
   const queryClient = useQueryClient();
@@ -349,7 +350,6 @@ export default function ThoughtsBottomSheet({
   );
   const thoughts = (thoughtsQuery.data ?? []) as Thought[];
   const createThought = useCreateThought();
-  const updateThought = useUpdateThought();
   const deleteThought = useDeleteThought();
 
   const invalidateThoughts = useCallback(() => {
@@ -601,51 +601,38 @@ export default function ThoughtsBottomSheet({
     if (!text || isSending) return;
     setIsSending(true);
     try {
-      // 편집 모드 가드: editingThought가 현재 articleId 소속인 경우만 PATCH 사용.
-      // articleId가 바뀐 뒤 잔류한 stale editingThought를 PATCH하는 cross-context 버그를 방지.
-      const isValidEdit =
-        editingThought != null &&
-        (articleId
-          ? editingThought.sourceArticleId === articleId
-          : editingThought.sourceArticleId == null);
-
-      if (isValidEdit && editingThought) {
-        await updateThought.mutateAsync({
-          id: editingThought.id,
-          data: { content: text },
-        });
-        setEditingThought(null);
-      } else {
-        // 잘못된 편집 상태가 남아있으면 조용히 초기화 후 새 단상으로 저장
-        if (editingThought) setEditingThought(null);
-        if (articleId) {
-          // 글 읽기 화면 컨텍스트: sourceArticleId 포함
-          await createThought.mutateAsync({
-            data: { content: text, createdFrom: "reading", sourceArticleId: articleId },
-          });
-        } else {
-          // 단상 탭 FAB 컨텍스트: sourceArticleId 없이 direct 단상으로 저장
-          await createThought.mutateAsync({
-            data: { content: text, createdFrom: "direct" },
-          });
-        }
+      if (editingThought) {
+        doClose();
+        router.push({ pathname: "/on-01a", params: { id: editingThought.id } });
+        return;
       }
+      const thought = await createThought.mutateAsync({
+        data: {
+          // The common editor owns the complete Markdown document.  Keep the
+          // selection as a quote block below an empty H1 ready for typing.
+          content: `# \n\n${articleId ? `> ${text}` : text}`,
+          createdFrom: articleId ? "reading" : "direct",
+          sourceArticleId: articleId ?? undefined,
+          status: "PRELIMINARY",
+        },
+      });
       invalidateThoughts();
       setInputText("");
+      doClose();
+      router.push({ pathname: "/on-01a", params: { id: thought.id } });
     } catch (e) {
       console.warn("[ThoughtsBottomSheet] save failed:", e);
     } finally {
       setIsSending(false);
     }
-  }, [inputText, isSending, editingThought, updateThought, createThought, articleId, invalidateThoughts]);
+  }, [inputText, isSending, editingThought, createThought, articleId, invalidateThoughts, doClose, router]);
 
   // ── Edit / Delete handlers ────────────────────────────────────────────────
 
   const handleEdit = useCallback((thought: Thought) => {
-    setEditingThought(thought);
-    setInputText(thought.content ?? "");
-    setTimeout(() => inputRef.current?.focus(), 100);
-  }, []);
+    doClose();
+    router.push({ pathname: "/on-01a", params: { id: thought.id } });
+  }, [doClose, router]);
 
   const handleDelete = useCallback(async (id: string) => {
     // Optimistic: 즉시 목록에서 숨기기
