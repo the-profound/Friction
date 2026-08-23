@@ -102,10 +102,19 @@ function ThoughtRecordCard({
     thought,
   });
   const height = width * Sizing.cardRatio;
-  const body = preview.hasTitle ? [preview.title, preview.body].filter(Boolean).join("\n\n") : preview.body;
-  const bodyLineHeight = 31;
-  const maxBodyLines = Math.max(1, Math.floor((height - 72) / bodyLineHeight));
-  const [overflowed, setOverflowed] = useState(false);
+  const textWidth = Math.max(1, width - 48);
+  const titleSize = readerFontSize(ReaderTokens.typeScale.titleCqi, textWidth);
+  const bodySize = readerFontSize(ReaderTokens.typeScale.bodyCqi, textWidth);
+  const titleLineHeight = titleSize * ReaderTokens.lineHeight.tight;
+  const bodyLineHeight = bodySize * ReaderTokens.lineHeight.relaxed;
+  const titleLines = preview.hasTitle ? 2 : 0;
+  const maxBodyLines = Math.max(
+    1,
+    Math.floor((height - 48 - (preview.hasTitle ? titleLineHeight * titleLines + 8 : 0)) / bodyLineHeight),
+  );
+  const [titleOverflowed, setTitleOverflowed] = useState(false);
+  const [bodyOverflowed, setBodyOverflowed] = useState(false);
+  const overflowed = titleOverflowed || bodyOverflowed;
 
   return (
     <ScalePressable
@@ -117,20 +126,38 @@ function ThoughtRecordCard({
     >
       {question ? <Text style={styles.questionLabel}>현재 질문</Text> : null}
       <View style={styles.thoughtCardBodyWrap}>
+        {preview.hasTitle ? (
+          <>
+            <Text
+              style={[styles.thoughtCardTitleMeasure, { fontSize: titleSize, lineHeight: titleLineHeight }]}
+              onTextLayout={(event) => setTitleOverflowed(event.nativeEvent.lines.length > titleLines)}
+            >
+              {preview.title}
+            </Text>
+            <Text
+              style={[styles.thoughtCardTitle, { fontSize: titleSize, lineHeight: titleLineHeight }]}
+              numberOfLines={titleLines}
+              ellipsizeMode="tail"
+            >
+              {preview.title}
+            </Text>
+          </>
+        ) : null}
         <Text
-          // The invisible source text gives us the platform's real wrapped-line
-          // count, not an unreliable character estimate.
-          style={styles.thoughtCardMeasure}
-          onTextLayout={(event) => setOverflowed(event.nativeEvent.lines.length > maxBodyLines)}
+          style={[styles.thoughtCardMeasure, { fontSize: bodySize, lineHeight: bodyLineHeight }]}
+          onTextLayout={(event) => setBodyOverflowed(event.nativeEvent.lines.length > maxBodyLines)}
         >
-          {body || "아직 적힌 내용이 없어요."}
+          {preview.body || "아직 적힌 내용이 없어요."}
         </Text>
         <Text
-          style={styles.thoughtCardBody}
+          style={[
+            styles.thoughtCardBody,
+            { fontSize: bodySize, lineHeight: bodyLineHeight, marginTop: preview.hasTitle ? 8 : 0 },
+          ]}
           numberOfLines={maxBodyLines}
           ellipsizeMode="tail"
         >
-          {body || "아직 적힌 내용이 없어요."}
+          {preview.body || "아직 적힌 내용이 없어요."}
         </Text>
       </View>
     </ScalePressable>
@@ -152,13 +179,16 @@ function RecordRow({
   onSend?: () => void;
   onArchive?: () => void;
 }) {
-  const { width } = useWindowDimensions();
+  const { width: windowWidth } = useWindowDimensions();
+  const [textFrameWidth, setTextFrameWidth] = useState(0);
   const preview = getRecordPreview(record);
   const title = (view === "content" ? preview.titleDisplay : preview.title) || preview.body || "제목 없음";
   const showsTitle = view === "title" || preview.hasTitle || record.kind !== "thought";
   const bodyLines = preview.hasTitle || record.kind !== "thought" ? 3 : 5;
-  const titleSize = readerFontSize(6.9, width - Spacing.screenPx * 2);
-  const bodySize = readerFontSize(4, width - Spacing.screenPx * 2);
+  const fallbackTextWidth = Math.max(1, windowWidth - Spacing.screenPx * 2);
+  const contentWidth = textFrameWidth || fallbackTextWidth;
+  const titleSize = readerFontSize(ReaderTokens.typeScale.titleCqi, contentWidth);
+  const bodySize = readerFontSize(ReaderTokens.typeScale.bodyCqi, contentWidth);
 
   return (
     <ScalePressable
@@ -169,6 +199,13 @@ function RecordRow({
       accessibilityLabel={`${record.kind === "thought" ? "단상" : record.kind === "editing" ? "편집 글" : "편지"} 열기`}
       accessibilityHint="길게 눌러 삭제"
     >
+      <View
+        style={styles.rowTextFrame}
+        onLayout={(event) => {
+          const nextWidth = Math.round(event.nativeEvent.layout.width);
+          if (nextWidth !== textFrameWidth) setTextFrameWidth(nextWidth);
+        }}
+      >
       <View style={styles.rowMeta}>
         <Text style={styles.rowKind}>{record.kind === "thought" ? "단상" : record.kind === "editing" ? "편집" : "편지"}</Text>
         <Text style={styles.rowDate}>{relativeDate(record.updatedAt)}</Text>
@@ -189,6 +226,7 @@ function RecordRow({
           {preview.body || "아직 적힌 내용이 없어요."}
         </Text>
       ) : null}
+      </View>
       {record.kind === "letter" && onSend && onArchive ? (
         <View style={styles.rowLetterActions}>
           <ScalePressable style={styles.rowLetterAction} contentStyle={styles.rowLetterActionContent} onPress={(event) => { event.stopPropagation(); onSend(); }}>
@@ -537,8 +575,10 @@ const styles = StyleSheet.create({
   questionCardShadow: { ...Platform.select({ ios: { shadowColor: "#8F1D2C", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.34, shadowRadius: 16 }, android: { elevation: 9 }, default: { boxShadow: "0 8px 20px rgba(143,29,44,0.34)" } as object }) },
   questionLabel: { position: "absolute", top: 18, right: 20, ...Typography.caption, color: Colors.zinc500, fontWeight: "600" },
   thoughtCardBodyWrap: { flex: 1, justifyContent: "center" },
-  thoughtCardBody: { fontFamily: ReaderTokens.fontFamily.serif, color: Colors.zinc800, fontSize: 18, lineHeight: 31 },
-  thoughtCardMeasure: { position: "absolute", opacity: 0, width: "100%", fontFamily: ReaderTokens.fontFamily.serif, color: Colors.zinc800, fontSize: 18, lineHeight: 31, pointerEvents: "none" },
+  thoughtCardTitle: { fontFamily: ReaderTokens.fontFamily.serifBold, color: Colors.zinc900 },
+  thoughtCardBody: { fontFamily: ReaderTokens.fontFamily.serif, color: Colors.zinc800 },
+  thoughtCardTitleMeasure: { position: "absolute", opacity: 0, width: "100%", fontFamily: ReaderTokens.fontFamily.serifBold, color: Colors.zinc900, pointerEvents: "none" },
+  thoughtCardMeasure: { position: "absolute", opacity: 0, width: "100%", fontFamily: ReaderTokens.fontFamily.serif, color: Colors.zinc800, pointerEvents: "none" },
   cardNav: { flexDirection: "row", alignItems: "center", gap: 16 },
   cardNavButton: { width: 42, height: 42, flexGrow: 0, flexShrink: 0 },
   cardNavButtonContent: { width: 42, height: 42, flexGrow: 0, flexShrink: 0, borderRadius: 21, borderWidth: 1, borderColor: Colors.zinc200, alignItems: "center", justifyContent: "center" },
@@ -552,7 +592,8 @@ const styles = StyleSheet.create({
   rowMeta: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   rowKind: { ...Typography.caption, color: Colors.zinc500, fontWeight: "600" },
   rowDate: { ...Typography.caption, color: Colors.zinc500 },
-  rowTitle: { fontFamily: ReaderTokens.fontFamily.serif, color: Colors.zinc900 },
+  rowTextFrame: { width: "100%" },
+  rowTitle: { fontFamily: ReaderTokens.fontFamily.serifBold, color: Colors.zinc900 },
   rowBody: { fontFamily: ReaderTokens.fontFamily.serif, color: Colors.zinc600 },
   rowLetterActions: { flexDirection: "row", gap: 6, marginTop: 2 },
   rowLetterAction: { height: 32, flexGrow: 0, flexShrink: 0 },

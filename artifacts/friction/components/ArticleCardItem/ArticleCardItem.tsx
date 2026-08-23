@@ -45,13 +45,14 @@ function ArticleCardItem({
   const coverType = cover?.type ?? "default";
 
   const scale = w / CARD_W;
+  const pad = Math.max(6, Math.round(24 * scale));
+  const textFrameWidth = Math.max(1, w - pad * 2);
   const titleSize = Math.max(
     8,
-    Math.round(readerFontSize(ReaderTokens.typeScale.titleCqi, w)),
+    Math.round(readerFontSize(ReaderTokens.typeScale.titleCqi, textFrameWidth)),
   );
   const authorSize = Math.max(6, Math.round(AUTHOR_SIZE * scale));
   const collectionSize = Math.max(5, Math.round(COLLECTION_SIZE * scale));
-  const pad = Math.max(6, Math.round(24 * scale));
 
   const borderRadius = Math.max(8, Math.round(16 * scale));
 

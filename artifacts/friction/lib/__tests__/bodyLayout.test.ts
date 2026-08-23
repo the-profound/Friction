@@ -7,11 +7,11 @@ describe("reader title typography", () => {
   const read = (relativePath: string) =>
     readFileSync(join(appRoot, relativePath), "utf8");
 
-  it("keeps title conversion anchored to the shared 6.4cqi token", () => {
+  it("keeps title conversion anchored to the shared 6.9cqi token", () => {
     const tokens = read("constants/tokens.ts");
     const layout = read("lib/bodyLayout.ts");
 
-    expect(tokens).toMatch(/titleCqi:\s*6\.4/);
+    expect(tokens).toMatch(/titleCqi:\s*6\.9/);
     expect(tokens).toMatch(/titleScaleEm[\s\S]*this\.titleCqi\s*\/\s*this\.bodyCqi/);
     expect(layout).toContain(
       "readerFontSize(ReaderTokens.typeScale.titleCqi, containerWidth)",
@@ -27,7 +27,7 @@ describe("reader title typography", () => {
     const webEditor = read("components/WebViewMarkdownEditor/WebViewMarkdownEditorWeb.tsx");
 
     expect(sharedCss).toContain("font-size:var(--title-font-size,${titleScaleEm}em)");
-    expect(editorHtml).toContain("font-size:var(--title-font-size,6.4cqi)");
+    expect(editorHtml).toContain("font-size:var(--title-font-size,6.9cqi)");
     expect(readerHtml).toContain('setProperty("--title-font-size",cmd.titleFontSizePx+"px")');
     expect(measureHtml).toContain('setProperty("--title-font-size",cmd.titleFontSizePx+"px")');
     expect(webMeasure).toContain("buildBodyTypographyCss");

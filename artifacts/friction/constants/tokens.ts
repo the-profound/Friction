@@ -385,7 +385,7 @@ export const ReaderTokens = {
     bodyCqi: 4.0,
     captionCqi: 3.4,
     metadataCqi: 2.8,
-    titleCqi: 6.4,
+    titleCqi: 6.9,
     /** 제목 입력과 제목1 서식이 공유하는 본문 대비 배율. */
     get titleScaleEm() {
       return this.titleCqi / this.bodyCqi;
