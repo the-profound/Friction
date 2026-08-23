@@ -1,6 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
-import { Colors, Sizing, ReaderTokens } from "@/constants/tokens";
+import { Colors, Sizing, ReaderTokens, Shadows } from "@/constants/tokens";
 
 interface EnvelopeFrontCardProps {
   recipientName?: string | null;
@@ -8,6 +8,7 @@ interface EnvelopeFrontCardProps {
   senderLocation?: string | null;
   cardWidth?: number;
   isActive?: boolean;
+  carouselShadow?: boolean;
 }
 
 const CARD_W = Sizing.cardSlotW;
@@ -26,6 +27,7 @@ export default function EnvelopeFrontCard({
   senderLocation,
   cardWidth,
   isActive = true,
+  carouselShadow = false,
 }: EnvelopeFrontCardProps) {
   const w = cardWidth ?? CARD_W;
   const h = w * Sizing.cardRatio;
@@ -44,11 +46,13 @@ export default function EnvelopeFrontCard({
   return (
     <View
       style={[
-        styles.card,
+        styles.shadowHost,
         { width: w, height: h, borderRadius },
+        carouselShadow && styles.carouselShadow,
         !isActive && styles.inactive,
       ]}
     >
+      <View style={[styles.card, { borderRadius }]}>
       {/* ── Top-left: 수신인(나) + 두 줄 밑줄 ── */}
       <View style={{ position: "absolute", top: pad, left: pad }}>
         {recipientName ? (
@@ -96,16 +100,24 @@ export default function EnvelopeFrontCard({
         {/* 발신처 아래 밑줄 */}
         <View style={{ width: lineW, height: 1, backgroundColor: lineColor, marginTop: Math.round(4 * scale) }} />
       </View>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
+  shadowHost: {
     backgroundColor: Colors.white,
-    overflow: "hidden",
     borderWidth: 1,
     borderColor: "rgba(0,0,0,0.06)",
+  },
+  card: {
+    flex: 1,
+    backgroundColor: Colors.white,
+    overflow: "hidden",
+  },
+  carouselShadow: {
+    ...Shadows.carouselCard,
   },
   inactive: {
     opacity: Colors.cardInactiveOpacity,

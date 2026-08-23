@@ -1,13 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Animated,
   FlatList,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
-  PanResponder,
   Platform,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -36,7 +31,7 @@ import {
 import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
-import DotIndicator from "@/components/DotIndicator/DotIndicator";
+import { DateGroupCarousel } from "@/components/DateGroupCarousel/DateGroupCarousel";
 import DropdownFilter from "@/components/DropdownFilter/DropdownFilter";
 import { PageHeader } from "@/components/NavBar/PageHeader";
 import RefreshableEmpty from "@/components/RefreshableEmpty";
@@ -71,6 +66,7 @@ import {
   type UnifiedRecord,
 } from "@/lib/recordList";
 import type { ArticleStatus } from "@/lib/policies";
+import { useDateGroupSnap } from "@/hooks/useDateGroupSnap";
 
 const KIND_OPTIONS: { key: RecordKind; label: string }[] = [
   { key: "thought", label: "단상" },
@@ -83,12 +79,10 @@ const VIEW_OPTIONS: { key: RecordView; label: string }[] = [
   { key: "title", label: "제목만" },
 ];
 
-const CARD_SWIPE_THRESHOLD = 48;
-const CARD_FLING_VELOCITY = 0.5;
 const CARD_ACTION_AREA_H = 64;
-const CARD_SHADOW_INSET = 8;
 
 type CardRecord = UnifiedRecord & { isQuestion: boolean; questionIndex?: number };
+const cardRecordKey = (record: CardRecord) => `${record.kind}:${record.id}`;
 
 function getCardTitleLineCount(title: string, titleSize: number, textWidth: number): number {
   const charsPerLine = Math.max(1, Math.floor(textWidth / titleSize));
@@ -305,190 +299,6 @@ function RecordRow({
   );
 }
 
-/**
- * The same nested-navigation model used by the inbox: a vertical date list
- * contains native snapping carousels, while the web branch provides a
- * PanResponder-based mouse drag fallback.
- */
-function RecordCarouselGroup({
-  group,
-  cardWidth,
-  renderCard,
-  shouldIgnoreVerticalPress,
-  questionQueue = false,
-}: {
-  group: RecordDateGroup<CardRecord>;
-  cardWidth: number;
-  renderCard: (record: CardRecord, shouldIgnorePress: () => boolean, cardHeight: number) => React.ReactNode;
-  shouldIgnoreVerticalPress: () => boolean;
-  questionQueue?: boolean;
-}) {
-  const { width: windowWidth } = useWindowDimensions();
-  const cardHeight = Math.max(...group.records.map((record) => getRecordCardHeight(record, cardWidth)));
-  const snapInterval = cardWidth + Spacing.cardGap;
-  const itemCount = group.records.length;
-  const groupSignature = group.records.map((record) => `${record.kind}:${record.id}`).join("|");
-  const [activeIndex, setActiveIndex] = useState(0);
-  const activeIndexRef = useRef(0);
-  const activeRecordKeyRef = useRef<string | null>(group.records[0] ? `${group.records[0].kind}:${group.records[0].id}` : null);
-  const itemCountRef = useRef(itemCount);
-  const geometryRef = useRef({ cardWidth, windowWidth });
-  const translateX = useRef(new Animated.Value(0)).current;
-  const nativeScrollRef = useRef<ScrollView>(null);
-  const swipedRef = useRef(false);
-  const snapToRef = useRef((_index: number) => {});
-
-  geometryRef.current = { cardWidth, windowWidth };
-  itemCountRef.current = itemCount;
-
-  const getBaseX = (index: number) => {
-    const geometry = geometryRef.current;
-    return -(index * (geometry.cardWidth + Spacing.cardGap)) + (geometry.windowWidth - geometry.cardWidth) / 2;
-  };
-
-  snapToRef.current = (index: number) => {
-    const nextIndex = Math.max(0, Math.min(index, itemCountRef.current - 1));
-    activeIndexRef.current = nextIndex;
-    activeRecordKeyRef.current = group.records[nextIndex] ? `${group.records[nextIndex].kind}:${group.records[nextIndex].id}` : null;
-    setActiveIndex((current) => current === nextIndex ? current : nextIndex);
-    Animated.spring(translateX, {
-      toValue: getBaseX(nextIndex),
-      useNativeDriver: false,
-      overshootClamping: true,
-      tension: 100,
-      friction: 20,
-    }).start();
-  };
-
-  useEffect(() => {
-    // Keep the selected entity on background refetches and title/content edits.
-    // Only deletion/replacement moves selection to the nearest remaining card.
-    const recordKeys = group.records.map((record) => `${record.kind}:${record.id}`);
-    const selectedIndex = activeRecordKeyRef.current ? recordKeys.indexOf(activeRecordKeyRef.current) : -1;
-    const nextIndex = selectedIndex >= 0
-      ? selectedIndex
-      : Math.max(0, Math.min(activeIndexRef.current, itemCount - 1));
-    activeIndexRef.current = nextIndex;
-    activeRecordKeyRef.current = recordKeys[nextIndex] ?? null;
-    setActiveIndex((current) => current === nextIndex ? current : nextIndex);
-    translateX.setValue(getBaseX(nextIndex));
-    nativeScrollRef.current?.scrollTo({ x: nextIndex * (cardWidth + Spacing.cardGap), animated: false });
-  }, [groupSignature, cardWidth, windowWidth, translateX]);
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => {
-        swipedRef.current = false;
-        return false;
-      },
-      onMoveShouldSetPanResponder: (_, gesture) =>
-        itemCountRef.current > 1 &&
-        Math.abs(gesture.dx) > Math.abs(gesture.dy) &&
-        Math.abs(gesture.dx) > 5,
-      onPanResponderGrant: () => {
-        translateX.setValue(getBaseX(activeIndexRef.current));
-      },
-      onPanResponderMove: (_, gesture) => {
-        if (Math.abs(gesture.dx) > 15) swipedRef.current = true;
-        const raw = getBaseX(activeIndexRef.current) + gesture.dx;
-        const maximum = getBaseX(0);
-        const minimum = getBaseX(itemCountRef.current - 1);
-        translateX.setValue(
-          raw > maximum
-            ? maximum + (raw - maximum) * 0.3
-            : raw < minimum
-              ? minimum + (raw - minimum) * 0.3
-              : raw,
-        );
-      },
-      onPanResponderRelease: (_, gesture) => {
-        const shouldAdvance = Math.abs(gesture.vx) > CARD_FLING_VELOCITY || Math.abs(gesture.dx) >= CARD_SWIPE_THRESHOLD;
-        const direction = gesture.vx < 0 || (Math.abs(gesture.vx) <= CARD_FLING_VELOCITY && gesture.dx < 0) ? 1 : -1;
-        snapToRef.current(activeIndexRef.current + (shouldAdvance ? direction : 0));
-        setTimeout(() => { swipedRef.current = false; }, 100);
-      },
-      onPanResponderTerminate: (_, gesture) => {
-        const shouldAdvance = Math.abs(gesture.vx) > CARD_FLING_VELOCITY || Math.abs(gesture.dx) >= CARD_SWIPE_THRESHOLD;
-        const direction = gesture.vx < 0 || (Math.abs(gesture.vx) <= CARD_FLING_VELOCITY && gesture.dx < 0) ? 1 : -1;
-        snapToRef.current(activeIndexRef.current + (shouldAdvance ? direction : 0));
-        setTimeout(() => { swipedRef.current = false; }, 100);
-      },
-    }),
-  ).current;
-
-  const onNativeScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const index = Math.round(event.nativeEvent.contentOffset.x / snapInterval);
-    const nextIndex = Math.max(0, Math.min(index, itemCount - 1));
-    activeIndexRef.current = nextIndex;
-    activeRecordKeyRef.current = group.records[nextIndex] ? `${group.records[nextIndex].kind}:${group.records[nextIndex].id}` : null;
-    setActiveIndex((current) => current === nextIndex ? current : nextIndex);
-  }, [group.records, itemCount, snapInterval]);
-
-  const cards = group.records.map((record, index) => (
-    <View
-      key={`${record.kind}-${record.id}`}
-      style={[
-        styles.recordCardSlot,
-        { width: cardWidth, height: cardHeight + CARD_ACTION_AREA_H },
-        index < itemCount - 1 && { marginRight: Spacing.cardGap },
-      ]}
-    >
-      {renderCard(
-        record,
-        () => (Platform.OS === "web" && swipedRef.current) || shouldIgnoreVerticalPress(),
-        cardHeight,
-      )}
-    </View>
-  ));
-
-  // The carousel clips horizontally, so reserve a small top inset for the
-  // card shadow instead of letting the clip boundary cut it off.
-  const carouselHeight = cardHeight + CARD_ACTION_AREA_H + CARD_SHADOW_INSET;
-
-  return (
-    <View style={styles.recordGroup}>
-      <View style={styles.recordDateHeader}>
-        <Text style={styles.recordDateHeaderText}>{questionQueue ? "질문 대기열" : group.label}</Text>
-        <Text style={styles.recordDateHeaderCount}>{group.records.length}개</Text>
-      </View>
-      {Platform.OS === "web" ? (
-        <View
-          style={[styles.recordCarouselWindow, { width: windowWidth, height: carouselHeight, userSelect: "none", cursor: "grab" } as object]}
-          {...panResponder.panHandlers}
-        >
-          <Animated.View style={[styles.recordCarouselTrack, { height: carouselHeight, transform: [{ translateX }] }]}>
-            {cards}
-          </Animated.View>
-        </View>
-      ) : (
-        <ScrollView
-          ref={nativeScrollRef}
-          horizontal
-          nestedScrollEnabled
-          directionalLockEnabled
-          showsHorizontalScrollIndicator={false}
-          snapToInterval={snapInterval}
-          snapToAlignment="start"
-          decelerationRate="fast"
-          scrollEventThrottle={16}
-          onScroll={onNativeScroll}
-          contentContainerStyle={[
-            styles.recordCarouselContent,
-            {
-              paddingHorizontal: (windowWidth - cardWidth) / 2,
-              paddingTop: CARD_SHADOW_INSET,
-            },
-          ]}
-          style={[styles.recordCarouselScroll, { height: carouselHeight }]}
-        >
-          {cards}
-        </ScrollView>
-      )}
-      <DotIndicator total={itemCount} activeIndex={activeIndex} />
-    </View>
-  );
-}
-
 export default function OnScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -510,16 +320,9 @@ export default function OnScreen() {
   const [archiveArticleId, setArchiveArticleId] = useState<string | null>(null);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
-  const recordListRef = useRef<FlatList<RecordDateGroup<CardRecord>>>(null);
-  const groupLayoutsRef = useRef(new Map<string, number>());
-  const verticalSnapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const verticalPressGuardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const verticalPressGuardRef = useRef(false);
   // Refresh and activation mutate the same server-owned FIFO queue. Keep one
   // synchronous guard so a late response can never replace a newer snapshot.
   const questionQueueMutationPendingRef = useRef(false);
-  const [dateSnapOffsets, setDateSnapOffsets] = useState<number[]>([]);
-  const [questionQueueHeight, setQuestionQueueHeight] = useState(0);
 
   const articlesQuery = useListArticles({ authorId: userId });
   const thoughtsQuery = useListThoughts();
@@ -595,31 +398,9 @@ export default function OnScreen() {
     () => buildRecordDateGroups(cardRecords),
     [cardRecords],
   );
-  const rebuildDateSnapOffsets = useCallback(() => {
-    const next = cardGroups
-      .map((group) => groupLayoutsRef.current.get(group.dateKey))
-      .filter((value): value is number => value !== undefined);
-    const normalized = next.length > 0 ? [0, ...next.filter((value) => value > 0)] : [];
-    setDateSnapOffsets((previous) =>
-      previous.length === normalized.length && previous.every((value, index) => value === normalized[index])
-        ? previous
-        : normalized,
-    );
-  }, [cardGroups, questionQueueHeight]);
-
-  const setGroupOffset = useCallback((dateKey: string, offset: number) => {
-    if (groupLayoutsRef.current.get(dateKey) === offset) return;
-    groupLayoutsRef.current.set(dateKey, offset);
-    rebuildDateSnapOffsets();
-  }, [rebuildDateSnapOffsets]);
-
-  useEffect(() => {
-    const dateKeys = new Set(cardGroups.map((group) => group.dateKey));
-    for (const key of groupLayoutsRef.current.keys()) {
-      if (!dateKeys.has(key)) groupLayoutsRef.current.delete(key);
-    }
-    rebuildDateSnapOffsets();
-  }, [cardGroups, rebuildDateSnapOffsets]);
+  const dateGroupSnap = useDateGroupSnap<RecordDateGroup<CardRecord>>({
+    dateKeys: cardGroups.map((group) => group.dateKey),
+  });
   const sortedCollections = useMemo(() => [...((collectionsQuery.data ?? []) as MyCollection[])]
     .filter((collection) => !collection.isArchive)
     .sort((a, b) => Number(Boolean(b.isImpression)) - Number(Boolean(a.isImpression)) || (b.articleCount ?? 0) - (a.articleCount ?? 0)), [collectionsQuery.data]);
@@ -820,56 +601,6 @@ export default function OnScreen() {
     </View>
   ), [cardWidth, openQuestion, openRecord, router]);
 
-  const snapToNearestDate = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    if (dateSnapOffsets.length < 2) return;
-    const currentOffset = event.nativeEvent.contentOffset.y;
-    if (currentOffset <= 0) return;
-    const targetOffset = dateSnapOffsets.reduce(
-      (closest, candidate) =>
-        Math.abs(candidate - currentOffset) < Math.abs(closest - currentOffset) ? candidate : closest,
-      dateSnapOffsets[0],
-    );
-    if (Math.abs(targetOffset - currentOffset) > 1) {
-      recordListRef.current?.scrollToOffset({ offset: targetOffset, animated: true });
-    }
-  }, [dateSnapOffsets]);
-
-  const scheduleWebDateSnap = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    if (Platform.OS !== "web") return;
-    const offset = event.nativeEvent.contentOffset.y;
-    if (verticalSnapTimerRef.current) clearTimeout(verticalSnapTimerRef.current);
-    verticalSnapTimerRef.current = setTimeout(() => {
-      verticalSnapTimerRef.current = null;
-      if (dateSnapOffsets.length < 2 || offset <= 0) return;
-      const targetOffset = dateSnapOffsets.reduce(
-        (closest, candidate) =>
-          Math.abs(candidate - offset) < Math.abs(closest - offset) ? candidate : closest,
-        dateSnapOffsets[0],
-      );
-      if (Math.abs(targetOffset - offset) > 1) {
-        recordListRef.current?.scrollToOffset({ offset: targetOffset, animated: true });
-      }
-    }, 110);
-  }, [dateSnapOffsets]);
-
-  const handleRecordListScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    // React Native Web can still emit a Pressable click after a drag has handed
-    // off to the parent scroll view. Suppress that trailing click briefly while
-    // keeping a later, stationary tap available.
-    verticalPressGuardRef.current = true;
-    if (verticalPressGuardTimerRef.current) clearTimeout(verticalPressGuardTimerRef.current);
-    verticalPressGuardTimerRef.current = setTimeout(() => {
-      verticalPressGuardRef.current = false;
-      verticalPressGuardTimerRef.current = null;
-    }, 180);
-    scheduleWebDateSnap(event);
-  }, [scheduleWebDateSnap]);
-
-  useEffect(() => () => {
-    if (verticalSnapTimerRef.current) clearTimeout(verticalSnapTimerRef.current);
-    if (verticalPressGuardTimerRef.current) clearTimeout(verticalPressGuardTimerRef.current);
-  }, []);
-
   return (
     <View style={styles.container}>
       <PageHeader
@@ -893,45 +624,48 @@ export default function OnScreen() {
         <View style={styles.center}><Text style={styles.muted}>불러오는 중...</Text></View>
       ) : view === "card" && (cardGroups.length > 0 || queuedQuestionRecords.length > 0) ? (
         <FlatList
-          ref={recordListRef}
+          ref={dateGroupSnap.listRef}
           data={cardGroups}
-          extraData={questionQueueHeight}
           nestedScrollEnabled
           keyExtractor={(group) => group.dateKey}
           renderItem={({ item }) => (
-            <View onLayout={(event) => setGroupOffset(item.dateKey, Math.round(event.nativeEvent.layout.y))}>
-              <RecordCarouselGroup
-                group={item}
+            <View onLayout={dateGroupSnap.onDateGroupLayout(item.dateKey)}>
+              <DateGroupCarousel
+                dateLabel={item.label}
+                countLabel={`${item.records.length}개`}
+                items={item.records}
+                itemKey={cardRecordKey}
                 cardWidth={cardWidth}
-                renderCard={renderRecordCard}
-                shouldIgnoreVerticalPress={() => verticalPressGuardRef.current}
+                cardHeight={getRecordGroupCardHeight(item.records, cardWidth)}
+                actionAreaHeight={CARD_ACTION_AREA_H}
+                renderCard={(record, context) => renderRecordCard(record, context.shouldIgnorePress, getRecordGroupCardHeight(item.records, cardWidth))}
+                shouldIgnoreVerticalPress={dateGroupSnap.shouldIgnoreVerticalPress}
               />
             </View>
           )}
           ListHeaderComponent={queuedQuestionRecords.length > 0 ? (
-            <View
-              onLayout={(event) => {
-                const nextHeight = Math.round(event.nativeEvent.layout.height);
-                setQuestionQueueHeight((previous) => previous === nextHeight ? previous : nextHeight);
-              }}
-            >
-              <RecordCarouselGroup
-                group={{ dateKey: "question-queue", label: "질문 대기열", records: queuedQuestionRecords }}
+            <View>
+              <DateGroupCarousel
+                dateLabel="질문 대기열"
+                countLabel={`${queuedQuestionRecords.length}개`}
+                items={queuedQuestionRecords}
+                itemKey={cardRecordKey}
                 cardWidth={cardWidth}
-                renderCard={renderRecordCard}
-                shouldIgnoreVerticalPress={() => verticalPressGuardRef.current}
-                questionQueue
+                cardHeight={getRecordGroupCardHeight(queuedQuestionRecords, cardWidth)}
+                actionAreaHeight={CARD_ACTION_AREA_H}
+                renderCard={(record, context) => renderRecordCard(record, context.shouldIgnorePress, getRecordGroupCardHeight(queuedQuestionRecords, cardWidth))}
+                shouldIgnoreVerticalPress={dateGroupSnap.shouldIgnoreVerticalPress}
               />
             </View>
           ) : null}
           refreshControl={<RefreshControl refreshing={articlesQuery.isRefetching || thoughtsQuery.isRefetching || questionQuery.isRefetching || refreshQuestion.isPending} onRefresh={() => refreshAll(kind === "thought")} />}
-          snapToOffsets={dateSnapOffsets.length > 1 ? dateSnapOffsets : undefined}
+          snapToOffsets={dateGroupSnap.snapOffsets.length > 1 ? dateGroupSnap.snapOffsets : undefined}
           snapToAlignment="start"
           decelerationRate="fast"
           disableIntervalMomentum
-          onMomentumScrollEnd={snapToNearestDate}
-          onScrollEndDrag={snapToNearestDate}
-          onScroll={handleRecordListScroll}
+          onMomentumScrollEnd={dateGroupSnap.onMomentumScrollEnd}
+          onScrollEndDrag={dateGroupSnap.onScrollEndDrag}
+          onScroll={dateGroupSnap.onScroll}
           scrollEventThrottle={16}
           contentContainerStyle={[styles.recordGroupList, { paddingBottom: navBottom }]}
           showsVerticalScrollIndicator={false}
@@ -1008,27 +742,9 @@ const styles = StyleSheet.create({
   muted: { ...Typography.body, color: Colors.zinc500, textAlign: "center" },
   emptyTitle: { ...Typography.bodySemiBold, color: Colors.zinc900, fontSize: 17, textAlign: "center" },
   recordGroupList: {},
-  recordGroup: { marginBottom: 8 },
-  recordDateHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    height: Sizing.dateHeaderH - CARD_SHADOW_INSET,
-    paddingTop: 6,
-    paddingBottom: 6,
-    paddingHorizontal: Spacing.screenPx,
-    backgroundColor: "transparent",
-  },
-  recordDateHeaderText: { ...Typography.dateHeader, color: Colors.zinc600 },
-  recordDateHeaderCount: { ...Typography.caption, color: Colors.zinc500 },
-  recordCarouselWindow: { overflow: "hidden" },
-  recordCarouselTrack: { flexDirection: "row", paddingTop: CARD_SHADOW_INSET },
-  recordCarouselScroll: {},
-  recordCarouselContent: {},
-  recordCardSlot: {},
   recordCardFrame: { flex: 1, alignItems: "center" },
   recordCardActionArea: { height: CARD_ACTION_AREA_H, alignItems: "center", justifyContent: "center" },
-  thoughtCard: { flexGrow: 0, flexShrink: 0, borderRadius: 16, ...Shadows.card },
+  thoughtCard: { flexGrow: 0, flexShrink: 0, borderRadius: 16, ...Shadows.carouselCard },
   thoughtCardContent: { flex: 1, backgroundColor: Colors.zinc50, borderRadius: 16 },
   questionCardContent: { backgroundColor: Colors.noticeAccent },
   thoughtCardBodyWrap: { flex: 1, justifyContent: "flex-start" },
@@ -1077,4 +793,8 @@ function getRecordCardHeight(record: UnifiedRecord, width: number): number {
     baseHeight,
     Math.ceil(layout.paddingY * 2 + titleHeight + Spacing.md + minimumBodyHeight),
   );
+}
+
+function getRecordGroupCardHeight(records: readonly UnifiedRecord[], width: number): number {
+  return Math.max(...records.map((record) => getRecordCardHeight(record, width)));
 }

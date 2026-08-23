@@ -1,18 +1,12 @@
-import React, { useState, useRef, useMemo, useCallback, useEffect } from "react";
+import React, { useState, useRef, useMemo, useCallback } from "react";
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
-  Dimensions,
   RefreshControl,
   ScrollView,
-  Platform,
-  Animated,
-  PanResponder,
   Pressable,
-  NativeSyntheticEvent,
-  NativeScrollEvent,
 } from "react-native";
 import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar";
 import { useRouter, useFocusEffect } from "expo-router";
@@ -23,7 +17,7 @@ import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { PageHeader } from "@/components/NavBar/PageHeader";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import EnvelopeFrontCard from "@/components/EnvelopeCard/EnvelopeFrontCard";
-import DotIndicator from "@/components/DotIndicator/DotIndicator";
+import { DateGroupCarousel } from "@/components/DateGroupCarousel/DateGroupCarousel";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import CardSelectOverlay, { type OriginLayout, type ChainArticleMeta, type EnvelopeInfo } from "@/components/CardSelectOverlay/CardSelectOverlay";
 import { useAncestorChain } from "@/hooks/useAncestorChain";
@@ -36,6 +30,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { isQueryStale } from "@/lib/useScreenFocused";
 import { useRealtimeChannel } from "@/lib/useRealtimeChannel";
 import { LIST_PERF_PRESET } from "@/lib/listPerf";
+import { useDateGroupSnap } from "@/hooks/useDateGroupSnap";
 
 /** Recursively collect all inbox descendants of rootArticleId (oldest → newest BFS). */
 function findAllDescendants(rootArticleId: string, allItems: InboxItem[]): InboxItem[] {
@@ -47,20 +42,8 @@ function getInboxSenderName(item: InboxItem): string {
   return item.senderDisplayName ?? item.sender?.nickname ?? item.sender?.id ?? "참여자";
 }
 
-const { width: SCREEN_W } = Dimensions.get("window");
 const CARD_W = Sizing.cardSlotW;
 const CARD_H = Sizing.cardH;
-const CARD_GAP = Spacing.cardGap;
-const SNAP_INTERVAL = CARD_W + CARD_GAP;
-const SNAP_THRESHOLD = 48;
-const FLING_VELOCITY = 0.5;
-const GROUP_ITEM_H = Sizing.groupH + 8;
-
-const CENTER_OFFSET = (SCREEN_W - CARD_W) / 2;
-
-function getBaseX(idx: number) {
-  return -(idx * SNAP_INTERVAL) + CENTER_OFFSET;
-}
 
 interface DateGroup {
   dateKey: string;
@@ -116,230 +99,10 @@ function groupBySlot(items: InboxItem[]): DateGroup[] {
   });
 }
 
-/**
- * Web: PanResponder + Animated (mouse drag works via RN Web's mouse→touch mapping)
- * Native: horizontal ScrollView with snap (native touch scroll, no gesture conflict)
- */
-function CarouselGroup({
-  group,
-  onCardPress,
-  hiddenCardId,
-  recipientName,
-}: {
-  group: DateGroup;
-  onCardPress: (item: InboxItem, layout: OriginLayout) => void;
-  hiddenCardId?: string | null;
-  recipientName?: string | null;
-}) {
-  const itemCount = group.items.length;
-  const [activeIndex, setActiveIndex] = useState(0);
-
-  // Refs for each card slot — used to call measureInWindow on press
-  const cardSlotRefs = useRef<(View | null)[]>([]);
-
-  // ── Web: PanResponder state ─────────────────────────────────────────────
-  const activeIndexRef = useRef(0);
-  const itemCountRef = useRef(itemCount);
-  const translateX = useRef(new Animated.Value(getBaseX(0))).current;
-  // Tracks whether the current gesture was a drag — blocks onPress if true.
-  // Reset on every new touch start so plain taps always work.
-  const swipedRef = useRef(false);
-
-  useEffect(() => {
-    itemCountRef.current = itemCount;
-    const clamped = Math.min(activeIndexRef.current, itemCount - 1);
-    if (clamped !== activeIndexRef.current) {
-      activeIndexRef.current = clamped;
-      setActiveIndex(clamped);
-      translateX.setValue(getBaseX(clamped));
-    }
-  }, [itemCount, translateX]);
-
-  const snapToRef = useRef((_idx: number) => {});
-  snapToRef.current = (idx: number) => {
-    const clamped = Math.max(0, Math.min(idx, itemCountRef.current - 1));
-    activeIndexRef.current = clamped;
-    setActiveIndex(clamped);
-    Animated.spring(translateX, {
-      toValue: getBaseX(clamped),
-      useNativeDriver: false,
-      overshootClamping: true,
-      tension: 100,
-      friction: 20,
-    }).start();
-  };
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => {
-        swipedRef.current = false;
-        return false;
-      },
-      onMoveShouldSetPanResponder: (_, g) =>
-        itemCountRef.current > 1 &&
-        Math.abs(g.dx) > Math.abs(g.dy) &&
-        Math.abs(g.dx) > 5,
-      onPanResponderGrant: () => {
-        translateX.setValue(getBaseX(activeIndexRef.current));
-      },
-      onPanResponderMove: (_, g) => {
-        // Only treat as a deliberate swipe once the user has dragged >15px,
-        // avoiding false-positives from slight trackpad/mouse micro-movements
-        // that would block subsequent taps.
-        if (Math.abs(g.dx) > 15) {
-          swipedRef.current = true;
-        }
-        const baseX = getBaseX(activeIndexRef.current);
-        const raw = baseX + g.dx;
-        const maxX = getBaseX(0);
-        const minX = getBaseX(itemCountRef.current - 1);
-        const rubber =
-          raw > maxX
-            ? maxX + (raw - maxX) * 0.3
-            : raw < minX
-              ? minX + (raw - minX) * 0.3
-              : raw;
-        translateX.setValue(rubber);
-      },
-      onPanResponderRelease: (_, g) => {
-        const { dx, vx } = g;
-        const current = activeIndexRef.current;
-        let next = current;
-        if (Math.abs(vx) > FLING_VELOCITY) {
-          next = vx < 0 ? current + 1 : current - 1;
-        } else if (Math.abs(dx) >= SNAP_THRESHOLD) {
-          next = dx < 0 ? current + 1 : current - 1;
-        }
-        snapToRef.current(next);
-        // Reset after any spurious same-gesture click event has fired (web).
-        // onStartShouldSetPanResponder is not reliably called for subsequent
-        // mouse clicks once the responder has been granted, so we reset here.
-        setTimeout(() => { swipedRef.current = false; }, 100);
-      },
-      onPanResponderTerminate: (_, g) => {
-        const { dx, vx } = g;
-        const current = activeIndexRef.current;
-        let next = current;
-        if (Math.abs(vx) > FLING_VELOCITY) {
-          next = vx < 0 ? current + 1 : current - 1;
-        } else if (Math.abs(dx) >= SNAP_THRESHOLD) {
-          next = dx < 0 ? current + 1 : current - 1;
-        }
-        snapToRef.current(next);
-        setTimeout(() => { swipedRef.current = false; }, 100);
-      },
-    }),
-  ).current;
-
-  // ── Native: ScrollView onScroll ─────────────────────────────────────────
-  const handleScroll = useCallback(
-    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const offsetX = e.nativeEvent.contentOffset.x;
-      const index = Math.round(offsetX / SNAP_INTERVAL);
-      setActiveIndex(Math.max(0, Math.min(index, itemCount - 1)));
-    },
-    [itemCount],
-  );
-
-  // ── Shared card list ────────────────────────────────────────────────────
-  const cards = group.items.map((item, index) => {
-    const isSealed = !!(item as any).isEnvelope && !item.openedAt;
-    const handlePress = () => {
-      if (Platform.OS === "web" && swipedRef.current) return;
-      const slotRef = cardSlotRefs.current[index];
-      if (slotRef) {
-        slotRef.measureInWindow((x, y, width, height) => {
-          onCardPress(item, { x, y, width, height });
-        });
-      } else {
-        onCardPress(item, { x: 0, y: 0, width: CARD_W, height: CARD_H });
-      }
-    };
-    return (
-      <View
-        key={item.id}
-        ref={(ref) => { cardSlotRefs.current[index] = ref; }}
-        style={[
-          styles.cardSlot,
-          index < group.items.length - 1 && { marginRight: CARD_GAP },
-          item.id === hiddenCardId && styles.cardSlotHidden,
-        ]}
-      >
-        {isSealed ? (
-          <EnvelopeFrontCard
-            senderName={getInboxSenderName(item)}
-            senderLocation={item.collectionName}
-            recipientName={recipientName}
-            isActive={index === activeIndex}
-            cardWidth={CARD_W}
-          />
-        ) : (
-          <ArticleCardItem
-            title={item.article?.title ?? "제목 없음"}
-            onPress={handlePress}
-            authorName={getInboxSenderName(item)}
-            collectionName={item.collectionName}
-            cover={item.article?.cover}
-            isRead={item.isRead}
-            isActive={index === activeIndex}
-          />
-        )}
-        {isSealed ? (
-          <Pressable style={StyleSheet.absoluteFill} onPress={handlePress} />
-        ) : null}
-      </View>
-    );
-  });
-
-  return (
-    <View style={styles.groupContainer}>
-      <View style={styles.dateHeader}>
-        <Text style={styles.dateHeaderText}>{group.label}</Text>
-        <Text style={styles.dateHeaderCount}>{group.items.length}편</Text>
-      </View>
-
-      {Platform.OS === "web" ? (
-        // Web: PanResponder captures mouse drag events (RN Web maps mouse→touch)
-        <View
-          style={[
-            styles.carouselWindow,
-            // Prevent text-selection and browser native drag from firing
-            // pointercancel mid-gesture (web-only CSS props)
-            { userSelect: "none", cursor: "grab" } as object,
-          ]}
-          {...panResponder.panHandlers}
-        >
-          <Animated.View
-            style={[styles.carouselTrack, { transform: [{ translateX }] }]}
-          >
-            {cards}
-          </Animated.View>
-        </View>
-      ) : (
-        // Native: horizontal ScrollView with snap — proper touch gesture handling
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          snapToInterval={SNAP_INTERVAL}
-          snapToAlignment="start"
-          decelerationRate="fast"
-          scrollEventThrottle={16}
-          onScroll={handleScroll}
-          contentContainerStyle={styles.carouselContent}
-          style={styles.carouselScroll}
-        >
-          {cards}
-        </ScrollView>
-      )}
-
-      <DotIndicator total={group.items.length} activeIndex={activeIndex} />
-    </View>
-  );
-}
-
 // Module-level keyExtractor — stable identity across renders so FlatList
 // can correctly skip per-row reconciliation when only parent state changes.
 const groupKeyExtractor = (group: DateGroup) => group.dateKey;
+const inboxItemKey = (item: InboxItem) => item.id;
 
 export default function InboxScreen() {
   const { startFadeToBlack } = useReaderTransition();
@@ -392,6 +155,9 @@ export default function InboxScreen() {
   }, [visibleItems, searchQuery]);
 
   const groups = useMemo(() => groupBySlot(filteredItems), [filteredItems]);
+  const dateGroupSnap = useDateGroupSnap<DateGroup>({
+    dateKeys: groups.map((group) => group.dateKey),
+  });
 
   const handleSearchPress = useCallback(() => {
     setSearchActive((prev) => {
@@ -409,14 +175,54 @@ export default function InboxScreen() {
   // function (and triggering row-level reconciliation) on every parent render.
   const renderGroupItem = useCallback(
     ({ item: group }: { item: DateGroup }) => (
-      <CarouselGroup
-        group={group}
-        onCardPress={handleCardPress}
-        hiddenCardId={tapItem?.id ?? null}
-        recipientName={nickname}
-      />
+      <View onLayout={dateGroupSnap.onDateGroupLayout(group.dateKey)}>
+        <DateGroupCarousel
+          dateLabel={group.label}
+          countLabel={`${group.items.length}편`}
+          items={group.items}
+          itemKey={inboxItemKey}
+          cardWidth={CARD_W}
+          cardHeight={CARD_H}
+          shouldIgnoreVerticalPress={dateGroupSnap.shouldIgnoreVerticalPress}
+          renderCard={(item, context) => {
+            const isSealed = Boolean((item as any).isEnvelope) && !item.openedAt;
+            const handlePress = () => {
+              if (context.shouldIgnorePress()) return;
+              context.measureOrigin((layout) => handleCardPress(item, layout));
+            };
+            return (
+              <View style={item.id === tapItem?.id ? styles.cardSlotHidden : undefined}>
+                {isSealed ? (
+                  <EnvelopeFrontCard
+                    senderName={getInboxSenderName(item)}
+                    senderLocation={item.collectionName}
+                    recipientName={nickname}
+                    isActive={context.isActive}
+                    cardWidth={CARD_W}
+                    carouselShadow
+                  />
+                ) : (
+                  <ArticleCardItem
+                    title={item.article?.title ?? "제목 없음"}
+                    onPress={handlePress}
+                    authorName={getInboxSenderName(item)}
+                    collectionName={item.collectionName}
+                    cover={item.article?.cover}
+                    isRead={item.isRead}
+                    isActive={context.isActive}
+                    carouselShadow
+                  />
+                )}
+                {isSealed ? (
+                  <Pressable style={StyleSheet.absoluteFill} onPress={handlePress} />
+                ) : null}
+              </View>
+            );
+          }}
+        />
+      </View>
     ),
-    [handleCardPress, tapItem?.id, nickname],
+    [dateGroupSnap.onDateGroupLayout, dateGroupSnap.shouldIgnoreVerticalPress, handleCardPress, nickname, tapItem?.id],
   );
 
   const handleModalClose = useCallback(() => {
@@ -677,6 +483,7 @@ export default function InboxScreen() {
       ) : (
         <FlatList
           {...LIST_PERF_PRESET}
+          ref={dateGroupSnap.listRef}
           data={groups}
           extraData={tapItem?.id ?? null}
           keyExtractor={groupKeyExtractor}
@@ -686,14 +493,14 @@ export default function InboxScreen() {
           }
           contentContainerStyle={[styles.listContent, { paddingBottom: navBottom }]}
           showsVerticalScrollIndicator={false}
-          snapToInterval={GROUP_ITEM_H}
+          snapToOffsets={dateGroupSnap.snapOffsets.length > 1 ? dateGroupSnap.snapOffsets : undefined}
           snapToAlignment="start"
           decelerationRate="fast"
-          getItemLayout={(_data, index) => ({
-            length: GROUP_ITEM_H,
-            offset: GROUP_ITEM_H * index,
-            index,
-          })}
+          disableIntervalMomentum
+          onMomentumScrollEnd={dateGroupSnap.onMomentumScrollEnd}
+          onScrollEndDrag={dateGroupSnap.onScrollEndDrag}
+          onScroll={dateGroupSnap.onScroll}
+          scrollEventThrottle={16}
         />
       )}
 
@@ -748,46 +555,6 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: Spacing.navBarPaddingBottom,
-  },
-  groupContainer: {
-    marginBottom: 8,
-  },
-  dateHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.screenPx,
-    paddingTop: Spacing.dateHeaderPt,
-    paddingBottom: Spacing.dateHeaderPb,
-    height: Sizing.dateHeaderH,
-  },
-  dateHeaderText: {
-    ...Typography.dateHeader,
-    color: Colors.zinc600,
-  },
-  dateHeaderCount: {
-    ...Typography.caption,
-    color: Colors.zinc500,
-  },
-  // Web carousel (PanResponder + Animated)
-  carouselWindow: {
-    width: SCREEN_W,
-    height: CARD_H,
-    overflow: "hidden",
-  },
-  carouselTrack: {
-    flexDirection: "row",
-    height: CARD_H,
-  },
-  // Native carousel (horizontal ScrollView)
-  carouselScroll: {
-    height: CARD_H,
-  },
-  carouselContent: {
-    paddingHorizontal: CENTER_OFFSET,
-  },
-  cardSlot: {
-    width: CARD_W,
   },
   cardSlotHidden: {
     opacity: 0,

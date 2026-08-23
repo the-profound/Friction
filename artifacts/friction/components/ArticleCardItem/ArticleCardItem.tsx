@@ -21,6 +21,8 @@ interface ArticleCardItemProps {
   cardWidth?: number;
   letterTypeBadge?: string | null;
   date?: string | null;
+  /** Limits shadow strength when the card sits inside a clipped date carousel. */
+  carouselShadow?: boolean;
 }
 
 const DEFAULT_BG = Colors.zinc50;
@@ -37,6 +39,7 @@ function ArticleCardItem({
   cardWidth,
   letterTypeBadge,
   date,
+  carouselShadow = false,
 }: ArticleCardItemProps) {
   const textColor = cover?.textColor ?? Colors.zinc900;
   const w = cardWidth ?? CARD_W;
@@ -60,6 +63,7 @@ function ArticleCardItem({
     <View
       style={[
         styles.cardShadowHost,
+        carouselShadow ? styles.carouselShadow : undefined,
         { width: w, height: h, borderRadius },
         !isActive && styles.inactive,
         isRead && styles.read,
@@ -175,6 +179,9 @@ const styles = StyleSheet.create({
   cardShadowHost: {
     backgroundColor: DEFAULT_BG,
     ...Shadows.card,
+  },
+  carouselShadow: {
+    ...Shadows.carouselCard,
   },
   inactive: {
     opacity: Colors.cardInactiveOpacity,

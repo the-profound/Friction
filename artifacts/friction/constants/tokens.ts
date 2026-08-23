@@ -68,6 +68,8 @@ export const Spacing = {
   dateHeaderPb: 12,
 
   dotsMarginTop: 20,
+  /** Vertical separation between date groups in the shared card carousel. */
+  carouselGroupBottom: 12,
 
   navBarBottom: 20,
 
@@ -96,6 +98,9 @@ export const Sizing = {
 
   dateHeaderH: 52,
   dotsH: 36,
+  /** Safe space inside the horizontally clipped carousel viewport for card shadows. */
+  carouselShadowInsetTop: 8,
+  carouselShadowInsetBottom: 12,
   get groupH() {
     return this.dateHeaderH + this.cardH + this.dotsH;
   },
@@ -302,6 +307,22 @@ export const Shadows = {
     },
     web: {
       boxShadow: "0px 4px 14px rgba(0,0,0,0.12)",
+    } as object,
+    default: {},
+  }),
+  /** A restrained shadow used only by date-group carousel cards. */
+  carouselCard: Platform.select({
+    ios: {
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 6,
+    },
+    android: {
+      elevation: 3,
+    },
+    web: {
+      boxShadow: "0px 2px 8px rgba(0,0,0,0.10)",
     } as object,
     default: {},
   }),
