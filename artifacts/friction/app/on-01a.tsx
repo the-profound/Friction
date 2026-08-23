@@ -72,6 +72,7 @@ import {
   invalidateArticleLists,
   invalidateArticleDetail,
 } from "@/lib/queryInvalidation";
+import { resolveDetailEntity } from "@/lib/detailEntityResolution";
 import { useUser } from "@/contexts/UserContext";
 import { useToast } from "@/contexts/ToastContext";
 import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
@@ -141,9 +142,9 @@ export default function WritingScreen() {
   // ── 데이터 fetching ─────────────────────────────────────────────────────────
   //
   // The URL id may point to either a PRELIMINARY thought (draft writing mode)
-  // or a real DIVIDING article (dividing mode).  Both queries run in parallel
-  // with errors suppressed so a 404 on one does not crash the screen.
-  // We derive which entity is active from the results.
+  // or a real DIVIDING article (dividing mode). Both requests can complete in
+  // either order, so the active entity must be resolved independently from a
+  // 404 on its counterpart.
 
   const thoughtQuery = useGetThought(id ?? "", {
     query: {
@@ -161,26 +162,33 @@ export default function WritingScreen() {
     },
   });
 
-  // Determine active entity.
-  // A thought is active when its query succeeded (status PRELIMINARY).
-  // An article is active when its query succeeds after a promotion.
   const thought = thoughtQuery.data;
   const article = articleQuery.data;
-
-  // isThoughtMode: the id refers to a thought (draft writing stage).
-  const isThoughtMode = !!thought && !article && modeParam !== "dividing";
-
-  // Active article for dividing mode.
-  const dividingArticle = article && article.status === "DIVIDING" ? article : undefined;
+  const detailEntity = resolveDetailEntity({
+    requestMode: modeParam === "dividing" ? "dividing" : "thought",
+    thought: {
+      data: thought,
+      error: thoughtQuery.error,
+      isError: thoughtQuery.isError,
+      isLoading: thoughtQuery.isLoading,
+    },
+    article: {
+      data: article,
+      error: articleQuery.error,
+      isError: articleQuery.isError,
+      isLoading: articleQuery.isLoading,
+    },
+  });
+  const isThoughtMode = detailEntity.kind === "success" && detailEntity.entity === "thought";
+  const activeArticle =
+    detailEntity.kind === "success" && detailEntity.entity === "article"
+      ? detailEntity.article
+      : undefined;
 
   const isThoughtModeRef = useRef(false);
   isThoughtModeRef.current = isThoughtMode;
 
-  const dataLoading =
-    !!id &&
-    (isThoughtMode
-      ? thoughtQuery.isLoading
-      : articleQuery.isLoading);
+  const dataLoading = !!id && detailEntity.kind === "loading";
 
   // Mutations
   const updateArticle = useUpdateArticle();
@@ -335,11 +343,12 @@ export default function WritingScreen() {
 
   // ── 데이터 초기화 ──────────────────────────────────────────────────────────
   useEffect(() => {
-    // Use thought content when in thought mode, article content for dividing.
+    // Only initialize from the entity selected by the detail resolver. This
+    // prevents a counterpart's late response from replacing the active draft.
     const activeContent = isThoughtMode
       ? thought?.content ?? ""
-      : article?.content ?? "";
-    const activeTitle = isThoughtMode ? "" : article?.title ?? "";
+      : activeArticle?.content ?? "";
+    const activeTitle = isThoughtMode ? "" : activeArticle?.title ?? "";
 
     if (!activeContent && !activeTitle && !isThoughtMode) return;
     if (!activeContent && isThoughtMode && !thought) return;
@@ -358,15 +367,17 @@ export default function WritingScreen() {
       setCharCount(c.length);
       // 초기 모드 결정: mode 파라미터 또는 서버 status(DIVIDING) 기준.
       const initialMode: EditorMode =
-        modeParam === "dividing" || (!isThoughtMode && article?.status === "DIVIDING") ? "dividing" : "draft";
+        modeParam === "dividing" || (!isThoughtMode && activeArticle?.status === "DIVIDING")
+          ? "dividing"
+          : "draft";
       setModeBoth(initialMode);
       if (editorReady) {
         editorRef.current?.setMarkdown(c);
         editorRef.current?.setTitle(t);
       }
       // Source article linking is only available on a real article.
-      if (!isThoughtMode && article?.sourceArticleId) {
-        setSourceArticleId(article.sourceArticleId);
+      if (!isThoughtMode && activeArticle?.sourceArticleId) {
+        setSourceArticleId(activeArticle.sourceArticleId);
       }
       console.log("[on-01 init] cached?=true dirty?=false injected:", JSON.stringify(c.slice(0, 60)));
     } else if (contentRef.current === serverContentRef.current) {
@@ -388,7 +399,7 @@ export default function WritingScreen() {
         console.log("[on-01 init] re-inject from server dirty?=false injected:", JSON.stringify(c.slice(0, 60)));
       }
     }
-  }, [thought, article, isThoughtMode, editorReady, modeParam, setModeBoth]);
+  }, [thought, activeArticle, isThoughtMode, editorReady, modeParam, setModeBoth]);
 
   useEffect(() => {
     const showSub = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
@@ -1586,22 +1597,28 @@ export default function WritingScreen() {
     );
   }
 
-  if (articleQuery.isError || !article) {
+  if (detailEntity.kind === "error") {
+    const entityLabel = detailEntity.entity === "thought" ? "단상" : "분할 글";
+    const description =
+      detailEntity.reason === "not-found"
+        ? `${entityLabel}을 찾을 수 없어요. 삭제되었거나 더 이상 열 수 없는 글일 수 있어요.`
+        : `잠시 후 다시 시도하거나 이전 화면으로 돌아가세요.`;
+    const retry = detailEntity.retryEntity === "thought"
+      ? () => thoughtQuery.refetch()
+      : () => articleQuery.refetch();
     return (
       <>
         <Stack.Screen options={{ gestureEnabled: false }} />
         <View style={[styles.container, { paddingTop: insets.top }]}>
           <View style={styles.loadingContainer}>
             <Feather name="alert-circle" size={30} color={Colors.zinc500} />
-            <Text style={styles.loadErrorTitle}>단상을 열지 못했어요</Text>
-            <Text style={styles.loadErrorDescription}>
-              잠시 후 다시 시도하거나 이전 화면으로 돌아가세요.
-            </Text>
+            <Text style={styles.loadErrorTitle}>{entityLabel}을 열지 못했어요</Text>
+            <Text style={styles.loadErrorDescription}>{description}</Text>
             <View style={styles.loadErrorActions}>
               <ScalePressable
                 style={styles.loadRetryButton}
                 contentStyle={styles.loadRetryButtonContent}
-                onPress={() => articleQuery.refetch()}
+                onPress={() => { void retry(); }}
               >
                 <Text style={styles.loadRetryButtonText}>다시 시도</Text>
               </ScalePressable>
