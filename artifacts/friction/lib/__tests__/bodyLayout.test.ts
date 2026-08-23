@@ -35,3 +35,95 @@ describe("reader title typography", () => {
     expect(webEditor).toContain("ReaderTokens.typeScale.titleCqi");
   });
 });
+
+describe("thought card typography regression guards", () => {
+  const appRoot = join(__dirname, "../..");
+  const read = (relativePath: string) =>
+    readFileSync(join(appRoot, relativePath), "utf8");
+
+  it.each([240, 300, 420])(
+    "keeps title/body font sizes at 6.9cqi/4cqi for a %dpx card",
+    (cardWidth) => {
+      // ThoughtRecordCard's text frame is the card width minus its 24px
+      // horizontal padding on both sides.
+      const textFrameWidth = cardWidth - 48;
+      const titleSize = (6.9 / 100) * textFrameWidth;
+      const bodySize = (4 / 100) * textFrameWidth;
+
+      expect(titleSize / bodySize).toBeCloseTo(6.9 / 4, 10);
+    },
+  );
+
+  it.each([
+    {
+      name: "title and body",
+      markdown: "# 제목\n\n긴 본문 ".repeat(30),
+      hasTitle: true,
+      titleLines: 2,
+    },
+    {
+      name: "body without title",
+      markdown: "긴 본문 ".repeat(30),
+      hasTitle: false,
+      titleLines: 0,
+    },
+    {
+      name: "empty body",
+      markdown: "# 제목",
+      hasTitle: true,
+      titleLines: 2,
+    },
+  ])("keeps $name preview line-limit inputs aligned", ({ markdown, hasTitle, titleLines }) => {
+    const card = read("app/(tabs)/on.tsx");
+
+    expect(markdown.length).toBeGreaterThan(0);
+    expect(card).toContain("const titleLines = preview.hasTitle ? 2 : 0;");
+    expect(card).toContain("numberOfLines={titleLines}");
+    expect(card).toContain("numberOfLines={maxBodyLines}");
+    expect(card).toContain('ellipsizeMode="tail"');
+    expect(card).toContain("preview.body || \"아직 적힌 내용이 없어요.\"");
+    expect(titleLines).toBe(hasTitle ? 2 : 0);
+  });
+
+  it("uses the card text frame, not the screen width, for both font sizes", () => {
+    const card = read("app/(tabs)/on.tsx");
+
+    expect(card).toContain("const textWidth = Math.max(1, width - 48);");
+    expect(card).toContain(
+      "readerFontSize(ReaderTokens.typeScale.titleCqi, textWidth)",
+    );
+    expect(card).toContain(
+      "readerFontSize(ReaderTokens.typeScale.bodyCqi, textWidth)",
+    );
+    expect(card).toContain("const maxBodyLines = Math.max(");
+  });
+
+  it("keeps the article card title tied to its scaled text frame", () => {
+    const articleCard = read("components/ArticleCardItem/ArticleCardItem.tsx");
+
+    expect(articleCard).toContain("const textFrameWidth = Math.max(1, w - pad * 2);");
+    expect(articleCard).toContain(
+      "readerFontSize(ReaderTokens.typeScale.titleCqi, textFrameWidth)",
+    );
+    expect(articleCard).toContain("numberOfLines={4}");
+  });
+});
+
+describe("content list typography regression guards", () => {
+  it("measures the rendered text frame before calculating title/body sizes", () => {
+    const appRoot = join(__dirname, "../..");
+    const card = readFileSync(join(appRoot, "app/(tabs)/on.tsx"), "utf8");
+
+    expect(card).toContain("const [textFrameWidth, setTextFrameWidth] = useState(0);");
+    expect(card).toContain("onLayout={(event) => {");
+    expect(card).toContain("const nextWidth = Math.round(event.nativeEvent.layout.width);");
+    expect(card).toContain("const contentWidth = textFrameWidth || fallbackTextWidth;");
+    expect(card).toContain(
+      "readerFontSize(ReaderTokens.typeScale.titleCqi, contentWidth)",
+    );
+    expect(card).toContain(
+      "readerFontSize(ReaderTokens.typeScale.bodyCqi, contentWidth)",
+    );
+    expect(card).toContain("numberOfLines={bodyLines}");
+  });
+});
