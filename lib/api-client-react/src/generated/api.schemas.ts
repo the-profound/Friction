@@ -53,7 +53,6 @@ export interface UpdateRecentCollectionBody {
 export type ArticleStatus = (typeof ArticleStatus)[keyof typeof ArticleStatus];
 
 export const ArticleStatus = {
-  DRAFT: "DRAFT",
   DIVIDING: "DIVIDING",
   CLOSING: "CLOSING",
   LETTER: "LETTER",
@@ -115,14 +114,6 @@ export interface Article {
   updatedAt: string;
 }
 
-export interface CreateArticleBody {
-  authorId: string;
-  title: string;
-  content?: string;
-  /** Optional ID of the source article this draft is a reply/memo to. */
-  sourceArticleId?: string;
-}
-
 export type UpdateArticleBodyStyle = { [key: string]: unknown } | null;
 
 export interface UpdateArticleBody {
@@ -142,7 +133,6 @@ export type TransitionArticleBodyTargetStatus =
   (typeof TransitionArticleBodyTargetStatus)[keyof typeof TransitionArticleBodyTargetStatus];
 
 export const TransitionArticleBodyTargetStatus = {
-  DRAFT: "DRAFT",
   DIVIDING: "DIVIDING",
   CLOSING: "CLOSING",
   LETTER: "LETTER",
@@ -1378,16 +1368,10 @@ export type ListArticlesStatus =
   (typeof ListArticlesStatus)[keyof typeof ListArticlesStatus];
 
 export const ListArticlesStatus = {
-  DRAFT: "DRAFT",
   DIVIDING: "DIVIDING",
   CLOSING: "CLOSING",
   LETTER: "LETTER",
 } as const;
-
-export type ReadingMemoParams = {
-  userId: string;
-  sourceArticleId: string;
-};
 
 export type ListInboxParams = {
   recipientId: string;

@@ -30,7 +30,6 @@ const DETAIL_ROUTE_MAP: Record<string, DetailRouteInfo> = {
   "on-01a": { tab: "ON" },
   "on-01b": { tab: "ON" },
   "on-01c": { tab: "ON" },
-  "on-02": { tab: "ON" },
   "of-01": { tab: "AR" },
   "of-01-detail": { tab: "AR" },
   "of-02": { tab: "OF" },

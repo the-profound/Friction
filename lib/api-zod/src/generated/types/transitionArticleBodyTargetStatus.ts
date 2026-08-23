@@ -10,7 +10,6 @@ export type TransitionArticleBodyTargetStatus =
   (typeof TransitionArticleBodyTargetStatus)[keyof typeof TransitionArticleBodyTargetStatus];
 
 export const TransitionArticleBodyTargetStatus = {
-  DRAFT: "DRAFT",
   DIVIDING: "DIVIDING",
   CLOSING: "CLOSING",
   LETTER: "LETTER",

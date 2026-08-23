@@ -1,7 +1,7 @@
-import { Router, type IRouter, type Request, type Response } from "express";
-import { and, eq, exists, ilike, isNotNull, isNull, ne, notExists, or, sql } from "drizzle-orm";
-import { db, articlesTable, myCollectionArticlesTable, myCollectionsTable, thoughtPromotionsTable, thoughtsTable, usersTable, type ArticleStatus } from "@workspace/db";
-import { CreateArticleBody, UpdateArticleBody, TransitionArticleStatusBody, FinalizeArticleBody, ReadingMemoQueryParams } from "@workspace/api-zod";
+import { Router, type IRouter } from "express";
+import { and, eq, ilike, isNull, sql } from "drizzle-orm";
+import { db, articlesTable, myCollectionArticlesTable, myCollectionsTable, usersTable, type ArticleStatus } from "@workspace/db";
+import { UpdateArticleBody, TransitionArticleStatusBody, FinalizeArticleBody } from "@workspace/api-zod";
 import { ObjectStorageService } from "../lib/objectStorage";
 import { generateArticleQuestions, getArticleQuestionsOrFallback } from "../services/generate-article-questions";
 import { requireAuth } from "../middlewares/requireAuth";
@@ -42,146 +42,34 @@ const articleCollectionIdSubquery = sql<string | null>`(
 )`;
 
 const FORWARD_TRANSITIONS: Record<string, string> = {
-  DRAFT: "DIVIDING",
   DIVIDING: "CLOSING",
   CLOSING: "LETTER",
 };
 
 const BACK_TRANSITIONS: Record<string, string> = {
-  DIVIDING: "DRAFT",
   CLOSING: "DIVIDING",
 };
 
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
-
-function splitThoughtMarkdown(markdown: string | null): { title: string; content: string } {
-  const value = markdown ?? "";
-  const firstLineEnd = value.indexOf("\n");
-  const firstLine = (firstLineEnd < 0 ? value : value.slice(0, firstLineEnd)).replace(/\r$/, "");
-  const match = /^#(?!#)\s+(.+?)\s*$/.exec(firstLine.trim());
-  if (!match) return { title: "", content: value };
-
-  return {
-    title: match[1].trim(),
-    content: firstLineEnd < 0 ? "" : value.slice(firstLineEnd + 1).replace(/^\s*\n/, ""),
-  };
-}
-
-function toThoughtMarkdown(title: string, content: string): string {
-  const trimmedTitle = title.trim();
-  return trimmedTitle ? `# ${trimmedTitle}\n\n${content}` : content;
-}
-
-function preliminaryThoughtAsDraft(thought: typeof thoughtsTable.$inferSelect, id = thought.id) {
-  return {
-    id,
-    authorId: thought.authorId,
-    // A thought owns one Markdown document.  Do not split its leading H1 into
-    // the article title until the atomic promotion transaction runs.
-    title: "",
-    content: thought.content ?? "",
-    status: "DRAFT" as const,
-    pages: null,
-    layoutWidth: null,
-    style: null,
-    cover: null,
-    letterAt: null,
-    sourceArticleId: thought.sourceArticleId,
-    createdAt: thought.createdAt,
-    updatedAt: thought.updatedAt,
-  };
-}
-
-function unpromotedThoughtCondition() {
-  return or(
-    eq(thoughtsTable.status, "PRELIMINARY"),
-    and(
-      eq(thoughtsTable.status, "NORMAL"),
-      eq(thoughtsTable.createdFrom, "question"),
-      notExists(
-        db
-          .select({ id: thoughtPromotionsTable.id })
-          .from(thoughtPromotionsTable)
-          .where(eq(thoughtPromotionsTable.fromThoughtId, thoughtsTable.id)),
-      ),
-    ),
-    and(
-      isNotNull(thoughtsTable.migratedFromArticleId),
-      exists(
-        db
-          .select({ id: articlesTable.id })
-          .from(articlesTable)
-          .where(
-            and(
-              eq(articlesTable.id, thoughtsTable.migratedFromArticleId),
-              eq(articlesTable.status, "DRAFT"),
-              isNull(articlesTable.deletedAt),
-            ),
-          ),
-      ),
-    ),
-  );
-}
-
-function canAccessPreliminaryThought(
-  req: Request,
-  res: Response,
-  thought: typeof thoughtsTable.$inferSelect,
-): boolean {
-  if (!req.user) {
-    res.status(401).json({ error: "Authentication required" });
-    return false;
-  }
-  if (req.user.id !== thought.authorId) {
-    res.status(403).json({ error: "Forbidden" });
-    return false;
-  }
-  return true;
-}
-
-router.get("/articles/reading-memo", requireAuth, async (req, res) => {
-  const parsed = ReadingMemoQueryParams.safeParse(req.query);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
-    return;
-  }
-  const { sourceArticleId } = parsed.data;
-  const userId = req.user!.id;
-
-  const [existingMemo] = await db
-    .select()
-    .from(thoughtsTable)
-    .where(
-      and(
-        eq(thoughtsTable.authorId, userId),
-        eq(thoughtsTable.sourceArticleId, sourceArticleId),
-        unpromotedThoughtCondition(),
-        isNull(thoughtsTable.deletedAt),
-      ),
-    )
-    .orderBy(sql`${thoughtsTable.updatedAt} DESC`)
-    .limit(1);
-
-  if (!existingMemo) {
-    res.status(404).json({ error: "Reading memo not found" });
-    return;
-  }
-  res.json(preliminaryThoughtAsDraft(existingMemo, existingMemo.migratedFromArticleId ?? existingMemo.id));
-});
+const visibleArticleStatus = sql`${articlesTable.status} IN ('DIVIDING', 'CLOSING', 'LETTER')`;
 
 router.get("/articles", requireAuth, async (req, res) => {
   const { authorId, status, titleQuery } = req.query;
   const conditions = [];
   if (authorId) conditions.push(eq(articlesTable.authorId, authorId as string));
   if (status) {
-    if (status !== "DRAFT") {
+    // DRAFT records are hidden — only post-promotion statuses are exposed.
+    const validStatuses: ArticleStatus[] = ["DIVIDING", "CLOSING", "LETTER"];
+    if (validStatuses.includes(status as ArticleStatus)) {
       conditions.push(eq(articlesTable.status, status as ArticleStatus));
+    } else {
+      res.json([]);
+      return;
     }
   } else {
-    // DRAFT records were migrated to thoughts. Hiding any surviving legacy
-    // rows prevents a memo from appearing twice during the rollout.
-    conditions.push(ne(articlesTable.status, "DRAFT"));
+    // Always exclude DRAFT rows; their content lives in thoughts.
+    conditions.push(visibleArticleStatus);
   }
   if (titleQuery) conditions.push(ilike(articlesTable.title, `%${titleQuery as string}%`));
 
@@ -201,82 +89,7 @@ router.get("/articles", requireAuth, async (req, res) => {
     authorNickname: r.authorNickname ?? null,
   }));
 
-  const preliminaryThoughts = req.user?.id === authorId
-    ? await db
-    .select()
-    .from(thoughtsTable)
-    .where(
-      and(
-        ...(authorId ? [eq(thoughtsTable.authorId, authorId as string)] : []),
-        unpromotedThoughtCondition(),
-        isNull(thoughtsTable.deletedAt),
-      ),
-    )
-    : [];
-
-  const drafts = preliminaryThoughts
-    .map((thought) => preliminaryThoughtAsDraft(thought, thought.migratedFromArticleId ?? thought.id))
-    .filter((draft) => !titleQuery || draft.title.toLowerCase().includes(String(titleQuery).toLowerCase()));
-
-  res.json(status === "DRAFT" ? drafts : [...articles, ...drafts]);
-});
-
-router.post("/articles", requireAuth, async (req, res) => {
-  const parsed = CreateArticleBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
-    return;
-  }
-  const { content, sourceArticleId } = parsed.data;
-  const authorId = req.user!.id;
-  let { title } = parsed.data;
-
-  if (sourceArticleId) {
-    const [sourceArticle] = await db
-      .select({ title: articlesTable.title })
-      .from(articlesTable)
-      .where(eq(articlesTable.id, sourceArticleId));
-    if (sourceArticle && (title.trim() === "" || title.trim() === "읽기 메모")) {
-      title = `읽기 메모 — ${sourceArticle.title}`;
-    }
-  }
-
-  const thought = await db.transaction(async (tx) => {
-    if (sourceArticleId) {
-      await tx
-        .update(articlesTable)
-        .set({ sourceArticleId: null })
-        .where(
-          and(
-            eq(articlesTable.authorId, authorId),
-            eq(articlesTable.sourceArticleId, sourceArticleId),
-          ),
-        );
-      await tx
-        .update(thoughtsTable)
-        .set({ sourceArticleId: null })
-        .where(
-          and(
-            eq(thoughtsTable.authorId, authorId),
-            eq(thoughtsTable.sourceArticleId, sourceArticleId),
-          ),
-        );
-    }
-
-    const [created] = await tx
-      .insert(thoughtsTable)
-      .values({
-        authorId,
-        content: toThoughtMarkdown(title, content ?? ""),
-        sourceArticleId: sourceArticleId ?? null,
-        createdFrom: sourceArticleId ? "reading" : "direct",
-        status: "PRELIMINARY",
-      })
-      .returning();
-    return created;
-  });
-
-  res.status(201).json(preliminaryThoughtAsDraft(thought));
+  res.json(articles);
 });
 
 router.get("/articles/:id", requireAuth, async (req, res) => {
@@ -289,125 +102,32 @@ router.get("/articles/:id", requireAuth, async (req, res) => {
     })
     .from(articlesTable)
     .leftJoin(usersTable, eq(usersTable.id, articlesTable.authorId))
-    .where(eq(articlesTable.id, req.params.id));
-  if (row) {
-    if (row.article.status === "DRAFT") {
-      const [migrated] = await db.select().from(thoughtsTable)
-      .where(and(
-        eq(thoughtsTable.migratedFromArticleId, row.article.id),
-        isNull(thoughtsTable.deletedAt),
-      )).limit(1);
-      if (migrated) {
-        if (!canAccessPreliminaryThought(req, res, migrated)) return;
-        res.json(preliminaryThoughtAsDraft(migrated, row.article.id));
-        return;
-      }
-    }
-    res.json({
-      ...row.article,
-      authorNickname: row.authorNickname ?? null,
-      collectionName: row.collectionName ?? null,
-      collectionId: row.collectionId ?? null,
-    });
-    return;
-  }
+    .where(and(eq(articlesTable.id, req.params.id), visibleArticleStatus, isNull(articlesTable.deletedAt)));
 
-  const [thought] = await db
-    .select()
-    .from(thoughtsTable)
-    .where(
-      and(
-        eq(thoughtsTable.id, req.params.id),
-        unpromotedThoughtCondition(),
-        isNull(thoughtsTable.deletedAt),
-      ),
-    );
-  if (!thought) {
+  if (!row) {
     res.status(404).json({ error: "Article not found" });
     return;
   }
-  if (!canAccessPreliminaryThought(req, res, thought)) return;
-  res.json(preliminaryThoughtAsDraft(thought));
+
+  res.json({
+    ...row.article,
+    authorNickname: row.authorNickname ?? null,
+    collectionName: row.collectionName ?? null,
+    collectionId: row.collectionId ?? null,
+  });
 });
 
 router.patch("/articles/:id", requireAuth, async (req, res) => {
-  const [existing] = await db.select().from(articlesTable).where(and(eq(articlesTable.id, req.params.id), isNull(articlesTable.deletedAt)));
+  const [existing] = await db
+    .select()
+    .from(articlesTable)
+    .where(and(eq(articlesTable.id, req.params.id), visibleArticleStatus, isNull(articlesTable.deletedAt)));
+
   if (!existing) {
-    const [thought] = await db
-      .select()
-      .from(thoughtsTable)
-      .where(
-        and(
-          eq(thoughtsTable.id, req.params.id),
-          unpromotedThoughtCondition(),
-          isNull(thoughtsTable.deletedAt),
-        ),
-      );
-    if (!thought) {
-      res.status(404).json({ error: "Article not found" });
-      return;
-    }
-    if (!canAccessPreliminaryThought(req, res, thought)) return;
-
-    const parsed = UpdateArticleBody.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
-      return;
-    }
-    if (
-      parsed.data.pages !== undefined ||
-      parsed.data.layoutWidth !== undefined ||
-      parsed.data.style !== undefined ||
-      parsed.data.cover !== undefined
-    ) {
-      res.status(400).json({ error: "Formatting data can only be set after promotion to DIVIDING" });
-      return;
-    }
-
-    const sourceArticleId = "sourceArticleId" in parsed.data
-      ? parsed.data.sourceArticleId
-      : thought.sourceArticleId;
-    const [updated] = await db
-      .update(thoughtsTable)
-      .set({
-        // Thought-mode editors own one canonical Markdown document, including
-        // its leading H1.  Article facades expose an empty title, so rebuilding
-        // with `toThoughtMarkdown` would add a second heading on every save.
-        content: parsed.data.content ?? thought.content,
-        sourceArticleId,
-        updatedAt: new Date(),
-      })
-      .where(eq(thoughtsTable.id, thought.id))
-      .returning();
-    res.json(preliminaryThoughtAsDraft(updated));
+    res.status(404).json({ error: "Article not found" });
     return;
   }
-  if (existing.status === "DRAFT") {
-    const [migratedThought] = await db
-      .select()
-      .from(thoughtsTable)
-      .where(and(
-        eq(thoughtsTable.migratedFromArticleId, existing.id),
-        isNull(thoughtsTable.deletedAt),
-      ))
-      .limit(1);
-    if (migratedThought) {
-      if (!canAccessPreliminaryThought(req, res, migratedThought)) return;
-      const parsed = UpdateArticleBody.safeParse(req.body);
-      if (!parsed.success) {
-        res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
-        return;
-      }
-      const [updated] = await db.update(thoughtsTable).set({
-        // Migrated DRAFT facades use the same canonical Markdown document
-        // contract as newly created thoughts.
-        content: parsed.data.content ?? migratedThought.content,
-        updatedAt: new Date(),
-      }).where(eq(thoughtsTable.id, migratedThought.id)).returning();
-      res.json(preliminaryThoughtAsDraft(updated, existing.id));
-      return;
-    }
-  }
+
   if (existing.authorId !== req.user!.id) {
     res.status(403).json({ error: "Forbidden" });
     return;
@@ -450,7 +170,7 @@ router.patch("/articles/:id", requireAuth, async (req, res) => {
           and(
             eq(articlesTable.authorId, existing.authorId),
             eq(articlesTable.sourceArticleId, newSourceArticleId),
-            ne(articlesTable.id, req.params.id),
+            sql`${articlesTable.id} != ${req.params.id}`,
           ),
         );
     }
@@ -478,7 +198,7 @@ router.post("/articles/:id/cover-image", requireAuth, async (req, res) => {
     return;
   }
 
-  const [article] = await db.select().from(articlesTable).where(and(eq(articlesTable.id, id), isNull(articlesTable.deletedAt)));
+  const [article] = await db.select().from(articlesTable).where(and(eq(articlesTable.id, id), visibleArticleStatus, isNull(articlesTable.deletedAt)));
   if (!article) {
     res.status(404).json({ error: "Article not found" });
     return;
@@ -507,64 +227,22 @@ router.delete("/articles/:id", requireAuth, async (req, res) => {
   const [existingArticle] = await db
     .select({ id: articlesTable.id, status: articlesTable.status, authorId: articlesTable.authorId })
     .from(articlesTable)
-    .where(and(eq(articlesTable.id, req.params.id), isNull(articlesTable.deletedAt)));
-  if (existingArticle && existingArticle.authorId !== req.user!.id) {
+    .where(and(eq(articlesTable.id, req.params.id), visibleArticleStatus, isNull(articlesTable.deletedAt)));
+
+  if (!existingArticle) {
+    res.status(404).json({ error: "Article not found" });
+    return;
+  }
+  if (existingArticle.authorId !== req.user!.id) {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
-  if (existingArticle?.status === "DRAFT") {
-    const [migratedThought] = await db
-      .select({ id: thoughtsTable.id })
-      .from(thoughtsTable)
-      .where(and(
-        eq(thoughtsTable.migratedFromArticleId, existingArticle.id),
-        isNull(thoughtsTable.deletedAt),
-      ))
-      .limit(1);
-    if (migratedThought) {
-      await db.transaction(async (tx) => {
-        const deletedAt = new Date();
-        await tx
-          .update(thoughtsTable)
-          .set({ deletedAt })
-          .where(eq(thoughtsTable.id, migratedThought.id));
-        await tx
-          .update(articlesTable)
-          .set({ deletedAt })
-          .where(and(eq(articlesTable.id, existingArticle.id), eq(articlesTable.status, "DRAFT")));
-      });
-      res.status(204).send();
-      return;
-    }
-  }
 
-  const [updated] = await db
+  await db
     .update(articlesTable)
     .set({ deletedAt: new Date() })
-    .where(and(eq(articlesTable.id, req.params.id), isNull(articlesTable.deletedAt)))
-    .returning({ id: articlesTable.id });
-  if (!updated) {
-    const [thought] = await db
-      .select()
-      .from(thoughtsTable)
-      .where(
-        and(
-          eq(thoughtsTable.id, req.params.id),
-          unpromotedThoughtCondition(),
-          isNull(thoughtsTable.deletedAt),
-        ),
-      );
-    if (!thought) {
-      res.status(404).json({ error: "Article not found" });
-      return;
-    }
-    if (!canAccessPreliminaryThought(req, res, thought)) return;
+    .where(and(eq(articlesTable.id, req.params.id), visibleArticleStatus, isNull(articlesTable.deletedAt)));
 
-    await db
-      .update(thoughtsTable)
-      .set({ deletedAt: new Date() })
-      .where(eq(thoughtsTable.id, thought.id));
-  }
   res.status(204).send();
 });
 
@@ -576,129 +254,16 @@ router.post("/articles/:id/transition", requireAuth, async (req, res) => {
   }
   const { targetStatus } = parsed.data;
 
-  const [article] = await db.select().from(articlesTable).where(and(eq(articlesTable.id, req.params.id), isNull(articlesTable.deletedAt)));
+  const [article] = await db
+    .select()
+    .from(articlesTable)
+    .where(and(eq(articlesTable.id, req.params.id), isNull(articlesTable.deletedAt)));
+
   if (!article) {
-    const [thought] = await db
-      .select()
-      .from(thoughtsTable)
-      .where(
-        and(
-          eq(thoughtsTable.id, req.params.id),
-          unpromotedThoughtCondition(),
-          isNull(thoughtsTable.deletedAt),
-        ),
-      );
-    if (!thought) {
-      res.status(404).json({ error: "Article not found" });
-      return;
-    }
-    if (!canAccessPreliminaryThought(req, res, thought)) return;
-    if (targetStatus !== "DIVIDING") {
-      res.status(400).json({ error: "A preliminary thought can only be promoted to DIVIDING" });
-      return;
-    }
-
-    const { title, content } = splitThoughtMarkdown(thought.content);
-    if (!title || !content.trim()) {
-      res.status(400).json({ error: "Thought must start with a non-empty H1 title and contain a non-empty body" });
-      return;
-    }
-
-    try {
-      const promoted = await db.transaction(async (tx) => {
-        const [existingPromotion] = await tx
-          .select({ id: thoughtsTable.id })
-          .from(thoughtsTable)
-          .where(and(eq(thoughtsTable.id, thought.id), unpromotedThoughtCondition()))
-          .limit(1);
-        if (!existingPromotion) return null;
-
-        const [created] = await tx
-          .insert(articlesTable)
-          .values({
-            id: thought.id,
-            authorId: thought.authorId,
-            title,
-            content,
-            status: "DIVIDING",
-            sourceArticleId: thought.sourceArticleId,
-          })
-          .returning();
-
-        await tx
-          .insert(thoughtPromotionsTable)
-          .values({ fromThoughtId: thought.id, toDraftId: created.id, promotionType: "promote" });
-        await tx
-          .update(thoughtsTable)
-          .set({ status: "NORMAL", updatedAt: new Date() })
-          .where(eq(thoughtsTable.id, thought.id));
-        return created;
-      });
-      if (!promoted) {
-        res.status(409).json({ error: "Thought has already been promoted" });
-        return;
-      }
-      res.json(promoted);
-      return;
-    } catch (error) {
-      if ((error as { cause?: { code?: string } }).cause?.code === "23505") {
-        res.status(409).json({ error: "Thought has already been promoted" });
-        return;
-      }
-      req.log.error({ err: error, thoughtId: thought.id }, "Error promoting preliminary thought");
-      res.status(500).json({ error: "Failed to promote thought" });
-      return;
-    }
+    res.status(404).json({ error: "Article not found" });
+    return;
   }
 
-  if (article.status === "DRAFT") {
-    const [migratedThought] = await db
-      .select()
-      .from(thoughtsTable)
-      .where(and(
-        eq(thoughtsTable.migratedFromArticleId, article.id),
-        isNull(thoughtsTable.deletedAt),
-      ))
-      .limit(1);
-    if (migratedThought) {
-      if (!canAccessPreliminaryThought(req, res, migratedThought)) return;
-      if (targetStatus !== "DIVIDING") {
-        res.status(400).json({ error: "A migrated draft can only be promoted to DIVIDING" });
-        return;
-      }
-      const { title, content } = splitThoughtMarkdown(migratedThought.content);
-      if (!title || !content.trim()) {
-        res.status(400).json({ error: "Thought must start with a non-empty H1 title and contain a non-empty body" });
-        return;
-      }
-      const promoted = await db.transaction(async (tx) => {
-        const [existingPromotion] = await tx
-          .select({ id: thoughtPromotionsTable.id })
-          .from(thoughtPromotionsTable)
-          .where(eq(thoughtPromotionsTable.fromThoughtId, migratedThought.id))
-          .limit(1);
-        if (existingPromotion) return null;
-        const [updated] = await tx
-          .update(articlesTable)
-          .set({ title, content, status: "DIVIDING" })
-          .where(and(eq(articlesTable.id, article.id), eq(articlesTable.status, "DRAFT")))
-          .returning();
-        if (!updated) return null;
-        await tx.insert(thoughtPromotionsTable).values({
-          fromThoughtId: migratedThought.id,
-          toDraftId: updated.id,
-          promotionType: "promote",
-        });
-        return updated;
-      });
-      if (!promoted) {
-        res.status(409).json({ error: "Thought has already been promoted" });
-        return;
-      }
-      res.json(promoted);
-      return;
-    }
-  }
   if (article.authorId !== req.user!.id) {
     res.status(403).json({ error: "Forbidden" });
     return;
@@ -711,11 +276,6 @@ router.post("/articles/:id/transition", requireAuth, async (req, res) => {
     res.status(400).json({
       error: `Invalid transition: ${article.status} → ${targetStatus}. Allowed: forward or 1-step back.`,
     });
-    return;
-  }
-
-  if (article.status === "DIVIDING" && targetStatus === "DRAFT") {
-    res.status(400).json({ error: "DIVIDING articles cannot be moved back to a thought" });
     return;
   }
 
@@ -734,11 +294,6 @@ router.post("/articles/:id/transition", requireAuth, async (req, res) => {
   }
   if (isForward && targetStatus === "LETTER") {
     updates.letterAt = new Date();
-  }
-  if (isBack) {
-    if (targetStatus === "DRAFT") {
-      updates.pages = null;
-    }
   }
 
   if (isForward && targetStatus === "LETTER") {
@@ -766,7 +321,7 @@ router.post("/articles/:id/finalize", requireAuth, async (req, res) => {
 
   try {
     const result = await db.transaction(async (tx) => {
-      const [article] = await tx.select().from(articlesTable).where(and(eq(articlesTable.id, articleId), isNull(articlesTable.deletedAt)));
+      const [article] = await tx.select().from(articlesTable).where(and(eq(articlesTable.id, articleId), visibleArticleStatus, isNull(articlesTable.deletedAt)));
       if (!article) {
         return { status: 404, body: { error: "Article not found" } } as const;
       }
@@ -838,7 +393,7 @@ router.post("/articles/:id/finalize", requireAuth, async (req, res) => {
 
 router.get("/articles/:id/questions", async (req, res) => {
   const articleId = req.params.id;
-  const [article] = await db.select({ id: articlesTable.id }).from(articlesTable).where(and(eq(articlesTable.id, articleId), isNull(articlesTable.deletedAt)));
+  const [article] = await db.select({ id: articlesTable.id }).from(articlesTable).where(and(eq(articlesTable.id, articleId), visibleArticleStatus, isNull(articlesTable.deletedAt)));
   if (!article) {
     res.status(404).json({ error: "Article not found" });
     return;

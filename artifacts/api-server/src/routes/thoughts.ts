@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, asc, desc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, isNull, ne, notExists, sql } from "drizzle-orm";
 import {
   db,
   articlesTable,
@@ -415,6 +415,15 @@ router.get("/thoughts", requireAuth, async (req, res) => {
   const conditions = [
     eq(thoughtsTable.authorId, userId),
     isNull(thoughtsTable.deletedAt),
+    // After promotion, the article is the sole record shown in the archive.
+    // Keeping the source thought out of this list prevents one write from
+    // appearing once as a thought and again as an editing article.
+    notExists(
+      db
+        .select({ id: thoughtPromotionsTable.id })
+        .from(thoughtPromotionsTable)
+        .where(eq(thoughtPromotionsTable.fromThoughtId, thoughtsTable.id)),
+    ),
     ...(sourceArticleId ? [eq(thoughtsTable.sourceArticleId, sourceArticleId)] : []),
   ];
 
@@ -490,13 +499,45 @@ router.post("/thoughts", requireAuth, async (req, res) => {
   }
 });
 
+router.get("/thoughts/:id", requireAuth, async (req, res) => {
+  const userId = req.user!.id;
+  const { id } = req.params;
+
+  const [thought] = await db
+    .select({
+      id: thoughtsTable.id,
+      authorId: thoughtsTable.authorId,
+      content: thoughtsTable.content,
+      createdFrom: thoughtsTable.createdFrom,
+      sourceArticleId: thoughtsTable.sourceArticleId,
+      sourceStoredSentenceId: thoughtsTable.sourceStoredSentenceId,
+      status: thoughtsTable.status,
+      migratedFromArticleId: thoughtsTable.migratedFromArticleId,
+      createdAt: thoughtsTable.createdAt,
+      updatedAt: thoughtsTable.updatedAt,
+    })
+    .from(thoughtsTable)
+    .where(and(eq(thoughtsTable.id, id), isNull(thoughtsTable.deletedAt)));
+
+  if (!thought) {
+    res.status(404).json({ error: "Thought not found" });
+    return;
+  }
+  if (thought.authorId !== userId) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  res.json(thought);
+});
+
 router.patch("/thoughts/:id", requireAuth, async (req, res) => {
   const userId = req.user!.id;
   const { id } = req.params;
   const body = req.body as Record<string, unknown> | null | undefined;
   const content = body?.content;
-  if (typeof content !== "string" || content.trim() === "") {
-    res.status(400).json({ error: "content must be a non-empty string" });
+  if (typeof content !== "string") {
+    res.status(400).json({ error: "content must be a string" });
     return;
   }
 
@@ -520,7 +561,7 @@ router.patch("/thoughts/:id", requireAuth, async (req, res) => {
 
   const [updated] = await db
     .update(thoughtsTable)
-    .set({ content: content.trim(), updatedAt: new Date() })
+    .set({ content, updatedAt: new Date() })
     .where(eq(thoughtsTable.id, id))
     .returning({
       id: thoughtsTable.id,
@@ -569,42 +610,18 @@ router.post("/thoughts/:id/promote", requireAuth, async (req, res) => {
         return { status: 409, body: { error: "Thought has already been promoted" } } as const;
       }
 
-      const article = thought.migratedFromArticleId
-        ? await tx
-          .update(articlesTable)
-          .set({
-            title: parsedMarkdown.title,
-            content: parsedMarkdown.body,
-            status: "DIVIDING",
-          })
-          .where(
-            and(
-              eq(articlesTable.id, thought.migratedFromArticleId),
-              eq(articlesTable.status, "DRAFT"),
-              isNull(articlesTable.deletedAt),
-            ),
-          )
-          .returning()
-          .then(([updated]) => updated)
-        : await tx
-          .insert(articlesTable)
-          .values({
-            id: thought.id,
-            authorId: thought.authorId,
-            title: parsedMarkdown.title,
-            content: parsedMarkdown.body,
-            status: "DIVIDING",
-            sourceArticleId: thought.sourceArticleId,
-          })
-          .returning()
-          .then(([created]) => created);
-
-      if (!article) {
-        return {
-          status: 409,
-          body: { error: "The migrated article can no longer be promoted" },
-        } as const;
-      }
+      // Always create a fresh DIVIDING article. Legacy DRAFT rows are
+      // soft-deactivated by migration 0033 and are never reused.
+      const [article] = await tx
+        .insert(articlesTable)
+        .values({
+          authorId: thought.authorId,
+          title: parsedMarkdown.title,
+          content: parsedMarkdown.body,
+          status: "DIVIDING",
+          sourceArticleId: thought.sourceArticleId,
+        })
+        .returning();
 
       await tx.insert(thoughtPromotionsTable).values({
         fromThoughtId: thought.id,
@@ -622,7 +639,21 @@ router.post("/thoughts/:id/promote", requireAuth, async (req, res) => {
     res.status(result.status).json(result.body);
   } catch (error) {
     if ((error as { cause?: { code?: string } }).cause?.code === "23505") {
-      res.status(409).json({ error: "Thought has already been promoted" });
+      // A promotion can race with another request. Only report "already
+      // promoted" after proving the thought now has a promotion row; a
+      // different unique constraint must not masquerade as a completed
+      // promotion and leave the user unable to retry.
+      const [existingPromotion] = await db
+        .select({ id: thoughtPromotionsTable.id })
+        .from(thoughtPromotionsTable)
+        .where(eq(thoughtPromotionsTable.fromThoughtId, thoughtId))
+        .limit(1);
+      if (existingPromotion) {
+        res.status(409).json({ error: "Thought has already been promoted" });
+        return;
+      }
+      req.log.error({ err: error, thoughtId }, "Unique constraint blocked thought promotion");
+      res.status(409).json({ error: "Thought promotion conflicted with an active record. Please retry." });
       return;
     }
     req.log.error({ err: error, thoughtId }, "Error promoting thought");
@@ -638,7 +669,6 @@ router.delete("/thoughts/:id", requireAuth, async (req, res) => {
     .select({
       id: thoughtsTable.id,
       authorId: thoughtsTable.authorId,
-      migratedFromArticleId: thoughtsTable.migratedFromArticleId,
     })
     .from(thoughtsTable)
     .where(and(eq(thoughtsTable.id, id), isNull(thoughtsTable.deletedAt)));
@@ -661,18 +691,6 @@ router.delete("/thoughts/:id", requireAuth, async (req, res) => {
     await tx
       .delete(thoughtQuestionQueueTable)
       .where(and(eq(thoughtQuestionQueueTable.userId, userId), eq(thoughtQuestionQueueTable.thoughtId, id)));
-    if (existing.migratedFromArticleId) {
-      await tx
-        .update(articlesTable)
-        .set({ deletedAt })
-        .where(
-          and(
-            eq(articlesTable.id, existing.migratedFromArticleId),
-            eq(articlesTable.status, "DRAFT"),
-            isNull(articlesTable.deletedAt),
-          ),
-        );
-    }
   });
 
   res.status(204).send();

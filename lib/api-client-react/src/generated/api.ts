@@ -26,7 +26,6 @@ import type {
   CheckArticleRead200,
   CheckArticleReadParams,
   ClientLogBody,
-  CreateArticleBody,
   CreateMyCollectionBody,
   CreateNeighborRequestBody,
   CreateSpaceBody,
@@ -76,7 +75,6 @@ import type {
   NeighborRequest,
   NeighborRequestWithUser,
   NeighborWithUser,
-  ReadingMemoParams,
   ReadingRecord,
   ReadingRecordNullable,
   RecentSavedCollectionResponse,
@@ -899,188 +897,6 @@ export function useListArticles<
 }
 
 /**
- * Compatibility endpoint. The response is a virtual DRAFT article, but the record is stored as a PRELIMINARY Markdown thought.
- * @summary Create a writing-stage thought through the legacy article API
- */
-export const getCreateArticleUrl = () => {
-  return `/api/articles`;
-};
-
-export const createArticle = async (
-  createArticleBody: CreateArticleBody,
-  options?: RequestInit,
-): Promise<Article> => {
-  return customFetch<Article>(getCreateArticleUrl(), {
-    ...options,
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(createArticleBody),
-  });
-};
-
-export const getCreateArticleMutationOptions = <
-  TError = ErrorType<ErrorResponse>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof createArticle>>,
-    TError,
-    { data: BodyType<CreateArticleBody> },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationOptions<
-  Awaited<ReturnType<typeof createArticle>>,
-  TError,
-  { data: BodyType<CreateArticleBody> },
-  TContext
-> => {
-  const mutationKey = ["createArticle"];
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      "mutationKey" in options.mutation &&
-      options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined };
-
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof createArticle>>,
-    { data: BodyType<CreateArticleBody> }
-  > = (props) => {
-    const { data } = props ?? {};
-
-    return createArticle(data, requestOptions);
-  };
-
-  return { mutationFn, ...mutationOptions };
-};
-
-export type CreateArticleMutationResult = NonNullable<
-  Awaited<ReturnType<typeof createArticle>>
->;
-export type CreateArticleMutationBody = BodyType<CreateArticleBody>;
-export type CreateArticleMutationError = ErrorType<ErrorResponse>;
-
-/**
- * @summary Create a writing-stage thought through the legacy article API
- */
-export const useCreateArticle = <
-  TError = ErrorType<ErrorResponse>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof createArticle>>,
-    TError,
-    { data: BodyType<CreateArticleBody> },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationResult<
-  Awaited<ReturnType<typeof createArticle>>,
-  TError,
-  { data: BodyType<CreateArticleBody> },
-  TContext
-> => {
-  return useMutation(getCreateArticleMutationOptions(options));
-};
-
-/**
- * Returns the existing PRELIMINARY thought as a virtual DRAFT article. Returns 404 until the memo is first saved.
- * @summary Get a reading memo through the legacy article API
- */
-export const getReadingMemoUrl = (params: ReadingMemoParams) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? "null" : value.toString());
-    }
-  });
-
-  const stringifiedParams = normalizedParams.toString();
-
-  return stringifiedParams.length > 0
-    ? `/api/articles/reading-memo?${stringifiedParams}`
-    : `/api/articles/reading-memo`;
-};
-
-export const readingMemo = async (
-  params: ReadingMemoParams,
-  options?: RequestInit,
-): Promise<Article> => {
-  return customFetch<Article>(getReadingMemoUrl(params), {
-    ...options,
-    method: "GET",
-  });
-};
-
-export const getReadingMemoQueryKey = (params?: ReadingMemoParams) => {
-  return [`/api/articles/reading-memo`, ...(params ? [params] : [])] as const;
-};
-
-export const getReadingMemoQueryOptions = <
-  TData = Awaited<ReturnType<typeof readingMemo>>,
-  TError = ErrorType<ErrorResponse>,
->(
-  params: ReadingMemoParams,
-  options?: {
-    query?: UseQueryOptions<
-      Awaited<ReturnType<typeof readingMemo>>,
-      TError,
-      TData
-    >;
-    request?: SecondParameter<typeof customFetch>;
-  },
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getReadingMemoQueryKey(params);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof readingMemo>>> = ({
-    signal,
-  }) => readingMemo(params, { signal, ...requestOptions });
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof readingMemo>>,
-    TError,
-    TData
-  > & { queryKey: QueryKey };
-};
-
-export type ReadingMemoQueryResult = NonNullable<
-  Awaited<ReturnType<typeof readingMemo>>
->;
-export type ReadingMemoQueryError = ErrorType<ErrorResponse>;
-
-/**
- * @summary Get a reading memo through the legacy article API
- */
-
-export function useReadingMemo<
-  TData = Awaited<ReturnType<typeof readingMemo>>,
-  TError = ErrorType<ErrorResponse>,
->(
-  params: ReadingMemoParams,
-  options?: {
-    query?: UseQueryOptions<
-      Awaited<ReturnType<typeof readingMemo>>,
-      TError,
-      TData
-    >;
-    request?: SecondParameter<typeof customFetch>;
-  },
-): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getReadingMemoQueryOptions(params, options);
-
-  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-  };
-
-  return { ...query, queryKey: queryOptions.queryKey };
-}
-
-/**
  * @summary Get article by ID
  */
 export const getGetArticleUrl = (id: string) => {
@@ -1340,7 +1156,7 @@ export const useDeleteArticle = <
 };
 
 /**
- * Forward only: DRAFT→DIVIDING→CLOSING→LETTER. LETTER transition sets letter_at and makes article immutable.
+ * Forward: DIVIDING→CLOSING→LETTER. Back: CLOSING→DIVIDING. LETTER transition sets letter_at and makes article immutable.
  * @summary Transition article status
  */
 export const getTransitionArticleStatusUrl = (id: string) => {
@@ -10228,6 +10044,94 @@ export const useCreateThought = <
 > => {
   return useMutation(getCreateThoughtMutationOptions(options));
 };
+
+/**
+ * Returns the authenticated user's own thought by ID. Uses the same shape as the list endpoint.
+ * @summary Get a thought by ID
+ */
+export const getGetThoughtUrl = (id: string) => {
+  return `/api/thoughts/${id}`;
+};
+
+export const getThought = async (
+  id: string,
+  options?: RequestInit,
+): Promise<Thought> => {
+  return customFetch<Thought>(getGetThoughtUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetThoughtQueryKey = (id: string) => {
+  return [`/api/thoughts/${id}`] as const;
+};
+
+export const getGetThoughtQueryOptions = <
+  TData = Awaited<ReturnType<typeof getThought>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getThought>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetThoughtQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getThought>>> = ({
+    signal,
+  }) => getThought(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getThought>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetThoughtQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getThought>>
+>;
+export type GetThoughtQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get a thought by ID
+ */
+
+export function useGetThought<
+  TData = Awaited<ReturnType<typeof getThought>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getThought>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetThoughtQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Update a thought's content

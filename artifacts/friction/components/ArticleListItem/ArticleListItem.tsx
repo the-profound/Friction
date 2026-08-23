@@ -23,7 +23,6 @@ interface ArticleListItemProps {
 }
 
 const STATUS_BADGE_COLORS: Record<ArticleStatus, { bg: string; text: string }> = {
-  DRAFT: { bg: Colors.zinc200, text: Colors.zinc600 },
   DIVIDING: { bg: "#e4b4b9", text: Colors.zinc700 },
   CLOSING: { bg: "#d17b85", text: "#333336" },
   LETTER: { bg: "#D1FAE5", text: "#059669" },
@@ -74,7 +73,7 @@ function ArticleListItem({
             {statusBadge ? (
               <View style={[styles.badge, { backgroundColor: STATUS_BADGE_COLORS[statusBadge].bg }]}>
                 <Text style={[styles.badgeText, { color: STATUS_BADGE_COLORS[statusBadge].text }]}>
-                  {statusBadge === "DRAFT" ? "작성 중" : statusBadge === "DIVIDING" ? "검토 중" : statusBadge === "CLOSING" ? "마감 중" : "완성"}
+                  {statusBadge === "DIVIDING" ? "검토 중" : statusBadge === "CLOSING" ? "마감 중" : "완성"}
                 </Text>
               </View>
             ) : null}

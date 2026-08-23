@@ -9,7 +9,6 @@
 export type ArticleStatus = (typeof ArticleStatus)[keyof typeof ArticleStatus];
 
 export const ArticleStatus = {
-  DRAFT: "DRAFT",
   DIVIDING: "DIVIDING",
   CLOSING: "CLOSING",
   LETTER: "LETTER",

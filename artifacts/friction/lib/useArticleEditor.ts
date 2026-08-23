@@ -31,7 +31,7 @@ export function useArticleEditor({ articleId }: UseArticleEditorOptions): Articl
   const transitionStatus = useTransitionArticleStatus();
   const { data: article } = useGetArticle(articleId);
 
-  const currentStatus = (article?.status ?? "DRAFT") as ArticleStatus;
+  const currentStatus = (article?.status ?? "DIVIDING") as ArticleStatus;
 
   const autoSave = useAutoSave({
     debounceMs: 1200,

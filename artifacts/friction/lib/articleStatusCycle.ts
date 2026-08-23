@@ -1,12 +1,11 @@
 import type { ArticleStatus } from "./policies";
 
-export const STATUS_ORDER: ArticleStatus[] = ["DRAFT", "DIVIDING", "CLOSING", "LETTER"];
+export const STATUS_ORDER: ArticleStatus[] = ["DIVIDING", "CLOSING", "LETTER"];
 
 export const STATUS_INDEX: Record<ArticleStatus, number> = {
-  DRAFT: 0,
-  DIVIDING: 1,
-  CLOSING: 2,
-  LETTER: 3,
+  DIVIDING: 0,
+  CLOSING: 1,
+  LETTER: 2,
 };
 
 interface TransitionRule {
@@ -15,7 +14,6 @@ interface TransitionRule {
 }
 
 const TRANSITIONS: Record<ArticleStatus, TransitionRule> = {
-  DRAFT: { forward: "DIVIDING", back: null },
   DIVIDING: { forward: "CLOSING", back: null },
   CLOSING: { forward: "LETTER", back: "DIVIDING" },
   LETTER: { forward: null, back: null },
@@ -46,15 +44,6 @@ export function canTransitionForward(
   if (!target) return { allowed: false, reason: "더 이상 다음 단계가 없습니다." };
 
   switch (from) {
-    case "DRAFT":
-      if (!input.title.trim()) {
-        return { allowed: false, reason: "제목이 비어있습니다." };
-      }
-      if (!input.content.trim()) {
-        return { allowed: false, reason: "본문이 비어있습니다. 내용을 작성해주세요." };
-      }
-      return { allowed: true, target };
-
     case "DIVIDING":
       if (!input.title.trim()) {
         return { allowed: false, reason: "제목이 비어있습니다." };
@@ -110,10 +99,6 @@ export function isEditable(status: ArticleStatus): boolean {
   return status !== "LETTER";
 }
 
-export function canModifyContent(status: ArticleStatus): boolean {
-  return status === "DRAFT";
-}
-
 export function canModifyPages(status: ArticleStatus): boolean {
   return status === "DIVIDING";
 }
@@ -128,7 +113,6 @@ export function isLetterImmutable(status: ArticleStatus): boolean {
 
 export function getStatusLabel(status: ArticleStatus): string {
   const labels: Record<ArticleStatus, string> = {
-    DRAFT: "작성 중",
     DIVIDING: "검토 중",
     CLOSING: "마감 중",
     LETTER: "완성",
@@ -138,7 +122,6 @@ export function getStatusLabel(status: ArticleStatus): string {
 
 export function getNextActionLabel(status: ArticleStatus): string | null {
   const labels: Record<ArticleStatus, string | null> = {
-    DRAFT: "검토하기",
     DIVIDING: "마감하기",
     CLOSING: "완성하기",
     LETTER: null,
@@ -148,7 +131,6 @@ export function getNextActionLabel(status: ArticleStatus): string | null {
 
 export function getBackActionLabel(status: ArticleStatus): string | null {
   const labels: Record<ArticleStatus, string | null> = {
-    DRAFT: null,
     DIVIDING: null,
     CLOSING: "검토로 돌아가기",
     LETTER: null,

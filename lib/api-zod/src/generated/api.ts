@@ -119,7 +119,7 @@ export const UpdateUserRecentCollectionResponse = zod.object({
  */
 export const ListArticlesQueryParams = zod.object({
   authorId: zod.coerce.string().uuid().optional(),
-  status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]).optional(),
+  status: zod.enum(["DIVIDING", "CLOSING", "LETTER"]).optional(),
   titleQuery: zod.coerce
     .string()
     .optional()
@@ -152,7 +152,7 @@ export const ListArticlesResponseItem = zod.object({
     ),
   title: zod.string(),
   content: zod.string(),
-  status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
+  status: zod.enum(["DIVIDING", "CLOSING", "LETTER"]),
   pages: zod.array(zod.string()).nullish(),
   layoutWidth: zod
     .number()
@@ -186,88 +186,6 @@ export const ListArticlesResponseItem = zod.object({
 export const ListArticlesResponse = zod.array(ListArticlesResponseItem);
 
 /**
- * Compatibility endpoint. The response is a virtual DRAFT article, but the record is stored as a PRELIMINARY Markdown thought.
- * @summary Create a writing-stage thought through the legacy article API
- */
-export const CreateArticleBody = zod.object({
-  authorId: zod.string().uuid(),
-  title: zod.string(),
-  content: zod.string().optional(),
-  sourceArticleId: zod
-    .string()
-    .uuid()
-    .optional()
-    .describe(
-      "Optional ID of the source article this draft is a reply\/memo to.",
-    ),
-});
-
-/**
- * Returns the existing PRELIMINARY thought as a virtual DRAFT article. Returns 404 until the memo is first saved.
- * @summary Get a reading memo through the legacy article API
- */
-export const ReadingMemoQueryParams = zod.object({
-  userId: zod.coerce.string().uuid(),
-  sourceArticleId: zod.coerce.string().uuid(),
-});
-
-export const ReadingMemoResponse = zod.object({
-  id: zod.string().uuid(),
-  authorId: zod.string().uuid(),
-  authorNickname: zod
-    .string()
-    .nullish()
-    .describe(
-      "Author's nickname. Populated by listArticles when joining users; may be null on other endpoints.",
-    ),
-  collectionName: zod
-    .string()
-    .nullish()
-    .describe(
-      "Name of the collection this article belongs to (team collection preferred, personal collection fallback). Populated by getArticle; may be null on other endpoints.",
-    ),
-  collectionId: zod
-    .string()
-    .uuid()
-    .nullish()
-    .describe(
-      "ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints.",
-    ),
-  title: zod.string(),
-  content: zod.string(),
-  status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
-  pages: zod.array(zod.string()).nullish(),
-  layoutWidth: zod
-    .number()
-    .nullish()
-    .describe(
-      "Container width used when splitting pages (px). Used to ensure consistent line-break rendering across preview and reader screens.",
-    ),
-  style: zod.object({}).passthrough().nullish(),
-  cover: zod
-    .object({
-      type: zod.enum(["image", "color", "default"]),
-      imageUrl: zod
-        .string()
-        .url()
-        .optional()
-        .describe("Cover image URL (used when type=image)"),
-      bgColor: zod
-        .string()
-        .optional()
-        .describe("Background color hex (used when type=color)"),
-      textColor: zod.string().describe("Text color hex for title overlay"),
-      align: zod.enum(["left", "center"]),
-    })
-    .nullish()
-    .describe("Article cover display settings. null means default cover."),
-  letterAt: zod.date().nullish(),
-  sourceArticleId: zod.string().uuid().nullish(),
-  createdAt: zod.date(),
-  updatedAt: zod.date(),
-});
-
-/**
  * @summary Get article by ID
  */
 export const GetArticleParams = zod.object({
@@ -298,7 +216,7 @@ export const GetArticleResponse = zod.object({
     ),
   title: zod.string(),
   content: zod.string(),
-  status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
+  status: zod.enum(["DIVIDING", "CLOSING", "LETTER"]),
   pages: zod.array(zod.string()).nullish(),
   layoutWidth: zod
     .number()
@@ -397,7 +315,7 @@ export const UpdateArticleResponse = zod.object({
     ),
   title: zod.string(),
   content: zod.string(),
-  status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
+  status: zod.enum(["DIVIDING", "CLOSING", "LETTER"]),
   pages: zod.array(zod.string()).nullish(),
   layoutWidth: zod
     .number()
@@ -437,7 +355,7 @@ export const DeleteArticleParams = zod.object({
 });
 
 /**
- * Forward only: DRAFT→DIVIDING→CLOSING→LETTER. LETTER transition sets letter_at and makes article immutable.
+ * Forward: DIVIDING→CLOSING→LETTER. Back: CLOSING→DIVIDING. LETTER transition sets letter_at and makes article immutable.
  * @summary Transition article status
  */
 export const TransitionArticleStatusParams = zod.object({
@@ -445,7 +363,7 @@ export const TransitionArticleStatusParams = zod.object({
 });
 
 export const TransitionArticleStatusBody = zod.object({
-  targetStatus: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
+  targetStatus: zod.enum(["DIVIDING", "CLOSING", "LETTER"]),
 });
 
 export const TransitionArticleStatusResponse = zod.object({
@@ -472,7 +390,7 @@ export const TransitionArticleStatusResponse = zod.object({
     ),
   title: zod.string(),
   content: zod.string(),
-  status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
+  status: zod.enum(["DIVIDING", "CLOSING", "LETTER"]),
   pages: zod.array(zod.string()).nullish(),
   layoutWidth: zod
     .number()
@@ -546,7 +464,7 @@ export const FinalizeArticleResponse = zod.object({
     ),
   title: zod.string(),
   content: zod.string(),
-  status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
+  status: zod.enum(["DIVIDING", "CLOSING", "LETTER"]),
   pages: zod.array(zod.string()).nullish(),
   layoutWidth: zod
     .number()
@@ -674,7 +592,7 @@ export const ListInboxResponseItem = zod.object({
         ),
       title: zod.string(),
       content: zod.string(),
-      status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
+      status: zod.enum(["DIVIDING", "CLOSING", "LETTER"]),
       pages: zod.array(zod.string()).nullish(),
       layoutWidth: zod
         .number()
@@ -788,7 +706,7 @@ export const GetInboxItemResponse = zod.object({
         ),
       title: zod.string(),
       content: zod.string(),
-      status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
+      status: zod.enum(["DIVIDING", "CLOSING", "LETTER"]),
       pages: zod.array(zod.string()).nullish(),
       layoutWidth: zod
         .number()
@@ -908,7 +826,7 @@ export const MarkInboxOpenedResponse = zod.object({
         ),
       title: zod.string(),
       content: zod.string(),
-      status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
+      status: zod.enum(["DIVIDING", "CLOSING", "LETTER"]),
       pages: zod.array(zod.string()).nullish(),
       layoutWidth: zod
         .number()
@@ -1022,7 +940,7 @@ export const MarkInboxReadResponse = zod.object({
         ),
       title: zod.string(),
       content: zod.string(),
-      status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
+      status: zod.enum(["DIVIDING", "CLOSING", "LETTER"]),
       pages: zod.array(zod.string()).nullish(),
       layoutWidth: zod
         .number()
@@ -1266,7 +1184,7 @@ export const ListMyCollectionArticlesResponseItem = zod.object({
         ),
       title: zod.string(),
       content: zod.string(),
-      status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
+      status: zod.enum(["DIVIDING", "CLOSING", "LETTER"]),
       pages: zod.array(zod.string()).nullish(),
       layoutWidth: zod
         .number()
@@ -1719,7 +1637,7 @@ export const ListTeamArticlesResponseItem = zod.object({
         ),
       title: zod.string(),
       content: zod.string(),
-      status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
+      status: zod.enum(["DIVIDING", "CLOSING", "LETTER"]),
       pages: zod.array(zod.string()).nullish(),
       layoutWidth: zod
         .number()
@@ -3513,7 +3431,7 @@ export const ListSendRecordsResponseItem = zod.object({
         ),
       title: zod.string(),
       content: zod.string(),
-      status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
+      status: zod.enum(["DIVIDING", "CLOSING", "LETTER"]),
       pages: zod.array(zod.string()).nullish(),
       layoutWidth: zod
         .number()
@@ -3619,7 +3537,7 @@ export const GetSendRecordResponse = zod.object({
         ),
       title: zod.string(),
       content: zod.string(),
-      status: zod.enum(["DRAFT", "DIVIDING", "CLOSING", "LETTER"]),
+      status: zod.enum(["DIVIDING", "CLOSING", "LETTER"]),
       pages: zod.array(zod.string()).nullish(),
       layoutWidth: zod
         .number()
@@ -3898,6 +3816,27 @@ export const CreateThoughtBody = zod.object({
   sourceArticleId: zod.string().uuid().nullish(),
   sourceStoredSentenceId: zod.string().uuid().nullish(),
   status: zod.enum(["NORMAL", "PRELIMINARY"]).optional(),
+});
+
+/**
+ * Returns the authenticated user's own thought by ID. Uses the same shape as the list endpoint.
+ * @summary Get a thought by ID
+ */
+export const GetThoughtParams = zod.object({
+  id: zod.coerce.string().uuid(),
+});
+
+export const GetThoughtResponse = zod.object({
+  id: zod.string().uuid(),
+  authorId: zod.string().uuid(),
+  content: zod.string().nullish(),
+  createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
+  sourceArticleId: zod.string().uuid().nullish(),
+  sourceStoredSentenceId: zod.string().uuid().nullish(),
+  status: zod.enum(["NORMAL", "PRELIMINARY"]),
+  migratedFromArticleId: zod.string().uuid().nullish(),
+  createdAt: zod.date(),
+  updatedAt: zod.date(),
 });
 
 /**

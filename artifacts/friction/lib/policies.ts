@@ -1,18 +1,22 @@
-export type ArticleStatus = "DRAFT" | "DIVIDING" | "CLOSING" | "LETTER";
+export type ArticleStatus = "DIVIDING" | "CLOSING" | "LETTER";
 export type ReadingMode = "basic" | "re_read";
 
-const STATUS_ORDER: ArticleStatus[] = ["DRAFT", "DIVIDING", "CLOSING", "LETTER"];
+const STATUS_ORDER: ArticleStatus[] = ["DIVIDING", "CLOSING", "LETTER"];
 
 export const ArticlePolicy = {
   VALID_TRANSITIONS: {
-    DRAFT: "DIVIDING" as const,
     DIVIDING: "CLOSING" as const,
     CLOSING: "LETTER" as const,
     LETTER: null,
   },
 
   canTransition(from: ArticleStatus, to: ArticleStatus): boolean {
-    return this.VALID_TRANSITIONS[from] === to;
+    return (this.VALID_TRANSITIONS as Record<ArticleStatus, ArticleStatus | null>)[from] === to;
+  },
+
+  canStepBack(from: ArticleStatus): ArticleStatus | null {
+    if (from === "CLOSING") return "DIVIDING";
+    return null;
   },
 
   isImmutable(status: ArticleStatus): boolean {
@@ -33,7 +37,6 @@ export const ArticlePolicy = {
 
   statusLabel(status: ArticleStatus): string {
     const labels: Record<ArticleStatus, string> = {
-      DRAFT: "작성 중",
       DIVIDING: "검토 중",
       CLOSING: "마감 중",
       LETTER: "완성",

@@ -14,7 +14,7 @@ export const articlesTable = pgTable(
     authorId: uuid("author_id").notNull().references(() => usersTable.id),
     title: varchar("title", { length: 500 }).notNull(),
     content: text("content").notNull(),
-    status: articleStatusEnum("status").notNull().default("DRAFT"),
+    status: articleStatusEnum("status").notNull().default("DIVIDING"),
     pages: jsonb("pages"),
     layoutWidth: doublePrecision("layout_width"),
     style: jsonb("style"),
@@ -28,7 +28,7 @@ export const articlesTable = pgTable(
   (t) => [
     uniqueIndex("articles_author_source_unique_idx")
       .on(t.authorId, t.sourceArticleId)
-      .where(sql`${t.sourceArticleId} IS NOT NULL`),
+      .where(sql`${t.sourceArticleId} IS NOT NULL AND ${t.deletedAt} IS NULL`),
   ],
 );
 

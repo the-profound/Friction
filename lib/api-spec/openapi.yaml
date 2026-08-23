@@ -216,7 +216,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [DRAFT, DIVIDING, CLOSING, LETTER]
+            enum: [DIVIDING, CLOSING, LETTER]
         - name: titleQuery
           in: query
           schema:
@@ -231,70 +231,6 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Article"
-    post:
-      operationId: createArticle
-      tags: [articles]
-      summary: Create a writing-stage thought through the legacy article API
-      description: "Compatibility endpoint. The response is a virtual DRAFT article, but the record is stored as a PRELIMINARY Markdown thought."
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateArticleBody"
-      responses:
-        "201":
-          description: Created virtual DRAFT article backed by a thought
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Article"
-        "400":
-          description: Validation error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
-  /articles/reading-memo:
-    get:
-      operationId: readingMemo
-      tags: [articles]
-      summary: Get a reading memo through the legacy article API
-      description: "Returns the existing PRELIMINARY thought as a virtual DRAFT article. Returns 404 until the memo is first saved."
-      parameters:
-        - name: userId
-          in: query
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: sourceArticleId
-          in: query
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        "200":
-          description: Virtual DRAFT article backed by the reading memo thought
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Article"
-        "400":
-          description: Validation error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "404":
-          description: Source article not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
   /articles/{id}:
     get:
       operationId: getArticle
@@ -368,7 +304,7 @@ paths:
       operationId: transitionArticleStatus
       tags: [articles]
       summary: Transition article status
-      description: "Forward only: DRAFT→DIVIDING→CLOSING→LETTER. LETTER transition sets letter_at and makes article immutable."
+      description: "Forward: DIVIDING→CLOSING→LETTER. Back: CLOSING→DIVIDING. LETTER transition sets letter_at and makes article immutable."
       parameters:
         - $ref: "#/components/parameters/IdPath"
       requestBody:
@@ -2756,6 +2692,38 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
   /thoughts/{id}:
+    get:
+      operationId: getThought
+      tags: [thoughts]
+      summary: Get a thought by ID
+      description: Returns the authenticated user's own thought by ID. Uses the same shape as the list endpoint.
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Thought
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Thought"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden — thought does not belong to this user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Thought not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     patch:
       operationId: updateThought
       tags: [thoughts]
@@ -3087,7 +3055,7 @@ components:
           type: string
         status:
           type: string
-          enum: [DRAFT, DIVIDING, CLOSING, LETTER]
+          enum: [DIVIDING, CLOSING, LETTER]
         pages:
           type: array
           items:
@@ -3118,22 +3086,6 @@ components:
           type: string
           format: date-time
       required: [id, authorId, title, content, status, createdAt, updatedAt]
-
-    CreateArticleBody:
-      type: object
-      properties:
-        authorId:
-          type: string
-          format: uuid
-        title:
-          type: string
-        content:
-          type: string
-        sourceArticleId:
-          type: string
-          format: uuid
-          description: Optional ID of the source article this draft is a reply/memo to.
-      required: [authorId, title]
 
     UpdateArticleBody:
       type: object
@@ -3191,7 +3143,7 @@ components:
       properties:
         targetStatus:
           type: string
-          enum: [DRAFT, DIVIDING, CLOSING, LETTER]
+          enum: [DIVIDING, CLOSING, LETTER]
       required: [targetStatus]
 
     FinalizeArticleBody:

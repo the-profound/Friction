@@ -37,7 +37,6 @@ export function buildUnifiedRecords(
     thought,
   }));
   const articleRecords: UnifiedRecord[] = (articles ?? [])
-    .filter((article) => article.status !== "DRAFT")
     .map((article) => ({
       id: article.id,
       kind: article.status === "LETTER" ? "letter" : "editing",

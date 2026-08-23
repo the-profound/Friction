@@ -232,6 +232,20 @@
       "when": 1787169600000,
       "tag": "0032_add_preliminary_thought_question_queue",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1787256000000,
+      "tag": "0033_deactivate_legacy_draft_articles",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1787443200000,
+      "tag": "0034_exclude_deleted_articles_from_source_unique",
+      "breakpoints": true
     }
   ]
 }

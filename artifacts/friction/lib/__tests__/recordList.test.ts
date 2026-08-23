@@ -18,11 +18,10 @@ describe("record list model", () => {
     expect([...records].sort(compareRecordsNewestFirst).map((record) => record.id)).toEqual(["c", "a", "b"]);
   });
 
-  it("excludes legacy writing-stage article rows because they are represented by thoughts", () => {
+  it("maps article status to record kind: non-LETTER articles become editing, LETTER becomes letter", () => {
     const records = buildUnifiedRecords(
       [],
       [
-        { id: "draft", status: "DRAFT" },
         { id: "editing", status: "DIVIDING", updatedAt: "2026-01-01T00:00:00.000Z" },
         { id: "letter", status: "LETTER", updatedAt: "2026-01-02T00:00:00.000Z" },
       ] as never,
