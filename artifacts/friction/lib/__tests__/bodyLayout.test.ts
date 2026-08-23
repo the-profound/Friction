@@ -44,11 +44,8 @@ describe("thought card typography regression guards", () => {
   it.each([240, 300, 420])(
     "keeps title/body font sizes at 6.9cqi/4cqi for a %dpx card",
     (cardWidth) => {
-      // ThoughtRecordCard's text frame is the card width minus its 24px
-      // horizontal padding on both sides.
-      const textFrameWidth = cardWidth - 48;
-      const titleSize = (6.9 / 100) * textFrameWidth;
-      const bodySize = (4 / 100) * textFrameWidth;
+      const titleSize = (6.9 / 100) * cardWidth;
+      const bodySize = (4 / 100) * cardWidth;
 
       expect(titleSize / bodySize).toBeCloseTo(6.9 / 4, 10);
     },
@@ -85,15 +82,12 @@ describe("thought card typography regression guards", () => {
     expect(titleLines).toBe(hasTitle ? 2 : 0);
   });
 
-  it("uses the card text frame, not the screen width, for both font sizes", () => {
+  it("uses the card width, not the padded text frame, for both font sizes", () => {
     const card = read("app/(tabs)/on.tsx");
 
-    expect(card).toContain("const textWidth = Math.max(1, width - 48);");
+    expect(card).toContain("readerFontSize(ReaderTokens.typeScale.titleCqi, width)");
     expect(card).toContain(
-      "readerFontSize(ReaderTokens.typeScale.titleCqi, textWidth)",
-    );
-    expect(card).toContain(
-      "readerFontSize(ReaderTokens.typeScale.bodyCqi, textWidth)",
+      "readerFontSize(ReaderTokens.typeScale.bodyCqi, width)",
     );
     expect(card).toContain("const maxBodyLines = Math.max(");
   });

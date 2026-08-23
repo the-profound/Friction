@@ -102,9 +102,10 @@ function ThoughtRecordCard({
     thought,
   });
   const height = width * Sizing.cardRatio;
-  const textWidth = Math.max(1, width - 48);
-  const titleSize = readerFontSize(ReaderTokens.typeScale.titleCqi, textWidth);
-  const bodySize = readerFontSize(ReaderTokens.typeScale.bodyCqi, textWidth);
+  // cqi is defined against the card container. Padding controls the text
+  // frame's available line width, but must not make the typography smaller.
+  const titleSize = readerFontSize(ReaderTokens.typeScale.titleCqi, width);
+  const bodySize = readerFontSize(ReaderTokens.typeScale.bodyCqi, width);
   const titleLineHeight = titleSize * ReaderTokens.lineHeight.tight;
   const bodyLineHeight = bodySize * ReaderTokens.lineHeight.relaxed;
   const titleLines = preview.hasTitle ? 2 : 0;
