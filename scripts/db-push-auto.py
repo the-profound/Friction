@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-Runs `drizzle-kit push --force` inside a pseudo-tty and auto-answers any
-interactive "Do you want to truncate <table>?" prompts with the safe
-default ("No, add the constraint without truncating the table").
+Runs `drizzle-kit push --force` inside a pseudo-tty and auto-answers
+interactive prompts with their safe defaults.
 
-Why this exists: drizzle-kit's --force flag only auto-approves clear data-loss
-statements. When adding a new unique constraint to a non-empty table, it
-still shows an interactive select prompt (even with --force) asking whether
-to truncate the table first. Piped/non-TTY stdin does NOT satisfy this
-prompt (it just hangs until killed), because the prompt library reads raw
-keypresses that require an actual pty. This wrapper allocates one so CI/
-post-merge automation can get through it non-interactively.
+Why this exists: drizzle-kit's --force flag still prompts when adding a
+constraint to a non-empty table or when it detects a possible schema rename.
+The default choices preserve rows: do not truncate a table, and create the
+declared new schema object rather than renaming an unrelated existing one.
+Piped/non-TTY stdin does NOT satisfy these prompts (it just hangs until
+killed), because the prompt library reads raw keypresses that require an
+actual pty. This wrapper allocates one so CI/post-merge automation can get
+through it non-interactively.
 
 Usage: python3 scripts/db-push-auto.py <path-to-drizzle-package-dir>
 Example: python3 scripts/db-push-auto.py lib/db
@@ -22,7 +22,10 @@ import sys
 import time
 
 TIMEOUT_SECONDS = 170
-PROMPT_MARKER = b"Do you want to truncate"
+PROMPT_MARKERS = (
+    b"Do you want to truncate",
+    b"created or renamed from another",
+)
 DEBOUNCE_SECONDS = 0.4
 
 
@@ -69,12 +72,12 @@ def main():
             sys.stdout.buffer.write(data)
             sys.stdout.flush()
 
-        if PROMPT_MARKER in buf:
+        if any(marker in buf for marker in PROMPT_MARKERS):
             if prompt_seen_at is None:
                 prompt_seen_at = time.time()
             elif time.time() - prompt_seen_at > DEBOUNCE_SECONDS:
-                # Selects the default highlighted option ("No, add the
-                # constraint without truncating the table").
+                # Selects the default highlighted option: do not truncate
+                # existing rows, and create the declared schema object.
                 os.write(master, b"\r")
                 buf = b""
                 prompt_seen_at = None

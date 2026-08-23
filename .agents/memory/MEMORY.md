@@ -48,3 +48,4 @@
 - [Friction gesture native-module capture](friction-gesture-native-module-capture.md) — Reanimated can serialize gesture closures before `runOnJS`; never let them capture React Native native modules.
 - [Friction native session recovery](friction-native-session-recovery.md) — native refresh must be app-active and explicitly resolved; API bearer tokens come only from validated in-memory state.
 - [Anonymous-space transition locking](friction-anonymous-transition-locking.md) — after locking a space, re-read anonymity inside each identity-reserving transaction; pre-lock snapshots can violate nickname completeness.
+- [Post-merge Drizzle prompts](friction-post-merge-drizzle-prompts.md) — `drizzle-kit push --force` can still require raw TTY responses; validate each default before automating it.
