@@ -76,6 +76,7 @@ const VIEW_OPTIONS: { key: RecordView; label: string }[] = [
 const CARD_SWIPE_THRESHOLD = 48;
 const CARD_FLING_VELOCITY = 0.5;
 const CARD_ACTION_AREA_H = 64;
+const CARD_SHADOW_INSET = 8;
 
 type CardRecord = UnifiedRecord & { isQuestion: boolean };
 
@@ -375,7 +376,9 @@ function RecordCarouselGroup({
     </View>
   ));
 
-  const carouselHeight = cardHeight + CARD_ACTION_AREA_H;
+  // The carousel clips horizontally, so reserve a small top inset for the
+  // card shadow instead of letting the clip boundary cut it off.
+  const carouselHeight = cardHeight + CARD_ACTION_AREA_H + CARD_SHADOW_INSET;
 
   return (
     <View style={styles.recordGroup}>
@@ -403,7 +406,13 @@ function RecordCarouselGroup({
           decelerationRate="fast"
           scrollEventThrottle={16}
           onScroll={onNativeScroll}
-          contentContainerStyle={[styles.recordCarouselContent, { paddingHorizontal: (windowWidth - cardWidth) / 2 }]}
+          contentContainerStyle={[
+            styles.recordCarouselContent,
+            {
+              paddingHorizontal: (windowWidth - cardWidth) / 2,
+              paddingTop: CARD_SHADOW_INSET,
+            },
+          ]}
           style={[styles.recordCarouselScroll, { height: carouselHeight }]}
         >
           {cards}
@@ -765,15 +774,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    height: Sizing.dateHeaderH,
-    paddingTop: Spacing.dateHeaderPt,
-    paddingBottom: Spacing.dateHeaderPb,
+    height: Sizing.dateHeaderH - CARD_SHADOW_INSET,
+    paddingTop: 6,
+    paddingBottom: 6,
     paddingHorizontal: Spacing.screenPx,
+    backgroundColor: "transparent",
   },
   recordDateHeaderText: { ...Typography.dateHeader, color: Colors.zinc600 },
   recordDateHeaderCount: { ...Typography.caption, color: Colors.zinc500 },
   recordCarouselWindow: { overflow: "hidden" },
-  recordCarouselTrack: { flexDirection: "row" },
+  recordCarouselTrack: { flexDirection: "row", paddingTop: CARD_SHADOW_INSET },
   recordCarouselScroll: {},
   recordCarouselContent: {},
   recordCardSlot: {},

@@ -251,6 +251,9 @@ export const Shadows = {
       shadowOpacity: 0.13,
       shadowRadius: 10,
     },
+    web: {
+      boxShadow: "0px 0px 10px rgba(0,0,0,0.13)",
+    } as object,
     default: {},
   }),
   navBarAndroid: Platform.select({
