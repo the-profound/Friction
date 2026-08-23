@@ -7,11 +7,11 @@ describe("reader title typography", () => {
   const read = (relativePath: string) =>
     readFileSync(join(appRoot, relativePath), "utf8");
 
-  it("keeps title conversion anchored to the shared 6.9cqi token", () => {
+  it("keeps title conversion anchored to the shared 6.4cqi token", () => {
     const tokens = read("constants/tokens.ts");
     const layout = read("lib/bodyLayout.ts");
 
-    expect(tokens).toMatch(/titleCqi:\s*6\.9/);
+    expect(tokens).toMatch(/titleCqi:\s*6\.4/);
     expect(tokens).toMatch(/titleScaleEm[\s\S]*this\.titleCqi\s*\/\s*this\.bodyCqi/);
     expect(layout).toContain(
       "readerFontSize(ReaderTokens.typeScale.titleCqi, containerWidth)",
@@ -27,7 +27,7 @@ describe("reader title typography", () => {
     const webEditor = read("components/WebViewMarkdownEditor/WebViewMarkdownEditorWeb.tsx");
 
     expect(sharedCss).toContain("font-size:var(--title-font-size,${titleScaleEm}em)");
-    expect(editorHtml).toContain("font-size:var(--title-font-size,6.9cqi)");
+    expect(editorHtml).toContain("font-size:var(--title-font-size,6.4cqi)");
     expect(readerHtml).toContain('setProperty("--title-font-size",cmd.titleFontSizePx+"px")');
     expect(measureHtml).toContain('setProperty("--title-font-size",cmd.titleFontSizePx+"px")');
     expect(webMeasure).toContain("buildBodyTypographyCss");
@@ -42,12 +42,12 @@ describe("thought card typography regression guards", () => {
     readFileSync(join(appRoot, relativePath), "utf8");
 
   it.each([240, 300, 420])(
-    "keeps title/body font sizes at 6.9cqi/4cqi for a %dpx card",
+    "keeps title/body font sizes at 6.4cqi/4cqi for a %dpx card",
     (cardWidth) => {
-      const titleSize = (6.9 / 100) * cardWidth;
+      const titleSize = (6.4 / 100) * cardWidth;
       const bodySize = (4 / 100) * cardWidth;
 
-      expect(titleSize / bodySize).toBeCloseTo(6.9 / 4, 10);
+      expect(titleSize / bodySize).toBeCloseTo(6.4 / 4, 10);
     },
   );
 
