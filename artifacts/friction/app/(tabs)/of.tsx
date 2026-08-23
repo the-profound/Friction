@@ -9,7 +9,6 @@ import {
   useWindowDimensions,
 } from "react-native";
 import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -215,7 +214,6 @@ function CodeRequestBar({
 }
 
 export default function SpacesScreen() {
-  const insets = useSafeAreaInsets();
   const navBottom = useNavBarBottomSafeArea();
   const router = useRouter();
   const { userId } = useUser();
@@ -359,7 +357,7 @@ export default function SpacesScreen() {
   );
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={styles.container}>
       <PageHeader
         title="공간"
         showAdd

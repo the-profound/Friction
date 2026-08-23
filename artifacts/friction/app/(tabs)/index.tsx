@@ -15,7 +15,6 @@ import {
   NativeScrollEvent,
 } from "react-native";
 import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { useReaderTransition } from "@/contexts/ReaderTransitionContext";
 import { Feather } from "@expo/vector-icons";
@@ -344,7 +343,6 @@ const groupKeyExtractor = (group: DateGroup) => group.dateKey;
 
 export default function InboxScreen() {
   const { startFadeToBlack } = useReaderTransition();
-  const insets = useSafeAreaInsets();
   const navBottom = useNavBarBottomSafeArea();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -645,7 +643,7 @@ export default function InboxScreen() {
   );
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={styles.container}>
       <PageHeader
         title="수신"
         showSearch

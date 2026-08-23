@@ -10,7 +10,6 @@ import {
 import { Feather } from "@expo/vector-icons";
 import { useRouter, useFocusEffect } from "expo-router";
 import { useReaderTransition } from "@/contexts/ReaderTransitionContext";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import ScalePressable from "@/components/shared/ScalePressable";
 import { PageHeader } from "@/components/NavBar/PageHeader";
@@ -65,7 +64,6 @@ const GRID_COLS = 3;
 
 export default function MyScreen() {
   const { startFadeToBlack } = useReaderTransition();
-  const insets = useSafeAreaInsets();
   const navBottom = useNavBarBottomSafeArea();
   const router = useRouter();
   const { userId } = useUser();
@@ -524,16 +522,12 @@ export default function MyScreen() {
         renderItem={renderRow}
         ListHeaderComponent={
           <View>
-            {/* Top safe-area padding lives here so the background colour
-                shows behind the notch while content still scrolls under it */}
-            <View style={{ paddingTop: insets.top }}>
-              <PageHeader
-                title="마이"
-                hideTitle
-                showProfile
-                onProfilePress={() => router.push("/mypage" as never)}
-              />
-            </View>
+            <PageHeader
+              title="마이"
+              hideTitle
+              showProfile
+              onProfilePress={() => router.push("/mypage" as never)}
+            />
 
             <View style={styles.profileSection} pointerEvents="none">
               {user?.avatarUrl ? (

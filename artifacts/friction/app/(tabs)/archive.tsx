@@ -575,7 +575,7 @@ export default function ArchiveScreen() {
   const isSentenceSelectionMode = activeSubTab === "sentence" && selectionMode;
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, isSentenceSelectionMode && { paddingTop: insets.top }]}>
       {isSentenceSelectionMode ? (
         <View style={styles.selectionHeader}>
           <ScalePressable onPress={exitSelectionMode} hitSlop={12}>
