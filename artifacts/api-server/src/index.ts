@@ -2,6 +2,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { seedDevData } from "./seed";
 import { startScheduler } from "./scheduler";
+import { assertSupabaseEnvironmentIsReady } from "./lib/supabaseEnvironment";
 
 const rawPort = process.env["PORT"];
 
@@ -97,6 +98,7 @@ function registerShutdownHandlers(server: HttpServer): void {
 }
 
 async function main(): Promise<void> {
+  assertSupabaseEnvironmentIsReady();
   const server = await listenWithRetry(port);
   registerShutdownHandlers(server);
 

@@ -12,6 +12,23 @@ type AuthDiagnosticPhase =
   | "sign-up"
   | "profile-sync";
 
+export type AuthDiagnosticErrorClass =
+  | "AuthSignUpError"
+  | "AuthSignInError"
+  | "AuthRestoreError"
+  | "AuthTransitionError"
+  | "NetworkError"
+  | "TimeoutError"
+  | "RequestError"
+  | "RuntimeConfigError"
+  | "SYNC_AUTH_INVALID"
+  | "SYNC_AUTH_UNAVAILABLE"
+  | "SYNC_DATABASE_UNAVAILABLE"
+  | "SYNC_EMAIL_CONFLICT"
+  | "SYNC_IDENTITY_MISMATCH"
+  | "SYNC_INVALID_REQUEST"
+  | "SYNC_UNKNOWN";
+
 export type ApiReachability = "checking" | "reachable" | "unreachable" | "not-applicable";
 
 type ReleaseDiagnosticContext = {
@@ -89,7 +106,8 @@ function safeNetworkErrorName(error: unknown): "NetworkError" | "TimeoutError" |
 export function reportAuthDiagnostic(
   phase: AuthDiagnosticPhase,
   outcome: string,
-  errorName?: string,
+  errorName?: AuthDiagnosticErrorClass,
+  flowId = createAuthFlowId(),
 ): void {
   if (Platform.OS === "web" || !runtimeConfig.apiBaseUrl) return;
 
@@ -99,7 +117,7 @@ export function reportAuthDiagnostic(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       source: "auth-flow",
-      message: `phase=${phase};outcome=${outcome}`,
+      message: `phase=${phase};outcome=${outcome};flow=${flowId}`,
       name: errorName ?? null,
       isFatal: false,
       timestamp: new Date().toISOString(),
@@ -143,4 +161,8 @@ export async function probeApiReachability(): Promise<ApiReachability> {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+export function createAuthFlowId(): string {
+  return `af_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
 }

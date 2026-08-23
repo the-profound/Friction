@@ -2,6 +2,8 @@ import React, { createContext, useContext, useEffect, useMemo, useRef } from "re
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { customFetch } from "@workspace/api-client-react";
+import { ApiError } from "@workspace/api-client-react";
+import { createAuthFlowId, reportAuthDiagnostic } from "@/lib/authDiagnostics";
 
 interface UserContextValue {
   userId: string;
@@ -47,8 +49,10 @@ export function UserProvider({
         ? rawNickname
         : undefined;
 
+    const flowId = createAuthFlowId();
     customFetch("/api/users/sync", {
       method: "POST",
+      headers: { "X-Auth-Flow-Id": flowId },
       body: JSON.stringify({ id, email, ...(nickname ? { nickname } : {}) }),
     })
       .then(() => {
@@ -57,28 +61,17 @@ export function UserProvider({
       .catch((err: unknown) => {
         // Reset so the next session change retries instead of staying silently broken.
         syncedIdRef.current = null;
-        let detail: string;
-        if (err && typeof err === "object") {
-          const obj = err as {
-            status?: unknown;
-            statusText?: unknown;
-            data?: unknown;
-            message?: unknown;
-          };
-          if (typeof obj.status === "number") {
-            detail = `${obj.status} ${obj.statusText ?? ""} ${JSON.stringify(obj.data ?? null)}`;
-          } else if (typeof obj.message === "string") {
-            detail = obj.message;
-          } else {
-            detail = String(err);
-          }
-        } else {
-          detail = String(err);
-        }
-        // Detailed diagnostic only goes to the console — operators get a
-        // short, friendly toast (one per session-change) so they notice
-        // their account is not fully synced, without exposing raw payloads.
-        console.warn(`[UserProvider] /api/users/sync failed for ${id}: ${detail}`);
+        const code =
+          err instanceof ApiError &&
+          err.data &&
+          typeof err.data === "object" &&
+          typeof (err.data as { code?: unknown }).code === "string"
+            ? (err.data as { code: string }).code
+            : "SYNC_UNKNOWN";
+        reportAuthDiagnostic("profile-sync", "failed-background", code as Parameters<typeof reportAuthDiagnostic>[2], flowId);
+        // Keep operator evidence anonymous: account identifiers, request
+        // payloads, response bodies, and raw exception messages are omitted.
+        console.warn(`[UserProvider] /api/users/sync failed (${code}; flow=${flowId})`);
         if (!syncErrorShownRef.current) {
           syncErrorShownRef.current = true;
           showToast({

@@ -68,7 +68,7 @@ import {
   type SpellChange,
   spellCheck as apiSpellCheck,
 } from "@workspace/api-client-react";
-import { isMeaningfulThoughtMarkdown } from "@workspace/api-zod/meaningfulThoughtMarkdown";
+import { isMeaningfulThoughtMarkdown } from "@workspace/api-zod";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   invalidateArticleLists,

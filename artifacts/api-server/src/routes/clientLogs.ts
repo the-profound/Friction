@@ -4,6 +4,149 @@ import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
+const AUTH_FLOW_MESSAGE =
+  /^phase=([a-z-]+);outcome=([A-Za-z0-9_-]+);flow=(af_[a-z0-9]{12,24})$/;
+const AUTH_FLOW_OUTCOMES = {
+  config: new Set(["invalid-build"]),
+  "api-reachability": new Set([
+    "configuration-invalid",
+    "reachable",
+    "server-error",
+    "unexpected-status",
+    "unreachable",
+  ]),
+  restore: new Set([
+    "authenticated",
+    "retryable-failure",
+    "logged-out",
+    "stale-result-ignored",
+    "failed-logged-out",
+    "stale-failure-ignored",
+  ]),
+  "auth-event": new Set([
+    "INITIAL_SESSION",
+    "SIGNED_IN",
+    "SIGNED_OUT",
+    "TOKEN_REFRESHED",
+    "USER_UPDATED",
+    "PASSWORD_RECOVERY",
+    "MFA_CHALLENGE_VERIFIED",
+  ]),
+  "sign-in": new Set(["failed", "auth-succeeded", "success"]),
+  "sign-up": new Set([
+    "failed",
+    "auth-succeeded-confirmation-required",
+    "auth-succeeded-auto-confirmed",
+    "success-auto-confirmed",
+    "confirmation-required",
+  ]),
+  "profile-sync": new Set(["started", "succeeded", "failed", "failed-background"]),
+} as const;
+const AUTH_ERROR_CLASSES = new Set([
+  "AuthSignUpError",
+  "AuthSignInError",
+  "AuthRestoreError",
+  "AuthTransitionError",
+  "NetworkError",
+  "TimeoutError",
+  "RequestError",
+  "RuntimeConfigError",
+  "SYNC_AUTH_INVALID",
+  "SYNC_AUTH_UNAVAILABLE",
+  "SYNC_DATABASE_UNAVAILABLE",
+  "SYNC_EMAIL_CONFLICT",
+  "SYNC_IDENTITY_MISMATCH",
+  "SYNC_INVALID_REQUEST",
+  "SYNC_UNKNOWN",
+]);
+const SAFE_HOSTNAME =
+  /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
+
+function getSafeReleaseDiagnostic(input: unknown): {
+  track: "development" | "preview" | "production";
+  configurationState: "valid" | "invalid" | "unavailable";
+  configurationFingerprint: string | null;
+  supabaseHost: string | null;
+  apiHost: string | null;
+} | null {
+  if (typeof input !== "object" || input === null) return null;
+  const release = input as Record<string, unknown>;
+  if (
+    release.track !== "development" &&
+    release.track !== "preview" &&
+    release.track !== "production"
+  ) {
+    return null;
+  }
+  if (
+    release.configurationState !== "valid" &&
+    release.configurationState !== "invalid" &&
+    release.configurationState !== "unavailable"
+  ) {
+    return null;
+  }
+
+  return {
+    track: release.track,
+    configurationState: release.configurationState,
+    configurationFingerprint:
+      typeof release.configurationFingerprint === "string" &&
+      /^[a-f0-9]{16}$/.test(release.configurationFingerprint)
+        ? release.configurationFingerprint
+        : null,
+    supabaseHost:
+      typeof release.supabaseHost === "string" &&
+      SAFE_HOSTNAME.test(release.supabaseHost)
+        ? release.supabaseHost.toLowerCase()
+        : null,
+    apiHost:
+      typeof release.apiHost === "string" && SAFE_HOSTNAME.test(release.apiHost)
+        ? release.apiHost.toLowerCase()
+        : null,
+  };
+}
+
+/**
+ * The diagnostics endpoint is intentionally unauthenticated. Treat every
+ * field as hostile and retain only a compact, allowlisted operational event.
+ */
+export function getSafeAuthFlowDiagnostic(input: {
+  message?: unknown;
+  name?: unknown;
+  platform?: unknown;
+  release?: unknown;
+}): {
+  phase: string;
+  outcome: string;
+  flowId: string;
+  errorClass: string | null;
+  platform: "ios" | "android" | null;
+  release: ReturnType<typeof getSafeReleaseDiagnostic>;
+} | null {
+  const match =
+    typeof input.message === "string" ? AUTH_FLOW_MESSAGE.exec(input.message) : null;
+  if (!match) return null;
+
+  const [, phase, outcome, flowId] = match;
+  const allowedOutcomes =
+    AUTH_FLOW_OUTCOMES[phase as keyof typeof AUTH_FLOW_OUTCOMES];
+  if (!allowedOutcomes?.has(outcome as never)) return null;
+
+  return {
+    phase,
+    outcome,
+    flowId,
+    errorClass:
+      typeof input.name === "string" && AUTH_ERROR_CLASSES.has(input.name)
+        ? input.name
+        : null,
+    platform: input.platform === "ios" || input.platform === "android"
+      ? input.platform
+      : null,
+    release: getSafeReleaseDiagnostic(input.release),
+  };
+}
+
 function safeDiagnosticLog(data: ClientLogBody) {
   const source =
     data.source === "fatal-js-error" ? "fatal-js-error" : data.source === "auth-flow" ? "auth-flow" : "unknown";
@@ -93,6 +236,22 @@ router.post("/client-logs", (req, res) => {
         issuePaths: parsed.error.issues.map((issue) => issue.path.join(".")),
       },
       "client-logs: received malformed payload",
+    );
+    res.status(204).send();
+    return;
+  }
+
+  if (parsed.data.source === "auth-flow") {
+    const authFlow = getSafeAuthFlowDiagnostic(parsed.data);
+    if (!authFlow || parsed.data.stack) {
+      logger.warn("client-logs: discarded malformed auth-flow diagnostic");
+      res.status(204).send();
+      return;
+    }
+
+    logger.info(
+      { authFlow },
+      "client-logs: auth-flow diagnostic reported",
     );
     res.status(204).send();
     return;

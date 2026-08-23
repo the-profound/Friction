@@ -41,6 +41,7 @@ config.resolver.extraNodeModules = {
     projectRoot,
     "node_modules/@tanstack/react-query"
   ),
+  "@workspace/api-zod": path.resolve(workspaceRoot, "lib/api-zod"),
 };
 
 module.exports = config;

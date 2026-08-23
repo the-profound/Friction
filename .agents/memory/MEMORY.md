@@ -51,3 +51,4 @@
 - [Post-merge Drizzle prompts](friction-post-merge-drizzle-prompts.md) — `drizzle-kit push --force` can still require raw TTY responses; validate each default before automating it.
 - [Friction direct thought composer](friction-direct-thought-composer.md) — all direct create affordances must share one lock; fast failures otherwise admit a double tap.
 - [EAS Cloud release validation](eas-cloud-release-validation.md) — env:exec evaluates Expo config before injecting Cloud variables; set release profile only inside its child command.
+- [Unauthenticated auth diagnostics](friction-auth-diagnostics-privacy.md) — analytics-style auth logs need semantic server allowlists, not just client types or character regexes.

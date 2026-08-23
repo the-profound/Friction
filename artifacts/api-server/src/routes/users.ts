@@ -1,11 +1,43 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { and, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
 import { db, usersTable, myCollectionsTable, neighborsTable, neighborRequestsTable, teamCollectionMembershipsTable } from "@workspace/db";
 import type { Neighbor, NeighborRequest } from "@workspace/db";
 import { CreateUserBody, UpdateUserBody, UpdateUserRecentCollectionBody } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth";
+import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
+
+type UserSyncDatabase = Pick<typeof db, "insert" | "select">;
+type UserSyncLogger = Pick<typeof logger, "info" | "warn" | "error">;
+
+interface UserSyncDependencies {
+  database?: UserSyncDatabase;
+  log?: UserSyncLogger;
+}
+
+function getAuthFlowId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  return /^af_[a-z0-9]{12,24}$/.test(value) ? value : null;
+}
+
+function syncError(res: Response, status: number, code: string, flowId: string | null) {
+  res.status(status).json({
+    error: "User profile synchronization failed",
+    code,
+    ...(flowId ? { diagnosticId: flowId } : {}),
+  });
+}
+
+function getPgCode(err: unknown): string | null {
+  if (!err || typeof err !== "object") return null;
+  const candidate = err as {
+    code?: unknown;
+    cause?: { code?: unknown };
+  };
+  if (typeof candidate.cause?.code === "string") return candidate.cause.code;
+  return typeof candidate.code === "string" ? candidate.code : null;
+}
 
 function deriveNicknameFromEmail(email: string): string {
   const local = email.split("@")[0] ?? "";
@@ -14,73 +46,73 @@ function deriveNicknameFromEmail(email: string): string {
   return fallback.slice(0, 20);
 }
 
-router.post("/users/sync", requireAuth, async (req, res) => {
-  const { id, email, nickname } = req.body ?? {};
-  if (!id || typeof id !== "string" || !email || typeof email !== "string") {
-    res.status(400).json({ error: "id and email are required" });
-    return;
-  }
-  const authenticatedEmail = req.user?.email;
-  if (
-    req.user?.id !== id ||
-    !authenticatedEmail ||
-    authenticatedEmail.toLowerCase() !== email.toLowerCase()
-  ) {
-    res.status(403).json({ error: "Authenticated user does not match sync payload" });
-    return;
-  }
+export function createUserSyncHandler({
+  database = db,
+  log = logger,
+}: UserSyncDependencies = {}) {
+  return async (req: Request, res: Response) => {
+    const flowId = getAuthFlowId(req.headers["x-auth-flow-id"]);
+    const { id, email, nickname } = req.body ?? {};
+    if (!id || typeof id !== "string" || !email || typeof email !== "string") {
+      syncError(res, 400, "SYNC_INVALID_REQUEST", flowId);
+      log.warn({ flowId, code: "SYNC_INVALID_REQUEST" }, "users/sync rejected");
+      return;
+    }
+    const authenticatedEmail = req.user?.email;
+    if (
+      req.user?.id !== id ||
+      !authenticatedEmail ||
+      authenticatedEmail.toLowerCase() !== email.toLowerCase()
+    ) {
+      syncError(res, 403, "SYNC_IDENTITY_MISMATCH", flowId);
+      log.warn({ flowId, code: "SYNC_IDENTITY_MISMATCH" }, "users/sync rejected");
+      return;
+    }
 
-  const trimmedNickname =
-    typeof nickname === "string" && nickname.trim().length > 0
-      ? nickname.trim().slice(0, 20)
-      : null;
+    const trimmedNickname =
+      typeof nickname === "string" && nickname.trim().length > 0
+        ? nickname.trim().slice(0, 20)
+        : null;
 
-  // Always upsert so accounts created out-of-band (e.g. directly in the auth
-  // dashboard) end up with a `users` row on first login. When the client did
-  // not supply a nickname, fall back to the email local-part so search,
-  // membership FKs, and neighbor requests can still resolve the user.
-  const resolvedNickname = trimmedNickname ?? deriveNicknameFromEmail(email);
+    // Always upsert so accounts created out-of-band (e.g. directly in the auth
+    // dashboard) end up with a `users` row on first login. When the client did
+    // not supply a nickname, fall back to the email local-part so search,
+    // membership FKs, and neighbor requests can still resolve the user.
+    const resolvedNickname = trimmedNickname ?? deriveNicknameFromEmail(email);
 
-  try {
-    const [user] = await db
-      .insert(usersTable)
-      .values({ id, email, nickname: resolvedNickname })
-      .onConflictDoUpdate({
-        target: usersTable.id,
-        // Preserve the existing nickname; only refresh email + updatedAt. If
-        // the caller explicitly provided a nickname we honor it.
-        set: trimmedNickname
-          ? { email, nickname: trimmedNickname, updatedAt: new Date() }
-          : { email, updatedAt: new Date() },
-      })
-      .returning();
+    try {
+      const [user] = await database
+        .insert(usersTable)
+        .values({ id, email, nickname: resolvedNickname })
+        .onConflictDoUpdate({
+          target: usersTable.id,
+          // Preserve the existing nickname; only refresh email + updatedAt. If
+          // the caller explicitly provided a nickname we honor it.
+          set: trimmedNickname
+            ? { email, nickname: trimmedNickname, updatedAt: new Date() }
+            : { email, updatedAt: new Date() },
+        })
+        .returning();
 
-    res.json(user);
-    return;
-  } catch (err: unknown) {
-    // Postgres unique_violation error code is 23505. This can happen when the
-    // auth id (id) doesn't yet exist in public.users but the email is already
-    // owned by a different row (e.g. an out-of-band backfill collision).
-    // In that case return the existing row by email so the caller can proceed
-    // without a 500, and log the discrepancy for operator investigation.
-    const pgCode = err && typeof err === "object" && "code" in err ? (err as { code?: unknown }).code : null;
-    if (pgCode === "23505") {
-      const [existing] = await db
-        .select()
-        .from(usersTable)
-        .where(eq(usersTable.email, email))
-        .limit(1);
-      if (existing) {
-        console.warn(
-          `[users/sync] email conflict: auth id=${id} differs from public.users id=${existing.id} for ${email}. Returning existing row.`,
-        );
-        res.json(existing);
+      log.info({ flowId, outcome: "profile-persisted" }, "users/sync completed");
+      res.json({ user, ...(flowId ? { diagnosticId: flowId } : {}) });
+      return;
+    } catch (err: unknown) {
+      // A unique email collision must not be treated as a successful sync for
+      // a different authenticated identity.
+      const pgCode = getPgCode(err);
+      if (pgCode === "23505") {
+        log.warn({ flowId, code: "SYNC_EMAIL_CONFLICT" }, "users/sync conflict");
+        syncError(res, 409, "SYNC_EMAIL_CONFLICT", flowId);
         return;
       }
+      log.error({ flowId, code: "SYNC_DATABASE_UNAVAILABLE" }, "users/sync database failure");
+      syncError(res, 503, "SYNC_DATABASE_UNAVAILABLE", flowId);
     }
-    throw err;
-  }
-});
+  };
+}
+
+router.post("/users/sync", requireAuth, createUserSyncHandler());
 
 router.get("/users/search", async (req, res) => {
   const { nickname, userId, excludeTeamId } = req.query;
