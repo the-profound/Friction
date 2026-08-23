@@ -53,6 +53,7 @@ import type {
 import { useInlineImageUpload } from "@/lib/useImageUpload";
 import {
   useGetArticle,
+  useCreateThought,
   useUpdateArticle,
   useDeleteThought,
   useTransitionArticleStatus,
@@ -67,14 +68,16 @@ import {
   type SpellChange,
   spellCheck as apiSpellCheck,
 } from "@workspace/api-client-react";
+import { isMeaningfulThoughtMarkdown } from "@workspace/api-zod/meaningfulThoughtMarkdown";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   invalidateArticleLists,
   invalidateArticleDetail,
+  invalidateDirectThoughtCreation,
 } from "@/lib/queryInvalidation";
-import { resolveDetailEntity } from "@/lib/detailEntityResolution";
 import { useUser } from "@/contexts/UserContext";
 import { useToast } from "@/contexts/ToastContext";
+import { useThoughtComposer } from "@/contexts/ThoughtComposerContext";
 import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
 import SourceArticlePickerSheet from "@/components/SourceArticlePickerSheet/SourceArticlePickerSheet";
 import WritingStateBar, { type WritingStage } from "@/components/WritingStateBar/WritingStateBar";
@@ -93,6 +96,7 @@ const DEFAULT_SELECTION: OnSelectionUpdatePayload = {
 
 const PAGE_KEY_PREFIX = "page_";
 const EXPORT_DEBOUNCE_MS = 1200;
+const DIRECT_THOUGHT_INITIAL_MARKDOWN = "# \n\n";
 
 type EditorMode = "draft" | "dividing";
 
@@ -115,16 +119,18 @@ export default function WritingScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { id, source, mode: modeParam, returnPage, returnBlock } = useLocalSearchParams<{
-    id: string;
+    id?: string;
     source?: string;
     mode?: string;
     returnPage?: string;
     returnBlock?: string;
   }>();
+  const isLocalDirectDraft = modeParam === "local-draft";
   const returnPageIndex = returnPage !== undefined ? parseInt(returnPage, 10) : undefined;
   const returnBlockIndex = returnBlock !== undefined ? parseInt(returnBlock, 10) : undefined;
   const { userId } = useUser();
   const { showToast } = useToast();
+  const { releaseDirectThoughtDraft } = useThoughtComposer();
   const editorLayout = useEditorLayout();
   const {
     containerWidth,
@@ -141,15 +147,14 @@ export default function WritingScreen() {
 
   // ── 데이터 fetching ─────────────────────────────────────────────────────────
   //
-  // The URL id may point to either a PRELIMINARY thought (draft writing mode)
-  // or a real DIVIDING article (dividing mode). Both requests can complete in
-  // either order, so the active entity must be resolved independently from a
-  // 404 on its counterpart.
+  // Routes identify their entity type: draft routes fetch only their thought,
+  // dividing routes fetch only their article. A direct local draft has neither
+  // until its first meaningful save.
 
   const thoughtQuery = useGetThought(id ?? "", {
     query: {
       queryKey: getGetThoughtQueryKey(id ?? ""),
-      enabled: !!id && modeParam !== "dividing",
+      enabled: !!id && !isLocalDirectDraft && modeParam !== "dividing",
       retry: false,
     },
   });
@@ -157,42 +162,36 @@ export default function WritingScreen() {
   const articleQuery = useGetArticle(id ?? "", {
     query: {
       queryKey: getGetArticleQueryKey(id ?? ""),
-      enabled: !!id,
+      enabled: !!id && !isLocalDirectDraft && modeParam === "dividing",
       retry: false,
     },
   });
 
+  // Determine active entity.
+  // A thought is active when its query succeeded (status PRELIMINARY).
+  // An article is active when its query succeeds after a promotion.
   const thought = thoughtQuery.data;
   const article = articleQuery.data;
-  const detailEntity = resolveDetailEntity({
-    requestMode: modeParam === "dividing" ? "dividing" : "thought",
-    thought: {
-      data: thought,
-      error: thoughtQuery.error,
-      isError: thoughtQuery.isError,
-      isLoading: thoughtQuery.isLoading,
-    },
-    article: {
-      data: article,
-      error: articleQuery.error,
-      isError: articleQuery.isError,
-      isLoading: articleQuery.isLoading,
-    },
-  });
-  const isThoughtMode = detailEntity.kind === "success" && detailEntity.entity === "thought";
-  const activeArticle =
-    detailEntity.kind === "success" && detailEntity.entity === "article"
-      ? detailEntity.article
-      : undefined;
+
+  // isThoughtMode: the id refers to a thought (draft writing stage).
+  // A non-dividing writing route is always a thought route. Decide this from
+  // the URL before data arrives so a restored persisted thought can never
+  // briefly autosave against the article endpoint during its first render.
+  const isThoughtMode = isLocalDirectDraft || (!!id && modeParam !== "dividing");
+
+  // Active article for dividing mode.
+  const dividingArticle = article && article.status === "DIVIDING" ? article : undefined;
 
   const isThoughtModeRef = useRef(false);
   isThoughtModeRef.current = isThoughtMode;
 
-  const dataLoading = !!id && detailEntity.kind === "loading";
+  const dataLoading = !!id && !isLocalDirectDraft &&
+    (modeParam === "dividing" ? articleQuery.isLoading : thoughtQuery.isLoading);
 
   // Mutations
   const updateArticle = useUpdateArticle();
   const updateThought = useUpdateThought();
+  const createThought = useCreateThought();
   const deleteThought = useDeleteThought();
   const promoteThought = usePromoteThought();
   const transitionStatus = useTransitionArticleStatus();
@@ -219,6 +218,7 @@ export default function WritingScreen() {
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [editorReady, setEditorReady] = useState(false);
   const editorReadyRef = useRef(false);
+  const shouldFocusInitialH1Ref = useRef(isLocalDirectDraft);
   const [initialized, setInitialized] = useState(false);
   const [selectionState, setSelectionState] = useState<OnSelectionUpdatePayload>(DEFAULT_SELECTION);
   const [isNavigating, setIsNavigating] = useState(false);
@@ -281,6 +281,11 @@ export default function WritingScreen() {
   // 마지막으로 서버에서 본 content. 사용자 편집 발생 여부 감지에 사용.
   const serverContentRef = useRef("");
   const isNavigatingRef = useRef(false);
+  const thoughtIdRef = useRef<string | undefined>(id);
+  const createThoughtPromiseRef = useRef<Promise<string> | null>(null);
+  const firstCreatedContentRef = useRef<string | null>(null);
+  const localDraftExitedRef = useRef(false);
+  const hasPersistedLocalDraftRouteRef = useRef(false);
 
   // Map 기반 export 추적: 진행 중인 각 requestExportMarkdown 이 자체 슬롯을 가져
   // autosave export 와 getEditorContent() export 가 서로의 resolver 를 덮어쓰지 않는다.
@@ -326,32 +331,35 @@ export default function WritingScreen() {
 
   // ── 마운트 시 캐시가 신선하면(≤30s) invalidate 생략 ──────────────────────────
   useEffect(() => {
-    if (!id) return;
-    // Check both thought and article caches.
-    const thoughtCached = queryClient.getQueryState(getGetThoughtQueryKey(id));
-    const articleCached = queryClient.getQueryState(getGetArticleQueryKey(id));
-    const thoughtFresh = !!thoughtCached && Date.now() - thoughtCached.dataUpdatedAt < 30_000;
-    const articleFresh = !!articleCached && Date.now() - articleCached.dataUpdatedAt < 30_000;
-    if (!thoughtFresh) {
-      queryClient.invalidateQueries({ queryKey: getGetThoughtQueryKey(id) });
-    }
-    if (!articleFresh) {
-      invalidateArticleDetail(queryClient, id);
+    if (!id || isLocalDirectDraft) return;
+    if (modeParam === "dividing") {
+      const articleCached = queryClient.getQueryState(getGetArticleQueryKey(id));
+      const articleFresh = !!articleCached && Date.now() - articleCached.dataUpdatedAt < 30_000;
+      if (!articleFresh) {
+        invalidateArticleDetail(queryClient, id);
+      }
+    } else {
+      const thoughtCached = queryClient.getQueryState(getGetThoughtQueryKey(id));
+      const thoughtFresh = !!thoughtCached && Date.now() - thoughtCached.dataUpdatedAt < 30_000;
+      if (!thoughtFresh) {
+        queryClient.invalidateQueries({ queryKey: getGetThoughtQueryKey(id) });
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [id, isLocalDirectDraft, modeParam, queryClient]);
 
   // ── 데이터 초기화 ──────────────────────────────────────────────────────────
   useEffect(() => {
-    // Only initialize from the entity selected by the detail resolver. This
-    // prevents a counterpart's late response from replacing the active draft.
-    const activeContent = isThoughtMode
+    // Use thought content when in thought mode, article content for dividing.
+    const activeContent = isLocalDirectDraft
+      ? DIRECT_THOUGHT_INITIAL_MARKDOWN
+      : isThoughtMode
       ? thought?.content ?? ""
-      : activeArticle?.content ?? "";
-    const activeTitle = isThoughtMode ? "" : activeArticle?.title ?? "";
+      : article?.content ?? "";
+    const activeTitle = isThoughtMode ? "" : article?.title ?? "";
 
     if (!activeContent && !activeTitle && !isThoughtMode) return;
-    if (!activeContent && isThoughtMode && !thought) return;
+    if (!activeContent && isThoughtMode && !thought && !isLocalDirectDraft) return;
 
     if (!initializedRef.current) {
       initializedRef.current = true;
@@ -367,17 +375,19 @@ export default function WritingScreen() {
       setCharCount(c.length);
       // 초기 모드 결정: mode 파라미터 또는 서버 status(DIVIDING) 기준.
       const initialMode: EditorMode =
-        modeParam === "dividing" || (!isThoughtMode && activeArticle?.status === "DIVIDING")
-          ? "dividing"
-          : "draft";
+        modeParam === "dividing" || (!isThoughtMode && article?.status === "DIVIDING") ? "dividing" : "draft";
       setModeBoth(initialMode);
       if (editorReady) {
         editorRef.current?.setMarkdown(c);
         editorRef.current?.setTitle(t);
+        if (shouldFocusInitialH1Ref.current) {
+          shouldFocusInitialH1Ref.current = false;
+          setTimeout(() => editorRef.current?.focusStart(), 0);
+        }
       }
       // Source article linking is only available on a real article.
-      if (!isThoughtMode && activeArticle?.sourceArticleId) {
-        setSourceArticleId(activeArticle.sourceArticleId);
+      if (!isThoughtMode && article?.sourceArticleId) {
+        setSourceArticleId(article.sourceArticleId);
       }
       console.log("[on-01 init] cached?=true dirty?=false injected:", JSON.stringify(c.slice(0, 60)));
     } else if (contentRef.current === serverContentRef.current) {
@@ -399,7 +409,7 @@ export default function WritingScreen() {
         console.log("[on-01 init] re-inject from server dirty?=false injected:", JSON.stringify(c.slice(0, 60)));
       }
     }
-  }, [thought, activeArticle, isThoughtMode, editorReady, modeParam, setModeBoth]);
+  }, [thought, article, isThoughtMode, isLocalDirectDraft, editorReady, modeParam, setModeBoth]);
 
   useEffect(() => {
     const showSub = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
@@ -445,6 +455,10 @@ export default function WritingScreen() {
     if (initializedRef.current) {
       editorRef.current?.setMarkdown(articleContentRef.current);
       editorRef.current?.setTitle(titleRef.current);
+    }
+    if (shouldFocusInitialH1Ref.current) {
+      shouldFocusInitialH1Ref.current = false;
+      setTimeout(() => editorRef.current?.focusStart(), 0);
     }
   }, []);
 
@@ -540,11 +554,72 @@ export default function WritingScreen() {
 
   const handleSave = useCallback(
     async (data: { title: string; content: string }) => {
-      if (!id) return;
       if (isThoughtModeRef.current && modeRef.current === "draft") {
+        if (!isMeaningfulThoughtMarkdown(data.content)) return;
+        let thoughtId = thoughtIdRef.current;
+        if (!thoughtId) {
+          if (!createThoughtPromiseRef.current) {
+            firstCreatedContentRef.current = data.content;
+            const creatingThought = createThought
+              .mutateAsync({
+                data: { content: data.content, createdFrom: "direct", status: "PRELIMINARY" },
+              })
+              .then(async (created: { id?: string | null }) => {
+                if (!created.id) {
+                  throw new Error("Thought creation did not return an id");
+                }
+                thoughtIdRef.current = created.id;
+                const latestContent = await getEditorContent();
+                if (localDraftExitedRef.current) {
+                  return created.id;
+                }
+                if (
+                  isMeaningfulThoughtMarkdown(latestContent)
+                  && latestContent !== data.content
+                ) {
+                  await updateThought.mutateAsync({
+                    id: created.id,
+                    data: { content: latestContent },
+                  });
+                }
+                // Keep the newest editor text visible through the route
+                // parameter update. This intentionally does not unmount the
+                // editor, so a pending export debounce remains alive.
+                queryClient.setQueryData(getGetThoughtQueryKey(created.id), {
+                  ...created,
+                  content: latestContent,
+                });
+                void invalidateDirectThoughtCreation(queryClient);
+                if (isLocalDirectDraft && !hasPersistedLocalDraftRouteRef.current) {
+                  hasPersistedLocalDraftRouteRef.current = true;
+                  router.setParams({ id: created.id, mode: undefined });
+                }
+                return created.id;
+              })
+              .finally(() => {
+                createThoughtPromiseRef.current = null;
+              });
+            createThoughtPromiseRef.current = creatingThought;
+          }
+          const createdThoughtId = await createThoughtPromiseRef.current;
+          if (!createdThoughtId) throw new Error("Thought creation did not return an id");
+          thoughtId = createdThoughtId;
+        }
+        if (!thoughtId) throw new Error("Thought creation did not return an id");
+        // A user can erase a draft and leave while its first POST is in
+        // flight. The exit path will delete that created id; never append a
+        // stale update after it has declared the local draft discarded.
+        if (localDraftExitedRef.current) return;
         // Thought title is the Markdown H1 — send the complete Markdown including H1.
-        await updateThought.mutateAsync({ id, data: { content: data.content } });
+        const createdContent = firstCreatedContentRef.current;
+        firstCreatedContentRef.current = null;
+        // Only the exact payload that was POSTed is already durable. Clear
+        // the sentinel immediately so A → B → A still PATCHes the final A.
+        if (createdContent !== data.content) {
+          await updateThought.mutateAsync({ id: thoughtId, data: { content: data.content } });
+        }
       } else if (modeRef.current === "dividing") {
+        if (!id) return;
         if (!data.title.trim()) return;
         const pgs = splitContentToPages(data.content).map((p) => p.content);
         await updateArticle.mutateAsync({
@@ -558,12 +633,12 @@ export default function WritingScreen() {
         });
       }
     },
-    [id, updateThought, updateArticle],
+    [id, createThought, queryClient, updateThought, updateArticle, isLocalDirectDraft, router, getEditorContent],
   );
 
   const { markDirty, markTitleDirty, flush } = useAutoSave({
     onSave: handleSave,
-    storageKey: id ? `draft_${id}` : undefined,
+    storageKey: isLocalDirectDraft ? "direct_thought_local_draft" : id ? `draft_${id}` : undefined,
   });
 
   const handleEditorChange = useCallback(
@@ -578,7 +653,9 @@ export default function WritingScreen() {
         if (!editorRef.current) return;
         const requestId = `autosave_${Date.now()}`;
         pendingExportsRef.current.set(requestId, (md: string) => {
-          markDirty(titleRef.current, md);
+          if (!isThoughtModeRef.current || isMeaningfulThoughtMarkdown(md)) {
+            markDirty(titleRef.current, md);
+          }
         });
         editorRef.current.requestExportMarkdown(requestId);
         return;
@@ -595,7 +672,9 @@ export default function WritingScreen() {
         if (!editorRef.current) return;
         const requestId = `autosave_${Date.now()}`;
         pendingExportsRef.current.set(requestId, (md: string) => {
-          markDirty(titleRef.current, md);
+          if (!isThoughtModeRef.current || isMeaningfulThoughtMarkdown(md)) {
+            markDirty(titleRef.current, md);
+          }
         });
         editorRef.current.requestExportMarkdown(requestId);
       }, EXPORT_DEBOUNCE_MS);
@@ -941,8 +1020,9 @@ export default function WritingScreen() {
     // creates a fresh DIVIDING article, and returns it.
     let promoted: { id: string; title?: string | null; content?: string | null; status?: string };
     try {
-      if (!id) throw new Error("no id");
-      promoted = await promoteThought.mutateAsync({ id });
+      const thoughtId = thoughtIdRef.current;
+      if (!thoughtId) throw new Error("no saved thought");
+      promoted = await promoteThought.mutateAsync({ id: thoughtId });
     } catch (e) {
       isNavigatingRef.current = false;
       setIsNavigating(false);
@@ -982,10 +1062,11 @@ export default function WritingScreen() {
 
     invalidateArticleLists(queryClient);
     queryClient.invalidateQueries({ queryKey: getListThoughtsQueryKey() });
+    releaseDirectThoughtDraft();
 
     // Replace route with the new article id so a refresh lands on the real article.
     router.replace({ pathname: "/on-01a", params: { id: promoted.id, mode: "dividing" } });
-  }, [getEditorContent, markDirty, flush, id, queryClient, promoteThought, showToast, setModeBoth, router]);
+  }, [getEditorContent, markDirty, flush, queryClient, promoteThought, showToast, setModeBoth, router, releaseDirectThoughtDraft]);
 
   // ── 분할 → 마감 (on-01c 이동) ──────────────────────────────────────────────
   const handleNextToClosing = useCallback(async () => {
@@ -1131,6 +1212,7 @@ export default function WritingScreen() {
     );
     const currentTitle = isThoughtModeRef.current ? "" : titleRef.current.trim();
     const currentContent = cur.trim();
+    const hasMeaningfulThought = isThoughtModeRef.current && isMeaningfulThoughtMarkdown(cur);
 
     if (!isThoughtModeRef.current && source === "quote") {
       if (!currentTitle) {
@@ -1139,16 +1221,29 @@ export default function WritingScreen() {
         showToast({ message: "제목을 입력해주세요.", type: "info" });
         return;
       }
-    } else if (!currentTitle && !currentContent) {
-      if (id && isThoughtModeRef.current) {
+    } else if (isThoughtModeRef.current && !hasMeaningfulThought) {
+      localDraftExitedRef.current = isLocalDirectDraft;
+      let savedThoughtId = thoughtIdRef.current;
+      // The first meaningful autosave may have begun just before the user
+      // clears the editor. Wait for it so the resulting record cannot escape
+      // this empty-draft cleanup.
+      if (!savedThoughtId && createThoughtPromiseRef.current) {
         try {
-          await deleteThought.mutateAsync({ id });
+          savedThoughtId = await createThoughtPromiseRef.current;
+        } catch {
+          // Creation failed, so there is no server record to remove.
+        }
+      }
+      if (savedThoughtId) {
+        try {
+          await deleteThought.mutateAsync({ id: savedThoughtId });
         } catch {
           showToast({ message: "빈 단상 삭제에 실패했습니다.", type: "error" });
         }
         invalidateArticleLists(queryClient);
         queryClient.invalidateQueries({ queryKey: getListThoughtsQueryKey() });
       }
+      releaseDirectThoughtDraft();
       isNavigatingRef.current = false;
       setIsNavigating(false);
       router.replace("/(tabs)/on");
@@ -1167,9 +1262,10 @@ export default function WritingScreen() {
     console.log("[handleDraftBack] flush ok — saved title=%j contentLen=%d", titleRef.current, cur.length);
 
     // Update thought cache after a successful save in draft mode.
-    if (id && isThoughtModeRef.current) {
+    const savedThoughtId = thoughtIdRef.current;
+    if (savedThoughtId && isThoughtModeRef.current) {
       queryClient.setQueryData(
-        getGetThoughtQueryKey(id),
+        getGetThoughtQueryKey(savedThoughtId),
         (old: unknown) => {
           if (!old || typeof old !== "object") return old;
           return { ...old, content: cur };
@@ -1192,27 +1288,38 @@ export default function WritingScreen() {
     }
     isNavigatingRef.current = false;
     setIsNavigating(false);
+    releaseDirectThoughtDraft();
     if (source === "quote") {
       router.replace("/(tabs)/archive");
     } else {
       router.replace("/(tabs)/on");
     }
-  }, [flush, router, queryClient, getEditorContent, markDirty, id, deleteThought, source, showToast]);
+  }, [flush, router, queryClient, getEditorContent, markDirty, id, deleteThought, source, showToast, releaseDirectThoughtDraft, isLocalDirectDraft]);
 
   // Native lifecycle events have no reliable "before unload" hook.  Export the
   // WebView snapshot while the app is still active and flush it to the thought/article
   // record; useAutoSave keeps a retry snapshot if the network is unavailable.
   useEffect(() => {
     const sub = AppState.addEventListener("change", (nextState) => {
-      if (nextState === "active" || modeRef.current === "dividing" || !initializedRef.current) return;
+        if (nextState === "active" || modeRef.current === "dividing" || !initializedRef.current) return;
       void (async () => {
         const latest = await getEditorContent();
-        markDirty(isThoughtModeRef.current ? "" : titleRef.current, latest);
-        await flush();
+          if (!isThoughtModeRef.current || isMeaningfulThoughtMarkdown(latest)) {
+            markDirty(isThoughtModeRef.current ? "" : titleRef.current, latest);
+            await flush();
+          }
       })();
     });
     return () => sub.remove();
   }, [getEditorContent, markDirty, flush]);
+
+  // A direct draft owns the shared composer lock until this writing screen
+  // exits. This cleanup also covers auth resets and programmatic navigation;
+  // setParams keeps the same screen mounted, so persisting a local draft does
+  // not prematurely release the lock.
+  useEffect(() => {
+    return () => releaseDirectThoughtDraft();
+  }, [releaseDirectThoughtDraft]);
 
   // ── 헤더/하드웨어 뒤로가기 통합 ────────────────────────────────────────────
   const handleHeaderBack = useCallback(() => {
@@ -1570,10 +1677,18 @@ export default function WritingScreen() {
     };
   }, []);
 
+  // A direct draft owns the shared composer lock until this writing screen
+  // exits. setParams keeps this component mounted, while this cleanup covers
+  // auth resets and other programmatic navigation.
+  useEffect(() => {
+    return () => releaseDirectThoughtDraft();
+  }, [releaseDirectThoughtDraft]);
+
   useEffect(() => {
     if (Platform.OS !== "android") return;
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
       if (!initializedRef.current) {
+        if (isLocalDirectDraft) releaseDirectThoughtDraft();
         router.back();
         return true;
       }
@@ -1581,9 +1696,9 @@ export default function WritingScreen() {
       return true;
     });
     return () => sub.remove();
-  }, [handleHeaderBack, router]);
+  }, [handleHeaderBack, router, isLocalDirectDraft, releaseDirectThoughtDraft]);
 
-  if (!id || dataLoading) {
+  if ((!isLocalDirectDraft && !id) || dataLoading) {
     return (
       <>
         <Stack.Screen options={{ gestureEnabled: false }} />
@@ -1597,28 +1712,34 @@ export default function WritingScreen() {
     );
   }
 
-  if (detailEntity.kind === "error") {
-    const entityLabel = detailEntity.entity === "thought" ? "단상" : "분할 글";
-    const description =
-      detailEntity.reason === "not-found"
-        ? `${entityLabel}을 찾을 수 없어요. 삭제되었거나 더 이상 열 수 없는 글일 수 있어요.`
-        : `잠시 후 다시 시도하거나 이전 화면으로 돌아가세요.`;
-    const retry = detailEntity.retryEntity === "thought"
-      ? () => thoughtQuery.refetch()
-      : () => articleQuery.refetch();
+  const hasLoadError = !isLocalDirectDraft && (
+    isThoughtMode
+      ? thoughtQuery.isError || !thought
+      : articleQuery.isError || !article
+  );
+
+  if (hasLoadError) {
     return (
       <>
         <Stack.Screen options={{ gestureEnabled: false }} />
         <View style={[styles.container, { paddingTop: insets.top }]}>
           <View style={styles.loadingContainer}>
             <Feather name="alert-circle" size={30} color={Colors.zinc500} />
-            <Text style={styles.loadErrorTitle}>{entityLabel}을 열지 못했어요</Text>
-            <Text style={styles.loadErrorDescription}>{description}</Text>
+            <Text style={styles.loadErrorTitle}>단상을 열지 못했어요</Text>
+            <Text style={styles.loadErrorDescription}>
+              잠시 후 다시 시도하거나 이전 화면으로 돌아가세요.
+            </Text>
             <View style={styles.loadErrorActions}>
               <ScalePressable
                 style={styles.loadRetryButton}
                 contentStyle={styles.loadRetryButtonContent}
-                onPress={() => { void retry(); }}
+                onPress={() => {
+                  if (isThoughtMode) {
+                    thoughtQuery.refetch();
+                  } else {
+                    articleQuery.refetch();
+                  }
+                }}
               >
                 <Text style={styles.loadRetryButtonText}>다시 시도</Text>
               </ScalePressable>

@@ -83,6 +83,9 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       focus() {
         bridge.injectRaw(`(function(){try{var el=document.querySelector('.ProseMirror');if(el){el.focus();}}catch(e){}})();true;`);
       },
+      focusStart() {
+        bridge.injectRaw(`(function(){try{var el=document.querySelector('.ProseMirror'),target=el&&el.querySelector('h1');if(!el)return;el.focus();var range=document.createRange(),selection=window.getSelection();range.selectNodeContents(target||el);range.collapse(true);selection&&selection.removeAllRanges();selection&&selection.addRange(range);}catch(e){}})();true;`);
+      },
       blur() {
         bridge.injectRaw(`(function(){try{if(document.activeElement){document.activeElement.blur();}}catch(e){}})();true;`);
       },

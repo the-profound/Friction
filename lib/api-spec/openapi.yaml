@@ -4859,7 +4859,6 @@ components:
           format: uuid
         content:
           type: string
-          nullable: true
         createdFrom:
           $ref: "#/components/schemas/ThoughtCreatedFrom"
         sourceArticleId:
@@ -4882,7 +4881,7 @@ components:
         updatedAt:
           type: string
           format: date-time
-      required: [id, authorId, createdFrom, status, createdAt, updatedAt]
+      required: [id, authorId, content, createdFrom, status, createdAt, updatedAt]
 
     ThoughtNote:
       type: object
@@ -4980,6 +4979,8 @@ components:
       properties:
         content:
           type: string
+          minLength: 1
+          description: Must include visible text or a non-empty Markdown image; whitespace and Markdown formatting alone are rejected.
       required: [content]
 
     CreateThoughtBody:
@@ -4987,6 +4988,8 @@ components:
       properties:
         content:
           type: string
+          minLength: 1
+          description: Must include visible text or a non-empty Markdown image; whitespace and Markdown formatting alone are rejected.
         createdFrom:
           $ref: "#/components/schemas/ThoughtCreatedFrom"
         sourceArticleId:

@@ -44,7 +44,7 @@ export const thoughtPromotionTypeEnum = pgEnum("thought_promotion_type", [
 export const thoughtsTable = pgTable("thoughts", {
   id: uuid("id").defaultRandom().primaryKey(),
   authorId: uuid("author_id").notNull().references(() => usersTable.id),
-  content: text("content"),
+  content: text("content").notNull(),
   sourceArticleId: uuid("source_article_id").references(() => articlesTable.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
@@ -62,6 +62,11 @@ export const thoughtsTable = pgTable("thoughts", {
     uniqueIndex("thoughts_writing_source_unique_idx")
       .on(t.authorId, t.sourceArticleId)
       .where(sql`${t.sourceArticleId} IS NOT NULL AND (${t.status} = 'PRELIMINARY' OR ${t.migratedFromArticleId} IS NOT NULL)`),
+    check(
+      "thoughts_content_meaningful_check",
+      sql`length(regexp_replace(regexp_replace(${t.content}, '!\\[[^]]*\\]\\([^)]*\\)?', '', 'g'), '[[:space:]#*_~\`>|[\](){},.!+\-=]', '', 'g')) > 0
+        OR ${t.content} ~ '!\\[[^]]*\\]\\([[:space:]]*[^)[:space:]][^)]*\\)'`,
+    ),
 ]);
 
 export const thoughtPromotionsTable = pgTable("thought_promotions", {

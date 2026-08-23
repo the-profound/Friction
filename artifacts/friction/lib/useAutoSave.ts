@@ -95,8 +95,10 @@ export function useAutoSave({
     );
 
     const run = async () => {
+      let saved = false;
       try {
         await onSaveRef.current(data);
+        saved = true;
         if (id >= latestCompletedRef.current) {
           latestCompletedRef.current = id;
           retryCountRef.current = 0;
@@ -134,6 +136,16 @@ export function useAutoSave({
       } finally {
         savingRef.current = false;
         if (activeSaveRef.current === p) activeSaveRef.current = null;
+        // A change received during an in-flight save may already have spent
+        // its debounce while savingRef was true. Schedule its next save here
+        // so a local draft's first create cannot strand newer text in memory.
+        if (saved && isDirtyRef.current && dirtyEpochRef.current !== epochSnapshot) {
+          setTimeout(() => {
+            if (isDirtyRef.current && !savingRef.current) {
+              void doSave();
+            }
+          }, 0);
+        }
       }
     };
 

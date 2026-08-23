@@ -1,29 +1,20 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
-import { useCreateThought } from "@workspace/api-client-react";
-import { useToast } from "@/contexts/ToastContext";
-import { invalidateDirectThoughtCreation } from "@/lib/queryInvalidation";
-
 interface ThoughtComposerContextValue {
   createDirectThought: () => Promise<void>;
+  releaseDirectThoughtDraft: () => void;
   isCreatingThought: boolean;
 }
 
 const ThoughtComposerContext = createContext<ThoughtComposerContextValue | null>(null);
-const DUPLICATE_TAP_WINDOW_MS = 750;
-
 /**
- * Coordinates every direct "new thought" entry point so a tap on a second
- * affordance cannot create another preliminary thought while the first request
- * is still in flight.
+ * Coordinates direct "new thought" entry points. A direct draft has no server
+ * record until it contains meaningful content, but it still owns this shared
+ * lock so another affordance cannot open a competing local draft.
  */
 export function ThoughtComposerProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const queryClient = useQueryClient();
-  const { showToast } = useToast();
-  const createThought = useCreateThought();
   const [isCreatingThought, setIsCreatingThought] = useState(false);
   const isCreatingRef = useRef(false);
   const isMountedRef = useRef(true);
@@ -39,30 +30,19 @@ export function ThoughtComposerProvider({ children }: { children: React.ReactNod
 
     isCreatingRef.current = true;
     setIsCreatingThought(true);
-    try {
-      const thought = await createThought.mutateAsync({
-        data: { content: "# \n\n", createdFrom: "direct", status: "PRELIMINARY" },
-      });
-      await invalidateDirectThoughtCreation(queryClient);
-      router.push({ pathname: "/on-01a", params: { id: thought.id } });
-    } catch {
-      showToast({ message: "단상 생성에 실패했습니다. 다시 시도해주세요.", type: "error" });
-    } finally {
-      // A fast network failure can settle between two click events from a
-      // double tap. Keep the shared lock briefly so that gesture is still one
-      // creation attempt, while leaving a normal retry available right after.
-      setTimeout(() => {
-        isCreatingRef.current = false;
-        if (isMountedRef.current) {
-          setIsCreatingThought(false);
-        }
-      }, DUPLICATE_TAP_WINDOW_MS);
+    router.push({ pathname: "/on-01a", params: { mode: "local-draft" } });
+  }, [router]);
+
+  const releaseDirectThoughtDraft = useCallback(() => {
+    isCreatingRef.current = false;
+    if (isMountedRef.current) {
+      setIsCreatingThought(false);
     }
-  }, [createThought, queryClient, router, showToast]);
+  }, []);
 
   const value = useMemo(
-    () => ({ createDirectThought, isCreatingThought }),
-    [createDirectThought, isCreatingThought],
+    () => ({ createDirectThought, releaseDirectThoughtDraft, isCreatingThought }),
+    [createDirectThought, releaseDirectThoughtDraft, isCreatingThought],
   );
 
   return (

@@ -7,5 +7,9 @@
  */
 
 export interface UpdateThoughtBody {
+  /**
+   * Must include visible text or a non-empty Markdown image; whitespace and Markdown formatting alone are rejected.
+   * @minLength 1
+   */
   content: string;
 }

@@ -202,4 +202,64 @@ describe("useAutoSave – C2 flush race condition", () => {
     // No new markDirty during save → dirty correctly cleared
     expect(ctrl.getIsDirty()).toBe(false);
   });
+
+  it("schedules a follow-up save when content changes during the first create", async () => {
+    let latest = "첫 입력";
+    let epoch = 1;
+    let dirty = true;
+    let saving = false;
+    const saved: string[] = [];
+    let releaseFirst!: () => void;
+    const firstSaveGate = new Promise<void>((resolve) => { releaseFirst = resolve; });
+
+    const doSave = async (): Promise<void> => {
+      if (saving) return;
+      saving = true;
+      const snapshot = epoch;
+      const payload = latest;
+      if (saved.length === 0) await firstSaveGate;
+      saved.push(payload);
+      saving = false;
+
+      if (dirty && epoch !== snapshot) {
+        await doSave();
+      } else {
+        dirty = false;
+      }
+    };
+
+    const first = doSave();
+    latest = "첫 입력 뒤에 이어진 최신 문장";
+    epoch++;
+    releaseFirst();
+    await first;
+
+    expect(saved).toEqual(["첫 입력", "첫 입력 뒤에 이어진 최신 문장"]);
+    expect(dirty).toBe(false);
+  });
+
+  it("does not treat the initial create payload as permanently saved", async () => {
+    let persistedId: string | null = null;
+    let firstCreatedContent: string | null = null;
+    let serverContent = "";
+
+    const saveThought = async (content: string) => {
+      if (!persistedId) {
+        persistedId = "thought-1";
+        firstCreatedContent = content;
+        serverContent = content;
+      }
+      const createdContent = firstCreatedContent;
+      firstCreatedContent = null;
+      if (createdContent !== content) {
+        serverContent = content;
+      }
+    };
+
+    await saveThought("A"); // POST A
+    await saveThought("B"); // PATCH B
+    await saveThought("A"); // must PATCH A, not incorrectly skip it
+
+    expect(serverContent).toBe("A");
+  });
 });

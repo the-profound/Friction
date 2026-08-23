@@ -3598,7 +3598,7 @@ export const GetThoughtQuestionQueueResponse = zod.object({
     .object({
       id: zod.string().uuid(),
       authorId: zod.string().uuid(),
-      content: zod.string().nullish(),
+      content: zod.string(),
       createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
       sourceArticleId: zod.string().uuid().nullish(),
       sourceStoredSentenceId: zod.string().uuid().nullish(),
@@ -3612,7 +3612,7 @@ export const GetThoughtQuestionQueueResponse = zod.object({
     .object({
       id: zod.string().uuid(),
       authorId: zod.string().uuid(),
-      content: zod.string().nullish(),
+      content: zod.string(),
       createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
       sourceArticleId: zod.string().uuid().nullish(),
       sourceStoredSentenceId: zod.string().uuid().nullish(),
@@ -3638,7 +3638,7 @@ export const RefreshThoughtQuestionQueueResponse = zod
       .object({
         id: zod.string().uuid(),
         authorId: zod.string().uuid(),
-        content: zod.string().nullish(),
+        content: zod.string(),
         createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
         sourceArticleId: zod.string().uuid().nullish(),
         sourceStoredSentenceId: zod.string().uuid().nullish(),
@@ -3652,7 +3652,7 @@ export const RefreshThoughtQuestionQueueResponse = zod
       .object({
         id: zod.string().uuid(),
         authorId: zod.string().uuid(),
-        content: zod.string().nullish(),
+        content: zod.string(),
         createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
         sourceArticleId: zod.string().uuid().nullish(),
         sourceStoredSentenceId: zod.string().uuid().nullish(),
@@ -3683,7 +3683,7 @@ export const ActivateThoughtQuestionResponse = zod
       .object({
         id: zod.string().uuid(),
         authorId: zod.string().uuid(),
-        content: zod.string().nullish(),
+        content: zod.string(),
         createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
         sourceArticleId: zod.string().uuid().nullish(),
         sourceStoredSentenceId: zod.string().uuid().nullish(),
@@ -3697,7 +3697,7 @@ export const ActivateThoughtQuestionResponse = zod
       .object({
         id: zod.string().uuid(),
         authorId: zod.string().uuid(),
-        content: zod.string().nullish(),
+        content: zod.string(),
         createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
         sourceArticleId: zod.string().uuid().nullish(),
         sourceStoredSentenceId: zod.string().uuid().nullish(),
@@ -3713,7 +3713,7 @@ export const ActivateThoughtQuestionResponse = zod
       activatedThought: zod.object({
         id: zod.string().uuid(),
         authorId: zod.string().uuid(),
-        content: zod.string().nullish(),
+        content: zod.string(),
         createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
         sourceArticleId: zod.string().uuid().nullish(),
         sourceStoredSentenceId: zod.string().uuid().nullish(),
@@ -3746,7 +3746,7 @@ export const GetSimilarThoughtsResponseItem = zod
   .object({
     id: zod.string().uuid(),
     authorId: zod.string().uuid(),
-    content: zod.string().nullish(),
+    content: zod.string(),
     createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
     sourceArticleId: zod.string().uuid().nullish(),
     sourceStoredSentenceId: zod.string().uuid().nullish(),
@@ -3796,7 +3796,7 @@ export const ListThoughtsQueryParams = zod.object({
 export const ListThoughtsResponseItem = zod.object({
   id: zod.string().uuid(),
   authorId: zod.string().uuid(),
-  content: zod.string().nullish(),
+  content: zod.string(),
   createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
   sourceArticleId: zod.string().uuid().nullish(),
   sourceStoredSentenceId: zod.string().uuid().nullish(),
@@ -3810,8 +3810,14 @@ export const ListThoughtsResponse = zod.array(ListThoughtsResponseItem);
 /**
  * @summary Create a thought (단상)
  */
+
 export const CreateThoughtBody = zod.object({
-  content: zod.string(),
+  content: zod
+    .string()
+    .min(1)
+    .describe(
+      "Must include visible text or a non-empty Markdown image; whitespace and Markdown formatting alone are rejected.",
+    ),
   createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
   sourceArticleId: zod.string().uuid().nullish(),
   sourceStoredSentenceId: zod.string().uuid().nullish(),
@@ -3829,7 +3835,7 @@ export const GetThoughtParams = zod.object({
 export const GetThoughtResponse = zod.object({
   id: zod.string().uuid(),
   authorId: zod.string().uuid(),
-  content: zod.string().nullish(),
+  content: zod.string(),
   createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
   sourceArticleId: zod.string().uuid().nullish(),
   sourceStoredSentenceId: zod.string().uuid().nullish(),
@@ -3847,13 +3853,18 @@ export const UpdateThoughtParams = zod.object({
 });
 
 export const UpdateThoughtBody = zod.object({
-  content: zod.string(),
+  content: zod
+    .string()
+    .min(1)
+    .describe(
+      "Must include visible text or a non-empty Markdown image; whitespace and Markdown formatting alone are rejected.",
+    ),
 });
 
 export const UpdateThoughtResponse = zod.object({
   id: zod.string().uuid(),
   authorId: zod.string().uuid(),
-  content: zod.string().nullish(),
+  content: zod.string(),
   createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
   sourceArticleId: zod.string().uuid().nullish(),
   sourceStoredSentenceId: zod.string().uuid().nullish(),

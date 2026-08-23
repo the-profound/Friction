@@ -86,6 +86,7 @@ export interface WebViewMarkdownEditorRef {
   setEditable: (isEditable: boolean) => void;
   setTitle: (title: string) => void;
   focus: () => void;
+  focusStart: () => void;
   blur: () => void;
   undo: () => void;
   redo: () => void;

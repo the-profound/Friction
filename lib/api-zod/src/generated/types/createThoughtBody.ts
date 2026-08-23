@@ -9,6 +9,10 @@ import type { ThoughtCreatedFrom } from "./thoughtCreatedFrom";
 import type { ThoughtStatus } from "./thoughtStatus";
 
 export interface CreateThoughtBody {
+  /**
+   * Must include visible text or a non-empty Markdown image; whitespace and Markdown formatting alone are rejected.
+   * @minLength 1
+   */
   content: string;
   createdFrom: ThoughtCreatedFrom;
   sourceArticleId?: string | null;

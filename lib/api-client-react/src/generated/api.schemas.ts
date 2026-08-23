@@ -1216,7 +1216,7 @@ export const ThoughtStatus = {
 export interface Thought {
   id: string;
   authorId: string;
-  content?: string | null;
+  content: string;
   createdFrom: ThoughtCreatedFrom;
   sourceArticleId?: string | null;
   sourceStoredSentenceId?: string | null;
@@ -1309,10 +1309,18 @@ export interface SpellCheckResponse {
 }
 
 export interface UpdateThoughtBody {
+  /**
+   * Must include visible text or a non-empty Markdown image; whitespace and Markdown formatting alone are rejected.
+   * @minLength 1
+   */
   content: string;
 }
 
 export interface CreateThoughtBody {
+  /**
+   * Must include visible text or a non-empty Markdown image; whitespace and Markdown formatting alone are rejected.
+   * @minLength 1
+   */
   content: string;
   createdFrom: ThoughtCreatedFrom;
   sourceArticleId?: string | null;

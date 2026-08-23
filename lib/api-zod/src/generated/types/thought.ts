@@ -11,7 +11,7 @@ import type { ThoughtStatus } from "./thoughtStatus";
 export interface Thought {
   id: string;
   authorId: string;
-  content?: string | null;
+  content: string;
   createdFrom: ThoughtCreatedFrom;
   sourceArticleId?: string | null;
   sourceStoredSentenceId?: string | null;

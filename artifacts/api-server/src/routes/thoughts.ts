@@ -10,7 +10,7 @@ import {
   type ThoughtStatus,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth";
-import { CreateThoughtBody } from "@workspace/api-zod";
+import { CreateThoughtBody, UpdateThoughtBody, isMeaningfulThoughtMarkdown } from "@workspace/api-zod";
 import { generateDenseEmbedding, generateSparseEmbedding } from "../lib/embeddings";
 import { analyzeThoughtExpansion } from "../services/analyze-thought-expansion";
 import { generatePreliminaryThoughtQuestion } from "../services/generate-preliminary-thought-question";
@@ -455,6 +455,10 @@ router.post("/thoughts", requireAuth, async (req, res) => {
   }
   const { content, createdFrom, sourceArticleId, sourceStoredSentenceId, status } = parsed.data;
   const authorId = req.user!.id;
+  if (!isMeaningfulThoughtMarkdown(content)) {
+    res.status(400).json({ error: "Thought content must include text or an image" });
+    return;
+  }
 
   const [thought] = await db.insert(thoughtsTable).values({
     authorId,
@@ -534,10 +538,14 @@ router.get("/thoughts/:id", requireAuth, async (req, res) => {
 router.patch("/thoughts/:id", requireAuth, async (req, res) => {
   const userId = req.user!.id;
   const { id } = req.params;
-  const body = req.body as Record<string, unknown> | null | undefined;
-  const content = body?.content;
-  if (typeof content !== "string") {
-    res.status(400).json({ error: "content must be a string" });
+  const parsed = UpdateThoughtBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
+    return;
+  }
+  const { content } = parsed.data;
+  if (!isMeaningfulThoughtMarkdown(content)) {
+    res.status(400).json({ error: "Thought content must include text or an image" });
     return;
   }
 
