@@ -6,3 +6,10 @@ id = "peiDdWeyRMdwwKTUJYJ91"
 uri = "file://screenshots/friction_inbox_nobg.png"
 type = "image"
 title = "Friction 앱 스크린샷 (배경 제거)"
+
+[[outputs]]
+id = "H7wDg1Ao4mNWBlp5YIN2S"
+uri = "file://artifacts/friction/docs/safe-area-layout-diagram.html"
+type = "text"
+title = "Friction 안전 영역 설계도"
+description = "작성·분할, 상세 읽기, 기록함 일반·선택 모드의 safe area와 여백 계산을 색상·치수로 표현한 단일 HTML 도면입니다."

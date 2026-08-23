@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Friction — 화면별 안전 영역 설계도</title>
+  <style>
+    :root {
+      --ink: #162238;
+      --muted: #5f6d82;
+      --paper: #f6f8fc;
+      --line: #cfd7e6;
+      --device: #1d293d;
+      --physical: #17b5a5;
+      --web: #f8c94d;
+      --nav: #8d63e8;
+      --virtual: #ff8a4c;
+      --content: #4a90e2;
+      --chrome: #e86470;
+      --selection: #d85bb5;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(#e9edf5 1px, transparent 1px),
+        linear-gradient(90deg, #e9edf5 1px, transparent 1px),
+        var(--paper);
+      background-size: 24px 24px;
+      font-family: Pretendard, Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    header {
+      padding: 52px max(24px, calc((100vw - 1360px) / 2)) 28px;
+      background: rgba(246, 248, 252, .9);
+      border-bottom: 1px solid var(--line);
+    }
+    h1 { margin: 0 0 10px; font-size: clamp(26px, 3vw, 40px); letter-spacing: -.06em; }
+    header p { margin: 0; color: var(--muted); line-height: 1.65; }
+    .formula {
+      display: inline-block; margin-top: 14px; padding: 8px 12px; border-radius: 7px;
+      background: #192a45; color: #fff; font: 600 13px ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    main { max-width: 1360px; margin: 0 auto; padding: 30px 24px 56px; }
+    .legend {
+      display: flex; flex-wrap: wrap; gap: 9px 18px; margin-bottom: 30px; font-size: 13px; font-weight: 700;
+    }
+    .legend span { display: inline-flex; align-items: center; gap: 7px; }
+    .dot { width: 12px; height: 12px; border-radius: 3px; }
+    .grid { display: grid; grid-template-columns: repeat(4, minmax(260px, 1fr)); gap: 20px; align-items: start; }
+    .sheet {
+      min-width: 0; padding: 17px; border: 1px solid var(--line); border-radius: 12px;
+      background: rgba(255,255,255,.93); box-shadow: 0 8px 25px rgba(20, 38, 68, .08);
+    }
+    .sheet h2 { margin: 0; font-size: 17px; letter-spacing: -.04em; }
+    .sheet .sub { min-height: 36px; margin: 5px 0 16px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+
+    .device {
+      position: relative; width: min(100%, 268px); height: 535px; margin: 0 auto 16px; overflow: hidden;
+      border: 8px solid var(--device); border-radius: 32px; background: #fff; box-shadow: 0 9px 0 #101827;
+    }
+    .notch { position: absolute; z-index: 10; top: 0; left: 50%; width: 86px; height: 20px; transform: translateX(-50%); background: var(--device); border-radius: 0 0 14px 14px; }
+    .zone {
+      position: absolute; left: 0; width: 100%; display: flex; align-items: center; justify-content: center;
+      padding: 4px 7px; border: 1px dashed rgba(22,34,56,.38); text-align: center; font-size: 10px; font-weight: 800; line-height: 1.22;
+    }
+    .zone small { display: block; margin-top: 2px; font-size: 8px; font-weight: 700; opacity: .78; }
+    .physical { background: rgba(23,181,165,.38); }
+    .web { background: rgba(248,201,77,.57); }
+    .chrome { background: rgba(232,100,112,.32); }
+    .content { background: rgba(74,144,226,.18); }
+    .virtual { border: 2px solid var(--virtual); background: rgba(255,138,76,.16); }
+    .nav-clearance { background: rgba(141,99,232,.23); }
+    .selection { background: rgba(216,91,181,.22); }
+    .nav-bar { background: rgba(141,99,232,.88); color: #fff; border: 0; }
+    .absolute { border: 2px solid currentColor; background: #fff; color: var(--chrome); border-radius: 50%; font-size: 9px; }
+    .fab { position: absolute; right: 20px; bottom: 52px; width: 36px; height: 36px; display: grid; place-items: center; font-weight: 900; }
+    .back { position: absolute; z-index: 5; top: 42px; left: 14px; width: 30px; height: 30px; display: grid; place-items: center; }
+    .pill { position: absolute; z-index: 5; bottom: 99px; left: 50%; width: 92px; height: 22px; transform: translateX(-50%); border-radius: 12px; color: #a14528; font-size: 8px; }
+    .side { position: absolute; top: 190px; width: 14px; height: 230px; background: repeating-linear-gradient(-45deg, #d5def0 0 2px, #fff 2px 5px); }
+    .side.left { left: 0; } .side.right { right: 0; }
+    .card { position: absolute; top: 172px; left: 14px; width: calc(100% - 28px); height: 250px; border: 2px solid var(--content); background: rgba(74,144,226,.06); }
+    .card .virtual-inner { position: absolute; left: 5%; top: 12%; width: 90%; height: 73%; border: 2px solid var(--virtual); background: rgba(255,138,76,.13); }
+    .card .text-column { position: absolute; left: 11%; top: 27%; width: 78%; height: 39%; border: 2px solid var(--content); background: rgba(74,144,226,.16); }
+    .card .caption { position: absolute; bottom: 0; height: 30px; width: 100%; display: grid; place-items: center; background: rgba(232,100,112,.34); color: #612b32; font-size: 9px; font-weight: 800; }
+
+    .specs { margin: 0; padding: 0; list-style: none; border-top: 1px solid #e3e8f2; }
+    .specs li { display: grid; grid-template-columns: 76px 1fr; gap: 7px; padding: 8px 0; border-bottom: 1px solid #e3e8f2; font-size: 11px; line-height: 1.38; }
+    .specs b { font-size: 10px; color: #40516a; }
+    code { padding: 1px 3px; border-radius: 3px; background: #eef2f8; color: #263f66; font: 600 10px ui-monospace, monospace; }
+    .callout { margin: 12px 0 0; padding: 9px 10px; border-left: 3px solid var(--chrome); background: #fff4f5; color: #5f3b43; font-size: 11px; line-height: 1.45; }
+    .note { margin-top: 24px; padding: 16px 18px; border: 1px solid #bad9d5; border-radius: 10px; background: #effaf8; line-height: 1.65; font-size: 13px; }
+    @media (max-width: 1160px) { .grid { grid-template-columns: repeat(2, minmax(280px, 1fr)); } }
+    @media (max-width: 620px) {
+      header { padding: 32px 20px 22px; }
+      main { padding: 22px 14px 38px; }
+      .grid { grid-template-columns: 1fr; }
+      .sheet { padding: 15px; }
+    }
+    @media print {
+      body { background: #fff; } header { padding: 22px 40px 16px; } main { max-width: none; padding: 20px; }
+      .grid { grid-template-columns: repeat(4, 1fr); gap: 12px; } .sheet { box-shadow: none; break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>화면별 안전 영역 · 본문 레이아웃 설계도</h1>
+    <p>문서 <strong>「Friction 안전 영역·본문 레이아웃 계산 기준」</strong>의 3. 화면별 현재 계산을 단순 도면으로 옮겼습니다.<br>수치는 현재 코드의 기준식이며, 화면을 다시 설계하자는 제안이 아닙니다.</p>
+    <div class="formula">물리 inset / 웹 fallback / NavBar clearance / 리더 가상 본문 박스는 서로 다른 값이다.</div>
+  </header>
+
+  <main>
+    <div class="legend" aria-label="색상 범례">
+      <span><i class="dot" style="background:var(--physical)"></i>물리 기기 inset</span>
+      <span><i class="dot" style="background:var(--web)"></i>웹 fallback</span>
+      <span><i class="dot" style="background:var(--chrome)"></i>화면 chrome · 고정 액션</span>
+      <span><i class="dot" style="background:var(--nav)"></i>NavBar / NavBar 회피 영역</span>
+      <span><i class="dot" style="background:var(--virtual)"></i>리더 가상 본문 박스</span>
+      <span><i class="dot" style="background:var(--content)"></i>실제 텍스트 열 · 카드 프레임</span>
+      <span><i class="dot" style="background:var(--selection)"></i>선택 모드 전용 영역</span>
+    </div>
+
+    <section class="grid">
+      <article class="sheet">
+        <h2>3.1 작성 · 분할</h2>
+        <p class="sub">일반 화면 흐름 + 가상 페이지 측정. 웹 fallback은 현재 이 화면에 임의로 더하지 않습니다.</p>
+        <div class="device" aria-label="작성과 분할 화면 도면">
+          <div class="notch"></div>
+          <div class="zone physical" style="top:0;height:28px">물리 top inset<small>native: insets.top / web: 0</small></div>
+          <div class="zone chrome" style="top:28px;height:61px">작성 헤더<small>좌우 24 · 상하 12</small></div>
+          <div class="zone chrome" style="top:89px;height:42px">분할 툴바<small>좌우 24 · 상하 8</small></div>
+          <div class="zone chrome" style="top:131px;height:44px">페이지 칩<small>고정 44px</small></div>
+          <div class="zone content" style="top:175px;height:305px">에디터의 실제 남은 화면 높이</div>
+          <div class="zone virtual" style="top:205px;left:5%;width:90%;height:200px">가상 본문 박스<small>폭 0.90W · 측정 높이 1.20W</small></div>
+          <div class="zone content" style="top:250px;left:11%;width:78%;height:104px">명시 텍스트 열<small>round(0.78W)</small></div>
+          <div class="zone physical" style="bottom:0;height:31px">물리 bottom inset<small>분할 가용 높이에서만 차감</small></div>
+          <div class="zone chrome" style="bottom:31px;height:36px">native 서식 툴바 회피<small>keyboard 중 +60px</small></div>
+        </div>
+        <ul class="specs">
+          <li><b>컨테이너 폭 W</b><span><code>min(screenHeight × 5/8, screenWidth)</code></span></li>
+          <li><b>가상 본문 폭</b><span><code>safeAreaWidth = 0.90 × W</code></span></li>
+          <li><b>텍스트 열</b><span><code>round(0.90W − 2 × 0.06W) = round(0.78W)</code></span></li>
+          <li><b>측정 높이</b><span><code>safeAreaHeight = 1.20 × W</code></span></li>
+          <li><b>분할 가용 높이</b><span><code>1.20W − 2 × 0.15W − insets.bottom</code></span></li>
+          <li><b>측정 총높이</b><span><code>sum(blocks) + 2 × 0.15W + insets.bottom</code></span></li>
+        </ul>
+        <p class="callout">헤더·툴바·실제 화면 높이는 에디터의 보이는 공간만 바꿉니다. 가상 페이지의 본문 분량 식에는 넣지 않습니다.</p>
+      </article>
+
+      <article class="sheet">
+        <h2>3.2 상세 읽기</h2>
+        <p class="sub">카드 표시 크기는 축소될 수 있지만, 본문 폭과 글꼴은 저장된 <code>layoutWidth</code> 기준으로 유지됩니다.</p>
+        <div class="device" aria-label="상세 읽기 화면 도면">
+          <div class="notch"></div>
+          <div class="zone physical" style="top:0;height:30px">물리 top inset</div>
+          <div class="absolute back">←</div>
+          <div class="zone chrome" style="top:32px;left:48px;width:160px;height:22px">뒤로가기: top = inset + 12</div>
+          <div class="side left"></div><div class="side right"></div>
+          <div class="card">
+            <div class="virtual-inner"></div>
+            <div class="text-column">가상 본문 0.90W<br><small>명시 열 폭 round(0.78W)</small></div>
+            <div class="caption">제목 바: round(20 + captionFontSize × 1.3)</div>
+          </div>
+          <div class="zone content" style="top:432px;height:46px">카드 표시 frame<small>논리 5:8 × scaleFactor</small></div>
+          <div class="absolute pill">문장 선택 pill</div>
+          <div class="absolute fab">메모<br>FAB</div>
+          <div class="zone physical" style="bottom:0;height:28px">물리 bottom inset</div>
+        </div>
+        <ul class="specs">
+          <li><b>카드 가용 폭</b><span><code>pageList width − 2 × 14</code> (그림자 여유)</span></li>
+          <li><b>본문 기준 W</b><span><code>article.layoutWidth</code> 우선, 없으면 작성 화면과 동일</span></li>
+          <li><b>논리 카드</b><span><code>W × (W / 5/8)</code> · 표시에는 <code>scaleFactor</code>만 적용</span></li>
+          <li><b>본문 하단</b><span><code>inset.bottom + 0.15W + titleBarHeight</code></span></li>
+          <li><b>메모 FAB</b><span><code>bottom: inset.bottom + 24</code> · <code>right: 20</code></span></li>
+          <li><b>문장 pill</b><span><code>inset.bottom + 80 + frame 위·아래 여백</code></span></li>
+          <li><b>시트 중 카드 상단</b><span><code>inset.top + 8</code> · 본문 W는 유지</span></li>
+          <li><b>완독 액션</b><span><code>paddingBottom: max(inset.bottom, 24)</code></span></li>
+        </ul>
+        <p class="callout">작아진 카드의 실제 폭으로 본문을 다시 계산하면 줄바꿈과 페이지 분량이 달라집니다. 축소는 outer frame만 담당합니다.</p>
+      </article>
+
+      <article class="sheet">
+        <h2>3.3 기록함 · 일반</h2>
+        <p class="sub">일반 목록·그리드는 floating NavBar가 실제로 떠 있으므로, 전체 clearance를 하단 스크롤 여유로 사용합니다.</p>
+        <div class="device" aria-label="기록함 일반 화면 도면">
+          <div class="notch"></div>
+          <div class="zone web" style="top:0;height:45px">web fallback 67px<small>native에서는 insets.top</small></div>
+          <div class="zone chrome" style="top:45px;height:50px">PageHeader<small>top = native inset + headerPt<br>web = 67 + headerPt</small></div>
+          <div class="zone content" style="top:95px;height:295px">일반 목록 / 그리드 / 빈 상태<small>마지막 항목까지 스크롤</small></div>
+          <div class="zone nav-clearance" style="bottom:68px;height:108px">NavBar clearance<small>inset.bottom + 20 + 68 + 20</small></div>
+          <div class="zone nav-bar" style="bottom:20px;left:20px;width:calc(100% - 40px);height:48px;border-radius:20px">floating NavBar<small>bottom = inset.bottom + 20</small></div>
+          <div class="zone physical" style="bottom:0;height:20px">physical bottom inset</div>
+        </div>
+        <ul class="specs">
+          <li><b>일반 헤더</b><span>native <code>insets.top + headerPt</code><br>web <code>67 + headerPt</code></span></li>
+          <li><b>NavBar 위치</b><span><code>insets.bottom + 20</code></span></li>
+          <li><b>목록 하단</b><span><code>navBottom = insets.bottom + 20 + 68 + 20</code></span></li>
+          <li><b>웹 navBottom</b><span><code>108px</code> — web fallback <code>34px</code>은 자동 포함되지 않음</span></li>
+          <li><b>빈 상태 하단</b><span><code>paddingBottom: navBottom</code></span></li>
+        </ul>
+        <p class="callout">일반 목록의 <code>navBottom</code>은 inset을 이미 포함합니다. 여기에 <code>insets.bottom</code>을 다시 더하지 않습니다.</p>
+      </article>
+
+      <article class="sheet">
+        <h2>3.3 기록함 · 문장 선택</h2>
+        <p class="sub">선택 모드에는 NavBar 대신 화면 하단 absolute 삭제 바가 생깁니다. 목록 reserve와 바의 내부 padding은 서로 다른 역할입니다.</p>
+        <div class="device" aria-label="기록함 문장 선택 화면 도면">
+          <div class="notch"></div>
+          <div class="zone physical" style="top:0;height:28px">root top = insets.top<small>web에서는 0</small></div>
+          <div class="zone selection" style="top:28px;height:74px">선택 헤더<small>paddingTop 50 · paddingBottom 20<br>web은 이 50px이 현재 상단 여백</small></div>
+          <div class="zone content" style="top:102px;height:266px">선택 가능한 문장 목록</div>
+          <div class="zone selection" style="bottom:0;height:168px">목록 하단 reserve<small>inset.bottom + 20 + 68 + 80</small></div>
+          <div class="zone chrome" style="bottom:0;left:14px;width:calc(100% - 28px);height:100px;border-radius:11px 11px 0 0">absolute 선택 삭제 바<small>bottom: 0 · 내부 bottom = inset.bottom + 20 + 68 + 12</small></div>
+          <div class="zone physical" style="bottom:0;height:22px;opacity:.65">physical bottom inset</div>
+        </div>
+        <ul class="specs">
+          <li><b>선택 root 상단</b><span><code>paddingTop: insets.top</code> (web = 0)</span></li>
+          <li><b>선택 헤더</b><span><code>paddingTop: 50</code> · <code>paddingBottom: 20</code></span></li>
+          <li><b>삭제 바 위치</b><span><code>bottom: 0</code> · NavBar 대신 하단 chrome</span></li>
+          <li><b>삭제 바 내부 하단</b><span><code>inset.bottom + 20 + 68 + 12</code></span></li>
+          <li><b>목록 하단 reserve</b><span><code>inset.bottom + 20 + 68 + 80</code></span></li>
+        </ul>
+        <p class="callout">삭제 바의 내부 padding으로 목록 하단 padding을 대체하면 마지막 항목이 바 아래로 들어갑니다. 선택 모드의 <code>80</code>은 별도 시각 reserve입니다.</p>
+      </article>
+    </section>
+
+    <aside class="note">
+      <strong>도면을 읽는 핵심:</strong> 청록/노랑은 화면의 물리적 가장자리를 피하기 위한 값이고, 보라는 NavBar가 있을 때 콘텐츠를 스크롤 가능하게 만드는 값입니다.
+      반면 주황/파랑은 리더 카드 내부의 논리적 본문 지오메트리입니다. 이름에 <code>safeArea</code>가 들어가도 주황 영역은 기기 노치나 홈 인디케이터와 무관합니다.
+    </aside>
+  </main>
+</body>
+</html>
