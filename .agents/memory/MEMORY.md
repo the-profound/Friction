@@ -54,3 +54,4 @@
 - [Friction direct thought composer](friction-direct-thought-composer.md) — all direct create affordances must share one lock; fast failures otherwise admit a double tap.
 - [EAS Cloud release validation](eas-cloud-release-validation.md) — env:exec evaluates Expo config before injecting Cloud variables; set release profile only inside its child command.
 - [Unauthenticated auth diagnostics](friction-auth-diagnostics-privacy.md) — analytics-style auth logs need semantic server allowlists, not just client types or character regexes.
+- [Editor hydration autosave](friction-editor-hydration-autosave.md) — server content injected into the editor can emit synthetic dirty events; ignore only its exact matching export.

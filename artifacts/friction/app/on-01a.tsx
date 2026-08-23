@@ -300,6 +300,11 @@ export default function WritingScreen() {
   const exportDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const exportPendingRef = useRef(false);
   const lastSeenDocVersionRef = useRef(-1);
+  // setMarkdown() can produce a synthetic WebView onChange/onExport pair.
+  // Mark server injections so their matching export is not mistaken for an
+  // edit. This is intentionally cleared only for an exact match: a real edit
+  // that happens before the export still needs to be autosaved.
+  const serverInjectionPendingRef = useRef(false);
 
   // ── 원본 글 연결 (dividing article 전용) ─────────────────────────────────
   const [sourceArticleId, setSourceArticleId] = useState<string | null>(null);
@@ -385,6 +390,7 @@ export default function WritingScreen() {
         modeParam === "dividing" || (!isThoughtMode && article?.status === "DIVIDING") ? "dividing" : "draft";
       setModeBoth(initialMode);
       if (editorReady) {
+        serverInjectionPendingRef.current = true;
         editorRef.current?.setMarkdown(c);
         editorRef.current?.setTitle(t);
         if (shouldFocusInitialH1Ref.current) {
@@ -410,6 +416,7 @@ export default function WritingScreen() {
         titleRef.current = t;
         setCharCount(c.length);
         if (editorReady) {
+          serverInjectionPendingRef.current = true;
           editorRef.current?.setMarkdown(c);
           editorRef.current?.setTitle(t);
         }
@@ -460,6 +467,7 @@ export default function WritingScreen() {
     setEditorReady(true);
     console.log("[handleEditorReady] editorReady=true, lastSeenDocVersion reset to -1, initializedRef=", initializedRef.current);
     if (initializedRef.current) {
+      serverInjectionPendingRef.current = true;
       editorRef.current?.setMarkdown(articleContentRef.current);
       editorRef.current?.setTitle(titleRef.current);
     }
@@ -683,6 +691,22 @@ export default function WritingScreen() {
     storageKey: isLocalDirectDraft ? "direct_thought_local_draft" : id ? `draft_${id}` : undefined,
   });
 
+  const handleAutosaveExport = useCallback(
+    (md: string) => {
+      if (serverInjectionPendingRef.current) {
+        serverInjectionPendingRef.current = false;
+        if (md === serverContentRef.current) {
+          console.log("[on-01] ignored initial server export — content unchanged");
+          return;
+        }
+      }
+      if (!isThoughtModeRef.current || isMeaningfulThoughtMarkdown(md)) {
+        markDirty(titleRef.current, md);
+      }
+    },
+    [markDirty],
+  );
+
   const handleEditorChange = useCallback(
     (_payload: OnChangePayload) => {
       if (_payload.charCount !== undefined) {
@@ -694,11 +718,7 @@ export default function WritingScreen() {
         // 분할 모드: 즉시 export 하여 페이지 재계산·측정을 트리거한다.
         if (!editorRef.current) return;
         const requestId = `autosave_${Date.now()}`;
-        pendingExportsRef.current.set(requestId, (md: string) => {
-          if (!isThoughtModeRef.current || isMeaningfulThoughtMarkdown(md)) {
-            markDirty(titleRef.current, md);
-          }
-        });
+        pendingExportsRef.current.set(requestId, handleAutosaveExport);
         editorRef.current.requestExportMarkdown(requestId);
         return;
       }
@@ -713,15 +733,11 @@ export default function WritingScreen() {
         exportPendingRef.current = false;
         if (!editorRef.current) return;
         const requestId = `autosave_${Date.now()}`;
-        pendingExportsRef.current.set(requestId, (md: string) => {
-          if (!isThoughtModeRef.current || isMeaningfulThoughtMarkdown(md)) {
-            markDirty(titleRef.current, md);
-          }
-        });
+        pendingExportsRef.current.set(requestId, handleAutosaveExport);
         editorRef.current.requestExportMarkdown(requestId);
       }, EXPORT_DEBOUNCE_MS);
     },
-    [markDirty],
+    [handleAutosaveExport],
   );
 
   const handleTitleChange = useCallback(
@@ -1096,6 +1112,7 @@ export default function WritingScreen() {
     setContent(promotedContent);
     setDebouncedContent(promotedContent);
     serverContentRef.current = promotedContent;
+    serverInjectionPendingRef.current = true;
     editorRef.current?.setTitle(promotedTitle);
     editorRef.current?.setMarkdown(promotedContent);
     setModeBoth("dividing");
