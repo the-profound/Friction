@@ -1579,6 +1579,40 @@ export default function WritingScreen() {
         <View style={[styles.container, { paddingTop: insets.top }]}>
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={Colors.zinc400} />
+            <Text style={styles.loadingText}>단상을 준비하고 있어요</Text>
+          </View>
+        </View>
+      </>
+    );
+  }
+
+  if (articleQuery.isError || !article) {
+    return (
+      <>
+        <Stack.Screen options={{ gestureEnabled: false }} />
+        <View style={[styles.container, { paddingTop: insets.top }]}>
+          <View style={styles.loadingContainer}>
+            <Feather name="alert-circle" size={30} color={Colors.zinc500} />
+            <Text style={styles.loadErrorTitle}>단상을 열지 못했어요</Text>
+            <Text style={styles.loadErrorDescription}>
+              잠시 후 다시 시도하거나 이전 화면으로 돌아가세요.
+            </Text>
+            <View style={styles.loadErrorActions}>
+              <ScalePressable
+                style={styles.loadRetryButton}
+                contentStyle={styles.loadRetryButtonContent}
+                onPress={() => articleQuery.refetch()}
+              >
+                <Text style={styles.loadRetryButtonText}>다시 시도</Text>
+              </ScalePressable>
+              <ScalePressable
+                style={styles.loadBackButton}
+                contentStyle={styles.loadBackButtonContent}
+                onPress={() => router.back()}
+              >
+                <Text style={styles.loadBackButtonText}>이전 화면</Text>
+              </ScalePressable>
+            </View>
           </View>
         </View>
       </>
@@ -1963,6 +1997,71 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    paddingHorizontal: Spacing.screenPx,
+    gap: Spacing.md,
+  },
+  loadingText: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc500,
+  },
+  loadErrorTitle: {
+    ...Typography.bodyMedium,
+    color: Colors.zinc800,
+    marginTop: Spacing.sm,
+  },
+  loadErrorDescription: {
+    ...Typography.caption,
+    fontSize: 13,
+    color: Colors.zinc500,
+    textAlign: "center",
+  },
+  loadErrorActions: {
+    flexDirection: "row",
+    gap: Spacing.md,
+    marginTop: Spacing.lg,
+  },
+  loadRetryButton: {
+    width: 92,
+    height: 40,
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  loadRetryButtonContent: {
+    width: "100%",
+    height: "100%",
+    flexGrow: 0,
+    flexShrink: 0,
+    borderRadius: 20,
+    backgroundColor: Colors.zinc900,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadRetryButtonText: {
+    ...Typography.captionMedium,
+    fontSize: 13,
+    color: Colors.white,
+  },
+  loadBackButton: {
+    width: 92,
+    height: 40,
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  loadBackButtonContent: {
+    width: "100%",
+    height: "100%",
+    flexGrow: 0,
+    flexShrink: 0,
+    borderRadius: 20,
+    backgroundColor: Colors.zinc100,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadBackButtonText: {
+    ...Typography.captionMedium,
+    fontSize: 13,
+    color: Colors.zinc700,
   },
   header: {
     flexDirection: "row",

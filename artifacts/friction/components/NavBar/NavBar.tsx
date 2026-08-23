@@ -1,25 +1,32 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useEffect, useRef } from "react";
-import { Animated, Platform, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { ActivityIndicator, Animated, StyleSheet, View, useWindowDimensions } from "react-native";
 import Reanimated, { useSharedValue, useAnimatedStyle, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Animation, Colors, Shadows, Sizing, Spacing, TabConfig, Typography } from "@/constants/tokens";
+import { Animation, Colors, Shadows, Sizing, Spacing, TabConfig } from "@/constants/tokens";
 import { useNavigation } from "@/contexts/NavigationContext";
+import { useThoughtComposer } from "@/contexts/ThoughtComposerContext";
 import type { OfSubTabKey } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
 
 type FeatherIconName = React.ComponentProps<typeof Feather>["name"];
 
+const MIN_MENU_WIDTH = 220;
+
 export function NavBar() {
   const insets = useSafeAreaInsets();
   const nav = useNavigation();
+  const { createDirectThought, isCreatingThought } = useThoughtComposer();
   const { width: screenWidth } = useWindowDimensions();
   const layerAnim = useRef(new Animated.Value(nav.layer === "main" ? 0 : 1)).current;
 
-  const dockWidth = Platform.OS === "web"
-    ? Sizing.navBarWidth
-    : Math.min(screenWidth - 48, 340);
+  const availableMenuWidth =
+    screenWidth - Spacing.screenPx * 2 - Sizing.navBarHeight - Spacing.lg;
+  const dockWidth = Math.min(
+    Sizing.navBarWidth,
+    Math.max(MIN_MENU_WIDTH, availableMenuWidth),
+  );
 
   useEffect(() => {
     Animated.timing(layerAnim, {
@@ -41,52 +48,69 @@ export function NavBar() {
 
   return (
     <View style={[styles.container, { bottom: Spacing.navBarBottom + insets.bottom }]} pointerEvents="box-none">
-      <View style={[styles.dockShadow, Shadows.navBarIos, { width: dockWidth }]}>
-      <View style={[styles.dock, Shadows.navBarAndroid, { width: dockWidth }]}>
-        <Animated.View
-          style={[styles.layerAbsolute, { width: dockWidth, height: Sizing.navBarHeight, opacity: mainOpacity }]}
-          pointerEvents={nav.layer === "main" ? "auto" : "none"}
-        >
-          <Animated.View style={[styles.layerAbsolute, { width: dockWidth, height: Sizing.navBarHeight, transform: [{ scale: mainScale }] }]}>
-          {TabConfig.mainTabs.map((tab) => (
-            <TabItem
-              key={tab.key}
-              icon={tab.icon as FeatherIconName}
-              label={tab.label}
-              active={nav.activeTab === tab.key}
-              onPress={() => nav.setActiveTab(tab.key)}
-            />
-          ))}
-          </Animated.View>
-        </Animated.View>
+      <View style={styles.navRow}>
+        <View style={[styles.dockShadow, Shadows.navBarIos, { width: dockWidth }]}>
+          <View style={[styles.dock, Shadows.navBarAndroid, { width: dockWidth }]}>
+            <Animated.View
+              style={[styles.layerAbsolute, { width: dockWidth, height: Sizing.navBarHeight, opacity: mainOpacity }]}
+              pointerEvents={nav.layer === "main" ? "auto" : "none"}
+            >
+              <Animated.View style={[styles.layerAbsolute, { width: dockWidth, height: Sizing.navBarHeight, transform: [{ scale: mainScale }] }]}>
+                {TabConfig.mainTabs.map((tab) => (
+                  <TabItem
+                    key={tab.key}
+                    icon={tab.icon as FeatherIconName}
+                    label={tab.label}
+                    active={nav.activeTab === tab.key}
+                    onPress={() => nav.setActiveTab(tab.key)}
+                  />
+                ))}
+              </Animated.View>
+            </Animated.View>
 
-        <Animated.View
-          style={[
-            styles.layerAbsolute,
-            { width: dockWidth, height: Sizing.navBarHeight, opacity: subOpacity },
-          ]}
-          pointerEvents={nav.layer === "sub" ? "auto" : "none"}
+            <Animated.View
+              style={[
+                styles.layerAbsolute,
+                { width: dockWidth, height: Sizing.navBarHeight, opacity: subOpacity },
+              ]}
+              pointerEvents={nav.layer === "sub" ? "auto" : "none"}
+            >
+              <Animated.View style={[styles.layerAbsolute, { width: dockWidth, height: Sizing.navBarHeight, transform: [{ scale: subScale }, { translateY: subTranslateY }] }]}>
+                <ScalePressable
+                  style={styles.backButton}
+                  contentStyle={styles.backButtonContent}
+                  onPress={nav.goBackToMainLayer}
+                >
+                  <Feather name="chevron-left" size={Sizing.backButtonIconSize} color={Colors.backButtonIcon} />
+                </ScalePressable>
+                {subItems.map((item) => (
+                  <TabItem
+                    key={item.key}
+                    icon={item.icon as FeatherIconName}
+                    label={item.label}
+                    active={activeSubTab === item.key}
+                    onPress={() => onSubTabPress(item.key)}
+                  />
+                ))}
+              </Animated.View>
+            </Animated.View>
+          </View>
+        </View>
+        <ScalePressable
+          style={styles.addButton}
+          contentStyle={styles.addButtonContent}
+          onPress={createDirectThought}
+          disabled={isCreatingThought}
+          accessibilityRole="button"
+          accessibilityLabel={isCreatingThought ? "새 단상을 만드는 중" : "새 단상 작성"}
+          accessibilityState={{ busy: isCreatingThought, disabled: isCreatingThought }}
         >
-          <Animated.View style={[styles.layerAbsolute, { width: dockWidth, height: Sizing.navBarHeight, transform: [{ scale: subScale }, { translateY: subTranslateY }] }]}>
-          <ScalePressable
-            style={styles.backButton}
-            contentStyle={styles.backButtonContent}
-            onPress={nav.goBackToMainLayer}
-          >
-            <Feather name="chevron-left" size={Sizing.backButtonIconSize} color={Colors.backButtonIcon} />
-          </ScalePressable>
-          {subItems.map((item) => (
-            <TabItem
-              key={item.key}
-              icon={item.icon as FeatherIconName}
-              label={item.label}
-              active={activeSubTab === item.key}
-              onPress={() => onSubTabPress(item.key)}
-            />
-          ))}
-          </Animated.View>
-        </Animated.View>
-      </View>
+          {isCreatingThought ? (
+            <ActivityIndicator size="small" color={Colors.white} />
+          ) : (
+            <Feather name="plus" size={Sizing.tabIconSize} color={Colors.white} />
+          )}
+        </ScalePressable>
       </View>
     </View>
   );
@@ -130,16 +154,6 @@ function TabItem({
           color={active ? Colors.tabActive : Colors.tabInactive}
         />
       </Reanimated.View>
-      <Text
-        style={[
-          styles.tabLabel,
-          { color: active ? Colors.tabActive : Colors.tabInactiveAlt },
-        ]}
-        allowFontScaling={false}
-        numberOfLines={1}
-      >
-        {label}
-      </Text>
     </ScalePressable>
   );
 }
@@ -151,6 +165,12 @@ const styles = StyleSheet.create({
     right: 0,
     alignItems: "center",
     zIndex: Sizing.navBarZIndex,
+  },
+  navRow: {
+    height: Sizing.navBarHeight,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.lg,
   },
   dockShadow: {
     borderRadius: Sizing.navBarRadius,
@@ -166,7 +186,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    overflow: "hidden",
   },
   layerAbsolute: {
     ...StyleSheet.absoluteFill,
@@ -180,12 +199,9 @@ const styles = StyleSheet.create({
   },
   tabItemContent: {
     minHeight: Sizing.touchTargetMin,
+    height: "100%",
     alignItems: "center",
     justifyContent: "center",
-    gap: 2,
-  },
-  tabLabel: {
-    ...Typography.tabLabel,
   },
   backButton: {
     width: Sizing.backButtonW,
@@ -198,5 +214,23 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.backButtonBg,
     alignItems: "center",
     justifyContent: "center",
+  },
+  addButton: {
+    width: Sizing.navBarHeight,
+    height: Sizing.navBarHeight,
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  addButtonContent: {
+    width: "100%",
+    height: "100%",
+    flexGrow: 0,
+    flexShrink: 0,
+    borderRadius: Sizing.navBarRadius,
+    backgroundColor: Colors.zinc900,
+    alignItems: "center",
+    justifyContent: "center",
+    ...Shadows.navBarIos,
+    ...Shadows.navBarAndroid,
   },
 });

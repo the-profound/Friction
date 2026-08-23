@@ -10,13 +10,12 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   getGetArticleQueryKey,
   getListThoughtsQueryKey,
   useAddArticleToMyCollection,
-  useCreateThought,
   useDeleteArticle,
   useDeleteThought,
   useGetThoughtQuestionQueue,
@@ -39,8 +38,8 @@ import { PageHeader } from "@/components/NavBar/PageHeader";
 import RefreshableEmpty from "@/components/RefreshableEmpty";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { Colors, ReaderTokens, Sizing, Spacing, Typography, readerFontSize } from "@/constants/tokens";
-import { useNavigation } from "@/contexts/NavigationContext";
 import { useReaderTransition } from "@/contexts/ReaderTransitionContext";
+import { useThoughtComposer } from "@/contexts/ThoughtComposerContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useUser } from "@/contexts/UserContext";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
@@ -212,7 +211,7 @@ export default function OnScreen() {
   const { startFadeToBlack } = useReaderTransition();
   const { userId } = useUser();
   const { showToast } = useToast();
-  const { setShowRecordFab } = useNavigation();
+  const { createDirectThought, isCreatingThought } = useThoughtComposer();
   const navBottom = useNavBarBottomSafeArea();
   const { width } = useWindowDimensions();
   const { tab } = useLocalSearchParams<{ tab?: string }>();
@@ -234,17 +233,11 @@ export default function OnScreen() {
   const questionQuery = useGetThoughtQuestionQueue({ query: { enabled: Boolean(userId) } });
   const sendRecordsQuery = useListSendRecords({ senderId: userId });
   const collectionsQuery = useListMyCollections({ ownerId: userId });
-  const createThought = useCreateThought();
   const deleteArticle = useDeleteArticle();
   const deleteThought = useDeleteThought();
   const activateQuestion = useActivateThoughtQuestion();
   const refreshQuestion = useRefreshThoughtQuestionQueue();
   const addToCollection = useAddArticleToMyCollection();
-
-  useFocusEffect(useCallback(() => {
-    setShowRecordFab(false);
-    return () => setShowRecordFab(false);
-  }, [setShowRecordFab]));
 
   useEffect(() => {
     for (const article of articlesQuery.data ?? []) {
@@ -333,17 +326,6 @@ export default function OnScreen() {
       showToast({ message: "질문을 시작하지 못했습니다. 다시 시도해주세요.", type: "error" });
     }
   }, [activateQuestion, questionQuery, router, showToast, thoughtsQuery]);
-
-  const createNewThought = useCallback(async () => {
-    if (createThought.isPending) return;
-    try {
-      const thought = await createThought.mutateAsync({ data: { content: "# \n\n", createdFrom: "direct", status: "PRELIMINARY" } });
-      await thoughtsQuery.refetch();
-      router.push({ pathname: "/on-01a", params: { id: thought.id } });
-    } catch {
-      showToast({ message: "단상 생성에 실패했습니다.", type: "error" });
-    }
-  }, [createThought, router, showToast, thoughtsQuery]);
 
   const confirmDelete = useCallback(async () => {
     const target = deleteTarget;
@@ -501,15 +483,18 @@ export default function OnScreen() {
         <RefreshableEmpty refreshing={articlesQuery.isRefetching || thoughtsQuery.isRefetching} onRefresh={() => refreshAll(kind === "thought")} contentContainerStyle={[styles.center, { paddingBottom: navBottom }]}>
           <Feather name={kind === "letter" ? "mail" : "edit-3"} size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>{searchQuery.trim() ? "검색 결과가 없습니다" : emptyTitle}</Text>
-          {!searchQuery.trim() && kind === "thought" ? <ScalePressable style={styles.createButton} contentStyle={styles.createButtonContent} onPress={createNewThought}><Text style={styles.createButtonText}>단상 쓰기</Text></ScalePressable> : null}
+          {!searchQuery.trim() && kind === "thought" ? (
+            <ScalePressable
+              style={styles.createButton}
+              contentStyle={styles.createButtonContent}
+              onPress={createDirectThought}
+              disabled={isCreatingThought}
+            >
+              <Text style={styles.createButtonText}>단상 쓰기</Text>
+            </ScalePressable>
+          ) : null}
         </RefreshableEmpty>
       )}
-
-      {kind === "thought" ? (
-        <ScalePressable style={[styles.fab, { bottom: navBottom }]} contentStyle={styles.fabContent} onPress={createNewThought} accessibilityLabel="단상 추가">
-          <Feather name="plus" size={22} color={Colors.white} />
-        </ScalePressable>
-      ) : null}
 
       <ConfirmModal
         visible={Boolean(deleteTarget)}
@@ -576,8 +561,6 @@ const styles = StyleSheet.create({
   createButton: { height: 48, flexGrow: 0, flexShrink: 0 },
   createButtonContent: { height: 48, flexGrow: 0, flexShrink: 0, paddingHorizontal: 20, backgroundColor: Colors.zinc900, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   createButtonText: { ...Typography.bodySemiBold, color: Colors.white, fontSize: 15 },
-  fab: { position: "absolute", right: Spacing.screenPx, width: 52, height: 52, flexGrow: 0, flexShrink: 0 },
-  fabContent: { width: 52, height: 52, flexGrow: 0, flexShrink: 0, borderRadius: 26, backgroundColor: Colors.zinc900, alignItems: "center", justifyContent: "center", ...Platform.select({ ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.18, shadowRadius: 6 }, android: { elevation: 4 }, default: {} }) },
   archive: { flex: 1, paddingHorizontal: Spacing.screenPx, paddingBottom: 16 },
   archiveTitle: { ...Typography.bodySemiBold, fontSize: 16, color: Colors.zinc900, textAlign: "center", paddingVertical: 12 },
   collectionRow: {},

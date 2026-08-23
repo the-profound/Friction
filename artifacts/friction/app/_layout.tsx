@@ -26,6 +26,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import ToastContainer from "@/components/Toast/Toast";
 import { NavigationProvider } from "@/contexts/NavigationContext";
 import { ToastProvider } from "@/contexts/ToastContext";
+import { ThoughtComposerProvider } from "@/contexts/ThoughtComposerContext";
 import { UserProvider } from "@/contexts/UserContext";
 import { ActiveReadingProvider, useActiveReading } from "@/contexts/ActiveReadingContext";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
@@ -374,12 +375,14 @@ export default function RootLayout() {
             <AuthProvider>
               <ActiveReadingProvider>
                 <ToastProvider>
-                  <NavigationProvider>
-                    <ReaderTransitionProvider>
-                      <RootLayoutNav />
-                      <ToastContainer />
-                    </ReaderTransitionProvider>
-                  </NavigationProvider>
+                  <ThoughtComposerProvider>
+                    <NavigationProvider>
+                      <ReaderTransitionProvider>
+                        <RootLayoutNav />
+                        <ToastContainer />
+                      </ReaderTransitionProvider>
+                    </NavigationProvider>
+                  </ThoughtComposerProvider>
                 </ToastProvider>
               </ActiveReadingProvider>
             </AuthProvider>

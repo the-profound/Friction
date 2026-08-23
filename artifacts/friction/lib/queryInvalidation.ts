@@ -2,6 +2,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import {
   getGetArticleQueryKey,
   getListArticlesQueryKey,
+  getListThoughtsQueryKey,
   getListInboxQueryKey,
   getListMyCollectionsQueryKey,
   getListMyCollectionArticlesQueryKey,
@@ -26,6 +27,18 @@ import type { InboxItem } from "@workspace/api-client-react";
 
 export function invalidateArticleLists(qc: QueryClient) {
   return qc.invalidateQueries({ queryKey: getListArticlesQueryKey() });
+}
+
+export function invalidateThoughtLists(qc: QueryClient) {
+  return qc.invalidateQueries({ queryKey: getListThoughtsQueryKey() });
+}
+
+/** Direct thought creation appears in both the thought list and article-based views. */
+export function invalidateDirectThoughtCreation(qc: QueryClient) {
+  return Promise.all([
+    invalidateArticleLists(qc),
+    invalidateThoughtLists(qc),
+  ]);
 }
 
 export function invalidateArticleDetail(qc: QueryClient, id: string) {
