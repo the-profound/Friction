@@ -4,6 +4,7 @@ import {
   getGetArticleQueryKey,
   getListArticlesQueryKey,
   getListThoughtsQueryKey,
+  getGetThoughtQuestionQueueQueryKey,
   getListInboxQueryKey,
   getListMyCollectionsQueryKey,
   getListMyCollectionArticlesQueryKey,
@@ -12,7 +13,12 @@ import {
   getListTeamArticlesQueryKey,
   getGetUserRecentCollectionQueryKey,
 } from "@workspace/api-client-react";
-import type { Article, InboxItem, Thought } from "@workspace/api-client-react";
+import type {
+  Article,
+  InboxItem,
+  Thought,
+  ThoughtQuestionQueueResponse,
+} from "@workspace/api-client-react";
 
 /**
  * 도메인별로 자주 함께 호출되는 invalidate 시퀀스를 한곳에 모아 두는 헬퍼.
@@ -87,6 +93,7 @@ type ListCacheSnapshot<T> = Array<[QueryKey, T[] | undefined]>;
 export interface RecordListCacheSnapshot {
   articles: ListCacheSnapshot<Article>;
   thoughts: ListCacheSnapshot<Thought>;
+  questionQueue: ThoughtQuestionQueueResponse | undefined;
 }
 
 /**
@@ -98,12 +105,16 @@ export function snapshotRecordListCaches(qc: QueryClient): RecordListCacheSnapsh
   return {
     articles: qc.getQueriesData<Article[]>({ queryKey: getListArticlesQueryKey() }),
     thoughts: qc.getQueriesData<Thought[]>({ queryKey: getListThoughtsQueryKey() }),
+    questionQueue: qc.getQueryData<ThoughtQuestionQueueResponse>(
+      getGetThoughtQuestionQueueQueryKey(),
+    ),
   };
 }
 
 export function restoreRecordListCaches(qc: QueryClient, snapshot: RecordListCacheSnapshot) {
   for (const [queryKey, data] of snapshot.articles) qc.setQueryData(queryKey, data);
   for (const [queryKey, data] of snapshot.thoughts) qc.setQueryData(queryKey, data);
+  qc.setQueryData(getGetThoughtQuestionQueueQueryKey(), snapshot.questionQueue);
 }
 
 export function removeRecordFromCache(
@@ -135,6 +146,39 @@ export function patchThoughtInRecordCaches(qc: QueryClient, id: string, patch: P
       return { ...thought, ...patch };
     });
     return changed ? next : previous;
+  });
+}
+
+/**
+ * A queue activation returns the final normal thought and the next queue
+ * snapshot together. Update only the unfiltered archive list: filtered thought
+ * queries may have source constraints the activated thought does not satisfy.
+ */
+export function upsertThoughtInRecordCaches(qc: QueryClient, thought: Thought) {
+  qc.setQueryData<Thought[]>(getListThoughtsQueryKey(), (previous) => {
+    if (!previous) return previous;
+    const withoutCurrent = previous.filter((item) => item.id !== thought.id);
+    return [...withoutCurrent, thought].sort(
+      (left, right) =>
+        new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
+        || left.id.localeCompare(right.id),
+    );
+  });
+}
+
+/**
+ * Mutation responses are the authoritative queue order. Preserve only the
+ * stable query shape so callers can pass either a queue read or a mutation
+ * response that carries extra fields such as activatedThought/requeued.
+ */
+export function setThoughtQuestionQueueCache(
+  qc: QueryClient,
+  queue: ThoughtQuestionQueueResponse,
+) {
+  qc.setQueryData<ThoughtQuestionQueueResponse>(getGetThoughtQuestionQueueQueryKey(), {
+    current: queue.current,
+    next: queue.next,
+    queue: queue.queue,
   });
 }
 

@@ -40,6 +40,25 @@ describe("record list model", () => {
     expect(getQueuedThoughtIds(undefined, current, next)).toEqual(new Set(["current", "next"]));
   });
 
+  it("keeps FIFO queue order in the model while excluding every queued ID from date groups", () => {
+    const queue = [
+      { id: "first" },
+      { id: "second" },
+      { id: "third" },
+    ] as Thought[];
+    const queueIds = getQueuedThoughtIds(queue, queue[0], queue[1]);
+    const normalThoughts = [
+      { id: "third" },
+      { id: "ordinary" },
+      { id: "first" },
+      { id: "second" },
+    ] as Thought[];
+
+    expect(queue.map((thought) => thought.id)).toEqual(["first", "second", "third"]);
+    expect(normalThoughts.filter((thought) => !queueIds.has(thought.id)).map((thought) => thought.id))
+      .toEqual(["ordinary"]);
+  });
+
   it("sorts kinds together by newest update time with a deterministic tie-break", () => {
     const records: UnifiedRecord[] = [
       { id: "b", kind: "thought", updatedAt: "2026-01-01T00:00:00.000Z", thought: {} as never },

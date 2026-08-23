@@ -1,11 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
-import { getListArticlesQueryKey, getListThoughtsQueryKey } from "@workspace/api-client-react";
+import {
+  getGetThoughtQuestionQueueQueryKey,
+  getListArticlesQueryKey,
+  getListThoughtsQueryKey,
+} from "@workspace/api-client-react";
 
 import {
   invalidateDirectThoughtCreation,
   removeRecordFromCache,
   restoreRecordListCaches,
+  setThoughtQuestionQueueCache,
   snapshotRecordListCaches,
+  upsertThoughtInRecordCaches,
 } from "../queryInvalidation";
 
 describe("direct thought creation cache invalidation", () => {
@@ -43,7 +49,14 @@ describe("optimistic record cache operations", () => {
           if (JSON.parse(key)[0] === queryKey[0]) cache.set(key, updater(value));
         }
       }),
-      setQueryData: vi.fn((key, value) => cache.set(JSON.stringify(key), value)),
+      getQueryData: vi.fn((key) => cache.get(JSON.stringify(key))),
+      setQueryData: vi.fn((key, value) => {
+        const cacheKey = JSON.stringify(key);
+        cache.set(
+          cacheKey,
+          typeof value === "function" ? value(cache.get(cacheKey)) : value,
+        );
+      }),
     };
 
     const snapshot = snapshotRecordListCaches(queryClient as never);
@@ -53,5 +66,54 @@ describe("optimistic record cache operations", () => {
 
     expect(cache.get(JSON.stringify(getListThoughtsQueryKey()))).toEqual([{ id: "thought-1" }]);
     expect(cache.get(JSON.stringify(thoughtKey))).toEqual([{ id: "thought-1" }]);
+  });
+
+  it("applies an activation response to the queue and ordinary thought caches together", () => {
+    const queueKey = getGetThoughtQuestionQueueQueryKey();
+    const thoughtKey = getListThoughtsQueryKey();
+    const filteredThoughtKey = [...thoughtKey, { sourceArticleId: "source-a" }];
+    const cache = new Map<string, unknown>([
+      [JSON.stringify(queueKey), { current: { id: "old-question" }, next: null, queue: [{ id: "old-question" }] }],
+      [JSON.stringify(thoughtKey), [{ id: "activated", updatedAt: "2026-01-01T00:00:00.000Z" }]],
+      [JSON.stringify(filteredThoughtKey), [{ id: "source-a-thought", updatedAt: "2026-01-02T00:00:00.000Z" }]],
+    ]);
+    const queryClient = {
+      setQueryData: vi.fn((key, value) => {
+        const cacheKey = JSON.stringify(key);
+        cache.set(
+          cacheKey,
+          typeof value === "function" ? value(cache.get(cacheKey)) : value,
+        );
+      }),
+      setQueriesData: vi.fn(({ queryKey }, updater) => {
+        for (const [key, value] of [...cache.entries()]) {
+          if (JSON.parse(key)[0] === queryKey[0]) cache.set(key, updater(value));
+        }
+      }),
+    };
+    const activatedThought = {
+      id: "activated",
+      updatedAt: "2026-01-03T00:00:00.000Z",
+      status: "NORMAL",
+    };
+    const response = {
+      current: { id: "next-question" },
+      next: null,
+      queue: [{ id: "next-question" }],
+      activatedThought,
+    };
+
+    setThoughtQuestionQueueCache(queryClient as never, response as never);
+    upsertThoughtInRecordCaches(queryClient as never, activatedThought as never);
+
+    expect(cache.get(JSON.stringify(queueKey))).toEqual({
+      current: { id: "next-question" },
+      next: null,
+      queue: [{ id: "next-question" }],
+    });
+    expect(cache.get(JSON.stringify(thoughtKey))).toEqual([activatedThought]);
+    expect(cache.get(JSON.stringify(filteredThoughtKey))).toEqual([
+      { id: "source-a-thought", updatedAt: "2026-01-02T00:00:00.000Z" },
+    ]);
   });
 });

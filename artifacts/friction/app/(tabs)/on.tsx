@@ -18,6 +18,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   getGetArticleQueryKey,
+  getGetThoughtQuestionQueueQueryKey,
   getListArticlesQueryKey,
   getListThoughtsQueryKey,
   useAddArticleToMyCollection,
@@ -51,7 +52,9 @@ import {
   invalidateMyCollections,
   removeRecordFromCache,
   restoreRecordListCaches,
+  setThoughtQuestionQueueCache,
   snapshotRecordListCaches,
+  upsertThoughtInRecordCaches,
 } from "@/lib/queryInvalidation";
 import { computeBodyLayout } from "@/lib/bodyLayout";
 import {
@@ -85,7 +88,7 @@ const CARD_FLING_VELOCITY = 0.5;
 const CARD_ACTION_AREA_H = 64;
 const CARD_SHADOW_INSET = 8;
 
-type CardRecord = UnifiedRecord & { isQuestion: boolean };
+type CardRecord = UnifiedRecord & { isQuestion: boolean; questionIndex?: number };
 
 function getCardTitleLineCount(title: string, titleSize: number, textWidth: number): number {
   const charsPerLine = Math.max(1, Math.floor(textWidth / titleSize));
@@ -116,6 +119,7 @@ function relativeDate(value: string): string {
 function RecordSourceCard({
   record,
   question = false,
+  questionIndex,
   width,
   height: suppliedHeight,
   onPress,
@@ -123,6 +127,7 @@ function RecordSourceCard({
 }: {
   record: UnifiedRecord;
   question?: boolean;
+  questionIndex?: number;
   width: number;
   height?: number;
   onPress: () => void;
@@ -179,7 +184,10 @@ function RecordSourceCard({
       onLongPress={() => {
         if (!touchMovedRef.current) onLongPress?.();
       }}
-      accessibilityLabel={`${question ? "현재 질문 단상" : record.kind === "thought" ? "단상 열기" : record.kind === "letter" ? "편지 열기" : "편집 글 열기"}`}
+      accessibilityLabel={question
+        ? `대기 중인 질문${questionIndex ? ` ${questionIndex}` : ""} 열기`
+        : record.kind === "thought" ? "단상 열기" : record.kind === "letter" ? "편지 열기" : "편집 글 열기"}
+      accessibilityHint={question ? "누르면 이 질문에 답하는 단상을 시작합니다." : undefined}
     >
       <View style={styles.thoughtCardBodyWrap}>
         {content.hasTitle ? (
@@ -307,11 +315,13 @@ function RecordCarouselGroup({
   cardWidth,
   renderCard,
   shouldIgnoreVerticalPress,
+  questionQueue = false,
 }: {
   group: RecordDateGroup<CardRecord>;
   cardWidth: number;
   renderCard: (record: CardRecord, shouldIgnorePress: () => boolean, cardHeight: number) => React.ReactNode;
   shouldIgnoreVerticalPress: () => boolean;
+  questionQueue?: boolean;
 }) {
   const { width: windowWidth } = useWindowDimensions();
   const cardHeight = Math.max(...group.records.map((record) => getRecordCardHeight(record, cardWidth)));
@@ -438,7 +448,7 @@ function RecordCarouselGroup({
   return (
     <View style={styles.recordGroup}>
       <View style={styles.recordDateHeader}>
-        <Text style={styles.recordDateHeaderText}>{group.label}</Text>
+        <Text style={styles.recordDateHeaderText}>{questionQueue ? "질문 대기열" : group.label}</Text>
         <Text style={styles.recordDateHeaderCount}>{group.records.length}개</Text>
       </View>
       {Platform.OS === "web" ? (
@@ -505,7 +515,11 @@ export default function OnScreen() {
   const verticalSnapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const verticalPressGuardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const verticalPressGuardRef = useRef(false);
+  // Refresh and activation mutate the same server-owned FIFO queue. Keep one
+  // synchronous guard so a late response can never replace a newer snapshot.
+  const questionQueueMutationPendingRef = useRef(false);
   const [dateSnapOffsets, setDateSnapOffsets] = useState<number[]>([]);
+  const [questionQueueHeight, setQuestionQueueHeight] = useState(0);
 
   const articlesQuery = useListArticles({ authorId: userId });
   const thoughtsQuery = useListThoughts();
@@ -548,8 +562,25 @@ export default function OnScreen() {
     ).filter((record) => recordMatchesQuery(record, searchQuery)),
     [articlesQuery.data, kind, listedThoughts, queuedIds, searchQuery],
   );
+  const queuedQuestionRecords = useMemo<CardRecord[]>(
+    () => kind === "thought"
+      ? ((questionQuery.data?.queue ?? []) as Thought[]).map((thought, index) => ({
+          id: thought.id,
+          kind: "thought" as const,
+          updatedAt: thought.updatedAt,
+          thought,
+          isQuestion: true,
+          questionIndex: index + 1,
+        }))
+      : [],
+    [kind, questionQuery.data?.queue],
+  );
+  const cardRecords = useMemo<CardRecord[]>(
+    () => records.map((record) => ({ ...record, isQuestion: false })),
+    [records],
+  );
   const visibleRecords = useMemo<CardRecord[]>(
-    () => kind === "thought" && questionQuery.data?.current
+    () => kind === "thought" && view !== "card" && questionQuery.data?.current
       ? [{
           id: questionQuery.data.current.id,
           kind: "thought" as const,
@@ -558,11 +589,11 @@ export default function OnScreen() {
           isQuestion: true,
         }, ...records.map((record) => ({ ...record, isQuestion: false }))]
       : records.map((record) => ({ ...record, isQuestion: false })),
-    [kind, questionQuery.data?.current, records],
+    [kind, questionQuery.data?.current, records, view],
   );
   const cardGroups = useMemo(
-    () => buildRecordDateGroups(visibleRecords),
-    [visibleRecords],
+    () => buildRecordDateGroups(cardRecords),
+    [cardRecords],
   );
   const rebuildDateSnapOffsets = useCallback(() => {
     const next = cardGroups
@@ -574,7 +605,7 @@ export default function OnScreen() {
         ? previous
         : normalized,
     );
-  }, [cardGroups]);
+  }, [cardGroups, questionQueueHeight]);
 
   const setGroupOffset = useCallback((dateKey: string, offset: number) => {
     if (groupLayoutsRef.current.get(dateKey) === offset) return;
@@ -593,15 +624,36 @@ export default function OnScreen() {
     .filter((collection) => !collection.isArchive)
     .sort((a, b) => Number(Boolean(b.isImpression)) - Number(Boolean(a.isImpression)) || (b.articleCount ?? 0) - (a.articleCount ?? 0)), [collectionsQuery.data]);
   const refreshAll = useCallback(async (replaceQuestion = false) => {
-    try {
-      if (replaceQuestion && questionQuery.data?.current) {
-        await refreshQuestion.mutateAsync({ data: { currentThoughtId: questionQuery.data.current.id } });
+    if (replaceQuestion) {
+      if (questionQueueMutationPendingRef.current) return;
+      questionQueueMutationPendingRef.current = true;
+      const cacheSnapshot = snapshotRecordListCaches(queryClient);
+      try {
+        const currentQuestion = questionQuery.data?.current;
+        if (!currentQuestion) {
+          await questionQuery.refetch();
+          return;
+        }
+        await queryClient.cancelQueries({ queryKey: getGetThoughtQuestionQueueQueryKey() });
+        const result = await refreshQuestion.mutateAsync({
+          data: { currentThoughtId: currentQuestion.id },
+        });
+        setThoughtQuestionQueueCache(queryClient, result);
+      } catch {
+        restoreRecordListCaches(queryClient, cacheSnapshot);
+        showToast({ message: "질문을 바꾸지 못했습니다. 다시 시도해주세요.", type: "error" });
+      } finally {
+        questionQueueMutationPendingRef.current = false;
       }
+      return;
+    }
+
+    try {
       await Promise.all([articlesQuery.refetch(), thoughtsQuery.refetch(), questionQuery.refetch()]);
     } catch {
-      showToast({ message: replaceQuestion ? "질문을 바꾸지 못했습니다. 다시 시도해주세요." : "기록을 불러오지 못했습니다.", type: "error" });
+      showToast({ message: "기록을 불러오지 못했습니다.", type: "error" });
     }
-  }, [articlesQuery, questionQuery, refreshQuestion, showToast, thoughtsQuery]);
+  }, [articlesQuery, queryClient, questionQuery, refreshQuestion, showToast, thoughtsQuery]);
 
   const openRecord = useCallback((record: UnifiedRecord) => {
     if (record.kind === "thought") {
@@ -614,15 +666,25 @@ export default function OnScreen() {
   }, [router, startFadeToBlack]);
 
   const openQuestion = useCallback(async (thought: Thought) => {
-    if (activateQuestion.isPending) return;
+    if (activateQuestion.isPending || questionQueueMutationPendingRef.current) return;
+    questionQueueMutationPendingRef.current = true;
+    const cacheSnapshot = snapshotRecordListCaches(queryClient);
     try {
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: getListThoughtsQueryKey() }),
+        queryClient.cancelQueries({ queryKey: getGetThoughtQuestionQueueQueryKey() }),
+      ]);
       const result = await activateQuestion.mutateAsync({ id: thought.id });
-      await Promise.all([thoughtsQuery.refetch(), questionQuery.refetch()]);
+      setThoughtQuestionQueueCache(queryClient, result);
+      upsertThoughtInRecordCaches(queryClient, result.activatedThought);
       router.push({ pathname: "/on-01a", params: { id: result.activatedThought.id } });
     } catch {
+      restoreRecordListCaches(queryClient, cacheSnapshot);
       showToast({ message: "질문을 시작하지 못했습니다. 다시 시도해주세요.", type: "error" });
+    } finally {
+      questionQueueMutationPendingRef.current = false;
     }
-  }, [activateQuestion, questionQuery, router, showToast, thoughtsQuery]);
+  }, [activateQuestion, queryClient, router, showToast]);
 
   const confirmDelete = useCallback(async () => {
     const target = deleteTarget;
@@ -699,6 +761,7 @@ export default function OnScreen() {
         <RecordSourceCard
           record={record}
           question={record.isQuestion}
+          questionIndex={record.questionIndex}
           width={cardWidth}
           height={cardHeight}
           onPress={() => {
@@ -828,10 +891,11 @@ export default function OnScreen() {
 
       {isLoading ? (
         <View style={styles.center}><Text style={styles.muted}>불러오는 중...</Text></View>
-      ) : view === "card" && cardGroups.length > 0 ? (
+      ) : view === "card" && (cardGroups.length > 0 || queuedQuestionRecords.length > 0) ? (
         <FlatList
           ref={recordListRef}
           data={cardGroups}
+          extraData={questionQueueHeight}
           nestedScrollEnabled
           keyExtractor={(group) => group.dateKey}
           renderItem={({ item }) => (
@@ -844,7 +908,23 @@ export default function OnScreen() {
               />
             </View>
           )}
-          refreshControl={<RefreshControl refreshing={articlesQuery.isRefetching || thoughtsQuery.isRefetching || refreshQuestion.isPending} onRefresh={() => refreshAll(kind === "thought")} />}
+          ListHeaderComponent={queuedQuestionRecords.length > 0 ? (
+            <View
+              onLayout={(event) => {
+                const nextHeight = Math.round(event.nativeEvent.layout.height);
+                setQuestionQueueHeight((previous) => previous === nextHeight ? previous : nextHeight);
+              }}
+            >
+              <RecordCarouselGroup
+                group={{ dateKey: "question-queue", label: "질문 대기열", records: queuedQuestionRecords }}
+                cardWidth={cardWidth}
+                renderCard={renderRecordCard}
+                shouldIgnoreVerticalPress={() => verticalPressGuardRef.current}
+                questionQueue
+              />
+            </View>
+          ) : null}
+          refreshControl={<RefreshControl refreshing={articlesQuery.isRefetching || thoughtsQuery.isRefetching || questionQuery.isRefetching || refreshQuestion.isPending} onRefresh={() => refreshAll(kind === "thought")} />}
           snapToOffsets={dateSnapOffsets.length > 1 ? dateSnapOffsets : undefined}
           snapToAlignment="start"
           decelerationRate="fast"
@@ -873,11 +953,11 @@ export default function OnScreen() {
               />
             );
           }}
-          refreshControl={<RefreshControl refreshing={articlesQuery.isRefetching || thoughtsQuery.isRefetching} onRefresh={() => refreshAll(kind === "thought")} />}
+          refreshControl={<RefreshControl refreshing={articlesQuery.isRefetching || thoughtsQuery.isRefetching || questionQuery.isRefetching || refreshQuestion.isPending} onRefresh={() => refreshAll(kind === "thought")} />}
           contentContainerStyle={{ paddingBottom: navBottom + 16 }}
         />
       ) : (
-        <RefreshableEmpty refreshing={articlesQuery.isRefetching || thoughtsQuery.isRefetching} onRefresh={() => refreshAll(kind === "thought")} contentContainerStyle={[styles.center, { paddingBottom: navBottom }]}>
+        <RefreshableEmpty refreshing={articlesQuery.isRefetching || thoughtsQuery.isRefetching || questionQuery.isRefetching || refreshQuestion.isPending} onRefresh={() => refreshAll(kind === "thought")} contentContainerStyle={[styles.center, { paddingBottom: navBottom }]}>
           <Feather name={kind === "letter" ? "mail" : "edit-3"} size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>{searchQuery.trim() ? "검색 결과가 없습니다" : emptyTitle}</Text>
           {!searchQuery.trim() && kind === "thought" ? (
