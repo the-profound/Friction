@@ -31,6 +31,10 @@ interface ConfirmModalProps {
   confirmLabel?: string;
   cancelLabel?: string;
   destructive?: boolean;
+  /** Prevents duplicate submissions while a mutation is in flight. */
+  confirmDisabled?: boolean;
+  /** Keeps a destructive dialog open while its mutation is in flight. */
+  cancelDisabled?: boolean;
   /**
    * Optional handler for backdrop / outside tap. When omitted, backdrop press
    * falls through to `onCancel` (the previous default). Provide this when the
@@ -52,6 +56,8 @@ export default function ConfirmModal({
   confirmLabel = "확인",
   cancelLabel = "취소",
   destructive = false,
+  confirmDisabled = false,
+  cancelDisabled = false,
   onBackdropPress,
 }: ConfirmModalProps) {
   // Freeze content while the modal is fading out so the last real values
@@ -89,7 +95,7 @@ export default function ConfirmModal({
 
   return (
     <Modal transparent visible={visible} animationType="fade" statusBarTranslucent>
-      <Pressable style={styles.overlay} onPress={onBackdropPress ?? onCancel}>
+        <Pressable style={styles.overlay} onPress={cancelDisabled ? undefined : (onBackdropPress ?? onCancel)}>
         <View style={styles.contentWrapper}>
           <Pressable style={styles.card} onPress={(e) => e.stopPropagation()}>
             <Text style={styles.title}>{displayTitle}</Text>
@@ -125,6 +131,7 @@ export default function ConfirmModal({
                   style={styles.button}
                   contentStyle={[styles.buttonContent, styles.cancelButton]}
                   onPress={onCancel}
+                  disabled={cancelDisabled}
                 >
                   <Text style={styles.cancelText}>{displayCancelLabel}</Text>
                 </ScalePressable>
@@ -132,6 +139,7 @@ export default function ConfirmModal({
                   style={styles.button}
                   contentStyle={[styles.buttonContent, displayDestructive ? styles.destructiveButton : styles.confirmButton]}
                   onPress={onConfirm}
+                  disabled={confirmDisabled}
                 >
                   <Text style={[styles.confirmText, displayDestructive && styles.destructiveText]}>
                     {displayConfirmLabel}
