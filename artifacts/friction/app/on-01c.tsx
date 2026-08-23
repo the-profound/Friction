@@ -36,7 +36,12 @@ import {
 } from "@workspace/api-client-react";
 import type { ArticleCover } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { invalidateArticleLists, invalidateArticleAndLists, invalidateArticleDetail } from "@/lib/queryInvalidation";
+import {
+  invalidateArticleLists,
+  invalidateArticleAndLists,
+  invalidateArticleDetail,
+  patchArticleInRecordCaches,
+} from "@/lib/queryInvalidation";
 import { useToast } from "@/contexts/ToastContext";
 
 export default function ClosingScreen() {
@@ -134,10 +139,11 @@ export default function ClosingScreen() {
         id,
         data: { cover: pending },
       });
+      patchArticleInRecordCaches(queryClient, id, { cover: pending });
     } catch (e: unknown) {
       console.warn("Failed to save cover:", e instanceof Error ? e.message : e);
     }
-  }, [id, updateArticle]);
+  }, [id, queryClient, updateArticle]);
 
   const handleCoverChange = useCallback(
     (next: ArticleCover) => {
@@ -155,12 +161,13 @@ export default function ClosingScreen() {
             id,
             data: { cover: toSave },
           });
+          patchArticleInRecordCaches(queryClient, id, { cover: toSave });
         } catch (e: unknown) {
           console.warn("Failed to save cover:", e instanceof Error ? e.message : e);
         }
       }, 500);
     },
-    [id, updateArticle],
+    [id, queryClient, updateArticle],
   );
 
   useEffect(() => {
@@ -249,10 +256,11 @@ export default function ClosingScreen() {
     setTitleEditing(false);
     try {
       await updateArticle.mutateAsync({ id, data: { title } });
+      patchArticleInRecordCaches(queryClient, id, { title });
     } catch (e: unknown) {
       console.warn("Failed to save title:", e instanceof Error ? e.message : e);
     }
-  }, [id, title, titleEditing, updateArticle]);
+  }, [id, queryClient, title, titleEditing, updateArticle]);
 
   const handleBack = useCallback(async () => {
     if (isActionInProgressRef.current) return;
@@ -322,10 +330,11 @@ export default function ClosingScreen() {
     if (!id) return;
     try {
       await updateArticle.mutateAsync({ id, data: { title } });
+      patchArticleInRecordCaches(queryClient, id, { title });
     } catch (e: unknown) {
       console.warn("Failed to save title:", e instanceof Error ? e.message : e);
     }
-  }, [id, title, updateArticle]);
+  }, [id, queryClient, title, updateArticle]);
 
   const handleStateBarPress = useCallback((target: WritingStage) => {
     if (target === "CLOSING") return;

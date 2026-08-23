@@ -25,6 +25,16 @@ export interface RecordPreview {
 }
 
 /**
+ * Card view is deliberately separate from RecordPreview. Preview values are
+ * compact/searchable by design, while the one-at-a-time reader needs the
+ * author-entered visual line structure.
+ */
+export interface RecordCardContent {
+  title: string;
+  body: string;
+  hasTitle: boolean;
+}
+/**
  * Keep record rows deterministic: a server can legitimately assign the same
  * timestamp to several writes, so the stable identifier is the final tie-break.
  */
@@ -147,9 +157,56 @@ export function getRecordPreview(record: UnifiedRecord): RecordPreview {
   return { title, titleDisplay, body, hasTitle: Boolean(title) };
 }
 
+function normalizeDisplayLineEndings(value: string | null | undefined): string {
+  return (value ?? "").replace(/\r\n?/g, "\n");
+}
 export function recordMatchesQuery(record: UnifiedRecord, rawQuery: string): boolean {
   const query = normalizePreviewText(rawQuery).toLocaleLowerCase();
   if (!query) return true;
   const preview = getRecordPreview(record);
   return `${preview.title} ${preview.body}`.toLocaleLowerCase().includes(query);
+}
+
+/**
+ * The card is a reading surface, not a search result: article title/body are
+ * preserved as entered. List and search callers must keep using
+ * getRecordPreview instead.
+ */
+export function getRecordCardContent(record: UnifiedRecord): RecordCardContent {
+  if (record.kind === "thought") return getThoughtCardContent(record.thought.content);
+  const title = normalizeDisplayLineEndings(record.article.title);
+  return {
+    title,
+    body: normalizeDisplayLineEndings(record.article.content),
+    hasTitle: Boolean(title),
+  };
+}
+
+/**
+ * Plain-text rendering for a thought card. Unlike the list preview this never
+ * collapses spaces or joins paragraph boundaries. Markdown markup is removed
+ * through the existing parser so a literal author line break still stays a
+ * literal line break in the card.
+ */
+export function getThoughtCardContent(markdown: string | null | undefined): RecordCardContent {
+  const blocks = parseMarkdownBlocks(normalizeDisplayLineEndings(markdown));
+  const firstBlock = blocks[0];
+  const hasTitle = firstBlock?.type === "h1";
+  const title = hasTitle ? tokensToPlainText(firstBlock.tokens) : "";
+  const bodyBlocks = hasTitle ? blocks.slice(1) : blocks;
+  // Block tokens remove Markdown syntax while retaining authored hard line
+  // breaks. Empty paragraph blocks encode additional blank lines beyond the
+  // normal paragraph separator.
+  const body = bodyBlocks.reduce((text, block) => {
+    const line = tokensToPlainText(block.tokens);
+    if (!line) return text ? `${text}\n\n` : text;
+    if (!text) return line;
+    return `${text}${text.endsWith("\n") ? "\n" : "\n\n"}${line}`;
+  }, "");
+
+  return {
+    title,
+    body,
+    hasTitle: Boolean(title),
+  };
 }

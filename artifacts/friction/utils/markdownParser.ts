@@ -79,6 +79,14 @@ function parseInlineMarkedTokens(markedTokens: Token[]): InlineToken[] {
           result.push({ kind: "italic", value: child.value });
         }
       }
+    } else if (token.type === "link") {
+      const t = token as Tokens.Link;
+      // Card/list plain text must show a link's label, never its Markdown URL.
+      result.push(...(t.tokens ? parseInlineMarkedTokens(t.tokens) : [{ kind: "text" as const, value: t.text }]));
+    } else if (token.type === "html") {
+      // marked keeps inline <u>...</u> as an HTML token; route it through the
+      // same supported-inline sanitizer rather than exposing markup literally.
+      result.push(...expandUnderlines([{ kind: "text", value: (token as { raw: string }).raw }]));
     } else if ("raw" in token) {
       result.push({ kind: "text", value: (token as { raw: string }).raw });
     }
@@ -97,7 +105,9 @@ function inlineTokensFromText(text: string): InlineToken[] {
 }
 
 export function tokensToPlainText(tokens: InlineToken[]): string {
-  return tokens.map((t) => t.value).join("");
+  // marked can split inline underline HTML into separate opening/text/closing
+  // tokens. Plain-text consumers must never surface those delimiters.
+  return tokens.map((t) => t.value).join("").replace(/<\/?u>/gi, "");
 }
 
 function flattenListItems(
@@ -172,11 +182,11 @@ export function parseMarkdownBlocks(markdown: string): MarkdownBlockType[] {
       // 빈 줄(엔터)을 측정·표시에 한 줄씩 반영하기 위해 빈 단락 블록으로 보존한다.
       // marked 는 단락 사이의 기본 구분자도 space("\n\n") 토큰으로 내보낸다.
       // 그러므로 기본 구분 2개 newline 은 빈 단락 0개에 해당하고, 그 위로
-      // 두 개의 newline 이 더해질 때마다 빈 단락 1개가 추가된 것이다.
-      // 즉 추가 빈 단락 수 = max(0, floor((newlines - 2) / 2)).
+       // newline 하나가 더해질 때마다 빈 단락 1개가 추가된 것이다.
+       // 즉 추가 빈 단락 수 = max(0, newlines - 2).
       const raw = (token as { raw?: string }).raw ?? "";
       const newlines = (raw.match(/\n/g) ?? []).length;
-      const extraEmpty = Math.max(0, Math.floor((newlines - 2) / 2));
+       const extraEmpty = Math.max(0, newlines - 2);
       for (let k = 0; k < extraEmpty; k++) {
         blocks.push({ type: "paragraph", tokens: [], rawText: "" });
       }

@@ -6,13 +6,15 @@ import {
   compareRecordsNewestFirst,
   getQueuedThoughtIds,
   getThoughtPreview,
+  getRecordCardContent,
+  getThoughtCardContent,
   normalizePreviewTitle,
   normalizePreviewText,
   type UnifiedRecord,
 } from "../recordList";
 
 describe("record list model", () => {
-  it("keeps every entry in a six-question queue out of ordinary archive records", () => {
+  it("keeps every queued question out of ordinary thought records", () => {
     const queuedThoughts = Array.from({ length: 6 }, (_, index) => ({
       id: `queued-${index + 1}`,
       updatedAt: "2026-01-01T00:00:00.000Z",
@@ -32,8 +34,8 @@ describe("record list model", () => {
   });
 
   it("falls back to current and next while an older cached queue response is in use", () => {
-    const current = { id: "current" } as never;
-    const next = { id: "next" } as never;
+    const current = { id: "current" } as Thought;
+    const next = { id: "next" } as Thought;
 
     expect(getQueuedThoughtIds(undefined, current, next)).toEqual(new Set(["current", "next"]));
   });
@@ -137,5 +139,51 @@ describe("record preview normalization", () => {
 
   it("keeps meaningful title line breaks for content view", () => {
     expect(normalizePreviewTitle("  첫 제목  \n  둘째\t제목 \n\n 셋째 ")).toBe("첫 제목\n둘째 제목\n셋째");
+  });
+
+  it("keeps authored thought paragraphs and blank lines in the card model", () => {
+    expect(getThoughtCardContent("# 긴 제목\n\n첫 줄\n둘째 줄\n\n\n셋째 줄")).toEqual({
+      title: "긴 제목",
+      body: "첫 줄\n둘째 줄\n\n\n셋째 줄",
+      hasTitle: true,
+    });
+  });
+
+  it("keeps plain text and structure without exposing Markdown syntax", () => {
+    expect(getThoughtCardContent("# 제목\n\n**굵게**와 *기울임*, [링크](https://example.com)\n\n- 첫 항목\n- 둘째 <u>항목</u>")).toEqual({
+      title: "제목",
+      body: "굵게와 기울임, 링크\n\n첫 항목\n\n둘째 항목",
+      hasTitle: true,
+    });
+  });
+
+  it("removes every parsed H1 form from the body instead of duplicating it", () => {
+    expect(getThoughtCardContent("제목\n====\n\n본문")).toEqual({
+      title: "제목",
+      body: "본문",
+      hasTitle: true,
+    });
+    expect(getThoughtCardContent("  # 들여쓴 제목\n\n본문")).toEqual({
+      title: "들여쓴 제목",
+      body: "본문",
+      hasTitle: true,
+    });
+  });
+
+  it("keeps article card text untouched while preview text stays normalized", () => {
+    const record: UnifiedRecord = {
+      id: "article",
+      kind: "editing",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      article: {
+        title: "긴 제목\n둘째 줄",
+        content: "첫 줄  \n\n  둘째 줄",
+      } as never,
+    };
+    expect(getRecordCardContent(record)).toEqual({
+      title: "긴 제목\n둘째 줄",
+      body: "첫 줄  \n\n  둘째 줄",
+      hasTitle: true,
+    });
   });
 });

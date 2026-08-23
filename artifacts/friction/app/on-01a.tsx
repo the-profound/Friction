@@ -64,6 +64,7 @@ import {
   useGetThought,
   useUpdateThought,
   usePromoteThought,
+  type Thought,
   type StoredSentence,
   type SpellChange,
   spellCheck as apiSpellCheck,
@@ -74,6 +75,12 @@ import {
   invalidateArticleLists,
   invalidateArticleDetail,
   invalidateDirectThoughtCreation,
+  insertThoughtInRecordCache,
+  patchArticleInRecordCaches,
+  patchThoughtInRecordCaches,
+  removeRecordFromCache,
+  restoreRecordListCaches,
+  snapshotRecordListCaches,
 } from "@/lib/queryInvalidation";
 import { useUser } from "@/contexts/UserContext";
 import { useToast } from "@/contexts/ToastContext";
@@ -560,11 +567,23 @@ export default function WritingScreen() {
         if (!thoughtId) {
           if (!createThoughtPromiseRef.current) {
             firstCreatedContentRef.current = data.content;
+            const now = new Date().toISOString();
+            const optimisticThought: Thought = {
+              id: `optimistic-thought-${Date.now()}`,
+              authorId: userId ?? "",
+              content: data.content,
+              createdFrom: "direct",
+              status: "PRELIMINARY",
+              createdAt: now,
+              updatedAt: now,
+            };
+            const recordListSnapshot = snapshotRecordListCaches(queryClient);
+            insertThoughtInRecordCache(queryClient, optimisticThought);
             const creatingThought = createThought
               .mutateAsync({
                 data: { content: data.content, createdFrom: "direct", status: "PRELIMINARY" },
               })
-              .then(async (created: { id?: string | null }) => {
+              .then(async (created: Thought) => {
                 if (!created.id) {
                   throw new Error("Thought creation did not return an id");
                 }
@@ -589,12 +608,21 @@ export default function WritingScreen() {
                   ...created,
                   content: latestContent,
                 });
+                removeRecordFromCache(queryClient, { id: optimisticThought.id, kind: "thought" });
+                insertThoughtInRecordCache(queryClient, {
+                  ...created,
+                  content: latestContent,
+                });
                 void invalidateDirectThoughtCreation(queryClient);
                 if (isLocalDirectDraft && !hasPersistedLocalDraftRouteRef.current) {
                   hasPersistedLocalDraftRouteRef.current = true;
                   router.setParams({ id: created.id, mode: undefined });
                 }
                 return created.id;
+              })
+              .catch((error: unknown) => {
+                restoreRecordListCaches(queryClient, recordListSnapshot);
+                throw error;
               })
               .finally(() => {
                 createThoughtPromiseRef.current = null;
@@ -617,6 +645,8 @@ export default function WritingScreen() {
         // the sentinel immediately so A → B → A still PATCHes the final A.
         if (createdContent !== data.content) {
           await updateThought.mutateAsync({ id: thoughtId, data: { content: data.content } });
+          patchThoughtInRecordCaches(queryClient, thoughtId, { content: data.content });
+          void invalidateDirectThoughtCreation(queryClient);
         }
       } else if (modeRef.current === "dividing") {
         if (!id) return;
@@ -626,14 +656,26 @@ export default function WritingScreen() {
           id,
           data: { title: data.title, content: data.content, pages: pgs },
         });
+        patchArticleInRecordCaches(queryClient, id, {
+          title: data.title,
+          content: data.content,
+          pages: pgs,
+        });
+        void invalidateArticleLists(queryClient);
       } else {
+        if (!id) return;
         await updateArticle.mutateAsync({
           id,
           data: { title: data.title, content: data.content },
         });
+        patchArticleInRecordCaches(queryClient, id, {
+          title: data.title,
+          content: data.content,
+        });
+        void invalidateArticleLists(queryClient);
       }
     },
-    [id, createThought, queryClient, updateThought, updateArticle, isLocalDirectDraft, router, getEditorContent],
+    [id, createThought, queryClient, updateThought, updateArticle, isLocalDirectDraft, router, getEditorContent, userId],
   );
 
   const { markDirty, markTitleDirty, flush } = useAutoSave({

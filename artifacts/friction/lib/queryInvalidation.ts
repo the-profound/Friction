@@ -1,4 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
+import type { QueryKey } from "@tanstack/react-query";
 import {
   getGetArticleQueryKey,
   getListArticlesQueryKey,
@@ -11,7 +12,7 @@ import {
   getListTeamArticlesQueryKey,
   getGetUserRecentCollectionQueryKey,
 } from "@workspace/api-client-react";
-import type { InboxItem } from "@workspace/api-client-react";
+import type { Article, InboxItem, Thought } from "@workspace/api-client-react";
 
 /**
  * 도메인별로 자주 함께 호출되는 invalidate 시퀀스를 한곳에 모아 두는 헬퍼.
@@ -79,6 +80,88 @@ export function invalidateTeamArticles(qc: QueryClient, teamId: string) {
 
 export function invalidateRecentCollection(qc: QueryClient, userId: string) {
   return qc.invalidateQueries({ queryKey: getGetUserRecentCollectionQueryKey(userId) });
+}
+
+type ListCacheSnapshot<T> = Array<[QueryKey, T[] | undefined]>;
+
+export interface RecordListCacheSnapshot {
+  articles: ListCacheSnapshot<Article>;
+  thoughts: ListCacheSnapshot<Thought>;
+}
+
+/**
+ * A mutation can touch several filtered list queries. Snapshot all of them
+ * before an optimistic record operation so an error restores the exact
+ * selection and order the user had, rather than forcing a blank/loading list.
+ */
+export function snapshotRecordListCaches(qc: QueryClient): RecordListCacheSnapshot {
+  return {
+    articles: qc.getQueriesData<Article[]>({ queryKey: getListArticlesQueryKey() }),
+    thoughts: qc.getQueriesData<Thought[]>({ queryKey: getListThoughtsQueryKey() }),
+  };
+}
+
+export function restoreRecordListCaches(qc: QueryClient, snapshot: RecordListCacheSnapshot) {
+  for (const [queryKey, data] of snapshot.articles) qc.setQueryData(queryKey, data);
+  for (const [queryKey, data] of snapshot.thoughts) qc.setQueryData(queryKey, data);
+}
+
+export function removeRecordFromCache(
+  qc: QueryClient,
+  record: { id: string; kind: "thought" | "editing" | "letter" },
+) {
+  if (record.kind === "thought") {
+    qc.setQueriesData<Thought[]>({ queryKey: getListThoughtsQueryKey() }, (previous) => {
+      if (!previous) return previous;
+      const next = previous.filter((thought) => thought.id !== record.id);
+      return next.length === previous.length ? previous : next;
+    });
+    return;
+  }
+  qc.setQueriesData<Article[]>({ queryKey: getListArticlesQueryKey() }, (previous) => {
+    if (!previous) return previous;
+    const next = previous.filter((article) => article.id !== record.id);
+    return next.length === previous.length ? previous : next;
+  });
+}
+
+export function patchThoughtInRecordCaches(qc: QueryClient, id: string, patch: Partial<Thought>) {
+  qc.setQueriesData<Thought[]>({ queryKey: getListThoughtsQueryKey() }, (previous) => {
+    if (!previous) return previous;
+    let changed = false;
+    const next = previous.map((thought) => {
+      if (thought.id !== id) return thought;
+      changed = true;
+      return { ...thought, ...patch };
+    });
+    return changed ? next : previous;
+  });
+}
+
+export function patchArticleInRecordCaches(qc: QueryClient, id: string, patch: Partial<Article>) {
+  qc.setQueriesData<Article[]>({ queryKey: getListArticlesQueryKey() }, (previous) => {
+    if (!previous) return previous;
+    let changed = false;
+    const next = previous.map((article) => {
+      if (article.id !== id) return article;
+      changed = true;
+      return { ...article, ...patch };
+    });
+    return changed ? next : previous;
+  });
+}
+
+/** Add a newly-created direct thought to the unfiltered record cache immediately. */
+export function insertThoughtInRecordCache(qc: QueryClient, thought: Thought) {
+  qc.setQueryData<Thought[] | undefined>(getListThoughtsQueryKey(), (previous) => {
+    if (!previous) return previous;
+    const withoutCurrent = previous.filter((item) => item.id !== thought.id);
+    return [thought, ...withoutCurrent].sort(
+      (left, right) =>
+        new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
+        || left.id.localeCompare(right.id),
+    );
+  });
 }
 
 // ── 낙관적 캐시 업데이트 헬퍼 ────────────────────────────────────────────────

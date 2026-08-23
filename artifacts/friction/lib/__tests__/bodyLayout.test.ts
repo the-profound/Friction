@@ -51,35 +51,13 @@ describe("thought card typography regression guards", () => {
     },
   );
 
-  it.each([
-    {
-      name: "title and body",
-      markdown: "# 제목\n\n긴 본문 ".repeat(30),
-      hasTitle: true,
-      titleLines: 2,
-    },
-    {
-      name: "body without title",
-      markdown: "긴 본문 ".repeat(30),
-      hasTitle: false,
-      titleLines: 0,
-    },
-    {
-      name: "empty body",
-      markdown: "# 제목",
-      hasTitle: true,
-      titleLines: 2,
-    },
-  ])("keeps $name preview line-limit inputs aligned", ({ markdown, hasTitle, titleLines }) => {
+  it("keeps compact preview limits out of the reading card", () => {
     const card = read("app/(tabs)/on.tsx");
 
-    expect(markdown.length).toBeGreaterThan(0);
-    expect(card).toContain("const titleLines = preview.hasTitle ? 2 : 0;");
-    expect(card).toContain("numberOfLines={titleLines}");
-    expect(card).toContain("numberOfLines={maxBodyLines}");
+    expect(card).toContain("getRecordCardContent(record)");
+    expect(card).not.toContain("numberOfLines={titleLines}");
     expect(card).toContain('ellipsizeMode="tail"');
-    expect(card).toContain("preview.body || \"아직 적힌 내용이 없어요.\"");
-    expect(titleLines).toBe(hasTitle ? 2 : 0);
+    expect(card).toContain("content.body || \"아직 적힌 내용이 없어요.\"");
   });
 
   it("uses the card width, not the padded text frame, for both font sizes", () => {
@@ -89,7 +67,7 @@ describe("thought card typography regression guards", () => {
     expect(card).toContain(
       "readerFontSize(ReaderTokens.typeScale.bodyCqi, width)",
     );
-    expect(card).toContain("const maxBodyLines = Math.max(");
+    expect(card).toContain("const bodyLines = Math.max(");
   });
 
   it("keeps the article card title tied to its scaled text frame", () => {

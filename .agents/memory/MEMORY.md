@@ -1,4 +1,5 @@
 - [Friction app testing](friction-app-testing.md) — (tabs) routes are blank when logged out; preview is Supabase-auth-gated, seeded users cannot log in.
+- [Friction record card gesture handoff](friction-record-card-gesture.md) — web scroll handoff can emit a trailing card press; combine local movement and parent-scroll guards.
 - [Friction dev workflow](friction-dev-workflow.md) — openapi.yaml is SSOT (run codegen); api-server has no hot-reload (restart workflow); types need `tsc --build` but runtime bundles src; known baseline tsc errors.
 - [Friction reader page-turn](friction-reader-pager.md) — WebViews ignore RN zIndex when overlapping; use side-by-side pager. Reader padding token is shared SSOT across 4 screens (pagination coupling, no scroll).
 - [Friction reading-memo WebView editor](friction-reader-memo-webview.md) — reading-mode memo uses same WebView TipTap engine as 기록 tab (Eulyoo1945 has no italic/bold face); page-turn is button-driven flip, not gesture.
