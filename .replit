@@ -111,15 +111,12 @@ outputType = "console"
 
 [[workflows.workflow]]
 name = "Publish Android(test)"
-author = "agent"
 mode = "parallel"
+author = 56922764
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash /home/runner/workspace/artifacts/friction/scripts/publish-android.sh"
-
-[workflows.workflow.metadata]
-outputType = "console"
 
 [agent]
 stack = "PNPM_WORKSPACE"
