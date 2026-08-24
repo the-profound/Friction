@@ -23,6 +23,11 @@
         "distribution": "store",
         "credentialsSource": "remote",
         "autoIncrement": true
+      },
+      "android": {
+        "buildType": "apk",
+        "credentialsSource": "remote",
+        "autoIncrement": true
       }
     },
     "development": {

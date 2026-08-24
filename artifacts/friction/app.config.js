@@ -188,7 +188,7 @@ module.exports = {
     },
     android: {
       softwareKeyboardLayoutMode: "resize",
-      package: "com.theprofound.friction",
+      package: IS_DEV ? "com.theprofound.friction" : "friction.by.theprofound",
       permissions: [
         "android.permission.RECORD_AUDIO",
         "android.permission.READ_EXTERNAL_STORAGE",

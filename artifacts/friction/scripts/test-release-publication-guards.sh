@@ -53,7 +53,7 @@ run_missing_value_case() {
   fi
 }
 
-for script_name in publish-ios.sh publish-preview.sh; do
+for script_name in publish-ios.sh publish-preview.sh publish-android.sh; do
   for variable in EXPO_PUBLIC_SUPABASE_URL EXPO_PUBLIC_SUPABASE_ANON_KEY EXPO_PUBLIC_DOMAIN; do
     run_missing_value_case "$script_name" "$variable"
   done

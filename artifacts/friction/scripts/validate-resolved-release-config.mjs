@@ -26,6 +26,7 @@ const expectedName = profile === "preview" ? "Friction Preview" : "Friction";
 if (
   config.name !== expectedName ||
   config.ios?.bundleIdentifier !== "friction.by.theprofound" ||
+  config.android?.package !== "friction.by.theprofound" ||
   diagnostics?.track !== resolveReleaseTrack(process.env) ||
   diagnostics?.configurationFingerprint !== summary.configurationFingerprint ||
   diagnostics?.apiHost !== summary.apiHost ||
