@@ -18,7 +18,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  getGetSpaceBasicSettingsQueryKey,
   getGetSpaceJoinContextQueryKey,
   getListSpacesQueryKey,
   useGetSpaceBasicSettings,
@@ -38,49 +37,82 @@ import SubmitProgressOverlay from "@/components/shared/SubmitProgressOverlay";
 import { Colors, Spacing, Typography } from "@/constants/tokens";
 import { useToast } from "@/contexts/ToastContext";
 import { useUser } from "@/contexts/UserContext";
-
-function getServerErrorMessage(error: unknown): string | null {
-  const data = (error as { data?: unknown })?.data;
-  if (!data || typeof data !== "object") return null;
-  const message = (data as { error?: unknown }).error;
-  return typeof message === "string" && message.trim() ? message : null;
-}
+import { useAuth } from "@/contexts/AuthContext";
+import { getCurrentAuthAccessToken } from "@/lib/authTokenStore";
+import {
+  describeBasicSettingsFailure,
+  getBasicSettingsRequestReadiness,
+  getSpaceBasicSettingsScreenQueryKey,
+  normalizeSpaceRouteId,
+} from "@/lib/spaceBasicSettingsAccess";
 
 export default function SpaceBasicSettingsScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id: routeId } = useLocalSearchParams<{ id?: string | string[] }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { userId } = useUser();
+  const { isLoading: authIsLoading, configurationError } = useAuth();
   const { showToast } = useToast();
   const updateSettings = useUpdateSpaceBasicSettings();
-  const [form, setForm] = useState<SpaceBasicSettingsValues | null>(null);
-  const initializedSpaceIdRef = useRef<string | null>(null);
+  const spaceId = normalizeSpaceRouteId(routeId);
+  const hasAccessToken = !!getCurrentAuthAccessToken();
+  const requestReadiness = getBasicSettingsRequestReadiness({
+    spaceId,
+    userId,
+    authIsLoading,
+    hasAccessToken,
+    configurationError,
+  });
+  const screenQueryKey = getSpaceBasicSettingsScreenQueryKey(spaceId ?? "", userId);
+  const formKey = `${userId}:${spaceId ?? ""}`;
+  const [formState, setFormState] = useState<{
+    key: string;
+    value: SpaceBasicSettingsValues;
+  } | null>(null);
+  const initializedFormKeyRef = useRef<string | null>(null);
+  // Never show a previous space's form during the render before effects clear it.
+  const form = formState?.key === formKey ? formState.value : null;
 
   const topInset = Platform.OS === "web" ? 67 : insets.top;
   const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
 
-  const settingsQuery = useGetSpaceBasicSettings(id, {
+  const settingsQuery = useGetSpaceBasicSettings(spaceId ?? "", {
     query: {
-      enabled: !!id && !!userId,
-      queryKey: getGetSpaceBasicSettingsQueryKey(id),
+      // A user id does not prove customFetch has a valid in-memory bearer
+      // token. Auth restoration and token refresh complete before this GET.
+      enabled: requestReadiness === "READY",
+      queryKey: screenQueryKey,
     },
   });
 
   useEffect(() => {
-    initializedSpaceIdRef.current = null;
-    setForm(null);
-  }, [id]);
-
-  useEffect(() => {
-    if (!settingsQuery.data || initializedSpaceIdRef.current === id) return;
-    initializedSpaceIdRef.current = id;
-    setForm({
-      name: settingsQuery.data.name,
-      description: settingsQuery.data.description ?? "",
-      isAnonymous: settingsQuery.data.isAnonymous,
+    if (
+      requestReadiness !== "READY" ||
+      !settingsQuery.data ||
+      (initializedFormKeyRef.current === formKey && formState?.key === formKey)
+    ) {
+      return;
+    }
+    initializedFormKeyRef.current = formKey;
+    setFormState({
+      key: formKey,
+      value: {
+        name: settingsQuery.data.name,
+        description: settingsQuery.data.description ?? "",
+        isAnonymous: settingsQuery.data.isAnonymous,
+      },
     });
-  }, [id, settingsQuery.data]);
+  }, [formKey, formState?.key, requestReadiness, settingsQuery.data]);
+
+  const handleFormChange = useCallback(
+    (value: SpaceBasicSettingsValues) => {
+      setFormState((previous) =>
+        previous?.key === formKey ? { key: formKey, value } : previous,
+      );
+    },
+    [formKey],
+  );
 
   const isValid = useMemo(() => {
     if (!form) return false;
@@ -91,9 +123,9 @@ export default function SpaceBasicSettingsScreen() {
   }, [form]);
 
   const handleSave = useCallback(async () => {
-    if (!form || updateSettings.isPending) return;
-    if (!userId) {
-      showToast({ message: "로그인이 필요합니다.", type: "error" });
+    if (!form || !spaceId || updateSettings.isPending) return;
+    if (requestReadiness !== "READY") {
+      showToast({ message: "로그인 상태를 확인한 뒤 다시 시도해주세요.", type: "error" });
       return;
     }
 
@@ -115,7 +147,7 @@ export default function SpaceBasicSettingsScreen() {
     }
     try {
       const updated = await updateSettings.mutateAsync({
-        id,
+        id: spaceId,
         data: {
           name,
           description: description || null,
@@ -123,7 +155,7 @@ export default function SpaceBasicSettingsScreen() {
         },
       });
 
-      const detailKey = getGetSpaceJoinContextQueryKey(id, { userId });
+      const detailKey = getGetSpaceJoinContextQueryKey(spaceId, { userId });
       queryClient.setQueryData<SpaceJoinContext>(detailKey, (previous) =>
         previous
           ? {
@@ -141,7 +173,7 @@ export default function SpaceBasicSettingsScreen() {
         { queryKey: getListSpacesQueryKey() },
         (previous) =>
           previous?.map((space) =>
-            space.id === id
+            space.id === spaceId
               ? {
                   ...space,
                   name: updated.name,
@@ -151,7 +183,7 @@ export default function SpaceBasicSettingsScreen() {
               : space,
           ),
       );
-      queryClient.setQueryData(getGetSpaceBasicSettingsQueryKey(id), updated);
+      queryClient.setQueryData(screenQueryKey, updated);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: detailKey }),
         queryClient.invalidateQueries({ queryKey: getListSpacesQueryKey() }),
@@ -160,37 +192,87 @@ export default function SpaceBasicSettingsScreen() {
       showToast({ message: "기본 설정을 저장했어요.", type: "success" });
       router.back();
     } catch (error) {
+      showToast({ message: describeBasicSettingsFailure(error).message, type: "error" });
+    }
+  }, [
+    form,
+    requestReadiness,
+    screenQueryKey,
+    queryClient,
+    router,
+    showToast,
+    spaceId,
+    updateSettings,
+    userId,
+  ]);
+
+  const handleRetry = useCallback(() => {
+    if (requestReadiness !== "READY") {
       showToast({
-        message:
-          getServerErrorMessage(error) ??
-          "기본 설정 저장에 실패했어요. 다시 시도해주세요.",
+        message: "로그인 상태를 확인하고 있어요. 잠시 후 다시 시도해주세요.",
         type: "error",
       });
+      return;
     }
-  }, [form, id, queryClient, router, showToast, updateSettings, userId]);
+    void settingsQuery.refetch();
+  }, [requestReadiness, settingsQuery, showToast]);
 
   const renderBody = () => {
-    if (settingsQuery.isLoading || !form) {
-      if (settingsQuery.isError) {
-        return (
-          <View style={styles.centerContent}>
-            <Feather name="alert-circle" size={36} color={Colors.zinc300} />
-            <Text style={styles.errorTitle}>기본 설정을 불러오지 못했어요</Text>
-            <Text style={styles.errorDescription}>
-              {getServerErrorMessage(settingsQuery.error) ??
-                "잠시 후 다시 시도해주세요."}
+    if (requestReadiness === "INVALID_SPACE") {
+      return (
+        <View style={styles.centerContent}>
+          <Feather name="alert-circle" size={36} color={Colors.zinc300} />
+          <Text style={styles.errorTitle}>공간 정보를 확인할 수 없어요</Text>
+          <Text style={styles.errorDescription}>
+            공간 상세 화면으로 돌아가서 다시 시도해주세요.
+          </Text>
+        </View>
+      );
+    }
+
+    if (requestReadiness === "CONFIGURATION_ERROR") {
+      return (
+        <View style={styles.centerContent}>
+          <Feather name="alert-circle" size={36} color={Colors.zinc300} />
+          <Text style={styles.errorTitle}>앱 연결 설정을 확인할 수 없어요</Text>
+          <Text style={styles.errorDescription}>
+            앱을 최신 버전으로 다시 설치하거나 잠시 후 다시 시도해주세요.
+          </Text>
+        </View>
+      );
+    }
+
+    if (requestReadiness === "AUTH_PENDING") {
+      return (
+        <View style={styles.centerContent}>
+          <ActivityIndicator color={Colors.zinc400} />
+          <Text style={styles.loadingDescription}>로그인 상태를 확인하고 있어요</Text>
+        </View>
+      );
+    }
+
+    if (settingsQuery.isError) {
+      const failure = describeBasicSettingsFailure(settingsQuery.error);
+      return (
+        <View style={styles.centerContent}>
+          <Feather name="alert-circle" size={36} color={Colors.zinc300} />
+          <Text style={styles.errorTitle}>{failure.title}</Text>
+          <Text style={styles.errorDescription}>{failure.message}</Text>
+          <ScalePressable
+            testID="space-basic-settings-retry"
+            style={styles.retryButton}
+            contentStyle={styles.retryButtonContent}
+            onPress={failure.retryable ? handleRetry : () => router.back()}
+          >
+            <Text style={styles.retryButtonText}>
+              {failure.retryable ? "다시 시도" : "공간 상세로 돌아가기"}
             </Text>
-            <ScalePressable
-              testID="space-basic-settings-retry"
-              style={styles.retryButton}
-              contentStyle={styles.retryButtonContent}
-              onPress={() => settingsQuery.refetch()}
-            >
-              <Text style={styles.retryButtonText}>다시 시도</Text>
-            </ScalePressable>
-          </View>
-        );
-      }
+          </ScalePressable>
+        </View>
+      );
+    }
+
+    if (settingsQuery.isLoading || !form) {
       return (
         <View style={styles.centerContent}>
           <ActivityIndicator color={Colors.zinc400} />
@@ -211,7 +293,7 @@ export default function SpaceBasicSettingsScreen() {
         </Text>
         <SpaceBasicSettingsForm
           value={form}
-          onChange={setForm}
+          onChange={handleFormChange}
           disabled={updateSettings.isPending}
           showSpaceNickname={false}
         />
@@ -242,7 +324,10 @@ export default function SpaceBasicSettingsScreen() {
 
         {renderBody()}
 
-        {!settingsQuery.isLoading && !settingsQuery.isError && form ? (
+        {requestReadiness === "READY" &&
+        !settingsQuery.isLoading &&
+        !settingsQuery.isError &&
+        form ? (
           <View style={[styles.footer, { paddingBottom: bottomInset + 16 }]}>
             <SubmitButton
               testID="space-basic-settings-save"
@@ -384,6 +469,11 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: Colors.zinc500,
     textAlign: "center",
+  },
+  loadingDescription: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc500,
   },
   retryButton: {
     height: RETRY_BUTTON_HEIGHT,

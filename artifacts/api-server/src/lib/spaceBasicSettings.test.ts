@@ -86,6 +86,9 @@ describe("space basic settings", () => {
         status: "PENDING",
       }),
     ).toBe("FORBIDDEN");
+    expect(
+      getSpaceBasicSettingsAccessIssue("RECRUITING", null),
+    ).toBe("FORBIDDEN");
   });
 
   it("blocks only public-to-anonymous conversion with incomplete identities", () => {

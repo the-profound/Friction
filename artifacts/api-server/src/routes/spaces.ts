@@ -501,7 +501,7 @@ router.get("/spaces/:id/basic-settings", requireAuth, async (req, res) => {
     .where(eq(spacesTable.id, spaceId))
     .limit(1);
   if (!space) {
-    res.status(404).json({ error: "공간을 찾을 수 없어요." });
+    res.status(404).json({ error: "공간을 찾을 수 없어요.", code: "SPACE_NOT_FOUND" });
     return;
   }
 
@@ -519,11 +519,17 @@ router.get("/spaces/:id/basic-settings", requireAuth, async (req, res) => {
     .limit(1);
   const accessIssue = getSpaceBasicSettingsAccessIssue(space.status, participation);
   if (accessIssue === "FORBIDDEN") {
-    res.status(403).json({ error: "공간장만 기본 설정을 확인할 수 있어요." });
+    res.status(403).json({
+      error: "공간장만 기본 설정을 확인할 수 있어요.",
+      code: "SPACE_BASIC_SETTINGS_FORBIDDEN",
+    });
     return;
   }
   if (accessIssue === "NOT_RECRUITING") {
-    res.status(409).json({ error: "모집 중인 공간에서만 기본 설정을 확인할 수 있어요." });
+    res.status(409).json({
+      error: "모집 중인 공간에서만 기본 설정을 확인할 수 있어요.",
+      code: "SPACE_BASIC_SETTINGS_NOT_RECRUITING",
+    });
     return;
   }
 
@@ -628,27 +634,37 @@ router.patch("/spaces/:id/basic-settings", requireAuth, async (req, res) => {
     });
 
     if (result.kind === "not_found") {
-      res.status(404).json({ error: "공간을 찾을 수 없어요." });
+      res.status(404).json({ error: "공간을 찾을 수 없어요.", code: "SPACE_NOT_FOUND" });
       return;
     }
     if (result.kind === "forbidden") {
-      res.status(403).json({ error: "공간장만 기본 설정을 바꿀 수 있어요." });
+      res.status(403).json({
+        error: "공간장만 기본 설정을 바꿀 수 있어요.",
+        code: "SPACE_BASIC_SETTINGS_FORBIDDEN",
+      });
       return;
     }
     if (result.kind === "not_recruiting") {
-      res.status(409).json({ error: "모집 중인 공간에서만 기본 설정을 바꿀 수 있어요." });
+      res.status(409).json({
+        error: "모집 중인 공간에서만 기본 설정을 바꿀 수 있어요.",
+        code: "SPACE_BASIC_SETTINGS_NOT_RECRUITING",
+      });
       return;
     }
     if (result.kind === "incomplete_anonymous_conversion") {
       res.status(409).json({
         error: "운영자 또는 기존 참여자·신청자 중 공간 닉네임이 없는 사람이 있어 익명 공간으로 전환할 수 없어요.",
+        code: "SPACE_BASIC_SETTINGS_ANONYMOUS_IDENTITY_INCOMPLETE",
       });
       return;
     }
     res.json(result.settings);
   } catch (err) {
     if (isSpaceNicknameConflict(err)) {
-      res.status(409).json({ error: "이미 사용 중인 공간 닉네임입니다." });
+      res.status(409).json({
+        error: "이미 사용 중인 공간 닉네임입니다.",
+        code: "SPACE_BASIC_SETTINGS_NICKNAME_CONFLICT",
+      });
       return;
     }
     console.error("PATCH /spaces/:id/basic-settings error:", err);

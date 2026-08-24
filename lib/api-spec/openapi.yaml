@@ -2945,6 +2945,9 @@ components:
       properties:
         error:
           type: string
+        code:
+          type: string
+          description: Stable machine-readable error code when the client needs an actionable recovery path.
       required:
         - error
 

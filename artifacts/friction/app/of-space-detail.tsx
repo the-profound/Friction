@@ -21,6 +21,7 @@ import { Feather } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import * as Clipboard from "expo-clipboard";
 import { useToast } from "@/contexts/ToastContext";
+import { normalizeSpaceRouteId } from "@/lib/spaceBasicSettingsAccess";
 import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
@@ -1628,11 +1629,20 @@ export default function SpaceDetailScreen() {
             ? [
                 {
                   label: "기본 설정",
-                  onPress: () =>
+                  onPress: () => {
+                    const spaceId = normalizeSpaceRouteId(id);
+                    if (!spaceId) {
+                      showToast({
+                        message: "공간 정보를 확인할 수 없어요. 다시 시도해주세요.",
+                        type: "error",
+                      });
+                      return;
+                    }
                     router.push({
                       pathname: "/of-space-basic-settings" as never,
-                      params: { id },
-                    }),
+                      params: { id: spaceId },
+                    });
+                  },
                 },
               ]
             : []),

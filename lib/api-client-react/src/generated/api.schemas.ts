@@ -7,6 +7,8 @@
  */
 export interface ErrorResponse {
   error: string;
+  /** Stable machine-readable error code when the client needs an actionable recovery path. */
+  code?: string;
 }
 
 export interface HealthStatus {

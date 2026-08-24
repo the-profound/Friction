@@ -219,6 +219,7 @@ function RootLayoutNav() {
           <Stack.Screen name="of-02-detail" />
           <Stack.Screen name="of-03" />
           <Stack.Screen name="of-space-rounds" />
+          <Stack.Screen name="of-space-basic-settings" />
           <Stack.Screen name="of-space-start" />
           <Stack.Screen name="of-space-schedule-send" />
           <Stack.Screen name="of-space-archive" />
