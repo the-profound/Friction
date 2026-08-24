@@ -8,10 +8,10 @@ BUILD_OUTPUT="$(mktemp /tmp/friction_android_build.XXXXXX.json)"
 trap 'rm -f "$BUILD_OUTPUT"' EXIT
 
 echo "========================================"
-echo "  Friction Android Preview APK (EAS)"
+echo "  Friction Android Test APK (EAS)"
 echo "========================================"
 echo ""
-echo "  This creates a directly installable preview APK with the release app identity."
+echo "  This creates a directly installable test APK with the release app identity."
 echo "  It does not submit anything to Google Play Console."
 echo ""
 
@@ -22,20 +22,20 @@ fi
 
 echo ""
 echo "🔎 릴리즈 환경 변수 검증 중..."
-APP_RELEASE_TRACK=preview EAS_BUILD_PROFILE=preview \
-  node "$SCRIPT_DIR/validate-release-env.mjs" --track preview
-bash "$SCRIPT_DIR/validate-eas-cloud-env.sh" preview
+APP_RELEASE_TRACK=production EAS_BUILD_PROFILE=production \
+  node "$SCRIPT_DIR/validate-release-env.mjs" --track production
+bash "$SCRIPT_DIR/validate-eas-cloud-env.sh" production
 
 cd "$APP_DIR"
 
 echo ""
-echo "📦 Android preview APK 빌드 시작 (EAS Cloud)..."
+echo "📦 Android test APK 빌드 시작 (EAS Cloud)..."
 echo "    빌드는 보통 15~30분 소요됩니다."
 echo ""
 
 "$EAS" build \
   --platform android \
-  --profile preview \
+  --profile android-test \
   --non-interactive \
   --wait \
   --json > "$BUILD_OUTPUT"
@@ -72,7 +72,7 @@ APK_URL="${BUILD_DETAILS[1]}"
 BUILD_DETAILS_URL="${BUILD_DETAILS[2]:-}"
 
 echo ""
-echo "✅ Android preview APK 빌드 완료 (ID: $BUILD_ID)"
+echo "✅ Android test APK 빌드 완료 (ID: $BUILD_ID)"
 echo ""
 echo "📲 APK 다운로드 및 설치:"
 echo "   $APK_URL"

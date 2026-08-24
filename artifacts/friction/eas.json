@@ -30,6 +30,18 @@
         "autoIncrement": true
       }
     },
+    "android-test": {
+      "extends": "production",
+      "environment": "production",
+      "env": {
+        "APP_RELEASE_TRACK": "production"
+      },
+      "android": {
+        "buildType": "apk",
+        "credentialsSource": "remote",
+        "autoIncrement": true
+      }
+    },
     "development": {
       "developmentClient": true,
       "env": {
