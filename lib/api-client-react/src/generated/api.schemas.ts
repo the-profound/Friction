@@ -609,6 +609,7 @@ export interface SpaceListItem {
   /** 운영자가 중심글 순서에 포함될지 여부 */
   operatorParticipates: boolean;
   roundCount: number;
+  /** 운영자와 별개로 모집할 참여자 수. 운영자 좌석은 포함하지 않음. */
   maxParticipants?: number | null;
   defaultCenterInterval: number;
   defaultCenterCount: number;
@@ -619,6 +620,7 @@ export interface SpaceListItem {
   createdAt: string;
   updatedAt: string;
   myRole: SpaceListItemMyRole;
+  /** 승인된 모집 대상 참여자 수. 운영자는 별도 역할이므로 포함하지 않음. */
   participantCount: number;
   activeRound?: SpaceRound | null;
   /** 운영자 표시명. 익명 공간은 모집 중 '참여자', 시작 후 공간 닉네임이며 계정 닉네임은 절대 제공하지 않음. */
@@ -680,6 +682,7 @@ export interface Space {
   /** 운영자가 중심글 순서에 포함될지 여부 */
   operatorParticipates: boolean;
   roundCount: number;
+  /** 운영자와 별개로 모집할 참여자 수. 운영자 좌석은 포함하지 않음. */
   maxParticipants?: number | null;
   defaultCenterInterval: number;
   defaultCenterCount: number;
@@ -691,9 +694,16 @@ export interface Space {
   updatedAt: string;
 }
 
+export type SpaceWithCreatorInfo = Space & {
+  /** 생성자의 안전한 표시명. 익명 공간에서 계정 닉네임은 제공하지 않음. */
+  creatorNickname?: string | null;
+  /** 승인된 모집 대상 참여자 수. 운영자는 별도 역할이므로 포함하지 않음. */
+  participantCount: number;
+};
+
 export interface SpaceInvitationWithSpace {
   invitation: SpaceInvitation;
-  space: Space;
+  space: SpaceWithCreatorInfo;
 }
 
 export type SpaceCodeRequestStatus =
@@ -736,6 +746,7 @@ export interface CreateSpaceBody {
   plannedStartsAt?: string | null;
   /** @minimum 1 */
   roundCount?: number;
+  /** 운영자와 별개로 모집할 참여자 수. 운영자 좌석은 포함하지 않음. */
   maxParticipants?: number | null;
   /** @minimum 1 */
   defaultCenterInterval?: number;
@@ -770,6 +781,7 @@ export interface UpdateSpaceBody {
   plannedStartsAt?: string | null;
   /** @minimum 1 */
   roundCount?: number;
+  /** 운영자와 별개로 모집할 참여자 수. 운영자 좌석은 포함하지 않음. */
   maxParticipants?: number | null;
   /** @minimum 1 */
   defaultCenterInterval?: number;
@@ -1184,12 +1196,6 @@ export interface SpaceScheduledSendWithLetter {
   /** Assigned round-slot date (YYYY-MM-DD) for the letter's author/round, if any */
   slotScheduledDate?: string | null;
 }
-
-export type SpaceWithCreatorInfo = Space & {
-  /** 생성자의 안전한 표시명. 익명 공간에서 계정 닉네임은 제공하지 않음. */
-  creatorNickname?: string | null;
-  participantCount: number;
-};
 
 export interface SpaceJoinContext {
   space: SpaceWithCreatorInfo;

@@ -19,6 +19,7 @@ import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import { useToast } from "@/contexts/ToastContext";
 import { useUser } from "@/contexts/UserContext";
+import { isRecruitmentFull } from "@/lib/spaceRecruitment";
 import {
   getSpaceByInviteCode,
   getSpaceJoinContext,
@@ -77,6 +78,14 @@ function validateSpaceNickname(value: string): string | null {
 }
 
 function getJoinMutationErrorMessage(error: unknown, fallback: string): string {
+  const responseError =
+    error != null &&
+    typeof error === "object" &&
+    "data" in error &&
+    (error as { data?: { error?: unknown } }).data?.error;
+  if (responseError === "모집 인원이 모두 찼습니다.") {
+    return responseError;
+  }
   const status = (error as { status?: number }).status;
   if (status === 409) return "이미 사용 중인 공간 닉네임이에요. 다른 이름을 입력해주세요.";
   return fallback;
@@ -120,12 +129,8 @@ function SpaceNicknameField({
 function SpaceInfoCard({ space }: { space: SpaceWithCreatorInfo }) {
   const isRecruiting = space.status === "RECRUITING";
   const isActive = space.status === "ACTIVE";
-  const effectiveMax = space.maxParticipants != null
-    ? (space.operatorParticipates ? space.maxParticipants - 1 : space.maxParticipants)
-    : null;
-  const isFull =
-    effectiveMax != null &&
-    space.participantCount >= effectiveMax;
+  const recruitmentCapacity = space.maxParticipants ?? null;
+  const isFull = isRecruitmentFull(recruitmentCapacity, space.participantCount);
 
   return (
     <View style={styles.infoCard}>
@@ -155,8 +160,8 @@ function SpaceInfoCard({ space }: { space: SpaceWithCreatorInfo }) {
           icon="users"
           label="모집 인원"
           value={
-            effectiveMax
-              ? `${space.participantCount} / ${effectiveMax}명`
+            recruitmentCapacity != null
+              ? `${space.participantCount} / ${recruitmentCapacity}명`
               : `${space.participantCount}명 참여 중`
           }
           accent={isFull ? "red" : undefined}
@@ -293,13 +298,10 @@ export default function SpaceJoinScreen() {
           setStep("space_archived");
           return;
         }
-        const effectiveMaxJoin = space.maxParticipants != null
-          ? (space.operatorParticipates ? space.maxParticipants - 1 : space.maxParticipants)
-          : null;
-        const isFull =
-          effectiveMaxJoin != null &&
-          space.participantCount >= effectiveMaxJoin &&
-          space.status !== "RECRUITING";
+        const isFull = isRecruitmentFull(
+          space.maxParticipants,
+          space.participantCount,
+        );
 
         // When entering via invitationId, only treat the matching invitation as valid.
         const targetInvitation =
@@ -412,13 +414,10 @@ export default function SpaceJoinScreen() {
         setStep("space_archived");
         return;
       }
-      const effectiveMaxCode = space.maxParticipants != null
-        ? (space.operatorParticipates ? space.maxParticipants - 1 : space.maxParticipants)
-        : null;
-      const isFull =
-        effectiveMaxCode != null &&
-        space.participantCount >= effectiveMaxCode &&
-        space.status !== "RECRUITING";
+      const isFull = isRecruitmentFull(
+        space.maxParticipants,
+        space.participantCount,
+      );
       if (isFull) {
         setStep("space_full");
         return;

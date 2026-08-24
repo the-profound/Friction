@@ -3943,6 +3943,7 @@ components:
         maxParticipants:
           type: integer
           nullable: true
+          description: "운영자와 별개로 모집할 참여자 수. 운영자 좌석은 포함하지 않음."
         defaultCenterInterval:
           type: integer
         defaultCenterCount:
@@ -3968,6 +3969,7 @@ components:
           enum: [OPERATOR, PARTICIPANT]
         participantCount:
           type: integer
+          description: "승인된 모집 대상 참여자 수. 운영자는 별도 역할이므로 포함하지 않음."
         activeRound:
           $ref: "#/components/schemas/SpaceRound"
           nullable: true
@@ -3983,7 +3985,7 @@ components:
         invitation:
           $ref: "#/components/schemas/SpaceInvitation"
         space:
-          $ref: "#/components/schemas/Space"
+          $ref: "#/components/schemas/SpaceWithCreatorInfo"
       required: [invitation, space]
 
     SpaceCodeRequestWithSpace:
@@ -4039,6 +4041,7 @@ components:
         maxParticipants:
           type: integer
           nullable: true
+          description: "운영자와 별개로 모집할 참여자 수. 운영자 좌석은 포함하지 않음."
         defaultCenterInterval:
           type: integer
         defaultCenterCount:
@@ -4084,6 +4087,7 @@ components:
         maxParticipants:
           type: integer
           nullable: true
+          description: "운영자와 별개로 모집할 참여자 수. 운영자 좌석은 포함하지 않음."
         defaultCenterInterval:
           type: integer
           minimum: 1
@@ -4120,6 +4124,7 @@ components:
         maxParticipants:
           type: integer
           nullable: true
+          description: "운영자와 별개로 모집할 참여자 수. 운영자 좌석은 포함하지 않음."
         defaultCenterInterval:
           type: integer
           minimum: 1
@@ -4760,6 +4765,7 @@ components:
               description: "생성자의 안전한 표시명. 익명 공간에서 계정 닉네임은 제공하지 않음."
             participantCount:
               type: integer
+              description: "승인된 모집 대상 참여자 수. 운영자는 별도 역할이므로 포함하지 않음."
           required: [participantCount]
 
     SpaceJoinContext:

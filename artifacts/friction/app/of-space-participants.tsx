@@ -18,6 +18,7 @@ import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { useUser } from "@/contexts/UserContext";
 import { SpaceCopy } from "@/constants/spaceCopy";
+import { isRecruitmentFull } from "@/lib/spaceRecruitment";
 import {
   useGetSpaceJoinContext,
   getGetSpaceJoinContextQueryKey,
@@ -93,6 +94,15 @@ function CodeRequestItem({
 function formatRequestDate(iso: string | Date): string {
   const d = typeof iso === "string" ? new Date(iso) : iso;
   return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function getRequestActionErrorMessage(error: unknown, fallback: string): string {
+  const responseError =
+    error != null &&
+    typeof error === "object" &&
+    "data" in error &&
+    (error as { data?: { error?: unknown } }).data?.error;
+  return typeof responseError === "string" ? responseError : fallback;
 }
 
 // ─── Android Rejection Reason Modal ──────────────────────────────────────────
@@ -259,13 +269,11 @@ export default function SpaceParticipantsScreen() {
 
   const isAnonymous = !!space?.isAnonymous;
 
-  const effectiveMax = space?.maxParticipants != null
-    ? (space.operatorParticipates ? space.maxParticipants - 1 : space.maxParticipants)
-    : null;
+  const recruitmentCapacity = space?.maxParticipants ?? null;
 
   const recruitmentClosed =
     space?.status !== "RECRUITING" ||
-    !!(effectiveMax != null && (space?.participantCount ?? 0) >= effectiveMax);
+    isRecruitmentFull(recruitmentCapacity, space?.participantCount ?? 0);
 
   const isLoading = joinContextQuery.isLoading || membersQuery.isLoading;
   const isRefreshing =
@@ -329,8 +337,11 @@ export default function SpaceParticipantsScreen() {
           membersQuery.refetch(),
           joinContextQuery.refetch(),
         ]);
-      } catch {
-        Alert.alert("오류", "승인에 실패했어요. 다시 시도해주세요.");
+      } catch (error) {
+        Alert.alert(
+          "오류",
+          getRequestActionErrorMessage(error, "승인에 실패했어요. 다시 시도해주세요."),
+        );
       } finally {
         setProcessingRequestId(null);
       }
@@ -452,7 +463,7 @@ export default function SpaceParticipantsScreen() {
               <Feather name="users" size={13} color={Colors.zinc400} />
               <Text style={styles.summaryText}>
                 확정 인원 {space.participantCount}
-                {effectiveMax != null ? `/${effectiveMax}` : ""}명
+                {recruitmentCapacity != null ? `/${recruitmentCapacity}` : ""}명
               </Text>
             </View>
             <View style={[styles.recruitmentBadge, recruitmentClosed ? styles.recruitmentBadgeClosed : styles.recruitmentBadgeOpen]}>

@@ -65,6 +65,7 @@ import {
   sortSpaceRoundsNewestFirst,
 } from "@/lib/spaceRoundPresentation";
 import { toKstCalendarDate } from "@/lib/kstDate";
+import { isRecruitmentFull } from "@/lib/spaceRecruitment";
 
 // ─── Space Carousel constants ─────────────────────────────────────────────────
 // Card width is derived so that exactly 2 full cards + the centre of the 3rd
@@ -1062,14 +1063,15 @@ export default function SpaceDetailScreen() {
   const isArchived = space?.status === "ARCHIVED";
   const isRecruiting = space?.status === "RECRUITING";
 
-  // Recruitment is closed when the space is no longer in RECRUITING status
-  // OR when the participant cap has been reached.
-  const effectiveMax = space?.maxParticipants != null
-    ? (space.operatorParticipates ? space.maxParticipants - 1 : space.maxParticipants)
-    : null;
+  // `participantCount` is the approved, recruitable-participant count. The
+  // operator is excluded by the API and never consumes a recruitment place.
+  const recruitmentCapacity = space?.maxParticipants ?? null;
 
   // Capacity-full flag: participant cap reached (independent of status).
-  const isCapacityFull = !!(effectiveMax != null && (space?.participantCount ?? 0) >= effectiveMax);
+  const isCapacityFull = isRecruitmentFull(
+    recruitmentCapacity,
+    space?.participantCount ?? 0,
+  );
 
   const rounds = (roundsQuery.data ?? []) as SpaceRound[];
   const letters = (lettersQuery.data ?? []) as SpaceLetter[];
@@ -1430,7 +1432,7 @@ export default function SpaceDetailScreen() {
               <Feather name="users" size={12} color={Colors.zinc400} />
               <Text style={styles.metaIconRowText}>
                 참여자 {space.participantCount}
-                {effectiveMax != null ? `/${effectiveMax}` : ""}명
+                {recruitmentCapacity != null ? `/${recruitmentCapacity}` : ""}명
                 {" · "}편지 {letters.length}개
               </Text>
             </View>

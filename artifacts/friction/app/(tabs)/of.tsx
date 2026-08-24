@@ -133,7 +133,7 @@ function SpaceCard({
             <Feather name="user" size={11} color={Colors.zinc400} />
             <Text style={styles.cardMetaText}>
               {item.participantCount}
-              {item.maxParticipants ? `/${item.operatorParticipates ? item.maxParticipants - 1 : item.maxParticipants}` : ""}명
+              {item.maxParticipants ? `/${item.maxParticipants}` : ""}명
             </Text>
           </View>
         </View>

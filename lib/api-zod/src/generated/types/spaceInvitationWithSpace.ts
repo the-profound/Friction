@@ -5,10 +5,10 @@
  * Friction MVP 1.0.0 API
  * OpenAPI spec version: 0.1.0
  */
-import type { Space } from "./space";
 import type { SpaceInvitation } from "./spaceInvitation";
+import type { SpaceWithCreatorInfo } from "./spaceWithCreatorInfo";
 
 export interface SpaceInvitationWithSpace {
   invitation: SpaceInvitation;
-  space: Space;
+  space: SpaceWithCreatorInfo;
 }

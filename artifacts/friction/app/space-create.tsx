@@ -436,9 +436,9 @@ function OperationSettingsStep({
           maxLength={4}
         />
         <Text style={stepStyles.hint}>
-          {form.maxParticipants.trim() && form.operatorParticipates
-            ? `공간장 참여 시 실제 모집 인원 = ${form.maxParticipants}명 − 1 = ${Math.max(1, parseInt(form.maxParticipants, 10) - 1)}명`
-            : "비워두면 인원 제한 없이 운영돼요 (최소 1명)"}
+          {form.maxParticipants.trim()
+            ? `공간장 참여 여부와 관계없이 참여자를 ${form.maxParticipants}명까지 모집해요`
+            : "비워두면 인원 제한 없이 운영돼요"}
         </Text>
       </View>
 

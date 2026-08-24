@@ -19,6 +19,7 @@ export interface UpdateSpaceBody {
   plannedStartsAt?: Date | null;
   /** @minimum 1 */
   roundCount?: number;
+  /** 운영자와 별개로 모집할 참여자 수. 운영자 좌석은 포함하지 않음. */
   maxParticipants?: number | null;
   /** @minimum 1 */
   defaultCenterInterval?: number;

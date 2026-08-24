@@ -24,6 +24,10 @@ import {
 import { processDueScheduledSends } from "../lib/scheduledSendProcessor";
 import { synchronizeSpaceRoundStatuses } from "../lib/spaceRoundStatus";
 import {
+  isRecruitmentFull,
+  startsConsumingRecruitmentPlace,
+} from "../lib/spaceRecruitment";
+import {
   db,
   spacesTable,
   spaceRoundsTable,
@@ -81,6 +85,23 @@ async function getLockedSpaceForNicknameMutation(
     .where(eq(spacesTable.id, spaceId))
     .limit(1);
   return space;
+}
+
+async function getApprovedRecruitParticipantCount(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  spaceId: string,
+): Promise<number> {
+  const [{ value }] = await tx
+    .select({ value: count() })
+    .from(spaceParticipationsTable)
+    .where(
+      and(
+        eq(spaceParticipationsTable.spaceId, spaceId),
+        eq(spaceParticipationsTable.status, "APPROVED"),
+        ne(spaceParticipationsTable.role, "OPERATOR"),
+      ),
+    );
+  return Number(value);
 }
 
 async function hasReservedSpaceNickname(
@@ -259,10 +280,66 @@ router.get("/spaces/my-invitations", async (req, res) => {
     .select()
     .from(spacesTable)
     .where(inArray(spacesTable.id, spaceIds));
+  const creatorIds = [...new Set(spaces.map((space) => space.creatorId))];
+  const [creators, participantCounts, creatorParticipations] = await Promise.all([
+    db
+      .select({ id: usersTable.id, nickname: usersTable.nickname })
+      .from(usersTable)
+      .where(inArray(usersTable.id, creatorIds)),
+    db
+      .select({ spaceId: spaceParticipationsTable.spaceId, value: count() })
+      .from(spaceParticipationsTable)
+      .where(
+        and(
+          inArray(spaceParticipationsTable.spaceId, spaceIds),
+          eq(spaceParticipationsTable.status, "APPROVED"),
+          ne(spaceParticipationsTable.role, "OPERATOR"),
+        ),
+      )
+      .groupBy(spaceParticipationsTable.spaceId),
+    db
+      .select({
+        spaceId: spaceParticipationsTable.spaceId,
+        userId: spaceParticipationsTable.userId,
+        spaceNickname: spaceParticipationsTable.spaceNickname,
+      })
+      .from(spaceParticipationsTable)
+      .where(
+        and(
+          inArray(spaceParticipationsTable.spaceId, spaceIds),
+          eq(spaceParticipationsTable.status, "APPROVED"),
+        ),
+      ),
+  ]);
+  const creatorMap = Object.fromEntries(creators.map((creator) => [creator.id, creator.nickname]));
+  const participantCountMap = Object.fromEntries(
+    participantCounts.map((participantCount) => [participantCount.spaceId, participantCount.value]),
+  );
+  const creatorParticipationMap = new Map(
+    creatorParticipations.map((participation) => [
+      `${participation.spaceId}:${participation.userId}`,
+      participation,
+    ]),
+  );
   const spaceMap = new Map(spaces.map((s) => [s.id, s]));
   const result = invitations
     .filter((i) => spaceMap.has(i.spaceId))
-    .map((i) => ({ invitation: i, space: spaceMap.get(i.spaceId)! }));
+    .map((i) => {
+      const space = spaceMap.get(i.spaceId)!;
+      return {
+        invitation: i,
+        space: {
+          ...space,
+          creatorNickname: space.isAnonymous
+            ? getAnonymousDisplayName(
+                space,
+                creatorParticipationMap.get(`${space.id}:${space.creatorId}`)?.spaceNickname,
+              )
+            : (creatorMap[space.creatorId] ?? null),
+          participantCount: participantCountMap[space.id] ?? 0,
+        },
+      };
+    });
   res.json(result);
 });
 
@@ -361,7 +438,9 @@ router.get("/spaces", async (req, res) => {
 
   const participantCountMap = new Map<string, number>();
   for (const p of allParticipations) {
-    participantCountMap.set(p.spaceId, (participantCountMap.get(p.spaceId) ?? 0) + 1);
+    if (p.role !== "OPERATOR") {
+      participantCountMap.set(p.spaceId, (participantCountMap.get(p.spaceId) ?? 0) + 1);
+    }
   }
 
   const activeRoundMap = new Map(allRounds.map((r) => [r.spaceId, r]));
@@ -470,6 +549,7 @@ router.get("/spaces/by-invite-code/:code", async (req, res) => {
       and(
         eq(spaceParticipationsTable.spaceId, space.id),
         eq(spaceParticipationsTable.status, "APPROVED"),
+        ne(spaceParticipationsTable.role, "OPERATOR"),
       ),
     );
   res.json({ ...space, creatorNickname: displayNames.get(space.creatorId) ?? null, participantCount });
@@ -1544,10 +1624,23 @@ router.patch("/spaces/:id/participations/:participationId", requireAuth, async (
       .limit(1);
     if (!target) return null;
     const nextStatus = req.body.status ?? target.status;
+    const nextRole = req.body.role ?? target.role;
     if (
       !["PENDING", "APPROVED", "REJECTED", "WITHDRAWN"].includes(nextStatus)
     ) {
       return "INVALID_STATUS" as const;
+    }
+    if (
+      startsConsumingRecruitmentPlace(
+        { status: target.status, role: target.role },
+        { status: nextStatus, role: nextRole },
+      ) &&
+      isRecruitmentFull(
+        currentSpace.maxParticipants,
+        await getApprovedRecruitParticipantCount(tx, currentSpace.id),
+      )
+    ) {
+      return "SPACE_FULL" as const;
     }
     if (
       currentSpace.isAnonymous &&
@@ -1583,6 +1676,10 @@ router.patch("/spaces/:id/participations/:participationId", requireAuth, async (
   }
   if (participation === "INVALID_STATUS") {
     res.status(400).json({ error: "잘못된 참여 상태입니다." });
+    return;
+  }
+  if (participation === "SPACE_FULL") {
+    res.status(409).json({ error: "모집 인원이 모두 찼습니다." });
     return;
   }
   if (participation === "NICKNAME_CONFLICT") {
@@ -1687,6 +1784,15 @@ router.patch("/spaces/:id/invitations/:invitationId", requireAuth, async (req, r
       if (existingParticipation) {
         return "ALREADY_PARTICIPATING" as const;
       }
+      if (
+        status === "ACCEPTED" &&
+        isRecruitmentFull(
+          currentSpace.maxParticipants,
+          await getApprovedRecruitParticipantCount(tx, currentSpace.id),
+        )
+      ) {
+        return "SPACE_FULL" as const;
+      }
       if (spaceNickname && await hasReservedSpaceNickname(tx, space.id, spaceNickname)) {
         return "NICKNAME_CONFLICT" as const;
       }
@@ -1726,6 +1832,10 @@ router.patch("/spaces/:id/invitations/:invitationId", requireAuth, async (req, r
     }
     if (result === "ALREADY_PARTICIPATING") {
       res.status(409).json({ error: "이미 이 공간에 참여한 사용자입니다." });
+      return;
+    }
+    if (result === "SPACE_FULL") {
+      res.status(409).json({ error: "모집 인원이 모두 찼습니다." });
       return;
     }
     res.json(result);
@@ -1818,6 +1928,14 @@ router.post("/spaces/:id/code-requests", requireAuth, async (req, res) => {
       if (existingParticipation) {
         return "ALREADY_PARTICIPATING" as const;
       }
+      if (
+        isRecruitmentFull(
+          currentSpace.maxParticipants,
+          await getApprovedRecruitParticipantCount(tx, currentSpace.id),
+        )
+      ) {
+        return "SPACE_FULL" as const;
+      }
       if (spaceNickname && await hasReservedSpaceNickname(tx, space.id, spaceNickname)) {
         return "NICKNAME_CONFLICT" as const;
       }
@@ -1846,6 +1964,10 @@ router.post("/spaces/:id/code-requests", requireAuth, async (req, res) => {
     }
     if (request === "ALREADY_PARTICIPATING") {
       res.status(409).json({ error: "이미 이 공간에 참여한 사용자입니다." });
+      return;
+    }
+    if (request === "SPACE_FULL") {
+      res.status(409).json({ error: "모집 인원이 모두 찼습니다." });
       return;
     }
     res.status(201).json({
@@ -1926,6 +2048,15 @@ router.patch("/spaces/:id/code-requests/:requestId", requireAuth, async (req, re
       if (existingParticipation) {
         return "ALREADY_PARTICIPATING" as const;
       }
+      if (
+        status === "APPROVED" &&
+        isRecruitmentFull(
+          currentSpace.maxParticipants,
+          await getApprovedRecruitParticipantCount(tx, currentSpace.id),
+        )
+      ) {
+        return "SPACE_FULL" as const;
+      }
       if (status === "APPROVED" && currentSpace.isAnonymous && !codeRequest.spaceNickname) {
         return "MISSING_NICKNAME" as const;
       }
@@ -1979,6 +2110,10 @@ router.patch("/spaces/:id/code-requests/:requestId", requireAuth, async (req, re
       res.status(409).json({ error: "이미 이 공간에 참여한 사용자입니다." });
       return;
     }
+    if (result === "SPACE_FULL") {
+      res.status(409).json({ error: "모집 인원이 모두 찼습니다." });
+      return;
+    }
     res.json({
       ...result.request,
       spaceNickname: result.space.isAnonymous
@@ -2016,6 +2151,7 @@ router.get("/spaces/:id/join-context", async (req, res) => {
       and(
         eq(spaceParticipationsTable.spaceId, space.id),
         eq(spaceParticipationsTable.status, "APPROVED"),
+        ne(spaceParticipationsTable.role, "OPERATOR"),
       ),
     );
   const spaceWithInfo = {
@@ -2841,10 +2977,11 @@ router.get("/space-invitations", async (req, res) => {
     db
       .select({ spaceId: spaceParticipationsTable.spaceId, value: count() })
       .from(spaceParticipationsTable)
-      .where(
+    .where(
         and(
           inArray(spaceParticipationsTable.spaceId, spaceIds),
           eq(spaceParticipationsTable.status, "APPROVED"),
+        ne(spaceParticipationsTable.role, "OPERATOR"),
         ),
       )
       .groupBy(spaceParticipationsTable.spaceId),
@@ -2888,7 +3025,7 @@ router.get("/space-invitations", async (req, res) => {
 
   const result = invitations
     .filter((inv) => spaceMap[inv.spaceId])
-    .map((inv) => ({ ...inv, space: spaceMap[inv.spaceId] }));
+    .map((inv) => ({ invitation: inv, space: spaceMap[inv.spaceId] }));
 
   res.json(result);
 });

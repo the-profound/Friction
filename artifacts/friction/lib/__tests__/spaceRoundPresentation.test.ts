@@ -9,8 +9,24 @@ import {
   shouldDimSpaceRoundLetter,
   sortSpaceRoundsNewestFirst,
 } from "../spaceRoundPresentation";
+import {
+  countRecruitmentParticipants,
+  isRecruitmentFull,
+} from "../spaceRecruitment";
 
 describe("space round presentation", () => {
+  it("keeps the operator out of recruitment capacity regardless of round participation", () => {
+    const approvedMembers = [
+      { role: "OPERATOR" },
+      { role: "PARTICIPANT" },
+      { role: "PARTICIPANT" },
+    ];
+
+    expect(countRecruitmentParticipants(approvedMembers)).toBe(2);
+    expect(isRecruitmentFull(2, countRecruitmentParticipants(approvedMembers))).toBe(true);
+    expect(isRecruitmentFull(3, countRecruitmentParticipants(approvedMembers))).toBe(false);
+  });
+
   it("labels completed rounds as ended", () => {
     expect(roundStatusLabel("COMPLETED")).toBe("종료");
     expect(roundStatusLabel("ACTIVE")).toBe("진행 중");

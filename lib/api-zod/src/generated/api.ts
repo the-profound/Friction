@@ -1769,8 +1769,8 @@ export const ListMySpaceInvitationsQueryParams = zod.object({
   userId: zod.coerce.string().uuid(),
 });
 
-export const listMySpaceInvitationsResponseSpaceWeekdaysItemMin = 0;
-export const listMySpaceInvitationsResponseSpaceWeekdaysItemMax = 6;
+export const listMySpaceInvitationsResponseSpaceOneWeekdaysItemMin = 0;
+export const listMySpaceInvitationsResponseSpaceOneWeekdaysItemMax = 6;
 
 export const ListMySpaceInvitationsResponseItem = zod.object({
   invitation: zod.object({
@@ -1782,50 +1782,71 @@ export const ListMySpaceInvitationsResponseItem = zod.object({
     createdAt: zod.date(),
     updatedAt: zod.date(),
   }),
-  space: zod.object({
-    id: zod.string().uuid(),
-    name: zod.string(),
-    description: zod.string().nullish(),
-    isAnonymous: zod.boolean(),
-    plannedStartsAt: zod
-      .date()
-      .nullish()
-      .describe("참여자에게 공개되는 공간 시작 예정일 (운영자가 설정)"),
-    startedAt: zod
-      .date()
-      .nullish()
-      .describe("운영자가 실제로 시작 버튼을 누른 시각"),
-    scheduleType: zod
-      .enum(["N_DAY", "WEEKDAY"])
-      .nullish()
-      .describe("진행 방식 (N일 간격 또는 요일 지정)"),
-    weekdays: zod
-      .array(
-        zod
+  space: zod
+    .object({
+      id: zod.string().uuid(),
+      name: zod.string(),
+      description: zod.string().nullish(),
+      isAnonymous: zod.boolean(),
+      plannedStartsAt: zod
+        .date()
+        .nullish()
+        .describe("참여자에게 공개되는 공간 시작 예정일 (운영자가 설정)"),
+      startedAt: zod
+        .date()
+        .nullish()
+        .describe("운영자가 실제로 시작 버튼을 누른 시각"),
+      scheduleType: zod
+        .enum(["N_DAY", "WEEKDAY"])
+        .nullish()
+        .describe("진행 방식 (N일 간격 또는 요일 지정)"),
+      weekdays: zod
+        .array(
+          zod
+            .number()
+            .min(listMySpaceInvitationsResponseSpaceOneWeekdaysItemMin)
+            .max(listMySpaceInvitationsResponseSpaceOneWeekdaysItemMax),
+        )
+        .nullish()
+        .describe("요일 지정 시 요일 배열 (0=일, 1=월, ..., 6=토)"),
+      operatorParticipates: zod
+        .boolean()
+        .describe("운영자가 중심글 순서에 포함될지 여부"),
+      roundCount: zod.number(),
+      maxParticipants: zod
+        .number()
+        .nullish()
+        .describe(
+          "운영자와 별개로 모집할 참여자 수. 운영자 좌석은 포함하지 않음.",
+        ),
+      defaultCenterInterval: zod.number(),
+      defaultCenterCount: zod.number(),
+      status: zod.enum(["RECRUITING", "ACTIVE", "ARCHIVED"]),
+      creatorId: zod.string().uuid(),
+      inviteCode: zod
+        .string()
+        .nullish()
+        .describe(
+          '한글 형용사+명사 조합 초대 코드 (예: \"파란하늘\"). 공간 생성 시 자동 배정.',
+        ),
+      createdAt: zod.date(),
+      updatedAt: zod.date(),
+    })
+    .and(
+      zod.object({
+        creatorNickname: zod
+          .string()
+          .nullish()
+          .describe(
+            "생성자의 안전한 표시명. 익명 공간에서 계정 닉네임은 제공하지 않음.",
+          ),
+        participantCount: zod
           .number()
-          .min(listMySpaceInvitationsResponseSpaceWeekdaysItemMin)
-          .max(listMySpaceInvitationsResponseSpaceWeekdaysItemMax),
-      )
-      .nullish()
-      .describe("요일 지정 시 요일 배열 (0=일, 1=월, ..., 6=토)"),
-    operatorParticipates: zod
-      .boolean()
-      .describe("운영자가 중심글 순서에 포함될지 여부"),
-    roundCount: zod.number(),
-    maxParticipants: zod.number().nullish(),
-    defaultCenterInterval: zod.number(),
-    defaultCenterCount: zod.number(),
-    status: zod.enum(["RECRUITING", "ACTIVE", "ARCHIVED"]),
-    creatorId: zod.string().uuid(),
-    inviteCode: zod
-      .string()
-      .nullish()
-      .describe(
-        '한글 형용사+명사 조합 초대 코드 (예: \"파란하늘\"). 공간 생성 시 자동 배정.',
-      ),
-    createdAt: zod.date(),
-    updatedAt: zod.date(),
-  }),
+          .describe(
+            "승인된 모집 대상 참여자 수. 운영자는 별도 역할이므로 포함하지 않음.",
+          ),
+      }),
+    ),
 });
 export const ListMySpaceInvitationsResponse = zod.array(
   ListMySpaceInvitationsResponseItem,
@@ -1888,7 +1909,12 @@ export const ListMySpaceCodeRequestsResponseItem = zod.object({
       .boolean()
       .describe("운영자가 중심글 순서에 포함될지 여부"),
     roundCount: zod.number(),
-    maxParticipants: zod.number().nullish(),
+    maxParticipants: zod
+      .number()
+      .nullish()
+      .describe(
+        "운영자와 별개로 모집할 참여자 수. 운영자 좌석은 포함하지 않음.",
+      ),
     defaultCenterInterval: zod.number(),
     defaultCenterCount: zod.number(),
     status: zod.enum(["RECRUITING", "ACTIVE", "ARCHIVED"]),
@@ -1947,7 +1973,10 @@ export const ListSpacesResponseItem = zod.object({
     .boolean()
     .describe("운영자가 중심글 순서에 포함될지 여부"),
   roundCount: zod.number(),
-  maxParticipants: zod.number().nullish(),
+  maxParticipants: zod
+    .number()
+    .nullish()
+    .describe("운영자와 별개로 모집할 참여자 수. 운영자 좌석은 포함하지 않음."),
   defaultCenterInterval: zod.number(),
   defaultCenterCount: zod.number(),
   status: zod.enum(["RECRUITING", "ACTIVE", "ARCHIVED"]),
@@ -1961,7 +1990,11 @@ export const ListSpacesResponseItem = zod.object({
   createdAt: zod.date(),
   updatedAt: zod.date(),
   myRole: zod.enum(["OPERATOR", "PARTICIPANT"]),
-  participantCount: zod.number(),
+  participantCount: zod
+    .number()
+    .describe(
+      "승인된 모집 대상 참여자 수. 운영자는 별도 역할이므로 포함하지 않음.",
+    ),
   activeRound: zod
     .object({
       id: zod.string().uuid(),
@@ -2001,7 +2034,10 @@ export const CreateSpaceBody = zod.object({
     .nullish()
     .describe("참여자에게 공개되는 공간 시작 예정일"),
   roundCount: zod.number().min(1).optional(),
-  maxParticipants: zod.number().nullish(),
+  maxParticipants: zod
+    .number()
+    .nullish()
+    .describe("운영자와 별개로 모집할 참여자 수. 운영자 좌석은 포함하지 않음."),
   defaultCenterInterval: zod.number().min(1).optional(),
   defaultCenterCount: zod.number().min(1).optional(),
   spaceNickname: zod
@@ -2054,7 +2090,10 @@ export const GetSpaceResponse = zod.object({
     .boolean()
     .describe("운영자가 중심글 순서에 포함될지 여부"),
   roundCount: zod.number(),
-  maxParticipants: zod.number().nullish(),
+  maxParticipants: zod
+    .number()
+    .nullish()
+    .describe("운영자와 별개로 모집할 참여자 수. 운영자 좌석은 포함하지 않음."),
   defaultCenterInterval: zod.number(),
   defaultCenterCount: zod.number(),
   status: zod.enum(["RECRUITING", "ACTIVE", "ARCHIVED"]),
@@ -2087,7 +2126,10 @@ export const UpdateSpaceBody = zod.object({
     .nullish()
     .describe("참여자에게 공개되는 공간 시작 예정일"),
   roundCount: zod.number().min(1).optional(),
-  maxParticipants: zod.number().nullish(),
+  maxParticipants: zod
+    .number()
+    .nullish()
+    .describe("운영자와 별개로 모집할 참여자 수. 운영자 좌석은 포함하지 않음."),
   defaultCenterInterval: zod.number().min(1).optional(),
   defaultCenterCount: zod.number().min(1).optional(),
   status: zod.enum(["RECRUITING", "ACTIVE", "ARCHIVED"]).optional(),
@@ -2126,7 +2168,10 @@ export const UpdateSpaceResponse = zod.object({
     .boolean()
     .describe("운영자가 중심글 순서에 포함될지 여부"),
   roundCount: zod.number(),
-  maxParticipants: zod.number().nullish(),
+  maxParticipants: zod
+    .number()
+    .nullish()
+    .describe("운영자와 별개로 모집할 참여자 수. 운영자 좌석은 포함하지 않음."),
   defaultCenterInterval: zod.number(),
   defaultCenterCount: zod.number(),
   status: zod.enum(["RECRUITING", "ACTIVE", "ARCHIVED"]),
@@ -2289,7 +2334,10 @@ export const StartSpaceResponse = zod.object({
     .boolean()
     .describe("운영자가 중심글 순서에 포함될지 여부"),
   roundCount: zod.number(),
-  maxParticipants: zod.number().nullish(),
+  maxParticipants: zod
+    .number()
+    .nullish()
+    .describe("운영자와 별개로 모집할 참여자 수. 운영자 좌석은 포함하지 않음."),
   defaultCenterInterval: zod.number(),
   defaultCenterCount: zod.number(),
   status: zod.enum(["RECRUITING", "ACTIVE", "ARCHIVED"]),
@@ -3028,7 +3076,12 @@ export const GetSpaceByInviteCodeResponse = zod
       .boolean()
       .describe("운영자가 중심글 순서에 포함될지 여부"),
     roundCount: zod.number(),
-    maxParticipants: zod.number().nullish(),
+    maxParticipants: zod
+      .number()
+      .nullish()
+      .describe(
+        "운영자와 별개로 모집할 참여자 수. 운영자 좌석은 포함하지 않음.",
+      ),
     defaultCenterInterval: zod.number(),
     defaultCenterCount: zod.number(),
     status: zod.enum(["RECRUITING", "ACTIVE", "ARCHIVED"]),
@@ -3050,7 +3103,11 @@ export const GetSpaceByInviteCodeResponse = zod
         .describe(
           "생성자의 안전한 표시명. 익명 공간에서 계정 닉네임은 제공하지 않음.",
         ),
-      participantCount: zod.number(),
+      participantCount: zod
+        .number()
+        .describe(
+          "승인된 모집 대상 참여자 수. 운영자는 별도 역할이므로 포함하지 않음.",
+        ),
     }),
   );
 
@@ -3100,7 +3157,12 @@ export const GetSpaceJoinContextResponse = zod.object({
         .boolean()
         .describe("운영자가 중심글 순서에 포함될지 여부"),
       roundCount: zod.number(),
-      maxParticipants: zod.number().nullish(),
+      maxParticipants: zod
+        .number()
+        .nullish()
+        .describe(
+          "운영자와 별개로 모집할 참여자 수. 운영자 좌석은 포함하지 않음.",
+        ),
       defaultCenterInterval: zod.number(),
       defaultCenterCount: zod.number(),
       status: zod.enum(["RECRUITING", "ACTIVE", "ARCHIVED"]),
@@ -3122,7 +3184,11 @@ export const GetSpaceJoinContextResponse = zod.object({
           .describe(
             "생성자의 안전한 표시명. 익명 공간에서 계정 닉네임은 제공하지 않음.",
           ),
-        participantCount: zod.number(),
+        participantCount: zod
+          .number()
+          .describe(
+            "승인된 모집 대상 참여자 수. 운영자는 별도 역할이므로 포함하지 않음.",
+          ),
       }),
     ),
   participation: zod
@@ -3184,8 +3250,8 @@ export const ListUserSpaceInvitationsQueryParams = zod.object({
   userId: zod.coerce.string().uuid(),
 });
 
-export const listUserSpaceInvitationsResponseSpaceWeekdaysItemMin = 0;
-export const listUserSpaceInvitationsResponseSpaceWeekdaysItemMax = 6;
+export const listUserSpaceInvitationsResponseSpaceOneWeekdaysItemMin = 0;
+export const listUserSpaceInvitationsResponseSpaceOneWeekdaysItemMax = 6;
 
 export const ListUserSpaceInvitationsResponseItem = zod.object({
   invitation: zod.object({
@@ -3197,50 +3263,71 @@ export const ListUserSpaceInvitationsResponseItem = zod.object({
     createdAt: zod.date(),
     updatedAt: zod.date(),
   }),
-  space: zod.object({
-    id: zod.string().uuid(),
-    name: zod.string(),
-    description: zod.string().nullish(),
-    isAnonymous: zod.boolean(),
-    plannedStartsAt: zod
-      .date()
-      .nullish()
-      .describe("참여자에게 공개되는 공간 시작 예정일 (운영자가 설정)"),
-    startedAt: zod
-      .date()
-      .nullish()
-      .describe("운영자가 실제로 시작 버튼을 누른 시각"),
-    scheduleType: zod
-      .enum(["N_DAY", "WEEKDAY"])
-      .nullish()
-      .describe("진행 방식 (N일 간격 또는 요일 지정)"),
-    weekdays: zod
-      .array(
-        zod
+  space: zod
+    .object({
+      id: zod.string().uuid(),
+      name: zod.string(),
+      description: zod.string().nullish(),
+      isAnonymous: zod.boolean(),
+      plannedStartsAt: zod
+        .date()
+        .nullish()
+        .describe("참여자에게 공개되는 공간 시작 예정일 (운영자가 설정)"),
+      startedAt: zod
+        .date()
+        .nullish()
+        .describe("운영자가 실제로 시작 버튼을 누른 시각"),
+      scheduleType: zod
+        .enum(["N_DAY", "WEEKDAY"])
+        .nullish()
+        .describe("진행 방식 (N일 간격 또는 요일 지정)"),
+      weekdays: zod
+        .array(
+          zod
+            .number()
+            .min(listUserSpaceInvitationsResponseSpaceOneWeekdaysItemMin)
+            .max(listUserSpaceInvitationsResponseSpaceOneWeekdaysItemMax),
+        )
+        .nullish()
+        .describe("요일 지정 시 요일 배열 (0=일, 1=월, ..., 6=토)"),
+      operatorParticipates: zod
+        .boolean()
+        .describe("운영자가 중심글 순서에 포함될지 여부"),
+      roundCount: zod.number(),
+      maxParticipants: zod
+        .number()
+        .nullish()
+        .describe(
+          "운영자와 별개로 모집할 참여자 수. 운영자 좌석은 포함하지 않음.",
+        ),
+      defaultCenterInterval: zod.number(),
+      defaultCenterCount: zod.number(),
+      status: zod.enum(["RECRUITING", "ACTIVE", "ARCHIVED"]),
+      creatorId: zod.string().uuid(),
+      inviteCode: zod
+        .string()
+        .nullish()
+        .describe(
+          '한글 형용사+명사 조합 초대 코드 (예: \"파란하늘\"). 공간 생성 시 자동 배정.',
+        ),
+      createdAt: zod.date(),
+      updatedAt: zod.date(),
+    })
+    .and(
+      zod.object({
+        creatorNickname: zod
+          .string()
+          .nullish()
+          .describe(
+            "생성자의 안전한 표시명. 익명 공간에서 계정 닉네임은 제공하지 않음.",
+          ),
+        participantCount: zod
           .number()
-          .min(listUserSpaceInvitationsResponseSpaceWeekdaysItemMin)
-          .max(listUserSpaceInvitationsResponseSpaceWeekdaysItemMax),
-      )
-      .nullish()
-      .describe("요일 지정 시 요일 배열 (0=일, 1=월, ..., 6=토)"),
-    operatorParticipates: zod
-      .boolean()
-      .describe("운영자가 중심글 순서에 포함될지 여부"),
-    roundCount: zod.number(),
-    maxParticipants: zod.number().nullish(),
-    defaultCenterInterval: zod.number(),
-    defaultCenterCount: zod.number(),
-    status: zod.enum(["RECRUITING", "ACTIVE", "ARCHIVED"]),
-    creatorId: zod.string().uuid(),
-    inviteCode: zod
-      .string()
-      .nullish()
-      .describe(
-        '한글 형용사+명사 조합 초대 코드 (예: \"파란하늘\"). 공간 생성 시 자동 배정.',
-      ),
-    createdAt: zod.date(),
-    updatedAt: zod.date(),
-  }),
+          .describe(
+            "승인된 모집 대상 참여자 수. 운영자는 별도 역할이므로 포함하지 않음.",
+          ),
+      }),
+    ),
 });
 export const ListUserSpaceInvitationsResponse = zod.array(
   ListUserSpaceInvitationsResponseItem,

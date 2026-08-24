@@ -24,6 +24,7 @@ export interface Space {
   /** 운영자가 중심글 순서에 포함될지 여부 */
   operatorParticipates: boolean;
   roundCount: number;
+  /** 운영자와 별개로 모집할 참여자 수. 운영자 좌석은 포함하지 않음. */
   maxParticipants?: number | null;
   defaultCenterInterval: number;
   defaultCenterCount: number;

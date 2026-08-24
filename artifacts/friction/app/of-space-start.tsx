@@ -48,6 +48,7 @@ import {
   kstDateAt6,
   toKstCalendarDate,
 } from "@/lib/kstDate";
+import { countRecruitmentParticipants } from "@/lib/spaceRecruitment";
 import {
   useGetSpaceJoinContext,
   getGetSpaceJoinContextQueryKey,
@@ -1435,6 +1436,10 @@ export default function SpaceStartScreen() {
   // operatorParticipates=true, making the check pass even when the operator
   // is the sole approved member.
   const hasEnoughParticipants = confirmedMembers.some((m) => m.role !== "OPERATOR");
+  const recruitParticipantCount = useMemo(
+    () => countRecruitmentParticipants(confirmedMembers),
+    [confirmedMembers],
+  );
   const hasValidSchedule =
     scheduleType === "N_DAY" || (scheduleType === "WEEKDAY" && weekdays.length > 0);
   const canStart = openingLetterExists && hasEnoughParticipants && hasValidSchedule;
@@ -1518,16 +1523,15 @@ export default function SpaceStartScreen() {
 
   const handleAutoRejectContinue = useCallback(() => {
     setShowAutoRejectModal(false);
-    const effectiveMaxStart = space?.maxParticipants != null
-      ? (space.operatorParticipates ? space.maxParticipants - 1 : space.maxParticipants)
-      : null;
-    const confirmedCount = slotOrder.length;
-    if (effectiveMaxStart != null && confirmedCount < effectiveMaxStart) {
+    if (
+      space?.maxParticipants != null &&
+      recruitParticipantCount < space.maxParticipants
+    ) {
       setShowUnderCapacityModal(true);
     } else {
       doStart();
     }
-  }, [space, slotOrder, doStart]);
+  }, [space, recruitParticipantCount, doStart]);
 
   const handleStartPress = useCallback(() => {
     if (!openingLetterExists) {
@@ -1557,11 +1561,10 @@ export default function SpaceStartScreen() {
     if (hasPendingRequests) {
       setShowAutoRejectModal(true);
     } else {
-      const effectiveMaxStart = space?.maxParticipants != null
-        ? (space.operatorParticipates ? space.maxParticipants - 1 : space.maxParticipants)
-        : null;
-      const confirmedCount = slotOrder.length;
-      if (effectiveMaxStart != null && confirmedCount < effectiveMaxStart) {
+      if (
+        space?.maxParticipants != null &&
+        recruitParticipantCount < space.maxParticipants
+      ) {
         setShowUnderCapacityModal(true);
       } else {
         doStart();
@@ -1569,7 +1572,7 @@ export default function SpaceStartScreen() {
     }
   }, [
     openingLetterExists, hasEnoughParticipants, scheduleType, weekdays,
-    hasPendingRequests, space, slotOrder, doStart, showToast,
+    hasPendingRequests, space, recruitParticipantCount, doStart, showToast,
   ]);
 
   // ── Step navigation logic ─────────────────────────────────────────────────
@@ -1717,7 +1720,7 @@ export default function SpaceStartScreen() {
           centerCount={centerCount}
           setCenterCount={setCenterCount}
           operatorParticipates={space.operatorParticipates ?? true}
-          confirmedCount={confirmedMembers.length}
+          confirmedCount={recruitParticipantCount}
           maxParticipants={space.maxParticipants}
           startDate={startDate}
           setStartDate={setStartDate}
@@ -1804,7 +1807,7 @@ export default function SpaceStartScreen() {
           hasPendingRequests={hasPendingRequests}
           pendingCount={pendingRequests.length}
           onGoToStep={goToStep}
-          participantCount={confirmedMembers.length}
+          participantCount={recruitParticipantCount}
           hasEnoughParticipants={hasEnoughParticipants}
         />
       );
@@ -1900,8 +1903,8 @@ export default function SpaceStartScreen() {
       <ConfirmModal
         visible={showUnderCapacityModal}
         title="인원 미달"
-        message={`모집 인원(${space.operatorParticipates ? (space.maxParticipants ?? 0) - 1 : space.maxParticipants}명)보다 적은 ${slotOrder.length}명으로 시작할까요?`}
-        confirmLabel={`${slotOrder.length}명으로 시작`}
+        message={`모집 인원(${space.maxParticipants ?? 0}명)보다 적은 ${recruitParticipantCount}명으로 시작할까요?`}
+        confirmLabel={`${recruitParticipantCount}명으로 시작`}
         onCancel={() => setShowUnderCapacityModal(false)}
         onConfirm={doStart}
         loading={isStarting}
