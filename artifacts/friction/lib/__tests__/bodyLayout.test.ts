@@ -1,6 +1,47 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import {
+  computePageGeometry,
+  getPageTextContentHeight,
+  resolvePageWidth,
+} from "../pageGeometry";
+
+describe("shared letter page geometry", () => {
+  it("uses the full logical page C and an integer 0.88C text column", () => {
+    const layout = computePageGeometry(301, {
+      aspectRatio: 5 / 8,
+      paddingXCqi: 6,
+      paddingYCqi: 15,
+    });
+
+    expect(layout.pageWidth).toBe(301);
+    expect(layout.pageHeight).toBeCloseTo(481.6, 8);
+    expect(layout.paddingX).toBeCloseTo(18.06, 8);
+    expect(layout.paddingY).toBeCloseTo(45.15, 8);
+    expect(layout.textColumnWidth).toBe(Math.round(301 - 2 * 18.06));
+    expect(layout.textColumnWidth).toBe(265);
+  });
+
+  it("keeps physical insets and the reader title bar as explicit lower reservations", () => {
+    const layout = computePageGeometry(300, {
+      aspectRatio: 5 / 8,
+      paddingXCqi: 6,
+      paddingYCqi: 15,
+    });
+    const titleBarHeight = Math.round(20 + (3.4 / 100) * 300 * 1.3);
+    const readerAvailable = getPageTextContentHeight(layout, 34 + titleBarHeight);
+
+    expect(titleBarHeight).toBe(33);
+    expect(readerAvailable).toBeCloseTo(323, 8);
+    expect(getPageTextContentHeight(layout)).toBeCloseTo(390, 8);
+  });
+
+  it("derives C from the page aspect ratio, never from a virtual body box", () => {
+    expect(resolvePageWidth(390, 844, 5 / 8)).toBe(390);
+    expect(resolvePageWidth(1024, 600, 5 / 8)).toBe(375);
+  });
+});
 
 describe("reader title typography", () => {
   const appRoot = join(__dirname, "../..");
@@ -14,7 +55,7 @@ describe("reader title typography", () => {
     expect(tokens).toMatch(/titleCqi:\s*6\.4/);
     expect(tokens).toMatch(/titleScaleEm[\s\S]*this\.titleCqi\s*\/\s*this\.bodyCqi/);
     expect(layout).toContain(
-      "readerFontSize(ReaderTokens.typeScale.titleCqi, containerWidth)",
+      "readerFontSize(ReaderTokens.typeScale.titleCqi, pageWidth)",
     );
   });
 
@@ -33,6 +74,47 @@ describe("reader title typography", () => {
     expect(webMeasure).toContain("buildBodyTypographyCss");
     expect(webMeasure).toContain('rootSelector: ".webview-measure-layer"');
     expect(webEditor).toContain("ReaderTokens.typeScale.titleCqi");
+  });
+});
+
+describe("completed letter compatibility", () => {
+  const appRoot = join(__dirname, "../..");
+  const read = (relativePath: string) =>
+    readFileSync(join(appRoot, relativePath), "utf8");
+
+  it("renders saved page boundaries without rewriting finalized letter data", () => {
+    const reader = read("app/read.tsx");
+    const articlesRoute = read("../api-server/src/routes/articles.ts");
+
+    expect(reader).toContain("return article.pages.map(normalizePageItem);");
+    expect(articlesRoute).toContain('if (existing.status === "LETTER")');
+    expect(articlesRoute).toContain('Cannot modify a LETTER article');
+  });
+});
+
+describe("page geometry renderer contract", () => {
+  const appRoot = join(__dirname, "../..");
+  const read = (relativePath: string) =>
+    readFileSync(join(appRoot, relativePath), "utf8");
+
+  it("makes writing, closing preview, reader, and photo export share the 0.88C column", () => {
+    const writing = read("app/on-01a.tsx");
+    const closing = read("app/on-01c.tsx");
+    const reader = read("app/read.tsx");
+    const exportModal = read("components/SaveAsPhotos/SaveAsPhotosModal.tsx");
+    const memo = read("components/MemoWebEditor/MemoWebEditor.tsx");
+
+    expect(writing).toContain("pageWidth: containerWidth");
+    expect(writing).toContain("getBodyContentHeight(editorLayout, readerBottomReservation)");
+    expect(writing).not.toContain("* 0.92");
+    expect(closing).toContain("width: storedBody.pageWidth");
+    expect(closing).toContain("width: fallbackBody.pageWidth");
+    expect(reader).not.toContain("safeAreaBox");
+    expect(reader).toContain("width: layout.textColumnWidth");
+    expect(exportModal).toContain("width: bodyLayout.pageWidth");
+    expect(exportModal).toContain("width: bodyLayout.textColumnWidth");
+    expect(memo).toContain("computePageGeometry(containerWidth");
+    expect(memo).toContain("width: textColumnWidth");
   });
 });
 

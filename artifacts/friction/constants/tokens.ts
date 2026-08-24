@@ -367,11 +367,6 @@ export type ToSubTabKey = (typeof TabConfig.toSubTabs)[number]["key"];
 export const ReaderTokens = {
   aspectRatio: 5 / 8,
 
-  safeArea: {
-    widthCqi: 90,
-    heightCqi: 120,
-  },
-
   padding: {
     xCqi: 6,
     yCqi: 15,

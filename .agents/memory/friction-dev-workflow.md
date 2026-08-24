@@ -79,3 +79,18 @@ If `lib/api-zod/src/generated/` is empty and the API server fails to build:
 
 **Why:** these caused wasted time chasing "is this my bug?" — they are environmental
 and orval/config-driven, present before any contract change.
+
+## Pure layout tests must not import React Native tokens
+
+Vitest's current web setup cannot parse React Native's Flow `import typeof` syntax when
+a unit test imports a module that imports `react-native` transitively (such as
+`constants/tokens`). Keep deterministic layout arithmetic in a platform-neutral module
+and unit-test that module directly; let the React Native-facing layout adapter compose it
+with tokens.
+
+**Why:** importing the shared React Native token adapter made otherwise pure geometry
+tests fail during module transformation before any assertions ran.
+
+**How to apply:** for width/height/split calculations, keep the reusable math free of
+React Native imports. Test the pure contract directly and use lightweight source-level
+guards only for renderer wiring.

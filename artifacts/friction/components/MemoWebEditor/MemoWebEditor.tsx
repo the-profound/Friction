@@ -16,6 +16,7 @@ import type {
 import { Colors, ReaderTokens } from "@/constants/tokens";
 import MarkdownBlock from "@/components/MarkdownBlock/MarkdownBlock";
 import type { MarkdownBlockType } from "@/utils/markdownParser";
+import { computePageGeometry } from "@/lib/pageGeometry";
 
 export type FormatType = "bold" | "italic" | "underline" | "quote";
 export type InlineMark = "bold" | "italic" | "underline";
@@ -193,6 +194,13 @@ const MemoWebEditor = forwardRef<MemoWebEditorRef, MemoWebEditorProps>(
     });
 
     const hintRowH = bodyFontSize * 0.78 + paddingY * 0.6;
+    // 메모도 편지와 같은 논리 페이지 C 위에 올라간다. 정적 미리보기와
+    // WebView 모두에 이 정수 폭을 직접 주어 페이지 전환 중 줄바꿈이 흔들리지 않게 한다.
+    const textColumnWidth = computePageGeometry(containerWidth, {
+      aspectRatio: ReaderTokens.aspectRatio,
+      paddingXCqi: ReaderTokens.padding.xCqi,
+      paddingYCqi: ReaderTokens.padding.yCqi,
+    }).textColumnWidth;
     const previewFontSize = bodyFontSize;
     const previewLineHeight = bodyFontSize * ReaderTokens.lineHeight.relaxed;
     const previewLetterSpacing = bodyFontSize * ReaderTokens.letterSpacing.relaxedEm;
@@ -239,19 +247,21 @@ const MemoWebEditor = forwardRef<MemoWebEditorRef, MemoWebEditorProps>(
             <View
               style={[
                 styles.editorWrap,
-                { paddingHorizontal: paddingX + 24, paddingTop: 16, paddingBottom: bottomInset },
+                { paddingTop: 16, paddingBottom: bottomInset, alignItems: "center" },
               ]}
             >
-              {previewBlocks.map((block, i) => (
-                <MarkdownBlock
-                  key={i}
-                  block={block}
-                  onCollect={noop}
-                  fontSize={previewFontSize}
-                  lineHeight={previewLineHeight}
-                  letterSpacing={previewLetterSpacing}
-                />
-              ))}
+              <View style={{ width: textColumnWidth, flex: 1 }}>
+                {previewBlocks.map((block, i) => (
+                  <MarkdownBlock
+                    key={i}
+                    block={block}
+                    onCollect={noop}
+                    fontSize={previewFontSize}
+                    lineHeight={previewLineHeight}
+                    letterSpacing={previewLetterSpacing}
+                  />
+                ))}
+              </View>
             </View>
           </View>
         )}
@@ -300,22 +310,24 @@ const MemoWebEditor = forwardRef<MemoWebEditorRef, MemoWebEditorProps>(
                 styles.editorWrap,
                 {
                   top: hintRowH,
-                  paddingHorizontal: paddingX + 24,
                   paddingTop: 16,
                   paddingBottom: bottomInset,
+                  alignItems: "center",
                 },
               ]}
             >
-              {frontBlocks.map((block, i) => (
-                <MarkdownBlock
-                  key={i}
-                  block={block}
-                  onCollect={noop}
-                  fontSize={previewFontSize}
-                  lineHeight={previewLineHeight}
-                  letterSpacing={previewLetterSpacing}
-                />
-              ))}
+              <View style={{ width: textColumnWidth, flex: 1 }}>
+                {frontBlocks.map((block, i) => (
+                  <MarkdownBlock
+                    key={i}
+                    block={block}
+                    onCollect={noop}
+                    fontSize={previewFontSize}
+                    lineHeight={previewLineHeight}
+                    letterSpacing={previewLetterSpacing}
+                  />
+                ))}
+              </View>
             </View>
           )}
         </Animated.View>
@@ -333,30 +345,32 @@ const MemoWebEditor = forwardRef<MemoWebEditorRef, MemoWebEditorProps>(
             styles.editorOverlay,
             {
               top: hintRowH,
-              paddingHorizontal: paddingX,
               paddingBottom: bottomInset,
+              alignItems: "center",
               opacity: isFlipping ? 0 : 1,
             },
           ]}
         >
-          <WebViewMarkdownEditor
-            ref={editorRef}
-            initialMarkdown={initialContent}
-            placeholder="이 페이지에 메모를 적어보세요..."
-            editable={editable}
-            hideTitle
-            bodyFontSize={bodyFontSize}
-            bodyLetterSpacing={0.3}
-            onReady={onReady}
-            onChange={handleChange}
-            onExportMarkdown={handleExport}
-            onSelectionUpdate={handleSelection}
-            onKeyboardVisibilityChange={onKeyboardVisibilityChange}
-            onTextSelectionActiveChange={onTextSelectionActiveChange}
-            onOverflowSplit={onOverflowSplit}
-            scrollEnabled={false}
-            swipeDownToDismissKeyboard={false}
-          />
+          <View style={{ width: textColumnWidth, flex: 1 }}>
+            <WebViewMarkdownEditor
+              ref={editorRef}
+              initialMarkdown={initialContent}
+              placeholder="이 페이지에 메모를 적어보세요..."
+              editable={editable}
+              hideTitle
+              bodyFontSize={bodyFontSize}
+              bodyLetterSpacing={0.3}
+              onReady={onReady}
+              onChange={handleChange}
+              onExportMarkdown={handleExport}
+              onSelectionUpdate={handleSelection}
+              onKeyboardVisibilityChange={onKeyboardVisibilityChange}
+              onTextSelectionActiveChange={onTextSelectionActiveChange}
+              onOverflowSplit={onOverflowSplit}
+              scrollEnabled={false}
+              swipeDownToDismissKeyboard={false}
+            />
+          </View>
         </View>
       </View>
     );

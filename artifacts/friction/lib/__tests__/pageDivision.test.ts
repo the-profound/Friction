@@ -6,6 +6,7 @@ import {
   simulateGreedyJobs,
   runGreedy,
 } from "../pageDivision";
+import { computePageGeometry, getPageTextContentHeight } from "../pageGeometry";
 
 describe("splitContentToPages", () => {
   it("splits content on --- dividers", () => {
@@ -205,5 +206,38 @@ describe("blockquote handling in the greedy division engine", () => {
     expect(pages[1]).toMatch(/^> /);
     expect(pages[0]).toBe("> " + words.slice(0, 10).join(" "));
     expect(pages[1]).toBe("> " + words.slice(10).join(" "));
+  });
+});
+
+describe("page-frame capacity boundaries", () => {
+  it("keeps a page that exactly fills the shared reader capacity intact", () => {
+    const layout = computePageGeometry(300, {
+      aspectRatio: 5 / 8,
+      paddingXCqi: 6,
+      paddingYCqi: 15,
+    });
+    const threshold = getPageTextContentHeight(layout, 34 + 33);
+    const paragraphs = ["첫 문단", "둘째 문단"];
+    const paraHeights = { 0: threshold / 2, 1: threshold / 2 };
+
+    expect(runGreedy(paragraphs, paraHeights, {}, threshold)).toEqual([
+      "첫 문단\n\n둘째 문단",
+    ]);
+  });
+
+  it("starts a new page as soon as shared reader capacity is exceeded", () => {
+    const layout = computePageGeometry(300, {
+      aspectRatio: 5 / 8,
+      paddingXCqi: 6,
+      paddingYCqi: 15,
+    });
+    const threshold = getPageTextContentHeight(layout, 34 + 33);
+    const paragraphs = ["첫 문단", "둘째 문단"];
+    const paraHeights = { 0: threshold / 2, 1: threshold / 2 + 0.01 };
+
+    expect(runGreedy(paragraphs, paraHeights, {}, threshold)).toEqual([
+      "첫 문단",
+      "둘째 문단",
+    ]);
   });
 });

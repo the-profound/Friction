@@ -28,7 +28,7 @@
  *   pageDivision.ts의 cumulativeHeight 계산에 그대로 사용할 수 있다.
  *
  * 레이아웃 은폐 전략:
- *   0×0 overflow:hidden 래퍼 View 안에 500×500 WebView를 배치한다.
+ *   0×0 overflow:hidden 래퍼 View 안에 고정 크기 WebView를 배치한다.
  *   left:-9999 같은 음수 오프셋 방식은 iOS에서 예기치 않은 터치 영역이
  *   생기거나 레이아웃에 영향을 줄 수 있어 래퍼 클리핑 방식을 사용한다.
  */

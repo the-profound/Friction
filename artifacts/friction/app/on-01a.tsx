@@ -20,6 +20,7 @@ import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useAutoSave } from "@/lib/useAutoSave";
 import { useEditorLayout } from "@/lib/useEditorLayout";
+import { getBodyContentHeight } from "@/lib/bodyLayout";
 import {
   splitContentToPages,
   splitPageContentForDivision,
@@ -140,9 +141,8 @@ export default function WritingScreen() {
   const { releaseDirectThoughtDraft } = useThoughtComposer();
   const editorLayout = useEditorLayout();
   const {
-    containerWidth,
-    safeAreaWidth,
-    safeAreaHeight,
+    pageWidth: containerWidth,
+    pageHeight,
     paddingX,
     paddingY,
     textColumnWidth,
@@ -761,9 +761,12 @@ export default function WritingScreen() {
   const measurePages = useMemo(() => splitContentToPages(debouncedContent), [debouncedContent]);
   const baseWarnings = useMemo(() => validatePages(pages), [pages]);
 
-  const pageContentHeight = safeAreaHeight;
+  // 새로 분할하는 페이지는 최종 리더/사진 내보내기와 같은 하단 예약을
+  // 적용해, 수동 경계와 자동 분할이 이후 화면에서 넘치지 않게 한다.
+  const readerBottomReservation = insets.bottom + editorLayout.titleBarHeight;
+  const pageContentHeight = pageHeight;
   const blockGap = bodyLineHeight * 0.6;
-  const availableContentHeight = safeAreaHeight - 2 * paddingY - insets.bottom;
+  const availableContentHeight = getBodyContentHeight(editorLayout, readerBottomReservation);
 
   const pageBlockMap = useMemo(() => {
     const map: Record<number, MarkdownBlockType[]> = {};
@@ -791,7 +794,7 @@ export default function WritingScreen() {
     if (candidates.length === 0) return null;
     return {
       candidates,
-      width: safeAreaWidth,
+      width: containerWidth,
       paddingX,
       textColumnWidth,
       blockGap,
@@ -800,7 +803,7 @@ export default function WritingScreen() {
       letterSpacing: bodyLetterSpacing,
       titleFontSize,
     };
-  }, [mode, measurePages, pageBlockMap, safeAreaWidth, paddingX, textColumnWidth, blockGap, bodyFontSize, bodyLineHeight, bodyLetterSpacing, titleFontSize]);
+  }, [mode, measurePages, pageBlockMap, containerWidth, paddingX, textColumnWidth, blockGap, bodyFontSize, bodyLineHeight, bodyLetterSpacing, titleFontSize]);
 
   const handleWarningMeasured = useCallback((heights: Record<string, number>) => {
     setBlockHeights((prev) => {
@@ -836,7 +839,7 @@ export default function WritingScreen() {
         continue;
       }
       const blockSum = heights.reduce((a, b) => a + b, 0);
-      const totalHeight = blockSum + 2 * paddingY + insets.bottom;
+      const totalHeight = blockSum + pageContentHeight - availableContentHeight;
       const overflowBlockIdx = findOverflowBlockIndex(heights, availableContentHeight, bodyLineHeight);
       info[p.pageIndex] = { totalHeight, overflowBlockIdx };
     }
@@ -850,7 +853,7 @@ export default function WritingScreen() {
     }
     prevPageOverflowInfoRef.current = info;
     return info;
-  }, [measurePages, pageBlockMap, blockHeights, paddingY, insets.bottom, availableContentHeight, bodyLineHeight]);
+  }, [measurePages, pageBlockMap, blockHeights, pageContentHeight, availableContentHeight, bodyLineHeight]);
 
   const pageHeights = useMemo<Record<number, number>>(() => {
     const map: Record<number, number> = {};
@@ -869,7 +872,7 @@ export default function WritingScreen() {
         engineResolveRef.current = resolve;
         setEngineRequest({
           candidates,
-          width: safeAreaWidth,
+          width: containerWidth,
           paddingX,
           textColumnWidth,
           fontSize: bodyFontSize,
@@ -879,7 +882,7 @@ export default function WritingScreen() {
         });
       });
     },
-    [safeAreaWidth, paddingX, textColumnWidth, bodyFontSize, bodyLineHeight, bodyLetterSpacing, titleFontSize],
+    [containerWidth, paddingX, textColumnWidth, bodyFontSize, bodyLineHeight, bodyLetterSpacing, titleFontSize],
   );
 
   const handleEngineMeasured = useCallback((heights: Record<string, number>) => {
@@ -889,16 +892,13 @@ export default function WritingScreen() {
     if (r) r(heights);
   }, []);
 
-  const splitThreshold = useMemo(() => {
-    const netH = safeAreaHeight - 2 * paddingY - insets.bottom;
-    return (netH + bodyLineHeight) * 0.92;
-  }, [safeAreaHeight, paddingY, insets.bottom, bodyLineHeight]);
+  const splitThreshold = availableContentHeight;
 
   const heightWarnings = useMemo<DivisionWarning[]>(() => {
     return measurePages
       .filter((page) => {
         const h = pageHeights[page.pageIndex];
-        return h !== undefined && h > pageContentHeight + bodyLineHeight;
+        return h !== undefined && h > pageContentHeight;
       })
       .map((page) => ({
         pageIndex: page.pageIndex,
@@ -906,7 +906,7 @@ export default function WritingScreen() {
         level: "red" as const,
         reason: "이 페이지는 읽기 화면에서 스크롤이 필요할 수 있습니다",
       }));
-  }, [measurePages, pageHeights, pageContentHeight, bodyLineHeight]);
+  }, [measurePages, pageHeights, pageContentHeight]);
 
   const warnings = useMemo(() => [...baseWarnings, ...heightWarnings], [baseWarnings, heightWarnings]);
 
@@ -1157,7 +1157,7 @@ export default function WritingScreen() {
     const liveHeightWarnings = pgs
       .filter((p) => {
         const h = pageHeights[p.pageIndex];
-        return h !== undefined && h > pageContentHeight + bodyLineHeight;
+        return h !== undefined && h > pageContentHeight;
       })
       .map((p): DivisionWarning => ({
         pageIndex: p.pageIndex,
@@ -1241,7 +1241,7 @@ export default function WritingScreen() {
     Promise.all([layoutWidthSave, statusChange]).finally(() => {
       invalidateArticleLists(queryClient);
     });
-  }, [getEditorContent, markDirty, flush, id, router, updateArticle, transitionStatus, queryClient, containerWidth, article, showToast, pageHeights, pageContentHeight, bodyLineHeight]);
+  }, [getEditorContent, markDirty, flush, id, router, updateArticle, transitionStatus, queryClient, containerWidth, article, showToast, pageHeights, pageContentHeight]);
 
   // ── 작성/분할 모드 뒤로가기 (화면 종료) ───────────────────────────────────
   //
@@ -1946,10 +1946,10 @@ export default function WritingScreen() {
           style={styles.editorOuter}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
-          <View style={[styles.editorInner, { width: safeAreaWidth }]}>
+          <View style={[styles.editorInner, { width: containerWidth }]}>
             {/*
               본문 텍스트 컬럼은 4개 화면(작성/분할/마감/읽기)이 동일한 정수 픽셀 폭으로
-              줄넘김을 결정해야 한다. textColumnWidth (= Math.round(safeAreaWidth − 2×paddingX))를
+              줄넘김을 결정해야 한다. textColumnWidth (= Math.round(containerWidth − 2×paddingX))를
               그대로 자식 View의 width로 사용해 Yoga 픽셀 스냅이 부모 위치에 따라
               ±1px 흔들리는 일을 차단한다.
             */}

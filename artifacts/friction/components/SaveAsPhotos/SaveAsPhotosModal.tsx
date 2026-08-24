@@ -18,7 +18,7 @@ import { resolveArticleCover } from "@/utils/articleCover";
 import { normalizePageItem } from "@/utils/normalizePageItem";
 import { computeBodyLayout } from "@/lib/bodyLayout";
 import { splitContentToPages } from "@/lib/pageDivision";
-import { Colors, Typography, ReaderTokens, ZIndex, readerFontSize } from "@/constants/tokens";
+import { Colors, Typography, ReaderTokens, ZIndex } from "@/constants/tokens";
 import { useToast } from "@/contexts/ToastContext";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import CoverPage from "@/components/CoverPage/CoverPage";
@@ -103,8 +103,6 @@ export default function SaveAsPhotosModal({
   const containerWidth = effectiveLayoutWidth;
   const containerHeight = containerWidth / ReaderTokens.aspectRatio;
   const bodyLayout = useMemo(() => computeBodyLayout(containerWidth), [containerWidth]);
-  const captionFontSize = readerFontSize(ReaderTokens.typeScale.captionCqi, containerWidth);
-  const titleBarHeight = Math.round(20 + captionFontSize * 1.3);
 
   const resetState = useCallback(() => {
     setPhase("idle");
@@ -360,22 +358,21 @@ export default function SaveAsPhotosModal({
 
           {phase === "capturing" && article && currentIndex > 0 && (
             <View style={{ flex: 1, width: containerWidth }}>
-              <View style={{ width: bodyLayout.safeAreaWidth, alignSelf: "center", flex: 1 }}>
-                <View style={{
-                  flex: 1,
-                  paddingHorizontal: bodyLayout.paddingX,
-                  paddingTop: bodyLayout.paddingY,
-                  paddingBottom: insets.bottom + bodyLayout.paddingY + titleBarHeight,
-                }}>
-                  <View style={{ width: bodyLayout.textColumnWidth, flex: 1 }}>
-                    <WebViewMarkdownReader
-                      key={`capture-page-${currentIndex}`}
-                      markdown={currentContentPage}
-                      bodyFontSize={bodyLayout.bodyFontSize}
-                      bodyLetterSpacing={bodyLayout.bodyLetterSpacing}
-                      onReady={handlePageReady}
-                    />
-                  </View>
+              <View style={{
+                flex: 1,
+                width: bodyLayout.pageWidth,
+                paddingHorizontal: bodyLayout.paddingX,
+                paddingTop: bodyLayout.paddingY,
+                paddingBottom: insets.bottom + bodyLayout.paddingY + bodyLayout.titleBarHeight,
+              }}>
+                <View style={{ width: bodyLayout.textColumnWidth, flex: 1 }}>
+                  <WebViewMarkdownReader
+                    key={`capture-page-${currentIndex}`}
+                    markdown={currentContentPage}
+                    bodyFontSize={bodyLayout.bodyFontSize}
+                    bodyLetterSpacing={bodyLayout.bodyLetterSpacing}
+                    onReady={handlePageReady}
+                  />
                 </View>
               </View>
             </View>

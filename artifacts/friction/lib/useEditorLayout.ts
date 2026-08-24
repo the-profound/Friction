@@ -1,11 +1,11 @@
 import { useMemo } from "react";
 import { useWindowDimensions } from "react-native";
-import { computeBodyLayout, resolveContainerWidth, type BodyLayout } from "./bodyLayout";
+import { computeBodyLayout, resolvePageWidth, type BodyLayout } from "./bodyLayout";
 
 /**
  * 작성(on-01a) · 분할(on-01b) 화면이 공유하는 에디터 레이아웃 계산.
  *
- * 두 화면은 같은 공식으로 컨테이너 폭/안전 영역/패딩/본문 폰트를 계산해야
+ * 두 화면은 같은 공식으로 논리 페이지 폭/패딩/본문 폰트를 계산해야
  * WebView 편집창이 보여주는 줄넘김과 PretextMeasureLayer 측정 결과,
  * 그리고 read.tsx의 렌더링 결과가 동일한 기준 위에서 일치한다.
  *
@@ -16,8 +16,8 @@ import { computeBodyLayout, resolveContainerWidth, type BodyLayout } from "./bod
 export function useEditorLayout(): BodyLayout {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   return useMemo(() => {
-    const containerWidth = resolveContainerWidth(screenWidth, screenHeight);
-    return computeBodyLayout(containerWidth);
+    const pageWidth = resolvePageWidth(screenWidth, screenHeight);
+    return computeBodyLayout(pageWidth);
   }, [screenWidth, screenHeight]);
 }
 

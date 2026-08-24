@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, desc, eq, ilike, inArray, lte, ne, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, isNull, lte, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import {
   db,
@@ -14,6 +14,9 @@ const router: IRouter = Router();
 const sourceArticle = alias(articlesTable, "source_article");
 const sourceArticleRead = alias(userArticleReadsTable, "source_article_read");
 const ANONYMOUS_PARTICIPANT_NAME = "참여자";
+// Keep the inbox list aligned with GET /articles/:id: an inbox row must not
+// lead users to a draft, deleted, or otherwise non-readable article.
+const readableInboxArticle = sql`${articlesTable.status} IN ('DIVIDING', 'CLOSING', 'LETTER')`;
 
 // Space-backed inbox rows normally carry sourceTeamCollectionId. Older rows
 // predate that column, so use the article's space-letter source relation as a
@@ -130,6 +133,8 @@ router.get("/inbox", async (req, res) => {
     eq(inboxTable.recipientId, recipientId),
     lte(inboxTable.visibleAt, new Date()),
     ne(inboxTable.senderId, inboxTable.recipientId),
+    readableInboxArticle,
+    isNull(articlesTable.deletedAt),
   ];
   // Optional isRead filter: pass isRead=false to get only unread items (inbox screen),
   // or omit entirely to get all visible items (picker, etc.)

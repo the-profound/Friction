@@ -501,10 +501,11 @@ export default function ClosingScreen() {
                           justifyContent: "center",
                         }}>
                           <View style={{
-                            width: storedBody.safeAreaWidth,
+                            width: storedBody.pageWidth,
                             flex: 1,
-                            paddingVertical: storedBody.paddingY,
-                            alignItems: "center",
+                            paddingHorizontal: storedBody.paddingX,
+                            paddingTop: storedBody.paddingY,
+                            paddingBottom: storedBody.paddingY + insets.bottom + storedBody.titleBarHeight,
                           }}>
                             <View style={{ width: storedBody.textColumnWidth, flex: 1 }}>
                               <WebViewMarkdownReader
@@ -525,10 +526,11 @@ export default function ClosingScreen() {
                     const fallbackBody = computeBodyLayout(previewCardWidth);
                     return (
                       <View style={{
-                        width: fallbackBody.safeAreaWidth,
+                        width: fallbackBody.pageWidth,
                         flex: 1,
-                        paddingVertical: fallbackBody.paddingY,
-                        alignItems: "center",
+                        paddingHorizontal: fallbackBody.paddingX,
+                        paddingTop: fallbackBody.paddingY,
+                        paddingBottom: fallbackBody.paddingY + insets.bottom + fallbackBody.titleBarHeight,
                         alignSelf: "center",
                       }}>
                         <View style={{ width: fallbackBody.textColumnWidth, flex: 1 }}>

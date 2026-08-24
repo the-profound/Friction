@@ -111,7 +111,7 @@ function computeReaderLayout(availableWidth: number, availableHeight: number, ov
   const frameWidth = containerWidth * scaleFactor;
   const frameHeight = containerHeight * scaleFactor;
 
-  // 본문(safeArea/padding/textColumnWidth/body 폰트 메트릭)은 lib/bodyLayout.ts의
+  // 본문(페이지 프레임/padding/textColumnWidth/body 폰트 메트릭)은 lib/bodyLayout.ts의
   // computeBodyLayout이 단일 진입점이다. 작성(on-01a)·분할(on-01b)·마감(on-01c)·
   // 읽기(read.tsx) 4개 화면이 모두 같은 함수를 거치므로 textColumnWidth(정수 픽셀)와
   // body 메트릭이 동일 컨테이너 폭에서 픽셀 단위로 일치한다.
@@ -133,8 +133,7 @@ function computeReaderLayout(availableWidth: number, availableHeight: number, ov
   );
 
   // Reserve space for the title bar overlay at the bottom of the page
-  // Formula: paddingTop(8) + captionFontSize * iOS line height factor(~1.3) + paddingBottom(12)
-  const titleBarHeight = Math.round(20 + captionFontSize * 1.3);
+  const titleBarHeight = body.titleBarHeight;
 
   return {
     containerWidth,
@@ -144,8 +143,6 @@ function computeReaderLayout(availableWidth: number, availableHeight: number, ov
     scaleFactor,
     paddingX: body.paddingX,
     paddingY: body.paddingY,
-    safeAreaWidth: body.safeAreaWidth,
-    safeAreaHeight: body.safeAreaHeight,
     textColumnWidth: body.textColumnWidth,
     bodyFontSize: body.bodyFontSize,
     titleFontSize: body.titleFontSize,
@@ -2271,9 +2268,7 @@ interface ReaderLayout {
   scaleFactor: number;
   paddingX: number;
   paddingY: number;
-  safeAreaWidth: number;
-  safeAreaHeight: number;
-  /** Explicit integer pixel width for the text column (safeAreaWidth - 2*paddingX, rounded).
+  /** Explicit integer pixel width for the text column (pageWidth - 2*paddingX, rounded).
    *  Use this as the width constraint for text containers instead of relying on
    *  paddingHorizontal, so Yoga pixel-snapping is consistent across different parent positions. */
   textColumnWidth: number;
@@ -2316,11 +2311,6 @@ const PageView = React.memo(function PageView({
   const dynamicPageStyles = useMemo(
     () =>
       StyleSheet.create({
-        safeAreaBox: {
-          width: layout.safeAreaWidth,
-          alignSelf: "center" as const,
-          flex: 1,
-        },
         pageContent: {
           flex: 1,
           paddingHorizontal: layout.paddingX,
@@ -2332,14 +2322,13 @@ const PageView = React.memo(function PageView({
           flex: 1,
         },
       }),
-    [layout.safeAreaWidth, layout.paddingX, layout.paddingY, layout.titleBarHeight, layout.textColumnWidth, bottomInset],
+    [layout.paddingX, layout.paddingY, layout.titleBarHeight, layout.textColumnWidth, bottomInset],
   );
 
   return (
     <View style={[styles.pageContainer, { flex: 1 }]}>
-      <View style={dynamicPageStyles.safeAreaBox}>
-        <View style={dynamicPageStyles.pageContent}>
-          <View style={dynamicPageStyles.textColumn}>
+      <View style={dynamicPageStyles.pageContent}>
+        <View style={dynamicPageStyles.textColumn}>
             <WebViewMarkdownReader
               markdown={content}
               bodyFontSize={layout.bodyFontSize}
@@ -2349,7 +2338,6 @@ const PageView = React.memo(function PageView({
               onDragStateChange={onDragStateChange}
               clearSelectionSignal={clearSignal}
             />
-          </View>
         </View>
       </View>
     </View>

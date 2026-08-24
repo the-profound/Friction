@@ -27,7 +27,7 @@ export type MeasureCandidate = {
 export type MeasureRequest = {
   /** 같은 request 객체를 또 넘겨도 다시 측정하지 않는다 (참조 동등성으로 식별). */
   candidates: MeasureCandidate[];
-  /** 측정 컨테이너의 가용 폭 (페이지 safe area 폭). paddingX와 함께 사용할 경우 실제 텍스트 폭은 width - 2*paddingX. */
+  /** 측정 컨테이너의 논리 페이지 폭 C. paddingX와 함께 사용할 경우 실제 텍스트 폭은 width - 2*paddingX. */
   width: number;
   /** 좌우 padding (페이지 readerLayout.paddingX와 동일하게). textColumnWidth가 있으면 무시된다. */
   paddingX: number;
@@ -36,7 +36,7 @@ export type MeasureRequest = {
   textColumnWidth?: number;
   /** 옵션: 위쪽 padding (전체 페이지 높이 측정 시에만 사용). */
   paddingTop?: number;
-  /** 옵션: 아래쪽 padding (insets.bottom + paddingY 등). */
+  /** 옵션: 아래쪽 padding (페이지 paddingY + 화면별 inset/title-bar 예약 등). */
   paddingBottom?: number;
   /** Markdown 블록 사이 vertical gap (lineHeight * 0.6). */
   blockGap?: number;

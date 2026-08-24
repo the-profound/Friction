@@ -108,7 +108,7 @@
   <header>
     <h1>화면별 안전 영역 · 본문 레이아웃 설계도</h1>
     <p>문서 <strong>「Friction 안전 영역·본문 레이아웃 계산 기준」</strong>의 3. 화면별 현재 계산을 단순 도면으로 옮겼습니다.<br>수치는 현재 코드의 기준식이며, 화면을 다시 설계하자는 제안이 아닙니다.</p>
-    <div class="formula">물리 inset / 웹 fallback / NavBar clearance / 리더 가상 본문 박스는 서로 다른 값이다.</div>
+    <div class="formula">물리 inset / 웹 fallback / NavBar clearance / 리더 논리 페이지 프레임은 서로 다른 값이다.</div>
   </header>
 
   <main>
@@ -117,7 +117,7 @@
       <span><i class="dot" style="background:var(--web)"></i>웹 fallback</span>
       <span><i class="dot" style="background:var(--chrome)"></i>화면 chrome · 고정 액션</span>
       <span><i class="dot" style="background:var(--nav)"></i>NavBar / NavBar 회피 영역</span>
-      <span><i class="dot" style="background:var(--virtual)"></i>리더 가상 본문 박스</span>
+      <span><i class="dot" style="background:var(--virtual)"></i>논리 페이지 프레임</span>
       <span><i class="dot" style="background:var(--content)"></i>실제 텍스트 열 · 카드 프레임</span>
       <span><i class="dot" style="background:var(--selection)"></i>선택 모드 전용 영역</span>
     </div>
@@ -125,7 +125,7 @@
     <section class="grid">
       <article class="sheet">
         <h2>3.1 작성 · 분할</h2>
-        <p class="sub">일반 화면 흐름 + 가상 페이지 측정. 웹 fallback은 현재 이 화면에 임의로 더하지 않습니다.</p>
+        <p class="sub">일반 화면 흐름 + 논리 페이지 측정. 웹 fallback은 현재 이 화면에 임의로 더하지 않습니다.</p>
         <div class="device" aria-label="작성과 분할 화면 도면">
           <div class="notch"></div>
           <div class="zone physical" style="top:0;height:28px">물리 top inset<small>native: insets.top / web: 0</small></div>
@@ -133,20 +133,20 @@
           <div class="zone chrome" style="top:89px;height:42px">분할 툴바<small>좌우 24 · 상하 8</small></div>
           <div class="zone chrome" style="top:131px;height:44px">페이지 칩<small>고정 44px</small></div>
           <div class="zone content" style="top:175px;height:305px">에디터의 실제 남은 화면 높이</div>
-          <div class="zone virtual" style="top:205px;left:5%;width:90%;height:200px">가상 본문 박스<small>폭 0.90W · 측정 높이 1.20W</small></div>
-          <div class="zone content" style="top:250px;left:11%;width:78%;height:104px">명시 텍스트 열<small>round(0.78W)</small></div>
-          <div class="zone physical" style="bottom:0;height:31px">물리 bottom inset<small>분할 가용 높이에서만 차감</small></div>
+          <div class="zone virtual" style="top:205px;left:0;width:100%;height:245px">논리 페이지 프레임<small>폭 W · 높이 W / (5/8)</small></div>
+          <div class="zone content" style="top:250px;left:6%;width:88%;height:150px">명시 텍스트 열<small>round(0.88W)</small></div>
+          <div class="zone physical" style="bottom:0;height:31px">물리 bottom inset<small>리더와 같은 하단 예약으로 차감</small></div>
           <div class="zone chrome" style="bottom:31px;height:36px">native 서식 툴바 회피<small>keyboard 중 +60px</small></div>
         </div>
         <ul class="specs">
           <li><b>컨테이너 폭 W</b><span><code>min(screenHeight × 5/8, screenWidth)</code></span></li>
-          <li><b>가상 본문 폭</b><span><code>safeAreaWidth = 0.90 × W</code></span></li>
-          <li><b>텍스트 열</b><span><code>round(0.90W − 2 × 0.06W) = round(0.78W)</code></span></li>
-          <li><b>측정 높이</b><span><code>safeAreaHeight = 1.20 × W</code></span></li>
-          <li><b>분할 가용 높이</b><span><code>1.20W − 2 × 0.15W − insets.bottom</code></span></li>
-          <li><b>측정 총높이</b><span><code>sum(blocks) + 2 × 0.15W + insets.bottom</code></span></li>
+          <li><b>페이지 프레임 폭</b><span><code>pageWidth = W</code></span></li>
+          <li><b>텍스트 열</b><span><code>round(W − 2 × 0.06W) = round(0.88W)</code></span></li>
+          <li><b>페이지 프레임 높이</b><span><code>pageHeight = W / (5/8)</code></span></li>
+          <li><b>분할 가용 높이</b><span><code>pageHeight − 2 × 0.15W − insets.bottom − titleBarHeight</code></span></li>
+          <li><b>측정 총높이</b><span><code>sum(blocks) + 2 × 0.15W + insets.bottom + titleBarHeight</code></span></li>
         </ul>
-        <p class="callout">헤더·툴바·실제 화면 높이는 에디터의 보이는 공간만 바꿉니다. 가상 페이지의 본문 분량 식에는 넣지 않습니다.</p>
+        <p class="callout">헤더·툴바·실제 화면 높이는 에디터의 보이는 공간만 바꿉니다. 논리 페이지 C의 본문 폭 식에는 넣지 않습니다.</p>
       </article>
 
       <article class="sheet">
@@ -160,7 +160,7 @@
           <div class="side left"></div><div class="side right"></div>
           <div class="card">
             <div class="virtual-inner"></div>
-            <div class="text-column">가상 본문 0.90W<br><small>명시 열 폭 round(0.78W)</small></div>
+            <div class="text-column">페이지 프레임 W<br><small>명시 열 폭 round(0.88W)</small></div>
             <div class="caption">제목 바: round(20 + captionFontSize × 1.3)</div>
           </div>
           <div class="zone content" style="top:432px;height:46px">카드 표시 frame<small>논리 5:8 × scaleFactor</small></div>
