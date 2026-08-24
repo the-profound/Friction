@@ -81,7 +81,7 @@ router = "path"
 PORT = "3001"
 
 [[workflows.workflow]]
-name = "Publish iOS"
+name = "Publish iOS(test)"
 mode = "parallel"
 author = 56922764
 
@@ -97,15 +97,6 @@ author = 56922764
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash /home/runner/workspace/artifacts/friction/scripts/publish-dev.sh"
-
-[[workflows.workflow]]
-name = "Project"
-mode = "parallel"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Friction Dev Tunnel"
 
 [[workflows.workflow]]
 name = "Friction Dev Tunnel"
