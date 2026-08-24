@@ -21,10 +21,8 @@ if [[ -z "${EXPO_TOKEN:-}" ]]; then
 fi
 
 echo ""
-echo "🔎 릴리즈 환경 변수 검증 중..."
-APP_RELEASE_TRACK=production EAS_BUILD_PROFILE=production \
-  node "$SCRIPT_DIR/validate-release-env.mjs" --track production
-bash "$SCRIPT_DIR/validate-eas-cloud-env.sh" production
+echo "🔎 Android test용 EAS 환경을 사용합니다..."
+echo "   앱 런타임 설정은 EAS의 production 환경에서 빌드에 주입됩니다."
 
 cd "$APP_DIR"
 
