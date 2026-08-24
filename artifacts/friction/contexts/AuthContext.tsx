@@ -1,7 +1,10 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { AppState, Platform } from "react-native";
 import { Session, AuthError } from "@supabase/supabase-js";
-import { supabase } from "@/lib/supabase";
+import {
+  activateNativeAuthStorage,
+  supabase,
+} from "@/lib/supabase";
 import { getCurrentDevicePushToken } from "@/lib/usePushNotifications";
 import {
   createActiveSessionRestoreGate,
@@ -215,8 +218,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       : null;
     nativeAutoRefreshRef.current = autoRefresh;
 
+    let unsubscribeAuthState: (() => void) | null = null;
+    const subscribeToAuthEvents = (): void => {
+      if (unsubscribeAuthState) return;
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(
+        (event, nextSession) => {
+          const decision = authCoordinator.receiveAuthEvent(event, nextSession);
+          if (!decision.accepted) {
+            pendingAuthSessionRef.current = nextSession;
+            return;
+          }
+          applySession(decision.session);
+          setIsLoading(false);
+          reportAuthDiagnostic("auth-event", event);
+        },
+      );
+      unsubscribeAuthState = () => subscription.unsubscribe();
+    };
+
     const restoreSession = async (): Promise<void> => {
       try {
+        // The SDK is constructed at module import time. Unlock its native
+        // storage only from this active-state restore owner, before any
+        // getSession() or refreshSession() call can reach SecureStore.
+        if (isNative) activateNativeAuthStorage();
         // A rejected or indefinitely pending SecureStore read must not leave
         // AuthGuard in its full-screen loading state forever.
         const result = await Promise.race([
@@ -247,6 +272,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const restoreDecision = authCoordinator.completeRestore(
           restoreOperation,
           restoredSession,
+          { allowRefreshEvents: result.shouldRetryRefresh },
         );
         if (restoreDecision.accepted && !suppressAuthEventsRef.current) {
           applySession(restoreDecision.session);
@@ -255,6 +281,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Set this after the explicit session decision so an event already
         // queued by the refresh cannot overwrite it with an older session.
         initialRestoreCompleteRef.current = restoreDecision.restoreComplete;
+        // Native onAuthStateChange emits INITIAL_SESSION by reading its storage.
+        // Register it only after our active-state restore has resolved the
+        // persisted credentials, then let foreground auto-refresh emit only
+        // post-restore changes through this subscription.
+        if (isNative) subscribeToAuthEvents();
         const currentSession = authCoordinator.getCurrentSession();
         if (
           isNative &&
@@ -286,6 +317,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (restoreDecision.accepted && !suppressAuthEventsRef.current) {
           applySession(null);
         }
+        if (isNative) subscribeToAuthEvents();
         reportAuthDiagnostic(
           "restore",
           restoreDecision.accepted ? "failed-logged-out" : "stale-failure-ignored",
@@ -312,21 +344,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (isNative) {
       void restoreGate.setAppState(AppState.currentState).catch(() => undefined);
     } else {
+      subscribeToAuthEvents();
       void restoreSession();
     }
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        const decision = authCoordinator.receiveAuthEvent(event, session);
-        if (!decision.accepted) {
-          pendingAuthSessionRef.current = session;
-          return;
-        }
-        applySession(decision.session);
-        setIsLoading(false);
-        reportAuthDiagnostic("auth-event", event);
-      }
-    );
 
     return () => {
       mounted = false;
@@ -336,7 +356,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (nativeAutoRefreshRef.current === autoRefresh) {
         nativeAutoRefreshRef.current = null;
       }
-      subscription.unsubscribe();
+      unsubscribeAuthState?.();
     };
   }, []);
 

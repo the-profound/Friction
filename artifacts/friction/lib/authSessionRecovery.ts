@@ -33,6 +33,24 @@ export interface NativeSessionRestoreResult<T extends SessionLike> {
 
 const REFRESH_MARGIN_MS = 60_000;
 
+/**
+ * Supabase initializes as soon as its client is constructed. On native, keep
+ * its storage adapter closed until AuthProvider has reached an active app
+ * state, so that initialization cannot independently recover a stale session.
+ */
+export function createNativeStorageAccessGate() {
+  let isOpen = false;
+
+  return {
+    open(): void {
+      isOpen = true;
+    },
+    canAccess(): boolean {
+      return isOpen;
+    },
+  };
+}
+
 export interface NativeSessionRestoreOptions {
   now?: number;
   canRefresh?: boolean | (() => boolean);
@@ -56,6 +74,15 @@ export interface RestoreDecision<T extends SessionLike> {
   accepted: boolean;
   restoreComplete: boolean;
   session: T | null;
+}
+
+export interface RestoreCompletionOptions {
+  /**
+   * A transient refresh failure leaves the stored session in place. The
+   * subsequent foreground refresher may emit TOKEN_REFRESHED, which is safe to
+   * accept after the explicit restore has rejected INITIAL_SESSION.
+   */
+  allowRefreshEvents?: boolean;
 }
 
 /**
@@ -110,6 +137,7 @@ export function createAuthSessionCoordinator<T extends SessionLike>() {
     completeRestore(
       operation: number,
       session: T | null,
+      { allowRefreshEvents = false }: RestoreCompletionOptions = {},
     ): RestoreDecision<T> {
       if (restoreRevision !== operation) {
         return {
@@ -133,7 +161,8 @@ export function createAuthSessionCoordinator<T extends SessionLike>() {
       }
 
       currentSession = session;
-      blockAuthEventsUntilNextOperation = session === null;
+      blockAuthEventsUntilNextOperation =
+        session === null && !allowRefreshEvents;
       return { accepted: true, restoreComplete: true, session };
     },
 
@@ -271,8 +300,9 @@ export async function restoreNativeSession<T extends SessionLike>(
   if (current.error) {
     if (isNonRetryableRefreshError(current.error)) {
       await clearLocalSession(auth);
+      return { session: null, shouldRetryRefresh: false };
     }
-    return { session: null, shouldRetryRefresh: false };
+    return { session: null, shouldRetryRefresh: true };
   }
 
   if (!current.data.session) {
@@ -309,7 +339,11 @@ export async function restoreNativeSession<T extends SessionLike>(
     }
 
     return { session: refreshed.data.session, shouldRetryRefresh: false };
-  } catch {
+  } catch (error) {
+    if (isNonRetryableRefreshError(error)) {
+      await clearLocalSession(auth);
+      return { session: null, shouldRetryRefresh: false };
+    }
     return { session: null, shouldRetryRefresh: true };
   }
 }

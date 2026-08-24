@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
+import { createClient } from "@supabase/supabase-js";
 import {
   createAuthSessionCoordinator,
   createNativeAutoRefreshController,
   createActiveSessionRestoreGate,
+  createNativeStorageAccessGate,
   isAccessTokenUsable,
   restoreNativeSession,
   type NativeAuthFacade,
@@ -78,6 +80,19 @@ describe("restoreNativeSession", () => {
     expect(auth.signOut).toHaveBeenCalledWith({ scope: "local" });
   });
 
+  it("clears a stored session whose refresh token has been deleted", async () => {
+    const auth = authWith(session(-1_000), {
+      session: null,
+      error: { name: "AuthSessionMissingError", status: 400 },
+    });
+
+    await expect(restoreNativeSession(auth, { now })).resolves.toEqual({
+      session: null,
+      shouldRetryRefresh: false,
+    });
+    expect(auth.signOut).toHaveBeenCalledWith({ scope: "local" });
+  });
+
   it("clears an expired session when refresh yields no replacement session", async () => {
     const auth = authWith(session(-1_000), { session: null, error: null });
 
@@ -105,6 +120,35 @@ describe("restoreNativeSession", () => {
       shouldRetryRefresh: true,
     });
     expect(auth.signOut).not.toHaveBeenCalled();
+  });
+
+  it("keeps a retryable session read failure available for a foreground retry", async () => {
+    const auth = authWith(session(-1_000), { session: null, error: null });
+    auth.getSession.mockResolvedValue({
+      data: { session: null },
+      error: { name: "AuthRetryableFetchError", status: 503 },
+    });
+
+    await expect(restoreNativeSession(auth, { now })).resolves.toEqual({
+      session: null,
+      shouldRetryRefresh: true,
+    });
+    expect(auth.signOut).not.toHaveBeenCalled();
+  });
+
+  it("clears a permanently invalid refresh error thrown by the SDK", async () => {
+    const auth = authWith(session(-1_000), { session: null, error: null });
+    auth.refreshSession.mockRejectedValue({
+      name: "AuthApiError",
+      status: 400,
+      message: "Invalid Refresh Token",
+    });
+
+    await expect(restoreNativeSession(auth, { now })).resolves.toEqual({
+      session: null,
+      shouldRetryRefresh: false,
+    });
+    expect(auth.signOut).toHaveBeenCalledWith({ scope: "local" });
   });
 
   it("defers a stale session refresh until the app becomes active", async () => {
@@ -154,6 +198,45 @@ describe("createActiveSessionRestoreGate", () => {
     await gate.setAppState("active");
     await gate.setAppState("active");
     expect(restore).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("createNativeStorageAccessGate", () => {
+  it("keeps persisted auth storage closed until active restore owns it", () => {
+    const gate = createNativeStorageAccessGate();
+
+    expect(gate.canAccess()).toBe(false);
+    gate.open();
+    expect(gate.canAccess()).toBe(true);
+  });
+
+  it("blocks Supabase's constructor recovery from reading native storage", async () => {
+    const gate = createNativeStorageAccessGate();
+    const readPersistedSession = vi.fn().mockResolvedValue(null);
+    const storage = {
+      getItem: vi.fn(async (key: string) =>
+        gate.canAccess() ? readPersistedSession(key) : null,
+      ),
+      setItem: vi.fn().mockResolvedValue(undefined),
+      removeItem: vi.fn().mockResolvedValue(undefined),
+    };
+    const client = createClient("https://example.supabase.co", "anon-key", {
+      auth: {
+        storage,
+        autoRefreshToken: false,
+        persistSession: true,
+        detectSessionInUrl: false,
+      },
+    });
+
+    // Let GoTrue's module-time initialize() settle through its gated adapter.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(storage.getItem).toHaveBeenCalled();
+    expect(readPersistedSession).not.toHaveBeenCalled();
+
+    gate.open();
+    await client.auth.getSession();
+    expect(readPersistedSession).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -250,6 +333,43 @@ describe("createAuthSessionCoordinator", () => {
     });
   });
 
+  it("accepts a foreground token refresh after a retryable startup failure", () => {
+    const coordinator = createAuthSessionCoordinator<TestSession>();
+    const restoreOperation = coordinator.beginRestore();
+    const refreshed = session(60 * 60 * 1000);
+
+    expect(
+      coordinator.completeRestore(restoreOperation, null, {
+        allowRefreshEvents: true,
+      }),
+    ).toEqual({
+      accepted: true,
+      restoreComplete: true,
+      session: null,
+    });
+    expect(coordinator.receiveAuthEvent("INITIAL_SESSION", session(-1_000))).toEqual({
+      accepted: false,
+      session: null,
+    });
+    expect(coordinator.receiveAuthEvent("TOKEN_REFRESHED", refreshed)).toEqual({
+      accepted: true,
+      session: refreshed,
+    });
+  });
+
+  it("accepts a foreground signed-out event after a valid restore", () => {
+    const coordinator = createAuthSessionCoordinator<TestSession>();
+    const restoreOperation = coordinator.beginRestore();
+    const restored = session(60 * 60 * 1000);
+
+    expect(coordinator.completeRestore(restoreOperation, restored).accepted).toBe(true);
+    expect(coordinator.receiveAuthEvent("SIGNED_OUT", null)).toEqual({
+      accepted: true,
+      session: null,
+    });
+    expect(coordinator.getCurrentSession()).toBeNull();
+  });
+
   it("does not apply auth events while a signup operation is in flight", () => {
     const coordinator = createAuthSessionCoordinator<TestSession>();
     const restoreOperation = coordinator.beginRestore();
@@ -260,5 +380,24 @@ describe("createAuthSessionCoordinator", () => {
       accepted: false,
       session: null,
     });
+  });
+
+  it("allows auto-confirmed signup immediately after invalid-session recovery", () => {
+    const coordinator = createAuthSessionCoordinator<TestSession>();
+    const restoreOperation = coordinator.beginRestore();
+    const autoConfirmedSession = session(60 * 60 * 1000);
+
+    expect(coordinator.completeRestore(restoreOperation, null).accepted).toBe(true);
+    const signupOperation = coordinator.beginAuthOperation();
+    expect(
+      coordinator.receiveAuthEvent("SIGNED_IN", autoConfirmedSession),
+    ).toEqual({
+      accepted: false,
+      session: null,
+    });
+    expect(
+      coordinator.commitAuthOperation(signupOperation, autoConfirmedSession),
+    ).toBe(true);
+    expect(coordinator.getCurrentSession()).toBe(autoConfirmedSession);
   });
 });

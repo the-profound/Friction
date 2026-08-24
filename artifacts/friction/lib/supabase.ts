@@ -3,6 +3,7 @@ import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 import { runtimeConfig } from "./runtimeConfig";
+import { createNativeStorageAccessGate } from "./authSessionRecovery";
 
 // `createClient` throws synchronously if either value is empty. Keep the
 // module import safe, but make the missing configuration an explicit app
@@ -15,8 +16,17 @@ if (runtimeConfig.errorMessage) {
 
 const supabaseUrl = runtimeConfig.supabaseUrl ?? "https://configuration.invalid";
 const supabaseAnonKey = runtimeConfig.supabaseAnonKey ?? "configuration-invalid";
-
 const CHUNK_SIZE = 1800;
+const nativeStorageAccessGate = createNativeStorageAccessGate();
+
+/**
+ * The Supabase SDK initializes at module import time. AuthProvider opens this
+ * gate only from the active native lifecycle path, before its explicit restore
+ * reads SecureStore and classifies a refresh failure.
+ */
+export function activateNativeAuthStorage(): void {
+  if (Platform.OS !== "web") nativeStorageAccessGate.open();
+}
 
 function chunkDataKey(key: string, index: number): string {
   return `${key}_chunk_${index}`;
@@ -142,6 +152,11 @@ const ExpoSecureStoreAdapter = {
     if (Platform.OS === "web") {
       return AsyncStorage.getItem(key);
     }
+    // Returning no session while closed prevents GoTrue's module-time
+    // initialization from accessing SecureStore or refreshing stale tokens.
+    if (!nativeStorageAccessGate.canAccess()) {
+      return Promise.resolve(null);
+    }
     return secureGetChunked(key);
   },
   setItem: (key: string, value: string) => {
@@ -161,11 +176,8 @@ const ExpoSecureStoreAdapter = {
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: ExpoSecureStoreAdapter,
-    // On React Native, the SDK refreshes an expired token while it initializes
-    // and logs a non-retryable refresh error before app code can handle it.
-    // AuthProvider restores and validates the session explicitly, then starts
-    // this refresher only while the app is active. Browser visibility handling
-    // remains the SDK default.
+    // AuthProvider opens native storage and validates sessions explicitly.
+    // Browser visibility handling remains the SDK default.
     autoRefreshToken: Platform.OS === "web",
     persistSession: true,
     detectSessionInUrl: Platform.OS === "web",

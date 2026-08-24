@@ -22,4 +22,19 @@ describe("auth token store", () => {
     });
     expect(getCurrentAuthAccessToken(now)).toBeNull();
   });
+
+  it("replaces and clears the in-memory token when foreground auth changes", () => {
+    setCurrentAuthSession({
+      access_token: "old-token",
+      expires_at: Math.floor((now + 60_000) / 1000),
+    });
+    setCurrentAuthSession({
+      access_token: "refreshed-token",
+      expires_at: Math.floor((now + 60 * 60 * 1000) / 1000),
+    });
+    expect(getCurrentAuthAccessToken(now)).toBe("refreshed-token");
+
+    setCurrentAuthSession(null);
+    expect(getCurrentAuthAccessToken(now)).toBeNull();
+  });
 });
