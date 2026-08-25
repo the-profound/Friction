@@ -8,6 +8,7 @@ if [[ "$TRACK" != "preview" && "$TRACK" != "production" ]]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+APP_DIR="$(dirname "$SCRIPT_DIR")"
 EAS="${EAS_BIN:-/home/runner/workspace/.config/npm/node_global/bin/eas}"
 
 # The local release environment is the intended target. Its values are read only
@@ -20,13 +21,16 @@ EXPECTED_FINGERPRINT="$(
 )"
 
 echo "🔎 EAS Cloud ${TRACK} 환경을 릴리즈 지문으로 대조 중..."
-env \
-  -u EXPO_PUBLIC_SUPABASE_URL \
-  -u EXPO_PUBLIC_SUPABASE_ANON_KEY \
-  -u EXPO_PUBLIC_DOMAIN \
-  -u APP_RELEASE_TRACK \
-  -u EAS_BUILD_PROFILE \
-  -u RELEASE_CONFIG_EXPECTED_FINGERPRINT \
-  "$EAS" env:exec "$TRACK" \
-  "APP_RELEASE_TRACK=\"$TRACK\" EAS_BUILD_PROFILE=\"$TRACK\" RELEASE_CONFIG_EXPECTED_FINGERPRINT=\"$EXPECTED_FINGERPRINT\" node \"$SCRIPT_DIR/validate-release-env.mjs\" --track \"$TRACK\" --expect-fingerprint \"$EXPECTED_FINGERPRINT\"" \
-  --non-interactive
+(
+  cd "$APP_DIR"
+  env \
+    -u EXPO_PUBLIC_SUPABASE_URL \
+    -u EXPO_PUBLIC_SUPABASE_ANON_KEY \
+    -u EXPO_PUBLIC_DOMAIN \
+    -u APP_RELEASE_TRACK \
+    -u EAS_BUILD_PROFILE \
+    -u RELEASE_CONFIG_EXPECTED_FINGERPRINT \
+    "$EAS" env:exec "$TRACK" \
+    "APP_RELEASE_TRACK=\"$TRACK\" EAS_BUILD_PROFILE=\"$TRACK\" RELEASE_CONFIG_EXPECTED_FINGERPRINT=\"$EXPECTED_FINGERPRINT\" node \"$SCRIPT_DIR/validate-release-env.mjs\" --track \"$TRACK\" --expect-fingerprint \"$EXPECTED_FINGERPRINT\"" \
+    --non-interactive
+)
