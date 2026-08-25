@@ -261,12 +261,14 @@ function RecordRow({
           if (nextWidth !== textFrameWidth) setTextFrameWidth(nextWidth);
         }}
       >
-        <View style={[styles.rowMeta, record.kind === "thought" && styles.rowMetaThought]}>
-          {record.kind !== "thought" ? (
-            <Text style={[styles.rowKind, isQuestion && styles.questionRowText]}>{record.kind === "editing" ? "편집" : "편지"}</Text>
-          ) : null}
-          <Text style={[styles.rowDate, isQuestion && styles.questionRowText]}>{relativeDate(record.updatedAt)}</Text>
-        </View>
+        {!isQuestion ? (
+          <View style={[styles.rowMeta, record.kind === "thought" && styles.rowMetaThought]}>
+            {record.kind !== "thought" ? (
+              <Text style={styles.rowKind}>{record.kind === "editing" ? "편집" : "편지"}</Text>
+            ) : null}
+            <Text style={styles.rowDate}>{relativeDate(record.updatedAt)}</Text>
+          </View>
+        ) : null}
         {showsTitle ? (
           <Text
             style={[styles.rowTitle, isQuestion && styles.questionRowText, { fontSize: titleSize, lineHeight: titleSize * 1.28 }]}
