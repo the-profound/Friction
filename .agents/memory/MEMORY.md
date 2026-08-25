@@ -56,3 +56,4 @@
 - [EAS nested-app command directory](eas-nested-app-command-directory.md) — EAS discovers Expo config from its current directory; release helpers for nested artifacts must enter the app directory first.
 - [Unauthenticated auth diagnostics](friction-auth-diagnostics-privacy.md) — analytics-style auth logs need semantic server allowlists, not just client types or character regexes.
 - [Editor hydration autosave](friction-editor-hydration-autosave.md) — server content injected into the editor can emit synthetic dirty events; ignore only its exact matching export.
+- [Dev-seed sentinel safety](friction-dev-seed-sentinels.md) — deterministic sentinels must match the inserted row exactly and commit only with the complete seed transaction.

@@ -1555,6 +1555,248 @@ export async function seedDevData(): Promise<void> {
 
       logger.info("Dev seed data (v8) inserted successfully");
     }
+
+    // -----------------------------------------------------------------------
+    // v9 sentinel: 공룡 운영 공간 — 5명 참여자·4회차·공유 편지 10편
+    //
+    // The operator account is deliberately resolved by email instead of being
+    // created here. This seed must never create or modify Supabase Auth users.
+    // The four other members are existing development users from earlier seed
+    // blocks; their existing UUIDs are resolved in the same way.
+    // -----------------------------------------------------------------------
+    const dinosaurOperatorResult = await client.query<{ id: string; nickname: string }>(
+      `SELECT id, nickname FROM users WHERE email = $1 LIMIT 1`,
+      ["thomthiswld@naver.com"],
+    );
+    if (dinosaurOperatorResult.rows.length === 0) {
+      throw new Error(
+        "[seed] Dinosaur operator account thomthiswld@naver.com was not found in users. " +
+        "Seed stopped without creating an Auth account.",
+      );
+    }
+    const dinosaurOperatorId = dinosaurOperatorResult.rows[0].id;
+
+    const dinosaurParticipantEmails = [
+      "hayun@test.dev",
+      "seojun@test.dev",
+      "minji@test.dev",
+      "eunseo@test.dev",
+    ];
+    const dinosaurParticipantsResult = await client.query<{ id: string; email: string }>(
+      `SELECT id, email FROM users WHERE email = ANY($1::text[])`,
+      [dinosaurParticipantEmails],
+    );
+    const dinosaurParticipantsByEmail = new Map(
+      dinosaurParticipantsResult.rows.map((user) => [user.email, user.id]),
+    );
+    const missingDinosaurParticipants = dinosaurParticipantEmails.filter(
+      (email) => !dinosaurParticipantsByEmail.has(email),
+    );
+    if (missingDinosaurParticipants.length > 0) {
+      throw new Error(
+        `[seed] Required existing development users were not found: ${missingDinosaurParticipants.join(", ")}. ` +
+        "Seed stopped without creating Auth accounts.",
+      );
+    }
+
+    const dinosaurSpaceId = "f9000001-0000-4000-f000-000000000001";
+    const dinosaurSentinelLetterId = "c4000001-0000-4000-c000-000000000000";
+    const dinosaurSpaceName = "공룡과 함께 쓰는 편지 공간";
+    const dinosaurSpaceResult = await client.query<{ creator_id: string; name: string }>(
+      `SELECT creator_id, name FROM spaces WHERE id = $1 LIMIT 1`,
+      [dinosaurSpaceId],
+    );
+    if (
+      dinosaurSpaceResult.rows.length > 0 &&
+      (dinosaurSpaceResult.rows[0].creator_id !== dinosaurOperatorId ||
+        dinosaurSpaceResult.rows[0].name !== dinosaurSpaceName)
+    ) {
+      throw new Error(
+        `[seed] Fixed dinosaur space id ${dinosaurSpaceId} is already owned by different data. ` +
+        "Seed stopped without modifying the existing space.",
+      );
+    }
+
+    const dinosaurSentinelResult = await client.query(
+      `SELECT id FROM space_letters WHERE id = $1 AND space_id = $2 LIMIT 1`,
+      [dinosaurSentinelLetterId, dinosaurSpaceId],
+    );
+    if (dinosaurSentinelResult.rows.length > 0) {
+      logger.info("Dev seed data already present (v9 dinosaur space), skipping");
+    } else {
+      logger.info("Inserting dev seed data (v9 dinosaur space)…");
+      await client.query("BEGIN");
+      try {
+        // v9-1. Active space owned by the existing operator account.
+        await client.query(
+          `INSERT INTO spaces
+             (id, name, description, is_anonymous, planned_starts_at, started_at,
+              schedule_type, weekdays, operator_participates, round_count,
+              max_participants, default_center_interval, default_center_count,
+              status, creator_id, invite_code, created_at, updated_at)
+           VALUES
+             ($1, $2,
+              '공룡과 기존 개발 사용자들이 함께 편지를 나누는 공간입니다.',
+              FALSE, NULL, NOW() - interval '1 day',
+              'N_DAY', NULL, TRUE, 4,
+              4, 7, 1,
+              'ACTIVE', $3, 'DINOQA1577', NOW(), NOW())
+           ON CONFLICT (id) DO NOTHING`,
+          [dinosaurSpaceId, dinosaurSpaceName, dinosaurOperatorId],
+        );
+
+        // v9-2. Four rounds. Dates keep round 1 active and later rounds
+        // upcoming for the current QA window; status is also stored explicitly
+        // because rounds without dates must preserve their status.
+        const dinosaurRoundDefinitions = [
+          {
+            id: "fa900001-0000-4000-f000-000000000001",
+            number: 1,
+            title: "1회차",
+            status: "ACTIVE",
+            startsAt: "NOW() - interval '1 day'",
+            endsAt: "NOW() + interval '30 days'",
+          },
+          {
+            id: "fa900002-0000-4000-f000-000000000002",
+            number: 2,
+            title: "2회차",
+            status: "UPCOMING",
+            startsAt: "NOW() + interval '31 days'",
+            endsAt: "NOW() + interval '60 days'",
+          },
+          {
+            id: "fa900003-0000-4000-f000-000000000003",
+            number: 3,
+            title: "3회차",
+            status: "UPCOMING",
+            startsAt: "NOW() + interval '61 days'",
+            endsAt: "NOW() + interval '90 days'",
+          },
+          {
+            id: "fa900004-0000-4000-f000-000000000004",
+            number: 4,
+            title: "4회차",
+            status: "UPCOMING",
+            startsAt: "NOW() + interval '91 days'",
+            endsAt: "NOW() + interval '120 days'",
+          },
+        ] as const;
+        const dinosaurRounds = new Map<number, string>();
+        for (const round of dinosaurRoundDefinitions) {
+          const roundResult = await client.query<{ id: string }>(
+            `INSERT INTO space_rounds
+               (id, space_id, round_number, title, description, status,
+                starts_at, ends_at, created_at, updated_at)
+             VALUES
+               ($1, $2, $3, $4, NULL, $5,
+                ${round.startsAt}, ${round.endsAt}, NOW(), NOW())
+             ON CONFLICT (space_id, round_number) DO UPDATE SET
+               title = EXCLUDED.title,
+               status = EXCLUDED.status,
+               starts_at = EXCLUDED.starts_at,
+               ends_at = EXCLUDED.ends_at,
+               updated_at = NOW()
+             RETURNING id`,
+            [round.id, dinosaurSpaceId, round.number, round.title, round.status],
+          );
+          dinosaurRounds.set(round.number, roundResult.rows[0].id);
+        }
+
+        // v9-3. Exactly five approved members: the operator plus four
+        // previously existing development accounts.
+        const dinosaurMemberIds = [
+          dinosaurOperatorId,
+          ...dinosaurParticipantEmails.map((email) => dinosaurParticipantsByEmail.get(email)!),
+        ];
+        for (const [index, userId] of dinosaurMemberIds.entries()) {
+          await client.query(
+            `INSERT INTO space_participations
+               (id, space_id, user_id, role, join_path, status,
+                invitation_id, code_request_id, created_at, updated_at)
+             VALUES
+               (gen_random_uuid(), $1, $2, $3, NULL, 'APPROVED', NULL, NULL, NOW(), NOW())
+             ON CONFLICT (space_id, user_id) DO UPDATE SET
+               role = EXCLUDED.role,
+               join_path = NULL,
+               status = 'APPROVED',
+               invitation_id = NULL,
+               code_request_id = NULL,
+               updated_at = NOW()`,
+            [dinosaurSpaceId, userId, index === 0 ? "OPERATOR" : "PARTICIPANT"],
+          );
+        }
+
+        // v9-4. Ten already-shared letters in active round 1. The article
+        // authors intentionally rotate across all five members.
+        const dinosaurAuthorIds = [
+          dinosaurOperatorId,
+          ...dinosaurParticipantEmails.map((email) => dinosaurParticipantsByEmail.get(email)!),
+        ];
+        const dinosaurArticles = [
+          ["a4000001-0000-4000-a000-000000000001", "첫 번째 편지", "오늘은 이 공간에서 처음 인사를 남깁니다. 서로의 하루를 천천히 나눌 수 있어 기대돼요."],
+          ["a4000002-0000-4000-a000-000000000002", "요즘의 작은 기쁨", "아침에 마신 따뜻한 차 한 잔처럼 사소하지만 분명한 기쁨들을 모아 적어봅니다."],
+          ["a4000003-0000-4000-a000-000000000003", "비 오는 날의 기록", "창문에 맺힌 빗방울을 바라보다가 잠시 멈춰 서는 시간이 좋았습니다."],
+          ["a4000004-0000-4000-a000-000000000004", "이번 주에 배운 것", "서두르지 않아도 괜찮다는 것을 이번 주에 다시 배웠습니다. 각자의 속도를 응원해요."],
+          ["a4000005-0000-4000-a000-000000000005", "오래된 사진 한 장", "서랍 속 사진을 꺼내 보니 지나간 계절의 표정들이 선명하게 떠올랐습니다."],
+          ["a4000006-0000-4000-a000-000000000006", "주말 산책", "집 근처 길을 오래 걸었습니다. 익숙한 풍경도 천천히 보면 새롭게 보이네요."],
+          ["a4000007-0000-4000-a000-000000000007", "다음 계절을 기다리며", "아직 오지 않은 계절을 생각하며 하고 싶은 일들을 하나씩 적어두었습니다."],
+          ["a4000008-0000-4000-a000-000000000008", "오늘의 고마운 일", "바쁜 하루 중에도 안부를 물어준 사람이 있어 고마웠습니다."],
+          ["a4000009-0000-4000-a000-000000000009", "천천히 쓰는 마음", "잘 쓰려고 애쓰기보다 지금 떠오른 마음을 솔직하게 남겨봅니다."],
+          ["a4000010-0000-4000-a000-000000000010", "첫 회차를 마무리하며", "첫 회차에 함께 편지를 나눌 수 있어 좋았습니다. 다음 이야기도 기대할게요."],
+        ] as const;
+        for (const [index, [articleId, title, content]] of dinosaurArticles.entries()) {
+          const authorId = dinosaurAuthorIds[index % dinosaurAuthorIds.length];
+          await client.query(
+            `INSERT INTO articles
+               (id, author_id, title, content, status, pages, style, cover,
+                source_article_id, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, 'LETTER', '[]'::jsonb, NULL, NULL, NULL, NOW(), NOW())
+             ON CONFLICT (id) DO UPDATE SET
+               author_id = EXCLUDED.author_id,
+               title = EXCLUDED.title,
+               content = EXCLUDED.content,
+               status = EXCLUDED.status,
+               pages = EXCLUDED.pages,
+               style = EXCLUDED.style,
+               cover = EXCLUDED.cover,
+               source_article_id = EXCLUDED.source_article_id,
+               updated_at = NOW()`,
+            [articleId, authorId, title, content],
+          );
+
+          const letterId = `c400${String(index + 1).padStart(4, "0")}-0000-4000-c000-000000000000`;
+          await client.query(
+            `INSERT INTO space_letters
+               (id, space_id, space_round_id, author_id, source_article_id,
+                letter_type, is_public, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, TRUE, NOW(), NOW())
+             ON CONFLICT (id) DO UPDATE SET
+               space_id = EXCLUDED.space_id,
+               space_round_id = EXCLUDED.space_round_id,
+               author_id = EXCLUDED.author_id,
+               source_article_id = EXCLUDED.source_article_id,
+               letter_type = EXCLUDED.letter_type,
+               is_public = TRUE,
+               updated_at = NOW()`,
+            [
+              letterId,
+              dinosaurSpaceId,
+              dinosaurRounds.get(1),
+              authorId,
+              articleId,
+              index === 0 ? "OPENING" : "CENTER",
+            ],
+          );
+        }
+
+        await client.query("COMMIT");
+        logger.info("Dev seed data (v9 dinosaur space) inserted successfully");
+      } catch (err) {
+        await client.query("ROLLBACK");
+        throw err;
+      }
+    }
   } catch (err) {
     logger.error({ err }, "Seed data error");
     throw err;
