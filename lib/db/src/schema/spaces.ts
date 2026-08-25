@@ -33,10 +33,15 @@ export const spacesTable = pgTable("spaces", {
   defaultCenterCount: integer("default_center_count").notNull().default(1),
   status: spaceStatusEnum("status").notNull().default("RECRUITING"),
   creatorId: uuid("creator_id").notNull().references(() => usersTable.id),
+  creationKey: varchar("creation_key", { length: 64 }),
   inviteCode: varchar("invite_code", { length: 30 }).unique(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-});
+}, (t) => [
+  uniqueIndex("spaces_creator_creation_key_unique")
+    .on(t.creatorId, t.creationKey)
+    .where(sql`${t.creationKey} IS NOT NULL`),
+]);
 
 export const insertSpaceSchema = createInsertSchema(spacesTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertSpace = z.infer<typeof insertSpaceSchema>;

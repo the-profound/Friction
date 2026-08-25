@@ -5,6 +5,7 @@
  * Friction MVP 1.0.0 API
  * OpenAPI spec version: 0.1.0
  */
+import type { CreateSpaceBodyScheduleType } from "./createSpaceBodyScheduleType";
 
 export interface CreateSpaceBody {
   /**
@@ -13,7 +14,13 @@ export interface CreateSpaceBody {
    */
   name: string;
   description?: string | null;
-  isAnonymous?: boolean;
+  isAnonymous: boolean;
+  /**
+   * 응답 유실 뒤 같은 생성 요청을 복구하기 위한 불투명 키.
+   * @maxLength 64
+   * @pattern ^sc_[a-z0-9]{16,60}$
+   */
+  creationKey?: string;
   /** 참여자에게 공개되는 공간 시작 예정일 */
   plannedStartsAt?: Date | null;
   /** @minimum 1 */
@@ -24,6 +31,12 @@ export interface CreateSpaceBody {
   defaultCenterInterval?: number;
   /** @minimum 1 */
   defaultCenterCount?: number;
+  /** 진행 방식 */
+  scheduleType?: CreateSpaceBodyScheduleType;
+  /** WEEKDAY 방식의 요일 배열 (0=일, 1=월, ..., 6=토) */
+  weekdays?: number[] | null;
+  /** 운영자가 중심글 순서 배정에 포함될지 여부 */
+  operatorParticipates?: boolean;
   /**
    * 익명 공간 생성자가 최초 입장 시 정하는 공간 전용 닉네임. isAnonymous=true이면 필수.
    * @minLength 1

@@ -1491,6 +1491,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /spaces/creation-replays:
+    post:
+      operationId: recoverSpaceCreation
+      tags: [spaces]
+      summary: Recover a space whose creation response was lost
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpaceCreationReplayBody"
+      responses:
+        "200":
+          description: Recovered space
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Space"
+        "404":
+          description: No committed space for this creation request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /spaces/{id}/basic-settings:
     get:
       operationId: getSpaceBasicSettings
@@ -4110,6 +4137,11 @@ components:
           nullable: true
         isAnonymous:
           type: boolean
+        creationKey:
+          type: string
+          pattern: "^sc_[a-z0-9]{16,60}$"
+          maxLength: 64
+          description: "응답 유실 뒤 같은 생성 요청을 복구하기 위한 불투명 키."
         plannedStartsAt:
           type: string
           format: date-time
@@ -4128,12 +4160,37 @@ components:
         defaultCenterCount:
           type: integer
           minimum: 1
+        scheduleType:
+          type: string
+          enum: [N_DAY, WEEKDAY]
+          description: 진행 방식
+        weekdays:
+          type: array
+          items:
+            type: integer
+            minimum: 0
+            maximum: 6
+          nullable: true
+          description: WEEKDAY 방식의 요일 배열 (0=일, 1=월, ..., 6=토)
+        operatorParticipates:
+          type: boolean
+          description: 운영자가 중심글 순서 배정에 포함될지 여부
         spaceNickname:
           type: string
           minLength: 1
           maxLength: 20
           description: "익명 공간 생성자가 최초 입장 시 정하는 공간 전용 닉네임. isAnonymous=true이면 필수."
-      required: [name]
+      required: [name, isAnonymous]
+
+    SpaceCreationReplayBody:
+      type: object
+      additionalProperties: false
+      required: [creationKey]
+      properties:
+        creationKey:
+          type: string
+          pattern: "^sc_[a-z0-9]{16,60}$"
+          maxLength: 64
 
     UpdateSpaceBody:
       type: object

@@ -260,6 +260,13 @@
       "when": 1787616000000,
       "tag": "0036_add_inline_image_storage",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1787702400000,
+      "tag": "0037_add_space_creation_idempotency",
+      "breakpoints": true
     }
   ]
 }

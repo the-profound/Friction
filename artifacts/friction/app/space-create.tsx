@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
+import Constants from "expo-constants";
 import { useQueryClient } from "@tanstack/react-query";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { CollapsibleDatePicker, getMinSpaceStartDate, startOfDay } from "@/components/shared/CalendarGrid";
@@ -24,12 +25,28 @@ import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
 import { useToast } from "@/contexts/ToastContext";
 import {
-  useCreateSpace,
-  useCreateSpaceRound,
+  createSpace,
+  createSpaceRound,
+  recoverSpaceCreation,
   getListSpacesQueryKey,
 } from "@workspace/api-client-react";
 import { SpaceInfoNote } from "@/components/SpaceInfoNote/SpaceInfoNote";
 import { SpaceCopy } from "@/constants/spaceCopy";
+import {
+  buildSpaceCreateSubmission,
+  buildSpaceCreationDiagnosticHeaders,
+  getSpaceCreationDiagnosticContext,
+  getSpaceCreationFailureMessage,
+  getRecoveredSpaceCreationDiagnostic,
+  getSpaceCreationSubmissionDiagnostic,
+  type SpaceCreationSubmissionDiagnostic,
+} from "@/lib/spaceCreateSubmission";
+import {
+  clearPendingSpaceCreationKey,
+  createSpaceCreationKey,
+  getPendingSpaceCreationKey,
+  savePendingSpaceCreationKey,
+} from "@/lib/spaceCreationRecovery";
 
 type ScheduleType = "N_DAY" | "WEEKDAY";
 
@@ -46,6 +63,14 @@ type FormData = {
   weekdays: number[];
   operatorParticipates: boolean;
   spaceNickname: string;
+};
+
+type PendingRoundCreation = {
+  spaceId: string;
+  completedRoundCount: number;
+  totalRoundCount: number;
+  diagnostic: SpaceCreationSubmissionDiagnostic;
+  headers: Record<string, string>;
 };
 
 const DEFAULT_CENTER_INTERVAL = 1;
@@ -102,13 +127,13 @@ export default function SpaceCreateScreen() {
   const { userId } = useUser();
   const { showToast } = useToast();
 
-  const createSpace = useCreateSpace();
-  const createSpaceRound = useCreateSpaceRound();
-
   const [step, setStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [roundCountRaw, setRoundCountRaw] = useState("1");
   const [roundCountError, setRoundCountError] = useState("");
+  const [pendingRoundCreation, setPendingRoundCreation] =
+    useState<PendingRoundCreation | null>(null);
+  const [pendingSpaceCreationKey, setPendingSpaceCreationKey] = useState<string | null>(null);
 
   const [form, setForm] = useState<FormData>({
     name: "",
@@ -128,6 +153,45 @@ export default function SpaceCreateScreen() {
   const updateField = useCallback(<K extends keyof FormData>(key: K, value: FormData[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   }, []);
+
+  useEffect(() => {
+    if (!userId || pendingRoundCreation) return;
+    let cancelled = false;
+    void (async () => {
+      const creationKey = await getPendingSpaceCreationKey();
+      if (!creationKey || cancelled) return;
+      setPendingSpaceCreationKey(creationKey);
+      try {
+        const space = await recoverSpaceCreation({ creationKey });
+        if (cancelled) return;
+        const diagnostic = getRecoveredSpaceCreationDiagnostic(
+          space.isAnonymous,
+          getSpaceCreationDiagnosticContext(
+            Constants.expoConfig?.extra?.releaseDiagnostics,
+            Platform.OS,
+          ),
+        );
+        setPendingRoundCreation({
+          spaceId: space.id,
+          completedRoundCount: 0,
+          totalRoundCount: space.roundCount,
+          diagnostic,
+          headers: buildSpaceCreationDiagnosticHeaders(diagnostic),
+        });
+        setStep(TOTAL_STEPS - 1);
+        showToast({
+          message: "이전에 만든 공간을 찾았어요. 회차 생성을 다시 시도해주세요.",
+          type: "error",
+        });
+      } catch {
+        // A 404 means the original request did not commit. Keep the key so a
+        // corrected retry is still idempotent if the user resumes this form.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, pendingRoundCreation, showToast]);
 
   const updateBasicSettings = useCallback((value: SpaceBasicSettingsValues) => {
     setForm((prev) => ({
@@ -184,69 +248,153 @@ export default function SpaceCreateScreen() {
       return;
     }
     const spaceNickname = form.spaceNickname.trim();
-    if (form.isAnonymous && (!spaceNickname || spaceNickname.length > 20)) {
+    if (!pendingRoundCreation && form.isAnonymous && (!spaceNickname || spaceNickname.length > 20)) {
       showToast({ message: "공간 닉네임은 1~20자로 입력해주세요.", type: "error" });
       return;
     }
     setIsSubmitting(true);
+    let roundCreation = pendingRoundCreation;
     try {
-      const startsAtStr = form.startsAt.trim() ? parseDateInput(form.startsAt) : null;
-      const startsAtParsed = startsAtStr ? new Date(startsAtStr) : null;
+      if (!roundCreation) {
+        const creationKey = pendingSpaceCreationKey ?? createSpaceCreationKey();
+        if (!pendingSpaceCreationKey) {
+          await savePendingSpaceCreationKey(creationKey);
+          setPendingSpaceCreationKey(creationKey);
+        }
+        const startsAtStr = form.startsAt.trim() ? parseDateInput(form.startsAt) : null;
+        const startsAtParsed = startsAtStr ? new Date(startsAtStr) : null;
 
-      const maxParticipants = form.maxParticipants.trim()
-        ? parseInt(form.maxParticipants, 10) || undefined
-        : undefined;
-
-      // UI weekday indices: 0=월,1=화,2=수,3=목,4=금,5=토,6=일
-      // Backend weekday convention: date.getDay() — 0=일,1=월,...,6=토
-      const toJsWeekday = (uiIdx: number) => (uiIdx + 1) % 7;
-      const backendWeekdays =
-        form.scheduleType === "WEEKDAY"
-          ? form.weekdays.map(toJsWeekday).sort((a, b) => a - b)
+        const maxParticipants = form.maxParticipants.trim()
+          ? parseInt(form.maxParticipants, 10) || undefined
           : undefined;
 
-      const space = await createSpace.mutateAsync({
-        data: {
-          name: form.name.trim(),
-          description: form.description.trim() || null,
+        // UI weekday indices: 0=월,1=화,2=수,3=목,4=금,5=토,6=일
+        // Backend weekday convention: date.getDay() — 0=일,1=월,...,6=토
+        const toJsWeekday = (uiIdx: number) => (uiIdx + 1) % 7;
+        const backendWeekdays =
+          form.scheduleType === "WEEKDAY"
+            ? form.weekdays.map(toJsWeekday).sort((a, b) => a - b)
+            : undefined;
+
+        const submission = buildSpaceCreateSubmission({
+          name: form.name,
+          description: form.description,
           isAnonymous: form.isAnonymous,
           plannedStartsAt: startsAtParsed ? startsAtParsed.toISOString() : null,
           roundCount: form.roundCount,
           maxParticipants: maxParticipants ?? null,
           defaultCenterInterval: form.defaultCenterInterval,
           defaultCenterCount: form.defaultCenterCount,
-          ...(form.isAnonymous ? { spaceNickname } : {}),
-          // Additional fields stored in DB but not yet in generated API types:
+          spaceNickname,
           scheduleType: form.scheduleType,
           weekdays: backendWeekdays ?? null,
           operatorParticipates: form.operatorParticipates,
-        } as any,
-      });
+          creationKey,
+        });
+        const diagnostic = getSpaceCreationSubmissionDiagnostic(
+          submission,
+          getSpaceCreationDiagnosticContext(
+            Constants.expoConfig?.extra?.releaseDiagnostics,
+            Platform.OS,
+          ),
+        );
+        const headers = buildSpaceCreationDiagnosticHeaders(diagnostic);
+        console.info("[space-create]", { stage: "space", outcome: "started", ...diagnostic });
 
-      for (let i = 0; i < form.roundCount; i++) {
-        await createSpaceRound.mutateAsync({
-          id: space.id,
-          data: {
+        let space;
+        try {
+          space = await createSpace(submission, { headers });
+        } catch (error) {
+          console.info("[space-create]", { stage: "space", outcome: "failed", ...diagnostic });
+          const status = error && typeof error === "object" && "status" in error
+            ? (error as { status?: unknown }).status
+            : undefined;
+          showToast({
+            message: getSpaceCreationFailureMessage(
+              "space",
+              typeof status === "number" ? status : undefined,
+            ),
+            type: "error",
+          });
+          return;
+        }
+
+        console.info("[space-create]", { stage: "space", outcome: "succeeded", ...diagnostic });
+        roundCreation = {
+          spaceId: space.id,
+          completedRoundCount: 0,
+          totalRoundCount: form.roundCount,
+          diagnostic,
+          headers,
+        };
+        setPendingRoundCreation(roundCreation);
+      }
+
+      let completedRoundCount = roundCreation.completedRoundCount;
+      try {
+        for (let i = completedRoundCount; i < roundCreation.totalRoundCount; i++) {
+          console.info("[space-create]", {
+            stage: "round",
+            outcome: "started",
+            ...roundCreation.diagnostic,
+          });
+          await createSpaceRound(
+            roundCreation.spaceId,
+            {
             roundNumber: i + 1,
             title: null,
             description: null,
-          },
+            },
+            { headers: roundCreation.headers },
+          );
+          completedRoundCount = i + 1;
+          roundCreation = { ...roundCreation, completedRoundCount };
+          setPendingRoundCreation(roundCreation);
+          console.info("[space-create]", {
+            stage: "round",
+            outcome: "succeeded",
+            ...roundCreation.diagnostic,
+          });
+        }
+      } catch {
+        const failedCreation = { ...roundCreation, completedRoundCount };
+        setPendingRoundCreation(failedCreation);
+        await queryClient.invalidateQueries({ queryKey: getListSpacesQueryKey() });
+        console.info("[space-create]", {
+          stage: "round",
+          outcome: "failed",
+          ...failedCreation.diagnostic,
         });
+        showToast({
+          message: getSpaceCreationFailureMessage("round"),
+          type: "error",
+        });
+        return;
       }
 
       queryClient.invalidateQueries({ queryKey: getListSpacesQueryKey() });
 
+      await clearPendingSpaceCreationKey();
+      setPendingRoundCreation(null);
+      setPendingSpaceCreationKey(null);
       showToast({ message: "공간을 만들었어요.", type: "success" });
       router.replace({
         pathname: "/of-space-detail" as never,
-        params: { id: space.id, showInviteGuide: "1" },
+        params: { id: roundCreation.spaceId, showInviteGuide: "1" },
       } as never);
-    } catch {
-      showToast({ message: "공간 생성에 실패했어요. 다시 시도해주세요.", type: "error" });
     } finally {
       setIsSubmitting(false);
     }
-  }, [isSubmitting, form, userId, createSpace, createSpaceRound, queryClient, showToast, router]);
+  }, [
+    isSubmitting,
+    form,
+    userId,
+    pendingRoundCreation,
+    pendingSpaceCreationKey,
+    queryClient,
+    showToast,
+    router,
+  ]);
 
   const renderStepContent = () => {
     if (step === 0) {
@@ -318,8 +466,8 @@ export default function SpaceCreateScreen() {
               textStyle={styles.nextBtnText}
               onPress={handleCreate}
               pending={isSubmitting}
-              label="공간 만들기"
-              pendingLabel="만드는 중..."
+              label={pendingRoundCreation ? "회차 만들기 다시 시도" : "공간 만들기"}
+              pendingLabel={pendingRoundCreation ? "회차 만드는 중..." : "만드는 중..."}
             />
           ) : (
             <SubmitButton
@@ -337,7 +485,7 @@ export default function SpaceCreateScreen() {
 
       <SubmitProgressOverlay
         visible={isSubmitting}
-        message="공간을 만드는 중이에요"
+        message={pendingRoundCreation ? "회차를 만드는 중이에요" : "공간을 만드는 중이에요"}
         subMessage="잠시만 기다려주세요"
       />
     </KeyboardAvoidingView>

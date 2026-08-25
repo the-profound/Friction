@@ -2030,12 +2030,27 @@ export const ListSpacesResponse = zod.array(ListSpacesResponseItem);
  */
 export const createSpaceBodyNameMax = 50;
 
+export const createSpaceBodyCreationKeyMax = 64;
+
+export const createSpaceBodyCreationKeyRegExp = new RegExp(
+  "^sc_[a-z0-9]{16,60}$",
+);
+
+export const createSpaceBodyWeekdaysItemMin = 0;
+export const createSpaceBodyWeekdaysItemMax = 6;
+
 export const createSpaceBodySpaceNicknameMax = 20;
 
 export const CreateSpaceBody = zod.object({
   name: zod.string().min(1).max(createSpaceBodyNameMax),
   description: zod.string().nullish(),
-  isAnonymous: zod.boolean().optional(),
+  isAnonymous: zod.boolean(),
+  creationKey: zod
+    .string()
+    .max(createSpaceBodyCreationKeyMax)
+    .regex(createSpaceBodyCreationKeyRegExp)
+    .optional()
+    .describe("응답 유실 뒤 같은 생성 요청을 복구하기 위한 불투명 키."),
   plannedStartsAt: zod
     .date()
     .nullish()
@@ -2047,6 +2062,20 @@ export const CreateSpaceBody = zod.object({
     .describe("운영자와 별개로 모집할 참여자 수. 운영자 좌석은 포함하지 않음."),
   defaultCenterInterval: zod.number().min(1).optional(),
   defaultCenterCount: zod.number().min(1).optional(),
+  scheduleType: zod.enum(["N_DAY", "WEEKDAY"]).optional().describe("진행 방식"),
+  weekdays: zod
+    .array(
+      zod
+        .number()
+        .min(createSpaceBodyWeekdaysItemMin)
+        .max(createSpaceBodyWeekdaysItemMax),
+    )
+    .nullish()
+    .describe("WEEKDAY 방식의 요일 배열 (0=일, 1=월, ..., 6=토)"),
+  operatorParticipates: zod
+    .boolean()
+    .optional()
+    .describe("운영자가 중심글 순서 배정에 포함될지 여부"),
   spaceNickname: zod
     .string()
     .min(1)
@@ -2168,6 +2197,73 @@ export const UpdateSpaceResponse = zod.object({
         .number()
         .min(updateSpaceResponseWeekdaysItemMin)
         .max(updateSpaceResponseWeekdaysItemMax),
+    )
+    .nullish()
+    .describe("요일 지정 시 요일 배열 (0=일, 1=월, ..., 6=토)"),
+  operatorParticipates: zod
+    .boolean()
+    .describe("운영자가 중심글 순서에 포함될지 여부"),
+  roundCount: zod.number(),
+  maxParticipants: zod
+    .number()
+    .nullish()
+    .describe("운영자와 별개로 모집할 참여자 수. 운영자 좌석은 포함하지 않음."),
+  defaultCenterInterval: zod.number(),
+  defaultCenterCount: zod.number(),
+  status: zod.enum(["RECRUITING", "ACTIVE", "ARCHIVED"]),
+  creatorId: zod.string().uuid(),
+  inviteCode: zod
+    .string()
+    .nullish()
+    .describe(
+      '한글 형용사+명사 조합 초대 코드 (예: \"파란하늘\"). 공간 생성 시 자동 배정.',
+    ),
+  createdAt: zod.date(),
+  updatedAt: zod.date(),
+});
+
+/**
+ * @summary Recover a space whose creation response was lost
+ */
+export const recoverSpaceCreationBodyCreationKeyMax = 64;
+
+export const recoverSpaceCreationBodyCreationKeyRegExp = new RegExp(
+  "^sc_[a-z0-9]{16,60}$",
+);
+
+export const RecoverSpaceCreationBody = zod.object({
+  creationKey: zod
+    .string()
+    .max(recoverSpaceCreationBodyCreationKeyMax)
+    .regex(recoverSpaceCreationBodyCreationKeyRegExp),
+});
+
+export const recoverSpaceCreationResponseWeekdaysItemMin = 0;
+export const recoverSpaceCreationResponseWeekdaysItemMax = 6;
+
+export const RecoverSpaceCreationResponse = zod.object({
+  id: zod.string().uuid(),
+  name: zod.string(),
+  description: zod.string().nullish(),
+  isAnonymous: zod.boolean(),
+  plannedStartsAt: zod
+    .date()
+    .nullish()
+    .describe("참여자에게 공개되는 공간 시작 예정일 (운영자가 설정)"),
+  startedAt: zod
+    .date()
+    .nullish()
+    .describe("운영자가 실제로 시작 버튼을 누른 시각"),
+  scheduleType: zod
+    .enum(["N_DAY", "WEEKDAY"])
+    .nullish()
+    .describe("진행 방식 (N일 간격 또는 요일 지정)"),
+  weekdays: zod
+    .array(
+      zod
+        .number()
+        .min(recoverSpaceCreationResponseWeekdaysItemMin)
+        .max(recoverSpaceCreationResponseWeekdaysItemMax),
     )
     .nullish()
     .describe("요일 지정 시 요일 배열 (0=일, 1=월, ..., 6=토)"),

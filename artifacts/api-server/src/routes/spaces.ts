@@ -5,8 +5,18 @@ import { requireAuth } from "../middlewares/requireAuth";
 import {
   ANONYMOUS_PARTICIPANT_NAME,
   getAnonymousDisplayName,
-  parseAnonymousSpaceNickname,
 } from "../lib/anonymousSpaceIdentity";
+import { getSpaceCreationDiagnostic } from "../lib/spaceCreationDiagnostics";
+import {
+  parseSpaceCreationIdentity,
+  parseSpaceCreationKey,
+} from "../lib/spaceCreationInput";
+import { createOrReuseSpace } from "../lib/spaceCreationReplay";
+import { redactSpaceCreationKeys } from "../lib/spaceCreationResponse";
+import {
+  canCreateSpaceRound,
+  createOrReuseSpaceRound,
+} from "../lib/spaceRoundCreation";
 import {
   getSpaceBasicSettingsAccessIssue,
   parseSpaceBasicSettingsInput,
@@ -43,6 +53,12 @@ import {
 } from "@workspace/db";
 
 const router: IRouter = Router();
+
+router.use((_req, res, next) => {
+  const originalJson = res.json.bind(res);
+  res.json = ((body: unknown) => originalJson(redactSpaceCreationKeys(body))) as typeof res.json;
+  next();
+});
 
 function toDate(val: unknown): Date | undefined {
   if (val == null) return undefined;
@@ -474,47 +490,101 @@ router.get("/spaces", async (req, res) => {
 });
 
 router.post("/spaces", requireAuth, async (req, res) => {
-  const body = req.body;
+  const body =
+    typeof req.body === "object" && req.body !== null && !Array.isArray(req.body)
+      ? req.body as Record<string, unknown>
+      : {};
+  const diagnostic = getSpaceCreationDiagnostic("space", req.headers, body);
+  req.log.info({ spaceCreation: diagnostic }, "POST /spaces: creation requested");
   const callerId = req.user!.id;
   if (body.creatorId && body.creatorId !== callerId) {
     res.status(403).json({ error: "공간은 로그인한 사용자만 생성할 수 있습니다." });
     return;
   }
-  const anonymousNickname = body.isAnonymous ? parseAnonymousSpaceNickname(body.spaceNickname) : null;
-  if (body.isAnonymous && !anonymousNickname) {
-    res.status(400).json({ error: "익명 공간에 참여하려면 공간 닉네임이 필요합니다." });
+  const hasCreationKey = Object.prototype.hasOwnProperty.call(body, "creationKey");
+  const creationKey = parseSpaceCreationKey(body.creationKey);
+  if (hasCreationKey && !creationKey) {
+    req.log.warn({ spaceCreation: diagnostic }, "POST /spaces: invalid creation key");
+    res.status(400).json({ error: "공간 생성 요청을 다시 시도해주세요." });
     return;
   }
+  const findCreationReplay = async () => {
+    if (!creationKey) return null;
+    const [existing] = await db
+      .select()
+      .from(spacesTable)
+      .where(
+        and(
+          eq(spacesTable.creatorId, callerId),
+          eq(spacesTable.creationKey, creationKey),
+        ),
+      )
+      .limit(1);
+    return existing ?? null;
+  };
+  const identity = parseSpaceCreationIdentity(body);
+  if (!identity.success) {
+    req.log.warn(
+      { spaceCreation: diagnostic },
+      "POST /spaces: identity validation failed",
+    );
+    res.status(400).json({ error: identity.error });
+    return;
+  }
+  const { isAnonymous, anonymousNickname } = identity;
   const MAX_RETRIES = 5;
   let lastErr: unknown;
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     const inviteCode: string = body.inviteCode ?? generateInviteCode();
     try {
       // Accept plannedStartsAt (new) or startsAt (legacy) for backward compat
-      const { plannedStartsAt, startsAt, creatorId: _creatorId, spaceNickname: _spaceNickname, ...rest } = body;
+      const {
+        plannedStartsAt,
+        startsAt,
+        creatorId: _creatorId,
+        creationKey: _creationKey,
+        isAnonymous: _isAnonymous,
+        spaceNickname: _spaceNickname,
+        ...rest
+      } = body;
       const resolvedPlannedStartsAt = plannedStartsAt ?? startsAt;
       const values = {
         ...rest,
+        isAnonymous,
         creatorId: callerId,
+        ...(creationKey ? { creationKey } : {}),
         inviteCode,
         ...(resolvedPlannedStartsAt != null ? { plannedStartsAt: toDate(resolvedPlannedStartsAt) } : {}),
       };
-      const space = await db.transaction(async (tx) => {
-        const [createdSpace] = await tx.insert(spacesTable).values(values).returning();
-        await tx.insert(spaceParticipationsTable).values({
-          spaceId: createdSpace.id,
-          userId: callerId,
-          role: "OPERATOR",
-          status: "APPROVED",
-          ...(anonymousNickname ? { spaceNickname: anonymousNickname } : {}),
-        });
-        return createdSpace;
+      const { space, replayed } = await createOrReuseSpace({
+        findExisting: findCreationReplay,
+        create: () => db.transaction(async (tx) => {
+          const [createdSpace] = await tx.insert(spacesTable).values(values).returning();
+          await tx.insert(spaceParticipationsTable).values({
+            spaceId: createdSpace.id,
+            userId: callerId,
+            role: "OPERATOR",
+            status: "APPROVED",
+            ...(anonymousNickname ? { spaceNickname: anonymousNickname } : {}),
+          });
+          return createdSpace;
+        }),
       });
+      req.log.info(
+        { spaceCreation: diagnostic },
+        replayed
+          ? "POST /spaces: creation retry recovered"
+          : "POST /spaces: creation succeeded",
+      );
       res.status(201).json(space);
       return;
     } catch (err: unknown) {
       const pg = getPgError(err);
       if (isSpaceNicknameConflict(err)) {
+        req.log.warn(
+          { spaceCreation: diagnostic },
+          "POST /spaces: nickname conflict",
+        );
         res.status(409).json({ error: "이미 사용 중인 공간 닉네임입니다." });
         return;
       }
@@ -522,13 +592,43 @@ router.post("/spaces", requireAuth, async (req, res) => {
         lastErr = err;
         continue;
       }
-      console.error("POST /spaces error:", err);
+      req.log.error(
+        { spaceCreation: diagnostic },
+        "POST /spaces: creation failed",
+      );
       res.status(500).json({ error: "공간 생성에 실패했습니다." });
       return;
     }
   }
-  console.error("POST /spaces: invite code collision after max retries", lastErr);
+  req.log.error(
+    { spaceCreation: diagnostic },
+    "POST /spaces: invite code collision after max retries",
+  );
   res.status(500).json({ error: "공간 생성에 실패했습니다." });
+});
+
+router.post("/spaces/creation-replays", requireAuth, async (req, res) => {
+  const creationKey = parseSpaceCreationKey(req.body?.creationKey);
+  if (!creationKey) {
+    res.status(400).json({ error: "공간 생성 요청을 다시 시도해주세요." });
+    return;
+  }
+
+  const [space] = await db
+    .select()
+    .from(spacesTable)
+    .where(
+      and(
+        eq(spacesTable.creatorId, req.user!.id),
+        eq(spacesTable.creationKey, creationKey),
+      ),
+    )
+    .limit(1);
+  if (!space) {
+    res.status(404).json({ error: "생성 중인 공간을 찾을 수 없습니다." });
+    return;
+  }
+  res.json(space);
 });
 
 router.get("/spaces/by-invite-code/:code", async (req, res) => {
@@ -1203,22 +1303,81 @@ router.get("/spaces/:id/rounds", async (req, res) => {
   res.json(rounds);
 });
 
-router.post("/spaces/:id/rounds", async (req, res) => {
+router.post("/spaces/:id/rounds", requireAuth, async (req, res) => {
+  const body =
+    typeof req.body === "object" && req.body !== null && !Array.isArray(req.body)
+      ? req.body as Record<string, unknown>
+      : {};
+  const diagnostic = getSpaceCreationDiagnostic("round", req.headers, body);
+  req.log.info({ spaceCreation: diagnostic }, "POST /spaces/:id/rounds: creation requested");
   try {
-    const { startsAt, endsAt, ...rest } = req.body;
+    const [callerParticipation] = await db
+      .select()
+      .from(spaceParticipationsTable)
+      .where(
+        and(
+          eq(spaceParticipationsTable.spaceId, req.params.id),
+          eq(spaceParticipationsTable.userId, req.user!.id),
+        ),
+      )
+      .limit(1);
+    if (!canCreateSpaceRound(callerParticipation)) {
+      req.log.warn(
+        { spaceCreation: diagnostic },
+        "POST /spaces/:id/rounds: creator is not an approved operator",
+      );
+      res.status(403).json({ error: "공간 운영자만 회차를 만들 수 있습니다." });
+      return;
+    }
+
+    const { startsAt, endsAt, ...rest } = body;
+    if (!Number.isInteger(rest.roundNumber) || (rest.roundNumber as number) < 1) {
+      res.status(400).json({ error: "회차 번호를 올바르게 입력해주세요." });
+      return;
+    }
     const values = {
       ...rest,
       spaceId: req.params.id,
       ...(startsAt != null ? { startsAt: toDate(startsAt) } : {}),
       ...(endsAt != null ? { endsAt: toDate(endsAt) } : {}),
     };
-    const [round] = await db
-      .insert(spaceRoundsTable)
-      .values(values)
-      .returning();
+    const { round, replayed } = await createOrReuseSpaceRound({
+      insert: async () => {
+        const [created] = await db
+          .insert(spaceRoundsTable)
+          .values(values)
+          .onConflictDoNothing({
+            target: [spaceRoundsTable.spaceId, spaceRoundsTable.roundNumber],
+          })
+          .returning();
+        return created;
+      },
+      findExisting: async () => {
+        const [existing] = await db
+          .select()
+          .from(spaceRoundsTable)
+          .where(
+            and(
+              eq(spaceRoundsTable.spaceId, req.params.id),
+              eq(spaceRoundsTable.roundNumber, rest.roundNumber as number),
+            ),
+          )
+          .limit(1);
+        return existing;
+      },
+    });
+    req.log.info(
+      { spaceCreation: diagnostic },
+      replayed
+        ? "POST /spaces/:id/rounds: creation retry recovered"
+        : "POST /spaces/:id/rounds: creation succeeded",
+    );
     res.status(201).json(round);
-  } catch (err) {
-    console.error("POST /spaces/:id/rounds error:", err);
+  } catch (err: unknown) {
+    req.log.error(
+      { spaceCreation: diagnostic },
+      "POST /spaces/:id/rounds: creation failed",
+    );
     res.status(500).json({ error: "회차 생성에 실패했습니다." });
   }
 });

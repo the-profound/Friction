@@ -89,6 +89,7 @@ import type {
   SpaceCodeRequest,
   SpaceCodeRequestWithRequester,
   SpaceCodeRequestWithSpace,
+  SpaceCreationReplayBody,
   SpaceInvitation,
   SpaceInvitationWithSpace,
   SpaceJoinContext,
@@ -5595,6 +5596,93 @@ export const useUpdateSpace = <
   TContext
 > => {
   return useMutation(getUpdateSpaceMutationOptions(options));
+};
+
+/**
+ * @summary Recover a space whose creation response was lost
+ */
+export const getRecoverSpaceCreationUrl = () => {
+  return `/api/spaces/creation-replays`;
+};
+
+export const recoverSpaceCreation = async (
+  spaceCreationReplayBody: SpaceCreationReplayBody,
+  options?: RequestInit,
+): Promise<Space> => {
+  return customFetch<Space>(getRecoverSpaceCreationUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(spaceCreationReplayBody),
+  });
+};
+
+export const getRecoverSpaceCreationMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof recoverSpaceCreation>>,
+    TError,
+    { data: BodyType<SpaceCreationReplayBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof recoverSpaceCreation>>,
+  TError,
+  { data: BodyType<SpaceCreationReplayBody> },
+  TContext
+> => {
+  const mutationKey = ["recoverSpaceCreation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof recoverSpaceCreation>>,
+    { data: BodyType<SpaceCreationReplayBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return recoverSpaceCreation(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RecoverSpaceCreationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof recoverSpaceCreation>>
+>;
+export type RecoverSpaceCreationMutationBody =
+  BodyType<SpaceCreationReplayBody>;
+export type RecoverSpaceCreationMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Recover a space whose creation response was lost
+ */
+export const useRecoverSpaceCreation = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof recoverSpaceCreation>>,
+    TError,
+    { data: BodyType<SpaceCreationReplayBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof recoverSpaceCreation>>,
+  TError,
+  { data: BodyType<SpaceCreationReplayBody> },
+  TContext
+> => {
+  return useMutation(getRecoverSpaceCreationMutationOptions(options));
 };
 
 /**
