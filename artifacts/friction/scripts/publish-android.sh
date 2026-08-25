@@ -26,6 +26,11 @@ echo "   앱 런타임 설정은 EAS의 production 환경에서 빌드에 주입
 
 cd "$APP_DIR"
 
+APP_RELEASE_TRACK=production EAS_BUILD_PROFILE=android-test \
+  node "$SCRIPT_DIR/validate-release-env.mjs" --track production
+bash "$SCRIPT_DIR/validate-eas-cloud-env.sh" production
+node "$SCRIPT_DIR/validate-native-abi.mjs"
+
 echo ""
 echo "📦 Android test APK 빌드 시작 (EAS Cloud)..."
 echo "    빌드는 보통 15~30분 소요됩니다."
