@@ -74,9 +74,8 @@ const KIND_OPTIONS: { key: RecordKind; label: string }[] = [
   { key: "letter", label: "편지" },
 ];
 const VIEW_OPTIONS: { key: RecordView; label: string }[] = [
-  { key: "card", label: "하나씩" },
-  { key: "content", label: "내용도" },
-  { key: "title", label: "제목만" },
+  { key: "card", label: "카드형" },
+  { key: "content", label: "목록형" },
 ];
 
 const CARD_ACTION_AREA_H = 64;
@@ -222,14 +221,12 @@ function RecordSourceCard({
 }
 function RecordRow({
   record,
-  view,
   onPress,
   onLongPress,
   onSend,
   onArchive,
 }: {
   record: UnifiedRecord;
-  view: Exclude<RecordView, "card">;
   onPress: () => void;
   onLongPress: () => void;
   onSend?: () => void;
@@ -238,8 +235,8 @@ function RecordRow({
   const { width: windowWidth } = useWindowDimensions();
   const [textFrameWidth, setTextFrameWidth] = useState(0);
   const preview = getRecordPreview(record);
-  const title = (view === "content" ? preview.titleDisplay : preview.title) || preview.body || "제목 없음";
-  const showsTitle = view === "title" || preview.hasTitle || record.kind !== "thought";
+  const title = preview.titleDisplay || preview.body || "제목 없음";
+  const showsTitle = preview.hasTitle || record.kind !== "thought";
   const bodyLines = preview.hasTitle || record.kind !== "thought" ? 3 : 5;
   const fallbackTextWidth = Math.max(1, windowWidth - Spacing.screenPx * 2);
   const contentWidth = textFrameWidth || fallbackTextWidth;
@@ -262,26 +259,25 @@ function RecordRow({
           if (nextWidth !== textFrameWidth) setTextFrameWidth(nextWidth);
         }}
       >
-      <View style={styles.rowMeta}>
-        <Text style={styles.rowKind}>{record.kind === "thought" ? "단상" : record.kind === "editing" ? "편집" : "편지"}</Text>
-        <Text style={styles.rowDate}>{relativeDate(record.updatedAt)}</Text>
-      </View>
-      {showsTitle ? (
-        <Text
-          style={[styles.rowTitle, { fontSize: titleSize, lineHeight: titleSize * 1.28 }]}
-          numberOfLines={view === "title" ? 1 : undefined}
-        >
-          {title}
-        </Text>
-      ) : null}
-      {view === "content" ? (
+        <View style={[styles.rowMeta, record.kind === "thought" && styles.rowMetaThought]}>
+          {record.kind !== "thought" ? (
+            <Text style={styles.rowKind}>{record.kind === "editing" ? "편집" : "편지"}</Text>
+          ) : null}
+          <Text style={styles.rowDate}>{relativeDate(record.updatedAt)}</Text>
+        </View>
+        {showsTitle ? (
+          <Text
+            style={[styles.rowTitle, { fontSize: titleSize, lineHeight: titleSize * 1.28 }]}
+          >
+            {title}
+          </Text>
+        ) : null}
         <Text
           style={[styles.rowBody, { fontSize: bodySize, lineHeight: bodySize * 1.7 }]}
           numberOfLines={bodyLines}
         >
           {preview.body || "아직 적힌 내용이 없어요."}
         </Text>
-      ) : null}
       </View>
       {record.kind === "letter" && onSend && onArchive ? (
         <View style={styles.rowLetterActions}>
@@ -679,7 +675,6 @@ export default function OnScreen() {
             return (
               <RecordRow
                 record={item}
-                view={view === "title" ? "title" : "content"}
                 onPress={() => isCurrentQuestion ? openQuestion(item.thought) : openRecord(item)}
                 onLongPress={() => { if (!isCurrentQuestion) setDeleteTarget(item); }}
                 onSend={item.kind === "letter" ? () => router.push({ pathname: "/to-send", params: { prefillArticleId: item.article.id } }) : undefined}
@@ -754,9 +749,10 @@ const styles = StyleSheet.create({
   letterAction: { height: 40, flexGrow: 0, flexShrink: 0 },
   letterActionContent: { height: 40, flexGrow: 0, flexShrink: 0, paddingHorizontal: 14, borderRadius: 20, backgroundColor: Colors.zinc100, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
   letterActionText: { ...Typography.caption, color: Colors.zinc700, fontWeight: "600" },
-  row: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.zinc100 },
-  rowContent: { paddingHorizontal: Spacing.screenPx, paddingVertical: 16, gap: 7, backgroundColor: Colors.white },
+  row: { marginHorizontal: Spacing.screenPx, marginBottom: Spacing.cardGap },
+  rowContent: { padding: 16, gap: 7, borderRadius: 16, backgroundColor: Colors.white, ...Shadows.card },
   rowMeta: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  rowMetaThought: { justifyContent: "flex-end" },
   rowKind: { ...Typography.caption, color: Colors.zinc500, fontWeight: "600" },
   rowDate: { ...Typography.caption, color: Colors.zinc500 },
   rowTextFrame: { width: "100%" },

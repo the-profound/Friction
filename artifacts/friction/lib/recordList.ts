@@ -3,7 +3,7 @@ import { parseMarkdownBlocks, tokensToPlainText } from "../utils/markdownParser"
 import { toKstCalendarDateKey } from "./kstDate";
 
 export type RecordKind = "thought" | "editing" | "letter";
-export type RecordView = "card" | "content" | "title";
+export type RecordView = "card" | "content";
 
 export type UnifiedRecord =
   | { id: string; kind: "thought"; updatedAt: string; thought: Thought }
