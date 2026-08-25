@@ -46,6 +46,61 @@ box by half the size difference (`left: (slotW - canonW)/2`) and clip with
   pops in half-enlarged. Defer with double-`requestAnimationFrame`, guarded by the
   opened ref so a fast close doesn't animate.
 
+## Source-to-Modal handoff timing
+
+Do not hide the source slot just because selection state is set: on release, the
+parent re-renders before the asynchronous native `Modal` portal has drawn. That
+creates a blank flash even when the two cards are pixel-identical.
+
+**Why:** a JavaScript `requestAnimationFrame` alone does not prove that iOS or
+Android has presented the Modal or laid out the origin-sized card.
+
+**How to apply:** keep the source visible until the overlay reports readiness.
+On native, readiness requires both `Modal.onShow` and the origin card
+container's `onLayout`; on web, the mounted card layout is the equivalent
+signal. Hide the parent source only then, and start the spring on the next
+frame. Guard callbacks with an incrementing open-session token so a late
+close/reopen event cannot launch or hide the wrong card.
+
+## Distance-aware, straight close motion
+
+The dismiss return must animate every position-bearing value on one shared,
+distance-aware clock with the same easing curve: hero progress, vertical drag
+offset, and carousel track offset. A nearby origin can return sooner, while a
+farther card gets more time without bending its spatial path.
+
+The matching entry transition also uses a distance-aware timing clock and the
+same strong ease-out curve, so both directions start decisively and settle
+smoothly instead of pairing a slow spring with a very fast return.
+
+**Why:** mismatched durations or easing bend the summed transform through
+multiple segments. A fixed, very short duration makes long source-to-overlay
+returns look unnaturally fast. A carousel can also sit between snap points
+while its logical active index still equals the source index, so conditionally
+omitting its offset creates a final sideways jump.
+
+**How to apply:** snapshot progress, vertical drag, and carousel offset at
+close; calculate duration from the card's remaining translation, scale, and
+carousel distance; then use that exact one duration and easing for all three
+values. Always return the carousel track to the source slot, even when its
+logical index is already unchanged.
+
+## Vertical dismiss composition
+
+On a downward dismiss gesture, move only the cover-card layer. The information
+bar and reading CTA stay at their layout positions and fade out as the card
+starts moving, so the falling card never overlaps them.
+
+**Why:** sharing the drag `translateY` with details makes the whole overlay
+look like one panel and forces text/buttons to travel through the card's path.
+
+**How to apply:** use one drag value only in the card transform and blend the
+detail opacity with a short dismiss fade. Restore that fade whenever a
+sub-threshold drag is cancelled. Map raw drag distance through a monotonic
+rubber-band curve before assigning it to the card, but keep dismissal
+thresholds on raw distance/velocity so resistance does not make the gesture
+unreliable.
+
 ## Content parity
 
 Any field the overlay shows must also be shown by the source card, or the card

@@ -25,6 +25,7 @@ import { normalizeSpaceRouteId } from "@/lib/spaceBasicSettingsAccess";
 import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
+import CanonicalCardSlot from "@/components/ArticleCardItem/CanonicalCardSlot";
 import CardSelectOverlay, { type OriginLayout, type ChainArticleMeta } from "@/components/CardSelectOverlay/CardSelectOverlay";
 import DotIndicator from "@/components/DotIndicator/DotIndicator";
 import { useUser } from "@/contexts/UserContext";
@@ -92,40 +93,6 @@ const SC_CARD_H = SC_CARD_W * (8 / 5);
 // canonical size and shrink it with a pure transform. The carousel card is then
 // literally the same pixels as the overlay card at progress=0, so it grows in
 // place with no swap and no flash on the way back down.
-const SC_CANON_W = Sizing.cardSlotW;
-const SC_CANON_H = Sizing.cardH;
-const SC_SCALE = SC_CARD_W / SC_CANON_W;
-
-/**
- * Renders `children` (sized to the canonical card box) visually scaled down to
- * fill exactly SC_CARD_W x SC_CARD_H. RN's `scale` is centre-origin, so the
- * inner box is offset by half the size difference to keep both centres aligned;
- * the outer box clips anything outside the scaled result.
- */
-function ScaledCardSlot({ children }: { children: React.ReactNode }) {
-  return (
-    <View style={scaledSlotStyles.outer}>
-      <View style={scaledSlotStyles.inner}>{children}</View>
-    </View>
-  );
-}
-
-const scaledSlotStyles = StyleSheet.create({
-  outer: {
-    width: SC_CARD_W,
-    height: SC_CARD_H,
-    overflow: "hidden",
-  },
-  inner: {
-    position: "absolute",
-    left: (SC_CARD_W - SC_CANON_W) / 2,
-    top: (SC_CARD_H - SC_CANON_H) / 2,
-    width: SC_CANON_W,
-    height: SC_CANON_H,
-    transform: [{ scale: SC_SCALE }],
-  },
-});
-
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function roundStatusColor(status: string): string {
@@ -169,6 +136,7 @@ function SpaceCarousel({
   letters,
   roundStatus,
   isAnonymous,
+  spaceName,
   onCardPress,
   hiddenCardId,
   openingSlot,
@@ -178,6 +146,7 @@ function SpaceCarousel({
   letters: SpaceLetter[];
   roundStatus: string;
   isAnonymous: boolean;
+  spaceName: string;
   onCardPress: (letter: SpaceLetter, layout: OriginLayout) => void;
   hiddenCardId?: string | null;
   openingSlot?: React.ReactNode;
@@ -299,16 +268,17 @@ function SpaceCarousel({
           letter.id === hiddenCardId && spaceCarouselStyles.cardSlotHidden,
         ]}
       >
-        <ScaledCardSlot>
+        <CanonicalCardSlot width={SC_CARD_W} height={SC_CARD_H}>
           <ArticleCardItem
             title={title ?? "제목 없음"}
             authorName={authorName}
+            collectionName={spaceName}
             cover={((letter as any).articleCover ?? null) as ArticleCover | null}
             isRead={shouldDimSpaceRoundLetter(roundStatus, letter.isRead)}
             isActive={true}
             onPress={handlePress}
           />
-        </ScaledCardSlot>
+        </CanonicalCardSlot>
       </View>
     );
   });
@@ -609,6 +579,7 @@ function RoundSection({
   spaceStatus,
   isOperator,
   isAnonymous,
+  spaceName,
   now,
   onPressLetter,
   onPressWriteOpening,
@@ -622,6 +593,7 @@ function RoundSection({
   spaceStatus: string;
   isOperator: boolean;
   isAnonymous: boolean;
+  spaceName: string;
   now: Date;
   onPressLetter: (letter: SpaceLetter, layout: OriginLayout) => void;
   onPressWriteOpening: (round: SpaceRound) => void;
@@ -642,6 +614,7 @@ function RoundSection({
     },
   });
   const roundSlots = (slotsQuery.data ?? []) as SpaceRoundSlotWithUser[];
+  const upcomingOpeningSlotRef = useRef<View | null>(null);
 
   const openingLetter = letters.find((l) => l.letterType === "OPENING") ?? null;
   const hasOpeningLetter = openingLetter !== null;
@@ -726,19 +699,45 @@ function RoundSection({
             displayName,
             authorNickname,
           );
+           const handleUpcomingOpeningPress = () => {
+             const slot = upcomingOpeningSlotRef.current;
+             if (slot) {
+               slot.measureInWindow((x, y, width, height) => {
+                 onPressLetter(letter, { x, y, width, height });
+               });
+               return;
+             }
+             onPressLetter(letter, {
+               x: 0,
+               y: 0,
+               width: SC_CARD_W,
+               height: SC_CARD_H,
+             });
+           };
           return (
-            <ScaledCardSlot>
-              <ArticleCardItem
-                title={title ?? "제목 없음"}
-                authorName={authorName}
-                cover={((letter as any).articleCover ?? null) as ArticleCover | null}
-                isRead={letter.isRead}
-                isActive={true}
-                onPress={() =>
-                  onPressLetter(letter, { x: 0, y: 0, width: SC_CARD_W, height: SC_CARD_H })
-                }
-              />
-            </ScaledCardSlot>
+            <View
+              style={
+                letter.id === hiddenCardId
+                  ? spaceCarouselStyles.cardSlotHidden
+                  : undefined
+              }
+            >
+              <CanonicalCardSlot
+                ref={upcomingOpeningSlotRef}
+                width={SC_CARD_W}
+                height={SC_CARD_H}
+              >
+                <ArticleCardItem
+                  title={title ?? "제목 없음"}
+                  authorName={authorName}
+                  collectionName={spaceName}
+                  cover={((letter as any).articleCover ?? null) as ArticleCover | null}
+                  isRead={letter.isRead}
+                  isActive={true}
+                  onPress={handleUpcomingOpeningPress}
+                />
+              </CanonicalCardSlot>
+            </View>
           );
         })()
       : openingPlaceholderNode;
@@ -776,6 +775,7 @@ function RoundSection({
         letters={letters}
         roundStatus={roundStatus}
         isAnonymous={isAnonymous}
+        spaceName={spaceName}
         onCardPress={onPressLetter}
         hiddenCardId={hiddenCardId}
         openingSlot={openingSlotNode}
@@ -1031,6 +1031,7 @@ export default function SpaceDetailScreen() {
   const [tapLetter, setTapLetter] = useState<SpaceLetter | null>(null);
   const [tapLetterOrigin, setTapLetterOrigin] = useState<OriginLayout | null>(null);
   const [tapArticle, setTapArticle] = useState<Article | null>(null);
+  const [isTappedSourceHidden, setIsTappedSourceHidden] = useState(false);
 
   useEffect(() => {
     if (showInviteGuide === "1") {
@@ -1125,6 +1126,7 @@ export default function SpaceDetailScreen() {
 
   const handlePressLetter = useCallback(
     (letter: SpaceLetter, layout: OriginLayout) => {
+      setIsTappedSourceHidden(false);
       setTapLetter(letter);
       setTapLetterOrigin(layout);
       // The carousel response already has the title and cover visible to the
@@ -1150,6 +1152,7 @@ export default function SpaceDetailScreen() {
   );
 
   const handleOverlayClose = useCallback(() => {
+    setIsTappedSourceHidden(false);
     setTapLetter(null);
     setTapLetterOrigin(null);
     setTapArticle(null);
@@ -1198,6 +1201,12 @@ export default function SpaceDetailScreen() {
       displayName,
       authorNickname,
     );
+    const tappedRound = rounds.find(
+      (round) => round.id === tapLetter.spaceRoundId,
+    );
+    const tappedRoundStatus = tappedRound
+      ? getSpaceRoundPresentationStatus(tappedRound, now)
+      : "ACTIVE";
     // Keep the entry presentation pinned to the exact carousel cover. The
     // fetched article is still used for its sourceArticleId above, but it must
     // not replace the card during the opening animation.
@@ -1209,11 +1218,13 @@ export default function SpaceDetailScreen() {
     } as Article);
     metaList.push({
       authorName,
+      collectionName: space?.name ?? null,
       date: tapLetter.createdAt,
+      isRead: shouldDimSpaceRoundLetter(tappedRoundStatus, tapLetter.isRead),
     });
 
     return { chainArticles: artList, chainMetas: metaList, chainInitialIndex: initIdx };
-  }, [tapLetter, tapArticle, ancestorChain, isAnonymousSpace]);
+  }, [tapLetter, tapArticle, ancestorChain, isAnonymousSpace, now, rounds, space?.name]);
 
   const handleOverlayRead = useCallback(
     (chainIdx: number) => {
@@ -1545,10 +1556,13 @@ export default function SpaceDetailScreen() {
                       spaceStatus={space.status}
                       isOperator={isOperator}
                       isAnonymous={space.isAnonymous}
+                      spaceName={space.name}
                       now={now}
                       onPressLetter={handlePressLetter}
                       onPressWriteOpening={handlePressWriteOpening}
-                      hiddenCardId={tapLetter?.id ?? null}
+                      hiddenCardId={
+                        isTappedSourceHidden ? tapLetter?.id ?? null : null
+                      }
                       spaceId={id}
                       userId={userId}
                       onScheduleSlot={handleScheduleSlot}
@@ -1695,6 +1709,7 @@ export default function SpaceDetailScreen() {
           originLayout={tapLetterOrigin}
           onClose={handleOverlayClose}
           onRead={handleOverlayRead}
+          onReady={() => setIsTappedSourceHidden(true)}
         />
       )}
     </View>

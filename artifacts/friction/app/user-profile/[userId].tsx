@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ScalePressable from "@/components/shared/ScalePressable";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
+import CanonicalCardSlot from "@/components/ArticleCardItem/CanonicalCardSlot";
 import CardSelectOverlay, { type ChainArticleMeta } from "@/components/CardSelectOverlay/CardSelectOverlay";
 import { useAncestorChain } from "@/hooks/useAncestorChain";
 import { Colors, Spacing, Typography, Sizing } from "@/constants/tokens";
@@ -75,6 +76,7 @@ export default function UserProfileScreen() {
 
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
   const [selectedOrigin, setSelectedOrigin] = useState<OriginLayout | null>(null);
+  const [isSelectedSourceHidden, setIsSelectedSourceHidden] = useState(false);
   const [selectedCollectionName, setSelectedCollectionName] = useState<string | null>(null);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
   const [selectedDateOverride, setSelectedDateOverride] = useState<string | null>(null);
@@ -244,12 +246,13 @@ export default function UserProfileScreen() {
     (windowWidth - GRID_PAD * 2 - GRID_GAP * (GRID_COLS - 1)) / GRID_COLS,
   );
 
-  const cellHeight = Math.floor(cellWidth * Sizing.cardRatio);
+  const cellHeight = cellWidth * Sizing.cardRatio;
 
   const cardSlotRefs = useRef<Map<string, View | null>>(new Map());
 
   const handleLetterPress = useCallback(
     (article: Article) => {
+      setIsSelectedSourceHidden(false);
       const rec = sendRecordByArticleId[article.id];
       const colName = rec?.name ?? null;
       const colId = rec?.id ?? null;
@@ -275,6 +278,7 @@ export default function UserProfileScreen() {
   );
 
   const handleOverlayClose = useCallback(() => {
+    setIsSelectedSourceHidden(false);
     setSelectedArticle(null);
     setSelectedOrigin(null);
     setSelectedCollectionName(null);
@@ -404,7 +408,8 @@ export default function UserProfileScreen() {
         return (
           <View style={styles.gridRow}>
             {item.items.map((article) => {
-              const isHidden = selectedArticle?.id === article.id;
+              const isHidden =
+                isSelectedSourceHidden && selectedArticle?.id === article.id;
               const itemCollectionName =
                 collectionNameByArticleId[article.id] ?? null;
               return (
@@ -420,17 +425,18 @@ export default function UserProfileScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={article.title || "제목 없음"}
                 >
-                  <ArticleCardItem
-                    title={article.title || "제목 없음"}
-                    authorName={
-                      article.authorNickname ?? user?.nickname ?? undefined
-                    }
-                    collectionName={itemCollectionName}
-                    cover={article.cover}
-                    cardWidth={cellWidth}
-                    isActive
-                    onPress={() => handleLetterPress(article)}
-                  />
+                  <CanonicalCardSlot width={cellWidth} height={cellHeight}>
+                    <ArticleCardItem
+                      title={article.title || "제목 없음"}
+                      authorName={
+                        article.authorNickname ?? user?.nickname ?? undefined
+                      }
+                      collectionName={itemCollectionName}
+                      cover={article.cover}
+                      isActive
+                      onPress={() => handleLetterPress(article)}
+                    />
+                  </CanonicalCardSlot>
                 </View>
               );
             })}
@@ -487,8 +493,10 @@ export default function UserProfileScreen() {
     },
     [
       selectedArticle?.id,
+      isSelectedSourceHidden,
       collectionNameByArticleId,
       cellWidth,
+      cellHeight,
       user?.nickname,
       handleLetterPress,
       handleSpacePress,
@@ -649,6 +657,7 @@ export default function UserProfileScreen() {
         originLayout={selectedOrigin}
         onClose={handleOverlayClose}
         onRead={handleOverlayRead}
+        onReady={() => setIsSelectedSourceHidden(true)}
         onNavigateToCollection={handleNavigateToCollection}
         onNavigateToAuthor={(id) => router.push(`/user-profile/${id}` as never)}
       />

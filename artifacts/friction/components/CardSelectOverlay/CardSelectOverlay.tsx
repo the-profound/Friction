@@ -31,6 +31,7 @@ import {
   EnvelopeFlapClosed,
   EnvelopeFlapOpen,
 } from "@/components/EnvelopeCard/EnvelopeLayers";
+import { calculateCardReturnDistance } from "./returnDistance";
 import ScalePressable from "@/components/shared/ScalePressable";
 import type { Article } from "@workspace/api-client-react";
 
@@ -44,6 +45,31 @@ const SLOT_W = CARD_W + OVERLAY_GAP;
 
 const CAROUSEL_SNAP_THRESHOLD = CARD_W * 0.28;
 const CAROUSEL_FLING_VX = 0.45;
+const OPEN_MIN_DURATION = 150;
+const OPEN_MAX_DURATION = 280;
+const OPEN_DURATION_PER_PIXEL = 0.2;
+const CLOSE_MIN_DURATION = 150;
+const CLOSE_MAX_DURATION = 320;
+const CLOSE_DURATION_PER_PIXEL = 0.25;
+const TRANSITION_EASING = Easing.out(Easing.poly(4));
+const DISMISS_FADE_DURATION = 100;
+const DISMISS_RESISTANCE_DISTANCE = 180;
+
+const getOpenDuration = (distance: number) =>
+  Math.round(
+    Math.min(
+      OPEN_MAX_DURATION,
+      Math.max(OPEN_MIN_DURATION, OPEN_MIN_DURATION + distance * OPEN_DURATION_PER_PIXEL),
+    ),
+  );
+
+const getCloseDuration = (distance: number) =>
+  Math.round(
+    Math.min(
+      CLOSE_MAX_DURATION,
+      Math.max(CLOSE_MIN_DURATION, CLOSE_MIN_DURATION + distance * CLOSE_DURATION_PER_PIXEL),
+    ),
+  );
 
 export interface OriginLayout {
   x: number;
@@ -58,6 +84,8 @@ export interface ChainArticleMeta {
   collectionName?: string | null;
   collectionId?: string | null;
   date?: string | Date | null;
+  /** Mirrors the dimmed state of the card that opened the overlay. */
+  isRead?: boolean;
 }
 
 /** @deprecated Use ChainArticleMeta */
@@ -87,6 +115,12 @@ interface CardSelectOverlayProps {
   originLayout: OriginLayout | null;
   onClose: () => void;
   onRead: (index: number) => void;
+  /**
+   * Called after the origin-sized overlay card has had one frame to mount.
+   * Parents use this to hide the source card without leaving a blank handoff
+   * frame between the source tree and the Modal portal.
+   */
+  onReady?: () => void;
   /** Optional card-tap action for flows that want to mirror the "읽기" CTA. */
   onCardTap?: (index: number) => void;
   onNavigateToCollection?: (id: string) => void;
@@ -106,6 +140,7 @@ export default function CardSelectOverlay({
   originLayout,
   onClose,
   onRead,
+  onReady,
   onCardTap,
   onNavigateToCollection,
   onNavigateToAuthor,
@@ -197,6 +232,7 @@ export default function CardSelectOverlay({
   const swipeY = useRef(new Animated.Value(0)).current;
   const carouselX = useRef(new Animated.Value(0)).current;
   const detailsFade = useRef(new Animated.Value(1)).current;
+  const verticalDismissActiveRef = useRef(false);
 
   // ── Envelope animation values ─────────────────────────────────────────────
   const [envelopePhase, setEnvelopePhase] = useState<EnvelopePhase>("sealed");
@@ -260,10 +296,17 @@ export default function CardSelectOverlay({
   // ── Carousel state ────────────────────────────────────────────────────────
   const [rendered, setRendered] = useState(false);
   const closingRef = useRef(false);
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
   const [activeIndex, setActiveIndex] = useState(0);
   const activeIndexRef = useRef(0);
   const countRef = useRef(count);
   const gestureDirRef = useRef<null | "h" | "v">(null);
+  const openedRef = useRef(false);
+  const openSessionRef = useRef(0);
+  const modalShownSessionRef = useRef(0);
+  const cardLayoutSessionRef = useRef(0);
+  const readyNotifiedSessionRef = useRef(0);
 
   countRef.current = displayArticles.length;
 
@@ -300,7 +343,53 @@ export default function CardSelectOverlay({
   );
 
   // ── Open / close lifecycle ────────────────────────────────────────────────
-  const openedRef = useRef(false);
+
+  const startOpenSpringWhenReady = useCallback(() => {
+    const session = openSessionRef.current;
+    if (!openedRef.current) return;
+    // React Native's Modal is presented asynchronously. On web the mounted
+    // card's layout is sufficient; native needs both the portal show event and
+    // the card's actual layout before it can replace the source slot.
+    if (
+      (Platform.OS !== "web" && modalShownSessionRef.current !== session) ||
+      cardLayoutSessionRef.current !== session ||
+      readyNotifiedSessionRef.current === session
+    ) {
+      return;
+    }
+
+    readyNotifiedSessionRef.current = session;
+    onReadyRef.current?.();
+
+    requestAnimationFrame(() => {
+      if (
+        !openedRef.current ||
+        openSessionRef.current !== session ||
+        readyNotifiedSessionRef.current !== session
+      ) {
+        return;
+      }
+      Animated.timing(progress, {
+        toValue: 1,
+        duration: getOpenDuration(
+          Math.hypot(startTx, startTy) +
+            Math.abs(finalScale - originScale) * CARD_W,
+        ),
+        easing: TRANSITION_EASING,
+        useNativeDriver: false,
+      }).start();
+    });
+  }, [progress]);
+
+  const handleModalShow = useCallback(() => {
+    modalShownSessionRef.current = openSessionRef.current;
+    startOpenSpringWhenReady();
+  }, [startOpenSpringWhenReady]);
+
+  const handleOriginCardLayout = useCallback(() => {
+    cardLayoutSessionRef.current = openSessionRef.current;
+    startOpenSpringWhenReady();
+  }, [startOpenSpringWhenReady]);
 
   const resetEnvelopeAnim = useCallback(() => {
     const phase: EnvelopePhase = envelopeInfo ? "sealed" : "revealed";
@@ -317,7 +406,12 @@ export default function CardSelectOverlay({
 
   useEffect(() => {
     if (isOpen) {
+      openSessionRef.current += 1;
+      const session = openSessionRef.current;
       openedRef.current = true;
+      modalShownSessionRef.current = Platform.OS === "web" ? session : 0;
+      cardLayoutSessionRef.current = 0;
+      readyNotifiedSessionRef.current = 0;
       activeIndexRef.current = initialIndex;
       carouselX.setValue(-initialIndex * SLOT_W);
       detailsFade.setValue(1);
@@ -327,17 +421,6 @@ export default function CardSelectOverlay({
       swipeY.setValue(0);
       progress.setValue(0);
       resetEnvelopeAnim();
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() => {
-          if (!openedRef.current) return;
-          Animated.spring(progress, {
-            toValue: 1,
-            tension: 70,
-            friction: 12,
-            useNativeDriver: false,
-          }).start();
-        }),
-      );
     } else {
       openedRef.current = false;
       if (rendered && !closingRef.current) {
@@ -370,36 +453,50 @@ export default function CardSelectOverlay({
     closingRef.current = true;
     openedRef.current = false;
     const initIdx = prevInitialIndexRef.current;
-
-    const runCloseParallel = () => {
-      Animated.parallel([
-        Animated.timing(progress, { toValue: 0, duration: 240, useNativeDriver: false }),
-        Animated.timing(swipeY, { toValue: 0, duration: 200, useNativeDriver: false }),
-      ]).start(() => {
-        setRendered(false);
-        closingRef.current = false;
-        onClose();
-      });
+    const finishClose = () => {
+      setRendered(false);
+      closingRef.current = false;
+      onClose();
     };
 
-    if (activeIndexRef.current !== initIdx) {
-      Animated.parallel([
-        Animated.timing(carouselX, {
-          toValue: -initIdx * SLOT_W,
-          duration: 180,
-          useNativeDriver: false,
-        }),
-        Animated.timing(progress, { toValue: 0, duration: 240, useNativeDriver: false }),
-        Animated.timing(swipeY, { toValue: 0, duration: 200, useNativeDriver: false }),
-      ]).start(() => {
-        activeIndexRef.current = initIdx;
-        setRendered(false);
-        closingRef.current = false;
-        onClose();
+    // Snapshot all transform values before calculating one shared duration.
+    // This keeps the return path straight while allowing a farther source slot
+    // to take longer than one that is already nearby.
+    progress.stopAnimation((currentProgress) => {
+      swipeY.stopAnimation((currentSwipeY) => {
+        carouselX.stopAnimation((currentCarouselX) => {
+          const closeDuration = getCloseDuration(calculateCardReturnDistance({
+            startTx,
+            startTy,
+            originScale,
+            finalScale,
+            cardWidth: CARD_W,
+            progress: currentProgress,
+            swipeY: currentSwipeY,
+            carouselX: currentCarouselX,
+            carouselTargetX: -initIdx * SLOT_W,
+          }));
+          const closeTiming = (value: Animated.Value, toValue: number) =>
+            Animated.timing(value, {
+              toValue,
+              duration: closeDuration,
+              easing: TRANSITION_EASING,
+              useNativeDriver: false,
+            });
+
+          // Always include the track, even when the active index already equals
+          // the initial index: it can sit between snap points after a drag.
+          Animated.parallel([
+            closeTiming(carouselX, -initIdx * SLOT_W),
+            closeTiming(progress, 0),
+            closeTiming(swipeY, 0),
+          ]).start(() => {
+            activeIndexRef.current = initIdx;
+            finishClose();
+          });
+        });
       });
-    } else {
-      runCloseParallel();
-    }
+    });
   };
   const requestClose = useCallback(() => runCloseRef.current(), []);
 
@@ -457,6 +554,35 @@ export default function CardSelectOverlay({
   }, [envelopeOpening, envelopeInfo, flipProgress, flapOpenProgress, revealProgress, letterOpacity, letterScale]);
 
   // ── Pan responder (horizontal carousel + vertical dismiss) ────────────────
+  const beginVerticalDismiss = useCallback(() => {
+    if (verticalDismissActiveRef.current) return;
+    verticalDismissActiveRef.current = true;
+    Animated.timing(detailsFade, {
+      toValue: 0,
+      duration: DISMISS_FADE_DURATION,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: false,
+    }).start();
+  }, [detailsFade]);
+
+  const restoreDetailsAfterDismiss = useCallback(() => {
+    verticalDismissActiveRef.current = false;
+    Animated.timing(detailsFade, {
+      toValue: 1,
+      duration: 120,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: false,
+    }).start();
+  }, [detailsFade]);
+
+  const applyDismissResistance = (distance: number) => {
+    const positiveDistance = Math.max(0, distance);
+    return (
+      (positiveDistance * DISMISS_RESISTANCE_DISTANCE) /
+      (DISMISS_RESISTANCE_DISTANCE + positiveDistance)
+    );
+  };
+
   const cardPanResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
@@ -465,7 +591,10 @@ export default function CardSelectOverlay({
         if (g.dy > 8 && Math.abs(g.dy) > Math.abs(g.dx)) return true;
         return false;
       },
-      onPanResponderGrant: () => { gestureDirRef.current = null; },
+      onPanResponderGrant: () => {
+        gestureDirRef.current = null;
+        verticalDismissActiveRef.current = false;
+      },
       onPanResponderMove: (_, g) => {
         if (!gestureDirRef.current) {
           if (countRef.current > 1 && Math.abs(g.dx) > Math.abs(g.dy) && Math.abs(g.dx) > 4) {
@@ -473,6 +602,7 @@ export default function CardSelectOverlay({
             Animated.timing(detailsFade, { toValue: 0, duration: 120, useNativeDriver: false }).start();
           } else if (Math.abs(g.dy) > 4) {
             gestureDirRef.current = "v";
+            beginVerticalDismiss();
           }
         }
         if (gestureDirRef.current === "h") {
@@ -483,7 +613,7 @@ export default function CardSelectOverlay({
           const rubber = raw > maxX ? maxX + (raw - maxX) * 0.3 : raw < minX ? minX + (raw - minX) * 0.3 : raw;
           carouselX.setValue(rubber);
         } else if (gestureDirRef.current === "v") {
-          if (g.dy > 0) swipeY.setValue(g.dy);
+          if (g.dy > 0) swipeY.setValue(applyDismissResistance(g.dy));
         }
       },
       onPanResponderRelease: (_, g) => {
@@ -504,7 +634,15 @@ export default function CardSelectOverlay({
           }, 80);
         } else if (gestureDirRef.current === "v") {
           if (g.dy > 80 || g.vy > 0.8) runCloseRef.current();
-          else Animated.spring(swipeY, { toValue: 0, useNativeDriver: false, tension: 200, friction: 20 }).start();
+          else {
+            Animated.spring(swipeY, {
+              toValue: 0,
+              useNativeDriver: false,
+              tension: 200,
+              friction: 20,
+            }).start();
+            restoreDetailsAfterDismiss();
+          }
         } else {
           Animated.spring(swipeY, { toValue: 0, useNativeDriver: false, tension: 200, friction: 20 }).start();
         }
@@ -512,8 +650,8 @@ export default function CardSelectOverlay({
       },
       onPanResponderTerminate: () => {
         Animated.spring(swipeY, { toValue: 0, useNativeDriver: false, tension: 200, friction: 20 }).start();
+        restoreDetailsAfterDismiss();
         Animated.spring(carouselX, { toValue: -activeIndexRef.current * SLOT_W, useNativeDriver: false, tension: 100, friction: 20 }).start();
-        Animated.timing(detailsFade, { toValue: 1, duration: 120, useNativeDriver: false }).start();
         gestureDirRef.current = null;
       },
     }),
@@ -524,13 +662,30 @@ export default function CardSelectOverlay({
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_, g) => g.dy > 8 && Math.abs(g.dy) > Math.abs(g.dx),
-      onPanResponderMove: (_, g) => { if (g.dy > 0) swipeY.setValue(g.dy); },
+      onPanResponderGrant: () => {
+        verticalDismissActiveRef.current = false;
+      },
+      onPanResponderMove: (_, g) => {
+        if (g.dy > 0) {
+          beginVerticalDismiss();
+          swipeY.setValue(applyDismissResistance(g.dy));
+        }
+      },
       onPanResponderRelease: (_, g) => {
         if (g.dy > 80 || g.vy > 0.8) runCloseRef.current();
-        else Animated.spring(swipeY, { toValue: 0, useNativeDriver: false, tension: 200, friction: 20 }).start();
+        else {
+          Animated.spring(swipeY, {
+            toValue: 0,
+            useNativeDriver: false,
+            tension: 200,
+            friction: 20,
+          }).start();
+          restoreDetailsAfterDismiss();
+        }
       },
       onPanResponderTerminate: () => {
         Animated.spring(swipeY, { toValue: 0, useNativeDriver: false, tension: 200, friction: 20 }).start();
+        restoreDetailsAfterDismiss();
       },
     }),
   ).current;
@@ -697,7 +852,7 @@ export default function CardSelectOverlay({
                 authorName={envMeta.authorName ?? undefined}
                 collectionName={envMeta.collectionName ?? undefined}
                 cover={envArticle.cover}
-                isRead={false}
+                isRead={envMeta.isRead ?? false}
                 isActive
                 onPress={handleCardTap}
               />
@@ -795,7 +950,14 @@ export default function CardSelectOverlay({
   };
 
   return (
-    <Modal transparent visible={rendered} animationType="none" statusBarTranslucent onRequestClose={requestClose}>
+    <Modal
+      transparent
+      visible={rendered}
+      animationType="none"
+      statusBarTranslucent
+      onRequestClose={requestClose}
+      onShow={handleModalShow}
+    >
       {/* Dark backdrop */}
       <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, { opacity: backdropOpacity }]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={requestClose} />
@@ -810,6 +972,7 @@ export default function CardSelectOverlay({
             transform: [{ translateX: cardTranslateX }, { translateY: cardTranslateY }, { scale }],
           },
         ]}
+        onLayout={handleOriginCardLayout}
         {...cardPanResponder.panHandlers}
       >
         {displayArticles.length > 1 ? (
@@ -832,7 +995,7 @@ export default function CardSelectOverlay({
                           authorName={meta.authorName ?? undefined}
                           collectionName={meta.collectionName ?? undefined}
                           cover={art.cover}
-                          isRead={false}
+                          isRead={meta.isRead ?? false}
                           isActive
                           onPress={handleCardTap}
                         />,
@@ -855,7 +1018,7 @@ export default function CardSelectOverlay({
                 authorName={displayMetas[0]?.authorName ?? undefined}
                 collectionName={displayMetas[0]?.collectionName ?? undefined}
                 cover={displayArticles[0].cover}
-                isRead={false}
+                isRead={displayMetas[0]?.isRead ?? false}
                 isActive
                 onPress={handleCardTap}
               />,
@@ -868,7 +1031,7 @@ export default function CardSelectOverlay({
 
       {/* Details (info bar) — hidden while envelope is sealed */}
       <Animated.View
-        style={[styles.detailsContainer, { top: detailsTop, left: infoBoxLeft, right: infoBoxLeft, opacity: isEnvelopeSealed ? 0 : finalDetailsOpacity, transform: [{ translateY: swipeY }] }]}
+        style={[styles.detailsContainer, { top: detailsTop, left: infoBoxLeft, right: infoBoxLeft, opacity: isEnvelopeSealed ? 0 : finalDetailsOpacity }]}
         pointerEvents={rendered && !isEnvelopeSealed ? "auto" : "none"}
         {...detailsPanResponder.panHandlers}
       >
@@ -935,7 +1098,7 @@ export default function CardSelectOverlay({
 
       {/* CTA button — "개봉하기" when sealed, "읽기" when revealed */}
       <Animated.View
-        style={[styles.ctaWrapper, { bottom: bottomInset + 16, left: infoBoxLeft, right: infoBoxLeft, opacity: finalDetailsOpacity, transform: [{ translateY: swipeY }] }]}
+        style={[styles.ctaWrapper, { bottom: bottomInset + 16, left: infoBoxLeft, right: infoBoxLeft, opacity: finalDetailsOpacity }]}
         pointerEvents={rendered ? "auto" : "none"}
       >
         {isEnvelopeSealed ? (

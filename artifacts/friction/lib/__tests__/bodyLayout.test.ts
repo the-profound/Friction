@@ -6,6 +6,7 @@ import {
   getPageTextContentHeight,
   resolvePageWidth,
 } from "../pageGeometry";
+import { calculateCardReturnDistance } from "../../components/CardSelectOverlay/returnDistance";
 
 describe("shared letter page geometry", () => {
   it("uses the full logical page C and an integer 0.88C text column", () => {
@@ -173,6 +174,145 @@ describe("thought card typography regression guards", () => {
       "readerFontSize(ReaderTokens.typeScale.titleCqi, textFrameWidth)",
     );
     expect(articleCard).toContain("numberOfLines={4}");
+  });
+});
+
+describe("selectable article card projection contract", () => {
+  const appRoot = join(__dirname, "../..");
+  const read = (relativePath: string) =>
+    readFileSync(join(appRoot, relativePath), "utf8");
+
+  it("projects the canonical card into small slots with an outer transform", () => {
+    const slot = read("components/ArticleCardItem/CanonicalCardSlot.tsx");
+
+    expect(slot).toContain("width: Sizing.cardSlotW");
+    expect(slot).toContain("height: canonicalHeight");
+    expect(slot).toContain("transform: [{ scale }]");
+    expect(slot).toContain('overflow: "hidden"');
+  });
+
+  it("keeps selectable three-column and space cards on the canonical layout path", () => {
+    const myTab = read("app/(tabs)/to.tsx");
+    const profile = read("app/user-profile/[userId].tsx");
+    const space = read("app/of-space-detail.tsx");
+
+    expect(myTab).toContain("CanonicalCardSlot width={cellWidth} height={cellHeight}");
+    expect(profile).toContain("CanonicalCardSlot width={cellWidth} height={cellHeight}");
+    expect(myTab).not.toContain("cardWidth={cellWidth}");
+    expect(profile).not.toContain("cardWidth={cellWidth}");
+    expect(space).toContain("CanonicalCardSlot width={SC_CARD_W} height={SC_CARD_H}");
+    expect(space).not.toContain("function ScaledCardSlot");
+    expect(space).toContain("ref={upcomingOpeningSlotRef}");
+    expect(space).toContain("slot.measureInWindow((x, y, width, height) =>");
+    expect(space).toContain("letter.id === hiddenCardId");
+  });
+
+  it("preserves the originating card's dimmed state in the selection overlay", () => {
+    const overlay = read("components/CardSelectOverlay/CardSelectOverlay.tsx");
+
+    expect(overlay).toContain("isRead={meta.isRead ?? false}");
+    expect(overlay).toContain("isRead={displayMetas[0]?.isRead ?? false}");
+  });
+
+  it("waits for the overlay's origin card before hiding its source slot", () => {
+    const overlay = read("components/CardSelectOverlay/CardSelectOverlay.tsx");
+    const inbox = read("app/(tabs)/index.tsx");
+    const myTab = read("app/(tabs)/to.tsx");
+    const profile = read("app/user-profile/[userId].tsx");
+    const space = read("app/of-space-detail.tsx");
+
+    expect(overlay).toContain("onShow={handleModalShow}");
+    expect(overlay).toContain("onLayout={handleOriginCardLayout}");
+    expect(overlay).toContain("cardLayoutSessionRef.current !== session");
+    expect(overlay).toContain("modalShownSessionRef.current !== session");
+    expect(overlay).toContain("openSessionRef.current !== session");
+    expect(inbox).toContain("onReady={() => setIsTappedSourceHidden(true)}");
+    expect(myTab).toContain("onReady={() => setIsSelectedSourceHidden(true)}");
+    expect(profile).toContain("onReady={() => setIsSelectedSourceHidden(true)}");
+    expect(space).toContain("onReady={() => setIsTappedSourceHidden(true)}");
+  });
+
+  it("returns the overlay to its source with one shared distance-based motion", () => {
+    const overlay = read("components/CardSelectOverlay/CardSelectOverlay.tsx");
+    const closeBlock = overlay.slice(
+      overlay.indexOf("// ── Close animation"),
+      overlay.indexOf("// ── Envelope opening animation"),
+    );
+
+    expect(overlay).toContain("const OPEN_MIN_DURATION = 150;");
+    expect(overlay).toContain("const OPEN_MAX_DURATION = 280;");
+    expect(overlay).toContain("const OPEN_DURATION_PER_PIXEL = 0.2;");
+    expect(overlay).toContain("const CLOSE_MIN_DURATION = 150;");
+    expect(overlay).toContain("const CLOSE_MAX_DURATION = 320;");
+    expect(overlay).toContain("const CLOSE_DURATION_PER_PIXEL = 0.25;");
+    expect(overlay).toContain("const TRANSITION_EASING = Easing.out(Easing.poly(4));");
+    expect(overlay).toContain("const getOpenDuration = (distance: number)");
+    expect(overlay).toContain("const getCloseDuration = (distance: number)");
+    expect(overlay).toContain("Animated.timing(progress, {");
+    expect(overlay).toContain("duration: getOpenDuration(");
+    expect(overlay).toContain("easing: TRANSITION_EASING");
+    expect(closeBlock).toContain("progress.stopAnimation((currentProgress) =>");
+    expect(closeBlock).toContain("swipeY.stopAnimation((currentSwipeY) =>");
+    expect(closeBlock).toContain("carouselX.stopAnimation((currentCarouselX) =>");
+    expect(closeBlock).toContain("calculateCardReturnDistance({");
+    expect(closeBlock).toContain("const closeDuration = getCloseDuration(calculateCardReturnDistance({");
+    expect(closeBlock).toContain("const closeTiming = (value: Animated.Value, toValue: number)");
+    expect(closeBlock).toContain("closeTiming(carouselX, -initIdx * SLOT_W)");
+    expect(closeBlock).toContain("duration: closeDuration");
+    expect(closeBlock).toContain("easing: TRANSITION_EASING");
+    expect(closeBlock).not.toContain("CLOSE_DURATION = 140");
+  });
+
+  it("measures the actual remaining vertical distance after a downward drag", () => {
+    const baseTransform = {
+      startTx: 0,
+      originScale: 1,
+      finalScale: 1,
+      cardWidth: 300,
+      progress: 1,
+      carouselX: 0,
+      carouselTargetX: 0,
+    };
+
+    expect(calculateCardReturnDistance({ ...baseTransform, startTy: 100, swipeY: 0 })).toBe(100);
+    expect(calculateCardReturnDistance({ ...baseTransform, startTy: 100, swipeY: 50 })).toBe(50);
+    expect(calculateCardReturnDistance({ ...baseTransform, startTy: -100, swipeY: 50 })).toBe(150);
+  });
+
+  it("includes unfinished scale and carousel movement in the return distance", () => {
+    expect(
+      calculateCardReturnDistance({
+        startTx: 0,
+        startTy: 0,
+        originScale: 0.5,
+        finalScale: 1,
+        cardWidth: 300,
+        progress: 1,
+        swipeY: 0,
+        carouselX: -20,
+        carouselTargetX: -80,
+      }),
+    ).toBe(210);
+  });
+
+  it("keeps details fixed and fades them while a resisted vertical dismiss drags only the card", () => {
+    const overlay = read("components/CardSelectOverlay/CardSelectOverlay.tsx");
+    const verticalGestureBlock = overlay.slice(
+      overlay.indexOf("// ── Pan responder (horizontal carousel + vertical dismiss)"),
+      overlay.indexOf("// ── Active card info"),
+    );
+    const detailsBlock = overlay.slice(
+      overlay.indexOf("{/* Details (info bar)"),
+      overlay.indexOf("{/* Full-screen fade-to-black overlay"),
+    );
+
+    expect(overlay).toContain("const DISMISS_FADE_DURATION = 100;");
+    expect(overlay).toContain("const DISMISS_RESISTANCE_DISTANCE = 180;");
+    expect(verticalGestureBlock).toContain("const beginVerticalDismiss = useCallback");
+    expect(verticalGestureBlock).toContain("toValue: 0");
+    expect(verticalGestureBlock).toContain("swipeY.setValue(applyDismissResistance(g.dy))");
+    expect(verticalGestureBlock).toContain("restoreDetailsAfterDismiss()");
+    expect(detailsBlock).not.toContain("transform: [{ translateY: swipeY }]");
   });
 });
 

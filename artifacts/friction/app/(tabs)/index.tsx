@@ -115,6 +115,7 @@ export default function InboxScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [tapItem, setTapItem] = useState<InboxItem | null>(null);
   const [tapItemOrigin, setTapItemOrigin] = useState<OriginLayout | null>(null);
+  const [isTappedSourceHidden, setIsTappedSourceHidden] = useState(false);
 
   const [sourcePromptItem, setSourcePromptItem] = useState<InboxItem | null>(null);
 
@@ -167,6 +168,7 @@ export default function InboxScreen() {
   }, []);
 
   const handleCardPress = useCallback((item: InboxItem, layout: OriginLayout) => {
+    setIsTappedSourceHidden(false);
     setTapItemOrigin(layout);
     setTapItem(item);
   }, []);
@@ -191,7 +193,13 @@ export default function InboxScreen() {
               context.measureOrigin((layout) => handleCardPress(item, layout));
             };
             return (
-              <View style={item.id === tapItem?.id ? styles.cardSlotHidden : undefined}>
+              <View
+                style={
+                  isTappedSourceHidden && item.id === tapItem?.id
+                    ? styles.cardSlotHidden
+                    : undefined
+                }
+              >
                 {isSealed ? (
                   <EnvelopeFrontCard
                     senderName={getInboxSenderName(item)}
@@ -222,10 +230,18 @@ export default function InboxScreen() {
         />
       </View>
     ),
-    [dateGroupSnap.onDateGroupLayout, dateGroupSnap.shouldIgnoreVerticalPress, handleCardPress, nickname, tapItem?.id],
+    [
+      dateGroupSnap.onDateGroupLayout,
+      dateGroupSnap.shouldIgnoreVerticalPress,
+      handleCardPress,
+      isTappedSourceHidden,
+      nickname,
+      tapItem?.id,
+    ],
   );
 
   const handleModalClose = useCallback(() => {
+    setIsTappedSourceHidden(false);
     setTapItem(null);
     setTapItemOrigin(null);
   }, []);
@@ -392,6 +408,7 @@ export default function InboxScreen() {
               collectionName: inboxItem?.collectionName ?? slot.article.collectionName ?? null,
               collectionId: inboxItem?.sourceTeamCollectionId ?? slot.article.collectionId ?? null,
               date: inboxItem?.visibleAt ?? slot.article.createdAt ?? null,
+              isRead: inboxItem?.isRead ?? false,
             }
           : {},
       );
@@ -407,6 +424,7 @@ export default function InboxScreen() {
       collectionName: tapItem.collectionName ?? tapItem.article?.collectionName ?? null,
       collectionId: tapItem.sourceTeamCollectionId ?? tapItem.article?.collectionId ?? null,
       date: tapItem.visibleAt ?? null,
+      isRead: tapItem.isRead,
     });
 
     // Descendants — recursively collected from all inbox data
@@ -421,6 +439,7 @@ export default function InboxScreen() {
         collectionName: desc.collectionName ?? desc.article.collectionName ?? null,
         collectionId: desc.sourceTeamCollectionId ?? desc.article?.collectionId ?? null,
         date: desc.visibleAt ?? desc.article.createdAt ?? null,
+        isRead: desc.isRead,
       });
     }
 
@@ -485,7 +504,7 @@ export default function InboxScreen() {
           {...LIST_PERF_PRESET}
           ref={dateGroupSnap.listRef}
           data={groups}
-          extraData={tapItem?.id ?? null}
+          extraData={`${tapItem?.id ?? ""}:${isTappedSourceHidden}`}
           keyExtractor={groupKeyExtractor}
           renderItem={renderGroupItem}
           refreshControl={
@@ -511,6 +530,7 @@ export default function InboxScreen() {
         originLayout={tapItemOrigin}
         onClose={handleModalClose}
         onRead={handleRead}
+        onReady={() => setIsTappedSourceHidden(true)}
         onCardTap={handleRead}
         onNavigateToCollection={handleNavigateToCollection}
         onNavigateToAuthor={(authorId) => router.push(`/user-profile/${authorId}` as never)}
