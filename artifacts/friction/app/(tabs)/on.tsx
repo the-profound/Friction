@@ -221,12 +221,14 @@ function RecordSourceCard({
 }
 function RecordRow({
   record,
+  isQuestion = false,
   onPress,
   onLongPress,
   onSend,
   onArchive,
 }: {
   record: UnifiedRecord;
+  isQuestion?: boolean;
   onPress: () => void;
   onLongPress: () => void;
   onSend?: () => void;
@@ -246,11 +248,11 @@ function RecordRow({
   return (
     <ScalePressable
       style={styles.row}
-      contentStyle={styles.rowContent}
+      contentStyle={[styles.rowContent, isQuestion && styles.questionRowContent]}
       onPress={onPress}
       onLongPress={onLongPress}
-      accessibilityLabel={`${record.kind === "thought" ? "단상" : record.kind === "editing" ? "편집 글" : "편지"} 열기`}
-      accessibilityHint="길게 눌러 삭제"
+      accessibilityLabel={isQuestion ? "대기 중인 질문 열기" : `${record.kind === "thought" ? "단상" : record.kind === "editing" ? "편집 글" : "편지"} 열기`}
+      accessibilityHint={isQuestion ? "누르면 이 질문에 답하는 단상을 시작합니다." : "길게 눌러 삭제"}
     >
       <View
         style={styles.rowTextFrame}
@@ -261,19 +263,19 @@ function RecordRow({
       >
         <View style={[styles.rowMeta, record.kind === "thought" && styles.rowMetaThought]}>
           {record.kind !== "thought" ? (
-            <Text style={styles.rowKind}>{record.kind === "editing" ? "편집" : "편지"}</Text>
+            <Text style={[styles.rowKind, isQuestion && styles.questionRowText]}>{record.kind === "editing" ? "편집" : "편지"}</Text>
           ) : null}
-          <Text style={styles.rowDate}>{relativeDate(record.updatedAt)}</Text>
+          <Text style={[styles.rowDate, isQuestion && styles.questionRowText]}>{relativeDate(record.updatedAt)}</Text>
         </View>
         {showsTitle ? (
           <Text
-            style={[styles.rowTitle, { fontSize: titleSize, lineHeight: titleSize * 1.28 }]}
+            style={[styles.rowTitle, isQuestion && styles.questionRowText, { fontSize: titleSize, lineHeight: titleSize * 1.28 }]}
           >
             {title}
           </Text>
         ) : null}
         <Text
-          style={[styles.rowBody, { fontSize: bodySize, lineHeight: bodySize * 1.7 }]}
+          style={[styles.rowBody, isQuestion && styles.questionRowText, { fontSize: bodySize, lineHeight: bodySize * 1.7 }]}
           numberOfLines={bodyLines}
         >
           {preview.body || "아직 적힌 내용이 없어요."}
@@ -675,6 +677,7 @@ export default function OnScreen() {
             return (
               <RecordRow
                 record={item}
+                isQuestion={isCurrentQuestion}
                 onPress={() => isCurrentQuestion ? openQuestion(item.thought) : openRecord(item)}
                 onLongPress={() => { if (!isCurrentQuestion) setDeleteTarget(item); }}
                 onSend={item.kind === "letter" ? () => router.push({ pathname: "/to-send", params: { prefillArticleId: item.article.id } }) : undefined}
@@ -751,6 +754,7 @@ const styles = StyleSheet.create({
   letterActionText: { ...Typography.caption, color: Colors.zinc700, fontWeight: "600" },
   row: { marginHorizontal: Spacing.screenPx, marginBottom: Spacing.cardGap },
   rowContent: { padding: 16, gap: 7, borderRadius: 16, backgroundColor: Colors.white, ...Shadows.card },
+  questionRowContent: { backgroundColor: Colors.noticeAccent },
   rowMeta: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   rowMetaThought: { justifyContent: "flex-end" },
   rowKind: { ...Typography.caption, color: Colors.zinc500, fontWeight: "600" },
@@ -758,6 +762,7 @@ const styles = StyleSheet.create({
   rowTextFrame: { width: "100%" },
   rowTitle: { fontFamily: ReaderTokens.fontFamily.serifBold, color: Colors.zinc900 },
   rowBody: { fontFamily: ReaderTokens.fontFamily.serif, color: Colors.zinc600 },
+  questionRowText: { color: Colors.white },
   rowLetterActions: { flexDirection: "row", gap: 6, marginTop: 2 },
   rowLetterAction: { height: 32, flexGrow: 0, flexShrink: 0 },
   rowLetterActionContent: { height: 32, flexGrow: 0, flexShrink: 0, paddingHorizontal: 10, borderRadius: 16, backgroundColor: Colors.zinc100, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4 },
