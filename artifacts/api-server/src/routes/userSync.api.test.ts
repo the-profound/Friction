@@ -218,6 +218,22 @@ describe("auth-flow diagnostic privacy contract", () => {
     });
   });
 
+  it("keeps the popup's signup code and diagnostic number searchable in safe logs", () => {
+    expect(
+      getSafeAuthFlowDiagnostic({
+        message: `phase=sign-up;outcome=failed;flow=${flowId}`,
+        name: "SIGNUP_API_UNREACHABLE",
+        platform: "ios",
+      }),
+    ).toMatchObject({
+      phase: "sign-up",
+      outcome: "failed",
+      flowId,
+      errorClass: "SIGNUP_API_UNREACHABLE",
+      platform: "ios",
+    });
+  });
+
   it("drops arbitrary values that could contain personal data or tokens", () => {
     expect(
       getSafeAuthFlowDiagnostic({

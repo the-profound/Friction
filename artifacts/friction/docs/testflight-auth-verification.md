@@ -108,8 +108,8 @@ preview/production 릴리즈를 통과시키지 않는다.
 | --- | --- | --- |
 | 설정 검증 | 앱을 처음 실행 | 설정이 누락되면 로그인 전 “앱을 시작할 수 없어요” 화면이 보인다. API/Supabase 요청은 시도하지 않는다. |
 | API 사전 확인 | 회원가입 2단계 진입 | API health check가 실패하면 가입 전 “앱 서버에 연결하지 못하고 있어요” 안내가 보인다. 입력은 유지되며, 연결 후 가입을 다시 시도할 수 있다. |
-| Supabase 인증 실패 | 가입 요청 전에 기기를 오프라인으로 전환 | “인증 서버에 연결하지 못했습니다”가 보이고 입력 화면이 유지된다. |
-| API 프로필 동기화 실패 | 가입 직후 API를 차단하거나 서버를 일시 중단 | “계정은 생성됐지만 앱 서버에 연결하지 못했습니다”가 보이고, 로그인 탭에서 다시 시도할 수 있다. |
+| Supabase 인증 실패 | 가입 요청 전에 기기를 오프라인으로 전환 | 로딩이 끝난 뒤 오류 팝업에 `SIGNUP_NETWORK`와 진단 번호가 보이고 입력 화면이 유지된다. |
+| API 프로필 동기화 실패 | 가입 직후 API를 차단하거나 서버를 일시 중단 | 로딩이 끝난 뒤 오류 팝업에 `SIGNUP_API_UNREACHABLE` 또는 `SYNC_*` 코드와 진단 번호가 보이고, 로그인 탭에서 다시 시도할 수 있다. |
 | 자동 확인 가입 | 약관 동의 후 가입 완료 | 프로필 동기화가 끝난 뒤 홈으로 이동하며 흰 화면/무한 로딩이 없다. |
 | 이메일 확인 가입 | 이메일 확인이 필요한 계정으로 가입 | 이메일 안내 화면이 표시되고 로그인 화면으로 돌아갈 수 있다. |
 | 재실행/재로그인 | 홈 진입 후 강제 종료, 재실행, 로그아웃, 재로그인 | 로딩이 끝나고 정상 화면이 보인다. |
@@ -117,8 +117,13 @@ preview/production 릴리즈를 통과시키지 않는다.
 
 ## 운영 진단 확인
 
-네이티브 앱은 시작 시 API `/healthz`를 비차단으로 확인한다. `client-logs: client
-diagnostic reported` 로그에는 아래의 안전한 값만 남는다.
+네이티브 앱은 시작 시 API `/healthz`를 비차단으로 확인한다. 가입 실패 팝업의
+오류 코드와 진단 번호는 `client-logs: auth-flow diagnostic reported` 로그의
+`authFlow.errorClass`와 `authFlow.flowId`에 같은 값으로 남는다. 앱 API에 도달하지
+못한 경우에는 해당 팝업 번호로 API 배포/네트워크 범위를 먼저 확인하고, 도달한 경우에는
+서버 로그에서 `flowId`로 `sign-up`과 `profile-sync` 이벤트를 함께 조회한다.
+
+로그에는 아래의 안전한 값만 남는다.
 
 - `phase`/`outcome`/오류 **종류** (`config`, `api-reachability`, `sign-up`,
   `profile-sync` 등)
@@ -126,5 +131,16 @@ diagnostic reported` 로그에는 아래의 안전한 값만 남는다.
 - release track, Supabase/API **호스트명**, 16자리 설정 지문, 설정 상태
 
 로그에 이메일, bearer token, anon key, URL query, 응답 본문 또는 원문 예외 메시지가
-있다면 진단 구현을 배포하지 않는다. 치명적 JS 오류는 앱을 다시 실행한 뒤
+있다면 진단 구현을 배포하지 않는다. 팝업과 화면 인라인 문구에도 이 값들을 넣지 않는다.
+치명적 JS 오류는 앱을 다시 실행한 뒤
 `client-logs: fatal JS error reported by client`로 별도 확인한다.
+
+### 가입 팝업 코드 판별
+
+| 팝업 코드 | 의미 | 운영 확인 |
+| --- | --- | --- |
+| `SIGNUP_AUTH_SERVICE` | Supabase가 가입 요청을 거절함 | 같은 `flowId`의 `sign-up;outcome=failed` 이벤트 확인 |
+| `SIGNUP_NETWORK` | Supabase 요청이 전송·응답되기 전에 실패함 | release 호스트/설정과 기기 네트워크 확인 |
+| `SIGNUP_API_UNREACHABLE` | 인증 후 앱 API에 도달하지 못함 | API 배포 상태와 네트워크 경로 확인 |
+| `SYNC_*` | 앱 API에는 도달했지만 프로필 동기화가 실패함 | API 로그에서 같은 `flowId`의 `profile-sync` 이벤트 확인 |
+| `AUTH_TRANSITION_ERROR` / `SIGNUP_UNKNOWN` | 세션 확정 또는 예상 밖 앱 오류 | 같은 `flowId`의 전체 `sign-up` 흐름 확인 |

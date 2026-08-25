@@ -18,13 +18,25 @@ import {
   createAuthFlowId,
   probeApiReachability,
   reportAuthDiagnostic,
-  type AuthDiagnosticErrorClass,
   type ApiReachability,
 } from "@/lib/authDiagnostics";
-import { ApiError, customFetch } from "@workspace/api-client-react";
+import {
+  getSignupAuthFailure,
+  getSignupProfileSyncCode,
+  getSignupProfileSyncFailure,
+  getSignupTransitionFailure,
+  getUnknownSignupFailure,
+  isNetworkFailure,
+  type SignupFailure,
+} from "@/lib/signupDiagnostics";
+import { customFetch } from "@workspace/api-client-react";
 
-export type SignUpError = AuthError | { message: string; name: string };
 export type AuthFlowError = AuthError | { message: string; name: string };
+export interface SignUpResult {
+  error: SignupFailure | null;
+  needsConfirmation: boolean;
+  diagnosticId: string;
+}
 
 interface AuthContextValue {
   session: Session | null;
@@ -32,7 +44,7 @@ interface AuthContextValue {
   configurationError: string | null;
   apiReachability: ApiReachability;
   signInWithPassword: (email: string, password: string) => Promise<{ error: AuthFlowError | null }>;
-  signUp: (email: string, password: string, nickname: string) => Promise<{ error: SignUpError | null; needsConfirmation: boolean }>;
+  signUp: (email: string, password: string, nickname: string) => Promise<SignUpResult>;
   signOut: () => Promise<void>;
 }
 
@@ -42,84 +54,13 @@ const AuthContext = createContext<AuthContextValue>({
   configurationError: null,
   apiReachability: "checking",
   signInWithPassword: async () => ({ error: null }),
-  signUp: async () => ({ error: null, needsConfirmation: false }),
+  signUp: async () => ({
+    error: null,
+    needsConfirmation: false,
+    diagnosticId: createAuthFlowId(),
+  }),
   signOut: async () => {},
 });
-
-function isNetworkFailure(error: unknown): boolean {
-  if (typeof error !== "object" || error === null) {
-    const message = String(error).toLowerCase();
-    return (
-      message.includes("network") ||
-      message.includes("fetch") ||
-      message.includes("timeout") ||
-      message.includes("abort")
-    );
-  }
-
-  const candidate = error as { name?: unknown; message?: unknown; status?: unknown };
-  const name = typeof candidate.name === "string" ? candidate.name.toLowerCase() : "";
-  const message =
-    typeof candidate.message === "string" ? candidate.message.toLowerCase() : "";
-  const status = typeof candidate.status === "number" ? candidate.status : null;
-
-  return (
-    name.includes("network") ||
-    name.includes("fetch") ||
-    name.includes("abort") ||
-    message.includes("network") ||
-    message.includes("fetch") ||
-    message.includes("timeout") ||
-    message.includes("abort") ||
-    status === 0 ||
-    status === 408 ||
-    status === 429 ||
-    (status !== null && status >= 500)
-  );
-}
-
-function getSyncErrorClass(error: unknown): AuthDiagnosticErrorClass {
-  if (error instanceof ApiError) {
-    const code =
-      error.data &&
-      typeof error.data === "object" &&
-      typeof (error.data as { code?: unknown }).code === "string"
-        ? (error.data as { code: string }).code
-        : null;
-    switch (code) {
-      case "AUTH_REQUIRED":
-      case "AUTH_INVALID":
-        return "SYNC_AUTH_INVALID";
-      case "AUTH_UNAVAILABLE":
-        return "SYNC_AUTH_UNAVAILABLE";
-      case "SYNC_DATABASE_UNAVAILABLE":
-        return "SYNC_DATABASE_UNAVAILABLE";
-      case "SYNC_EMAIL_CONFLICT":
-        return "SYNC_EMAIL_CONFLICT";
-      case "SYNC_IDENTITY_MISMATCH":
-        return "SYNC_IDENTITY_MISMATCH";
-      case "SYNC_INVALID_REQUEST":
-        return "SYNC_INVALID_REQUEST";
-      default:
-        return "SYNC_UNKNOWN";
-    }
-  }
-  return isNetworkFailure(error) ? "NetworkError" : "SYNC_UNKNOWN";
-}
-
-function getSyncErrorMessage(error: unknown): { message: string; name: string } {
-  const errorClass = getSyncErrorClass(error);
-  if (errorClass === "SYNC_AUTH_INVALID") {
-    return { message: "인증 상태가 만료되었습니다. 다시 시도해주세요.", name: errorClass };
-  }
-  if (errorClass === "SYNC_AUTH_UNAVAILABLE" || errorClass === "SYNC_DATABASE_UNAVAILABLE") {
-    return { message: "계정 서비스가 일시적으로 지연되고 있습니다. 잠시 후 다시 시도해주세요.", name: errorClass };
-  }
-  if (errorClass === "NetworkError") {
-    return { message: "네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.", name: "UserSyncNetworkError" };
-  }
-  return { message: "사용자 정보 저장에 실패했습니다. 다시 시도해주세요.", name: errorClass };
-}
 
 async function syncUserProfile(
   session: Session,
@@ -131,8 +72,8 @@ async function syncUserProfile(
     reportAuthDiagnostic("profile-sync", "failed", "SYNC_INVALID_REQUEST", flowId);
     throw {
       message: "인증된 계정 이메일을 확인하지 못했습니다.",
-      name: "UserSyncError",
-    } satisfies SignUpError;
+      name: "SYNC_INVALID_REQUEST",
+    };
   }
 
   const rawNickname = nickname ?? session.user.user_metadata?.nickname;
@@ -154,7 +95,7 @@ async function syncUserProfile(
     });
     reportAuthDiagnostic("profile-sync", "succeeded", undefined, flowId);
   } catch (error) {
-    reportAuthDiagnostic("profile-sync", "failed", getSyncErrorClass(error), flowId);
+    reportAuthDiagnostic("profile-sync", "failed", getSignupProfileSyncCode(error), flowId);
     throw error;
   }
 }
@@ -414,7 +355,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await supabase.auth.signOut().catch(() => {});
         setCurrentAuthSession(null);
         return {
-          error: getSyncErrorMessage(syncError),
+          error: {
+            message: getSignupProfileSyncFailure(syncError, flowId).message,
+            name: "UserSyncError",
+          },
         };
       }
 
@@ -449,15 +393,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     pendingAuthSessionRef.current = undefined;
     setCurrentAuthSession(null);
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { data: { nickname } },
-      });
+      let signUpResponse: Awaited<ReturnType<typeof supabase.auth.signUp>>;
+      try {
+        signUpResponse = await supabase.auth.signUp({
+          email,
+          password,
+          options: { data: { nickname } },
+        });
+      } catch (error) {
+        authCoordinator.commitAuthOperation(operation, null);
+        const failure = getSignupAuthFailure(error, flowId);
+        reportAuthDiagnostic("sign-up", "failed", failure.code, flowId);
+        return { error: failure, needsConfirmation: false, diagnosticId: flowId };
+      }
+      const { data, error } = signUpResponse;
       if (error) {
         authCoordinator.commitAuthOperation(operation, null);
-        reportAuthDiagnostic("sign-up", "failed", isNetworkFailure(error) ? "NetworkError" : "AuthSignUpError", flowId);
-        return { error, needsConfirmation: false };
+        const failure = getSignupAuthFailure(error, flowId);
+        reportAuthDiagnostic("sign-up", "failed", failure.code, flowId);
+        return { error: failure, needsConfirmation: false, diagnosticId: flowId };
       }
       const needsConfirmation = !data.session;
       reportAuthDiagnostic(
@@ -486,9 +440,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             await supabase.auth.signOut().catch(() => {});
             setCurrentAuthSession(null);
           }
+          const failure = getSignupProfileSyncFailure(syncError, flowId);
+          reportAuthDiagnostic("sign-up", "failed", failure.code, flowId);
           return {
-            error: getSyncErrorMessage(syncError),
+            error: failure,
             needsConfirmation,
+            diagnosticId: flowId,
           };
         }
       }
@@ -496,12 +453,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Only now — after the profile sync has succeeded — do we let the app
       // see this session and treat the user as authenticated.
       if (!authCoordinator.commitAuthOperation(operation, data.session)) {
+        const failure = getSignupTransitionFailure(flowId);
+        reportAuthDiagnostic("sign-up", "failed", failure.code, flowId);
         return {
-          error: {
-            message: "가입 상태를 확정하지 못했습니다. 다시 시도해주세요.",
-            name: "AuthTransitionError",
-          },
+          error: failure,
           needsConfirmation,
+          diagnosticId: flowId,
         };
       }
       if (data.session) {
@@ -515,11 +472,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setIsLoading(false);
          reportAuthDiagnostic("sign-up", "confirmation-required", undefined, flowId);
       }
-      return { error: null, needsConfirmation };
+      return { error: null, needsConfirmation, diagnosticId: flowId };
     } catch (error) {
       authCoordinator.commitAuthOperation(operation, null);
-       reportAuthDiagnostic("sign-up", "failed", isNetworkFailure(error) ? "NetworkError" : "AuthSignUpError", flowId);
-      throw error;
+      const failure = getUnknownSignupFailure(flowId);
+      reportAuthDiagnostic("sign-up", "failed", failure.code, flowId);
+      return { error: failure, needsConfirmation: false, diagnosticId: flowId };
     } finally {
       // The deliberate session decision above is authoritative. Discard
       // session observations collected while profile sync was in flight so a

@@ -1,9 +1,10 @@
 import { Feather } from "@expo/vector-icons";
 import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -18,6 +19,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Colors, Spacing, Typography } from "@/constants/tokens";
 import { useAuth } from "@/contexts/AuthContext";
+import {
+  getSignupFailureAlertContent,
+  type SignupFailure,
+} from "@/lib/signupDiagnostics";
 
 type Mode = "login" | "signup";
 type SignupStep = 1 | 2;
@@ -48,6 +53,21 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [signupDone, setSignupDone] = useState(false);
+  const [signupFailurePopup, setSignupFailurePopup] = useState<SignupFailure | null>(null);
+  const lastShownSignupDiagnosticIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!signupFailurePopup || isLoading) return;
+    if (lastShownSignupDiagnosticIdRef.current === signupFailurePopup.diagnosticId) {
+      setSignupFailurePopup(null);
+      return;
+    }
+
+    lastShownSignupDiagnosticIdRef.current = signupFailurePopup.diagnosticId;
+    const alertContent = getSignupFailureAlertContent(signupFailurePopup);
+    Alert.alert(alertContent.title, alertContent.message, [{ text: "확인" }]);
+    setSignupFailurePopup(null);
+  }, [isLoading, signupFailurePopup]);
 
   function switchMode(next: Mode) {
     setMode(next);
@@ -61,6 +81,7 @@ export default function LoginScreen() {
     setShowPassword(false);
     setShowPasswordConfirm(false);
     setSignupDone(false);
+    setSignupFailurePopup(null);
   }
 
   async function handleLogin() {
@@ -139,29 +160,11 @@ export default function LoginScreen() {
     try {
       const { error, needsConfirmation } = await signUp(email.trim(), password, trimmedNickname);
       if (error) {
-        if (error.name === "SupabaseNetworkError") {
-          setErrorMessage("인증 서버에 연결하지 못했습니다. 인터넷 연결을 확인해주세요.");
-        } else if (error.name === "ApiNetworkError") {
-          setErrorMessage("계정은 생성됐지만 앱 서버에 연결하지 못했습니다. 로그인 탭에서 다시 시도해주세요.");
-        } else if (error.name === "UserSyncError") {
-          setErrorMessage("계정은 생성됐지만 프로필 저장에 실패했습니다. 로그인 탭에서 다시 시도해주세요.");
-        } else {
-          const msg = error.message.toLowerCase();
-          if (msg.includes("already registered") || msg.includes("already exists") || msg.includes("user already")) {
-            setErrorMessage("이미 가입된 이메일입니다. 로그인해주세요.");
-          } else if (msg.includes("network") || msg.includes("fetch")) {
-            setErrorMessage("네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.");
-          } else if (msg.includes("password")) {
-            setErrorMessage("비밀번호는 6자 이상이어야 합니다.");
-          } else {
-            setErrorMessage("회원가입에 실패했습니다. 다시 시도해주세요.");
-          }
-        }
+        setErrorMessage(error.message);
+        setSignupFailurePopup(error);
       } else if (needsConfirmation) {
         setSignupDone(true);
       }
-    } catch {
-      setErrorMessage("네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.");
     } finally {
       setIsLoading(false);
     }

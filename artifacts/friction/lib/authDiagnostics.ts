@@ -2,6 +2,7 @@ import Constants from "expo-constants";
 import { Platform } from "react-native";
 import { customFetch } from "@workspace/api-client-react";
 import { runtimeConfig } from "./runtimeConfig";
+import type { SignupDiagnosticCode } from "./signupDiagnostics";
 
 type AuthDiagnosticPhase =
   | "config"
@@ -27,7 +28,8 @@ export type AuthDiagnosticErrorClass =
   | "SYNC_EMAIL_CONFLICT"
   | "SYNC_IDENTITY_MISMATCH"
   | "SYNC_INVALID_REQUEST"
-  | "SYNC_UNKNOWN";
+  | "SYNC_UNKNOWN"
+  | SignupDiagnosticCode;
 
 export type ApiReachability = "checking" | "reachable" | "unreachable" | "not-applicable";
 
