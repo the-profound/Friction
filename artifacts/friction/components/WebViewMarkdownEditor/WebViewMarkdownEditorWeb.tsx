@@ -338,6 +338,7 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
 
     return (
       <div
+        className="web-markdown-editor-scroll-container"
         style={
           titleFontSize != null
             ? ({ ...containerStyle, "--title-font-size": `${titleFontSize}px` } as React.CSSProperties)
@@ -419,6 +420,16 @@ const editorContentStyle: React.CSSProperties = {
 };
 
 const proseMirrorCss = `
+.web-markdown-editor-scroll-container {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  scrollbar-gutter: stable;
+}
+.web-markdown-editor-scroll-container::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
 .ProseMirror {
   min-height: 100%;
   padding: 16px 24px 120px;

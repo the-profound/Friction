@@ -75,6 +75,19 @@ describe("reader title typography", () => {
     expect(webMeasure).toContain('rootSelector: ".webview-measure-layer"');
     expect(webEditor).toContain("ReaderTokens.typeScale.titleCqi");
   });
+
+  it("hides only the web editor scrollbar while preserving its scroll container", () => {
+    const webEditor = read("components/WebViewMarkdownEditor/WebViewMarkdownEditorWeb.tsx");
+    const nativeEditor = read("components/WebViewMarkdownEditor/WebViewMarkdownEditor.tsx");
+
+    expect(webEditor).toContain('className="web-markdown-editor-scroll-container"');
+    expect(webEditor).toContain("scrollbar-width: none");
+    expect(webEditor).toContain("-ms-overflow-style: none");
+    expect(webEditor).toContain("scrollbar-gutter: stable");
+    expect(webEditor).toContain(".web-markdown-editor-scroll-container::-webkit-scrollbar");
+    expect(webEditor).toContain('overflow: "auto"');
+    expect(nativeEditor).toContain("showsVerticalScrollIndicator={false}");
+  });
 });
 
 describe("completed letter compatibility", () => {
