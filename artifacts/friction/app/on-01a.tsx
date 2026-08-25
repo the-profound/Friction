@@ -88,7 +88,6 @@ import {
 import { useUser } from "@/contexts/UserContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useThoughtComposer } from "@/contexts/ThoughtComposerContext";
-import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
 import SourceArticlePickerSheet from "@/components/SourceArticlePickerSheet/SourceArticlePickerSheet";
 import WritingStateBar, { type WritingStage } from "@/components/WritingStateBar/WritingStateBar";
 import MemoToolbar, { type FormatType } from "@/components/MemoToolbar/MemoToolbar";
@@ -318,7 +317,6 @@ export default function WritingScreen() {
   const [sourceArticleId, setSourceArticleId] = useState<string | null>(null);
   const [sourceArticleTitle, setSourceArticleTitle] = useState<string | null>(null);
   const [pickerVisible, setPickerVisible] = useState(false);
-  const [imagePickerVisible, setImagePickerVisible] = useState(false);
 
   const sourceArticleQuery = useGetArticle(sourceArticleId ?? "", {
     query: { queryKey: getGetArticleQueryKey(sourceArticleId ?? ""), enabled: !!sourceArticleId },
@@ -982,21 +980,9 @@ export default function WritingScreen() {
     }
   }, [id, updateArticle, queryClient, showToast]);
 
-  // ── 이미지 업로드 (draft) ──────────────────────────────────────────────────
-  //
-  // 사진은 텍스트와 같은 페이지에 머무를 수 없다(사진 단독 페이지 규칙).
-  // 기존에는 [검토] 진입 직전에만 autoSplitImages() 를 호출했기 때문에,
-  // 작성 중에는 방금 삽입한 사진이 잠시 주변 텍스트와 같은 페이지에 섞여
-  // 있는 것처럼 보일 수 있었다. 삽입 직후 바로 같은 커맨드를 호출해
-  // 분할선이 즉시 생기도록 한다. 검토 진입 시의 호출은 안전망으로 유지.
-  const handleInlineImagePicked = useCallback((image: { imageId: string; localUrl: string }) => {
-    editorRef.current?.insertImage({
-      url: image.localUrl,
-      imageId: image.imageId,
-      uploadState: "uploading",
-    });
-  }, []);
-
+  // ── 이미지 업로드 재시도 (draft) ───────────────────────────────────────────
+  // 새 사진 선택은 작성 화면에서 제공하지 않지만, 이미 에디터에 있는
+  // 업로드 실패 이미지의 복원/재시도 처리는 유지한다.
   const handleImageUploadSuccess = useCallback((image: { imageId: string; imageUrl: string }) => {
     editorRef.current?.replaceImage(image.imageId, image.imageUrl);
     // insertImage 트랜잭션이 WebView 이벤트 루프에서 커밋된 뒤 분할을
@@ -1013,15 +999,10 @@ export default function WritingScreen() {
     showToast({ message: `${image.error.message} 사진을 눌러 다시 올릴 수 있어요.`, type: "error" });
   }, [showToast]);
 
-  const { pickAndUpload: pickInlineImage, retry: retryInlineImage } = useInlineImageUpload({
-    onPicked: handleInlineImagePicked,
+  const { retry: retryInlineImage } = useInlineImageUpload({
     onSuccess: handleImageUploadSuccess,
     onError: handleImageUploadError,
   });
-
-  const handleInsertImage = useCallback(() => {
-    setImagePickerVisible(true);
-  }, []);
 
   const navigateAfterRemovingGuard = useCallback((navigate: () => void) => {
     pendingNavigationRef.current = navigate;
@@ -2100,10 +2081,6 @@ export default function WritingScreen() {
             plusBtnCenterX={plusBtnCenterX}
             onDismiss={() => setInlineMenuMode(null)}
             onSelectQuote={handleSelectQuoteFromAddMenu}
-            onSelectPhoto={() => {
-              setInlineMenuMode(null);
-              handleInsertImage();
-            }}
           />
         )}
 
@@ -2230,18 +2207,6 @@ export default function WritingScreen() {
           />
         )}
 
-        {!isDividing && (
-          <ActionSheetModal
-            visible={imagePickerVisible}
-            title="사진 추가"
-            onClose={() => setImagePickerVisible(false)}
-            actions={[
-              { label: "카메라로 촬영", onPress: () => { setImagePickerVisible(false); setTimeout(() => pickInlineImage("camera"), 300); } },
-              { label: "갤러리에서 선택", onPress: () => { setImagePickerVisible(false); setTimeout(() => pickInlineImage("gallery"), 300); } },
-              { label: "취소", style: "cancel", onPress: () => setImagePickerVisible(false) },
-            ]}
-          />
-        )}
       </View>
     </>
   );

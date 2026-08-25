@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 
 const appRoot = join(__dirname, "../..");
 const readScreen = () => readFileSync(join(appRoot, "app/on-01a.tsx"), "utf8");
+const readAddMenu = () =>
+  readFileSync(join(appRoot, "components/MemoToolbar/AddMenuPopup.tsx"), "utf8");
 
 describe("on-01a initial WebView export autosave regression", () => {
   it("ignores the export caused by injecting unchanged server content", () => {
@@ -58,5 +60,27 @@ describe("on-01a return navigation regression", () => {
     expect(removalGuard).toContain("handleHeaderBack();");
     expect(screen).toContain("<Stack.Screen options={{ gestureEnabled: true }} />");
     expect(screen).toContain("exitToPreviousList();");
+  });
+});
+
+describe("on-01a photo insertion regression", () => {
+  it("does not connect the writing screen to a photo picker", () => {
+    const screen = readScreen();
+
+    expect(screen).not.toContain("onSelectPhoto");
+    expect(screen).not.toContain("imagePickerVisible");
+    expect(screen).not.toContain("handleInsertImage");
+    expect(screen).not.toContain("pickAndUpload");
+    expect(screen).not.toContain("ActionSheetModal");
+    expect(screen).toContain("onImageRetry={retryInlineImage}");
+    expect(screen).toContain("onSelectQuote={handleSelectQuoteFromAddMenu}");
+  });
+
+  it("closes the add menu without invoking a photo picker when photo is unavailable", () => {
+    const addMenu = readAddMenu();
+
+    expect(addMenu).toContain("onPress={onSelectPhoto ?? onDismiss}");
+    expect(addMenu).toContain('color={onSelectPhoto ? "#3f3f46" : "#a1a1aa"}');
+    expect(addMenu).toContain("!onSelectPhoto && styles.labelDisabled");
   });
 });
