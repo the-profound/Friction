@@ -4,7 +4,7 @@ export type SpaceRoundPresentation = {
   roundNumber: number;
 };
 
-type DatedSpaceRoundPresentation = SpaceRoundPresentation & {
+export type DatedSpaceRoundPresentation = SpaceRoundPresentation & {
   status: string;
   startsAt?: string | Date | null;
   endsAt?: string | Date | null;
@@ -93,6 +93,55 @@ export function sortSpaceRoundsNewestFirst<T extends SpaceRoundPresentation>(
   rounds: readonly T[],
 ): T[] {
   return [...rounds].sort((a, b) => b.roundNumber - a.roundNumber);
+}
+
+const SPACE_DETAIL_STATUS_ORDER: Record<string, number> = {
+  ACTIVE: 0,
+  UPCOMING: 1,
+  COMPLETED: 2,
+};
+
+function getDateTimestamp(value: string | Date | null | undefined): number | null {
+  if (!value) return null;
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? null : timestamp;
+}
+
+/**
+ * Orders rounds for the space detail carousel by the status users see there:
+ * active, upcoming, then completed. Date ordering is only used when both
+ * rounds in a group have valid dates; otherwise round number keeps the result
+ * deterministic without relying on the API response order.
+ */
+export function sortSpaceRoundsForDetail<T extends DatedSpaceRoundPresentation>(
+  rounds: readonly T[],
+  now: Date = new Date(),
+): T[] {
+  return [...rounds].sort((a, b) => {
+    const aStatus = getSpaceRoundPresentationStatus(a, now);
+    const bStatus = getSpaceRoundPresentationStatus(b, now);
+    const statusDifference =
+      (SPACE_DETAIL_STATUS_ORDER[aStatus] ?? Number.MAX_SAFE_INTEGER) -
+      (SPACE_DETAIL_STATUS_ORDER[bStatus] ?? Number.MAX_SAFE_INTEGER);
+
+    if (statusDifference !== 0) return statusDifference;
+
+    if (aStatus === "UPCOMING" && bStatus === "UPCOMING") {
+      const aStartsAt = getDateTimestamp(a.startsAt);
+      const bStartsAt = getDateTimestamp(b.startsAt);
+      if (aStartsAt !== null && bStartsAt !== null && aStartsAt !== bStartsAt) {
+        return aStartsAt - bStartsAt;
+      }
+    } else if (aStatus === "COMPLETED" && bStatus === "COMPLETED") {
+      const aEndsAt = getDateTimestamp(a.endsAt);
+      const bEndsAt = getDateTimestamp(b.endsAt);
+      if (aEndsAt !== null && bEndsAt !== null && aEndsAt !== bEndsAt) {
+        return bEndsAt - aEndsAt;
+      }
+    }
+
+    return b.roundNumber - a.roundNumber;
+  });
 }
 
 /**

@@ -63,7 +63,7 @@ import {
   roundStatusLabel,
   sortSpaceRoundSlotsForPresentation,
   shouldDimSpaceRoundLetter,
-  sortSpaceRoundsNewestFirst,
+  sortSpaceRoundsForDetail,
 } from "@/lib/spaceRoundPresentation";
 import { toKstCalendarDate } from "@/lib/kstDate";
 import { isRecruitmentFull } from "@/lib/spaceRecruitment";
@@ -1548,7 +1548,7 @@ export default function SpaceDetailScreen() {
               </View>
             ) : (
               <View style={styles.roundsList}>
-                {sortSpaceRoundsNewestFirst(rounds).map((round) => (
+                {sortSpaceRoundsForDetail(rounds, now).map((round) => (
                     <RoundSection
                       key={round.id}
                       round={round}
