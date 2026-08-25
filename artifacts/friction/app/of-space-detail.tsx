@@ -11,6 +11,7 @@ import {
   Platform,
   Animated,
   PanResponder,
+  Pressable,
   Dimensions,
   type NativeSyntheticEvent,
   type TextLayoutEventData,
@@ -1158,6 +1159,13 @@ export default function SpaceDetailScreen() {
     setTapArticle(null);
   }, []);
 
+  const handleNavigateToAuthor = useCallback(
+    (authorId: string) => {
+      router.push(`/user-profile/${authorId}` as never);
+    },
+    [router],
+  );
+
   // ── Article chain for the overlay (shared with 수신함/프로필) ──────────────
   // In anonymous spaces we skip ancestor traversal so real author identities
   // in the reply chain are never exposed.
@@ -1218,6 +1226,7 @@ export default function SpaceDetailScreen() {
     } as Article);
     metaList.push({
       authorName,
+      authorId: isAnonymousSpace ? null : tapLetter.authorId ?? null,
       collectionName: space?.name ?? null,
       date: tapLetter.createdAt,
       isRead: shouldDimSpaceRoundLetter(tappedRoundStatus, tapLetter.isRead),
@@ -1469,11 +1478,26 @@ export default function SpaceDetailScreen() {
               </View>
             ) : null}
 
-            {(!space.isAnonymous || isOperator) && (space as any).creatorNickname ? (
-              <View style={styles.metaIconRow}>
-                <Feather name="user-check" size={12} color={Colors.zinc400} />
-                <Text style={styles.metaIconRowText}>{(space as any).creatorNickname}</Text>
-              </View>
+            {(!space.isAnonymous || isOperator) && space.creatorNickname ? (
+              !space.isAnonymous ? (
+                <Pressable
+                  style={styles.metaIconRow}
+                  onPress={() => handleNavigateToAuthor(space.creatorId)}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${space.creatorNickname} 프로필 보기`}
+                  testID="space-creator-profile"
+                >
+                  <Feather name="user-check" size={12} color={Colors.zinc400} />
+                  <Text style={styles.metaIconRowText}>{space.creatorNickname}</Text>
+                  <Feather name="chevron-right" size={12} color={Colors.zinc400} />
+                </Pressable>
+              ) : (
+                <View style={styles.metaIconRow}>
+                  <Feather name="user-check" size={12} color={Colors.zinc400} />
+                  <Text style={styles.metaIconRowText}>{space.creatorNickname}</Text>
+                </View>
+              )
             ) : space.isAnonymous && !isOperator ? (
               <View style={styles.metaIconRow}>
                 <Feather name="user-check" size={12} color={Colors.zinc400} />
@@ -1710,6 +1734,7 @@ export default function SpaceDetailScreen() {
           onClose={handleOverlayClose}
           onRead={handleOverlayRead}
           onReady={() => setIsTappedSourceHidden(true)}
+          onNavigateToAuthor={handleNavigateToAuthor}
         />
       )}
     </View>

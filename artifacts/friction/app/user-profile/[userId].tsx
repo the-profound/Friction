@@ -660,6 +660,7 @@ export default function UserProfileScreen() {
         onReady={() => setIsSelectedSourceHidden(true)}
         onNavigateToCollection={handleNavigateToCollection}
         onNavigateToAuthor={(id) => router.push(`/user-profile/${id}` as never)}
+        currentAuthorId={profileUserId}
       />
       <ConfirmModal
         visible={removeConfirmVisible}

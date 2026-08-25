@@ -644,6 +644,7 @@ export default function MyScreen() {
         onReady={() => setIsSelectedSourceHidden(true)}
         onNavigateToCollection={handleNavigateToCollection}
         onNavigateToAuthor={handleNavigateToAuthor}
+        currentAuthorId={userId}
       />
     </View>
   );

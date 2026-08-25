@@ -125,6 +125,9 @@ interface CardSelectOverlayProps {
   onCardTap?: (index: number) => void;
   onNavigateToCollection?: (id: string) => void;
   onNavigateToAuthor?: (authorId: string) => void;
+  /** Prevents the info bar from navigating back to the screen's current entity. */
+  currentCollectionId?: string | null;
+  currentAuthorId?: string | null;
   /**
    * When provided, the item at initialIndex is a sealed envelope.
    * The overlay shows the envelope front face first and plays an opening
@@ -144,6 +147,8 @@ export default function CardSelectOverlay({
   onCardTap,
   onNavigateToCollection,
   onNavigateToAuthor,
+  currentCollectionId,
+  currentAuthorId,
   envelopeInfo,
 }: CardSelectOverlayProps) {
   const insets = useSafeAreaInsets();
@@ -694,8 +699,16 @@ export default function CardSelectOverlay({
   const activeMeta = displayMetas[activeIndex] ?? {};
   const { authorName, authorId, collectionName, collectionId, date } = activeMeta;
   const dateLabel = date ? formatDate(date) : "";
-  const canTapCollection = !!(collectionId && onNavigateToCollection);
-  const canTapAuthor = !!(authorId && onNavigateToAuthor);
+  const canTapCollection = !!(
+    collectionId &&
+    collectionId !== currentCollectionId &&
+    onNavigateToCollection
+  );
+  const canTapAuthor = !!(
+    authorId &&
+    authorId !== currentAuthorId &&
+    onNavigateToAuthor
+  );
   const fadeOverlayOpacity = useSharedValue(0);
   const fadeOverlayStyle = useAnimatedStyle(() => ({ opacity: fadeOverlayOpacity.value }));
 

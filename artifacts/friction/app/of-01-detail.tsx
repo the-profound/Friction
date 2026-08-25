@@ -764,6 +764,7 @@ export default function PersonalCollectionDetailScreen() {
         originLayout={null}
         onClose={() => setTapArticleEntry(null)}
         onRead={handleReadFromOverlay}
+        currentCollectionId={id}
       />
 
       {!selectionMode && <NavBar />}

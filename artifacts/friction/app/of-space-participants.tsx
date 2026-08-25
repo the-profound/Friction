@@ -10,6 +10,7 @@ import {
   RefreshControl,
   Platform,
   Modal,
+  Pressable,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -173,16 +174,31 @@ function MemberRow({
   isAnonymous,
   onRemove,
   removing,
+  onNavigateToAuthor,
 }: {
   member: SpaceMember;
   isAnonymous: boolean;
   onRemove: () => void;
   removing: boolean;
+  onNavigateToAuthor?: (authorId: string) => void;
 }) {
   const isOperatorRow = member.role === "OPERATOR";
   const label = isAnonymous
     ? (member.accountNickname ?? "알 수 없음")
     : (member.nickname ?? "알 수 없음");
+  const canNavigateToProfile = !isAnonymous && !!member.userId && !!onNavigateToAuthor;
+  const memberNameContent = (
+    <>
+      <Text style={styles.rowCardTitle} numberOfLines={1}>
+        {label}
+      </Text>
+      {isOperatorRow && (
+        <View style={styles.operatorTag}>
+          <Text style={styles.operatorTagText}>공간장</Text>
+        </View>
+      )}
+    </>
+  );
 
   return (
     <View style={styles.rowCard}>
@@ -191,16 +207,23 @@ function MemberRow({
           <Feather name="user" size={14} color={Colors.zinc500} />
         </View>
         <View style={styles.rowCardMeta}>
-          <View style={styles.memberNameRow}>
-            <Text style={styles.rowCardTitle} numberOfLines={1}>
-              {label}
-            </Text>
-            {isOperatorRow && (
-              <View style={styles.operatorTag}>
-                <Text style={styles.operatorTagText}>공간장</Text>
-              </View>
-            )}
-          </View>
+          {canNavigateToProfile ? (
+            <Pressable
+              style={styles.memberNameRow}
+              onPress={() => onNavigateToAuthor?.(member.userId)}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel={`${label} 프로필 보기`}
+              testID={`participant-profile-${member.userId}`}
+            >
+              {memberNameContent}
+              <Feather name="chevron-right" size={12} color={Colors.zinc400} />
+            </Pressable>
+          ) : (
+            <View style={styles.memberNameRow}>
+              {memberNameContent}
+            </View>
+          )}
         </View>
       </View>
       {!isOperatorRow && (
@@ -268,6 +291,13 @@ export default function SpaceParticipantsScreen() {
   const codeRequests = (codeRequestsQuery.data ?? []) as SpaceCodeRequestWithRequester[];
 
   const isAnonymous = !!space?.isAnonymous;
+
+  const handleNavigateToAuthor = useCallback(
+    (authorId: string) => {
+      router.push(`/user-profile/${authorId}` as never);
+    },
+    [router],
+  );
 
   const recruitmentCapacity = space?.maxParticipants ?? null;
 
@@ -500,6 +530,7 @@ export default function SpaceParticipantsScreen() {
                     isAnonymous={isAnonymous}
                     onRemove={() => handleRemoveMember(member)}
                     removing={removingMemberId === member.id}
+                    onNavigateToAuthor={handleNavigateToAuthor}
                   />
                 ))}
               </View>

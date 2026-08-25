@@ -232,6 +232,57 @@ describe("selectable article card projection contract", () => {
     expect(space).toContain("onReady={() => setIsTappedSourceHidden(true)}");
   });
 
+  it("connects space letter author navigation without treating the space as a collection", () => {
+    const space = read("app/of-space-detail.tsx");
+
+    expect(space).toContain(
+      'router.push(`/user-profile/${authorId}` as never);',
+    );
+    expect(space).toContain("onNavigateToAuthor={handleNavigateToAuthor}");
+    expect(space).toContain(
+      "authorId: isAnonymousSpace ? null : tapLetter.authorId ?? null,",
+    );
+    expect(space).toContain("collectionName: space?.name ?? null,");
+    expect(space).not.toContain("collectionId: id");
+  });
+
+  it("makes the non-anonymous space creator row open the creator profile", () => {
+    const space = read("app/of-space-detail.tsx");
+
+    expect(space).toContain("onPress={() => handleNavigateToAuthor(space.creatorId)}");
+    expect(space).toContain('testID="space-creator-profile"');
+    expect(space).toContain('name="chevron-right" size={12} color={Colors.zinc400}');
+    expect(space).toContain("!space.isAnonymous ?");
+    expect(space).toContain("익명 공간장");
+  });
+
+  it("disables info-bar navigation back to the screen's current entity", () => {
+    const overlay = read("components/CardSelectOverlay/CardSelectOverlay.tsx");
+    const myTab = read("app/(tabs)/to.tsx");
+    const profile = read("app/user-profile/[userId].tsx");
+    const collection = read("app/of-01-detail.tsx");
+
+    expect(overlay).toContain("currentCollectionId?: string | null;");
+    expect(overlay).toContain("currentAuthorId?: string | null;");
+    expect(overlay).toContain("collectionId !== currentCollectionId");
+    expect(overlay).toContain("authorId !== currentAuthorId");
+    expect(myTab).toContain("currentAuthorId={userId}");
+    expect(profile).toContain("currentAuthorId={profileUserId}");
+    expect(collection).toContain("currentCollectionId={id}");
+  });
+
+  it("makes non-anonymous participant names open profiles without exposing anonymous identities", () => {
+    const participants = read("app/of-space-participants.tsx");
+
+    expect(participants).toContain("onNavigateToAuthor?: (authorId: string) => void;");
+    expect(participants).toContain("const canNavigateToProfile = !isAnonymous");
+    expect(participants).toContain('name="chevron-right" size={12} color={Colors.zinc400}');
+    expect(participants).toContain('router.push(`/user-profile/${authorId}` as never);');
+    expect(participants).toContain("onNavigateToAuthor={handleNavigateToAuthor}");
+    expect(participants).toContain("accountNickname ?? \"알 수 없음\"");
+    expect(participants).not.toContain("isAnonymous && onNavigateToAuthor");
+  });
+
   it("returns the overlay to its source with one shared distance-based motion", () => {
     const overlay = read("components/CardSelectOverlay/CardSelectOverlay.tsx");
     const closeBlock = overlay.slice(
