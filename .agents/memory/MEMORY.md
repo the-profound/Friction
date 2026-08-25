@@ -57,3 +57,4 @@
 - [Unauthenticated auth diagnostics](friction-auth-diagnostics-privacy.md) — analytics-style auth logs need semantic server allowlists, not just client types or character regexes.
 - [Editor hydration autosave](friction-editor-hydration-autosave.md) — server content injected into the editor can emit synthetic dirty events; ignore only its exact matching export.
 - [Dev-seed sentinel safety](friction-dev-seed-sentinels.md) — deterministic sentinels must match the inserted row exactly and commit only with the complete seed transaction.
+- [Supabase direct seed transactions](supabase-direct-seed-transactions.md) — populate related demo data atomically; validate UUID relationships and PostgreSQL enum values before committing.
