@@ -16,6 +16,13 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
+ * @summary Upload a verified inline article image
+ */
+export const UploadInlineImageResponse = zod.object({
+  imageUrl: zod.string().url(),
+});
+
+/**
  * @summary List users
  */
 export const ListUsersResponseItem = zod.object({

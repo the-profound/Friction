@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useEffect, useState, useMemo } from "react";
-import { View, StyleSheet, ActivityIndicator, Animated } from "react-native";
+import { View, StyleSheet, ActivityIndicator, Animated, PixelRatio } from "react-native";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { getReaderHtml } from "./readerHtml";
 import { getEditorFonts, subscribeEditorFonts, type EditorFontState } from "@/lib/editorFontStore";
@@ -142,7 +142,10 @@ export default function WebViewMarkdownReader({
   );
 
   // Memoize markdown→HTML so we don't re-parse on unrelated re-renders.
-  const html = useMemo(() => markdownToHtml(markdown), [markdown]);
+  const html = useMemo(
+    () => markdownToHtml(markdown, PixelRatio.get()),
+    [markdown],
+  );
   const htmlRef = useRef(html);
   htmlRef.current = html;
 

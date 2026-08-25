@@ -174,6 +174,7 @@ export * from "./updateSpaceScheduledSendBodyStatus";
 export * from "./updateTeamCollectionBody";
 export * from "./updateThoughtBody";
 export * from "./updateUserBody";
+export * from "./uploadInlineImageResponse";
 export * from "./upsertReadingRecordBody";
 export * from "./user";
 export * from "./userArticleRead";

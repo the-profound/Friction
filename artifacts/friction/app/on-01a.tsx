@@ -53,6 +53,7 @@ import type {
   MeasureCandidate,
 } from "@/components/PretextMeasureLayer/PretextMeasureLayer";
 import { useInlineImageUpload } from "@/lib/useImageUpload";
+import { removeUnpersistableInlineImages } from "@/lib/inlineImages";
 import {
   useGetArticle,
   useCreateThought,
@@ -560,17 +561,18 @@ export default function WritingScreen() {
       return;
     }
     lastSeenDocVersionRef.current = incomingVer;
-    contentRef.current = payload.markdown;
+    const persistableMarkdown = removeUnpersistableInlineImages(payload.markdown);
+    contentRef.current = persistableMarkdown;
     // 분할 모드에서는 모든 편집 이후 페이지/측정이 즉시 재계산돼야 하므로
     // content·debouncedContent 를 함께 갱신한다.
     if (modeRef.current === "dividing") {
-      setContent(payload.markdown);
-      setDebouncedContent(payload.markdown);
+      setContent(persistableMarkdown);
+      setDebouncedContent(persistableMarkdown);
     }
     const cb = pendingExportsRef.current.get(payload.requestId);
     if (cb) {
       pendingExportsRef.current.delete(payload.requestId);
-      cb(payload.markdown);
+      cb(persistableMarkdown);
     }
   }, []);
 
@@ -707,6 +709,7 @@ export default function WritingScreen() {
           return;
         }
       }
+      md = removeUnpersistableInlineImages(md);
       if (!isThoughtModeRef.current || isMeaningfulThoughtMarkdown(md)) {
         markDirty(titleRef.current, md);
       }
@@ -986,10 +989,18 @@ export default function WritingScreen() {
   // 작성 중에는 방금 삽입한 사진이 잠시 주변 텍스트와 같은 페이지에 섞여
   // 있는 것처럼 보일 수 있었다. 삽입 직후 바로 같은 커맨드를 호출해
   // 분할선이 즉시 생기도록 한다. 검토 진입 시의 호출은 안전망으로 유지.
-  const handleImageUploadSuccess = useCallback((imageUrl: string) => {
-    editorRef.current?.insertImage(imageUrl);
+  const handleInlineImagePicked = useCallback((image: { imageId: string; localUrl: string }) => {
+    editorRef.current?.insertImage({
+      url: image.localUrl,
+      imageId: image.imageId,
+      uploadState: "uploading",
+    });
+  }, []);
+
+  const handleImageUploadSuccess = useCallback((image: { imageId: string; imageUrl: string }) => {
+    editorRef.current?.replaceImage(image.imageId, image.imageUrl);
     // insertImage 트랜잭션이 WebView 이벤트 루프에서 커밋된 뒤 분할을
-    // 시도해야 방금 삽입한 이미지 노드를 인식할 수 있다.
+    // 시도해야 방금 원격 원본으로 확정된 이미지 노드를 인식할 수 있다.
     setTimeout(() => {
       editorRef.current?.autoSplitImages().then(() => {
         showToast({ message: "사진은 페이지에 단독으로만 첨부할 수 있어요.", type: "info" });
@@ -997,11 +1008,13 @@ export default function WritingScreen() {
     }, 0);
   }, [showToast]);
 
-  const handleImageUploadError = useCallback((err: Error) => {
-    showToast({ message: err.message, type: "error" });
+  const handleImageUploadError = useCallback((image: { imageId: string; error: Error }) => {
+    editorRef.current?.setImageUploadState(image.imageId, "failed");
+    showToast({ message: `${image.error.message} 사진을 눌러 다시 올릴 수 있어요.`, type: "error" });
   }, [showToast]);
 
-  const { pickAndUpload: pickInlineImage, isUploading: isImageUploading } = useInlineImageUpload({
+  const { pickAndUpload: pickInlineImage, retry: retryInlineImage } = useInlineImageUpload({
+    onPicked: handleInlineImagePicked,
     onSuccess: handleImageUploadSuccess,
     onError: handleImageUploadError,
   });
@@ -2016,6 +2029,7 @@ export default function WritingScreen() {
                 onChange={handleEditorChange}
                 onExportMarkdown={handleExportMarkdown}
                 onTitleChange={isThoughtMode && !isDividing ? undefined : handleTitleChange}
+                onImageRetry={retryInlineImage}
                 onKeyboardVisibilityChange={setKeyboardVisible}
                 onSelectionUpdate={handleSelectionUpdate}
                 bodyFontSize={bodyFontSize}
@@ -2086,14 +2100,10 @@ export default function WritingScreen() {
             plusBtnCenterX={plusBtnCenterX}
             onDismiss={() => setInlineMenuMode(null)}
             onSelectQuote={handleSelectQuoteFromAddMenu}
-            onSelectPhoto={
-              isImageUploading
-                ? undefined
-                : () => {
-                    setInlineMenuMode(null);
-                    handleInsertImage();
-                  }
-            }
+            onSelectPhoto={() => {
+              setInlineMenuMode(null);
+              handleInsertImage();
+            }}
           />
         )}
 

@@ -3,9 +3,16 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import { StarterKit } from "@tiptap/starter-kit";
 import { Placeholder } from "@tiptap/extension-placeholder";
 import { Underline } from "@tiptap/extension-underline";
+import { Node as TipTapNode } from "@tiptap/core";
 import { marked } from "marked";
 import TurndownService from "turndown";
 import { ReaderTokens } from "@/constants/tokens";
+import {
+  getInlineImageTransformUrl,
+  isPersistableInlineImageUrl,
+  INLINE_IMAGE_DISPLAY_WIDTH,
+} from "@/lib/inlineImages";
+import { PixelRatio } from "react-native";
 import type {
   WebViewMarkdownEditorProps,
   WebViewMarkdownEditorRef,
@@ -39,11 +46,60 @@ function htmlToMarkdown(html: string): string {
       codeBlockStyle: "fenced",
     });
     td.escape = (str: string) => str;
-    return td.turndown(html || "");
+    const root = document.createElement("div");
+    root.innerHTML = html || "";
+    root.querySelectorAll("img[data-original-src]").forEach((image) => {
+      image.setAttribute("src", image.getAttribute("data-original-src") ?? "");
+    });
+    return td.turndown(root.innerHTML).replace(
+      /!\[[^\]]*]\(([^)\s]+)\)/g,
+      (full, src: string) => isPersistableInlineImageUrl(src) ? full : "",
+    );
   } catch {
     return "";
   }
 }
+
+const InlineImage = TipTapNode.create({
+  name: "inlineImage",
+  group: "block",
+  atom: true,
+  addAttributes() {
+    return {
+      src: { default: null },
+      originalSrc: {
+        default: null,
+        parseHTML: (element) => element.getAttribute("data-original-src") || element.getAttribute("src"),
+      },
+      alt: { default: "" },
+      imageId: { default: null },
+      uploadState: { default: "complete" },
+      "data-autosplit": { default: null },
+    };
+  },
+  parseHTML() {
+    // marked.parse() emits plain <img> for legacy Markdown image syntax.
+    // Parse both forms so opening then saving an existing article never drops
+    // its image solely because it predates the custom node attribute.
+    return [{ tag: 'img[data-inline="true"]' }, { tag: "img" }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    const state = HTMLAttributes.uploadState ?? "complete";
+    return ["img", {
+      "data-inline": "true",
+      class: `tiptap-inline-image is-${state}`,
+      src: getInlineImageTransformUrl(
+        HTMLAttributes.originalSrc ?? HTMLAttributes.src ?? "",
+        INLINE_IMAGE_DISPLAY_WIDTH,
+        PixelRatio.get(),
+      ),
+      alt: HTMLAttributes.alt ?? "",
+      "data-original-src": HTMLAttributes.originalSrc ?? HTMLAttributes.src ?? "",
+      "data-image-id": HTMLAttributes.imageId ?? "",
+      "data-upload-state": state,
+    }];
+  },
+});
 
 const CHANGE_THROTTLE_MS = 500;
 
@@ -62,6 +118,7 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
       belowTitleSlot,
       titleFontSize,
       hideTitle = false,
+      onImageRetry,
     },
     ref,
   ) {
@@ -75,6 +132,7 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
         StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
         Placeholder.configure({ placeholder: placeholder || "여기에 메모를 작성하세요..." }),
         Underline,
+        InlineImage,
       ],
       content: markdownToHtml(initialMarkdown),
       editable,
@@ -207,7 +265,45 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
           editor.chain().focus().setHardBreak().run();
         }
       },
-      insertImage(_url: string) {
+      insertImage(image) {
+        if (editor && !editor.isDestroyed) {
+          editor.chain().focus().insertContent({
+            type: "inlineImage",
+            attrs: {
+              src: image.url,
+              originalSrc: image.url,
+              alt: "",
+              imageId: image.imageId,
+              uploadState: image.uploadState,
+            },
+          }).run();
+        }
+      },
+      replaceImage(imageId: string, url: string) {
+        if (editor && !editor.isDestroyed) {
+          editor.state.doc.descendants((node, pos) => {
+            if (node.type.name !== "inlineImage" || node.attrs.imageId !== imageId) return true;
+            editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, {
+              ...node.attrs,
+              src: url,
+              originalSrc: url,
+              uploadState: "complete",
+            }));
+            return false;
+          });
+        }
+      },
+      setImageUploadState(imageId, uploadState) {
+        if (editor && !editor.isDestroyed) {
+          editor.state.doc.descendants((node, pos) => {
+            if (node.type.name !== "inlineImage" || node.attrs.imageId !== imageId) return true;
+            editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, {
+              ...node.attrs,
+              uploadState,
+            }));
+            return false;
+          });
+        }
       },
       insertQuote(text: string) {
         if (editor && !editor.isDestroyed && text) {
@@ -265,7 +361,17 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
           />
         )}
         {belowTitleSlot}
-        <EditorContent editor={editor} style={editorContentStyle} lang="en" />
+        <EditorContent
+          editor={editor}
+          style={editorContentStyle}
+          lang="en"
+          onClick={(event) => {
+            const target = event.target as HTMLElement;
+            if (target.matches('img[data-upload-state="failed"][data-image-id]')) {
+              onImageRetry?.(target.dataset.imageId ?? "");
+            }
+          }}
+        />
       </div>
     );
   },
@@ -348,6 +454,9 @@ const proseMirrorCss = `
 .ProseMirror u { text-decoration: underline; }
 .ProseMirror strong { font-family: 'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif; font-weight: 700; }
 .ProseMirror em { font-style: italic; }
+.ProseMirror img[data-inline="true"] { display:block; max-width:240px; width:auto; height:auto; border-radius:8px; margin:0.5em 0; }
+.ProseMirror img[data-upload-state="uploading"] { opacity:0.55; }
+.ProseMirror img[data-upload-state="failed"] { opacity:0.55; outline:2px solid #dc2626; cursor:pointer; }
 .ProseMirror code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: #f4f4f5; padding: 0.1em 0.3em; border-radius: 3px; letter-spacing: 0; font-size: 0.9em; }
 .ProseMirror pre { background: #f4f4f5; padding: 0.75em 1em; border-radius: 4px; overflow-x: auto; margin: 0.5em 0; letter-spacing: 0; text-align: left; }
 .ProseMirror pre code { background: none; padding: 0; }

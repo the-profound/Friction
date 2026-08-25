@@ -33,7 +33,7 @@
  *   생기거나 레이아웃에 영향을 줄 수 있어 래퍼 클리핑 방식을 사용한다.
  */
 import React, { useRef, useCallback, useEffect, useState } from "react";
-import { View, StyleSheet } from "react-native";
+import { View, StyleSheet, PixelRatio } from "react-native";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { getMeasureHtml } from "./measureHtml";
 import { getEditorFonts, subscribeEditorFonts, type EditorFontState } from "@/lib/editorFontStore";
@@ -120,7 +120,9 @@ export default function WebViewMeasureLayer({ request, onMeasured }: Props) {
     const blockGap = req.blockGap ?? req.lineHeight * 0.6;
     const items = req.candidates.map((c) => ({
       key: c.key,
-      html: c.blocks ? c.blocks.map(blockToHtml).join("") : markdownToHtml(c.content ?? ""),
+      html: c.blocks
+        ? c.blocks.map(blockToHtml).join("")
+        : markdownToHtml(c.content ?? "", PixelRatio.get()),
     }));
     const seq = ++latestSeqRef.current;
     bridge

@@ -6,6 +6,7 @@
  * 방식으로 네이티브 구현과 동일한 결과를 반환한다.
  */
 import React, { useRef, useLayoutEffect, useCallback } from "react";
+import { PixelRatio } from "react-native";
 import { buildBodyTypographyCss } from "@/components/shared/bodyTypographyCss";
 import { blockToHtml, markdownToHtml } from "@/lib/markdownRenderer";
 import type { MeasureRequest } from "../PretextMeasureLayer/PretextMeasureLayer";
@@ -65,7 +66,9 @@ export default function WebViewMeasureLayerWeb({ request, onMeasured }: Props) {
     for (const c of request.candidates) {
       const el = document.createElement("div");
       el.style.cssText = "width:100%;margin:0;padding:0";
-      el.innerHTML = c.blocks ? c.blocks.map(blockToHtml).join("") : markdownToHtml(c.content ?? "");
+      el.innerHTML = c.blocks
+        ? c.blocks.map(blockToHtml).join("")
+        : markdownToHtml(c.content ?? "", PixelRatio.get());
       wrapper.appendChild(el);
       els.push({ key: c.key, el });
     }

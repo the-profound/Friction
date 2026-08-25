@@ -130,6 +130,7 @@ import type {
   UpdateTeamCollectionBody,
   UpdateThoughtBody,
   UpdateUserBody,
+  UploadInlineImageResponse,
   UpsertReadingRecordBody,
   User,
   UserArticleRead,
@@ -219,6 +220,92 @@ export function useHealthCheck<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Upload a verified inline article image
+ */
+export const getUploadInlineImageUrl = () => {
+  return `/api/storage/inline-images`;
+};
+
+export const uploadInlineImage = async (
+  uploadInlineImageBody: Blob,
+  options?: RequestInit,
+): Promise<UploadInlineImageResponse> => {
+  return customFetch<UploadInlineImageResponse>(getUploadInlineImageUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "image/jpeg", ...options?.headers },
+    body: JSON.stringify(uploadInlineImageBody),
+  });
+};
+
+export const getUploadInlineImageMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof uploadInlineImage>>,
+    TError,
+    { data: BodyType<Blob> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof uploadInlineImage>>,
+  TError,
+  { data: BodyType<Blob> },
+  TContext
+> => {
+  const mutationKey = ["uploadInlineImage"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof uploadInlineImage>>,
+    { data: BodyType<Blob> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return uploadInlineImage(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UploadInlineImageMutationResult = NonNullable<
+  Awaited<ReturnType<typeof uploadInlineImage>>
+>;
+export type UploadInlineImageMutationBody = BodyType<Blob>;
+export type UploadInlineImageMutationError = ErrorType<void>;
+
+/**
+ * @summary Upload a verified inline article image
+ */
+export const useUploadInlineImage = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof uploadInlineImage>>,
+    TError,
+    { data: BodyType<Blob> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof uploadInlineImage>>,
+  TError,
+  { data: BodyType<Blob> },
+  TContext
+> => {
+  return useMutation(getUploadInlineImageMutationOptions(options));
+};
 
 /**
  * @summary List users

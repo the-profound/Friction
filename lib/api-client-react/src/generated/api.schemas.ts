@@ -52,6 +52,10 @@ export interface UpdateRecentCollectionBody {
   collectionId: string | null;
 }
 
+export interface UploadInlineImageResponse {
+  imageUrl: string;
+}
+
 export type ArticleStatus = (typeof ArticleStatus)[keyof typeof ArticleStatus];
 
 export const ArticleStatus = {

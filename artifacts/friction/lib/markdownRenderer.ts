@@ -1,4 +1,9 @@
 import type { InlineToken, MarkdownBlockType } from "@/utils/markdownParser";
+import {
+  getInlineImageTransformUrl,
+  isPersistableInlineImageUrl,
+  INLINE_IMAGE_DISPLAY_WIDTH,
+} from "./inlineImages";
 
 function escapeHtml(s: string): string {
   return s
@@ -16,13 +21,8 @@ function escapeHtmlAttr(s: string): string {
     .replace(/'/g, "&#x27;");
 }
 
-function isSafeImageUrl(url: string): boolean {
-  const trimmed = url.trim().toLowerCase();
-  return (
-    trimmed.startsWith("https://") ||
-    trimmed.startsWith("http://") ||
-    trimmed.startsWith("data:image/")
-  );
+export function isSafeImageUrl(url: string): boolean {
+  return isPersistableInlineImageUrl(url);
 }
 
 /**
@@ -97,17 +97,19 @@ function renderInline(text: string): string {
   return out;
 }
 
-function renderImageLine(line: string): string | null {
+function renderImageLine(line: string, imagePixelRatio = 1): string | null {
   const m = /^!\[([^\]]*)\]\(([^)]+)\)$/.exec(line.trim());
   if (!m) return null;
   const rawSrc = m[2].trim();
   if (!isSafeImageUrl(rawSrc)) return null;
   const alt = escapeHtmlAttr(m[1]);
-  const src = escapeHtmlAttr(rawSrc);
+  const src = escapeHtmlAttr(
+    getInlineImageTransformUrl(rawSrc, INLINE_IMAGE_DISPLAY_WIDTH, imagePixelRatio),
+  );
   return `<img data-inline="true" class="tiptap-inline-image" src="${src}" alt="${alt}">`;
 }
 
-export function markdownToHtml(md: string): string {
+export function markdownToHtml(md: string, imagePixelRatio = 1): string {
   try {
     const text = (md || "").replace(/\r\n?/g, "\n");
     const lines = text.split("\n");
@@ -159,7 +161,7 @@ export function markdownToHtml(md: string): string {
         continue;
       }
 
-      const imgHtml = renderImageLine(line);
+      const imgHtml = renderImageLine(line, imagePixelRatio);
       if (imgHtml) { blocks.push(imgHtml); i++; continue; }
 
       const paraLines: string[] = [];
@@ -171,7 +173,7 @@ export function markdownToHtml(md: string): string {
         !/^[-*]\s+/.test(lines[i]) &&
         !/^\d+\.\s+/.test(lines[i]) &&
         !/^(-{3,}|\*{3,}|_{3,})\s*$/.test(lines[i]) &&
-        !renderImageLine(lines[i])
+        !renderImageLine(lines[i], imagePixelRatio)
       ) { paraLines.push(lines[i]); i++; }
       const pInner = paraLines.map((l, idx) => idx === 0 ? renderInline(l) : "<br>" + renderInline(l)).join("");
       blocks.push(`<p>${pInner}</p>`);

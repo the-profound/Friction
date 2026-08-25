@@ -483,7 +483,13 @@ const InlineImage = TipTapNode.create({
   addAttributes() {
     return {
       src: { default: null },
+      originalSrc: {
+        default: null,
+        parseHTML: (element) => element.getAttribute("data-original-src") || element.getAttribute("src"),
+      },
       alt: { default: "" },
+      imageId: { default: null },
+      uploadState: { default: "complete" },
       "data-autosplit": { default: null },
     };
   },
@@ -494,15 +500,32 @@ const InlineImage = TipTapNode.create({
     const attrs: Record<string, string> = {
       "data-inline": "true",
       class: "tiptap-inline-image",
-      src: HTMLAttributes.src ?? "",
+      src: getInlineImageDisplayUrl(HTMLAttributes.originalSrc ?? HTMLAttributes.src ?? ""),
       alt: HTMLAttributes.alt ?? "",
     };
     if (HTMLAttributes["data-autosplit"]) {
       attrs["data-autosplit"] = HTMLAttributes["data-autosplit"];
     }
+    if (HTMLAttributes.imageId) {
+      attrs["data-image-id"] = HTMLAttributes.imageId;
+    }
+    if (HTMLAttributes.originalSrc ?? HTMLAttributes.src) {
+      attrs["data-original-src"] = HTMLAttributes.originalSrc ?? HTMLAttributes.src;
+    }
+    if (HTMLAttributes.uploadState) {
+      attrs["data-upload-state"] = HTMLAttributes.uploadState;
+      attrs.class += ` is-${HTMLAttributes.uploadState}`;
+    }
     return ["img", attrs];
   },
 });
+
+function getInlineImageDisplayUrl(originalUrl: string): string {
+  const match = /^(https?:\/\/[^/]+)\/storage\/v1\/object\/public\/([^?]+)$/.exec(originalUrl);
+  if (!match) return originalUrl;
+  const width = Math.max(1, Math.min(1600, Math.round(240 * window.devicePixelRatio)));
+  return `${match[1]}/storage/v1/render/image/public/${match[2]}?width=${width}&resize=contain&quality=80`;
+}
 
 function escapeHtml(s: string): string {
   return s
@@ -719,9 +742,9 @@ function htmlToMarkdown(html: string): string {
       if (tag === "u") return `<u>${inner}</u>`;
       if (tag === "br") return "  \n";
       if (tag === "img" && el.getAttribute("data-inline") === "true") {
-        const src = el.getAttribute("src") || "";
+        const src = el.getAttribute("data-original-src") || el.getAttribute("src") || "";
         const alt = el.getAttribute("alt") || "";
-        return `![${alt}](${src})`;
+        return /^https?:\/\//i.test(src) ? `![${alt}](${src})` : "";
       }
       return inner;
     }
@@ -737,9 +760,9 @@ function htmlToMarkdown(html: string): string {
     function blockMd(el: HTMLElement, depth: number): string {
       const tag = el.tagName.toLowerCase();
       if (tag === "img" && el.getAttribute("data-inline") === "true") {
-        const src = el.getAttribute("src") || "";
+        const src = el.getAttribute("data-original-src") || el.getAttribute("src") || "";
         const alt = el.getAttribute("alt") || "";
-        return `![${alt}](${src})\n\n`;
+        return /^https?:\/\//i.test(src) ? `![${alt}](${src})\n\n` : "";
       }
       if (tag === "hr") return `---\n\n`;
       if (tag === "h1") return `# ${childrenToInline(el)}\n\n`;
@@ -861,6 +884,8 @@ interface Command {
   pageIndex?: number;
   blockIndex?: number;
   url?: string;
+  imageId?: string;
+  uploadState?: "uploading" | "failed" | "complete";
   original?: string;
   replacement?: string;
   contextHint?: string;
@@ -1658,8 +1683,44 @@ function spellFindRange(
           if (editor && !editor.isDestroyed && cmd.url) {
             editor.chain().focus().insertContent({
               type: "inlineImage",
-              attrs: { src: cmd.url, alt: "" },
+              attrs: {
+                src: cmd.url,
+                originalSrc: cmd.url,
+                alt: "",
+                imageId: cmd.imageId ?? "",
+                uploadState: cmd.uploadState ?? "complete",
+              },
             }).run();
+          }
+          break;
+        }
+        case "replaceImage": {
+          if (editor && !editor.isDestroyed && cmd.imageId && cmd.url) {
+            const activeEditor = editor;
+            activeEditor.state.doc.descendants((node: PMNode, pos: number) => {
+              if (node.type.name !== "inlineImage" || node.attrs.imageId !== cmd.imageId) return true;
+              activeEditor.view.dispatch(activeEditor.state.tr.setNodeMarkup(pos, undefined, {
+                ...node.attrs,
+                src: cmd.url,
+                originalSrc: cmd.url,
+                uploadState: "complete",
+              }));
+              return false;
+            });
+          }
+          break;
+        }
+        case "setImageUploadState": {
+          if (editor && !editor.isDestroyed && cmd.imageId) {
+            const activeEditor = editor;
+            activeEditor.state.doc.descendants((node: PMNode, pos: number) => {
+              if (node.type.name !== "inlineImage" || node.attrs.imageId !== cmd.imageId) return true;
+              activeEditor.view.dispatch(activeEditor.state.tr.setNodeMarkup(pos, undefined, {
+                ...node.attrs,
+                uploadState: cmd.uploadState ?? "complete",
+              }));
+              return false;
+            });
           }
           break;
         }
@@ -1707,13 +1768,15 @@ function spellFindRange(
 
           const _isHR = (n: PMNode) => n.type.name === "horizontalRule";
           const _isImg = (n: PMNode) => n.type.name === "inlineImage";
+          const _isRemoteImg = (n: PMNode) =>
+            _isImg(n) && /^https?:\/\//i.test(String(n.attrs.originalSrc ?? n.attrs.src ?? ""));
           const _isEmptyPara = (n: PMNode) =>
             n.type.name === "paragraph" && n.content.size === 0;
 
           const original: PMNode[] = [];
           doc.forEach((n) => original.push(n));
 
-          if (!original.some((n) => _isImg(n) && !n.attrs["data-autosplit"])) {
+          if (!original.some((n) => _isRemoteImg(n) && !n.attrs["data-autosplit"])) {
             postToRN({ type: "onAutoSplitComplete", payload: { hadConsecutiveImages: false } });
             break;
           }
@@ -1744,7 +1807,7 @@ function spellFindRange(
           for (let i = 0; i < original.length; i++) {
             const node = original[i];
 
-            if (!_isImg(node) || node.attrs["data-autosplit"]) {
+            if (!_isRemoteImg(node) || node.attrs["data-autosplit"]) {
               result.push(node);
               continue;
             }
@@ -2037,6 +2100,13 @@ function spellFindRange(
         editorFocused = false;
       }
       syncKeyboardState();
+    });
+
+    document.addEventListener("click", function (e) {
+      const target = e.target;
+      if (!(target instanceof HTMLImageElement)) return;
+      if (target.dataset.uploadState !== "failed" || !target.dataset.imageId) return;
+      postToRN({ type: "onImageRetry", payload: { imageId: target.dataset.imageId } });
     });
 
     let swipeStartY = 0;

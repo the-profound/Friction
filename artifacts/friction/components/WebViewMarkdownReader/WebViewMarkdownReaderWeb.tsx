@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useMemo } from "react";
+import { PixelRatio } from "react-native";
 import type { WebViewMarkdownReaderProps } from "./WebViewMarkdownReader";
 import { ReaderTokens } from "@/constants/tokens";
 import { markdownToHtml } from "@/lib/markdownRenderer";
@@ -17,7 +18,10 @@ export default function WebViewMarkdownReaderWeb({
   const onTextSelectRef = useRef(onTextSelect);
   onTextSelectRef.current = onTextSelect;
 
-  const html = useMemo(() => markdownToHtml(markdown), [markdown]);
+  const html = useMemo(
+    () => markdownToHtml(markdown, PixelRatio.get()),
+    [markdown],
+  );
 
   useEffect(() => {
     onReady?.();
