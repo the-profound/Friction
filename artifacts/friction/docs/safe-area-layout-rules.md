@@ -59,9 +59,9 @@ const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
 
 | 항목 | 식 | 현재 값의 구성 | 코드 |
 | --- | --- | --- | --- |
-| NavBar의 화면 하단 위치 | `insets.bottom + Spacing.navBarBottom` | device bottom + `20` | `components/NavBar/NavBar.tsx` |
-| NavBar clearance 기본값 | `insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + extraGap` | device bottom + `20` + `68` + 기본 `20` = `insets.bottom + 108` | `hooks/useNavBarBottomSafeArea.ts` |
-| 과거 고정 토큰 | `Spacing.navBarPaddingBottom` | `108` | `constants/tokens.ts` |
+| NavBar의 화면 하단 위치 | `insets.bottom + Spacing.navBarBottom` | device bottom + `36` | `components/NavBar/NavBar.tsx` |
+| NavBar clearance 기본값 | `insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + extraGap` | device bottom + `36` + `60` + 기본 `20` = `insets.bottom + 116` | `hooks/useNavBarBottomSafeArea.ts` |
+| 과거 고정 토큰 | `Spacing.navBarPaddingBottom` | `116` | `constants/tokens.ts` |
 
 `useNavBarBottomSafeArea()`는 기본 `extraGap`까지 포함하므로, NavBar가 있는 목록의 `paddingBottom`에는 이 훅 **하나만** 사용한다. 그 결과 마지막 항목은 NavBar 상단에서 기본 20px 떨어진 위치까지 스크롤될 수 있다.
 
@@ -169,12 +169,12 @@ Web에서는 이 훅의 `insets.bottom`이 현재 0이므로 결과가 `108px`�
 | 상태·영역 | 식 | 목적 | 왜 다른가 |
 | --- | --- | --- | --- |
 | 일반 화면 헤더 | `PageHeader`: native `insets.top + Spacing.headerPt`; web `67 + Spacing.headerPt` | 보관 헤더를 화면 상단에서 안전하게 시작 | `PageHeader`가 웹 fallback을 직접 담당한다. |
-| 일반 목록·그리드 하단 | `navBottom = insets.bottom + 20 + 68 + 20` | 마지막 폴더/문장을 floating NavBar보다 위로 스크롤 | NavBar가 실제로 노출된 상태이므로 전체 clearance가 필요하다. |
+| 일반 목록·그리드 하단 | `navBottom = insets.bottom + 36 + 60 + 20` | 마지막 폴더/문장을 floating NavBar보다 위로 스크롤 | NavBar가 실제로 노출된 상태이므로 전체 clearance가 필요하다. |
 | 일반 빈 상태 하단 | `paddingBottom: navBottom` | 중앙 정렬 콘텐츠가 NavBar에 의해 시각적으로 눌리지 않음 | 목록과 같은 NavBar 회피 책임이다. |
 | 문장 선택 화면 루트 상단 | `paddingTop: insets.top` | 선택 헤더가 native 상태바와 겹치지 않음 | 선택 모드에서는 `PageHeader` 대신 별도 헤더를 쓴다. |
 | 문장 선택 헤더 내부 | `paddingTop: 50`, `paddingBottom: 20` | 취소/선택 개수 헤더의 고정 시각 여백 | 현재는 `PageHeader`와 다른 컴포넌트다. 웹에서는 root inset이 0이므로 이 50px이 현행 상단 여백이다. |
-| 문장 선택 바 위치 | `bottom: 0`, `paddingBottom: insets.bottom + 20 + 68 + 12` | 삭제 버튼이 홈 인디케이터와 NavBar가 있던 시각 영역 위에 보이도록 함 | 선택 모드에서는 NavBar 대신 삭제 바가 하단 chrome이다. `12`는 선택 바 내부 여유다. |
-| 문장 선택 목록 하단 | `insets.bottom + 20 + 68 + 80` | 마지막 문장이 선택 바/하단 chrome 뒤에 숨지 않음 | `80`은 선택 삭제 바의 버튼·상단 padding을 고려한 목록 reserve다. 버튼 바의 padding만으로는 목록 끝을 보장할 수 없다. |
+| 문장 선택 바 위치 | `bottom: 0`, `paddingBottom: insets.bottom + 36 + 60 + 12` | 삭제 버튼이 홈 인디케이터와 NavBar가 있던 시각 영역 위에 보이도록 함 | 선택 모드에서는 NavBar 대신 삭제 바가 하단 chrome이다. `12`는 선택 바 내부 여유다. |
+| 문장 선택 목록 하단 | `insets.bottom + 36 + 60 + 80` | 마지막 문장이 선택 바/하단 chrome 뒤에 숨지 않음 | `80`은 선택 삭제 바의 버튼·상단 padding을 고려한 목록 reserve다. 버튼 바의 padding만으로는 목록 끝을 보장할 수 없다. |
 
 일반 모드의 `navBottom`과 선택 모드 식은 비슷해 보여도 교체 가능한 값이 아니다.
 

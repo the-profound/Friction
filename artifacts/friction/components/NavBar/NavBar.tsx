@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useEffect, useRef } from "react";
-import { ActivityIndicator, Animated, StyleSheet, View, useWindowDimensions } from "react-native";
+import { ActivityIndicator, Animated, Platform, StyleSheet, View, useWindowDimensions } from "react-native";
 import Reanimated, { useSharedValue, useAnimatedStyle, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -49,68 +49,73 @@ export function NavBar() {
   return (
     <View style={[styles.container, { bottom: Spacing.navBarBottom + insets.bottom }]} pointerEvents="box-none">
       <View style={styles.navRow}>
-        <View style={[styles.dockShadow, Shadows.navBarIos, { width: dockWidth }]}>
-          <View style={[styles.dock, Shadows.navBarAndroid, { width: dockWidth }]}>
-            <Animated.View
-              style={[styles.layerAbsolute, { width: dockWidth, height: Sizing.navBarHeight, opacity: mainOpacity }]}
-              pointerEvents={nav.layer === "main" ? "auto" : "none"}
-            >
-              <Animated.View style={[styles.layerAbsolute, { width: dockWidth, height: Sizing.navBarHeight, transform: [{ scale: mainScale }] }]}>
-                {TabConfig.mainTabs.map((tab) => (
-                  <TabItem
-                    key={tab.key}
-                    icon={tab.icon as FeatherIconName}
-                    label={tab.label}
-                    active={nav.activeTab === tab.key}
-                    onPress={() => nav.setActiveTab(tab.key)}
-                  />
-                ))}
-              </Animated.View>
+        <View style={[styles.dock, Shadows.navBar, { width: dockWidth }]}>
+          <Animated.View
+            style={[styles.layerAbsolute, { width: dockWidth, height: Sizing.navBarHeight, opacity: mainOpacity }]}
+            pointerEvents={nav.layer === "main" ? "auto" : "none"}
+          >
+            <Animated.View style={[styles.layerAbsolute, { width: dockWidth, height: Sizing.navBarHeight, transform: [{ scale: mainScale }] }]}>
+              {TabConfig.mainTabs.map((tab) => (
+                <TabItem
+                  key={tab.key}
+                  icon={tab.icon as FeatherIconName}
+                  label={tab.label}
+                  active={nav.activeTab === tab.key}
+                  onPress={() => nav.setActiveTab(tab.key)}
+                />
+              ))}
             </Animated.View>
+          </Animated.View>
 
-            <Animated.View
-              style={[
-                styles.layerAbsolute,
-                { width: dockWidth, height: Sizing.navBarHeight, opacity: subOpacity },
-              ]}
-              pointerEvents={nav.layer === "sub" ? "auto" : "none"}
-            >
-              <Animated.View style={[styles.layerAbsolute, { width: dockWidth, height: Sizing.navBarHeight, transform: [{ scale: subScale }, { translateY: subTranslateY }] }]}>
-                <ScalePressable
-                  style={styles.backButton}
-                  contentStyle={styles.backButtonContent}
-                  onPress={nav.goBackToMainLayer}
-                >
-                  <Feather name="chevron-left" size={Sizing.backButtonIconSize} color={Colors.backButtonIcon} />
-                </ScalePressable>
-                {subItems.map((item) => (
-                  <TabItem
-                    key={item.key}
-                    icon={item.icon as FeatherIconName}
-                    label={item.label}
-                    active={activeSubTab === item.key}
-                    onPress={() => onSubTabPress(item.key)}
-                  />
-                ))}
-              </Animated.View>
+          <Animated.View
+            style={[
+              styles.layerAbsolute,
+              { width: dockWidth, height: Sizing.navBarHeight, opacity: subOpacity },
+            ]}
+            pointerEvents={nav.layer === "sub" ? "auto" : "none"}
+          >
+            <Animated.View style={[styles.layerAbsolute, { width: dockWidth, height: Sizing.navBarHeight, transform: [{ scale: subScale }, { translateY: subTranslateY }] }]}>
+              <ScalePressable
+                style={styles.backButton}
+                contentStyle={styles.backButtonContent}
+                onPress={nav.goBackToMainLayer}
+              >
+                <Feather name="chevron-left" size={Sizing.backButtonIconSize} color={Colors.backButtonIcon} />
+              </ScalePressable>
+              {subItems.map((item) => (
+                <TabItem
+                  key={item.key}
+                  icon={item.icon as FeatherIconName}
+                  label={item.label}
+                  active={activeSubTab === item.key}
+                  onPress={() => onSubTabPress(item.key)}
+                />
+              ))}
             </Animated.View>
-          </View>
+          </Animated.View>
         </View>
-        <ScalePressable
-          style={styles.addButton}
-          contentStyle={styles.addButtonContent}
-          onPress={createDirectThought}
-          disabled={isCreatingThought}
-          accessibilityRole="button"
-          accessibilityLabel={isCreatingThought ? "새 단상을 만드는 중" : "새 단상 작성"}
-          accessibilityState={{ busy: isCreatingThought, disabled: isCreatingThought }}
-        >
-          {isCreatingThought ? (
-            <ActivityIndicator size="small" color={Colors.white} />
-          ) : (
-            <Feather name="plus" size={Sizing.tabIconSize} color={Colors.white} />
-          )}
-        </ScalePressable>
+        <View style={[styles.addButtonShadow, Shadows.navBar]} pointerEvents="box-none">
+          <ScalePressable
+            style={styles.addButton}
+            contentStyle={[
+              styles.addButtonContent,
+              // Reanimated's web content layer can drop boxShadow. The fixed
+              // wrapper owns it on web; native keeps the shadow on the surface.
+              Platform.OS === "web" ? null : Shadows.navBar,
+            ]}
+            onPress={createDirectThought}
+            disabled={isCreatingThought}
+            accessibilityRole="button"
+            accessibilityLabel={isCreatingThought ? "새 단상을 만드는 중" : "새 단상 작성"}
+            accessibilityState={{ busy: isCreatingThought, disabled: isCreatingThought }}
+          >
+            {isCreatingThought ? (
+              <ActivityIndicator size="small" color={Colors.white} />
+            ) : (
+              <Feather name="plus" size={Sizing.tabIconSize} color={Colors.white} />
+            )}
+          </ScalePressable>
+        </View>
       </View>
     </View>
   );
@@ -172,13 +177,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: Spacing.lg,
   },
-  dockShadow: {
-    borderRadius: Sizing.navBarRadius,
-    backgroundColor: Colors.navBarBg,
-  },
   dock: {
     width: Sizing.navBarWidth,
     height: Sizing.navBarHeight,
+    flexGrow: 0,
+    flexShrink: 0,
     borderRadius: Sizing.navBarRadius,
     backgroundColor: Colors.navBarBg,
     borderWidth: 1,
@@ -196,10 +199,15 @@ const styles = StyleSheet.create({
   },
   tabItem: {
     flex: 1,
+    height: Sizing.navBarHeight,
+    flexGrow: 1,
+    flexShrink: 1,
+    alignSelf: "center",
   },
   tabItemContent: {
-    minHeight: Sizing.touchTargetMin,
-    height: "100%",
+    height: Sizing.navBarHeight,
+    flexGrow: 0,
+    flexShrink: 0,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -210,6 +218,8 @@ const styles = StyleSheet.create({
   backButtonContent: {
     width: "100%",
     height: "100%",
+    flexGrow: 0,
+    flexShrink: 0,
     borderRadius: Sizing.navBarRadius,
     backgroundColor: Colors.backButtonBg,
     alignItems: "center",
@@ -220,6 +230,14 @@ const styles = StyleSheet.create({
     height: Sizing.navBarHeight,
     flexGrow: 0,
     flexShrink: 0,
+    borderRadius: Sizing.navBarRadius,
+  },
+  addButtonShadow: {
+    width: Sizing.navBarHeight,
+    height: Sizing.navBarHeight,
+    flexGrow: 0,
+    flexShrink: 0,
+    borderRadius: Sizing.navBarRadius,
   },
   addButtonContent: {
     width: "100%",
@@ -230,7 +248,5 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.noticeAccent,
     alignItems: "center",
     justifyContent: "center",
-    ...Shadows.navBarIos,
-    ...Shadows.navBarAndroid,
   },
 });

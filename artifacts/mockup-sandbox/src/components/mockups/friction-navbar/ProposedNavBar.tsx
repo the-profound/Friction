@@ -21,6 +21,10 @@ const tabs: { key: TabKey; label: string; icon: string }[] = [
   { key: "TO", label: "마이", icon: "user" },
 ];
 
+const NAV_BAR_HEIGHT = 60;
+const NAV_BAR_RADIUS = NAV_BAR_HEIGHT / 2;
+const NAV_BAR_SHADOW = "0 5px 14px rgba(0,0,0,0.16), 0 1px 2px rgba(0,0,0,0.08)";
+
 function FeatherIcon({
   name,
   size = 18,
@@ -176,11 +180,11 @@ const styles: Record<string, CSSProperties> = {
   letterStamp: { position: "absolute", bottom: 17, left: 18, color: "#968b83", fontSize: 8, letterSpacing: 1.2 },
   pageHint: { marginTop: 18, color: colors.muted, fontSize: 10, letterSpacing: 1.1, display: "flex", gap: 8, alignItems: "center" },
   pageHintSpan: { display: "inline-block", width: 23, height: 1, background: colors.muted },
-  bottomArea: { position: "absolute", left: 0, right: 0, bottom: 0, padding: "0 16px 22px", background: "linear-gradient(transparent, rgba(248,247,244,0.97) 22%)", paddingTop: 38 },
-  navShell: { height: 70, display: "flex", alignItems: "center", gap: 12 },
-  menuGroup: { flex: 1, height: 70, display: "flex", alignItems: "center", justifyContent: "space-around", minWidth: 0, background: colors.white, border: `1px solid ${colors.line}`, borderRadius: 32, padding: "0 5px", boxShadow: "0 9px 22px rgba(38,31,27,0.1)" },
-  tab: { appearance: "none", border: 0, background: "transparent", padding: "14px 4px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", minWidth: 39, fontFamily: "inherit" },
-  cta: { appearance: "none", border: 0, background: colors.ink, color: colors.white, borderRadius: 35, width: 70, minWidth: 70, height: 70, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: "0 5px 12px rgba(24,24,27,0.2)" },
+  bottomArea: { position: "absolute", left: 0, right: 0, bottom: 0, padding: "0 16px 38px", background: "linear-gradient(transparent, rgba(248,247,244,0.97) 22%)", paddingTop: 38 },
+  navShell: { height: NAV_BAR_HEIGHT, display: "flex", alignItems: "center", gap: 12 },
+  menuGroup: { flex: 1, height: NAV_BAR_HEIGHT, display: "flex", alignItems: "center", justifyContent: "space-around", minWidth: 0, background: colors.white, border: `1px solid ${colors.line}`, borderRadius: NAV_BAR_RADIUS, padding: "0 5px", boxShadow: NAV_BAR_SHADOW },
+  tab: { appearance: "none", border: 0, background: "transparent", height: NAV_BAR_HEIGHT, padding: "0 4px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", minWidth: 39, fontFamily: "inherit" },
+  cta: { appearance: "none", border: 0, background: colors.ink, color: colors.white, borderRadius: NAV_BAR_RADIUS, width: NAV_BAR_HEIGHT, minWidth: NAV_BAR_HEIGHT, height: NAV_BAR_HEIGHT, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: NAV_BAR_SHADOW },
   composerCard: { position: "absolute", bottom: 98, left: 16, right: 16, background: colors.ink, color: colors.white, borderRadius: 18, padding: "18px 18px 16px", boxShadow: "0 14px 30px rgba(24,24,27,0.2)" },
   composerKicker: { color: "#cdb7ae", fontSize: 10, letterSpacing: 1.2, marginBottom: 9 },
   composerLine: { fontFamily: "'Playfair Display', serif", fontSize: 19, lineHeight: 1.35, marginBottom: 15 },

@@ -71,15 +71,18 @@ export const Spacing = {
   /** Vertical separation between date groups in the shared card carousel. */
   carouselGroupBottom: 12,
 
-  navBarBottom: 20,
+  navBarBottom: 36,
 
-  navBarPaddingBottom: 108,
+  navBarPaddingBottom: 116,
 } as const;
 
 export const Sizing = {
-  navBarWidth: 300,
-  navBarHeight: 68,
-  navBarRadius: 999,
+  navBarWidth: 340,
+  navBarHeight: 60,
+  /** Capsule radius and the CTA's circular radius are both derived from the shared height. */
+  get navBarRadius() {
+    return this.navBarHeight / 2;
+  },
   navBarZIndex: 30,
 
   tabIconSize: 22,
@@ -249,22 +252,20 @@ export const Animation = {
 } as const;
 
 export const Shadows = {
-  navBarIos: Platform.select({
+  /** One raised-surface treatment shared by the dock and the circular CTA. */
+  navBar: Platform.select({
     ios: {
       shadowColor: "#000",
-      shadowOffset: { width: 0, height: 0 },
+      shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.13,
       shadowRadius: 10,
     },
-    web: {
-      boxShadow: "0px 0px 10px rgba(0,0,0,0.13)",
-    } as object,
-    default: {},
-  }),
-  navBarAndroid: Platform.select({
     android: {
       elevation: 4,
     },
+    web: {
+      boxShadow: "0px 5px 14px rgba(0,0,0,0.16), 0px 1px 2px rgba(0,0,0,0.08)",
+    } as object,
     default: {},
   }),
   headerScrolled: Platform.select({
