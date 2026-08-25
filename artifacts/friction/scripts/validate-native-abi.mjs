@@ -1,12 +1,16 @@
 #!/usr/bin/env node
 
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const expectedVersion = "57.0.12";
-const packagePath = resolve("package.json");
-const lockfilePath = resolve("../../pnpm-lock.yaml");
-const workspacePath = resolve("../../pnpm-workspace.yaml");
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+const appDir = resolve(scriptDir, "..");
+const workspaceDir = resolve(appDir, "../..");
+const packagePath = resolve(appDir, "package.json");
+const lockfilePath = resolve(workspaceDir, "pnpm-lock.yaml");
+const workspacePath = resolve(workspaceDir, "pnpm-workspace.yaml");
 
 const packageJson = JSON.parse(await readFile(packagePath, "utf8"));
 const lockfile = await readFile(lockfilePath, "utf8");
