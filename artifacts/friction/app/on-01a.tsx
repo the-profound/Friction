@@ -15,7 +15,8 @@ import {
 import ScalePressable from "@/components/shared/ScalePressable";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter, useLocalSearchParams, Stack } from "expo-router";
+import { useRouter, useLocalSearchParams, Stack, useNavigation } from "expo-router";
+import { usePreventRemove } from "expo-router/build/react-navigation/core";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useAutoSave } from "@/lib/useAutoSave";
@@ -125,6 +126,7 @@ type EditorMode = "draft" | "dividing";
 export default function WritingScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const navigation = useNavigation();
   const queryClient = useQueryClient();
   const { id, source, mode: modeParam, returnPage, returnBlock } = useLocalSearchParams<{
     id?: string;
@@ -288,6 +290,11 @@ export default function WritingScreen() {
   // 마지막으로 서버에서 본 content. 사용자 편집 발생 여부 감지에 사용.
   const serverContentRef = useRef("");
   const isNavigatingRef = useRef(false);
+  // Native Stack requires usePreventRemove instead of a bare beforeRemove
+  // listener for reliable interactive iOS swipe cancellation. Intentional
+  // navigation waits until this guard has been disabled before dispatching.
+  const [shouldPreventRemoval, setShouldPreventRemoval] = useState(true);
+  const pendingNavigationRef = useRef<(() => void) | null>(null);
   const thoughtIdRef = useRef<string | undefined>(id);
   const createThoughtPromiseRef = useRef<Promise<string> | null>(null);
   const firstCreatedContentRef = useRef<string | null>(null);
@@ -1003,6 +1010,11 @@ export default function WritingScreen() {
     setImagePickerVisible(true);
   }, []);
 
+  const navigateAfterRemovingGuard = useCallback((navigate: () => void) => {
+    pendingNavigationRef.current = navigate;
+    setShouldPreventRemoval(false);
+  }, []);
+
   // ── 모드 전환: 작성(thought) → 분할(article) ──────────────────────────────
   //
   // flush() 로 최신 내용을 thought 에 저장한 뒤 promoteThought() 를 단 1회 호출한다.
@@ -1124,8 +1136,11 @@ export default function WritingScreen() {
     releaseDirectThoughtDraft();
 
     // Replace route with the new article id so a refresh lands on the real article.
-    router.replace({ pathname: "/on-01a", params: { id: promoted.id, mode: "dividing" } });
-  }, [getEditorContent, markDirty, flush, queryClient, promoteThought, showToast, setModeBoth, router, releaseDirectThoughtDraft]);
+    // This route identity swap is a stage transition, not a user-initiated exit.
+    navigateAfterRemovingGuard(() => {
+      router.replace({ pathname: "/on-01a", params: { id: promoted.id, mode: "dividing" } });
+    });
+  }, [getEditorContent, markDirty, flush, queryClient, promoteThought, showToast, setModeBoth, router, releaseDirectThoughtDraft, navigateAfterRemovingGuard]);
 
   // ── 분할 → 마감 (on-01c 이동) ──────────────────────────────────────────────
   const handleNextToClosing = useCallback(async () => {
@@ -1248,6 +1263,28 @@ export default function WritingScreen() {
   // Both draft and dividing modes exit the screen via this single handler.
   // There is no "exit dividing back to draft" transition — once promoted to
   // DIVIDING the article stays there.
+  const exitToPreviousList = useCallback(() => {
+    // Only pop if this screen was pushed from the tab navigator. A restored
+    // route or a quote opened from another detail screen can have a different
+    // root-stack predecessor; exposing that predecessor is not a "back to
+    // list" action, so use the route-specific safe fallback instead.
+    const state = navigation.getState();
+    const previousRoute = state?.routes[state.index - 1];
+    const canPopToList = router.canGoBack() && previousRoute?.name === "(tabs)";
+
+    releaseDirectThoughtDraft();
+    isNavigatingRef.current = false;
+    setIsNavigating(false);
+    navigateAfterRemovingGuard(() => {
+      if (canPopToList) {
+        router.back();
+        return;
+      }
+
+      router.replace(source === "quote" ? "/(tabs)/archive" : "/(tabs)/on");
+    });
+  }, [navigation, releaseDirectThoughtDraft, router, source, navigateAfterRemovingGuard]);
+
   const handleDraftBack = useCallback(async () => {
     if (isNavigatingRef.current) return;
     isNavigatingRef.current = true;
@@ -1302,10 +1339,7 @@ export default function WritingScreen() {
         invalidateArticleLists(queryClient);
         queryClient.invalidateQueries({ queryKey: getListThoughtsQueryKey() });
       }
-      releaseDirectThoughtDraft();
-      isNavigatingRef.current = false;
-      setIsNavigating(false);
-      router.replace("/(tabs)/on");
+      exitToPreviousList();
       return;
     }
 
@@ -1345,15 +1379,8 @@ export default function WritingScreen() {
     if (isThoughtModeRef.current) {
       queryClient.invalidateQueries({ queryKey: getListThoughtsQueryKey() });
     }
-    isNavigatingRef.current = false;
-    setIsNavigating(false);
-    releaseDirectThoughtDraft();
-    if (source === "quote") {
-      router.replace("/(tabs)/archive");
-    } else {
-      router.replace("/(tabs)/on");
-    }
-  }, [flush, router, queryClient, getEditorContent, markDirty, id, deleteThought, source, showToast, releaseDirectThoughtDraft, isLocalDirectDraft]);
+    exitToPreviousList();
+  }, [flush, queryClient, getEditorContent, markDirty, id, deleteThought, showToast, isLocalDirectDraft, exitToPreviousList]);
 
   // Native lifecycle events have no reliable "before unload" hook.  Export the
   // WebView snapshot while the app is still active and flush it to the thought/article
@@ -1391,6 +1418,32 @@ export default function WritingScreen() {
     }
     handleDraftBack();
   }, [spellTabVisible, handleDraftBack]);
+
+  // Keep the native edge-swipe, browser history back, and header button on
+  // the same asynchronous save/delete path. usePreventRemove is required for
+  // Native Stack: a bare beforeRemove listener is not reliable for iOS edge
+  // gestures. A repeat removal while save/delete is in progress stays blocked.
+  const handlePreventedRemoval = useCallback(() => {
+    if (isNavigatingRef.current) return;
+    if (!initializedRef.current) {
+      exitToPreviousList();
+      return;
+    }
+    handleHeaderBack();
+  }, [handleHeaderBack, exitToPreviousList]);
+
+  usePreventRemove(shouldPreventRemoval, handlePreventedRemoval);
+
+  // usePreventRemove updates the native-stack removal guard after render.
+  // Dispatch intentional route changes on the following turn so stage
+  // replaces and completed exits are admitted exactly once.
+  useEffect(() => {
+    if (shouldPreventRemoval || !pendingNavigationRef.current) return;
+    const navigate = pendingNavigationRef.current;
+    pendingNavigationRef.current = null;
+    const timer = setTimeout(navigate, 0);
+    return () => clearTimeout(timer);
+  }, [shouldPreventRemoval]);
 
   const handleDismissKeyboard = useCallback(() => {
     editorRef.current?.blur();
@@ -1747,20 +1800,19 @@ export default function WritingScreen() {
     if (Platform.OS !== "android") return;
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
       if (!initializedRef.current) {
-        if (isLocalDirectDraft) releaseDirectThoughtDraft();
-        router.back();
+        exitToPreviousList();
         return true;
       }
       handleHeaderBack();
       return true;
     });
     return () => sub.remove();
-  }, [handleHeaderBack, router, isLocalDirectDraft, releaseDirectThoughtDraft]);
+  }, [handleHeaderBack, exitToPreviousList]);
 
   if ((!isLocalDirectDraft && !id) || dataLoading) {
     return (
       <>
-        <Stack.Screen options={{ gestureEnabled: false }} />
+        <Stack.Screen options={{ gestureEnabled: true }} />
         <View style={[styles.container, { paddingTop: insets.top }]}>
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={Colors.zinc400} />
@@ -1780,7 +1832,7 @@ export default function WritingScreen() {
   if (hasLoadError) {
     return (
       <>
-        <Stack.Screen options={{ gestureEnabled: false }} />
+        <Stack.Screen options={{ gestureEnabled: true }} />
         <View style={[styles.container, { paddingTop: insets.top }]}>
           <View style={styles.loadingContainer}>
             <Feather name="alert-circle" size={30} color={Colors.zinc500} />
@@ -1805,7 +1857,7 @@ export default function WritingScreen() {
               <ScalePressable
                 style={styles.loadBackButton}
                 contentStyle={styles.loadBackButtonContent}
-                onPress={() => router.back()}
+                onPress={exitToPreviousList}
               >
                 <Text style={styles.loadBackButtonText}>이전 화면</Text>
               </ScalePressable>
@@ -1820,7 +1872,7 @@ export default function WritingScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ gestureEnabled: false }} />
+      <Stack.Screen options={{ gestureEnabled: true }} />
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.header}>
           <ScalePressable onPress={handleHeaderBack} hitSlop={12}>

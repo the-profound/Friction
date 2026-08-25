@@ -223,6 +223,8 @@ function RootLayoutNav() {
           <Stack.Screen name="of-space-start" />
           <Stack.Screen name="of-space-schedule-send" />
           <Stack.Screen name="of-space-archive" />
+          {/* Draft entry/exit uses push/pop. These replace options are only for
+              transitions between the writing stages. */}
           <Stack.Screen name="on-01a" options={{ animationTypeForReplace: "pop" }} />
           <Stack.Screen name="on-01b" options={{ animationTypeForReplace: "pop" }} />
           <Stack.Screen name="on-01c" />
