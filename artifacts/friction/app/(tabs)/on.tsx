@@ -614,8 +614,8 @@ export default function OnScreen() {
       />
       <AnimatedSearchBar active={searchActive} value={searchQuery} onChangeText={setSearchQuery} placeholder="제목과 내용으로 검색" />
       <View style={styles.filters}>
-        <DropdownFilter label="종류" value={kind} defaultValue="thought" options={KIND_OPTIONS} onChange={setKind} selectedLabel={`종류: ${KIND_OPTIONS.find((option) => option.key === kind)?.label ?? ""}`} />
-        <DropdownFilter label="보기" value={view} defaultValue="card" options={VIEW_OPTIONS} onChange={setView} selectedLabel={`보기: ${VIEW_OPTIONS.find((option) => option.key === view)?.label ?? ""}`} />
+        <DropdownFilter label="종류" value={kind} defaultValue="thought" options={KIND_OPTIONS} onChange={setKind} />
+        <DropdownFilter label="보기" value={view} defaultValue="card" options={VIEW_OPTIONS} onChange={setView} />
       </View>
 
       {isLoading ? (
