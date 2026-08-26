@@ -66,7 +66,7 @@ import {
   type UnifiedRecord,
 } from "@/lib/recordList";
 import type { ArticleStatus } from "@/lib/policies";
-import { useDateGroupSnap } from "@/hooks/useDateGroupSnap";
+import { useScrollPressGuard } from "@/hooks/useScrollPressGuard";
 
 const KIND_OPTIONS: { key: RecordKind; label: string }[] = [
   { key: "thought", label: "단상" },
@@ -398,9 +398,7 @@ export default function OnScreen() {
     () => buildRecordDateGroups(cardRecords),
     [cardRecords],
   );
-  const dateGroupSnap = useDateGroupSnap<RecordDateGroup<CardRecord>>({
-    dateKeys: cardGroups.map((group) => group.dateKey),
-  });
+  const scrollPressGuard = useScrollPressGuard();
   const sortedCollections = useMemo(() => [...((collectionsQuery.data ?? []) as MyCollection[])]
     .filter((collection) => !collection.isArchive)
     .sort((a, b) => Number(Boolean(b.isImpression)) - Number(Boolean(a.isImpression)) || (b.articleCount ?? 0) - (a.articleCount ?? 0)), [collectionsQuery.data]);
@@ -624,12 +622,11 @@ export default function OnScreen() {
         <View style={styles.center}><Text style={styles.muted}>불러오는 중...</Text></View>
       ) : view === "card" && (cardGroups.length > 0 || queuedQuestionRecords.length > 0) ? (
         <FlatList
-          ref={dateGroupSnap.listRef}
           data={cardGroups}
           nestedScrollEnabled
           keyExtractor={(group) => group.dateKey}
           renderItem={({ item }) => (
-            <View onLayout={dateGroupSnap.onDateGroupLayout(item.dateKey)}>
+            <View>
               <DateGroupCarousel
                 dateLabel={item.label}
                 countLabel={`${item.records.length}개`}
@@ -639,7 +636,7 @@ export default function OnScreen() {
                 cardHeight={getRecordGroupCardHeight(item.records, cardWidth)}
                 actionAreaHeight={CARD_ACTION_AREA_H}
                 renderCard={(record, context) => renderRecordCard(record, context.shouldIgnorePress, getRecordGroupCardHeight(item.records, cardWidth))}
-                shouldIgnoreVerticalPress={dateGroupSnap.shouldIgnoreVerticalPress}
+                shouldIgnoreVerticalPress={scrollPressGuard.shouldIgnoreVerticalPress}
               />
             </View>
           )}
@@ -654,18 +651,12 @@ export default function OnScreen() {
                 cardHeight={getRecordGroupCardHeight(queuedQuestionRecords, cardWidth)}
                 actionAreaHeight={CARD_ACTION_AREA_H}
                 renderCard={(record, context) => renderRecordCard(record, context.shouldIgnorePress, getRecordGroupCardHeight(queuedQuestionRecords, cardWidth))}
-                shouldIgnoreVerticalPress={dateGroupSnap.shouldIgnoreVerticalPress}
+                shouldIgnoreVerticalPress={scrollPressGuard.shouldIgnoreVerticalPress}
               />
             </View>
           ) : null}
           refreshControl={<RefreshControl refreshing={articlesQuery.isRefetching || thoughtsQuery.isRefetching || questionQuery.isRefetching || refreshQuestion.isPending} onRefresh={() => refreshAll(kind === "thought")} />}
-          snapToOffsets={dateGroupSnap.snapOffsets.length > 1 ? dateGroupSnap.snapOffsets : undefined}
-          snapToAlignment="start"
-          decelerationRate="fast"
-          disableIntervalMomentum
-          onMomentumScrollEnd={dateGroupSnap.onMomentumScrollEnd}
-          onScrollEndDrag={dateGroupSnap.onScrollEndDrag}
-          onScroll={dateGroupSnap.onScroll}
+          onScroll={scrollPressGuard.onScroll}
           scrollEventThrottle={16}
           contentContainerStyle={[styles.recordGroupList, { paddingBottom: navBottom }]}
           showsVerticalScrollIndicator={false}

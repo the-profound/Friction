@@ -30,7 +30,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { isQueryStale } from "@/lib/useScreenFocused";
 import { useRealtimeChannel } from "@/lib/useRealtimeChannel";
 import { LIST_PERF_PRESET } from "@/lib/listPerf";
-import { useDateGroupSnap } from "@/hooks/useDateGroupSnap";
+import { useScrollPressGuard } from "@/hooks/useScrollPressGuard";
 
 /** Recursively collect all inbox descendants of rootArticleId (oldest → newest BFS). */
 function findAllDescendants(rootArticleId: string, allItems: InboxItem[]): InboxItem[] {
@@ -156,9 +156,7 @@ export default function InboxScreen() {
   }, [visibleItems, searchQuery]);
 
   const groups = useMemo(() => groupBySlot(filteredItems), [filteredItems]);
-  const dateGroupSnap = useDateGroupSnap<DateGroup>({
-    dateKeys: groups.map((group) => group.dateKey),
-  });
+  const scrollPressGuard = useScrollPressGuard();
 
   const handleSearchPress = useCallback(() => {
     setSearchActive((prev) => {
@@ -177,7 +175,7 @@ export default function InboxScreen() {
   // function (and triggering row-level reconciliation) on every parent render.
   const renderGroupItem = useCallback(
     ({ item: group }: { item: DateGroup }) => (
-      <View onLayout={dateGroupSnap.onDateGroupLayout(group.dateKey)}>
+      <View>
         <DateGroupCarousel
           dateLabel={group.label}
           countLabel={`${group.items.length}편`}
@@ -185,7 +183,7 @@ export default function InboxScreen() {
           itemKey={inboxItemKey}
           cardWidth={CARD_W}
           cardHeight={CARD_H}
-          shouldIgnoreVerticalPress={dateGroupSnap.shouldIgnoreVerticalPress}
+          shouldIgnoreVerticalPress={scrollPressGuard.shouldIgnoreVerticalPress}
           renderCard={(item, context) => {
             const isSealed = Boolean((item as any).isEnvelope) && !item.openedAt;
             const handlePress = () => {
@@ -231,8 +229,7 @@ export default function InboxScreen() {
       </View>
     ),
     [
-      dateGroupSnap.onDateGroupLayout,
-      dateGroupSnap.shouldIgnoreVerticalPress,
+      scrollPressGuard.shouldIgnoreVerticalPress,
       handleCardPress,
       isTappedSourceHidden,
       nickname,
@@ -502,7 +499,6 @@ export default function InboxScreen() {
       ) : (
         <FlatList
           {...LIST_PERF_PRESET}
-          ref={dateGroupSnap.listRef}
           data={groups}
           extraData={`${tapItem?.id ?? ""}:${isTappedSourceHidden}`}
           keyExtractor={groupKeyExtractor}
@@ -512,13 +508,7 @@ export default function InboxScreen() {
           }
           contentContainerStyle={[styles.listContent, { paddingBottom: navBottom }]}
           showsVerticalScrollIndicator={false}
-          snapToOffsets={dateGroupSnap.snapOffsets.length > 1 ? dateGroupSnap.snapOffsets : undefined}
-          snapToAlignment="start"
-          decelerationRate="fast"
-          disableIntervalMomentum
-          onMomentumScrollEnd={dateGroupSnap.onMomentumScrollEnd}
-          onScrollEndDrag={dateGroupSnap.onScrollEndDrag}
-          onScroll={dateGroupSnap.onScroll}
+          onScroll={scrollPressGuard.onScroll}
           scrollEventThrottle={16}
         />
       )}
