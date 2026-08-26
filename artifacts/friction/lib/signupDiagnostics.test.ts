@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getSignupFailureAlertContent,
+  getSignupFailureInlineMessage,
   getSignupAuthFailure,
   getSignupProfileSyncFailure,
   getUnknownSignupFailure,
@@ -39,6 +40,19 @@ describe("signup diagnostic failures", () => {
     });
     expect(JSON.stringify(content)).not.toContain("person@example.test");
     expect(JSON.stringify(content)).not.toContain("access-token-value");
+  });
+
+  it("keeps safe signup guidance available for inline form feedback", () => {
+    const failure = getSignupAuthFailure(
+      { message: "server returned person@example.test and access-token-value" },
+      diagnosticId,
+    );
+
+    expect(getSignupFailureInlineMessage(failure)).toBe(
+      "인증 서비스에서 가입을 완료하지 못했습니다. 잠시 후 다시 시도해주세요.",
+    );
+    expect(getSignupFailureInlineMessage(failure)).not.toContain("person@example.test");
+    expect(getSignupFailureInlineMessage(failure)).not.toContain("access-token-value");
   });
 
   it("distinguishes a native auth network failure", () => {

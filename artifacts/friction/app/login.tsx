@@ -21,11 +21,13 @@ import { Colors, Spacing, Typography } from "@/constants/tokens";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   getSignupFailureAlertContent,
+  getSignupFailureInlineMessage,
   type SignupFailure,
 } from "@/lib/signupDiagnostics";
 
 type Mode = "login" | "signup";
 type SignupStep = 1 | 2;
+const SIGNUP_BACK_ROW_HEIGHT = 32;
 
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
@@ -160,7 +162,9 @@ export default function LoginScreen() {
     try {
       const { error, needsConfirmation } = await signUp(email.trim(), password, trimmedNickname);
       if (error) {
-        setErrorMessage(error.message);
+        // Keep the sanitized guidance on the active form as well as in the
+        // diagnostic alert. The form stays retryable after the alert closes.
+        setErrorMessage(getSignupFailureInlineMessage(error));
         setSignupFailurePopup(error);
       } else if (needsConfirmation) {
         setSignupDone(true);
@@ -728,9 +732,16 @@ const styles = StyleSheet.create({
     color: Colors.zinc700,
   },
   backRow: {
+    height: SIGNUP_BACK_ROW_HEIGHT,
     alignSelf: "flex-start",
+    flexGrow: 0,
+    flexShrink: 0,
   },
   backRowContent: {
+    height: SIGNUP_BACK_ROW_HEIGHT,
+    alignSelf: "flex-start",
+    flexGrow: 0,
+    flexShrink: 0,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,

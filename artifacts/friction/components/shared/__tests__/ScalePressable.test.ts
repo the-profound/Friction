@@ -56,6 +56,22 @@ describe("ScalePressable styles: inner animation wrapper", () => {
     expect(styles.inner).toHaveProperty("flexGrow", 1);
     expect((styles.inner as Record<string, unknown>)["flex"]).toBeUndefined();
   });
+
+  it("allows compact rows to override the inner stretch with fixed height and no growth", async () => {
+    const { styles } = await import("../ScalePressable");
+    const compactRowContent = {
+      height: 32,
+      alignSelf: "flex-start",
+      flexGrow: 0,
+      flexShrink: 0,
+    };
+    const merged = { ...styles.inner, ...compactRowContent };
+
+    expect(merged).toMatchObject(compactRowContent);
+    expect(merged.flexGrow).toBe(0);
+    expect(merged.flexShrink).toBe(0);
+    expect(merged.height).toBe(32);
+  });
 });
 
 describe("ScalePressable: module exports", () => {

@@ -31,6 +31,15 @@ export function getSignupFailureAlertContent(failure: SignupFailure): {
   };
 }
 
+/**
+ * Returns the already-sanitized message for the active signup form.
+ * Keep the inline message separate from the diagnostic details shown in the
+ * native alert so the form remains useful after the alert is dismissed.
+ */
+export function getSignupFailureInlineMessage(failure: SignupFailure): string {
+  return failure.message;
+}
+
 function errorText(error: unknown): string {
   if (typeof error !== "object" || error === null) return String(error).toLowerCase();
   const candidate = error as { message?: unknown };
