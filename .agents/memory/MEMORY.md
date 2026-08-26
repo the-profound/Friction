@@ -8,6 +8,7 @@
 - [Artifact port config SSOT](friction-artifact-port-config.md) — workflow PORT comes from artifact.toml localPort at runtime; `.replit` text can be stale. Change ports via verifyAndReplaceArtifactToml only.
 - [Friction two-database setup](friction-two-database.md) — executeSql tool hits local DB (DATABASE_URL); API server hits Supabase DB (SUPABASE_DB_URL). Migrations must reach BOTH.
 - [Scaled-layer text blur](friction-scaled-layer-text-blur.md) — shrunk cards blur when shadow/overflow:hidden sit on the text layer; split shadow to an empty sibling, mask only at scale 1.
+- [Android shadow stacking](friction-android-shadow-stacking.md) — elevated empty shadow siblings can paint above card content; Android elevation belongs on the containing surface.
 - [Friction memo overlay rendering](friction-memo-overlay-rendering.md) — RN `color: "transparent"` unreliable for hiding overlay text; use exact background hex match instead.
 - [Friction memo card scroll vs page-flip gesture](friction-memo-gesture-split.md) — keyboard-open drag translates the card (WebView scroll disabled); typing-overflow auto-split only reports the cut, RN must apply it via setMarkdown.
 - [Sheet close dead zone](friction-sheet-close-unlock.md) — dismissed sheet still eats taps: outer container keeps full height while only inner panel slides; RN hit-test never falls through. Not a JS-thread issue.

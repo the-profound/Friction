@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ImageBackground,
   Animated,
+  Platform,
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { Colors, Shadows, Sizing, ReaderTokens, readerFontSize } from "../../constants/tokens";
@@ -95,23 +96,31 @@ function ArticleCardItem({
   const textFrameWidth = Math.max(1, w - pad * 2);
   const titleSize = Math.max(
     8,
-    Math.round(readerFontSize(ReaderTokens.typeScale.titleCqi, textFrameWidth)),
+    Math.round(readerFontSize(ReaderTokens.typeScale.cardTitleCqi, textFrameWidth)),
   );
   const authorSize = Math.max(6, Math.round(AUTHOR_SIZE * scale));
   const collectionSize = Math.max(5, Math.round(COLLECTION_SIZE * scale));
 
   const borderRadius = Math.max(8, Math.round(16 * scale));
+  // Android elevation controls sibling paint order. Keep it on the containing
+  // card surface so an empty shadow sibling can never cover the card content.
+  const useAndroidSurfaceShadow = Platform.OS === "android" && !hideShadow;
 
   return (
     <View
       style={[
         styles.cardFrame,
+        useAndroidSurfaceShadow
+          ? carouselShadow
+            ? styles.androidCarouselSurface
+            : styles.androidCardSurface
+          : undefined,
         { width: w, height: h, borderRadius },
         !isActive && styles.inactive,
         isRead && styles.read,
       ]}
     >
-      {!hideShadow ? (
+      {!hideShadow && Platform.OS !== "android" ? (
         <ArticleCardShadow
           width={w}
           height={h}
@@ -228,6 +237,16 @@ const COLLECTION_SIZE = 16;
 const styles = StyleSheet.create({
   cardFrame: {
     position: "relative",
+  },
+  // On Android this is the containing elevated surface, not a sibling. An
+  // elevated sibling is painted above the non-elevated card pressable.
+  androidCardSurface: {
+    backgroundColor: DEFAULT_BG,
+    ...Shadows.card,
+  },
+  androidCarouselSurface: {
+    backgroundColor: DEFAULT_BG,
+    ...Shadows.carouselCard,
   },
   cardShadowHost: {
     ...StyleSheet.absoluteFill,

@@ -884,7 +884,7 @@ export default function CardSelectOverlay({
                 cover={envArticle.cover}
                 isRead={envMeta.isRead ?? false}
                 isActive
-                hideShadow
+                hideShadow={Platform.OS !== "android"}
                 onPress={handleCardTap}
               />
             </Animated.View>
@@ -972,6 +972,11 @@ export default function CardSelectOverlay({
    * identical shadow would darken it during the handoff. They retain one host.
    */
   const renderCardShadow = (slotIndex: number, isRead = false) => {
+    // Android elevation changes sibling paint order, so ArticleCardItem owns
+    // the elevated containing surface there. Empty elevated shadow siblings
+    // would cover the pressable's cover art and title.
+    if (Platform.OS === "android") return null;
+
     const isCarouselOrigin =
       originUsesCarouselShadow && slotIndex === initialIndex;
     const selectedShadowOpacity = isRead
@@ -1084,7 +1089,12 @@ export default function CardSelectOverlay({
                           cover={art.cover}
                           isRead={meta.isRead ?? false}
                           isActive
-                          hideShadow
+                          carouselShadow={
+                            Platform.OS === "android" &&
+                            originUsesCarouselShadow &&
+                            i === initialIndex
+                          }
+                          hideShadow={Platform.OS !== "android"}
                           onPress={handleCardTap}
                         />,
                         i,
@@ -1109,7 +1119,10 @@ export default function CardSelectOverlay({
                 cover={displayArticles[0].cover}
                 isRead={displayMetas[0]?.isRead ?? false}
                 isActive
-                hideShadow
+                carouselShadow={
+                  Platform.OS === "android" && originUsesCarouselShadow
+                }
+                hideShadow={Platform.OS !== "android"}
                 onPress={handleCardTap}
               />,
               0,

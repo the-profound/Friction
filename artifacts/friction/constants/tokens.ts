@@ -422,6 +422,8 @@ export const ReaderTokens = {
     captionCqi: 3.4,
     metadataCqi: 2.8,
     titleCqi: 6.4,
+    /** 편지 표지 카드 제목 전용 크기. 읽기·작성 화면 제목과 분리한다. */
+    cardTitleCqi: 11.2,
     /** 제목 입력과 제목1 서식이 공유하는 본문 대비 배율. */
     get titleScaleEm() {
       return this.titleCqi / this.bodyCqi;

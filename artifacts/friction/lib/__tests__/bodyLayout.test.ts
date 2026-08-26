@@ -167,13 +167,24 @@ describe("thought card typography regression guards", () => {
   });
 
   it("keeps the article card title tied to its scaled text frame", () => {
+    const tokens = read("constants/tokens.ts");
     const articleCard = read("components/ArticleCardItem/ArticleCardItem.tsx");
 
+    expect(tokens).toMatch(/titleCqi:\s*6\.4/);
+    expect(tokens).toMatch(/cardTitleCqi:\s*11\.2/);
     expect(articleCard).toContain("const textFrameWidth = Math.max(1, w - pad * 2);");
     expect(articleCard).toContain(
-      "readerFontSize(ReaderTokens.typeScale.titleCqi, textFrameWidth)",
+      "readerFontSize(ReaderTokens.typeScale.cardTitleCqi, textFrameWidth)",
     );
     expect(articleCard).toContain("numberOfLines={4}");
+  });
+
+  it("renders a 300px card title at about 32px without changing reader title scale", () => {
+    const cardTextFrameWidth = 300 - 24 * 2;
+    const cardTitleSize = (11.2 / 100) * cardTextFrameWidth;
+
+    expect(cardTitleSize).toBeCloseTo(28.224, 3);
+    expect((6.4 / 100) * 300).toBeCloseTo(19.2, 3);
   });
 });
 
@@ -322,6 +333,11 @@ describe("selectable article card projection contract", () => {
     expect(card).toContain("export function ArticleCardShadow");
     expect(card).toContain("hideShadow?: boolean;");
     expect(card).toContain("...StyleSheet.absoluteFill");
+    expect(card).toContain('!hideShadow && Platform.OS !== "android"');
+    expect(card).toContain("androidCardSurface");
+    expect(card).toContain("androidCarouselSurface");
+    expect(overlay).toContain('if (Platform.OS === "android") return null;');
+    expect(overlay).toContain('hideShadow={Platform.OS !== "android"}');
     expect(overlay).toContain("originUsesCarouselShadow?: boolean;");
     expect(overlay).toContain("const originShadowOpacity = useMemo(");
     expect(overlay).toContain("outputRange: [1, 0]");
