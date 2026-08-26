@@ -314,6 +314,25 @@ describe("selectable article card projection contract", () => {
     expect(closeBlock).not.toContain("CLOSE_DURATION = 140");
   });
 
+  it("cross-fades the carousel source shadow on the hero progress used for return", () => {
+    const overlay = read("components/CardSelectOverlay/CardSelectOverlay.tsx");
+    const card = read("components/ArticleCardItem/ArticleCardItem.tsx");
+    const inbox = read("app/(tabs)/index.tsx");
+
+    expect(card).toContain("export function ArticleCardShadow");
+    expect(card).toContain("hideShadow?: boolean;");
+    expect(card).toContain("...StyleSheet.absoluteFill");
+    expect(overlay).toContain("originUsesCarouselShadow?: boolean;");
+    expect(overlay).toContain("const originShadowOpacity = useMemo(");
+    expect(overlay).toContain("outputRange: [1, 0]");
+    expect(overlay).toContain("originUsesCarouselShadow && slotIndex === initialIndex");
+    expect(overlay).toContain("carouselShadow");
+    expect(overlay).toContain("opacity={sourceShadowOpacity}");
+    expect(overlay).toContain("opacity={selectedShadowOpacity}");
+    expect(overlay).toContain("hideShadow");
+    expect(inbox).toContain("originUsesCarouselShadow");
+  });
+
   it("measures the actual remaining vertical distance after a downward drag", () => {
     const baseTransform = {
       startTx: 0,

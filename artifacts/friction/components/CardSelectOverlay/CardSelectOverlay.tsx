@@ -24,7 +24,9 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
-import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
+import ArticleCardItem, {
+  ArticleCardShadow,
+} from "@/components/ArticleCardItem/ArticleCardItem";
 import EnvelopeFrontCard from "@/components/EnvelopeCard/EnvelopeFrontCard";
 import {
   EnvelopePocketFront,
@@ -129,6 +131,12 @@ interface CardSelectOverlayProps {
   currentCollectionId?: string | null;
   currentAuthorId?: string | null;
   /**
+   * The inbox carousel uses the restrained carousel shadow at the source.
+   * Cross-fade from that source token to the selection token on the same hero
+   * progress, so the return handoff cannot pop a different shadow into view.
+   */
+  originUsesCarouselShadow?: boolean;
+  /**
    * When provided, the item at initialIndex is a sealed envelope.
    * The overlay shows the envelope front face first and plays an opening
    * animation when the user taps "개봉하기".
@@ -149,6 +157,7 @@ export default function CardSelectOverlay({
   onNavigateToAuthor,
   currentCollectionId,
   currentAuthorId,
+  originUsesCarouselShadow = false,
   envelopeInfo,
 }: CardSelectOverlayProps) {
   const insets = useSafeAreaInsets();
@@ -345,6 +354,14 @@ export default function CardSelectOverlay({
     () => Animated.multiply(progressDetailsOpacity, detailsFade),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
+  );
+  const originShadowOpacity = useMemo(
+    () =>
+      progress.interpolate({
+        inputRange: [0, 1],
+        outputRange: [1, 0],
+      }),
+    [progress],
   );
 
   // ── Open / close lifecycle ────────────────────────────────────────────────
@@ -867,6 +884,7 @@ export default function CardSelectOverlay({
                 cover={envArticle.cover}
                 isRead={envMeta.isRead ?? false}
                 isActive
+                hideShadow
                 onPress={handleCardTap}
               />
             </Animated.View>
@@ -944,6 +962,61 @@ export default function CardSelectOverlay({
     </View>
   );
 
+  /**
+   * A source carousel card has a deliberately softer shadow than a selected
+   * card. Keep both empty shadow hosts on the same transformed slot and blend
+   * them with `progress`: entry grows into the selected treatment, and the
+   * distance-aware close naturally returns to the exact source treatment.
+   *
+   * Standard cards already use the selected token, so rendering a second
+   * identical shadow would darken it during the handoff. They retain one host.
+   */
+  const renderCardShadow = (slotIndex: number, isRead = false) => {
+    const isCarouselOrigin =
+      originUsesCarouselShadow && slotIndex === initialIndex;
+    const selectedShadowOpacity = isRead
+      ? progress.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0, 0.45],
+        })
+      : progress;
+    const sourceShadowOpacity = isRead
+      ? progress.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.45, 0],
+        })
+      : originShadowOpacity;
+
+    if (!isCarouselOrigin) {
+      return (
+        <ArticleCardShadow
+          width={CARD_W}
+          height={CARD_H}
+          borderRadius={16}
+          opacity={isRead ? 0.45 : undefined}
+        />
+      );
+    }
+
+    return (
+      <>
+        <ArticleCardShadow
+          width={CARD_W}
+          height={CARD_H}
+          borderRadius={16}
+          carouselShadow
+          opacity={sourceShadowOpacity}
+        />
+        <ArticleCardShadow
+          width={CARD_W}
+          height={CARD_H}
+          borderRadius={16}
+          opacity={selectedShadowOpacity}
+        />
+      </>
+    );
+  };
+
   // ── Render ────────────────────────────────────────────────────────────────
   const trackW = SLOT_W * displayArticles.length;
 
@@ -1002,6 +1075,7 @@ export default function CardSelectOverlay({
                     <SkeletonCard />
                   ) : (
                     <>
+                      {renderCardShadow(i, meta.isRead ?? false)}
                       {wrapWithLetterAnim(
                         <ArticleCardItem
                           title={art.title ?? "제목 없음"}
@@ -1010,6 +1084,7 @@ export default function CardSelectOverlay({
                           cover={art.cover}
                           isRead={meta.isRead ?? false}
                           isActive
+                          hideShadow
                           onPress={handleCardTap}
                         />,
                         i,
@@ -1025,6 +1100,7 @@ export default function CardSelectOverlay({
           <SkeletonCard />
         ) : (
           <>
+            {renderCardShadow(0, displayMetas[0]?.isRead ?? false)}
             {wrapWithLetterAnim(
               <ArticleCardItem
                 title={displayArticles[0].title ?? "제목 없음"}
@@ -1033,6 +1109,7 @@ export default function CardSelectOverlay({
                 cover={displayArticles[0].cover}
                 isRead={displayMetas[0]?.isRead ?? false}
                 isActive
+                hideShadow
                 onPress={handleCardTap}
               />,
               0,

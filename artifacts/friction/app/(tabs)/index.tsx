@@ -531,6 +531,7 @@ export default function InboxScreen() {
         onClose={handleModalClose}
         onRead={handleRead}
         onReady={() => setIsTappedSourceHidden(true)}
+        originUsesCarouselShadow
         onCardTap={handleRead}
         onNavigateToCollection={handleNavigateToCollection}
         onNavigateToAuthor={(authorId) => router.push(`/user-profile/${authorId}` as never)}

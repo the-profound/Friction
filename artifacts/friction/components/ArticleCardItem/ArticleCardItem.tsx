@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   ImageBackground,
+  Animated,
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { Colors, Shadows, Sizing, ReaderTokens, readerFontSize } from "../../constants/tokens";
@@ -23,9 +24,50 @@ interface ArticleCardItemProps {
   date?: string | null;
   /** Limits shadow strength when the card sits inside a clipped date carousel. */
   carouselShadow?: boolean;
+  /** Lets a transition render the shadow separately from the card content. */
+  hideShadow?: boolean;
 }
 
 const DEFAULT_BG = Colors.zinc50;
+
+type CardShadowOpacity =
+  | number
+  | Animated.Value
+  | Animated.AnimatedInterpolation<number>;
+
+interface ArticleCardShadowProps {
+  width: number;
+  height: number;
+  borderRadius: number;
+  carouselShadow?: boolean;
+  opacity?: CardShadowOpacity;
+}
+
+/**
+ * The shadow is intentionally an empty sibling of the card content. This keeps
+ * scaled card text crisp and lets selection transitions cross-fade only the
+ * shadow treatment without changing the card's content, corners, or press
+ * behavior.
+ */
+export function ArticleCardShadow({
+  width,
+  height,
+  borderRadius,
+  carouselShadow = false,
+  opacity,
+}: ArticleCardShadowProps) {
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        styles.cardShadowHost,
+        carouselShadow ? styles.carouselShadow : undefined,
+        { width, height, borderRadius },
+        opacity === undefined ? undefined : { opacity },
+      ]}
+    />
+  );
+}
 
 function ArticleCardItem({
   title,
@@ -40,6 +82,7 @@ function ArticleCardItem({
   letterTypeBadge,
   date,
   carouselShadow = false,
+  hideShadow = false,
 }: ArticleCardItemProps) {
   const textColor = cover?.textColor ?? Colors.zinc900;
   const w = cardWidth ?? CARD_W;
@@ -62,13 +105,20 @@ function ArticleCardItem({
   return (
     <View
       style={[
-        styles.cardShadowHost,
-        carouselShadow ? styles.carouselShadow : undefined,
+        styles.cardFrame,
         { width: w, height: h, borderRadius },
         !isActive && styles.inactive,
         isRead && styles.read,
       ]}
     >
+      {!hideShadow ? (
+        <ArticleCardShadow
+          width={w}
+          height={h}
+          borderRadius={borderRadius}
+          carouselShadow={carouselShadow}
+        />
+      ) : null}
       <ScalePressable
         onPress={onPress}
         onLongPress={onLongPress}
@@ -176,7 +226,11 @@ const AUTHOR_SIZE = 24;
 const COLLECTION_SIZE = 16;
 
 const styles = StyleSheet.create({
+  cardFrame: {
+    position: "relative",
+  },
   cardShadowHost: {
+    ...StyleSheet.absoluteFill,
     backgroundColor: DEFAULT_BG,
     ...Shadows.card,
   },
