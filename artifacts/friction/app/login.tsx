@@ -28,6 +28,8 @@ import {
 type Mode = "login" | "signup";
 type SignupStep = 1 | 2;
 const SIGNUP_BACK_ROW_HEIGHT = 32;
+const SIGNUP_CHECKBOX_TOUCH_TARGET = 44;
+const SIGNUP_SUBMIT_BUTTON_HEIGHT = 52;
 
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
@@ -144,6 +146,8 @@ export default function LoginScreen() {
   }
 
   async function handleSignUpStep2() {
+    if (isLoading) return;
+
     const trimmedNickname = nickname.trim();
     if (!trimmedNickname) {
       setErrorMessage("이름(닉네임)을 입력해주세요.");
@@ -464,16 +468,38 @@ export default function LoginScreen() {
             <View style={styles.agreementBox}>
               <View style={styles.checkRow}>
                 <ScalePressable
-                  onPress={() => setAgreedTerms((v) => !v)}
+                  style={styles.checkboxButton}
+                  contentStyle={styles.checkboxButtonContent}
+                  onPress={() => {
+                    if (isLoading) return;
+                    setAgreedTerms((v) => !v);
+                  }}
+                  disabled={isLoading}
                   accessibilityRole="checkbox"
-                  accessibilityState={{ checked: agreedTerms }}
+                  accessibilityState={{
+                    checked: agreedTerms,
+                    disabled: isLoading,
+                  }}
                   hitSlop={8}
                 >
-                  <View style={[styles.checkbox, agreedTerms && styles.checkboxChecked]}>
-                    {agreedTerms && <Feather name="check" size={13} color={Colors.white} />}
+                  <View
+                    style={[
+                      styles.checkbox,
+                      agreedTerms && styles.checkboxChecked,
+                    ]}
+                  >
+                    {agreedTerms && (
+                      <Feather name="check" size={13} color={Colors.white} />
+                    )}
                   </View>
                 </ScalePressable>
-                <Text style={styles.checkLabel} onPress={() => setAgreedTerms((v) => !v)}>
+                <Text
+                  style={styles.checkLabel}
+                  onPress={() => {
+                    if (isLoading) return;
+                    setAgreedTerms((v) => !v);
+                  }}
+                >
                   {"(필수) "}
                   <Text
                     style={styles.checkLink}
@@ -487,16 +513,38 @@ export default function LoginScreen() {
 
               <View style={styles.checkRow}>
                 <ScalePressable
-                  onPress={() => setAgreedPrivacy((v) => !v)}
+                  style={styles.checkboxButton}
+                  contentStyle={styles.checkboxButtonContent}
+                  onPress={() => {
+                    if (isLoading) return;
+                    setAgreedPrivacy((v) => !v);
+                  }}
+                  disabled={isLoading}
                   accessibilityRole="checkbox"
-                  accessibilityState={{ checked: agreedPrivacy }}
+                  accessibilityState={{
+                    checked: agreedPrivacy,
+                    disabled: isLoading,
+                  }}
                   hitSlop={8}
                 >
-                  <View style={[styles.checkbox, agreedPrivacy && styles.checkboxChecked]}>
-                    {agreedPrivacy && <Feather name="check" size={13} color={Colors.white} />}
+                  <View
+                    style={[
+                      styles.checkbox,
+                      agreedPrivacy && styles.checkboxChecked,
+                    ]}
+                  >
+                    {agreedPrivacy && (
+                      <Feather name="check" size={13} color={Colors.white} />
+                    )}
                   </View>
                 </ScalePressable>
-                <Text style={styles.checkLabel} onPress={() => setAgreedPrivacy((v) => !v)}>
+                <Text
+                  style={styles.checkLabel}
+                  onPress={() => {
+                    if (isLoading) return;
+                    setAgreedPrivacy((v) => !v);
+                  }}
+                >
                   {"(필수) "}
                   <Text
                     style={styles.checkLink}
@@ -523,6 +571,10 @@ export default function LoginScreen() {
               disabled={!canSubmitSignupStep2}
               accessibilityRole="button"
               accessibilityLabel="가입 완료"
+              accessibilityState={{
+                disabled: !canSubmitSignupStep2,
+                busy: isLoading,
+              }}
             >
               {isLoading ? (
                 <ActivityIndicator size="small" color={Colors.white} />
@@ -685,13 +737,34 @@ const styles = StyleSheet.create({
     color: Colors.zinc500,
     alignSelf: "flex-start",
   },
+  checkboxButton: {
+    width: SIGNUP_CHECKBOX_TOUCH_TARGET,
+    height: SIGNUP_CHECKBOX_TOUCH_TARGET,
+    alignSelf: "flex-start",
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  checkboxButtonContent: {
+    width: SIGNUP_CHECKBOX_TOUCH_TARGET,
+    height: SIGNUP_CHECKBOX_TOUCH_TARGET,
+    alignSelf: "flex-start",
+    flexGrow: 0,
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   button: {
     width: "100%",
-    height: 52,
+    height: SIGNUP_SUBMIT_BUTTON_HEIGHT,
+    flexGrow: 0,
+    flexShrink: 0,
     marginTop: 4,
   },
   buttonContent: {
-    height: "100%",
+    width: "100%",
+    height: SIGNUP_SUBMIT_BUTTON_HEIGHT,
+    flexGrow: 0,
+    flexShrink: 0,
     backgroundColor: Colors.zinc900,
     borderRadius: 14,
     alignItems: "center",
