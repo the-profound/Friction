@@ -43,6 +43,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       hideTitle,
       scrollEnabled = true,
       onOverflowSplit,
+      onImageRetry,
       swipeDownToDismissKeyboard = true,
     },
     ref,
@@ -112,6 +113,15 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       },
       insertHardBreak() {
         sendCommand({ type: "insertHardBreak" });
+      },
+      insertImage(image) {
+        sendCommand({ type: "insertImage", ...image });
+      },
+      replaceImage(imageId: string, url: string) {
+        sendCommand({ type: "replaceImage", imageId, url });
+      },
+      setImageUploadState(imageId, uploadState) {
+        sendCommand({ type: "setImageUploadState", imageId, uploadState });
       },
       insertQuote(text: string) {
         sendCommand({ type: "insertQuote", text });
@@ -202,13 +212,16 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
               resolvers.forEach((r) => r(data.payload));
               break;
             }
+            case "onImageRetry":
+              onImageRetry?.(data.payload.imageId);
+              break;
             case "onOverflowSplit":
               onOverflowSplit?.(data.payload);
               break;
           }
         });
       },
-      [bridge, hideTitle, onReady, onChange, onExportMarkdown, onTitleChange, onError, onKeyboardVisibilityChange, onSelectionUpdate, onTextSelectionActiveChange, onSourceArticleSlotTap, onOverflowSplit, swipeDownToDismissKeyboard],
+      [bridge, hideTitle, onReady, onChange, onExportMarkdown, onTitleChange, onError, onKeyboardVisibilityChange, onSelectionUpdate, onTextSelectionActiveChange, onSourceArticleSlotTap, onOverflowSplit, onImageRetry, swipeDownToDismissKeyboard],
     );
 
     useEffect(() => {

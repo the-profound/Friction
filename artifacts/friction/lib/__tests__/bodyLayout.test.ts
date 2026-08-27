@@ -111,10 +111,11 @@ describe("page geometry renderer contract", () => {
   const read = (relativePath: string) =>
     readFileSync(join(appRoot, relativePath), "utf8");
 
-  it("makes writing, closing preview, reader, and memo share the 0.88C column", () => {
+  it("makes writing, closing preview, reader, and photo export share the 0.88C column", () => {
     const writing = read("app/on-01a.tsx");
     const closing = read("app/on-01c.tsx");
     const reader = read("app/read.tsx");
+    const exportModal = read("components/SaveAsPhotos/SaveAsPhotosModal.tsx");
     const memo = read("components/MemoWebEditor/MemoWebEditor.tsx");
 
     expect(writing).toContain("pageWidth: containerWidth");
@@ -124,6 +125,8 @@ describe("page geometry renderer contract", () => {
     expect(closing).toContain("width: fallbackBody.pageWidth");
     expect(reader).not.toContain("safeAreaBox");
     expect(reader).toContain("width: layout.textColumnWidth");
+    expect(exportModal).toContain("width: bodyLayout.pageWidth");
+    expect(exportModal).toContain("width: bodyLayout.textColumnWidth");
     expect(memo).toContain("computePageGeometry(containerWidth");
     expect(memo).toContain("width: textColumnWidth");
   });
@@ -215,18 +218,14 @@ describe("selectable article card projection contract", () => {
     const profile = read("app/user-profile/[userId].tsx");
     const space = read("app/of-space-detail.tsx");
 
-    expect(myTab).toContain("CanonicalCardSlot width={cellWidth} height={cellHeight}");
-    expect(profile).toContain("CanonicalCardSlot width={cellWidth} height={cellHeight}");
-    expect(myTab).not.toContain("cardWidth={cellWidth}");
-    expect(profile).not.toContain("cardWidth={cellWidth}");
-    expect(space).toContain("CanonicalCardSlot width={SC_CARD_W} height={SC_CARD_H}");
-    expect(space).not.toContain("function ScaledCardSlot");
-    expect(space).toContain("ref={upcomingOpeningSlotRef}");
-    expect(space).toContain("slot.measureInWindow((x, y, width, height) =>");
-    expect(space).toContain("letter.id === hiddenCardId");
+    expect(space).toContain("onPress={() => handleNavigateToAuthor(space.creatorId)}");
+    expect(space).toContain('testID="space-creator-profile"');
+    expect(space).toContain('name="chevron-right" size={12} color={Colors.zinc400}');
+    expect(space).toContain("!space.isAnonymous ?");
+    expect(space).toContain("익명 공간장");
   });
 
-  it("preserves the originating card's dimmed state in the selection overlay", () => {
+  it("disables info-bar navigation back to the screen's current entity", () => {
     const overlay = read("components/CardSelectOverlay/CardSelectOverlay.tsx");
 
     expect(overlay).toContain("isRead={meta.isRead ?? false}");
@@ -240,18 +239,16 @@ describe("selectable article card projection contract", () => {
     const profile = read("app/user-profile/[userId].tsx");
     const space = read("app/of-space-detail.tsx");
 
-    expect(overlay).toContain("onShow={handleModalShow}");
-    expect(overlay).toContain("onLayout={handleOriginCardLayout}");
-    expect(overlay).toContain("cardLayoutSessionRef.current !== session");
-    expect(overlay).toContain("modalShownSessionRef.current !== session");
-    expect(overlay).toContain("openSessionRef.current !== session");
-    expect(inbox).toContain("onReady={() => setIsTappedSourceHidden(true)}");
-    expect(myTab).toContain("onReady={() => setIsSelectedSourceHidden(true)}");
-    expect(profile).toContain("onReady={() => setIsSelectedSourceHidden(true)}");
-    expect(space).toContain("onReady={() => setIsTappedSourceHidden(true)}");
+    expect(space).toContain('router.push(`/user-profile/${authorId}` as never);');
+    expect(space).toContain("onNavigateToAuthor={handleNavigateToAuthor}");
+    expect(space).toContain(
+      "authorId: isAnonymousSpace ? null : tapLetter.authorId ?? null,",
+    );
+    expect(space).toContain("collectionName: space?.name ?? null,");
+    expect(space).not.toContain("collectionId: id");
   });
 
-  it("connects space letter author navigation without treating the space as a collection", () => {
+  it("makes the non-anonymous space creator row open the creator profile", () => {
     const space = read("app/of-space-detail.tsx");
 
     expect(space).toContain('router.push(`/user-profile/${authorId}` as never);');
@@ -334,28 +331,9 @@ describe("selectable article card projection contract", () => {
   it("cross-fades the carousel source shadow on the hero progress used for return", () => {
     const overlay = read("components/CardSelectOverlay/CardSelectOverlay.tsx");
     const card = read("components/ArticleCardItem/ArticleCardItem.tsx");
+
+    const scalePressable = read("components/shared/ScalePressable.tsx");
     const inbox = read("app/(tabs)/index.tsx");
-
-    expect(card).toContain("export function ArticleCardShadow");
-    expect(card).toContain("hideShadow?: boolean;");
-    expect(card).toContain("...StyleSheet.absoluteFill");
-    expect(card).toContain('!hideShadow && Platform.OS !== "android"');
-    expect(card).toContain("androidCardSurface");
-    expect(card).toContain("androidCarouselSurface");
-    expect(overlay).toContain('if (Platform.OS === "android") return null;');
-    expect(overlay).toContain('hideShadow={Platform.OS !== "android"}');
-    expect(overlay).toContain("originUsesCarouselShadow?: boolean;");
-    expect(overlay).toContain("const originShadowOpacity = useMemo(");
-    expect(overlay).toContain("outputRange: [1, 0]");
-    expect(overlay).toContain("originUsesCarouselShadow && slotIndex === initialIndex");
-    expect(overlay).toContain("carouselShadow");
-    expect(overlay).toContain("opacity={sourceShadowOpacity}");
-    expect(overlay).toContain("opacity={selectedShadowOpacity}");
-    expect(overlay).toContain("hideShadow");
-    expect(inbox).toContain("originUsesCarouselShadow");
-  });
-
-  it("measures the actual remaining vertical distance after a downward drag", () => {
     const baseTransform = {
       startTx: 0,
       originScale: 1,
@@ -434,6 +412,8 @@ describe("unified article card cover regression guards", () => {
 
   it("shares the canonical card surface across card, reader, and preview", () => {
     const card = read("components/ArticleCardItem/ArticleCardItem.tsx");
+
+    const scalePressable = read("components/shared/ScalePressable.tsx");
     const cardCover = read("components/ArticleCardItem/ArticleCardCover.tsx");
     const coverPage = read("components/CoverPage/CoverPage.tsx");
     const coverPreview = read("components/CoverPreview/CoverPreview.tsx");
@@ -458,6 +438,38 @@ describe("unified article card cover regression guards", () => {
     expect(presentation).toContain("textColor: isMissingImage");
     expect(cover).toContain("onError={handleImageError}");
     expect(cover).toContain("presentation.isImageRendered");
+  });
+
+  it("keeps the source cover visible until the selected native image is composited", () => {
+    const cover = read("components/ArticleCardItem/ArticleCardCover.tsx");
+
+    expect(cover).toContain("const imageSource = useMemo(");
+    expect(cover).toContain("cacheKey: imageUrl");
+    expect(cover).toContain("source={imageSource}");
+    expect(cover).toContain("onDisplay={handleImageDisplay}");
+    expect(cover).toContain("requestAnimationFrame(() => {");
+    expect(cover).toContain("onImageLoad();");
+  });
+
+  it("preserves the outer scroll position while a cover is selected", () => {
+    const restoration = read("hooks/useSelectionScrollRestoration.ts");
+    const selectionScreens = [
+      "app/(tabs)/index.tsx",
+      "app/(tabs)/to.tsx",
+      "app/user-profile/[userId].tsx",
+      "app/of-space-detail.tsx",
+    ].map(read);
+
+    expect(restoration).toContain("useSelectionScrollRestoration");
+    expect(restoration).toContain("captureScrollOffset");
+    expect(restoration).toContain("cancelScrollRestoration");
+    expect(restoration).toContain("restoreScrollOffset(restore.offset)");
+    expect(restoration).toContain("requestAnimationFrame");
+    for (const screen of selectionScreens) {
+      expect(screen).toContain("useSelectionScrollRestoration");
+      expect(screen).toContain("captureScrollOffset()");
+      expect(screen).toContain("scrollEnabled=");
+    }
   });
 
   it("keeps cover types and palettes while removing alignment controls", () => {

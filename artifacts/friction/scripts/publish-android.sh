@@ -29,6 +29,7 @@ cd "$APP_DIR"
 APP_RELEASE_TRACK=production EAS_BUILD_PROFILE=android-test \
   node "$SCRIPT_DIR/validate-release-env.mjs" --track production
 bash "$SCRIPT_DIR/validate-eas-cloud-env.sh" production
+node "$SCRIPT_DIR/validate-native-abi.mjs"
 
 echo ""
 echo "📦 Android test APK 빌드 시작 (EAS Cloud)..."

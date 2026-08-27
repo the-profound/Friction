@@ -1,11 +1,11 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   LayoutChangeEvent,
-  Image,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { Image } from "expo-image";
 import type { ArticleCover } from "@workspace/api-client-react";
 import {
   Colors,
@@ -18,6 +18,11 @@ import {
   getArticleCardCoverFontFamily,
   getArticleCardSenderBottomOffset,
 } from "@/lib/articleCoverPresentation";
+
+// expo-image's SDK typings currently use a React base type that conflicts with
+// this app's React 19 JSX types. Keep shared cover surfaces on expo-image while
+// the project-wide type mismatch is addressed separately.
+const CachedImage = Image as unknown as React.ComponentType<any>;
 
 interface ArticleCardCoverProps {
   cover?: ArticleCover | null;
@@ -59,6 +64,7 @@ export default function ArticleCardCover({
 }: ArticleCardCoverProps) {
   const [measuredSize, setMeasuredSize] = useState({ width: 0, height: 0 });
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
+  const displayedImageFrameRef = useRef<number | null>(null);
 
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
     const { width: nextWidth, height: nextHeight } = event.nativeEvent.layout;
@@ -76,6 +82,13 @@ export default function ArticleCardCover({
   const imageUrl = cover?.imageUrl;
   const hasImage =
     coverType === "image" && !!imageUrl && failedImageUrl !== imageUrl;
+  // Keep the native image request stable while an ancestor re-renders to hide
+  // the source slot. expo-image can otherwise briefly clear its drawing
+  // surface even though the URI and cache key have not changed.
+  const imageSource = useMemo(
+    () => (hasImage ? { uri: imageUrl, cacheKey: imageUrl } : null),
+    [hasImage, imageUrl],
+  );
   const presentation = getArticleCardCoverPresentation(cover, hasImage, {
     neutralBackground: Colors.zinc50,
     readableText: Colors.zinc900,
@@ -110,9 +123,42 @@ export default function ArticleCardCover({
 
   const handleImageError = useCallback(() => {
     if (imageUrl) setFailedImageUrl(imageUrl);
-    // Image capture needs to proceed even when the remote image is unavailable.
-    onImageLoad?.();
-  }, [imageUrl, onImageLoad]);
+  }, [imageUrl]);
+
+  const handleImageDisplay = useCallback(() => {
+    if (!onImageLoad) return;
+    if (displayedImageFrameRef.current !== null) {
+      cancelAnimationFrame(displayedImageFrameRef.current);
+    }
+    // `onDisplay` is delivered before native has necessarily composited the
+    // image into the modal. Keep the source card visible through one committed
+    // frame, then allow the parent to hide it and begin the hero transition.
+    displayedImageFrameRef.current = requestAnimationFrame(() => {
+      displayedImageFrameRef.current = null;
+      onImageLoad();
+    });
+  }, [onImageLoad]);
+
+  useEffect(() => {
+    setFailedImageUrl(null);
+  }, [imageUrl]);
+
+  useEffect(
+    () => () => {
+      if (displayedImageFrameRef.current !== null) {
+        cancelAnimationFrame(displayedImageFrameRef.current);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!imageUrl || failedImageUrl !== imageUrl || !onImageLoad) return;
+    // An error callback does not mean the fallback has appeared. Wait one
+    // committed frame before an overlay is allowed to hide its source card.
+    const frame = requestAnimationFrame(onImageLoad);
+    return () => cancelAnimationFrame(frame);
+  }, [failedImageUrl, imageUrl, onImageLoad]);
 
   return (
     <View
@@ -129,15 +175,17 @@ export default function ArticleCardCover({
       onLayout={handleLayout}
     >
       {hasImage ? (
-        <Image
-          source={{ uri: imageUrl }}
-          style={StyleSheet.absoluteFill}
-          resizeMode="cover"
-          onLoad={onImageLoad}
+        <CachedImage
+          source={imageSource}
+          style={[StyleSheet.absoluteFill, { borderRadius }]}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={0}
+          onDisplay={handleImageDisplay}
           onError={handleImageError}
         />
       ) : null}
-      {hasImage ? <View style={styles.imageOverlay} /> : null}
+      {hasImage ? <View style={[styles.imageOverlay, { borderRadius }]} /> : null}
 
       <View style={[styles.inner, { padding: pad }]} pointerEvents="none">
         {letterTypeBadge ? (
@@ -246,7 +294,6 @@ export default function ArticleCardCover({
 const styles = StyleSheet.create({
   root: {
     position: "relative",
-    overflow: "hidden",
   },
   imageOverlay: {
     ...StyleSheet.absoluteFill,

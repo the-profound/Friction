@@ -34,15 +34,29 @@ vi.mock("react-native-reanimated", () => ({
   },
 }));
 
-vi.mock("react", () => ({
-  default: { createElement: () => null },
-  createElement: () => null,
-}));
+vi.mock("react", () => {
+  const createElement = (
+    type: unknown,
+    props: Record<string, unknown> | null,
+    ...children: unknown[]
+  ) => ({
+    type,
+    props: {
+      ...props,
+      children: children.length <= 1 ? children[0] : children,
+    },
+  });
+  return {
+    default: { createElement },
+    createElement,
+  };
+});
 
 describe("ScalePressable styles: inner animation wrapper", () => {
   it("inner style has overflow:visible so scale does not clip children", async () => {
     const { styles } = await import("../ScalePressable");
     expect(styles.inner).toHaveProperty("overflow", "visible");
+    expect(styles).not.toHaveProperty("innerClipped");
   });
 
   it("inner style has alignSelf:stretch so Animated.View fills the Pressable", async () => {
@@ -99,6 +113,14 @@ describe("ScalePressable: module exports", () => {
   it("does NOT export computeInnerStyle (workaround removed)", async () => {
     const mod = await import("../ScalePressable") as Record<string, unknown>;
     expect(mod["computeInnerStyle"]).toBeUndefined();
+  });
+
+  it("does not retain the card-specific animated radius clipping prop", async () => {
+    const mod = await import("../ScalePressable");
+    type Props = Parameters<typeof mod.default>[0];
+    const props: Props = { onPress: () => {} };
+
+    expect("animatedBorderRadius" in props).toBe(false);
   });
 });
 
@@ -196,5 +218,22 @@ describe("ScalePressable: props type compatibility", () => {
     type FnStyle = (state: { pressed: boolean }) => object;
     const isFnStyleAssignable: FnStyle extends StyleProp ? true : false = true;
     expect(isFnStyleAssignable).toBe(true);
+  });
+});
+
+describe("ScalePressable: disabled press behavior", () => {
+  it("does not attach press-scale handlers while disabled", async () => {
+    const { default: ScalePressable } = await import("../ScalePressable");
+    const tree = ScalePressable({
+      onPress: () => undefined,
+      disabled: true,
+      children: null,
+    }) as unknown as {
+      props: { disabled?: boolean; onPressIn?: unknown; onPressOut?: unknown };
+    };
+
+    expect(tree.props.disabled).toBe(true);
+    expect(tree.props.onPressIn).toBeUndefined();
+    expect(tree.props.onPressOut).toBeUndefined();
   });
 });

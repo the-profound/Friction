@@ -52,6 +52,7 @@ import type {
   SpaceRoundSlotWithUser,
 } from "@workspace/api-client-react";
 import { useAncestorChain } from "@/hooks/useAncestorChain";
+import { useSelectionScrollRestoration } from "@/hooks/useSelectionScrollRestoration";
 import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
 import { SpaceInfoNote } from "@/components/SpaceInfoNote/SpaceInfoNote";
 import { SpaceCopy } from "@/constants/spaceCopy";
@@ -1033,6 +1034,15 @@ export default function SpaceDetailScreen() {
   const [tapLetterOrigin, setTapLetterOrigin] = useState<OriginLayout | null>(null);
   const [tapArticle, setTapArticle] = useState<Article | null>(null);
   const [isTappedSourceHidden, setIsTappedSourceHidden] = useState(false);
+  const spaceScrollRef = useRef<ScrollView>(null);
+  const restoreSpaceScrollOffset = useCallback((offset: number) => {
+    spaceScrollRef.current?.scrollTo({ y: offset, animated: false });
+  }, []);
+  const {
+    handleScroll: handleSelectionScroll,
+    captureScrollOffset,
+    cancelScrollRestoration,
+  } = useSelectionScrollRestoration(tapLetter !== null, restoreSpaceScrollOffset);
 
   useEffect(() => {
     if (showInviteGuide === "1") {
@@ -1127,6 +1137,7 @@ export default function SpaceDetailScreen() {
 
   const handlePressLetter = useCallback(
     (letter: SpaceLetter, layout: OriginLayout) => {
+      captureScrollOffset();
       setIsTappedSourceHidden(false);
       setTapLetter(letter);
       setTapLetterOrigin(layout);
@@ -1149,7 +1160,7 @@ export default function SpaceDetailScreen() {
         }).catch(() => {});
       }
     },
-    [queryClient],
+    [queryClient, captureScrollOffset],
   );
 
   const handleOverlayClose = useCallback(() => {
@@ -1240,6 +1251,9 @@ export default function SpaceDetailScreen() {
       const isTapped = chainIdx === chainInitialIndex;
       const article = chainArticles[chainIdx];
       const letter = tapLetter;
+      if ((isTapped && letter?.sourceArticleId) || (!isTapped && article)) {
+        cancelScrollRestoration();
+      }
       setTapLetter(null);
       setTapLetterOrigin(null);
       setTapArticle(null);
@@ -1258,7 +1272,7 @@ export default function SpaceDetailScreen() {
         params: { articleId: article.id, mode: "re_read" },
       });
     },
-    [tapLetter, chainArticles, chainInitialIndex, router],
+    [tapLetter, chainArticles, chainInitialIndex, router, cancelScrollRestoration],
   );
 
   const handleCopyInviteCode = useCallback(async () => {
@@ -1391,9 +1405,13 @@ export default function SpaceDetailScreen() {
       </View>
 
       <ScrollView
+        ref={spaceScrollRef}
         style={styles.scrollView}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: 80 + insets.bottom }]}
         showsVerticalScrollIndicator={false}
+        onScroll={handleSelectionScroll}
+        scrollEventThrottle={16}
+        scrollEnabled={tapLetter === null}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}

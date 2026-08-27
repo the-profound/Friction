@@ -19,6 +19,7 @@ echo "🔎 릴리즈 환경 변수 검증 중..."
 APP_RELEASE_TRACK=production EAS_BUILD_PROFILE=production \
   node "$SCRIPT_DIR/validate-release-env.mjs" --track production
 bash "$SCRIPT_DIR/validate-eas-cloud-env.sh" production
+node "$SCRIPT_DIR/validate-native-abi.mjs"
 
 export EXPO_APPLE_TEAM_ID="D9P94YPN8F"
 

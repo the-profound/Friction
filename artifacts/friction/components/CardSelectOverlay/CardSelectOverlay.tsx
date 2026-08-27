@@ -24,9 +24,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
-import ArticleCardItem, {
-  ArticleCardShadow,
-} from "@/components/ArticleCardItem/ArticleCardItem";
+import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import EnvelopeFrontCard from "@/components/EnvelopeCard/EnvelopeFrontCard";
 import {
   EnvelopePocketFront,
@@ -36,6 +34,11 @@ import {
 import { calculateCardReturnDistance } from "./returnDistance";
 import ScalePressable from "@/components/shared/ScalePressable";
 import type { Article } from "@workspace/api-client-react";
+import {
+  advanceVisualGate,
+  isCurrentVisualReady,
+  type VisualGate,
+} from "./visualReadiness";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 const CARD_W = Sizing.cardSlotW;
@@ -56,6 +59,11 @@ const CLOSE_DURATION_PER_PIXEL = 0.25;
 const TRANSITION_EASING = Easing.out(Easing.poly(4));
 const DISMISS_FADE_DURATION = 100;
 const DISMISS_RESISTANCE_DISTANCE = 180;
+
+function getCoverImageUrl(article: Article | null | undefined): string | null {
+  const cover = article?.cover;
+  return cover?.type === "image" && cover.imageUrl ? cover.imageUrl : null;
+}
 
 const getOpenDuration = (distance: number) =>
   Math.round(
@@ -123,8 +131,6 @@ interface CardSelectOverlayProps {
    * frame between the source tree and the Modal portal.
    */
   onReady?: () => void;
-  /** Optional card-tap action for flows that want to mirror the "읽기" CTA. */
-  onCardTap?: (index: number) => void;
   onNavigateToCollection?: (id: string) => void;
   onNavigateToAuthor?: (authorId: string) => void;
   /** Prevents the info bar from navigating back to the screen's current entity. */
@@ -152,7 +158,6 @@ export default function CardSelectOverlay({
   onClose,
   onRead,
   onReady,
-  onCardTap,
   onNavigateToCollection,
   onNavigateToAuthor,
   currentCollectionId,
@@ -321,6 +326,14 @@ export default function CardSelectOverlay({
   const modalShownSessionRef = useRef(0);
   const cardLayoutSessionRef = useRef(0);
   const readyNotifiedSessionRef = useRef(0);
+  const visualReadySessionRef = useRef(0);
+  const visualGateRef = useRef<VisualGate>({
+    key: "",
+    token: 0,
+    session: 0,
+    slotIndex: -1,
+    imageUrl: null,
+  });
 
   countRef.current = displayArticles.length;
 
@@ -355,15 +368,6 @@ export default function CardSelectOverlay({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
-  const originShadowOpacity = useMemo(
-    () =>
-      progress.interpolate({
-        inputRange: [0, 1],
-        outputRange: [1, 0],
-      }),
-    [progress],
-  );
-
   // ── Open / close lifecycle ────────────────────────────────────────────────
 
   const startOpenSpringWhenReady = useCallback(() => {
@@ -375,6 +379,7 @@ export default function CardSelectOverlay({
     if (
       (Platform.OS !== "web" && modalShownSessionRef.current !== session) ||
       cardLayoutSessionRef.current !== session ||
+      visualReadySessionRef.current !== session ||
       readyNotifiedSessionRef.current === session
     ) {
       return;
@@ -413,6 +418,44 @@ export default function CardSelectOverlay({
     startOpenSpringWhenReady();
   }, [startOpenSpringWhenReady]);
 
+  const initialImageUrl = getCoverImageUrl(displayArticles[initialIndex]);
+  const initialVisualKey = `${initialIndex}:${displayArticles[initialIndex]?.id ?? "loading"}:${initialImageUrl ?? ""}`;
+
+  // This ref is intentionally updated during render: image callbacks need the
+  // committed card's current identity, not values captured by an earlier slot.
+  // It has no visual side effects and is only read by asynchronous callbacks.
+  if (visualGateRef.current.key !== initialVisualKey) {
+    visualGateRef.current = advanceVisualGate(visualGateRef.current, {
+      key: initialVisualKey,
+      session: openedRef.current ? openSessionRef.current : 0,
+      slotIndex: initialIndex,
+      imageUrl: initialImageUrl,
+    });
+  }
+
+  const handleCardVisualReady = useCallback(
+    (session: number, token: number, slotIndex: number, imageUrl: string) => {
+      // Image callbacks can arrive after a close/reopen or after an ancestor
+      // slot changes the initial index. Never let an old card unlock a new
+      // source-to-modal handoff.
+      if (
+        !openedRef.current ||
+        openSessionRef.current !== session ||
+        !isCurrentVisualReady(visualGateRef.current, {
+          session,
+          token,
+          slotIndex,
+          imageUrl,
+        })
+      ) {
+        return;
+      }
+      visualReadySessionRef.current = session;
+      startOpenSpringWhenReady();
+    },
+    [startOpenSpringWhenReady],
+  );
+
   const resetEnvelopeAnim = useCallback(() => {
     const phase: EnvelopePhase = envelopeInfo ? "sealed" : "revealed";
     setEnvelopePhase(phase);
@@ -434,6 +477,13 @@ export default function CardSelectOverlay({
       modalShownSessionRef.current = Platform.OS === "web" ? session : 0;
       cardLayoutSessionRef.current = 0;
       readyNotifiedSessionRef.current = 0;
+      visualReadySessionRef.current = initialImageUrl ? 0 : session;
+      visualGateRef.current = advanceVisualGate(visualGateRef.current, {
+        key: initialVisualKey,
+        session,
+        slotIndex: initialIndex,
+        imageUrl: initialImageUrl,
+      });
       activeIndexRef.current = initialIndex;
       carouselX.setValue(-initialIndex * SLOT_W);
       detailsFade.setValue(1);
@@ -451,6 +501,17 @@ export default function CardSelectOverlay({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
+
+  // A fetched article can replace a seeded card while the overlay is open.
+  // Reset readiness when its actual cover URL changes so the source is never
+  // hidden while the replacement image is still blank.
+  useEffect(() => {
+    if (!openedRef.current || !rendered) return;
+    const session = openSessionRef.current;
+    if (visualGateRef.current.session !== session) return;
+    visualReadySessionRef.current = initialImageUrl ? 0 : session;
+    startOpenSpringWhenReady();
+  }, [initialVisualKey, rendered, initialImageUrl, startOpenSpringWhenReady]);
 
   // ── Adjust carousel position when ancestors are prepended during loading ──
   const prevInitialIndexRef = useRef(initialIndex);
@@ -753,10 +814,9 @@ export default function CardSelectOverlay({
     runReadTransition(onRead);
   }, [onRead, runReadTransition]);
 
-  const handleCardTap = useCallback(() => {
-    if (isEnvelopeSealed || !onCardTap) return;
-    runReadTransition(onCardTap);
-  }, [isEnvelopeSealed, onCardTap, runReadTransition]);
+  // The cover is a selection-mode surface, not a read action. Reading is
+  // intentionally available only through the explicit "읽기" CTA below.
+  const handleCardTap = useCallback(() => undefined, []);
 
   // ── Envelope overlay — rendered absolutely over the card at initialIndex ──
   const renderEnvelopeLayer = (slotIndex: number) => {
@@ -777,6 +837,8 @@ export default function CardSelectOverlay({
 
     const envArticle = displayArticles[initialIndex] ?? null;
     const envMeta = displayMetas[initialIndex] ?? {};
+    const envImageUrl = getCoverImageUrl(envArticle);
+    const envVisualGate = visualGateRef.current;
 
     return (
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
@@ -884,7 +946,20 @@ export default function CardSelectOverlay({
                 cover={envArticle.cover}
                 isRead={envMeta.isRead ?? false}
                 isActive
-                hideShadow={Platform.OS !== "android"}
+                disabled
+                onImageReady={
+                   envImageUrl &&
+                   envVisualGate.slotIndex === initialIndex &&
+                   envVisualGate.imageUrl === envImageUrl
+                     ? () =>
+                         handleCardVisualReady(
+                           envVisualGate.session,
+                           envVisualGate.token,
+                           initialIndex,
+                           envImageUrl,
+                         )
+                     : undefined
+                 }
                 onPress={handleCardTap}
               />
             </Animated.View>
@@ -962,66 +1037,6 @@ export default function CardSelectOverlay({
     </View>
   );
 
-  /**
-   * A source carousel card has a deliberately softer shadow than a selected
-   * card. Keep both empty shadow hosts on the same transformed slot and blend
-   * them with `progress`: entry grows into the selected treatment, and the
-   * distance-aware close naturally returns to the exact source treatment.
-   *
-   * Standard cards already use the selected token, so rendering a second
-   * identical shadow would darken it during the handoff. They retain one host.
-   */
-  const renderCardShadow = (slotIndex: number, isRead = false) => {
-    // Android elevation changes sibling paint order, so ArticleCardItem owns
-    // the elevated containing surface there. Empty elevated shadow siblings
-    // would cover the pressable's cover art and title.
-    if (Platform.OS === "android") return null;
-
-    const isCarouselOrigin =
-      originUsesCarouselShadow && slotIndex === initialIndex;
-    const selectedShadowOpacity = isRead
-      ? progress.interpolate({
-          inputRange: [0, 1],
-          outputRange: [0, 0.45],
-        })
-      : progress;
-    const sourceShadowOpacity = isRead
-      ? progress.interpolate({
-          inputRange: [0, 1],
-          outputRange: [0.45, 0],
-        })
-      : originShadowOpacity;
-
-    if (!isCarouselOrigin) {
-      return (
-        <ArticleCardShadow
-          width={CARD_W}
-          height={CARD_H}
-          borderRadius={16}
-          opacity={isRead ? 0.45 : undefined}
-        />
-      );
-    }
-
-    return (
-      <>
-        <ArticleCardShadow
-          width={CARD_W}
-          height={CARD_H}
-          borderRadius={16}
-          carouselShadow
-          opacity={sourceShadowOpacity}
-        />
-        <ArticleCardShadow
-          width={CARD_W}
-          height={CARD_H}
-          borderRadius={16}
-          opacity={selectedShadowOpacity}
-        />
-      </>
-    );
-  };
-
   // ── Render ────────────────────────────────────────────────────────────────
   const trackW = SLOT_W * displayArticles.length;
 
@@ -1071,6 +1086,12 @@ export default function CardSelectOverlay({
             {displayArticles.map((art, i) => {
               const meta = displayMetas[i] ?? {};
               const slotOpacity = i === initialIndex ? 1 : progressDetailsOpacity;
+              const imageUrl = getCoverImageUrl(art);
+              const visualGate = visualGateRef.current;
+              const isCurrentVisualSlot =
+                i === visualGate.slotIndex &&
+                imageUrl !== null &&
+                visualGate.imageUrl === imageUrl;
               return (
                 <Animated.View
                   key={art?.id ?? `loading-${i}`}
@@ -1080,7 +1101,6 @@ export default function CardSelectOverlay({
                     <SkeletonCard />
                   ) : (
                     <>
-                      {renderCardShadow(i, meta.isRead ?? false)}
                       {wrapWithLetterAnim(
                         <ArticleCardItem
                           title={art.title ?? "제목 없음"}
@@ -1089,12 +1109,27 @@ export default function CardSelectOverlay({
                           cover={art.cover}
                           isRead={meta.isRead ?? false}
                           isActive
+                          disabled
                           carouselShadow={
-                            Platform.OS === "android" &&
                             originUsesCarouselShadow &&
                             i === initialIndex
                           }
-                          hideShadow={Platform.OS !== "android"}
+                          shadowProgress={
+                            originUsesCarouselShadow && i === initialIndex
+                              ? progress
+                              : undefined
+                          }
+                           onImageReady={
+                             isCurrentVisualSlot && imageUrl
+                               ? () =>
+                                   handleCardVisualReady(
+                                     visualGate.session,
+                                     visualGate.token,
+                                     i,
+                                     imageUrl,
+                                   )
+                               : undefined
+                           }
                           onPress={handleCardTap}
                         />,
                         i,
@@ -1110,23 +1145,44 @@ export default function CardSelectOverlay({
           <SkeletonCard />
         ) : (
           <>
-            {renderCardShadow(0, displayMetas[0]?.isRead ?? false)}
-            {wrapWithLetterAnim(
-              <ArticleCardItem
-                title={displayArticles[0].title ?? "제목 없음"}
-                authorName={displayMetas[0]?.authorName ?? undefined}
-                collectionName={displayMetas[0]?.collectionName ?? undefined}
-                cover={displayArticles[0].cover}
-                isRead={displayMetas[0]?.isRead ?? false}
-                isActive
-                carouselShadow={
-                  Platform.OS === "android" && originUsesCarouselShadow
-                }
-                hideShadow={Platform.OS !== "android"}
-                onPress={handleCardTap}
-              />,
-              0,
-            )}
+            {(() => {
+              const imageUrl = getCoverImageUrl(displayArticles[0]);
+              const visualGate = visualGateRef.current;
+              const isCurrentVisualSlot =
+                visualGate.slotIndex === 0 &&
+                imageUrl !== null &&
+                visualGate.imageUrl === imageUrl;
+              return wrapWithLetterAnim(
+                <ArticleCardItem
+                  title={displayArticles[0].title ?? "제목 없음"}
+                  authorName={displayMetas[0]?.authorName ?? undefined}
+                  collectionName={displayMetas[0]?.collectionName ?? undefined}
+                  cover={displayArticles[0].cover}
+                  isRead={displayMetas[0]?.isRead ?? false}
+                  isActive
+                  disabled
+                  carouselShadow={
+                    originUsesCarouselShadow
+                  }
+                  shadowProgress={
+                    originUsesCarouselShadow ? progress : undefined
+                  }
+                  onImageReady={
+                    isCurrentVisualSlot && imageUrl
+                      ? () =>
+                          handleCardVisualReady(
+                            visualGate.session,
+                            visualGate.token,
+                            0,
+                            imageUrl,
+                          )
+                      : undefined
+                  }
+                  onPress={handleCardTap}
+                />,
+                0,
+              );
+            })()}
             {renderEnvelopeLayer(0)}
           </>
         )}

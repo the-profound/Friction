@@ -1,9 +1,9 @@
 import React from "react";
 import {
-  View,
   StyleSheet,
   Animated,
   Platform,
+  type ViewStyle,
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import type { ArticleCover } from "@workspace/api-client-react";
@@ -16,6 +16,7 @@ interface ArticleCardItemProps {
   collectionName?: string | null;
   onPress: () => void;
   onLongPress?: () => void;
+  disabled?: boolean;
   cover?: ArticleCover | null;
   isRead?: boolean;
   isActive?: boolean;
@@ -24,47 +25,65 @@ interface ArticleCardItemProps {
   date?: string | null;
   /** Limits shadow strength when the card sits inside a clipped date carousel. */
   carouselShadow?: boolean;
-  /** Lets a transition render the shadow separately from the card content. */
-  hideShadow?: boolean;
+  /**
+   * Selection overlays use the same hero progress to blend a carousel card's
+   * raised surface into the selected-card treatment and back on close.
+   */
+  shadowProgress?: Animated.Value | Animated.AnimatedInterpolation<number>;
+  /** Called after the image, or its explicit fallback, is visibly rendered. */
+  onImageReady?: () => void;
 }
+
 const DEFAULT_BG = Colors.zinc50;
-type CardShadowOpacity =
-  | number
-  | Animated.Value
-  | Animated.AnimatedInterpolation<number>;
 
-interface ArticleCardShadowProps {
-  width: number;
-  height: number;
-  borderRadius: number;
-  carouselShadow?: boolean;
-  opacity?: CardShadowOpacity;
-}
+function getCardSurfaceShadowStyle(
+  carouselShadow: boolean,
+  shadowProgress?: Animated.Value | Animated.AnimatedInterpolation<number>,
+): ViewStyle {
+  if (!carouselShadow) return styles.standardCardSurface;
+  if (!shadowProgress) return styles.carouselCardSurface;
 
-/**
- * The shadow is intentionally an empty sibling of the card content. This keeps
- * scaled card text crisp and lets selection transitions cross-fade only the
- * shadow treatment without changing the card's content, corners, or press
- * behavior.
- */
-export function ArticleCardShadow({
-  width,
-  height,
-  borderRadius,
-  carouselShadow = false,
-  opacity,
-}: ArticleCardShadowProps) {
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={[
-        styles.cardShadowHost,
-        carouselShadow ? styles.carouselShadow : undefined,
-        { width, height, borderRadius },
-        opacity === undefined ? undefined : { opacity },
-      ]}
-    />
-  );
+  const interpolateNumber = (outputRange: number[]) =>
+    shadowProgress.interpolate({
+      inputRange: [0, 1],
+      outputRange,
+    });
+  const interpolateString = (outputRange: string[]) =>
+    shadowProgress.interpolate({
+      inputRange: [0, 1],
+      outputRange,
+    });
+
+  // The card surface itself owns the interpolation. Avoid an opaque shadow
+  // sibling: it can show up as a same-sized white card while the cover moves.
+  if (Platform.OS === "ios") {
+    return {
+      shadowColor: "#000",
+      shadowOffset: {
+        width: 0,
+        height: interpolateNumber([2, 4]) as unknown as number,
+      },
+      shadowOpacity: interpolateNumber([0.1, 0.12]) as unknown as number,
+      shadowRadius: interpolateNumber([6, 12]) as unknown as number,
+    };
+  }
+
+  if (Platform.OS === "android") {
+    return {
+      elevation: interpolateNumber([3, 5]) as unknown as number,
+    };
+  }
+
+  if (Platform.OS === "web") {
+    return {
+      boxShadow: interpolateString([
+        "0px 2px 8px rgba(0,0,0,0.10)",
+        "0px 4px 14px rgba(0,0,0,0.12)",
+      ]) as unknown as string,
+    } as ViewStyle;
+  }
+
+  return styles.standardCardSurface;
 }
 
 function ArticleCardItem({
@@ -73,6 +92,7 @@ function ArticleCardItem({
   collectionName,
   onPress,
   onLongPress,
+  disabled = false,
   cover,
   isRead = false,
   isActive = true,
@@ -80,44 +100,32 @@ function ArticleCardItem({
   letterTypeBadge,
   date,
   carouselShadow = false,
-  hideShadow = false,
+  shadowProgress,
+  onImageReady,
 }: ArticleCardItemProps) {
   const w = cardWidth ?? CARD_W;
   const h = w * Sizing.cardRatio;
   const scale = w / CARD_W;
-
   const borderRadius = Math.max(8, Math.round(16 * scale));
-  // Android elevation controls sibling paint order. Keep it on the containing
-  // card surface so an empty shadow sibling can never cover the card content.
-  const useAndroidSurfaceShadow = Platform.OS === "android" && !hideShadow;
 
   return (
-    <View
+    <ScalePressable
       style={[
         styles.cardFrame,
-        useAndroidSurfaceShadow
-          ? carouselShadow
-            ? styles.androidCarouselSurface
-            : styles.androidCardSurface
-          : undefined,
         { width: w, height: h, borderRadius },
         !isActive && styles.inactive,
         isRead && styles.read,
       ]}
+      onPress={onPress}
+      onLongPress={onLongPress}
+      disabled={disabled}
     >
-      {!hideShadow && Platform.OS !== "android" ? (
-        <ArticleCardShadow
-          width={w}
-          height={h}
-          borderRadius={borderRadius}
-          carouselShadow={carouselShadow}
-        />
-      ) : null}
-      <ScalePressable
-        onPress={onPress}
-        onLongPress={onLongPress}
-        style={{ width: w, height: h }}
-        animatedBorderRadius={borderRadius}
+      <Animated.View
+        style={[
+          styles.cardSurface,
+          getCardSurfaceShadowStyle(carouselShadow, shadowProgress),
+          { width: w, height: h, borderRadius },
+        ]}
       >
         <ArticleCardCover
           cover={cover}
@@ -129,36 +137,33 @@ function ArticleCardItem({
           width={w}
           height={h}
           borderRadius={borderRadius}
+          onImageLoad={onImageReady}
         />
-      </ScalePressable>
-
-    </View>
+      </Animated.View>
+    </ScalePressable>
   );
 }
 
 export default React.memo(ArticleCardItem);
 
 const CARD_W = Sizing.cardSlotW;
+
 const styles = StyleSheet.create({
   cardFrame: {
     position: "relative",
   },
-  // On Android this is the containing elevated surface, not a sibling. An
-  // elevated sibling is painted above the non-elevated card pressable.
-  androidCardSurface: {
+  cardSurface: {
+    position: "relative",
+    overflow: "visible",
+    // The raised surface is the card itself. Never put an opaque, same-sized
+    // shadow plate behind this cover: a transform or image handoff can expose
+    // it as a white duplicate card.
     backgroundColor: DEFAULT_BG,
+  },
+  standardCardSurface: {
     ...Shadows.card,
   },
-  androidCarouselSurface: {
-    backgroundColor: DEFAULT_BG,
-    ...Shadows.carouselCard,
-  },
-  cardShadowHost: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: DEFAULT_BG,
-    ...Shadows.card,
-  },
-  carouselShadow: {
+  carouselCardSurface: {
     ...Shadows.carouselCard,
   },
   inactive: {

@@ -191,6 +191,11 @@ module.exports = {
       package: IS_DEV ? "com.theprofound.friction" : "friction.by.theprofound",
       permissions: [
         "android.permission.RECORD_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
         "android.permission.READ_MEDIA_AUDIO",
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.VIBRATE",
@@ -215,6 +220,25 @@ module.exports = {
             "./node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Feather.ttf",
             "./node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/MaterialCommunityIcons.ttf",
           ],
+        },
+      ],
+      [
+        "expo-image-picker",
+        {
+          photosPermission:
+            "글에 사진을 첨부하려면 사진첩 접근 권한이 필요합니다.",
+          cameraPermission:
+            "글에 사진을 첨부하려면 카메라 접근 권한이 필요합니다.",
+        },
+      ],
+      [
+        "expo-media-library",
+        {
+          photosPermission:
+            "글을 이미지로 저장하려면 사진첩 접근 권한이 필요합니다.",
+          savePhotosPermission:
+            "글을 이미지로 저장하려면 사진첩 접근 권한이 필요합니다.",
+          isAccessMediaLocationEnabled: false,
         },
       ],
       "expo-web-browser",

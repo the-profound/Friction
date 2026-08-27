@@ -10,12 +10,6 @@ import Animated, {
 export interface ScalePressableProps extends PressableProps {
   scaleTo?: number;
   contentStyle?: StyleProp<ViewStyle>;
-  /**
-   * When provided, borderRadius is applied to the inner Animated.View and
-   * scaled proportionally with the press animation so corners stay visually
-   * consistent as the card shrinks.
-   */
-  animatedBorderRadius?: number;
 }
 
 const PRESS_DURATION = 80;
@@ -62,7 +56,7 @@ export default function ScalePressable({
   style,
   contentStyle,
   children,
-  animatedBorderRadius,
+  disabled = false,
   ...rest
 }: ScalePressableProps) {
   const scale = useSharedValue(1);
@@ -74,9 +68,6 @@ export default function ScalePressable({
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
-    ...(animatedBorderRadius !== undefined
-      ? { borderRadius: animatedBorderRadius * scale.value }
-      : {}),
   }));
 
   const handleLayout = (e: LayoutChangeEvent) => {
@@ -88,6 +79,7 @@ export default function ScalePressable({
   const handlePressIn = (
     e: Parameters<NonNullable<PressableProps["onPressIn"]>>[0],
   ) => {
+    if (disabled) return;
     // Explicit scaleTo always wins; otherwise derive from the measured size so
     // the value is always fresh even after layout changes.
     const target =
@@ -101,6 +93,7 @@ export default function ScalePressable({
   const handlePressOut = (
     e: Parameters<NonNullable<PressableProps["onPressOut"]>>[0],
   ) => {
+    if (disabled) return;
     scale.value = withTiming(1, { duration: RELEASE_DURATION, easing: EASING });
     onPressOut?.(e);
   };
@@ -108,13 +101,14 @@ export default function ScalePressable({
   return (
     <Pressable
       style={style}
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
+      onPressIn={disabled ? undefined : handlePressIn}
+      onPressOut={disabled ? undefined : handlePressOut}
       onLayout={handleLayout}
+      disabled={disabled}
       {...rest}
     >
       {(state: PressableStateCallbackType) => (
-        <Animated.View style={[styles.inner, animatedBorderRadius !== undefined && styles.innerClipped, contentStyle, animatedStyle]}>
+        <Animated.View style={[styles.inner, contentStyle, animatedStyle]}>
           {typeof children === "function" ? children(state) : children}
         </Animated.View>
       )}
@@ -128,8 +122,5 @@ export const styles = StyleSheet.create({
     flexGrow: 1,
     alignSelf: "stretch",
     overflow: "visible",
-  },
-  innerClipped: {
-    overflow: "hidden",
   },
 });

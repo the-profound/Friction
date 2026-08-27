@@ -42,6 +42,7 @@ import type {
   NeighborRequestWithUser,
 } from "@workspace/api-client-react";
 import { spaceStatusLabel, spaceStatusStyle } from "@/lib/spaceStatusStyle";
+import { useSelectionScrollRestoration } from "@/hooks/useSelectionScrollRestoration";
 import type { OriginLayout } from "@/components/CardSelectOverlay/CardSelectOverlay";
 
 type ProfileTab = "letters" | "publications" | "spaces";
@@ -249,9 +250,22 @@ export default function UserProfileScreen() {
   const cellHeight = cellWidth * Sizing.cardRatio;
 
   const cardSlotRefs = useRef<Map<string, View | null>>(new Map());
+  const profileListRef = useRef<FlatList<ProfileListRow>>(null);
+  const restoreProfileScrollOffset = useCallback((offset: number) => {
+    profileListRef.current?.scrollToOffset({ offset, animated: false });
+  }, []);
+  const {
+    handleScroll: handleSelectionScroll,
+    captureScrollOffset,
+    cancelScrollRestoration,
+  } = useSelectionScrollRestoration(
+    selectedArticle !== null,
+    restoreProfileScrollOffset,
+  );
 
   const handleLetterPress = useCallback(
     (article: Article) => {
+      captureScrollOffset();
       setIsSelectedSourceHidden(false);
       const rec = sendRecordByArticleId[article.id];
       const colName = rec?.name ?? null;
@@ -274,7 +288,7 @@ export default function UserProfileScreen() {
         setSelectedDateOverride(deliverySlot);
       }
     },
-    [cellWidth, cellHeight, sendRecordByArticleId],
+    [cellWidth, cellHeight, sendRecordByArticleId, captureScrollOffset],
   );
 
   const handleOverlayClose = useCallback(() => {
@@ -339,6 +353,7 @@ export default function UserProfileScreen() {
   const handleOverlayRead = useCallback((chainIdx: number) => {
     const article = chainArticles[chainIdx];
     if (!article) return;
+    cancelScrollRestoration();
     setSelectedArticle(null);
     setSelectedOrigin(null);
     setSelectedCollectionName(null);
@@ -348,7 +363,7 @@ export default function UserProfileScreen() {
       pathname: "/read" as never,
       params: { articleId: article.id, mode: "re_read" },
     });
-  }, [chainArticles, router]);
+  }, [chainArticles, router, cancelScrollRestoration]);
 
   const handleSpacePress = useCallback(
     (space: SpaceListItem) => {
@@ -533,6 +548,7 @@ export default function UserProfileScreen() {
   return (
     <View style={styles.container}>
       <FlatList
+        ref={profileListRef}
         data={listData as ProfileListRow[]}
         keyExtractor={(item, index) => {
           if (item._type === "lr") return `lr-${item.items[0]?.id ?? index}`;
@@ -648,6 +664,9 @@ export default function UserProfileScreen() {
         ListEmptyComponent={listEmpty}
         contentContainerStyle={contentPadding}
         showsVerticalScrollIndicator={false}
+        onScroll={handleSelectionScroll}
+        scrollEventThrottle={16}
+        scrollEnabled={selectedArticle === null}
       />
 
       <CardSelectOverlay

@@ -62,6 +62,22 @@ signal. Hide the parent source only then, and start the spring on the next
 frame. Guard callbacks with an incrementing open-session token so a late
 close/reopen event cannot launch or hide the wrong card.
 
+### Image-cover readiness
+
+When the selected card has an image cover, modal/layout readiness alone is not
+enough: wait for `expo-image` to report that the target image is displayed
+before hiding the source. Gate that callback with a generation token tied to
+the open session, selected slot, and image URL.
+
+**Why:** an image callback can outlive a close/reopen, or arrive after a reply
+chain prepends slots and changes the target index. A session-only guard lets
+that stale callback hide a source before the current target is visible.
+
+**How to apply:** advance the gate whenever any session/slot/URL identity
+changes, capture it in the image callback, and compare all four values on
+delivery. Do not treat `onError` as a display event; first render a deliberate
+fallback surface, then release the source on a following frame.
+
 ## Distance-aware, straight close motion
 
 The dismiss return must animate every position-bearing value on one shared,

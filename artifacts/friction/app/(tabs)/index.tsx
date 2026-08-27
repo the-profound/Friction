@@ -7,6 +7,8 @@ import {
   RefreshControl,
   ScrollView,
   Pressable,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from "react-native";
 import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar";
 import { useRouter, useFocusEffect } from "expo-router";
@@ -31,6 +33,7 @@ import { isQueryStale } from "@/lib/useScreenFocused";
 import { useRealtimeChannel } from "@/lib/useRealtimeChannel";
 import { LIST_PERF_PRESET } from "@/lib/listPerf";
 import { useScrollPressGuard } from "@/hooks/useScrollPressGuard";
+import { useSelectionScrollRestoration } from "@/hooks/useSelectionScrollRestoration";
 
 /** Recursively collect all inbox descendants of rootArticleId (oldest → newest BFS). */
 function findAllDescendants(rootArticleId: string, allItems: InboxItem[]): InboxItem[] {
@@ -116,6 +119,15 @@ export default function InboxScreen() {
   const [tapItem, setTapItem] = useState<InboxItem | null>(null);
   const [tapItemOrigin, setTapItemOrigin] = useState<OriginLayout | null>(null);
   const [isTappedSourceHidden, setIsTappedSourceHidden] = useState(false);
+  const inboxListRef = useRef<FlatList<DateGroup>>(null);
+  const restoreInboxScrollOffset = useCallback((offset: number) => {
+    inboxListRef.current?.scrollToOffset({ offset, animated: false });
+  }, []);
+  const {
+    handleScroll: handleSelectionScroll,
+    captureScrollOffset,
+    cancelScrollRestoration,
+  } = useSelectionScrollRestoration(tapItem !== null, restoreInboxScrollOffset);
 
   const [sourcePromptItem, setSourcePromptItem] = useState<InboxItem | null>(null);
 
@@ -166,10 +178,19 @@ export default function InboxScreen() {
   }, []);
 
   const handleCardPress = useCallback((item: InboxItem, layout: OriginLayout) => {
+    captureScrollOffset();
     setIsTappedSourceHidden(false);
     setTapItemOrigin(layout);
     setTapItem(item);
-  }, []);
+  }, [captureScrollOffset]);
+
+  const handleInboxScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      handleSelectionScroll(event);
+      scrollPressGuard.onScroll();
+    },
+    [handleSelectionScroll, scrollPressGuard],
+  );
 
   // Stable renderItem for the carousel FlatList — avoids re-creating the
   // function (and triggering row-level reconciliation) on every parent render.
@@ -269,6 +290,9 @@ export default function InboxScreen() {
     if (inboxItem) {
       const isReply = inboxItem.isReplyToMe === true || !!inboxItem.replyToArticleId;
       if (isReply && inboxItem.hasReadSourceArticle === false) {
+        // The source-first prompt continues toward the reader, so it must not
+        // restore the list between selection mode and that navigation.
+        cancelScrollRestoration();
         setTapItem(null);
         setSourcePromptItem(inboxItem);
         return;
@@ -277,19 +301,21 @@ export default function InboxScreen() {
       // Here we just navigate immediately after the fade calls back.
       prepareInboxItem(inboxItem);
       const mode = (inboxItem.isRead || inboxItem.hasReadBefore) ? "re_read" : "basic";
+      cancelScrollRestoration();
       setTapItem(null);
       router.push({
         pathname: "/read",
         params: { articleId: inboxItem.articleId, inboxId: inboxItem.id, mode },
       });
     } else if (article) {
+      cancelScrollRestoration();
       setTapItem(null);
       router.push({
         pathname: "/read",
         params: { articleId: article.id, mode: "re_read" },
       });
     }
-  }, [prepareInboxItem, router]);
+  }, [prepareInboxItem, router, cancelScrollRestoration]);
 
   const handleSourcePromptClose = useCallback(() => {
     setSourcePromptItem(null);
@@ -498,6 +524,7 @@ export default function InboxScreen() {
         </ScrollView>
       ) : (
         <FlatList
+          ref={inboxListRef}
           {...LIST_PERF_PRESET}
           data={groups}
           extraData={`${tapItem?.id ?? ""}:${isTappedSourceHidden}`}
@@ -508,8 +535,9 @@ export default function InboxScreen() {
           }
           contentContainerStyle={[styles.listContent, { paddingBottom: navBottom }]}
           showsVerticalScrollIndicator={false}
-          onScroll={scrollPressGuard.onScroll}
+          onScroll={handleInboxScroll}
           scrollEventThrottle={16}
+          scrollEnabled={tapItem === null}
         />
       )}
 
@@ -522,7 +550,6 @@ export default function InboxScreen() {
         onRead={handleRead}
         onReady={() => setIsTappedSourceHidden(true)}
         originUsesCarouselShadow
-        onCardTap={handleRead}
         onNavigateToCollection={handleNavigateToCollection}
         onNavigateToAuthor={(authorId) => router.push(`/user-profile/${authorId}` as never)}
         envelopeInfo={
