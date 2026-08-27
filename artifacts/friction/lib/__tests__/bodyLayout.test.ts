@@ -168,15 +168,17 @@ describe("thought card typography regression guards", () => {
 
   it("keeps the article card title tied to its scaled text frame", () => {
     const tokens = read("constants/tokens.ts");
-    const articleCard = read("components/ArticleCardItem/ArticleCardItem.tsx");
+    const cardCover = read("components/ArticleCardItem/ArticleCardCover.tsx");
 
     expect(tokens).toMatch(/titleCqi:\s*6\.4/);
     expect(tokens).toMatch(/cardTitleCqi:\s*11\.2/);
-    expect(articleCard).toContain("const textFrameWidth = Math.max(1, w - pad * 2);");
-    expect(articleCard).toContain(
+    expect(cardCover).toContain(
+      "const textFrameWidth = Math.max(1, resolvedWidth - pad * 2);",
+    );
+    expect(cardCover).toContain(
       "readerFontSize(ReaderTokens.typeScale.cardTitleCqi, textFrameWidth)",
     );
-    expect(articleCard).toContain("numberOfLines={4}");
+    expect(cardCover).toContain("numberOfLines={4}");
   });
 
   it("renders a 300px card title at about 32px without changing reader title scale", () => {
@@ -185,6 +187,15 @@ describe("thought card typography regression guards", () => {
 
     expect(cardTitleSize).toBeCloseTo(28.224, 3);
     expect((6.4 / 100) * 300).toBeCloseTo(19.2, 3);
+  });
+
+  it("renders filtered letters with the shared cover card at the fixed card ratio", () => {
+    const recordsScreen = read("app/(tabs)/on.tsx");
+
+    expect(recordsScreen).toContain('import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";');
+    expect(recordsScreen).toContain('if (record.kind === "letter")');
+    expect(recordsScreen).toContain("cover={record.article.cover}");
+    expect(recordsScreen).toContain("if (record.kind === \"letter\") return baseHeight;");
   });
 });
 
@@ -246,9 +257,7 @@ describe("selectable article card projection contract", () => {
   it("connects space letter author navigation without treating the space as a collection", () => {
     const space = read("app/of-space-detail.tsx");
 
-    expect(space).toContain(
-      'router.push(`/user-profile/${authorId}` as never);',
-    );
+    expect(space).toContain('router.push(`/user-profile/${authorId}` as never);');
     expect(space).toContain("onNavigateToAuthor={handleNavigateToAuthor}");
     expect(space).toContain(
       "authorId: isAnonymousSpace ? null : tapLetter.authorId ?? null,",
@@ -418,5 +427,80 @@ describe("content list typography regression guards", () => {
       "readerFontSize(ReaderTokens.typeScale.bodyCqi, contentWidth)",
     );
     expect(card).toContain("numberOfLines={bodyLines}");
+  });
+});
+
+describe("unified article card cover regression guards", () => {
+  const appRoot = join(__dirname, "../..");
+  const read = (relativePath: string) =>
+    readFileSync(join(appRoot, relativePath), "utf8");
+
+  it("shares the canonical card surface across card, reader, and preview", () => {
+    const card = read("components/ArticleCardItem/ArticleCardItem.tsx");
+    const cardCover = read("components/ArticleCardItem/ArticleCardCover.tsx");
+    const coverPage = read("components/CoverPage/CoverPage.tsx");
+    const coverPreview = read("components/CoverPreview/CoverPreview.tsx");
+
+    expect(card).toContain('import ArticleCardCover from "./ArticleCardCover"');
+    expect(card).toContain("<ArticleCardCover");
+    expect(coverPage).toContain("<ArticleCardCover");
+    expect(coverPreview).toContain("<ArticleCardCover");
+    expect(cardCover).toContain('alignSelf: "flex-start"');
+    expect(cardCover).toContain('alignItems: "flex-end"');
+    expect(cardCover).toContain("getArticleCardSenderBottomOffset");
+    expect(cardCover).toContain("getArticleCardCoverFontFamily");
+  });
+
+  it("uses a readable fallback when an image cover cannot render", () => {
+    const presentation = read("lib/articleCoverPresentation.ts");
+    const cover = read("components/ArticleCardItem/ArticleCardCover.tsx");
+
+    expect(presentation).toContain(
+      'const isMissingImage = cover?.type === "image" && !isImageRendered;',
+    );
+    expect(presentation).toContain("textColor: isMissingImage");
+    expect(cover).toContain("onError={handleImageError}");
+    expect(cover).toContain("presentation.isImageRendered");
+  });
+
+  it("keeps cover types and palettes while removing alignment controls", () => {
+    const editor = read("components/CoverEditor/CoverEditor.tsx");
+    const preview = read("components/CoverPreview/CoverPreview.tsx");
+
+    expect(editor).toContain("표지 타입");
+    expect(editor).toContain("서체");
+    expect(editor).toContain("고딕");
+    expect(editor).toContain("세리프");
+    expect(editor).toContain("텍스트 색상");
+    expect(editor).toContain("배경 색상");
+    expect(editor).not.toContain("텍스트 정렬");
+    expect(editor).not.toContain("CoverTextAlign");
+    expect(editor).not.toContain('title="표지 설정"');
+    expect(preview).toContain("COMPACT_PREVIEW_HEIGHT = 200");
+    expect(preview).toContain("COMPACT_PREVIEW_WIDTH");
+    expect(preview).toContain("aspectRatio: ReaderTokens.aspectRatio");
+  });
+
+  it("keeps the editor cover as the source for every external card surface", () => {
+    const externalCardScreens = [
+      "app/(tabs)/index.tsx",
+      "app/(tabs)/to.tsx",
+      "app/of-space-detail.tsx",
+      "app/user-profile/[userId].tsx",
+      "components/CardSelectOverlay/CardSelectOverlay.tsx",
+    ];
+
+    for (const relativePath of externalCardScreens) {
+      const source = read(relativePath);
+      expect(source, relativePath).toContain("<ArticleCardItem");
+      expect(source, relativePath).toContain("cover=");
+    }
+
+    const closingScreen = read("app/on-01c.tsx");
+    expect(closingScreen).toContain("data: { cover: toSave }");
+    expect(closingScreen).toContain("data: patchData");
+
+    const spacesRoute = read("../api-server/src/routes/spaces.ts");
+    expect(spacesRoute).toContain("articleCover: article?.cover ?? null");
   });
 });

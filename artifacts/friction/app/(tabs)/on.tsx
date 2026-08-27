@@ -29,6 +29,7 @@ import {
   type Thought,
 } from "@workspace/api-client-react";
 import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar";
+import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import { DateGroupCarousel } from "@/components/DateGroupCarousel/DateGroupCarousel";
@@ -146,6 +147,20 @@ function RecordSourceCard({
   );
   const textStyle = Platform.OS === "web" ? ({ whiteSpace: "pre-wrap" } as object) : undefined;
 
+  if (record.kind === "letter") {
+    return (
+      <ArticleCardItem
+        title={record.article.title || "제목 없음"}
+        authorName={record.article.authorNickname ?? undefined}
+        collectionName={record.article.collectionName}
+        cover={record.article.cover}
+        cardWidth={width}
+        onPress={onPress}
+        onLongPress={onLongPress}
+      />
+    );
+  }
+
   return (
     <ScalePressable
       style={[styles.thoughtCard, { width, height }]}
@@ -179,7 +194,7 @@ function RecordSourceCard({
       }}
       accessibilityLabel={question
         ? `대기 중인 질문${questionIndex ? ` ${questionIndex}` : ""} 열기`
-        : record.kind === "thought" ? "단상 열기" : record.kind === "letter" ? "편지 열기" : "편집 글 열기"}
+        : record.kind === "thought" ? "단상 열기" : "편집 글 열기"}
       accessibilityHint={question ? "누르면 이 질문에 답하는 단상을 시작합니다." : undefined}
     >
       <View style={styles.thoughtCardBodyWrap}>
@@ -776,6 +791,7 @@ const styles = StyleSheet.create({
 
 function getRecordCardHeight(record: UnifiedRecord, width: number): number {
   const baseHeight = width * Sizing.cardRatio;
+  if (record.kind === "letter") return baseHeight;
   const layout = computeBodyLayout(width);
   const content = getRecordCardContent(record);
   if (!content.hasTitle) return baseHeight;

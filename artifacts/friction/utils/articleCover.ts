@@ -4,6 +4,7 @@ import { Colors } from "../constants/tokens";
 const DEFAULT_COVER: ArticleCover = {
   type: "default",
   textColor: Colors.zinc900,
+  fontFamily: "sans",
   align: "left",
 };
 

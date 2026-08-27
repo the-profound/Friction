@@ -3197,6 +3197,11 @@ components:
         textColor:
           type: string
           description: Text color hex for title overlay
+        fontFamily:
+          type: string
+          enum: [sans, serif]
+          default: sans
+          description: Cover text font family. Existing covers without this value use sans.
         align:
           type: string
           enum: [left, center]

@@ -174,13 +174,10 @@ export default function LoginScreen() {
     }
   }
 
-  async function handleDevLogin() {
-    setIsLoading(true);
-    try {
-      await signInWithPassword("minji@test.com", "00000000");
-    } finally {
-      setIsLoading(false);
-    }
+  function handleDevLogin() {
+    setErrorMessage(
+      "민지 테스트 계정은 아직 인증 서버에 준비되지 않았어요. 현준 또는 일곤 버튼으로 로그인해주세요.",
+    );
   }
 
   async function handleHyeonjunLogin() {

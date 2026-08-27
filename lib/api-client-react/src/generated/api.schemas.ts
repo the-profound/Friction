@@ -75,6 +75,17 @@ export const ArticleCoverType = {
   default: "default",
 } as const;
 
+/**
+ * Cover text font family. Existing covers without this value use sans.
+ */
+export type ArticleCoverFontFamily =
+  (typeof ArticleCoverFontFamily)[keyof typeof ArticleCoverFontFamily];
+
+export const ArticleCoverFontFamily = {
+  sans: "sans",
+  serif: "serif",
+} as const;
+
 export type ArticleCoverAlign =
   (typeof ArticleCoverAlign)[keyof typeof ArticleCoverAlign];
 
@@ -94,6 +105,8 @@ export interface ArticleCover {
   bgColor?: string;
   /** Text color hex for title overlay */
   textColor: string;
+  /** Cover text font family. Existing covers without this value use sans. */
+  fontFamily?: ArticleCoverFontFamily;
   align: ArticleCoverAlign;
 }
 

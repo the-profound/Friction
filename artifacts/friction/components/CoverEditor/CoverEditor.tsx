@@ -3,16 +3,15 @@ import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Image } from "re
 import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
-import { Colors, Typography, Spacing } from "../../constants/tokens";
+import { Colors, ReaderTokens, Typography, Spacing } from "../../constants/tokens";
 import BottomSheet from "../BottomSheet/BottomSheet";
 import CoverPreview from "../CoverPreview/CoverPreview";
-import { getDefaultCover } from "../../utils/articleCover";
 import { useImageUpload } from "../../lib/useImageUpload";
 import { useToast } from "../../contexts/ToastContext";
 import type {
   ArticleCover,
+  ArticleCoverFontFamily,
   ArticleCoverType,
-  ArticleCoverAlign,
 } from "@workspace/api-client-react";
 
 type FeatherIconName = React.ComponentProps<typeof Feather>["name"];
@@ -23,9 +22,13 @@ const COVER_TYPES: { key: ArticleCoverType; label: string; icon: FeatherIconName
   { key: "image", label: "이미지", icon: "image" },
 ];
 
-const TEXT_ALIGNS: { key: ArticleCoverAlign; label: string; icon: FeatherIconName }[] = [
-  { key: "left", label: "왼쪽", icon: "align-left" },
-  { key: "center", label: "가운데", icon: "align-center" },
+const COVER_FONTS: {
+  key: ArticleCoverFontFamily;
+  label: string;
+  sample: string;
+}[] = [
+  { key: "sans", label: "고딕", sample: "가나다" },
+  { key: "serif", label: "세리프", sample: "가나다" },
 ];
 
 const BG_COLORS = [
@@ -115,7 +118,6 @@ export default function CoverEditor({
     <BottomSheet
       visible={visible}
       onClose={onClose}
-      title="표지 설정"
       snapPoints={[0.75, 0.9]}
     >
       <ScrollView
@@ -156,25 +158,48 @@ export default function CoverEditor({
           ))}
         </View>
 
-        <Text style={styles.sectionLabel}>텍스트 정렬</Text>
+        <Text style={styles.sectionLabel}>서체</Text>
         <View style={styles.chipRow}>
-          {TEXT_ALIGNS.map((a) => (
-            <ScalePressable
-              key={a.key}
-              style={styles.alignChip}
-              onPress={() => update({ align: a.key })}
-              contentStyle={[
-                styles.alignChipContent,
-                local.align === a.key && styles.alignChipActive,
-              ]}
-            >
-              <Feather
-                name={a.icon}
-                size={18}
-                color={local.align === a.key ? Colors.zinc900 : Colors.zinc400}
-              />
-            </ScalePressable>
-          ))}
+          {COVER_FONTS.map((font) => {
+            const isActive = (local.fontFamily ?? "sans") === font.key;
+            return (
+              <ScalePressable
+                key={font.key}
+                style={styles.fontChip}
+                onPress={() => update({ fontFamily: font.key })}
+                accessibilityRole="button"
+                accessibilityLabel={`${font.label} 서체`}
+                accessibilityState={{ selected: isActive }}
+                contentStyle={[
+                  styles.fontChipContent,
+                  isActive && styles.typeChipActive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.fontSample,
+                    isActive && styles.typeChipLabelActive,
+                    {
+                      fontFamily:
+                        font.key === "serif"
+                          ? ReaderTokens.fontFamily.serifBold
+                          : ReaderTokens.fontFamily.sansSemiBold,
+                    },
+                  ]}
+                >
+                  {font.sample}
+                </Text>
+                <Text
+                  style={[
+                    styles.typeChipLabel,
+                    isActive && styles.typeChipLabelActive,
+                  ]}
+                >
+                  {font.label}
+                </Text>
+              </ScalePressable>
+            );
+          })}
         </View>
 
         <Text style={styles.sectionLabel}>텍스트 색상</Text>
@@ -346,22 +371,28 @@ const styles = StyleSheet.create({
   typeChipLabelActive: {
     color: Colors.white,
   },
-  alignChip: {
-    width: 44,
-    height: 44,
+  fontChip: {
+    height: 40,
+    alignSelf: "flex-start",
+    flexGrow: 0,
+    flexShrink: 0,
   },
-  alignChipContent: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: Colors.zinc100,
+  fontChipContent: {
+    height: 40,
+    minWidth: 86,
+    flexGrow: 0,
+    flexShrink: 0,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    backgroundColor: Colors.zinc100,
   },
-  alignChipActive: {
-    backgroundColor: Colors.zinc200,
-    borderWidth: 2,
-    borderColor: Colors.zinc700,
+  fontSample: {
+    fontSize: 13,
+    color: Colors.zinc600,
   },
   colorRow: {
     flexDirection: "row",

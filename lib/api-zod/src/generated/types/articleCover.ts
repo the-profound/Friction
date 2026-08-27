@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ArticleCoverAlign } from "./articleCoverAlign";
+import type { ArticleCoverFontFamily } from "./articleCoverFontFamily";
 import type { ArticleCoverType } from "./articleCoverType";
 
 /**
@@ -19,5 +20,7 @@ export interface ArticleCover {
   bgColor?: string;
   /** Text color hex for title overlay */
   textColor: string;
+  /** Cover text font family. Existing covers without this value use sans. */
+  fontFamily?: ArticleCoverFontFamily;
   align: ArticleCoverAlign;
 }

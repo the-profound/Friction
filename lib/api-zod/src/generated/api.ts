@@ -135,6 +135,8 @@ export const ListArticlesQueryParams = zod.object({
     ),
 });
 
+export const listArticlesResponseCoverFontFamilyDefault = `sans`;
+
 export const ListArticlesResponseItem = zod.object({
   id: zod.string().uuid(),
   authorId: zod.string().uuid(),
@@ -181,6 +183,12 @@ export const ListArticlesResponseItem = zod.object({
         .optional()
         .describe("Background color hex (used when type=color)"),
       textColor: zod.string().describe("Text color hex for title overlay"),
+      fontFamily: zod
+        .enum(["sans", "serif"])
+        .default(listArticlesResponseCoverFontFamilyDefault)
+        .describe(
+          "Cover text font family. Existing covers without this value use sans.",
+        ),
       align: zod.enum(["left", "center"]),
     })
     .nullish()
@@ -198,6 +206,8 @@ export const ListArticlesResponse = zod.array(ListArticlesResponseItem);
 export const GetArticleParams = zod.object({
   id: zod.coerce.string().uuid(),
 });
+
+export const getArticleResponseCoverFontFamilyDefault = `sans`;
 
 export const GetArticleResponse = zod.object({
   id: zod.string().uuid(),
@@ -245,6 +255,12 @@ export const GetArticleResponse = zod.object({
         .optional()
         .describe("Background color hex (used when type=color)"),
       textColor: zod.string().describe("Text color hex for title overlay"),
+      fontFamily: zod
+        .enum(["sans", "serif"])
+        .default(getArticleResponseCoverFontFamilyDefault)
+        .describe(
+          "Cover text font family. Existing covers without this value use sans.",
+        ),
       align: zod.enum(["left", "center"]),
     })
     .nullish()
@@ -262,6 +278,8 @@ export const GetArticleResponse = zod.object({
 export const UpdateArticleParams = zod.object({
   id: zod.coerce.string().uuid(),
 });
+
+export const updateArticleBodyCoverFontFamilyDefault = `sans`;
 
 export const UpdateArticleBody = zod.object({
   title: zod.string().min(1).optional(),
@@ -285,6 +303,12 @@ export const UpdateArticleBody = zod.object({
         .optional()
         .describe("Background color hex (used when type=color)"),
       textColor: zod.string().describe("Text color hex for title overlay"),
+      fontFamily: zod
+        .enum(["sans", "serif"])
+        .default(updateArticleBodyCoverFontFamilyDefault)
+        .describe(
+          "Cover text font family. Existing covers without this value use sans.",
+        ),
       align: zod.enum(["left", "center"]),
     })
     .nullish()
@@ -297,6 +321,8 @@ export const UpdateArticleBody = zod.object({
       "ID of the source article this draft is a reply to. Set to null to unlink.",
     ),
 });
+
+export const updateArticleResponseCoverFontFamilyDefault = `sans`;
 
 export const UpdateArticleResponse = zod.object({
   id: zod.string().uuid(),
@@ -344,6 +370,12 @@ export const UpdateArticleResponse = zod.object({
         .optional()
         .describe("Background color hex (used when type=color)"),
       textColor: zod.string().describe("Text color hex for title overlay"),
+      fontFamily: zod
+        .enum(["sans", "serif"])
+        .default(updateArticleResponseCoverFontFamilyDefault)
+        .describe(
+          "Cover text font family. Existing covers without this value use sans.",
+        ),
       align: zod.enum(["left", "center"]),
     })
     .nullish()
@@ -372,6 +404,8 @@ export const TransitionArticleStatusParams = zod.object({
 export const TransitionArticleStatusBody = zod.object({
   targetStatus: zod.enum(["DIVIDING", "CLOSING", "LETTER"]),
 });
+
+export const transitionArticleStatusResponseCoverFontFamilyDefault = `sans`;
 
 export const TransitionArticleStatusResponse = zod.object({
   id: zod.string().uuid(),
@@ -419,6 +453,12 @@ export const TransitionArticleStatusResponse = zod.object({
         .optional()
         .describe("Background color hex (used when type=color)"),
       textColor: zod.string().describe("Text color hex for title overlay"),
+      fontFamily: zod
+        .enum(["sans", "serif"])
+        .default(transitionArticleStatusResponseCoverFontFamilyDefault)
+        .describe(
+          "Cover text font family. Existing covers without this value use sans.",
+        ),
       align: zod.enum(["left", "center"]),
     })
     .nullish()
@@ -446,6 +486,8 @@ export const FinalizeArticleBody = zod.object({
       "Optional personal collection to add the finalized article to. When omitted, the article is finalized without being added to a collection.",
     ),
 });
+
+export const finalizeArticleResponseCoverFontFamilyDefault = `sans`;
 
 export const FinalizeArticleResponse = zod.object({
   id: zod.string().uuid(),
@@ -493,6 +535,12 @@ export const FinalizeArticleResponse = zod.object({
         .optional()
         .describe("Background color hex (used when type=color)"),
       textColor: zod.string().describe("Text color hex for title overlay"),
+      fontFamily: zod
+        .enum(["sans", "serif"])
+        .default(finalizeArticleResponseCoverFontFamilyDefault)
+        .describe(
+          "Cover text font family. Existing covers without this value use sans.",
+        ),
       align: zod.enum(["left", "center"]),
     })
     .nullish()
@@ -558,6 +606,8 @@ export const ListInboxQueryParams = zod.object({
     ),
 });
 
+export const listInboxResponseArticleCoverFontFamilyDefault = `sans`;
+
 export const ListInboxResponseItem = zod.object({
   id: zod.string().uuid(),
   recipientId: zod.string().uuid(),
@@ -621,6 +671,12 @@ export const ListInboxResponseItem = zod.object({
             .optional()
             .describe("Background color hex (used when type=color)"),
           textColor: zod.string().describe("Text color hex for title overlay"),
+          fontFamily: zod
+            .enum(["sans", "serif"])
+            .default(listInboxResponseArticleCoverFontFamilyDefault)
+            .describe(
+              "Cover text font family. Existing covers without this value use sans.",
+            ),
           align: zod.enum(["left", "center"]),
         })
         .nullish()
@@ -671,6 +727,8 @@ export const ListInboxResponse = zod.array(ListInboxResponseItem);
 export const GetInboxItemParams = zod.object({
   id: zod.coerce.string().uuid(),
 });
+
+export const getInboxItemResponseArticleCoverFontFamilyDefault = `sans`;
 
 export const GetInboxItemResponse = zod.object({
   id: zod.string().uuid(),
@@ -735,6 +793,12 @@ export const GetInboxItemResponse = zod.object({
             .optional()
             .describe("Background color hex (used when type=color)"),
           textColor: zod.string().describe("Text color hex for title overlay"),
+          fontFamily: zod
+            .enum(["sans", "serif"])
+            .default(getInboxItemResponseArticleCoverFontFamilyDefault)
+            .describe(
+              "Cover text font family. Existing covers without this value use sans.",
+            ),
           align: zod.enum(["left", "center"]),
         })
         .nullish()
@@ -791,6 +855,8 @@ export const DeleteInboxItemParams = zod.object({
 export const MarkInboxOpenedParams = zod.object({
   id: zod.coerce.string().uuid(),
 });
+
+export const markInboxOpenedResponseArticleCoverFontFamilyDefault = `sans`;
 
 export const MarkInboxOpenedResponse = zod.object({
   id: zod.string().uuid(),
@@ -855,6 +921,12 @@ export const MarkInboxOpenedResponse = zod.object({
             .optional()
             .describe("Background color hex (used when type=color)"),
           textColor: zod.string().describe("Text color hex for title overlay"),
+          fontFamily: zod
+            .enum(["sans", "serif"])
+            .default(markInboxOpenedResponseArticleCoverFontFamilyDefault)
+            .describe(
+              "Cover text font family. Existing covers without this value use sans.",
+            ),
           align: zod.enum(["left", "center"]),
         })
         .nullish()
@@ -905,6 +977,8 @@ export const MarkInboxOpenedResponse = zod.object({
 export const MarkInboxReadParams = zod.object({
   id: zod.coerce.string().uuid(),
 });
+
+export const markInboxReadResponseArticleCoverFontFamilyDefault = `sans`;
 
 export const MarkInboxReadResponse = zod.object({
   id: zod.string().uuid(),
@@ -969,6 +1043,12 @@ export const MarkInboxReadResponse = zod.object({
             .optional()
             .describe("Background color hex (used when type=color)"),
           textColor: zod.string().describe("Text color hex for title overlay"),
+          fontFamily: zod
+            .enum(["sans", "serif"])
+            .default(markInboxReadResponseArticleCoverFontFamilyDefault)
+            .describe(
+              "Cover text font family. Existing covers without this value use sans.",
+            ),
           align: zod.enum(["left", "center"]),
         })
         .nullish()
@@ -1161,6 +1241,8 @@ export const ListMyCollectionArticlesParams = zod.object({
   id: zod.coerce.string().uuid(),
 });
 
+export const listMyCollectionArticlesResponseArticleCoverFontFamilyDefault = `sans`;
+
 export const ListMyCollectionArticlesResponseItem = zod.object({
   id: zod.string().uuid(),
   myCollectionId: zod.string().uuid(),
@@ -1213,6 +1295,14 @@ export const ListMyCollectionArticlesResponseItem = zod.object({
             .optional()
             .describe("Background color hex (used when type=color)"),
           textColor: zod.string().describe("Text color hex for title overlay"),
+          fontFamily: zod
+            .enum(["sans", "serif"])
+            .default(
+              listMyCollectionArticlesResponseArticleCoverFontFamilyDefault,
+            )
+            .describe(
+              "Cover text font family. Existing covers without this value use sans.",
+            ),
           align: zod.enum(["left", "center"]),
         })
         .nullish()
@@ -1613,6 +1703,8 @@ export const ListTeamArticlesQueryParams = zod.object({
     ),
 });
 
+export const listTeamArticlesResponseArticleCoverFontFamilyDefault = `sans`;
+
 export const ListTeamArticlesResponseItem = zod.object({
   id: zod.string().uuid(),
   teamCollectionId: zod.string().uuid(),
@@ -1666,6 +1758,12 @@ export const ListTeamArticlesResponseItem = zod.object({
             .optional()
             .describe("Background color hex (used when type=color)"),
           textColor: zod.string().describe("Text color hex for title overlay"),
+          fontFamily: zod
+            .enum(["sans", "serif"])
+            .default(listTeamArticlesResponseArticleCoverFontFamilyDefault)
+            .describe(
+              "Cover text font family. Existing covers without this value use sans.",
+            ),
           align: zod.enum(["left", "center"]),
         })
         .nullish()
@@ -2620,6 +2718,8 @@ export const ListAllSpaceScheduledSendsParams = zod.object({
   id: zod.coerce.string().uuid(),
 });
 
+export const listAllSpaceScheduledSendsResponseLetterArticleCoverFontFamilyDefault = `sans`;
+
 export const ListAllSpaceScheduledSendsResponseItem = zod.object({
   id: zod.string().uuid(),
   spaceId: zod.string().uuid(),
@@ -2657,6 +2757,14 @@ export const ListAllSpaceScheduledSendsResponseItem = zod.object({
             .optional()
             .describe("Background color hex (used when type=color)"),
           textColor: zod.string().describe("Text color hex for title overlay"),
+          fontFamily: zod
+            .enum(["sans", "serif"])
+            .default(
+              listAllSpaceScheduledSendsResponseLetterArticleCoverFontFamilyDefault,
+            )
+            .describe(
+              "Cover text font family. Existing covers without this value use sans.",
+            ),
           align: zod.enum(["left", "center"]),
         })
         .nullish()
@@ -3012,6 +3120,8 @@ export const ListSpaceLettersParams = zod.object({
   id: zod.coerce.string().uuid(),
 });
 
+export const listSpaceLettersResponseArticleCoverFontFamilyDefault = `sans`;
+
 export const ListSpaceLettersResponseItem = zod.object({
   id: zod.string().uuid(),
   spaceId: zod.string().uuid(),
@@ -3037,6 +3147,12 @@ export const ListSpaceLettersResponseItem = zod.object({
         .optional()
         .describe("Background color hex (used when type=color)"),
       textColor: zod.string().describe("Text color hex for title overlay"),
+      fontFamily: zod
+        .enum(["sans", "serif"])
+        .default(listSpaceLettersResponseArticleCoverFontFamilyDefault)
+        .describe(
+          "Cover text font family. Existing covers without this value use sans.",
+        ),
       align: zod.enum(["left", "center"]),
     })
     .nullish()
@@ -3584,6 +3700,8 @@ export const ListSendRecordsQueryParams = zod.object({
   senderId: zod.coerce.string().uuid(),
 });
 
+export const listSendRecordsResponseArticleCoverFontFamilyDefault = `sans`;
+
 export const ListSendRecordsResponseItem = zod.object({
   id: zod.string().uuid(),
   senderId: zod.string().uuid(),
@@ -3643,6 +3761,12 @@ export const ListSendRecordsResponseItem = zod.object({
             .optional()
             .describe("Background color hex (used when type=color)"),
           textColor: zod.string().describe("Text color hex for title overlay"),
+          fontFamily: zod
+            .enum(["sans", "serif"])
+            .default(listSendRecordsResponseArticleCoverFontFamilyDefault)
+            .describe(
+              "Cover text font family. Existing covers without this value use sans.",
+            ),
           align: zod.enum(["left", "center"]),
         })
         .nullish()
@@ -3689,6 +3813,8 @@ export const SendArticleBody = zod.object({
 export const GetSendRecordParams = zod.object({
   id: zod.coerce.string().uuid(),
 });
+
+export const getSendRecordResponseArticleCoverFontFamilyDefault = `sans`;
 
 export const GetSendRecordResponse = zod.object({
   id: zod.string().uuid(),
@@ -3749,6 +3875,12 @@ export const GetSendRecordResponse = zod.object({
             .optional()
             .describe("Background color hex (used when type=color)"),
           textColor: zod.string().describe("Text color hex for title overlay"),
+          fontFamily: zod
+            .enum(["sans", "serif"])
+            .default(getSendRecordResponseArticleCoverFontFamilyDefault)
+            .describe(
+              "Cover text font family. Existing covers without this value use sans.",
+            ),
           align: zod.enum(["left", "center"]),
         })
         .nullish()

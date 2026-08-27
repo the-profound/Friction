@@ -13,6 +13,7 @@ export * from "./addTeamMemberBody";
 export * from "./article";
 export * from "./articleCover";
 export * from "./articleCoverAlign";
+export * from "./articleCoverFontFamily";
 export * from "./articleCoverType";
 export * from "./articleQuestionsResponse";
 export * from "./articleStatus";
