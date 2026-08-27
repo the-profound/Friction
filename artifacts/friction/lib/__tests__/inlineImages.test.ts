@@ -4,10 +4,6 @@ import {
   isPersistableInlineImageUrl,
   removeUnpersistableInlineImages,
 } from "../inlineImages";
-import {
-  getInlineImageResizeAction,
-  INLINE_IMAGE_COMPRESSION,
-} from "../inlineImagePreparation";
 
 describe("inline image persistence", () => {
   it("does not let unfinished device URLs reach saved markdown", () => {
@@ -39,14 +35,5 @@ describe("inline image persistence", () => {
     expect(getInlineImageTransformUrl("https://legacy.example/photo.jpg", 240, 2, "https://project.supabase.co")).toBe(
       "https://legacy.example/photo.jpg",
     );
-  });
-});
-
-describe("inline image preparation", () => {
-  it("limits the longest edge to 1600px before the JPEG re-encode", () => {
-    expect(getInlineImageResizeAction(3200, 1800)).toEqual({ width: 1600 });
-    expect(getInlineImageResizeAction(1200, 2400)).toEqual({ height: 1600 });
-    expect(getInlineImageResizeAction(1200, 900)).toBeNull();
-    expect(INLINE_IMAGE_COMPRESSION).toBe(0.8);
   });
 });

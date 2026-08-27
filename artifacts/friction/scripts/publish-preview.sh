@@ -36,7 +36,6 @@ echo "🔎 릴리즈 환경 변수 검증 중..."
 APP_RELEASE_TRACK=preview EAS_BUILD_PROFILE=preview \
   node "$SCRIPT_DIR/validate-release-env.mjs" --track preview
 bash "$SCRIPT_DIR/validate-eas-cloud-env.sh" preview
-node "$SCRIPT_DIR/validate-native-abi.mjs"
 
 ASC_KEY_FILE="$(mktemp /tmp/asc_api_key.XXXXXX.p8)"
 trap 'rm -f "$ASC_KEY_FILE"' EXIT

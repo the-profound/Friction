@@ -111,11 +111,10 @@ describe("page geometry renderer contract", () => {
   const read = (relativePath: string) =>
     readFileSync(join(appRoot, relativePath), "utf8");
 
-  it("makes writing, closing preview, reader, and photo export share the 0.88C column", () => {
+  it("makes writing, closing preview, reader, and memo share the 0.88C column", () => {
     const writing = read("app/on-01a.tsx");
     const closing = read("app/on-01c.tsx");
     const reader = read("app/read.tsx");
-    const exportModal = read("components/SaveAsPhotos/SaveAsPhotosModal.tsx");
     const memo = read("components/MemoWebEditor/MemoWebEditor.tsx");
 
     expect(writing).toContain("pageWidth: containerWidth");
@@ -125,8 +124,6 @@ describe("page geometry renderer contract", () => {
     expect(closing).toContain("width: fallbackBody.pageWidth");
     expect(reader).not.toContain("safeAreaBox");
     expect(reader).toContain("width: layout.textColumnWidth");
-    expect(exportModal).toContain("width: bodyLayout.pageWidth");
-    expect(exportModal).toContain("width: bodyLayout.textColumnWidth");
     expect(memo).toContain("computePageGeometry(containerWidth");
     expect(memo).toContain("width: textColumnWidth");
   });

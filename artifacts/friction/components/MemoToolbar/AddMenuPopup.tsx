@@ -7,7 +7,7 @@ import {
   Pressable,
   useWindowDimensions,
 } from "react-native";
-import { MaterialCommunityIcons, Feather } from "@expo/vector-icons";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Colors } from "@/constants/tokens";
 
 const POPUP_W = 140;
@@ -22,11 +22,6 @@ interface AddMenuPopupProps {
   onDismiss: () => void;
   /** "수집한 문장" 선택 시 호출 (quotePicker 패널 열기 등). */
   onSelectQuote: () => void;
-  /**
-   * "사진" 선택 시 호출. undefined면 항목이 비활성(회색)으로 표시되고
-   * 탭하면 팝업만 닫힌다.
-   */
-  onSelectPhoto?: () => void;
 }
 
 /**
@@ -38,7 +33,6 @@ export default function AddMenuPopup({
   plusBtnCenterX,
   onDismiss,
   onSelectQuote,
-  onSelectPhoto,
 }: AddMenuPopupProps) {
   const { width: screenWidth } = useWindowDimensions();
   const cx = plusBtnCenterX ?? screenWidth / 2;
@@ -67,20 +61,6 @@ export default function AddMenuPopup({
               style={styles.icon}
             />
             <Text style={styles.label}>수집한 문장</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.row, { borderBottomWidth: 0 }]}
-            onPress={onSelectPhoto ?? onDismiss}
-          >
-            <Feather
-              name="image"
-              size={16}
-              color={onSelectPhoto ? "#3f3f46" : "#a1a1aa"}
-              style={styles.icon}
-            />
-            <Text style={[styles.label, !onSelectPhoto && styles.labelDisabled]}>
-              사진
-            </Text>
           </Pressable>
         </View>
       </View>
@@ -124,8 +104,5 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.zinc800,
     fontFamily: Platform.select({ ios: "Pretendard-Regular", default: "Pretendard" }),
-  },
-  labelDisabled: {
-    color: Colors.zinc400, // typography-ok: disabled menu item label
   },
 });

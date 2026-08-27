@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -63,8 +63,8 @@ describe("on-01a return navigation regression", () => {
   });
 });
 
-describe("on-01a photo insertion regression", () => {
-  it("does not connect the writing screen to a photo picker", () => {
+describe("on-01a photo feature removal regression", () => {
+  it("does not expose a photo picker or failed-upload retry path", () => {
     const screen = readScreen();
 
     expect(screen).not.toContain("onSelectPhoto");
@@ -72,15 +72,44 @@ describe("on-01a photo insertion regression", () => {
     expect(screen).not.toContain("handleInsertImage");
     expect(screen).not.toContain("pickAndUpload");
     expect(screen).not.toContain("ActionSheetModal");
-    expect(screen).toContain("onImageRetry={retryInlineImage}");
+    expect(screen).not.toContain("onImageRetry");
+    expect(screen).not.toContain("useInlineImageUpload");
     expect(screen).toContain("onSelectQuote={handleSelectQuoteFromAddMenu}");
   });
 
-  it("closes the add menu without invoking a photo picker when photo is unavailable", () => {
+  it("offers only sentence collection from the add menu", () => {
     const addMenu = readAddMenu();
 
-    expect(addMenu).toContain("onPress={onSelectPhoto ?? onDismiss}");
-    expect(addMenu).toContain('color={onSelectPhoto ? "#3f3f46" : "#a1a1aa"}');
-    expect(addMenu).toContain("!onSelectPhoto && styles.labelDisabled");
+    expect(addMenu).toContain("수집한 문장");
+    expect(addMenu).not.toContain("onSelectPhoto");
+    expect(addMenu).not.toContain("사진");
+  });
+
+  it("keeps old image rendering but removes photo-native dependencies and entry points", () => {
+    const config = readFileSync(join(appRoot, "app.config.js"), "utf8");
+    const packageJson = readFileSync(join(appRoot, "package.json"), "utf8");
+    const coverEditor = readFileSync(
+      join(appRoot, "components/CoverEditor/CoverEditor.tsx"),
+      "utf8",
+    );
+    const detail = readFileSync(join(appRoot, "app/of-01-detail.tsx"), "utf8");
+    const editor = readFileSync(
+      join(appRoot, "components/WebViewMarkdownEditor/WebViewMarkdownEditor.tsx"),
+      "utf8",
+    );
+
+    expect(existsSync(join(appRoot, "lib/useImageUpload.ts"))).toBe(false);
+    expect(existsSync(join(appRoot, "lib/inlineImagePreparation.ts"))).toBe(false);
+    expect(existsSync(join(appRoot, "components/SaveAsPhotos/SaveAsPhotosModal.tsx"))).toBe(false);
+    expect(config).not.toContain("expo-image-picker");
+    expect(config).not.toContain("expo-media-library");
+    expect(config).not.toContain("READ_MEDIA_IMAGES");
+    expect(packageJson).not.toContain("expo-image-manipulator");
+    expect(packageJson).not.toContain("expo-image-picker");
+    expect(packageJson).not.toContain("expo-media-library");
+    expect(packageJson).not.toContain("react-native-view-shot");
+    expect(coverEditor).not.toContain('key: "image"');
+    expect(detail).not.toContain("사진으로 저장");
+    expect(editor).not.toContain("onImageRetry");
   });
 });

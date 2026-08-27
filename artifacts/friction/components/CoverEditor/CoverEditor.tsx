@@ -1,13 +1,11 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Image } from "react-native";
+import { View, Text, StyleSheet, ScrollView } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { Colors, ReaderTokens, Typography, Spacing } from "../../constants/tokens";
 import BottomSheet from "../BottomSheet/BottomSheet";
 import CoverPreview from "../CoverPreview/CoverPreview";
-import { useImageUpload } from "../../lib/useImageUpload";
-import { useToast } from "../../contexts/ToastContext";
 import type {
   ArticleCover,
   ArticleCoverFontFamily,
@@ -19,7 +17,6 @@ type FeatherIconName = React.ComponentProps<typeof Feather>["name"];
 const COVER_TYPES: { key: ArticleCoverType; label: string; icon: FeatherIconName }[] = [
   { key: "default", label: "기본", icon: "layout" },
   { key: "color", label: "단색", icon: "droplet" },
-  { key: "image", label: "이미지", icon: "image" },
 ];
 
 const COVER_FONTS: {
@@ -67,7 +64,6 @@ interface CoverEditorProps {
   onChange: (cover: ArticleCover) => void;
   title: string;
   author?: string;
-  articleId: string;
 }
 
 export default function CoverEditor({
@@ -77,10 +73,8 @@ export default function CoverEditor({
   onChange,
   title,
   author,
-  articleId,
 }: CoverEditorProps) {
   const insets = useSafeAreaInsets();
-  const { showToast } = useToast();
   const [local, setLocal] = useState<ArticleCover>(cover);
   const localRef = useRef(local);
   localRef.current = local;
@@ -99,20 +93,6 @@ export default function CoverEditor({
     },
     [onChange],
   );
-
-  const { pickAndUpload, isUploading } = useImageUpload({
-    articleId,
-    onSuccess: (imageUrl) => {
-      update({ type: "image", imageUrl });
-    },
-    onError: (err) => {
-      showToast({ message: err.message, type: "error" });
-    },
-  });
-
-  const handleRemoveImage = useCallback(() => {
-    update({ type: "default", imageUrl: undefined });
-  }, [update]);
 
   return (
     <BottomSheet
@@ -256,65 +236,6 @@ export default function CoverEditor({
           </>
         )}
 
-        {local.type === "image" && (
-          <View style={styles.imageSection}>
-            {local.imageUrl ? (
-              <>
-                <Image
-                  source={{ uri: local.imageUrl }}
-                  style={styles.imageThumbnail}
-                  resizeMode="cover"
-                />
-                <View style={styles.imageActions}>
-                  <ScalePressable
-                    style={styles.imageButton}
-                    onPress={pickAndUpload}
-                    disabled={isUploading}
-                    contentStyle={[styles.imageButtonContent, styles.imageButtonSecondary]}
-                  >
-                    {isUploading ? (
-                      <ActivityIndicator size="small" color={Colors.zinc600} />
-                    ) : (
-                      <Feather name="refresh-cw" size={15} color={Colors.zinc600} />
-                    )}
-                    <Text style={styles.imageButtonSecondaryLabel}>
-                      {isUploading ? "업로드 중..." : "이미지 변경"}
-                    </Text>
-                  </ScalePressable>
-                  <ScalePressable
-                    style={styles.imageButton}
-                    onPress={handleRemoveImage}
-                    disabled={isUploading}
-                    contentStyle={[styles.imageButtonContent, styles.imageButtonDanger]}
-                  >
-                    <Feather name="trash-2" size={15} color="#dc2626" />
-                    <Text style={styles.imageButtonDangerLabel}>이미지 제거</Text>
-                  </ScalePressable>
-                </View>
-              </>
-            ) : (
-              <ScalePressable
-                style={styles.imagePickerButton}
-                onPress={pickAndUpload}
-                disabled={isUploading}
-                contentStyle={[styles.imagePickerButtonContent, isUploading && styles.imagePickerButtonDisabled]}
-              >
-                {isUploading ? (
-                  <ActivityIndicator size="small" color={Colors.zinc600} />
-                ) : (
-                  <Feather name="upload" size={20} color={Colors.zinc500} />
-                )}
-                <Text style={styles.imagePickerLabel}>
-                  {isUploading ? "업로드 중..." : "사진 선택"}
-                </Text>
-                {!isUploading && (
-                  <Text style={styles.imagePickerHint}>카메라 롤에서 사진을 선택합니다</Text>
-                )}
-              </ScalePressable>
-            )}
-          </View>
-        )}
-
         <View style={{ height: insets.bottom + 120 }} />
       </ScrollView>
     </BottomSheet>
@@ -417,71 +338,5 @@ const styles = StyleSheet.create({
   colorChipActive: {
     borderWidth: 2,
     borderColor: Colors.zinc700,
-  },
-  imageSection: {
-    marginTop: 16,
-    gap: 12,
-  },
-  imagePickerButton: {},
-  imagePickerButtonContent: {
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    borderWidth: 1,
-    borderColor: Colors.zinc200,
-    borderStyle: "dashed",
-    borderRadius: 12,
-    padding: 20,
-    backgroundColor: Colors.zinc50,
-  },
-  imagePickerButtonDisabled: {
-    opacity: 0.6,
-  },
-  imagePickerLabel: {
-    ...Typography.bodySemiBold,
-    fontSize: 14,
-    color: Colors.zinc700,
-  },
-  imagePickerHint: {
-    ...Typography.caption,
-    fontSize: 12,
-    color: Colors.zinc400, // typography-ok: image-picker hint text
-  },
-  imageThumbnail: {
-    width: "100%",
-    height: 160,
-    borderRadius: 10,
-    backgroundColor: Colors.zinc100,
-  },
-  imageActions: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  imageButton: {
-    flex: 1,
-  },
-  imageButtonContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
-  imageButtonSecondary: {
-    backgroundColor: Colors.zinc100,
-  },
-  imageButtonSecondaryLabel: {
-    ...Typography.bodySemiBold,
-    fontSize: 13,
-    color: Colors.zinc600,
-  },
-  imageButtonDanger: {
-    backgroundColor: "#fef2f2",
-  },
-  imageButtonDangerLabel: {
-    ...Typography.bodySemiBold,
-    fontSize: 13,
-    color: "#dc2626",
   },
 });
