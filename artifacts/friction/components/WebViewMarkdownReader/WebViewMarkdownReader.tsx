@@ -2,7 +2,7 @@ import React, { useRef, useCallback, useEffect, useState, useMemo } from "react"
 import { View, StyleSheet, ActivityIndicator, Animated, PixelRatio } from "react-native";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { getReaderHtml } from "./readerHtml";
-import { getEditorFonts, subscribeEditorFonts, type EditorFontState } from "@/lib/editorFontStore";
+import { areEditorFontsReady, getEditorFonts, subscribeEditorFonts, type EditorFontState } from "@/lib/editorFontStore";
 import { markdownToHtml } from "@/lib/markdownRenderer";
 import {
   flushWebViewPerf,
@@ -66,6 +66,7 @@ export default function WebViewMarkdownReader({
   // injections is ignored so we never fade in stale content.
   const pendingVersionRef = useRef(0);
   const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bodyFontsReadyRef = useRef(false);
 
   const clearFallbackTimer = useCallback(() => {
     if (fallbackTimerRef.current != null) {
@@ -117,7 +118,22 @@ export default function WebViewMarkdownReader({
   const handleMessage = useCallback(
     (event: WebViewMessageEvent) => {
       bridge.handleMessage(event, (data) => {
-        if (data.type === "onReady") {
+        if (data.type === "onBodyFontsReady") {
+          if (bodyFontsReadyRef.current) return;
+          bodyFontsReadyRef.current = true;
+          bridge.markReady();
+          prevHtmlRef.current = htmlRef.current;
+          const version = beginContentSwap();
+          injectContent(htmlRef.current, version);
+          if (bodyFontSize != null && bodyLetterSpacing != null) {
+            bridge.send({
+              type: "setBodyMetrics",
+              fontSizePx: bodyFontSize,
+              letterSpacingPx: bodyLetterSpacing,
+              titleFontSizePx: titleFontSize,
+            });
+          }
+        } else if (data.type === "onReady") {
           recordWebViewBoot("reader", mountedAtRef.current);
           onReadyRef.current?.();
         } else if (data.type === "onContentReady") {
@@ -138,7 +154,7 @@ export default function WebViewMarkdownReader({
         }
       });
     },
-    [bridge, fadeIn, clearFallbackTimer],
+    [bridge, fadeIn, clearFallbackTimer, beginContentSwap, injectContent, bodyFontSize, bodyLetterSpacing, titleFontSize],
   );
 
   // Memoize markdown→HTML so we don't re-parse on unrelated re-renders.
@@ -207,17 +223,26 @@ export default function WebViewMarkdownReader({
     return unsubscribe;
   }, []);
 
-  const fontsReady = !!(fonts.regularBase64 && fonts.semiBoldBase64);
+  const fontsReady = areEditorFontsReady(fonts);
   const canRender = fontsReady || !!fonts.error;
 
   const documentHtml = useMemo(
     () => getReaderHtml({
       regularBase64: fonts.regularBase64,
       semiBoldBase64: fonts.semiBoldBase64,
+      notoRegularBase64: fonts.notoRegularBase64,
+      notoSemiBoldBase64: fonts.notoSemiBoldBase64,
       perfEnabled: isWebViewPerfEnabled(),
     }),
-    [fonts.regularBase64, fonts.semiBoldBase64],
+    [fonts.regularBase64, fonts.semiBoldBase64, fonts.notoRegularBase64, fonts.notoSemiBoldBase64],
   );
+  const previousDocumentHtmlRef = useRef(documentHtml);
+  if (documentHtml !== previousDocumentHtmlRef.current) {
+    previousDocumentHtmlRef.current = documentHtml;
+    bodyFontsReadyRef.current = false;
+    opacityAnim.setValue(1);
+    bridge.reset("WebViewMarkdownReader font configuration changed");
+  }
 
   // 컴포넌트가 unmount 될 때 누적된 리더 지표를 콘솔에 요약 출력한다.
   useEffect(() => {
@@ -240,20 +265,7 @@ export default function WebViewMarkdownReader({
         style={styles.webView}
         onMessage={handleMessage}
         onLoad={() => {
-          bridge.markReady();
-          prevHtmlRef.current = htmlRef.current;
-          // Overlay stays opaque while the first content injection is async.
-          // Fades out when the WebView reports the new DOM is in place.
-          const version = beginContentSwap();
-          injectContent(htmlRef.current, version);
-            if (bodyFontSize != null && bodyLetterSpacing != null) {
-              bridge.send({
-                type: "setBodyMetrics",
-                fontSizePx: bodyFontSize,
-                letterSpacingPx: bodyLetterSpacing,
-                titleFontSizePx: titleFontSize,
-              });
-          }
+          // Initial content is injected only after onBodyFontsReady.
         }}
         originWhitelist={["*"]}
         javaScriptEnabled

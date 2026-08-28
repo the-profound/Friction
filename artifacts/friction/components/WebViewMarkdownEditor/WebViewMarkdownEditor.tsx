@@ -2,7 +2,7 @@ import React, { useRef, useCallback, useImperativeHandle, forwardRef, useEffect,
 import { View, StyleSheet, Platform, Keyboard, ActivityIndicator } from "react-native";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { getEditorHtml, EDITOR_CONFIG_VERSION } from "./editorHtml";
-import { getEditorFonts, subscribeEditorFonts, consumeEditorFontsErrorToast, type EditorFontState } from "@/lib/editorFontStore";
+import { areEditorFontsReady, getEditorFonts, subscribeEditorFonts, consumeEditorFontsErrorToast, type EditorFontState } from "@/lib/editorFontStore";
 import { useToast } from "@/contexts/ToastContext";
 import {
   flushWebViewPerf,
@@ -52,6 +52,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
     const mountedAtRef = useRef<number>(Date.now());
     const [scrollLocked, setScrollLocked] = useState(false);
     const autoSplitResolversRef = useRef<Array<(r: { hadConsecutiveImages: boolean }) => void>>([]);
+    const bodyFontsReadyRef = useRef(false);
 
     const bridgeRef = useRef<WebViewBridge | null>(null);
     if (bridgeRef.current == null) {
@@ -142,10 +143,32 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
         bridge.handleMessage(event, (raw) => {
           const data = raw as WebViewToRNEvent;
           switch (data.type) {
+            case "onBodyFontsReady":
+              if (bodyFontsReadyRef.current) break;
+              bodyFontsReadyRef.current = true;
+              bridge.markReady();
+              sendCommand({
+                type: "init",
+                payload: {
+                  initialMarkdown,
+                  editorConfigVersion,
+                  placeholder,
+                  titleValue,
+                  ensureTrailingParagraph,
+                },
+              });
+              if (bodyFontSize != null && bodyLetterSpacing != null) {
+                sendCommand({
+                  type: "setBodyMetrics",
+                  fontSizePx: bodyFontSize,
+                  letterSpacingPx: bodyLetterSpacing,
+                  titleFontSizePx: titleFontSize,
+                });
+              }
+              break;
             case "onReady":
-              // markReady 는 onLoad 시점에 이미 호출되어 있다 (init 자체가
-              // 큐에 막히면 onReady 가 영원히 오지 않는 데드락이 생기기
-              // 때문). 여기서는 boot 지표 기록과 외부 콜백만 처리한다.
+              // markReady is called by onBodyFontsReady before init is sent.
+              // Here we only record boot timing and notify the caller.
               recordWebViewBoot("editor", mountedAtRef.current);
               if (hideTitle) {
                 bridge.injectRaw(
@@ -209,7 +232,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
           }
         });
       },
-      [bridge, hideTitle, onReady, onChange, onExportMarkdown, onTitleChange, onError, onKeyboardVisibilityChange, onSelectionUpdate, onTextSelectionActiveChange, onSourceArticleSlotTap, onOverflowSplit, swipeDownToDismissKeyboard],
+      [bridge, sendCommand, initialMarkdown, editorConfigVersion, placeholder, titleValue, ensureTrailingParagraph, bodyFontSize, bodyLetterSpacing, titleFontSize, hideTitle, onReady, onChange, onExportMarkdown, onTitleChange, onError, onKeyboardVisibilityChange, onSelectionUpdate, onTextSelectionActiveChange, onSourceArticleSlotTap, onOverflowSplit, swipeDownToDismissKeyboard],
     );
 
     useEffect(() => {
@@ -252,7 +275,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       }
     }, [fonts.error, fonts.regularBase64, showToast]);
 
-    const fontsReady = !!(fonts.regularBase64 && fonts.semiBoldBase64);
+    const fontsReady = areEditorFontsReady(fonts);
     // If font loading hard-failed, fall back to system serif (no @font-face)
     // so the editor remains usable instead of getting stuck on a spinner.
     const canRenderEditor = fontsReady || !!fonts.error;
@@ -261,10 +284,18 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       () => getEditorHtml({
         regularBase64: fonts.regularBase64,
         semiBoldBase64: fonts.semiBoldBase64,
+        notoRegularBase64: fonts.notoRegularBase64,
+        notoSemiBoldBase64: fonts.notoSemiBoldBase64,
         perfEnabled: isWebViewPerfEnabled(),
       }),
-      [fonts.regularBase64, fonts.semiBoldBase64],
+      [fonts.regularBase64, fonts.semiBoldBase64, fonts.notoRegularBase64, fonts.notoSemiBoldBase64],
     );
+    const previousHtmlRef = useRef(html);
+    if (html !== previousHtmlRef.current) {
+      previousHtmlRef.current = html;
+      bodyFontsReadyRef.current = false;
+      bridge.reset("WebViewMarkdownEditor font configuration changed");
+    }
 
     // 컴포넌트가 unmount 될 때 누적된 편집기 지표를 콘솔에 요약 출력한다.
     useEffect(() => {
@@ -290,29 +321,8 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
           style={styles.webView}
           onMessage={handleMessage}
           onLoad={() => {
-            // 편집기 HTML 의 IIFE 가 동기 실행 단계에서 window.handleCommand 를
-            // 등록하므로 onLoad 시점이면 init 명령을 즉시 디스패치해도 안전하다.
-            // 만약 onReady 까지 markReady 를 미루면 init 자체가 큐에 갇혀
-            // onReady 가 절대 발생하지 않는 데드락이 생긴다.
-            bridge.markReady();
-            sendCommand({
-              type: "init",
-              payload: {
-                initialMarkdown,
-                editorConfigVersion,
-                placeholder,
-                titleValue,
-                ensureTrailingParagraph,
-              },
-            });
-            if (bodyFontSize != null && bodyLetterSpacing != null) {
-              sendCommand({
-                type: "setBodyMetrics",
-                fontSizePx: bodyFontSize,
-                letterSpacingPx: bodyLetterSpacing,
-                titleFontSizePx: titleFontSize,
-              });
-            }
+            // The HTML posts onBodyFontsReady after all embedded Eulyoo + Noto
+            // faces decode (or after its bounded safe-fallback timeout).
           }}
           onError={(e) => {
             onError?.({ code: "WEBVIEW_LOAD_FAIL", message: e.nativeEvent.description || "WebView load failed" });

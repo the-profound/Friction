@@ -15,10 +15,14 @@
 import { buildBodyTypographyCss } from "@/components/shared/bodyTypographyCss";
 import { buildWebViewPerfHeadScript } from "@/lib/webviewPerf";
 import { buildWebViewBridgeHeadScript } from "@/lib/webViewBridgeShim";
+import {
+  buildBodyFontReadyScript,
+  buildEmbeddedBodyFontFaceCss,
+  hasEmbeddedBodyFonts,
+  type EmbeddedBodyFontOptions,
+} from "@/components/shared/bodyTypographyFonts";
 
-export interface MeasureFontOptions {
-  regularBase64?: string | null;
-  semiBoldBase64?: string | null;
+export interface MeasureFontOptions extends EmbeddedBodyFontOptions {
   perfEnabled?: boolean;
 }
 
@@ -33,13 +37,10 @@ const bodyTypographyCss = buildBodyTypographyCss({
 });
 
 export function getMeasureHtml(opts: MeasureFontOptions = {}): string {
-  const { regularBase64, semiBoldBase64 } = opts;
-  const fontFaceCSS =
-    regularBase64 && semiBoldBase64
-      ? `@font-face{font-family:'Eulyoo1945-Regular';src:url('data:font/woff2;base64,${regularBase64}') format('woff2');font-weight:400;font-style:normal}@font-face{font-family:'Eulyoo1945-SemiBold';src:url('data:font/woff2;base64,${semiBoldBase64}') format('woff2');font-weight:600;font-style:normal}`
-      : "";
+  const fontFaceCSS = buildEmbeddedBodyFontFaceCss(opts);
   const perfHeadScript = buildWebViewPerfHeadScript(!!opts.perfEnabled);
   const bridgeHeadScript = buildWebViewBridgeHeadScript();
+  const fontReadyScript = buildBodyFontReadyScript(hasEmbeddedBodyFonts(opts));
 
   return `<!DOCTYPE html>
 <html lang="ko">
@@ -54,6 +55,7 @@ html,body{background:transparent;overflow:hidden;visibility:hidden}
 ${bodyTypographyCss}
 .mb{position:absolute;left:0;top:0}
 </style>
+${fontReadyScript}
 </head>
 <body>
 <script>

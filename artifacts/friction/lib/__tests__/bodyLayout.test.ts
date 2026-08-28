@@ -7,6 +7,135 @@ import {
   resolvePageWidth,
 } from "../pageGeometry";
 import { calculateCardReturnDistance } from "../../components/CardSelectOverlay/returnDistance";
+import {
+  BODY_FONT_FALLBACK_PROBE_TEXT,
+  BODY_REGULAR_FONT_FAMILY,
+  BODY_SEMIBOLD_FONT_FAMILY,
+  buildBodyFontReadyScript,
+  buildEmbeddedBodyFontFaceCss,
+} from "../../components/shared/bodyTypographyFonts";
+
+describe("letter body font fallback contract", () => {
+  it("embeds compressed Eulyoo and Noto Serif KR WOFF2 faces", () => {
+    const css = buildEmbeddedBodyFontFaceCss({
+      regularBase64: "eulyoo-regular",
+      semiBoldBase64: "eulyoo-semibold",
+      notoRegularBase64: "noto-regular",
+      notoSemiBoldBase64: "noto-semibold",
+    });
+
+    expect(css).toContain("data:font/woff2;base64,eulyoo-regular");
+    expect(css).toContain("data:font/woff2;base64,noto-regular");
+    expect(css.match(/format\('woff2'\)/g)).toHaveLength(4);
+    expect(css).not.toContain("font-weight:700");
+    expect(BODY_REGULAR_FONT_FAMILY).toBe(
+      "'Eulyoo1945-Regular','NotoSerifKR_400Regular',serif",
+    );
+    expect(BODY_SEMIBOLD_FONT_FAMILY).toBe(
+      "'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif",
+    );
+  });
+
+  it("keeps each embedded body font compressed enough for concurrent WebViews", () => {
+    const fontDir = join(__dirname, "../../assets/fonts");
+    const files = [
+      "Eulyoo1945-Regular.woff2",
+      "Eulyoo1945-SemiBold.woff2",
+      "NotoSerifKR-400Regular-korean.woff2",
+      "NotoSerifKR-600SemiBold-korean.woff2",
+    ];
+    let embeddedBytes = 0;
+    for (const file of files) {
+      const font = readFileSync(join(fontDir, file));
+      expect(font.subarray(0, 4).toString("ascii")).toBe("wOF2");
+      expect(font.byteLength).toBeLessThan(1_600_000);
+      embeddedBytes += font.byteLength;
+    }
+    const previousEulyooOnlyBytes =
+      readFileSync(join(fontDir, "Eulyoo1945-Regular.otf")).byteLength +
+      readFileSync(join(fontDir, "Eulyoo1945-SemiBold.otf")).byteLength;
+    expect(embeddedBytes).toBeLessThan(previousEulyooOnlyBytes + 100_000);
+  });
+
+  it("waits for the fallback-only glyph before native rendering and measurement", () => {
+    expect(BODY_FONT_FALLBACK_PROBE_TEXT).toContain("잓");
+    const script = buildBodyFontReadyScript(true);
+    expect(script).toContain("document.fonts.load");
+    expect(script).toContain("NotoSerifKR_400Regular");
+    expect(script).toContain("NotoSerifKR_600SemiBold");
+    expect(script).toContain("onBodyFontsReady");
+    expect(script).toContain("setTimeout");
+  });
+
+  it("uses the four-font readiness gate in editor, reader, and measurement WebViews", () => {
+    const appRoot = join(__dirname, "../..");
+    const read = (relativePath: string) =>
+      readFileSync(join(appRoot, relativePath), "utf8");
+    const layout = read("app/_layout.tsx");
+    const editor = read("components/WebViewMarkdownEditor/WebViewMarkdownEditor.tsx");
+    const reader = read("components/WebViewMarkdownReader/WebViewMarkdownReader.tsx");
+    const measure = read("components/WebViewMeasureLayer/WebViewMeasureLayer.tsx");
+    const webEditor = read("components/WebViewMarkdownEditor/WebViewMarkdownEditorWeb.tsx");
+    const webReader = read("components/WebViewMarkdownReader/WebViewMarkdownReaderWeb.tsx");
+    const webMeasure = read("components/WebViewMeasureLayer/WebViewMeasureLayerWeb.tsx");
+
+    expect(layout).toContain("NotoSerifKR-400Regular-korean.woff2");
+    expect(layout).toContain("NotoSerifKR-600SemiBold-korean.woff2");
+    expect(layout).toContain("setEditorFonts(regular, semiBold, notoRegular, notoSemiBold)");
+    for (const source of [editor, reader, measure]) {
+      expect(source).toContain("areEditorFontsReady");
+      expect(source).toContain("onBodyFontsReady");
+      expect(source).toContain("notoRegularBase64");
+      expect(source).toContain("notoSemiBoldBase64");
+    }
+    for (const source of [webEditor, webReader, webMeasure]) {
+      expect(source).toContain("BODY_REGULAR_FONT_FAMILY");
+    }
+  });
+
+  it("keeps native editor commands and touch handling intact when regenerating HTML", () => {
+    const editorSource = readFileSync(
+      join(__dirname, "../../components/WebViewMarkdownEditor/editorWebviewSrc/index.ts"),
+      "utf8",
+    );
+    const editorBundle = readFileSync(
+      join(__dirname, "../../components/WebViewMarkdownEditor/editorHtml.ts"),
+      "utf8",
+    );
+    const editableCase = editorSource.slice(
+      editorSource.indexOf('case "setEditable"'),
+      editorSource.indexOf('case "setSourceArticleSlot"'),
+    );
+    const overflowCase = editorSource.slice(
+      editorSource.indexOf('case "setOverflowRanges"'),
+      editorSource.indexOf('case "setOverflowProbeConfig"'),
+    );
+    const swipeSection = editorSource.slice(
+      editorSource.indexOf("let swipeStartY"),
+      editorSource.indexOf("// ── Selection handle drag detection"),
+    );
+
+    expect(editableCase).toContain("const next = !!cmd.isEditable;");
+    expect(editableCase).not.toContain("availableContentHeightPx");
+    expect(overflowCase).toContain("setMeta(overflowPluginKey, { ranges })");
+    expect(overflowCase).not.toContain("ranges: []");
+    expect(editorSource).toContain('document.addEventListener("focusout"');
+    expect(editorSource).toContain("const target = e.target as Element;");
+    expect(swipeSection).toContain("const dy = e.touches[0].clientY - swipeStartY;");
+    expect(swipeSection).not.toContain("selHandleDragStartY");
+
+    expect(editorBundle).toMatch(
+      /case"setEditable":\{let \w+=!!\w+\.isEditable;/,
+    );
+    expect(editorBundle).toMatch(
+      /case"setOverflowRanges":\{[^}]+setMeta\(\w+,\{ranges:\w+\}\)/,
+    );
+    expect(editorBundle).toContain('addEventListener("focusout"');
+    expect(editorBundle).toMatch(
+      /\.touches\[0\]\.clientY-[\w$]+>[\w$]+&&\([\w$]+=!0,[\w$]+\(\{type:"onSwipeDownToDismiss"\}\)\)/,
+    );
+  });
+});
 
 describe("shared letter page geometry", () => {
   it("uses the full logical page C and an integer 0.88C text column", () => {

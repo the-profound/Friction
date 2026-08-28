@@ -272,17 +272,23 @@ const styles = StyleSheet.create({
 async function loadEditorFonts(): Promise<void> {
   if (Platform.OS === "web") return;
   try {
-    const [regularAsset, semiBoldAsset] = await Asset.loadAsync([
-      require("../assets/fonts/Eulyoo1945-Regular.otf"),
-      require("../assets/fonts/Eulyoo1945-SemiBold.otf"),
+    const [regularAsset, semiBoldAsset, notoRegularAsset, notoSemiBoldAsset] = await Asset.loadAsync([
+      require("../assets/fonts/Eulyoo1945-Regular.woff2"),
+      require("../assets/fonts/Eulyoo1945-SemiBold.woff2"),
+      require("../assets/fonts/NotoSerifKR-400Regular-korean.woff2"),
+      require("../assets/fonts/NotoSerifKR-600SemiBold-korean.woff2"),
     ]);
     const regularUri = regularAsset.localUri ?? regularAsset.uri;
     const semiBoldUri = semiBoldAsset.localUri ?? semiBoldAsset.uri;
-    const [regular, semiBold] = await Promise.all([
+    const notoRegularUri = notoRegularAsset.localUri ?? notoRegularAsset.uri;
+    const notoSemiBoldUri = notoSemiBoldAsset.localUri ?? notoSemiBoldAsset.uri;
+    const [regular, semiBold, notoRegular, notoSemiBold] = await Promise.all([
       FileSystem.readAsStringAsync(regularUri, { encoding: "base64" }),
       FileSystem.readAsStringAsync(semiBoldUri, { encoding: "base64" }),
+      FileSystem.readAsStringAsync(notoRegularUri, { encoding: "base64" }),
+      FileSystem.readAsStringAsync(notoSemiBoldUri, { encoding: "base64" }),
     ]);
-    setEditorFonts(regular, semiBold);
+    setEditorFonts(regular, semiBold, notoRegular, notoSemiBold);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[editorFonts] Failed to load editor fonts:", err);

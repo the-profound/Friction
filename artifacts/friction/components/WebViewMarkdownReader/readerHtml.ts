@@ -1,10 +1,14 @@
 import { buildBodyTypographyCss } from "@/components/shared/bodyTypographyCss";
 import { buildWebViewPerfHeadScript } from "@/lib/webviewPerf";
 import { buildWebViewBridgeHeadScript } from "@/lib/webViewBridgeShim";
+import {
+  buildBodyFontReadyScript,
+  buildEmbeddedBodyFontFaceCss,
+  hasEmbeddedBodyFonts,
+  type EmbeddedBodyFontOptions,
+} from "@/components/shared/bodyTypographyFonts";
 
-export interface ReaderFontOptions {
-  regularBase64?: string | null;
-  semiBoldBase64?: string | null;
+export interface ReaderFontOptions extends EmbeddedBodyFontOptions {
   perfEnabled?: boolean;
 }
 
@@ -20,13 +24,10 @@ const bodyTypographyCss = buildBodyTypographyCss({
 });
 
 export function getReaderHtml(fontOptions: ReaderFontOptions = {}): string {
-  const { regularBase64, semiBoldBase64 } = fontOptions;
-  let fontFaceCSS = "";
-  if (regularBase64 && semiBoldBase64) {
-    fontFaceCSS = `@font-face{font-family:'Eulyoo1945-Regular';src:url('data:font/woff2;base64,${regularBase64}') format('woff2');font-weight:400;font-style:normal}@font-face{font-family:'Eulyoo1945-SemiBold';src:url('data:font/woff2;base64,${semiBoldBase64}') format('woff2');font-weight:600;font-style:normal}`;
-  }
+  const fontFaceCSS = buildEmbeddedBodyFontFaceCss(fontOptions);
   const perfHeadScript = buildWebViewPerfHeadScript(!!fontOptions.perfEnabled);
   const bridgeHeadScript = buildWebViewBridgeHeadScript();
+  const fontReadyScript = buildBodyFontReadyScript(hasEmbeddedBodyFonts(fontOptions));
 
   return `<!DOCTYPE html>
 <html lang="ko">
@@ -43,6 +44,7 @@ ${bodyTypographyCss}
 #reader-content{width:100%}
 ::selection{background:rgba(59,130,246,0.3)}
 </style>
+${fontReadyScript}
 </head>
 <body>
 <div id="reader-content" lang="en"></div>

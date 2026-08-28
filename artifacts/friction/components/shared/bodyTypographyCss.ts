@@ -1,4 +1,8 @@
 import { ReaderTokens } from "@/constants/tokens";
+import {
+  BODY_REGULAR_FONT_FAMILY,
+  BODY_SEMIBOLD_FONT_FAMILY,
+} from "./bodyTypographyFonts";
 
 /**
  * 작성(on-01a) · 분할(on-01b) · 마감(on-01c) · 읽기(read) 4개 화면이 모두
@@ -55,18 +59,18 @@ export function buildBodyTypographyCss(opts: BodyTypographyCssOptions): string {
   const uExtras = readerUnderline ? ";text-underline-offset:0.2em" : "";
 
   return [
-    `${r}{font-family:'Eulyoo1945-Regular','NotoSerifKR_400Regular',serif;font-size:var(--body-font-size,16px);line-height:1.8;letter-spacing:var(--body-letter-spacing,0.8px);color:#1A1A1A;background:transparent;-webkit-text-size-adjust:100%;text-align:justify;overflow-wrap:break-word;word-wrap:break-word;word-break:normal;-webkit-hyphens:auto;hyphens:auto;text-justify:inter-ideograph}`,
+    `${r}{font-family:${BODY_REGULAR_FONT_FAMILY};font-size:var(--body-font-size,16px);line-height:1.8;letter-spacing:var(--body-letter-spacing,0.8px);color:#1A1A1A;background:transparent;-webkit-text-size-adjust:100%;text-align:justify;overflow-wrap:break-word;word-wrap:break-word;word-break:normal;-webkit-hyphens:auto;hyphens:auto;text-justify:inter-ideograph}`,
     `${b} p{${pMargin};text-align:justify;overflow-wrap:break-word;word-break:normal;-webkit-hyphens:auto;hyphens:auto;text-justify:inter-ideograph}`,
-    `${b} h1{font-family:'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif;font-size:var(--title-font-size,${titleScaleEm}em);font-weight:600;letter-spacing:0.025em;${h1Margin};line-height:1.25;text-align:left}`,
-    `${b} h2{font-family:'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif;font-size:1.3em;font-weight:600;letter-spacing:0.025em;${h2Margin};line-height:1.3;text-align:left}`,
-    `${b} h3{font-family:'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif;font-size:1.1em;font-weight:600;letter-spacing:0.025em;${h3Margin};line-height:1.35;text-align:left}`,
+    `${b} h1{font-family:${BODY_SEMIBOLD_FONT_FAMILY};font-size:var(--title-font-size,${titleScaleEm}em);font-weight:600;letter-spacing:0.025em;${h1Margin};line-height:1.25;text-align:left}`,
+    `${b} h2{font-family:${BODY_SEMIBOLD_FONT_FAMILY};font-size:1.3em;font-weight:600;letter-spacing:0.025em;${h2Margin};line-height:1.3;text-align:left}`,
+    `${b} h3{font-family:${BODY_SEMIBOLD_FONT_FAMILY};font-size:1.1em;font-weight:600;letter-spacing:0.025em;${h3Margin};line-height:1.35;text-align:left}`,
     `${b} ul,${b} ol{padding-left:1.5em;${listMargin};text-align:left}`,
     `${b} li{${liMargin};text-align:left}`,
     `${b} li p{margin-bottom:0}`,
-    `${b} blockquote{font-family:'Eulyoo1945-Regular','NotoSerifKR_400Regular',serif;font-style:italic;border-left:3px solid #d4d4d8;padding-left:1em;${blockquoteMargin};color:#52525b;text-align:justify;overflow-wrap:break-word;word-break:normal;-webkit-hyphens:auto;hyphens:auto;text-justify:inter-ideograph}`,
+    `${b} blockquote{font-family:${BODY_REGULAR_FONT_FAMILY};font-style:italic;border-left:3px solid #d4d4d8;padding-left:1em;${blockquoteMargin};color:#52525b;text-align:justify;overflow-wrap:break-word;word-break:normal;-webkit-hyphens:auto;hyphens:auto;text-justify:inter-ideograph}`,
     `${b} hr{border:none;border-top:1px solid #e4e4e7;${hrCss}}`,
     `${b} u{text-decoration:underline${uExtras}}`,
-    `${b} strong{font-family:'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif;font-weight:700}`,
+    `${b} strong{font-family:${BODY_SEMIBOLD_FONT_FAMILY};font-weight:600}`,
     `${b} em{font-style:italic}`,
     `${b} img[data-inline="true"],.tiptap-inline-image{display:block;max-width:240px;width:auto;height:auto;border-radius:8px;margin:0.5em 0}`,
   ].join("\n");

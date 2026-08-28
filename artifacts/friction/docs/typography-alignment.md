@@ -41,7 +41,7 @@
 | 일반 UI | `Pretendard-*` | `Typography`와 `ReaderTokens.fontFamily`의 `Platform.select` 이름을 사용한다. |
 | 본문 일반 | `Eulyoo1945-Regular` | `NotoSerifKR_400Regular`, CSS `serif` |
 | 본문 강조·제목 | `Eulyoo1945-SemiBold` | `NotoSerifKR_600SemiBold`, CSS `serif` |
-| 네이티브 WebView | 위 Eulyoo WOFF2 | `editorFontStore`에서 Regular와 SemiBold를 모두 전달할 때 `@font-face`로 삽입한다. 둘 중 하나라도 없으면 CSS fallback 체인을 사용한다. |
+| 네이티브 WebView | Eulyoo + Noto Serif KR WOFF2 | `editorFontStore`에서 두 가족의 Regular와 SemiBold를 모두 전달할 때 `@font-face`로 삽입한다. 하나라도 없으면 CSS fallback 체인을 사용한다. |
 | 앱 폰트 등록 | Noto Serif KR 400/600/800 | `app/_layout.tsx`에서 Expo 폰트로 등록한다. |
 
 글꼴 파일을 바꾸거나 fallback 순서를 바꾸면, 폰트가 아직 준비되지 않은 WebView와
@@ -164,6 +164,13 @@ cqiToPx(cqi, C) = (cqi / 100) × C
 
 ## 4. 본문 블록별 정렬·여백·줄바꿈 정책
 
+본문 글꼴 체인은 모든 렌더러에서 Eulyoo1945를 우선하고, Eulyoo에 없는 글리프
+(예: `잓`)는 같은 굵기의 Noto Serif KR로 폴백한다. 네이티브 WebView는 앱에
+등록된 글꼴을 직접 볼 수 없으므로 Eulyoo와 Noto Serif KR WOFF2를 데이터 URI로
+각각 주입한다. Noto 자원은 기본 라틴·문장부호·한글 자모와 현대 한글 전체
+(`AC00–D7A3`, `잓` 포함)를 보존한 OFL 서브셋이다. 작성·읽기·측정은 네 글꼴의 디코딩이 끝난 뒤 시작하며, 디코딩
+실패나 제한 시간 초과 때만 동일한 시스템 serif 폴백으로 진행한다.
+
 아래의 기준 CSS는 `buildBodyTypographyCss()`다. 네이티브 리더는
 `spaced`/`hrStyle: "spaced"`/밑줄 offset을, 측정 레이어는
 `zero`/`hrStyle: "measure"`를 선택한다. 작성 에디터는 TipTap DOM과 HR 조작 UI
@@ -180,7 +187,7 @@ cqiToPx(cqi, C) = (cqi / 100) × C
 | 목록 (`ul`, `ol`, `li`) | 목록과 항목 모두 왼쪽 맞춤; 항목의 본문 메트릭을 상속 | 목록 `padding-left: 1.5em`, 화면용 아래 1em; 항목 아래 0.2em; `li p` 아래 여백 0 | 목록의 줄바꿈은 목록 안에서 일어나며 일반 문단의 양쪽 맞춤 정책을 적용하지 않는다. |
 | 구분선 (`hr`) | 텍스트 정렬·행간·자간 없음 | `border-top: 1px solid #e4e4e7`; 리더 `1em 0`, 측정은 높이 1 px/여백 0 | 에디터는 HR 자체 여백 0, `.hr-wrapper`가 1em 여백과 조작 영역을 담당한다. |
 | 밑줄 (`u`) | 부모 텍스트의 메트릭·정렬을 상속 | 리더 네이티브만 `text-underline-offset: 0.2em` | Web reader와 편집기는 현재 기본 underline offset을 사용한다. |
-| 굵게 / 기울임 (`strong`, `em`) | `strong`: Eulyoo SemiBold, `font-weight:700`; `em`: italic | 별도 블록 여백 없음 | 부모 문단/제목의 줄바꿈을 상속한다. |
+| 굵게 / 기울임 (`strong`, `em`) | `strong`: Eulyoo SemiBold 600 → Noto Serif KR SemiBold 600; `em`: italic | 별도 블록 여백 없음 | 부모 문단/제목의 줄바꿈을 상속한다. |
 | 인라인 이미지 (`img[data-inline]`) | 텍스트 정렬 대상이 아닌 block | native shared CSS: `max-width:240px`, auto 크기, 8 px radius, `0.5em 0` | 한 줄 전체 이미지 Markdown만 reader 변환기가 이미지로 만든다. Web reader는 현재 이 명시 CSS를 갖지 않으므로 변경 시 native/web을 모두 확인한다. |
 | 코드 (`code`, `pre`) | **리더·측정용 Markdown 변환기의 지원 블록이 아니다.** | reader/measure 공통 CSS에 전용 `code`/`pre` 스타일 없음 | fenced code는 reader 변환기에서 코드 블록으로 보장되지 않는다. Web 에디터만 현재 `ui-monospace`, 회색 배경, `pre` 가로 스크롤을 별도로 제공한다. 교차 흐름용 코드 서식을 새로 지원할 때는 파서, 에디터, 리더, 측정기의 정책을 함께 설계한다. |
 

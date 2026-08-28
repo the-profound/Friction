@@ -1,6 +1,8 @@
 export interface EditorFontState {
   regularBase64: string | null;
   semiBoldBase64: string | null;
+  notoRegularBase64: string | null;
+  notoSemiBoldBase64: string | null;
   error: string | null;
 }
 
@@ -9,6 +11,8 @@ type FontListener = (state: EditorFontState) => void;
 let state: EditorFontState = {
   regularBase64: null,
   semiBoldBase64: null,
+  notoRegularBase64: null,
+  notoSemiBoldBase64: null,
   error: null,
 };
 const listeners: FontListener[] = [];
@@ -19,8 +23,19 @@ function emit(): void {
   }
 }
 
-export function setEditorFonts(regular: string, semiBold: string): void {
-  state = { regularBase64: regular, semiBoldBase64: semiBold, error: null };
+export function setEditorFonts(
+  regular: string,
+  semiBold: string,
+  notoRegular: string,
+  notoSemiBold: string,
+): void {
+  state = {
+    regularBase64: regular,
+    semiBoldBase64: semiBold,
+    notoRegularBase64: notoRegular,
+    notoSemiBoldBase64: notoSemiBold,
+    error: null,
+  };
   emit();
 }
 
@@ -39,6 +54,15 @@ export function consumeEditorFontsErrorToast(): boolean {
 
 export function getEditorFonts(): EditorFontState {
   return state;
+}
+
+export function areEditorFontsReady(fonts: EditorFontState): boolean {
+  return !!(
+    fonts.regularBase64 &&
+    fonts.semiBoldBase64 &&
+    fonts.notoRegularBase64 &&
+    fonts.notoSemiBoldBase64
+  );
 }
 
 export function subscribeEditorFonts(listener: FontListener): () => void {

@@ -60,6 +60,7 @@
 - [EAS nested-app command directory](eas-nested-app-command-directory.md) — EAS discovers Expo config from its current directory; release helpers for nested artifacts must enter the app directory first.
 - [Unauthenticated auth diagnostics](friction-auth-diagnostics-privacy.md) — analytics-style auth logs need semantic server allowlists, not just client types or character regexes.
 - [Editor hydration autosave](friction-editor-hydration-autosave.md) — server content injected into the editor can emit synthetic dirty events; ignore only its exact matching export.
+- [WebView body-font readiness](friction-webview-body-font-readiness.md) — app-registered fonts are invisible to native WebViews; embed matching formats and gate content/measurement on document.fonts.
 - [Dev-seed sentinel safety](friction-dev-seed-sentinels.md) — deterministic sentinels must match the inserted row exactly and commit only with the complete seed transaction.
 - [Space creation retries and diagnostics](space-creation-retries-and-diagnostics.md) — parent/child creation must resume safely after response loss and log only privacy-safe metadata.
 - [Durable create idempotency](durable-create-idempotency.md) — persist the client create ID before POST; recovery aliases must clear together and empty-draft discard must retain identity.

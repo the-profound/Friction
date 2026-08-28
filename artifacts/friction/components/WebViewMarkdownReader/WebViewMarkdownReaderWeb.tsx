@@ -3,6 +3,10 @@ import { PixelRatio } from "react-native";
 import type { WebViewMarkdownReaderProps } from "./WebViewMarkdownReader";
 import { ReaderTokens } from "@/constants/tokens";
 import { markdownToHtml } from "@/lib/markdownRenderer";
+import {
+  BODY_REGULAR_FONT_FAMILY,
+  BODY_SEMIBOLD_FONT_FAMILY,
+} from "@/components/shared/bodyTypographyFonts";
 
 export default function WebViewMarkdownReaderWeb({
   markdown,
@@ -56,7 +60,7 @@ export default function WebViewMarkdownReaderWeb({
 
   const contentStyle: React.CSSProperties = useMemo(() => ({
     width: "100%",
-    fontFamily: "'Eulyoo1945-Regular','NotoSerifKR_400Regular',serif",
+    fontFamily: BODY_REGULAR_FONT_FAMILY,
     fontSize: bodyFontSize ?? 16,
     lineHeight: 1.8,
     letterSpacing: bodyLetterSpacing ?? 0.8,
@@ -97,16 +101,16 @@ const wrapperStyle: React.CSSProperties = {
 
 const webReaderCSS = `
 .reader-content p{margin-bottom:1em;text-align:justify;overflow-wrap:break-word;word-break:normal;-webkit-hyphens:auto;hyphens:auto;text-justify:inter-ideograph}
- .reader-content h1{font-family:'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif;font-size:var(--title-font-size,${ReaderTokens.typeScale.titleCqi}cqi);font-weight:600;letter-spacing:0.025em;margin:1em 0 0.4em;line-height:1.25;text-align:left}
-.reader-content h2{font-family:'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif;font-size:1.3em;font-weight:600;letter-spacing:0.025em;margin:0.8em 0 0.3em;line-height:1.3;text-align:left}
-.reader-content h3{font-family:'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif;font-size:1.1em;font-weight:600;letter-spacing:0.025em;margin:0.6em 0 0.3em;line-height:1.35;text-align:left}
+ .reader-content h1{font-family:${BODY_SEMIBOLD_FONT_FAMILY};font-size:var(--title-font-size,${ReaderTokens.typeScale.titleCqi}cqi);font-weight:600;letter-spacing:0.025em;margin:1em 0 0.4em;line-height:1.25;text-align:left}
+.reader-content h2{font-family:${BODY_SEMIBOLD_FONT_FAMILY};font-size:1.3em;font-weight:600;letter-spacing:0.025em;margin:0.8em 0 0.3em;line-height:1.3;text-align:left}
+.reader-content h3{font-family:${BODY_SEMIBOLD_FONT_FAMILY};font-size:1.1em;font-weight:600;letter-spacing:0.025em;margin:0.6em 0 0.3em;line-height:1.35;text-align:left}
 .reader-content ul,.reader-content ol{padding-left:1.5em;margin-bottom:1em;text-align:left}
 .reader-content li{margin-bottom:0.2em;text-align:left}
 .reader-content li p{margin-bottom:0}
-.reader-content blockquote{font-family:'Eulyoo1945-Regular','NotoSerifKR_400Regular',serif;font-style:italic;border-left:3px solid #d4d4d8;padding-left:1em;margin:0.5em 0;color:#52525b;text-align:justify;overflow-wrap:break-word;word-break:normal;-webkit-hyphens:auto;hyphens:auto;text-justify:inter-ideograph}
+.reader-content blockquote{font-family:${BODY_REGULAR_FONT_FAMILY};font-style:italic;border-left:3px solid #d4d4d8;padding-left:1em;margin:0.5em 0;color:#52525b;text-align:justify;overflow-wrap:break-word;word-break:normal;-webkit-hyphens:auto;hyphens:auto;text-justify:inter-ideograph}
 .reader-content hr{border:none;border-top:1px solid #e4e4e7;margin:1em 0}
 .reader-content u{text-decoration:underline}
-.reader-content strong{font-family:'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif;font-weight:700}
+.reader-content strong{font-family:${BODY_SEMIBOLD_FONT_FAMILY};font-weight:600}
 .reader-content em{font-style:italic}
 ::selection{background:rgba(59,130,246,0.3)}
 `;

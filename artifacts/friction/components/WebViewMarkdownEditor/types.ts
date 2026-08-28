@@ -68,6 +68,7 @@ export interface OnSelectionUpdatePayload {
 }
 
 export type WebViewToRNEvent =
+  | { type: "onBodyFontsReady"; ok: boolean }
   | { type: "onReady" }
   | { type: "onChange"; payload: OnChangePayload }
   | { type: "onExportMarkdown"; payload: OnExportMarkdownPayload }

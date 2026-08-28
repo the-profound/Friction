@@ -10,6 +10,7 @@ import { PixelRatio } from "react-native";
 import { buildBodyTypographyCss } from "@/components/shared/bodyTypographyCss";
 import { blockToHtml, markdownToHtml } from "@/lib/markdownRenderer";
 import type { MeasureRequest } from "../PretextMeasureLayer/PretextMeasureLayer";
+import { BODY_REGULAR_FONT_FAMILY } from "@/components/shared/bodyTypographyFonts";
 
 interface Props {
   request: MeasureRequest | null;
@@ -94,7 +95,7 @@ export default function WebViewMeasureLayerWeb({ request, onMeasured }: Props) {
         className="webview-measure-layer"
         style={{
           ...CONTAINER_STYLE,
-          fontFamily: "'Eulyoo1945-Regular','NotoSerifKR_400Regular',serif",
+          fontFamily: BODY_REGULAR_FONT_FAMILY,
           lineHeight: 1.8,
           color: "#1A1A1A",
           overflowWrap: "break-word" as const,
