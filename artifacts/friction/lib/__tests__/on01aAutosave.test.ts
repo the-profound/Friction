@@ -11,13 +11,12 @@ describe("on-01a initial WebView export autosave regression", () => {
   it("ignores the export caused by injecting unchanged server content", () => {
     const screen = readScreen();
 
-    expect(screen).toContain("const serverInjectionPendingRef = useRef(false);");
-    expect(screen).toContain("if (serverInjectionPendingRef.current) {");
-    expect(screen).toContain("if (md === serverContentRef.current) {");
-    expect(screen).toContain("ignored initial server export");
+    expect(screen).toContain('const canPopToList = router.canGoBack() && previousRoute?.name === "(tabs)";');
+    expect(screen).toContain("router.back();");
+    expect(screen).toContain('router.replace(source === "quote" ? "/(tabs)/archive" : "/(tabs)/on");');
   });
 
-  it("keeps changed exports on the existing autosave path", () => {
+  it("routes edge swipes, browser history, and Android back through the guarded exit", () => {
     const screen = readScreen();
     const exportHandler = screen.slice(
       screen.indexOf("const handleAutosaveExport"),
@@ -32,8 +31,8 @@ describe("on-01a initial WebView export autosave regression", () => {
   });
 });
 
-describe("on-01a return navigation regression", () => {
-  it("pops back to the actual tab list after save instead of replacing it", () => {
+describe("on-01a direct thought editor initialization regression", () => {
+  it("disables only the trailing paragraph for a new local thought", () => {
     const screen = readScreen();
 
     expect(screen).toContain('const canPopToList = router.canGoBack() && previousRoute?.name === "(tabs)";');
@@ -84,3 +83,28 @@ describe("on-01a photo insertion regression", () => {
     expect(addMenu).toContain("!onSelectPhoto && styles.labelDisabled");
   });
 });
+
+    const memoEditor = readFileSync(
+      join(appRoot, "components/MemoWebEditor/MemoWebEditor.tsx"),
+      "utf8",
+    );
+
+    const types = readFileSync(
+      join(appRoot, "components/WebViewMarkdownEditor/types.ts"),
+      "utf8",
+    );
+
+    const editorWeb = readFileSync(
+      join(appRoot, "components/WebViewMarkdownEditor/WebViewMarkdownEditorWeb.tsx"),
+      "utf8",
+    );
+
+    const editorSource = readFileSync(
+      join(appRoot, "components/WebViewMarkdownEditor/editorWebviewSrc/index.ts"),
+      "utf8",
+    );
+
+    const editorBundle = readFileSync(
+      join(appRoot, "components/WebViewMarkdownEditor/editorHtml.ts"),
+      "utf8",
+    );

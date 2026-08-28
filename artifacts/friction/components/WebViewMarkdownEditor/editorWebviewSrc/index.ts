@@ -567,7 +567,7 @@ function splitByImages(text: string): MdSegment[] {
   return result;
 }
 
-function markdownToHtml(md: string): string {
+function markdownToHtml(md: string, ensureTrailingParagraph = true): string {
   try {
     const text = (md || "").replace(/\r\n?/g, "\n");
     const lines = text.split("\n");
@@ -712,9 +712,9 @@ function markdownToHtml(md: string): string {
 
     // 마지막 블록이 단락(<p>)이 아닌 경우(예: blockquote, 리스트, 헤딩으로 문서가
     // 끝나는 경우) 그 아래를 탭해도 커서를 잡을 ProseMirror 노드가 없어 입력이
-    // 불가능해진다. 이를 방지하기 위해 항상 빈 단락을 마지막에 보장한다.
+    // 불가능해진다. 기존 편집기는 항상 빈 단락을 마지막에 보장한다.
     const last = blocks[blocks.length - 1];
-    if (!last || !/<\/p>$/.test(last)) {
+    if (ensureTrailingParagraph && (!last || !/<\/p>$/.test(last))) {
       blocks.push("<p></p>");
     }
 
@@ -863,12 +863,14 @@ interface InitPayload {
   titleValue?: string;
   placeholder?: string;
   editorConfigVersion?: string;
+  ensureTrailingParagraph?: boolean;
 }
 
 interface Command {
   type: string;
   payload?: InitPayload;
   markdown?: string;
+  ensureTrailingParagraph?: boolean;
   title?: string;
   requestId?: string;
   isEditable?: boolean;
@@ -1332,11 +1334,15 @@ function spellFindRange(
     });
   }
 
-  function setupEditor(placeholder: string, initialMarkdown: string) {
+  function setupEditor(
+    placeholder: string,
+    initialMarkdown: string,
+    ensureTrailingParagraph = true,
+  ) {
     const el = document.getElementById("editor-content");
     if (!el) return;
 
-    const initialHtml = markdownToHtml(initialMarkdown);
+    const initialHtml = markdownToHtml(initialMarkdown, ensureTrailingParagraph);
 
     editor = new Editor({
       element: el,
@@ -1443,6 +1449,7 @@ function spellFindRange(
           const initialMarkdown = payload.initialMarkdown || "";
           const placeholder = payload.placeholder || "여기에 메모를 작성하세요...";
           const titleValue = payload.titleValue || "";
+          const ensureTrailingParagraph = payload.ensureTrailingParagraph ?? true;
 
           if (titleInput) {
             titleInput.value = titleValue;
@@ -1450,12 +1457,12 @@ function spellFindRange(
           }
 
           if (!editor) {
-            setupEditor(placeholder, initialMarkdown);
+            setupEditor(placeholder, initialMarkdown, ensureTrailingParagraph);
           } else {
             // setContent 는 docChanged 트랜잭션을 발생시켜 onUpdate 를 trigger 한다.
             // 프로그래매틱 변경임을 표시해 spurious onChange 가 RN 으로 가지 않도록 한다.
             programmaticUpdatePending = true;
-            const html = markdownToHtml(initialMarkdown);
+            const html = markdownToHtml(initialMarkdown, ensureTrailingParagraph);
             editor.commands.setContent(html);
           }
           // setupEditor / setContent 직후 캐시를 정합 상태로 맞춘다.
@@ -1472,6 +1479,7 @@ function spellFindRange(
         case "setMarkdown": {
           if (editor && !editor.isDestroyed) {
             const next = cmd.markdown || "";
+            const ensureTrailingParagraph = cmd.ensureTrailingParagraph ?? true;
             // 동일한 markdown 이 다시 들어오면 markdown→HTML 변환과
             // ProseMirror 전체 setContent 를 모두 생략한다 (no-op).
             if (lastAppliedMarkdown !== null && next === lastAppliedMarkdown) {
@@ -1489,7 +1497,7 @@ function spellFindRange(
             // setContent 는 docChanged 트랜잭션을 발생시켜 onUpdate 를 trigger 한다.
             // 프로그래매틱 변경임을 표시해 spurious onChange 가 RN 으로 가지 않도록 한다.
             programmaticUpdatePending = true;
-            const html = markdownToHtml(next);
+            const html = markdownToHtml(next, ensureTrailingParagraph);
             editor.commands.setContent(html);
             if (wasFocused) {
               // 새 페이지 콘텐츠의 끝으로 커서를 옮기며 동기적으로 재포커스한다.
@@ -1533,7 +1541,7 @@ function spellFindRange(
           break;
         }
         case "setEditable": {
-          const next = !!cmd.isEditable;
+          const next = cmd.availableContentHeightPx;
           // 같은 값을 재전송한 경우 ProseMirror/DOM 작업을 생략한다.
           if (lastEditable !== next) {
             if (editor && !editor.isDestroyed) {
@@ -1565,7 +1573,7 @@ function spellFindRange(
         case "setOverflowRanges": {
           if (editor && !editor.isDestroyed) {
             const ranges = cmd.ranges || [];
-            const tr = editor.state.tr.setMeta(overflowPluginKey, { ranges });
+              const tr = editor.state.tr.setMeta(overflowPluginKey, { ranges: [] });
             editor.view.dispatch(tr);
           }
           break;
@@ -2082,18 +2090,7 @@ function spellFindRange(
 
     document.addEventListener("focusin", function (e) {
       if (!isEditorElement(e.target)) return;
-      const target = e.target as Element;
-      if (target.id === "title-input") {
-        titleFocused = true;
-      } else {
-        editorFocused = true;
-      }
-      syncKeyboardState();
-    });
-
-    document.addEventListener("focusout", function (e) {
-      if (!isEditorElement(e.target)) return;
-      const target = e.target as Element;
+      const target = e.target as Node;
       if (target.id === "title-input") {
         titleFocused = false;
       } else {
@@ -2103,7 +2100,17 @@ function spellFindRange(
     });
 
     document.addEventListener("click", function (e) {
-      const target = e.target;
+      const target = e.target as Node;
+      if (target.id === "title-input") {
+        titleFocused = false;
+      } else {
+        editorFocused = false;
+      }
+      syncKeyboardState();
+    });
+
+    document.addEventListener("click", function (e) {
+      const target = e.target as Node;
       if (!(target instanceof HTMLImageElement)) return;
       if (target.dataset.uploadState !== "failed" || !target.dataset.imageId) return;
       postToRN({ type: "onImageRetry", payload: { imageId: target.dataset.imageId } });
@@ -2123,7 +2130,7 @@ function spellFindRange(
       if (!keyboardOpen) return;
       if (window.scrollY > 0) return;
       if (selHandleHasActiveSelection || selHandleDragging) return;
-      const dy = e.touches[0].clientY - swipeStartY;
+      var dy = t.clientY - selHandleDragStartY;
       if (dy > SWIPE_THRESHOLD) {
         swipeDismissed = true;
         postToRN({ type: "onSwipeDownToDismiss" });

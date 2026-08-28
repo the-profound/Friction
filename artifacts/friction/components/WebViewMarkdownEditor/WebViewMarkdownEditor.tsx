@@ -26,6 +26,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       titleValue,
       editorConfigVersion = EDITOR_CONFIG_VERSION,
       placeholder,
+      ensureTrailingParagraph = true,
       editable = true,
       onReady,
       onChange,
@@ -66,7 +67,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
 
     useImperativeHandle(ref, () => ({
       setMarkdown(markdown: string) {
-        sendCommand({ type: "setMarkdown", markdown });
+        sendCommand({ type: "setMarkdown", markdown, ensureTrailingParagraph });
       },
       requestExportMarkdown(requestId: string) {
         // requestExportMarkdown 은 호환을 위해 기존 typed-event 패턴을 유지한다
@@ -144,7 +145,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       applySpellFix(original: string, replacement: string, contextHint: string, occurrenceIndex: number) {
         sendCommand({ type: "applySpellFix", original, replacement, contextHint, occurrenceIndex });
       },
-    }), [bridge, sendCommand]);
+    }), [bridge, sendCommand, ensureTrailingParagraph]);
 
     const handleMessage = useCallback(
       (event: WebViewMessageEvent) => {
@@ -309,7 +310,13 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
             bridge.markReady();
             sendCommand({
               type: "init",
-              payload: { initialMarkdown, editorConfigVersion, placeholder, titleValue },
+              payload: {
+                initialMarkdown,
+                editorConfigVersion,
+                placeholder,
+                titleValue,
+                ensureTrailingParagraph,
+              },
             });
             if (bodyFontSize != null && bodyLetterSpacing != null) {
               sendCommand({

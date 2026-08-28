@@ -40,7 +40,10 @@ const bundleJs = result.outputFiles[0].text;
 const escapedJs = bundleJs
   .replace(/\\/g, "\\\\")
   .replace(/`/g, "\\`")
-  .replace(/\$\{/g, "\\${");
+  .replace(/\$\{/g, "\\${")
+  // Keep raw newlines inside nested template literals from leaving trailing
+  // whitespace in the generated TypeScript source.
+  .replace(/\r?\n/g, "\\n");
 
 const css = `
 *{margin:0;padding:0;box-sizing:border-box}

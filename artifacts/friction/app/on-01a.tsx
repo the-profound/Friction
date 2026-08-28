@@ -2005,6 +2005,7 @@ export default function WritingScreen() {
                 initialMarkdown={contentRef.current}
                 titleValue={title}
                 placeholder="떠오르는 생각을 자유롭게 적어보세요..."
+                ensureTrailingParagraph={!isLocalDirectDraft}
                 editable
                 onReady={handleEditorReady}
                 onChange={handleEditorChange}

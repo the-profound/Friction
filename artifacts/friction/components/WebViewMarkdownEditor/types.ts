@@ -5,6 +5,11 @@ export interface EditorInitPayload {
   editorConfigVersion: string;
   placeholder?: string;
   titleValue?: string;
+  /**
+   * 마지막 블록이 비본문 블록일 때 커서용 빈 단락을 덧붙일지 여부.
+   * 기본값은 true로, 기존 편집기의 이어쓰기 동작을 유지한다.
+   */
+  ensureTrailingParagraph?: boolean;
 }
 
 export interface OverflowRange {
@@ -16,7 +21,7 @@ export type RNToWebViewCommand =
   | { type: "init"; payload: EditorInitPayload }
   | { type: "undo" }
   | { type: "redo" }
-  | { type: "setMarkdown"; markdown: string }
+  | { type: "setMarkdown"; markdown: string; ensureTrailingParagraph?: boolean }
   | { type: "setTitle"; title: string }
   | { type: "requestExportMarkdown"; requestId: string }
   | { type: "setEditable"; isEditable: boolean }
@@ -119,6 +124,11 @@ export interface WebViewMarkdownEditorProps {
   titleValue?: string;
   editorConfigVersion?: string;
   placeholder?: string;
+  /**
+   * 마지막 블록이 비본문 블록일 때 커서용 빈 단락을 덧붙일지 여부.
+   * 기본값은 true — 기록/메모/편지 편집기의 기존 동작을 유지한다.
+   */
+  ensureTrailingParagraph?: boolean;
   editable?: boolean;
   onReady?: () => void;
   onChange?: (payload: OnChangePayload) => void;

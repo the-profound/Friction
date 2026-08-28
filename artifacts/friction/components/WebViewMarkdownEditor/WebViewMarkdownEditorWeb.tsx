@@ -21,14 +21,14 @@ import type {
 
 marked.setOptions({ breaks: true, gfm: true } as Parameters<typeof marked.setOptions>[0]);
 
-function markdownToHtml(md: string): string {
+function markdownToHtml(md: string, ensureTrailingParagraph = true): string {
   try {
     const result = marked.parse(md || "");
     let html = typeof result === "string" ? result : "";
     // 마지막 블록이 단락(<p>)이 아닌 경우(예: blockquote, 리스트, 헤딩) 그
     // 아래를 탭/클릭해도 ProseMirror에 커서를 잡을 노드가 없어 입력이
-    // 불가능해진다. 항상 빈 단락을 보장한다.
-    if (!/<\/p>\s*$/.test(html)) {
+    // 불가능해진다. 기존 편집기는 항상 빈 단락을 보장한다.
+    if (ensureTrailingParagraph && !/<\/p>\s*$/.test(html)) {
       html += "<p></p>";
     }
     return html;
@@ -109,6 +109,7 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
       initialMarkdown,
       titleValue,
       placeholder,
+      ensureTrailingParagraph = true,
       editable = true,
       onReady,
       onChange,
@@ -134,7 +135,7 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
         Underline,
         InlineImage,
       ],
-      content: markdownToHtml(initialMarkdown),
+       content: markdownToHtml(initialMarkdown, ensureTrailingParagraph),
       editable,
       autofocus: false,
       onUpdate: ({ editor: ed }) => {
@@ -185,7 +186,7 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
       setMarkdown(markdown: string) {
         if (editor && !editor.isDestroyed) {
           try {
-            const html = markdownToHtml(markdown);
+             const html = markdownToHtml(markdown, ensureTrailingParagraph);
             editor.commands.setContent(html);
             // 인용구/리스트/헤딩 등으로 끝나는 메모를 주입할 때, 마지막 빈
             // 단락에 커서를 자동 배치해 사용자가 별도 탭 없이 바로 본문을
@@ -324,7 +325,7 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
       },
       applySpellFix(_original: string, _replacement: string, _contextHint: string) {
       },
-    }), [editor, requestExportMarkdown, onError]);
+    }), [editor, requestExportMarkdown, onError, ensureTrailingParagraph]);
 
     const handleTitleInput = useCallback(
       (e: React.ChangeEvent<HTMLTextAreaElement>) => {
