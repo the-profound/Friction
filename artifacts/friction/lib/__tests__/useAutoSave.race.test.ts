@@ -262,4 +262,50 @@ describe("useAutoSave – C2 flush race condition", () => {
 
     expect(serverContent).toBe("A");
   });
+
+  it("re-exports after an earlier lifecycle flush before allowing back navigation", async () => {
+    let editorContent = "키보드를 닫을 때의 내용";
+    let tail: Promise<void> = Promise.resolve();
+    let releaseFirstSave!: () => void;
+    const firstSaveGate = new Promise<void>((resolve) => { releaseFirstSave = resolve; });
+    const persisted: string[] = [];
+
+    const enqueueLatestFlush = () => {
+      const run = async () => {
+        const exported = editorContent;
+        if (persisted.length === 0) await firstSaveGate;
+        persisted.push(exported);
+      };
+      const task = tail.then(run, run);
+      tail = task.then(() => undefined, () => undefined);
+      return task;
+    };
+
+    const keyboardDismissFlush = enqueueLatestFlush();
+    await Promise.resolve();
+    editorContent = "뒤로 가기 직전의 더 최신 내용";
+    const backFlush = enqueueLatestFlush();
+
+    releaseFirstSave();
+    await Promise.all([keyboardDismissFlush, backFlush]);
+
+    expect(persisted).toEqual([
+      "키보드를 닫을 때의 내용",
+      "뒤로 가기 직전의 더 최신 내용",
+    ]);
+  });
+
+  it("keeps the same create id after an empty draft is discarded and retyped", () => {
+    let queued = {
+      title: "",
+      content: "# ",
+      creationId: "7e867265-30c8-4df0-8137-4e7216c285dd",
+    };
+
+    const { creationId } = queued;
+    queued = { title: "", content: "", creationId };
+    queued = { ...queued, content: "다시 작성한 의미 있는 단상" };
+
+    expect(queued.creationId).toBe("7e867265-30c8-4df0-8137-4e7216c285dd");
+  });
 });

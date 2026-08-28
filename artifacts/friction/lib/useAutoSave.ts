@@ -6,23 +6,30 @@ export type AutoSaveStatus = "idle" | "saving" | "saved" | "error";
 interface PendingPayload {
   title: string;
   content: string;
+  entityId?: string;
+  creationId?: string;
+  aliasQueueKeys?: string[];
 }
 
 interface UseAutoSaveOptions {
   debounceMs?: number;
   maxRetries?: number;
   storageKey?: string;
+  creationId?: string;
   onSave: (data: { title: string; content: string }) => Promise<void>;
+  onRestore?: (data: {
+    title: string;
+    content: string;
+    entityId?: string;
+    creationId?: string;
+  }) => void;
 }
 
 async function persistQueue(key: string, data: PendingPayload | null): Promise<void> {
-  try {
-    if (data) {
-      await AsyncStorage.setItem(key, JSON.stringify(data));
-    } else {
-      await AsyncStorage.removeItem(key);
-    }
-  } catch {
+  if (data) {
+    await AsyncStorage.setItem(key, JSON.stringify(data));
+  } else {
+    await AsyncStorage.removeItem(key);
   }
 }
 
@@ -39,12 +46,17 @@ export function useAutoSave({
   debounceMs = 1200,
   maxRetries = 3,
   storageKey,
+  creationId,
   onSave,
+  onRestore,
 }: UseAutoSaveOptions) {
   const [status, setStatus] = useState<AutoSaveStatus>("idle");
   const [isDirty, setIsDirty] = useState(false);
 
-  const latestDataRef = useRef<PendingPayload>({ title: "", content: "" });
+  const latestDataRef = useRef<PendingPayload>({ title: "", content: "", creationId });
+  if (creationId && !latestDataRef.current.creationId) {
+    latestDataRef.current.creationId = creationId;
+  }
   const requestIdRef = useRef(0);
   const latestCompletedRef = useRef(0);
   // Incremented by markDirty/markTitleDirty on every new dirty call.
@@ -64,16 +76,54 @@ export function useAutoSave({
   const isDirtyRef = useRef(false);
   const onSaveRef = useRef(onSave);
   onSaveRef.current = onSave;
+  const onRestoreRef = useRef(onRestore);
+  onRestoreRef.current = onRestore;
   const queueKey = storageKey ? `autosave_queue_${storageKey}` : null;
+  const queueKeysRef = useRef<Set<string>>(new Set());
+  if (queueKey) queueKeysRef.current.add(queueKey);
+  const queueWriteRef = useRef<Promise<void>>(Promise.resolve());
 
   // Tracks the currently in-flight save promise so flush() can await it
   // instead of starting a concurrent save that races with the existing one.
   const activeSaveRef = useRef<Promise<void> | null>(null);
 
+  const clearRetryTimer = useCallback(() => {
+    if (!retryTimerRef.current) return;
+    clearTimeout(retryTimerRef.current);
+    retryTimerRef.current = null;
+  }, []);
+
+  const writeQueue = useCallback((data: PendingPayload | null) => {
+    const keys = Array.from(queueKeysRef.current);
+    if (keys.length === 0) return Promise.resolve();
+    // Preserve call order across AsyncStorage writes. A delayed dirty write
+    // must never finish after a later successful remove and resurrect a stale
+    // payload on the next mount.
+    queueWriteRef.current = queueWriteRef.current.catch(() => undefined).then(async () => {
+      const queued = data ? { ...data, aliasQueueKeys: keys } : null;
+      await Promise.all(keys.map((key) => persistQueue(key, queued)));
+    });
+    return queueWriteRef.current;
+  }, []);
+
+  const bindEntity = useCallback(async (entityId: string, nextStorageKey: string) => {
+    const nextQueueKey = `autosave_queue_${nextStorageKey}`;
+    queueKeysRef.current.add(nextQueueKey);
+    latestDataRef.current = { ...latestDataRef.current, entityId };
+    // Write the recoverable server identity and newest payload under both the
+    // local-draft key and the persisted-id key before the route changes. A
+    // process death on either side can then resume with PATCH, never a second
+    // create or a missing newer snapshot.
+    await writeQueue({ ...latestDataRef.current });
+  }, [writeQueue]);
+
   const doSave = useCallback(async () => {
     if (savingRef.current) return;
 
-    const data = { ...latestDataRef.current };
+    const data = {
+      title: latestDataRef.current.title,
+      content: latestDataRef.current.content,
+    };
     const id = ++requestIdRef.current;
     // Snapshot the dirty epoch so we can detect if markDirty was called
     // AFTER this save started (while we were awaiting the network). If it
@@ -97,14 +147,19 @@ export function useAutoSave({
     const run = async () => {
       let saved = false;
       try {
+        // A create idempotency key is useful only if it survives a process
+        // death before the POST response. Never issue a server write until all
+        // queue writes scheduled for this snapshot have completed durably.
+        await queueWriteRef.current;
         await onSaveRef.current(data);
         saved = true;
         if (id >= latestCompletedRef.current) {
           latestCompletedRef.current = id;
           retryCountRef.current = 0;
-          if (queueKey) persistQueue(queueKey, null);
           // Only mark clean if no new markDirty was called after this save started.
           if (requestIdRef.current === id && dirtyEpochRef.current === epochSnapshot) {
+            clearRetryTimer();
+            await writeQueue(null);
             isDirtyRef.current = false;
             setIsDirty(false);
             setStatus("saved");
@@ -117,17 +172,27 @@ export function useAutoSave({
               epochSnapshot,
               dirtyEpochRef.current,
             );
+            // A newer payload is still pending. Its markDirty call already
+            // placed the newest snapshot in storage, so do not clear it here.
           }
         }
       } catch {
         if (id >= latestCompletedRef.current) {
-          if (queueKey) persistQueue(queueKey, data);
+          // discard() may have intentionally cancelled this payload while the
+          // request was in flight (for example, a formatting-only local
+          // thought). Do not resurrect it as an error or retry.
+          if (!isDirtyRef.current) return;
+
+          // New input can arrive while this request is failing. Persist and
+          // retry the newest payload, never the stale save-start snapshot.
+          writeQueue({ ...latestDataRef.current });
           retryCountRef.current++;
           if (retryCountRef.current <= maxRetries) {
             const delay = Math.min(1000 * Math.pow(2, retryCountRef.current - 1), 10000);
+            clearRetryTimer();
             retryTimerRef.current = setTimeout(() => {
-              savingRef.current = false;
-              doSave();
+              retryTimerRef.current = null;
+              void doSave();
             }, delay);
             return;
           }
@@ -152,17 +217,33 @@ export function useAutoSave({
     const p = run();
     activeSaveRef.current = p;
     await p;
-  }, [maxRetries, queueKey]);
+  }, [clearRetryTimer, maxRetries, writeQueue]);
 
   useEffect(() => {
     if (!queueKey) return;
     let cancelled = false;
     loadQueue(queueKey).then((queued) => {
       if (cancelled || !queued) return;
-      latestDataRef.current = queued;
+      for (const alias of queued.aliasQueueKeys ?? []) {
+        if (alias.startsWith("autosave_queue_")) queueKeysRef.current.add(alias);
+      }
+      // Queues from versions before create idempotency existed have no
+      // creationId. Attach this screen's generated id (or the already-bound
+      // entity id) and enqueue that upgraded payload before doSave can POST.
+      const restored = {
+        ...queued,
+        creationId:
+          queued.creationId ?? queued.entityId ?? latestDataRef.current.creationId,
+      };
+      latestDataRef.current = restored;
       dirtyEpochRef.current++;
       isDirtyRef.current = true;
       setIsDirty(true);
+      // Restore the exact pending snapshot into the visible editor before
+      // retrying it, so a remount cannot show a blank/server-old document while
+      // silently saving different queued content.
+      onRestoreRef.current?.(restored);
+      writeQueue({ ...restored });
       doSave();
     });
     return () => { cancelled = true; };
@@ -170,20 +251,21 @@ export function useAutoSave({
 
   const markDirty = useCallback(
     (title: string, content: string) => {
-      latestDataRef.current = { title, content };
+      latestDataRef.current = { ...latestDataRef.current, title, content };
       // Bump epoch BEFORE setting isDirtyRef so any in-flight doSave that
       // checks (dirtyEpochRef.current === epochSnapshot) sees the mismatch
       // and does not clear the dirty flag prematurely.
       dirtyEpochRef.current++;
       isDirtyRef.current = true;
       setIsDirty(true);
+      writeQueue({ ...latestDataRef.current });
 
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = setTimeout(() => {
         doSave();
       }, debounceMs);
     },
-    [debounceMs, doSave],
+    [debounceMs, doSave, writeQueue],
   );
 
   // Title-only dirty path: avoids re-passing the full body string on each
@@ -195,19 +277,20 @@ export function useAutoSave({
     (title: string, fallbackContent: string = "") => {
       const prevContent = latestDataRef.current.content;
       const content = prevContent !== "" ? prevContent : fallbackContent;
-      latestDataRef.current = { title, content };
+      latestDataRef.current = { ...latestDataRef.current, title, content };
       // Bump epoch so any in-flight doSave does not clear isDirtyRef
       // if this title keystroke arrives during a concurrent save.
       dirtyEpochRef.current++;
       isDirtyRef.current = true;
       setIsDirty(true);
+      writeQueue({ ...latestDataRef.current });
 
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = setTimeout(() => {
         doSave();
       }, debounceMs);
     },
-    [debounceMs, doSave],
+    [debounceMs, doSave, writeQueue],
   );
 
   const flush = useCallback(async (): Promise<{ ok: boolean }> => {
@@ -215,10 +298,7 @@ export function useAutoSave({
       clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = null;
     }
-    if (retryTimerRef.current) {
-      clearTimeout(retryTimerRef.current);
-      retryTimerRef.current = null;
-    }
+    clearRetryTimer();
 
     // If a save is already in-flight, wait for it to complete rather than
     // force-resetting savingRef and launching a concurrent save. A concurrent
@@ -229,6 +309,11 @@ export function useAutoSave({
     if (activeSaveRef.current) {
       await activeSaveRef.current;
     }
+
+    // The in-flight request may have scheduled a retry while flush() was
+    // awaiting it. Cancel that timer before starting synchronous retries, or
+    // it can reset the save guard and launch a concurrent stale request.
+    clearRetryTimer();
 
     // After awaiting any in-flight save, allow doSave to proceed.
     savingRef.current = false;
@@ -265,10 +350,7 @@ export function useAutoSave({
 
       // Cancel the background retry timer doSave scheduled — we'll retry
       // directly in the next loop iteration instead.
-      if (retryTimerRef.current) {
-        clearTimeout(retryTimerRef.current);
-        retryTimerRef.current = null;
-      }
+      clearRetryTimer();
 
       if (attempt < FLUSH_MAX_ATTEMPTS - 1) {
         await new Promise<void>((resolve) => setTimeout(resolve, FLUSH_RETRY_DELAY_MS));
@@ -276,21 +358,50 @@ export function useAutoSave({
     }
 
     return { ok: false };
-  }, [status, doSave]);
+  }, [clearRetryTimer, status, doSave]);
 
   const retry = useCallback(async () => {
     if (status !== "error") return;
+    clearRetryTimer();
     retryCountRef.current = 0;
     savingRef.current = false;
     await doSave();
-  }, [status, doSave]);
+  }, [clearRetryTimer, status, doSave]);
+
+  const discard = useCallback(async () => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    clearRetryTimer();
+    // Invalidate any in-flight completion and make its failure a no-op.
+    dirtyEpochRef.current++;
+    retryCountRef.current = 0;
+    const { creationId: stableCreationId, entityId: boundEntityId } = latestDataRef.current;
+    latestDataRef.current = {
+      title: "",
+      content: "",
+      creationId: stableCreationId,
+      entityId: boundEntityId,
+    };
+    isDirtyRef.current = false;
+    setIsDirty(false);
+    setStatus("idle");
+    try {
+      await writeQueue(null);
+    } catch {
+      // A formatting-only draft remains intentionally unsaved. Queue cleanup
+      // is best-effort here so storage failure is not mislabeled as loss of a
+      // meaningful thought.
+    }
+  }, [clearRetryTimer, writeQueue]);
 
   useEffect(() => {
     return () => {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+      clearRetryTimer();
     };
-  }, []);
+  }, [clearRetryTimer]);
 
-  return { status, isDirty, markDirty, markTitleDirty, flush, retry };
+  return { status, isDirty, markDirty, markTitleDirty, flush, retry, discard, bindEntity };
 }

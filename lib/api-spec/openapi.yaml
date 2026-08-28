@@ -5128,6 +5128,10 @@ components:
     CreateThoughtBody:
       type: object
       properties:
+        clientId:
+          type: string
+          format: uuid
+          description: Optional client-generated ID used to make retried creates idempotent.
         content:
           type: string
           minLength: 1

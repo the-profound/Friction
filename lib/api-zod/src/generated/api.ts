@@ -4184,6 +4184,13 @@ export const ListThoughtsResponse = zod.array(ListThoughtsResponseItem);
  */
 
 export const CreateThoughtBody = zod.object({
+  clientId: zod
+    .string()
+    .uuid()
+    .optional()
+    .describe(
+      "Optional client-generated ID used to make retried creates idempotent.",
+    ),
   content: zod
     .string()
     .min(1)

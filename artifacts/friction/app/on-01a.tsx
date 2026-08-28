@@ -106,6 +106,14 @@ const PAGE_KEY_PREFIX = "page_";
 const EXPORT_DEBOUNCE_MS = 1200;
 const DIRECT_THOUGHT_INITIAL_MARKDOWN = "# \n\n";
 
+function createThoughtClientId(): string {
+  const randomNibble = () => Math.floor(Math.random() * 16);
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (token) => {
+    const value = token === "x" ? randomNibble() : (randomNibble() & 0x3) | 0x8;
+    return value.toString(16);
+  });
+}
+
 type EditorMode = "draft" | "dividing";
 
 /**
@@ -230,6 +238,7 @@ export default function WritingScreen() {
   const [initialized, setInitialized] = useState(false);
   const [selectionState, setSelectionState] = useState<OnSelectionUpdatePayload>(DEFAULT_SELECTION);
   const [isNavigating, setIsNavigating] = useState(false);
+  const [isManualRetrying, setIsManualRetrying] = useState(false);
 
   // ── 서식 툴바 인라인 메뉴 시스템 (read.tsx 메모 모드와 동일 구조) ─────────
   const { height: screenHeight } = useWindowDimensions();
@@ -295,14 +304,21 @@ export default function WritingScreen() {
   const [shouldPreventRemoval, setShouldPreventRemoval] = useState(true);
   const pendingNavigationRef = useRef<(() => void) | null>(null);
   const thoughtIdRef = useRef<string | undefined>(id);
+  const thoughtCreationIdRef = useRef<string | undefined>(
+    isLocalDirectDraft ? createThoughtClientId() : undefined,
+  );
   const createThoughtPromiseRef = useRef<Promise<string> | null>(null);
   const firstCreatedContentRef = useRef<string | null>(null);
   const localDraftExitedRef = useRef(false);
   const hasPersistedLocalDraftRouteRef = useRef(false);
+  const bindAutosaveEntityRef = useRef<
+    (entityId: string, nextStorageKey: string) => Promise<void>
+  >(async () => {});
 
   // Map 기반 export 추적: 진행 중인 각 requestExportMarkdown 이 자체 슬롯을 가져
   // autosave export 와 getEditorContent() export 가 서로의 resolver 를 덮어쓰지 않는다.
   const pendingExportsRef = useRef<Map<string, (md: string) => void>>(new Map());
+  const exportRequestSeqRef = useRef(0);
   const exportDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const exportPendingRef = useRef(false);
   const lastSeenDocVersionRef = useRef(-1);
@@ -311,6 +327,11 @@ export default function WritingScreen() {
   // edit. This is intentionally cleared only for an exact match: a real edit
   // that happens before the export still needs to be autosaved.
   const serverInjectionPendingRef = useRef(false);
+
+  const nextExportRequestId = useCallback((kind: "export" | "autosave") => {
+    exportRequestSeqRef.current += 1;
+    return `${kind}_${Date.now()}_${exportRequestSeqRef.current}`;
+  }, []);
 
   // ── 원본 글 연결 (dividing article 전용) ─────────────────────────────────
   const [sourceArticleId, setSourceArticleId] = useState<string | null>(null);
@@ -498,7 +519,7 @@ export default function WritingScreen() {
           resolve(bestKnown);
           return;
         }
-        const requestId = `export_${Date.now()}`;
+        const requestId = nextExportRequestId("export");
         console.log(
           "[getEditorContent] requestExportMarkdown id=", requestId,
           "lastSeenDocVersion=", lastSeenDocVersionRef.current,
@@ -540,7 +561,7 @@ export default function WritingScreen() {
         }, POLL_INTERVAL_MS);
       }
     });
-  }, []);
+  }, [nextExportRequestId]);
 
   const handleExportMarkdown = useCallback((payload: OnExportMarkdownPayload) => {
     // stale 응답 폐기: 더 새로운 docVersion 응답을 이미 처리했다면 즉시 버린다.
@@ -595,37 +616,32 @@ export default function WritingScreen() {
             insertThoughtInRecordCache(queryClient, optimisticThought);
             const creatingThought = createThought
               .mutateAsync({
-                data: { content: data.content, createdFrom: "direct", status: "PRELIMINARY" },
+                data: {
+                  clientId: thoughtCreationIdRef.current ?? createThoughtClientId(),
+                  content: data.content,
+                  createdFrom: "direct",
+                  status: "PRELIMINARY",
+                },
               })
               .then(async (created: Thought) => {
                 if (!created.id) {
                   throw new Error("Thought creation did not return an id");
                 }
                 thoughtIdRef.current = created.id;
-                const latestContent = await getEditorContent();
-                if (localDraftExitedRef.current) {
-                  return created.id;
-                }
-                if (
-                  isMeaningfulThoughtMarkdown(latestContent)
-                  && latestContent !== data.content
-                ) {
-                  await updateThought.mutateAsync({
-                    id: created.id,
-                    data: { content: latestContent },
-                  });
-                }
-                // Keep the newest editor text visible through the route
-                // parameter update. This intentionally does not unmount the
-                // editor, so a pending export debounce remains alive.
+                if (localDraftExitedRef.current) return created.id;
+                await bindAutosaveEntityRef.current(created.id, `draft_${created.id}`);
+                // This create owns exactly the payload snapshotted by
+                // useAutoSave. If the editor changed while POST was in flight,
+                // the dirty epoch schedules a later PATCH with that newer
+                // snapshot instead of mixing editor exports into this request.
                 queryClient.setQueryData(getGetThoughtQueryKey(created.id), {
                   ...created,
-                  content: latestContent,
+                  content: data.content,
                 });
                 removeRecordFromCache(queryClient, { id: optimisticThought.id, kind: "thought" });
                 insertThoughtInRecordCache(queryClient, {
                   ...created,
-                  content: latestContent,
+                  content: data.content,
                 });
                 void invalidateDirectThoughtCreation(queryClient);
                 if (isLocalDirectDraft && !hasPersistedLocalDraftRouteRef.current) {
@@ -659,6 +675,14 @@ export default function WritingScreen() {
         // the sentinel immediately so A → B → A still PATCHes the final A.
         if (createdContent !== data.content) {
           await updateThought.mutateAsync({ id: thoughtId, data: { content: data.content } });
+          queryClient.setQueryData(
+            getGetThoughtQueryKey(thoughtId),
+            (old: unknown) => {
+              if (!old || typeof old !== "object") return old;
+              return { ...old, content: data.content };
+            },
+            { updatedAt: Date.now() },
+          );
           patchThoughtInRecordCaches(queryClient, thoughtId, { content: data.content });
           void invalidateDirectThoughtCreation(queryClient);
         }
@@ -689,13 +713,50 @@ export default function WritingScreen() {
         void invalidateArticleLists(queryClient);
       }
     },
-    [id, createThought, queryClient, updateThought, updateArticle, isLocalDirectDraft, router, getEditorContent, userId],
+    [id, createThought, queryClient, updateThought, updateArticle, isLocalDirectDraft, router, userId],
   );
 
-  const { markDirty, markTitleDirty, flush } = useAutoSave({
+  const handleAutosaveRestore = useCallback((data: {
+    title: string;
+    content: string;
+    entityId?: string;
+    creationId?: string;
+  }) => {
+    if (data.creationId) thoughtCreationIdRef.current = data.creationId;
+    if (data.entityId) {
+      thoughtIdRef.current = data.entityId;
+      if (isLocalDirectDraft && !hasPersistedLocalDraftRouteRef.current) {
+        hasPersistedLocalDraftRouteRef.current = true;
+        router.setParams({ id: data.entityId, mode: undefined });
+      }
+    }
+    titleRef.current = data.title;
+    contentRef.current = data.content;
+    articleContentRef.current = data.content;
+    setTitle(data.title);
+    setContent(data.content);
+    setCharCount(data.content.length);
+    if (editorReadyRef.current) {
+      editorRef.current?.setTitle(data.title);
+      editorRef.current?.setMarkdown(data.content);
+    }
+  }, [isLocalDirectDraft, router]);
+
+  const {
+    status: autoSaveStatus,
+    isDirty: autoSaveDirty,
+    markDirty,
+    markTitleDirty,
+    flush,
+    discard: discardAutosave,
+    bindEntity: bindAutosaveEntity,
+  } = useAutoSave({
     onSave: handleSave,
+    onRestore: handleAutosaveRestore,
+    creationId: thoughtCreationIdRef.current,
     storageKey: isLocalDirectDraft ? "direct_thought_local_draft" : id ? `draft_${id}` : undefined,
   });
+  bindAutosaveEntityRef.current = bindAutosaveEntity;
 
   const handleAutosaveExport = useCallback(
     (md: string) => {
@@ -709,9 +770,11 @@ export default function WritingScreen() {
       md = removeUnpersistableInlineImages(md);
       if (!isThoughtModeRef.current || isMeaningfulThoughtMarkdown(md)) {
         markDirty(titleRef.current, md);
+      } else {
+        void discardAutosave();
       }
     },
-    [markDirty],
+    [discardAutosave, markDirty],
   );
 
   const handleEditorChange = useCallback(
@@ -724,7 +787,7 @@ export default function WritingScreen() {
       if (modeRef.current === "dividing") {
         // 분할 모드: 즉시 export 하여 페이지 재계산·측정을 트리거한다.
         if (!editorRef.current) return;
-        const requestId = `autosave_${Date.now()}`;
+        const requestId = nextExportRequestId("autosave");
         pendingExportsRef.current.set(requestId, handleAutosaveExport);
         editorRef.current.requestExportMarkdown(requestId);
         return;
@@ -739,13 +802,59 @@ export default function WritingScreen() {
         if (!exportPendingRef.current) return;
         exportPendingRef.current = false;
         if (!editorRef.current) return;
-        const requestId = `autosave_${Date.now()}`;
+        const requestId = nextExportRequestId("autosave");
         pendingExportsRef.current.set(requestId, handleAutosaveExport);
         editorRef.current.requestExportMarkdown(requestId);
       }, EXPORT_DEBOUNCE_MS);
     },
-    [handleAutosaveExport],
+    [handleAutosaveExport, nextExportRequestId],
   );
+
+  const latestFlushTailRef = useRef<Promise<void>>(Promise.resolve());
+
+  const flushLatestEditorSnapshot = useCallback(() => {
+    const run = async () => {
+      if (exportDebounceTimerRef.current) {
+        clearTimeout(exportDebounceTimerRef.current);
+        exportDebounceTimerRef.current = null;
+      }
+      exportPendingRef.current = false;
+
+      const latest = await getEditorContent();
+      const meaningful = !isThoughtModeRef.current || isMeaningfulThoughtMarkdown(latest);
+      if (!meaningful) {
+        await discardAutosave();
+        return { ok: true, content: latest, meaningful: false };
+      }
+
+      markDirty(isThoughtModeRef.current ? "" : titleRef.current, latest);
+      const result = await flush();
+      return { ...result, content: latest, meaningful: true };
+    };
+
+    // Do not coalesce distinct lifecycle/navigation boundaries. Each caller
+    // waits for the previous flush and then exports again, so a back action
+    // that follows keyboard dismissal cannot navigate using its older snapshot.
+    const task = latestFlushTailRef.current.then(run, run);
+    latestFlushTailRef.current = task.then(
+      () => undefined,
+      () => undefined,
+    );
+    return task;
+  }, [discardAutosave, flush, getEditorContent, markDirty]);
+
+  const handleRetryAutosave = useCallback(async () => {
+    if (isManualRetrying) return;
+    setIsManualRetrying(true);
+    try {
+      const result = await flushLatestEditorSnapshot();
+      if (!result.ok) {
+        showToast({ message: "저장에 실패했습니다. 내용을 유지하고 있어요.", type: "error" });
+      }
+    } finally {
+      setIsManualRetrying(false);
+    }
+  }, [flushLatestEditorSnapshot, isManualRetrying, showToast]);
 
   const handleTitleChange = useCallback(
     (text: string) => {
@@ -1262,14 +1371,20 @@ export default function WritingScreen() {
     editorRef.current?.blur();
     Keyboard.dismiss();
 
-    // (c) 빠른 타이핑 직후 이동: 진행 중이던 export 디바운스를 취소하고
-    //     WebView 에서 최신 마크다운을 직접 추출한다.
-    if (exportDebounceTimerRef.current) {
-      clearTimeout(exportDebounceTimerRef.current);
-      exportDebounceTimerRef.current = null;
+    // A thought exit uses the same latest-export boundary as keyboard close,
+    // app backgrounding, and manual retry. Other editor modes keep their
+    // existing validation-before-save flow.
+    const thoughtFlush = isThoughtModeRef.current
+      ? await flushLatestEditorSnapshot()
+      : null;
+    if (!isThoughtModeRef.current) {
+      if (exportDebounceTimerRef.current) {
+        clearTimeout(exportDebounceTimerRef.current);
+        exportDebounceTimerRef.current = null;
+      }
+      exportPendingRef.current = false;
     }
-    exportPendingRef.current = false;
-    const cur = await getEditorContent();
+    const cur = thoughtFlush?.content ?? await getEditorContent();
     console.log(
       "[handleDraftBack] content acquired len=%d preview=%j",
       cur.length,
@@ -1312,9 +1427,12 @@ export default function WritingScreen() {
       return;
     }
 
-    // markDirty → flush 순서 보장.
-    markDirty(isThoughtModeRef.current ? "" : titleRef.current, cur);
-    const flushResult = await flush();
+    // Thought mode was already flushed from its exact latest export above.
+    // Article mode preserves the existing markDirty → flush ordering.
+    const flushResult = thoughtFlush ?? await (async () => {
+      markDirty(titleRef.current, cur);
+      return flush();
+    })();
     if (!flushResult.ok) {
       isNavigatingRef.current = false;
       setIsNavigating(false);
@@ -1349,24 +1467,26 @@ export default function WritingScreen() {
       queryClient.invalidateQueries({ queryKey: getListThoughtsQueryKey() });
     }
     exitToPreviousList();
-  }, [flush, queryClient, getEditorContent, markDirty, id, deleteThought, showToast, isLocalDirectDraft, exitToPreviousList]);
+  }, [flush, queryClient, getEditorContent, markDirty, id, deleteThought, showToast, isLocalDirectDraft, exitToPreviousList, flushLatestEditorSnapshot]);
 
   // Native lifecycle events have no reliable "before unload" hook.  Export the
   // WebView snapshot while the app is still active and flush it to the thought/article
   // record; useAutoSave keeps a retry snapshot if the network is unavailable.
   useEffect(() => {
     const sub = AppState.addEventListener("change", (nextState) => {
-        if (nextState === "active" || modeRef.current === "dividing" || !initializedRef.current) return;
+      if (nextState === "active" || modeRef.current === "dividing" || !initializedRef.current) return;
       void (async () => {
+        if (isThoughtModeRef.current) {
+          await flushLatestEditorSnapshot();
+          return;
+        }
         const latest = await getEditorContent();
-          if (!isThoughtModeRef.current || isMeaningfulThoughtMarkdown(latest)) {
-            markDirty(isThoughtModeRef.current ? "" : titleRef.current, latest);
-            await flush();
-          }
+        markDirty(titleRef.current, latest);
+        await flush();
       })();
     });
     return () => sub.remove();
-  }, [getEditorContent, markDirty, flush]);
+  }, [flushLatestEditorSnapshot, getEditorContent, markDirty, flush]);
 
   // A direct draft owns the shared composer lock until this writing screen
   // exits. This cleanup also covers auth resets and programmatic navigation;
@@ -1417,7 +1537,28 @@ export default function WritingScreen() {
   const handleDismissKeyboard = useCallback(() => {
     editorRef.current?.blur();
     Keyboard.dismiss();
-  }, []);
+    if (
+      isThoughtModeRef.current
+      && modeRef.current === "draft"
+      && initializedRef.current
+      && !isNavigatingRef.current
+    ) {
+      void flushLatestEditorSnapshot();
+    }
+  }, [flushLatestEditorSnapshot]);
+
+  const handleKeyboardVisibilityChange = useCallback((visible: boolean) => {
+    setKeyboardVisible(visible);
+    if (
+      !visible
+      && isThoughtModeRef.current
+      && modeRef.current === "draft"
+      && initializedRef.current
+      && !isNavigatingRef.current
+    ) {
+      void flushLatestEditorSnapshot();
+    }
+  }, [flushLatestEditorSnapshot]);
 
   const handleInsertDivider = useCallback(() => {
     editorRef.current?.insertDivider();
@@ -1986,7 +2127,7 @@ export default function WritingScreen() {
                 onChange={handleEditorChange}
                 onExportMarkdown={handleExportMarkdown}
                 onTitleChange={isThoughtMode && !isDividing ? undefined : handleTitleChange}
-                onKeyboardVisibilityChange={setKeyboardVisible}
+                onKeyboardVisibilityChange={handleKeyboardVisibilityChange}
                 onSelectionUpdate={handleSelectionUpdate}
                 bodyFontSize={bodyFontSize}
                 bodyLetterSpacing={bodyLetterSpacing}
@@ -2003,6 +2144,55 @@ export default function WritingScreen() {
               />
             </View>
             <View style={styles.editorFooter}>
+              {isThoughtMode && !isDividing ? (
+                <View
+                  style={styles.autoSaveFeedback}
+                  accessibilityLiveRegion="polite"
+                  accessibilityLabel={
+                    autoSaveStatus === "error"
+                      ? "저장 실패. 다시 시도할 수 있습니다."
+                      : autoSaveStatus === "saving" || isManualRetrying
+                        ? "저장 중"
+                        : autoSaveDirty
+                          ? "저장 대기 중"
+                          : autoSaveStatus === "saved"
+                            ? "저장됨"
+                            : undefined
+                  }
+                >
+                  {autoSaveStatus === "saving" || isManualRetrying ? (
+                    <>
+                      <ActivityIndicator size="small" color={Colors.zinc500} />
+                      <Text style={styles.autoSaveStatusText}>저장 중…</Text>
+                    </>
+                  ) : autoSaveStatus === "error" ? (
+                    <>
+                      <Feather name="alert-circle" size={13} color="#b91c1c" />
+                      <Text style={styles.autoSaveErrorText}>저장 실패</Text>
+                      <ScalePressable
+                        style={styles.autoSaveRetryButton}
+                        contentStyle={styles.autoSaveRetryButtonContent}
+                        onPress={handleRetryAutosave}
+                        disabled={isManualRetrying}
+                        accessibilityRole="button"
+                        accessibilityLabel="단상 저장 다시 시도"
+                        accessibilityState={{ disabled: isManualRetrying, busy: isManualRetrying }}
+                      >
+                        <Text style={styles.autoSaveRetryText}>다시 시도</Text>
+                      </ScalePressable>
+                    </>
+                  ) : autoSaveDirty ? (
+                    <Text style={styles.autoSaveStatusText}>저장 대기 중</Text>
+                  ) : autoSaveStatus === "saved" ? (
+                    <>
+                      <Feather name="check" size={13} color={Colors.zinc500} />
+                      <Text style={styles.autoSaveStatusText}>저장됨</Text>
+                    </>
+                  ) : null}
+                </View>
+              ) : (
+                <View style={styles.autoSaveFeedback} />
+              )}
               <Text style={styles.charCountText}>{charCount}자</Text>
             </View>
           </View>
@@ -2029,8 +2219,7 @@ export default function WritingScreen() {
           >
             <MemoToolbar
               onDismissKeyboard={() => {
-                editorRef.current?.blur();
-                Keyboard.dismiss();
+                handleDismissKeyboard();
               }}
               onFormat={handleOnFormat}
               onOpenAddMenu={handleOpenAddMenu}
@@ -2352,10 +2541,49 @@ const styles = StyleSheet.create({
   editorFooter: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "flex-end",
+    justifyContent: "space-between",
     paddingVertical: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Colors.zinc100,
+  },
+  autoSaveFeedback: {
+    minHeight: 28,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    flexGrow: 0,
+    flexShrink: 1,
+  },
+  autoSaveStatusText: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc500,
+  },
+  autoSaveErrorText: {
+    ...Typography.captionMedium,
+    fontSize: 12,
+    color: "#b91c1c",
+  },
+  autoSaveRetryButton: {
+    width: 64,
+    height: 28,
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  autoSaveRetryButtonContent: {
+    width: "100%",
+    height: "100%",
+    flexGrow: 0,
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    backgroundColor: "#fef2f2",
+  },
+  autoSaveRetryText: {
+    ...Typography.captionMedium,
+    fontSize: 12,
+    color: "#b91c1c",
   },
   charCountText: {
     ...Typography.caption,

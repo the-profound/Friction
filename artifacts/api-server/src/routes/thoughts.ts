@@ -470,21 +470,53 @@ router.post("/thoughts", requireAuth, async (req, res) => {
     res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
     return;
   }
-  const { content, createdFrom, sourceArticleId, sourceStoredSentenceId, status } = parsed.data;
+  const { clientId, content, createdFrom, sourceArticleId, sourceStoredSentenceId, status } = parsed.data;
   const authorId = req.user!.id;
   if (!isMeaningfulThoughtMarkdown(content)) {
     res.status(400).json({ error: "Thought content must include text or an image" });
     return;
   }
 
-  const [thought] = await db.insert(thoughtsTable).values({
+  const insertValues = {
+    ...(clientId ? { id: clientId } : {}),
     authorId,
     content,
     createdFrom,
     sourceArticleId: sourceArticleId ?? null,
     sourceStoredSentenceId: sourceStoredSentenceId ?? null,
     status: (status ?? "NORMAL") as ThoughtStatus,
-  }).returning();
+  };
+
+  let [thought] = clientId
+    ? await db
+        .insert(thoughtsTable)
+        .values(insertValues)
+        .onConflictDoNothing({ target: thoughtsTable.id })
+        .returning()
+    : await db.insert(thoughtsTable).values(insertValues).returning();
+
+  if (!thought && clientId) {
+    const [ownedExisting] = await db
+      .select({ id: thoughtsTable.id })
+      .from(thoughtsTable)
+      .where(and(eq(thoughtsTable.id, clientId), eq(thoughtsTable.authorId, authorId)))
+      .limit(1);
+    if (!ownedExisting) {
+      res.status(409).json({ error: "Thought id is already in use" });
+      return;
+    }
+
+    [thought] = await db
+      .update(thoughtsTable)
+      .set({ content, updatedAt: new Date() })
+      .where(and(eq(thoughtsTable.id, clientId), eq(thoughtsTable.authorId, authorId)))
+      .returning();
+  }
+
+  if (!thought) {
+    res.status(500).json({ error: "Failed to create thought" });
+    return;
+  }
 
   res.status(201).json(thought);
 

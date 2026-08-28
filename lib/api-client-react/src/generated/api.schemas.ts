@@ -1375,6 +1375,8 @@ export interface UpdateThoughtBody {
 }
 
 export interface CreateThoughtBody {
+  /** Optional client-generated ID used to make retried creates idempotent. */
+  clientId?: string;
   /**
    * Must include visible text or a non-empty Markdown image; whitespace and Markdown formatting alone are rejected.
    * @minLength 1

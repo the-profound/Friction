@@ -1018,15 +1018,10 @@ function spellFindRange(
   //   docChangeCounter
   //     onUpdate 의 transaction.docChanged 마다 증가. lastExportedDocVersion 비교에 사용.
   //
-  //   lastEmittedCharCount / lastEmittedWordCount
-  //     마지막으로 emit 한 onChange 메트릭. 동일하면 emit 자체를 생략.
-  //     (RN 측은 charCount/wordCount 가 변하지 않은 이벤트로 얻을 정보가 없다.)
   let lastAppliedMarkdown: string | null = null;
   let lastExportedMarkdown = "";
   let lastExportedDocVersion = -1;
   let docChangeCounter = 0;
-  let lastEmittedCharCount = -1;
-  let lastEmittedWordCount = -1;
   // Tracks whether the next docChanged transaction is from a programmatic
   // setMarkdown/setContent call (not user input). When true, onUpdate skips
   // the onChange emission so the RN side doesn't start an autosave debounce
@@ -1399,13 +1394,10 @@ function spellFindRange(
           const text = ed.state.doc.textContent;
           const charCount = text.length;
           const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
-          // 직전 emit 과 charCount/wordCount 가 동일하면 emit 을 생략한다.
-          // (isDirty 는 현재 항상 true 라 단독으로는 새 정보를 주지 않는다.)
-          if (charCount === lastEmittedCharCount && wordCount === lastEmittedWordCount) {
-            return;
-          }
-          lastEmittedCharCount = charCount;
-          lastEmittedWordCount = wordCount;
+          // Korean IME composition and formatting changes can replace the
+          // document while keeping both metrics identical. Every debounced
+          // docChanged transaction must notify RN so the newest Markdown is
+          // exported instead of leaving an older syllable/format unsaved.
           postToRN({ type: "onChange", payload: { isDirty: true, charCount, wordCount } });
         }, CHANGE_THROTTLE_MS);
         postSelectionState(ed);
