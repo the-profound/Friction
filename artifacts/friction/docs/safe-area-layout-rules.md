@@ -74,7 +74,7 @@ Web에서는 이 훅의 `insets.bottom`이 현재 0이므로 결과가 `108px`�
 
 ### 2.3 리더/에디터의 논리 페이지 프레임
 
-`ReaderTokens`와 `computeBodyLayout(pageWidth)`는 작성(`on-01a`), 분할(`on-01b`), 마감(`on-01c`), 읽기(`read`), 사진 내보내기가 같은 줄바꿈 기준을 쓰게 하는 단일 진입점이다.
+`ReaderTokens`와 `computeBodyLayout(pageWidth)`는 작성(`on-01a`), 분할(`on-01b`), 마감(`on-01c`), 읽기가 같은 줄바꿈 기준을 쓰게 하는 단일 진입점이다.
 
 `cqiToPx(cqi, C) = cqi / 100 × C`라 할 때, `C = pageWidth`이다.
 

@@ -488,8 +488,6 @@ const InlineImage = TipTapNode.create({
         parseHTML: (element) => element.getAttribute("data-original-src") || element.getAttribute("src"),
       },
       alt: { default: "" },
-      imageId: { default: null },
-      uploadState: { default: "complete" },
       "data-autosplit": { default: null },
     };
   },
@@ -506,15 +504,8 @@ const InlineImage = TipTapNode.create({
     if (HTMLAttributes["data-autosplit"]) {
       attrs["data-autosplit"] = HTMLAttributes["data-autosplit"];
     }
-    if (HTMLAttributes.imageId) {
-      attrs["data-image-id"] = HTMLAttributes.imageId;
-    }
     if (HTMLAttributes.originalSrc ?? HTMLAttributes.src) {
       attrs["data-original-src"] = HTMLAttributes.originalSrc ?? HTMLAttributes.src;
-    }
-    if (HTMLAttributes.uploadState) {
-      attrs["data-upload-state"] = HTMLAttributes.uploadState;
-      attrs.class += ` is-${HTMLAttributes.uploadState}`;
     }
     return ["img", attrs];
   },
@@ -885,9 +876,6 @@ interface Command {
   mark?: string;
   pageIndex?: number;
   blockIndex?: number;
-  url?: string;
-  imageId?: string;
-  uploadState?: "uploading" | "failed" | "complete";
   original?: string;
   replacement?: string;
   contextHint?: string;
@@ -1541,7 +1529,7 @@ function spellFindRange(
           break;
         }
         case "setEditable": {
-          const next = cmd.availableContentHeightPx;
+          const next = !!cmd.isEditable;
           // 같은 값을 재전송한 경우 ProseMirror/DOM 작업을 생략한다.
           if (lastEditable !== next) {
             if (editor && !editor.isDestroyed) {
@@ -1573,7 +1561,7 @@ function spellFindRange(
         case "setOverflowRanges": {
           if (editor && !editor.isDestroyed) {
             const ranges = cmd.ranges || [];
-              const tr = editor.state.tr.setMeta(overflowPluginKey, { ranges: [] });
+            const tr = editor.state.tr.setMeta(overflowPluginKey, { ranges });
             editor.view.dispatch(tr);
           }
           break;
@@ -1684,51 +1672,6 @@ function spellFindRange(
         case "insertHardBreak": {
           if (editor && !editor.isDestroyed) {
             editor.chain().focus().setHardBreak().run();
-          }
-          break;
-        }
-        case "insertImage": {
-          if (editor && !editor.isDestroyed && cmd.url) {
-            editor.chain().focus().insertContent({
-              type: "inlineImage",
-              attrs: {
-                src: cmd.url,
-                originalSrc: cmd.url,
-                alt: "",
-                imageId: cmd.imageId ?? "",
-                uploadState: cmd.uploadState ?? "complete",
-              },
-            }).run();
-          }
-          break;
-        }
-        case "replaceImage": {
-          if (editor && !editor.isDestroyed && cmd.imageId && cmd.url) {
-            const activeEditor = editor;
-            activeEditor.state.doc.descendants((node: PMNode, pos: number) => {
-              if (node.type.name !== "inlineImage" || node.attrs.imageId !== cmd.imageId) return true;
-              activeEditor.view.dispatch(activeEditor.state.tr.setNodeMarkup(pos, undefined, {
-                ...node.attrs,
-                src: cmd.url,
-                originalSrc: cmd.url,
-                uploadState: "complete",
-              }));
-              return false;
-            });
-          }
-          break;
-        }
-        case "setImageUploadState": {
-          if (editor && !editor.isDestroyed && cmd.imageId) {
-            const activeEditor = editor;
-            activeEditor.state.doc.descendants((node: PMNode, pos: number) => {
-              if (node.type.name !== "inlineImage" || node.attrs.imageId !== cmd.imageId) return true;
-              activeEditor.view.dispatch(activeEditor.state.tr.setNodeMarkup(pos, undefined, {
-                ...node.attrs,
-                uploadState: cmd.uploadState ?? "complete",
-              }));
-              return false;
-            });
           }
           break;
         }
@@ -2090,30 +2033,24 @@ function spellFindRange(
 
     document.addEventListener("focusin", function (e) {
       if (!isEditorElement(e.target)) return;
-      const target = e.target as Node;
+      const target = e.target as Element;
+      if (target.id === "title-input") {
+        titleFocused = true;
+      } else {
+        editorFocused = true;
+      }
+      syncKeyboardState();
+    });
+
+    document.addEventListener("focusout", function (e) {
+      if (!isEditorElement(e.target)) return;
+      const target = e.target as Element;
       if (target.id === "title-input") {
         titleFocused = false;
       } else {
         editorFocused = false;
       }
       syncKeyboardState();
-    });
-
-    document.addEventListener("click", function (e) {
-      const target = e.target as Node;
-      if (target.id === "title-input") {
-        titleFocused = false;
-      } else {
-        editorFocused = false;
-      }
-      syncKeyboardState();
-    });
-
-    document.addEventListener("click", function (e) {
-      const target = e.target as Node;
-      if (!(target instanceof HTMLImageElement)) return;
-      if (target.dataset.uploadState !== "failed" || !target.dataset.imageId) return;
-      postToRN({ type: "onImageRetry", payload: { imageId: target.dataset.imageId } });
     });
 
     let swipeStartY = 0;
@@ -2130,7 +2067,7 @@ function spellFindRange(
       if (!keyboardOpen) return;
       if (window.scrollY > 0) return;
       if (selHandleHasActiveSelection || selHandleDragging) return;
-      var dy = t.clientY - selHandleDragStartY;
+      const dy = e.touches[0].clientY - swipeStartY;
       if (dy > SWIPE_THRESHOLD) {
         swipeDismissed = true;
         postToRN({ type: "onSwipeDownToDismiss" });

@@ -52,7 +52,6 @@ import type {
   MeasureRequest,
   MeasureCandidate,
 } from "@/components/PretextMeasureLayer/PretextMeasureLayer";
-import { useInlineImageUpload } from "@/lib/useImageUpload";
 import { removeUnpersistableInlineImages } from "@/lib/inlineImages";
 import {
   useGetArticle,
@@ -769,7 +768,7 @@ export default function WritingScreen() {
   const measurePages = useMemo(() => splitContentToPages(debouncedContent), [debouncedContent]);
   const baseWarnings = useMemo(() => validatePages(pages), [pages]);
 
-  // 새로 분할하는 페이지는 최종 리더/사진 내보내기와 같은 하단 예약을
+  // 새로 분할하는 페이지는 최종 리더와 같은 하단 예약을
   // 적용해, 수동 경계와 자동 분할이 이후 화면에서 넘치지 않게 한다.
   const readerBottomReservation = insets.bottom + editorLayout.titleBarHeight;
   const pageContentHeight = pageHeight;
@@ -979,30 +978,6 @@ export default function WritingScreen() {
       showToast({ message: "답장 대상 편지 연결 해제에 실패했습니다.", type: "error" });
     }
   }, [id, updateArticle, queryClient, showToast]);
-
-  // ── 이미지 업로드 재시도 (draft) ───────────────────────────────────────────
-  // 새 사진 선택은 작성 화면에서 제공하지 않지만, 이미 에디터에 있는
-  // 업로드 실패 이미지의 복원/재시도 처리는 유지한다.
-  const handleImageUploadSuccess = useCallback((image: { imageId: string; imageUrl: string }) => {
-    editorRef.current?.replaceImage(image.imageId, image.imageUrl);
-    // insertImage 트랜잭션이 WebView 이벤트 루프에서 커밋된 뒤 분할을
-    // 시도해야 방금 원격 원본으로 확정된 이미지 노드를 인식할 수 있다.
-    setTimeout(() => {
-      editorRef.current?.autoSplitImages().then(() => {
-        showToast({ message: "사진은 페이지에 단독으로만 첨부할 수 있어요.", type: "info" });
-      }).catch(() => {});
-    }, 0);
-  }, [showToast]);
-
-  const handleImageUploadError = useCallback((image: { imageId: string; error: Error }) => {
-    editorRef.current?.setImageUploadState(image.imageId, "failed");
-    showToast({ message: `${image.error.message} 사진을 눌러 다시 올릴 수 있어요.`, type: "error" });
-  }, [showToast]);
-
-  const { retry: retryInlineImage } = useInlineImageUpload({
-    onSuccess: handleImageUploadSuccess,
-    onError: handleImageUploadError,
-  });
 
   const navigateAfterRemovingGuard = useCallback((navigate: () => void) => {
     pendingNavigationRef.current = navigate;
@@ -2011,7 +1986,6 @@ export default function WritingScreen() {
                 onChange={handleEditorChange}
                 onExportMarkdown={handleExportMarkdown}
                 onTitleChange={isThoughtMode && !isDividing ? undefined : handleTitleChange}
-                onImageRetry={retryInlineImage}
                 onKeyboardVisibilityChange={setKeyboardVisible}
                 onSelectionUpdate={handleSelectionUpdate}
                 bodyFontSize={bodyFontSize}

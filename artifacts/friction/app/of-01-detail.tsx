@@ -2,7 +2,6 @@ import React, { useState, useCallback, useRef } from "react";
 import { View, Text, StyleSheet, FlatList, TextInput } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
-import SaveAsPhotosModal from "@/components/SaveAsPhotos/SaveAsPhotosModal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { NavBar } from "@/components/NavBar/NavBar";
@@ -69,8 +68,6 @@ export default function PersonalCollectionDetailScreen() {
   const [isLongPressMenuVisible, setIsLongPressMenuVisible] = useState(false);
   const [isSourcePickerVisible, setIsSourcePickerVisible] = useState(false);
   const [longPressSourceTitle, setLongPressSourceTitle] = useState<string | null>(null);
-  const [isSaveAsPhotosVisible, setIsSaveAsPhotosVisible] = useState(false);
-
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const [tapArticleEntry, setTapArticleEntry] = useState<MyCollectionArticleWithDetails | null>(null);
   const openRowRef = useRef<SwipeableRowHandle | null>(null);
@@ -714,16 +711,6 @@ export default function PersonalCollectionDetailScreen() {
             </ScalePressable>
           )}
           <ScalePressable
-            style={styles.actionSheetItem}
-            contentStyle={styles.actionSheetItemContent}
-            onPress={() => {
-              setIsLongPressMenuVisible(false);
-              setIsSaveAsPhotosVisible(true);
-            }}
-          >
-            <Text style={styles.actionSheetItemText}>사진으로 저장</Text>
-          </ScalePressable>
-          <ScalePressable
             style={[styles.actionSheetItem, styles.actionSheetCancelItem]}
             contentStyle={styles.actionSheetItemContent}
             onPress={() => setIsLongPressMenuVisible(false)}
@@ -744,14 +731,6 @@ export default function PersonalCollectionDetailScreen() {
           onUnlink={handleSourceArticleUnlink}
         />
       ) : null}
-
-      {longPressTargetArticle && (
-        <SaveAsPhotosModal
-          visible={isSaveAsPhotosVisible}
-          articleId={longPressTargetArticle.articleId}
-          onClose={() => setIsSaveAsPhotosVisible(false)}
-        />
-      )}
 
       <CardSelectOverlay
         articles={tapArticleEntry?.article ? [tapArticleEntry.article] : []}

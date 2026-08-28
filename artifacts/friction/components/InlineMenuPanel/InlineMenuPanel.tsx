@@ -9,7 +9,7 @@ import {
   Text,
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
-import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Colors, Typography } from "@/constants/tokens";
 import { useListStoredSentences, getListStoredSentencesQueryKey } from "@workspace/api-client-react";
 import type { StoredSentence } from "@workspace/api-client-react";
@@ -42,11 +42,10 @@ interface InlineMenuPanelProps {
 }
 
 const ADD_MENU_ITEMS = [
-  { key: "quote", label: "수집한 문장", iconLib: "mci" as const, icon: "text-box-outline" as const },
-  { key: "photo", label: "사진", iconLib: "feather" as const, icon: "image" as const },
+  { key: "quote", label: "수집한 문장", icon: "text-box-outline" as const },
 ] as const;
 
-const ADD_MENU_HEIGHT = 96;
+const ADD_MENU_HEIGHT = 48;
 
 export default function InlineMenuPanel({
   mode,
@@ -98,11 +97,7 @@ export default function InlineMenuPanel({
                 contentStyle={styles.addMenuRowContent}
                 onPress={item.key === "quote" ? onSelectQuoteMenu : undefined}
               >
-                {item.iconLib === "mci" ? (
-                  <MaterialCommunityIcons name={item.icon as any} size={16} color={Colors.zinc500} />
-                ) : (
-                  <Feather name={item.icon as any} size={16} color={Colors.zinc500} />
-                )}
+                <MaterialCommunityIcons name={item.icon} size={16} color={Colors.zinc500} />
                 <Text style={styles.addMenuLabel}>{item.label}</Text>
               </ScalePressable>
             ))}

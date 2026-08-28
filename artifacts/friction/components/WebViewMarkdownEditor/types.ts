@@ -33,9 +33,6 @@ export type RNToWebViewCommand =
   | { type: "toggleMark"; mark: string }
   | { type: "insertDivider" }
   | { type: "insertHardBreak" }
-  | { type: "insertImage"; url: string; imageId: string; uploadState: "uploading" | "failed" | "complete" }
-  | { type: "replaceImage"; imageId: string; url: string }
-  | { type: "setImageUploadState"; imageId: string; uploadState: "uploading" | "failed" | "complete" }
   | { type: "insertQuote"; text: string }
   | { type: "autoSplitImages" }
   | { type: "scrollToBlock"; pageIndex: number; blockIndex: number }
@@ -85,7 +82,6 @@ export type WebViewToRNEvent =
   | { type: "onSelHandleDragStart" }
   | { type: "onSelHandleDragEnd" }
   | { type: "onAutoSplitComplete"; payload: { hadConsecutiveImages: boolean } }
-  | { type: "onImageRetry"; payload: { imageId: string } }
   | { type: "onOverflowSplit"; payload: { beforeMarkdown: string; afterMarkdown: string } };
 
 export interface WebViewMarkdownEditorRef {
@@ -104,13 +100,6 @@ export interface WebViewMarkdownEditorRef {
   toggleMark: (mark: string) => void;
   insertDivider: () => void;
   insertHardBreak: () => void;
-  insertImage: (image: {
-    url: string;
-    imageId: string;
-    uploadState: "uploading" | "failed" | "complete";
-  }) => void;
-  replaceImage: (imageId: string, url: string) => void;
-  setImageUploadState: (imageId: string, uploadState: "uploading" | "failed" | "complete") => void;
   insertQuote: (text: string) => void;
   autoSplitImages: () => Promise<{ hadConsecutiveImages: boolean }>;
   scrollToBlock: (pageIndex: number, blockIndex: number) => void;
@@ -169,7 +158,6 @@ export interface WebViewMarkdownEditorProps {
    * 내용)이다.
    */
   onOverflowSplit?: (payload: { beforeMarkdown: string; afterMarkdown: string }) => void;
-  onImageRetry?: (imageId: string) => void;
   /**
    * WebView 내부의 "아래로 스와이프하면 키보드를 닫는다" 휴리스틱을 끈다.
    * 메모 모드는 키보드가 열려 있는 동안 아래로 드래그하면 카드를 스크롤하는

@@ -109,8 +109,6 @@ html,body{height:100%;background:transparent;container-type:inline-size}
 .ProseMirror strong{font-family:'Eulyoo1945-SemiBold',serif;font-weight:700}
 .ProseMirror em{font-style:italic}
 .tiptap-inline-image{display:block;max-width:240px;width:auto;height:auto;border-radius:8px;margin:0.5em 0}
-.tiptap-inline-image.is-uploading{opacity:.55}
-.tiptap-inline-image.is-failed{opacity:.55;outline:2px solid #dc2626;cursor:pointer}
 .ProseMirror .overflow-highlight{background:#fecaca}
 .ProseMirror .spell-highlight{background:rgba(59,130,246,0.15);border-bottom:2px solid #3b82f6;border-radius:1px}
 .tiptap-question-block{background-color:#eff6ff;border-left:4px solid #3b82f6;border-radius:6px;padding:12px 14px;margin:0.5em 0;text-align:left}
