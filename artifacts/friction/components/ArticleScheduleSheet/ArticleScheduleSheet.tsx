@@ -20,6 +20,7 @@ import {
   useUpdateSpaceScheduledSend,
   getListSpaceLettersQueryKey,
   getListAllSpaceScheduledSendsQueryKey,
+  getListSpaceRoundSlotsQueryKey,
   ApiError,
 } from "@workspace/api-client-react";
 import type {
@@ -303,6 +304,9 @@ export function ArticleScheduleSheet({
           },
         });
         queryClient.invalidateQueries({ queryKey: getListAllSpaceScheduledSendsQueryKey(spaceId) });
+        queryClient.invalidateQueries({
+          queryKey: getListSpaceRoundSlotsQueryKey(spaceId, centerSlot.roundId),
+        });
       }
 
       onSaved();

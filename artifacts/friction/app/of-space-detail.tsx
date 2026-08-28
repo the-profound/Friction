@@ -42,6 +42,8 @@ import {
   getGetArticleQueryKey,
   useListSpaceRoundSlots,
   getListSpaceRoundSlotsQueryKey,
+  useListAllSpaceScheduledSends,
+  getListAllSpaceScheduledSendsQueryKey,
 } from "@workspace/api-client-react";
 import type {
   SpaceRound,
@@ -50,6 +52,7 @@ import type {
   Article,
   ArticleCover,
   SpaceRoundSlotWithUser,
+  SpaceScheduledSendWithLetter,
 } from "@workspace/api-client-react";
 import { useAncestorChain } from "@/hooks/useAncestorChain";
 import { useSelectionScrollRestoration } from "@/hooks/useSelectionScrollRestoration";
@@ -66,6 +69,7 @@ import {
   sortSpaceRoundSlotsForPresentation,
   shouldDimSpaceRoundLetter,
   sortSpaceRoundsForDetail,
+  resolveUpcomingRoundCenterCards,
 } from "@/lib/spaceRoundPresentation";
 import { toKstCalendarDate } from "@/lib/kstDate";
 import { isRecruitmentFull } from "@/lib/spaceRecruitment";
@@ -134,6 +138,10 @@ function scheduleTypeLabel(
 
 const SC_SNAP_STEP = SC_CARD_W + SC_CARD_GAP;
 
+type SpaceCarouselItem =
+  | { id: string; letter: SpaceLetter }
+  | { id: string; node: React.ReactNode };
+
 function SpaceCarousel({
   letters,
   roundStatus,
@@ -144,6 +152,7 @@ function SpaceCarousel({
   openingSlot,
   openingSlotAtEnd = false,
   trailingSlots = [],
+  orderedItems,
 }: {
   letters: SpaceLetter[];
   roundStatus: string;
@@ -154,8 +163,16 @@ function SpaceCarousel({
   openingSlot?: React.ReactNode;
   openingSlotAtEnd?: boolean;
   trailingSlots?: { id: string; node: React.ReactNode }[];
+  /** Used by upcoming rounds to replace cards at their exact slot position. */
+  orderedItems?: SpaceCarouselItem[];
 }) {
-  const itemCount = letters.length + trailingSlots.length + (openingSlot ? 1 : 0);
+  const carouselItems: SpaceCarouselItem[] =
+    orderedItems ??
+    [
+      ...letters.map((letter) => ({ id: `letter:${letter.id}`, letter })),
+      ...trailingSlots,
+    ];
+  const itemCount = carouselItems.length + (openingSlot ? 1 : 0);
   const cardSlotRefs = useRef<(View | null)[]>([]);
   const swipedRef = useRef(false);
 
@@ -234,7 +251,25 @@ function SpaceCarousel({
     }),
   ).current;
 
-  const letterCards = letters.map((letter, index) => {
+  const carouselCards = carouselItems.map((item, index) => {
+    const globalIndex = (openingSlot && !openingSlotAtEnd ? 1 : 0) + index;
+    const isLast = globalIndex === itemCount - 1;
+
+    if ("node" in item) {
+      return (
+        <View
+          key={item.id}
+          style={[
+            spaceCarouselStyles.cardSlot,
+            !isLast && { marginRight: SC_CARD_GAP },
+          ]}
+        >
+          {item.node}
+        </View>
+      );
+    }
+
+    const { letter } = item;
     const authorNickname = (letter as any).authorNickname as string | null;
     const displayName = (letter as any).displayName as string | null;
     const title = (letter as any).articleTitle as string | null;
@@ -244,10 +279,6 @@ function SpaceCarousel({
       displayName,
       authorNickname,
     );
-
-    const globalIndex = (openingSlot && !openingSlotAtEnd ? 1 : 0) + index;
-    const isLast = globalIndex === itemCount - 1;
-
     const handlePress = () => {
       if (Platform.OS === "web" && swipedRef.current) return;
       const slotRef = cardSlotRefs.current[index];
@@ -262,7 +293,7 @@ function SpaceCarousel({
 
     return (
       <View
-        key={letter.id}
+        key={item.id}
         ref={(ref) => { cardSlotRefs.current[index] = ref; }}
         style={[
           spaceCarouselStyles.cardSlot,
@@ -299,20 +330,7 @@ function SpaceCarousel({
           </View>,
         ]
       : []),
-    ...letterCards,
-    ...trailingSlots.map((slot, index) => (
-      <View
-        key={slot.id}
-        style={[
-          spaceCarouselStyles.cardSlot,
-          index < trailingSlots.length - 1 || openingSlotAtEnd
-            ? { marginRight: SC_CARD_GAP }
-            : null,
-        ]}
-      >
-        {slot.node}
-      </View>
-    )),
+    ...carouselCards,
     ...(openingSlot && openingSlotAtEnd
       ? [
           <View key="__opening_slot" style={spaceCarouselStyles.cardSlot}>
@@ -489,31 +507,37 @@ function SpaceRoundSlotCard({
 // ─── Upcoming Round Slots ─────────────────────────────────────────────────────
 
 function UpcomingRoundSlots({
-  spaceId,
-  round,
+  slots,
+  isLoading,
+  letters,
+  pendingCenterReservations,
+  isPendingCenterLettersFetching,
+  isAnonymous,
+  spaceName,
+  onPressLetter,
+  hiddenCardId,
   userId,
   now,
   onSchedule,
   openingSlot,
   openingSlotIsExpired = false,
 }: {
-  spaceId: string;
-  round: SpaceRound;
+  slots: SpaceRoundSlotWithUser[];
+  isLoading: boolean;
+  letters: SpaceLetter[];
+  pendingCenterReservations: { spaceLetterId: string; slotId?: string | null }[];
+  isPendingCenterLettersFetching: boolean;
+  isAnonymous: boolean;
+  spaceName: string;
+  onPressLetter: (letter: SpaceLetter, layout: OriginLayout) => void;
+  hiddenCardId?: string | null;
   userId: string;
   now: Date;
   onSchedule: (slot: SpaceRoundSlotWithUser) => void;
   openingSlot?: React.ReactNode;
   openingSlotIsExpired?: boolean;
 }) {
-  const slotsQuery = useListSpaceRoundSlots(spaceId, round.id, {
-    query: {
-      enabled: !!spaceId && !!round.id,
-      queryKey: getListSpaceRoundSlotsQueryKey(spaceId, round.id),
-    },
-  });
-  const slots = (slotsQuery.data ?? []) as SpaceRoundSlotWithUser[];
-
-  if (slotsQuery.isLoading) {
+  if (isLoading || isPendingCenterLettersFetching) {
     return (
       <View style={styles.slotLoadingRow}>
         <ActivityIndicator size="small" color={Colors.zinc300} />
@@ -544,32 +568,40 @@ function UpcomingRoundSlots({
     );
   }
 
-  const orderedSlots = sortSpaceRoundSlotsForPresentation(slots, now);
-  const openingCard = openingSlot ? (
-    <View key="__opening_slot" style={{ marginRight: SC_CARD_GAP }}>
-      {openingSlot}
-    </View>
-  ) : null;
-  const slotCards = orderedSlots.map((slot) => (
-    <SpaceRoundSlotCard
-      key={slot.id}
-      slot={slot}
-      userId={userId}
-      now={now}
-      onSchedule={onSchedule}
-    />
-  ));
+  const upcomingCards = resolveUpcomingRoundCenterCards(
+    letters,
+    sortSpaceRoundSlotsForPresentation(slots, now),
+    userId,
+    pendingCenterReservations,
+  );
+  const orderedItems: SpaceCarouselItem[] = upcomingCards.map((item) =>
+    item.kind === "letter"
+      ? { id: `letter:${item.letter.id}`, letter: item.letter }
+      : {
+          id: `slot:${item.slot.id}`,
+          node: (
+            <SpaceRoundSlotCard
+              slot={item.slot}
+              userId={userId}
+              now={now}
+              onSchedule={onSchedule}
+            />
+          ),
+        },
+  );
 
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.slotCarouselContent}
-    >
-      {!openingSlotIsExpired ? openingCard : null}
-      {slotCards}
-      {openingSlotIsExpired ? openingCard : null}
-    </ScrollView>
+    <SpaceCarousel
+      letters={[]}
+      roundStatus="UPCOMING"
+      isAnonymous={isAnonymous}
+      spaceName={spaceName}
+      onCardPress={onPressLetter}
+      hiddenCardId={hiddenCardId}
+      openingSlot={openingSlot}
+      openingSlotAtEnd={openingSlotIsExpired}
+      orderedItems={orderedItems}
+    />
   );
 }
 
@@ -584,6 +616,8 @@ function RoundSection({
   spaceName,
   now,
   onPressLetter,
+  pendingCenterReservations,
+  isPendingCenterLettersFetching,
   onPressWriteOpening,
   hiddenCardId,
   spaceId,
@@ -598,6 +632,8 @@ function RoundSection({
   spaceName: string;
   now: Date;
   onPressLetter: (letter: SpaceLetter, layout: OriginLayout) => void;
+  pendingCenterReservations: { spaceLetterId: string; slotId?: string | null }[];
+  isPendingCenterLettersFetching: boolean;
   onPressWriteOpening: (round: SpaceRound) => void;
   hiddenCardId?: string | null;
   spaceId: string;
@@ -749,8 +785,15 @@ function RoundSection({
   if (isUpcoming) {
     letterArea = (
       <UpcomingRoundSlots
-        spaceId={spaceId}
-        round={round}
+        slots={roundSlots}
+        isLoading={slotsQuery.isLoading}
+        letters={letters}
+        pendingCenterReservations={pendingCenterReservations}
+        isPendingCenterLettersFetching={isPendingCenterLettersFetching}
+        isAnonymous={isAnonymous}
+        spaceName={spaceName}
+        onPressLetter={onPressLetter}
+        hiddenCardId={hiddenCardId}
         userId={userId}
         now={now}
         onSchedule={onScheduleSlot}
@@ -1016,6 +1059,8 @@ export default function SpaceDetailScreen() {
   const wentToReaderRef = useRef(false);
   // ── Track navigation to archive screen so we can refetch space state on return ──
   const wentToArchiveRef = useRef(false);
+  // ── Track reservation-list navigation so its mutations cannot leave cards stale ──
+  const wentToScheduleRef = useRef(false);
   useFocusEffect(
     useCallback(() => {
       if (wentToReaderRef.current) {
@@ -1025,6 +1070,23 @@ export default function SpaceDetailScreen() {
       if (wentToArchiveRef.current) {
         wentToArchiveRef.current = false;
         queryClient.invalidateQueries({ queryKey: getGetSpaceJoinContextQueryKey(id, { userId }) });
+      }
+      if (wentToScheduleRef.current) {
+        wentToScheduleRef.current = false;
+        queryClient.invalidateQueries({ queryKey: getListSpaceLettersQueryKey(id) });
+        queryClient.invalidateQueries({
+          queryKey: getListAllSpaceScheduledSendsQueryKey(id),
+        });
+        queryClient.invalidateQueries({
+          predicate: (query) => {
+            const endpoint = query.queryKey[0];
+            return (
+              typeof endpoint === "string" &&
+              endpoint.startsWith(`/api/spaces/${id}/rounds/`) &&
+              endpoint.endsWith("/slots")
+            );
+          },
+        });
       }
     }, [queryClient, id, userId]),
   );
@@ -1067,6 +1129,12 @@ export default function SpaceDetailScreen() {
   const lettersQuery = useListSpaceLetters(id, {
     query: { enabled: !!id, queryKey: getListSpaceLettersQueryKey(id) },
   });
+  const scheduledSendsQuery = useListAllSpaceScheduledSends(id, {
+    query: {
+      enabled: !!id && !!userId,
+      queryKey: getListAllSpaceScheduledSendsQueryKey(id),
+    },
+  });
 
   const joinContext = joinContextQuery.data;
   const space = joinContext?.space;
@@ -1087,6 +1155,17 @@ export default function SpaceDetailScreen() {
 
   const rounds = (roundsQuery.data ?? []) as SpaceRound[];
   const letters = (lettersQuery.data ?? []) as SpaceLetter[];
+  const scheduledSends = (scheduledSendsQuery.data ?? []) as SpaceScheduledSendWithLetter[];
+  const pendingCenterReservations = useMemo(
+    () =>
+      scheduledSends
+          .filter((send) => send.status === "PENDING" && send.letterType === "CENTER")
+          .map((send) => ({
+            spaceLetterId: send.spaceLetterId,
+            slotId: send.slotId,
+          })),
+    [scheduledSends],
+  );
 
   // Fallback for legacy data: OPENING letters created by the start flow
   // before rounds existed have no spaceRoundId. Group them under round 1 so
@@ -1119,15 +1198,17 @@ export default function SpaceDetailScreen() {
   const isRefreshing =
     joinContextQuery.isFetching ||
     roundsQuery.isFetching ||
-    lettersQuery.isFetching;
+    lettersQuery.isFetching ||
+    scheduledSendsQuery.isFetching;
 
   const refetchAll = useCallback(async () => {
     await Promise.all([
       joinContextQuery.refetch(),
       roundsQuery.refetch(),
       lettersQuery.refetch(),
+      scheduledSendsQuery.refetch(),
     ]);
-  }, [joinContextQuery, roundsQuery, lettersQuery]);
+  }, [joinContextQuery, roundsQuery, lettersQuery, scheduledSendsQuery]);
 
   const handleDescriptionSaved = useCallback(() => {
     queryClient.invalidateQueries({
@@ -1283,6 +1364,7 @@ export default function SpaceDetailScreen() {
 
   const handlePressWriteOpening = useCallback(
     (round: SpaceRound) => {
+      wentToScheduleRef.current = true;
       router.push({
         pathname: "/of-space-schedule-send" as never,
         params: { id, openingRoundId: round.id },
@@ -1293,6 +1375,7 @@ export default function SpaceDetailScreen() {
 
   const handleScheduleSlot = useCallback(
     (slot: SpaceRoundSlotWithUser) => {
+      wentToScheduleRef.current = true;
       router.push({
         pathname: "/of-space-schedule-send" as never,
         params: {
@@ -1305,6 +1388,14 @@ export default function SpaceDetailScreen() {
     },
     [router, id],
   );
+
+  const handleOpenScheduleList = useCallback(() => {
+    wentToScheduleRef.current = true;
+    router.push({
+      pathname: "/of-space-schedule-send" as never,
+      params: { id },
+    });
+  }, [router, id]);
 
   // ─── Loading ────────────────────────────────────────────────────────────────
   if (isLoading) {
@@ -1601,6 +1692,8 @@ export default function SpaceDetailScreen() {
                       spaceName={space.name}
                       now={now}
                       onPressLetter={handlePressLetter}
+                      pendingCenterReservations={pendingCenterReservations}
+                      isPendingCenterLettersFetching={scheduledSendsQuery.isFetching}
                       onPressWriteOpening={handlePressWriteOpening}
                       hiddenCardId={
                         isTappedSourceHidden ? tapLetter?.id ?? null : null
@@ -1666,12 +1759,7 @@ export default function SpaceDetailScreen() {
         <ScalePressable
           style={[styles.floatingBtnOuter, { bottom: insets.bottom + 16 }]}
           contentStyle={styles.floatingBtn}
-          onPress={() =>
-            router.push({
-              pathname: "/of-space-schedule-send" as never,
-              params: { id },
-            })
-          }
+          onPress={handleOpenScheduleList}
         >
           <Feather name="send" size={15} color={Colors.white} />
           <Text style={styles.floatingBtnText}>{isArchived ? "예약 목록 보기" : "예약 목록"}</Text>

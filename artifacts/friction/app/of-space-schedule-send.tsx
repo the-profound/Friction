@@ -32,6 +32,7 @@ import {
   getListAllSpaceScheduledSendsQueryKey,
   getListSpaceRoundsQueryKey,
   getListSpaceLettersQueryKey,
+  getListSpaceRoundSlotsQueryKey,
   getListArticlesQueryKey,
   listSpaceRoundSlots,
 } from "@workspace/api-client-react";
@@ -842,8 +843,13 @@ export default function SpaceScheduleSendScreen() {
 
   const handleSaved = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: getListAllSpaceScheduledSendsQueryKey(id) });
-    sendsQuery.refetch();
-  }, [queryClient, id, sendsQuery]);
+    queryClient.invalidateQueries({ queryKey: getListSpaceLettersQueryKey(id) });
+    rounds.forEach((round) => {
+      queryClient.invalidateQueries({
+        queryKey: getListSpaceRoundSlotsQueryKey(id, round.id),
+      });
+    });
+  }, [queryClient, id, rounds]);
 
   const handleCancel = useCallback(
     async (send: SpaceScheduledSendWithLetter) => {
@@ -860,7 +866,7 @@ export default function SpaceScheduleSendScreen() {
                 sendId: send.id,
                 data: { status: "CANCELLED" },
               });
-              sendsQuery.refetch();
+              handleSaved();
             } catch {
               Alert.alert("오류", "취소에 실패했어요. 다시 시도해주세요.");
             }
@@ -868,7 +874,7 @@ export default function SpaceScheduleSendScreen() {
         },
       ]);
     },
-    [id, updateSend, sendsQuery],
+    [id, updateSend, handleSaved],
   );
 
   const handleGoToArchive = useCallback(() => {

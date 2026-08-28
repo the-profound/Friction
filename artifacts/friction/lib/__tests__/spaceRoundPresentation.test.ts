@@ -4,6 +4,7 @@ import {
   getSpaceRoundPresentationStatus,
   isKstSlotReservable,
   isOpeningSlotReservable,
+  resolveUpcomingRoundCenterCards,
   roundStatusLabel,
   sortSpaceRoundSlotsForPresentation,
   shouldDimSpaceRoundLetter,
@@ -222,6 +223,99 @@ describe("space round presentation", () => {
         atDeadline,
       ).map((slot) => slot.id),
     ).toEqual(["future", "past"]);
+  });
+
+  it("shows pending center letters only in their own upcoming round slots", () => {
+    const slots = [
+      { id: "round-one-other", spaceRoundId: "round-one", assignedUserId: "other" },
+      { id: "round-one-mine", spaceRoundId: "round-one", assignedUserId: "me" },
+      { id: "round-two-mine", spaceRoundId: "round-two", assignedUserId: "me" },
+    ];
+    const letters = [
+      { id: "letter-one", spaceRoundId: "round-one", authorId: "me", letterType: "CENTER" },
+      { id: "letter-two", spaceRoundId: "round-two", authorId: "me", letterType: "CENTER" },
+      { id: "other-letter", spaceRoundId: "round-one", authorId: "other", letterType: "CENTER" },
+    ];
+
+    const result = resolveUpcomingRoundCenterCards(
+      letters,
+      slots,
+      "me",
+      [
+        { spaceLetterId: "letter-one", slotId: "round-one-mine" },
+        { spaceLetterId: "letter-two", slotId: "round-two-mine" },
+        { spaceLetterId: "other-letter", slotId: "round-one-other" },
+      ],
+    );
+
+    expect(result.map((item) => item.kind === "letter" ? item.slotId : item.slot.id)).toEqual([
+      "round-one-other",
+      "round-one-mine",
+      "round-two-mine",
+    ]);
+    expect(result.map((item) => item.kind)).toEqual(["slot", "letter", "letter"]);
+  });
+
+  it("leaves a slot reservable again when its center reservation was cancelled", () => {
+    const slots = [
+      { id: "mine", spaceRoundId: "upcoming", assignedUserId: "me" },
+      { id: "other", spaceRoundId: "upcoming", assignedUserId: "other" },
+    ];
+    const letters = [
+      { id: "cancelled-letter", spaceRoundId: "upcoming", authorId: "me", letterType: "CENTER" },
+      { id: "other-letter", spaceRoundId: "upcoming", authorId: "other", letterType: "CENTER" },
+    ];
+
+    const result = resolveUpcomingRoundCenterCards(
+      letters,
+      slots,
+      "me",
+      [],
+    );
+
+    expect(result.map((item) => item.kind)).toEqual(["slot", "slot"]);
+  });
+
+  it("does not fill a slot from a stale reservation slot ID", () => {
+    const slots = [
+      { id: "round-one-mine", spaceRoundId: "round-one", assignedUserId: "me" },
+      { id: "round-two-mine", spaceRoundId: "round-two", assignedUserId: "me" },
+    ];
+    const letters = [
+      { id: "letter-one", spaceRoundId: "round-one", authorId: "me", letterType: "CENTER" },
+    ];
+
+    const result = resolveUpcomingRoundCenterCards(
+      letters,
+      slots,
+      "me",
+      [{ spaceLetterId: "letter-one", slotId: "round-two-mine" }],
+    );
+
+    expect(result.map((item) => item.kind)).toEqual(["slot", "slot"]);
+  });
+
+  it("uses exact round and assignee matching only for legacy reservations without a slot ID", () => {
+    const slots = [
+      { id: "round-one-mine", spaceRoundId: "round-one", assignedUserId: "me" },
+      { id: "round-two-mine", spaceRoundId: "round-two", assignedUserId: "me" },
+    ];
+    const letters = [
+      { id: "legacy-letter", spaceRoundId: "round-one", authorId: "me", letterType: "CENTER" },
+    ];
+
+    const result = resolveUpcomingRoundCenterCards(
+      letters,
+      slots,
+      "me",
+      [{ spaceLetterId: "legacy-letter" }],
+    );
+
+    expect(result.map((item) => item.kind === "letter" ? item.slotId : item.slot.id)).toEqual([
+      "round-one-mine",
+      "round-two-mine",
+    ]);
+    expect(result.map((item) => item.kind)).toEqual(["letter", "slot"]);
   });
 
   it("uses the safe anonymous display name for every letter type", () => {

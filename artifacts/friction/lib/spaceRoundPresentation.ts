@@ -55,6 +55,96 @@ export type SpaceRoundSlotPresentation = {
   slotOrder: number;
 };
 
+type SpaceRoundCenterLetterMatch = {
+  id: string;
+  spaceRoundId?: string | null;
+  authorId: string;
+  letterType: string | null | undefined;
+};
+
+type SpaceRoundSlotAssignment = {
+  id: string;
+  spaceRoundId: string;
+  assignedUserId: string;
+};
+
+type PendingCenterReservation = {
+  spaceLetterId: string;
+  slotId?: string | null;
+};
+
+export type UpcomingRoundCenterCardItem<
+  TLetter extends SpaceRoundCenterLetterMatch,
+  TSlot extends SpaceRoundSlotAssignment,
+> =
+  | { kind: "letter"; letter: TLetter; slotId: string }
+  | { kind: "slot"; slot: TSlot };
+
+/**
+ * Resolves only the current user's pending CENTER reservations to their exact
+ * round assignments. Other participants' upcoming reservations deliberately
+ * remain slots, so their articles are never exposed before their send time.
+ */
+export function resolveUpcomingRoundCenterCards<
+  TLetter extends SpaceRoundCenterLetterMatch,
+  TSlot extends SpaceRoundSlotAssignment,
+>(
+  letters: readonly TLetter[],
+  slots: readonly TSlot[],
+  userId: string,
+  pendingCenterReservations: readonly PendingCenterReservation[],
+): UpcomingRoundCenterCardItem<TLetter, TSlot>[] {
+  const slotsByRoundAndAssignee = new Map(
+    slots.map((slot) => [`${slot.spaceRoundId}:${slot.assignedUserId}`, slot]),
+  );
+  const slotsById = new Map(slots.map((slot) => [slot.id, slot]));
+  const reservationsByLetterId = new Map(
+    pendingCenterReservations.map((reservation) => [
+      reservation.spaceLetterId,
+      reservation,
+    ]),
+  );
+  const lettersBySlotId = new Map<string, TLetter>();
+
+  for (const letter of letters) {
+    if (
+      letter.letterType !== "CENTER" ||
+      letter.authorId !== userId ||
+      !letter.spaceRoundId
+    ) {
+      continue;
+    }
+
+    const reservation = reservationsByLetterId.get(letter.id);
+    if (!reservation) continue;
+
+    // New reservations persist the chosen slot ID. Old reservations without
+    // that field can only use the explicit round + assigned-user fallback.
+    const slot = reservation.slotId
+      ? slotsById.get(reservation.slotId)
+      : slotsByRoundAndAssignee.get(
+          `${letter.spaceRoundId}:${letter.authorId}`,
+        );
+    if (
+      !slot ||
+      slot.spaceRoundId !== letter.spaceRoundId ||
+      slot.assignedUserId !== letter.authorId ||
+      lettersBySlotId.has(slot.id)
+    ) {
+      continue;
+    }
+
+    lettersBySlotId.set(slot.id, letter);
+  }
+
+  return slots.map((slot) => {
+    const letter = lettersBySlotId.get(slot.id);
+    return letter
+      ? { kind: "letter", letter, slotId: slot.id }
+      : { kind: "slot", slot };
+  });
+}
+
 /** Keeps reservable cards ahead of expired empty slots without changing their internal order. */
 export function sortSpaceRoundSlotsForPresentation<T extends SpaceRoundSlotPresentation>(
   slots: readonly T[],
