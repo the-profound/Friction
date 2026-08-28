@@ -8,6 +8,6 @@
 
 export interface ErrorResponse {
   error: string;
-  /** Stable machine-readable error code when the client needs an actionable recovery path. */
+  /** Stable machine-readable error code when the client needs an actionable recovery path. Codes are endpoint-specific; omitted for generic errors. */
   code?: string;
 }

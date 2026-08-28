@@ -30,9 +30,9 @@ import CanonicalCardSlot from "@/components/ArticleCardItem/CanonicalCardSlot";
 import CardSelectOverlay, { type OriginLayout, type ChainArticleMeta } from "@/components/CardSelectOverlay/CardSelectOverlay";
 import DotIndicator from "@/components/DotIndicator/DotIndicator";
 import { useUser } from "@/contexts/UserContext";
+import { getUserScopedSpaceJoinContextQueryKey } from "@/lib/spaceJoinContextQuery";
 import {
   useGetSpaceJoinContext,
-  getGetSpaceJoinContextQueryKey,
   useListSpaceRounds,
   getListSpaceRoundsQueryKey,
   useListSpaceLetters,
@@ -1069,7 +1069,7 @@ export default function SpaceDetailScreen() {
       }
       if (wentToArchiveRef.current) {
         wentToArchiveRef.current = false;
-        queryClient.invalidateQueries({ queryKey: getGetSpaceJoinContextQueryKey(id, { userId }) });
+        queryClient.invalidateQueries({ queryKey: getUserScopedSpaceJoinContextQueryKey(id, userId) });
       }
       if (wentToScheduleRef.current) {
         wentToScheduleRef.current = false;
@@ -1118,8 +1118,7 @@ export default function SpaceDetailScreen() {
 
   const joinContextQuery = useGetSpaceJoinContext(
     id,
-    { userId },
-    { query: { enabled: !!id && !!userId, queryKey: getGetSpaceJoinContextQueryKey(id, { userId }) } },
+    { query: { enabled: !!id && !!userId, queryKey: getUserScopedSpaceJoinContextQueryKey(id, userId) } },
   );
 
   const roundsQuery = useListSpaceRounds(id, {
@@ -1212,7 +1211,7 @@ export default function SpaceDetailScreen() {
 
   const handleDescriptionSaved = useCallback(() => {
     queryClient.invalidateQueries({
-      queryKey: getGetSpaceJoinContextQueryKey(id, { userId }),
+      queryKey: getUserScopedSpaceJoinContextQueryKey(id, userId),
     });
   }, [queryClient, id, userId]);
 

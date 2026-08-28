@@ -45,7 +45,6 @@ export * from "./expandThoughtsResponse";
 export * from "./finalizeArticleBody";
 export * from "./getReadingRecordParams";
 export * from "./getSimilarThoughtsParams";
-export * from "./getSpaceJoinContextParams";
 export * from "./healthStatus";
 export * from "./inboxItem";
 export * from "./listArticlesParams";

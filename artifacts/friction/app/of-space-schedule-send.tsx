@@ -28,7 +28,6 @@ import {
   useUpdateSpaceScheduledSend,
   useListArticles,
   useGetSpaceJoinContext,
-  getGetSpaceJoinContextQueryKey,
   getListAllSpaceScheduledSendsQueryKey,
   getListSpaceRoundsQueryKey,
   getListSpaceLettersQueryKey,
@@ -45,6 +44,7 @@ import type {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useUser } from "@/contexts/UserContext";
+import { getUserScopedSpaceJoinContextQueryKey } from "@/lib/spaceJoinContextQuery";
 import { ApiError } from "@workspace/api-client-react";
 import { kstDateAt6, minOpeningSendDate, toKstCalendarDate } from "@/lib/kstDate";
 import {
@@ -593,8 +593,7 @@ export default function SpaceScheduleSendScreen() {
 
   const joinContextQuery = useGetSpaceJoinContext(
     id,
-    { userId },
-    { query: { enabled: !!id && !!userId, queryKey: getGetSpaceJoinContextQueryKey(id, { userId }) } },
+    { query: { enabled: !!id && !!userId, queryKey: getUserScopedSpaceJoinContextQueryKey(id, userId) } },
   );
   const space = joinContextQuery.data?.space ?? null;
   const spaceStatus = space?.status ?? null;

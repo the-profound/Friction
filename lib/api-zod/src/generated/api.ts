@@ -3331,14 +3331,10 @@ export const GetSpaceByInviteCodeResponse = zod
   );
 
 /**
- * @summary Get a user's join context for a space (participation, invitation, code request)
+ * @summary Get the authenticated user's join context for a space (participation, invitation, code request)
  */
 export const GetSpaceJoinContextParams = zod.object({
   id: zod.coerce.string().uuid(),
-});
-
-export const GetSpaceJoinContextQueryParams = zod.object({
-  userId: zod.coerce.string().uuid(),
 });
 
 export const getSpaceJoinContextResponseSpaceOneWeekdaysItemMin = 0;

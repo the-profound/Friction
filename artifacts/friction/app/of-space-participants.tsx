@@ -18,11 +18,11 @@ import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { useUser } from "@/contexts/UserContext";
+import { getUserScopedSpaceJoinContextQueryKey } from "@/lib/spaceJoinContextQuery";
 import { SpaceCopy } from "@/constants/spaceCopy";
 import { isRecruitmentFull } from "@/lib/spaceRecruitment";
 import {
   useGetSpaceJoinContext,
-  getGetSpaceJoinContextQueryKey,
   useListSpaceMembers,
   getListSpaceMembersQueryKey,
   useUpdateSpaceParticipation,
@@ -255,8 +255,7 @@ export default function SpaceParticipantsScreen() {
 
   const joinContextQuery = useGetSpaceJoinContext(
     id,
-    { userId },
-    { query: { enabled: !!id && !!userId, queryKey: getGetSpaceJoinContextQueryKey(id, { userId }) } },
+    { query: { enabled: !!id && !!userId, queryKey: getUserScopedSpaceJoinContextQueryKey(id, userId) } },
   );
   const space = joinContextQuery.data?.space;
   const myParticipation = joinContextQuery.data?.participation;

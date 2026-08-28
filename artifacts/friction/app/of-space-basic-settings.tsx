@@ -17,8 +17,8 @@ import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQueryClient } from "@tanstack/react-query";
+import { getUserScopedSpaceJoinContextQueryKey } from "@/lib/spaceJoinContextQuery";
 import {
-  getGetSpaceJoinContextQueryKey,
   getListSpacesQueryKey,
   useGetSpaceBasicSettings,
   useUpdateSpaceBasicSettings,
@@ -155,7 +155,7 @@ export default function SpaceBasicSettingsScreen() {
         },
       });
 
-      const detailKey = getGetSpaceJoinContextQueryKey(spaceId, { userId });
+      const detailKey = getUserScopedSpaceJoinContextQueryKey(spaceId, userId);
       queryClient.setQueryData<SpaceJoinContext>(detailKey, (previous) =>
         previous
           ? {

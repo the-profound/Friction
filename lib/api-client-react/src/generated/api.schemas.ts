@@ -7,7 +7,7 @@
  */
 export interface ErrorResponse {
   error: string;
-  /** Stable machine-readable error code when the client needs an actionable recovery path. */
+  /** Stable machine-readable error code when the client needs an actionable recovery path. Codes are endpoint-specific; omitted for generic errors. */
   code?: string;
 }
 
@@ -1569,10 +1569,6 @@ export const ListSpaceCodeRequestsStatus = {
   REJECTED: "REJECTED",
   CANCELLED: "CANCELLED",
 } as const;
-
-export type GetSpaceJoinContextParams = {
-  userId: string;
-};
 
 export type ListUserSpaceInvitationsParams = {
   userId: string;

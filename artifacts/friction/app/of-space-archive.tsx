@@ -13,10 +13,10 @@ import ScalePressable from "@/components/shared/ScalePressable";
 import {
   useUpdateSpace,
   getListSpacesQueryKey,
-  getGetSpaceJoinContextQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useUser } from "@/contexts/UserContext";
+import { getUserScopedSpaceJoinContextQueryKey } from "@/lib/spaceJoinContextQuery";
 
 export default function SpaceArchiveScreen() {
   const insets = useSafeAreaInsets();
@@ -47,7 +47,7 @@ export default function SpaceArchiveScreen() {
               await Promise.all([
                 queryClient.invalidateQueries({ queryKey: getListSpacesQueryKey({ userId }) }),
                 queryClient.invalidateQueries({
-                  queryKey: getGetSpaceJoinContextQueryKey(id, { userId }),
+                  queryKey: getUserScopedSpaceJoinContextQueryKey(id, userId),
                 }),
               ]);
               router.back();

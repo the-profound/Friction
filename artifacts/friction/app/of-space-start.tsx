@@ -49,9 +49,9 @@ import {
   toKstCalendarDate,
 } from "@/lib/kstDate";
 import { countRecruitmentParticipants } from "@/lib/spaceRecruitment";
+import { getUserScopedSpaceJoinContextQueryKey } from "@/lib/spaceJoinContextQuery";
 import {
   useGetSpaceJoinContext,
-  getGetSpaceJoinContextQueryKey,
   useListSpaceMembers,
   useListSpaceCodeRequests,
   useListSpaceLetters,
@@ -1261,8 +1261,7 @@ export default function SpaceStartScreen() {
 
   const joinContextQuery = useGetSpaceJoinContext(
     id,
-    { userId },
-    { query: { enabled: !!id && !!userId, queryKey: getGetSpaceJoinContextQueryKey(id, { userId }) } },
+    { query: { enabled: !!id && !!userId, queryKey: getUserScopedSpaceJoinContextQueryKey(id, userId) } },
   );
   const space = joinContextQuery.data?.space as SpaceWithCreatorInfo | undefined;
 
@@ -1479,7 +1478,7 @@ export default function SpaceStartScreen() {
         },
       });
 
-      queryClient.invalidateQueries({ queryKey: getGetSpaceJoinContextQueryKey(id, { userId }) });
+      queryClient.invalidateQueries({ queryKey: getUserScopedSpaceJoinContextQueryKey(id, userId) });
       showToast({ message: "공간이 시작되었습니다", type: "success" });
       router.back();
     } catch (err: unknown) {

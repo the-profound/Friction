@@ -52,6 +52,7 @@
 - [EAS build environment isolation](friction-eas-build-env.md) — Replit Secrets are not automatically available to EAS Cloud builds; configure each Expo project/environment explicitly.
 - [Friction gesture native-module capture](friction-gesture-native-module-capture.md) — Reanimated can serialize gesture closures before `runOnJS`; never let them capture React Native native modules.
 - [Friction native session recovery](friction-native-session-recovery.md) — native refresh must be app-active and explicitly resolved; API bearer tokens come only from validated in-memory state.
+- [Authenticated generated query migrations](authenticated-generated-query-migrations.md) — removing a generated query parameter shifts hook arguments; migrate every consumer atomically or options silently drop.
 - [Anonymous-space transition locking](friction-anonymous-transition-locking.md) — after locking a space, re-read anonymity inside each identity-reserving transaction; pre-lock snapshots can violate nickname completeness.
 - [Post-merge Drizzle prompts](friction-post-merge-drizzle-prompts.md) — `drizzle-kit push --force` can still require raw TTY responses; validate each default before automating it.
 - [Friction direct thought composer](friction-direct-thought-composer.md) — all direct create affordances must share one lock; fast failures otherwise admit a double tap.

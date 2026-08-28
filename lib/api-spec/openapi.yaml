@@ -2017,6 +2017,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SpaceInvitation"
+        "400":
+          description: Invalid invitation response or missing nickname for an anonymous space
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Invitation was already handled, user already participates, recruitment is closed or full, or nickname is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Not found
           content:
@@ -2067,6 +2079,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SpaceCodeRequest"
+        "400":
+          description: Invite code does not match the requested space, or an anonymous-space nickname is missing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Request already exists, user already participates, recruitment is closed or full, or nickname is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /spaces/{id}/code-requests/{requestId}:
     patch:
@@ -2096,6 +2120,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SpaceCodeRequest"
+        "400":
+          description: Missing nickname for anonymous space approval
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Request was already handled, user already participates, recruitment is closed or full, or nickname is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Not found
           content:
@@ -2255,15 +2291,11 @@ paths:
     get:
       operationId: getSpaceJoinContext
       tags: [spaces]
-      summary: Get a user's join context for a space (participation, invitation, code request)
+      summary: Get the authenticated user's join context for a space (participation, invitation, code request)
+      security:
+        - bearerAuth: []
       parameters:
         - $ref: "#/components/parameters/IdPath"
-        - name: userId
-          in: query
-          required: true
-          schema:
-            type: string
-            format: uuid
       responses:
         "200":
           description: Join context
@@ -3000,7 +3032,7 @@ components:
           type: string
         code:
           type: string
-          description: Stable machine-readable error code when the client needs an actionable recovery path.
+          description: Stable machine-readable error code when the client needs an actionable recovery path. Codes are endpoint-specific; omitted for generic errors.
       required:
         - error
 

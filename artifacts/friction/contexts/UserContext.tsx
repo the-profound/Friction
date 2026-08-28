@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
+import { isSpaceJoinContextQueryKey } from "@/lib/spaceJoinContextQuery";
 import { customFetch } from "@workspace/api-client-react";
 import { ApiError } from "@workspace/api-client-react";
 import { createAuthFlowId, reportAuthDiagnostic } from "@/lib/authDiagnostics";
@@ -21,6 +23,7 @@ export function UserProvider({
 }) {
   const { session } = useAuth();
   const { showToast } = useToast();
+  const queryClient = useQueryClient();
   const syncedIdRef = useRef<string | null>(null);
   const syncErrorShownRef = useRef(false);
 
@@ -34,6 +37,16 @@ export function UserProvider({
         "or pass an explicit `userId` prop (e.g. for tests).",
     );
   }
+
+  const previousUserIdRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (previousUserIdRef.current !== resolvedUserId) {
+      queryClient.removeQueries({
+        predicate: (query) => isSpaceJoinContextQueryKey(query.queryKey),
+      });
+      previousUserIdRef.current = resolvedUserId;
+    }
+  }, [queryClient, resolvedUserId]);
 
   useEffect(() => {
     if (overrideUserId) return;

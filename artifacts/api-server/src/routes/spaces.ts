@@ -1,10 +1,11 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Response } from "express";
 import { eq, and, inArray, count, ne, isNull, isNotNull, asc, sql } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth } from "../middlewares/requireAuth";
 import {
   ANONYMOUS_PARTICIPANT_NAME,
   getAnonymousDisplayName,
+  parseAnonymousSpaceNickname,
 } from "../lib/anonymousSpaceIdentity";
 import { getSpaceCreationDiagnostic } from "../lib/spaceCreationDiagnostics";
 import {
@@ -78,6 +79,25 @@ function isSpaceNicknameConflict(err: unknown): boolean {
     pg.constraint === "space_participations_active_nickname_unique" ||
     pg.constraint === "space_code_requests_active_nickname_unique"
   );
+}
+
+type SpaceJoinErrorCode =
+  | "INVITE_CODE_MISMATCH"
+  | "DUPLICATE_CODE_REQUEST"
+  | "MISSING_NICKNAME"
+  | "NICKNAME_CONFLICT"
+  | "ALREADY_PARTICIPATING"
+  | "SPACE_FULL"
+  | "SPACE_NOT_RECRUITING"
+  | "ALREADY_RESPONDED";
+
+function sendSpaceJoinError(
+  res: Response,
+  status: number,
+  code: SpaceJoinErrorCode,
+  error: string,
+) {
+  res.status(status).json({ error, code });
 }
 
 function toSpaceBasicSettingsResponse(
@@ -1915,12 +1935,6 @@ router.patch("/spaces/:id/invitations/:invitationId", requireAuth, async (req, r
     const result = await db.transaction(async (tx) => {
       const currentSpace = await getLockedSpaceForNicknameMutation(tx, space.id);
       if (!currentSpace) return null;
-      const spaceNickname = status === "ACCEPTED" && currentSpace.isAnonymous
-        ? requestedSpaceNickname
-        : null;
-      if (status === "ACCEPTED" && currentSpace.isAnonymous && !spaceNickname) {
-        return "MISSING_NICKNAME" as const;
-      }
       const [invitation] = await tx
         .select()
         .from(spaceInvitationsTable)
@@ -1929,6 +1943,12 @@ router.patch("/spaces/:id/invitations/:invitationId", requireAuth, async (req, r
       if (!invitation) return null;
       if (invitation.status !== "PENDING") {
         return "ALREADY_RESPONDED" as const;
+      }
+      const spaceNickname = status === "ACCEPTED" && currentSpace.isAnonymous
+        ? requestedSpaceNickname
+        : null;
+      if (status === "ACCEPTED" && currentSpace.isAnonymous && !spaceNickname) {
+        return "MISSING_NICKNAME" as const;
       }
       const [existingParticipation] = await tx
         .select({ id: spaceParticipationsTable.id })
@@ -1942,6 +1962,9 @@ router.patch("/spaces/:id/invitations/:invitationId", requireAuth, async (req, r
         .limit(1);
       if (existingParticipation) {
         return "ALREADY_PARTICIPATING" as const;
+      }
+      if (status === "ACCEPTED" && currentSpace.status !== "RECRUITING") {
+        return "SPACE_NOT_RECRUITING" as const;
       }
       if (
         status === "ACCEPTED" &&
@@ -1978,29 +2001,33 @@ router.patch("/spaces/:id/invitations/:invitationId", requireAuth, async (req, r
       return;
     }
     if (result === "NICKNAME_CONFLICT") {
-      res.status(409).json({ error: "이미 사용 중인 공간 닉네임입니다." });
+      sendSpaceJoinError(res, 409, result, "이미 사용 중인 공간 닉네임입니다.");
       return;
     }
     if (result === "MISSING_NICKNAME") {
-      res.status(400).json({ error: "익명 공간에 참여하려면 공간 닉네임이 필요합니다." });
+      sendSpaceJoinError(res, 400, result, "익명 공간에 참여하려면 공간 닉네임이 필요합니다.");
       return;
     }
     if (result === "ALREADY_RESPONDED") {
-      res.status(409).json({ error: "이미 응답한 초대입니다." });
+      sendSpaceJoinError(res, 409, result, "이미 응답한 초대입니다.");
       return;
     }
     if (result === "ALREADY_PARTICIPATING") {
-      res.status(409).json({ error: "이미 이 공간에 참여한 사용자입니다." });
+      sendSpaceJoinError(res, 409, result, "이미 이 공간에 참여한 사용자입니다.");
       return;
     }
     if (result === "SPACE_FULL") {
-      res.status(409).json({ error: "모집 인원이 모두 찼습니다." });
+      sendSpaceJoinError(res, 409, result, "모집 인원이 모두 찼습니다.");
+      return;
+    }
+    if (result === "SPACE_NOT_RECRUITING") {
+      sendSpaceJoinError(res, 409, result, "모집이 마감된 공간입니다.");
       return;
     }
     res.json(result);
   } catch (err) {
     if (isSpaceNicknameConflict(err)) {
-      res.status(409).json({ error: "이미 사용 중인 공간 닉네임입니다." });
+      sendSpaceJoinError(res, 409, "NICKNAME_CONFLICT", "이미 사용 중인 공간 닉네임입니다.");
       return;
     }
     throw err;
@@ -2070,7 +2097,25 @@ router.post("/spaces/:id/code-requests", requireAuth, async (req, res) => {
     const request = await db.transaction(async (tx) => {
       const currentSpace = await getLockedSpaceForNicknameMutation(tx, space.id);
       if (!currentSpace) return "SPACE_NOT_FOUND" as const;
+      const submittedCode = typeof req.body.code === "string" ? req.body.code.trim() : "";
+      if (!currentSpace.inviteCode || submittedCode !== currentSpace.inviteCode) {
+        return "INVITE_CODE_MISMATCH" as const;
+      }
       const spaceNickname = currentSpace.isAnonymous ? requestedSpaceNickname : null;
+      const [existingRequest] = await tx
+        .select({ id: spaceCodeRequestsTable.id })
+        .from(spaceCodeRequestsTable)
+        .where(
+          and(
+            eq(spaceCodeRequestsTable.spaceId, space.id),
+            eq(spaceCodeRequestsTable.requesterId, callerId),
+            eq(spaceCodeRequestsTable.status, "PENDING"),
+          ),
+        )
+        .limit(1);
+      if (existingRequest) {
+        return "DUPLICATE_CODE_REQUEST" as const;
+      }
       if (currentSpace.isAnonymous && !spaceNickname) {
         return "MISSING_NICKNAME" as const;
       }
@@ -2086,6 +2131,9 @@ router.post("/spaces/:id/code-requests", requireAuth, async (req, res) => {
         .limit(1);
       if (existingParticipation) {
         return "ALREADY_PARTICIPATING" as const;
+      }
+      if (currentSpace.status !== "RECRUITING") {
+        return "SPACE_NOT_RECRUITING" as const;
       }
       if (
         isRecruitmentFull(
@@ -2103,7 +2151,7 @@ router.post("/spaces/:id/code-requests", requireAuth, async (req, res) => {
         .values({
           spaceId: space.id,
           requesterId: callerId,
-          code: req.body.code,
+          code: currentSpace.inviteCode,
           ...(spaceNickname ? { spaceNickname } : {}),
         })
         .returning();
@@ -2113,20 +2161,32 @@ router.post("/spaces/:id/code-requests", requireAuth, async (req, res) => {
       res.status(404).json({ error: "Space not found" });
       return;
     }
+    if (request === "INVITE_CODE_MISMATCH") {
+      sendSpaceJoinError(res, 400, request, "초대 문구가 이 공간과 일치하지 않습니다.");
+      return;
+    }
+    if (request === "DUPLICATE_CODE_REQUEST") {
+      sendSpaceJoinError(res, 409, request, "이미 이 공간에 참여 신청을 보냈습니다.");
+      return;
+    }
     if (request === "MISSING_NICKNAME") {
-      res.status(400).json({ error: "익명 공간에 참여하려면 공간 닉네임이 필요합니다." });
+      sendSpaceJoinError(res, 400, request, "익명 공간에 참여하려면 공간 닉네임이 필요합니다.");
       return;
     }
     if (request === "NICKNAME_CONFLICT") {
-      res.status(409).json({ error: "이미 사용 중인 공간 닉네임입니다." });
+      sendSpaceJoinError(res, 409, request, "이미 사용 중인 공간 닉네임입니다.");
       return;
     }
     if (request === "ALREADY_PARTICIPATING") {
-      res.status(409).json({ error: "이미 이 공간에 참여한 사용자입니다." });
+      sendSpaceJoinError(res, 409, request, "이미 이 공간에 참여한 사용자입니다.");
       return;
     }
     if (request === "SPACE_FULL") {
-      res.status(409).json({ error: "모집 인원이 모두 찼습니다." });
+      sendSpaceJoinError(res, 409, request, "모집 인원이 모두 찼습니다.");
+      return;
+    }
+    if (request === "SPACE_NOT_RECRUITING") {
+      sendSpaceJoinError(res, 409, request, "모집이 마감된 공간입니다.");
       return;
     }
     res.status(201).json({
@@ -2137,7 +2197,7 @@ router.post("/spaces/:id/code-requests", requireAuth, async (req, res) => {
     });
   } catch (err) {
     if (isSpaceNicknameConflict(err)) {
-      res.status(409).json({ error: "이미 사용 중인 공간 닉네임입니다." });
+      sendSpaceJoinError(res, 409, "NICKNAME_CONFLICT", "이미 사용 중인 공간 닉네임입니다.");
       return;
     }
     throw err;
@@ -2207,6 +2267,9 @@ router.patch("/spaces/:id/code-requests/:requestId", requireAuth, async (req, re
       if (existingParticipation) {
         return "ALREADY_PARTICIPATING" as const;
       }
+      if (status === "APPROVED" && currentSpace.status !== "RECRUITING") {
+        return "SPACE_NOT_RECRUITING" as const;
+      }
       if (
         status === "APPROVED" &&
         isRecruitmentFull(
@@ -2254,23 +2317,27 @@ router.patch("/spaces/:id/code-requests/:requestId", requireAuth, async (req, re
       return;
     }
     if (result === "MISSING_NICKNAME") {
-      res.status(400).json({ error: "익명 공간에 참여하려면 공간 닉네임이 필요합니다." });
+      sendSpaceJoinError(res, 400, result, "익명 공간에 참여하려면 공간 닉네임이 필요합니다.");
       return;
     }
     if (result === "NICKNAME_CONFLICT") {
-      res.status(409).json({ error: "이미 사용 중인 공간 닉네임입니다." });
+      sendSpaceJoinError(res, 409, result, "이미 사용 중인 공간 닉네임입니다.");
       return;
     }
     if (result === "ALREADY_RESPONDED") {
-      res.status(409).json({ error: "이미 처리된 참여 신청입니다." });
+      sendSpaceJoinError(res, 409, result, "이미 처리된 참여 신청입니다.");
       return;
     }
     if (result === "ALREADY_PARTICIPATING") {
-      res.status(409).json({ error: "이미 이 공간에 참여한 사용자입니다." });
+      sendSpaceJoinError(res, 409, result, "이미 이 공간에 참여한 사용자입니다.");
       return;
     }
     if (result === "SPACE_FULL") {
-      res.status(409).json({ error: "모집 인원이 모두 찼습니다." });
+      sendSpaceJoinError(res, 409, result, "모집 인원이 모두 찼습니다.");
+      return;
+    }
+    if (result === "SPACE_NOT_RECRUITING") {
+      sendSpaceJoinError(res, 409, result, "모집이 마감된 공간입니다.");
       return;
     }
     res.json({
@@ -2281,19 +2348,15 @@ router.patch("/spaces/:id/code-requests/:requestId", requireAuth, async (req, re
     });
   } catch (err) {
     if (isSpaceNicknameConflict(err)) {
-      res.status(409).json({ error: "이미 사용 중인 공간 닉네임입니다." });
+      sendSpaceJoinError(res, 409, "NICKNAME_CONFLICT", "이미 사용 중인 공간 닉네임입니다.");
       return;
     }
     throw err;
   }
 });
 
-router.get("/spaces/:id/join-context", async (req, res) => {
-  const { userId } = req.query;
-  if (!userId || typeof userId !== "string") {
-    res.status(400).json({ error: "userId is required" });
-    return;
-  }
+router.get("/spaces/:id/join-context", requireAuth, async (req, res) => {
+  const userId = req.user!.id;
   const [space] = await db
     .select()
     .from(spacesTable)

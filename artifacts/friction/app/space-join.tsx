@@ -6,6 +6,7 @@ import {
   ScrollView,
   TextInput,
   ActivityIndicator,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -20,10 +21,10 @@ import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import { useToast } from "@/contexts/ToastContext";
 import { useUser } from "@/contexts/UserContext";
 import { isRecruitmentFull } from "@/lib/spaceRecruitment";
+import { getUserScopedSpaceJoinContextQueryKey } from "@/lib/spaceJoinContextQuery";
 import {
   getSpaceByInviteCode,
   getSpaceJoinContext,
-  getGetSpaceJoinContextQueryKey,
   getListSpacesQueryKey,
   useCreateSpaceCodeRequest,
   useUpdateSpaceCodeRequest,
@@ -77,22 +78,60 @@ function validateSpaceNickname(value: string): string | null {
   return null;
 }
 
+type JoinMutationErrorCode =
+  | "INVITE_CODE_MISMATCH"
+  | "DUPLICATE_CODE_REQUEST"
+  | "MISSING_NICKNAME"
+  | "NICKNAME_CONFLICT"
+  | "ALREADY_PARTICIPATING"
+  | "SPACE_FULL"
+  | "SPACE_NOT_RECRUITING"
+  | "ALREADY_RESPONDED";
+
+function getJoinMutationErrorCode(error: unknown): JoinMutationErrorCode | null {
+  const code =
+    error != null &&
+    typeof error === "object" &&
+    "data" in error &&
+    (error as { data?: { code?: unknown } }).data?.code;
+  return typeof code === "string" ? code as JoinMutationErrorCode : null;
+}
+
 function getJoinMutationErrorMessage(error: unknown, fallback: string): string {
+  const code = getJoinMutationErrorCode(error);
+  const messages: Partial<Record<JoinMutationErrorCode, string>> = {
+    INVITE_CODE_MISMATCH: "초대 문구가 이 공간과 일치하지 않아요. 다시 확인해주세요.",
+    DUPLICATE_CODE_REQUEST: "이미 이 공간에 참여 신청을 보냈어요.",
+    MISSING_NICKNAME: "공간 닉네임을 입력해주세요.",
+    NICKNAME_CONFLICT: "이미 사용 중인 공간 닉네임이에요. 다른 이름을 입력해주세요.",
+    ALREADY_PARTICIPATING: "이미 이 공간에 참여하고 있어요.",
+    SPACE_FULL: "모집 인원이 모두 찼습니다.",
+    SPACE_NOT_RECRUITING: "모집이 마감된 공간이에요.",
+    ALREADY_RESPONDED: "이미 처리된 참여 요청이에요.",
+  };
+  if (code && messages[code]) return messages[code];
   const responseError =
     error != null &&
     typeof error === "object" &&
     "data" in error &&
     (error as { data?: { error?: unknown } }).data?.error;
-  if (responseError === "모집 인원이 모두 찼습니다.") {
+  if (typeof responseError === "string") {
     return responseError;
   }
-  const status = (error as { status?: number }).status;
-  if (status === 409) return "이미 사용 중인 공간 닉네임이에요. 다른 이름을 입력해주세요.";
   return fallback;
 }
 
 function isSpaceNicknameConflict(error: unknown): boolean {
-  return (error as { status?: number }).status === 409;
+  return getJoinMutationErrorCode(error) === "NICKNAME_CONFLICT";
+}
+
+function shouldReloadJoinContext(error: unknown): boolean {
+  const code = getJoinMutationErrorCode(error);
+  return code === "DUPLICATE_CODE_REQUEST" ||
+    code === "ALREADY_PARTICIPATING" ||
+    code === "SPACE_FULL" ||
+    code === "SPACE_NOT_RECRUITING" ||
+    code === "ALREADY_RESPONDED";
 }
 
 function SpaceNicknameField({
@@ -257,6 +296,7 @@ export default function SpaceJoinScreen() {
   const [codeError, setCodeError] = useState<string | null>(null);
   const [spaceNickname, setSpaceNickname] = useState("");
   const [spaceNicknameError, setSpaceNicknameError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [spaceId, setSpaceId] = useState<string | null>(params.spaceId ?? null);
   const [foundSpace, setFoundSpace] = useState<SpaceWithCreatorInfo | null>(null);
   const [joinContext, setJoinContext] = useState<SpaceJoinContext | null>(null);
@@ -274,7 +314,7 @@ export default function SpaceJoinScreen() {
       queryClient.invalidateQueries({ queryKey: getListSpacesQueryKey() }),
       spaceId
         ? queryClient.invalidateQueries({
-            queryKey: getGetSpaceJoinContextQueryKey(spaceId, { userId }),
+            queryKey: getUserScopedSpaceJoinContextQueryKey(spaceId, userId),
           })
         : Promise.resolve(),
     ]);
@@ -286,7 +326,7 @@ export default function SpaceJoinScreen() {
       opts?: { invitationId?: string; codeRequestId?: string },
     ) => {
       try {
-        const ctx = await getSpaceJoinContext(sid, { userId });
+        const ctx = await getSpaceJoinContext(sid);
         setJoinContext(ctx);
         const { space, participation, invitation, codeRequest } = ctx;
 
@@ -319,10 +359,6 @@ export default function SpaceJoinScreen() {
               : null
             : codeRequest;
 
-        if (isFull && !targetInvitation && !targetCodeRequest) {
-          setStep("space_full");
-          return;
-        }
         if (targetInvitation?.status === "PENDING") {
           setStep("invitation");
           return;
@@ -333,6 +369,10 @@ export default function SpaceJoinScreen() {
         }
         if (targetCodeRequest?.status === "REJECTED") {
           setStep("code_rejected");
+          return;
+        }
+        if (isFull) {
+          setStep("space_full");
           return;
         }
         setFoundSpace(space);
@@ -367,7 +407,7 @@ export default function SpaceJoinScreen() {
     if (step === "code_pending" && spaceId) {
       pollTimerRef.current = setInterval(async () => {
         try {
-          const ctx = await getSpaceJoinContext(spaceId, { userId });
+          const ctx = await getSpaceJoinContext(spaceId);
           setJoinContext(ctx);
           const req = ctx.codeRequest;
           if (req?.status === "APPROVED") {
@@ -397,12 +437,13 @@ export default function SpaceJoinScreen() {
       return;
     }
     setCodeError(null);
+    setActionError(null);
     setStep("code_lookup_loading");
     try {
       const space = await getSpaceByInviteCode(raw);
       setFoundSpace(space);
       setSpaceId(space.id);
-      const ctx = await getSpaceJoinContext(space.id, { userId });
+      const ctx = await getSpaceJoinContext(space.id);
       setJoinContext(ctx);
       const { participation, invitation, codeRequest } = ctx;
 
@@ -412,14 +453,6 @@ export default function SpaceJoinScreen() {
       }
       if (space.status === "ARCHIVED") {
         setStep("space_archived");
-        return;
-      }
-      const isFull = isRecruitmentFull(
-        space.maxParticipants,
-        space.participantCount,
-      );
-      if (isFull) {
-        setStep("space_full");
         return;
       }
       if (invitation?.status === "PENDING") {
@@ -432,6 +465,10 @@ export default function SpaceJoinScreen() {
       }
       if (codeRequest?.status === "REJECTED") {
         setStep("code_rejected");
+        return;
+      }
+      if (isRecruitmentFull(space.maxParticipants, space.participantCount)) {
+        setStep("space_full");
         return;
       }
       setStep("space_preview");
@@ -447,7 +484,7 @@ export default function SpaceJoinScreen() {
   }, [inviteCode, userId]);
 
   const handleApply = useCallback(async () => {
-    if (!foundSpace || !spaceId) return;
+    if (!foundSpace || !spaceId || actionLoading) return;
     const nicknameError = foundSpace.isAnonymous
       ? validateSpaceNickname(spaceNickname)
       : null;
@@ -455,6 +492,7 @@ export default function SpaceJoinScreen() {
       setSpaceNicknameError(nicknameError);
       return;
     }
+    setActionError(null);
     setActionLoading(true);
     try {
       await createCodeRequest.mutateAsync({
@@ -464,7 +502,7 @@ export default function SpaceJoinScreen() {
           ...(foundSpace.isAnonymous ? { spaceNickname: spaceNickname.trim() } : {}),
         },
       });
-      const ctx = await getSpaceJoinContext(spaceId, { userId });
+      const ctx = await getSpaceJoinContext(spaceId);
       setJoinContext(ctx);
       await refreshJoinCaches();
       setStep("code_pending");
@@ -473,14 +511,22 @@ export default function SpaceJoinScreen() {
         setSpaceNicknameError(getJoinMutationErrorMessage(error, "신청에 실패했어요. 다시 시도해주세요."));
         return;
       }
-      showToast({
-        message: getJoinMutationErrorMessage(error, "신청에 실패했어요. 다시 시도해주세요."),
-        type: "error",
-      });
+      if (getJoinMutationErrorCode(error) === "INVITE_CODE_MISMATCH") {
+        setCodeError(getJoinMutationErrorMessage(error, "초대 문구를 다시 확인해주세요."));
+        setFoundSpace(null);
+        setJoinContext(null);
+        setStep("code_input");
+        return;
+      }
+      if (shouldReloadJoinContext(error)) {
+        await loadJoinContext(spaceId);
+        return;
+      }
+      setActionError(getJoinMutationErrorMessage(error, "신청에 실패했어요. 다시 시도해주세요."));
     } finally {
       setActionLoading(false);
     }
-  }, [foundSpace, spaceId, inviteCode, spaceNickname, createCodeRequest, showToast, userId, refreshJoinCaches]);
+  }, [foundSpace, spaceId, actionLoading, inviteCode, spaceNickname, createCodeRequest, userId, refreshJoinCaches, loadJoinContext]);
 
   const handleCancelRequest = useCallback(async () => {
     if (!spaceId || !joinContext?.codeRequest) return;
@@ -508,7 +554,7 @@ export default function SpaceJoinScreen() {
   }, [spaceId, joinContext, updateCodeRequest, showToast, cameFromList, router]);
 
   const handleAcceptInvitation = useCallback(async () => {
-    if (!spaceId || !joinContext?.invitation) return;
+    if (!spaceId || !joinContext?.invitation || actionLoading) return;
     const nicknameError = joinContext.space.isAnonymous
       ? validateSpaceNickname(spaceNickname)
       : null;
@@ -516,6 +562,7 @@ export default function SpaceJoinScreen() {
       setSpaceNicknameError(nicknameError);
       return;
     }
+    setActionError(null);
     setActionLoading(true);
     try {
       await updateInvitation.mutateAsync({
@@ -534,14 +581,15 @@ export default function SpaceJoinScreen() {
         setSpaceNicknameError(getJoinMutationErrorMessage(error, "수락에 실패했어요. 다시 시도해주세요."));
         return;
       }
-      showToast({
-        message: getJoinMutationErrorMessage(error, "수락에 실패했어요. 다시 시도해주세요."),
-        type: "error",
-      });
+      if (shouldReloadJoinContext(error)) {
+        await loadJoinContext(spaceId);
+        return;
+      }
+      setActionError(getJoinMutationErrorMessage(error, "수락에 실패했어요. 다시 시도해주세요."));
     } finally {
       setActionLoading(false);
     }
-  }, [spaceId, joinContext, spaceNickname, updateInvitation, showToast, router, refreshJoinCaches]);
+  }, [spaceId, joinContext, actionLoading, spaceNickname, updateInvitation, showToast, router, refreshJoinCaches, loadJoinContext]);
 
   const handleDeclineInvitation = useCallback(async () => {
     if (!spaceId || !joinContext?.invitation) return;
@@ -578,6 +626,7 @@ export default function SpaceJoinScreen() {
             onChangeText={(v) => {
               setInviteCode(v);
               setCodeError(null);
+              setActionError(null);
             }}
             autoFocus
             autoCapitalize="none"
@@ -684,6 +733,7 @@ export default function SpaceJoinScreen() {
               onChangeText={(value) => {
                 setSpaceNickname(value);
                 setSpaceNicknameError(null);
+                setActionError(null);
               }}
             />
           ) : null}
@@ -697,6 +747,7 @@ export default function SpaceJoinScreen() {
           ) : (
             <SubmitButton
               style={styles.primaryButton}
+              contentStyle={styles.primaryButtonContent}
               disabledStyle={styles.primaryButtonDisabled}
               textStyle={styles.primaryButtonText}
               onPress={handleApply}
@@ -705,6 +756,7 @@ export default function SpaceJoinScreen() {
               pendingLabel="신청 중..."
             />
           )}
+          {actionError ? <Text style={styles.errorText}>{actionError}</Text> : null}
           <ScalePressable
             style={styles.secondaryButton}
             contentStyle={styles.secondaryButtonContent}
@@ -741,6 +793,7 @@ export default function SpaceJoinScreen() {
               onChangeText={(value) => {
                 setSpaceNickname(value);
                 setSpaceNicknameError(null);
+                setActionError(null);
               }}
             />
           ) : null}
@@ -754,6 +807,7 @@ export default function SpaceJoinScreen() {
           ) : (
             <SubmitButton
               style={styles.primaryButton}
+              contentStyle={styles.primaryButtonContent}
               disabledStyle={styles.primaryButtonDisabled}
               textStyle={styles.primaryButtonText}
               onPress={handleAcceptInvitation}
@@ -762,6 +816,7 @@ export default function SpaceJoinScreen() {
               pendingLabel="처리 중..."
             />
           )}
+          {actionError ? <Text style={styles.errorText}>{actionError}</Text> : null}
           {!isClosed && (
             <ScalePressable
               style={styles.secondaryButton}
@@ -834,7 +889,10 @@ export default function SpaceJoinScreen() {
       : "공간 참여";
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[
+      styles.container,
+      { paddingTop: Platform.OS === "web" ? 67 : insets.top },
+    ]}>
       <View style={styles.header}>
         <ScalePressable onPress={() => router.back()} hitSlop={8}>
           <Feather name="chevron-left" size={24} color={Colors.zinc700} />
@@ -843,16 +901,25 @@ export default function SpaceJoinScreen() {
         <View style={styles.headerSpacer} />
       </View>
       <ScrollView
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 32 }]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: (Platform.OS === "web" ? 34 : insets.bottom) + 32 },
+        ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
         {renderContent()}
       </ScrollView>
       {step === "code_input" && (
-        <View style={[styles.bottomButtonArea, { paddingBottom: insets.bottom + 16 }]}>
+        <View
+          style={[
+            styles.bottomButtonArea,
+            { paddingBottom: (Platform.OS === "web" ? 34 : insets.bottom) + 16 },
+          ]}
+        >
           <SubmitButton
             style={styles.primaryButton}
+            contentStyle={styles.primaryButtonContent}
             disabledStyle={styles.primaryButtonDisabled}
             textStyle={styles.primaryButtonText}
             onPress={handleCodeLookup}
@@ -1058,10 +1125,18 @@ const styles = StyleSheet.create({
   primaryButton: {
     backgroundColor: Colors.zinc900,
     borderRadius: 12,
-    paddingVertical: 15,
+    height: 52,
+    flexGrow: 0,
+    flexShrink: 0,
     alignItems: "center",
     width: "100%",
     marginTop: 0,
+  },
+  primaryButtonContent: {
+    width: "100%",
+    height: 52,
+    flexGrow: 0,
+    flexShrink: 0,
   },
   primaryButtonDisabled: {
     backgroundColor: Colors.zinc300,

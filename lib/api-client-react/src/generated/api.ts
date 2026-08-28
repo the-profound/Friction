@@ -47,7 +47,6 @@ import type {
   FinalizeArticleBody,
   GetReadingRecordParams,
   GetSimilarThoughtsParams,
-  GetSpaceJoinContextParams,
   HealthStatus,
   InboxItem,
   ListArticlesParams,
@@ -7535,7 +7534,7 @@ export const createSpaceCodeRequest = async (
 };
 
 export const getCreateSpaceCodeRequestMutationOptions = <
-  TError = ErrorType<unknown>,
+  TError = ErrorType<ErrorResponse>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -7577,13 +7576,13 @@ export type CreateSpaceCodeRequestMutationResult = NonNullable<
 >;
 export type CreateSpaceCodeRequestMutationBody =
   BodyType<CreateSpaceCodeRequestBody>;
-export type CreateSpaceCodeRequestMutationError = ErrorType<unknown>;
+export type CreateSpaceCodeRequestMutationError = ErrorType<ErrorResponse>;
 
 /**
  * @summary Request to join a space using an invite code
  */
 export const useCreateSpaceCodeRequest = <
-  TError = ErrorType<unknown>,
+  TError = ErrorType<ErrorResponse>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -8308,46 +8307,24 @@ export function useGetSpaceByInviteCode<
 }
 
 /**
- * @summary Get a user's join context for a space (participation, invitation, code request)
+ * @summary Get the authenticated user's join context for a space (participation, invitation, code request)
  */
-export const getGetSpaceJoinContextUrl = (
-  id: string,
-  params: GetSpaceJoinContextParams,
-) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? "null" : value.toString());
-    }
-  });
-
-  const stringifiedParams = normalizedParams.toString();
-
-  return stringifiedParams.length > 0
-    ? `/api/spaces/${id}/join-context?${stringifiedParams}`
-    : `/api/spaces/${id}/join-context`;
+export const getGetSpaceJoinContextUrl = (id: string) => {
+  return `/api/spaces/${id}/join-context`;
 };
 
 export const getSpaceJoinContext = async (
   id: string,
-  params: GetSpaceJoinContextParams,
   options?: RequestInit,
 ): Promise<SpaceJoinContext> => {
-  return customFetch<SpaceJoinContext>(getGetSpaceJoinContextUrl(id, params), {
+  return customFetch<SpaceJoinContext>(getGetSpaceJoinContextUrl(id), {
     ...options,
     method: "GET",
   });
 };
 
-export const getGetSpaceJoinContextQueryKey = (
-  id: string,
-  params?: GetSpaceJoinContextParams,
-) => {
-  return [
-    `/api/spaces/${id}/join-context`,
-    ...(params ? [params] : []),
-  ] as const;
+export const getGetSpaceJoinContextQueryKey = (id: string) => {
+  return [`/api/spaces/${id}/join-context`] as const;
 };
 
 export const getGetSpaceJoinContextQueryOptions = <
@@ -8355,7 +8332,6 @@ export const getGetSpaceJoinContextQueryOptions = <
   TError = ErrorType<ErrorResponse>,
 >(
   id: string,
-  params: GetSpaceJoinContextParams,
   options?: {
     query?: UseQueryOptions<
       Awaited<ReturnType<typeof getSpaceJoinContext>>,
@@ -8367,13 +8343,11 @@ export const getGetSpaceJoinContextQueryOptions = <
 ) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey =
-    queryOptions?.queryKey ?? getGetSpaceJoinContextQueryKey(id, params);
+  const queryKey = queryOptions?.queryKey ?? getGetSpaceJoinContextQueryKey(id);
 
   const queryFn: QueryFunction<
     Awaited<ReturnType<typeof getSpaceJoinContext>>
-  > = ({ signal }) =>
-    getSpaceJoinContext(id, params, { signal, ...requestOptions });
+  > = ({ signal }) => getSpaceJoinContext(id, { signal, ...requestOptions });
 
   return {
     queryKey,
@@ -8393,7 +8367,7 @@ export type GetSpaceJoinContextQueryResult = NonNullable<
 export type GetSpaceJoinContextQueryError = ErrorType<ErrorResponse>;
 
 /**
- * @summary Get a user's join context for a space (participation, invitation, code request)
+ * @summary Get the authenticated user's join context for a space (participation, invitation, code request)
  */
 
 export function useGetSpaceJoinContext<
@@ -8401,7 +8375,6 @@ export function useGetSpaceJoinContext<
   TError = ErrorType<ErrorResponse>,
 >(
   id: string,
-  params: GetSpaceJoinContextParams,
   options?: {
     query?: UseQueryOptions<
       Awaited<ReturnType<typeof getSpaceJoinContext>>,
@@ -8411,7 +8384,7 @@ export function useGetSpaceJoinContext<
     request?: SecondParameter<typeof customFetch>;
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetSpaceJoinContextQueryOptions(id, params, options);
+  const queryOptions = getGetSpaceJoinContextQueryOptions(id, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
