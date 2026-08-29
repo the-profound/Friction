@@ -65,7 +65,6 @@ import {
   getListAllSpaceScheduledSendsQueryKey,
   useCreateSpaceScheduledSend,
   useCreateSpaceLetter,
-  useUpdateSpaceScheduledSend,
   useListSpaceRounds,
   getListSpaceRoundsQueryKey,
 } from "@workspace/api-client-react";
@@ -856,7 +855,6 @@ function OpeningLetterStep({
   startDate,
   articles,
   letters,
-  allSends,
   spaceId,
   userId,
   onSaved,
@@ -870,7 +868,6 @@ function OpeningLetterStep({
   startDate: Date;
   articles: Article[];
   letters: SpaceLetter[];
-  allSends: SpaceScheduledSendWithLetter[];
   spaceId: string;
   userId: string;
   onSaved: () => void;
@@ -879,7 +876,6 @@ function OpeningLetterStep({
   const { showToast } = useToast();
   const createSend = useCreateSpaceScheduledSend();
   const createLetter = useCreateSpaceLetter();
-  const updateSend = useUpdateSpaceScheduledSend();
 
   const deadline = getOpeningLetterDeadline(startDate);
   const maxScheduledAt = deadline;
@@ -936,13 +932,6 @@ function OpeningLetterStep({
         queryClient.invalidateQueries({ queryKey: getListSpaceLettersQueryKey(spaceId) });
       }
 
-      const openingLetterIds = new Set(letters.filter(l => l.letterType === "OPENING").map(l => l.id));
-      if (existingLetter) openingLetterIds.add(spaceLetterId);
-      const pendingOpeningSends = allSends.filter(s => s.status === "PENDING" && openingLetterIds.has(s.spaceLetterId));
-      await Promise.all(pendingOpeningSends.map(s =>
-        updateSend.mutateAsync({ id: spaceId, letterId: s.spaceLetterId, sendId: s.id, data: { status: "CANCELLED" } })
-      ));
-
       const chosenDate = scheduledDate > maxScheduledAt ? maxScheduledAt : scheduledDate;
       // 발송 시각은 기기 시간대와 무관하게 항상 "해당 날짜의 KST 06:00"
       const finalScheduledAt = kstDateAt6(chosenDate);
@@ -961,7 +950,7 @@ function OpeningLetterStep({
     } finally {
       setSaving(false);
     }
-  }, [selectedArticleId, scheduledDate, maxScheduledAt, letters, allSends, spaceId, userId, createLetter, createSend, updateSend, queryClient, onSaved, showToast]);
+  }, [selectedArticleId, scheduledDate, maxScheduledAt, letters, spaceId, userId, createLetter, createSend, queryClient, onSaved, showToast]);
 
   return (
     <View style={stepStyles.container}>
@@ -994,7 +983,7 @@ function OpeningLetterStep({
               contentStyle={olStyles.reSelectBtn}
               onPress={() => { setSelectedArticleId(null); setShowArticleList(true); }}
             >
-              <Text style={olStyles.reSelectBtnText}>다른 편지로 변경</Text>
+              <Text style={olStyles.reSelectBtnText}>여는 편지 추가 등록</Text>
             </ScalePressable>
           )}
         </View>
@@ -1780,7 +1769,6 @@ export default function SpaceStartScreen() {
           startDate={startDate}
           articles={articles}
           letters={letters}
-          allSends={sends}
           spaceId={id}
           userId={userId ?? ""}
           onSaved={() => {

@@ -1,0 +1,117 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+
+const routesSource = readFileSync(join(__dirname, "spaces.ts"), "utf8");
+const scheduleScreenSource = readFileSync(
+  join(__dirname, "../../../friction/app/of-space-schedule-send.tsx"),
+  "utf8",
+);
+const scheduleSheetSource = readFileSync(
+  join(
+    __dirname,
+    "../../../friction/components/ArticleScheduleSheet/ArticleScheduleSheet.tsx",
+  ),
+  "utf8",
+);
+const startScreenSource = readFileSync(
+  join(__dirname, "../../../friction/app/of-space-start.tsx"),
+  "utf8",
+);
+const schemaSource = readFileSync(
+  join(__dirname, "../../../../lib/db/src/schema/spaces.ts"),
+  "utf8",
+);
+const migrationSource = readFileSync(
+  join(
+    __dirname,
+    "../../../../lib/db/drizzle/0040_allow_multiple_opening_letters_per_round.sql",
+  ),
+  "utf8",
+);
+
+describe("space scheduled-send role policy", () => {
+  it("allows multiple pending OPENING sends for the same letter, round, and date", () => {
+    const createSendRoute = routesSource.slice(
+      routesSource.indexOf(
+        'router.post("/spaces/:id/letters/:letterId/scheduled-sends"',
+      ),
+      routesSource.indexOf(
+        'router.patch("/spaces/:id/letters/:letterId/scheduled-sends/:sendId"',
+      ),
+    );
+
+    expect(createSendRoute).toContain('letter.letterType === "CENTER"');
+    expect(createSendRoute).not.toContain(
+      "eq(spaceLettersTable.letterType, letter.letterType)",
+    );
+    expect(scheduleSheetSource).not.toContain("pendingOpeningSends");
+    expect(startScreenSource).not.toContain("pendingOpeningSends");
+  });
+
+  it("keeps different OPENING articles as separate letters in the same round", () => {
+    const createLetterRoute = routesSource.slice(
+      routesSource.indexOf('router.post("/spaces/:id/letters"'),
+      routesSource.indexOf("async function getScheduledSendAccess"),
+    );
+
+    expect(createLetterRoute).toContain(
+      "eq(spaceLettersTable.letterType, parsed.data.letterType)",
+    );
+    expect(schemaSource).not.toContain(
+      'uniqueIndex("space_letters_opening_per_round_unique")',
+    );
+    expect(migrationSource).toContain(
+      'DROP INDEX IF EXISTS "space_letters_opening_per_round_unique"',
+    );
+  });
+
+  it("does not let OPENING reservations consume CENTER slots", () => {
+    expect(scheduleScreenSource).toContain(
+      's.letterType === "CENTER" &&\n              s.letter?.authorId === userId',
+    );
+    expect(scheduleScreenSource).not.toContain("openingRoundIdsWithSend");
+    expect(scheduleSheetSource).toContain('l.letterType === "CENTER"');
+  });
+
+  it("continues rejecting a second pending CENTER reservation for the same author and round", () => {
+    const conflictHelper = routesSource.slice(
+      routesSource.indexOf("async function hasPendingCenterReservationConflict"),
+      routesSource.indexOf("/**\n * Validates that a CENTER-role reservation"),
+    );
+    const patchRoute = routesSource.slice(
+      routesSource.indexOf(
+        'router.patch("/spaces/:id/letters/:letterId/scheduled-sends/:sendId"',
+      ),
+      routesSource.indexOf('router.get("/spaces/:id/scheduled-sends"'),
+    );
+
+    expect(conflictHelper).toContain(
+      'eq(spaceScheduledSendsTable.status, "PENDING")',
+    );
+    expect(conflictHelper).toContain(
+      'eq(spaceLettersTable.letterType, "CENTER")',
+    );
+    expect(conflictHelper).toContain(
+      "eq(spaceLettersTable.authorId, letter.authorId)",
+    );
+    expect(conflictHelper).toContain(
+      "eq(spaceLettersTable.spaceRoundId, letter.spaceRoundId)",
+    );
+    expect(patchRoute).toContain(
+      "hasPendingCenterReservationConflict(String(req.params.id), letter, existingSend.id)",
+    );
+  });
+
+  it("links every pre-start OPENING reservation to the first round", () => {
+    const startRoute = routesSource.slice(
+      routesSource.indexOf('router.post("/spaces/:id/start"'),
+      routesSource.indexOf('router.get("/spaces/:id/rounds"'),
+    );
+
+    expect(startRoute).toContain(
+      "inArray(spaceLettersTable.id, roundlessOpeningLetters.map((letter) => letter.id))",
+    );
+    expect(startRoute).not.toContain("winnerId");
+  });
+});

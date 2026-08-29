@@ -722,11 +722,16 @@ export default function SpaceScheduleSendScreen() {
     () =>
       new Set(
         sends
-          .filter((s) => s.status === "PENDING" && s.letterType === "CENTER")
+          .filter(
+            (s) =>
+              s.status === "PENDING" &&
+              s.letterType === "CENTER" &&
+              s.letter?.authorId === userId,
+          )
           .map((s) => s.letter?.spaceRoundId)
           .filter((v): v is string => !!v),
       ),
-    [sends],
+    [sends, userId],
   );
   // Rounds where the user's CENTER letter has already been sent — that slot
   // is used up and shouldn't be offered again for a *new* reservation either.
@@ -734,11 +739,16 @@ export default function SpaceScheduleSendScreen() {
     () =>
       new Set(
         sends
-          .filter((s) => s.status === "SENT" && s.letterType === "CENTER")
+          .filter(
+            (s) =>
+              s.status === "SENT" &&
+              s.letterType === "CENTER" &&
+              s.letter?.authorId === userId,
+          )
           .map((s) => s.letter?.spaceRoundId)
           .filter((v): v is string => !!v),
       ),
-    [sends],
+    [sends, userId],
   );
   const newReservationCenterSlots = useMemo(
     () =>
@@ -762,31 +772,19 @@ export default function SpaceScheduleSendScreen() {
     [unresolvedCenterRoundIds, pendingCenterRoundIds, sentCenterRoundIds],
   );
 
-  // Opening letters are reservable per-round: only an operator may fill
-  // them, only while the round's KST 06:00 opening deadline is still ahead,
-  // and only when there is no PENDING or SENT opening reservation. The first
-  // six hours of the start date are ACTIVE as a round period but still valid
-  // for its 06:00 opening send slot.
-  const openingRoundIdsWithSend = useMemo(
-    () =>
-      new Set(
-        sends
-          .filter((s) => s.letterType === "OPENING" && (s.status === "PENDING" || s.status === "SENT"))
-          .map((s) => s.letter?.spaceRoundId)
-          .filter((v): v is string => !!v),
-      ),
-    [sends],
-  );
+  // Opening letters are reservable per-round: only an operator may add them
+  // and only while the round's KST 06:00 opening deadline is still ahead.
+  // Existing opening reservations do not consume the round; multiple sends
+  // may coexist for the same round and date.
   const openingEligibleRounds = useMemo(
     () =>
       isOperator
         ? presentationRounds.filter((r) => {
             if (r.status === "COMPLETED") return false;
-            if (openingRoundIdsWithSend.has(r.id)) return false;
             return isOpeningSlotReservable(r.startsAt, now);
           })
         : [],
-    [isOperator, presentationRounds, openingRoundIdsWithSend, now],
+    [isOperator, presentationRounds, now],
   );
 
   // ─── Empty slots available for a brand-new reservation ─────────────────────
@@ -909,14 +907,12 @@ export default function SpaceScheduleSendScreen() {
   // round's opening slot and jump straight into article/date selection,
   // skipping the slot picker sheet entirely. Re-validated against the same
   // eligibility list the slot picker itself uses (operator role, round
-  // status, no existing pending/sent opening reservation, feasible date
-  // window) so this entry point can never bypass those checks — if the
+  // status, feasible date window) so this entry point can never bypass
+  // those checks — if the
   // round isn't eligible, tell the user why instead of silently leaving
   // them stranded on the reservation-list screen. The space-detail button
-  // is only shown for UPCOMING rounds without an opening letter, so this
   // should normally always succeed; the alert only fires for the narrow
-  // race where the round started or someone else reserved it between the
-  // button being shown and this screen's data finishing its load.
+  // race where the round started between navigation and data resolution.
   //
   // This is a one-shot action, consumed via `consumedOpeningRoundIdRef`: once
   // it has auto-picked (or attempted to, for a given value), it never fires
@@ -953,10 +949,9 @@ export default function SpaceScheduleSendScreen() {
     // Not eligible after all — figure out the most likely reason so the
     // message isn't a generic dead end.
     const targetRound = presentationRounds.find((r) => r.id === openingRoundId);
-    const message = openingRoundIdsWithSend.has(openingRoundId)
-      ? "다른 사람이 방금 이 회차의 여는 편지를 예약했어요."
-      : targetRound && targetRound.status !== "UPCOMING"
-        ? "이미 회차가 시작해서 여는 편지를 예약할 수 없어요."
+    const message =
+      targetRound && targetRound.status === "COMPLETED"
+        ? "이미 회차가 끝나 여는 편지를 예약할 수 없어요."
         : "지금은 이 회차에 여는 편지를 예약할 수 없어요.";
     Alert.alert("예약할 수 없어요", message);
   }, [
@@ -966,7 +961,6 @@ export default function SpaceScheduleSendScreen() {
     joinContextQuery.isLoading,
     openingEligibleRounds,
     presentationRounds,
-    openingRoundIdsWithSend,
   ]);
 
   // A direct route from a slot card is only a shortcut. It must wait for the
@@ -1162,7 +1156,6 @@ export default function SpaceScheduleSendScreen() {
           onClose={() => setPickedSlot(null)}
           onSaved={handleSaved}
           onGoToArchive={handleGoToArchive}
-          allSends={sends}
           assignedCenterSlots={pickedSlot.kind === "center" ? [pickedSlot] : undefined}
           initialScheduledDate={pickedSlot.kind === "center" ? pickedSlot.date : null}
           isLoadingCenterDates={false}

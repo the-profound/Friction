@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Response } from "express";
-import { eq, and, inArray, count, ne, isNull, isNotNull, asc, sql } from "drizzle-orm";
+import { eq, and, inArray, count, ne, isNull, isNotNull, asc, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth } from "../middlewares/requireAuth";
 import {
@@ -1224,22 +1224,12 @@ router.post("/spaces/:id/start", requireAuth, async (req, res) => {
         occasionCursor += slots.length;
       }
 
-      // Link round-less OPENING letters to round 1. The start flow creates
-      // (or reuses) the opening letter before any rounds exist, so it has no
-      // spaceRoundId — but the detail screen groups letters strictly by
-      // round, so an unlinked letter would never be shown. Attaching it here
-      // covers both the newly-created and the reused-letter paths.
-      //
-      // Only one OPENING letter may ever be linked per round (DB-enforced by
-      // space_letters_opening_per_round_unique), so if drafting left behind
-      // more than one round-less OPENING letter (e.g. the operator switched
-      // their selected article more than once before starting), link only
-      // the one with an active pending send — the one actually chosen — or
-      // else the most recently created draft. The rest are abandoned drafts
-      // and are left round-less rather than crashing the start transaction.
+      // Link every round-less OPENING letter to round 1. Multiple opening
+      // letters may be reserved for the same round, so none of the drafts or
+      // their scheduled sends should be abandoned when the space starts.
       if (firstRoundId) {
         const roundlessOpeningLetters = await tx
-          .select({ id: spaceLettersTable.id, createdAt: spaceLettersTable.createdAt })
+          .select({ id: spaceLettersTable.id })
           .from(spaceLettersTable)
           .where(
             and(
@@ -1249,35 +1239,10 @@ router.post("/spaces/:id/start", requireAuth, async (req, res) => {
             ),
           );
         if (roundlessOpeningLetters.length > 0) {
-          let winnerId = roundlessOpeningLetters[0]!.id;
-          if (roundlessOpeningLetters.length > 1) {
-            const pendingSendLetterIds = new Set(
-              (
-                await tx
-                  .select({ spaceLetterId: spaceScheduledSendsTable.spaceLetterId })
-                  .from(spaceScheduledSendsTable)
-                  .where(
-                    and(
-                      eq(spaceScheduledSendsTable.spaceId, req.params.id),
-                      eq(spaceScheduledSendsTable.status, "PENDING"),
-                      inArray(
-                        spaceScheduledSendsTable.spaceLetterId,
-                        roundlessOpeningLetters.map((l) => l.id),
-                      ),
-                    ),
-                  )
-              ).map((s) => s.spaceLetterId),
-            );
-            const withPendingSend = roundlessOpeningLetters.find((l) => pendingSendLetterIds.has(l.id));
-            winnerId = (
-              withPendingSend ??
-              [...roundlessOpeningLetters].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0]!
-            ).id;
-          }
           await tx
             .update(spaceLettersTable)
             .set({ spaceRoundId: firstRoundId })
-            .where(eq(spaceLettersTable.id, winnerId));
+            .where(inArray(spaceLettersTable.id, roundlessOpeningLetters.map((letter) => letter.id)));
         }
       }
 
@@ -2683,9 +2648,7 @@ router.post("/spaces/:id/letters", requireAuth, async (req, res) => {
     return;
   }
 
-  // A caller-supplied spaceRoundId must actually belong to this space —
-  // otherwise the letter (and, for OPENING, the global per-round unique
-  // index) would reference/lock a round in a different space entirely.
+  // A caller-supplied spaceRoundId must actually belong to this space.
   if (parsed.data.spaceRoundId) {
     const [round] = await db
       .select({ id: spaceRoundsTable.id })
@@ -2703,11 +2666,10 @@ router.post("/spaces/:id/letters", requireAuth, async (req, res) => {
     }
   }
 
-  // If a sourceArticleId is provided, reuse any existing SpaceLetter for
-  // (space, article, author, round) instead of creating a duplicate. The
-  // round is part of the matching key so that, e.g., reusing the same
-  // article as an OPENING letter for round 2 doesn't accidentally pick up
-  // round 1's letter row for that article.
+  // If a sourceArticleId is provided, reuse an existing SpaceLetter only
+  // when its role also matches. Without letterType in this key, scheduling a
+  // CENTER letter could accidentally reuse an OPENING letter for the same
+  // article, author, and round.
   if (parsed.data.sourceArticleId) {
     const [existing] = await db
       .select()
@@ -2717,6 +2679,7 @@ router.post("/spaces/:id/letters", requireAuth, async (req, res) => {
           eq(spaceLettersTable.spaceId, req.params.id),
           eq(spaceLettersTable.sourceArticleId, parsed.data.sourceArticleId),
           eq(spaceLettersTable.authorId, req.user!.id),
+          eq(spaceLettersTable.letterType, parsed.data.letterType),
           parsed.data.spaceRoundId
             ? eq(spaceLettersTable.spaceRoundId, parsed.data.spaceRoundId)
             : isNull(spaceLettersTable.spaceRoundId),
@@ -2729,25 +2692,11 @@ router.post("/spaces/:id/letters", requireAuth, async (req, res) => {
     }
   }
 
-  try {
-    const [letter] = await db
-      .insert(spaceLettersTable)
-      .values({ ...parsed.data, spaceId: req.params.id, authorId: req.user!.id })
-      .returning();
-    res.status(201).json(letter);
-  } catch (err) {
-    // Concurrent double-taps/retries can race past the sourceArticleId reuse
-    // check above; the DB-level partial unique index is the real guard
-    // against two OPENING letters landing on the same round. drizzle-orm
-    // wraps the underlying pg error in `.cause`, so the Postgres error code
-    // (23505 = unique_violation) is at `err.cause.code`, not `err.code`.
-    const pgErrorCode = (err as { cause?: { code?: string } } | null)?.cause?.code;
-    if (parsed.data.letterType === "OPENING" && pgErrorCode === "23505") {
-      res.status(409).json({ error: "이미 해당 회차에 여는 편지가 있습니다." });
-      return;
-    }
-    throw err;
-  }
+  const [letter] = await db
+    .insert(spaceLettersTable)
+    .values({ ...parsed.data, spaceId: req.params.id, authorId: req.user!.id })
+    .returning();
+  res.status(201).json(letter);
 });
 
 async function getScheduledSendAccess(spaceId: string, callerId: string) {
@@ -2820,6 +2769,32 @@ async function findAssignedSlot(spaceRoundId: string, authorId: string) {
     )
     .limit(1);
   return slot ?? null;
+}
+
+async function hasPendingCenterReservationConflict(
+  spaceId: string,
+  letter: { authorId: string; spaceRoundId: string | null },
+  exceptSendId?: string,
+): Promise<boolean> {
+  const conditions: SQL[] = [
+    eq(spaceScheduledSendsTable.spaceId, spaceId),
+    eq(spaceScheduledSendsTable.status, "PENDING"),
+    eq(spaceLettersTable.authorId, letter.authorId),
+    eq(spaceLettersTable.letterType, "CENTER"),
+    letter.spaceRoundId
+      ? eq(spaceLettersTable.spaceRoundId, letter.spaceRoundId)
+      : isNull(spaceLettersTable.spaceRoundId),
+  ];
+  if (exceptSendId) {
+    conditions.push(ne(spaceScheduledSendsTable.id, exceptSendId));
+  }
+  const [duplicate] = await db
+    .select({ id: spaceScheduledSendsTable.id })
+    .from(spaceScheduledSendsTable)
+    .innerJoin(spaceLettersTable, eq(spaceScheduledSendsTable.spaceLetterId, spaceLettersTable.id))
+    .where(and(...conditions))
+    .limit(1);
+  return !!duplicate;
 }
 
 /**
@@ -2957,23 +2932,13 @@ router.post("/spaces/:id/letters/:letterId/scheduled-sends", requireAuth, async 
   // whatever date/time value the client actually sent.
   const normalizedScheduledAt = normalizeToKst6(parsedScheduledAt);
 
-  // Reject duplicate PENDING reservations for the same author/space/round/role.
-  const dupConditions = [
-    eq(spaceScheduledSendsTable.spaceId, req.params.id),
-    eq(spaceScheduledSendsTable.status, "PENDING"),
-    eq(spaceLettersTable.authorId, letter.authorId),
-    eq(spaceLettersTable.letterType, letter.letterType),
-    letter.spaceRoundId
-      ? eq(spaceLettersTable.spaceRoundId, letter.spaceRoundId)
-      : isNull(spaceLettersTable.spaceRoundId),
-  ];
-  const [duplicate] = await db
-    .select({ id: spaceScheduledSendsTable.id })
-    .from(spaceScheduledSendsTable)
-    .innerJoin(spaceLettersTable, eq(spaceScheduledSendsTable.spaceLetterId, spaceLettersTable.id))
-    .where(and(...dupConditions))
-    .limit(1);
-  if (duplicate) {
+  // CENTER keeps one pending reservation per author/round. OPENING is
+  // intentionally exempt: the same or different opening letter may have
+  // multiple independent pending sends, including on the same date.
+  if (
+    letter.letterType === "CENTER" &&
+    await hasPendingCenterReservationConflict(String(req.params.id), letter)
+  ) {
     res.status(409).json({ error: "이미 같은 회차·역할로 대기 중인 예약이 있습니다." });
     return;
   }
@@ -3064,6 +3029,13 @@ router.patch("/spaces/:id/letters/:letterId/scheduled-sends/:sendId", requireAut
   if (scheduledAt !== undefined || status === "PENDING") {
     const effectiveScheduledAt = normalizedScheduledAt ?? existingSend.scheduledAt;
     if (letter.letterType === "CENTER") {
+      if (
+        (status ?? existingSend.status) === "PENDING" &&
+        await hasPendingCenterReservationConflict(String(req.params.id), letter, existingSend.id)
+      ) {
+        res.status(409).json({ error: "이미 같은 회차·역할로 대기 중인 예약이 있습니다." });
+        return;
+      }
       const validation = await validateCenterSlotDate(letter, effectiveScheduledAt);
       if (!validation.ok) {
         res.status(400).json({ error: validation.error });

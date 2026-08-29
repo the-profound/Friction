@@ -11,6 +11,7 @@
     "migrate:rounds-backfill": "tsx src/migrate-spaces-rounds-backfill.ts",
     "migrate:space-slot-dates-backfill": "tsx src/migrate-space-slot-dates-backfill.ts",
     "migrate:opening-letter-round-uniqueness": "tsx src/migrate-opening-letter-round-uniqueness.ts",
+    "migrate:allow-multiple-opening-letters": "tsx src/migrate-opening-letter-round-uniqueness.ts",
     "backfill:embeddings": "tsx src/backfill-embeddings.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"

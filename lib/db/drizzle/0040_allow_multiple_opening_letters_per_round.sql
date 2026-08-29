@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS "space_letters_opening_per_round_unique";

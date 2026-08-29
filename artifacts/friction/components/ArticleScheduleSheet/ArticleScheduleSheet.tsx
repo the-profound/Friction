@@ -17,7 +17,6 @@ import { CollapsibleDatePicker, startOfDay } from "@/components/shared/CalendarG
 import {
   useCreateSpaceScheduledSend,
   useCreateSpaceLetter,
-  useUpdateSpaceScheduledSend,
   getListSpaceLettersQueryKey,
   getListAllSpaceScheduledSendsQueryKey,
   getListSpaceRoundSlotsQueryKey,
@@ -26,7 +25,6 @@ import {
 import type {
   Article,
   SpaceLetter,
-  SpaceScheduledSendWithLetter,
 } from "@workspace/api-client-react";
 import { kstDateAt6, minOpeningSendDate } from "@/lib/kstDate";
 
@@ -78,7 +76,6 @@ export type ArticleScheduleSheetProps = {
   onSaved: () => void;
   slotId?: string | null;
   initialScheduledDate?: string | null;
-  allSends?: SpaceScheduledSendWithLetter[];
   onGoToArchive?: () => void;
   /** Opening-letter mode only: latest allowed scheduled date (inclusive). Saves are clamped to this. */
   maxScheduledAt?: Date | null;
@@ -112,7 +109,6 @@ export function ArticleScheduleSheet({
   onSaved,
   slotId,
   initialScheduledDate,
-  allSends,
   onGoToArchive,
   maxScheduledAt,
   openingRoundId = null,
@@ -171,7 +167,6 @@ export function ArticleScheduleSheet({
 
   const createSend = useCreateSpaceScheduledSend();
   const createLetter = useCreateSpaceLetter();
-  const updateSend = useUpdateSpaceScheduledSend();
   const queryClient = useQueryClient();
 
   const pickerArticles = useMemo(
@@ -241,29 +236,6 @@ export function ArticleScheduleSheet({
           queryClient.invalidateQueries({ queryKey: getListSpaceLettersQueryKey(spaceId) });
         }
 
-        const openingLetterIds = new Set(
-          letters
-            .filter(
-              (l) => l.letterType === "OPENING" && (!openingRoundId || l.spaceRoundId === openingRoundId),
-            )
-            .map((l) => l.id),
-        );
-        if (existingLetter) openingLetterIds.add(spaceLetterId);
-
-        const pendingOpeningSends = (allSends ?? []).filter(
-          (s) => s.status === "PENDING" && openingLetterIds.has(s.spaceLetterId),
-        );
-        await Promise.all(
-          pendingOpeningSends.map((s) =>
-            updateSend.mutateAsync({
-              id: spaceId,
-              letterId: s.spaceLetterId,
-              sendId: s.id,
-              data: { status: "CANCELLED" },
-            }),
-          ),
-        );
-
         // scheduledAt is already validated above to be within [minDate, maxDate].
         const finalScheduledAt = kstDateAt6(scheduledAt);
         await createSend.mutateAsync({
@@ -276,7 +248,10 @@ export function ArticleScheduleSheet({
         // selectedCenterSlot is guaranteed non-null here (checked above).
         const centerSlot = selectedCenterSlot!;
         const existingLetter = letters.find(
-          (l) => l.sourceArticleId === selectedArticleId && l.spaceRoundId === centerSlot.roundId,
+          (l) =>
+            l.sourceArticleId === selectedArticleId &&
+            l.letterType === "CENTER" &&
+            l.spaceRoundId === centerSlot.roundId,
         );
         let spaceLetterId: string;
         if (existingLetter) {
@@ -322,7 +297,7 @@ export function ArticleScheduleSheet({
     }
   }, [
     selectedArticleId, selectedCenterSlot, scheduledAt, isOpeningLetter, spaceId, letters, userId,
-    slotId, allSends, createLetter, createSend, updateSend, queryClient, onSaved, onClose,
+    slotId, createLetter, createSend, queryClient, onSaved, onClose,
     openingRoundId, maxDate, minDate,
   ]);
 

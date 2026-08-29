@@ -5,11 +5,9 @@ import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { Colors, Typography } from "@/constants/tokens";
 
-/** A single reservable slot: either one round's opening-letter slot (one per
- * round, only offered while that round doesn't already have a PENDING/SENT
- * opening reservation), or one of the user's assigned CENTER round slots.
- * Only slots that don't already have a PENDING or SENT reservation should
- * ever appear here. */
+/** A reservable target: an opening-letter round (which remains available for
+ * additional opening letters) or one of the user's still-unused CENTER
+ * round slots. */
 export type EmptySlot =
   | { kind: "opening"; roundId: string; roundNumber: number | null; maxDate: string | null }
   | { kind: "center"; date: string; roundId: string; roundNumber: number | null };
