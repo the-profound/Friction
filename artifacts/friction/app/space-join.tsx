@@ -23,6 +23,10 @@ import { useUser } from "@/contexts/UserContext";
 import { isRecruitmentFull } from "@/lib/spaceRecruitment";
 import { getUserScopedSpaceJoinContextQueryKey } from "@/lib/spaceJoinContextQuery";
 import {
+  SPACE_NICKNAME_MAX_LENGTH,
+  validateSpaceNickname,
+} from "@/lib/spaceJoinValidation";
+import {
   getSpaceByInviteCode,
   getSpaceJoinContext,
   getListSpacesQueryKey,
@@ -69,13 +73,6 @@ function scheduleTypeLabelJoin(
     return "요일 지정";
   }
   return `${centerInterval}일 간격`;
-}
-
-function validateSpaceNickname(value: string): string | null {
-  const nickname = value.trim();
-  if (!nickname) return "공간 닉네임을 입력해주세요.";
-  if (nickname.length > 20) return "공간 닉네임은 20자까지 입력할 수 있어요.";
-  return null;
 }
 
 type JoinMutationErrorCode =
@@ -152,7 +149,7 @@ function SpaceNicknameField({
         placeholderTextColor={Colors.zinc400}
         value={value}
         onChangeText={onChangeText}
-        maxLength={20}
+        maxLength={SPACE_NICKNAME_MAX_LENGTH}
         autoCapitalize="none"
         autoCorrect={false}
         accessibilityLabel="공간 닉네임"
@@ -529,7 +526,7 @@ export default function SpaceJoinScreen() {
   }, [foundSpace, spaceId, actionLoading, inviteCode, spaceNickname, createCodeRequest, userId, refreshJoinCaches, loadJoinContext]);
 
   const handleCancelRequest = useCallback(async () => {
-    if (!spaceId || !joinContext?.codeRequest) return;
+    if (!spaceId || !joinContext?.codeRequest || actionLoading) return;
     setActionLoading(true);
     setCancelConfirmVisible(false);
     try {
@@ -551,7 +548,7 @@ export default function SpaceJoinScreen() {
     } finally {
       setActionLoading(false);
     }
-  }, [spaceId, joinContext, updateCodeRequest, showToast, cameFromList, router]);
+  }, [spaceId, joinContext, actionLoading, updateCodeRequest, showToast, cameFromList, router]);
 
   const handleAcceptInvitation = useCallback(async () => {
     if (!spaceId || !joinContext?.invitation || actionLoading) return;
@@ -723,6 +720,8 @@ export default function SpaceJoinScreen() {
 
     if (step === "space_preview" && foundSpace) {
       const isClosed = foundSpace.status === "ACTIVE";
+      const canApply =
+        !foundSpace.isAnonymous || validateSpaceNickname(spaceNickname) === null;
       return (
         <View style={styles.spacePreviewContainer}>
           <SpaceInfoCard space={foundSpace} />
@@ -752,6 +751,7 @@ export default function SpaceJoinScreen() {
               textStyle={styles.primaryButtonText}
               onPress={handleApply}
               pending={actionLoading}
+              disabled={!canApply}
               label="참여 신청하기"
               pendingLabel="신청 중..."
             />
@@ -773,6 +773,9 @@ export default function SpaceJoinScreen() {
 
     if (step === "invitation" && joinContext) {
       const isClosed = joinContext.space.status === "ACTIVE";
+      const canAccept =
+        !joinContext.space.isAnonymous ||
+        validateSpaceNickname(spaceNickname) === null;
       return (
         <View style={styles.spacePreviewContainer}>
           <View style={styles.invitationBanner}>
@@ -812,6 +815,7 @@ export default function SpaceJoinScreen() {
               textStyle={styles.primaryButtonText}
               onPress={handleAcceptInvitation}
               pending={actionLoading}
+              disabled={!canAccept}
               label="수락하기"
               pendingLabel="처리 중..."
             />
@@ -836,18 +840,34 @@ export default function SpaceJoinScreen() {
           <View style={styles.pendingIcon}>
             <Feather name="clock" size={32} color="#D97706" />
           </View>
-          <Text style={styles.pendingTitle}>승인 대기 중이에요</Text>
+          <Text style={styles.pendingTitle}>
+            {joinContext.space.name} 가입 신청 완료!
+          </Text>
           <Text style={styles.pendingSubtitle}>
             공간장이 신청을 확인한 후 참여 여부를 결정해요.{"\n"}
             승인되면 바로 알려드릴게요.
           </Text>
-          <SpaceInfoCard space={joinContext.space} />
           <ScalePressable
             style={styles.cancelRequestButton}
             contentStyle={styles.cancelRequestButtonContent}
             onPress={() => setCancelConfirmVisible(true)}
+            disabled={actionLoading}
+            accessibilityRole="button"
+            accessibilityLabel="신청 취소하기"
+            accessibilityState={{ disabled: actionLoading }}
           >
             <Text style={styles.cancelRequestText}>신청 취소하기</Text>
+          </ScalePressable>
+          <ScalePressable
+            style={styles.secondaryButton}
+            contentStyle={styles.secondaryButtonContent}
+            onPress={() => router.replace("/(tabs)/of")}
+            disabled={actionLoading}
+            accessibilityRole="button"
+            accessibilityLabel="목록으로 돌아가기"
+            accessibilityState={{ disabled: actionLoading }}
+          >
+            <Text style={styles.secondaryButtonText}>목록으로 돌아가기</Text>
           </ScalePressable>
         </View>
       );
@@ -1148,9 +1168,15 @@ const styles = StyleSheet.create({
   },
   secondaryButton: {
     width: "100%",
+    height: 48,
+    flexGrow: 0,
+    flexShrink: 0,
   },
   secondaryButtonContent: {
-    paddingVertical: 12,
+    height: 48,
+    flexGrow: 0,
+    flexShrink: 0,
+    paddingHorizontal: 12,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1302,9 +1328,15 @@ const styles = StyleSheet.create({
   },
   cancelRequestButton: {
     marginTop: 8,
+    height: 48,
+    flexGrow: 0,
+    flexShrink: 0,
   },
   cancelRequestButtonContent: {
-    paddingVertical: 14,
+    height: 48,
+    flexGrow: 0,
+    flexShrink: 0,
+    paddingHorizontal: 12,
     alignItems: "center",
     justifyContent: "center",
   },

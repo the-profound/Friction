@@ -68,6 +68,8 @@ export default function SubmitButton({
     <ScalePressable
       onPress={handlePress}
       disabled={effectivelyDisabled}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: effectivelyDisabled, busy: pending }}
       style={[style, effectivelyDisabled && disabledStyle]}
       contentStyle={[DEFAULT_CONTENT_STYLE, contentStyle]}
       hitSlop={hitSlop}
