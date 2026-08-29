@@ -3075,30 +3075,25 @@ router.get("/spaces/:id/scheduled-sends", requireAuth, async (req, res) => {
   // hasn't been processed by the periodic sweep yet, so it never shows as
   // "대기 중" (pending) after its time has come.
   await processDueScheduledSends({ spaceId: req.params.id });
-  let sends;
-  if (access.isOperator) {
-    sends = await db
-      .select()
-      .from(spaceScheduledSendsTable)
-      .where(eq(spaceScheduledSendsTable.spaceId, req.params.id))
-      .orderBy(spaceScheduledSendsTable.scheduledAt);
-  } else {
-    const rows = await db
-      .select({ send: spaceScheduledSendsTable })
-      .from(spaceScheduledSendsTable)
-      .innerJoin(
-        spaceLettersTable,
-        eq(spaceScheduledSendsTable.spaceLetterId, spaceLettersTable.id),
-      )
-      .where(
-        and(
-          eq(spaceScheduledSendsTable.spaceId, req.params.id),
-          eq(spaceLettersTable.authorId, callerId),
-        ),
-      )
-      .orderBy(spaceScheduledSendsTable.scheduledAt);
-    sends = rows.map((r) => r.send);
-  }
+  // Reservation ownership is the same for operators and participants. An
+  // operator may manage other space content, but this screen is the personal
+  // reservation list and must never expose another member's reservation
+  // metadata or let it affect the derived empty-slot state in the client.
+  const rows = await db
+    .select({ send: spaceScheduledSendsTable })
+    .from(spaceScheduledSendsTable)
+    .innerJoin(
+      spaceLettersTable,
+      eq(spaceScheduledSendsTable.spaceLetterId, spaceLettersTable.id),
+    )
+    .where(
+      and(
+        eq(spaceScheduledSendsTable.spaceId, req.params.id),
+        eq(spaceLettersTable.authorId, callerId),
+      ),
+    )
+    .orderBy(spaceScheduledSendsTable.scheduledAt);
+  const sends = rows.map((r) => r.send);
   if (sends.length === 0) {
     res.json([]);
     return;

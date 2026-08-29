@@ -52,6 +52,7 @@ import {
   isKstSlotReservable,
   isOpeningSlotReservable,
 } from "@/lib/spaceRoundPresentation";
+import { getOwnedSpaceScheduledSends } from "@/lib/spaceScheduledSendOwnership";
 
 function dateToYmd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -600,7 +601,14 @@ export default function SpaceScheduleSendScreen() {
   const isSpaceArchived = spaceStatus === "ARCHIVED";
   const isOperator = joinContextQuery.data?.participation?.role === "OPERATOR";
 
-  const sendsQuery = useListAllSpaceScheduledSends(id, { query: { enabled: !!id, queryKey: getListAllSpaceScheduledSendsQueryKey(id) } });
+  const sendsQuery = useListAllSpaceScheduledSends(id, {
+    query: {
+      enabled: !!id && !!userId,
+      // The response is authenticated and user-scoped. Include the caller in
+      // the cache key so switching accounts cannot reuse another user's list.
+      queryKey: [...getListAllSpaceScheduledSendsQueryKey(id), userId ?? ""],
+    },
+  });
   const roundsQuery = useListSpaceRounds(id, { query: { enabled: !!id, queryKey: getListSpaceRoundsQueryKey(id) } });
   const lettersQuery = useListSpaceLetters(id, { query: { enabled: !!id, queryKey: getListSpaceLettersQueryKey(id) } });
   const articlesQuery = useListArticles(
@@ -610,7 +618,14 @@ export default function SpaceScheduleSendScreen() {
 
   const updateSend = useUpdateSpaceScheduledSend();
 
-  const sends = (sendsQuery.data ?? []) as SpaceScheduledSendWithLetter[];
+  const sends = useMemo(
+    () =>
+      getOwnedSpaceScheduledSends(
+        (sendsQuery.data ?? []) as SpaceScheduledSendWithLetter[],
+        userId,
+      ),
+    [sendsQuery.data, userId],
+  );
   const rounds = (roundsQuery.data ?? []) as SpaceRound[];
   const letters = (lettersQuery.data ?? []) as SpaceLetter[];
   const articles = (articlesQuery.data ?? []) as Article[];
