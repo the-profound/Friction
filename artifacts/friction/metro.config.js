@@ -7,6 +7,13 @@ const workspaceRoot = path.resolve(projectRoot, "../..");
 
 const config = getDefaultConfig(projectRoot);
 
+// The editor, reader, and measurement WebViews share the compressed body-font
+// contract. Keep WOFF2 as a Metro asset so static require() calls in the root
+// layout are bundled for native development builds.
+config.resolver.assetExts = Array.from(
+  new Set([...config.resolver.assetExts, "woff2"]),
+);
+
 // Explicitly opt in to Watchman for file watching. `@expo/cli` only reads
 // `config.resolver.useWatchman` (defaulting to `false` if unset) rather than
 // Metro's own default of `true`, so without this Metro falls back to Node's

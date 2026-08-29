@@ -16,6 +16,20 @@ import {
 } from "../../components/shared/bodyTypographyFonts";
 
 describe("letter body font fallback contract", () => {
+  it("registers WOFF2 as a Metro asset without dropping the default assets", () => {
+    const metroConfig = readFileSync(
+      join(__dirname, "../../metro.config.js"),
+      "utf8",
+    );
+
+    expect(metroConfig).toMatch(
+      /config\.resolver\.assetExts\s*=\s*Array\.from\(/,
+    );
+    expect(metroConfig).toContain(
+      'new Set([...config.resolver.assetExts, "woff2"])',
+    );
+  });
+
   it("embeds compressed Eulyoo and Noto Serif KR WOFF2 faces", () => {
     const css = buildEmbeddedBodyFontFaceCss({
       regularBase64: "eulyoo-regular",
