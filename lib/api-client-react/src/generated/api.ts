@@ -96,6 +96,7 @@ import type {
   SpaceListItem,
   SpaceMember,
   SpaceParticipation,
+  SpacePendingCodeRequestSummary,
   SpaceRound,
   SpaceRoundSlotWithUser,
   SpaceScheduledSend,
@@ -5237,6 +5238,87 @@ export function useListMySpaceCodeRequests<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getListMySpaceCodeRequestsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List pending code request counts for spaces operated by the current user
+ */
+export const getListOperatorPendingSpaceCodeRequestsUrl = () => {
+  return `/api/spaces/operator-pending-code-requests`;
+};
+
+export const listOperatorPendingSpaceCodeRequests = async (
+  options?: RequestInit,
+): Promise<SpacePendingCodeRequestSummary[]> => {
+  return customFetch<SpacePendingCodeRequestSummary[]>(
+    getListOperatorPendingSpaceCodeRequestsUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListOperatorPendingSpaceCodeRequestsQueryKey = () => {
+  return [`/api/spaces/operator-pending-code-requests`] as const;
+};
+
+export const getListOperatorPendingSpaceCodeRequestsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listOperatorPendingSpaceCodeRequests>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listOperatorPendingSpaceCodeRequests>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListOperatorPendingSpaceCodeRequestsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listOperatorPendingSpaceCodeRequests>>
+  > = ({ signal }) =>
+    listOperatorPendingSpaceCodeRequests({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listOperatorPendingSpaceCodeRequests>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListOperatorPendingSpaceCodeRequestsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listOperatorPendingSpaceCodeRequests>>
+>;
+export type ListOperatorPendingSpaceCodeRequestsQueryError = ErrorType<void>;
+
+/**
+ * @summary List pending code request counts for spaces operated by the current user
+ */
+
+export function useListOperatorPendingSpaceCodeRequests<
+  TData = Awaited<ReturnType<typeof listOperatorPendingSpaceCodeRequests>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listOperatorPendingSpaceCodeRequests>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions =
+    getListOperatorPendingSpaceCodeRequestsQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

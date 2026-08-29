@@ -1404,6 +1404,25 @@ paths:
                 items:
                   $ref: "#/components/schemas/SpaceCodeRequestWithSpace"
 
+  /spaces/operator-pending-code-requests:
+    get:
+      operationId: listOperatorPendingSpaceCodeRequests
+      tags: [spaces]
+      summary: List pending code request counts for spaces operated by the current user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Pending code request counts grouped by operated space
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SpacePendingCodeRequestSummary"
+        "401":
+          description: Authentication required
+
   /spaces:
     get:
       operationId: listSpaces
@@ -4099,6 +4118,17 @@ components:
         space:
           $ref: "#/components/schemas/Space"
       required: [codeRequest, space]
+
+    SpacePendingCodeRequestSummary:
+      type: object
+      properties:
+        space:
+          $ref: "#/components/schemas/Space"
+        pendingCount:
+          type: integer
+          minimum: 1
+          description: Number of pending join requests for this space
+      required: [space, pendingCount]
 
     Space:
       type: object

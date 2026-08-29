@@ -26,6 +26,7 @@ import {
   useListSpaces,
   useListMySpaceInvitations,
   useListMySpaceCodeRequests,
+  useListOperatorPendingSpaceCodeRequests,
   getListSpacesQueryKey,
   getListMySpaceInvitationsQueryKey,
   getListMySpaceCodeRequestsQueryKey,
@@ -34,8 +35,10 @@ import type {
   SpaceListItem,
   SpaceInvitationWithSpace,
   SpaceCodeRequestWithSpace,
+  SpacePendingCodeRequestSummary,
 } from "@workspace/api-client-react";
 import { spaceStatusLabel, spaceStatusStyle } from "@/lib/spaceStatusStyle";
+import { getUserScopedOperatorPendingSpaceCodeRequestsQueryKey } from "@/lib/operatorPendingSpaceCodeRequestsQuery";
 
 const GRID_H_PADDING = Spacing.screenPx;
 const GRID_COLUMN_GAP = 10;
@@ -193,7 +196,7 @@ function CodeRequestBar({
   if (requests.length === 0) return null;
   return (
     <View style={styles.codeRequestSection}>
-      <Text style={styles.inviteSectionLabel}>승인 대기</Text>
+      <Text style={styles.inviteSectionLabel}>신청 중</Text>
       {requests.map((item) => (
         <ScalePressable
           key={item.codeRequest.id}
@@ -204,9 +207,43 @@ function CodeRequestBar({
           <Feather name="clock" size={14} color={Colors.zinc400} style={styles.inviteIcon} />
           <Text style={styles.codeRequestSpaceName} numberOfLines={1}>{item.space.name}</Text>
           <View style={styles.pendingBadge}>
-            <Text style={styles.pendingBadgeText}>승인 대기 중</Text>
+            <Text style={styles.pendingBadgeText}>신청 중</Text>
           </View>
           <Feather name="chevron-right" size={15} color={Colors.zinc400} />
+        </ScalePressable>
+      ))}
+    </View>
+  );
+}
+
+function OperatorPendingBar({
+  summaries,
+  onPress,
+}: {
+  summaries: SpacePendingCodeRequestSummary[];
+  onPress: (summary: SpacePendingCodeRequestSummary) => void;
+}) {
+  if (summaries.length === 0) return null;
+  return (
+    <View style={styles.operatorPendingSection}>
+      <Text style={styles.inviteSectionLabel}>승인 대기</Text>
+      {summaries.map((summary) => (
+        <ScalePressable
+          key={summary.space.id}
+          style={styles.operatorPendingBarOuter}
+          contentStyle={styles.operatorPendingBar}
+          onPress={() => onPress(summary)}
+        >
+          <View style={styles.operatorPendingInfo}>
+            <Feather name="user-check" size={14} color={Colors.noticeAccent} style={styles.inviteIcon} />
+            <Text style={styles.operatorPendingSpaceName} numberOfLines={1}>
+              {summary.space.name}
+            </Text>
+            <Text style={styles.operatorPendingSubtext}>
+              {summary.pendingCount}건 처리 필요
+            </Text>
+          </View>
+          <Feather name="chevron-right" size={16} color={Colors.noticeAccent} />
         </ScalePressable>
       ))}
     </View>
@@ -235,6 +272,13 @@ export default function SpacesScreen() {
   });
   const invitationsQuery = useListMySpaceInvitations({ userId });
   const codeRequestsQuery = useListMySpaceCodeRequests({ userId });
+  const operatorPendingQueryKey = useMemo(
+    () => getUserScopedOperatorPendingSpaceCodeRequestsQueryKey(userId),
+    [userId],
+  );
+  const operatorPendingQuery = useListOperatorPendingSpaceCodeRequests({
+    query: { enabled: !!userId, queryKey: operatorPendingQueryKey },
+  });
 
   const allSpaces = useMemo(
     () =>
@@ -255,19 +299,25 @@ export default function SpacesScreen() {
 
   const invitations = (invitationsQuery.data ?? []) as SpaceInvitationWithSpace[];
   const codeRequests = (codeRequestsQuery.data ?? []) as SpaceCodeRequestWithSpace[];
+  const operatorPending = (operatorPendingQuery.data ?? []) as SpacePendingCodeRequestSummary[];
 
   const isLoading =
-    spacesQuery.isLoading || invitationsQuery.isLoading || codeRequestsQuery.isLoading;
+    spacesQuery.isLoading ||
+    invitationsQuery.isLoading ||
+    codeRequestsQuery.isLoading;
   const isError =
-    spacesQuery.isError || invitationsQuery.isError || codeRequestsQuery.isError;
+    spacesQuery.isError ||
+    invitationsQuery.isError ||
+    codeRequestsQuery.isError;
 
   const refetchAll = useCallback(async () => {
     await Promise.all([
       spacesQuery.refetch(),
       invitationsQuery.refetch(),
       codeRequestsQuery.refetch(),
+      operatorPendingQuery.refetch(),
     ]);
-  }, [spacesQuery, invitationsQuery, codeRequestsQuery]);
+  }, [spacesQuery, invitationsQuery, codeRequestsQuery, operatorPendingQuery]);
 
   const handleRefresh = useCallback(async () => {
     setIsManualRefreshing(true);
@@ -283,10 +333,23 @@ export default function SpacesScreen() {
       const spaceStale = isQueryStale(queryClient, getListSpacesQueryKey({ userId }));
       const invStale = isQueryStale(queryClient, getListMySpaceInvitationsQueryKey({ userId }));
       const codeStale = isQueryStale(queryClient, getListMySpaceCodeRequestsQueryKey({ userId }));
+      const operatorPendingStale = isQueryStale(
+        queryClient,
+        operatorPendingQueryKey,
+      );
       if (spaceStale) spacesQuery.refetch();
       if (invStale) invitationsQuery.refetch();
       if (codeStale) codeRequestsQuery.refetch();
-    }, [queryClient, userId, spacesQuery.refetch, invitationsQuery.refetch, codeRequestsQuery.refetch]),
+      if (operatorPendingStale) operatorPendingQuery.refetch();
+    }, [
+      queryClient,
+      userId,
+      operatorPendingQueryKey,
+      spacesQuery.refetch,
+      invitationsQuery.refetch,
+      codeRequestsQuery.refetch,
+      operatorPendingQuery.refetch,
+    ]),
   );
 
   const handleInvitationBarPress = useCallback(
@@ -309,6 +372,16 @@ export default function SpacesScreen() {
     [router],
   );
 
+  const handleOperatorPendingBarPress = useCallback(
+    (summary: SpacePendingCodeRequestSummary) => {
+      router.push({
+        pathname: "/of-space-participants" as never,
+        params: { id: summary.space.id, spaceName: summary.space.name },
+      });
+    },
+    [router],
+  );
+
   const renderSpaceItem = useCallback(
     ({ item }: { item: SpaceListItem }) => (
       <SpaceCard
@@ -322,8 +395,19 @@ export default function SpacesScreen() {
     [router, cardWidth],
   );
 
-  const hasRawContent =
-    allSpaces.length > 0 || invitations.length > 0 || codeRequests.length > 0;
+  const hasPrimaryContent =
+    allSpaces.length > 0 ||
+    invitations.length > 0 ||
+    codeRequests.length > 0;
+  const hasRawContent = hasPrimaryContent || operatorPending.length > 0;
+  const isOperatorSummaryOnlyLoading =
+    !hasPrimaryContent &&
+    operatorPending.length === 0 &&
+    operatorPendingQuery.isLoading;
+  const isOperatorSummaryOnlyError =
+    !hasPrimaryContent &&
+    operatorPending.length === 0 &&
+    operatorPendingQuery.isError;
 
   const filterBars = (
     <View style={styles.filterRow}>
@@ -347,6 +431,10 @@ export default function SpacesScreen() {
   const listHeaderComponent = (
     <>
       {filterBars}
+      <OperatorPendingBar
+        summaries={operatorPending}
+        onPress={handleOperatorPendingBarPress}
+      />
       <InvitationBar
         invitations={invitations}
         onPress={handleInvitationBarPress}
@@ -393,6 +481,18 @@ export default function SpacesScreen() {
             <Text style={styles.retryButtonText}>다시 시도</Text>
           </ScalePressable>
         </View>
+      ) : isOperatorSummaryOnlyLoading ? (
+        <View style={[styles.centerContainer, { paddingBottom: navBottom }]}>
+          <Text style={styles.loadingText}>불러오는 중...</Text>
+        </View>
+      ) : isOperatorSummaryOnlyError ? (
+        <View style={[styles.centerContainer, { paddingBottom: navBottom }]}>
+          <Feather name="alert-circle" size={40} color={Colors.zinc300} />
+          <Text style={styles.emptyTitle}>승인 대기 목록을 불러오지 못했어요</Text>
+          <ScalePressable style={styles.retryButtonOuter} contentStyle={styles.retryButton} onPress={handleRefresh}>
+            <Text style={styles.retryButtonText}>다시 시도</Text>
+          </ScalePressable>
+        </View>
       ) : !hasRawContent ? (
         <RefreshableEmpty
           refreshing={isManualRefreshing}
@@ -403,8 +503,7 @@ export default function SpacesScreen() {
           <Text style={styles.emptyTitle}>공간이 없어요</Text>
           <Text style={styles.emptySubtitle}>함께 편지를 나눌 공간을 만들거나{"\n"}초대 문구로 참여해보세요</Text>
         </RefreshableEmpty>
-      ) : invitations.length > 0 || codeRequests.length > 0 ? (
-        spaces.length === 0 ? (
+      ) : spaces.length === 0 ? (
           <ScrollView
             contentContainerStyle={{ paddingBottom: navBottom }}
             refreshControl={
@@ -417,6 +516,10 @@ export default function SpacesScreen() {
             showsVerticalScrollIndicator={false}
           >
             {filterBars}
+            <OperatorPendingBar
+              summaries={operatorPending}
+              onPress={handleOperatorPendingBarPress}
+            />
             <InvitationBar
               invitations={invitations}
               onPress={handleInvitationBarPress}
@@ -451,34 +554,7 @@ export default function SpacesScreen() {
             }
           />
         )
-      ) : (
-        <FlatList
-          {...LIST_PERF_PRESET}
-          data={spaces}
-          keyExtractor={(item) => item.id}
-          renderItem={renderSpaceItem}
-          contentContainerStyle={[styles.listContent, { paddingBottom: navBottom }]}
-          refreshControl={
-            <RefreshControl
-              refreshing={isManualRefreshing}
-              onRefresh={handleRefresh}
-              tintColor={Colors.zinc400}
-            />
-          }
-          showsVerticalScrollIndicator={false}
-          ListHeaderComponent={
-            <>
-              {filterBars}
-              {spaces.length > 0 && <View style={styles.gridTopSpacer} />}
-            </>
-          }
-          ListEmptyComponent={
-            <View style={styles.filteredEmptyInline}>
-              <Text style={styles.filteredEmptyText}>해당하는 공간이 없어요</Text>
-            </View>
-          }
-        />
-      )}
+      }
     </View>
   );
 }
@@ -699,6 +775,44 @@ const styles = StyleSheet.create({
     maxWidth: 120,
   },
   inviteSubtext: {
+    ...Typography.body,
+    fontSize: 13,
+    color: Colors.zinc700,
+  },
+  // ─── Operator pending bar ────────────────────────────────────────────────────
+  operatorPendingSection: {
+    paddingTop: 12,
+    paddingBottom: 4,
+  },
+  operatorPendingBarOuter: {
+    marginHorizontal: Spacing.screenPx,
+    marginVertical: 4,
+  },
+  operatorPendingBar: {
+    backgroundColor: Colors.noticeAccentSoft,
+    borderRadius: 12,
+    padding: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  operatorPendingInfo: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "nowrap",
+    overflow: "hidden",
+    gap: 4,
+  },
+  operatorPendingSpaceName: {
+    ...Typography.bodySemiBold,
+    fontSize: 14,
+    color: Colors.noticeAccent,
+    flexShrink: 1,
+    maxWidth: 160,
+  },
+  operatorPendingSubtext: {
     ...Typography.body,
     fontSize: 13,
     color: Colors.zinc700,

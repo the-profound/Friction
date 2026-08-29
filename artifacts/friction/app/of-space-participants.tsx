@@ -15,6 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
+import { useQueryClient } from "@tanstack/react-query";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { useUser } from "@/contexts/UserContext";
@@ -35,6 +36,7 @@ import type {
   SpaceMember,
   SpaceCodeRequestWithRequester,
 } from "@workspace/api-client-react";
+import { getUserScopedOperatorPendingSpaceCodeRequestsQueryKey } from "@/lib/operatorPendingSpaceCodeRequestsQuery";
 
 // ─── Code request item (moved from of-space-detail) ────────────────────────
 
@@ -248,6 +250,7 @@ export default function SpaceParticipantsScreen() {
   const router = useRouter();
   const { id, spaceName } = useLocalSearchParams<{ id: string; spaceName?: string }>();
   const { userId } = useUser();
+  const queryClient = useQueryClient();
 
   const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
   const [rejectTargetId, setRejectTargetId] = useState<string | null>(null);
@@ -365,6 +368,9 @@ export default function SpaceParticipantsScreen() {
           codeRequestsQuery.refetch(),
           membersQuery.refetch(),
           joinContextQuery.refetch(),
+          queryClient.invalidateQueries({
+            queryKey: getUserScopedOperatorPendingSpaceCodeRequestsQueryKey(userId),
+          }),
         ]);
       } catch (error) {
         Alert.alert(
@@ -375,7 +381,16 @@ export default function SpaceParticipantsScreen() {
         setProcessingRequestId(null);
       }
     },
-    [processingRequestId, updateCodeRequest, id, codeRequestsQuery, membersQuery, joinContextQuery],
+    [
+      processingRequestId,
+      updateCodeRequest,
+      id,
+      codeRequestsQuery,
+      membersQuery,
+      joinContextQuery,
+      queryClient,
+      userId,
+    ],
   );
 
   const handleReject = useCallback(
@@ -399,7 +414,12 @@ export default function SpaceParticipantsScreen() {
                 requestId,
                 data: { status: "REJECTED", rejectionReason: trimmed },
               });
-              await codeRequestsQuery.refetch();
+              await Promise.all([
+                codeRequestsQuery.refetch(),
+                queryClient.invalidateQueries({
+                  queryKey: getUserScopedOperatorPendingSpaceCodeRequestsQueryKey(userId),
+                }),
+              ]);
             } catch {
               Alert.alert("오류", "거절에 실패했어요. 다시 시도해주세요.");
             } finally {
@@ -412,7 +432,7 @@ export default function SpaceParticipantsScreen() {
         setRejectTargetId(requestId);
       }
     },
-    [processingRequestId, updateCodeRequest, id, codeRequestsQuery],
+    [processingRequestId, updateCodeRequest, id, codeRequestsQuery, queryClient, userId],
   );
 
   const handleRejectConfirm = useCallback(
@@ -427,14 +447,19 @@ export default function SpaceParticipantsScreen() {
           requestId,
           data: { status: "REJECTED", rejectionReason: reason },
         });
-        await codeRequestsQuery.refetch();
+        await Promise.all([
+          codeRequestsQuery.refetch(),
+          queryClient.invalidateQueries({
+            queryKey: getUserScopedOperatorPendingSpaceCodeRequestsQueryKey(userId),
+          }),
+        ]);
       } catch {
         Alert.alert("오류", "거절에 실패했어요. 다시 시도해주세요.");
       } finally {
         setProcessingRequestId(null);
       }
     },
-    [rejectTargetId, updateCodeRequest, id, codeRequestsQuery],
+    [rejectTargetId, updateCodeRequest, id, codeRequestsQuery, queryClient, userId],
   );
 
   const headerTitle = spaceName ?? space?.name ?? "참여자 관리";

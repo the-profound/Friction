@@ -2067,6 +2067,73 @@ export const ListMySpaceCodeRequestsResponse = zod.array(
 );
 
 /**
+ * @summary List pending code request counts for spaces operated by the current user
+ */
+export const listOperatorPendingSpaceCodeRequestsResponseSpaceWeekdaysItemMin = 0;
+export const listOperatorPendingSpaceCodeRequestsResponseSpaceWeekdaysItemMax = 6;
+
+export const ListOperatorPendingSpaceCodeRequestsResponseItem = zod.object({
+  space: zod.object({
+    id: zod.string().uuid(),
+    name: zod.string(),
+    description: zod.string().nullish(),
+    isAnonymous: zod.boolean(),
+    plannedStartsAt: zod
+      .date()
+      .nullish()
+      .describe("참여자에게 공개되는 공간 시작 예정일 (운영자가 설정)"),
+    startedAt: zod
+      .date()
+      .nullish()
+      .describe("운영자가 실제로 시작 버튼을 누른 시각"),
+    scheduleType: zod
+      .enum(["N_DAY", "WEEKDAY"])
+      .nullish()
+      .describe("진행 방식 (N일 간격 또는 요일 지정)"),
+    weekdays: zod
+      .array(
+        zod
+          .number()
+          .min(listOperatorPendingSpaceCodeRequestsResponseSpaceWeekdaysItemMin)
+          .max(
+            listOperatorPendingSpaceCodeRequestsResponseSpaceWeekdaysItemMax,
+          ),
+      )
+      .nullish()
+      .describe("요일 지정 시 요일 배열 (0=일, 1=월, ..., 6=토)"),
+    operatorParticipates: zod
+      .boolean()
+      .describe("운영자가 중심글 순서에 포함될지 여부"),
+    roundCount: zod.number(),
+    maxParticipants: zod
+      .number()
+      .nullish()
+      .describe(
+        "운영자와 별개로 모집할 참여자 수. 운영자 좌석은 포함하지 않음.",
+      ),
+    defaultCenterInterval: zod.number(),
+    defaultCenterCount: zod.number(),
+    status: zod.enum(["RECRUITING", "ACTIVE", "ARCHIVED"]),
+    creatorId: zod.string().uuid(),
+    inviteCode: zod
+      .string()
+      .nullish()
+      .describe(
+        '한글 형용사+명사 조합 초대 코드 (예: \"파란하늘\"). 공간 생성 시 자동 배정.',
+      ),
+    createdAt: zod.date(),
+    updatedAt: zod.date(),
+  }),
+  pendingCount: zod
+    .number()
+    .min(1)
+    .describe("Number of pending join requests for this space"),
+});
+export const ListOperatorPendingSpaceCodeRequestsResponse = zod.array(
+  ListOperatorPendingSpaceCodeRequestsResponseItem,
+);
+
+/**
  * @summary List spaces the user participates in (with role and participant count)
  */
 export const ListSpacesQueryParams = zod.object({

@@ -425,6 +425,66 @@ router.get("/spaces/my-code-requests", async (req, res) => {
   res.json(result);
 });
 
+// ─── Operator pending code requests (must be before /:id) ────────────────────
+router.get("/spaces/operator-pending-code-requests", requireAuth, async (req, res) => {
+  const callerId = req.user!.id;
+  const operatorParticipations = await db
+    .select({ spaceId: spaceParticipationsTable.spaceId })
+    .from(spaceParticipationsTable)
+    .where(
+      and(
+        eq(spaceParticipationsTable.userId, callerId),
+        eq(spaceParticipationsTable.role, "OPERATOR"),
+        eq(spaceParticipationsTable.status, "APPROVED"),
+      ),
+    );
+
+  const operatorSpaceIds = [...new Set(operatorParticipations.map((p) => p.spaceId))];
+  if (operatorSpaceIds.length === 0) {
+    res.json([]);
+    return;
+  }
+
+  const [spaces, pendingCounts] = await Promise.all([
+    db
+      .select()
+      .from(spacesTable)
+      .where(
+        and(
+          inArray(spacesTable.id, operatorSpaceIds),
+          ne(spacesTable.status, "ARCHIVED"),
+        ),
+      ),
+    db
+      .select({
+        spaceId: spaceCodeRequestsTable.spaceId,
+        pendingCount: count(),
+      })
+      .from(spaceCodeRequestsTable)
+      .where(
+        and(
+          inArray(spaceCodeRequestsTable.spaceId, operatorSpaceIds),
+          eq(spaceCodeRequestsTable.status, "PENDING"),
+        ),
+      )
+      .groupBy(spaceCodeRequestsTable.spaceId),
+  ]);
+
+  const spaceMap = new Map(spaces.map((space) => [space.id, space]));
+  const result = pendingCounts
+    .map((pending) => ({
+      space: spaceMap.get(pending.spaceId),
+      pendingCount: Number(pending.pendingCount),
+    }))
+    .filter(
+      (item): item is { space: (typeof spaces)[number]; pendingCount: number } =>
+        item.space !== undefined && item.pendingCount > 0,
+    )
+    .sort((a, b) => a.space.name.localeCompare(b.space.name, "ko"));
+
+  res.json(result);
+});
+
 // ─── List spaces (enriched with role + participant count) ────────────────────
 router.get("/spaces", async (req, res) => {
   const { userId } = req.query;

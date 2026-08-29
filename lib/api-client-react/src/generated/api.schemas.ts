@@ -753,6 +753,15 @@ export interface SpaceCodeRequestWithSpace {
   space: Space;
 }
 
+export interface SpacePendingCodeRequestSummary {
+  space: Space;
+  /**
+   * Number of pending join requests for this space
+   * @minimum 1
+   */
+  pendingCount: number;
+}
+
 /**
  * 진행 방식
  */

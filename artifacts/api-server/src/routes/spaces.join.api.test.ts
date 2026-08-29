@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
+import { readFileSync } from "node:fs";
 import express from "express";
 
 type Space = {
@@ -17,6 +18,7 @@ const state = vi.hoisted(() => {
     spaces: {
       id: column("spaces.id"),
       inviteCode: column("spaces.invite_code"),
+      status: column("spaces.status"),
     },
     participations: {
       id: column("space_participations.id"),
@@ -54,6 +56,7 @@ const state = vi.hoisted(() => {
         from: () => chain,
         where: () => chain,
         orderBy: () => chain,
+        groupBy: () => Promise.resolve(rows),
         limit: () => Promise.resolve(rows),
         then: (resolve: (value: unknown[]) => unknown, reject?: (reason: unknown) => unknown) =>
           Promise.resolve(rows).then(resolve, reject),
@@ -156,6 +159,12 @@ function patch(baseUrl: string, userId: string, path: string, body: Record<strin
     method: "PATCH",
     headers: { "content-type": "application/json", "x-test-user-id": userId },
     body: JSON.stringify(body),
+  });
+}
+
+function get(baseUrl: string, path: string, userId?: string) {
+  return fetch(`${baseUrl}${path}`, {
+    headers: userId ? { "x-test-user-id": userId } : undefined,
   });
 }
 
@@ -269,5 +278,82 @@ describe("space join API contract", () => {
       const response = await fetch(`${baseUrl}/spaces/space-a/join-context?userId=another-user`);
       expect(response.status).toBe(401);
     });
+  });
+});
+
+describe("operator pending code request summary", () => {
+  it("requires authentication", async () => {
+    await withServer(async (baseUrl) => {
+      const response = await get(baseUrl, "/spaces/operator-pending-code-requests");
+      expect(response.status).toBe(401);
+    });
+  });
+
+  it("returns one sorted row per operated space and omits unmatched spaces", async () => {
+    await withServer(async (baseUrl) => {
+      queueRows(
+        [{ spaceId: "space-b" }, { spaceId: "space-a" }],
+        [
+          { id: "space-b", name: "베타 공간", status: "RECRUITING" },
+          { id: "space-a", name: "가나다 공간", status: "ACTIVE" },
+        ],
+        [
+          { spaceId: "space-b", pendingCount: "1" },
+          { spaceId: "space-a", pendingCount: 2 },
+          { spaceId: "another-operator-space", pendingCount: 4 },
+        ],
+      );
+
+      const response = await get(
+        baseUrl,
+        "/spaces/operator-pending-code-requests",
+        "operator-a",
+      );
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual([
+        {
+          space: { id: "space-a", name: "가나다 공간", status: "ACTIVE" },
+          pendingCount: 2,
+        },
+        {
+          space: { id: "space-b", name: "베타 공간", status: "RECRUITING" },
+          pendingCount: 1,
+        },
+      ]);
+    });
+  });
+
+  it("returns an empty list when the user operates no spaces", async () => {
+    await withServer(async (baseUrl) => {
+      queueRows([]);
+
+      const response = await get(
+        baseUrl,
+        "/spaces/operator-pending-code-requests",
+        "participant-a",
+      );
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual([]);
+    });
+  });
+
+  it("scopes the database predicates to the authenticated approved operator and pending requests", () => {
+    const source = readFileSync(new URL("./spaces.ts", import.meta.url), "utf8");
+    const routeStart = source.indexOf(
+      'router.get("/spaces/operator-pending-code-requests"',
+    );
+    const routeEnd = source.indexOf(
+      "// ─── List spaces",
+      routeStart,
+    );
+    const route = source.slice(routeStart, routeEnd);
+
+    expect(route).toContain("const callerId = req.user!.id");
+    expect(route).toContain('eq(spaceParticipationsTable.role, "OPERATOR")');
+    expect(route).toContain('eq(spaceParticipationsTable.status, "APPROVED")');
+    expect(route).toContain('eq(spaceCodeRequestsTable.status, "PENDING")');
+    expect(route).toContain('ne(spacesTable.status, "ARCHIVED")');
   });
 });
