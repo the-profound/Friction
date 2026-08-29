@@ -15,6 +15,8 @@ export interface InboxItem {
   senderId: string;
   /** Team collection through which this inbox row was delivered. NULL for 1:1 / neighbor sends. */
   sourceTeamCollectionId?: string | null;
+  /** Space through which this inbox row was delivered. NULL for team-collection and 1:1 / neighbor sends. */
+  sourceSpaceId?: string | null;
   visibleAt: Date;
   openedAt?: Date | null;
   isRead: boolean;

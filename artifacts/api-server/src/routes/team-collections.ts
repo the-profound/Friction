@@ -288,6 +288,8 @@ router.post("/team-collections/:id/members", async (req, res) => {
             eq(inboxTable.articleId, teamCollectionArticlesTable.articleId),
             eq(inboxTable.recipientId, teamCollectionMembershipsTable.userId),
             eq(inboxTable.senderId, teamCollectionArticlesTable.addedBy),
+            eq(inboxTable.sourceTeamCollectionId, teamCollectionId),
+            isNull(inboxTable.sourceSpaceId),
           ),
         )
         .where(and(
@@ -309,10 +311,9 @@ router.post("/team-collections/:id/members", async (req, res) => {
     }
 
     if (perArticle.size > 0) {
-      // One row per (newMember, article, this team collection). The unique
-      // constraint inbox_recipient_article_source_unique guarantees the same
-      // article-from-the-same-collection won't duplicate even if backfill
-      // re-runs.
+      // One row per (newMember, article, this team collection). The inbox
+      // source uniqueness guarantees the same article from the same collection
+      // won't duplicate even if backfill re-runs.
       const toInsert = Array.from(perArticle.entries()).map(([articleId, v]) => ({
         recipientId: userId,
         articleId,
@@ -320,9 +321,7 @@ router.post("/team-collections/:id/members", async (req, res) => {
         sourceTeamCollectionId: teamCollectionId,
         visibleAt: v.visibleAt,
       }));
-      await tx.insert(inboxTable).values(toInsert).onConflictDoNothing({
-        target: [inboxTable.recipientId, inboxTable.articleId, inboxTable.sourceTeamCollectionId],
-      });
+      await tx.insert(inboxTable).values(toInsert).onConflictDoNothing();
     }
 
     return m;
@@ -385,6 +384,8 @@ router.get("/team-collections/:id/articles", async (req, res) => {
       and(
         eq(inboxTable.articleId, teamCollectionArticlesTable.articleId),
         eq(inboxTable.recipientId, effectiveRequesterId),
+        eq(inboxTable.sourceTeamCollectionId, teamCollectionId),
+        isNull(inboxTable.sourceSpaceId),
       ),
     )
     .leftJoin(
@@ -541,9 +542,7 @@ router.post("/team-collections/:id/articles", async (req, res) => {
           sourceTeamCollectionId: teamCollectionId,
           visibleAt,
         })),
-      ).onConflictDoNothing({
-        target: [inboxTable.recipientId, inboxTable.articleId, inboxTable.sourceTeamCollectionId],
-      });
+      ).onConflictDoNothing();
     }
 
     await tx.insert(sendRecordsTable).values({

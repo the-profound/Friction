@@ -620,6 +620,13 @@ export const ListInboxResponseItem = zod.object({
     .describe(
       "Team collection through which this inbox row was delivered. NULL for 1:1 \/ neighbor sends.",
     ),
+  sourceSpaceId: zod
+    .string()
+    .uuid()
+    .nullish()
+    .describe(
+      "Space through which this inbox row was delivered. NULL for team-collection and 1:1 \/ neighbor sends.",
+    ),
   visibleAt: zod.date(),
   openedAt: zod.date().nullish(),
   isRead: zod.boolean(),
@@ -741,6 +748,13 @@ export const GetInboxItemResponse = zod.object({
     .nullish()
     .describe(
       "Team collection through which this inbox row was delivered. NULL for 1:1 \/ neighbor sends.",
+    ),
+  sourceSpaceId: zod
+    .string()
+    .uuid()
+    .nullish()
+    .describe(
+      "Space through which this inbox row was delivered. NULL for team-collection and 1:1 \/ neighbor sends.",
     ),
   visibleAt: zod.date(),
   openedAt: zod.date().nullish(),
@@ -870,6 +884,13 @@ export const MarkInboxOpenedResponse = zod.object({
     .describe(
       "Team collection through which this inbox row was delivered. NULL for 1:1 \/ neighbor sends.",
     ),
+  sourceSpaceId: zod
+    .string()
+    .uuid()
+    .nullish()
+    .describe(
+      "Space through which this inbox row was delivered. NULL for team-collection and 1:1 \/ neighbor sends.",
+    ),
   visibleAt: zod.date(),
   openedAt: zod.date().nullish(),
   isRead: zod.boolean(),
@@ -991,6 +1012,13 @@ export const MarkInboxReadResponse = zod.object({
     .nullish()
     .describe(
       "Team collection through which this inbox row was delivered. NULL for 1:1 \/ neighbor sends.",
+    ),
+  sourceSpaceId: zod
+    .string()
+    .uuid()
+    .nullish()
+    .describe(
+      "Space through which this inbox row was delivered. NULL for team-collection and 1:1 \/ neighbor sends.",
     ),
   visibleAt: zod.date(),
   openedAt: zod.date().nullish(),

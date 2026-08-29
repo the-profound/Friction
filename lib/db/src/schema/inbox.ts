@@ -1,8 +1,10 @@
-import { boolean, pgTable, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { boolean, pgTable, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
 import { articlesTable } from "./articles";
+import { spacesTable, spaceScheduledSendsTable } from "./spaces";
 import { teamCollectionsTable } from "./team-collections";
 import { usersTable } from "./users";
 
@@ -15,15 +17,31 @@ export const inboxTable = pgTable("inbox", {
     () => teamCollectionsTable.id,
     { onDelete: "set null" },
   ),
+  sourceSpaceId: uuid("source_space_id").references(
+    () => spacesTable.id,
+    { onDelete: "set null" },
+  ),
+  sourceSpaceScheduledSendId: uuid("source_space_scheduled_send_id").references(
+    () => spaceScheduledSendsTable.id,
+    { onDelete: "set null" },
+  ),
   visibleAt: timestamp("visible_at", { withTimezone: true }).notNull(),
   openedAt: timestamp("opened_at", { withTimezone: true }),
   isRead: boolean("is_read").notNull().default(false),
   isEnvelope: boolean("is_envelope").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
-  unique("inbox_recipient_article_source_unique")
-    .on(t.recipientId, t.articleId, t.sourceTeamCollectionId)
+  unique("inbox_recipient_article_sources_unique")
+    .on(
+      t.recipientId,
+      t.articleId,
+      t.sourceTeamCollectionId,
+      t.sourceSpaceScheduledSendId,
+    )
     .nullsNotDistinct(),
+  uniqueIndex("inbox_space_scheduled_send_recipient_unique")
+    .on(t.recipientId, t.sourceSpaceScheduledSendId)
+    .where(sql`${t.sourceSpaceScheduledSendId} IS NOT NULL`),
 ]);
 
 export const insertInboxSchema = createInsertSchema(inboxTable).omit({ id: true, createdAt: true });

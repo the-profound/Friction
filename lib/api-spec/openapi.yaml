@@ -3286,6 +3286,11 @@ components:
           format: uuid
           nullable: true
           description: Team collection through which this inbox row was delivered. NULL for 1:1 / neighbor sends.
+        sourceSpaceId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Space through which this inbox row was delivered. NULL for team-collection and 1:1 / neighbor sends.
         visibleAt:
           type: string
           format: date-time

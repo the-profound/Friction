@@ -18,24 +18,35 @@ const ANONYMOUS_PARTICIPANT_NAME = "참여자";
 // lead users to a draft, deleted, or otherwise non-readable article.
 const readableInboxArticle = sql`${articlesTable.status} IN ('DIVIDING', 'CLOSING', 'LETTER')`;
 
-// Space-backed inbox rows normally carry sourceTeamCollectionId. Older rows
-// predate that column, so use the article's space-letter source relation as a
-// deterministic fallback. This keeps mixed-space inboxes isolated per row.
+// Space-backed inbox rows carry sourceSpaceId. For legacy generic rows with no
+// explicit source, use the article relation only when it identifies exactly one
+// space. Team-collection rows are never interpreted as space rows.
 const inboxSpaceIdSubquery = sql<string | null>`(
   COALESCE(
+    ${inboxTable.sourceSpaceId},
     (
-      SELECT s.id
-      FROM spaces s
-      WHERE s.id = ${inboxTable.sourceTeamCollectionId}
-      LIMIT 1
-    ),
-    (
-      SELECT s.id
-      FROM spaces s
-      JOIN space_letters sl ON sl.space_id = s.id
-      WHERE sl.source_article_id = ${inboxTable.articleId}
-      ORDER BY sl.created_at ASC
-      LIMIT 1
+      SELECT CASE
+        WHEN COUNT(DISTINCT sl.space_id) = 1
+        THEN (ARRAY_AGG(DISTINCT sl.space_id))[1]
+      END
+      FROM space_letters sl
+      WHERE ${inboxTable.sourceSpaceId} IS NULL
+        AND ${inboxTable.sourceTeamCollectionId} IS NULL
+        AND sl.source_article_id = ${inboxTable.articleId}
+        AND NOT EXISTS (
+          SELECT 1
+          FROM send_records sr
+          WHERE sr.inbox_id = ${inboxTable.id}
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM team_collection_articles tca
+          JOIN team_collection_memberships tcm
+            ON tcm.team_collection_id = tca.team_collection_id
+           AND tcm.user_id = ${inboxTable.recipientId}
+          WHERE tca.article_id = ${inboxTable.articleId}
+            AND tca.added_by = ${inboxTable.senderId}
+        )
     )
   )
 )`;
@@ -100,18 +111,20 @@ function sanitizeInboxRow<T extends InboxRow>(row: T) {
   };
 }
 
-// Resolves the "출처 모임명" shown next to each inbox card.
-// New rows carry sourceTeamCollectionId for team-collection deliveries; for
-// 1:1/neighbor sends (NULL) we fall back to a personal-collection name lookup
-// so legacy NULL rows that were never backfilled still render something useful.
+// Resolves the source name shown next to each inbox card. Space and team
+// collection sources are intentionally independent; generic person sends may
+// still fall back to a personal-collection name.
 const collectionNameSubquery = sql<string | null>`(
-  COALESCE(
-    (
+  CASE
+    WHEN ${inboxSpaceIdSubquery} IS NOT NULL THEN (
+      SELECT s.name FROM spaces s WHERE s.id = ${inboxSpaceIdSubquery}
+    )
+    WHEN ${inboxTable.sourceTeamCollectionId} IS NOT NULL THEN (
       SELECT tc.name
       FROM team_collections tc
       WHERE tc.id = ${inboxTable.sourceTeamCollectionId}
-    ),
-    (
+    )
+    ELSE (
       SELECT mc.name
       FROM my_collection_articles mca
       JOIN my_collections mc ON mca.my_collection_id = mc.id
@@ -119,7 +132,7 @@ const collectionNameSubquery = sql<string | null>`(
       ORDER BY mca.added_at ASC
       LIMIT 1
     )
-  )
+  END
 )`;
 
 router.get("/inbox", async (req, res) => {
@@ -154,6 +167,7 @@ router.get("/inbox", async (req, res) => {
       articleId: inboxTable.articleId,
       senderId: inboxTable.senderId,
       sourceTeamCollectionId: inboxTable.sourceTeamCollectionId,
+      sourceSpaceId: inboxTable.sourceSpaceId,
       visibleAt: inboxTable.visibleAt,
       openedAt: inboxTable.openedAt,
       isRead: inboxTable.isRead,
@@ -201,6 +215,7 @@ router.get("/inbox/:id", async (req, res) => {
       articleId: inboxTable.articleId,
       senderId: inboxTable.senderId,
       sourceTeamCollectionId: inboxTable.sourceTeamCollectionId,
+      sourceSpaceId: inboxTable.sourceSpaceId,
       visibleAt: inboxTable.visibleAt,
       openedAt: inboxTable.openedAt,
       isRead: inboxTable.isRead,

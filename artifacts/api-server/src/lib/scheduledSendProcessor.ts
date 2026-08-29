@@ -1,26 +1,23 @@
 /**
- * Processes due space-letter reservations (`space_scheduled_sends`).
+ * Atomically delivers due space-letter reservations to recipient inboxes.
  *
- * A reservation is "due" once its `scheduledAt` (always KST 06:00) has
- * passed. Once due, it must transition out of PENDING so it never lingers
- * as "대기 중" (pending) on the reservation list:
- *   - SENT + sentAt: the normal case — the reservation is honored.
- *   - FAILED + failureReason: the underlying letter/article was deleted, or
- *     the space was archived before the reservation could be honored.
- *
- * This is called from two places:
- *   1. The periodic scheduler job (`scheduler.ts`), which sweeps the whole
- *      table so reservations are caught up even if the process was down.
- *   2. Read paths (`GET .../scheduled-sends`) that scope the sweep to a
- *      single space, so a user never sees a "PENDING" reservation whose
- *      time has already passed, even if the periodic job hasn't run yet.
- *
- * All transitions are guarded by `WHERE status = 'PENDING'`, so concurrent
- * callers (multiple server instances, or a read-path sweep racing the
- * periodic job) can never double-process the same row.
+ * Each reservation is processed while its row is locked. Inbox creation and
+ * the PENDING -> SENT transition share one transaction, and the reservation id
+ * is persisted on every inbox row as the durable idempotency key. SENT rows
+ * with no delivery rows are also selected so deployments repair historical
+ * omissions without duplicating successful deliveries.
  */
-import { db, spaceScheduledSendsTable, spaceLettersTable, articlesTable, spacesTable } from "@workspace/db";
-import { eq, and, lte, inArray } from "drizzle-orm";
+import {
+  articlesTable,
+  db,
+  inboxTable,
+  spacesTable,
+  spaceLettersTable,
+  spaceParticipationsTable,
+  spaceScheduledSendRecipientsTable,
+  spaceScheduledSendsTable,
+} from "@workspace/db";
+import { and, eq, inArray, isNull, lte, or, sql, type SQL } from "drizzle-orm";
 import { logger } from "./logger";
 
 export interface ProcessDueScheduledSendsResult {
@@ -28,123 +25,260 @@ export interface ProcessDueScheduledSendsResult {
   failedCount: number;
 }
 
+const READABLE_ARTICLE_STATUSES = new Set(["DIVIDING", "CLOSING", "LETTER"]);
+
+export function resolveSpaceDeliveryRecipientIds(input: {
+  authorId: string;
+  creatorId: string;
+  approvedParticipantIds: string[];
+}): string[] {
+  const recipients = new Set(input.approvedParticipantIds);
+  // The creator/operator remains a recipient even in legacy spaces where the
+  // operator participation row is absent, and regardless of slot participation.
+  recipients.add(input.creatorId);
+  recipients.delete(input.authorId);
+  return [...recipients];
+}
+
+type ProcessOneResult = "sent" | "repaired" | "failed" | "skipped";
+
+async function processOneScheduledSend(
+  sendId: string,
+  now: Date,
+): Promise<ProcessOneResult> {
+  return db.transaction(async (tx) => {
+    // Serialize workers on this reservation. A second worker re-reads the
+    // committed state below and can only perform idempotent repair.
+    await tx.execute(
+      sql`SELECT id FROM space_scheduled_sends WHERE id = ${sendId} FOR UPDATE`,
+    );
+
+    const [send] = await tx
+      .select()
+      .from(spaceScheduledSendsTable)
+      .where(eq(spaceScheduledSendsTable.id, sendId))
+      .limit(1);
+
+    if (
+      !send ||
+      send.scheduledAt > now ||
+      (send.status !== "PENDING" && send.status !== "SENT")
+    ) {
+      return "skipped";
+    }
+
+    const [letter] = await tx
+      .select()
+      .from(spaceLettersTable)
+      .where(
+        and(
+          eq(spaceLettersTable.id, send.spaceLetterId),
+          eq(spaceLettersTable.spaceId, send.spaceId),
+        ),
+      )
+      .limit(1);
+    const [space] = await tx
+      .select({
+        id: spacesTable.id,
+        creatorId: spacesTable.creatorId,
+        status: spacesTable.status,
+      })
+      .from(spacesTable)
+      .where(eq(spacesTable.id, send.spaceId))
+      .limit(1);
+
+    let failureReason: string | null = null;
+    if (!letter) {
+      failureReason = "원본 공간 글을 찾을 수 없습니다.";
+    } else if (!space) {
+      failureReason = "공간을 찾을 수 없습니다.";
+    } else if (space.status === "ARCHIVED" && send.status === "PENDING") {
+      failureReason = "공간이 종료되어 발송할 수 없습니다.";
+    } else if (!letter.sourceArticleId) {
+      failureReason = "수신함에 전달할 원본 글이 없습니다.";
+    } else {
+      const [article] = await tx
+        .select({
+          id: articlesTable.id,
+          status: articlesTable.status,
+          deletedAt: articlesTable.deletedAt,
+        })
+        .from(articlesTable)
+        .where(eq(articlesTable.id, letter.sourceArticleId))
+        .limit(1);
+      if (!article || article.deletedAt || !READABLE_ARTICLE_STATUSES.has(article.status)) {
+        failureReason = "원본 글을 읽을 수 없어 발송할 수 없습니다.";
+      }
+    }
+
+    if (failureReason) {
+      await tx
+        .update(spaceScheduledSendsTable)
+        .set({ status: "FAILED", failureReason, sentAt: null })
+        .where(
+          and(
+            eq(spaceScheduledSendsTable.id, send.id),
+            inArray(spaceScheduledSendsTable.status, ["PENDING", "SENT"]),
+          ),
+        );
+      return "failed";
+    }
+
+    let recipientSnapshot = await tx
+      .select({ recipientId: spaceScheduledSendRecipientsTable.recipientId })
+      .from(spaceScheduledSendRecipientsTable)
+      .where(eq(spaceScheduledSendRecipientsTable.scheduledSendId, send.id));
+
+    if (!send.recipientsSnapshottedAt) {
+      const participationConditions: SQL[] = [
+        eq(spaceParticipationsTable.spaceId, send.spaceId),
+        eq(spaceParticipationsTable.status, "APPROVED"),
+      ];
+      if (send.status === "SENT") {
+        participationConditions.push(
+          lte(
+            spaceParticipationsTable.createdAt,
+            send.sentAt ?? send.scheduledAt,
+          ),
+          // Legacy rows have no dedicated approvedAt. updatedAt <= cutoff is
+          // conservative evidence that the currently-approved state already
+          // existed by delivery time, and prevents late approvals from being
+          // added retroactively.
+          lte(
+            spaceParticipationsTable.updatedAt,
+            send.sentAt ?? send.scheduledAt,
+          ),
+        );
+      }
+      const participations = await tx
+        .select({ userId: spaceParticipationsTable.userId })
+        .from(spaceParticipationsTable)
+        .where(and(...participationConditions));
+      const resolvedRecipientIds = resolveSpaceDeliveryRecipientIds({
+        authorId: letter!.authorId,
+        creatorId: space!.creatorId,
+        approvedParticipantIds: participations.map((row) => row.userId),
+      });
+      if (resolvedRecipientIds.length > 0) {
+        await tx
+          .insert(spaceScheduledSendRecipientsTable)
+          .values(
+            resolvedRecipientIds.map((recipientId) => ({
+              scheduledSendId: send.id,
+              recipientId,
+            })),
+          )
+          .onConflictDoNothing();
+      }
+      await tx
+        .update(spaceScheduledSendsTable)
+        .set({ recipientsSnapshottedAt: now })
+        .where(eq(spaceScheduledSendsTable.id, send.id));
+      recipientSnapshot = resolvedRecipientIds.map((recipientId) => ({
+        recipientId,
+      }));
+    }
+
+    const recipientIds = recipientSnapshot.map((row) => row.recipientId);
+
+    if (recipientIds.length > 0) {
+      await tx
+        .insert(inboxTable)
+        .values(
+          recipientIds.map((recipientId) => ({
+            recipientId,
+            articleId: letter!.sourceArticleId!,
+            senderId: letter!.authorId,
+            sourceSpaceId: send.spaceId,
+            sourceSpaceScheduledSendId: send.id,
+            visibleAt: send.scheduledAt,
+          })),
+        )
+        .onConflictDoNothing({
+          target: [
+            inboxTable.recipientId,
+            inboxTable.sourceSpaceScheduledSendId,
+          ],
+          where: sql`${inboxTable.sourceSpaceScheduledSendId} IS NOT NULL`,
+        });
+    }
+
+    if (send.status === "PENDING") {
+      await tx
+        .update(spaceScheduledSendsTable)
+        .set({ status: "SENT", sentAt: now, failureReason: null })
+        .where(
+          and(
+            eq(spaceScheduledSendsTable.id, send.id),
+            eq(spaceScheduledSendsTable.status, "PENDING"),
+          ),
+        );
+      return "sent";
+    }
+    return "repaired";
+  });
+}
+
 export async function processDueScheduledSends(opts?: {
   spaceId?: string;
 }): Promise<ProcessDueScheduledSendsResult> {
   const now = new Date();
   const conditions = [
-    eq(spaceScheduledSendsTable.status, "PENDING"),
     lte(spaceScheduledSendsTable.scheduledAt, now),
+    or(
+      eq(spaceScheduledSendsTable.status, "PENDING"),
+      and(
+        eq(spaceScheduledSendsTable.status, "SENT"),
+        or(
+          isNull(spaceScheduledSendsTable.recipientsSnapshottedAt),
+          sql`EXISTS (
+            SELECT 1
+            FROM space_scheduled_send_recipients ssr
+            WHERE ssr.scheduled_send_id = ${spaceScheduledSendsTable.id}
+              AND NOT EXISTS (
+                SELECT 1
+                FROM inbox i
+                WHERE i.source_space_scheduled_send_id = ${spaceScheduledSendsTable.id}
+                  AND i.recipient_id = ssr.recipient_id
+              )
+          )`,
+        )!,
+      ),
+    )!,
   ];
   if (opts?.spaceId) {
     conditions.push(eq(spaceScheduledSendsTable.spaceId, opts.spaceId));
   }
 
-  const due = await db
-    .select({
-      id: spaceScheduledSendsTable.id,
-      spaceId: spaceScheduledSendsTable.spaceId,
-      spaceLetterId: spaceScheduledSendsTable.spaceLetterId,
-    })
+  const candidates = await db
+    .select({ id: spaceScheduledSendsTable.id })
     .from(spaceScheduledSendsTable)
     .where(and(...conditions));
 
-  if (due.length === 0) {
-    return { sentCount: 0, failedCount: 0 };
-  }
-
-  const letterIds = [...new Set(due.map((d) => d.spaceLetterId))];
-  const spaceIds = [...new Set(due.map((d) => d.spaceId))];
-
-  const [letters, spaces] = await Promise.all([
-    db.select().from(spaceLettersTable).where(inArray(spaceLettersTable.id, letterIds)),
-    db
-      .select({ id: spacesTable.id, status: spacesTable.status })
-      .from(spacesTable)
-      .where(inArray(spacesTable.id, spaceIds)),
-  ]);
-  const letterMap = new Map(letters.map((l) => [l.id, l]));
-  const spaceStatusMap = new Map(spaces.map((s) => [s.id, s.status]));
-
-  const articleIds = [
-    ...new Set(letters.map((l) => l.sourceArticleId).filter((id): id is string => !!id)),
-  ];
-  const articles = articleIds.length > 0
-    ? await db
-        .select({ id: articlesTable.id, deletedAt: articlesTable.deletedAt })
-        .from(articlesTable)
-        .where(inArray(articlesTable.id, articleIds))
-    : [];
-  const deletedArticleIds = new Set(articles.filter((a) => a.deletedAt != null).map((a) => a.id));
-  const existingArticleIds = new Set(articles.map((a) => a.id));
-
-  const okIds: string[] = [];
-  const failures = new Map<string, string>();
-
-  for (const send of due) {
-    const letter = letterMap.get(send.spaceLetterId);
-    if (!letter) {
-      failures.set(send.id, "원본 글을 찾을 수 없습니다.");
-      continue;
-    }
-    const spaceStatus = spaceStatusMap.get(send.spaceId);
-    if (spaceStatus === "ARCHIVED") {
-      failures.set(send.id, "공간이 종료되어 발송할 수 없습니다.");
-      continue;
-    }
-    if (
-      letter.sourceArticleId &&
-      (deletedArticleIds.has(letter.sourceArticleId) || !existingArticleIds.has(letter.sourceArticleId))
-    ) {
-      failures.set(send.id, "원본 글이 삭제되어 발송할 수 없습니다.");
-      continue;
-    }
-    okIds.push(send.id);
-  }
-
   let sentCount = 0;
   let failedCount = 0;
+  let repairedCount = 0;
 
-  await db.transaction(async (tx) => {
-    if (okIds.length > 0) {
-      const sent = await tx
-        .update(spaceScheduledSendsTable)
-        .set({ status: "SENT", sentAt: now })
-        .where(
-          and(
-            eq(spaceScheduledSendsTable.status, "PENDING"),
-            inArray(spaceScheduledSendsTable.id, okIds),
-          ),
-        )
-        .returning({ id: spaceScheduledSendsTable.id });
-      sentCount = sent.length;
+  for (const candidate of candidates) {
+    try {
+      const result = await processOneScheduledSend(candidate.id, now);
+      if (result === "sent") sentCount += 1;
+      if (result === "repaired") repairedCount += 1;
+      if (result === "failed") failedCount += 1;
+    } catch (err) {
+      // The transaction rolls back both inbox rows and status changes. Leave a
+      // PENDING reservation retryable rather than committing a false SENT.
+      failedCount += 1;
+      logger.error(
+        { err, scheduledSendId: candidate.id },
+        "scheduledSendProcessor: delivery transaction rolled back",
+      );
     }
+  }
 
-    // Group failures by reason so each distinct reason is one UPDATE.
-    const byReason = new Map<string, string[]>();
-    for (const [id, reason] of failures) {
-      const bucket = byReason.get(reason) ?? [];
-      bucket.push(id);
-      byReason.set(reason, bucket);
-    }
-    for (const [reason, ids] of byReason) {
-      const failed = await tx
-        .update(spaceScheduledSendsTable)
-        .set({ status: "FAILED", failureReason: reason })
-        .where(
-          and(
-            eq(spaceScheduledSendsTable.status, "PENDING"),
-            inArray(spaceScheduledSendsTable.id, ids),
-          ),
-        )
-        .returning({ id: spaceScheduledSendsTable.id });
-      failedCount += failed.length;
-    }
-  });
-
-  if (sentCount > 0 || failedCount > 0) {
+  if (sentCount > 0 || failedCount > 0 || repairedCount > 0) {
     logger.info(
-      { sentCount, failedCount, spaceId: opts?.spaceId },
+      { sentCount, failedCount, repairedCount, spaceId: opts?.spaceId },
       "scheduledSendProcessor: processed due reservations",
     );
   }

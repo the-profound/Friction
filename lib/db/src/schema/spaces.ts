@@ -168,6 +168,7 @@ export const spaceScheduledSendsTable = pgTable("space_scheduled_sends", {
   status: spaceScheduledSendStatusEnum("status").notNull().default("PENDING"),
   sentAt: timestamp("sent_at", { withTimezone: true }),
   failureReason: text("failure_reason"),
+  recipientsSnapshottedAt: timestamp("recipients_snapshotted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
@@ -175,6 +176,35 @@ export const spaceScheduledSendsTable = pgTable("space_scheduled_sends", {
 export const insertSpaceScheduledSendSchema = createInsertSchema(spaceScheduledSendsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertSpaceScheduledSend = z.infer<typeof insertSpaceScheduledSendSchema>;
 export type SpaceScheduledSend = typeof spaceScheduledSendsTable.$inferSelect;
+
+export const spaceScheduledSendRecipientsTable = pgTable(
+  "space_scheduled_send_recipients",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    scheduledSendId: uuid("scheduled_send_id")
+      .notNull()
+      .references(() => spaceScheduledSendsTable.id, { onDelete: "cascade" }),
+    recipientId: uuid("recipient_id")
+      .notNull()
+      .references(() => usersTable.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("space_scheduled_send_recipients_send_user_unique").on(
+      t.scheduledSendId,
+      t.recipientId,
+    ),
+  ],
+);
+
+export const insertSpaceScheduledSendRecipientSchema = createInsertSchema(
+  spaceScheduledSendRecipientsTable,
+).omit({ id: true, createdAt: true });
+export type InsertSpaceScheduledSendRecipient = z.infer<
+  typeof insertSpaceScheduledSendRecipientSchema
+>;
+export type SpaceScheduledSendRecipient =
+  typeof spaceScheduledSendRecipientsTable.$inferSelect;
 
 export const spaceRoundSlotsTable = pgTable("space_round_slots", {
   id: uuid("id").defaultRandom().primaryKey(),
