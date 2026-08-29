@@ -45,7 +45,7 @@ html,body{height:100%;background:transparent;container-type:inline-size}
 #title-input{
   display:block;
   width:100%;
-  font-family:'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif;
+  font-family:var(--body-semibold-font-family,'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif);
    font-size:var(--title-font-size);
   font-weight:600;
   line-height:1.25;
@@ -62,62 +62,44 @@ html,body{height:100%;background:transparent;container-type:inline-size}
   -webkit-text-size-adjust:100%;
   -webkit-appearance:none;
 }
-#title-input::placeholder{color:#a1a1aa;font-family:'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif}
+#title-input::placeholder{color:#a1a1aa;font-family:var(--body-semibold-font-family,'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif)}
 #editor-content{
-  width:100%;
+  width:var(--text-column-width);
+  max-width:100%;
   min-height:200px;
   padding:0 0 120px;
-  font-family:'Eulyoo1945-Regular','NotoSerifKR_400Regular',serif;
-   font-size:var(--body-font-size);
-   line-height:var(--body-line-height);
-   letter-spacing:var(--body-letter-spacing);
-  color:#1A1A1A;
-  background:transparent;
-   text-size-adjust:100%;
-   -webkit-text-size-adjust:100%;
   outline:none;
-  text-align:justify;
-  overflow-wrap:break-word;
-  text-justify:inter-ideograph;
 }
 .ProseMirror{
+  box-sizing:border-box;
+  width:100%;
+  max-width:100%;
   outline:none;
   min-height:200px;
-  word-wrap:break-word;
   white-space:pre-wrap !important;
 }
-.ProseMirror p{margin-bottom:1em;text-align:justify;overflow-wrap:break-word;text-justify:inter-ideograph}
- .ProseMirror h1{font-family:'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif;font-size:var(--title-font-size);font-weight:600;letter-spacing:0.025em;margin:1em 0 0.4em;line-height:1.25;text-align:left}
-.ProseMirror h2{font-family:'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif;font-size:1.3em;font-weight:600;letter-spacing:0.025em;margin:0.8em 0 0.3em;line-height:1.3;text-align:left}
-.ProseMirror h3{font-family:'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif;font-size:1.1em;font-weight:600;letter-spacing:0.025em;margin:0.6em 0 0.3em;line-height:1.35;text-align:left}
-.ProseMirror ul,.ProseMirror ol{padding-left:1.5em;margin-bottom:1em;text-align:left}
-.ProseMirror li{margin-bottom:0.2em;text-align:left}
-.ProseMirror blockquote{font-family:'Eulyoo1945-Regular','NotoSerifKR_400Regular',serif;font-style:italic;border-left:3px solid #d4d4d8;padding-left:1em;margin:0.5em 0;color:#52525b;text-align:left}
-.ProseMirror hr{border:none;border-top:1px solid #e4e4e7;margin:0}
-.hr-wrapper{position:relative;margin:1em 0;cursor:pointer;padding:10px 0}
-.hr-controls{display:none;justify-content:space-between;align-items:center;padding:4px 0 2px}
+.hr-wrapper{position:relative;margin:1em 0;cursor:pointer}
+.hr-controls{display:none;position:absolute;left:0;right:0;top:100%;z-index:2;justify-content:space-between;align-items:center;padding:4px 0 2px;background:#fff}
 .hr-move-group{display:inline-flex;gap:8px}
 .hr-btn{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid #d4d4d8;border-radius:50%;background:#fff;color:#3f3f46;font-size:16px;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation;user-select:none;transition:opacity 0.15s}
 .hr-btn-delete{color:#a1a1aa;font-size:14px}
 .ProseMirror p.is-editor-empty:first-child::before{content:attr(data-placeholder);color:#a1a1aa;pointer-events:none;float:left;height:0}
-.ProseMirror u{text-decoration:underline}
-.ProseMirror strong{font-family:'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif;font-weight:600}
-.ProseMirror em{font-style:italic}
-.tiptap-inline-image{display:block;max-width:240px;width:auto;height:auto;border-radius:8px;margin:0.5em 0}
 .ProseMirror .overflow-highlight{background:#fecaca}
 .ProseMirror .spell-highlight{background:rgba(59,130,246,0.15);border-bottom:2px solid #3b82f6;border-radius:1px}
-.tiptap-question-block{background-color:#eff6ff;border-left:4px solid #3b82f6;border-radius:6px;padding:12px 14px;margin:0.5em 0;text-align:left}
-.tiptap-question-block p{margin-bottom:0;font-family:'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif;font-weight:600;color:#1e3a8a;text-align:left}
+.tiptap-question-block{background-color:#eff6ff;border-radius:6px;padding:0;margin:0 0 1em}
+.tiptap-question-block p{margin:0;font-family:var(--body-regular-font-family,'Eulyoo1945-Regular','NotoSerifKR_400Regular',serif);font-weight:400;color:#1e3a8a}
+.tiptap-question-block p::before{content:'Q. '}
 @keyframes page-anchor-pulse{0%{opacity:0}25%{opacity:1}75%{opacity:1}100%{opacity:0}}
 .page-anchor-overlay{position:absolute;left:0;width:100%;background:rgba(59,130,246,0.14);border-radius:6px;pointer-events:none;z-index:0;animation:page-anchor-pulse 1.6s ease-in-out forwards}
 #source-article-slot{display:none;width:100%;font-size:13px;color:#a1a1aa;font-family:system-ui,-apple-system,sans-serif;padding:0 0 8px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;-webkit-tap-highlight-color:transparent}
 body{padding:16px 0 0;overflow:auto;position:relative}
 `.trim();
 
-const VERSION = "3.20.0";
+const VERSION = "3.21.0";
 
 const tsContent = `import { buildWebViewPerfHeadScript } from "@/lib/webviewPerf";
 import { buildWebViewBridgeHeadScript } from "@/lib/webViewBridgeShim";
+import { buildBodyTypographyCss } from "@/components/shared/bodyTypographyCss";
 import {
   BODY_FONT_CONFIG_VERSION,
   buildBodyFontReadyScript,
@@ -136,6 +118,13 @@ function buildFontFaceCSS(opts: EditorFontOptions): string {
   return buildEmbeddedBodyFontFaceCss(opts);
 }
 
+const bodyTypographyCss = buildBodyTypographyCss({
+  rootSelector: "#editor-content",
+  blockSelector: ".ProseMirror",
+  blockMargins: "spaced",
+  hrStyle: "flush",
+});
+
 export function getEditorHtml(fontOptions: EditorFontOptions = {}): string {
   const fontFaceCSS = buildFontFaceCSS(fontOptions);
   const perfHeadScript = buildWebViewPerfHeadScript(!!fontOptions.perfEnabled);
@@ -148,7 +137,7 @@ export function getEditorHtml(fontOptions: EditorFontOptions = {}): string {
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
 \${perfHeadScript}
 \${bridgeHeadScript}
-<style>\${fontFaceCSS}${css}</style>
+<style>\${fontFaceCSS}\${bodyTypographyCss}${css}</style>
 \${fontReadyScript}
 </head>
 <body>

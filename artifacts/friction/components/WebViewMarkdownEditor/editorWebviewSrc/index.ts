@@ -868,6 +868,7 @@ interface Command {
   ranges?: OverflowRange[] | null;
   availableContentHeightPx?: number | null;
   autoSplit?: boolean;
+  mode?: "fallback";
   text?: string;
   metrics?: { textColumnWidth: number; fontSizePx: number; lineHeightPx: number; letterSpacingPx: number; titleFontSizePx: number; textScalePercent: 100 };
   blockType?: string;
@@ -1029,7 +1030,9 @@ function spellFindRange(
   // 멱등 처리용 캐시 — 같은 값을 재전송한 경우 비싼 DOM/style 작업을 스킵한다.
   let lastEditable: boolean | null = null;
   let lastSourceArticleText: string | null = null;
+  let lastTextColumnWidth: number | null = null;
   let lastBodyFontSizePx: number | null = null;
+  let lastBodyLineHeightPx: number | null = null;
   let lastBodyLetterSpacingPx: number | null = null;
   let lastTitleFontSizePx: number | null = null;
 
@@ -1581,10 +1584,19 @@ function spellFindRange(
           if (!metrics) break;
           // 같은 값을 재전송한 경우 CSS 변수/리프로브 작업을 생략한다.
           let changed = false;
+          if (metrics.textColumnWidth !== lastTextColumnWidth) {
+            root.style.setProperty("--text-column-width", metrics.textColumnWidth + "px");
+            lastTextColumnWidth = metrics.textColumnWidth;
+            changed = true;
+          }
           if (metrics.fontSizePx !== lastBodyFontSizePx) {
             root.style.setProperty("--body-font-size", metrics.fontSizePx + "px");
-            root.style.setProperty("--body-line-height", metrics.lineHeightPx + "px");
             lastBodyFontSizePx = metrics.fontSizePx;
+            changed = true;
+          }
+          if (metrics.lineHeightPx !== lastBodyLineHeightPx) {
+            root.style.setProperty("--body-line-height", metrics.lineHeightPx + "px");
+            lastBodyLineHeightPx = metrics.lineHeightPx;
             changed = true;
           }
           if (metrics.letterSpacingPx !== lastBodyLetterSpacingPx) {
@@ -1598,7 +1610,7 @@ function spellFindRange(
             if (titleInput) autoResizeTitle();
             changed = true;
           }
-          // 폰트/자간이 바뀐 경우에만 강조 재측정.
+          // 폭/폰트/행간/자간이 바뀐 경우에만 강조 재측정.
           if (changed) scheduleOverflowProbe(150);
           requestAnimationFrame(() => {
             const probe = document.querySelector<HTMLElement>(".ProseMirror");
@@ -1630,6 +1642,14 @@ function spellFindRange(
               },
             });
           });
+          break;
+        }
+        case "setBodyFontMode": {
+          if (cmd.mode !== "fallback") break;
+          const root = document.documentElement;
+          root.style.setProperty("--body-regular-font-family", "serif");
+          root.style.setProperty("--body-semibold-font-family", "serif");
+          scheduleOverflowProbe(50);
           break;
         }
         case "setBlockType": {

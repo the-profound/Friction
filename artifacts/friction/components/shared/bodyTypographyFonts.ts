@@ -50,7 +50,8 @@ export function buildBodyFontReadyScript(hasEmbeddedFonts: boolean): string {
 
   return `<script>(function(){
 var settled=false;
-function done(ok){if(settled)return;settled=true;window.__bodyFontsReady=Promise.resolve(!!ok);window.__rnBridge.post({type:"onBodyFontsReady",ok:!!ok});}
+function freezeFallback(){var s=document.documentElement&&document.documentElement.style;if(!s)return;s.setProperty("--body-regular-font-family","serif");s.setProperty("--body-semibold-font-family","serif");}
+function done(ok){if(settled)return;settled=true;if(!ok)freezeFallback();window.__bodyFontsReady=Promise.resolve(!!ok);window.__rnBridge.post({type:"onBodyFontsReady",ok:!!ok});}
 window.__bodyFontsReady=new Promise(function(resolve){
 window.addEventListener("load",function(){
  if(!document.fonts||typeof document.fonts.load!=="function"){resolve(false);return;}

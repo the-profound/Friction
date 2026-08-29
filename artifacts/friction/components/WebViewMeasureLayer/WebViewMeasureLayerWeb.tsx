@@ -10,8 +10,12 @@ import { PixelRatio } from "react-native";
 import { buildBodyTypographyCss } from "@/components/shared/bodyTypographyCss";
 import { blockToHtml, markdownToHtml } from "@/lib/markdownRenderer";
 import type { MeasureRequest } from "../PretextMeasureLayer/PretextMeasureLayer";
-import { BODY_REGULAR_FONT_FAMILY } from "@/components/shared/bodyTypographyFonts";
 import {
+  BODY_REGULAR_FONT_FAMILY,
+  BODY_SEMIBOLD_FONT_FAMILY,
+} from "@/components/shared/bodyTypographyFonts";
+import {
+  hasCompleteBodyFontSet,
   logWebBodyTypographyDiagnostic,
   waitForWebBodyFonts,
   type BodyFontLoadStatus,
@@ -19,7 +23,7 @@ import {
 
 interface Props {
   request: MeasureRequest | null;
-  onMeasured: (heights: Record<string, number>) => void;
+  onMeasured: (heights: Record<string, number>, request: MeasureRequest) => void;
 }
 
 const CONTAINER_STYLE: React.CSSProperties = {
@@ -45,6 +49,7 @@ export default function WebViewMeasureLayerWeb({ request, onMeasured }: Props) {
   const prevRequestRef = useRef<MeasureRequest | null>(null);
   const [fontsReady, setFontsReady] = useState(false);
   const fontStatusRef = useRef<BodyFontLoadStatus | null>(null);
+  const latestMeasureSeqRef = useRef(0);
   useEffect(() => {
     let active = true;
     waitForWebBodyFonts().then((status) => {
@@ -61,7 +66,7 @@ export default function WebViewMeasureLayerWeb({ request, onMeasured }: Props) {
     if (!containerRef.current) return;
     if (request.candidates.length === 0) {
       prevRequestRef.current = request;
-      onMeasuredRef.current({});
+      onMeasuredRef.current({}, request);
       return;
     }
 
@@ -91,7 +96,9 @@ export default function WebViewMeasureLayerWeb({ request, onMeasured }: Props) {
       els.push({ key: c.key, el });
     }
 
+    const seq = ++latestMeasureSeqRef.current;
     requestAnimationFrame(() => {
+      if (seq !== latestMeasureSeqRef.current) return;
       const heights: Record<string, number> = {};
       for (const { key, el } of els) {
         heights[key] = el.getBoundingClientRect().height + blockGap;
@@ -102,9 +109,16 @@ export default function WebViewMeasureLayerWeb({ request, onMeasured }: Props) {
         request.typography,
         fontStatusRef.current ?? undefined,
       );
-      onMeasuredRef.current(heights);
+      onMeasuredRef.current(heights, request);
     });
   }, [request, fontsReady]);
+
+  useEffect(() => {
+    if (!request) {
+      prevRequestRef.current = null;
+      latestMeasureSeqRef.current += 1;
+    }
+  }, [request]);
 
   useLayoutEffect(() => {
     measureNow();
@@ -118,14 +132,20 @@ export default function WebViewMeasureLayerWeb({ request, onMeasured }: Props) {
         className="webview-measure-layer"
         style={{
           ...CONTAINER_STYLE,
-          fontFamily: BODY_REGULAR_FONT_FAMILY,
+          fontFamily: `var(--body-regular-font-family, ${BODY_REGULAR_FONT_FAMILY})`,
+          "--body-regular-font-family": hasCompleteBodyFontSet(fontStatusRef.current)
+            ? BODY_REGULAR_FONT_FAMILY
+            : "serif",
+          "--body-semibold-font-family": hasCompleteBodyFontSet(fontStatusRef.current)
+            ? BODY_SEMIBOLD_FONT_FAMILY
+            : "serif",
           textSizeAdjust: "100%",
           WebkitTextSizeAdjust: "100%",
           color: "#1A1A1A",
           overflowWrap: "break-word" as const,
           wordWrap: "break-word" as const,
           textAlign: "justify" as const,
-        }}
+        } as React.CSSProperties}
       />
     </>
   );

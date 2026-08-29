@@ -16,12 +16,14 @@ import {
   BODY_REGULAR_FONT_FAMILY,
   BODY_SEMIBOLD_FONT_FAMILY,
 } from "@/components/shared/bodyTypographyFonts";
+import { buildBodyTypographyCss } from "@/components/shared/bodyTypographyCss";
 import type {
   WebViewMarkdownEditorProps,
   WebViewMarkdownEditorRef,
   OnChangePayload,
 } from "./types";
 import {
+  hasCompleteBodyFontSet,
   logWebBodyTypographyDiagnostic,
   waitForWebBodyFonts,
   type BodyFontLoadStatus,
@@ -326,7 +328,27 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
       <div
         ref={containerRef}
         className="web-markdown-editor-scroll-container"
-        style={{ ...containerStyle, visibility: fontsReady ? "visible" : "hidden", fontSize: typography.fontSizePx, lineHeight: `${typography.lineHeightPx}px`, letterSpacing: typography.letterSpacingPx, "--body-font-size": `${typography.fontSizePx}px`, "--body-line-height": `${typography.lineHeightPx}px`, "--body-letter-spacing": `${typography.letterSpacingPx}px`, "--title-font-size": `${typography.titleFontSizePx}px` } as React.CSSProperties}
+        style={{
+          ...containerStyle,
+          visibility: fontsReady ? "visible" : "hidden",
+          width: typography.textColumnWidth,
+          minWidth: typography.textColumnWidth,
+          maxWidth: typography.textColumnWidth,
+          fontSize: typography.fontSizePx,
+          lineHeight: `${typography.lineHeightPx}px`,
+          letterSpacing: typography.letterSpacingPx,
+          "--text-column-width": `${typography.textColumnWidth}px`,
+          "--body-regular-font-family": hasCompleteBodyFontSet(fontStatusRef.current)
+            ? BODY_REGULAR_FONT_FAMILY
+            : "serif",
+          "--body-semibold-font-family": hasCompleteBodyFontSet(fontStatusRef.current)
+            ? BODY_SEMIBOLD_FONT_FAMILY
+            : "serif",
+          "--body-font-size": `${typography.fontSizePx}px`,
+          "--body-line-height": `${typography.lineHeightPx}px`,
+          "--body-letter-spacing": `${typography.letterSpacingPx}px`,
+          "--title-font-size": `${typography.titleFontSizePx}px`,
+        } as React.CSSProperties}
       >
         <style>{proseMirrorCss}</style>
         {!hideTitle && onTitleChange !== undefined && (
@@ -355,14 +377,14 @@ const containerStyle: React.CSSProperties = {
   flexDirection: "column",
   height: "100%",
   overflow: "auto",
-  fontFamily: BODY_REGULAR_FONT_FAMILY,
+  fontFamily: `var(--body-regular-font-family, ${BODY_REGULAR_FONT_FAMILY})`,
   color: "#1A1A1A",
 };
 
 const titleInputStyle: React.CSSProperties = {
   display: "block",
   width: "100%",
-  fontFamily: BODY_SEMIBOLD_FONT_FAMILY,
+  fontFamily: `var(--body-semibold-font-family, ${BODY_SEMIBOLD_FONT_FAMILY})`,
   fontSize: "var(--title-font-size)",
   fontWeight: 600,
   lineHeight: 1.25,
@@ -374,8 +396,9 @@ const titleInputStyle: React.CSSProperties = {
   outline: "none",
   resize: "none",
   overflow: "hidden",
-  padding: "8px 24px",
+  padding: "8px 0",
   marginBottom: 12,
+  boxSizing: "border-box",
 };
 
 const editorContentStyle: React.CSSProperties = {
@@ -383,13 +406,22 @@ const editorContentStyle: React.CSSProperties = {
   display: "flex",
   flexDirection: "column",
   height: "100%",
+  width: "100%",
 };
 
+const editorTypographyCss = buildBodyTypographyCss({
+  rootSelector: ".web-markdown-editor-scroll-container",
+  blockSelector: ".ProseMirror",
+  blockMargins: "spaced",
+  hrStyle: "spaced",
+});
+
 const proseMirrorCss = `
+${editorTypographyCss}
 .web-markdown-editor-scroll-container {
   scrollbar-width: none;
   -ms-overflow-style: none;
-  scrollbar-gutter: stable;
+  box-sizing: border-box;
 }
 .web-markdown-editor-scroll-container::-webkit-scrollbar {
   display: none;
@@ -397,31 +429,13 @@ const proseMirrorCss = `
   height: 0;
 }
 .ProseMirror {
+  box-sizing: border-box;
+  width: var(--text-column-width);
+  max-width: 100%;
   min-height: 100%;
-  padding: 16px 24px 120px;
+  padding: 16px 0 120px;
   outline: none;
-  font-family: ${BODY_REGULAR_FONT_FAMILY};
-   font-size: var(--body-font-size);
-   line-height: var(--body-line-height);
-   letter-spacing: var(--body-letter-spacing);
-  color: #1A1A1A;
-   text-size-adjust: 100%;
-   -webkit-text-size-adjust: 100%;
-  text-align: justify;
-  overflow-wrap: break-word;
-  word-wrap: break-word;
-  word-break: normal;
-  -webkit-hyphens: auto;
-  hyphens: auto;
 }
-.ProseMirror p { margin-bottom: 1em; text-align: justify; overflow-wrap: break-word; word-break: normal; -webkit-hyphens: auto; hyphens: auto; }
- .ProseMirror h1 { font-family: ${BODY_SEMIBOLD_FONT_FAMILY}; font-size: var(--title-font-size); font-weight: 600; letter-spacing: 0.025em; margin: 1em 0 0.4em; line-height: 1.25; text-align: left; }
-.ProseMirror h2 { font-family: ${BODY_SEMIBOLD_FONT_FAMILY}; font-size: 1.3em; font-weight: 600; letter-spacing: 0.025em; margin: 0.8em 0 0.3em; line-height: 1.3; text-align: left; }
-.ProseMirror h3 { font-family: ${BODY_SEMIBOLD_FONT_FAMILY}; font-size: 1.1em; font-weight: 600; letter-spacing: 0.025em; margin: 0.6em 0 0.3em; line-height: 1.35; text-align: left; }
-.ProseMirror ul, .ProseMirror ol { padding-left: 1.5em; margin-bottom: 1em; text-align: left; }
-.ProseMirror li { margin-bottom: 0.2em; text-align: left; }
-.ProseMirror blockquote { font-family: ${BODY_REGULAR_FONT_FAMILY}; font-style: italic; border-left: 3px solid #d4d4d8; padding-left: 1em; margin: 0.5em 0; color: #52525b; text-align: left; }
-.ProseMirror hr { border: none; border-top: 1px solid #e4e4e7; margin: 1em 0; }
 .ProseMirror p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
   color: #a1a1aa;
@@ -429,10 +443,6 @@ const proseMirrorCss = `
   float: left;
   height: 0;
 }
-.ProseMirror u { text-decoration: underline; }
-.ProseMirror strong { font-family: ${BODY_SEMIBOLD_FONT_FAMILY}; font-weight: 600; }
-.ProseMirror em { font-style: italic; }
-.ProseMirror img[data-inline="true"] { display:block; max-width:240px; width:auto; height:auto; border-radius:8px; margin:0.5em 0; }
 .ProseMirror code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: #f4f4f5; padding: 0.1em 0.3em; border-radius: 3px; letter-spacing: 0; font-size: 0.9em; }
 .ProseMirror pre { background: #f4f4f5; padding: 0.75em 1em; border-radius: 4px; overflow-x: auto; margin: 0.5em 0; letter-spacing: 0; text-align: left; }
 .ProseMirror pre code { background: none; padding: 0; }

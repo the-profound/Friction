@@ -4,7 +4,7 @@ import type { MeasureRequest } from "../PretextMeasureLayer/PretextMeasureLayer"
 
 interface Props {
   request: MeasureRequest | null;
-  onMeasured: (heights: Record<string, number>) => void;
+  onMeasured: (heights: Record<string, number>, request: MeasureRequest) => void;
 }
 
 let WebComponent: React.ComponentType<Props>;

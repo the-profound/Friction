@@ -21,7 +21,11 @@ import {
   buildBodyFontReadyScript,
   buildEmbeddedBodyFontFaceCss,
 } from "../../components/shared/bodyTypographyFonts";
+import { buildBodyTypographyCss } from "../../components/shared/bodyTypographyCss";
 import { bodyTypographyMetrics, computeBodyLayout } from "../bodyLayout";
+import { markdownToHtml } from "../markdownRenderer";
+import { splitContentToPages } from "../pageDivision";
+import { parseMarkdownBlocks } from "../../utils/markdownParser";
 
 describe("letter body font fallback contract", () => {
   it("registers WOFF2 as a Metro asset without dropping the default assets", () => {
@@ -87,6 +91,8 @@ describe("letter body font fallback contract", () => {
     expect(script).toContain("NotoSerifKR_600SemiBold");
     expect(script).toContain("onBodyFontsReady");
     expect(script).toContain("setTimeout");
+    expect(script).toContain("freezeFallback");
+    expect(script).toContain('--body-regular-font-family","serif"');
   });
 
   it("resolves readiness without invoking font loads when embedded faces are unavailable", async () => {
@@ -321,6 +327,128 @@ describe("reader title typography", () => {
     }
   });
 
+  it("uses one editor typography contract with no nested horizontal inset", () => {
+    const nativeEditor = read("components/WebViewMarkdownEditor/editorHtml.ts");
+    const nativeEditorSource = read("components/WebViewMarkdownEditor/editorWebviewSrc/index.ts");
+    const webEditor = read("components/WebViewMarkdownEditor/WebViewMarkdownEditorWeb.tsx");
+    const writingScreen = read("app/on-01a.tsx");
+    const css = buildBodyTypographyCss({
+      rootSelector: "#editor-content",
+      blockSelector: ".ProseMirror",
+      blockMargins: "spaced",
+      hrStyle: "flush",
+    });
+
+    expect(css).toContain("#editor-content{font-family:");
+    expect(css).toContain(".ProseMirror li p{margin-bottom:0}");
+    expect(css).toContain("overflow-wrap:break-word");
+    expect(css).toContain("word-break:normal");
+    expect(css).toContain("text-size-adjust:100%");
+    expect(nativeEditor).toContain("buildBodyTypographyCss");
+    expect(nativeEditor).toContain('rootSelector: "#editor-content"');
+    expect(nativeEditor).toContain("width:var(--text-column-width)");
+    expect(nativeEditor).toContain(".hr-wrapper{position:relative;margin:1em 0;cursor:pointer}");
+    expect(nativeEditor).not.toContain("cursor:pointer;padding:10px 0");
+    expect(nativeEditor).toContain(
+      ".tiptap-question-block{background-color:#eff6ff;border-radius:6px;padding:0;margin:0 0 1em}",
+    );
+    expect(nativeEditor).toContain(".tiptap-question-block p::before{content:'Q. '}");
+    expect(nativeEditor).toContain(
+      ".tiptap-question-block p{margin:0;font-family:var(--body-regular-font-family",
+    );
+    expect(nativeEditorSource).toContain('setProperty("--text-column-width"');
+    expect(nativeEditorSource).toContain("metrics.lineHeightPx !== lastBodyLineHeightPx");
+    expect(nativeEditorSource).toContain('case "setBodyFontMode"');
+    expect(webEditor).toContain("buildBodyTypographyCss");
+    expect(webEditor).toContain('rootSelector: ".web-markdown-editor-scroll-container"');
+    expect(webEditor).toContain("width: var(--text-column-width)");
+    expect(webEditor).toContain("padding: 16px 0 120px");
+    expect(webEditor).not.toContain("padding: 16px 24px 120px");
+    expect(webEditor).toContain('padding: "8px 0"');
+    expect(webEditor).toContain("hasCompleteBodyFontSet");
+    expect(writingScreen).toContain(
+      "width: textColumnWidth, alignSelf: \"center\"",
+    );
+  });
+
+  it("keeps representative Korean Markdown blocks in the shared rendering vocabulary", () => {
+    const probe = [
+      "# 플랫폼 줄바꿈 확인",
+      "",
+      "가잓 같은 폴백 글자와 가나다라마바사아자차카타파하",
+      "공백없는긴문자열공백없는긴문자열공백없는긴문자열",
+      "",
+      "- 목록 **강조**",
+      "1. 순서 목록 <u>밑줄</u>",
+      "",
+      "> 인용문은 같은 폭과 줄바꿈 규칙을 사용한다.",
+      "",
+      "---",
+    ].join("\n");
+    const html = markdownToHtml(probe);
+
+    expect(html).toContain("<h1>플랫폼 줄바꿈 확인</h1>");
+    expect(html).toContain("공백없는긴문자열");
+    expect(html).toContain("<ul>");
+    expect(html).toContain("<ol>");
+    expect(html).toContain("<strong>강조</strong>");
+    expect(html).toContain("<u>밑줄</u>");
+    expect(html).toContain("<blockquote>");
+    expect(html).toContain("<hr>");
+
+    const pages = splitContentToPages("첫 페이지\n---\n두 번째 페이지");
+    expect(pages.map((page) => parseMarkdownBlocks(page.content))).toEqual([
+      [
+        expect.objectContaining({
+          type: "paragraph",
+          rawText: "첫 페이지",
+        }),
+      ],
+      [
+        expect.objectContaining({
+          type: "paragraph",
+          rawText: "두 번째 페이지",
+        }),
+      ],
+    ]);
+  });
+
+  it("ties measurement callbacks to the request that produced them", () => {
+    const writingScreen = read("app/on-01a.tsx");
+    const nativeMeasure = read("components/WebViewMeasureLayer/WebViewMeasureLayer.tsx");
+    const webMeasure = read("components/WebViewMeasureLayer/WebViewMeasureLayerWeb.tsx");
+
+    expect(nativeMeasure).toContain(
+      "onMeasured: (heights: Record<string, number>, request: MeasureRequest) => void",
+    );
+    expect(nativeMeasure).toContain("onMeasuredRef.current(heights ?? {}, req)");
+    expect(webMeasure).toContain("onMeasuredRef.current(heights, request)");
+    expect(webMeasure).toContain("latestMeasureSeqRef");
+    expect(webMeasure).toContain("hasCompleteBodyFontSet");
+    expect(read("lib/bodyTypographyDiagnostics.ts")).toContain(
+      "webBodyFontReadyPromise",
+    );
+    expect(writingScreen).toContain(
+      "if (measuredRequest !== warningRequestRef.current) return",
+    );
+    expect(writingScreen).toContain(
+      "warningMeasurement.request === warningRequest",
+    );
+    expect(writingScreen).toContain(
+      "pending.request !== measuredRequest",
+    );
+    expect(writingScreen).toContain("fontMode: nativeBodyFontMode");
+    expect(writingScreen).toContain(
+      "pending.request.fontMode === nativeBodyFontMode",
+    );
+    expect(writingScreen).toContain(
+      "measuredRequest.fontMode !== getNativeBodyFontMode()",
+    );
+    const nativeFontMode = read("lib/nativeBodyFontMode.ts");
+    expect(nativeFontMode).toContain("if (!ok && mode !== \"fallback\")");
+    expect(nativeFontMode).toContain("for (const listener of listeners)");
+  });
+
   it("hides only the web editor scrollbar while preserving its scroll container", () => {
     const webEditor = read("components/WebViewMarkdownEditor/WebViewMarkdownEditorWeb.tsx");
     const nativeEditor = read("components/WebViewMarkdownEditor/WebViewMarkdownEditor.tsx");
@@ -328,7 +456,6 @@ describe("reader title typography", () => {
     expect(webEditor).toContain('className="web-markdown-editor-scroll-container"');
     expect(webEditor).toContain("scrollbar-width: none");
     expect(webEditor).toContain("-ms-overflow-style: none");
-    expect(webEditor).toContain("scrollbar-gutter: stable");
     expect(webEditor).toContain(".web-markdown-editor-scroll-container::-webkit-scrollbar");
     expect(webEditor).toContain('overflow: "auto"');
     expect(nativeEditor).toContain("showsVerticalScrollIndicator={false}");

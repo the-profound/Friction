@@ -23,6 +23,10 @@ import { useAutoSave } from "@/lib/useAutoSave";
 import { useEditorLayout } from "@/lib/useEditorLayout";
 import { bodyTypographyMetrics, getBodyContentHeight } from "@/lib/bodyLayout";
 import {
+  getNativeBodyFontMode,
+  subscribeNativeBodyFontMode,
+} from "@/lib/nativeBodyFontMode";
+import {
   splitContentToPages,
   splitPageContentForDivision,
   validatePages,
@@ -351,7 +355,13 @@ export default function WritingScreen() {
 
   // ── 분할 상태 (dividing) ───────────────────────────────────────────────────
   const [splitting, setSplitting] = useState(false);
+  const [nativeBodyFontMode, setNativeBodyFontMode] = useState(getNativeBodyFontMode);
   const pageStripRef = useRef<ScrollView>(null);
+
+  useEffect(
+    () => subscribeNativeBodyFontMode(setNativeBodyFontMode),
+    [],
+  );
 
   type SpellState =
     | { status: "idle" }
@@ -893,7 +903,11 @@ export default function WritingScreen() {
     return map;
   }, [measurePages]);
 
-  const [blockHeights, setBlockHeights] = useState<Record<string, number>>({});
+  const [warningMeasurement, setWarningMeasurement] = useState<{
+    request: MeasureRequest | null;
+    heights: Record<string, number>;
+  }>({ request: null, heights: {} });
+  const warningRequestRef = useRef<MeasureRequest | null>(null);
 
   const warningRequest = useMemo<MeasureRequest | null>(() => {
     if (mode !== "dividing") return null;
@@ -912,26 +926,42 @@ export default function WritingScreen() {
     return {
       candidates,
       typography,
+      fontMode: nativeBodyFontMode,
       blockGap,
     };
-  }, [mode, measurePages, pageBlockMap, blockGap, typography]);
+  }, [mode, measurePages, pageBlockMap, blockGap, typography, nativeBodyFontMode]);
+  warningRequestRef.current = warningRequest;
 
-  const handleWarningMeasured = useCallback((heights: Record<string, number>) => {
-    setBlockHeights((prev) => {
-      const prevKeys = Object.keys(prev);
+  const handleWarningMeasured = useCallback((
+    heights: Record<string, number>,
+    measuredRequest: MeasureRequest,
+  ) => {
+    if (measuredRequest !== warningRequestRef.current) return;
+    setWarningMeasurement((prev) => {
+      const prevHeights = prev.request === measuredRequest ? prev.heights : {};
+      const prevKeys = Object.keys(prevHeights);
       const nextKeys = Object.keys(heights);
-      if (prevKeys.length === nextKeys.length && nextKeys.every((k) => prev[k] === heights[k])) {
+      if (
+        prev.request === measuredRequest &&
+        prevKeys.length === nextKeys.length &&
+        nextKeys.every((k) => prevHeights[k] === heights[k])
+      ) {
         return prev;
       }
-      return heights;
+      return { request: measuredRequest, heights };
     });
   }, []);
 
-  const prevPageOverflowInfoRef = useRef<Record<number, { totalHeight: number; overflowBlockIdx: number }>>({});
+  const prevPageOverflowInfoRef = useRef<{
+    request: MeasureRequest | null;
+    info: Record<number, { totalHeight: number; overflowBlockIdx: number }>;
+  }>({ request: null, info: {} });
 
   const pageOverflowInfo = useMemo(() => {
     const info: Record<number, { totalHeight: number; overflowBlockIdx: number }> = {};
     let anyPending = false;
+    const blockHeights =
+      warningMeasurement.request === warningRequest ? warningMeasurement.heights : {};
     const currentPageIndices = new Set(measurePages.map((p) => p.pageIndex));
     for (const p of measurePages) {
       const blocks = pageBlockMap[p.pageIndex] ?? [];
@@ -955,16 +985,25 @@ export default function WritingScreen() {
       info[p.pageIndex] = { totalHeight, overflowBlockIdx };
     }
     if (anyPending) {
+      if (prevPageOverflowInfoRef.current.request !== warningRequest) return {};
       const cached: Record<number, { totalHeight: number; overflowBlockIdx: number }> = {};
       for (const idx of currentPageIndices) {
-        const prev = prevPageOverflowInfoRef.current[idx];
+        const prev = prevPageOverflowInfoRef.current.info[idx];
         if (prev) cached[idx] = prev;
       }
       return cached;
     }
-    prevPageOverflowInfoRef.current = info;
+    prevPageOverflowInfoRef.current = { request: warningRequest, info };
     return info;
-  }, [measurePages, pageBlockMap, blockHeights, pageContentHeight, availableContentHeight, bodyLineHeight]);
+  }, [
+    measurePages,
+    pageBlockMap,
+    warningMeasurement,
+    warningRequest,
+    pageContentHeight,
+    availableContentHeight,
+    bodyLineHeight,
+  ]);
 
   const pageHeights = useMemo<Record<number, number>>(() => {
     const map: Record<number, number> = {};
@@ -975,26 +1014,53 @@ export default function WritingScreen() {
   }, [pageOverflowInfo]);
 
   const [engineRequest, setEngineRequest] = useState<MeasureRequest | null>(null);
-  const engineResolveRef = useRef<((heights: Record<string, number>) => void) | null>(null);
+  const engineResolveRef = useRef<{
+    request: MeasureRequest;
+    resolve: (heights: Record<string, number>) => void;
+  } | null>(null);
 
   const measureEngine = useCallback(
     (candidates: MeasureCandidate[]): Promise<Record<string, number>> => {
       return new Promise((resolve) => {
-        engineResolveRef.current = resolve;
-        setEngineRequest({
+        const request: MeasureRequest = {
           candidates,
           typography,
-        });
+          fontMode: nativeBodyFontMode,
+        };
+        engineResolveRef.current = { request, resolve };
+        setEngineRequest(request);
       });
     },
-    [typography],
+    [typography, nativeBodyFontMode],
   );
 
-  const handleEngineMeasured = useCallback((heights: Record<string, number>) => {
-    const r = engineResolveRef.current;
+  useEffect(() => {
+    const pending = engineResolveRef.current;
+    if (!pending || pending.request.fontMode === nativeBodyFontMode) return;
+    const replacement: MeasureRequest = {
+      ...pending.request,
+      fontMode: nativeBodyFontMode,
+    };
+    engineResolveRef.current = {
+      request: replacement,
+      resolve: pending.resolve,
+    };
+    setEngineRequest(replacement);
+  }, [nativeBodyFontMode]);
+
+  const handleEngineMeasured = useCallback((
+    heights: Record<string, number>,
+    measuredRequest: MeasureRequest,
+  ) => {
+    const pending = engineResolveRef.current;
+    if (
+      !pending ||
+      pending.request !== measuredRequest ||
+      measuredRequest.fontMode !== getNativeBodyFontMode()
+    ) return;
     engineResolveRef.current = null;
     setEngineRequest(null);
-    if (r) r(heights);
+    pending.resolve(heights);
   }, []);
 
   const splitThreshold = availableContentHeight;

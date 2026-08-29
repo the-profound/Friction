@@ -30,6 +30,7 @@ export type RNToWebViewCommand =
   | { type: "setOverflowRanges"; ranges: OverflowRange[] | null }
   | { type: "setOverflowProbeConfig"; availableContentHeightPx: number | null; autoSplit?: boolean }
   | { type: "setBodyMetrics"; metrics: BodyTypographyMetrics }
+  | { type: "setBodyFontMode"; mode: "fallback" }
   | { type: "setBlockType"; blockType: string }
   | { type: "toggleMark"; mark: string }
   | { type: "insertDivider" }

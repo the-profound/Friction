@@ -211,6 +211,32 @@ DOM 폭, font-size, line-height, letter-spacing, text-size-adjust, DPR, text zoo
 Eulyoo regular/semibold 로드 상태를 비교한다. reader/editor/measure의 값이 같은
 본문 계약 값이어야 하며, 다르면 해당 renderer를 표시하기 전에 수정한다.
 
+작성 편집기의 실제 DOM은 네이티브와 Web 모두 공통 `textColumnWidth` 자체가
+입력 폭이다. 화면 쪽 래퍼가 이미 이 폭으로 제한되므로 `.ProseMirror`나 제목
+입력에 가로 padding을 다시 넣지 않는다. 세로 시작 여백과 키보드 아래 스크롤
+여유만 편집기 구조 CSS로 둔다. 문단·제목·목록·인용·구분선·강조의 폰트와
+줄바꿈 규칙은 `buildBodyTypographyCss()`를 통해 편집기/측정/리더가 공유한다.
+
+회전, 웹 창 크기 변경, Android 키보드로 인한 usable window 변경 뒤에는 다음을
+한 세트로 확인한다.
+
+1. `useEditorLayout()`이 새 화면 크기로 `textColumnWidth`와 본문 메트릭을 만든다.
+2. 활성 편집 DOM이 `setBodyMetrics` 또는 React style 갱신으로 같은 폭을 받는다.
+3. 경고/분할 측정 요청도 새 `typography` 객체로 다시 발급된다.
+4. 측정 응답은 자신을 만든 요청과 함께 소비되며 이전 요청의 높이/페이지 경계는
+   현재 화면에 재사용되지 않는다.
+
+네이티브에서는 편집기·리더·측정 WebView가 각각 폰트를 디코드하지만 최종
+`custom`/`fallback` 선택은 RN 세션 상태 하나를 공유한다. 어느 한 문서라도
+실패하거나 제한 시간에 도달하면 fallback이 세션 동안 고정되어 모든 활성
+WebView에 전파되고, 측정 요청의 `fontMode`도 바뀌어 이전 custom-font 결과가
+현재 경계로 채택되지 않는다. fallback에서 custom으로 자동 복귀시키지 않는다.
+
+고정 회귀 문구에는 `가잓`, 긴 한국어 문단, 공백 없는 긴 문자열, H1/H2/H3,
+순서/비순서 목록, 인용, HR, 굵게/기울임/밑줄을 포함한다. 키보드 표시 전후와
+회전 전후에 편집기 진단의 `domWidthPx`가 측정 진단과 같은
+`textColumnWidth`인지 먼저 비교한 뒤 페이지 경계를 확인한다.
+
 ### 공통 값을 바꿀 때
 
 1. 값을 둘 곳을 먼저 고른다. UI 토큰은 `Typography`, 본문 척도·컬럼은

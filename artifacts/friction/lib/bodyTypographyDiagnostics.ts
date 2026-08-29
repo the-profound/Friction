@@ -31,6 +31,17 @@ const FONT_PROBES = [
   ["notoSemiBold", "600 16px 'NotoSerifKR_600SemiBold'"],
 ] as const;
 
+let webBodyFontReadyPromise: Promise<BodyFontLoadStatus> | null = null;
+
+export function hasCompleteBodyFontSet(status: BodyFontLoadStatus | null): boolean {
+  return !!(
+    status?.eulyooRegular &&
+    status.eulyooSemiBold &&
+    status.notoRegular &&
+    status.notoSemiBold
+  );
+}
+
 function readWebBodyFontStatus(): BodyFontLoadStatus {
   const fonts = typeof document !== "undefined" ? document.fonts : undefined;
   return Object.fromEntries(
@@ -47,6 +58,12 @@ function readWebBodyFontStatus(): BodyFontLoadStatus {
  * before a renderer reports ready or measures text.
  */
 export async function waitForWebBodyFonts(): Promise<BodyFontLoadStatus> {
+  if (webBodyFontReadyPromise) return webBodyFontReadyPromise;
+  webBodyFontReadyPromise = waitForWebBodyFontsOnce();
+  return webBodyFontReadyPromise;
+}
+
+async function waitForWebBodyFontsOnce(): Promise<BodyFontLoadStatus> {
   if (typeof document === "undefined" || !document.fonts) {
     return {
       eulyooRegular: false,

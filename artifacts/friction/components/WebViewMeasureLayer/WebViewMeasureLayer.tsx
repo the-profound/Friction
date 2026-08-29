@@ -7,7 +7,10 @@
  * 읽기 화면(WebViewMarkdownReader)과 완전히 동일한 페이지 경계를 보장한다.
  *
  * 외부 API는 PretextMeasureLayer와 동일:
- *   props: { request: MeasureRequest | null; onMeasured: (heights: Record<string, number>) => void }
+ *   props: {
+ *     request: MeasureRequest | null;
+ *     onMeasured: (heights: Record<string, number>, request: MeasureRequest) => void;
+ *   }
  *
  * 측정 흐름:
  *   1. 네 폰트 데이터 준비 후 WebView 마운트 → 내부 디코딩 완료 신호 → bridge.markReady()
@@ -46,10 +49,15 @@ import {
 } from "@/lib/webviewPerf";
 import { createWebViewBridge, type WebViewBridge } from "@/lib/webViewBridge";
 import { logBodyTypographyDiagnostic } from "@/lib/bodyTypographyDiagnostics";
+import {
+  getNativeBodyFontMode,
+  reportNativeBodyFontReady,
+  subscribeNativeBodyFontMode,
+} from "@/lib/nativeBodyFontMode";
 
 interface Props {
   request: MeasureRequest | null;
-  onMeasured: (heights: Record<string, number>) => void;
+  onMeasured: (heights: Record<string, number>, request: MeasureRequest) => void;
 }
 
 export default function WebViewMeasureLayer({ request, onMeasured }: Props) {
@@ -146,7 +154,7 @@ export default function WebViewMeasureLayer({ request, onMeasured }: Props) {
       .then((heights) => {
         // stale: 새로운 측정이 그 사이 발급되었으면 결과를 버린다.
         if (seq !== latestSeqRef.current) return;
-        onMeasuredRef.current(heights ?? {});
+        onMeasuredRef.current(heights ?? {}, req);
       })
       .catch(() => {
         // bridge.reset() 으로 reject 되거나 WebView 가 사라진 경우 — 조용히 무시.
@@ -154,7 +162,12 @@ export default function WebViewMeasureLayer({ request, onMeasured }: Props) {
   }, [bridge]);
 
   useEffect(() => {
-    if (!request) return;
+    if (!request) {
+      pendingRef.current = null;
+      prevRequestRef.current = null;
+      latestSeqRef.current += 1;
+      return;
+    }
 
     if (!canRender) {
       // 폰트 준비 전: pendingRef에만 보관하고 prevRequestRef는 건드리지 않는다.
@@ -167,7 +180,7 @@ export default function WebViewMeasureLayer({ request, onMeasured }: Props) {
     prevRequestRef.current = request;
 
     if (request.candidates.length === 0) {
-      onMeasuredRef.current({});
+      onMeasuredRef.current({}, request);
       return;
     }
     if (!bridge.isReady()) {
@@ -187,8 +200,17 @@ export default function WebViewMeasureLayer({ request, onMeasured }: Props) {
         return;
       }
       if (data.type !== "onBodyFontsReady" || bodyFontsReadyRef.current) return;
+      reportNativeBodyFontReady(
+        (data as { type: "onBodyFontsReady"; ok?: boolean }).ok === true,
+      );
       bodyFontsReadyRef.current = true;
       bridge.markReady();
+      if (getNativeBodyFontMode() === "fallback") {
+        bridge.injectRaw(
+          `document.documentElement.style.setProperty("--body-regular-font-family","serif");` +
+          `document.documentElement.style.setProperty("--body-semibold-font-family","serif");true;`,
+        );
+      }
       if (!bootRecordedRef.current) {
         bootRecordedRef.current = true;
         recordWebViewBoot("measure", mountedAtRef.current);
@@ -198,6 +220,14 @@ export default function WebViewMeasureLayer({ request, onMeasured }: Props) {
       if (toSend && toSend.candidates.length > 0) sendMeasure(toSend);
     });
   }, [bridge, sendMeasure]);
+
+  useEffect(() => subscribeNativeBodyFontMode((mode) => {
+    if (mode !== "fallback" || !bridge.isReady()) return;
+    bridge.injectRaw(
+      `document.documentElement.style.setProperty("--body-regular-font-family","serif");` +
+      `document.documentElement.style.setProperty("--body-semibold-font-family","serif");true;`,
+    );
+  }), [bridge]);
 
   if (!canRender) return null;
 

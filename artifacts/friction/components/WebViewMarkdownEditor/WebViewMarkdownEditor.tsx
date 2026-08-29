@@ -19,6 +19,11 @@ import type {
 } from "./types";
 import { createWebViewBridge, type WebViewBridge } from "@/lib/webViewBridge";
 import { logBodyTypographyDiagnostic } from "@/lib/bodyTypographyDiagnostics";
+import {
+  getNativeBodyFontMode,
+  reportNativeBodyFontReady,
+  subscribeNativeBodyFontMode,
+} from "@/lib/nativeBodyFontMode";
 
 const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdownEditorProps>(
   function WebViewMarkdownEditor(
@@ -144,8 +149,14 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
           switch (data.type) {
             case "onBodyFontsReady":
               if (bodyFontsReadyRef.current) break;
+              reportNativeBodyFontReady(
+                (data as { type: "onBodyFontsReady"; ok?: boolean }).ok === true,
+              );
               bodyFontsReadyRef.current = true;
               bridge.markReady();
+              if (getNativeBodyFontMode() === "fallback") {
+                sendCommand({ type: "setBodyFontMode", mode: "fallback" });
+              }
               sendCommand({
                 type: "init",
                 payload: {
@@ -248,6 +259,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
     }, [sourceArticleSlotText, sendCommand]);
 
     const [fonts, setFonts] = useState<EditorFontState>(() => getEditorFonts());
+    const [nativeBodyFontMode, setNativeBodyFontMode] = useState(getNativeBodyFontMode);
     const { showToast } = useToast();
 
     useEffect(() => {
@@ -255,6 +267,17 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       setFonts(getEditorFonts());
       return unsubscribe;
     }, []);
+
+    useEffect(
+      () => subscribeNativeBodyFontMode(setNativeBodyFontMode),
+      [],
+    );
+
+    useEffect(() => {
+      if (nativeBodyFontMode === "fallback" && bridge.isReady()) {
+        sendCommand({ type: "setBodyFontMode", mode: "fallback" });
+      }
+    }, [bridge, nativeBodyFontMode, sendCommand]);
 
     useEffect(() => {
       if (fonts.error && !fonts.regularBase64 && consumeEditorFontsErrorToast()) {

@@ -12,6 +12,11 @@ import {
 import { createWebViewBridge, type WebViewBridge, type WebViewCommand } from "@/lib/webViewBridge";
 import type { BodyTypographyMetrics } from "@/lib/bodyLayout";
 import { logBodyTypographyDiagnostic } from "@/lib/bodyTypographyDiagnostics";
+import {
+  getNativeBodyFontMode,
+  reportNativeBodyFontReady,
+  subscribeNativeBodyFontMode,
+} from "@/lib/nativeBodyFontMode";
 
 export interface WebViewMarkdownReaderProps {
   markdown: string;
@@ -118,8 +123,17 @@ export default function WebViewMarkdownReader({
       bridge.handleMessage(event, (data) => {
         if (data.type === "onBodyFontsReady") {
           if (bodyFontsReadyRef.current) return;
+          reportNativeBodyFontReady(
+            (data as { type: "onBodyFontsReady"; ok?: boolean }).ok === true,
+          );
           bodyFontsReadyRef.current = true;
           bridge.markReady();
+          if (getNativeBodyFontMode() === "fallback") {
+            bridge.injectRaw(
+              `document.documentElement.style.setProperty("--body-regular-font-family","serif");` +
+              `document.documentElement.style.setProperty("--body-semibold-font-family","serif");true;`,
+            );
+          }
           prevHtmlRef.current = htmlRef.current;
           const version = beginContentSwap();
           injectContent(htmlRef.current, version);
@@ -183,6 +197,14 @@ export default function WebViewMarkdownReader({
   useEffect(() => {
     if (bridge.isReady()) bridge.send({ type: "setBodyMetrics", metrics: typography });
   }, [bridge, typography]);
+
+  useEffect(() => subscribeNativeBodyFontMode((mode) => {
+    if (mode !== "fallback" || !bridge.isReady()) return;
+    bridge.injectRaw(
+      `document.documentElement.style.setProperty("--body-regular-font-family","serif");` +
+      `document.documentElement.style.setProperty("--body-semibold-font-family","serif");true;`,
+    );
+  }), [bridge]);
 
   useEffect(() => {
     if (clearSelectionSignal === prevClearSignalRef.current) return;

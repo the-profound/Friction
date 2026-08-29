@@ -3,6 +3,7 @@ import { View } from "react-native";
 import MarkdownBlock from "../MarkdownBlock/MarkdownBlock";
 import { parseMarkdownBlocks, type MarkdownBlockType } from "../../utils/markdownParser";
 import type { BodyTypographyMetrics } from "@/lib/bodyLayout";
+import type { NativeBodyFontMode } from "@/lib/nativeBodyFontMode";
 
 /**
  * Pretext 측정 프리미티브 — 화면측 한 곳의 단일 레이어로 텍스트 블록의
@@ -30,6 +31,8 @@ export type MeasureRequest = {
   candidates: MeasureCandidate[];
   /** 작성·리더·DOM/WebView 측정이 함께 쓰는 유일한 본문 메트릭 계약. */
   typography: BodyTypographyMetrics;
+  /** Native WebViews share this session-sticky custom/fallback font decision. */
+  fontMode?: NativeBodyFontMode;
   /** 옵션: 위쪽 padding (전체 페이지 높이 측정 시에만 사용). */
   paddingTop?: number;
   /** 옵션: 아래쪽 padding (페이지 paddingY + 화면별 inset/title-bar 예약 등). */

@@ -3,8 +3,12 @@ import { PixelRatio } from "react-native";
 import type { WebViewMarkdownReaderProps } from "./WebViewMarkdownReader";
 import { markdownToHtml } from "@/lib/markdownRenderer";
 import { buildBodyTypographyCss } from "@/components/shared/bodyTypographyCss";
-import { BODY_REGULAR_FONT_FAMILY } from "@/components/shared/bodyTypographyFonts";
 import {
+  BODY_REGULAR_FONT_FAMILY,
+  BODY_SEMIBOLD_FONT_FAMILY,
+} from "@/components/shared/bodyTypographyFonts";
+import {
+  hasCompleteBodyFontSet,
   logWebBodyTypographyDiagnostic,
   waitForWebBodyFonts,
   type BodyFontLoadStatus,
@@ -27,14 +31,13 @@ export default function WebViewMarkdownReaderWeb({
     [markdown],
   );
 
-  const [fontsReady, setFontsReady] = useState(false);
-  const fontStatusRef = useRef<BodyFontLoadStatus | null>(null);
+  const [fontStatus, setFontStatus] = useState<BodyFontLoadStatus | null>(null);
+  const fontsReady = fontStatus !== null;
   useEffect(() => {
     let active = true;
     waitForWebBodyFonts().then((status) => {
       if (active) {
-        fontStatusRef.current = status;
-        setFontsReady(true);
+        setFontStatus(status);
         onReady?.();
       }
     });
@@ -49,12 +52,12 @@ export default function WebViewMarkdownReaderWeb({
           "reader",
           containerRef.current,
           typography,
-          fontStatusRef.current ?? undefined,
+          fontStatus ?? undefined,
         );
       }
     });
     return () => cancelAnimationFrame(frame);
-  }, [fontsReady, typography]);
+  }, [fontStatus, fontsReady, typography]);
 
   useEffect(() => {
     const handler = () => {
@@ -85,7 +88,7 @@ export default function WebViewMarkdownReaderWeb({
 
   const contentStyle: React.CSSProperties = useMemo(() => ({
     width: typography.textColumnWidth,
-    fontFamily: BODY_REGULAR_FONT_FAMILY,
+    fontFamily: `var(--body-regular-font-family, ${BODY_REGULAR_FONT_FAMILY})`,
     fontSize: typography.fontSizePx,
     lineHeight: `${typography.lineHeightPx}px`,
     letterSpacing: typography.letterSpacingPx,
@@ -93,6 +96,12 @@ export default function WebViewMarkdownReaderWeb({
     "--body-line-height": `${typography.lineHeightPx}px`,
     "--body-letter-spacing": `${typography.letterSpacingPx}px`,
     "--title-font-size": `${typography.titleFontSizePx}px`,
+    "--body-regular-font-family": hasCompleteBodyFontSet(fontStatus)
+      ? BODY_REGULAR_FONT_FAMILY
+      : "serif",
+    "--body-semibold-font-family": hasCompleteBodyFontSet(fontStatus)
+      ? BODY_SEMIBOLD_FONT_FAMILY
+      : "serif",
     color: "#1A1A1A",
     textAlign: "justify" as const,
     overflowWrap: "break-word" as const,
@@ -102,7 +111,7 @@ export default function WebViewMarkdownReaderWeb({
     WebkitHyphens: "auto",
     userSelect: "text" as const,
     WebkitUserSelect: "text" as const,
-  }), [typography]);
+  }), [fontStatus, typography]);
 
   return (
     <div style={{ ...wrapperStyle, visibility: fontsReady ? "visible" : "hidden" }}>
