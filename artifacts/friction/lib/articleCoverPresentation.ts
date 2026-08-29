@@ -1,3 +1,5 @@
+import { normalizeHexColor } from "./articleCoverColors";
+
 export interface ArticleCoverPresentationInput {
   type?: "default" | "color" | "image";
   imageUrl?: string;
@@ -22,15 +24,19 @@ export function getArticleCardCoverPresentation(
   colors: ArticleCardCoverColors,
 ) {
   const isMissingImage = cover?.type === "image" && !isImageRendered;
+  const neutralBackground =
+    normalizeHexColor(colors.neutralBackground) ?? "#FAFAFA";
+  const readableText = normalizeHexColor(colors.readableText) ?? "#18181B";
+  const coverBackground =
+    cover?.type === "color" ? normalizeHexColor(cover.bgColor) : null;
+  const coverText = normalizeHexColor(cover?.textColor);
 
   return {
     backgroundColor:
-      cover?.type === "color" && cover.bgColor
-        ? cover.bgColor
-        : colors.neutralBackground,
+      coverBackground ?? neutralBackground,
     textColor: isMissingImage
-      ? colors.readableText
-      : (cover?.textColor ?? colors.readableText),
+      ? readableText
+      : (coverText ?? readableText),
     isImageRendered,
   };
 }

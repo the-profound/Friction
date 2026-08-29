@@ -30,8 +30,8 @@ describe("getArticleCardCoverPresentation", () => {
     expect(
       getArticleCardCoverPresentation(whiteTextImageCover, false, colors),
     ).toEqual({
-      backgroundColor: "#fafafa",
-      textColor: "#18181b",
+      backgroundColor: "#FAFAFA",
+      textColor: "#18181B",
       isImageRendered: false,
     });
 
@@ -41,7 +41,7 @@ describe("getArticleCardCoverPresentation", () => {
         false,
         colors,
       ).textColor,
-    ).toBe("#18181b");
+    ).toBe("#18181B");
   });
 
   it("preserves selected color-cover text and background values", () => {
@@ -56,8 +56,44 @@ describe("getArticleCardCoverPresentation", () => {
         colors,
       ),
     ).toEqual({
-      backgroundColor: "#18181b",
+      backgroundColor: "#18181B",
       textColor: "#FFFFFF",
+      isImageRendered: false,
+    });
+  });
+
+  it("uses safe defaults instead of passing invalid stored colors to the card", () => {
+    expect(
+      getArticleCardCoverPresentation(
+        {
+          type: "color",
+          bgColor: "not-a-color",
+          textColor: "#12345",
+        },
+        false,
+        colors,
+      ),
+    ).toEqual({
+      backgroundColor: "#FAFAFA",
+      textColor: "#18181B",
+      isImageRendered: false,
+    });
+  });
+
+  it("canonicalizes valid shorthand and unprefixed saved colors before rendering", () => {
+    expect(
+      getArticleCardCoverPresentation(
+        {
+          type: "color",
+          bgColor: "abc",
+          textColor: "#def",
+        },
+        false,
+        colors,
+      ),
+    ).toEqual({
+      backgroundColor: "#AABBCC",
+      textColor: "#DDEEFF",
       isImageRendered: false,
     });
   });
