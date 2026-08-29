@@ -719,10 +719,10 @@ export default function ReadScreen() {
 
   useEffect(() => {
     if (mode === "basic" && articleId) {
-      setActiveSession({ articleId, inboxId, mode });
+      setActiveSession({ articleId, inboxId, mode, userId });
     }
     return () => {};
-  }, [articleId, inboxId, mode, setActiveSession]);
+  }, [articleId, inboxId, mode, setActiveSession, userId]);
 
   useEffect(() => {
     if (!reading.isRestoring && reading.isSessionHydrated && reading.session.state === "IDLE" && totalPages > 0) {

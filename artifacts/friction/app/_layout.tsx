@@ -37,10 +37,10 @@ import { getCurrentAuthAccessToken } from "@/lib/authTokenStore";
 import { Colors } from "@/constants/tokens";
 import { Platform } from "react-native";
 import { ReaderTransitionProvider } from "@/contexts/ReaderTransitionContext";
-
-// 웹 개발 환경 로그인 바이패스 (비활성화: 실제 Supabase 인증 사용)
-const DEV_WEB_BYPASS = false;
-const DEV_WEB_BYPASS_USER_ID = "92d8bf9b-e5f0-46aa-834c-c9bb66d7a83f";
+import {
+  getActiveReadingForUser,
+  getAuthNavigationDecision,
+} from "@/lib/authNavigation";
 
 setBaseUrl(runtimeConfig.apiBaseUrl);
 
@@ -94,28 +94,33 @@ const queryClient = new QueryClient({
   },
 });
 
-function ActiveReadingGuard({ children }: { children: React.ReactNode }) {
+function ActiveReadingGuard({
+  children,
+  userId,
+}: {
+  children: React.ReactNode;
+  userId: string;
+}) {
   const { activeSession } = useActiveReading();
   const router = useRouter();
   const pathname = usePathname();
+  const ownedActiveSession = getActiveReadingForUser(activeSession, userId);
 
   useEffect(() => {
-    if (activeSession && pathname !== "/read") {
+    if (ownedActiveSession && pathname !== "/read") {
       router.push({
         pathname: "/read",
         params: {
-          articleId: activeSession.articleId,
-          inboxId: activeSession.inboxId,
-          mode: activeSession.mode,
+          articleId: ownedActiveSession.articleId,
+          inboxId: ownedActiveSession.inboxId,
+          mode: ownedActiveSession.mode,
         },
       });
     }
-  }, [activeSession, router, pathname]);
+  }, [ownedActiveSession, router, pathname]);
 
   return <>{children}</>;
 }
-
-const AUTH_BYPASS_ROUTES = new Set(["login", "login-callback"]);
 
 function AuthLoadingView({ message }: { message: string }) {
   return (
@@ -138,79 +143,11 @@ function AuthConfigurationErrorView({ message }: { message: string }) {
   );
 }
 
-function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { session, isLoading, configurationError } = useAuth();
-  // Register push token once the user is authenticated
-  usePushNotifications(session?.user?.id ?? (DEV_WEB_BYPASS ? DEV_WEB_BYPASS_USER_ID : null));
-  // Navigate to inbox when a LETTER_ARRIVED notification is tapped
-  useNotificationDeepLink(session?.user?.id ?? (DEV_WEB_BYPASS ? DEV_WEB_BYPASS_USER_ID : null));
-  const router = useRouter();
-  const segments = useSegments();
-  const hasRedirectedRef = useRef(false);
-
-  if (configurationError) {
-    return <AuthConfigurationErrorView message={configurationError} />;
-  }
-
-  const inBypassRoute = segments[0] != null && AUTH_BYPASS_ROUTES.has(segments[0] as string);
-  const isAuthed = DEV_WEB_BYPASS || !!session;
-
-  useEffect(() => {
-    if (isLoading && !DEV_WEB_BYPASS) return;
-
-    if (!isAuthed && !inBypassRoute) {
-      router.replace("/login");
-    } else if (isAuthed && segments[0] === "login") {
-      hasRedirectedRef.current = true;
-      router.replace("/(tabs)/on");
-    } else if (
-      isAuthed &&
-      Platform.OS !== "web" &&
-      segments[0] === "(tabs)" &&
-      (segments[1] == null || (segments[1] as string) === "index") &&
-      !hasRedirectedRef.current
-    ) {
-      hasRedirectedRef.current = true;
-      router.replace("/(tabs)/on");
-    }
-  }, [isAuthed, isLoading, inBypassRoute, segments, router]);
-
-  // Block rendering while auth state is resolving (개발 바이패스 시 스킵)
-  if (isLoading && !DEV_WEB_BYPASS) {
-    return <AuthLoadingView message="로그인 상태를 확인하고 있어요" />;
-  }
-
-  // Authenticated: wrap ALL routes (including login/bypass) in UserProvider so
-  // that there is no window during the login→tabs navigation transition where a
-  // tab screen mounts while UserProvider is absent from the tree.
-  // login.tsx / login-callback.tsx do not call useUser(), so this is safe.
-  if (session?.user?.id) {
-    return <UserProvider>{children}</UserProvider>;
-  }
-
-  if (DEV_WEB_BYPASS) {
-    return <UserProvider userId={DEV_WEB_BYPASS_USER_ID}>{children}</UserProvider>;
-  }
-
-  // Block rendering protected routes while redirecting to login
-  if (!isAuthed && !inBypassRoute) {
-    return <AuthLoadingView message="화면을 불러오고 있어요" />;
-  }
-
-  // Unauthenticated login/bypass routes — no UserProvider needed
-  if (inBypassRoute) {
-    return <>{children}</>;
-  }
-
-  // Transient: authenticated state resolving
-  return <AuthLoadingView message="화면을 준비하고 있어요" />;
-}
-
-function RootLayoutNav() {
+function ProtectedRouteStack({ userId }: { userId: string }) {
   return (
-    <AuthGuard>
-      <ActiveReadingGuard>
-        <Stack screenOptions={{ headerShown: false, headerBackTitle: "Back" }}>
+    <UserProvider key={userId}>
+      <ActiveReadingGuard userId={userId}>
+        <Stack key={`protected-${userId}`} screenOptions={{ headerShown: false, headerBackTitle: "Back" }}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="read" options={{ animation: "none" }} />
           <Stack.Screen name="of-01" />
@@ -223,8 +160,6 @@ function RootLayoutNav() {
           <Stack.Screen name="of-space-start" />
           <Stack.Screen name="of-space-schedule-send" />
           <Stack.Screen name="of-space-archive" />
-          {/* Draft entry/exit uses push/pop. These replace options are only for
-              transitions between the writing stages. */}
           <Stack.Screen name="on-01a" options={{ animationTypeForReplace: "pop" }} />
           <Stack.Screen name="on-01b" options={{ animationTypeForReplace: "pop" }} />
           <Stack.Screen name="on-01c" />
@@ -236,12 +171,108 @@ function RootLayoutNav() {
           <Stack.Screen name="mypage-sendrecords" />
           <Stack.Screen name="settings" options={{ presentation: "card" }} />
           <Stack.Screen name="terms" options={{ presentation: "card" }} />
+          {/* Keep the login route declared while redirecting after sign-in.
+              It is still inside UserProvider, so it cannot expose a provider
+              gap if the router has not processed the redirect yet. */}
           <Stack.Screen name="login" options={{ headerShown: false }} />
           <Stack.Screen name="login-callback" options={{ headerShown: false }} />
         </Stack>
       </ActiveReadingGuard>
-    </AuthGuard>
+    </UserProvider>
   );
+}
+
+function PublicRouteStack() {
+  return (
+    <Stack key="public" screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="login" />
+      <Stack.Screen name="login-callback" />
+    </Stack>
+  );
+}
+
+function AuthGuard() {
+  const { session, isLoading, configurationError } = useAuth();
+  // Register push token once the user is authenticated
+  const sessionUserId = session?.user?.id ?? null;
+  usePushNotifications(sessionUserId);
+  // Navigate to inbox when a LETTER_ARRIVED notification is tapped
+  useNotificationDeepLink(sessionUserId);
+  const { activeSession, clearActiveSession } = useActiveReading();
+  const router = useRouter();
+  const segments = useSegments();
+  const hasRedirectedRef = useRef(false);
+  const previousUserIdRef = useRef<string | null>(null);
+
+  const firstSegment = segments[0] as string | undefined;
+  const decision = getAuthNavigationDecision({
+    isLoading,
+    userId: sessionUserId,
+    firstSegment,
+  });
+  const navigationKind = decision.kind;
+
+  useEffect(() => {
+    if (configurationError || isLoading) return;
+
+    if (navigationKind === "redirect-login") {
+      clearActiveSession();
+      router.replace("/login");
+    } else if (
+      navigationKind === "protected" &&
+      (firstSegment === "login" || firstSegment === "login-callback")
+    ) {
+      hasRedirectedRef.current = true;
+      router.replace("/(tabs)/on");
+    } else if (
+      navigationKind === "protected" &&
+      Platform.OS !== "web" &&
+      firstSegment === "(tabs)" &&
+      (segments[1] == null || (segments[1] as string) === "index") &&
+      !hasRedirectedRef.current
+    ) {
+      hasRedirectedRef.current = true;
+      router.replace("/(tabs)/on");
+    }
+  }, [clearActiveSession, configurationError, firstSegment, isLoading, navigationKind, router, segments]);
+
+  useEffect(() => {
+    if (configurationError) return;
+    if (!sessionUserId) {
+      previousUserIdRef.current = null;
+      if (activeSession) clearActiveSession();
+      return;
+    }
+
+    const accountChanged =
+      previousUserIdRef.current !== null &&
+      previousUserIdRef.current !== sessionUserId;
+    const activeReadingBelongsToAnotherAccount =
+      activeSession !== null &&
+      getActiveReadingForUser(activeSession, sessionUserId) === null;
+    if (accountChanged || activeReadingBelongsToAnotherAccount) {
+      clearActiveSession();
+    }
+    previousUserIdRef.current = sessionUserId;
+  }, [activeSession, clearActiveSession, configurationError, sessionUserId]);
+
+  if (configurationError) {
+    return <AuthConfigurationErrorView message={configurationError} />;
+  }
+
+  if (decision.kind === "loading") {
+    return <AuthLoadingView message="로그인 상태를 확인하고 있어요" />;
+  }
+
+  if (decision.kind === "protected") {
+    return <ProtectedRouteStack userId={decision.userId} />;
+  }
+
+  if (decision.kind === "redirect-login") {
+    return <AuthLoadingView message="화면을 불러오고 있어요" />;
+  }
+
+  return <PublicRouteStack />;
 }
 
 const styles = StyleSheet.create({
@@ -387,7 +418,7 @@ export default function RootLayout() {
                   <ThoughtComposerProvider>
                     <NavigationProvider>
                       <ReaderTransitionProvider>
-                        <RootLayoutNav />
+                        <AuthGuard />
                         <ToastContainer />
                       </ReaderTransitionProvider>
                     </NavigationProvider>

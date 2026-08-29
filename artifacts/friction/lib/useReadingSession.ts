@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, useEffect } from "react";
+import { useCallback, useRef, useState, useEffect, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useUpsertReadingRecord, useCreateUserArticleRead, useMarkInboxRead, useGetReadingRecord, useDeleteReadingRecord, getGetReadingRecordQueryKey } from "@workspace/api-client-react";
 import { invalidateTeamArticles, patchInboxItemInCache } from "./queryInvalidation";
@@ -18,6 +18,7 @@ import {
   shouldShowExitUI,
 } from "./readingPersistence";
 import type { ReadingSession, ReadingSessionState } from "./readingPersistence";
+import { createReadingSaveBoundary } from "./readingSaveBoundary";
 
 const POSITION_SAVE_DEBOUNCE_MS = 2000;
 
@@ -103,7 +104,13 @@ export function useReadingSession({
   }, [totalPages]);
 
   const queryClient = useQueryClient();
-  const upsertReading = useUpsertReadingRecord();
+  const saveBoundary = useMemo(
+    () => createReadingSaveBoundary(userId, articleId),
+    [articleId, userId],
+  );
+  const upsertReading = useUpsertReadingRecord({
+    request: { signal: saveBoundary.signal },
+  });
   const createArticleRead = useCreateUserArticleRead();
   const markInboxReadMutation = useMarkInboxRead();
   const deleteReading = useDeleteReadingRecord();
@@ -112,10 +119,23 @@ export function useReadingSession({
   const teamCollectionIdRef = useRef(teamCollectionId);
   useEffect(() => { teamCollectionIdRef.current = teamCollectionId; }, [teamCollectionId]);
 
+  // A protected navigation tree is replaced when the account changes. Do not
+  // let a debounced write from the previous account survive that replacement.
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      saveBoundary.dispose();
+    };
+  }, [saveBoundary]);
+
   const savePosition = useCallback(
     (currentPage: number, scrollPosition: number) => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = setTimeout(async () => {
+        if (!saveBoundary.canDispatch(userId, articleId)) return;
         try {
           await upsertReading.mutateAsync({
             data: { userId, articleId, currentPage, scrollPosition },
@@ -124,7 +144,7 @@ export function useReadingSession({
         }
       }, POSITION_SAVE_DEBOUNCE_MS);
     },
-    [userId, articleId, upsertReading],
+    [userId, articleId, saveBoundary, upsertReading],
   );
 
   const startReading = useCallback(() => {

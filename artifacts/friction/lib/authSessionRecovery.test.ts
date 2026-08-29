@@ -10,6 +10,10 @@ import {
   type NativeAuthFacade,
   type SessionLike,
 } from "./authSessionRecovery";
+import {
+  getActiveReadingForUser,
+  getAuthNavigationDecision,
+} from "./authNavigation";
 
 type TestSession = SessionLike & { id: string };
 
@@ -399,5 +403,84 @@ describe("createAuthSessionCoordinator", () => {
       coordinator.commitAuthOperation(signupOperation, autoConfirmedSession),
     ).toBe(true);
     expect(coordinator.getCurrentSession()).toBe(autoConfirmedSession);
+  });
+});
+
+describe("auth navigation boundary", () => {
+  it("keeps a protected deep link behind the restore loading boundary", () => {
+    expect(
+      getAuthNavigationDecision({
+        isLoading: true,
+        userId: null,
+        firstSegment: "read",
+      }),
+    ).toEqual({ kind: "loading" });
+  });
+
+  it("redirects an unauthenticated direct read entry instead of mounting it", () => {
+    expect(
+      getAuthNavigationDecision({
+        isLoading: false,
+        userId: null,
+        firstSegment: "read",
+      }),
+    ).toEqual({ kind: "redirect-login" });
+  });
+
+  it("renders only the public stack on the login routes", () => {
+    expect(
+      getAuthNavigationDecision({
+        isLoading: false,
+        userId: null,
+        firstSegment: "login",
+      }),
+    ).toEqual({ kind: "public" });
+  });
+
+  it("keys protected navigation to the current authenticated user", () => {
+    const firstAccount = getAuthNavigationDecision({
+      isLoading: false,
+      userId: "user-a",
+      firstSegment: "read",
+    });
+    const secondAccount = getAuthNavigationDecision({
+      isLoading: false,
+      userId: "user-b",
+      firstSegment: "read",
+    });
+    expect(firstAccount).toEqual({ kind: "protected", userId: "user-a" });
+    expect(secondAccount).toEqual({ kind: "protected", userId: "user-b" });
+    expect(secondAccount).not.toEqual(firstAccount);
+  });
+
+  it("unmounts protected navigation as soon as the web session is lost", () => {
+    const authenticated = getAuthNavigationDecision({
+      isLoading: false,
+      userId: "user-a",
+      firstSegment: "read",
+    });
+    const signedOut = getAuthNavigationDecision({
+      isLoading: false,
+      userId: null,
+      firstSegment: "read",
+    });
+    expect(authenticated.kind).toBe("protected");
+    expect(signedOut).toEqual({ kind: "redirect-login" });
+  });
+
+  it("does not restore an active reading session owned by another account", () => {
+    const activeSession = {
+      userId: "user-a",
+      articleId: "article-1",
+      mode: "basic",
+    };
+    expect(getActiveReadingForUser(activeSession, "user-b")).toBeNull();
+    expect(getActiveReadingForUser(activeSession, "user-a")).toBe(activeSession);
+    expect(
+      getActiveReadingForUser(
+        { articleId: "legacy", mode: "basic" } as typeof activeSession,
+        "user-a",
+      ),
+    ).toBeNull();
   });
 });
