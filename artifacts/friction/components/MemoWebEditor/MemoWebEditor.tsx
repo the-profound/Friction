@@ -210,6 +210,7 @@ const MemoWebEditor = forwardRef<MemoWebEditorRef, MemoWebEditorProps>(
       textColumnWidth,
       fontSizePx: bodyFontSize,
       lineHeightPx: previewLineHeight,
+      paragraphGapPx: bodyFontSize * ReaderTokens.paragraphSpacing.bodyEm,
       letterSpacingPx: 0.3,
       titleFontSizePx: bodyFontSize * ReaderTokens.typeScale.titleScaleEm,
       textScalePercent: 100,

@@ -27,7 +27,7 @@ export interface BodyTypographyCssOptions {
    *  편집기: ".ProseMirror" (TipTap이 .ProseMirror 안에 블록을 그린다)
    *  리더 / 측정: 루트 셀렉터와 동일. */
   blockSelector: string;
-  /** "spaced": 일반 읽기용 마진(p:1em, h1:1em 0 0.4em, …).
+  /** "spaced": 일반 읽기용 마진(p:공통 본문 문단 간격, h1:1em 0 0.4em, …).
    *  "zero": 모든 블록 마진을 0으로 초기화 (측정 레이어가 blockGap을 외부에서 더할 때 사용). */
   blockMargins: "spaced" | "zero";
   /** "spaced": border-top + 1em 위아래 여백 (리더 페이지).
@@ -41,7 +41,7 @@ export interface BodyTypographyCssOptions {
 export function buildBodyTypographyCss(opts: BodyTypographyCssOptions): string {
   const { rootSelector: r, blockSelector: b, blockMargins, hrStyle, readerUnderline } = opts;
   const spaced = blockMargins === "spaced";
-  const pMargin = spaced ? "margin-bottom:1em" : "margin:0";
+  const pMargin = spaced ? "margin-bottom:var(--body-paragraph-gap)" : "margin:0";
   const h1Margin = spaced ? "margin:1em 0 0.4em" : "margin:0";
   const h2Margin = spaced ? "margin:0.8em 0 0.3em" : "margin:0";
   const h3Margin = spaced ? "margin:0.6em 0 0.3em" : "margin:0";

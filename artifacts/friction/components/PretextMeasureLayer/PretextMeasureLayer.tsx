@@ -37,8 +37,6 @@ export type MeasureRequest = {
   paddingTop?: number;
   /** 옵션: 아래쪽 padding (페이지 paddingY + 화면별 inset/title-bar 예약 등). */
   paddingBottom?: number;
-  /** Markdown 블록 사이 vertical gap (lineHeight * 0.6). */
-  blockGap?: number;
 };
 
 interface Props {
@@ -83,7 +81,7 @@ export default function PretextMeasureLayer({ request, onMeasured }: Props) {
   if (!request) return null;
 
   const renderKey = renderKeyRef.current;
-  const blockGap = request.blockGap ?? request.typography.lineHeightPx * 0.6;
+  const blockGap = request.typography.paragraphGapPx;
 
   return (
     <View pointerEvents="none" style={{ position: "absolute", left: 0, top: 0, opacity: 0 }}>

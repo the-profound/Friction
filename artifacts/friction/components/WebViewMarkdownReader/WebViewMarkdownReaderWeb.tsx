@@ -94,6 +94,7 @@ export default function WebViewMarkdownReaderWeb({
     letterSpacing: typography.letterSpacingPx,
     "--body-font-size": `${typography.fontSizePx}px`,
     "--body-line-height": `${typography.lineHeightPx}px`,
+    "--body-paragraph-gap": `${typography.paragraphGapPx}px`,
     "--body-letter-spacing": `${typography.letterSpacingPx}px`,
     "--title-font-size": `${typography.titleFontSizePx}px`,
     "--body-regular-font-family": hasCompleteBodyFontSet(fontStatus)

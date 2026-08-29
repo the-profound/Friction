@@ -72,7 +72,7 @@ export default function WebViewMeasureLayerWeb({ request, onMeasured }: Props) {
 
     prevRequestRef.current = request;
     const containerWidth = request.typography.textColumnWidth;
-    const blockGap = request.blockGap ?? request.typography.lineHeightPx * 0.6;
+    const blockGap = request.typography.paragraphGapPx;
     const wrapper = containerRef.current;
 
     wrapper.style.width = containerWidth + "px";
@@ -81,6 +81,7 @@ export default function WebViewMeasureLayerWeb({ request, onMeasured }: Props) {
     wrapper.style.letterSpacing = request.typography.letterSpacingPx + "px";
     wrapper.style.setProperty("--body-font-size", request.typography.fontSizePx + "px");
     wrapper.style.setProperty("--body-line-height", request.typography.lineHeightPx + "px");
+    wrapper.style.setProperty("--body-paragraph-gap", request.typography.paragraphGapPx + "px");
     wrapper.style.setProperty("--body-letter-spacing", request.typography.letterSpacingPx + "px");
     wrapper.style.setProperty("--title-font-size", request.typography.titleFontSizePx + "px");
     wrapper.innerHTML = "";

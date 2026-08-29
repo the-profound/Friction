@@ -435,6 +435,11 @@ export const ReaderTokens = {
     tight: 1.2,
   },
 
+  paragraphSpacing: {
+    /** 일반 본문 문단의 아래 여백. 본문 글자 크기에 대한 em 배율이다. */
+    bodyEm: 0.6,
+  },
+
   letterSpacing: {
     relaxedEm: 0.05,
     tightEm: -0.02,

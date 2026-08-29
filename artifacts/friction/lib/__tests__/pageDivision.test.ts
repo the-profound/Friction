@@ -145,6 +145,27 @@ describe("image isolation in the greedy division engine", () => {
   });
 });
 
+describe("shared paragraph spacing at page boundaries", () => {
+  it("keeps consecutive and empty paragraph measurements on the 0.6em contract", () => {
+    const lineHeight = 18;
+    const paragraphGap = 6;
+    const oneLineParagraphHeight = lineHeight + paragraphGap;
+    const paragraphs = ["첫 문단", "", "페이지 경계 직전 문단"];
+    const paraHeights = {
+      0: oneLineParagraphHeight,
+      1: paragraphGap,
+      2: oneLineParagraphHeight,
+    };
+    const threshold =
+      oneLineParagraphHeight + paragraphGap + oneLineParagraphHeight - 1;
+
+    expect(runGreedy(paragraphs, paraHeights, {}, threshold)).toEqual([
+      "첫 문단\n\n",
+      "페이지 경계 직전 문단",
+    ]);
+  });
+});
+
 describe("isBlockquotePara", () => {
   it("recognizes lines starting with '> '", () => {
     expect(isBlockquotePara("> 인용 텍스트")).toBe(true);

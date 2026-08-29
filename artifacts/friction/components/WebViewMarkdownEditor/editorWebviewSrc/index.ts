@@ -870,7 +870,15 @@ interface Command {
   autoSplit?: boolean;
   mode?: "fallback";
   text?: string;
-  metrics?: { textColumnWidth: number; fontSizePx: number; lineHeightPx: number; letterSpacingPx: number; titleFontSizePx: number; textScalePercent: 100 };
+  metrics?: {
+    textColumnWidth: number;
+    fontSizePx: number;
+    lineHeightPx: number;
+    paragraphGapPx: number;
+    letterSpacingPx: number;
+    titleFontSizePx: number;
+    textScalePercent: 100;
+  };
   blockType?: string;
   mark?: string;
   pageIndex?: number;
@@ -1033,6 +1041,7 @@ function spellFindRange(
   let lastTextColumnWidth: number | null = null;
   let lastBodyFontSizePx: number | null = null;
   let lastBodyLineHeightPx: number | null = null;
+  let lastBodyParagraphGapPx: number | null = null;
   let lastBodyLetterSpacingPx: number | null = null;
   let lastTitleFontSizePx: number | null = null;
 
@@ -1597,6 +1606,11 @@ function spellFindRange(
           if (metrics.lineHeightPx !== lastBodyLineHeightPx) {
             root.style.setProperty("--body-line-height", metrics.lineHeightPx + "px");
             lastBodyLineHeightPx = metrics.lineHeightPx;
+            changed = true;
+          }
+          if (metrics.paragraphGapPx !== lastBodyParagraphGapPx) {
+            root.style.setProperty("--body-paragraph-gap", metrics.paragraphGapPx + "px");
+            lastBodyParagraphGapPx = metrics.paragraphGapPx;
             changed = true;
           }
           if (metrics.letterSpacingPx !== lastBodyLetterSpacingPx) {

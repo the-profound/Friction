@@ -157,7 +157,7 @@ cqiToPx(cqi, C) = (cqi / 100) × C
 | 읽기 | `read.tsx`가 저장된 `layoutWidth`(없으면 작성과 같은 폭 계산)를 사용하고 리더에 본문/제목 메트릭을 전달 | 마감 미리보기 및 분할 결과와 같은 줄·페이지 |
 
 분할의 `WebViewMeasureLayer`는 블록 마진을 0으로 만든 뒤 React Native 측
-`blockGap`을 높이에 더하는 측정 전용 계약을 쓴다. 화면에 보이는 리더의 여백과
+본문 메트릭의 `paragraphGapPx`를 높이에 더하는 측정 전용 계약을 쓴다. 화면에 보이는 리더의 여백과
 같은 CSS `margin`을 측정기에 다시 더하지 않는다.
 
 ---
@@ -179,7 +179,7 @@ cqiToPx(cqi, C) = (cqi / 100) × C
 
 | Markdown / DOM 블록 | 정렬·폰트·행간·자간 | 여백·장식 | 줄바꿈 / 구현 범위 |
 | --- | --- | --- | --- |
-| 문단 (`p`) | 양쪽 맞춤, Eulyoo Regular, 본문 1.8, 본문 자간 | 화면용 `margin-bottom: 1em`; 측정용 0 | `overflow-wrap`/`word-wrap: break-word`, `word-break: normal`, 자동 hyphenation, `text-justify: inter-ideograph` |
+| 문단 (`p`) | 양쪽 맞춤, Eulyoo Regular, 본문 1.8, 본문 자간 | 화면용 `margin-bottom: 0.6em`; 측정용 0 | `overflow-wrap`/`word-wrap: break-word`, `word-break: normal`, 자동 hyphenation, `text-justify: inter-ideograph` |
 | H1 | 왼쪽, Eulyoo SemiBold 600, `1.6em`, 행간 1.25, `0.025em` | `1em 0 0.4em`; 측정용 0 | 제목은 양쪽 맞춤하지 않는다. 제목 입력은 `-0.01em`, 아래 1 px border, `8px 0` padding, 12 px 아래 여백을 별도로 가진다. |
 | H2 | 왼쪽, SemiBold 600, `1.3em`, 행간 1.3, `0.025em` | `0.8em 0 0.3em`; 측정용 0 | 제목 정책을 따른다. |
 | H3 | 왼쪽, SemiBold 600, `1.1em`, 행간 1.35, `0.025em` | `0.6em 0 0.3em`; 측정용 0 | 제목 정책을 따른다. |

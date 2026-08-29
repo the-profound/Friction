@@ -35,6 +35,8 @@ export interface BodyLayout {
   textColumnWidth: number;
   bodyFontSize: number;
   bodyLineHeight: number;
+  /** 일반 본문 문단의 아래 여백(px). */
+  bodyParagraphGap: number;
   bodyLetterSpacing: number;
   titleFontSize: number;
   /** 카드 하단 제목 바의 높이. 화면별 하단 예약으로만 사용한다. */
@@ -46,6 +48,7 @@ export interface BodyTypographyMetrics {
   textColumnWidth: number;
   fontSizePx: number;
   lineHeightPx: number;
+  paragraphGapPx: number;
   letterSpacingPx: number;
   titleFontSizePx: number;
   textScalePercent: 100;
@@ -56,6 +59,7 @@ export function bodyTypographyMetrics(layout: BodyLayout): BodyTypographyMetrics
     textColumnWidth: layout.textColumnWidth,
     fontSizePx: layout.bodyFontSize,
     lineHeightPx: layout.bodyLineHeight,
+    paragraphGapPx: layout.bodyParagraphGap,
     letterSpacingPx: layout.bodyLetterSpacing,
     titleFontSizePx: layout.titleFontSize,
     textScalePercent: 100,
@@ -70,6 +74,7 @@ export function computeBodyLayout(pageWidth: number): BodyLayout {
   });
   const bodyFontSize = readerFontSize(ReaderTokens.typeScale.bodyCqi, pageWidth);
   const bodyLineHeight = bodyFontSize * ReaderTokens.lineHeight.relaxed;
+  const bodyParagraphGap = bodyFontSize * ReaderTokens.paragraphSpacing.bodyEm;
   const bodyLetterSpacing = readerLetterSpacing(
     ReaderTokens.letterSpacing.relaxedEm,
     bodyFontSize,
@@ -81,6 +86,7 @@ export function computeBodyLayout(pageWidth: number): BodyLayout {
     ...geometry,
     bodyFontSize,
     bodyLineHeight,
+    bodyParagraphGap,
     bodyLetterSpacing,
     titleFontSize,
     titleBarHeight,

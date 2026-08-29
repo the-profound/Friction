@@ -137,7 +137,6 @@ export default function WebViewMeasureLayer({ request, onMeasured }: Props) {
   const latestSeqRef = useRef(0);
 
   const sendMeasure = useCallback((req: MeasureRequest) => {
-    const blockGap = req.blockGap ?? req.typography.lineHeightPx * 0.6;
     const items = req.candidates.map((c) => ({
       key: c.key,
       html: c.blocks
@@ -148,7 +147,6 @@ export default function WebViewMeasureLayer({ request, onMeasured }: Props) {
     bridge
       .request<Record<string, number>>("measure", {
         metrics: req.typography,
-        blockGap,
         items,
       })
       .then((heights) => {

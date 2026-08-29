@@ -892,7 +892,6 @@ export default function WritingScreen() {
   // 적용해, 수동 경계와 자동 분할이 이후 화면에서 넘치지 않게 한다.
   const readerBottomReservation = insets.bottom + editorLayout.titleBarHeight;
   const pageContentHeight = pageHeight;
-  const blockGap = bodyLineHeight * 0.6;
   const availableContentHeight = getBodyContentHeight(editorLayout, readerBottomReservation);
 
   const pageBlockMap = useMemo(() => {
@@ -927,9 +926,8 @@ export default function WritingScreen() {
       candidates,
       typography,
       fontMode: nativeBodyFontMode,
-      blockGap,
     };
-  }, [mode, measurePages, pageBlockMap, blockGap, typography, nativeBodyFontMode]);
+  }, [mode, measurePages, pageBlockMap, typography, nativeBodyFontMode]);
   warningRequestRef.current = warningRequest;
 
   const handleWarningMeasured = useCallback((

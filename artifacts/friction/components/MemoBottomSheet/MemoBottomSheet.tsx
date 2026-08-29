@@ -24,7 +24,7 @@ import type {
   OnExportMarkdownPayload,
   OnSelectionUpdatePayload,
 } from "@/components/WebViewMarkdownEditor/types";
-import { Colors, Typography, Spacing } from "@/constants/tokens";
+import { Colors, Typography, Spacing, ReaderTokens } from "@/constants/tokens";
 import type { FormatType } from "@/components/MemoWebEditor/MemoWebEditor";
 import type { BodyTypographyMetrics } from "@/lib/bodyLayout";
 
@@ -85,7 +85,8 @@ const MemoBottomSheet = forwardRef<MemoBottomSheetRef, MemoBottomSheetProps>(
     const typography: BodyTypographyMetrics = {
       textColumnWidth: screenWidth - Spacing.screenPx * 2,
       fontSizePx: bodyFontSize,
-      lineHeightPx: bodyFontSize * 1.8,
+      lineHeightPx: bodyFontSize * ReaderTokens.lineHeight.relaxed,
+      paragraphGapPx: bodyFontSize * ReaderTokens.paragraphSpacing.bodyEm,
       letterSpacingPx: 0.3,
       titleFontSizePx: bodyFontSize * 1.6,
       textScalePercent: 100,

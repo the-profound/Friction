@@ -26,6 +26,7 @@ import { bodyTypographyMetrics, computeBodyLayout } from "../bodyLayout";
 import { markdownToHtml } from "../markdownRenderer";
 import { splitContentToPages } from "../pageDivision";
 import { parseMarkdownBlocks } from "../../utils/markdownParser";
+import { ReaderTokens } from "../../constants/tokens";
 
 describe("letter body font fallback contract", () => {
   it("registers WOFF2 as a Metro asset without dropping the default assets", () => {
@@ -228,9 +229,39 @@ describe("shared letter page geometry", () => {
     expect(koreanProbe).toContain("잓");
     expect(metrics.textColumnWidth).toBe(Math.round(width * 0.88));
     expect(metrics.fontSizePx).toBeCloseTo(width * 0.04);
-    expect(metrics.lineHeightPx).toBeCloseTo(metrics.fontSizePx * 1.8);
+    expect(ReaderTokens.lineHeight.relaxed).toBe(1.8);
+    expect(ReaderTokens.paragraphSpacing.bodyEm).toBe(0.6);
+    expect(metrics.lineHeightPx).toBeCloseTo(
+      metrics.fontSizePx * ReaderTokens.lineHeight.relaxed,
+    );
+    expect(metrics.paragraphGapPx).toBeCloseTo(
+      metrics.fontSizePx * ReaderTokens.paragraphSpacing.bodyEm,
+    );
     expect(metrics.letterSpacingPx).toBeCloseTo(metrics.fontSizePx * 0.05);
     expect(metrics.textScalePercent).toBe(100);
+  });
+
+  it("uses the shared paragraph-gap variable in visible body CSS only", () => {
+    const visibleCss = buildBodyTypographyCss({
+      rootSelector: ".reader",
+      blockSelector: ".reader",
+      blockMargins: "spaced",
+      hrStyle: "spaced",
+    });
+    const measureCss = buildBodyTypographyCss({
+      rootSelector: ".measure",
+      blockSelector: ".measure",
+      blockMargins: "zero",
+      hrStyle: "measure",
+    });
+
+    expect(visibleCss).toContain(
+      ".reader p{margin-bottom:var(--body-paragraph-gap)",
+    );
+    expect(measureCss).toContain(".measure p{margin:0");
+    expect(measureCss).not.toContain(
+      "margin-bottom:var(--body-paragraph-gap)",
+    );
   });
 
   it("uses the full logical page C and an integer 0.88C text column", () => {
@@ -295,11 +326,17 @@ describe("reader title typography", () => {
     expect(sharedCss).toContain("font-size:var(--title-font-size)");
     expect(editorHtml).toContain("font-size:var(--title-font-size)");
     expect(editorHtml).not.toContain("var(--title-font-size,");
+    expect(editorHtml).toContain("const bodyTypographyCss = buildBodyTypographyCss");
+    expect(editorHtml).toContain("<style>${fontFaceCSS}${bodyTypographyCss}");
+    expect(editorHtml).toContain("paragraphGapPx");
     expect(readerHtml).toContain('setProperty("--title-font-size",m.titleFontSizePx+"px")');
     expect(measureHtml).toContain('setProperty("--title-font-size",m.titleFontSizePx+"px")');
+    expect(readerHtml).toContain('setProperty("--body-paragraph-gap",m.paragraphGapPx+"px")');
+    expect(measureHtml).toContain('var gap=m.paragraphGapPx');
     expect(webMeasure).toContain("buildBodyTypographyCss");
     expect(webMeasure).toContain('rootSelector: ".webview-measure-layer"');
     expect(webEditor).toContain('"--title-font-size": `${typography.titleFontSizePx}px`');
+    expect(webEditor).toContain('"--body-paragraph-gap": `${typography.paragraphGapPx}px`');
   });
 
   it("reports the same effective metric fields from every renderer", () => {

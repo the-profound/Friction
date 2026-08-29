@@ -106,6 +106,7 @@ bridge.register("setBodyMetrics",function(cmd){
  var m=cmd.metrics;if(!m)return;
  document.documentElement.style.setProperty("--body-font-size",m.fontSizePx+"px");
  document.documentElement.style.setProperty("--body-line-height",m.lineHeightPx+"px");
+ document.documentElement.style.setProperty("--body-paragraph-gap",m.paragraphGapPx+"px");
  document.documentElement.style.setProperty("--body-letter-spacing",m.letterSpacingPx+"px");
  document.documentElement.style.setProperty("--title-font-size",m.titleFontSizePx+"px");
  requestAnimationFrame(function(){
