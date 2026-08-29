@@ -8,6 +8,7 @@ import {
   usersTable,
   userArticleReadsTable,
 } from "@workspace/db";
+import { resolveInboxSourceName } from "../lib/inboxSource";
 
 const router: IRouter = Router();
 
@@ -18,36 +19,46 @@ const ANONYMOUS_PARTICIPANT_NAME = "참여자";
 // lead users to a draft, deleted, or otherwise non-readable article.
 const readableInboxArticle = sql`${articlesTable.status} IN ('DIVIDING', 'CLOSING', 'LETTER')`;
 
-// Space-backed inbox rows carry sourceSpaceId. For legacy generic rows with no
-// explicit source, use the article relation only when it identifies exactly one
-// space. Team-collection rows are never interpreted as space rows.
-const inboxSpaceIdSubquery = sql<string | null>`(
+export const scheduledSendSpaceIdSubquery = sql<string | null>`(
+  SELECT ss.space_id
+  FROM space_scheduled_sends ss
+  WHERE ss.id = ${inboxTable.sourceSpaceScheduledSendId}
+  LIMIT 1
+)`;
+
+// Some pre-provenance rows have neither source column populated. Match those
+// only to an exact SENT reservation (article, author, and delivery timestamp),
+// mirroring the migration backfill and protecting ordinary person sends.
+export const legacyScheduledSpaceIdSubquery = sql<string | null>`(
+  SELECT CASE
+    WHEN COUNT(DISTINCT ss.space_id) = 1
+    THEN (ARRAY_AGG(DISTINCT ss.space_id))[1]
+  END
+  FROM space_letters sl
+  JOIN space_scheduled_sends ss
+    ON ss.space_letter_id = sl.id
+   AND ss.space_id = sl.space_id
+   AND ss.status = 'SENT'
+  WHERE ${inboxTable.sourceSpaceId} IS NULL
+    AND ${inboxTable.sourceSpaceScheduledSendId} IS NULL
+    AND ${inboxTable.sourceTeamCollectionId} IS NULL
+    AND sl.source_article_id = ${inboxTable.articleId}
+    AND sl.author_id = ${inboxTable.senderId}
+    AND ss.scheduled_at = ${inboxTable.visibleAt}
+    AND NOT EXISTS (
+      SELECT 1
+      FROM send_records sr
+      WHERE sr.inbox_id = ${inboxTable.id}
+    )
+)`;
+
+// Space provenance priority is explicit source, durable reservation link, then
+// exact historical reservation evidence. Collection guesses never participate.
+export const inboxSpaceIdSubquery = sql<string | null>`(
   COALESCE(
     ${inboxTable.sourceSpaceId},
-    (
-      SELECT CASE
-        WHEN COUNT(DISTINCT sl.space_id) = 1
-        THEN (ARRAY_AGG(DISTINCT sl.space_id))[1]
-      END
-      FROM space_letters sl
-      WHERE ${inboxTable.sourceSpaceId} IS NULL
-        AND ${inboxTable.sourceTeamCollectionId} IS NULL
-        AND sl.source_article_id = ${inboxTable.articleId}
-        AND NOT EXISTS (
-          SELECT 1
-          FROM send_records sr
-          WHERE sr.inbox_id = ${inboxTable.id}
-        )
-        AND NOT EXISTS (
-          SELECT 1
-          FROM team_collection_articles tca
-          JOIN team_collection_memberships tcm
-            ON tcm.team_collection_id = tca.team_collection_id
-           AND tcm.user_id = ${inboxTable.recipientId}
-          WHERE tca.article_id = ${inboxTable.articleId}
-            AND tca.added_by = ${inboxTable.senderId}
-        )
-    )
+    ${scheduledSendSpaceIdSubquery},
+    ${legacyScheduledSpaceIdSubquery}
   )
 )`;
 const inboxSpaceAnonymousSubquery = sql<boolean | null>`(
@@ -98,41 +109,60 @@ const senderDisplayName = sql<string>`(
 type InboxRow = {
   sender?: typeof usersTable.$inferSelect | null;
   isAnonymousSpace: boolean | null;
+  explicitSpaceName: string | null;
+  scheduledSpaceName: string | null;
+  legacyScheduledSpaceName: string | null;
+  teamCollectionName: string | null;
+  personalCollectionName: string | null;
   [key: string]: unknown;
 };
 
 function sanitizeInboxRow<T extends InboxRow>(row: T) {
-  const { isAnonymousSpace, ...item } = row;
+  const {
+    isAnonymousSpace,
+    explicitSpaceName,
+    scheduledSpaceName,
+    legacyScheduledSpaceName,
+    teamCollectionName,
+    personalCollectionName,
+    ...item
+  } = row;
   // Anonymous inbox responses must not expose the account nickname/email
   // through the sender object. senderDisplayName is the sole display path.
   return {
     ...item,
+    collectionName: resolveInboxSourceName({
+      explicitSpaceName,
+      scheduledSpaceName,
+      legacyScheduledSpaceName,
+      teamCollectionName,
+      personalCollectionName,
+    }),
     ...(isAnonymousSpace ? { sender: undefined } : {}),
   };
 }
 
-// Resolves the source name shown next to each inbox card. Space and team
-// collection sources are intentionally independent; generic person sends may
-// still fall back to a personal-collection name.
-const collectionNameSubquery = sql<string | null>`(
-  CASE
-    WHEN ${inboxSpaceIdSubquery} IS NOT NULL THEN (
-      SELECT s.name FROM spaces s WHERE s.id = ${inboxSpaceIdSubquery}
-    )
-    WHEN ${inboxTable.sourceTeamCollectionId} IS NOT NULL THEN (
-      SELECT tc.name
-      FROM team_collections tc
-      WHERE tc.id = ${inboxTable.sourceTeamCollectionId}
-    )
-    ELSE (
-      SELECT mc.name
-      FROM my_collection_articles mca
-      JOIN my_collections mc ON mca.my_collection_id = mc.id
-      WHERE mca.article_id = ${inboxTable.articleId}
-      ORDER BY mca.added_at ASC
-      LIMIT 1
-    )
-  END
+const explicitSpaceNameSubquery = sql<string | null>`(
+  SELECT s.name FROM spaces s WHERE s.id = ${inboxTable.sourceSpaceId}
+)`;
+const scheduledSpaceNameSubquery = sql<string | null>`(
+  SELECT s.name FROM spaces s WHERE s.id = ${scheduledSendSpaceIdSubquery}
+)`;
+const legacyScheduledSpaceNameSubquery = sql<string | null>`(
+  SELECT s.name FROM spaces s WHERE s.id = ${legacyScheduledSpaceIdSubquery}
+)`;
+const teamCollectionNameSubquery = sql<string | null>`(
+  SELECT tc.name
+  FROM team_collections tc
+  WHERE tc.id = ${inboxTable.sourceTeamCollectionId}
+)`;
+const personalCollectionNameSubquery = sql<string | null>`(
+  SELECT mc.name
+  FROM my_collection_articles mca
+  JOIN my_collections mc ON mca.my_collection_id = mc.id
+  WHERE mca.article_id = ${inboxTable.articleId}
+  ORDER BY mca.added_at ASC
+  LIMIT 1
 )`;
 
 router.get("/inbox", async (req, res) => {
@@ -167,7 +197,7 @@ router.get("/inbox", async (req, res) => {
       articleId: inboxTable.articleId,
       senderId: inboxTable.senderId,
       sourceTeamCollectionId: inboxTable.sourceTeamCollectionId,
-      sourceSpaceId: inboxTable.sourceSpaceId,
+      sourceSpaceId: inboxSpaceIdSubquery,
       visibleAt: inboxTable.visibleAt,
       openedAt: inboxTable.openedAt,
       isRead: inboxTable.isRead,
@@ -177,7 +207,11 @@ router.get("/inbox", async (req, res) => {
       sender: usersTable,
       senderDisplayName,
       isAnonymousSpace: inboxSpaceAnonymousSubquery,
-      collectionName: collectionNameSubquery,
+      explicitSpaceName: explicitSpaceNameSubquery,
+      scheduledSpaceName: scheduledSpaceNameSubquery,
+      legacyScheduledSpaceName: legacyScheduledSpaceNameSubquery,
+      teamCollectionName: teamCollectionNameSubquery,
+      personalCollectionName: personalCollectionNameSubquery,
       isReplyToMe: sql<boolean>`(${sourceArticle.id} IS NOT NULL AND ${sourceArticle.authorId} = ${inboxTable.recipientId})`,
       replyToArticleId: articlesTable.sourceArticleId,
       hasReadBefore: sql<boolean>`(${userArticleReadsTable.completedAt} IS NOT NULL)`,
@@ -215,7 +249,7 @@ router.get("/inbox/:id", async (req, res) => {
       articleId: inboxTable.articleId,
       senderId: inboxTable.senderId,
       sourceTeamCollectionId: inboxTable.sourceTeamCollectionId,
-      sourceSpaceId: inboxTable.sourceSpaceId,
+      sourceSpaceId: inboxSpaceIdSubquery,
       visibleAt: inboxTable.visibleAt,
       openedAt: inboxTable.openedAt,
       isRead: inboxTable.isRead,
@@ -225,7 +259,11 @@ router.get("/inbox/:id", async (req, res) => {
       sender: usersTable,
       senderDisplayName,
       isAnonymousSpace: inboxSpaceAnonymousSubquery,
-      collectionName: collectionNameSubquery,
+      explicitSpaceName: explicitSpaceNameSubquery,
+      scheduledSpaceName: scheduledSpaceNameSubquery,
+      legacyScheduledSpaceName: legacyScheduledSpaceNameSubquery,
+      teamCollectionName: teamCollectionNameSubquery,
+      personalCollectionName: personalCollectionNameSubquery,
       isReplyToMe: sql<boolean>`(${sourceArticle.id} IS NOT NULL AND ${sourceArticle.authorId} = ${inboxTable.recipientId})`,
       replyToArticleId: articlesTable.sourceArticleId,
     })

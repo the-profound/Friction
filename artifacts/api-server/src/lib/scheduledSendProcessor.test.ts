@@ -204,6 +204,7 @@ describe("space scheduled-send delivery", () => {
       }),
       expect.objectContaining({
         recipientId: "operator-1",
+        sourceSpaceId: "space-1",
         sourceSpaceScheduledSendId: "send-1",
       }),
     ]);

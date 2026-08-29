@@ -428,8 +428,11 @@ export default function InboxScreen() {
                 slot.article.authorNickname ??
                 null,
               authorId: inboxItem?.sender?.id ?? inboxItem?.senderId ?? slot.article.authorId ?? null,
-              collectionName: inboxItem?.collectionName ?? slot.article.collectionName ?? null,
-              collectionId: inboxItem?.sourceTeamCollectionId ?? slot.article.collectionId ?? null,
+              collectionName: inboxItem?.collectionName ?? null,
+              collectionId:
+                inboxItem && !inboxItem.sourceSpaceId
+                  ? (inboxItem.sourceTeamCollectionId ?? null)
+                  : null,
               date: inboxItem?.visibleAt ?? slot.article.createdAt ?? null,
               isRead: inboxItem?.isRead ?? false,
             }
@@ -444,8 +447,10 @@ export default function InboxScreen() {
     metaList.push({
       authorName: tapItem.senderDisplayName ?? tapItem.sender?.nickname ?? tapItem.sender?.id ?? null,
       authorId: tapItem.sender?.id ?? tapItem.senderId ?? null,
-      collectionName: tapItem.collectionName ?? tapItem.article?.collectionName ?? null,
-      collectionId: tapItem.sourceTeamCollectionId ?? tapItem.article?.collectionId ?? null,
+      collectionName: tapItem.collectionName ?? null,
+      collectionId: tapItem.sourceSpaceId
+        ? null
+        : (tapItem.sourceTeamCollectionId ?? null),
       date: tapItem.visibleAt ?? null,
       isRead: tapItem.isRead,
     });
@@ -459,8 +464,10 @@ export default function InboxScreen() {
       metaList.push({
         authorName: desc.senderDisplayName ?? desc.sender?.nickname ?? desc.article.authorNickname ?? null,
         authorId: desc.sender?.id ?? desc.senderId ?? desc.article?.authorId ?? null,
-        collectionName: desc.collectionName ?? desc.article.collectionName ?? null,
-        collectionId: desc.sourceTeamCollectionId ?? desc.article?.collectionId ?? null,
+        collectionName: desc.collectionName ?? null,
+        collectionId: desc.sourceSpaceId
+          ? null
+          : (desc.sourceTeamCollectionId ?? null),
         date: desc.visibleAt ?? desc.article.createdAt ?? null,
         isRead: desc.isRead,
       });
