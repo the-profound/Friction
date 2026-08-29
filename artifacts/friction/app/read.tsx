@@ -48,7 +48,7 @@ import {
   readerFontSize,
   readerLetterSpacing,
 } from "@/constants/tokens";
-import { computeBodyLayout } from "@/lib/bodyLayout";
+import { bodyTypographyMetrics, computeBodyLayout } from "@/lib/bodyLayout";
 import ProgressIndicator from "@/components/ProgressIndicator/ProgressIndicator";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import type { StoredSentence } from "@workspace/api-client-react";
@@ -2331,9 +2331,13 @@ const PageView = React.memo(function PageView({
         <View style={dynamicPageStyles.textColumn}>
             <WebViewMarkdownReader
               markdown={content}
-              bodyFontSize={layout.bodyFontSize}
-              bodyLetterSpacing={layout.bodyLetterSpacing}
-              titleFontSize={layout.titleFontSize}
+              typography={bodyTypographyMetrics({
+                pageWidth: layout.containerWidth, pageHeight: layout.containerHeight,
+                paddingX: layout.paddingX, paddingY: layout.paddingY, textColumnWidth: layout.textColumnWidth,
+                bodyFontSize: layout.bodyFontSize, bodyLineHeight: layout.bodyLineHeight,
+                bodyLetterSpacing: layout.bodyLetterSpacing, titleFontSize: layout.titleFontSize,
+                titleBarHeight: layout.titleBarHeight,
+              })}
               onTextSelect={onTextSelect}
               onDragStateChange={onDragStateChange}
               clearSelectionSignal={clearSignal}

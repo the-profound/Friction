@@ -200,6 +200,17 @@ cqiToPx(cqi, C) = (cqi / 100) × C
 
 ## 5. 변경 순서와 검증 방법
 
+### 수동 플랫폼 검증 (본문 정렬 변경 시)
+
+작성/분할, 마감 미리보기, 읽기를 iOS·Android·Web에서 같은 한국어 probe
+(`가잓`과 긴 문단/제목 포함)로 확인한다. iOS/Android에서는 시스템 글자 크기와
+디스플레이 크기를 각각 바꾼 뒤에도 줄바꿈이 유지되는지 확인하고, Web에서는 브라우저
+기본 글꼴 크기를 바꾼 뒤 확인한다. 네이티브 WebView의 `textZoom={100}` 및 CSS의
+`text-size-adjust:100%`가 이 경로를 고정한다. 개발 빌드에서는 renderer 진단 로그의
+DOM 폭, font-size, line-height, letter-spacing, text-size-adjust, DPR, text zoom과
+Eulyoo regular/semibold 로드 상태를 비교한다. reader/editor/measure의 값이 같은
+본문 계약 값이어야 하며, 다르면 해당 renderer를 표시하기 전에 수정한다.
+
 ### 공통 값을 바꿀 때
 
 1. 값을 둘 곳을 먼저 고른다. UI 토큰은 `Typography`, 본문 척도·컬럼은

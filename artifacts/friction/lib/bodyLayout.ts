@@ -41,6 +41,27 @@ export interface BodyLayout {
   titleBarHeight: number;
 }
 
+/** Exact DOM typography contract shared by every letter body renderer. */
+export interface BodyTypographyMetrics {
+  textColumnWidth: number;
+  fontSizePx: number;
+  lineHeightPx: number;
+  letterSpacingPx: number;
+  titleFontSizePx: number;
+  textScalePercent: 100;
+}
+
+export function bodyTypographyMetrics(layout: BodyLayout): BodyTypographyMetrics {
+  return {
+    textColumnWidth: layout.textColumnWidth,
+    fontSizePx: layout.bodyFontSize,
+    lineHeightPx: layout.bodyLineHeight,
+    letterSpacingPx: layout.bodyLetterSpacing,
+    titleFontSizePx: layout.titleFontSize,
+    textScalePercent: 100,
+  };
+}
+
 export function computeBodyLayout(pageWidth: number): BodyLayout {
   const geometry = computePageGeometry(pageWidth, {
     aspectRatio: ReaderTokens.aspectRatio,

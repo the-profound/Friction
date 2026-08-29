@@ -21,7 +21,7 @@ import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useAutoSave } from "@/lib/useAutoSave";
 import { useEditorLayout } from "@/lib/useEditorLayout";
-import { getBodyContentHeight } from "@/lib/bodyLayout";
+import { bodyTypographyMetrics, getBodyContentHeight } from "@/lib/bodyLayout";
 import {
   splitContentToPages,
   splitPageContentForDivision,
@@ -160,6 +160,7 @@ export default function WritingScreen() {
     bodyLetterSpacing,
     titleFontSize,
   } = editorLayout;
+  const typography = useMemo(() => bodyTypographyMetrics(editorLayout), [editorLayout]);
 
   // ── 데이터 fetching ─────────────────────────────────────────────────────────
   //
@@ -910,16 +911,10 @@ export default function WritingScreen() {
     if (candidates.length === 0) return null;
     return {
       candidates,
-      width: containerWidth,
-      paddingX,
-      textColumnWidth,
+      typography,
       blockGap,
-      fontSize: bodyFontSize,
-      lineHeight: bodyLineHeight,
-      letterSpacing: bodyLetterSpacing,
-      titleFontSize,
     };
-  }, [mode, measurePages, pageBlockMap, containerWidth, paddingX, textColumnWidth, blockGap, bodyFontSize, bodyLineHeight, bodyLetterSpacing, titleFontSize]);
+  }, [mode, measurePages, pageBlockMap, blockGap, typography]);
 
   const handleWarningMeasured = useCallback((heights: Record<string, number>) => {
     setBlockHeights((prev) => {
@@ -988,17 +983,11 @@ export default function WritingScreen() {
         engineResolveRef.current = resolve;
         setEngineRequest({
           candidates,
-          width: containerWidth,
-          paddingX,
-          textColumnWidth,
-          fontSize: bodyFontSize,
-          lineHeight: bodyLineHeight,
-          letterSpacing: bodyLetterSpacing,
-          titleFontSize,
+          typography,
         });
       });
     },
-    [containerWidth, paddingX, textColumnWidth, bodyFontSize, bodyLineHeight, bodyLetterSpacing, titleFontSize],
+    [typography],
   );
 
   const handleEngineMeasured = useCallback((heights: Record<string, number>) => {
@@ -2129,9 +2118,7 @@ export default function WritingScreen() {
                 onTitleChange={isThoughtMode && !isDividing ? undefined : handleTitleChange}
                 onKeyboardVisibilityChange={handleKeyboardVisibilityChange}
                 onSelectionUpdate={handleSelectionUpdate}
-                bodyFontSize={bodyFontSize}
-                bodyLetterSpacing={bodyLetterSpacing}
-                titleFontSize={titleFontSize}
+                typography={typography}
                 hideTitle={isThoughtMode && !isDividing}
                 sourceArticleSlotText={
                   isDividing

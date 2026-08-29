@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useImperativeHandle, forwardRef, useRef } from "react";
+import React, { useCallback, useEffect, useImperativeHandle, forwardRef, useRef, useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { StarterKit } from "@tiptap/starter-kit";
 import { Placeholder } from "@tiptap/extension-placeholder";
@@ -6,7 +6,6 @@ import { Underline } from "@tiptap/extension-underline";
 import { Node as TipTapNode } from "@tiptap/core";
 import { marked } from "marked";
 import TurndownService from "turndown";
-import { ReaderTokens } from "@/constants/tokens";
 import {
   getInlineImageTransformUrl,
   isPersistableInlineImageUrl,
@@ -22,6 +21,11 @@ import type {
   WebViewMarkdownEditorRef,
   OnChangePayload,
 } from "./types";
+import {
+  logWebBodyTypographyDiagnostic,
+  waitForWebBodyFonts,
+  type BodyFontLoadStatus,
+} from "@/lib/bodyTypographyDiagnostics";
 
 marked.setOptions({ breaks: true, gfm: true } as Parameters<typeof marked.setOptions>[0]);
 
@@ -116,7 +120,7 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
       onTitleChange,
       onError,
       belowTitleSlot,
-      titleFontSize,
+       typography,
       hideTitle = false,
     },
     ref,
@@ -124,6 +128,9 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
     const changeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const onExportMarkdownRef = useRef(onExportMarkdown);
     const titleRef = useRef<HTMLTextAreaElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [fontsReady, setFontsReady] = useState(false);
+    const fontStatusRef = useRef<BodyFontLoadStatus | null>(null);
     useEffect(() => { onExportMarkdownRef.current = onExportMarkdown; }, [onExportMarkdown]);
 
     const editor = useEditor({
@@ -147,9 +154,29 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
         }, CHANGE_THROTTLE_MS);
       },
       onCreate: () => {
-        onReady?.();
+        waitForWebBodyFonts().then((status) => {
+          fontStatusRef.current = status;
+          setFontsReady(true);
+          onReady?.();
+        });
       },
     });
+
+    useEffect(() => {
+      if (!fontsReady || !containerRef.current) return;
+      const frame = requestAnimationFrame(() => {
+        const target = containerRef.current?.querySelector<HTMLElement>(".ProseMirror");
+        if (target) {
+          logWebBodyTypographyDiagnostic(
+            "editor",
+            target,
+            typography,
+            fontStatusRef.current ?? undefined,
+          );
+        }
+      });
+      return () => cancelAnimationFrame(frame);
+    }, [fontsReady, typography]);
 
     useEffect(() => {
       if (editor && !editor.isDestroyed) {
@@ -297,12 +324,9 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
 
     return (
       <div
+        ref={containerRef}
         className="web-markdown-editor-scroll-container"
-        style={
-          titleFontSize != null
-            ? ({ ...containerStyle, "--title-font-size": `${titleFontSize}px` } as React.CSSProperties)
-            : containerStyle
-        }
+        style={{ ...containerStyle, visibility: fontsReady ? "visible" : "hidden", fontSize: typography.fontSizePx, lineHeight: `${typography.lineHeightPx}px`, letterSpacing: typography.letterSpacingPx, "--body-font-size": `${typography.fontSizePx}px`, "--body-line-height": `${typography.lineHeightPx}px`, "--body-letter-spacing": `${typography.letterSpacingPx}px`, "--title-font-size": `${typography.titleFontSizePx}px` } as React.CSSProperties}
       >
         <style>{proseMirrorCss}</style>
         {!hideTitle && onTitleChange !== undefined && (
@@ -312,16 +336,12 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
             placeholder="제목"
             onChange={handleTitleInput}
             rows={1}
-            style={
-              titleFontSize != null
-                ? { ...titleInputStyle, fontSize: titleFontSize }
-                : titleInputStyle
-            }
+            style={{ ...titleInputStyle, fontSize: typography.titleFontSizePx }}
             readOnly={!editable}
           />
         )}
         {belowTitleSlot}
-        <EditorContent editor={editor} style={editorContentStyle} lang="en" />
+        <EditorContent editor={editor} style={editorContentStyle} lang="ko" />
       </div>
     );
   },
@@ -336,9 +356,6 @@ const containerStyle: React.CSSProperties = {
   height: "100%",
   overflow: "auto",
   fontFamily: BODY_REGULAR_FONT_FAMILY,
-  fontSize: 16,
-  lineHeight: 1.8,
-  letterSpacing: "0.05em",
   color: "#1A1A1A",
 };
 
@@ -346,7 +363,7 @@ const titleInputStyle: React.CSSProperties = {
   display: "block",
   width: "100%",
   fontFamily: BODY_SEMIBOLD_FONT_FAMILY,
-  fontSize: `var(--title-font-size, ${ReaderTokens.typeScale.titleCqi}cqi)`,
+  fontSize: "var(--title-font-size)",
   fontWeight: 600,
   lineHeight: 1.25,
   letterSpacing: "-0.01em",
@@ -384,11 +401,12 @@ const proseMirrorCss = `
   padding: 16px 24px 120px;
   outline: none;
   font-family: ${BODY_REGULAR_FONT_FAMILY};
-  font-size: 16px;
-  line-height: 1.8;
-  letter-spacing: 0.05em;
+   font-size: var(--body-font-size);
+   line-height: var(--body-line-height);
+   letter-spacing: var(--body-letter-spacing);
   color: #1A1A1A;
-  -webkit-text-size-adjust: 100%;
+   text-size-adjust: 100%;
+   -webkit-text-size-adjust: 100%;
   text-align: justify;
   overflow-wrap: break-word;
   word-wrap: break-word;
@@ -397,7 +415,7 @@ const proseMirrorCss = `
   hyphens: auto;
 }
 .ProseMirror p { margin-bottom: 1em; text-align: justify; overflow-wrap: break-word; word-break: normal; -webkit-hyphens: auto; hyphens: auto; }
- .ProseMirror h1 { font-family: ${BODY_SEMIBOLD_FONT_FAMILY}; font-size: var(--title-font-size, ${ReaderTokens.typeScale.titleCqi}cqi); font-weight: 600; letter-spacing: 0.025em; margin: 1em 0 0.4em; line-height: 1.25; text-align: left; }
+ .ProseMirror h1 { font-family: ${BODY_SEMIBOLD_FONT_FAMILY}; font-size: var(--title-font-size); font-weight: 600; letter-spacing: 0.025em; margin: 1em 0 0.4em; line-height: 1.25; text-align: left; }
 .ProseMirror h2 { font-family: ${BODY_SEMIBOLD_FONT_FAMILY}; font-size: 1.3em; font-weight: 600; letter-spacing: 0.025em; margin: 0.8em 0 0.3em; line-height: 1.3; text-align: left; }
 .ProseMirror h3 { font-family: ${BODY_SEMIBOLD_FONT_FAMILY}; font-size: 1.1em; font-weight: 600; letter-spacing: 0.025em; margin: 0.6em 0 0.3em; line-height: 1.35; text-align: left; }
 .ProseMirror ul, .ProseMirror ol { padding-left: 1.5em; margin-bottom: 1em; text-align: left; }

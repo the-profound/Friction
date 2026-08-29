@@ -1,6 +1,13 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("react-native", () => ({
+  Platform: {
+    OS: "web",
+    select: (options: Record<string, unknown>) => options.web ?? options.default,
+  },
+}));
 import {
   computePageGeometry,
   getPageTextContentHeight,
@@ -14,6 +21,7 @@ import {
   buildBodyFontReadyScript,
   buildEmbeddedBodyFontFaceCss,
 } from "../../components/shared/bodyTypographyFonts";
+import { bodyTypographyMetrics, computeBodyLayout } from "../bodyLayout";
 
 describe("letter body font fallback contract", () => {
   it("registers WOFF2 as a Metro asset without dropping the default assets", () => {
@@ -81,6 +89,59 @@ describe("letter body font fallback contract", () => {
     expect(script).toContain("setTimeout");
   });
 
+  it("resolves readiness without invoking font loads when embedded faces are unavailable", async () => {
+    const posted: unknown[] = [];
+    let loadHandler: (() => void) | undefined;
+    const load = vi.fn();
+    const windowStub = {
+      __rnBridge: { post: (event: unknown) => posted.push(event) },
+      addEventListener: (_type: string, handler: () => void) => {
+        loadHandler = handler;
+      },
+    };
+    const documentStub = {
+      fonts: { load, ready: Promise.resolve() },
+    };
+    const source = buildBodyFontReadyScript(false).replace(/^<script>|<\/script>$/g, "");
+    new Function("window", "document", "setTimeout", "clearTimeout", source)(
+      windowStub,
+      documentStub,
+      setTimeout,
+      clearTimeout,
+    );
+    loadHandler?.();
+    await vi.waitFor(() => expect(posted).toHaveLength(1));
+    expect(load).not.toHaveBeenCalled();
+    expect(posted[0]).toMatchObject({ type: "onBodyFontsReady", ok: true });
+  });
+
+  it("checks all four embedded faces with the Korean fallback probe", async () => {
+    const posted: unknown[] = [];
+    let loadHandler: (() => void) | undefined;
+    const load = vi.fn((_font: string, _probe: string) => Promise.resolve([]));
+    const windowStub = {
+      __rnBridge: { post: (event: unknown) => posted.push(event) },
+      addEventListener: (_type: string, handler: () => void) => {
+        loadHandler = handler;
+      },
+    };
+    const documentStub = {
+      fonts: { load, ready: Promise.resolve() },
+    };
+    const source = buildBodyFontReadyScript(true).replace(/^<script>|<\/script>$/g, "");
+    new Function("window", "document", "setTimeout", "clearTimeout", source)(
+      windowStub,
+      documentStub,
+      setTimeout,
+      clearTimeout,
+    );
+    loadHandler?.();
+    await vi.waitFor(() => expect(posted).toHaveLength(1));
+    expect(load).toHaveBeenCalledTimes(4);
+    expect(load.mock.calls.every((call) => call[1] === BODY_FONT_FALLBACK_PROBE_TEXT)).toBe(true);
+    expect(posted[0]).toMatchObject({ type: "onBodyFontsReady", ok: true });
+  });
+
   it("uses the four-font readiness gate in editor, reader, and measurement WebViews", () => {
     const appRoot = join(__dirname, "../..");
     const read = (relativePath: string) =>
@@ -101,9 +162,12 @@ describe("letter body font fallback contract", () => {
       expect(source).toContain("onBodyFontsReady");
       expect(source).toContain("notoRegularBase64");
       expect(source).toContain("notoSemiBoldBase64");
+      expect(source).toContain("textZoom={100}");
     }
     for (const source of [webEditor, webReader, webMeasure]) {
       expect(source).toContain("BODY_REGULAR_FONT_FAMILY");
+      expect(source).toContain("waitForWebBodyFonts");
+      expect(source).toContain("logWebBodyTypographyDiagnostic");
     }
   });
 
@@ -152,6 +216,17 @@ describe("letter body font fallback contract", () => {
 });
 
 describe("shared letter page geometry", () => {
+  it.each([240, 301, 390])("creates one exact Korean body contract at %dpx", (width) => {
+    const metrics = bodyTypographyMetrics(computeBodyLayout(width));
+    const koreanProbe = "가나다라마바사아자차카타파하잓";
+    expect(koreanProbe).toContain("잓");
+    expect(metrics.textColumnWidth).toBe(Math.round(width * 0.88));
+    expect(metrics.fontSizePx).toBeCloseTo(width * 0.04);
+    expect(metrics.lineHeightPx).toBeCloseTo(metrics.fontSizePx * 1.8);
+    expect(metrics.letterSpacingPx).toBeCloseTo(metrics.fontSizePx * 0.05);
+    expect(metrics.textScalePercent).toBe(100);
+  });
+
   it("uses the full logical page C and an integer 0.88C text column", () => {
     const layout = computePageGeometry(301, {
       aspectRatio: 5 / 8,
@@ -211,13 +286,39 @@ describe("reader title typography", () => {
     const webMeasure = read("components/WebViewMeasureLayer/WebViewMeasureLayerWeb.tsx");
     const webEditor = read("components/WebViewMarkdownEditor/WebViewMarkdownEditorWeb.tsx");
 
-    expect(sharedCss).toContain("font-size:var(--title-font-size,${titleScaleEm}em)");
-    expect(editorHtml).toContain("font-size:var(--title-font-size,6.4cqi)");
-    expect(readerHtml).toContain('setProperty("--title-font-size",cmd.titleFontSizePx+"px")');
-    expect(measureHtml).toContain('setProperty("--title-font-size",cmd.titleFontSizePx+"px")');
+    expect(sharedCss).toContain("font-size:var(--title-font-size)");
+    expect(editorHtml).toContain("font-size:var(--title-font-size)");
+    expect(editorHtml).not.toContain("var(--title-font-size,");
+    expect(readerHtml).toContain('setProperty("--title-font-size",m.titleFontSizePx+"px")');
+    expect(measureHtml).toContain('setProperty("--title-font-size",m.titleFontSizePx+"px")');
     expect(webMeasure).toContain("buildBodyTypographyCss");
     expect(webMeasure).toContain('rootSelector: ".webview-measure-layer"');
-    expect(webEditor).toContain("ReaderTokens.typeScale.titleCqi");
+    expect(webEditor).toContain('"--title-font-size": `${typography.titleFontSizePx}px`');
+  });
+
+  it("reports the same effective metric fields from every renderer", () => {
+    const diagnostics = read("lib/bodyTypographyDiagnostics.ts");
+    const readerHtml = read("components/WebViewMarkdownReader/readerHtml.ts");
+    const measureHtml = read("components/WebViewMeasureLayer/measureHtml.ts");
+    const editorSource = read("components/WebViewMarkdownEditor/editorWebviewSrc/index.ts");
+    const required = [
+      "domWidthPx",
+      "fontSizePx",
+      "lineHeightPx",
+      "letterSpacingPx",
+      "textSizeAdjust",
+      "devicePixelRatio",
+      "configuredTextZoomPercent",
+      "effectiveFontScaleRatio",
+      "eulyooRegular",
+      "eulyooSemiBold",
+    ];
+    for (const field of required) {
+      expect(diagnostics).toContain(field);
+      expect(readerHtml).toContain(field);
+      expect(measureHtml).toContain(field);
+      expect(editorSource).toContain(field);
+    }
   });
 
   it("hides only the web editor scrollbar while preserving its scroll container", () => {

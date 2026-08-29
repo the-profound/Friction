@@ -869,9 +869,7 @@ interface Command {
   availableContentHeightPx?: number | null;
   autoSplit?: boolean;
   text?: string;
-  fontSizePx?: number;
-  letterSpacingPx?: number;
-  titleFontSizePx?: number;
+  metrics?: { textColumnWidth: number; fontSizePx: number; lineHeightPx: number; letterSpacingPx: number; titleFontSizePx: number; textScalePercent: 100 };
   blockType?: string;
   mark?: string;
   pageIndex?: number;
@@ -1579,26 +1577,59 @@ function spellFindRange(
         }
         case "setBodyMetrics": {
           const root = document.documentElement;
+          const metrics = cmd.metrics;
+          if (!metrics) break;
           // 같은 값을 재전송한 경우 CSS 변수/리프로브 작업을 생략한다.
           let changed = false;
-          if (cmd.fontSizePx != null && cmd.fontSizePx !== lastBodyFontSizePx) {
-            root.style.setProperty("--body-font-size", cmd.fontSizePx + "px");
-            lastBodyFontSizePx = cmd.fontSizePx;
+          if (metrics.fontSizePx !== lastBodyFontSizePx) {
+            root.style.setProperty("--body-font-size", metrics.fontSizePx + "px");
+            root.style.setProperty("--body-line-height", metrics.lineHeightPx + "px");
+            lastBodyFontSizePx = metrics.fontSizePx;
             changed = true;
           }
-          if (cmd.letterSpacingPx != null && cmd.letterSpacingPx !== lastBodyLetterSpacingPx) {
-            root.style.setProperty("--body-letter-spacing", cmd.letterSpacingPx + "px");
-            lastBodyLetterSpacingPx = cmd.letterSpacingPx;
+          if (metrics.letterSpacingPx !== lastBodyLetterSpacingPx) {
+            root.style.setProperty("--body-letter-spacing", metrics.letterSpacingPx + "px");
+            lastBodyLetterSpacingPx = metrics.letterSpacingPx;
             changed = true;
           }
-          if (cmd.titleFontSizePx != null && cmd.titleFontSizePx !== lastTitleFontSizePx) {
-            root.style.setProperty("--title-font-size", cmd.titleFontSizePx + "px");
-            lastTitleFontSizePx = cmd.titleFontSizePx;
+          if (metrics.titleFontSizePx !== lastTitleFontSizePx) {
+            root.style.setProperty("--title-font-size", metrics.titleFontSizePx + "px");
+            lastTitleFontSizePx = metrics.titleFontSizePx;
             if (titleInput) autoResizeTitle();
             changed = true;
           }
           // 폰트/자간이 바뀐 경우에만 강조 재측정.
           if (changed) scheduleOverflowProbe(150);
+          requestAnimationFrame(() => {
+            const probe = document.querySelector<HTMLElement>(".ProseMirror");
+            if (!probe) return;
+            const computed = getComputedStyle(probe);
+            const fonts = document.fonts;
+            postToRN({
+              type: "onBodyTypographyDiagnostic",
+              payload: {
+                domWidthPx: probe.getBoundingClientRect().width,
+                fontSizePx: Number.parseFloat(computed.fontSize),
+                lineHeightPx: Number.parseFloat(computed.lineHeight),
+                letterSpacingPx: Number.parseFloat(computed.letterSpacing),
+                textSizeAdjust:
+                  computed.getPropertyValue("text-size-adjust") ||
+                  computed.getPropertyValue("-webkit-text-size-adjust") ||
+                  "unknown",
+                devicePixelRatio: window.devicePixelRatio || 1,
+                configuredTextZoomPercent: metrics.textScalePercent,
+                effectiveFontScaleRatio:
+                  Number.parseFloat(computed.fontSize) / metrics.fontSizePx,
+                fontFamily: computed.fontFamily,
+                fonts: {
+                  eulyooRegular: !!fonts?.check("400 16px 'Eulyoo1945-Regular'", "가잓"),
+                  eulyooSemiBold: !!fonts?.check("600 16px 'Eulyoo1945-SemiBold'", "가잓"),
+                  notoRegular: !!fonts?.check("400 16px 'NotoSerifKR_400Regular'", "가잓"),
+                  notoSemiBold: !!fonts?.check("600 16px 'NotoSerifKR_600SemiBold'", "가잓"),
+                },
+              },
+            });
+          });
           break;
         }
         case "setBlockType": {

@@ -17,6 +17,7 @@ import { Colors, ReaderTokens } from "@/constants/tokens";
 import MarkdownBlock from "@/components/MarkdownBlock/MarkdownBlock";
 import type { MarkdownBlockType } from "@/utils/markdownParser";
 import { computePageGeometry } from "@/lib/pageGeometry";
+import type { BodyTypographyMetrics } from "@/lib/bodyLayout";
 
 export type FormatType = "bold" | "italic" | "underline" | "quote";
 export type InlineMark = "bold" | "italic" | "underline";
@@ -204,6 +205,15 @@ const MemoWebEditor = forwardRef<MemoWebEditorRef, MemoWebEditorProps>(
     const previewFontSize = bodyFontSize;
     const previewLineHeight = bodyFontSize * ReaderTokens.lineHeight.relaxed;
     const previewLetterSpacing = bodyFontSize * ReaderTokens.letterSpacing.relaxedEm;
+    // Memo is not a letter body: preserve its compact 0.3px tracking explicitly.
+    const typography: BodyTypographyMetrics = {
+      textColumnWidth,
+      fontSizePx: bodyFontSize,
+      lineHeightPx: previewLineHeight,
+      letterSpacingPx: 0.3,
+      titleFontSizePx: bodyFontSize * ReaderTokens.typeScale.titleScaleEm,
+      textScalePercent: 100,
+    };
     const noop = useCallback(() => {}, []);
 
     return (
@@ -358,8 +368,7 @@ const MemoWebEditor = forwardRef<MemoWebEditorRef, MemoWebEditorProps>(
               placeholder="이 페이지에 메모를 적어보세요..."
               editable={editable}
               hideTitle
-              bodyFontSize={bodyFontSize}
-              bodyLetterSpacing={0.3}
+              typography={typography}
               onReady={onReady}
               onChange={handleChange}
               onExportMarkdown={handleExport}

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { BodyTypographyMetrics } from "@/lib/bodyLayout";
 
 export interface EditorInitPayload {
   initialMarkdown: string;
@@ -28,7 +29,7 @@ export type RNToWebViewCommand =
   | { type: "setSourceArticleSlot"; text: string }
   | { type: "setOverflowRanges"; ranges: OverflowRange[] | null }
   | { type: "setOverflowProbeConfig"; availableContentHeightPx: number | null; autoSplit?: boolean }
-  | { type: "setBodyMetrics"; fontSizePx: number; letterSpacingPx: number; titleFontSizePx?: number }
+  | { type: "setBodyMetrics"; metrics: BodyTypographyMetrics }
   | { type: "setBlockType"; blockType: string }
   | { type: "toggleMark"; mark: string }
   | { type: "insertDivider" }
@@ -69,6 +70,7 @@ export interface OnSelectionUpdatePayload {
 
 export type WebViewToRNEvent =
   | { type: "onBodyFontsReady"; ok: boolean }
+  | { type: "onBodyTypographyDiagnostic"; payload: import("@/lib/bodyTypographyDiagnostics").BodyTypographyDiagnostic }
   | { type: "onReady" }
   | { type: "onChange"; payload: OnChangePayload }
   | { type: "onExportMarkdown"; payload: OnExportMarkdownPayload }
@@ -136,9 +138,8 @@ export interface WebViewMarkdownEditorProps {
   belowTitleSlot?: ReactNode;
   sourceArticleSlotText?: string | null;
   onSourceArticleSlotTap?: () => void;
-  bodyFontSize?: number;
-  bodyLetterSpacing?: number;
-  titleFontSize?: number;
+  /** Required for letter bodies; memo constructs its own explicit contract. */
+  typography: BodyTypographyMetrics;
   /**
    * 제목/원본연결 슬롯을 숨기고 하단 여백을 줄여 컴팩트한 "캡슐" 형태로
    * 렌더링한다. 읽기 메모(read.tsx)처럼 본문만 필요한 경우 사용한다.

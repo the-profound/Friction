@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams, Stack } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing, ReaderTokens, Shadows } from "@/constants/tokens";
-import { computeBodyLayout } from "@/lib/bodyLayout";
+import { bodyTypographyMetrics, computeBodyLayout } from "@/lib/bodyLayout";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import CoverPreview from "@/components/CoverPreview/CoverPreview";
 import CoverEditor from "@/components/CoverEditor/CoverEditor";
@@ -510,8 +510,7 @@ export default function ClosingScreen() {
                             <View style={{ width: storedBody.textColumnWidth, flex: 1 }}>
                               <WebViewMarkdownReader
                                 markdown={currentPage!}
-                                bodyFontSize={storedBody.bodyFontSize}
-                                bodyLetterSpacing={storedBody.bodyLetterSpacing}
+                                typography={bodyTypographyMetrics(storedBody)}
                               />
                             </View>
                           </View>
@@ -536,8 +535,7 @@ export default function ClosingScreen() {
                         <View style={{ width: fallbackBody.textColumnWidth, flex: 1 }}>
                           <WebViewMarkdownReader
                             markdown={currentPage!}
-                            bodyFontSize={fallbackBody.bodyFontSize}
-                            bodyLetterSpacing={fallbackBody.bodyLetterSpacing}
+                            typography={bodyTypographyMetrics(fallbackBody)}
                           />
                         </View>
                       </View>

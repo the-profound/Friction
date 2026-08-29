@@ -15,12 +15,6 @@ import fs from "fs";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const entryPoint = path.join(__dirname, "editorWebviewSrc", "index.ts");
 const outputFile = path.join(__dirname, "editorHtml.ts");
-const tokensSource = fs.readFileSync(path.join(__dirname, "../../constants/tokens.ts"), "utf8");
-const titleCqiMatch = tokensSource.match(/titleCqi:\s*([\d.]+)/);
-if (!titleCqiMatch) {
-  throw new Error("ReaderTokens.typeScale.titleCqi was not found");
-}
-const titleCqi = Number(titleCqiMatch[1]);
 
 const result = await esbuild.build({
   entryPoints: [entryPoint],
@@ -52,7 +46,7 @@ html,body{height:100%;background:transparent;container-type:inline-size}
   display:block;
   width:100%;
   font-family:'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif;
-  font-size:var(--title-font-size,${titleCqi}cqi);
+   font-size:var(--title-font-size);
   font-weight:600;
   line-height:1.25;
   letter-spacing:-0.01em;
@@ -74,12 +68,13 @@ html,body{height:100%;background:transparent;container-type:inline-size}
   min-height:200px;
   padding:0 0 120px;
   font-family:'Eulyoo1945-Regular','NotoSerifKR_400Regular',serif;
-  font-size:var(--body-font-size,16px);
-  line-height:1.8;
-  letter-spacing:var(--body-letter-spacing,0.8px);
+   font-size:var(--body-font-size);
+   line-height:var(--body-line-height);
+   letter-spacing:var(--body-letter-spacing);
   color:#1A1A1A;
   background:transparent;
-  -webkit-text-size-adjust:100%;
+   text-size-adjust:100%;
+   -webkit-text-size-adjust:100%;
   outline:none;
   text-align:justify;
   overflow-wrap:break-word;
@@ -92,7 +87,7 @@ html,body{height:100%;background:transparent;container-type:inline-size}
   white-space:pre-wrap !important;
 }
 .ProseMirror p{margin-bottom:1em;text-align:justify;overflow-wrap:break-word;text-justify:inter-ideograph}
- .ProseMirror h1{font-family:'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif;font-size:var(--title-font-size,${titleCqi}cqi);font-weight:600;letter-spacing:0.025em;margin:1em 0 0.4em;line-height:1.25;text-align:left}
+ .ProseMirror h1{font-family:'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif;font-size:var(--title-font-size);font-weight:600;letter-spacing:0.025em;margin:1em 0 0.4em;line-height:1.25;text-align:left}
 .ProseMirror h2{font-family:'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif;font-size:1.3em;font-weight:600;letter-spacing:0.025em;margin:0.8em 0 0.3em;line-height:1.3;text-align:left}
 .ProseMirror h3{font-family:'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif;font-size:1.1em;font-weight:600;letter-spacing:0.025em;margin:0.6em 0 0.3em;line-height:1.35;text-align:left}
 .ProseMirror ul,.ProseMirror ol{padding-left:1.5em;margin-bottom:1em;text-align:left}
@@ -119,7 +114,7 @@ html,body{height:100%;background:transparent;container-type:inline-size}
 body{padding:16px 0 0;overflow:auto;position:relative}
 `.trim();
 
-const VERSION = "3.19.0";
+const VERSION = "3.20.0";
 
 const tsContent = `import { buildWebViewPerfHeadScript } from "@/lib/webviewPerf";
 import { buildWebViewBridgeHeadScript } from "@/lib/webViewBridgeShim";

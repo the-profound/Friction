@@ -18,6 +18,7 @@ import type {
   WebViewToRNEvent,
 } from "./types";
 import { createWebViewBridge, type WebViewBridge } from "@/lib/webViewBridge";
+import { logBodyTypographyDiagnostic } from "@/lib/bodyTypographyDiagnostics";
 
 const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdownEditorProps>(
   function WebViewMarkdownEditor(
@@ -38,9 +39,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       onTextSelectionActiveChange,
       sourceArticleSlotText,
       onSourceArticleSlotTap,
-      bodyFontSize,
-      bodyLetterSpacing,
-      titleFontSize,
+       typography,
       hideTitle,
       scrollEnabled = true,
       onOverflowSplit,
@@ -157,14 +156,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
                   ensureTrailingParagraph,
                 },
               });
-              if (bodyFontSize != null && bodyLetterSpacing != null) {
-                sendCommand({
-                  type: "setBodyMetrics",
-                  fontSizePx: bodyFontSize,
-                  letterSpacingPx: bodyLetterSpacing,
-                  titleFontSizePx: titleFontSize,
-                });
-              }
+              sendCommand({ type: "setBodyMetrics", metrics: typography });
               break;
             case "onReady":
               // markReady is called by onBodyFontsReady before init is sent.
@@ -181,6 +173,12 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
                 );
               }
               onReady?.();
+              break;
+            case "onBodyTypographyDiagnostic":
+              logBodyTypographyDiagnostic(
+                "editor",
+                (data as { type: "onBodyTypographyDiagnostic"; payload: Parameters<typeof logBodyTypographyDiagnostic>[1] }).payload,
+              );
               break;
             case "onChange":
               onChange?.(data.payload);
@@ -232,7 +230,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
           }
         });
       },
-      [bridge, sendCommand, initialMarkdown, editorConfigVersion, placeholder, titleValue, ensureTrailingParagraph, bodyFontSize, bodyLetterSpacing, titleFontSize, hideTitle, onReady, onChange, onExportMarkdown, onTitleChange, onError, onKeyboardVisibilityChange, onSelectionUpdate, onTextSelectionActiveChange, onSourceArticleSlotTap, onOverflowSplit, swipeDownToDismissKeyboard],
+      [bridge, sendCommand, initialMarkdown, editorConfigVersion, placeholder, titleValue, ensureTrailingParagraph, typography, hideTitle, onReady, onChange, onExportMarkdown, onTitleChange, onError, onKeyboardVisibilityChange, onSelectionUpdate, onTextSelectionActiveChange, onSourceArticleSlotTap, onOverflowSplit, swipeDownToDismissKeyboard],
     );
 
     useEffect(() => {
@@ -242,15 +240,8 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
     }, [bridge, editable, sendCommand]);
 
     useEffect(() => {
-      if (bridge.isReady() && bodyFontSize != null && bodyLetterSpacing != null) {
-        sendCommand({
-          type: "setBodyMetrics",
-          fontSizePx: bodyFontSize,
-          letterSpacingPx: bodyLetterSpacing,
-          titleFontSizePx: titleFontSize,
-        });
-      }
-    }, [bridge, bodyFontSize, bodyLetterSpacing, titleFontSize, sendCommand]);
+      if (bridge.isReady()) sendCommand({ type: "setBodyMetrics", metrics: typography });
+    }, [bridge, typography, sendCommand]);
 
     useEffect(() => {
       sendCommand({ type: "setSourceArticleSlot", text: sourceArticleSlotText ?? "" });
@@ -339,6 +330,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
           hideKeyboardAccessoryView={Platform.OS === "ios"}
           showsVerticalScrollIndicator={false}
           contentMode="mobile"
+          textZoom={100}
         />
       </View>
     );

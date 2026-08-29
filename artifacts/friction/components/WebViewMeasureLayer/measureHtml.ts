@@ -64,11 +64,13 @@ ${fontReadyScript}
 var bridge=window.__rnBridge;
 bridge.register("measure",function(cmd){
 var root=document.documentElement;
-if(cmd.fontSizePx!=null)root.style.setProperty("--body-font-size",cmd.fontSizePx+"px");
-if(cmd.letterSpacingPx!=null)root.style.setProperty("--body-letter-spacing",cmd.letterSpacingPx+"px");
-if(cmd.titleFontSizePx!=null)root.style.setProperty("--title-font-size",cmd.titleFontSizePx+"px");
-var w=cmd.containerWidth||300;
-var gap=cmd.blockGap||0;
+ var m=cmd.metrics;if(!m)throw new Error("Typography metrics required");
+ root.style.setProperty("--body-font-size",m.fontSizePx+"px");
+ root.style.setProperty("--body-line-height",m.lineHeightPx+"px");
+ root.style.setProperty("--body-letter-spacing",m.letterSpacingPx+"px");
+ root.style.setProperty("--title-font-size",m.titleFontSizePx+"px");
+ var w=m.textColumnWidth;
+ var gap=cmd.blockGap;
 var items=cmd.items||[];
 var wrap=document.createElement("div");
 wrap.style.cssText="position:absolute;left:0;top:0;pointer-events:none;";
@@ -88,6 +90,23 @@ var heights={};
 els.forEach(function(b){
 heights[b.key]=b.el.getBoundingClientRect().height+gap;
 });
+ var probe=els[0]&&els[0].el,cs=probe&&getComputedStyle(probe),fonts=document.fonts;
+ if(probe&&cs)bridge.post({type:"onBodyTypographyDiagnostic",payload:{
+ domWidthPx:probe.getBoundingClientRect().width,
+ fontSizePx:parseFloat(cs.fontSize),
+ lineHeightPx:parseFloat(cs.lineHeight),
+ letterSpacingPx:parseFloat(cs.letterSpacing),
+ textSizeAdjust:cs.textSizeAdjust||cs.webkitTextSizeAdjust||"unknown",
+ devicePixelRatio:window.devicePixelRatio||1,
+ configuredTextZoomPercent:m.textScalePercent,
+ effectiveFontScaleRatio:parseFloat(cs.fontSize)/m.fontSizePx,
+ fontFamily:cs.fontFamily,
+ fonts:{
+ eulyooRegular:!!(fonts&&fonts.check("400 16px 'Eulyoo1945-Regular'","가잓")),
+ eulyooSemiBold:!!(fonts&&fonts.check("600 16px 'Eulyoo1945-SemiBold'","가잓")),
+ notoRegular:!!(fonts&&fonts.check("400 16px 'NotoSerifKR_400Regular'","가잓")),
+ notoSemiBold:!!(fonts&&fonts.check("600 16px 'NotoSerifKR_600SemiBold'","가잓"))
+ }}});
 if(wrap.parentNode)wrap.parentNode.removeChild(wrap);
 resolve(heights);
 });

@@ -45,6 +45,7 @@ import {
   recordWebViewBoot,
 } from "@/lib/webviewPerf";
 import { createWebViewBridge, type WebViewBridge } from "@/lib/webViewBridge";
+import { logBodyTypographyDiagnostic } from "@/lib/bodyTypographyDiagnostics";
 
 interface Props {
   request: MeasureRequest | null;
@@ -128,8 +129,7 @@ export default function WebViewMeasureLayer({ request, onMeasured }: Props) {
   const latestSeqRef = useRef(0);
 
   const sendMeasure = useCallback((req: MeasureRequest) => {
-    const containerWidth = req.textColumnWidth ?? (req.width - 2 * req.paddingX);
-    const blockGap = req.blockGap ?? req.lineHeight * 0.6;
+    const blockGap = req.blockGap ?? req.typography.lineHeightPx * 0.6;
     const items = req.candidates.map((c) => ({
       key: c.key,
       html: c.blocks
@@ -139,10 +139,7 @@ export default function WebViewMeasureLayer({ request, onMeasured }: Props) {
     const seq = ++latestSeqRef.current;
     bridge
       .request<Record<string, number>>("measure", {
-        containerWidth,
-        fontSizePx: req.fontSize,
-        letterSpacingPx: req.letterSpacing,
-        titleFontSizePx: req.titleFontSize,
+        metrics: req.typography,
         blockGap,
         items,
       })
@@ -182,6 +179,13 @@ export default function WebViewMeasureLayer({ request, onMeasured }: Props) {
 
   const handleMessage = useCallback((event: WebViewMessageEvent) => {
     bridge.handleMessage(event, (data) => {
+      if (data.type === "onBodyTypographyDiagnostic") {
+        logBodyTypographyDiagnostic(
+          "measure",
+          (data as { payload: Parameters<typeof logBodyTypographyDiagnostic>[1] }).payload,
+        );
+        return;
+      }
       if (data.type !== "onBodyFontsReady" || bodyFontsReadyRef.current) return;
       bodyFontsReadyRef.current = true;
       bridge.markReady();
@@ -217,6 +221,7 @@ export default function WebViewMeasureLayer({ request, onMeasured }: Props) {
         bounces={false}
         showsVerticalScrollIndicator={false}
         contentMode="mobile"
+        textZoom={100}
       />
     </View>
   );

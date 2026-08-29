@@ -53,14 +53,14 @@ var settled=false;
 function done(ok){if(settled)return;settled=true;window.__bodyFontsReady=Promise.resolve(!!ok);window.__rnBridge.post({type:"onBodyFontsReady",ok:!!ok});}
 window.__bodyFontsReady=new Promise(function(resolve){
 window.addEventListener("load",function(){
-if(!${embedded}||!document.fonts||typeof document.fonts.load!=="function"){resolve(false);return;}
+ if(!document.fonts||typeof document.fonts.load!=="function"){resolve(false);return;}
 var timer=setTimeout(function(){resolve(false);},4000);
-Promise.all([
+ Promise.all(${embedded}?[
 document.fonts.load("400 16px 'Eulyoo1945-Regular'",${probe}),
 document.fonts.load("600 16px 'Eulyoo1945-SemiBold'",${probe}),
 document.fonts.load("400 16px 'NotoSerifKR_400Regular'",${probe}),
 document.fonts.load("600 16px 'NotoSerifKR_600SemiBold'",${probe})
-]).then(function(){return document.fonts.ready;}).then(function(){clearTimeout(timer);resolve(true);},function(){clearTimeout(timer);resolve(false);});
+ ]:[document.fonts.ready]).then(function(){return document.fonts.ready;}).then(function(){clearTimeout(timer);resolve(true);},function(){clearTimeout(timer);resolve(false);});
 },{once:true});
 });
 window.__bodyFontsReady.then(done,function(){done(false);});

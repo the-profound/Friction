@@ -1,4 +1,3 @@
-import { ReaderTokens } from "@/constants/tokens";
 import {
   BODY_REGULAR_FONT_FAMILY,
   BODY_SEMIBOLD_FONT_FAMILY,
@@ -41,7 +40,6 @@ export interface BodyTypographyCssOptions {
 
 export function buildBodyTypographyCss(opts: BodyTypographyCssOptions): string {
   const { rootSelector: r, blockSelector: b, blockMargins, hrStyle, readerUnderline } = opts;
-  const titleScaleEm = ReaderTokens.typeScale.titleScaleEm;
   const spaced = blockMargins === "spaced";
   const pMargin = spaced ? "margin-bottom:1em" : "margin:0";
   const h1Margin = spaced ? "margin:1em 0 0.4em" : "margin:0";
@@ -59,9 +57,9 @@ export function buildBodyTypographyCss(opts: BodyTypographyCssOptions): string {
   const uExtras = readerUnderline ? ";text-underline-offset:0.2em" : "";
 
   return [
-    `${r}{font-family:${BODY_REGULAR_FONT_FAMILY};font-size:var(--body-font-size,16px);line-height:1.8;letter-spacing:var(--body-letter-spacing,0.8px);color:#1A1A1A;background:transparent;-webkit-text-size-adjust:100%;text-align:justify;overflow-wrap:break-word;word-wrap:break-word;word-break:normal;-webkit-hyphens:auto;hyphens:auto;text-justify:inter-ideograph}`,
+    `${r}{font-family:${BODY_REGULAR_FONT_FAMILY};font-size:var(--body-font-size);line-height:var(--body-line-height);letter-spacing:var(--body-letter-spacing);color:#1A1A1A;background:transparent;text-size-adjust:100%;-webkit-text-size-adjust:100%;text-align:justify;overflow-wrap:break-word;word-wrap:break-word;word-break:normal;-webkit-hyphens:auto;hyphens:auto;text-justify:inter-ideograph}`,
     `${b} p{${pMargin};text-align:justify;overflow-wrap:break-word;word-break:normal;-webkit-hyphens:auto;hyphens:auto;text-justify:inter-ideograph}`,
-    `${b} h1{font-family:${BODY_SEMIBOLD_FONT_FAMILY};font-size:var(--title-font-size,${titleScaleEm}em);font-weight:600;letter-spacing:0.025em;${h1Margin};line-height:1.25;text-align:left}`,
+    `${b} h1{font-family:${BODY_SEMIBOLD_FONT_FAMILY};font-size:var(--title-font-size);font-weight:600;letter-spacing:0.025em;${h1Margin};line-height:1.25;text-align:left}`,
     `${b} h2{font-family:${BODY_SEMIBOLD_FONT_FAMILY};font-size:1.3em;font-weight:600;letter-spacing:0.025em;${h2Margin};line-height:1.3;text-align:left}`,
     `${b} h3{font-family:${BODY_SEMIBOLD_FONT_FAMILY};font-size:1.1em;font-weight:600;letter-spacing:0.025em;${h3Margin};line-height:1.35;text-align:left}`,
     `${b} ul,${b} ol{padding-left:1.5em;${listMargin};text-align:left}`,

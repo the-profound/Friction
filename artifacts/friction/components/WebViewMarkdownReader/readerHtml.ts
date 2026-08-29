@@ -47,7 +47,7 @@ ${bodyTypographyCss}
 ${fontReadyScript}
 </head>
 <body>
-<div id="reader-content" lang="en"></div>
+<div id="reader-content" lang="ko"></div>
 <script>
 "use strict";
 (function(){
@@ -103,9 +103,29 @@ if(!didReady){didReady=true;post({type:"onReady"});}
 post({type:"onContentReady",version:cmd.version});
 });
 bridge.register("setBodyMetrics",function(cmd){
-document.documentElement.style.setProperty("--body-font-size",cmd.fontSizePx+"px");
-document.documentElement.style.setProperty("--body-letter-spacing",cmd.letterSpacingPx+"px");
-if(cmd.titleFontSizePx!=null)document.documentElement.style.setProperty("--title-font-size",cmd.titleFontSizePx+"px");
+ var m=cmd.metrics;if(!m)return;
+ document.documentElement.style.setProperty("--body-font-size",m.fontSizePx+"px");
+ document.documentElement.style.setProperty("--body-line-height",m.lineHeightPx+"px");
+ document.documentElement.style.setProperty("--body-letter-spacing",m.letterSpacingPx+"px");
+ document.documentElement.style.setProperty("--title-font-size",m.titleFontSizePx+"px");
+ requestAnimationFrame(function(){
+ var cs=getComputedStyle(el),fonts=document.fonts;
+ post({type:"onBodyTypographyDiagnostic",payload:{
+ domWidthPx:el.getBoundingClientRect().width,
+ fontSizePx:parseFloat(cs.fontSize),
+ lineHeightPx:parseFloat(cs.lineHeight),
+ letterSpacingPx:parseFloat(cs.letterSpacing),
+ textSizeAdjust:cs.textSizeAdjust||cs.webkitTextSizeAdjust||"unknown",
+ devicePixelRatio:window.devicePixelRatio||1,
+ configuredTextZoomPercent:m.textScalePercent,
+ effectiveFontScaleRatio:parseFloat(cs.fontSize)/m.fontSizePx,
+ fontFamily:cs.fontFamily,
+ fonts:{
+ eulyooRegular:!!(fonts&&fonts.check("400 16px 'Eulyoo1945-Regular'","가잓")),
+ eulyooSemiBold:!!(fonts&&fonts.check("600 16px 'Eulyoo1945-SemiBold'","가잓")),
+ notoRegular:!!(fonts&&fonts.check("400 16px 'NotoSerifKR_400Regular'","가잓")),
+ notoSemiBold:!!(fonts&&fonts.check("600 16px 'NotoSerifKR_600SemiBold'","가잓"))
+ }}});});
 });
 bridge.register("clearSelection",function(){
 var sel=window.getSelection();if(sel)sel.removeAllRanges();

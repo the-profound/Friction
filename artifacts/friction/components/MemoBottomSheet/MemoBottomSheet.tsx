@@ -26,6 +26,7 @@ import type {
 } from "@/components/WebViewMarkdownEditor/types";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import type { FormatType } from "@/components/MemoWebEditor/MemoWebEditor";
+import type { BodyTypographyMetrics } from "@/lib/bodyLayout";
 
 export interface MemoBottomSheetRef {
   insertQuote: (text: string) => void;
@@ -80,7 +81,15 @@ const MemoBottomSheet = forwardRef<MemoBottomSheetRef, MemoBottomSheetProps>(
     ref,
   ) {
     const insets = useSafeAreaInsets();
-    const { height: screenHeight } = useWindowDimensions();
+    const { height: screenHeight, width: screenWidth } = useWindowDimensions();
+    const typography: BodyTypographyMetrics = {
+      textColumnWidth: screenWidth - Spacing.screenPx * 2,
+      fontSizePx: bodyFontSize,
+      lineHeightPx: bodyFontSize * 1.8,
+      letterSpacingPx: 0.3,
+      titleFontSizePx: bodyFontSize * 1.6,
+      textScalePercent: 100,
+    };
     const editorRef = useRef<WebViewMarkdownEditorRef>(null);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const autoReqRef = useRef(0);
@@ -350,8 +359,7 @@ const MemoBottomSheet = forwardRef<MemoBottomSheetRef, MemoBottomSheetProps>(
               placeholder="메모를 적어보세요..."
               editable
               hideTitle
-              bodyFontSize={bodyFontSize}
-              bodyLetterSpacing={0.3}
+              typography={typography}
               scrollEnabled
               swipeDownToDismissKeyboard={false}
               onReady={handleReady}

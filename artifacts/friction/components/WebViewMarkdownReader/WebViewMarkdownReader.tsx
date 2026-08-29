@@ -10,12 +10,12 @@ import {
   recordWebViewBoot,
 } from "@/lib/webviewPerf";
 import { createWebViewBridge, type WebViewBridge, type WebViewCommand } from "@/lib/webViewBridge";
+import type { BodyTypographyMetrics } from "@/lib/bodyLayout";
+import { logBodyTypographyDiagnostic } from "@/lib/bodyTypographyDiagnostics";
 
 export interface WebViewMarkdownReaderProps {
   markdown: string;
-  bodyFontSize?: number;
-  bodyLetterSpacing?: number;
-  titleFontSize?: number;
+  typography: BodyTypographyMetrics;
   onTextSelect?: (text: string, isEmpty: boolean) => void;
   onReady?: () => void;
   clearSelectionSignal?: number;
@@ -30,9 +30,7 @@ const OVERLAY_BG = "#FFFFFF";
 
 export default function WebViewMarkdownReader({
   markdown,
-  bodyFontSize,
-  bodyLetterSpacing,
-  titleFontSize,
+  typography,
   onTextSelect,
   onReady,
   clearSelectionSignal,
@@ -125,14 +123,7 @@ export default function WebViewMarkdownReader({
           prevHtmlRef.current = htmlRef.current;
           const version = beginContentSwap();
           injectContent(htmlRef.current, version);
-          if (bodyFontSize != null && bodyLetterSpacing != null) {
-            bridge.send({
-              type: "setBodyMetrics",
-              fontSizePx: bodyFontSize,
-              letterSpacingPx: bodyLetterSpacing,
-              titleFontSizePx: titleFontSize,
-            });
-          }
+          bridge.send({ type: "setBodyMetrics", metrics: typography });
         } else if (data.type === "onReady") {
           recordWebViewBoot("reader", mountedAtRef.current);
           onReadyRef.current?.();
@@ -144,6 +135,11 @@ export default function WebViewMarkdownReader({
             clearFallbackTimer();
             fadeIn();
           }
+        } else if (data.type === "onBodyTypographyDiagnostic") {
+          logBodyTypographyDiagnostic(
+            "reader",
+            (data as { payload: Parameters<typeof logBodyTypographyDiagnostic>[1] }).payload,
+          );
         } else if (data.type === "onTextSelect") {
           const d = data as { text?: string; isEmpty?: boolean };
           onTextSelectRef.current?.(d.text ?? "", !!d.isEmpty);
@@ -154,7 +150,7 @@ export default function WebViewMarkdownReader({
         }
       });
     },
-    [bridge, fadeIn, clearFallbackTimer, beginContentSwap, injectContent, bodyFontSize, bodyLetterSpacing, titleFontSize],
+    [bridge, fadeIn, clearFallbackTimer, beginContentSwap, injectContent, typography],
   );
 
   // Memoize markdown→HTML so we don't re-parse on unrelated re-renders.
@@ -185,15 +181,8 @@ export default function WebViewMarkdownReader({
   }, [bridge, html, injectContent]);
 
   useEffect(() => {
-    if (bridge.isReady() && bodyFontSize != null && bodyLetterSpacing != null) {
-      bridge.send({
-        type: "setBodyMetrics",
-        fontSizePx: bodyFontSize,
-        letterSpacingPx: bodyLetterSpacing,
-        titleFontSizePx: titleFontSize,
-      });
-    }
-  }, [bridge, bodyFontSize, bodyLetterSpacing, titleFontSize]);
+    if (bridge.isReady()) bridge.send({ type: "setBodyMetrics", metrics: typography });
+  }, [bridge, typography]);
 
   useEffect(() => {
     if (clearSelectionSignal === prevClearSignalRef.current) return;
@@ -277,6 +266,7 @@ export default function WebViewMarkdownReader({
         bounces={false}
         showsVerticalScrollIndicator={false}
         contentMode="mobile"
+        textZoom={100}
       />
       {/* Opaque overlay that hides the WebView until content is ready, then
           fades out. Kept separate from the WebView so the WebView itself never
