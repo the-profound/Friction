@@ -19,6 +19,18 @@ export function preserveCarouselIndex(
     : clampCarouselIndex(currentIndex, itemKeys.length);
 }
 
+/** Starts a new browse session at the first card without disturbing ordinary refreshes. */
+export function resolveCarouselIndex(
+  activeItemKey: string | null,
+  currentIndex: number,
+  itemKeys: readonly string[],
+  resetToFirst: boolean,
+): number {
+  return resetToFirst
+    ? clampCarouselIndex(0, itemKeys.length)
+    : preserveCarouselIndex(activeItemKey, currentIndex, itemKeys);
+}
+
 export function getCarouselNextIndex(
   currentIndex: number,
   itemCount: number,

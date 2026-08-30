@@ -11,7 +11,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   getGetArticleQueryKey,
@@ -44,6 +44,7 @@ import { useReaderTransition } from "@/contexts/ReaderTransitionContext";
 import { useThoughtComposer } from "@/contexts/ThoughtComposerContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useUser } from "@/contexts/UserContext";
+import { useNavigation } from "@/contexts/NavigationContext";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import {
   invalidateArticleLists,
@@ -56,15 +57,18 @@ import {
 } from "@/lib/queryInvalidation";
 import { computeBodyLayout } from "@/lib/bodyLayout";
 import {
-  buildRecordGroups,
+  buildMixedRecordGroups,
   buildUnifiedRecords,
   filterRecords,
   getQueuedThoughtIds,
+  getQueuedThoughts,
   getRecordCardBodyLineCount,
   getRecordCardContent,
   getRecordCardTitleLineCount,
   getRecordPreview,
   recordMatchesQuery,
+  resolveQuestionPlacementAnchors,
+  type QuestionPlacementAnchors,
   type RecordDateGroup,
   type RecordKind,
   type RecordView,
@@ -135,7 +139,12 @@ function RecordSourceCard({
   const titleLineHeight = titleSize * ReaderTokens.lineHeight.tight;
   const bodyLineHeight = bodySize * ReaderTokens.lineHeight.relaxed;
   const titleLineCount = content.hasTitle
-    ? getRecordCardTitleLineCount(content.title, titleSize, layout.textColumnWidth)
+    ? getRecordCardTitleLineCount(
+        content.title,
+        titleSize,
+        layout.textColumnWidth,
+        question ? Number.MAX_SAFE_INTEGER : undefined,
+      )
     : 0;
   const bodyLines = getRecordCardBodyLineCount({
     cardHeight: height,
@@ -209,8 +218,8 @@ function RecordSourceCard({
                 color: question ? Colors.white : Colors.zinc900,
               },
             ]}
-            numberOfLines={2}
-            ellipsizeMode="tail"
+            numberOfLines={question ? undefined : 2}
+            ellipsizeMode={question ? undefined : "tail"}
           >
             {content.title}
           </Text>
@@ -318,6 +327,7 @@ function RecordRow({
 
 export default function OnScreen() {
   const router = useRouter();
+  const { tabReselectVersion } = useNavigation();
   const queryClient = useQueryClient();
   const { startFadeToBlack } = useReaderTransition();
   const { userId } = useUser();
@@ -328,8 +338,10 @@ export default function OnScreen() {
   const cardWidth = Math.min(width - Spacing.screenPx * 2, Sizing.cardSlotW);
   const [kind, setKind] = useState<RecordKind>("thought");
   const [view, setView] = useState<RecordView>("card");
+  const [recordResetVersion, setRecordResetVersion] = useState(tabReselectVersion.ON);
   const [searchActive, setSearchActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [cardMixSeed, setCardMixSeed] = useState(() => `${Date.now()}-${Math.random()}`);
   const [deleteTarget, setDeleteTarget] = useState<UnifiedRecord | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const deletePendingRef = useRef(false);
@@ -339,6 +351,29 @@ export default function OnScreen() {
   // Refresh and activation mutate the same server-owned FIFO queue. Keep one
   // synchronous guard so a late response can never replace a newer snapshot.
   const questionQueueMutationPendingRef = useRef(false);
+  const hasFocusedRecordScreenRef = useRef(false);
+  const questionPlacementRef = useRef<{
+    seed: string;
+    anchors: QuestionPlacementAnchors;
+  } | null>(null);
+
+  useEffect(() => {
+    setKind("thought");
+    setView("card");
+    setRecordResetVersion(tabReselectVersion.ON);
+  }, [tabReselectVersion.ON]);
+
+  useFocusEffect(
+    useCallback(() => {
+      // Tab screens stay mounted. A focus transition is the screen-level
+      // boundary at which a new question placement is allowed.
+      if (hasFocusedRecordScreenRef.current) {
+        setCardMixSeed(`${Date.now()}-${Math.random()}`);
+      } else {
+        hasFocusedRecordScreenRef.current = true;
+      }
+    }, []),
+  );
 
   const articlesQuery = useListArticles({ authorId: userId });
   const thoughtsQuery = useListThoughts();
@@ -365,19 +400,27 @@ export default function OnScreen() {
     [questionQuery.data?.current, questionQuery.data?.next, questionQuery.data?.queue],
   );
   const listedThoughts = (thoughtsQuery.data ?? []) as Thought[];
-  const records = useMemo(
+  const allRecords = useMemo(
     () => filterRecords(
       buildUnifiedRecords(
         listedThoughts.filter((thought: Thought) => !queuedIds.has(thought.id)),
         articlesQuery.data,
       ),
       kind,
-    ).filter((record) => recordMatchesQuery(record, searchQuery)),
-    [articlesQuery.data, kind, listedThoughts, queuedIds, searchQuery],
+    ),
+    [articlesQuery.data, kind, listedThoughts, queuedIds],
+  );
+  const records = useMemo(
+    () => allRecords.filter((record) => recordMatchesQuery(record, searchQuery)),
+    [allRecords, searchQuery],
   );
   const queuedQuestionRecords = useMemo<CardRecord[]>(
     () => kind === "thought"
-      ? ((questionQuery.data?.queue ?? []) as Thought[]).map((thought, index) => ({
+      ? getQueuedThoughts(
+          questionQuery.data?.queue,
+          questionQuery.data?.current,
+          questionQuery.data?.next,
+        ).map((thought, index) => ({
           id: thought.id,
           kind: "thought" as const,
           updatedAt: thought.updatedAt,
@@ -386,12 +429,29 @@ export default function OnScreen() {
           questionIndex: index + 1,
         }))
       : [],
-    [kind, questionQuery.data?.queue],
+    [kind, questionQuery.data?.current, questionQuery.data?.next, questionQuery.data?.queue],
   );
   const cardRecords = useMemo<CardRecord[]>(
     () => records.map((record) => ({ ...record, isQuestion: false })),
     [records],
   );
+  const allCardRecords = useMemo<CardRecord[]>(
+    () => allRecords.map((record) => ({ ...record, isQuestion: false })),
+    [allRecords],
+  );
+  const questionPlacementAnchors = useMemo(() => {
+    const previousAnchors = questionPlacementRef.current?.seed === cardMixSeed
+      ? questionPlacementRef.current.anchors
+      : undefined;
+    const anchors = resolveQuestionPlacementAnchors(
+      allCardRecords,
+      queuedQuestionRecords,
+      cardMixSeed,
+      previousAnchors,
+    );
+    questionPlacementRef.current = { seed: cardMixSeed, anchors };
+    return anchors;
+  }, [allCardRecords, cardMixSeed, queuedQuestionRecords]);
   const visibleRecords = useMemo<CardRecord[]>(
     () => kind === "thought" && view !== "card" && questionQuery.data?.current
       ? [{
@@ -405,8 +465,13 @@ export default function OnScreen() {
     [kind, questionQuery.data?.current, records, view],
   );
   const cardGroups = useMemo(
-    () => buildRecordGroups(cardRecords, queuedQuestionRecords),
-    [cardRecords, queuedQuestionRecords],
+    () => buildMixedRecordGroups(
+      cardRecords,
+      queuedQuestionRecords,
+      cardMixSeed,
+      questionPlacementAnchors,
+    ),
+    [cardMixSeed, cardRecords, questionPlacementAnchors, queuedQuestionRecords],
   );
   const scrollPressGuard = useScrollPressGuard();
   const recordListRef = useRef<FlatList<RecordDateGroup<CardRecord>>>(null);
@@ -444,6 +509,7 @@ export default function OnScreen() {
     groupSignature: cardGroupSignature,
     listRef: recordListRef,
     enabled: view === "card",
+    resetKey: recordResetVersion,
     estimatedGroupHeights: estimatedRecordGroupHeights,
     viewportRef: recordListViewportRef,
     onPageGestureStart: scrollPressGuard.onScroll,
@@ -467,6 +533,7 @@ export default function OnScreen() {
         const currentQuestion = questionQuery.data?.current;
         if (!currentQuestion) {
           await questionQuery.refetch();
+          setCardMixSeed(`${Date.now()}-${Math.random()}`);
           return;
         }
         await queryClient.cancelQueries({ queryKey: getGetThoughtQuestionQueueQueryKey() });
@@ -474,6 +541,7 @@ export default function OnScreen() {
           data: { currentThoughtId: currentQuestion.id },
         });
         setThoughtQuestionQueueCache(queryClient, result);
+        setCardMixSeed(`${Date.now()}-${Math.random()}`);
       } catch {
         restoreRecordListCaches(queryClient, cacheSnapshot);
         showToast({ message: "질문을 바꾸지 못했습니다. 다시 시도해주세요.", type: "error" });
@@ -485,6 +553,7 @@ export default function OnScreen() {
 
     try {
       await Promise.all([articlesQuery.refetch(), thoughtsQuery.refetch(), questionQuery.refetch()]);
+      setCardMixSeed(`${Date.now()}-${Math.random()}`);
     } catch {
       showToast({ message: "기록을 불러오지 못했습니다.", type: "error" });
     }
@@ -705,9 +774,10 @@ export default function OnScreen() {
           <FlatList
             ref={recordListRef}
             data={cardGroups}
+            extraData={recordResetVersion}
             nestedScrollEnabled
             keyExtractor={(group) => group.dateKey}
-            renderItem={({ item }) => {
+            renderItem={({ item, index }) => {
               const cardHeight = getRecordGroupCardHeight(item.records, cardWidth);
               const actionAreaHeight = getRecordGroupActionAreaHeight(item.records);
               return (
@@ -723,6 +793,7 @@ export default function OnScreen() {
                     cardWidth={cardWidth}
                     cardHeight={cardHeight}
                     actionAreaHeight={actionAreaHeight}
+                    resetKey={index === 0 ? `${cardMixSeed}:${recordResetVersion}` : cardMixSeed}
                     renderCard={(record, context) => renderRecordCard(record, context.shouldIgnorePress, cardHeight)}
                     shouldIgnoreVerticalPress={scrollPressGuard.shouldIgnoreVerticalPress}
                   />
@@ -817,7 +888,7 @@ const styles = StyleSheet.create({
   // Keep the press wrapper transparent: only the animated content surface
   // should own the card geometry and shadow, so the shadow scales with it.
   thoughtCard: { flexGrow: 0, flexShrink: 0 },
-  thoughtCardContent: { flex: 1, backgroundColor: Colors.zinc50, borderRadius: 16, ...Shadows.carouselCard },
+  thoughtCardContent: { flex: 1, backgroundColor: Colors.zinc50, borderRadius: 16, overflow: "hidden", ...Shadows.carouselCard },
   questionCardContent: { backgroundColor: Colors.noticeAccent },
   thoughtCardBodyWrap: { flex: 1, justifyContent: "flex-start" },
   thoughtCardTitle: { fontFamily: ReaderTokens.fontFamily.serifBold, color: Colors.zinc900 },

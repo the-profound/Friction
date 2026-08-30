@@ -9,6 +9,7 @@ export interface NavState {
   ofSubTab: OfSubTabKey;
   toSubTab: ToSubTabKey;
   headerScrolled: boolean;
+  tabReselectVersion: Record<MainTabKey, number>;
 }
 
 export interface NavActions {

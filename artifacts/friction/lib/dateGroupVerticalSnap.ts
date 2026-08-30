@@ -150,3 +150,14 @@ export function preserveDateGroupAnchor(
     : 0;
   return nextKeys[fallbackIndex] ?? null;
 }
+
+export function resolveDateGroupAnchor(
+  previousKey: string | null,
+  previousKeys: readonly string[],
+  nextKeys: readonly string[],
+  resetToFirst: boolean,
+): string | null {
+  return resetToFirst
+    ? nextKeys[0] ?? null
+    : preserveDateGroupAnchor(previousKey, previousKeys, nextKeys);
+}

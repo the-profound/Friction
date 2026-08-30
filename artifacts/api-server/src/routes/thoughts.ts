@@ -15,6 +15,7 @@ import { CreateThoughtBody, UpdateThoughtBody, isMeaningfulThoughtMarkdown } fro
 import { generateDenseEmbedding, generateSparseEmbedding } from "../lib/embeddings";
 import { analyzeThoughtExpansion } from "../services/analyze-thought-expansion";
 import { generatePreliminaryThoughtQuestion } from "../services/generate-preliminary-thought-question";
+import { generateRandomPreliminaryThoughtQuestion } from "../services/generate-random-preliminary-thought-question";
 import {
   formatPreliminaryQuestionMarkdown,
   isQuestionThoughtMarkdown,
@@ -30,6 +31,7 @@ type ThoughtMarkdown = {
 // A bounded backlog lets the archive browse questions continuously without
 // letting display retries trigger unbounded AI work.
 const QUESTION_QUEUE_TARGET_SIZE = 6;
+const QUESTION_QUEUE_MIN_SIZE = 3;
 const QUESTION_QUEUE_SOURCE_CANDIDATE_LIMIT = QUESTION_QUEUE_TARGET_SIZE * 3;
 
 type ThoughtRow = typeof thoughtsTable.$inferSelect;
@@ -98,12 +100,48 @@ async function cleanupQuestionQueue(
   `);
 }
 
-async function fillQuestionQueue(
+async function trimQuestionQueue(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  userId: string,
+  queued: Awaited<ReturnType<typeof getQueuedQuestions>>,
+) {
+  const retained = queued.slice(0, QUESTION_QUEUE_TARGET_SIZE);
+  const overflow = queued.slice(QUESTION_QUEUE_TARGET_SIZE);
+  if (overflow.length === 0) return retained;
+
+  const deletedAt = new Date();
+  for (const entry of overflow) {
+    await tx
+      .delete(thoughtQuestionQueueTable)
+      .where(eq(thoughtQuestionQueueTable.id, entry.queueId));
+    await tx
+      .update(thoughtsTable)
+      .set({ deletedAt })
+      .where(
+        and(
+          eq(thoughtsTable.id, entry.thought.id),
+          eq(thoughtsTable.authorId, userId),
+          eq(thoughtsTable.status, "PRELIMINARY"),
+          eq(thoughtsTable.createdFrom, "question"),
+        ),
+      );
+  }
+  return retained;
+}
+
+async function normalizeQuestionQueue(
   tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
   userId: string,
 ) {
   await cleanupQuestionQueue(tx, userId);
-  let queued = await getQueuedQuestions(tx, userId);
+  return trimQuestionQueue(tx, userId, await getQueuedQuestions(tx, userId));
+}
+
+async function fillQuestionQueue(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  userId: string,
+) {
+  let queued = await normalizeQuestionQueue(tx, userId);
   const needed = QUESTION_QUEUE_TARGET_SIZE - queued.length;
   if (needed <= 0) return queued;
 
@@ -147,7 +185,6 @@ async function fillQuestionQueue(
       !!candidate.content?.trim() &&
       !isQuestionThoughtMarkdown(candidate.content),
   );
-  if (sourceCandidates.length === 0) return queued;
 
   const sourceGroups = Array.from(
     { length: needed },
@@ -203,6 +240,38 @@ async function fillQuestionQueue(
     queued = [...queued, { queueId: queueRow.id, position: queueRow.position, thought: question }];
   }
 
+  // A user should still have a useful minimum backlog when there are not
+  // enough normal thoughts to use as source material. These generic prompts
+  // are intentionally only a floor; source-based generation can fill the
+  // queue up to the target size when material is available.
+  const existingQuestionTitles = new Set(
+    queued
+      .map((entry) => getQuestionTitle(entry.thought.content))
+      .filter((title): title is string => Boolean(title)),
+  );
+  while (queued.length < QUESTION_QUEUE_MIN_SIZE) {
+    const generated = generateRandomPreliminaryThoughtQuestion(existingQuestionTitles);
+    if (!generated) break;
+
+    const [question] = await tx
+      .insert(thoughtsTable)
+      .values({
+        authorId: userId,
+        content: formatPreliminaryQuestionMarkdown(generated.title, generated.description),
+        createdFrom: "question",
+        status: "PRELIMINARY",
+      })
+      .returning();
+
+    const lastPosition = queued.at(-1)?.position ?? -1;
+    const [queueRow] = await tx
+      .insert(thoughtQuestionQueueTable)
+      .values({ userId, thoughtId: question.id, position: lastPosition + 1 })
+      .returning({ id: thoughtQuestionQueueTable.id, position: thoughtQuestionQueueTable.position });
+    queued = [...queued, { queueId: queueRow.id, position: queueRow.position, thought: question }];
+    existingQuestionTitles.add(generated.title);
+  }
+
   return queued;
 }
 
@@ -245,6 +314,11 @@ function parseThoughtMarkdown(markdown: string): ThoughtMarkdown | null {
   const body = firstLineEnd < 0 ? "" : markdown.slice(firstLineEnd + 1).replace(/^\s*\n/, "");
   if (!title || !body.trim()) return null;
   return { title, body };
+}
+
+function getQuestionTitle(markdown: string | null): string | null {
+  const title = markdown?.split(/\r?\n/, 1)[0]?.trim().replace(/^#\s+Q\.\s*/i, "");
+  return title || null;
 }
 
 router.get("/thoughts/:id/similar", requireAuth, async (req, res) => {
@@ -355,7 +429,7 @@ router.post("/thoughts/question-queue/refresh", requireAuth, async (req, res) =>
 
   const result = await db.transaction(async (tx) => {
     await lockQuestionQueue(tx, userId);
-    const before = await getQueuedQuestions(tx, userId);
+    const before = await normalizeQuestionQueue(tx, userId);
     const current = before[0];
     if (!current || current.thought.id !== currentThoughtId) {
       return { ...(await queueSnapshot(tx, userId)), requeued: false };
@@ -381,6 +455,7 @@ router.post("/thoughts/:id/activate", requireAuth, async (req, res) => {
 
   const result = await db.transaction(async (tx) => {
     await lockQuestionQueue(tx, userId);
+    await normalizeQuestionQueue(tx, userId);
     const [thought] = await tx
       .select()
       .from(thoughtsTable)

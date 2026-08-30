@@ -47,6 +47,18 @@ const state = vi.hoisted(() => {
         return thought ? [{ queueId: queue.id, position: queue.position, thought }] : [];
       });
 
+  const findStringParam = (condition: unknown): string | undefined => {
+    if (typeof condition === "string") return condition;
+    if (!condition || typeof condition !== "object") return undefined;
+    const chunks = (condition as { queryChunks?: unknown[] }).queryChunks;
+    if (!chunks) return undefined;
+    for (const chunk of chunks) {
+      const value = findStringParam(chunk);
+      if (value) return value;
+    }
+    return undefined;
+  };
+
   const db: any = {
     transaction: async (callback: (tx: any) => unknown) => callback(db),
     execute: vi.fn(async () => []),
@@ -146,7 +158,7 @@ const state = vi.hoisted(() => {
     }),
     update: (table: unknown) => ({
       set: (values: Record<string, unknown>) => ({
-        where: () => ({
+        where: (condition: unknown) => ({
           apply: () => {
             if (table === tables.queue) {
               const queue = rowsForUser(state.activeUser)[0];
@@ -156,7 +168,8 @@ const state = vi.hoisted(() => {
               }
               return [];
             }
-            const thought = state.selectedThoughtId ? thoughts.get(state.selectedThoughtId) : undefined;
+            const thoughtId = findStringParam(condition) ?? state.selectedThoughtId;
+            const thought = thoughtId ? thoughts.get(thoughtId) : undefined;
             if (!thought) return [];
             Object.assign(thought, values);
             return [thought];
@@ -171,11 +184,15 @@ const state = vi.hoisted(() => {
       }),
     }),
     delete: (table: unknown) => ({
-      where: () => {
-        if (table === tables.queue && state.selectedThoughtId) {
+      where: (condition: unknown) => {
+        if (table === tables.queue) {
+          const queueId = findStringParam(condition);
           queues.set(
             state.activeUser,
-            (queues.get(state.activeUser) ?? []).filter((queue) => queue.thoughtId !== state.selectedThoughtId),
+            (queues.get(state.activeUser) ?? []).filter((queue) =>
+              queueId
+                ? queue.id !== queueId
+                : queue.thoughtId !== state.selectedThoughtId),
           );
         }
         return Promise.resolve([]);
@@ -226,6 +243,13 @@ vi.mock("../services/generate-preliminary-thought-question", () => ({
   generatePreliminaryThoughtQuestion: vi.fn(async () => ({
     title: "생성된 질문",
     description: "기록을 이어갈 질문입니다.",
+  })),
+}));
+
+vi.mock("../services/generate-random-preliminary-thought-question", () => ({
+  generateRandomPreliminaryThoughtQuestion: vi.fn(() => ({
+    title: `무작위 질문 ${state.generatedCount + 1}`,
+    description: "가볍게 떠올려 볼 질문입니다.",
   })),
 }));
 
@@ -339,10 +363,167 @@ beforeEach(() => {
 afterAll(() => vi.restoreAllMocks());
 
 describe("thought question queue API", () => {
-  it("returns an empty compatible snapshot when no usable source material exists", async () => {
+  it("fills the minimum backlog with random questions when no source material exists", async () => {
     await withServer(async (baseUrl) => {
       const body = (await (await request(baseUrl, "user-a", "/thoughts/question-queue")).json()) as QueueResponse;
-      expect(body).toEqual({ current: null, next: null, queue: [] });
+      expect(body.queue).toHaveLength(3);
+      expect(body.queue.map((item: { id: string }) => item.id)).toEqual([
+        "generated-1",
+        "generated-2",
+        "generated-3",
+      ]);
+      expect(body.current).toMatchObject({ id: "generated-1" });
+      expect(body.next).toMatchObject({ id: "generated-2" });
+      expect(state.generatedCount).toBe(3);
+    });
+  });
+
+  it("adds only enough random questions to reach the minimum backlog", async () => {
+    seedQueue("user-a", ["existing-a", "existing-b"]);
+
+    await withServer(async (baseUrl) => {
+      const body = (await (await request(baseUrl, "user-a", "/thoughts/question-queue")).json()) as QueueResponse;
+      expect(body.queue.map((item: { id: string }) => item.id)).toEqual([
+        "existing-a",
+        "existing-b",
+        "generated-1",
+      ]);
+      expect(state.generatedCount).toBe(1);
+    });
+  });
+
+  it("never adds questions beyond the six-card maximum", async () => {
+    seedQueue("user-a", [
+      "existing-1",
+      "existing-2",
+      "existing-3",
+      "existing-4",
+      "existing-5",
+      "existing-6",
+    ]);
+    seedCandidates("user-a", 18);
+
+    await withServer(async (baseUrl) => {
+      const body = (await (await request(baseUrl, "user-a", "/thoughts/question-queue")).json()) as QueueResponse;
+      expect(body.queue).toHaveLength(6);
+      expect(state.generatedCount).toBe(0);
+    });
+  });
+
+  it("trims an oversized persisted queue to the first six FIFO questions", async () => {
+    seedQueue("user-a", [
+      "existing-1",
+      "existing-2",
+      "existing-3",
+      "existing-4",
+      "existing-5",
+      "existing-6",
+      "existing-7",
+    ]);
+
+    await withServer(async (baseUrl) => {
+      const body = (await (await request(baseUrl, "user-a", "/thoughts/question-queue")).json()) as QueueResponse;
+      expect(body.queue.map((item: { id: string }) => item.id)).toEqual([
+        "existing-1",
+        "existing-2",
+        "existing-3",
+        "existing-4",
+        "existing-5",
+        "existing-6",
+      ]);
+      expect(state.queues.get("user-a")).toHaveLength(6);
+      expect(state.thoughts.get("existing-7")?.deletedAt).toBeInstanceOf(Date);
+    });
+  });
+
+  it("keeps only six questions when refreshing an oversized queue", async () => {
+    seedQueue("user-a", [
+      "question-1",
+      "question-2",
+      "question-3",
+      "question-4",
+      "question-5",
+      "question-6",
+      "question-7",
+    ]);
+
+    await withServer(async (baseUrl) => {
+      const response = await request(baseUrl, "user-a", "/thoughts/question-queue/refresh", {
+        method: "POST",
+        body: JSON.stringify({ currentThoughtId: "question-1" }),
+      });
+      const body = (await response.json()) as QueueResponse;
+      expect(body.queue.map((item: { id: string }) => item.id)).toEqual([
+        "question-2",
+        "question-3",
+        "question-4",
+        "question-5",
+        "question-6",
+        "question-1",
+      ]);
+      expect(state.queues.get("user-a")).toHaveLength(6);
+      expect(state.thoughts.get("question-7")?.deletedAt).toBeInstanceOf(Date);
+    });
+  });
+
+  it("normalizes an oversized queue before returning a stale refresh snapshot", async () => {
+    seedQueue("user-a", [
+      "question-1",
+      "question-2",
+      "question-3",
+      "question-4",
+      "question-5",
+      "question-6",
+      "question-7",
+    ]);
+
+    await withServer(async (baseUrl) => {
+      const response = await request(baseUrl, "user-a", "/thoughts/question-queue/refresh", {
+        method: "POST",
+        body: JSON.stringify({ currentThoughtId: "question-2" }),
+      });
+      expect(await response.json()).toMatchObject({
+        requeued: false,
+        queue: [
+          { id: "question-1" },
+          { id: "question-2" },
+          { id: "question-3" },
+          { id: "question-4" },
+          { id: "question-5" },
+          { id: "question-6" },
+        ],
+      });
+      expect(state.queues.get("user-a")).toHaveLength(6);
+    });
+  });
+
+  it("keeps only six questions after activating one from an oversized queue", async () => {
+    seedQueue("user-a", [
+      "question-1",
+      "question-2",
+      "question-3",
+      "question-4",
+      "question-5",
+      "question-6",
+      "question-7",
+      "question-8",
+    ]);
+
+    await withServer(async (baseUrl) => {
+      const response = await request(baseUrl, "user-a", "/thoughts/question-2/activate", {
+        method: "POST",
+      });
+      const body = (await response.json()) as QueueResponse;
+      expect(body.queue.map((item: { id: string }) => item.id)).toEqual([
+        "question-1",
+        "question-3",
+        "question-4",
+        "question-5",
+        "question-6",
+      ]);
+      expect(state.queues.get("user-a")).toHaveLength(5);
+      expect(state.thoughts.get("question-7")?.deletedAt).toBeInstanceOf(Date);
+      expect(state.thoughts.get("question-8")?.deletedAt).toBeInstanceOf(Date);
     });
   });
 
@@ -458,9 +639,10 @@ describe("thought question queue API", () => {
       expect(activated.status).toBe(200);
       expect(await activated.json()).toMatchObject({
         activatedThought: { id: "question-b", status: "NORMAL" },
-        queue: [{ id: "question-a" }, { id: "question-c" }],
+        queue: [{ id: "question-a" }, { id: "question-c" }, { id: "generated-1" }],
       });
       expect(state.usedSources.get("user-a")).toEqual(new Set(["source-preserved"]));
+      expect(state.generatedCount).toBe(1);
 
       // The successful activation owns the single refill attempt. A network
       // retry must not create a question that was unavailable at that time.
@@ -469,9 +651,9 @@ describe("thought question queue API", () => {
       expect(retry.status).toBe(200);
       expect(await retry.json()).toMatchObject({
         activatedThought: { id: "question-b", status: "NORMAL" },
-        queue: [{ id: "question-a" }, { id: "question-c" }],
+        queue: [{ id: "question-a" }, { id: "question-c" }, { id: "generated-1" }],
       });
-      expect(state.generatedCount).toBe(0);
+      expect(state.generatedCount).toBe(1);
     });
   });
 
@@ -482,8 +664,12 @@ describe("thought question queue API", () => {
     await withServer(async (baseUrl) => {
       const a = (await (await request(baseUrl, "user-a", "/thoughts/question-queue")).json()) as QueueResponse;
       const b = (await (await request(baseUrl, "user-b", "/thoughts/question-queue")).json()) as QueueResponse;
-      expect(a.queue).toEqual([expect.objectContaining({ id: "question-a" })]);
-      expect(b.queue).toEqual([expect.objectContaining({ id: "question-b" })]);
+      expect(a.queue).toHaveLength(3);
+      expect(b.queue).toHaveLength(3);
+      expect(a.queue[0]).toMatchObject({ id: "question-a" });
+      expect(b.queue[0]).toMatchObject({ id: "question-b" });
+      expect(a.queue).not.toContainEqual(expect.objectContaining({ id: "question-b" }));
+      expect(b.queue).not.toContainEqual(expect.objectContaining({ id: "question-a" }));
     });
   });
 });

@@ -52,6 +52,13 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
   const [ofSubTab, setOfSubTabState] = useState<OfSubTabKey>("group");
   const [toSubTab, setToSubTabState] = useState<ToSubTabKey>("neighbors");
   const [headerScrolled, setHeaderScrolled] = useState(false);
+  const [tabReselectVersion, setTabReselectVersion] = useState<Record<MainTabKey, number>>({
+    IN: 0,
+    OF: 0,
+    ON: 0,
+    AR: 0,
+    TO: 0,
+  });
 
   const lastSyncRef = useRef({ tab: "ON" as MainTabKey, ofSub: "group" as OfSubTabKey, toSub: "neighbors" as ToSubTabKey });
   const pathnameRef = useRef<string>("");
@@ -118,6 +125,12 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
   }, [segments, pathname, globalParams.subTab]);
 
   const setActiveTab = useCallback((tab: MainTabKey) => {
+    if (lastSyncRef.current.tab === tab) {
+      setTabReselectVersion((previous) => ({
+        ...previous,
+        [tab]: previous[tab] + 1,
+      }));
+    }
     setActiveTabState(tab);
     setLayer("main");
     lastSyncRef.current = { ...lastSyncRef.current, tab };
@@ -161,6 +174,7 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
       ofSubTab,
       toSubTab,
       headerScrolled,
+      tabReselectVersion,
       setActiveTab,
       setOfSubTab,
       setToSubTab,
@@ -174,6 +188,7 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
       ofSubTab,
       toSubTab,
       headerScrolled,
+      tabReselectVersion,
       setActiveTab,
       setOfSubTab,
       setToSubTab,

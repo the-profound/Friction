@@ -29,6 +29,7 @@ import { useListInbox, useMarkInboxOpened, useDeleteInboxItem, getListInboxQuery
 import { patchInboxItemInCache, removeInboxItemFromCache } from "@/lib/queryInvalidation";
 import type { InboxItem, Article } from "@workspace/api-client-react";
 import { useUser } from "@/contexts/UserContext";
+import { useNavigation } from "@/contexts/NavigationContext";
 import { useToast } from "@/contexts/ToastContext";
 import { isQueryStale } from "@/lib/useScreenFocused";
 import { useRealtimeChannel } from "@/lib/useRealtimeChannel";
@@ -112,6 +113,7 @@ const inboxItemKey = (item: InboxItem) => item.id;
 
 export default function InboxScreen() {
   const { startFadeToBlack } = useReaderTransition();
+  const { tabReselectVersion } = useNavigation();
   const navBottom = useNavBarBottomSafeArea();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -187,6 +189,7 @@ export default function InboxScreen() {
     groupSignature: inboxGroupSignature,
     listRef: inboxListRef,
     enabled: groups.length > 0,
+    resetKey: tabReselectVersion.IN,
     estimatedGroupHeight: getDateGroupCarouselHeight(
       CARD_H,
       0,
@@ -225,7 +228,7 @@ export default function InboxScreen() {
   // Stable renderItem for the carousel FlatList — avoids re-creating the
   // function (and triggering row-level reconciliation) on every parent render.
   const renderGroupItem = useCallback(
-    ({ item: group }: { item: DateGroup }) => (
+    ({ item: group, index }: { item: DateGroup; index: number }) => (
       <View onLayout={(event) => inboxVerticalDateSnap.onGroupLayout(group.dateKey, event)}>
         <DateGroupCarousel
           dateLabel={group.label}
@@ -234,6 +237,7 @@ export default function InboxScreen() {
           itemKey={inboxItemKey}
           cardWidth={CARD_W}
           cardHeight={CARD_H}
+          resetKey={index === 0 ? tabReselectVersion.IN : undefined}
           shouldIgnoreVerticalPress={scrollPressGuard.shouldIgnoreVerticalPress}
           renderCard={(item, context) => {
             const isSealed = Boolean((item as any).isEnvelope) && !item.openedAt;
@@ -285,6 +289,7 @@ export default function InboxScreen() {
       inboxVerticalDateSnap.onGroupLayout,
       isTappedSourceHidden,
       nickname,
+      tabReselectVersion.IN,
       tapItem?.id,
     ],
   );
@@ -570,7 +575,7 @@ export default function InboxScreen() {
             ref={inboxListRef}
             {...LIST_PERF_PRESET}
             data={groups}
-            extraData={`${tapItem?.id ?? ""}:${isTappedSourceHidden}`}
+            extraData={`${tapItem?.id ?? ""}:${isTappedSourceHidden}:${tabReselectVersion.IN}`}
             keyExtractor={groupKeyExtractor}
             renderItem={renderGroupItem}
             refreshControl={

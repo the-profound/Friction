@@ -15,8 +15,6 @@ export interface RecordDateGroup<T extends UnifiedRecord = UnifiedRecord> {
   records: T[];
 }
 
-export const QUESTION_QUEUE_GROUP_KEY = "__thought_question_queue__";
-
 export interface RecordPreview {
   /** Single-line form used for title-only mode and search. */
   title: string;
@@ -48,13 +46,14 @@ export function getRecordCardTitleLineCount(
   title: string,
   titleSize: number,
   textWidth: number,
+  maxLines = RECORD_CARD_TITLE_MAX_LINES,
 ): number {
   const charsPerLine = Math.max(1, Math.floor(textWidth / titleSize));
   const estimatedLines = title.split("\n").reduce(
     (total, line) => total + Math.max(1, Math.ceil(Array.from(line).length / charsPerLine)),
     0,
   );
-  return Math.min(RECORD_CARD_TITLE_MAX_LINES, Math.max(1, estimatedLines));
+  return Math.min(maxLines, Math.max(1, estimatedLines));
 }
 
 export function getRecordCardBodyLineCount({
@@ -122,8 +121,27 @@ export function getQueuedThoughtIds(
   current: Thought | null | undefined,
   next: Thought | null | undefined,
 ): Set<string> {
-  const queuedThoughts = queue ?? [current, next].filter((thought): thought is Thought => Boolean(thought));
-  return new Set(queuedThoughts.map((thought) => thought.id));
+  return new Set(getQueuedThoughts(queue, current, next).map((thought) => thought.id));
+}
+
+/**
+ * Returns one de-duplicated FIFO queue. During a client/server rollout the
+ * response may only contain current/next, so those aliases are intentionally
+ * used when the complete queue is absent.
+ */
+export function getQueuedThoughts(
+  queue: Thought[] | null | undefined,
+  current: Thought | null | undefined,
+  next: Thought | null | undefined,
+): Thought[] {
+  const source = [current, ...(queue ?? []), next]
+    .filter((thought): thought is Thought => Boolean(thought));
+  const seen = new Set<string>();
+  return source.filter((thought) => {
+    if (seen.has(thought.id)) return false;
+    seen.add(thought.id);
+    return true;
+  });
 }
 
 /** Displays the same compact calendar date label used by the record card groups. */
@@ -155,34 +173,132 @@ export function buildRecordDateGroups<T extends UnifiedRecord>(records: T[]): Re
     }));
 }
 
+function stableHash(value: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+export type QuestionPlacementAnchors = ReadonlyMap<string, string | null>;
+
 /**
- * Builds the complete card-list model. The question queue is a first-class
- * group rather than a FlatList header so native virtualization measures and
- * anchors it exactly like every date group.
- *
- * Queue records are removed defensively from date records as well. This keeps
- * the question flow as the single owner of preliminary thoughts even when the
- * two API responses briefly overlap during a cache refresh.
+ * Keeps each non-current question attached to the same ordinary record for the
+ * lifetime of one screen session. Only questions whose anchor disappeared are
+ * assigned again; adding, activating, or deleting unrelated records does not
+ * move the rest.
  */
-export function buildRecordGroups<T extends UnifiedRecord>(
+export function resolveQuestionPlacementAnchors<T extends UnifiedRecord>(
+  records: readonly T[],
+  questionQueue: readonly T[],
+  seed: string,
+  previousAnchors: QuestionPlacementAnchors = new Map(),
+): Map<string, string | null> {
+  const questionIds = new Set(questionQueue.map((record) => record.id));
+  const ordinaryIds = records
+    .filter((record) => !questionIds.has(record.id))
+    .sort(compareRecordsNewestFirst)
+    .map((record) => record.id);
+  const ordinaryIdSet = new Set(ordinaryIds);
+  const anchors = new Map<string, string | null>();
+
+  for (const question of questionQueue.slice(1)) {
+    const previousAnchor = previousAnchors.get(question.id);
+    if (previousAnchor && ordinaryIdSet.has(previousAnchor)) {
+      anchors.set(question.id, previousAnchor);
+      continue;
+    }
+    if (ordinaryIds.length === 0) {
+      anchors.set(question.id, null);
+      continue;
+    }
+    anchors.set(
+      question.id,
+      ordinaryIds[stableHash(`${seed}:${question.id}`) % ordinaryIds.length],
+    );
+  }
+  return anchors;
+}
+
+/**
+ * Builds date groups while mixing the complete question queue into ordinary
+ * cards. The first queued question is always the first card of the newest
+ * visible date group; remaining questions use a seed+ID slot so their
+ * positions remain stable while the screen is mounted.
+ *
+ * Placement anchors are carried across data changes by the caller. Removing
+ * or activating one item therefore does not reshuffle unrelated questions,
+ * and duplicate IDs are defensively removed from both inputs.
+ */
+export function buildMixedRecordGroups<T extends UnifiedRecord>(
   records: T[],
   questionQueue: readonly T[] = [],
+  seed = "",
+  placementAnchors?: QuestionPlacementAnchors,
 ): RecordDateGroup<T>[] {
-  const queueIds = new Set(questionQueue.map((record) => record.id));
+  const uniqueQuestions = questionQueue.filter((record, index, source) =>
+    source.findIndex((candidate) => candidate.id === record.id) === index,
+  );
+  const queueIds = new Set(uniqueQuestions.map((record) => record.id));
   const dateGroups = buildRecordDateGroups(
     records.filter((record) => !queueIds.has(record.id)),
   );
 
-  if (questionQueue.length === 0) return dateGroups;
+  if (uniqueQuestions.length === 0) return dateGroups;
 
-  return [
-    {
-      dateKey: QUESTION_QUEUE_GROUP_KEY,
-      label: "질문 대기열",
-      records: [...questionQueue],
-    },
-    ...dateGroups,
-  ];
+  if (dateGroups.length === 0) {
+    const firstQuestion = uniqueQuestions[0];
+    const dateKey = toKstCalendarDateKey(firstQuestion.updatedAt);
+    return [{
+      dateKey,
+      label: formatRecordDateLabel(dateKey),
+      records: uniqueQuestions,
+    }];
+  }
+
+  const [currentQuestion, ...remainingQuestions] = uniqueQuestions;
+  const anchors = placementAnchors ?? resolveQuestionPlacementAnchors(
+    records,
+    uniqueQuestions,
+    seed,
+  );
+  const visibleOrdinaryIds = dateGroups.flatMap((group) =>
+    group.records.map((record) => record.id),
+  );
+  const visibleOrdinaryIdSet = new Set(visibleOrdinaryIds);
+  const insertions = new Map<string, T[]>();
+
+  remainingQuestions
+    .map((record, index) => ({
+      record,
+      index,
+      rank: stableHash(`${seed}:${record.id}`),
+    }))
+    .sort((left, right) => left.rank - right.rank || left.index - right.index)
+    .forEach(({ record }) => {
+      const persistentAnchor = anchors.get(record.id);
+      const displayAnchor = persistentAnchor && visibleOrdinaryIdSet.has(persistentAnchor)
+        ? persistentAnchor
+        : visibleOrdinaryIds[stableHash(`${seed}:${record.id}`) % visibleOrdinaryIds.length];
+      if (!displayAnchor) return;
+      const bucket = insertions.get(displayAnchor);
+      if (bucket) bucket.push(record);
+      else insertions.set(displayAnchor, [record]);
+    });
+
+  const mixedGroups = dateGroups.map((group, groupIndex) => {
+    const mixedRecords: T[] = [];
+    for (const [recordIndex, record] of group.records.entries()) {
+      if (groupIndex === 0 && recordIndex === 0) mixedRecords.push(currentQuestion);
+      mixedRecords.push(record);
+      mixedRecords.push(...(insertions.get(record.id) ?? []));
+    }
+    return { ...group, records: mixedRecords };
+  });
+
+  return mixedGroups;
 }
 
 /**

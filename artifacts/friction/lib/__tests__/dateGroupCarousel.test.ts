@@ -4,12 +4,14 @@ import {
   getCarouselNextIndex,
   getDateGroupCarouselHeight,
   preserveCarouselIndex,
+  resolveCarouselIndex,
 } from "../dateGroupCarousel";
 import {
   findDateGroupAtOffset,
   getDateGroupPageDecision,
   getDateGroupPageIndex,
   preserveDateGroupAnchor,
+  resolveDateGroupAnchor,
   resolveDateGroupLayouts,
   shouldApplyDateGroupMeasurement,
   type DateGroupLayout,
@@ -40,6 +42,28 @@ describe("shared date-group carousel geometry", () => {
     expect(preserveCarouselIndex("question-b", 1, ["question-c", "question-d"]))
       .toBe(1);
     expect(preserveCarouselIndex("question-c", 2, ["question-c"]))
+      .toBe(0);
+  });
+
+  it("resets the date-group anchor to the first group only for an explicit reset", () => {
+    expect(resolveDateGroupAnchor(
+      "2026-08-28",
+      ["2026-08-29", "2026-08-28"],
+      ["2026-08-29", "2026-08-28", "2026-08-27"],
+      false,
+    )).toBe("2026-08-28");
+    expect(resolveDateGroupAnchor(
+      "2026-08-28",
+      ["2026-08-29", "2026-08-28"],
+      ["2026-08-29", "2026-08-28", "2026-08-27"],
+      true,
+    )).toBe("2026-08-29");
+  });
+
+  it("resets to the current question only when a new browse session starts", () => {
+    expect(resolveCarouselIndex("ordinary", 2, ["question", "other", "ordinary"], false))
+      .toBe(2);
+    expect(resolveCarouselIndex("ordinary", 2, ["question", "other", "ordinary"], true))
       .toBe(0);
   });
 });

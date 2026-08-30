@@ -16,7 +16,7 @@ import { Colors, Sizing, Spacing, Typography } from "@/constants/tokens";
 import {
   clampCarouselIndex,
   getCarouselNextIndex,
-  preserveCarouselIndex,
+  resolveCarouselIndex,
 } from "@/lib/dateGroupCarousel";
 
 export interface CarouselOriginLayout {
@@ -42,6 +42,8 @@ interface DateGroupCarouselProps<T> {
   /** The card's visible height; group-specific action rows are separate. */
   cardHeight: number;
   actionAreaHeight?: number;
+  /** Reset to the first card only when the parent starts a new browse session. */
+  resetKey?: string | number;
   renderCard: (item: T, context: DateGroupCarouselItemContext) => React.ReactNode;
   shouldIgnoreVerticalPress?: () => boolean;
 }
@@ -61,6 +63,7 @@ export function DateGroupCarousel<T>({
   cardWidth,
   cardHeight,
   actionAreaHeight = 0,
+  resetKey,
   renderCard,
   shouldIgnoreVerticalPress,
 }: DateGroupCarouselProps<T>) {
@@ -73,6 +76,7 @@ export function DateGroupCarousel<T>({
   const [activeIndex, setActiveIndex] = useState(0);
   const activeIndexRef = useRef(0);
   const activeItemKeyRef = useRef<string | null>(itemKeys[0] ?? null);
+  const resetKeyRef = useRef(resetKey);
   const itemCountRef = useRef(itemCount);
   const geometryRef = useRef({ cardWidth, windowWidth, snapInterval });
   const slotRefs = useRef<(View | null)[]>([]);
@@ -106,17 +110,25 @@ export function DateGroupCarousel<T>({
   useEffect(() => {
     // Keep the selected entity after data refreshes and edits; only a missing
     // entity falls back to the nearest valid slot.
-    const nextIndex = preserveCarouselIndex(
+    const shouldReset = resetKeyRef.current !== resetKey;
+    resetKeyRef.current = resetKey;
+    const nextIndex = resolveCarouselIndex(
       activeItemKeyRef.current,
       activeIndexRef.current,
       itemKeys,
+      shouldReset,
     );
     activeIndexRef.current = nextIndex;
     activeItemKeyRef.current = itemKeys[nextIndex] ?? null;
     setActiveIndex((current) => current === nextIndex ? current : nextIndex);
-    translateX.setValue(getBaseX(nextIndex));
-    nativeScrollRef.current?.scrollTo({ x: nextIndex * snapInterval, animated: false });
-  }, [cardWidth, getBaseX, itemCount, itemKeys, itemSignature, snapInterval, translateX, windowWidth]);
+    if (shouldReset) {
+      snapToRef.current(nextIndex);
+      nativeScrollRef.current?.scrollTo({ x: nextIndex * snapInterval, animated: true });
+    } else {
+      translateX.setValue(getBaseX(nextIndex));
+      nativeScrollRef.current?.scrollTo({ x: nextIndex * snapInterval, animated: false });
+    }
+  }, [cardWidth, getBaseX, itemCount, itemKeys, itemSignature, resetKey, snapInterval, translateX, windowWidth]);
 
   const releaseToNearestSlot = useCallback((distanceX: number, velocityX: number) => {
     snapToRef.current(getCarouselNextIndex(

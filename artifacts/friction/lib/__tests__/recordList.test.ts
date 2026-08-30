@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { Thought } from "@workspace/api-client-react";
 import {
   buildRecordDateGroups,
-  buildRecordGroups,
+  buildMixedRecordGroups,
   buildUnifiedRecords,
   compareRecordsNewestFirst,
   getQueuedThoughtIds,
+  getQueuedThoughts,
   getRecordCardBodyLineCount,
   getThoughtPreview,
   getRecordCardContent,
@@ -13,8 +14,8 @@ import {
   getThoughtCardContent,
   normalizePreviewTitle,
   normalizePreviewText,
+  resolveQuestionPlacementAnchors,
   type UnifiedRecord,
-  QUESTION_QUEUE_GROUP_KEY,
 } from "../recordList";
 
 describe("record list model", () => {
@@ -42,6 +43,14 @@ describe("record list model", () => {
     const next = { id: "next" } as Thought;
 
     expect(getQueuedThoughtIds(undefined, current, next)).toEqual(new Set(["current", "next"]));
+    expect(getQueuedThoughts(undefined, current, next)).toEqual([current, next]);
+  });
+
+  it("de-duplicates repeated queue aliases without changing FIFO order", () => {
+    const current = { id: "current" } as Thought;
+    const next = { id: "next" } as Thought;
+
+    expect(getQueuedThoughts([current, next, current], current, next)).toEqual([current, next]);
   });
 
   it("keeps FIFO queue order in the model while excluding every queued ID from date groups", () => {
@@ -144,46 +153,126 @@ describe("record card date groups", () => {
     expect(buildRecordDateGroups([])).toEqual([]);
   });
 
-  it("puts the FIFO question queue in one stable first group without duplicate date records", () => {
-    const firstQuestion = thought("question-first", "2026-03-04T02:00:00.000Z");
-    const secondQuestion = thought("question-second", "2026-03-04T01:00:00.000Z");
-    const ordinary = thought("ordinary", "2026-03-04T00:00:00.000Z");
+  it("pins the current question to the newest visible date without changing date order", () => {
+    const currentQuestion = thought("question-current", "2020-01-01T00:00:00.000Z");
+    const otherQuestion = thought("question-other", "2030-01-01T00:00:00.000Z");
+    const newest = thought("newest", "2026-03-04T02:00:00.000Z");
+    const older = thought("older", "2026-03-03T02:00:00.000Z");
 
-    const groups = buildRecordGroups(
-      [ordinary, firstQuestion, secondQuestion],
-      [firstQuestion, secondQuestion],
+    const groups = buildMixedRecordGroups(
+      [older, newest],
+      [currentQuestion, otherQuestion],
+      "session",
     );
 
-    expect(groups.map((group) => group.dateKey)).toEqual([
-      QUESTION_QUEUE_GROUP_KEY,
-      "2026-03-04",
+    expect(groups.map((group) => group.dateKey)).toEqual(["2026-03-04", "2026-03-03"]);
+    expect(groups[0].label).toBe("3월 4일");
+    expect(groups[0].records[0].id).toBe("question-current");
+    expect(groups.flatMap((group) => group.records).map((record) => record.id).sort()).toEqual([
+      "newest",
+      "older",
+      "question-current",
+      "question-other",
     ]);
-    expect(groups[0].label).toBe("질문 대기열");
-    expect(groups[0].records.map((record) => record.id)).toEqual([
-      "question-first",
-      "question-second",
-    ]);
-    expect(groups[1].records.map((record) => record.id)).toEqual(["ordinary"]);
   });
 
-  it("removes the queue group when the server queue becomes empty", () => {
+  it("returns ordinary date groups unchanged when the server queue becomes empty", () => {
     const ordinary = thought("ordinary", "2026-03-04T00:00:00.000Z");
 
-    expect(buildRecordGroups([ordinary], []).map((group) => group.dateKey)).toEqual(["2026-03-04"]);
+    expect(buildMixedRecordGroups([ordinary], [], "session").map((group) => group.dateKey))
+      .toEqual(["2026-03-04"]);
   });
 
-  it("renders every queued question even when there are no ordinary date records", () => {
+  it("renders every queued question in a date-formatted group when no ordinary records match", () => {
     const firstQuestion = thought("question-first", "2026-03-04T02:00:00.000Z");
     const secondQuestion = thought("question-second", "2026-03-04T01:00:00.000Z");
 
-    const groups = buildRecordGroups([], [firstQuestion, secondQuestion]);
+    const groups = buildMixedRecordGroups([], [firstQuestion, secondQuestion], "session");
 
     expect(groups).toHaveLength(1);
-    expect(groups[0].dateKey).toBe(QUESTION_QUEUE_GROUP_KEY);
+    expect(groups[0].dateKey).toBe("2026-03-04");
+    expect(groups[0].label).toBe("3월 4일");
     expect(groups[0].records.map((record) => record.id)).toEqual([
       "question-first",
       "question-second",
     ]);
+  });
+
+  it("keeps one session placement stable and changes it only with a new seed", () => {
+    const ordinary = Array.from({ length: 6 }, (_, index) =>
+      thought(`ordinary-${index + 1}`, `2026-03-04T0${index}:00:00.000Z`),
+    );
+    const questions = Array.from({ length: 6 }, (_, index) =>
+      thought(`q${index + 1}`, "2026-03-01T00:00:00.000Z"),
+    );
+    const ids = (seed: string) => buildMixedRecordGroups(ordinary, questions, seed)
+      .flatMap((group) => group.records.map((record) => record.id));
+
+    expect(ids("seed-a")).toEqual(ids("seed-a"));
+    expect(ids("seed-a")).not.toEqual(ids("seed-b"));
+    expect(ids("seed-a")[0]).toBe("q1");
+    expect(new Set(ids("seed-a")).size).toBe(ordinary.length + questions.length);
+  });
+
+  it("does not move unaffected questions after activation or ordinary-card deletion", () => {
+    const ordinary = Array.from({ length: 6 }, (_, index) =>
+      thought(`ordinary-${index + 1}`, `2026-03-04T0${index}:00:00.000Z`),
+    );
+    const questions = Array.from({ length: 6 }, (_, index) =>
+      thought(`q${index + 1}`, "2026-03-01T00:00:00.000Z"),
+    );
+    const beforeAnchors = resolveQuestionPlacementAnchors(
+      ordinary,
+      questions,
+      "session",
+    );
+    const activatedQuestions = questions.slice(1);
+    const afterActivationAnchors = resolveQuestionPlacementAnchors(
+      [...ordinary, questions[0]],
+      activatedQuestions,
+      "session",
+      beforeAnchors,
+    );
+    const deletedOrdinaryId = afterActivationAnchors.get("q3");
+    const afterDeletionAnchors = resolveQuestionPlacementAnchors(
+      [...ordinary, questions[0]].filter((record) => record.id !== deletedOrdinaryId),
+      activatedQuestions,
+      "session",
+      afterActivationAnchors,
+    );
+
+    for (const questionId of ["q4", "q5", "q6"]) {
+      if (afterActivationAnchors.get(questionId) === deletedOrdinaryId) continue;
+      expect(afterDeletionAnchors.get(questionId)).toBe(afterActivationAnchors.get(questionId));
+    }
+    expect(buildMixedRecordGroups(
+      [...ordinary, questions[0]],
+      activatedQuestions,
+      "session",
+      afterActivationAnchors,
+    )[0].records[0].id).toBe("q2");
+  });
+
+  it("temporarily falls back from hidden search anchors and restores every original position", () => {
+    const ordinary = Array.from({ length: 6 }, (_, index) =>
+      thought(`ordinary-${index + 1}`, `2026-03-04T0${index}:00:00.000Z`),
+    );
+    const questions = Array.from({ length: 6 }, (_, index) =>
+      thought(`q${index + 1}`, "2026-03-01T00:00:00.000Z"),
+    );
+    const anchors = resolveQuestionPlacementAnchors(ordinary, questions, "session");
+    const recordIds = (records: UnifiedRecord[]) => buildMixedRecordGroups(
+      records,
+      questions,
+      "session",
+      anchors,
+    ).flatMap((group) => group.records.map((record) => record.id));
+    const beforeSearch = recordIds(ordinary);
+    const duringSearch = recordIds(ordinary.slice(0, 2));
+    const afterSearch = recordIds(ordinary);
+
+    expect(duringSearch.filter((id) => id.startsWith("q"))).toHaveLength(questions.length);
+    expect(afterSearch).toEqual(beforeSearch);
   });
 });
 
@@ -259,6 +348,21 @@ describe("fixed-ratio record card text limits", () => {
     expect(getRecordCardTitleLineCount("첫 줄\n둘째 줄", 20, 200)).toBe(2);
     expect(getRecordCardTitleLineCount("첫 줄\n둘째 줄\n셋째 줄", 20, 200)).toBe(2);
     expect(getRecordCardTitleLineCount("가".repeat(40), 20, 200)).toBe(2);
+  });
+
+  it("allows question titles to reserve three or more lines without changing the card size", () => {
+    expect(getRecordCardTitleLineCount("첫 줄\n둘째 줄\n셋째 줄", 20, 200, Number.MAX_SAFE_INTEGER))
+      .toBe(3);
+    expect(getRecordCardTitleLineCount("가".repeat(40), 20, 200, Number.MAX_SAFE_INTEGER))
+      .toBe(4);
+    expect(getRecordCardBodyLineCount({
+      cardHeight: 480,
+      paddingY: 48,
+      titleLineCount: 4,
+      titleLineHeight: 24,
+      titleGap: 8,
+      bodyLineHeight: 20,
+    })).toBe(14);
   });
 
   it("reduces body lines by the visible title only and never below one line", () => {

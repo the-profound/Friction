@@ -12,6 +12,7 @@ import {
   findDateGroupAtOffset,
   getDateGroupPageDecision,
   preserveDateGroupAnchor,
+  resolveDateGroupAnchor,
   resolveDateGroupLayouts,
   shouldApplyDateGroupMeasurement,
   type DateGroupLayout,
@@ -48,6 +49,8 @@ interface UseDateGroupVerticalSnapOptions {
   viewportRef?: React.RefObject<MeasurableView | null>;
   /** Starts the shared press guard before a vertical page transition. */
   onPageGestureStart?: () => void;
+  /** Moves back to the first date group when the owning tab is reselected. */
+  resetKey?: string | number;
 }
 
 const FLING_VELOCITY = 0.5;
@@ -71,6 +74,7 @@ export function useDateGroupVerticalSnap({
   estimatedGroupHeights,
   viewportRef,
   onPageGestureStart,
+  resetKey,
 }: UseDateGroupVerticalSnapOptions) {
   const [viewportHeight, setViewportHeight] = useState(0);
   const [pageLocked, setPageLocked] = useState(false);
@@ -86,6 +90,7 @@ export function useDateGroupVerticalSnap({
   const nativeGestureStartOffsetRef = useRef(0);
   const isNativeDraggingRef = useRef(false);
   const pendingRestoreKeyRef = useRef<string | null>(null);
+  const pendingRestoreAnimatedRef = useRef(false);
   const restoreFrameRef = useRef<number | null>(null);
   const measureFrameRef = useRef<number | null>(null);
   const wheelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -93,6 +98,7 @@ export function useDateGroupVerticalSnap({
   const pageUnlockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const transitionGenerationRef = useRef(0);
   const layoutGenerationRef = useRef(0);
+  const resetKeyRef = useRef(resetKey);
   const isPageAnimatingRef = useRef(false);
   const programmaticTargetRef = useRef<number | null>(null);
   const finishGestureRef = useRef((
@@ -147,11 +153,13 @@ export function useDateGroupVerticalSnap({
     }
 
     pendingRestoreKeyRef.current = null;
+    const shouldAnimate = pendingRestoreAnimatedRef.current;
+    pendingRestoreAnimatedRef.current = false;
     currentKeyRef.current = key;
     const offset = Math.max(0, layout.offset);
     currentOffsetRef.current = offset;
     programmaticTargetRef.current = offset;
-    listRef.current?.scrollToOffset({ offset, animated: false });
+    listRef.current?.scrollToOffset({ offset, animated: shouldAnimate });
   }, [enabled, listRef, viewportRef]);
 
   const scheduleAnchorRestore = useCallback(() => {
@@ -202,6 +210,8 @@ export function useDateGroupVerticalSnap({
     const nextKeys = [...groupKeys];
     const previousKeys = previousKeysRef.current;
     const previousKey = currentKeyRef.current;
+    const shouldReset = resetKeyRef.current !== resetKey;
+    resetKeyRef.current = resetKey;
     const validKeys = new Set(nextKeys);
 
     for (const key of heightsRef.current.keys()) {
@@ -220,10 +230,11 @@ export function useDateGroupVerticalSnap({
     rebuildLayouts();
 
     const nextAnchor = previousKeys.length > 0
-      ? preserveDateGroupAnchor(previousKey, previousKeys, nextKeys)
+      ? resolveDateGroupAnchor(previousKey, previousKeys, nextKeys, shouldReset)
       : nextKeys[0] ?? null;
     currentKeyRef.current = nextAnchor;
     pendingRestoreKeyRef.current = nextAnchor;
+    pendingRestoreAnimatedRef.current = shouldReset && nextAnchor !== null;
     currentOffsetRef.current = layoutsRef.current.get(nextAnchor ?? "")?.offset ?? 0;
     previousKeysRef.current = nextKeys;
 
@@ -237,6 +248,7 @@ export function useDateGroupVerticalSnap({
     groupKeys,
     groupSignature,
     rebuildLayouts,
+    resetKey,
     scheduleAnchorRestore,
     scheduleVisibleMeasurements,
     viewportRef,

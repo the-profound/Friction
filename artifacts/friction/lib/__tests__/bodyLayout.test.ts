@@ -557,7 +557,8 @@ describe("thought card typography regression guards", () => {
 
     expect(card).toContain("getRecordCardContent(record)");
     expect(card).not.toContain("numberOfLines={titleLines}");
-    expect(card).toContain('ellipsizeMode="tail"');
+    expect(card).toContain('ellipsizeMode={question ? undefined : "tail"}');
+    expect(card).toContain('overflow: "hidden"');
     expect(card).toContain("content.body || \"아직 적힌 내용이 없어요.\"");
   });
 
@@ -569,7 +570,7 @@ describe("thought card typography regression guards", () => {
       "readerFontSize(ReaderTokens.typeScale.bodyCqi, width)",
     );
     expect(card).toContain("const bodyLines = getRecordCardBodyLineCount({");
-    expect(card).toContain("numberOfLines={2}");
+    expect(card).toContain("numberOfLines={question ? undefined : 2}");
   });
 
   it("keeps the article card title tied to its scaled text frame", () => {
@@ -635,6 +636,36 @@ describe("thought card typography regression guards", () => {
     expect(pagingHook).not.toContain("getDateGroupSnapTarget");
     expect(pagingHook).not.toContain("scheduleSettle");
     expect(dots).toContain("{total > 1 ? dots.map");
+  });
+
+  it("returns active inbox and record tabs to the first card in the first group", () => {
+    const navigationContext = read("contexts/NavigationContext.tsx");
+    const recordsScreen = read("app/(tabs)/on.tsx");
+    const inboxScreen = read("app/(tabs)/index.tsx");
+    const pagingHook = read("hooks/useDateGroupVerticalSnap.ts");
+
+    expect(navigationContext).toContain("lastSyncRef.current.tab === tab");
+    expect(navigationContext).toContain("setTabReselectVersion");
+    expect(inboxScreen).toContain("resetKey: tabReselectVersion.IN");
+    expect(inboxScreen).toContain("index === 0 ? tabReselectVersion.IN : undefined");
+    expect(inboxScreen).toContain("isTappedSourceHidden}:${tabReselectVersion.IN}");
+    expect(recordsScreen).toContain('setKind("thought")');
+    expect(recordsScreen).toContain('setView("card")');
+    expect(recordsScreen).toContain("setRecordResetVersion(tabReselectVersion.ON)");
+    expect(recordsScreen).toContain("resetKey: recordResetVersion");
+    expect(recordsScreen).toContain("index === 0 ? `${cardMixSeed}:${recordResetVersion}` : cardMixSeed");
+    expect(pagingHook).toContain("resolveDateGroupAnchor(previousKey, previousKeys, nextKeys, shouldReset)");
+  });
+
+  it("animates explicit tab reselects while keeping ordinary data restores immediate", () => {
+    const carousel = read("components/DateGroupCarousel/DateGroupCarousel.tsx");
+    const pagingHook = read("hooks/useDateGroupVerticalSnap.ts");
+
+    expect(carousel).toContain("if (shouldReset)");
+    expect(carousel).toContain("nativeScrollRef.current?.scrollTo({ x: nextIndex * snapInterval, animated: true })");
+    expect(carousel).toContain("nativeScrollRef.current?.scrollTo({ x: nextIndex * snapInterval, animated: false })");
+    expect(pagingHook).toContain("pendingRestoreAnimatedRef");
+    expect(pagingHook).toContain("animated: shouldAnimate");
   });
 });
 
