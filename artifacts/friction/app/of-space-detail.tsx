@@ -1588,18 +1588,10 @@ export default function SpaceDetailScreen() {
 
             {(!space.isAnonymous || isOperator) && space.creatorNickname ? (
               !space.isAnonymous ? (
-                <Pressable
-                  style={styles.metaIconRow}
-                  onPress={() => handleNavigateToAuthor(space.creatorId)}
-                  hitSlop={6}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${space.creatorNickname} 프로필 보기`}
-                  testID="space-creator-profile"
-                >
+                <View style={styles.metaIconRow}>
                   <Feather name="user-check" size={12} color={Colors.zinc400} />
                   <Text style={styles.metaIconRowText}>{space.creatorNickname}</Text>
-                  <Feather name="chevron-right" size={12} color={Colors.zinc400} />
-                </Pressable>
+                </View>
               ) : (
                 <View style={styles.metaIconRow}>
                   <Feather name="user-check" size={12} color={Colors.zinc400} />

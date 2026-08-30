@@ -634,14 +634,15 @@ describe("selectable article card projection contract", () => {
     expect(slot).toContain('overflow: "hidden"');
   });
 
-  it("keeps selectable three-column and space cards on the canonical layout path", () => {
+  it("keeps the space creator metadata on the canonical layout path", () => {
     const myTab = read("app/(tabs)/to.tsx");
     const profile = read("app/user-profile/[userId].tsx");
     const space = read("app/of-space-detail.tsx");
 
-    expect(space).toContain("onPress={() => handleNavigateToAuthor(space.creatorId)}");
-    expect(space).toContain('testID="space-creator-profile"');
-    expect(space).toContain('name="chevron-right" size={12} color={Colors.zinc400}');
+    expect(space).toContain("<View style={styles.metaIconRow}>");
+    expect(space).not.toContain("onPress={() => handleNavigateToAuthor(space.creatorId)}");
+    expect(space).not.toContain('testID="space-creator-profile"');
+    expect(space).not.toContain('name="chevron-right" size={12} color={Colors.zinc400}');
     expect(space).toContain("!space.isAnonymous ?");
     expect(space).toContain("익명 공간장");
   });
@@ -681,12 +682,13 @@ describe("selectable article card projection contract", () => {
     expect(space).not.toContain("collectionId: id");
   });
 
-  it("makes the non-anonymous space creator row open the creator profile", () => {
+  it("renders the non-anonymous space creator row as static metadata", () => {
     const space = read("app/of-space-detail.tsx");
 
-    expect(space).toContain("onPress={() => handleNavigateToAuthor(space.creatorId)}");
-    expect(space).toContain('testID="space-creator-profile"');
-    expect(space).toContain('name="chevron-right" size={12} color={Colors.zinc400}');
+    expect(space).toContain("<View style={styles.metaIconRow}>");
+    expect(space).not.toContain("onPress={() => handleNavigateToAuthor(space.creatorId)}");
+    expect(space).not.toContain('testID="space-creator-profile"');
+    expect(space).not.toContain('name="chevron-right" size={12} color={Colors.zinc400}');
     expect(space).toContain("!space.isAnonymous ?");
     expect(space).toContain("익명 공간장");
   });
