@@ -814,8 +814,10 @@ const styles = StyleSheet.create({
   recordListViewport: { flex: 1 },
   recordCardFrame: { flex: 1, alignItems: "center" },
   recordCardActionArea: { height: CARD_ACTION_AREA_H, alignItems: "center", justifyContent: "center" },
-  thoughtCard: { flexGrow: 0, flexShrink: 0, borderRadius: 16, ...Shadows.carouselCard },
-  thoughtCardContent: { flex: 1, backgroundColor: Colors.zinc50, borderRadius: 16 },
+  // Keep the press wrapper transparent: only the animated content surface
+  // should own the card geometry and shadow, so the shadow scales with it.
+  thoughtCard: { flexGrow: 0, flexShrink: 0 },
+  thoughtCardContent: { flex: 1, backgroundColor: Colors.zinc50, borderRadius: 16, ...Shadows.carouselCard },
   questionCardContent: { backgroundColor: Colors.noticeAccent },
   thoughtCardBodyWrap: { flex: 1, justifyContent: "flex-start" },
   thoughtCardTitle: { fontFamily: ReaderTokens.fontFamily.serifBold, color: Colors.zinc900 },
