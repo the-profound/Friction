@@ -65,8 +65,8 @@ function htmlToMarkdown(html: string): string {
       /!\[[^\]]*]\(([^)\s]+)\)/g,
       (full, src: string) => isPersistableInlineImageUrl(src) ? full : "",
     );
-  } catch {
-    return "";
+  } catch (error) {
+    throw new Error("Failed to convert editor HTML to Markdown", { cause: error });
   }
 }
 
@@ -129,6 +129,7 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
   ) {
     const changeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const onExportMarkdownRef = useRef(onExportMarkdown);
+    const editorSessionIdRef = useRef(`editor_web_${Date.now()}_${Math.random().toString(36).slice(2)}`);
     const titleRef = useRef<HTMLTextAreaElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const [fontsReady, setFontsReady] = useState(false);
@@ -151,15 +152,28 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
           const text = ed.state.doc.textContent;
           const charCount = text.length;
           const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
-          const payload: OnChangePayload = { isDirty: true, charCount, wordCount };
-          onChange?.(payload);
+          try {
+            const payload: OnChangePayload = {
+              isDirty: true,
+              charCount,
+              wordCount,
+              markdown: htmlToMarkdown(ed.getHTML()),
+              editorSessionId: editorSessionIdRef.current,
+            };
+            onChange?.(payload);
+          } catch (error) {
+            onError?.({
+              code: "MARKDOWN_EXPORT_FAIL",
+              message: error instanceof Error ? error.message : String(error),
+            });
+          }
         }, CHANGE_THROTTLE_MS);
       },
       onCreate: () => {
         waitForWebBodyFonts().then((status) => {
           fontStatusRef.current = status;
           setFontsReady(true);
-          onReady?.();
+          onReady?.(editorSessionIdRef.current);
         });
       },
     });
@@ -200,9 +214,21 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
           try {
             const html = editor.getHTML();
             const markdown = htmlToMarkdown(html);
-            onExportMarkdownRef.current?.({ requestId, markdown, isDirty: false });
+            onExportMarkdownRef.current?.({
+              requestId,
+              markdown,
+              isDirty: false,
+              editorSessionId: editorSessionIdRef.current,
+            });
           } catch (e: unknown) {
-            onError?.({ code: "MARKDOWN_CONVERT_FAIL", message: e instanceof Error ? e.message : String(e) });
+            const message = e instanceof Error ? e.message : String(e);
+            onExportMarkdownRef.current?.({
+              requestId,
+              isDirty: true,
+              editorSessionId: editorSessionIdRef.current,
+              error: { code: "MARKDOWN_EXPORT_FAIL", message },
+            });
+            onError?.({ code: "MARKDOWN_EXPORT_FAIL", message });
           }
         }
       },

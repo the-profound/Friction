@@ -14,6 +14,8 @@ interface PendingPayload {
 interface UseAutoSaveOptions {
   debounceMs?: number;
   maxRetries?: number;
+  saveTimeoutMs?: number;
+  storageTimeoutMs?: number;
   storageKey?: string;
   creationId?: string;
   onSave: (data: { title: string; content: string }) => Promise<void>;
@@ -33,6 +35,23 @@ async function persistQueue(key: string, data: PendingPayload | null): Promise<v
   }
 }
 
+function rejectAfter<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  if (timeoutMs <= 0) return promise;
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 async function loadQueue(key: string): Promise<PendingPayload | null> {
   try {
     const raw = await AsyncStorage.getItem(key);
@@ -45,6 +64,8 @@ async function loadQueue(key: string): Promise<PendingPayload | null> {
 export function useAutoSave({
   debounceMs = 1200,
   maxRetries = 3,
+  saveTimeoutMs = 10_000,
+  storageTimeoutMs = 3_000,
   storageKey,
   creationId,
   onSave,
@@ -103,8 +124,11 @@ export function useAutoSave({
       const queued = data ? { ...data, aliasQueueKeys: keys } : null;
       await Promise.all(keys.map((key) => persistQueue(key, queued)));
     });
-    return queueWriteRef.current;
-  }, []);
+    // The caller gets a finite result, but the physical write remains in the
+    // serialized chain until it truly settles. A timed-out native write must
+    // never be overtaken by a newer set/remove operation.
+    return rejectAfter(queueWriteRef.current, storageTimeoutMs, "autosave queue write");
+  }, [storageTimeoutMs]);
 
   const bindEntity = useCallback(async (entityId: string, nextStorageKey: string) => {
     const nextQueueKey = `autosave_queue_${nextStorageKey}`;
@@ -146,12 +170,22 @@ export function useAutoSave({
 
     const run = async () => {
       let saved = false;
+      let watchdog: ReturnType<typeof setTimeout> | null = null;
       try {
         // A create idempotency key is useful only if it survives a process
         // death before the POST response. Never issue a server write until all
         // queue writes scheduled for this snapshot have completed durably.
-        await queueWriteRef.current;
-        await onSaveRef.current(data);
+        await rejectAfter(queueWriteRef.current, storageTimeoutMs, "autosave queue barrier");
+        const networkSave = onSaveRef.current(data);
+        watchdog = setTimeout(() => {
+          // Do not abandon the physical request or start a newer one. The
+          // request may still reach the server, and allowing an overlapping
+          // retry could let the older payload arrive last and overwrite it.
+          if (activeSaveRef.current === p && isDirtyRef.current) {
+            setStatus("error");
+          }
+        }, saveTimeoutMs);
+        await networkSave;
         saved = true;
         if (id >= latestCompletedRef.current) {
           latestCompletedRef.current = id;
@@ -185,7 +219,7 @@ export function useAutoSave({
 
           // New input can arrive while this request is failing. Persist and
           // retry the newest payload, never the stale save-start snapshot.
-          writeQueue({ ...latestDataRef.current });
+          void writeQueue({ ...latestDataRef.current }).catch(() => undefined);
           retryCountRef.current++;
           if (retryCountRef.current <= maxRetries) {
             const delay = Math.min(1000 * Math.pow(2, retryCountRef.current - 1), 10000);
@@ -199,6 +233,7 @@ export function useAutoSave({
           setStatus("error");
         }
       } finally {
+        if (watchdog) clearTimeout(watchdog);
         savingRef.current = false;
         if (activeSaveRef.current === p) activeSaveRef.current = null;
         // A change received during an in-flight save may already have spent
@@ -217,13 +252,18 @@ export function useAutoSave({
     const p = run();
     activeSaveRef.current = p;
     await p;
-  }, [clearRetryTimer, maxRetries, writeQueue]);
+  }, [clearRetryTimer, maxRetries, saveTimeoutMs, storageTimeoutMs, writeQueue]);
 
   useEffect(() => {
     if (!queueKey) return;
     let cancelled = false;
+    const restoreStartEpoch = dirtyEpochRef.current;
     loadQueue(queueKey).then((queued) => {
       if (cancelled || !queued) return;
+      // A local edit made while AsyncStorage was reading is newer than the
+      // queued snapshot. Never replace visible text or latestData with the
+      // delayed restore; markDirty has already queued the fresh snapshot.
+      if (dirtyEpochRef.current !== restoreStartEpoch || isDirtyRef.current) return;
       for (const alias of queued.aliasQueueKeys ?? []) {
         if (alias.startsWith("autosave_queue_")) queueKeysRef.current.add(alias);
       }
@@ -243,7 +283,9 @@ export function useAutoSave({
       // retrying it, so a remount cannot show a blank/server-old document while
       // silently saving different queued content.
       onRestoreRef.current?.(restored);
-      writeQueue({ ...restored });
+      void writeQueue({ ...restored }).catch(() => {
+        if (!cancelled) setStatus("error");
+      });
       doSave();
     });
     return () => { cancelled = true; };
@@ -258,7 +300,9 @@ export function useAutoSave({
       dirtyEpochRef.current++;
       isDirtyRef.current = true;
       setIsDirty(true);
-      writeQueue({ ...latestDataRef.current });
+      void writeQueue({ ...latestDataRef.current }).catch(() => {
+        setStatus("error");
+      });
 
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = setTimeout(() => {
@@ -283,7 +327,9 @@ export function useAutoSave({
       dirtyEpochRef.current++;
       isDirtyRef.current = true;
       setIsDirty(true);
-      writeQueue({ ...latestDataRef.current });
+      void writeQueue({ ...latestDataRef.current }).catch(() => {
+        setStatus("error");
+      });
 
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = setTimeout(() => {
@@ -307,7 +353,12 @@ export function useAutoSave({
     // even though the data was persisted — causing a spurious "저장 실패" alert.
     const hadInFlight = !!activeSaveRef.current;
     if (activeSaveRef.current) {
-      await activeSaveRef.current;
+      try {
+        await rejectAfter(activeSaveRef.current, saveTimeoutMs, "active autosave request");
+      } catch {
+        setStatus("error");
+        return { ok: false };
+      }
     }
 
     // The in-flight request may have scheduled a retry while flush() was
@@ -358,15 +409,40 @@ export function useAutoSave({
     }
 
     return { ok: false };
-  }, [clearRetryTimer, status, doSave]);
+  }, [clearRetryTimer, status, doSave, saveTimeoutMs]);
 
   const retry = useCallback(async () => {
     if (status !== "error") return;
     clearRetryTimer();
+    if (activeSaveRef.current) {
+      try {
+        await rejectAfter(activeSaveRef.current, saveTimeoutMs, "active autosave retry");
+      } catch {
+        setStatus("error");
+      }
+      return;
+    }
     retryCountRef.current = 0;
     savingRef.current = false;
     await doSave();
-  }, [clearRetryTimer, status, doSave]);
+  }, [clearRetryTimer, status, doSave, saveTimeoutMs]);
+
+  const reportFailure = useCallback(async () => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    clearRetryTimer();
+    isDirtyRef.current = true;
+    setIsDirty(true);
+    setStatus("error");
+    try {
+      await writeQueue({ ...latestDataRef.current });
+    } catch {
+      // The status must still leave the editor retryable even if local storage
+      // itself is temporarily unavailable.
+    }
+  }, [clearRetryTimer, writeQueue]);
 
   const discard = useCallback(async () => {
     if (debounceTimerRef.current) {
@@ -403,5 +479,15 @@ export function useAutoSave({
     };
   }, [clearRetryTimer]);
 
-  return { status, isDirty, markDirty, markTitleDirty, flush, retry, discard, bindEntity };
+  return {
+    status,
+    isDirty,
+    markDirty,
+    markTitleDirty,
+    flush,
+    retry,
+    reportFailure,
+    discard,
+    bindEntity,
+  };
 }

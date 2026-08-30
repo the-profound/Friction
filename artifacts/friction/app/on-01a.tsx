@@ -120,6 +120,13 @@ function createThoughtClientId(): string {
 
 type EditorMode = "draft" | "dividing";
 
+interface PendingEditorExport {
+  editorSessionId: string;
+  resolve: (markdown: string) => void;
+  reject: (error: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+}
+
 /**
  * 작성·분할 통합 화면.
  *
@@ -243,7 +250,6 @@ export default function WritingScreen() {
   const [initialized, setInitialized] = useState(false);
   const [selectionState, setSelectionState] = useState<OnSelectionUpdatePayload>(DEFAULT_SELECTION);
   const [isNavigating, setIsNavigating] = useState(false);
-  const [isManualRetrying, setIsManualRetrying] = useState(false);
 
   // ── 서식 툴바 인라인 메뉴 시스템 (read.tsx 메모 모드와 동일 구조) ─────────
   const { height: screenHeight } = useWindowDimensions();
@@ -322,11 +328,12 @@ export default function WritingScreen() {
 
   // Map 기반 export 추적: 진행 중인 각 requestExportMarkdown 이 자체 슬롯을 가져
   // autosave export 와 getEditorContent() export 가 서로의 resolver 를 덮어쓰지 않는다.
-  const pendingExportsRef = useRef<Map<string, (md: string) => void>>(new Map());
+  const pendingExportsRef = useRef<Map<string, PendingEditorExport>>(new Map());
   const exportRequestSeqRef = useRef(0);
   const exportDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const exportPendingRef = useRef(false);
   const lastSeenDocVersionRef = useRef(-1);
+  const currentEditorSessionIdRef = useRef<string | undefined>(undefined);
   // setMarkdown() can produce a synthetic WebView onChange/onExport pair.
   // Mark server injections so their matching export is not mistaken for an
   // edit. This is intentionally cleared only for an exact match: a real edit
@@ -495,17 +502,45 @@ export default function WritingScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editorReady, initialized]);
 
-  const handleEditorReady = useCallback(() => {
+  const rejectPendingExports = useCallback((reason: string) => {
+    const error = new Error(reason);
+    const pending = Array.from(pendingExportsRef.current.values());
+    pendingExportsRef.current.clear();
+    for (const entry of pending) {
+      clearTimeout(entry.timer);
+      entry.reject(error);
+    }
+  }, []);
+
+  const handleEditorReload = useCallback((editorSessionId: string) => {
+    currentEditorSessionIdRef.current = editorSessionId;
+    editorReadyRef.current = false;
+    setEditorReady(false);
+    lastSeenDocVersionRef.current = -1;
+    rejectPendingExports("Editor reloaded before export completed");
+  }, [rejectPendingExports]);
+
+  const handleEditorReady = useCallback((editorSessionId?: string) => {
     // WebView 가 (재)로드될 때마다 WebView 쪽 docChangeCounter 는 0 으로 리셋된다.
     // lastSeenDocVersionRef 를 함께 리셋하지 않으면 이전 세션의 높은 버전 번호가
     // 남아 새 export 응답이 stale 로 판정·폐기되고 contentRef 가 갱신되지 않는다.
+    if (
+      editorSessionId
+      && currentEditorSessionIdRef.current
+      && editorSessionId !== currentEditorSessionIdRef.current
+    ) {
+      return;
+    }
+    if (editorSessionId) currentEditorSessionIdRef.current = editorSessionId;
     lastSeenDocVersionRef.current = -1;
     editorReadyRef.current = true;
     setEditorReady(true);
     console.log("[handleEditorReady] editorReady=true, lastSeenDocVersion reset to -1, initializedRef=", initializedRef.current);
     if (initializedRef.current) {
       serverInjectionPendingRef.current = true;
-      editorRef.current?.setMarkdown(articleContentRef.current);
+      // A reload must hydrate from the newest snapshot acknowledged by RN,
+      // not from the older server snapshot that originally opened the screen.
+      editorRef.current?.setMarkdown(contentRef.current || articleContentRef.current);
       editorRef.current?.setTitle(titleRef.current);
     }
     if (shouldFocusInitialH1Ref.current) {
@@ -515,19 +550,11 @@ export default function WritingScreen() {
   }, []);
 
   const getEditorContent = useCallback((): Promise<string> => {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const doExport = () => {
-        // serverContentRef 는 마지막으로 서버에서 받은 값. contentRef 가 비어있을 경우
-        // (초기 로드 직후 WebView 가 아직 export 를 한 번도 보내지 않은 타이밍 등)를 대비해
-        // 두 번째 폴백으로 사용한다.
-        const bestKnown = contentRef.current || serverContentRef.current;
-        if (!editorRef.current || !editorReadyRef.current) {
-          console.warn(
-            "[getEditorContent] fallback: editorRef=", !!editorRef.current,
-            "editorReadyRef=", editorReadyRef.current,
-            "bestKnown.len=", bestKnown.length,
-          );
-          resolve(bestKnown);
+        const editorSessionId = currentEditorSessionIdRef.current;
+        if (!editorRef.current || !editorReadyRef.current || !editorSessionId) {
+          reject(new Error("Editor is not ready to export the latest document"));
           return;
         }
         const requestId = nextExportRequestId("export");
@@ -536,20 +563,19 @@ export default function WritingScreen() {
           "lastSeenDocVersion=", lastSeenDocVersionRef.current,
           "contentRef.len=", contentRef.current.length,
         );
-        pendingExportsRef.current.set(requestId, resolve);
-        editorRef.current.requestExportMarkdown(requestId);
-        setTimeout(() => {
-          if (pendingExportsRef.current.has(requestId)) {
-            pendingExportsRef.current.delete(requestId);
-            const fallback = contentRef.current || serverContentRef.current;
-            console.warn(
-              "[getEditorContent] 2s timeout — fallback len=", fallback.length,
-              "contentRef.len=", contentRef.current.length,
-            );
-            // 타임아웃 시에도 동일한 이중 폴백 사용.
-            resolve(fallback);
-          }
+        const timer = setTimeout(() => {
+          const pending = pendingExportsRef.current.get(requestId);
+          if (!pending) return;
+          pendingExportsRef.current.delete(requestId);
+          pending.reject(new Error("Editor export timed out"));
         }, 2000);
+        pendingExportsRef.current.set(requestId, {
+          editorSessionId,
+          resolve,
+          reject,
+          timer,
+        });
+        editorRef.current.requestExportMarkdown(requestId);
       };
 
       // 에디터가 아직 준비되지 않은 경우 최대 5초까지 50ms 간격으로 폴링한 뒤 export한다.
@@ -574,36 +600,81 @@ export default function WritingScreen() {
     });
   }, [nextExportRequestId]);
 
-  const handleExportMarkdown = useCallback((payload: OnExportMarkdownPayload) => {
-    // stale 응답 폐기: 더 새로운 docVersion 응답을 이미 처리했다면 즉시 버린다.
+  const acceptEditorSnapshot = useCallback((payload: {
+    markdown: string;
+    docVersion?: number;
+    editorSessionId?: string;
+  }): string | null => {
+    const currentSessionId = currentEditorSessionIdRef.current;
+    if (
+      payload.editorSessionId
+      && currentSessionId
+      && payload.editorSessionId !== currentSessionId
+    ) {
+      return null;
+    }
     const incomingVer = payload.docVersion ?? 0;
-    const hasPendingCb = pendingExportsRef.current.has(payload.requestId);
-    console.log(
-      "[handleExportMarkdown] reqId=", payload.requestId,
-      "incomingVer=", incomingVer,
-      "lastSeenVer=", lastSeenDocVersionRef.current,
-      "md.len=", payload.markdown.length,
-      "hasPendingCb=", hasPendingCb,
-    );
     if (incomingVer < lastSeenDocVersionRef.current) {
-      console.warn("[handleExportMarkdown] DISCARDED (stale version)");
-      return;
+      return null;
     }
     lastSeenDocVersionRef.current = incomingVer;
     const persistableMarkdown = removeUnpersistableInlineImages(payload.markdown);
     contentRef.current = persistableMarkdown;
-    // 분할 모드에서는 모든 편집 이후 페이지/측정이 즉시 재계산돼야 하므로
-    // content·debouncedContent 를 함께 갱신한다.
     if (modeRef.current === "dividing") {
       setContent(persistableMarkdown);
       setDebouncedContent(persistableMarkdown);
     }
-    const cb = pendingExportsRef.current.get(payload.requestId);
-    if (cb) {
-      pendingExportsRef.current.delete(payload.requestId);
-      cb(persistableMarkdown);
-    }
+    return persistableMarkdown;
   }, []);
+
+  const handleExportMarkdown = useCallback((payload: OnExportMarkdownPayload) => {
+    // stale 응답 폐기: 더 새로운 docVersion 응답을 이미 처리했다면 즉시 버린다.
+    const incomingVer = payload.docVersion ?? 0;
+    const pending = pendingExportsRef.current.get(payload.requestId);
+    console.log(
+      "[handleExportMarkdown] reqId=", payload.requestId,
+      "incomingVer=", incomingVer,
+      "lastSeenVer=", lastSeenDocVersionRef.current,
+      "md.len=", payload.markdown?.length ?? 0,
+      "hasPendingCb=", !!pending,
+    );
+    if (
+      pending
+      && payload.editorSessionId
+      && payload.editorSessionId !== pending.editorSessionId
+    ) {
+      pendingExportsRef.current.delete(payload.requestId);
+      clearTimeout(pending.timer);
+      pending.reject(new Error("Editor export belongs to a stale reload session"));
+      return;
+    }
+    if (payload.error || payload.markdown === undefined) {
+      if (pending) {
+        pendingExportsRef.current.delete(payload.requestId);
+        clearTimeout(pending.timer);
+        pending.reject(new Error(payload.error?.message || "Editor export failed"));
+      }
+      return;
+    }
+    const persistableMarkdown = acceptEditorSnapshot({
+      markdown: payload.markdown,
+      docVersion: payload.docVersion,
+      editorSessionId: payload.editorSessionId,
+    });
+    if (persistableMarkdown == null) {
+      if (pending) {
+        pendingExportsRef.current.delete(payload.requestId);
+        clearTimeout(pending.timer);
+        pending.reject(new Error("Editor export response was stale"));
+      }
+      return;
+    }
+    if (pending) {
+      pendingExportsRef.current.delete(payload.requestId);
+      clearTimeout(pending.timer);
+      pending.resolve(persistableMarkdown);
+    }
+  }, [acceptEditorSnapshot]);
 
   const handleSave = useCallback(
     async (data: { title: string; content: string }) => {
@@ -754,11 +825,10 @@ export default function WritingScreen() {
   }, [isLocalDirectDraft, router]);
 
   const {
-    status: autoSaveStatus,
-    isDirty: autoSaveDirty,
     markDirty,
     markTitleDirty,
     flush,
+    reportFailure: reportAutosaveFailure,
     discard: discardAutosave,
     bindEntity: bindAutosaveEntity,
   } = useAutoSave({
@@ -788,6 +858,29 @@ export default function WritingScreen() {
     [discardAutosave, markDirty],
   );
 
+  const handleEditorError = useCallback(
+    (error: { code: string; message: string }) => {
+      if (
+        error.code !== "MARKDOWN_EXPORT_FAIL"
+        && error.code !== "WEBVIEW_LOAD_FAIL"
+      ) {
+        return;
+      }
+      // Keep the last confirmed snapshot recoverable, but never leave a prior
+      // "saved" state visible when the editor could not export newer input.
+      markDirty(
+        isThoughtModeRef.current ? "" : titleRef.current,
+        contentRef.current || serverContentRef.current,
+      );
+      void reportAutosaveFailure();
+      showToast({
+        message: "최신 내용을 저장하지 못했습니다. 잠시 후 다시 시도해주세요.",
+        type: "error",
+      });
+    },
+    [markDirty, reportAutosaveFailure, showToast],
+  );
+
   const handleEditorChange = useCallback(
     (_payload: OnChangePayload) => {
       if (_payload.charCount !== undefined) {
@@ -795,11 +888,37 @@ export default function WritingScreen() {
       }
       if (!_payload.isDirty) return;
 
+      if (_payload.markdown !== undefined) {
+        const markdown = acceptEditorSnapshot({
+          markdown: _payload.markdown,
+          docVersion: _payload.docVersion,
+          editorSessionId: _payload.editorSessionId,
+        });
+        if (markdown != null) handleAutosaveExport(markdown);
+        return;
+      }
+
       if (modeRef.current === "dividing") {
         // 분할 모드: 즉시 export 하여 페이지 재계산·측정을 트리거한다.
         if (!editorRef.current) return;
         const requestId = nextExportRequestId("autosave");
-        pendingExportsRef.current.set(requestId, handleAutosaveExport);
+        const editorSessionId = currentEditorSessionIdRef.current;
+        if (!editorSessionId) return;
+        const timer = setTimeout(() => {
+          const pending = pendingExportsRef.current.get(requestId);
+          if (!pending) return;
+          pendingExportsRef.current.delete(requestId);
+          pending.reject(new Error("Autosave export timed out"));
+        }, 2000);
+        pendingExportsRef.current.set(requestId, {
+          editorSessionId,
+          resolve: handleAutosaveExport,
+          reject: () => {
+            markDirty(titleRef.current, contentRef.current);
+            void reportAutosaveFailure();
+          },
+          timer,
+        });
         editorRef.current.requestExportMarkdown(requestId);
         return;
       }
@@ -814,14 +933,42 @@ export default function WritingScreen() {
         exportPendingRef.current = false;
         if (!editorRef.current) return;
         const requestId = nextExportRequestId("autosave");
-        pendingExportsRef.current.set(requestId, handleAutosaveExport);
+        const editorSessionId = currentEditorSessionIdRef.current;
+        if (!editorSessionId) return;
+        const timer = setTimeout(() => {
+          const pending = pendingExportsRef.current.get(requestId);
+          if (!pending) return;
+          pendingExportsRef.current.delete(requestId);
+          pending.reject(new Error("Autosave export timed out"));
+        }, 2000);
+        pendingExportsRef.current.set(requestId, {
+          editorSessionId,
+          resolve: handleAutosaveExport,
+          reject: () => {
+            markDirty(titleRef.current, contentRef.current);
+            void reportAutosaveFailure();
+          },
+          timer,
+        });
         editorRef.current.requestExportMarkdown(requestId);
       }, EXPORT_DEBOUNCE_MS);
     },
-    [handleAutosaveExport, nextExportRequestId],
+    [
+      acceptEditorSnapshot,
+      handleAutosaveExport,
+      markDirty,
+      nextExportRequestId,
+      reportAutosaveFailure,
+    ],
   );
 
   const latestFlushTailRef = useRef<Promise<void>>(Promise.resolve());
+
+  useEffect(() => {
+    return () => {
+      rejectPendingExports("Writing screen unmounted before export completed");
+    };
+  }, [rejectPendingExports]);
 
   const flushLatestEditorSnapshot = useCallback(() => {
     const run = async () => {
@@ -831,7 +978,19 @@ export default function WritingScreen() {
       }
       exportPendingRef.current = false;
 
-      const latest = await getEditorContent();
+      let latest: string;
+      try {
+        latest = await getEditorContent();
+      } catch {
+        const confirmedSnapshot = contentRef.current || serverContentRef.current;
+        markDirty(isThoughtModeRef.current ? "" : titleRef.current, confirmedSnapshot);
+        await reportAutosaveFailure();
+        return {
+          ok: false,
+          content: confirmedSnapshot,
+          meaningful: isMeaningfulThoughtMarkdown(confirmedSnapshot),
+        };
+      }
       const meaningful = !isThoughtModeRef.current || isMeaningfulThoughtMarkdown(latest);
       if (!meaningful) {
         await discardAutosave();
@@ -852,20 +1011,7 @@ export default function WritingScreen() {
       () => undefined,
     );
     return task;
-  }, [discardAutosave, flush, getEditorContent, markDirty]);
-
-  const handleRetryAutosave = useCallback(async () => {
-    if (isManualRetrying) return;
-    setIsManualRetrying(true);
-    try {
-      const result = await flushLatestEditorSnapshot();
-      if (!result.ok) {
-        showToast({ message: "저장에 실패했습니다. 내용을 유지하고 있어요.", type: "error" });
-      }
-    } finally {
-      setIsManualRetrying(false);
-    }
-  }, [flushLatestEditorSnapshot, isManualRetrying, showToast]);
+  }, [discardAutosave, flush, getEditorContent, markDirty, reportAutosaveFailure]);
 
   const handleTitleChange = useCallback(
     (text: string) => {
@@ -1176,7 +1322,16 @@ export default function WritingScreen() {
     // 루프가 완전히 settle 될 때까지 한 틱 기다린다.
     await new Promise<void>((r) => setTimeout(r, 50));
 
-    const cur = await getEditorContent();
+    let cur: string;
+    try {
+      cur = await getEditorContent();
+    } catch {
+      await reportAutosaveFailure();
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
+      showToast({ message: "최신 내용을 확인하지 못했습니다. 다시 시도해주세요.", type: "error" });
+      return;
+    }
     console.log(
       "[enterDividingMode] content acquired len=%d preview=%j",
       cur.length,
@@ -1271,7 +1426,7 @@ export default function WritingScreen() {
     navigateAfterRemovingGuard(() => {
       router.replace({ pathname: "/on-01a", params: { id: promoted.id, mode: "dividing" } });
     });
-  }, [getEditorContent, markDirty, flush, queryClient, promoteThought, showToast, setModeBoth, router, releaseDirectThoughtDraft, navigateAfterRemovingGuard]);
+  }, [getEditorContent, markDirty, flush, queryClient, promoteThought, showToast, setModeBoth, router, releaseDirectThoughtDraft, navigateAfterRemovingGuard, reportAutosaveFailure]);
 
   // ── 분할 → 마감 (on-01c 이동) ──────────────────────────────────────────────
   const handleNextToClosing = useCallback(async () => {
@@ -1282,7 +1437,15 @@ export default function WritingScreen() {
     editorRef.current?.blur();
     Keyboard.dismiss();
 
-    const cur = await getEditorContent();
+    let cur: string;
+    try {
+      cur = await getEditorContent();
+    } catch {
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
+      showToast({ message: "최신 내용을 확인하지 못했습니다. 다시 시도해주세요.", type: "error" });
+      return;
+    }
     console.log(
       "[handleNextToClosing] content len=%d preview=%j",
       cur.length,
@@ -1430,6 +1593,12 @@ export default function WritingScreen() {
     const thoughtFlush = isThoughtModeRef.current
       ? await flushLatestEditorSnapshot()
       : null;
+    if (thoughtFlush && !thoughtFlush.ok) {
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
+      showToast({ message: "최신 내용을 확인하지 못했습니다. 다시 저장해주세요.", type: "error" });
+      return;
+    }
     if (!isThoughtModeRef.current) {
       if (exportDebounceTimerRef.current) {
         clearTimeout(exportDebounceTimerRef.current);
@@ -1437,7 +1606,15 @@ export default function WritingScreen() {
       }
       exportPendingRef.current = false;
     }
-    const cur = thoughtFlush?.content ?? await getEditorContent();
+    let cur: string;
+    try {
+      cur = thoughtFlush?.content ?? await getEditorContent();
+    } catch {
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
+      showToast({ message: "최신 내용을 확인하지 못했습니다. 다시 시도해주세요.", type: "error" });
+      return;
+    }
     console.log(
       "[handleDraftBack] content acquired len=%d preview=%j",
       cur.length,
@@ -2176,9 +2353,11 @@ export default function WritingScreen() {
                 placeholder="떠오르는 생각을 자유롭게 적어보세요..."
                 ensureTrailingParagraph={!isLocalDirectDraft}
                 editable
+                onReload={handleEditorReload}
                 onReady={handleEditorReady}
                 onChange={handleEditorChange}
                 onExportMarkdown={handleExportMarkdown}
+                onError={handleEditorError}
                 onTitleChange={isThoughtMode && !isDividing ? undefined : handleTitleChange}
                 onKeyboardVisibilityChange={handleKeyboardVisibilityChange}
                 onSelectionUpdate={handleSelectionUpdate}
@@ -2195,55 +2374,7 @@ export default function WritingScreen() {
               />
             </View>
             <View style={styles.editorFooter}>
-              {isThoughtMode && !isDividing ? (
-                <View
-                  style={styles.autoSaveFeedback}
-                  accessibilityLiveRegion="polite"
-                  accessibilityLabel={
-                    autoSaveStatus === "error"
-                      ? "저장 실패. 다시 시도할 수 있습니다."
-                      : autoSaveStatus === "saving" || isManualRetrying
-                        ? "저장 중"
-                        : autoSaveDirty
-                          ? "저장 대기 중"
-                          : autoSaveStatus === "saved"
-                            ? "저장됨"
-                            : undefined
-                  }
-                >
-                  {autoSaveStatus === "saving" || isManualRetrying ? (
-                    <>
-                      <ActivityIndicator size="small" color={Colors.zinc500} />
-                      <Text style={styles.autoSaveStatusText}>저장 중…</Text>
-                    </>
-                  ) : autoSaveStatus === "error" ? (
-                    <>
-                      <Feather name="alert-circle" size={13} color="#b91c1c" />
-                      <Text style={styles.autoSaveErrorText}>저장 실패</Text>
-                      <ScalePressable
-                        style={styles.autoSaveRetryButton}
-                        contentStyle={styles.autoSaveRetryButtonContent}
-                        onPress={handleRetryAutosave}
-                        disabled={isManualRetrying}
-                        accessibilityRole="button"
-                        accessibilityLabel="단상 저장 다시 시도"
-                        accessibilityState={{ disabled: isManualRetrying, busy: isManualRetrying }}
-                      >
-                        <Text style={styles.autoSaveRetryText}>다시 시도</Text>
-                      </ScalePressable>
-                    </>
-                  ) : autoSaveDirty ? (
-                    <Text style={styles.autoSaveStatusText}>저장 대기 중</Text>
-                  ) : autoSaveStatus === "saved" ? (
-                    <>
-                      <Feather name="check" size={13} color={Colors.zinc500} />
-                      <Text style={styles.autoSaveStatusText}>저장됨</Text>
-                    </>
-                  ) : null}
-                </View>
-              ) : (
-                <View style={styles.autoSaveFeedback} />
-              )}
+              <View style={styles.autoSaveFeedback} />
               <Text style={styles.charCountText}>{charCount}자</Text>
             </View>
           </View>
@@ -2604,37 +2735,6 @@ const styles = StyleSheet.create({
     gap: 5,
     flexGrow: 0,
     flexShrink: 1,
-  },
-  autoSaveStatusText: {
-    ...Typography.caption,
-    fontSize: 12,
-    color: Colors.zinc500,
-  },
-  autoSaveErrorText: {
-    ...Typography.captionMedium,
-    fontSize: 12,
-    color: "#b91c1c",
-  },
-  autoSaveRetryButton: {
-    width: 64,
-    height: 28,
-    flexGrow: 0,
-    flexShrink: 0,
-  },
-  autoSaveRetryButtonContent: {
-    width: "100%",
-    height: "100%",
-    flexGrow: 0,
-    flexShrink: 0,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 14,
-    backgroundColor: "#fef2f2",
-  },
-  autoSaveRetryText: {
-    ...Typography.captionMedium,
-    fontSize: 12,
-    color: "#b91c1c",
   },
   charCountText: {
     ...Typography.caption,

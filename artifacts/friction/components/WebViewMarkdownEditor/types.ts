@@ -4,6 +4,7 @@ import type { BodyTypographyMetrics } from "@/lib/bodyLayout";
 export interface EditorInitPayload {
   initialMarkdown: string;
   editorConfigVersion: string;
+  editorSessionId: string;
   placeholder?: string;
   titleValue?: string;
   /**
@@ -46,13 +47,18 @@ export interface OnChangePayload {
   isDirty: boolean;
   charCount?: number;
   wordCount?: number;
+  markdown?: string;
+  docVersion?: number;
+  editorSessionId?: string;
 }
 
 export interface OnExportMarkdownPayload {
   requestId: string;
-  markdown: string;
+  markdown?: string;
   isDirty: boolean;
   docVersion?: number;
+  editorSessionId?: string;
+  error?: OnErrorPayload;
 }
 
 export interface OnErrorPayload {
@@ -72,7 +78,7 @@ export interface OnSelectionUpdatePayload {
 export type WebViewToRNEvent =
   | { type: "onBodyFontsReady"; ok: boolean }
   | { type: "onBodyTypographyDiagnostic"; payload: import("@/lib/bodyTypographyDiagnostics").BodyTypographyDiagnostic }
-  | { type: "onReady" }
+  | { type: "onReady"; payload?: { editorSessionId?: string } }
   | { type: "onChange"; payload: OnChangePayload }
   | { type: "onExportMarkdown"; payload: OnExportMarkdownPayload }
   | { type: "onTitleChange"; payload: { title: string } }
@@ -123,7 +129,8 @@ export interface WebViewMarkdownEditorProps {
    */
   ensureTrailingParagraph?: boolean;
   editable?: boolean;
-  onReady?: () => void;
+  onReady?: (editorSessionId?: string) => void;
+  onReload?: (editorSessionId: string) => void;
   onChange?: (payload: OnChangePayload) => void;
   onExportMarkdown?: (payload: OnExportMarkdownPayload) => void;
   onTitleChange?: (title: string) => void;

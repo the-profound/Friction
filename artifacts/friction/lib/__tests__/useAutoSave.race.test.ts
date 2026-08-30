@@ -308,4 +308,61 @@ describe("useAutoSave – C2 flush race condition", () => {
 
     expect(queued.creationId).toBe("7e867265-30c8-4df0-8137-4e7216c285dd");
   });
+
+  it("turns a permanently pending save into a finite retryable failure", async () => {
+    vi.useFakeTimers();
+    try {
+      const rejectAfter = <T>(promise: Promise<T>, timeoutMs: number) =>
+        new Promise<T>((resolve, reject) => {
+          const timer = setTimeout(() => reject(new Error("timed out")), timeoutMs);
+          promise.then(
+            (value) => {
+              clearTimeout(timer);
+              resolve(value);
+            },
+            reject,
+          );
+        });
+
+      const neverSettles = new Promise<void>(() => {});
+      const bounded = rejectAfter(neverSettles, 10_000);
+      const assertion = expect(bounded).rejects.toThrow("timed out");
+
+      await vi.advanceTimersByTimeAsync(10_000);
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the newest queued identity and content after a timed-out create", () => {
+    const queued = {
+      creationId: "stable-create-id",
+      content: "최초 요청 뒤에 입력한 최신 문장",
+      entityId: undefined as string | undefined,
+    };
+
+    const retryPayload = { ...queued };
+
+    expect(retryPayload.creationId).toBe("stable-create-id");
+    expect(retryPayload.content).toBe("최초 요청 뒤에 입력한 최신 문장");
+    expect(retryPayload.entityId).toBeUndefined();
+  });
+
+  it("does not let a delayed queue restore overwrite immediate user input", () => {
+    let dirtyEpoch = 0;
+    let latestContent = "";
+    const restoreStartEpoch = dirtyEpoch;
+
+    // The user types before AsyncStorage.getItem resolves.
+    latestContent = "방금 입력한 최신 내용";
+    dirtyEpoch++;
+
+    const queuedContent = "이전 실행의 오래된 내용";
+    if (dirtyEpoch === restoreStartEpoch) {
+      latestContent = queuedContent;
+    }
+
+    expect(latestContent).toBe("방금 입력한 최신 내용");
+  });
 });

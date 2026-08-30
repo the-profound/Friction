@@ -35,6 +35,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       ensureTrailingParagraph = true,
       editable = true,
       onReady,
+      onReload,
       onChange,
       onExportMarkdown,
       onTitleChange,
@@ -57,6 +58,8 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
     const [scrollLocked, setScrollLocked] = useState(false);
     const autoSplitResolversRef = useRef<Array<(r: { hadConsecutiveImages: boolean }) => void>>([]);
     const bodyFontsReadyRef = useRef(false);
+    const loadSequenceRef = useRef(0);
+    const editorSessionIdRef = useRef("editor_native_0");
 
     const bridgeRef = useRef<WebViewBridge | null>(null);
     if (bridgeRef.current == null) {
@@ -162,6 +165,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
                 payload: {
                   initialMarkdown,
                   editorConfigVersion,
+                  editorSessionId: editorSessionIdRef.current,
                   placeholder,
                   titleValue,
                   ensureTrailingParagraph,
@@ -183,7 +187,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
                     `}catch(e){}})();true;`,
                 );
               }
-              onReady?.();
+              onReady?.(data.payload?.editorSessionId);
               break;
             case "onBodyTypographyDiagnostic":
               logBodyTypographyDiagnostic(
@@ -334,11 +338,19 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
           source={{ html }}
           style={styles.webView}
           onMessage={handleMessage}
+          onLoadStart={() => {
+            loadSequenceRef.current += 1;
+            editorSessionIdRef.current = `editor_native_${Date.now()}_${loadSequenceRef.current}`;
+            bodyFontsReadyRef.current = false;
+            bridge.reset("WebViewMarkdownEditor reload");
+            onReload?.(editorSessionIdRef.current);
+          }}
           onLoad={() => {
             // The HTML posts onBodyFontsReady after all embedded Eulyoo + Noto
             // faces decode (or after its bounded safe-fallback timeout).
           }}
-          onError={(e) => {
+          onError={(e: { nativeEvent: { description?: string } }) => {
+            bridge.reset("WebViewMarkdownEditor load failed");
             onError?.({ code: "WEBVIEW_LOAD_FAIL", message: e.nativeEvent.description || "WebView load failed" });
           }}
           originWhitelist={["*"]}

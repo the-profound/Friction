@@ -65,4 +65,5 @@
 - [Dev-seed sentinel safety](friction-dev-seed-sentinels.md) — deterministic sentinels must match the inserted row exactly and commit only with the complete seed transaction.
 - [Space creation retries and diagnostics](space-creation-retries-and-diagnostics.md) — parent/child creation must resume safely after response loss and log only privacy-safe metadata.
 - [Durable create idempotency](durable-create-idempotency.md) — persist the client create ID before POST; recovery aliases must clear together and empty-draft discard must retain identity.
+- [Autosave timeout ordering](autosave-timeout-ordering.md) — UI timeouts must not release physical save/storage serialization; delayed restores and export failures must never replace newer input.
 - [Space send recipient snapshots](space-send-recipient-snapshots.md) — freeze recipients before delivery; retries and repairs must never recalculate from mutable participation state.

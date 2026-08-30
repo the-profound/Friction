@@ -715,7 +715,7 @@ function markdownToHtml(md: string, ensureTrailingParagraph = true): string {
   }
 }
 
-function htmlToMarkdown(html: string): string {
+function htmlToMarkdown(html: string, onError?: (error: unknown) => void): string {
   try {
     const container = document.createElement("div");
     container.innerHTML = html || "";
@@ -824,7 +824,8 @@ function htmlToMarkdown(html: string): string {
       md += blockMd(child as HTMLElement, 0);
     }
     return md.replace(/\n{3,}/g, "\n\n").trimEnd();
-  } catch {
+  } catch (error) {
+    onError?.(error);
     return "";
   }
 }
@@ -854,6 +855,7 @@ interface InitPayload {
   titleValue?: string;
   placeholder?: string;
   editorConfigVersion?: string;
+  editorSessionId?: string;
   ensureTrailingParagraph?: boolean;
 }
 
@@ -1029,6 +1031,7 @@ function spellFindRange(
   let lastExportedMarkdown = "";
   let lastExportedDocVersion = -1;
   let docChangeCounter = 0;
+  let editorSessionId = "";
   // Tracks whether the next docChanged transaction is from a programmatic
   // setMarkdown/setContent call (not user input). When true, onUpdate skips
   // the onChange emission so the RN side doesn't start an autosave debounce
@@ -1404,11 +1407,39 @@ function spellFindRange(
           const text = ed.state.doc.textContent;
           const charCount = text.length;
           const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
+          let conversionFailed = false;
+          let conversionError: unknown;
+          const markdown = htmlToMarkdown(ed.getHTML(), (error) => {
+            conversionFailed = true;
+            conversionError = error;
+          });
+          if (conversionFailed) {
+            postToRN({
+              type: "onError",
+              payload: {
+                code: "MARKDOWN_EXPORT_FAIL",
+                message: String(conversionError),
+              },
+            });
+            return;
+          }
+          lastExportedMarkdown = markdown;
+          lastExportedDocVersion = docChangeCounter;
           // Korean IME composition and formatting changes can replace the
           // document while keeping both metrics identical. Every debounced
           // docChanged transaction must notify RN so the newest Markdown is
           // exported instead of leaving an older syllable/format unsaved.
-          postToRN({ type: "onChange", payload: { isDirty: true, charCount, wordCount } });
+          postToRN({
+            type: "onChange",
+            payload: {
+              isDirty: true,
+              charCount,
+              wordCount,
+              markdown,
+              docVersion: docChangeCounter,
+              editorSessionId,
+            },
+          });
         }, CHANGE_THROTTLE_MS);
         postSelectionState(ed);
         // doc 가 바뀌면 기존 decoration 은 매핑된 좌표가 stale 일 수 있으므로
@@ -1440,6 +1471,7 @@ function spellFindRange(
           const placeholder = payload.placeholder || "여기에 메모를 작성하세요...";
           const titleValue = payload.titleValue || "";
           const ensureTrailingParagraph = payload.ensureTrailingParagraph ?? true;
+          editorSessionId = payload.editorSessionId || "";
 
           if (titleInput) {
             titleInput.value = titleValue;
@@ -1461,7 +1493,7 @@ function spellFindRange(
           lastExportedMarkdown = "";
           lastExportedDocVersion = -1;
 
-          postToRN({ type: "onReady" });
+          postToRN({ type: "onReady", payload: { editorSessionId } });
           // 초기 콘텐츠 레이아웃이 안정된 뒤 한 번 강조를 측정한다.
           scheduleOverflowProbe(150);
           break;
@@ -1519,13 +1551,40 @@ function spellFindRange(
               markdown = lastExportedMarkdown;
             } else {
               const html = editor.getHTML();
-              markdown = htmlToMarkdown(html);
+              let conversionFailed = false;
+              let conversionError: unknown;
+              markdown = htmlToMarkdown(html, (error) => {
+                conversionFailed = true;
+                conversionError = error;
+              });
+              if (conversionFailed) {
+                postToRN({
+                  type: "onExportMarkdown",
+                  payload: {
+                    requestId: cmd.requestId,
+                    isDirty: true,
+                    docVersion: docChangeCounter,
+                    editorSessionId,
+                    error: {
+                      code: "MARKDOWN_EXPORT_FAIL",
+                      message: String(conversionError),
+                    },
+                  },
+                });
+                break;
+              }
               lastExportedMarkdown = markdown;
               lastExportedDocVersion = docChangeCounter;
             }
             postToRN({
               type: "onExportMarkdown",
-              payload: { requestId: cmd.requestId, markdown, isDirty: false, docVersion: docChangeCounter },
+              payload: {
+                requestId: cmd.requestId,
+                markdown,
+                isDirty: false,
+                docVersion: docChangeCounter,
+                editorSessionId,
+              },
             });
           }
           break;

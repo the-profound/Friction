@@ -95,7 +95,7 @@ html,body{height:100%;background:transparent;container-type:inline-size}
 body{padding:16px 0 0;overflow:auto;position:relative}
 `.trim();
 
-const VERSION = "3.22.0";
+const VERSION = "3.23.0";
 
 const tsContent = `import { buildWebViewPerfHeadScript } from "@/lib/webviewPerf";
 import { buildWebViewBridgeHeadScript } from "@/lib/webViewBridgeShim";

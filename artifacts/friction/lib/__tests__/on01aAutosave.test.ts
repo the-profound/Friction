@@ -15,6 +15,16 @@ const readEditorWeb = () =>
     join(appRoot, "components/WebViewMarkdownEditor/WebViewMarkdownEditorWeb.tsx"),
     "utf8",
   );
+const readEditorNative = () =>
+  readFileSync(
+    join(appRoot, "components/WebViewMarkdownEditor/WebViewMarkdownEditor.tsx"),
+    "utf8",
+  );
+const readEditorTypes = () =>
+  readFileSync(
+    join(appRoot, "components/WebViewMarkdownEditor/types.ts"),
+    "utf8",
+  );
 
 describe("on-01a editor hydration and initialization", () => {
   it("ignores only the export caused by unchanged server hydration", () => {
@@ -47,11 +57,50 @@ describe("on-01a latest-snapshot autosave boundary", () => {
     expect(screen).toContain('nextExportRequestId("autosave")');
   });
 
+  it("fails a lost export instead of saving an older fallback as current", () => {
+    const screen = readScreen();
+    const getEditorContent = screen.slice(
+      screen.indexOf("const getEditorContent"),
+      screen.indexOf("const acceptEditorSnapshot"),
+    );
+
+    expect(getEditorContent).toContain('pending.reject(new Error("Editor export timed out"))');
+    expect(getEditorContent).toContain('reject(new Error("Editor is not ready to export the latest document"))');
+    expect(getEditorContent).not.toContain("resolve(fallback)");
+    expect(getEditorContent).not.toContain("resolve(bestKnown)");
+  });
+
+  it("turns background Markdown conversion failures into retryable save errors", () => {
+    const screen = readScreen();
+
+    expect(screen).toContain("const handleEditorError = useCallback");
+    expect(screen).toContain('error.code !== "MARKDOWN_EXPORT_FAIL"');
+    expect(screen).toContain("contentRef.current || serverContentRef.current");
+    expect(screen).toContain("void reportAutosaveFailure();");
+    expect(screen).toContain("onError={handleEditorError}");
+  });
+
+  it("rejects exports from a previous WebView reload session", () => {
+    const screen = readScreen();
+    const nativeEditor = readEditorNative();
+    const types = readEditorTypes();
+
+    expect(types).toContain("editorSessionId?: string;");
+    expect(types).toContain("onReload?: (editorSessionId: string) => void;");
+    expect(nativeEditor).toContain("onLoadStart={() => {");
+    expect(nativeEditor).toContain('bridge.reset("WebViewMarkdownEditor reload")');
+    expect(nativeEditor).toContain("onReload?.(editorSessionIdRef.current);");
+    expect(screen).toContain("const handleEditorReload = useCallback");
+    expect(screen).toContain("rejectPendingExports(\"Editor reloaded before export completed\")");
+    expect(screen).toContain("payload.editorSessionId !== pending.editorSessionId");
+    expect(screen).toContain("onReload={handleEditorReload}");
+  });
+
   it("flushes the same latest editor snapshot on back, keyboard close, app background, and retry", () => {
     const screen = readScreen();
     const latestFlush = screen.slice(
       screen.indexOf("const flushLatestEditorSnapshot"),
-      screen.indexOf("const handleRetryAutosave"),
+      screen.indexOf("const handleTitleChange"),
     );
     const backHandler = screen.slice(
       screen.indexOf("const handleDraftBack"),
@@ -66,7 +115,7 @@ describe("on-01a latest-snapshot autosave boundary", () => {
       screen.indexOf("const handleInsertDivider"),
     );
 
-    expect(latestFlush).toContain("const latest = await getEditorContent();");
+    expect(latestFlush).toContain("latest = await getEditorContent();");
     expect(latestFlush).toContain("markDirty(isThoughtModeRef.current ? \"\" : titleRef.current, latest);");
     expect(latestFlush).toContain("const result = await flush();");
     expect(backHandler).toContain("await flushLatestEditorSnapshot()");
@@ -81,7 +130,7 @@ describe("on-01a latest-snapshot autosave boundary", () => {
     const screen = readScreen();
     const latestFlush = screen.slice(
       screen.indexOf("const flushLatestEditorSnapshot"),
-      screen.indexOf("const handleRetryAutosave"),
+      screen.indexOf("const handleTitleChange"),
     );
 
     expect(latestFlush).toContain("isMeaningfulThoughtMarkdown(latest)");
@@ -89,16 +138,20 @@ describe("on-01a latest-snapshot autosave boundary", () => {
     expect(latestFlush).toContain("meaningful: false");
   });
 
-  it("shows pending, saving, saved, and retryable error states in-screen", () => {
+  it("keeps autosave status content out of the editor footer", () => {
     const screen = readScreen();
+    const footer = screen.slice(
+      screen.indexOf('<View style={styles.editorFooter}>'),
+      screen.indexOf('<Text style={styles.charCountText}', screen.indexOf('<View style={styles.editorFooter}>')),
+    );
 
-    expect(screen).toContain("autoSaveStatus === \"error\"");
-    expect(screen).toContain("저장 대기 중");
-    expect(screen).toContain("저장 중…");
-    expect(screen).toContain("저장됨");
-    expect(screen).toContain("저장 실패");
-    expect(screen).toContain("onPress={handleRetryAutosave}");
-    expect(screen).toContain('accessibilityLabel="단상 저장 다시 시도"');
+    expect(footer).not.toContain("저장 대기 중");
+    expect(footer).not.toContain("저장 중…");
+    expect(footer).not.toContain("저장됨");
+    expect(footer).not.toContain("저장 실패");
+    expect(footer).not.toContain("단상 저장 다시 시도");
+    expect(footer).toContain('<View style={styles.autoSaveFeedback} />');
+    expect(screen).toContain("reportFailure: reportAutosaveFailure");
   });
 
   it("keeps each create/update request bound to one autosave snapshot", () => {
@@ -138,6 +191,23 @@ describe("useAutoSave pending-content preservation", () => {
     expect(screen).toContain("onRestore: handleAutosaveRestore");
   });
 
+  it("bounds storage and network waits and exposes bridge failures as retryable", () => {
+    const autoSave = readAutoSave();
+    const screen = readScreen();
+
+    expect(autoSave).toContain("saveTimeoutMs = 10_000");
+    expect(autoSave).toContain("storageTimeoutMs = 3_000");
+    expect(autoSave).toContain("const networkSave = onSaveRef.current(data);");
+    expect(autoSave).toContain("watchdog = setTimeout(() => {");
+    expect(autoSave).toContain('setStatus("error");');
+    expect(autoSave).toContain('"autosave queue write"');
+    expect(autoSave).toContain("the physical write remains in the");
+    expect(autoSave).toContain("const reportFailure = useCallback");
+    expect(autoSave).toContain('setStatus("error");');
+    expect(screen).toContain("reportFailure: reportAutosaveFailure");
+    expect(screen).toContain("await reportAutosaveFailure();");
+  });
+
   it("binds the first server id to both recovery keys before changing the route", () => {
     const autoSave = readAutoSave();
     const screen = readScreen();
@@ -171,9 +241,11 @@ describe("useAutoSave pending-content preservation", () => {
     expect(screen).toContain("creationId: thoughtCreationIdRef.current");
     expect(autoSave).toContain("creationId?: string;");
     expect(autoSave).toContain("const latestDataRef = useRef<PendingPayload>");
-    expect(autoSave).toContain("await queueWriteRef.current;");
-    expect(autoSave.indexOf("await queueWriteRef.current;")).toBeLessThan(
-      autoSave.indexOf("await onSaveRef.current(data);"),
+    expect(autoSave).toContain(
+      'await rejectAfter(queueWriteRef.current, storageTimeoutMs, "autosave queue barrier")',
+    );
+    expect(autoSave.indexOf("autosave queue barrier")).toBeLessThan(
+      autoSave.indexOf("const networkSave = onSaveRef.current(data)"),
     );
     expect(autoSave).toContain(
       "queued.creationId ?? queued.entityId ?? latestDataRef.current.creationId",
@@ -187,7 +259,9 @@ describe("useAutoSave pending-content preservation", () => {
       autoSave.indexOf("const retry = useCallback"),
     );
 
-    expect(flushBody).toContain("await activeSaveRef.current;");
+    expect(flushBody).toContain(
+      'await rejectAfter(activeSaveRef.current, saveTimeoutMs, "active autosave request")',
+    );
     expect(flushBody).toContain("clearRetryTimer();");
     expect(autoSave).not.toContain("savingRef.current = false;\n              doSave();");
   });
@@ -203,8 +277,10 @@ describe("useAutoSave pending-content preservation", () => {
     );
     expect(autoSave).toContain("creationId: stableCreationId");
     expect(autoSave).toContain(
-      "return { status, isDirty, markDirty, markTitleDirty, flush, retry, discard, bindEntity };",
+      "reportFailure,",
     );
+    expect(autoSave).toContain("discard,");
+    expect(autoSave).toContain("bindEntity,");
   });
 });
 
@@ -214,16 +290,22 @@ describe("WebView editor autosave signals", () => {
 
     expect(editorSource).toContain("Korean IME composition and formatting changes");
     expect(editorSource).not.toContain("charCount === lastEmittedCharCount");
-    expect(editorSource).toContain(
-      'postToRN({ type: "onChange", payload: { isDirty: true, charCount, wordCount } });',
-    );
+    expect(editorSource).toContain("const markdown = htmlToMarkdown(ed.getHTML(), (error) => {");
+    expect(editorSource).toContain("markdown,");
+    expect(editorSource).toContain("docVersion: docChangeCounter,");
+    expect(editorSource).toContain("editorSessionId,");
+    expect(editorSource).toContain('code: "MARKDOWN_EXPORT_FAIL"');
   });
 
-  it("keeps the web editor's debounced document-change signal", () => {
+  it("keeps the web editor's debounced document-change snapshot", () => {
     const editorWeb = readEditorWeb();
 
     expect(editorWeb).toContain("onUpdate: ({ editor: ed }) => {");
     expect(editorWeb).toContain("onChange?.(payload);");
+    expect(editorWeb).toContain("markdown: htmlToMarkdown(ed.getHTML())");
+    expect(editorWeb).toContain("editorSessionId: editorSessionIdRef.current");
+    expect(editorWeb).toContain('error: { code: "MARKDOWN_EXPORT_FAIL", message }');
+    expect(editorWeb).toContain('throw new Error("Failed to convert editor HTML to Markdown"');
     expect(editorWeb).not.toContain("lastEmittedCharCount");
   });
 });
