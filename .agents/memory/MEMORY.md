@@ -68,3 +68,4 @@
 - [Autosave timeout ordering](autosave-timeout-ordering.md) — UI timeouts must not release physical save/storage serialization; delayed restores and export failures must never replace newer input.
 - [Space send recipient snapshots](space-send-recipient-snapshots.md) — freeze recipients before delivery; retries and repairs must never recalculate from mutable participation state.
 - [Date carousel snap geometry](friction-date-carousel-snap-geometry.md) — vertical header snap offsets require deterministic group chrome, including a reserved dot row for one-card groups.
+- [Native virtualized special groups](friction-native-special-list-groups.md) — interactive first groups belong in FlatList data, not conditional headers, so native measurement and anchors stay stable.

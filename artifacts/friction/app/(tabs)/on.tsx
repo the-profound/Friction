@@ -56,8 +56,8 @@ import {
 } from "@/lib/queryInvalidation";
 import { computeBodyLayout } from "@/lib/bodyLayout";
 import {
+  buildRecordGroups,
   buildUnifiedRecords,
-  buildRecordDateGroups,
   filterRecords,
   getQueuedThoughtIds,
   getRecordCardBodyLineCount,
@@ -413,42 +413,24 @@ export default function OnScreen() {
     [kind, questionQuery.data?.current, records, view],
   );
   const cardGroups = useMemo(
-    () => buildRecordDateGroups(cardRecords),
-    [cardRecords],
+    () => buildRecordGroups(cardRecords, queuedQuestionRecords),
+    [cardRecords, queuedQuestionRecords],
   );
   const scrollPressGuard = useScrollPressGuard();
   const recordListRef = useRef<FlatList<RecordDateGroup<CardRecord>>>(null);
   const recordListViewportRef = useRef<View>(null);
   const cardGroupKeys = useMemo(
-    () => [
-      ...(queuedQuestionRecords.length > 0 ? ["__thought_question_queue__"] : []),
-      ...cardGroups.map((group) => group.dateKey),
-    ],
-    [cardGroups, queuedQuestionRecords.length],
+    () => cardGroups.map((group) => group.dateKey),
+    [cardGroups],
   );
   const cardGroupSignature = useMemo(
-    () => [
-      queuedQuestionRecords.map((record) => record.id).join(","),
-      ...cardGroups.map((group) => `${group.dateKey}:${group.records.map((record) => record.id).join(",")}`),
-    ].join("|"),
-    [cardGroups, queuedQuestionRecords],
+    () => cardGroups
+      .map((group) => `${group.dateKey}:${group.records.map((record) => record.id).join(",")}`)
+      .join("|"),
+    [cardGroups],
   );
   const estimatedRecordGroupHeights = useMemo(() => {
     const heights = new Map<string, number>();
-    if (queuedQuestionRecords.length > 0) {
-      heights.set(
-        "__thought_question_queue__",
-        getDateGroupCarouselHeight(
-          getRecordGroupCardHeight(queuedQuestionRecords, cardWidth),
-          0,
-          Sizing.dateHeaderH
-            + Sizing.carouselShadowInsetTop
-            + Sizing.carouselShadowInsetBottom
-            + Sizing.dotsH
-            + Spacing.carouselGroupBottom,
-        ),
-      );
-    }
     for (const group of cardGroups) {
       heights.set(
         group.dateKey,
@@ -464,7 +446,7 @@ export default function OnScreen() {
       );
     }
     return heights;
-  }, [cardGroups, cardWidth, queuedQuestionRecords]);
+  }, [cardGroups, cardWidth]);
   const verticalDateSnap = useDateGroupVerticalSnap({
     groupKeys: cardGroupKeys,
     groupSignature: cardGroupSignature,
@@ -704,7 +686,7 @@ export default function OnScreen() {
 
       {isLoading ? (
         <View style={styles.center}><Text style={styles.muted}>불러오는 중...</Text></View>
-      ) : view === "card" && (cardGroups.length > 0 || queuedQuestionRecords.length > 0) ? (
+      ) : view === "card" && cardGroups.length > 0 ? (
         <View
           ref={recordListViewportRef}
           style={styles.recordListViewport}
@@ -737,23 +719,6 @@ export default function OnScreen() {
                 </View>
               );
             }}
-            ListHeaderComponent={queuedQuestionRecords.length > 0 ? (
-              <View
-                ref={(node) => verticalDateSnap.setGroupRef("__thought_question_queue__", node)}
-                onLayout={(event) => verticalDateSnap.onGroupLayout("__thought_question_queue__", event)}
-              >
-                <DateGroupCarousel
-                  dateLabel="질문 대기열"
-                  countLabel={`${queuedQuestionRecords.length}개`}
-                  items={queuedQuestionRecords}
-                  itemKey={cardRecordKey}
-                  cardWidth={cardWidth}
-                  cardHeight={getRecordGroupCardHeight(queuedQuestionRecords, cardWidth)}
-                  renderCard={(record, context) => renderRecordCard(record, context.shouldIgnorePress, getRecordGroupCardHeight(queuedQuestionRecords, cardWidth))}
-                  shouldIgnoreVerticalPress={scrollPressGuard.shouldIgnoreVerticalPress}
-                />
-              </View>
-            ) : null}
             refreshControl={<RefreshControl refreshing={articlesQuery.isRefetching || thoughtsQuery.isRefetching || questionQuery.isRefetching || refreshQuestion.isPending} onRefresh={() => refreshAll(kind === "thought")} />}
             onScroll={handleRecordScroll}
             onScrollBeginDrag={verticalDateSnap.onScrollBeginDrag}

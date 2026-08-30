@@ -3,6 +3,7 @@ import {
   clampCarouselIndex,
   getCarouselNextIndex,
   getDateGroupCarouselHeight,
+  preserveCarouselIndex,
 } from "../dateGroupCarousel";
 import {
   findDateGroupAtOffset,
@@ -29,6 +30,15 @@ describe("shared date-group carousel geometry", () => {
   it("reserves stable header, shadow, action, dot, and group spacing", () => {
     expect(getDateGroupCarouselHeight(480, 0, 100)).toBe(580);
     expect(getDateGroupCarouselHeight(480, 56, 100)).toBe(636);
+  });
+
+  it("keeps the selected question through FIFO refreshes and falls back to the nearest slot", () => {
+    expect(preserveCarouselIndex("question-b", 1, ["question-b", "question-c", "question-d"]))
+      .toBe(0);
+    expect(preserveCarouselIndex("question-b", 1, ["question-c", "question-d"]))
+      .toBe(1);
+    expect(preserveCarouselIndex("question-c", 2, ["question-c"]))
+      .toBe(0);
   });
 });
 

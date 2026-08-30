@@ -13,7 +13,11 @@ import {
 } from "react-native";
 import DotIndicator from "@/components/DotIndicator/DotIndicator";
 import { Colors, Sizing, Spacing, Typography } from "@/constants/tokens";
-import { clampCarouselIndex, getCarouselNextIndex } from "@/lib/dateGroupCarousel";
+import {
+  clampCarouselIndex,
+  getCarouselNextIndex,
+  preserveCarouselIndex,
+} from "@/lib/dateGroupCarousel";
 
 export interface CarouselOriginLayout {
   x: number;
@@ -102,10 +106,11 @@ export function DateGroupCarousel<T>({
   useEffect(() => {
     // Keep the selected entity after data refreshes and edits; only a missing
     // entity falls back to the nearest valid slot.
-    const selectedIndex = activeItemKeyRef.current ? itemKeys.indexOf(activeItemKeyRef.current) : -1;
-    const nextIndex = selectedIndex >= 0
-      ? selectedIndex
-      : clampCarouselIndex(activeIndexRef.current, itemCount);
+    const nextIndex = preserveCarouselIndex(
+      activeItemKeyRef.current,
+      activeIndexRef.current,
+      itemKeys,
+    );
     activeIndexRef.current = nextIndex;
     activeItemKeyRef.current = itemKeys[nextIndex] ?? null;
     setActiveIndex((current) => current === nextIndex ? current : nextIndex);

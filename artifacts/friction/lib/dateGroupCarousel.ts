@@ -4,6 +4,21 @@ export function clampCarouselIndex(index: number, itemCount: number): number {
   return Math.max(0, Math.min(index, itemCount - 1));
 }
 
+/**
+ * Keeps the selected entity stable while a queue refresh changes its slots.
+ * If that entity disappeared, retain the nearest still-valid numeric slot.
+ */
+export function preserveCarouselIndex(
+  activeItemKey: string | null,
+  currentIndex: number,
+  itemKeys: readonly string[],
+): number {
+  const selectedIndex = activeItemKey ? itemKeys.indexOf(activeItemKey) : -1;
+  return selectedIndex >= 0
+    ? selectedIndex
+    : clampCarouselIndex(currentIndex, itemKeys.length);
+}
+
 export function getCarouselNextIndex(
   currentIndex: number,
   itemCount: number,

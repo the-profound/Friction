@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Thought } from "@workspace/api-client-react";
 import {
   buildRecordDateGroups,
+  buildRecordGroups,
   buildUnifiedRecords,
   compareRecordsNewestFirst,
   getQueuedThoughtIds,
@@ -13,6 +14,7 @@ import {
   normalizePreviewTitle,
   normalizePreviewText,
   type UnifiedRecord,
+  QUESTION_QUEUE_GROUP_KEY,
 } from "../recordList";
 
 describe("record list model", () => {
@@ -140,6 +142,48 @@ describe("record card date groups", () => {
 
   it("returns no groups when a filter or search has no matching records", () => {
     expect(buildRecordDateGroups([])).toEqual([]);
+  });
+
+  it("puts the FIFO question queue in one stable first group without duplicate date records", () => {
+    const firstQuestion = thought("question-first", "2026-03-04T02:00:00.000Z");
+    const secondQuestion = thought("question-second", "2026-03-04T01:00:00.000Z");
+    const ordinary = thought("ordinary", "2026-03-04T00:00:00.000Z");
+
+    const groups = buildRecordGroups(
+      [ordinary, firstQuestion, secondQuestion],
+      [firstQuestion, secondQuestion],
+    );
+
+    expect(groups.map((group) => group.dateKey)).toEqual([
+      QUESTION_QUEUE_GROUP_KEY,
+      "2026-03-04",
+    ]);
+    expect(groups[0].label).toBe("질문 대기열");
+    expect(groups[0].records.map((record) => record.id)).toEqual([
+      "question-first",
+      "question-second",
+    ]);
+    expect(groups[1].records.map((record) => record.id)).toEqual(["ordinary"]);
+  });
+
+  it("removes the queue group when the server queue becomes empty", () => {
+    const ordinary = thought("ordinary", "2026-03-04T00:00:00.000Z");
+
+    expect(buildRecordGroups([ordinary], []).map((group) => group.dateKey)).toEqual(["2026-03-04"]);
+  });
+
+  it("renders every queued question even when there are no ordinary date records", () => {
+    const firstQuestion = thought("question-first", "2026-03-04T02:00:00.000Z");
+    const secondQuestion = thought("question-second", "2026-03-04T01:00:00.000Z");
+
+    const groups = buildRecordGroups([], [firstQuestion, secondQuestion]);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].dateKey).toBe(QUESTION_QUEUE_GROUP_KEY);
+    expect(groups[0].records.map((record) => record.id)).toEqual([
+      "question-first",
+      "question-second",
+    ]);
   });
 });
 

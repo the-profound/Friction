@@ -15,6 +15,8 @@ export interface RecordDateGroup<T extends UnifiedRecord = UnifiedRecord> {
   records: T[];
 }
 
+export const QUESTION_QUEUE_GROUP_KEY = "__thought_question_queue__";
+
 export interface RecordPreview {
   /** Single-line form used for title-only mode and search. */
   title: string;
@@ -151,6 +153,36 @@ export function buildRecordDateGroups<T extends UnifiedRecord>(records: T[]): Re
       label: formatRecordDateLabel(dateKey),
       records: dateRecords,
     }));
+}
+
+/**
+ * Builds the complete card-list model. The question queue is a first-class
+ * group rather than a FlatList header so native virtualization measures and
+ * anchors it exactly like every date group.
+ *
+ * Queue records are removed defensively from date records as well. This keeps
+ * the question flow as the single owner of preliminary thoughts even when the
+ * two API responses briefly overlap during a cache refresh.
+ */
+export function buildRecordGroups<T extends UnifiedRecord>(
+  records: T[],
+  questionQueue: readonly T[] = [],
+): RecordDateGroup<T>[] {
+  const queueIds = new Set(questionQueue.map((record) => record.id));
+  const dateGroups = buildRecordDateGroups(
+    records.filter((record) => !queueIds.has(record.id)),
+  );
+
+  if (questionQueue.length === 0) return dateGroups;
+
+  return [
+    {
+      dateKey: QUESTION_QUEUE_GROUP_KEY,
+      label: "질문 대기열",
+      records: [...questionQueue],
+    },
+    ...dateGroups,
+  ];
 }
 
 /**
