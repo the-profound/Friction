@@ -67,7 +67,7 @@
 - [Durable create idempotency](durable-create-idempotency.md) — persist the client create ID before POST; recovery aliases must clear together and empty-draft discard must retain identity.
 - [Autosave timeout ordering](autosave-timeout-ordering.md) — UI timeouts must not release physical save/storage serialization; delayed restores and export failures must never replace newer input.
 - [Space send recipient snapshots](space-send-recipient-snapshots.md) — freeze recipients before delivery; retries and repairs must never recalculate from mutable participation state.
-- [Date carousel snap geometry](friction-date-carousel-snap-geometry.md) — vertical header snap offsets require deterministic group chrome, including a reserved dot row for one-card groups.
+- [Date carousel vertical paging](friction-date-carousel-snap-geometry.md) — one gesture moves one adjacent date header; measured anchors and deterministic estimates share a generation guard.
 - [Native virtualized special groups](friction-native-special-list-groups.md) — interactive first groups belong in FlatList data, not conditional headers, so native measurement and anchors stay stable.
 - [Signed upload verification](signed-upload-verification.md) — pin the staged object generation, recheck exact bytes, and publish only those verified bytes.
 - [Serialized final-state saves](serialized-final-state-saves.md) — debounce and explicit commits that write the same field must share one ordered save queue.

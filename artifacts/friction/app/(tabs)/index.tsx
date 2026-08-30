@@ -7,6 +7,7 @@ import {
   RefreshControl,
   ScrollView,
   Pressable,
+  Platform,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
@@ -186,7 +187,6 @@ export default function InboxScreen() {
     groupSignature: inboxGroupSignature,
     listRef: inboxListRef,
     enabled: groups.length > 0,
-    bottomInset: navBottom,
     estimatedGroupHeight: getDateGroupCarouselHeight(
       CARD_H,
       0,
@@ -196,6 +196,7 @@ export default function InboxScreen() {
         + Sizing.dotsH
         + Spacing.carouselGroupBottom,
     ),
+    onPageGestureStart: scrollPressGuard.onScroll,
   });
 
   const handleSearchPress = useCallback(() => {
@@ -560,27 +561,35 @@ export default function InboxScreen() {
           <Text style={styles.emptyText}>이웃이 보낸 편지가 도착하면 여기에 표시됩니다</Text>
         </ScrollView>
       ) : (
-        <FlatList
-          ref={inboxListRef}
-          {...LIST_PERF_PRESET}
-          data={groups}
-          extraData={`${tapItem?.id ?? ""}:${isTappedSourceHidden}`}
-          keyExtractor={groupKeyExtractor}
-          renderItem={renderGroupItem}
-          refreshControl={
-            <RefreshControl refreshing={isManualRefreshing} onRefresh={handleRefresh} tintColor={Colors.zinc400} />
-          }
-          contentContainerStyle={[styles.listContent, { paddingBottom: navBottom }]}
-          showsVerticalScrollIndicator={false}
-          onLayout={inboxVerticalDateSnap.onLayout}
-          onScroll={handleInboxScroll}
-          scrollEventThrottle={16}
-          onScrollBeginDrag={inboxVerticalDateSnap.onScrollBeginDrag}
-          onScrollEndDrag={inboxVerticalDateSnap.onScrollEndDrag}
-          onMomentumScrollBegin={inboxVerticalDateSnap.onMomentumScrollBegin}
-          onMomentumScrollEnd={inboxVerticalDateSnap.onMomentumScrollEnd}
-          scrollEnabled={tapItem === null}
-        />
+        <View
+          style={styles.listViewport}
+          {...inboxVerticalDateSnap.panHandlers}
+          {...({ onWheel: inboxVerticalDateSnap.onWheel } as object)}
+        >
+          <FlatList
+            ref={inboxListRef}
+            {...LIST_PERF_PRESET}
+            data={groups}
+            extraData={`${tapItem?.id ?? ""}:${isTappedSourceHidden}`}
+            keyExtractor={groupKeyExtractor}
+            renderItem={renderGroupItem}
+            refreshControl={
+              <RefreshControl refreshing={isManualRefreshing} onRefresh={handleRefresh} tintColor={Colors.zinc400} />
+            }
+            contentContainerStyle={[styles.listContent, { paddingBottom: navBottom }]}
+            showsVerticalScrollIndicator={false}
+            onLayout={inboxVerticalDateSnap.onLayout}
+            onScroll={handleInboxScroll}
+            scrollEventThrottle={16}
+            onScrollBeginDrag={inboxVerticalDateSnap.onScrollBeginDrag}
+            onScrollEndDrag={inboxVerticalDateSnap.onScrollEndDrag}
+            scrollEnabled={
+              Platform.OS !== "web"
+              && tapItem === null
+              && !inboxVerticalDateSnap.pageLocked
+            }
+          />
+        </View>
       )}
 
       <CardSelectOverlay
@@ -635,6 +644,9 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: Spacing.navBarPaddingBottom,
+  },
+  listViewport: {
+    flex: 1,
   },
   cardSlotHidden: {
     opacity: 0,

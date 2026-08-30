@@ -21,6 +21,18 @@ describe("DropdownFilter presentation", () => {
     ).toBe("기록 종류");
   });
 
+  it("can show the selected option label for the default value", () => {
+    expect(
+      getDropdownFilterLabel({
+        label: "종류",
+        value: "thought",
+        defaultValue: "thought",
+        selectedOptionLabel: "단상",
+        showDefaultOptionLabel: true,
+      }),
+    ).toBe("단상");
+  });
+
   it("uses the selected label for an active value", () => {
     expect(
       getDropdownFilterLabel({

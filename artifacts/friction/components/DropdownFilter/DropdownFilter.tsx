@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import ScalePressable from "@/components/shared/ScalePressable";
-import PillButton from "@/components/shared/PillButton";
+import PillButton, { type PillVariant } from "@/components/shared/PillButton";
 import { Colors, Typography, ZIndex } from "@/constants/tokens";
 import {
   getDropdownFilterLabel,
@@ -45,6 +45,10 @@ export interface DropdownFilterProps<T extends string> {
   onChange: (value: T) => void;
   /** Replaces the option label in the capsule when an active value is selected. */
   selectedLabel?: string;
+  /** Shows the selected option label even when value equals defaultValue. */
+  showDefaultOptionLabel?: boolean;
+  /** Visual variant used when a non-default option is selected. */
+  activeVariant?: Extract<PillVariant, "primary" | "outline">;
   /** Width of the options menu before it is clamped to the viewport. */
   dropdownWidth?: number;
   accessibilityLabel?: string;
@@ -58,6 +62,8 @@ export default function DropdownFilter<T extends string>({
   options,
   onChange,
   selectedLabel,
+  showDefaultOptionLabel = false,
+  activeVariant = "primary",
   dropdownWidth = DEFAULT_DROPDOWN_WIDTH,
   accessibilityLabel,
   accessibilityHint,
@@ -75,7 +81,10 @@ export default function DropdownFilter<T extends string>({
     defaultValue,
     selectedLabel,
     selectedOptionLabel: selectedOption?.label,
+    showDefaultOptionLabel,
   });
+  const pillVariant: Extract<PillVariant, "primary" | "outline"> =
+    isFiltered ? activeVariant : "outline";
 
   const handleClose = useCallback(() => setOpen(false), []);
 
@@ -144,7 +153,7 @@ export default function DropdownFilter<T extends string>({
     >
       <PillButton
         size="sm"
-        variant={isFiltered ? "primary" : "outline"}
+        variant={pillVariant}
         contentStyle={styles.pillContent}
         onPress={handleOpen}
         accessibilityRole="button"
@@ -153,7 +162,7 @@ export default function DropdownFilter<T extends string>({
         accessibilityState={{ expanded: open, selected: isFiltered }}
       >
         <Text
-          style={[styles.pillText, isFiltered && styles.pillTextActive]}
+          style={[styles.pillText, pillVariant === "primary" && styles.pillTextActive]}
           numberOfLines={1}
         >
           {buttonLabel}
@@ -161,7 +170,7 @@ export default function DropdownFilter<T extends string>({
         <Feather
           name="chevron-down"
           size={13}
-          color={isFiltered ? Colors.white : Colors.zinc500}
+          color={pillVariant === "primary" ? Colors.white : Colors.zinc500}
         />
       </PillButton>
 

@@ -4,6 +4,24 @@ export interface DateGroupLayout {
   height: number;
 }
 
+export interface DateGroupPageDecision {
+  index: number;
+  dateKey: string | null;
+  targetOffset: number | null;
+}
+
+export function shouldApplyDateGroupMeasurement(
+  measurementGeneration: number,
+  currentGeneration: number,
+  nodeIsCurrent: boolean,
+  height: number,
+): boolean {
+  return measurementGeneration === currentGeneration
+    && nodeIsCurrent
+    && Number.isFinite(height)
+    && height > 0;
+}
+
 export function resolveDateGroupLayouts(
   groupKeys: readonly string[],
   heights: ReadonlyMap<string, number>,
@@ -50,45 +68,67 @@ export function findDateGroupAtOffset(
 }
 
 /**
- * A group that fits in the available viewport is anchored to its date header.
+ * Resolves one vertical page gesture from the date key that was active when
+ * the gesture began. A gesture can move at most one item, even when its
+ * velocity is high or the list contains many groups.
  *
- * An oversized group cannot align both its header and its actions, so it snaps
- * only near its two edges: its date header, and the position that brings the
- * end of the group to the bottom of the viewport. Between those edges it
- * returns null, leaving the group's interior freely readable. Record cards use
- * a fixed 5:8 ratio and are routinely taller than the list viewport, so
- * treating oversized groups as entirely unsnappable disables date snapping on
- * that screen altogether.
+ * Finger/mouse movement uses the usual screen convention: a negative y
+ * distance is an upward swipe and advances to the next (older) date.
  */
-export function getDateGroupSnapTarget(
-  offset: number,
-  viewportHeight: number,
+export function getDateGroupPageIndex(
+  currentKey: string | null,
+  groupKeys: readonly string[],
+  distanceY: number,
+  velocityY: number,
+  threshold: number,
+  flingVelocity: number,
+): number {
+  if (groupKeys.length === 0) return 0;
+  const currentIndex = currentKey ? groupKeys.indexOf(currentKey) : -1;
+  const safeCurrentIndex = currentIndex >= 0 ? currentIndex : 0;
+  const shouldAdvance =
+    Math.abs(velocityY) > flingVelocity || Math.abs(distanceY) >= threshold;
+  if (!shouldAdvance) return safeCurrentIndex;
+
+  const direction = velocityY < 0
+    || (Math.abs(velocityY) <= flingVelocity && distanceY < 0)
+    ? 1
+    : -1;
+  return Math.max(0, Math.min(safeCurrentIndex + direction, groupKeys.length - 1));
+}
+
+/**
+ * Converts a single gesture into a deterministic date-key and header target.
+ * Missing measurements are intentionally a no-op; callers can keep the
+ * current page rather than guessing an offset from an incomplete virtualized
+ * list.
+ */
+export function getDateGroupPageDecision(
+  currentKey: string | null,
+  groupKeys: readonly string[],
   layouts: readonly DateGroupLayout[],
-): number | null {
-  if (viewportHeight <= 0) return null;
-  const sorted = [...layouts].sort((left, right) => left.offset - right.offset);
-  const current = findDateGroupAtOffset(offset, sorted);
-  if (!current) return null;
-
-  const currentIndex = sorted.findIndex((layout) => layout.dateKey === current.dateKey);
-  const next = currentIndex >= 0 ? sorted[currentIndex + 1] : undefined;
-  const nearest = next && Math.abs(next.offset - offset) < Math.abs(current.offset - offset)
-    ? next
-    : current;
-
-  if (nearest.height <= viewportHeight) return Math.max(0, nearest.offset);
-
-  const headerTarget = Math.max(0, nearest.offset);
-  const endTarget = Math.max(headerTarget, nearest.offset + nearest.height - viewportHeight);
-  // Each zone stays strictly below half the distance between the two targets,
-  // so every oversized group keeps a free interior around its midpoint and the
-  // list never pulls the user away from content they are reading.
-  const captureDistance = Math.min(160, viewportHeight * 0.25, (endTarget - headerTarget) * 0.4);
-  const headerDistance = Math.abs(headerTarget - offset);
-  const endDistance = Math.abs(endTarget - offset);
-
-  if (headerDistance > captureDistance && endDistance > captureDistance) return null;
-  return headerDistance <= endDistance ? headerTarget : endTarget;
+  distanceY: number,
+  velocityY: number,
+  threshold: number,
+  flingVelocity: number,
+): DateGroupPageDecision {
+  const index = getDateGroupPageIndex(
+    currentKey,
+    groupKeys,
+    distanceY,
+    velocityY,
+    threshold,
+    flingVelocity,
+  );
+  const dateKey = groupKeys[index] ?? null;
+  const layout = dateKey
+    ? layouts.find((candidate) => candidate.dateKey === dateKey)
+    : undefined;
+  return {
+    index,
+    dateKey,
+    targetOffset: layout ? Math.max(0, layout.offset) : null,
+  };
 }
 
 /**

@@ -1,18 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  PanResponder,
   Platform,
   View,
   type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  type PanResponderGestureState,
 } from "react-native";
 import {
   findDateGroupAtOffset,
-  getDateGroupSnapTarget,
+  getDateGroupPageDecision,
   preserveDateGroupAnchor,
   resolveDateGroupLayouts,
+  shouldApplyDateGroupMeasurement,
   type DateGroupLayout,
 } from "@/lib/dateGroupVerticalSnap";
+import { Sizing } from "@/constants/tokens";
 
 interface VerticalListRef {
   scrollToOffset: (params: { offset: number; animated: boolean }) => void;
@@ -24,6 +28,12 @@ interface MeasurableView {
   ) => void;
 }
 
+interface WheelEventLike {
+  deltaY: number;
+  deltaMode?: number;
+  preventDefault?: () => void;
+}
+
 interface UseDateGroupVerticalSnapOptions {
   groupKeys: readonly string[];
   /**
@@ -33,31 +43,37 @@ interface UseDateGroupVerticalSnapOptions {
   groupSignature: string;
   listRef: React.RefObject<VerticalListRef | null>;
   enabled: boolean;
-  bottomInset?: number;
   estimatedGroupHeight?: number;
   estimatedGroupHeights?: ReadonlyMap<string, number>;
   viewportRef?: React.RefObject<MeasurableView | null>;
+  /** Starts the shared press guard before a vertical page transition. */
+  onPageGestureStart?: () => void;
 }
 
-const WEB_SETTLE_DELAY_MS = 120;
-const NATIVE_SETTLE_DELAY_MS = 180;
+const FLING_VELOCITY = 0.5;
+const WHEEL_SETTLE_DELAY_MS = 90;
+const PAGE_ANIMATION_TIMEOUT_MS = 700;
 
 /**
- * Adds date-header anchoring without using FlatList paging. Paging would
- * force an oversized group to hide its lower cards/actions, and is not
- * implemented consistently by React Native Web.
+ * Owns the vertical date-group page contract.
+ *
+ * The FlatList is deliberately not the gesture owner: free scrolling makes a
+ * tall group behave differently from a short group and is not consistent on
+ * React Native Web. Touch/mouse drags are resolved by PanResponder and web
+ * wheel/trackpad input is resolved by the same pure page decision.
  */
 export function useDateGroupVerticalSnap({
   groupKeys,
   groupSignature,
   listRef,
   enabled,
-  bottomInset = 0,
   estimatedGroupHeight,
   estimatedGroupHeights,
   viewportRef,
+  onPageGestureStart,
 }: UseDateGroupVerticalSnapOptions) {
   const [viewportHeight, setViewportHeight] = useState(0);
+  const [pageLocked, setPageLocked] = useState(false);
   const layoutsRef = useRef(new Map<string, DateGroupLayout>());
   const heightsRef = useRef(new Map<string, number>());
   const measuredLayoutsRef = useRef(new Map<string, DateGroupLayout>());
@@ -65,23 +81,56 @@ export function useDateGroupVerticalSnap({
   const groupKeysRef = useRef<string[]>([...groupKeys]);
   const previousKeysRef = useRef<string[]>([]);
   const currentOffsetRef = useRef(0);
-  const anchorKeyRef = useRef<string | null>(null);
-  const anchorDistanceRef = useRef(0);
-  const interactedRef = useRef(false);
+  const currentKeyRef = useRef<string | null>(groupKeys[0] ?? null);
+  const gestureStartKeyRef = useRef<string | null>(null);
+  const nativeGestureStartOffsetRef = useRef(0);
+  const isNativeDraggingRef = useRef(false);
   const pendingRestoreKeyRef = useRef<string | null>(null);
-  const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restoreFrameRef = useRef<number | null>(null);
   const measureFrameRef = useRef<number | null>(null);
-  const settleUnlockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isSettlingRef = useRef(false);
+  const wheelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wheelDistanceRef = useRef(0);
+  const pageUnlockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const transitionGenerationRef = useRef(0);
+  const layoutGenerationRef = useRef(0);
+  const isPageAnimatingRef = useRef(false);
   const programmaticTargetRef = useRef<number | null>(null);
+  const finishGestureRef = useRef((
+    _distanceY: number,
+    _velocityY: number,
+    _animated: boolean,
+    _forceLock: boolean,
+  ) => {});
+  const beginGestureRef = useRef(() => {});
+
   groupKeysRef.current = [...groupKeys];
 
-  const clearSettleTimer = useCallback(() => {
-    if (settleTimerRef.current !== null) {
-      clearTimeout(settleTimerRef.current);
-      settleTimerRef.current = null;
+  const clearWheelTimer = useCallback(() => {
+    if (wheelTimerRef.current !== null) {
+      clearTimeout(wheelTimerRef.current);
+      wheelTimerRef.current = null;
     }
+  }, []);
+
+  const clearPageAnimationLock = useCallback(() => {
+    transitionGenerationRef.current += 1;
+    if (pageUnlockTimerRef.current !== null) {
+      clearTimeout(pageUnlockTimerRef.current);
+      pageUnlockTimerRef.current = null;
+    }
+    isPageAnimatingRef.current = false;
+    programmaticTargetRef.current = null;
+    setPageLocked(false);
+  }, []);
+
+  const rebuildLayouts = useCallback(() => {
+    const resolved = resolveDateGroupLayouts(
+      groupKeysRef.current,
+      heightsRef.current,
+      measuredLayoutsRef.current,
+    );
+    layoutsRef.current.clear();
+    for (const layout of resolved) layoutsRef.current.set(layout.dateKey, layout);
   }, []);
 
   const restoreAnchor = useCallback(() => {
@@ -89,13 +138,19 @@ export function useDateGroupVerticalSnap({
     if (!key || !enabled) return;
     const layout = layoutsRef.current.get(key);
     if (!layout) return;
-    if (viewportRef?.current && groupNodesRef.current.has(key) && !measuredLayoutsRef.current.has(key)) {
+    if (
+      viewportRef?.current
+      && groupNodesRef.current.has(key)
+      && !measuredLayoutsRef.current.has(key)
+    ) {
       return;
     }
 
     pendingRestoreKeyRef.current = null;
-    const offset = Math.max(0, layout.offset + anchorDistanceRef.current);
+    currentKeyRef.current = key;
+    const offset = Math.max(0, layout.offset);
     currentOffsetRef.current = offset;
+    programmaticTargetRef.current = offset;
     listRef.current?.scrollToOffset({ offset, animated: false });
   }, [enabled, listRef, viewportRef]);
 
@@ -107,24 +162,19 @@ export function useDateGroupVerticalSnap({
     });
   }, [restoreAnchor]);
 
-  const rebuildLayouts = useCallback(() => {
-    const resolved = resolveDateGroupLayouts(
-      groupKeysRef.current,
-      heightsRef.current,
-      measuredLayoutsRef.current,
-    );
-    layoutsRef.current.clear();
-    for (const layout of resolved) {
-      layoutsRef.current.set(layout.dateKey, layout);
-    }
-  }, []);
-
   const measureGroupNode = useCallback((dateKey: string, node: MeasurableView) => {
     const viewport = viewportRef?.current;
     if (!viewport) return;
+    const measurementGeneration = layoutGenerationRef.current;
     viewport.measureInWindow((_viewportX, viewportY) => {
+      if (measurementGeneration !== layoutGenerationRef.current) return;
       node.measureInWindow((_groupX, groupY, _groupWidth, groupHeight) => {
-        if (groupNodesRef.current.get(dateKey) !== node || groupHeight <= 0) return;
+        if (!shouldApplyDateGroupMeasurement(
+          measurementGeneration,
+          layoutGenerationRef.current,
+          groupNodesRef.current.get(dateKey) === node,
+          groupHeight,
+        )) return;
         heightsRef.current.set(dateKey, groupHeight);
         measuredLayoutsRef.current.set(dateKey, {
           dateKey,
@@ -142,17 +192,18 @@ export function useDateGroupVerticalSnap({
     if (measureFrameRef.current !== null) cancelAnimationFrame(measureFrameRef.current);
     measureFrameRef.current = requestAnimationFrame(() => {
       measureFrameRef.current = null;
-      for (const [dateKey, node] of groupNodesRef.current) {
-        measureGroupNode(dateKey, node);
-      }
+      for (const [dateKey, node] of groupNodesRef.current) measureGroupNode(dateKey, node);
     });
   }, [measureGroupNode, viewportRef]);
 
   useEffect(() => {
+    clearPageAnimationLock();
+    layoutGenerationRef.current += 1;
     const nextKeys = [...groupKeys];
     const previousKeys = previousKeysRef.current;
-    const previousAnchor = anchorKeyRef.current;
+    const previousKey = currentKeyRef.current;
     const validKeys = new Set(nextKeys);
+
     for (const key of heightsRef.current.keys()) {
       if (!validKeys.has(key)) heightsRef.current.delete(key);
     }
@@ -168,19 +219,19 @@ export function useDateGroupVerticalSnap({
     }
     rebuildLayouts();
 
-    if (previousKeys.length > 0 && previousAnchor) {
-      const nextAnchor = preserveDateGroupAnchor(previousAnchor, previousKeys, nextKeys);
-      if (nextAnchor !== previousAnchor) anchorDistanceRef.current = 0;
-      anchorKeyRef.current = nextAnchor;
-      pendingRestoreKeyRef.current = nextAnchor;
-    }
-
+    const nextAnchor = previousKeys.length > 0
+      ? preserveDateGroupAnchor(previousKey, previousKeys, nextKeys)
+      : nextKeys[0] ?? null;
+    currentKeyRef.current = nextAnchor;
+    pendingRestoreKeyRef.current = nextAnchor;
+    currentOffsetRef.current = layoutsRef.current.get(nextAnchor ?? "")?.offset ?? 0;
     previousKeysRef.current = nextKeys;
+
     if (viewportRef?.current) scheduleVisibleMeasurements();
-    // Mounted anchors wait for their actual measurement in restoreAnchor;
-    // virtualized anchors restore immediately from their per-key estimate.
     scheduleAnchorRestore();
   }, [
+    enabled,
+    clearPageAnimationLock,
     estimatedGroupHeight,
     estimatedGroupHeights,
     groupKeys,
@@ -189,6 +240,7 @@ export function useDateGroupVerticalSnap({
     scheduleAnchorRestore,
     scheduleVisibleMeasurements,
     viewportRef,
+    viewportHeight,
   ]);
 
   const onLayout = useCallback((event: LayoutChangeEvent) => {
@@ -215,90 +267,162 @@ export function useDateGroupVerticalSnap({
     else if (pendingRestoreKeyRef.current === dateKey) scheduleAnchorRestore();
   }, [measureGroupNode, rebuildLayouts, scheduleAnchorRestore, viewportRef]);
 
-  const clearSettleLock = useCallback(() => {
-    if (settleUnlockTimerRef.current !== null) {
-      clearTimeout(settleUnlockTimerRef.current);
-      settleUnlockTimerRef.current = null;
+  const moveToDateKey = useCallback((
+    dateKey: string | null,
+    animated: boolean,
+    forceLock = false,
+  ) => {
+    if (!dateKey) return;
+    const layout = layoutsRef.current.get(dateKey);
+    if (!layout) return;
+    const offset = Math.max(0, layout.offset);
+    const shouldAnimate = animated && Math.abs(offset - currentOffsetRef.current) >= 1;
+    const shouldLock = forceLock || shouldAnimate;
+    currentKeyRef.current = dateKey;
+    currentOffsetRef.current = offset;
+    programmaticTargetRef.current = shouldLock ? offset : null;
+    isPageAnimatingRef.current = shouldLock;
+    if (pageUnlockTimerRef.current !== null) clearTimeout(pageUnlockTimerRef.current);
+    if (shouldLock) {
+      const generation = transitionGenerationRef.current + 1;
+      transitionGenerationRef.current = generation;
+      setPageLocked(true);
+      pageUnlockTimerRef.current = setTimeout(() => {
+        if (transitionGenerationRef.current !== generation) return;
+        clearPageAnimationLock();
+      }, PAGE_ANIMATION_TIMEOUT_MS);
     }
-    isSettlingRef.current = false;
-    programmaticTargetRef.current = null;
-  }, []);
+    listRef.current?.scrollToOffset({ offset, animated: shouldAnimate });
+  }, [clearPageAnimationLock, listRef]);
 
-  const settleRef = useRef(() => {});
-  settleRef.current = () => {
-    settleTimerRef.current = null;
-    if (!enabled || !interactedRef.current || isSettlingRef.current) return;
-    const target = getDateGroupSnapTarget(
-      currentOffsetRef.current,
-      Math.max(0, viewportHeight - bottomInset),
-      [...layoutsRef.current.values()],
+  const finishPageGesture = useCallback((
+    distanceY: number,
+    velocityY: number,
+    animated: boolean,
+    forceLock: boolean,
+  ) => {
+    if (!enabled || isPageAnimatingRef.current) return;
+    onPageGestureStart?.();
+    const currentKey = gestureStartKeyRef.current ?? currentKeyRef.current;
+    const decision = getDateGroupPageDecision(
+      currentKey,
+      groupKeysRef.current,
+      layoutsRef.current.size > 0 ? [...layoutsRef.current.values()] : [],
+      distanceY,
+      velocityY,
+      Sizing.swipeThreshold,
+      FLING_VELOCITY,
     );
-    if (target === null || Math.abs(target - currentOffsetRef.current) < 1) return;
-    currentOffsetRef.current = target;
-    isSettlingRef.current = true;
-    programmaticTargetRef.current = target;
-    listRef.current?.scrollToOffset({ offset: target, animated: true });
-    settleUnlockTimerRef.current = setTimeout(clearSettleLock, 1000);
-  };
+    moveToDateKey(decision.dateKey, animated, forceLock);
+  }, [enabled, moveToDateKey, onPageGestureStart]);
+  finishGestureRef.current = finishPageGesture;
 
-  const scheduleSettle = useCallback((delay = WEB_SETTLE_DELAY_MS) => {
-    clearSettleTimer();
-    settleTimerRef.current = setTimeout(() => settleRef.current(), delay);
-  }, [clearSettleTimer]);
+  const beginPageGesture = useCallback(() => {
+    if (!enabled || isPageAnimatingRef.current) return;
+    clearWheelTimer();
+    wheelDistanceRef.current = 0;
+    gestureStartKeyRef.current = currentKeyRef.current
+      ?? findDateGroupAtOffset(currentOffsetRef.current, [...layoutsRef.current.values()])?.dateKey
+      ?? groupKeysRef.current[0]
+      ?? null;
+    onPageGestureStart?.();
+  }, [clearWheelTimer, enabled, onPageGestureStart]);
+  beginGestureRef.current = beginPageGesture;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gesture) =>
+        Platform.OS === "web"
+        && !isPageAnimatingRef.current
+        && Math.abs(gesture.dy) > Math.abs(gesture.dx)
+        && Math.abs(gesture.dy) > 6,
+      onMoveShouldSetPanResponderCapture: (_, gesture) =>
+        Platform.OS === "web"
+        && !isPageAnimatingRef.current
+        && Math.abs(gesture.dy) > Math.abs(gesture.dx)
+        && Math.abs(gesture.dy) > 6,
+      onPanResponderGrant: () => beginGestureRef.current(),
+      onPanResponderMove: () => {},
+      onPanResponderRelease: (_, gesture: PanResponderGestureState) =>
+        finishGestureRef.current(gesture.dy, gesture.vy, true, false),
+      onPanResponderTerminate: (_, gesture: PanResponderGestureState) =>
+        finishGestureRef.current(gesture.dy, gesture.vy, true, false),
+      onPanResponderTerminationRequest: () => false,
+    }),
+  ).current;
+
+  const onWheel = useCallback((event: WheelEventLike) => {
+    if (!enabled) return;
+    event.preventDefault?.();
+    if (isPageAnimatingRef.current) return;
+    const rawDelta = Number.isFinite(event.deltaY) ? event.deltaY : 0;
+    if (rawDelta === 0) return;
+    const multiplier = event.deltaMode === 1
+      ? 16
+      : event.deltaMode === 2
+        ? Math.max(1, viewportHeight)
+        : 1;
+    // The web wheel path was inverted relative to the pointer/touch gesture.
+    // Keep native drag direction unchanged and reverse only this web input.
+    wheelDistanceRef.current -= rawDelta * multiplier;
+    clearWheelTimer();
+    wheelTimerRef.current = setTimeout(() => {
+      wheelTimerRef.current = null;
+      const distance = wheelDistanceRef.current;
+      wheelDistanceRef.current = 0;
+      if (Math.abs(distance) < 1) return;
+      beginPageGesture();
+      finishGestureRef.current(distance, 0, true, false);
+    }, WHEEL_SETTLE_DELAY_MS);
+  }, [beginPageGesture, clearWheelTimer, enabled, viewportHeight]);
 
   const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offset = Math.max(0, event.nativeEvent.contentOffset.y);
-    currentOffsetRef.current = offset;
-    const current = findDateGroupAtOffset(offset, [...layoutsRef.current.values()]);
-    if (current) {
-      anchorKeyRef.current = current.dateKey;
-      anchorDistanceRef.current = offset - current.offset;
-    }
-
     const programmaticTarget = programmaticTargetRef.current;
     if (programmaticTarget !== null) {
-      if (Math.abs(programmaticTarget - offset) < 1) clearSettleLock();
+      if (Math.abs(programmaticTarget - offset) < 1) {
+        currentOffsetRef.current = programmaticTarget;
+        if (!isPageAnimatingRef.current) programmaticTargetRef.current = null;
+      }
       return;
     }
-
-    // Web wheel scrolling does not reliably emit the native drag lifecycle.
-    if (Platform.OS === "web" && !isSettlingRef.current) {
-      interactedRef.current = true;
-      scheduleSettle();
+    currentOffsetRef.current = offset;
+    const current = findDateGroupAtOffset(offset, [...layoutsRef.current.values()]);
+    if (current && !isPageAnimatingRef.current && !isNativeDraggingRef.current) {
+      currentKeyRef.current = current.dateKey;
     }
-  }, [clearSettleLock, scheduleSettle]);
+  }, []);
 
   const onScrollBeginDrag = useCallback(() => {
-    interactedRef.current = true;
-    clearSettleLock();
-    clearSettleTimer();
-  }, [clearSettleLock, clearSettleTimer]);
+    if (!enabled || isPageAnimatingRef.current) return;
+    isNativeDraggingRef.current = true;
+    nativeGestureStartOffsetRef.current = currentOffsetRef.current;
+    beginPageGesture();
+  }, [beginPageGesture, enabled]);
 
-  const onMomentumScrollBegin = useCallback(() => {
-    interactedRef.current = true;
-    clearSettleTimer();
-  }, [clearSettleTimer]);
-
-  const onScrollEndDrag = useCallback(() => {
-    interactedRef.current = true;
-    scheduleSettle(Platform.OS === "web" ? WEB_SETTLE_DELAY_MS : NATIVE_SETTLE_DELAY_MS);
-  }, [scheduleSettle]);
-
-  const onMomentumScrollEnd = useCallback(() => {
-    if (isSettlingRef.current) {
-      clearSettleLock();
-      return;
-    }
-    interactedRef.current = true;
-    scheduleSettle(0);
-  }, [clearSettleLock, scheduleSettle]);
+  const onScrollEndDrag = useCallback((
+    event: NativeSyntheticEvent<NativeScrollEvent>,
+  ) => {
+    if (!enabled || !isNativeDraggingRef.current) return;
+    isNativeDraggingRef.current = false;
+    const endOffset = Math.max(0, event.nativeEvent.contentOffset.y);
+    currentOffsetRef.current = endOffset;
+    const scrollVelocityY = event.nativeEvent.velocity?.y ?? 0;
+    finishGestureRef.current(
+      nativeGestureStartOffsetRef.current - endOffset,
+      -scrollVelocityY,
+      false,
+      true,
+    );
+  }, [enabled]);
 
   useEffect(() => () => {
-    clearSettleTimer();
-    clearSettleLock();
+    clearWheelTimer();
+    clearPageAnimationLock();
     if (restoreFrameRef.current !== null) cancelAnimationFrame(restoreFrameRef.current);
     if (measureFrameRef.current !== null) cancelAnimationFrame(measureFrameRef.current);
-  }, [clearSettleLock, clearSettleTimer]);
+  }, [clearPageAnimationLock, clearWheelTimer]);
 
   return {
     onLayout,
@@ -307,7 +431,8 @@ export function useDateGroupVerticalSnap({
     onScroll,
     onScrollBeginDrag,
     onScrollEndDrag,
-    onMomentumScrollBegin,
-    onMomentumScrollEnd,
+    onWheel,
+    panHandlers: panResponder.panHandlers,
+    pageLocked,
   };
 }

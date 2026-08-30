@@ -605,9 +605,10 @@ describe("thought card typography regression guards", () => {
     expect(recordsScreen).toContain("return baseHeight;");
   });
 
-  it("attaches the record card list to shared date-header snap restoration", () => {
+  it("attaches both card lists to one-step date paging and anchor restoration", () => {
     const recordsScreen = read("app/(tabs)/on.tsx");
     const inboxScreen = read("app/(tabs)/index.tsx");
+    const pagingHook = read("hooks/useDateGroupVerticalSnap.ts");
     const dots = read("components/DotIndicator/DotIndicator.tsx");
 
     expect(recordsScreen).toContain("ref={recordListRef}");
@@ -616,6 +617,23 @@ describe("thought card typography regression guards", () => {
     expect(recordsScreen).toContain("estimatedGroupHeights: estimatedRecordGroupHeights");
     expect(recordsScreen).toContain("useDateGroupVerticalSnap({");
     expect(inboxScreen).toContain("useDateGroupVerticalSnap({");
+    for (const [source, controllerName] of [
+      [recordsScreen, "verticalDateSnap"],
+      [inboxScreen, "inboxVerticalDateSnap"],
+    ] as const) {
+      expect(source).toContain(`${controllerName}.onScrollEndDrag`);
+      expect(source).toContain("onWheel: ");
+      expect(source).toContain('Platform.OS !== "web"');
+      expect(source).toContain("pageLocked");
+    }
+    expect(pagingHook).toContain("getDateGroupPageDecision(");
+    expect(pagingHook).toContain("onMoveShouldSetPanResponderCapture");
+    expect(pagingHook).toContain("wheelDistanceRef.current -= rawDelta * multiplier");
+    expect(pagingHook).toContain("measurementGeneration !== layoutGenerationRef.current");
+    expect(pagingHook).toContain("shouldApplyDateGroupMeasurement(");
+    expect(pagingHook).not.toContain("onMomentumScrollEnd");
+    expect(pagingHook).not.toContain("getDateGroupSnapTarget");
+    expect(pagingHook).not.toContain("scheduleSettle");
     expect(dots).toContain("{total > 1 ? dots.map");
   });
 });

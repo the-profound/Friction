@@ -11,7 +11,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   getGetArticleQueryKey,
@@ -81,8 +81,8 @@ const KIND_OPTIONS: { key: RecordKind; label: string }[] = [
   { key: "letter", label: "편지" },
 ];
 const VIEW_OPTIONS: { key: RecordView; label: string }[] = [
-  { key: "card", label: "카드형" },
-  { key: "content", label: "목록형" },
+  { key: "card", label: "카드" },
+  { key: "content", label: "목록" },
 ];
 
 const CARD_ACTION_AREA_H = 56;
@@ -326,9 +326,7 @@ export default function OnScreen() {
   const navBottom = useNavBarBottomSafeArea();
   const { width } = useWindowDimensions();
   const cardWidth = Math.min(width - Spacing.screenPx * 2, Sizing.cardSlotW);
-  const { tab } = useLocalSearchParams<{ tab?: string }>();
-  const initialKind: RecordKind = tab === "my_article" ? "letter" : tab === "memo" ? "editing" : "thought";
-  const [kind, setKind] = useState<RecordKind>(initialKind);
+  const [kind, setKind] = useState<RecordKind>("thought");
   const [view, setView] = useState<RecordView>("card");
   const [searchActive, setSearchActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -357,12 +355,6 @@ export default function OnScreen() {
       queryClient.setQueryData(getGetArticleQueryKey(article.id), article);
     }
   }, [articlesQuery.data, queryClient]);
-
-  useEffect(() => {
-    if (tab === "my_article") setKind("letter");
-    else if (tab === "memo") setKind("editing");
-    else if (tab === "thought") setKind("thought");
-  }, [tab]);
 
   const queuedIds = useMemo(
     () => getQueuedThoughtIds(
@@ -452,9 +444,9 @@ export default function OnScreen() {
     groupSignature: cardGroupSignature,
     listRef: recordListRef,
     enabled: view === "card",
-    bottomInset: navBottom,
     estimatedGroupHeights: estimatedRecordGroupHeights,
     viewportRef: recordListViewportRef,
+    onPageGestureStart: scrollPressGuard.onScroll,
   });
   const handleRecordScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -680,8 +672,24 @@ export default function OnScreen() {
       />
       <AnimatedSearchBar active={searchActive} value={searchQuery} onChangeText={setSearchQuery} placeholder="제목과 내용으로 검색" />
       <View style={styles.filters}>
-        <DropdownFilter label="종류" value={kind} defaultValue="thought" options={KIND_OPTIONS} onChange={setKind} />
-        <DropdownFilter label="보기" value={view} defaultValue="card" options={VIEW_OPTIONS} onChange={setView} />
+        <DropdownFilter
+          label="종류"
+          value={kind}
+          defaultValue="thought"
+          options={KIND_OPTIONS}
+          onChange={setKind}
+          showDefaultOptionLabel
+          activeVariant="outline"
+        />
+        <DropdownFilter
+          label="보기"
+          value={view}
+          defaultValue="card"
+          options={VIEW_OPTIONS}
+          onChange={setView}
+          showDefaultOptionLabel
+          activeVariant="outline"
+        />
       </View>
 
       {isLoading ? (
@@ -691,6 +699,8 @@ export default function OnScreen() {
           ref={recordListViewportRef}
           style={styles.recordListViewport}
           onLayout={verticalDateSnap.onLayout}
+          {...verticalDateSnap.panHandlers}
+          {...({ onWheel: verticalDateSnap.onWheel } as object)}
         >
           <FlatList
             ref={recordListRef}
@@ -723,11 +733,10 @@ export default function OnScreen() {
             onScroll={handleRecordScroll}
             onScrollBeginDrag={verticalDateSnap.onScrollBeginDrag}
             onScrollEndDrag={verticalDateSnap.onScrollEndDrag}
-            onMomentumScrollBegin={verticalDateSnap.onMomentumScrollBegin}
-            onMomentumScrollEnd={verticalDateSnap.onMomentumScrollEnd}
             scrollEventThrottle={16}
             contentContainerStyle={[styles.recordGroupList, { paddingBottom: navBottom }]}
             showsVerticalScrollIndicator={false}
+            scrollEnabled={Platform.OS !== "web" && !verticalDateSnap.pageLocked}
           />
         </View>
       ) : visibleRecords.length > 0 ? (
@@ -797,7 +806,7 @@ export default function OnScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.white },
-  filters: { flexDirection: "row", gap: 8, paddingHorizontal: Spacing.screenPx, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.zinc100 },
+  filters: { flexDirection: "row", gap: 8, paddingHorizontal: Spacing.screenPx, paddingTop: 4, paddingBottom: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.zinc100 },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, paddingHorizontal: Spacing.screenPx },
   muted: { ...Typography.body, color: Colors.zinc500, textAlign: "center" },
   emptyTitle: { ...Typography.bodySemiBold, color: Colors.zinc900, fontSize: 17, textAlign: "center" },

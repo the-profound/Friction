@@ -4,6 +4,7 @@ export interface DropdownFilterPresentation<T extends string> {
   defaultValue: T;
   selectedLabel?: string;
   selectedOptionLabel?: string;
+  showDefaultOptionLabel?: boolean;
 }
 
 /**
@@ -24,7 +25,8 @@ export function getDropdownFilterLabel<T extends string>({
   defaultValue,
   selectedLabel,
   selectedOptionLabel,
+  showDefaultOptionLabel = false,
 }: DropdownFilterPresentation<T>): string {
-  if (!isDropdownFilterActive(value, defaultValue)) return label;
+  if (!isDropdownFilterActive(value, defaultValue) && !showDefaultOptionLabel) return label;
   return selectedLabel ?? selectedOptionLabel ?? label;
 }

@@ -7,9 +7,11 @@ import {
 } from "../dateGroupCarousel";
 import {
   findDateGroupAtOffset,
-  getDateGroupSnapTarget,
+  getDateGroupPageDecision,
+  getDateGroupPageIndex,
   preserveDateGroupAnchor,
   resolveDateGroupLayouts,
+  shouldApplyDateGroupMeasurement,
   type DateGroupLayout,
 } from "../dateGroupVerticalSnap";
 
@@ -49,50 +51,17 @@ describe("vertical date-header snapping", () => {
     { dateKey: "2026-08-27", offset: 1280, height: 500 },
   ];
 
-  it("snaps a fitting group to its date header", () => {
-    expect(getDateGroupSnapTarget(580, 800, layouts)).toBe(520);
-    expect(getDateGroupSnapTarget(1320, 600, layouts)).toBe(1280);
-    expect(getDateGroupSnapTarget(400, 800, layouts)).toBe(520);
-  });
-
-  it("captures an oversized group at its header and at its end", () => {
-    // The 2026-08-28 group is 760 tall in a 640 viewport: header 520, end 640.
-    expect(getDateGroupSnapTarget(530, 640, layouts)).toBe(520);
-    expect(getDateGroupSnapTarget(632, 640, layouts)).toBe(640);
-    // Its midpoint stays free so the user can read across the group.
-    expect(getDateGroupSnapTarget(580, 640, layouts)).toBeNull();
-  });
-
-  it("leaves the interior of a very tall group freely scrollable", () => {
-    const tall = [{ dateKey: "2026-08-28", offset: 0, height: 2000 }];
-    expect(getDateGroupSnapTarget(0, 600, tall)).toBe(0);
-    expect(getDateGroupSnapTarget(700, 600, tall)).toBeNull();
-    expect(getDateGroupSnapTarget(1400, 600, tall)).toBe(1400);
-  });
-
-  it("never overlaps the two capture zones of a real record group", () => {
-    // A letter record group (fixed 5:8 card plus its action row) in a viewport
-    // that already excludes the navbar: it overflows, but only modestly.
-    const letterGroup = [{ dateKey: "2026-08-28", offset: 0, height: 636 }];
-    expect(getDateGroupSnapTarget(0, 400, letterGroup)).toBe(0);
-    expect(getDateGroupSnapTarget(118, 400, letterGroup)).toBeNull();
-    expect(getDateGroupSnapTarget(236, 400, letterGroup)).toBe(236);
-
-    // Even with only 36px of overflow the midpoint stays free, so the capture
-    // zones never meet regardless of how far a group exceeds the viewport.
-    const barelyOversized = [{ dateKey: "2026-08-28", offset: 0, height: 636 }];
-    expect(getDateGroupSnapTarget(10, 600, barelyOversized)).toBe(0);
-    expect(getDateGroupSnapTarget(18, 600, barelyOversized)).toBeNull();
-    expect(getDateGroupSnapTarget(30, 600, barelyOversized)).toBe(36);
-  });
-
-  it("can snap forward out of an oversized group to a fitting neighbor", () => {
-    expect(getDateGroupSnapTarget(1100, 640, layouts)).toBe(1280);
-  });
-
   it("does not guess an unmeasured anchor", () => {
     expect(findDateGroupAtOffset(100, [])).toBeNull();
-    expect(getDateGroupSnapTarget(100, 700, [])).toBeNull();
+    expect(getDateGroupPageDecision(
+      "2026-08-29",
+      ["2026-08-29"],
+      [],
+      -100,
+      -1,
+      48,
+      0.5,
+    ).targetOffset).toBeNull();
   });
 
   it("uses measured date-header positions instead of inferred row offsets", () => {
@@ -120,6 +89,13 @@ describe("vertical date-header snapping", () => {
     ]);
   });
 
+  it("rejects measurements that started before a data or layout generation change", () => {
+    expect(shouldApplyDateGroupMeasurement(4, 5, true, 640)).toBe(false);
+    expect(shouldApplyDateGroupMeasurement(5, 5, false, 640)).toBe(false);
+    expect(shouldApplyDateGroupMeasurement(5, 5, true, 0)).toBe(false);
+    expect(shouldApplyDateGroupMeasurement(5, 5, true, 640)).toBe(true);
+  });
+
   it("keeps a date key across refreshes and chooses its nearest slot if removed", () => {
     const previous = ["queue", "2026-08-29", "2026-08-28"];
     expect(preserveDateGroupAnchor("2026-08-29", previous, previous)).toBe("2026-08-29");
@@ -127,5 +103,68 @@ describe("vertical date-header snapping", () => {
       .toBe("2026-08-28");
     expect(preserveDateGroupAnchor("2026-08-28", previous, ["queue", "2026-08-29"]))
       .toBe("2026-08-29");
+  });
+
+  it("moves exactly one date group from the gesture-start key", () => {
+    const keys = layouts.map((layout) => layout.dateKey);
+    expect(getDateGroupPageIndex(keys[1], keys, -5000, -8, 48, 0.5)).toBe(2);
+    expect(getDateGroupPageIndex(keys[1], keys, 5000, 8, 48, 0.5)).toBe(0);
+    expect(getDateGroupPageIndex(keys[1], keys, -20, 0, 48, 0.5)).toBe(1);
+    expect(getDateGroupPageIndex(keys[0], keys, 5000, 8, 48, 0.5)).toBe(0);
+    expect(getDateGroupPageIndex(keys[2], keys, -5000, -8, 48, 0.5)).toBe(2);
+  });
+
+  it("uses inclusive distance and strict fling thresholds", () => {
+    const keys = layouts.map((layout) => layout.dateKey);
+    expect(getDateGroupPageIndex(keys[1], keys, -47, 0, 48, 0.5)).toBe(1);
+    expect(getDateGroupPageIndex(keys[1], keys, -48, 0, 48, 0.5)).toBe(2);
+    expect(getDateGroupPageIndex(keys[1], keys, -2, -0.5, 48, 0.5)).toBe(1);
+    expect(getDateGroupPageIndex(keys[1], keys, -2, -0.51, 48, 0.5)).toBe(2);
+  });
+
+  it("pages by headers even when the current group is taller than the viewport", () => {
+    const tallLayouts = [
+      { dateKey: "a", offset: 0, height: 2000 },
+      { dateKey: "b", offset: 2000, height: 2200 },
+      { dateKey: "c", offset: 4200, height: 500 },
+    ];
+    expect(getDateGroupPageDecision(
+      "a",
+      tallLayouts.map((layout) => layout.dateKey),
+      tallLayouts,
+      -60,
+      0,
+      48,
+      0.5,
+    )).toMatchObject({ dateKey: "b", targetOffset: 2000 });
+  });
+
+  it("treats consecutive swipes as separate one-step decisions", () => {
+    const keys = layouts.map((layout) => layout.dateKey);
+    const firstIndex = getDateGroupPageIndex(keys[0], keys, -200, -2, 48, 0.5);
+    const secondIndex = getDateGroupPageIndex(keys[firstIndex], keys, -200, -2, 48, 0.5);
+    expect(firstIndex).toBe(1);
+    expect(secondIndex).toBe(2);
+  });
+
+  it("uses the current date header for weak gestures and the adjacent header for swipes", () => {
+    expect(getDateGroupPageDecision(
+      "2026-08-28",
+      layouts.map((layout) => layout.dateKey),
+      layouts,
+      -60,
+      0,
+      48,
+      0.5,
+    )).toMatchObject({ dateKey: "2026-08-27", targetOffset: 1280 });
+    expect(getDateGroupPageDecision(
+      "2026-08-28",
+      layouts.map((layout) => layout.dateKey),
+      layouts,
+      12,
+      0,
+      48,
+      0.5,
+    )).toMatchObject({ dateKey: "2026-08-28", targetOffset: 520 });
   });
 });
