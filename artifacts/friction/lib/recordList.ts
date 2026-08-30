@@ -34,6 +34,48 @@ export interface RecordCardContent {
   body: string;
   hasTitle: boolean;
 }
+
+export const RECORD_CARD_TITLE_MAX_LINES = 2;
+
+/**
+ * Korean glyphs are approximately one title-font em wide. This conservative
+ * estimate reserves no more than the two visible title lines when calculating
+ * the body's remaining card space, including authored line breaks.
+ */
+export function getRecordCardTitleLineCount(
+  title: string,
+  titleSize: number,
+  textWidth: number,
+): number {
+  const charsPerLine = Math.max(1, Math.floor(textWidth / titleSize));
+  const estimatedLines = title.split("\n").reduce(
+    (total, line) => total + Math.max(1, Math.ceil(Array.from(line).length / charsPerLine)),
+    0,
+  );
+  return Math.min(RECORD_CARD_TITLE_MAX_LINES, Math.max(1, estimatedLines));
+}
+
+export function getRecordCardBodyLineCount({
+  cardHeight,
+  paddingY,
+  titleLineCount,
+  titleLineHeight,
+  titleGap,
+  bodyLineHeight,
+}: {
+  cardHeight: number;
+  paddingY: number;
+  titleLineCount: number;
+  titleLineHeight: number;
+  titleGap: number;
+  bodyLineHeight: number;
+}): number {
+  const titleHeight = titleLineCount * titleLineHeight;
+  return Math.max(
+    1,
+    Math.floor((cardHeight - paddingY * 2 - titleHeight - titleGap) / bodyLineHeight),
+  );
+}
 /**
  * Keep record rows deterministic: a server can legitimately assign the same
  * timestamp to several writes, so the stable identifier is the final tie-break.

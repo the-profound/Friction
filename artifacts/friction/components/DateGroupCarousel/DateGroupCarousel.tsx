@@ -266,7 +266,7 @@ export function DateGroupCarousel<T>({
 
 const styles = StyleSheet.create({
   group: {
-    marginBottom: Spacing.carouselGroupBottom,
+    paddingBottom: Spacing.carouselGroupBottom,
   },
   dateHeader: {
     flexDirection: "row",

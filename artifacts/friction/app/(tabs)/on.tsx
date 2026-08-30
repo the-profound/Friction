@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   Platform,
   RefreshControl,
   StyleSheet,
@@ -58,7 +60,9 @@ import {
   buildRecordDateGroups,
   filterRecords,
   getQueuedThoughtIds,
+  getRecordCardBodyLineCount,
   getRecordCardContent,
+  getRecordCardTitleLineCount,
   getRecordPreview,
   recordMatchesQuery,
   type RecordDateGroup,
@@ -68,6 +72,8 @@ import {
 } from "@/lib/recordList";
 import type { ArticleStatus } from "@/lib/policies";
 import { useScrollPressGuard } from "@/hooks/useScrollPressGuard";
+import { useDateGroupVerticalSnap } from "@/hooks/useDateGroupVerticalSnap";
+import { getDateGroupCarouselHeight } from "@/lib/dateGroupCarousel";
 
 const KIND_OPTIONS: { key: RecordKind; label: string }[] = [
   { key: "thought", label: "단상" },
@@ -79,21 +85,11 @@ const VIEW_OPTIONS: { key: RecordView; label: string }[] = [
   { key: "content", label: "목록형" },
 ];
 
-const CARD_ACTION_AREA_H = 64;
+const CARD_ACTION_AREA_H = 56;
 
 type CardRecord = UnifiedRecord & { isQuestion: boolean; questionIndex?: number };
 const cardRecordKey = (record: CardRecord) => `${record.kind}:${record.id}`;
 
-function getCardTitleLineCount(title: string, titleSize: number, textWidth: number): number {
-  const charsPerLine = Math.max(1, Math.floor(textWidth / titleSize));
-  return Math.max(
-    1,
-    title.split("\n").reduce(
-      (total, line) => total + Math.max(1, Math.ceil(Array.from(line).length / charsPerLine)),
-      0,
-    ),
-  );
-}
 function getScreenForStatus(status: ArticleStatus): "/on-01a" | "/on-01b" | "/on-01c" {
   if (status === "DIVIDING") return "/on-01b";
   if (status === "CLOSING") return "/on-01c";
@@ -138,13 +134,17 @@ function RecordSourceCard({
   const bodySize = readerFontSize(ReaderTokens.typeScale.bodyCqi, width);
   const titleLineHeight = titleSize * ReaderTokens.lineHeight.tight;
   const bodyLineHeight = bodySize * ReaderTokens.lineHeight.relaxed;
-  const titleHeight = content.hasTitle
-    ? getCardTitleLineCount(content.title, titleSize, layout.textColumnWidth) * titleLineHeight
+  const titleLineCount = content.hasTitle
+    ? getRecordCardTitleLineCount(content.title, titleSize, layout.textColumnWidth)
     : 0;
-  const bodyLines = Math.max(
-    1,
-    Math.floor((height - layout.paddingY * 2 - titleHeight - (content.hasTitle ? Spacing.md : 0)) / bodyLineHeight),
-  );
+  const bodyLines = getRecordCardBodyLineCount({
+    cardHeight: height,
+    paddingY: layout.paddingY,
+    titleLineCount,
+    titleLineHeight,
+    titleGap: content.hasTitle ? Spacing.md : 0,
+    bodyLineHeight,
+  });
   const textStyle = Platform.OS === "web" ? ({ whiteSpace: "pre-wrap" } as object) : undefined;
 
   if (record.kind === "letter") {
@@ -209,6 +209,8 @@ function RecordSourceCard({
                 color: question ? Colors.white : Colors.zinc900,
               },
             ]}
+            numberOfLines={2}
+            ellipsizeMode="tail"
           >
             {content.title}
           </Text>
@@ -323,6 +325,7 @@ export default function OnScreen() {
   const { createDirectThought, isCreatingThought } = useThoughtComposer();
   const navBottom = useNavBarBottomSafeArea();
   const { width } = useWindowDimensions();
+  const cardWidth = Math.min(width - Spacing.screenPx * 2, Sizing.cardSlotW);
   const { tab } = useLocalSearchParams<{ tab?: string }>();
   const initialKind: RecordKind = tab === "my_article" ? "letter" : tab === "memo" ? "editing" : "thought";
   const [kind, setKind] = useState<RecordKind>(initialKind);
@@ -414,6 +417,70 @@ export default function OnScreen() {
     [cardRecords],
   );
   const scrollPressGuard = useScrollPressGuard();
+  const recordListRef = useRef<FlatList<RecordDateGroup<CardRecord>>>(null);
+  const recordListViewportRef = useRef<View>(null);
+  const cardGroupKeys = useMemo(
+    () => [
+      ...(queuedQuestionRecords.length > 0 ? ["__thought_question_queue__"] : []),
+      ...cardGroups.map((group) => group.dateKey),
+    ],
+    [cardGroups, queuedQuestionRecords.length],
+  );
+  const cardGroupSignature = useMemo(
+    () => [
+      queuedQuestionRecords.map((record) => record.id).join(","),
+      ...cardGroups.map((group) => `${group.dateKey}:${group.records.map((record) => record.id).join(",")}`),
+    ].join("|"),
+    [cardGroups, queuedQuestionRecords],
+  );
+  const estimatedRecordGroupHeights = useMemo(() => {
+    const heights = new Map<string, number>();
+    if (queuedQuestionRecords.length > 0) {
+      heights.set(
+        "__thought_question_queue__",
+        getDateGroupCarouselHeight(
+          getRecordGroupCardHeight(queuedQuestionRecords, cardWidth),
+          0,
+          Sizing.dateHeaderH
+            + Sizing.carouselShadowInsetTop
+            + Sizing.carouselShadowInsetBottom
+            + Sizing.dotsH
+            + Spacing.carouselGroupBottom,
+        ),
+      );
+    }
+    for (const group of cardGroups) {
+      heights.set(
+        group.dateKey,
+        getDateGroupCarouselHeight(
+          getRecordGroupCardHeight(group.records, cardWidth),
+          getRecordGroupActionAreaHeight(group.records),
+          Sizing.dateHeaderH
+            + Sizing.carouselShadowInsetTop
+            + Sizing.carouselShadowInsetBottom
+            + Sizing.dotsH
+            + Spacing.carouselGroupBottom,
+        ),
+      );
+    }
+    return heights;
+  }, [cardGroups, cardWidth, queuedQuestionRecords]);
+  const verticalDateSnap = useDateGroupVerticalSnap({
+    groupKeys: cardGroupKeys,
+    groupSignature: cardGroupSignature,
+    listRef: recordListRef,
+    enabled: view === "card",
+    bottomInset: navBottom,
+    estimatedGroupHeights: estimatedRecordGroupHeights,
+    viewportRef: recordListViewportRef,
+  });
+  const handleRecordScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      verticalDateSnap.onScroll(event);
+      scrollPressGuard.onScroll();
+    },
+    [scrollPressGuard, verticalDateSnap.onScroll],
+  );
   const sortedCollections = useMemo(() => [...((collectionsQuery.data ?? []) as MyCollection[])]
     .filter((collection) => !collection.isArchive)
     .sort((a, b) => Number(Boolean(b.isImpression)) - Number(Boolean(a.isImpression)) || (b.articleCount ?? 0) - (a.articleCount ?? 0)), [collectionsQuery.data]);
@@ -547,8 +614,6 @@ export default function OnScreen() {
     (thoughtsQuery.isLoading && !thoughtsQuery.data) ||
     (questionQuery.isLoading && !questionQuery.data);
   const emptyTitle = kind === "thought" ? "첫 단상을 남겨보세요" : kind === "editing" ? "편집 중인 글이 없어요" : "아직 내보낸 편지가 없어요";
-  const cardWidth = Math.min(width - Spacing.screenPx * 2, Sizing.cardSlotW);
-
   const renderRecordCard = useCallback((record: CardRecord, shouldIgnorePress: () => boolean, cardHeight: number) => (
     <View style={styles.recordCardFrame}>
       {record.kind === "thought" ? (
@@ -580,12 +645,14 @@ export default function OnScreen() {
           }}
         />
       )}
-      <View style={styles.recordCardActionArea}>
-        {record.kind === "letter" ? (
+      {record.kind === "letter" ? (
+        <View style={styles.recordCardActionArea}>
           <View style={styles.letterActions}>
             <ScalePressable
               style={styles.letterAction}
               contentStyle={styles.letterActionContent}
+              accessibilityRole="button"
+              accessibilityLabel="편지 보내기"
               onPress={() => {
                 if (!shouldIgnorePress()) {
                   router.push({ pathname: "/to-send", params: { prefillArticleId: record.article.id } });
@@ -598,6 +665,8 @@ export default function OnScreen() {
             <ScalePressable
               style={styles.letterAction}
               contentStyle={styles.letterActionContent}
+              accessibilityRole="button"
+              accessibilityLabel="편지 보관하기"
               onPress={() => {
                 if (!shouldIgnorePress()) {
                   setArchiveArticleId(record.article.id);
@@ -609,8 +678,8 @@ export default function OnScreen() {
               <Text style={styles.letterActionText}>보관</Text>
             </ScalePressable>
           </View>
-        ) : null}
-      </View>
+        </View>
+      ) : null}
     </View>
   ), [cardWidth, openQuestion, openRecord, router]);
 
@@ -636,46 +705,66 @@ export default function OnScreen() {
       {isLoading ? (
         <View style={styles.center}><Text style={styles.muted}>불러오는 중...</Text></View>
       ) : view === "card" && (cardGroups.length > 0 || queuedQuestionRecords.length > 0) ? (
-        <FlatList
-          data={cardGroups}
-          nestedScrollEnabled
-          keyExtractor={(group) => group.dateKey}
-          renderItem={({ item }) => (
-            <View>
-              <DateGroupCarousel
-                dateLabel={item.label}
-                countLabel={`${item.records.length}개`}
-                items={item.records}
-                itemKey={cardRecordKey}
-                cardWidth={cardWidth}
-                cardHeight={getRecordGroupCardHeight(item.records, cardWidth)}
-                actionAreaHeight={CARD_ACTION_AREA_H}
-                renderCard={(record, context) => renderRecordCard(record, context.shouldIgnorePress, getRecordGroupCardHeight(item.records, cardWidth))}
-                shouldIgnoreVerticalPress={scrollPressGuard.shouldIgnoreVerticalPress}
-              />
-            </View>
-          )}
-          ListHeaderComponent={queuedQuestionRecords.length > 0 ? (
-            <View>
-              <DateGroupCarousel
-                dateLabel="질문 대기열"
-                countLabel={`${queuedQuestionRecords.length}개`}
-                items={queuedQuestionRecords}
-                itemKey={cardRecordKey}
-                cardWidth={cardWidth}
-                cardHeight={getRecordGroupCardHeight(queuedQuestionRecords, cardWidth)}
-                actionAreaHeight={CARD_ACTION_AREA_H}
-                renderCard={(record, context) => renderRecordCard(record, context.shouldIgnorePress, getRecordGroupCardHeight(queuedQuestionRecords, cardWidth))}
-                shouldIgnoreVerticalPress={scrollPressGuard.shouldIgnoreVerticalPress}
-              />
-            </View>
-          ) : null}
-          refreshControl={<RefreshControl refreshing={articlesQuery.isRefetching || thoughtsQuery.isRefetching || questionQuery.isRefetching || refreshQuestion.isPending} onRefresh={() => refreshAll(kind === "thought")} />}
-          onScroll={scrollPressGuard.onScroll}
-          scrollEventThrottle={16}
-          contentContainerStyle={[styles.recordGroupList, { paddingBottom: navBottom }]}
-          showsVerticalScrollIndicator={false}
-        />
+        <View
+          ref={recordListViewportRef}
+          style={styles.recordListViewport}
+          onLayout={verticalDateSnap.onLayout}
+        >
+          <FlatList
+            ref={recordListRef}
+            data={cardGroups}
+            nestedScrollEnabled
+            keyExtractor={(group) => group.dateKey}
+            renderItem={({ item }) => {
+              const cardHeight = getRecordGroupCardHeight(item.records, cardWidth);
+              const actionAreaHeight = getRecordGroupActionAreaHeight(item.records);
+              return (
+                <View
+                  ref={(node) => verticalDateSnap.setGroupRef(item.dateKey, node)}
+                  onLayout={(event) => verticalDateSnap.onGroupLayout(item.dateKey, event)}
+                >
+                  <DateGroupCarousel
+                    dateLabel={item.label}
+                    countLabel={`${item.records.length}개`}
+                    items={item.records}
+                    itemKey={cardRecordKey}
+                    cardWidth={cardWidth}
+                    cardHeight={cardHeight}
+                    actionAreaHeight={actionAreaHeight}
+                    renderCard={(record, context) => renderRecordCard(record, context.shouldIgnorePress, cardHeight)}
+                    shouldIgnoreVerticalPress={scrollPressGuard.shouldIgnoreVerticalPress}
+                  />
+                </View>
+              );
+            }}
+            ListHeaderComponent={queuedQuestionRecords.length > 0 ? (
+              <View
+                ref={(node) => verticalDateSnap.setGroupRef("__thought_question_queue__", node)}
+                onLayout={(event) => verticalDateSnap.onGroupLayout("__thought_question_queue__", event)}
+              >
+                <DateGroupCarousel
+                  dateLabel="질문 대기열"
+                  countLabel={`${queuedQuestionRecords.length}개`}
+                  items={queuedQuestionRecords}
+                  itemKey={cardRecordKey}
+                  cardWidth={cardWidth}
+                  cardHeight={getRecordGroupCardHeight(queuedQuestionRecords, cardWidth)}
+                  renderCard={(record, context) => renderRecordCard(record, context.shouldIgnorePress, getRecordGroupCardHeight(queuedQuestionRecords, cardWidth))}
+                  shouldIgnoreVerticalPress={scrollPressGuard.shouldIgnoreVerticalPress}
+                />
+              </View>
+            ) : null}
+            refreshControl={<RefreshControl refreshing={articlesQuery.isRefetching || thoughtsQuery.isRefetching || questionQuery.isRefetching || refreshQuestion.isPending} onRefresh={() => refreshAll(kind === "thought")} />}
+            onScroll={handleRecordScroll}
+            onScrollBeginDrag={verticalDateSnap.onScrollBeginDrag}
+            onScrollEndDrag={verticalDateSnap.onScrollEndDrag}
+            onMomentumScrollBegin={verticalDateSnap.onMomentumScrollBegin}
+            onMomentumScrollEnd={verticalDateSnap.onMomentumScrollEnd}
+            scrollEventThrottle={16}
+            contentContainerStyle={[styles.recordGroupList, { paddingBottom: navBottom }]}
+            showsVerticalScrollIndicator={false}
+          />
+        </View>
       ) : visibleRecords.length > 0 ? (
         <FlatList
           data={visibleRecords}
@@ -748,6 +837,7 @@ const styles = StyleSheet.create({
   muted: { ...Typography.body, color: Colors.zinc500, textAlign: "center" },
   emptyTitle: { ...Typography.bodySemiBold, color: Colors.zinc900, fontSize: 17, textAlign: "center" },
   recordGroupList: {},
+  recordListViewport: { flex: 1 },
   recordCardFrame: { flex: 1, alignItems: "center" },
   recordCardActionArea: { height: CARD_ACTION_AREA_H, alignItems: "center", justifyContent: "center" },
   thoughtCard: { flexGrow: 0, flexShrink: 0, borderRadius: 16, ...Shadows.carouselCard },
@@ -757,8 +847,8 @@ const styles = StyleSheet.create({
   thoughtCardTitle: { fontFamily: ReaderTokens.fontFamily.serifBold, color: Colors.zinc900 },
   thoughtCardBody: { fontFamily: ReaderTokens.fontFamily.serif, color: Colors.zinc800 },
   letterActions: { flexDirection: "row", gap: 8 },
-  letterAction: { height: 40, flexGrow: 0, flexShrink: 0 },
-  letterActionContent: { height: 40, flexGrow: 0, flexShrink: 0, paddingHorizontal: 14, borderRadius: 20, backgroundColor: Colors.zinc100, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
+  letterAction: { height: 44, flexGrow: 0, flexShrink: 0, alignSelf: "flex-start" },
+  letterActionContent: { height: 44, flexGrow: 0, flexShrink: 0, paddingHorizontal: 14, borderRadius: 22, backgroundColor: Colors.zinc100, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
   letterActionText: { ...Typography.caption, color: Colors.zinc700, fontWeight: "600" },
   row: { marginHorizontal: Spacing.screenPx, marginBottom: Spacing.cardGap },
   rowContent: { padding: 16, gap: 7, borderRadius: 16, backgroundColor: Colors.white, ...Shadows.card },
@@ -792,19 +882,13 @@ const styles = StyleSheet.create({
 function getRecordCardHeight(record: UnifiedRecord, width: number): number {
   const baseHeight = width * Sizing.cardRatio;
   if (record.kind === "letter") return baseHeight;
-  const layout = computeBodyLayout(width);
-  const content = getRecordCardContent(record);
-  if (!content.hasTitle) return baseHeight;
-  const titleSize = readerFontSize(ReaderTokens.typeScale.titleCqi, width);
-  const titleHeight = getCardTitleLineCount(content.title, titleSize, layout.textColumnWidth)
-    * titleSize * ReaderTokens.lineHeight.tight;
-  const minimumBodyHeight = layout.bodyLineHeight * 2;
-  return Math.max(
-    baseHeight,
-    Math.ceil(layout.paddingY * 2 + titleHeight + Spacing.md + minimumBodyHeight),
-  );
+  return baseHeight;
 }
 
 function getRecordGroupCardHeight(records: readonly UnifiedRecord[], width: number): number {
-  return Math.max(...records.map((record) => getRecordCardHeight(record, width)));
+  return records.length > 0 ? getRecordCardHeight(records[0], width) : width * Sizing.cardRatio;
+}
+
+function getRecordGroupActionAreaHeight(records: readonly UnifiedRecord[]): number {
+  return records.some((record) => record.kind === "letter") ? CARD_ACTION_AREA_H : 0;
 }

@@ -568,7 +568,8 @@ describe("thought card typography regression guards", () => {
     expect(card).toContain(
       "readerFontSize(ReaderTokens.typeScale.bodyCqi, width)",
     );
-    expect(card).toContain("const bodyLines = Math.max(");
+    expect(card).toContain("const bodyLines = getRecordCardBodyLineCount({");
+    expect(card).toContain("numberOfLines={2}");
   });
 
   it("keeps the article card title tied to its scaled text frame", () => {
@@ -601,6 +602,21 @@ describe("thought card typography regression guards", () => {
     expect(recordsScreen).toContain('if (record.kind === "letter")');
     expect(recordsScreen).toContain("cover={record.article.cover}");
     expect(recordsScreen).toContain("if (record.kind === \"letter\") return baseHeight;");
+    expect(recordsScreen).toContain("return baseHeight;");
+  });
+
+  it("attaches the record card list to shared date-header snap restoration", () => {
+    const recordsScreen = read("app/(tabs)/on.tsx");
+    const inboxScreen = read("app/(tabs)/index.tsx");
+    const dots = read("components/DotIndicator/DotIndicator.tsx");
+
+    expect(recordsScreen).toContain("ref={recordListRef}");
+    expect(recordsScreen).toContain("ref={recordListViewportRef}");
+    expect(recordsScreen).toContain("verticalDateSnap.setGroupRef(item.dateKey, node)");
+    expect(recordsScreen).toContain("estimatedGroupHeights: estimatedRecordGroupHeights");
+    expect(recordsScreen).toContain("useDateGroupVerticalSnap({");
+    expect(inboxScreen).toContain("useDateGroupVerticalSnap({");
+    expect(dots).toContain("{total > 1 ? dots.map");
   });
 });
 

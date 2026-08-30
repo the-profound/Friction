@@ -33,7 +33,9 @@ import { isQueryStale } from "@/lib/useScreenFocused";
 import { useRealtimeChannel } from "@/lib/useRealtimeChannel";
 import { LIST_PERF_PRESET } from "@/lib/listPerf";
 import { useScrollPressGuard } from "@/hooks/useScrollPressGuard";
+import { useDateGroupVerticalSnap } from "@/hooks/useDateGroupVerticalSnap";
 import { useSelectionScrollRestoration } from "@/hooks/useSelectionScrollRestoration";
+import { getDateGroupCarouselHeight } from "@/lib/dateGroupCarousel";
 
 /** Recursively collect all inbox descendants of rootArticleId (oldest → newest BFS). */
 function findAllDescendants(rootArticleId: string, allItems: InboxItem[]): InboxItem[] {
@@ -169,6 +171,32 @@ export default function InboxScreen() {
 
   const groups = useMemo(() => groupBySlot(filteredItems), [filteredItems]);
   const scrollPressGuard = useScrollPressGuard();
+  const inboxGroupKeys = useMemo(
+    () => groups.map((group) => group.dateKey),
+    [groups],
+  );
+  const inboxGroupSignature = useMemo(
+    () => groups
+      .map((group) => `${group.dateKey}:${group.items.map((item) => item.id).join(",")}`)
+      .join("|"),
+    [groups],
+  );
+  const inboxVerticalDateSnap = useDateGroupVerticalSnap({
+    groupKeys: inboxGroupKeys,
+    groupSignature: inboxGroupSignature,
+    listRef: inboxListRef,
+    enabled: groups.length > 0,
+    bottomInset: navBottom,
+    estimatedGroupHeight: getDateGroupCarouselHeight(
+      CARD_H,
+      0,
+      Sizing.dateHeaderH
+        + Sizing.carouselShadowInsetTop
+        + Sizing.carouselShadowInsetBottom
+        + Sizing.dotsH
+        + Spacing.carouselGroupBottom,
+    ),
+  });
 
   const handleSearchPress = useCallback(() => {
     setSearchActive((prev) => {
@@ -186,17 +214,18 @@ export default function InboxScreen() {
 
   const handleInboxScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      inboxVerticalDateSnap.onScroll(event);
       handleSelectionScroll(event);
       scrollPressGuard.onScroll();
     },
-    [handleSelectionScroll, scrollPressGuard],
+    [handleSelectionScroll, inboxVerticalDateSnap.onScroll, scrollPressGuard],
   );
 
   // Stable renderItem for the carousel FlatList — avoids re-creating the
   // function (and triggering row-level reconciliation) on every parent render.
   const renderGroupItem = useCallback(
     ({ item: group }: { item: DateGroup }) => (
-      <View>
+      <View onLayout={(event) => inboxVerticalDateSnap.onGroupLayout(group.dateKey, event)}>
         <DateGroupCarousel
           dateLabel={group.label}
           countLabel={`${group.items.length}편`}
@@ -252,6 +281,7 @@ export default function InboxScreen() {
     [
       scrollPressGuard.shouldIgnoreVerticalPress,
       handleCardPress,
+      inboxVerticalDateSnap.onGroupLayout,
       isTappedSourceHidden,
       nickname,
       tapItem?.id,
@@ -542,8 +572,13 @@ export default function InboxScreen() {
           }
           contentContainerStyle={[styles.listContent, { paddingBottom: navBottom }]}
           showsVerticalScrollIndicator={false}
+          onLayout={inboxVerticalDateSnap.onLayout}
           onScroll={handleInboxScroll}
           scrollEventThrottle={16}
+          onScrollBeginDrag={inboxVerticalDateSnap.onScrollBeginDrag}
+          onScrollEndDrag={inboxVerticalDateSnap.onScrollEndDrag}
+          onMomentumScrollBegin={inboxVerticalDateSnap.onMomentumScrollBegin}
+          onMomentumScrollEnd={inboxVerticalDateSnap.onMomentumScrollEnd}
           scrollEnabled={tapItem === null}
         />
       )}

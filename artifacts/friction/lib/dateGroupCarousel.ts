@@ -17,3 +17,12 @@ export function getCarouselNextIndex(
   const direction = velocityX < 0 || (Math.abs(velocityX) <= flingVelocity && distanceX < 0) ? 1 : -1;
   return clampCarouselIndex(currentIndex + direction, itemCount);
 }
+
+/** Exact outer height reserved by DateGroupCarousel for one date group. */
+export function getDateGroupCarouselHeight(
+  cardHeight: number,
+  actionAreaHeight: number,
+  chromeHeight: number,
+): number {
+  return cardHeight + actionAreaHeight + chromeHeight;
+}

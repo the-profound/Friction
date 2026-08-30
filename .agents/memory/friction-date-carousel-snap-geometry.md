@@ -1,0 +1,10 @@
+---
+name: Friction date carousel snap geometry
+description: Why date-group snap offsets depend on deterministic carousel chrome across visible and virtualized rows.
+---
+
+Date-header vertical snapping should use each mounted header’s actual content-space position, derived from its window position relative to the list viewport plus the current scroll offset. It must also calculate virtualized groups without waiting for them to mount. Keep non-card chrome deterministic across item counts; in particular, reserve the dot-indicator row even when a group has only one card. Oversized groups still need bounded capture zones at both of their edges.
+
+**Why:** FlatList item-root `onLayout.y` can be relative to an internal cell rather than list content, while refresh/filter changes can leave the preserved date offscreen. Actual window-relative measurement fixes mounted anchors; per-date deterministic estimates prevent virtualized anchors from becoming permanently pending or restoring to the wrong position. Treating every oversized group as fully unsnappable disables date snapping entirely on screens where fixed-ratio cards are naturally taller than the usable list viewport.
+
+**How to apply:** Prefer measured header offsets for mounted groups and per-date estimates as the offscreen fallback. Let oversized groups snap near their header and near the offset that brings their end to the viewport bottom, returning no target through the interior so actions stay reachable. On a screen whose cards use a fixed ratio, the "oversized" branch is the normal case, not the exception — verify it against that screen's real card height rather than assuming most groups fit. When changing date header, shadow inset, action, dot, or group-gap geometry, update the estimated-height contract and tests together. Clear stale measurements on data signatures, then refine restored positions when mounted headers report again.

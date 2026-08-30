@@ -5,8 +5,10 @@ import {
   buildUnifiedRecords,
   compareRecordsNewestFirst,
   getQueuedThoughtIds,
+  getRecordCardBodyLineCount,
   getThoughtPreview,
   getRecordCardContent,
+  getRecordCardTitleLineCount,
   getThoughtCardContent,
   normalizePreviewTitle,
   normalizePreviewText,
@@ -204,5 +206,33 @@ describe("record preview normalization", () => {
       body: "첫 줄  \n\n  둘째 줄",
       hasTitle: true,
     });
+  });
+});
+
+describe("fixed-ratio record card text limits", () => {
+  it("caps long and explicitly broken titles at two visible lines", () => {
+    expect(getRecordCardTitleLineCount("짧은 제목", 20, 200)).toBe(1);
+    expect(getRecordCardTitleLineCount("첫 줄\n둘째 줄", 20, 200)).toBe(2);
+    expect(getRecordCardTitleLineCount("첫 줄\n둘째 줄\n셋째 줄", 20, 200)).toBe(2);
+    expect(getRecordCardTitleLineCount("가".repeat(40), 20, 200)).toBe(2);
+  });
+
+  it("reduces body lines by the visible title only and never below one line", () => {
+    expect(getRecordCardBodyLineCount({
+      cardHeight: 480,
+      paddingY: 48,
+      titleLineCount: 2,
+      titleLineHeight: 24,
+      titleGap: 8,
+      bodyLineHeight: 20,
+    })).toBe(16);
+    expect(getRecordCardBodyLineCount({
+      cardHeight: 80,
+      paddingY: 32,
+      titleLineCount: 2,
+      titleLineHeight: 24,
+      titleGap: 8,
+      bodyLineHeight: 20,
+    })).toBe(1);
   });
 });

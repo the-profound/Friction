@@ -24,11 +24,9 @@ export default function DotIndicator({ total, activeIndex }: DotIndicatorProps) 
     });
   }, [total, activeIndex]);
 
-  if (total <= 1) return null;
-
   return (
     <View style={styles.container}>
-      {dots.map((dot) => (
+      {total > 1 ? dots.map((dot) => (
         <View
           key={dot.index}
           style={[
@@ -40,7 +38,7 @@ export default function DotIndicator({ total, activeIndex }: DotIndicatorProps) 
                 : styles.inactiveDot,
           ]}
         />
-      ))}
+      )) : null}
     </View>
   );
 }
