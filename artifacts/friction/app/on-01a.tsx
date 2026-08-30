@@ -2384,13 +2384,13 @@ export default function WritingScreen() {
             여기서는 키보드가 올라온 동안 에디터가 툴바에 가려지지 않도록
             툴바 높이만큼 공간을 확보한다.
           */}
-          {!isDividing && keyboardVisible && Platform.OS !== "web" && selectionState.activeBlock !== "horizontalRule" && (
+          {keyboardVisible && Platform.OS !== "web" && selectionState.activeBlock !== "horizontalRule" && (
             <View style={styles.toolbarSpacerBottom} />
           )}
         </KeyboardAvoidingView>
 
         {/* ── 서식 툴바 — 키보드/인라인 패널 위 floating (read.tsx와 동일) ── */}
-        {!isDividing && Platform.OS !== "web" && selectionState.activeBlock !== "horizontalRule" &&
+        {Platform.OS !== "web" && selectionState.activeBlock !== "horizontalRule" &&
           (keyboardVisible || inlineMenuMode !== null || keyboardRestorePending) && (
           <View
             style={[
@@ -2421,7 +2421,7 @@ export default function WritingScreen() {
         )}
 
         {/* ── [+] 팝업 메뉴 (addMenu) ── */}
-        {!isDividing && inlineMenuMode === "addMenu" && (
+        {inlineMenuMode === "addMenu" && (
           <AddMenuPopup
             keyboardHeight={keyboardHeight}
             plusBtnCenterX={plusBtnCenterX}
@@ -2431,7 +2431,7 @@ export default function WritingScreen() {
         )}
 
         {/* ── 인라인 메뉴 패널 (본문/문장수집 인용) ── */}
-        {!isDividing && inlineMenuMode !== null && inlineMenuMode !== "addMenu" && (
+        {inlineMenuMode !== null && inlineMenuMode !== "addMenu" && (
           <InlineMenuPanel
             mode={inlineMenuMode}
             panelHeight={inlinePanelHeight}
