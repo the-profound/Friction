@@ -23,6 +23,10 @@ import CoverEditor from "@/components/CoverEditor/CoverEditor";
 import WebViewMarkdownReader from "@/components/WebViewMarkdownReader";
 import { resolveArticleCover, getDefaultCover } from "@/utils/articleCover";
 import { canStepBack } from "@/lib/articleStatusCycle";
+import {
+  createSerializedAsyncRunner,
+  type SerializedAsyncRunner,
+} from "@/lib/serializedAsyncRunner";
 import WritingStateBar, { type WritingStage } from "@/components/WritingStateBar/WritingStateBar";
 import { trackArticlePublished } from "@/lib/analytics";
 import {
@@ -83,12 +87,17 @@ export default function ClosingScreen() {
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [titleEditing, setTitleEditing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isCoverUploading, setIsCoverUploading] = useState(false);
+  const coverUploadInProgressRef = useRef(false);
   const isActionInProgressRef = useRef(false);
   const [previewCardWidth, setPreviewCardWidth] = useState(0);
   const storedLayoutWidth = (article?.layoutWidth != null && article.layoutWidth > 0) ? article.layoutWidth : null;
   const exportedArticleIdRef = useRef<string | null>(null);
   const initializedRef = useRef(false);
   const saveCoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const coverSaveQueueRef = useRef<SerializedAsyncRunner>(
+    createSerializedAsyncRunner(),
+  );
   // Step 3(E) — pages 변경 여부 추적: 분할 화면에서 이미 저장된 pages를 다시
   // 보내지 않도록, 서버에서 받은 초기 pages 스냅샷을 저장해 둔다. on-01c는
   // 현재 pages를 편집하지 않으므로 거의 항상 변경되지 않은 상태로 남는다.
@@ -126,6 +135,19 @@ export default function ClosingScreen() {
   // 향후 미리보기 내 블록 탭 추적이 구현되면 이 ref를 갱신한다.
   const returnBlockIdxRef = useRef(0);
 
+  const persistCover = useCallback(
+    (nextCover: ArticleCover) =>
+      coverSaveQueueRef.current(async () => {
+        if (!id) throw new Error("편지 정보를 찾을 수 없어요.");
+        await updateArticle.mutateAsync({
+          id,
+          data: { cover: nextCover },
+        });
+        patchArticleInRecordCaches(queryClient, id, { cover: nextCover });
+      }),
+    [id, queryClient, updateArticle],
+  );
+
   const flushCoverSave = useCallback(async () => {
     if (saveCoverTimerRef.current) {
       clearTimeout(saveCoverTimerRef.current);
@@ -133,17 +155,19 @@ export default function ClosingScreen() {
     }
     const pending = pendingCoverRef.current;
     if (!pending || !id) return;
-    pendingCoverRef.current = null;
     try {
-      await updateArticle.mutateAsync({
-        id,
-        data: { cover: pending },
-      });
-      patchArticleInRecordCaches(queryClient, id, { cover: pending });
+      await persistCover(pending);
+      if (pendingCoverRef.current === pending) {
+        pendingCoverRef.current = null;
+      }
     } catch (e: unknown) {
       console.warn("Failed to save cover:", e instanceof Error ? e.message : e);
+      if (!pendingCoverRef.current) {
+        pendingCoverRef.current = pending;
+      }
+      throw e;
     }
-  }, [id, queryClient, updateArticle]);
+  }, [id, persistCover]);
 
   const handleCoverChange = useCallback(
     (next: ArticleCover) => {
@@ -155,19 +179,20 @@ export default function ClosingScreen() {
         saveCoverTimerRef.current = null;
         const toSave = pendingCoverRef.current;
         if (!toSave) return;
-        pendingCoverRef.current = null;
         try {
-          await updateArticle.mutateAsync({
-            id,
-            data: { cover: toSave },
-          });
-          patchArticleInRecordCaches(queryClient, id, { cover: toSave });
+          await persistCover(toSave);
+          if (pendingCoverRef.current === toSave) {
+            pendingCoverRef.current = null;
+          }
         } catch (e: unknown) {
           console.warn("Failed to save cover:", e instanceof Error ? e.message : e);
+          if (!pendingCoverRef.current) {
+            pendingCoverRef.current = toSave;
+          }
         }
       }, 500);
     },
-    [id, queryClient, updateArticle],
+    [id, persistCover],
   );
 
   useEffect(() => {
@@ -177,6 +202,10 @@ export default function ClosingScreen() {
   }, []);
 
   const handleExport = useCallback(() => {
+    if (coverUploadInProgressRef.current) {
+      showToast({ message: "표지 사진 업로드가 끝난 뒤 내보낼 수 있어요.", type: "info" });
+      return;
+    }
     if (!title.trim()) {
       showToast({ message: "제목을 입력해주세요.", type: "info" });
       return;
@@ -210,6 +239,7 @@ export default function ClosingScreen() {
 
   const handleConfirmExport = useCallback(async () => {
     setConfirmVisible(false);
+    if (coverUploadInProgressRef.current) return;
     if (isActionInProgressRef.current) return;
     isActionInProgressRef.current = true;
     if (saveCoverTimerRef.current) {
@@ -217,17 +247,21 @@ export default function ClosingScreen() {
       saveCoverTimerRef.current = null;
     }
     const coverToSave = pendingCoverRef.current ?? cover;
-    pendingCoverRef.current = null;
     setIsExporting(true);
     try {
+      // An already-started debounced cover save must finish before the final
+      // cover write. No cover mutation may bypass this queue before finalize.
+      await persistCover(coverToSave);
+      if (pendingCoverRef.current === coverToSave) {
+        pendingCoverRef.current = null;
+      }
+
       // Step 3(E) — PATCH 페이로드 최소화:
       // pages는 분할 화면(on-01b)에서 이미 저장됐고 이 화면에서는 편집되지 않으므로,
       // 초기 스냅샷과 다를 때만 포함한다 (실질적으로 거의 항상 생략된다).
-      // title/cover는 변경 여부와 무관하게 보내 최신 상태를 확정한다 — debounce로
-      // 아직 서버에 반영되지 않은 cover나, blur 전인 title을 한 번에 확정한다.
-      const patchData: { title?: string; pages?: string[]; cover?: typeof cover } = {
+      // title은 blur 전 입력까지 확정하고, cover는 위 직렬화 큐에서 별도로 확정한다.
+      const patchData: { title?: string; pages?: string[] } = {
         title,
-        cover: coverToSave,
       };
       const initialPages = initialPagesRef.current;
       const pagesChanged =
@@ -248,7 +282,33 @@ export default function ClosingScreen() {
       setIsExporting(false);
       isActionInProgressRef.current = false;
     }
-  }, [id, title, pages, cover, updateArticle, finalizeExport]);
+  }, [id, title, pages, cover, persistCover, updateArticle, finalizeExport]);
+
+  const handleCoverUploadStateChange = useCallback((uploading: boolean) => {
+    coverUploadInProgressRef.current = uploading;
+    setIsCoverUploading(uploading);
+  }, []);
+
+  const handlePhotoCoverCommit = useCallback(
+    async (nextCover: ArticleCover) => {
+      if (!id) throw new Error("편지 정보를 찾을 수 없어요.");
+      if (saveCoverTimerRef.current) {
+        clearTimeout(saveCoverTimerRef.current);
+        saveCoverTimerRef.current = null;
+      }
+      const pending = pendingCoverRef.current;
+      if (pending) {
+        await persistCover(pending);
+        if (pendingCoverRef.current === pending) {
+          pendingCoverRef.current = null;
+        }
+      }
+      await persistCover(nextCover);
+      setCover(nextCover);
+      pendingCoverRef.current = null;
+    },
+    [id, persistCover],
+  );
 
   const flushTitleSave = useCallback(async () => {
     if (!id) return;
@@ -263,17 +323,27 @@ export default function ClosingScreen() {
   }, [id, queryClient, title, titleEditing, updateArticle]);
 
   const handleBack = useCallback(async () => {
+    if (coverUploadInProgressRef.current) {
+      showToast({ message: "표지 사진 작업이 끝난 뒤 이동할 수 있어요.", type: "info" });
+      return;
+    }
     if (isActionInProgressRef.current) return;
     isActionInProgressRef.current = true;
-    Keyboard.dismiss();
-    await flushTitleSave();
-    await flushCoverSave();
-    invalidateArticleLists(queryClient);
-    isActionInProgressRef.current = false;
-    router.replace("/(tabs)/on");
-  }, [router, queryClient, flushCoverSave, flushTitleSave]);
+    try {
+      Keyboard.dismiss();
+      await flushTitleSave();
+      await flushCoverSave();
+      invalidateArticleLists(queryClient);
+      router.replace("/(tabs)/on");
+    } catch {
+      showToast({ message: "표지를 저장하지 못했어요. 다시 시도해주세요.", type: "error" });
+    } finally {
+      isActionInProgressRef.current = false;
+    }
+  }, [router, queryClient, flushCoverSave, flushTitleSave, showToast]);
 
   const handleStepBack = useCallback(async () => {
+    if (coverUploadInProgressRef.current) return;
     if (isActionInProgressRef.current) return;
     isActionInProgressRef.current = true;
     Keyboard.dismiss();
@@ -417,11 +487,21 @@ export default function ClosingScreen() {
         <WritingStateBar
           current="CLOSING"
           onPress={handleStateBarPress}
-          disabled={isExporting}
+          disabled={isExporting || isCoverUploading}
         />
         <View style={styles.headerSideRight}>
-          <ScalePressable onPress={handleExport} hitSlop={12} disabled={isExporting}>
-            {isExporting ? (
+          <ScalePressable
+            onPress={handleExport}
+            hitSlop={12}
+            disabled={isExporting || isCoverUploading}
+            accessibilityRole="button"
+            accessibilityLabel="편지 내보내기"
+            accessibilityState={{
+              disabled: isExporting || isCoverUploading,
+              busy: isExporting || isCoverUploading,
+            }}
+          >
+            {isExporting || isCoverUploading ? (
               <ActivityIndicator size="small" color={Colors.zinc400} />
             ) : (
               <Text style={styles.exportButton}>내보내기</Text>
@@ -591,6 +671,9 @@ export default function ClosingScreen() {
         onChange={handleCoverChange}
         title={title}
         author={authorName}
+        articleId={id}
+        onPhotoOperationStateChange={handleCoverUploadStateChange}
+        onCommitPhotoCover={handlePhotoCoverCommit}
       />
 
       <ConfirmModal

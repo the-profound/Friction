@@ -17,12 +17,23 @@ describe("CoverEditor color picker integration", () => {
     expect(editor).not.toContain("BG_COLORS");
   });
 
-  it("keeps background controls specific to solid covers without restoring removed image controls", () => {
+  it("keeps background controls specific to solid covers and exposes cover-only photo controls", () => {
     const editor = read("CoverEditor.tsx");
 
     expect(editor).toContain('local.type === "color"');
-    expect(editor).not.toContain("pickAndUpload");
+    expect(editor).toContain('{ key: "image", label: "사진"');
+    expect(editor).toContain("pickCoverPhoto()");
+    expect(editor).toContain("uploadCoverPhoto(articleId, photo)");
+    expect(editor).toContain('"이미지 변경"');
     expect(editor).not.toContain("useImageUpload");
+
+    const typeSelection = editor.slice(
+      editor.indexOf('if (type === "image")'),
+      editor.indexOf("const isPhotoBusy"),
+    );
+    expect(typeSelection).toContain("setPhotoPanelVisible(true)");
+    expect(typeSelection).not.toContain("void selectPhoto()");
+    expect(editor).toContain("onPress={selectPhoto}");
   });
 
   it("restores and sanitizes saved colors every time the editor opens", () => {
@@ -31,5 +42,36 @@ describe("CoverEditor color picker integration", () => {
     expect(editor).toContain("resolveArticleCover(cover)");
     expect(editor).toContain("if (visible)");
     expect(editor).toContain("onChange(next)");
+  });
+
+  it("only applies an image cover after upload succeeds and keeps a retryable error", () => {
+    const editor = read("CoverEditor.tsx");
+
+    expect(editor.indexOf("await uploadCoverPhoto(articleId, photo)")).toBeLessThan(
+      editor.indexOf("await onCommitPhotoCover(next)"),
+    );
+    const commitIndex = editor.indexOf("await onCommitPhotoCover(next)");
+    expect(editor.indexOf("await onCommitPhotoCover(next)")).toBeLessThan(
+      editor.indexOf("setLocal(next)", commitIndex),
+    );
+    expect(editor).toContain("photoOperationInProgressRef.current");
+    expect(editor).toContain("retryPhotoRef.current");
+    expect(editor).toContain("retryUploadedImageUrlRef.current");
+    expect(editor).toContain("다시 시도");
+    expect(editor).toContain("accessibilityState={{ disabled: isPhotoBusy, busy: isPhotoBusy }}");
+  });
+
+  it("serializes the final cover save before export finalization", () => {
+    const closingScreen = read("../../app/on-01c.tsx");
+    const exportFlow = closingScreen.slice(
+      closingScreen.indexOf("const handleConfirmExport"),
+      closingScreen.indexOf("const handleCoverUploadStateChange"),
+    );
+
+    expect(exportFlow).toContain("await persistCover(coverToSave)");
+    expect(exportFlow.indexOf("await persistCover(coverToSave)")).toBeLessThan(
+      exportFlow.indexOf("await finalizeExport()"),
+    );
+    expect(exportFlow).not.toContain("cover: coverToSave");
   });
 });

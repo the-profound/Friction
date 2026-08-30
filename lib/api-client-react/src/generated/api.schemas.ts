@@ -148,6 +148,37 @@ export interface UpdateArticleBody {
   sourceArticleId?: string | null;
 }
 
+export interface ArticleCoverUploadInput {
+  /** @minLength 1 */
+  name: string;
+  /**
+   * @minimum 1
+   * @maximum 10485760
+   */
+  size: number;
+  /** @pattern ^image/ */
+  contentType: string;
+}
+
+export interface ArticleCoverUploadResponse {
+  uploadURL: string;
+  /**
+   * Opaque staging object path passed to the verification operation
+   * @pattern ^/objects/cover-staging/
+   */
+  objectPath: string;
+}
+
+export interface ArticleCoverVerificationInput {
+  /** @pattern ^/objects/cover-staging/ */
+  objectPath: string;
+}
+
+export interface ArticleCoverVerificationResponse {
+  /** Relative API URL for the verified image */
+  imageUrl: string;
+}
+
 export type TransitionArticleBodyTargetStatus =
   (typeof TransitionArticleBodyTargetStatus)[keyof typeof TransitionArticleBodyTargetStatus];
 

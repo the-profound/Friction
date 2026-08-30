@@ -1,8 +1,20 @@
 import { Router, type IRouter } from "express";
 import { and, eq, ilike, isNull, sql } from "drizzle-orm";
 import { db, articlesTable, myCollectionArticlesTable, myCollectionsTable, usersTable, type ArticleStatus } from "@workspace/db";
-import { UpdateArticleBody, TransitionArticleStatusBody, FinalizeArticleBody } from "@workspace/api-zod";
-import { ObjectStorageService } from "../lib/objectStorage";
+import {
+  UpdateArticleBody,
+  TransitionArticleStatusBody,
+  FinalizeArticleBody,
+  RequestArticleCoverUploadUrlBody,
+  RequestArticleCoverUploadUrlResponse,
+  VerifyArticleCoverUploadBody,
+  VerifyArticleCoverUploadResponse,
+} from "@workspace/api-zod";
+import {
+  InvalidCoverImageError,
+  ObjectNotFoundError,
+  ObjectStorageService,
+} from "../lib/objectStorage";
 import { generateArticleQuestions, getArticleQuestionsOrFallback } from "../services/generate-article-questions";
 import { requireAuth } from "../middlewares/requireAuth";
 
@@ -52,6 +64,20 @@ const BACK_TRANSITIONS: Record<string, string> = {
 
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
+const MAX_COVER_IMAGE_BYTES = 10 * 1024 * 1024;
+
+async function findEditableOwnedArticle(
+  articleId: string,
+  userId: string,
+): Promise<{ status: string } | "not-found" | "forbidden"> {
+  const [article] = await db
+    .select()
+    .from(articlesTable)
+    .where(and(eq(articlesTable.id, articleId), visibleArticleStatus, isNull(articlesTable.deletedAt)));
+  if (!article) return "not-found";
+  if (article.authorId !== userId) return "forbidden";
+  return { status: article.status };
+}
 const visibleArticleStatus = sql`${articlesTable.status} IN ('DIVIDING', 'CLOSING', 'LETTER')`;
 
 router.get("/articles", requireAuth, async (req, res) => {
@@ -182,28 +208,25 @@ router.patch("/articles/:id", requireAuth, async (req, res) => {
 
 router.post("/articles/:id/cover-image", requireAuth, async (req, res) => {
   const { id } = req.params;
-  const { name, size, contentType } = req.body ?? {};
-
-  if (!name || !contentType || typeof size !== "number") {
-    res.status(400).json({ error: "name, size, and contentType are required" });
+  const parsed = RequestArticleCoverUploadUrlBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({
+      error: parsed.error.issues[0]?.message ?? "Invalid cover image metadata",
+    });
     return;
   }
+  const { contentType } = parsed.data;
   if (!contentType.startsWith("image/")) {
     res.status(400).json({ error: "contentType must be an image MIME type" });
     return;
   }
-  const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
-  if (size > MAX_IMAGE_SIZE) {
-    res.status(400).json({ error: "Image size must not exceed 10MB" });
-    return;
-  }
 
-  const [article] = await db.select().from(articlesTable).where(and(eq(articlesTable.id, id), visibleArticleStatus, isNull(articlesTable.deletedAt)));
-  if (!article) {
+  const article = await findEditableOwnedArticle(id, req.user!.id);
+  if (article === "not-found") {
     res.status(404).json({ error: "Article not found" });
     return;
   }
-  if (article.authorId !== req.user!.id) {
+  if (article === "forbidden") {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
@@ -213,13 +236,58 @@ router.post("/articles/:id/cover-image", requireAuth, async (req, res) => {
   }
 
   try {
-    const uploadURL = await objectStorageService.getObjectEntityUploadURL();
-    const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
-    const imageUrl = `/api/storage${objectPath}`;
-    res.json({ uploadURL, imageUrl });
+    const target = await objectStorageService.getCoverImageUploadTarget(id);
+    res.json(RequestArticleCoverUploadUrlResponse.parse(target));
   } catch (error) {
     req.log.error({ err: error }, "Error generating cover image upload URL");
     res.status(500).json({ error: "Failed to generate upload URL" });
+  }
+});
+
+router.post("/articles/:id/cover-image/verify", requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const parsed = VerifyArticleCoverUploadBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({
+      error: parsed.error.issues[0]?.message ?? "Invalid staged image path",
+    });
+    return;
+  }
+
+  const article = await findEditableOwnedArticle(id, req.user!.id);
+  if (article === "not-found") {
+    res.status(404).json({ error: "Article not found" });
+    return;
+  }
+  if (article === "forbidden") {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  if (article.status === "LETTER") {
+    res.status(400).json({ error: "Cannot change cover image of a finalized letter" });
+    return;
+  }
+
+  try {
+    const objectPath = await objectStorageService.verifyAndPublishCoverImage(
+      id,
+      parsed.data.objectPath,
+      MAX_COVER_IMAGE_BYTES,
+    );
+    res.json(VerifyArticleCoverUploadResponse.parse({
+      imageUrl: `/api/storage${objectPath}`,
+    }));
+  } catch (error) {
+    if (error instanceof ObjectNotFoundError) {
+      res.status(404).json({ error: "Staged cover image not found" });
+      return;
+    }
+    if (error instanceof InvalidCoverImageError) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    req.log.error({ err: error }, "Error verifying cover image upload");
+    res.status(500).json({ error: "Failed to verify cover image" });
   }
 });
 

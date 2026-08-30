@@ -40,6 +40,7 @@ interface ColorPickerProps {
   onChange: (value: string) => void;
   label: string;
   testID: string;
+  disabled?: boolean;
 }
 
 interface PickerSize {
@@ -52,6 +53,7 @@ export default function ColorPicker({
   onChange,
   label,
   testID,
+  disabled = false,
 }: ColorPickerProps) {
   const [hsv, setHsv] = useState<HsvColor>(() =>
     getHsvFromHex(value, DEFAULT_HSV),
@@ -72,12 +74,13 @@ export default function ColorPicker({
 
   const commit = useCallback(
     (next: HsvColor) => {
+      if (disabled) return;
       const nextValue = hsvToHex(next);
       setHsv(next);
       lastValueRef.current = nextValue;
       onChange(nextValue);
     },
-    [onChange],
+    [disabled, onChange],
   );
 
   const updateSpectrum = useCallback(
@@ -169,7 +172,12 @@ export default function ColorPicker({
   const normalizedValue = hsvToHex(hsv);
 
   return (
-    <View style={styles.container} testID={testID}>
+    <View
+      style={[styles.container, disabled && styles.disabled]}
+      testID={testID}
+      pointerEvents={disabled ? "none" : "auto"}
+      accessibilityState={{ disabled }}
+    >
       <View style={styles.valueRow}>
         <View
           style={[styles.valueSwatch, { backgroundColor: normalizedValue }]}
@@ -300,6 +308,9 @@ const styles = StyleSheet.create({
   container: {
     width: "100%",
     gap: 10,
+  },
+  disabled: {
+    opacity: 0.55,
   },
   valueRow: {
     minHeight: 44,

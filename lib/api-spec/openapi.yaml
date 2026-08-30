@@ -325,6 +325,102 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /articles/{id}/cover-image:
+    post:
+      operationId: requestArticleCoverUploadUrl
+      tags: [articles]
+      summary: Request an upload URL for an article cover image
+      description: "Returns a short-lived staging upload URL after validating the authenticated article owner, image MIME type, 10MB declared size limit, and editable article status. After uploading bytes to uploadURL, call the verification operation before persisting the cover."
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArticleCoverUploadInput"
+      responses:
+        "200":
+          description: Presigned staging upload URL and opaque object path
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArticleCoverUploadResponse"
+        "400":
+          description: Invalid image metadata, image too large, or finalized article
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Article is owned by another user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Article not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /articles/{id}/cover-image/verify:
+    post:
+      operationId: verifyArticleCoverUpload
+      tags: [articles]
+      summary: Verify and publish an uploaded article cover image
+      description: "Checks the staged object's actual byte length and raster image signature, publishes it under a readable cover path, and returns the final image URL."
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArticleCoverVerificationInput"
+      responses:
+        "200":
+          description: Verified article cover image URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArticleCoverVerificationResponse"
+        "400":
+          description: Invalid, unsupported, oversized, or finalized cover image
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Article is owned by another user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Article or staged image not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /articles/{id}/transition:
     post:
       operationId: transitionArticleStatus
@@ -3257,6 +3353,49 @@ components:
           type: string
           enum: [left, center]
       required: [type, textColor, align]
+
+    ArticleCoverUploadInput:
+      type: object
+      required: [name, size, contentType]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        size:
+          type: integer
+          minimum: 1
+          maximum: 10485760
+        contentType:
+          type: string
+          pattern: "^image/"
+
+    ArticleCoverUploadResponse:
+      type: object
+      required: [uploadURL, objectPath]
+      properties:
+        uploadURL:
+          type: string
+          format: uri
+        objectPath:
+          type: string
+          pattern: "^/objects/cover-staging/"
+          description: Opaque staging object path passed to the verification operation
+
+    ArticleCoverVerificationInput:
+      type: object
+      required: [objectPath]
+      properties:
+        objectPath:
+          type: string
+          pattern: "^/objects/cover-staging/"
+
+    ArticleCoverVerificationResponse:
+      type: object
+      required: [imageUrl]
+      properties:
+        imageUrl:
+          type: string
+          description: Relative API URL for the verified image
 
     TransitionArticleBody:
       type: object

@@ -394,6 +394,62 @@ export const DeleteArticleParams = zod.object({
 });
 
 /**
+ * Returns a short-lived staging upload URL after validating the authenticated article owner, image MIME type, 10MB declared size limit, and editable article status. After uploading bytes to uploadURL, call the verification operation before persisting the cover.
+ * @summary Request an upload URL for an article cover image
+ */
+export const RequestArticleCoverUploadUrlParams = zod.object({
+  id: zod.coerce.string().uuid(),
+});
+
+export const requestArticleCoverUploadUrlBodySizeMax = 10485760;
+
+export const requestArticleCoverUploadUrlBodyContentTypeRegExp = new RegExp(
+  "^image",
+);
+
+export const RequestArticleCoverUploadUrlBody = zod.object({
+  name: zod.string().min(1),
+  size: zod.number().min(1).max(requestArticleCoverUploadUrlBodySizeMax),
+  contentType: zod
+    .string()
+    .regex(requestArticleCoverUploadUrlBodyContentTypeRegExp),
+});
+
+export const requestArticleCoverUploadUrlResponseObjectPathRegExp = new RegExp(
+  "^\/objects\/cover-staging",
+);
+
+export const RequestArticleCoverUploadUrlResponse = zod.object({
+  uploadURL: zod.string().url(),
+  objectPath: zod
+    .string()
+    .regex(requestArticleCoverUploadUrlResponseObjectPathRegExp)
+    .describe(
+      "Opaque staging object path passed to the verification operation",
+    ),
+});
+
+/**
+ * Checks the staged object's actual byte length and raster image signature, publishes it under a readable cover path, and returns the final image URL.
+ * @summary Verify and publish an uploaded article cover image
+ */
+export const VerifyArticleCoverUploadParams = zod.object({
+  id: zod.coerce.string().uuid(),
+});
+
+export const verifyArticleCoverUploadBodyObjectPathRegExp = new RegExp(
+  "^\/objects\/cover-staging",
+);
+
+export const VerifyArticleCoverUploadBody = zod.object({
+  objectPath: zod.string().regex(verifyArticleCoverUploadBodyObjectPathRegExp),
+});
+
+export const VerifyArticleCoverUploadResponse = zod.object({
+  imageUrl: zod.string().describe("Relative API URL for the verified image"),
+});
+
+/**
  * Forward: DIVIDING→CLOSING→LETTER. Back: CLOSING→DIVIDING. LETTER transition sets letter_at and makes article immutable.
  * @summary Transition article status
  */

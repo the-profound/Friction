@@ -33,7 +33,7 @@ function sourceFiles(relativeDirectory: string): string[] {
 }
 
 describe("native photo feature removal", () => {
-  it("keeps route-loadable source free of photo-only native modules", () => {
+  it("allows only the cover picker to reference the photo library native module", () => {
     const routeLoadableFiles = [
       ...sourceFiles("app"),
       ...sourceFiles("components"),
@@ -43,23 +43,33 @@ describe("native photo feature removal", () => {
     for (const filePath of routeLoadableFiles) {
       const source = readFileSync(filePath, "utf8");
       for (const packageName of nativePhotoPackages) {
-        expect(source, `${relative(appRoot, filePath)} imports ${packageName}`).not.toContain(
-          packageName,
-        );
+        const relativePath = relative(appRoot, filePath);
+        const isAllowedCoverPicker =
+          relativePath === "lib/coverPhotoPicker.ts" &&
+          packageName === "expo-image-picker";
+        if (!isAllowedCoverPicker) {
+          expect(source, `${relativePath} imports ${packageName}`).not.toContain(packageName);
+        }
       }
     }
+    const coverPicker = read("lib/coverPhotoPicker.ts");
+    expect(coverPicker).toContain('await import("expo-image-picker")');
+    expect(coverPicker).not.toMatch(/^import .*expo-image-picker/m);
   });
 
-  it("does not declare photo-only packages, plugins, or media permissions", () => {
+  it("declares only the cover picker package and minimal photo permission", () => {
     const packageJson = read("package.json");
     const appConfig = read("app.config.js");
     const workspaceConfig = readFileSync(join(workspaceRoot, "pnpm-workspace.yaml"), "utf8");
 
-    for (const packageName of nativePhotoPackages) {
+    expect(packageJson).toContain('"expo-image-picker"');
+    expect(appConfig).toContain('"expo-image-picker"');
+    for (const packageName of nativePhotoPackages.filter((name) => name !== "expo-image-picker")) {
       expect(packageJson).not.toContain(packageName);
       expect(appConfig).not.toContain(packageName);
       expect(workspaceConfig).not.toContain(packageName);
     }
+    expect(workspaceConfig).not.toContain("expo-image-picker");
 
     for (const permission of [
       "READ_EXTERNAL_STORAGE",
@@ -88,16 +98,15 @@ describe("native photo feature removal", () => {
     expect(webEditor).toContain('"data-original-src"');
   });
 
-  it("keeps image cover rendering but removes image cover creation controls", () => {
+  it("keeps image cover rendering and limits image creation to the cover editor", () => {
     const preview = read("components/ArticleCardItem/ArticleCardCover.tsx");
     const editor = read("components/CoverEditor/CoverEditor.tsx");
 
     expect(preview).toContain('coverType === "image"');
     expect(preview).toContain("const imageUrl = cover?.imageUrl");
-    expect(editor).not.toContain('key: "image"');
-    expect(editor).not.toContain("pickAndUpload");
-    expect(editor).not.toContain("사진 선택");
-    expect(editor).not.toContain("이미지 변경");
+    expect(editor).toContain('key: "image"');
+    expect(editor).toContain("사진 선택");
+    expect(editor).toContain("이미지 변경");
   });
 
   it("does not expose photo creation, retry, or device-save actions", () => {

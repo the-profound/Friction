@@ -22,6 +22,10 @@ import type {
   AddTeamArticleBody,
   AddTeamMemberBody,
   Article,
+  ArticleCoverUploadInput,
+  ArticleCoverUploadResponse,
+  ArticleCoverVerificationInput,
+  ArticleCoverVerificationResponse,
   ArticleQuestionsResponse,
   CheckArticleRead200,
   CheckArticleReadParams,
@@ -1241,6 +1245,191 @@ export const useDeleteArticle = <
   TContext
 > => {
   return useMutation(getDeleteArticleMutationOptions(options));
+};
+
+/**
+ * Returns a short-lived staging upload URL after validating the authenticated article owner, image MIME type, 10MB declared size limit, and editable article status. After uploading bytes to uploadURL, call the verification operation before persisting the cover.
+ * @summary Request an upload URL for an article cover image
+ */
+export const getRequestArticleCoverUploadUrlUrl = (id: string) => {
+  return `/api/articles/${id}/cover-image`;
+};
+
+export const requestArticleCoverUploadUrl = async (
+  id: string,
+  articleCoverUploadInput: ArticleCoverUploadInput,
+  options?: RequestInit,
+): Promise<ArticleCoverUploadResponse> => {
+  return customFetch<ArticleCoverUploadResponse>(
+    getRequestArticleCoverUploadUrlUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(articleCoverUploadInput),
+    },
+  );
+};
+
+export const getRequestArticleCoverUploadUrlMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof requestArticleCoverUploadUrl>>,
+    TError,
+    { id: string; data: BodyType<ArticleCoverUploadInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof requestArticleCoverUploadUrl>>,
+  TError,
+  { id: string; data: BodyType<ArticleCoverUploadInput> },
+  TContext
+> => {
+  const mutationKey = ["requestArticleCoverUploadUrl"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof requestArticleCoverUploadUrl>>,
+    { id: string; data: BodyType<ArticleCoverUploadInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return requestArticleCoverUploadUrl(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RequestArticleCoverUploadUrlMutationResult = NonNullable<
+  Awaited<ReturnType<typeof requestArticleCoverUploadUrl>>
+>;
+export type RequestArticleCoverUploadUrlMutationBody =
+  BodyType<ArticleCoverUploadInput>;
+export type RequestArticleCoverUploadUrlMutationError =
+  ErrorType<ErrorResponse>;
+
+/**
+ * @summary Request an upload URL for an article cover image
+ */
+export const useRequestArticleCoverUploadUrl = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof requestArticleCoverUploadUrl>>,
+    TError,
+    { id: string; data: BodyType<ArticleCoverUploadInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof requestArticleCoverUploadUrl>>,
+  TError,
+  { id: string; data: BodyType<ArticleCoverUploadInput> },
+  TContext
+> => {
+  return useMutation(getRequestArticleCoverUploadUrlMutationOptions(options));
+};
+
+/**
+ * Checks the staged object's actual byte length and raster image signature, publishes it under a readable cover path, and returns the final image URL.
+ * @summary Verify and publish an uploaded article cover image
+ */
+export const getVerifyArticleCoverUploadUrl = (id: string) => {
+  return `/api/articles/${id}/cover-image/verify`;
+};
+
+export const verifyArticleCoverUpload = async (
+  id: string,
+  articleCoverVerificationInput: ArticleCoverVerificationInput,
+  options?: RequestInit,
+): Promise<ArticleCoverVerificationResponse> => {
+  return customFetch<ArticleCoverVerificationResponse>(
+    getVerifyArticleCoverUploadUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(articleCoverVerificationInput),
+    },
+  );
+};
+
+export const getVerifyArticleCoverUploadMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof verifyArticleCoverUpload>>,
+    TError,
+    { id: string; data: BodyType<ArticleCoverVerificationInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof verifyArticleCoverUpload>>,
+  TError,
+  { id: string; data: BodyType<ArticleCoverVerificationInput> },
+  TContext
+> => {
+  const mutationKey = ["verifyArticleCoverUpload"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof verifyArticleCoverUpload>>,
+    { id: string; data: BodyType<ArticleCoverVerificationInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return verifyArticleCoverUpload(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type VerifyArticleCoverUploadMutationResult = NonNullable<
+  Awaited<ReturnType<typeof verifyArticleCoverUpload>>
+>;
+export type VerifyArticleCoverUploadMutationBody =
+  BodyType<ArticleCoverVerificationInput>;
+export type VerifyArticleCoverUploadMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Verify and publish an uploaded article cover image
+ */
+export const useVerifyArticleCoverUpload = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof verifyArticleCoverUpload>>,
+    TError,
+    { id: string; data: BodyType<ArticleCoverVerificationInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof verifyArticleCoverUpload>>,
+  TError,
+  { id: string; data: BodyType<ArticleCoverVerificationInput> },
+  TContext
+> => {
+  return useMutation(getVerifyArticleCoverUploadMutationOptions(options));
 };
 
 /**

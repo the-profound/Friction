@@ -220,6 +220,14 @@ module.exports = {
       "expo-web-browser",
       "expo-asset",
       [
+        "expo-image-picker",
+        {
+          photosPermission: "편지 표지를 선택하기 위해 사진 보관함 접근이 필요합니다.",
+          cameraPermission: false,
+          microphonePermission: false,
+        },
+      ],
+      [
         "expo-splash-screen",
         {
           image: "./assets/images/splash-icon.png",
