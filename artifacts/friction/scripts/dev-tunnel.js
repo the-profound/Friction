@@ -18,12 +18,18 @@
  * in the "Enter URL manually" field of the installed dev-client.
  */
 const { spawn } = require("child_process");
+const fs = require("fs");
 const path = require("path");
 
 const ngrok = require("@ngrok/ngrok");
 
 const METRO_PORT = 8090;
 const projectRoot = path.resolve(__dirname, "..");
+const metroMarkerPath = path.join(
+  projectRoot,
+  ".expo",
+  `friction-metro-${METRO_PORT}.json`,
+);
 
 // ── Validate env ──────────────────────────────────────────────────────────────
 if (!process.env.NGROK_AUTHTOKEN) {
@@ -71,7 +77,10 @@ async function waitForMetro(timeoutMs = 120_000) {
       const res = await fetch(`http://localhost:${METRO_PORT}/status`, {
         signal: AbortSignal.timeout(2000),
       });
-      if (res.ok) return true;
+      if (res.ok) {
+        const marker = JSON.parse(fs.readFileSync(metroMarkerPath, "utf8"));
+        if (marker.bundleValidation === "passed") return true;
+      }
     } catch {
       // not ready yet
     }
@@ -92,8 +101,13 @@ async function waitForMetro(timeoutMs = 120_000) {
   // Start Metro (dev mode, no minify)
   console.log("Starting Metro…");
   metroProcess = spawn(
-    "pnpm",
-    ["exec", "expo", "start", "--dev-client", "--port", String(METRO_PORT)],
+    process.execPath,
+    [
+      path.join(projectRoot, "scripts", "start-dev-metro.js"),
+      "--dev-client",
+      "--port",
+      String(METRO_PORT),
+    ],
     {
       cwd: projectRoot,
       stdio: ["ignore", "pipe", "pipe"],

@@ -10,6 +10,18 @@ export const BODY_SEMIBOLD_FONT_FAMILY =
  */
 export const BODY_FONT_CONFIG_VERSION = "eulyoo1945-noto-serif-kr-woff2-v2";
 export const BODY_FONT_FALLBACK_PROBE_TEXT = "가잓";
+export const BODY_FONT_ASSET_NAMES = [
+  "Eulyoo1945-Regular",
+  "Eulyoo1945-SemiBold",
+  "NotoSerifKR-400Regular-korean",
+  "NotoSerifKR-600SemiBold-korean",
+] as const;
+export const BODY_FONT_ASSET_PATHS = [
+  "assets/fonts/Eulyoo1945-Regular.woff2",
+  "assets/fonts/Eulyoo1945-SemiBold.woff2",
+  "assets/fonts/NotoSerifKR-400Regular-korean.woff2",
+  "assets/fonts/NotoSerifKR-600SemiBold-korean.woff2",
+] as const;
 
 export interface EmbeddedBodyFontOptions {
   regularBase64?: string | null;

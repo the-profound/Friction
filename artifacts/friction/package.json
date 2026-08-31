@@ -4,7 +4,7 @@
   "private": true,
   "main": "./index.js",
   "scripts": {
-    "dev": "EXPO_PACKAGER_PROXY_URL=https://$REPLIT_EXPO_DEV_DOMAIN EXPO_PUBLIC_DOMAIN=$REPLIT_DEV_DOMAIN EXPO_PUBLIC_REPL_ID=$REPL_ID REACT_NATIVE_PACKAGER_HOSTNAME=$REPLIT_DEV_DOMAIN pnpm exec expo start --localhost --port $PORT",
+    "dev": "EXPO_PACKAGER_PROXY_URL=https://$REPLIT_EXPO_DEV_DOMAIN EXPO_PUBLIC_DOMAIN=$REPLIT_DEV_DOMAIN EXPO_PUBLIC_REPL_ID=$REPL_ID REACT_NATIVE_PACKAGER_HOSTNAME=$REPLIT_DEV_DOMAIN node scripts/start-dev-metro.js --localhost --port $PORT",
     "dev:tunnel": "node scripts/dev-tunnel.js",
     "build": "node scripts/build.js",
     "build:editor": "node components/WebViewMarkdownEditor/buildEditorHtml.mjs",
@@ -12,6 +12,7 @@
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "check:typography": "node scripts/check-typography.mjs",
+    "check:dev-bundle": "node scripts/validate-dev-font-bundle.mjs",
     "validate:release": "node scripts/validate-release-env.mjs",
     "validate:resolved-release": "node scripts/validate-resolved-release-config.mjs",
     "test:release-publication-guards": "bash scripts/test-release-publication-guards.sh",

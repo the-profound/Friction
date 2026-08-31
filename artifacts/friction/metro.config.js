@@ -6,6 +6,7 @@ const projectRoot = __dirname;
 const workspaceRoot = path.resolve(projectRoot, "../..");
 
 const config = getDefaultConfig(projectRoot);
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // The editor, reader, and measurement WebViews share the compressed body-font
 // contract. Keep WOFF2 as a Metro asset so static require() calls in the root
@@ -22,6 +23,20 @@ config.resolver.assetExts = Array.from(
 // crashes when a second Metro instance (the tunnel workflow) ran alongside
 // the main preview workflow in this monorepo's large node_modules tree.
 config.resolver.useWatchman = true;
+
+// Replit creates and removes workflow log directories under `.local` while
+// Metro is walking the workspace. FallbackWatcher treats a directory removed
+// during startup as fatal, so exclude this non-source state from the file map.
+// This also keeps a cold-cache restart from depending on transient Replit logs.
+const defaultBlockList = Array.isArray(config.resolver.blockList)
+  ? config.resolver.blockList
+  : [config.resolver.blockList];
+config.resolver.blockList = [
+  ...defaultBlockList.filter(Boolean),
+  new RegExp(
+    `^${escapeRegex(path.join(workspaceRoot, ".local"))}(?:[/\\\\].*)?$`,
+  ),
+];
 
 // Watch all workspace packages so Metro can resolve symlinked libs
 config.watchFolders = [workspaceRoot];

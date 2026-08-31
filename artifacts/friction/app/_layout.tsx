@@ -38,6 +38,11 @@ import { Colors } from "@/constants/tokens";
 import { Platform } from "react-native";
 import { ReaderTransitionProvider } from "@/contexts/ReaderTransitionContext";
 import {
+  BODY_FONT_ASSET_NAMES,
+  BODY_FONT_ASSET_PATHS,
+  BODY_FONT_CONFIG_VERSION,
+} from "@/components/shared/bodyTypographyFonts";
+import {
   getActiveReadingForUser,
   getAuthNavigationDecision,
 } from "@/lib/authNavigation";
@@ -302,13 +307,48 @@ const styles = StyleSheet.create({
 
 async function loadEditorFonts(): Promise<void> {
   if (Platform.OS === "web") return;
+  const assetSpecs = [
+    {
+      name: BODY_FONT_ASSET_NAMES[0],
+      path: BODY_FONT_ASSET_PATHS[0],
+      module: require("../assets/fonts/Eulyoo1945-Regular.woff2"),
+    },
+    {
+      name: BODY_FONT_ASSET_NAMES[1],
+      path: BODY_FONT_ASSET_PATHS[1],
+      module: require("../assets/fonts/Eulyoo1945-SemiBold.woff2"),
+    },
+    {
+      name: BODY_FONT_ASSET_NAMES[2],
+      path: BODY_FONT_ASSET_PATHS[2],
+      module: require("../assets/fonts/NotoSerifKR-400Regular-korean.woff2"),
+    },
+    {
+      name: BODY_FONT_ASSET_NAMES[3],
+      path: BODY_FONT_ASSET_PATHS[3],
+      module: require("../assets/fonts/NotoSerifKR-600SemiBold-korean.woff2"),
+    },
+  ];
+  const diagnosticContext = {
+    contractVersion: BODY_FONT_CONFIG_VERSION,
+    serverId:
+      process.env.EXPO_PUBLIC_FRICTION_DEV_SERVER_ID?.trim() || "unknown",
+    serverContractVersion:
+      process.env.EXPO_PUBLIC_FRICTION_DEV_FONT_CONTRACT_VERSION?.trim() ||
+      "unknown",
+    platform: Platform.OS,
+    assetPaths: assetSpecs.map(({ path }) => path),
+    assetModuleRefs: assetSpecs.map(({ module }) =>
+      typeof module === "number" ? String(module) : typeof module,
+    ),
+  };
+  console.info(
+    "[editorFonts] Loading native body-font assets",
+    diagnosticContext,
+  );
   try {
-    const [regularAsset, semiBoldAsset, notoRegularAsset, notoSemiBoldAsset] = await Asset.loadAsync([
-      require("../assets/fonts/Eulyoo1945-Regular.woff2"),
-      require("../assets/fonts/Eulyoo1945-SemiBold.woff2"),
-      require("../assets/fonts/NotoSerifKR-400Regular-korean.woff2"),
-      require("../assets/fonts/NotoSerifKR-600SemiBold-korean.woff2"),
-    ]);
+    const [regularAsset, semiBoldAsset, notoRegularAsset, notoSemiBoldAsset] =
+      await Asset.loadAsync(assetSpecs.map(({ module }) => module));
     const regularUri = regularAsset.localUri ?? regularAsset.uri;
     const semiBoldUri = semiBoldAsset.localUri ?? semiBoldAsset.uri;
     const notoRegularUri = notoRegularAsset.localUri ?? notoRegularAsset.uri;
@@ -320,9 +360,30 @@ async function loadEditorFonts(): Promise<void> {
       FileSystem.readAsStringAsync(notoSemiBoldUri, { encoding: "base64" }),
     ]);
     setEditorFonts(regular, semiBold, notoRegular, notoSemiBold);
+    console.info("[editorFonts] Native body-font assets loaded", {
+      ...diagnosticContext,
+      loadedAssets: [
+        regularAsset,
+        semiBoldAsset,
+        notoRegularAsset,
+        notoSemiBoldAsset,
+      ].map((asset, index) => ({
+        name: assetSpecs[index].name,
+        type: asset.type,
+        hasLocalUri: Boolean(asset.localUri),
+        hasUri: Boolean(asset.uri),
+      })),
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("[editorFonts] Failed to load editor fonts:", err);
+    console.error("[editorFonts] Failed to load editor fonts:", {
+      ...diagnosticContext,
+      error: message,
+      hint:
+        diagnosticContext.serverContractVersion !== BODY_FONT_CONFIG_VERSION
+          ? "Dev server font contract differs from the running app bundle."
+          : "Check the four WOFF2 asset modules and restart the matching Metro server.",
+    });
     setEditorFontsError(message);
   }
 }

@@ -15,6 +15,9 @@ import {
 } from "../pageGeometry";
 import { calculateCardReturnDistance } from "../../components/CardSelectOverlay/returnDistance";
 import {
+  BODY_FONT_ASSET_NAMES,
+  BODY_FONT_ASSET_PATHS,
+  BODY_FONT_CONFIG_VERSION,
   BODY_FONT_FALLBACK_PROBE_TEXT,
   BODY_REGULAR_FONT_FAMILY,
   BODY_SEMIBOLD_FONT_FAMILY,
@@ -29,6 +32,38 @@ import { parseMarkdownBlocks } from "../../utils/markdownParser";
 import { ReaderTokens } from "../../constants/tokens";
 
 describe("letter body font fallback contract", () => {
+  it("keeps the native loader and bundle validator on the same four-face contract", () => {
+    const layout = readFileSync(
+      join(__dirname, "../../app/_layout.tsx"),
+      "utf8",
+    );
+    const validator = readFileSync(
+      join(__dirname, "../../scripts/validate-dev-font-bundle.mjs"),
+      "utf8",
+    );
+    const starter = readFileSync(
+      join(__dirname, "../../scripts/start-dev-metro.js"),
+      "utf8",
+    );
+
+    expect(BODY_FONT_ASSET_NAMES).toHaveLength(4);
+    expect(BODY_FONT_ASSET_PATHS).toHaveLength(4);
+    expect(layout).toContain(
+      "Asset.loadAsync(assetSpecs.map(({ module }) => module))",
+    );
+    for (const assetPath of BODY_FONT_ASSET_PATHS) {
+      expect(layout).toContain(assetPath);
+      expect(validator).toContain(assetPath);
+    }
+    expect(layout).toContain("EXPO_PUBLIC_FRICTION_DEV_SERVER_ID");
+    expect(starter).toContain("EXPO_PUBLIC_FRICTION_DEV_SERVER_ID");
+    expect(starter).toContain('"--clear"');
+    expect(validator).toContain("BODY_FONT_CONFIG_VERSION");
+    expect(validator).toContain("serverMarker.serverId");
+    expect(validator).toContain('"type": "woff2"');
+    expect(validator).toContain("registerAsset");
+  });
+
   it("registers WOFF2 as a Metro asset without dropping the default assets", () => {
     const metroConfig = readFileSync(
       join(__dirname, "../../metro.config.js"),
