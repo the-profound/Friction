@@ -859,15 +859,15 @@ export default function SpaceJoinScreen() {
             <Text style={styles.cancelRequestText}>신청 취소하기</Text>
           </ScalePressable>
           <ScalePressable
-            style={styles.secondaryButton}
-            contentStyle={styles.secondaryButtonContent}
+            style={styles.pendingBackButton}
+            contentStyle={styles.pendingBackButtonContent}
             onPress={() => router.replace("/(tabs)/of")}
             disabled={actionLoading}
             accessibilityRole="button"
             accessibilityLabel="목록으로 돌아가기"
             accessibilityState={{ disabled: actionLoading }}
           >
-            <Text style={styles.secondaryButtonText}>목록으로 돌아가기</Text>
+            <Text style={styles.pendingBackButtonText}>목록으로 돌아가기</Text>
           </ScalePressable>
         </View>
       );
@@ -1189,6 +1189,30 @@ const styles = StyleSheet.create({
     ...Typography.body,
     fontSize: 15,
     color: "#DC2626",
+  },
+  pendingBackButton: {
+    width: "100%",
+    height: 48,
+    flexGrow: 0,
+    flexShrink: 0,
+    borderRadius: 12,
+    backgroundColor: Colors.noticeAccent,
+  },
+  pendingBackButtonContent: {
+    width: "100%",
+    height: 48,
+    flexGrow: 0,
+    flexShrink: 0,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.noticeAccent,
+  },
+  pendingBackButtonText: {
+    ...Typography.bodySemiBold,
+    fontSize: 15,
+    color: Colors.white,
   },
   roundsDisclaimerRow: {
     marginTop: 12,
