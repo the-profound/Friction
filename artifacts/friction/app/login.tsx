@@ -30,9 +30,49 @@ type SignupStep = 1 | 2;
 const SIGNUP_BACK_ROW_HEIGHT = 32;
 const SIGNUP_CHECKBOX_TOUCH_TARGET = 44;
 const SIGNUP_SUBMIT_BUTTON_HEIGHT = 52;
+const MINJI_EMAIL = "minji@test.com";
+const MINJI_PASSWORD_CANDIDATES = ["00000000", "000000"] as const;
 
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
+function getLoginErrorMessage(error: {
+  name: string;
+  message: string;
+}): string {
+  if (error.name === "SupabaseNetworkError") {
+    return "인증 서버에 연결하지 못했습니다. 인터넷 연결을 확인해주세요.";
+  }
+  if (error.name === "ApiNetworkError") {
+    return "앱 서버에 연결하지 못했습니다. 잠시 후 다시 시도해주세요.";
+  }
+  if (error.name === "UserSyncError") {
+    return "계정은 확인됐지만 프로필 저장에 실패했습니다. 로그인 탭에서 다시 시도해주세요.";
+  }
+
+  const msg = error.message.toLowerCase();
+  if (
+    msg.includes("invalid login credentials") ||
+    msg.includes("invalid credentials")
+  ) {
+    return "이메일 또는 비밀번호가 올바르지 않아요.";
+  }
+  if (msg.includes("email not confirmed")) {
+    return "이메일 인증이 완료되지 않은 계정이에요. 메일함을 확인해주세요.";
+  }
+  if (msg.includes("network") || msg.includes("fetch")) {
+    return "네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.";
+  }
+  return "로그인에 실패했습니다. 다시 시도해주세요.";
+}
+
+function isInvalidCredentialsError(error: { message: string }): boolean {
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("invalid login credentials") ||
+    message.includes("invalid credentials")
+  );
 }
 
 const PRIVACY_URL = "https://friction.app/privacy";
@@ -59,6 +99,7 @@ export default function LoginScreen() {
   const [signupDone, setSignupDone] = useState(false);
   const [signupFailurePopup, setSignupFailurePopup] = useState<SignupFailure | null>(null);
   const lastShownSignupDiagnosticIdRef = useRef<string | null>(null);
+  const minjiLoginInFlightRef = useRef(false);
 
   useEffect(() => {
     if (!signupFailurePopup || isLoading) return;
@@ -102,24 +143,7 @@ export default function LoginScreen() {
     try {
       const { error } = await signInWithPassword(email.trim(), password);
       if (error) {
-        if (error.name === "SupabaseNetworkError") {
-          setErrorMessage("인증 서버에 연결하지 못했습니다. 인터넷 연결을 확인해주세요.");
-        } else if (error.name === "ApiNetworkError") {
-          setErrorMessage("앱 서버에 연결하지 못했습니다. 잠시 후 다시 시도해주세요.");
-        } else if (error.name === "UserSyncError") {
-          setErrorMessage("계정은 확인됐지만 프로필 저장에 실패했습니다. 로그인 탭에서 다시 시도해주세요.");
-        } else {
-          const msg = error.message.toLowerCase();
-          if (msg.includes("invalid login credentials") || msg.includes("invalid credentials")) {
-            setErrorMessage("이메일 또는 비밀번호가 올바르지 않아요.");
-          } else if (msg.includes("email not confirmed")) {
-            setErrorMessage("이메일 인증이 완료되지 않은 계정이에요. 메일함을 확인해주세요.");
-          } else if (msg.includes("network") || msg.includes("fetch")) {
-            setErrorMessage("네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.");
-          } else {
-            setErrorMessage("로그인에 실패했습니다. 다시 시도해주세요.");
-          }
-        }
+        setErrorMessage(getLoginErrorMessage(error));
       }
     } catch {
       setErrorMessage("네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.");
@@ -178,10 +202,42 @@ export default function LoginScreen() {
     }
   }
 
-  function handleDevLogin() {
-    setErrorMessage(
-      "민지 테스트 계정은 아직 인증 서버에 준비되지 않았어요. 현준 또는 일곤 버튼으로 로그인해주세요.",
-    );
+  async function handleDevLogin() {
+    if (minjiLoginInFlightRef.current || isLoading) return;
+
+    minjiLoginInFlightRef.current = true;
+    setErrorMessage(null);
+    setIsLoading(true);
+    try {
+      for (const [
+        candidateIndex,
+        candidatePassword,
+      ] of MINJI_PASSWORD_CANDIDATES.entries()) {
+        try {
+          const { error } = await signInWithPassword(
+            MINJI_EMAIL,
+            candidatePassword,
+          );
+          if (!error) return;
+
+          // Only a definitive credential rejection is safe to retry. In
+          // particular, a successful Supabase login followed by profile sync
+          // failure must not trigger another auth request.
+          if (candidateIndex === 0 && isInvalidCredentialsError(error)) {
+            continue;
+          }
+
+          setErrorMessage(getLoginErrorMessage(error));
+          return;
+        } catch {
+          setErrorMessage("네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.");
+          return;
+        }
+      }
+    } finally {
+      minjiLoginInFlightRef.current = false;
+      setIsLoading(false);
+    }
   }
 
   async function handleHyeonjunLogin() {
