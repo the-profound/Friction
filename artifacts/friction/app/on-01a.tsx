@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   View,
   Text,
@@ -146,12 +147,15 @@ export default function WritingScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const queryClient = useQueryClient();
-  const { id, source, mode: modeParam, returnPage, returnBlock } = useLocalSearchParams<{
+  const { id, source, mode: modeParam, returnPage, returnBlock, spaceId, spaceRoundId, letterType } = useLocalSearchParams<{
     id?: string;
     source?: string;
     mode?: string;
     returnPage?: string;
     returnBlock?: string;
+    spaceId?: string;
+    spaceRoundId?: string;
+    letterType?: string;
   }>();
   const isLocalDirectDraft = modeParam === "local-draft";
   const returnPageIndex = returnPage !== undefined ? parseInt(returnPage, 10) : undefined;
@@ -1421,12 +1425,35 @@ export default function WritingScreen() {
     queryClient.invalidateQueries({ queryKey: getListThoughtsQueryKey() });
     releaseDirectThoughtDraft();
 
+    // 공간 컨텍스트를 AsyncStorage에 저장 — (tabs)/on.tsx 재개 시 on-01c가 복구할 수 있도록
+    if (spaceId) {
+      try {
+        await AsyncStorage.setItem(
+          `space_context:${promoted.id}`,
+          JSON.stringify({
+            spaceId,
+            ...(spaceRoundId ? { spaceRoundId } : {}),
+            ...(letterType ? { letterType } : {}),
+          }),
+        );
+      } catch {
+        // 저장 실패는 비핵심 — 라우트 파라미터로 컨텍스트가 이미 전달됨
+      }
+    }
+
     // Replace route with the new article id so a refresh lands on the real article.
     // This route identity swap is a stage transition, not a user-initiated exit.
     navigateAfterRemovingGuard(() => {
-      router.replace({ pathname: "/on-01a", params: { id: promoted.id, mode: "dividing" } });
+      router.replace({
+        pathname: "/on-01a",
+        params: {
+          id: promoted.id,
+          mode: "dividing",
+          ...(spaceId ? { spaceId, ...(spaceRoundId ? { spaceRoundId } : {}), ...(letterType ? { letterType } : {}) } : {}),
+        },
+      });
     });
-  }, [getEditorContent, markDirty, flush, queryClient, promoteThought, showToast, setModeBoth, router, releaseDirectThoughtDraft, navigateAfterRemovingGuard, reportAutosaveFailure]);
+  }, [getEditorContent, markDirty, flush, queryClient, promoteThought, showToast, setModeBoth, router, releaseDirectThoughtDraft, navigateAfterRemovingGuard, reportAutosaveFailure, spaceId, spaceRoundId, letterType]);
 
   // ── 분할 → 마감 (on-01c 이동) ──────────────────────────────────────────────
   const handleNextToClosing = useCallback(async () => {
@@ -1520,7 +1547,13 @@ export default function WritingScreen() {
       { updatedAt: Date.now() },
     );
 
-    router.push({ pathname: "/on-01c", params: { id } });
+    router.push({
+      pathname: "/on-01c",
+      params: {
+        id,
+        ...(spaceId ? { spaceId, ...(spaceRoundId ? { spaceRoundId } : {}), ...(letterType ? { letterType } : {}) } : {}),
+      },
+    });
     isNavigatingRef.current = false;
     setIsNavigating(false);
 

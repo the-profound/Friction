@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   View,
   Text,
@@ -28,6 +29,7 @@ import {
   type SerializedAsyncRunner,
 } from "@/lib/serializedAsyncRunner";
 import WritingStateBar, { type WritingStage } from "@/components/WritingStateBar/WritingStateBar";
+import { SpaceInfoNote } from "@/components/SpaceInfoNote/SpaceInfoNote";
 import { trackArticlePublished } from "@/lib/analytics";
 import {
   useGetArticle,
@@ -37,6 +39,13 @@ import {
   useFinalizeArticle,
   TransitionArticleBodyTargetStatus,
   getGetArticleQueryKey,
+  useGetSpace,
+  SpaceLetterVisibility,
+  useCreateSpaceLetter,
+  CreateSpaceLetterBodyLetterType,
+  useUpdateSpaceLetterVisibility,
+  listSpaceLetters,
+  getListSpaceLettersQueryKey,
 } from "@workspace/api-client-react";
 import type { ArticleCover } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -53,10 +62,54 @@ export default function ClosingScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, spaceId, spaceRoundId, letterType } = useLocalSearchParams<{
+    id: string;
+    spaceId?: string;
+    spaceRoundId?: string;
+    letterType?: string;
+  }>();
   const articleQuery = useGetArticle(id ?? "");
   const article = id ? articleQuery.data : undefined;
   const articleLoading = id ? articleQuery.isLoading : false;
+
+  // AsyncStorage 복구 — (tabs)/on.tsx에서 재개할 때 라우트에 spaceId가 없는 경우를 처리한다.
+  // contextReady: false인 동안 내보내기를 차단해 복구 완료 전에 export가 실행되는 것을 방지한다.
+  const [recoveredSpaceContext, setRecoveredSpaceContext] = useState<{
+    spaceId: string;
+    spaceRoundId?: string;
+    letterType?: string;
+  } | null>(null);
+  const [contextReady, setContextReady] = useState(!!spaceId);
+  useEffect(() => {
+    if (spaceId) {
+      setContextReady(true);
+      return;
+    }
+    if (!id) {
+      setContextReady(true);
+      return;
+    }
+    // spaceId가 라우트에 없는 경우 — AsyncStorage에서 복구 시도
+    void AsyncStorage.getItem(`space_context:${id}`).then((raw) => {
+      if (raw) {
+        try {
+          setRecoveredSpaceContext(
+            JSON.parse(raw) as { spaceId: string; spaceRoundId?: string; letterType?: string },
+          );
+        } catch {}
+      }
+      setContextReady(true);
+    });
+  }, [id, spaceId]);
+
+  const effectiveSpaceId = spaceId ?? recoveredSpaceContext?.spaceId;
+  const effectiveSpaceRoundId = spaceRoundId ?? recoveredSpaceContext?.spaceRoundId;
+  const effectiveLetterType = letterType ?? recoveredSpaceContext?.letterType;
+
+  const spaceQuery = useGetSpace(effectiveSpaceId ?? "", {
+    query: { enabled: !!effectiveSpaceId },
+  });
+  const isAnonymous = spaceQuery.data?.isAnonymous ?? false;
 
   const authorQuery = useGetUser(article?.authorId ?? "");
   const authorName = article?.authorId
@@ -78,6 +131,8 @@ export default function ClosingScreen() {
   const updateArticle = useUpdateArticle();
   const transitionStatus = useTransitionArticleStatus();
   const finalizeArticle = useFinalizeArticle();
+  const createSpaceLetterMutation = useCreateSpaceLetter();
+  const updateSpaceLetterVisibilityMutation = useUpdateSpaceLetterVisibility();
 
   const [title, setTitle] = useState("");
   const [pages, setPages] = useState<string[]>([]);
@@ -88,6 +143,9 @@ export default function ClosingScreen() {
   const [titleEditing, setTitleEditing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isCoverUploading, setIsCoverUploading] = useState(false);
+  const [visibility, setVisibility] = useState<SpaceLetterVisibility>(
+    SpaceLetterVisibility.PUBLIC,
+  );
   const coverUploadInProgressRef = useRef(false);
   const isActionInProgressRef = useRef(false);
   const [previewCardWidth, setPreviewCardWidth] = useState(0);
@@ -127,6 +185,13 @@ export default function ClosingScreen() {
       console.log("[on-01 init] on-01c cached?=true dirty?=false title injected:", (article.title || "").slice(0, 30));
     }
   }, [article]);
+
+  // 익명 공간이면 공개 설정을 RECIPIENT_ONLY로 고정한다.
+  useEffect(() => {
+    if (isAnonymous) {
+      setVisibility(SpaceLetterVisibility.RECIPIENT_ONLY);
+    }
+  }, [isAnonymous]);
 
   const pendingCoverRef = useRef<ArticleCover | null>(null);
   // 마감→분할 복귀 시 전달할 콘텐츠 페이지 인덱스를 렌더마다 갱신한다.
@@ -202,6 +267,13 @@ export default function ClosingScreen() {
   }, []);
 
   const handleExport = useCallback(() => {
+    // AsyncStorage 복구가 완료될 때까지 내보내기를 차단한다.
+    // 복구 전에 export를 허용하면 effectiveSpaceId가 undefined인 상태로 finalizeArticle이
+    // 실행되어 SpaceLetter 생성/연결이 누락될 수 있다.
+    if (!contextReady) return;
+    // 공간이 있는 경우 isAnonymous 로딩 중에 내보내기를 허용하면
+    // PUBLIC 토글을 선택한 채로 익명 공간에 발신해 PATCH 403이 발생한다.
+    if (effectiveSpaceId && spaceQuery.isLoading) return;
     if (coverUploadInProgressRef.current) {
       showToast({ message: "표지 사진 업로드가 끝난 뒤 내보낼 수 있어요.", type: "info" });
       return;
@@ -215,7 +287,7 @@ export default function ClosingScreen() {
       return;
     }
     setConfirmVisible(true);
-  }, [title, pages, showToast]);
+  }, [contextReady, effectiveSpaceId, spaceQuery.isLoading, title, pages, showToast]);
 
   const finalizeExport = useCallback(
     async () => {
@@ -232,9 +304,81 @@ export default function ClosingScreen() {
         pageCount: pages.length,
       });
       invalidateArticleLists(queryClient);
-      router.replace({ pathname: "/(tabs)/on", params: { tab: "my_article" } });
+
+      // 공간 편지 공개 설정 적용 — effectiveSpaceId가 있을 때 신뢰할 수 있는 방식으로 처리한다.
+      // 1) 이미 존재하는 편지 → 실명 공간만 PATCH (익명 공간은 서버가 RECIPIENT_ONLY 강제, PATCH 시 403)
+      // 2) 아직 없는 편지 → createSpaceLetter POST body에 visibility 포함하여 생성
+      // 실패해도 로컬 편지는 이미 완성(LETTER)됐으므로 내보내기 자체는 막지 않는다.
+      if (effectiveSpaceId) {
+        try {
+          // 익명 공간은 항상 RECIPIENT_ONLY로 제출 (토글 상태와 무관하게 서버 규칙 준수)
+          const resolvedVisibility = isAnonymous
+            ? SpaceLetterVisibility.RECIPIENT_ONLY
+            : visibility;
+
+          const validLetterTypes = Object.values(CreateSpaceLetterBodyLetterType);
+          const resolvedLetterType = validLetterTypes.includes(
+            effectiveLetterType as CreateSpaceLetterBodyLetterType,
+          )
+            ? (effectiveLetterType as CreateSpaceLetterBodyLetterType)
+            : CreateSpaceLetterBodyLetterType.CENTER;
+
+          const letters = await listSpaceLetters(effectiveSpaceId);
+          // letterType + spaceRoundId + sourceArticleId로 정확히 매칭하여
+          // 같은 공간에 같은 articleId를 사용하는 다른 역할의 편지를 건드리지 않는다.
+          const existing = letters.find(
+            (l) =>
+              l.sourceArticleId === articleId &&
+              l.letterType === resolvedLetterType &&
+              (effectiveSpaceRoundId ? (l.spaceRoundId ?? null) === effectiveSpaceRoundId : true),
+          );
+          if (existing) {
+            // 익명 공간은 서버가 이미 RECIPIENT_ONLY를 유지하므로 PATCH 불필요
+            if (!isAnonymous) {
+              await updateSpaceLetterVisibilityMutation.mutateAsync({
+                id: effectiveSpaceId,
+                letterId: existing.id,
+                data: { visibility: resolvedVisibility },
+              });
+            }
+          } else {
+            await createSpaceLetterMutation.mutateAsync({
+              id: effectiveSpaceId,
+              data: {
+                authorId: updated.authorId,
+                sourceArticleId: articleId,
+                letterType: resolvedLetterType,
+                spaceRoundId: effectiveSpaceRoundId ?? null,
+                visibility: resolvedVisibility,
+              },
+            });
+          }
+          queryClient.invalidateQueries({
+            queryKey: getListSpaceLettersQueryKey(effectiveSpaceId),
+          });
+          // 성공 시에만 AsyncStorage 정리 (실패 시 컨텍스트를 유지해 재시도 가능하게)
+          try { await AsyncStorage.removeItem(`space_context:${articleId}`); } catch {}
+          router.replace({ pathname: "/of-space-start", params: { id: effectiveSpaceId } });
+          return;
+        } catch (e) {
+          console.warn("[on-01c] 공간 편지 공개 설정 실패:", e);
+          // AsyncStorage는 삭제하지 않는다 — 공간 화면에서 편지를 선택해 직접 연결할 수 있음
+          showToast({
+            message: "편지는 완성됐지만 공간 등록에 실패했어요. 공간 화면에서 직접 선택해주세요.",
+            type: "error",
+            duration: 7000,
+          });
+        }
+        router.replace({ pathname: "/of-space-start", params: { id: effectiveSpaceId } });
+      } else {
+        router.replace({ pathname: "/(tabs)/on", params: { tab: "my_article" } });
+      }
     },
-    [pages, finalizeArticle, queryClient, router],
+    [
+      pages, finalizeArticle, queryClient, router, showToast,
+      effectiveSpaceId, effectiveSpaceRoundId, effectiveLetterType, visibility, isAnonymous,
+      createSpaceLetterMutation, updateSpaceLetterVisibilityMutation,
+    ],
   );
 
   const handleConfirmExport = useCallback(async () => {
@@ -549,6 +693,84 @@ export default function ClosingScreen() {
         </ScalePressable>
       </View>
 
+      <View style={styles.visibilitySection}>
+        {isAnonymous ? (
+          // 익명 공간: 수신자 공개 고정 표시
+          <View style={styles.visibilityAnonymousRow}>
+            <View style={styles.visibilityAnonPill}>
+              <Feather name="users" size={13} color={Colors.zinc400} />
+              <Text style={styles.visibilityAnonPillText}>{"수신자 공개"}</Text>
+            </View>
+            <Text style={styles.visibilityAnonHint}>{"익명 공간은 수신자 공개로 고정돼요"}</Text>
+          </View>
+        ) : (
+          // 실명 공간 또는 공간 미지정: 전체 공개 / 수신자 공개 토글
+          <View style={styles.visibilityToggleRow}>
+            <ScalePressable
+              style={[
+                styles.visibilityToggleBtn,
+                visibility === SpaceLetterVisibility.PUBLIC && styles.visibilityToggleBtnActive,
+              ]}
+              contentStyle={[
+                styles.visibilityToggleBtnContent,
+                visibility === SpaceLetterVisibility.PUBLIC && styles.visibilityToggleBtnContentActive,
+              ]}
+              onPress={() => setVisibility(SpaceLetterVisibility.PUBLIC)}
+              accessibilityRole="radio"
+              accessibilityLabel="전체 공개"
+              accessibilityState={{ checked: visibility === SpaceLetterVisibility.PUBLIC }}
+            >
+              <Feather
+                name="globe"
+                size={13}
+                color={visibility === SpaceLetterVisibility.PUBLIC ? Colors.white : Colors.zinc600}
+              />
+              <Text
+                style={[
+                  styles.visibilityToggleBtnLabel,
+                  visibility === SpaceLetterVisibility.PUBLIC && styles.visibilityToggleBtnLabelActive,
+                ]}
+              >
+                {"전체 공개"}
+              </Text>
+            </ScalePressable>
+            <ScalePressable
+              style={[
+                styles.visibilityToggleBtn,
+                visibility === SpaceLetterVisibility.RECIPIENT_ONLY && styles.visibilityToggleBtnActive,
+              ]}
+              contentStyle={[
+                styles.visibilityToggleBtnContent,
+                visibility === SpaceLetterVisibility.RECIPIENT_ONLY && styles.visibilityToggleBtnContentActive,
+              ]}
+              onPress={() => setVisibility(SpaceLetterVisibility.RECIPIENT_ONLY)}
+              accessibilityRole="radio"
+              accessibilityLabel="수신자 공개"
+              accessibilityState={{ checked: visibility === SpaceLetterVisibility.RECIPIENT_ONLY }}
+            >
+              <Feather
+                name="users"
+                size={13}
+                color={visibility === SpaceLetterVisibility.RECIPIENT_ONLY ? Colors.white : Colors.zinc600}
+              />
+              <Text
+                style={[
+                  styles.visibilityToggleBtnLabel,
+                  visibility === SpaceLetterVisibility.RECIPIENT_ONLY && styles.visibilityToggleBtnLabelActive,
+                ]}
+              >
+                {"수신자 공개"}
+              </Text>
+            </ScalePressable>
+            <SpaceInfoNote
+              variant="popup"
+              text={"편지를 내보낸 이후에도 공개 상태를 변경할 수 있어요. 단, 익명 공간에 발신하면 수신자 공개로 고정돼요."}
+              accessibilityLabel="공개 설정 안내 보기"
+            />
+          </View>
+        )}
+      </View>
+
       <GestureDetector gesture={swipeGesture}>
         <View style={styles.previewArea}>
           <View style={styles.previewInner}>
@@ -845,5 +1067,84 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 14,
     color: Colors.zinc600,
+  },
+  // ── 공개 설정 섹션 ──────────────────────────────────────
+  visibilitySection: {
+    paddingHorizontal: Spacing.screenPx,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.zinc100,
+  },
+  visibilityToggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  // 토글 버튼 — 비활성 상태 (테두리만, overflow:hidden 없음)
+  visibilityToggleBtn: {
+    height: 34,
+    flexGrow: 0,
+    flexShrink: 0,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
+  },
+  visibilityToggleBtnContent: {
+    height: 34,
+    flexGrow: 0,
+    flexShrink: 0,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+  },
+  // 토글 버튼 — 활성 상태
+  visibilityToggleBtnActive: {
+    borderColor: Colors.zinc900,
+    backgroundColor: Colors.zinc900,
+  },
+  visibilityToggleBtnContentActive: {
+    backgroundColor: Colors.zinc900,
+  },
+  visibilityToggleBtnLabel: {
+    ...Typography.bodySemiBold,
+    fontSize: 13,
+    color: Colors.zinc600,
+  },
+  visibilityToggleBtnLabelActive: {
+    color: Colors.white,
+  },
+  // 익명 공간 — 잠금 표시
+  visibilityAnonymousRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  visibilityAnonPill: {
+    height: 34,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
+    backgroundColor: Colors.zinc50,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  visibilityAnonPillText: {
+    ...Typography.bodySemiBold,
+    fontSize: 13,
+    color: Colors.zinc400,
+  },
+  visibilityAnonHint: {
+    ...Typography.body,
+    fontSize: 12,
+    color: Colors.zinc400,
+    flex: 1,
   },
 });

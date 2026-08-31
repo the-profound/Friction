@@ -874,8 +874,16 @@ function OpeningLetterStep({
 }) {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  const router = useRouter();
   const createSend = useCreateSpaceScheduledSend();
   const createLetter = useCreateSpaceLetter();
+
+  const handleWriteNew = useCallback(() => {
+    router.push({
+      pathname: "/on-01a",
+      params: { mode: "local-draft", spaceId, letterType: "OPENING" },
+    });
+  }, [router, spaceId]);
 
   const deadline = getOpeningLetterDeadline(startDate);
   const maxScheduledAt = deadline;
@@ -1009,6 +1017,15 @@ function OpeningLetterStep({
               {selectedTitle ?? "선택된 편지 없음"}
             </Text>
             <Feather name="chevron-right" size={16} color={Colors.zinc400} />
+          </ScalePressable>
+
+          {/* 새로 작성하기 — 기존 편지가 없을 때 직접 작성으로 이동 */}
+          <ScalePressable
+            contentStyle={olStyles.writeNewBtn}
+            onPress={handleWriteNew}
+          >
+            <Feather name="edit-2" size={13} color={Colors.zinc500} />
+            <Text style={olStyles.writeNewBtnText}>새로 작성하기</Text>
           </ScalePressable>
 
           {/* 선택된 글 — 발송일 선택 */}
@@ -2418,6 +2435,18 @@ const opStyles = StyleSheet.create({
 });
 
 const olStyles = StyleSheet.create({
+  writeNewBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    alignSelf: "flex-start",
+    paddingVertical: 4,
+  },
+  writeNewBtnText: {
+    ...Typography.body,
+    fontSize: 13,
+    color: Colors.zinc500,
+  },
   section: {
     gap: 10,
   },
