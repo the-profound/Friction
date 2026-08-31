@@ -11,6 +11,7 @@ import {
   articlesTable,
   db,
   inboxTable,
+  letterRecipientAccessTable,
   spacesTable,
   spaceLettersTable,
   spaceParticipationsTable,
@@ -201,6 +202,18 @@ async function processOneScheduledSend(
           ],
           where: sql`${inboxTable.sourceSpaceScheduledSendId} IS NOT NULL`,
         });
+
+      // Accumulate letter_recipient_access rows so visibility filtering reflects
+      // all sends for this letter (not just the most recent one).
+      await tx
+        .insert(letterRecipientAccessTable)
+        .values(
+          recipientIds.map((userId) => ({
+            letterId: send.spaceLetterId,
+            userId,
+          })),
+        )
+        .onConflictDoNothing();
     }
 
     if (send.status === "PENDING") {

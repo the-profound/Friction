@@ -96,6 +96,77 @@ export const UpdateUserResponse = zod.object({
 });
 
 /**
+ * 프로필 페이지용. visibility=PUBLIC인 편지만 반환. 익명 공간 편지는 항상 RECIPIENT_ONLY이므로 포함되지 않음.
+ * @summary List a user's public space letters (for profile page)
+ */
+export const ListUserSpaceLettersParams = zod.object({
+  id: zod.coerce.string().uuid(),
+});
+
+export const listUserSpaceLettersResponseArticleCoverFontFamilyDefault = `sans`;
+
+export const ListUserSpaceLettersResponseItem = zod.object({
+  id: zod.string().uuid(),
+  spaceId: zod.string().uuid(),
+  spaceRoundId: zod.string().uuid().nullish(),
+  authorId: zod.string().uuid(),
+  sourceArticleId: zod.string().uuid().nullish(),
+  letterType: zod.enum(["OPENING", "CENTER", "REPLY"]),
+  visibility: zod
+    .enum(["PUBLIC", "RECIPIENT_ONLY"])
+    .describe(
+      "PUBLIC — 공간 참여자 전체에게 공개. RECIPIENT_ONLY — scheduled send 수신자 및 작성자·오퍼레이터에게만 공개.",
+    ),
+  createdAt: zod.date(),
+  updatedAt: zod.date(),
+  articleTitle: zod.string().nullish(),
+  articleExcerpt: zod.string().nullish(),
+  articleCover: zod
+    .object({
+      type: zod.enum(["image", "color", "default"]),
+      imageUrl: zod
+        .string()
+        .url()
+        .optional()
+        .describe("Cover image URL (used when type=image)"),
+      bgColor: zod
+        .string()
+        .optional()
+        .describe("Background color hex (used when type=color)"),
+      textColor: zod.string().describe("Text color hex for title overlay"),
+      fontFamily: zod
+        .enum(["sans", "serif"])
+        .default(listUserSpaceLettersResponseArticleCoverFontFamilyDefault)
+        .describe(
+          "Cover text font family. Existing covers without this value use sans.",
+        ),
+      align: zod.enum(["left", "center"]),
+    })
+    .nullish()
+    .describe("Article cover display settings. null means default cover."),
+  authorNickname: zod
+    .string()
+    .nullish()
+    .describe(
+      "작성자의 안전한 표시명. 익명 공간 모집 중에는 '참여자', 시작 후 공간 닉네임.",
+    ),
+  displayName: zod
+    .string()
+    .nullish()
+    .describe(
+      "익명 공간의 안전한 표시명. 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임. 비익명 공간에서는 null.",
+    ),
+  isRead: zod
+    .boolean()
+    .describe(
+      "Whether the calling user has already read the source article. Always false when there is no sourceArticleId.",
+    ),
+});
+export const ListUserSpaceLettersResponse = zod.array(
+  ListUserSpaceLettersResponseItem,
+);
+
+/**
  * @summary Get user's recent saved collection ID
  */
 export const GetUserRecentCollectionParams = zod.object({
@@ -2890,7 +2961,11 @@ export const ListAllSpaceScheduledSendsResponseItem = zod.object({
       authorId: zod.string().uuid(),
       sourceArticleId: zod.string().uuid().nullish(),
       letterType: zod.enum(["OPENING", "CENTER", "REPLY"]),
-      isPublic: zod.boolean(),
+      visibility: zod
+        .enum(["PUBLIC", "RECIPIENT_ONLY"])
+        .describe(
+          "PUBLIC — 공간 참여자 전체에게 공개. RECIPIENT_ONLY — scheduled send 수신자 및 작성자·오퍼레이터에게만 공개.",
+        ),
       createdAt: zod.date(),
       updatedAt: zod.date(),
       articleTitle: zod.string().nullish(),
@@ -3280,7 +3355,11 @@ export const ListSpaceLettersResponseItem = zod.object({
   authorId: zod.string().uuid(),
   sourceArticleId: zod.string().uuid().nullish(),
   letterType: zod.enum(["OPENING", "CENTER", "REPLY"]),
-  isPublic: zod.boolean(),
+  visibility: zod
+    .enum(["PUBLIC", "RECIPIENT_ONLY"])
+    .describe(
+      "PUBLIC — 공간 참여자 전체에게 공개. RECIPIENT_ONLY — scheduled send 수신자 및 작성자·오퍼레이터에게만 공개.",
+    ),
   createdAt: zod.date(),
   updatedAt: zod.date(),
   articleTitle: zod.string().nullish(),
@@ -3340,7 +3419,91 @@ export const CreateSpaceLetterBody = zod.object({
   authorId: zod.string().uuid(),
   sourceArticleId: zod.string().uuid().nullish(),
   letterType: zod.enum(["OPENING", "CENTER", "REPLY"]),
-  isPublic: zod.boolean().optional(),
+  visibility: zod
+    .enum(["PUBLIC", "RECIPIENT_ONLY"])
+    .optional()
+    .describe(
+      "실명 공간에서만 유효. 익명 공간에서는 항상 RECIPIENT_ONLY로 고정됨.",
+    ),
+});
+
+/**
+ * 작성자만 호출 가능. 익명 공간 편지는 항상 RECIPIENT_ONLY로 고정되어 변경 불가(403).
+ * @summary Change a letter's visibility
+ */
+export const UpdateSpaceLetterVisibilityParams = zod.object({
+  id: zod.coerce.string().uuid(),
+  letterId: zod.coerce.string().uuid(),
+});
+
+export const UpdateSpaceLetterVisibilityBody = zod.object({
+  visibility: zod
+    .enum(["PUBLIC", "RECIPIENT_ONLY"])
+    .describe(
+      "PUBLIC — 공간 참여자 전체에게 공개. RECIPIENT_ONLY — scheduled send 수신자 및 작성자·오퍼레이터에게만 공개.",
+    ),
+});
+
+export const updateSpaceLetterVisibilityResponseArticleCoverFontFamilyDefault = `sans`;
+
+export const UpdateSpaceLetterVisibilityResponse = zod.object({
+  id: zod.string().uuid(),
+  spaceId: zod.string().uuid(),
+  spaceRoundId: zod.string().uuid().nullish(),
+  authorId: zod.string().uuid(),
+  sourceArticleId: zod.string().uuid().nullish(),
+  letterType: zod.enum(["OPENING", "CENTER", "REPLY"]),
+  visibility: zod
+    .enum(["PUBLIC", "RECIPIENT_ONLY"])
+    .describe(
+      "PUBLIC — 공간 참여자 전체에게 공개. RECIPIENT_ONLY — scheduled send 수신자 및 작성자·오퍼레이터에게만 공개.",
+    ),
+  createdAt: zod.date(),
+  updatedAt: zod.date(),
+  articleTitle: zod.string().nullish(),
+  articleExcerpt: zod.string().nullish(),
+  articleCover: zod
+    .object({
+      type: zod.enum(["image", "color", "default"]),
+      imageUrl: zod
+        .string()
+        .url()
+        .optional()
+        .describe("Cover image URL (used when type=image)"),
+      bgColor: zod
+        .string()
+        .optional()
+        .describe("Background color hex (used when type=color)"),
+      textColor: zod.string().describe("Text color hex for title overlay"),
+      fontFamily: zod
+        .enum(["sans", "serif"])
+        .default(
+          updateSpaceLetterVisibilityResponseArticleCoverFontFamilyDefault,
+        )
+        .describe(
+          "Cover text font family. Existing covers without this value use sans.",
+        ),
+      align: zod.enum(["left", "center"]),
+    })
+    .nullish()
+    .describe("Article cover display settings. null means default cover."),
+  authorNickname: zod
+    .string()
+    .nullish()
+    .describe(
+      "작성자의 안전한 표시명. 익명 공간 모집 중에는 '참여자', 시작 후 공간 닉네임.",
+    ),
+  displayName: zod
+    .string()
+    .nullish()
+    .describe(
+      "익명 공간의 안전한 표시명. 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임. 비익명 공간에서는 null.",
+    ),
+  isRead: zod
+    .boolean()
+    .describe(
+      "Whether the calling user has already read the source article. Always false when there is no sourceArticleId.",
+    ),
 });
 
 /**

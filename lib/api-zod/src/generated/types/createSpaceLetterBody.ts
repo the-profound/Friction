@@ -6,11 +6,13 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { CreateSpaceLetterBodyLetterType } from "./createSpaceLetterBodyLetterType";
+import type { SpaceLetterVisibility } from "./spaceLetterVisibility";
 
 export interface CreateSpaceLetterBody {
   spaceRoundId?: string | null;
   authorId: string;
   sourceArticleId?: string | null;
   letterType: CreateSpaceLetterBodyLetterType;
-  isPublic?: boolean;
+  /** 실명 공간에서만 유효. 익명 공간에서는 항상 RECIPIENT_ONLY로 고정됨. */
+  visibility?: SpaceLetterVisibility;
 }

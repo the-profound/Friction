@@ -1150,6 +1150,17 @@ export interface UpdateSpaceCodeRequestBody {
   rejectionReason?: string | null;
 }
 
+/**
+ * PUBLIC — 공간 참여자 전체에게 공개. RECIPIENT_ONLY — scheduled send 수신자 및 작성자·오퍼레이터에게만 공개.
+ */
+export type SpaceLetterVisibility =
+  (typeof SpaceLetterVisibility)[keyof typeof SpaceLetterVisibility];
+
+export const SpaceLetterVisibility = {
+  PUBLIC: "PUBLIC",
+  RECIPIENT_ONLY: "RECIPIENT_ONLY",
+} as const;
+
 export type SpaceLetterLetterType =
   (typeof SpaceLetterLetterType)[keyof typeof SpaceLetterLetterType];
 
@@ -1166,7 +1177,7 @@ export interface SpaceLetter {
   authorId: string;
   sourceArticleId?: string | null;
   letterType: SpaceLetterLetterType;
-  isPublic: boolean;
+  visibility: SpaceLetterVisibility;
   createdAt: string;
   updatedAt: string;
   articleTitle?: string | null;
@@ -1194,7 +1205,12 @@ export interface CreateSpaceLetterBody {
   authorId: string;
   sourceArticleId?: string | null;
   letterType: CreateSpaceLetterBodyLetterType;
-  isPublic?: boolean;
+  /** 실명 공간에서만 유효. 익명 공간에서는 항상 RECIPIENT_ONLY로 고정됨. */
+  visibility?: SpaceLetterVisibility;
+}
+
+export interface UpdateSpaceLetterVisibilityBody {
+  visibility: SpaceLetterVisibility;
 }
 
 export type SpaceScheduledSendStatus =

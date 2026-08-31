@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { and, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
-import { db, usersTable, myCollectionsTable, neighborsTable, neighborRequestsTable, teamCollectionMembershipsTable } from "@workspace/db";
+import { db, usersTable, myCollectionsTable, neighborsTable, neighborRequestsTable, teamCollectionMembershipsTable, spaceLettersTable, articlesTable } from "@workspace/db";
 import type { Neighbor, NeighborRequest } from "@workspace/db";
 import { CreateUserBody, UpdateUserBody, UpdateUserRecentCollectionBody } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth";
@@ -276,6 +276,54 @@ router.delete("/users/:id", async (req, res) => {
     return;
   }
   res.status(204).send();
+});
+
+router.get("/users/:id/space-letters", async (req, res) => {
+  const [user] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.id, req.params.id)).limit(1);
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  const letters = await db
+    .select()
+    .from(spaceLettersTable)
+    .where(
+      and(
+        eq(spaceLettersTable.authorId, req.params.id),
+        eq(spaceLettersTable.visibility, "PUBLIC"),
+      ),
+    );
+
+  if (letters.length === 0) {
+    res.json([]);
+    return;
+  }
+
+  const articleIds = [...new Set(letters.map((l) => l.sourceArticleId).filter(Boolean) as string[])];
+  const articles = articleIds.length > 0
+    ? await db
+        .select({ id: articlesTable.id, title: articlesTable.title, content: articlesTable.content, cover: articlesTable.cover })
+        .from(articlesTable)
+        .where(inArray(articlesTable.id, articleIds))
+    : [];
+  const articleMap = new Map(articles.map((a) => [a.id, a]));
+
+  const result = letters.map((letter) => {
+    const article = letter.sourceArticleId ? (articleMap.get(letter.sourceArticleId) ?? null) : null;
+    const rawContent = article?.content ?? null;
+    const articleExcerpt = rawContent ? rawContent.replace(/[#*_`>\-~[\]()]/g, "").trim().slice(0, 100) : null;
+    return {
+      ...letter,
+      articleTitle: article?.title ?? null,
+      articleExcerpt,
+      articleCover: article?.cover ?? null,
+      authorNickname: null,
+      displayName: null,
+      isRead: false,
+    };
+  });
+  res.json(result);
 });
 
 router.get("/users/:id/recent-collection", async (req, res) => {

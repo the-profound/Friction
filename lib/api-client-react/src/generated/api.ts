@@ -128,6 +128,7 @@ import type {
   UpdateSpaceBody,
   UpdateSpaceCodeRequestBody,
   UpdateSpaceInvitationBody,
+  UpdateSpaceLetterVisibilityBody,
   UpdateSpaceParticipationBody,
   UpdateSpaceRoundBody,
   UpdateSpaceRoundSlotBody,
@@ -710,6 +711,95 @@ export const useUpdateUser = <
 > => {
   return useMutation(getUpdateUserMutationOptions(options));
 };
+
+/**
+ * 프로필 페이지용. visibility=PUBLIC인 편지만 반환. 익명 공간 편지는 항상 RECIPIENT_ONLY이므로 포함되지 않음.
+ * @summary List a user's public space letters (for profile page)
+ */
+export const getListUserSpaceLettersUrl = (id: string) => {
+  return `/api/users/${id}/space-letters`;
+};
+
+export const listUserSpaceLetters = async (
+  id: string,
+  options?: RequestInit,
+): Promise<SpaceLetter[]> => {
+  return customFetch<SpaceLetter[]>(getListUserSpaceLettersUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListUserSpaceLettersQueryKey = (id: string) => {
+  return [`/api/users/${id}/space-letters`] as const;
+};
+
+export const getListUserSpaceLettersQueryOptions = <
+  TData = Awaited<ReturnType<typeof listUserSpaceLetters>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listUserSpaceLetters>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListUserSpaceLettersQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listUserSpaceLetters>>
+  > = ({ signal }) => listUserSpaceLetters(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listUserSpaceLetters>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListUserSpaceLettersQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listUserSpaceLetters>>
+>;
+export type ListUserSpaceLettersQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary List a user's public space letters (for profile page)
+ */
+
+export function useListUserSpaceLetters<
+  TData = Awaited<ReturnType<typeof listUserSpaceLetters>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listUserSpaceLetters>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListUserSpaceLettersQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Get user's recent saved collection ID
@@ -8148,6 +8238,122 @@ export const useCreateSpaceLetter = <
   TContext
 > => {
   return useMutation(getCreateSpaceLetterMutationOptions(options));
+};
+
+/**
+ * 작성자만 호출 가능. 익명 공간 편지는 항상 RECIPIENT_ONLY로 고정되어 변경 불가(403).
+ * @summary Change a letter's visibility
+ */
+export const getUpdateSpaceLetterVisibilityUrl = (
+  id: string,
+  letterId: string,
+) => {
+  return `/api/spaces/${id}/letters/${letterId}/visibility`;
+};
+
+export const updateSpaceLetterVisibility = async (
+  id: string,
+  letterId: string,
+  updateSpaceLetterVisibilityBody: UpdateSpaceLetterVisibilityBody,
+  options?: RequestInit,
+): Promise<SpaceLetter> => {
+  return customFetch<SpaceLetter>(
+    getUpdateSpaceLetterVisibilityUrl(id, letterId),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(updateSpaceLetterVisibilityBody),
+    },
+  );
+};
+
+export const getUpdateSpaceLetterVisibilityMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSpaceLetterVisibility>>,
+    TError,
+    {
+      id: string;
+      letterId: string;
+      data: BodyType<UpdateSpaceLetterVisibilityBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateSpaceLetterVisibility>>,
+  TError,
+  {
+    id: string;
+    letterId: string;
+    data: BodyType<UpdateSpaceLetterVisibilityBody>;
+  },
+  TContext
+> => {
+  const mutationKey = ["updateSpaceLetterVisibility"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateSpaceLetterVisibility>>,
+    {
+      id: string;
+      letterId: string;
+      data: BodyType<UpdateSpaceLetterVisibilityBody>;
+    }
+  > = (props) => {
+    const { id, letterId, data } = props ?? {};
+
+    return updateSpaceLetterVisibility(id, letterId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateSpaceLetterVisibilityMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateSpaceLetterVisibility>>
+>;
+export type UpdateSpaceLetterVisibilityMutationBody =
+  BodyType<UpdateSpaceLetterVisibilityBody>;
+export type UpdateSpaceLetterVisibilityMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Change a letter's visibility
+ */
+export const useUpdateSpaceLetterVisibility = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSpaceLetterVisibility>>,
+    TError,
+    {
+      id: string;
+      letterId: string;
+      data: BodyType<UpdateSpaceLetterVisibilityBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateSpaceLetterVisibility>>,
+  TError,
+  {
+    id: string;
+    letterId: string;
+    data: BodyType<UpdateSpaceLetterVisibilityBody>;
+  },
+  TContext
+> => {
+  return useMutation(getUpdateSpaceLetterVisibilityMutationOptions(options));
 };
 
 /**

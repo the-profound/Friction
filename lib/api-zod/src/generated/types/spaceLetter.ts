@@ -7,6 +7,7 @@
  */
 import type { ArticleCover } from "./articleCover";
 import type { SpaceLetterLetterType } from "./spaceLetterLetterType";
+import type { SpaceLetterVisibility } from "./spaceLetterVisibility";
 
 export interface SpaceLetter {
   id: string;
@@ -15,7 +16,7 @@ export interface SpaceLetter {
   authorId: string;
   sourceArticleId?: string | null;
   letterType: SpaceLetterLetterType;
-  isPublic: boolean;
+  visibility: SpaceLetterVisibility;
   createdAt: Date;
   updatedAt: Date;
   articleTitle?: string | null;

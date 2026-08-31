@@ -48,6 +48,7 @@ import {
   spaceCodeRequestsTable,
   spaceLettersTable,
   spaceScheduledSendsTable,
+  letterRecipientAccessTable,
   usersTable,
   articlesTable,
   userArticleReadsTable,
@@ -2528,6 +2529,30 @@ router.get("/spaces/:id/letters", requireAuth, async (req, res) => {
         letters = letters.filter((l) => l.authorId === callerId || !hiddenLetterIds.has(l.id));
       }
     }
+
+    // Visibility filter: RECIPIENT_ONLY letters authored by others are only visible
+    // to users listed in letter_recipient_access for that letter.
+    const recipientOnlyOtherLetterIds = letters
+      .filter((l) => l.authorId !== callerId && l.visibility === "RECIPIENT_ONLY")
+      .map((l) => l.id);
+    if (recipientOnlyOtherLetterIds.length > 0) {
+      const accessRows = await db
+        .select({ letterId: letterRecipientAccessTable.letterId })
+        .from(letterRecipientAccessTable)
+        .where(
+          and(
+            inArray(letterRecipientAccessTable.letterId, recipientOnlyOtherLetterIds),
+            eq(letterRecipientAccessTable.userId, callerId),
+          ),
+        );
+      const accessibleLetterIds = new Set(accessRows.map((r) => r.letterId));
+      letters = letters.filter(
+        (l) =>
+          l.authorId === callerId ||
+          l.visibility !== "RECIPIENT_ONLY" ||
+          accessibleLetterIds.has(l.id),
+      );
+    }
   }
   const articleIds = [...new Set(letters.map((l) => l.sourceArticleId).filter(Boolean) as string[])];
   const authorIds = [...new Set(letters.map((l) => l.authorId))];
@@ -2587,7 +2612,7 @@ router.post("/spaces/:id/letters", requireAuth, async (req, res) => {
     sourceArticleId: z.string().uuid().nullable().optional(),
     spaceRoundId: z.string().uuid().nullable().optional(),
     letterType: z.enum(["OPENING", "CENTER", "REPLY"]),
-    isPublic: z.boolean().optional(),
+    visibility: z.enum(["PUBLIC", "RECIPIENT_ONLY"]).optional(),
   });
   const parsed = bodySchema.safeParse(req.body);
   if (!parsed.success) {
@@ -2621,7 +2646,7 @@ router.post("/spaces/:id/letters", requireAuth, async (req, res) => {
   }
 
   const [targetSpace] = await db
-    .select({ status: spacesTable.status })
+    .select({ status: spacesTable.status, isAnonymous: spacesTable.isAnonymous })
     .from(spacesTable)
     .where(eq(spacesTable.id, req.params.id))
     .limit(1);
@@ -2629,6 +2654,9 @@ router.post("/spaces/:id/letters", requireAuth, async (req, res) => {
     res.status(404).json({ error: "Space not found" });
     return;
   }
+
+  // Determine effective visibility: anonymous spaces always force RECIPIENT_ONLY.
+  const effectiveVisibility = targetSpace.isAnonymous ? "RECIPIENT_ONLY" : (parsed.data.visibility ?? "PUBLIC");
 
   // OPENING letters must be tied to a round once the space is ACTIVE —
   // otherwise the letter would never surface on the detail/reservation
@@ -2694,9 +2722,68 @@ router.post("/spaces/:id/letters", requireAuth, async (req, res) => {
 
   const [letter] = await db
     .insert(spaceLettersTable)
-    .values({ ...parsed.data, spaceId: req.params.id, authorId: req.user!.id })
+    .values({
+      ...parsed.data,
+      spaceId: req.params.id,
+      authorId: req.user!.id,
+      visibility: effectiveVisibility,
+    })
     .returning();
   res.status(201).json(letter);
+});
+
+router.patch("/spaces/:id/letters/:letterId/visibility", requireAuth, async (req, res) => {
+  const bodySchema = z.object({
+    visibility: z.enum(["PUBLIC", "RECIPIENT_ONLY"]),
+  });
+  const parsed = bodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid request body", details: parsed.error.flatten() });
+    return;
+  }
+
+  const callerId = req.user!.id;
+
+  const [letter] = await db
+    .select()
+    .from(spaceLettersTable)
+    .where(
+      and(
+        eq(spaceLettersTable.id, req.params.letterId),
+        eq(spaceLettersTable.spaceId, req.params.id),
+      ),
+    )
+    .limit(1);
+  if (!letter) {
+    res.status(404).json({ error: "Letter not found" });
+    return;
+  }
+
+  if (letter.authorId !== callerId) {
+    res.status(403).json({ error: "Only the author can change letter visibility" });
+    return;
+  }
+
+  const [space] = await db
+    .select({ isAnonymous: spacesTable.isAnonymous })
+    .from(spacesTable)
+    .where(eq(spacesTable.id, req.params.id))
+    .limit(1);
+  if (!space) {
+    res.status(404).json({ error: "Space not found" });
+    return;
+  }
+  if (space.isAnonymous) {
+    res.status(403).json({ error: "익명 공간의 편지 공개 설정은 변경할 수 없습니다." });
+    return;
+  }
+
+  const [updated] = await db
+    .update(spaceLettersTable)
+    .set({ visibility: parsed.data.visibility })
+    .where(eq(spaceLettersTable.id, req.params.letterId))
+    .returning();
+  res.json(updated);
 });
 
 async function getScheduledSendAccess(spaceId: string, callerId: string) {

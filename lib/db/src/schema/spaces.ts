@@ -1,4 +1,4 @@
-import { boolean, check, date, integer, jsonb, pgEnum, pgTable, text, timestamp, unique, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
+import { boolean, check, date, integer, jsonb, pgEnum, pgTable, primaryKey, text, timestamp, unique, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -16,6 +16,7 @@ export const spaceCodeRequestStatusEnum = pgEnum("space_code_request_status", ["
 export const spaceLetterTypeEnum = pgEnum("space_letter_type", ["OPENING", "CENTER", "REPLY"]);
 export const spaceScheduledSendStatusEnum = pgEnum("space_scheduled_send_status", ["PENDING", "SENT", "CANCELLED", "FAILED"]);
 export const spaceScheduleTypeEnum = pgEnum("space_schedule_type", ["N_DAY", "WEEKDAY"]);
+export const spaceLetterVisibilityEnum = pgEnum("space_letter_visibility", ["PUBLIC", "RECIPIENT_ONLY"]);
 
 export const spacesTable = pgTable("spaces", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -142,7 +143,7 @@ export const spaceLettersTable = pgTable("space_letters", {
   authorId: uuid("author_id").notNull().references(() => usersTable.id),
   sourceArticleId: uuid("source_article_id").references(() => articlesTable.id),
   letterType: spaceLetterTypeEnum("letter_type").notNull(),
-  isPublic: boolean("is_public").notNull().default(false),
+  visibility: spaceLetterVisibilityEnum("visibility").notNull().default("PUBLIC"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
@@ -211,3 +212,21 @@ export const spaceRoundSlotsTable = pgTable("space_round_slots", {
 export const insertSpaceRoundSlotSchema = createInsertSchema(spaceRoundSlotsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertSpaceRoundSlot = z.infer<typeof insertSpaceRoundSlotSchema>;
 export type SpaceRoundSlot = typeof spaceRoundSlotsTable.$inferSelect;
+
+export const letterRecipientAccessTable = pgTable(
+  "letter_recipient_access",
+  {
+    letterId: uuid("letter_id")
+      .notNull()
+      .references(() => spaceLettersTable.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => usersTable.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.letterId, t.userId] }),
+  ],
+);
+
+export type LetterRecipientAccess = typeof letterRecipientAccessTable.$inferSelect;

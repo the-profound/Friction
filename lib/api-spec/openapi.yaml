@@ -180,6 +180,30 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /users/{id}/space-letters:
+    get:
+      operationId: listUserSpaceLetters
+      tags: [users]
+      summary: List a user's public space letters (for profile page)
+      description: "프로필 페이지용. visibility=PUBLIC인 편지만 반환. 익명 공간 편지는 항상 RECIPIENT_ONLY이므로 포함되지 않음."
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Public space letter list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SpaceLetter"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /users/{id}/recent-collection:
     get:
       operationId: getUserRecentCollection
@@ -2289,6 +2313,60 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SpaceLetter"
+
+  /spaces/{id}/letters/{letterId}/visibility:
+    patch:
+      operationId: updateSpaceLetterVisibility
+      tags: [spaces]
+      summary: Change a letter's visibility
+      description: "작성자만 호출 가능. 익명 공간 편지는 항상 RECIPIENT_ONLY로 고정되어 변경 불가(403)."
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+        - name: letterId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSpaceLetterVisibilityBody"
+      responses:
+        "200":
+          description: Updated letter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpaceLetter"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Not the author, or anonymous space letter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Letter or space not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /spaces/{id}/letters/{letterId}/scheduled-sends:
     get:
@@ -4861,6 +4939,11 @@ components:
           nullable: true
       required: [status]
 
+    SpaceLetterVisibility:
+      type: string
+      enum: [PUBLIC, RECIPIENT_ONLY]
+      description: "PUBLIC — 공간 참여자 전체에게 공개. RECIPIENT_ONLY — scheduled send 수신자 및 작성자·오퍼레이터에게만 공개."
+
     SpaceLetter:
       type: object
       properties:
@@ -4884,8 +4967,8 @@ components:
         letterType:
           type: string
           enum: [OPENING, CENTER, REPLY]
-        isPublic:
-          type: boolean
+        visibility:
+          $ref: "#/components/schemas/SpaceLetterVisibility"
         createdAt:
           type: string
           format: date-time
@@ -4912,7 +4995,7 @@ components:
         isRead:
           type: boolean
           description: Whether the calling user has already read the source article. Always false when there is no sourceArticleId.
-      required: [id, spaceId, authorId, letterType, isPublic, createdAt, updatedAt, isRead]
+      required: [id, spaceId, authorId, letterType, visibility, createdAt, updatedAt, isRead]
 
     CreateSpaceLetterBody:
       type: object
@@ -4931,9 +5014,17 @@ components:
         letterType:
           type: string
           enum: [OPENING, CENTER, REPLY]
-        isPublic:
-          type: boolean
+        visibility:
+          $ref: "#/components/schemas/SpaceLetterVisibility"
+          description: "실명 공간에서만 유효. 익명 공간에서는 항상 RECIPIENT_ONLY로 고정됨."
       required: [authorId, letterType]
+
+    UpdateSpaceLetterVisibilityBody:
+      type: object
+      properties:
+        visibility:
+          $ref: "#/components/schemas/SpaceLetterVisibility"
+      required: [visibility]
 
     SpaceScheduledSend:
       type: object
