@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Animated,
   FlatList,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -12,7 +11,6 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -32,6 +30,9 @@ import {
   type MyCollection,
   type Thought,
 } from "@workspace/api-client-react";
+import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
+import DropdownFilter from "@/components/DropdownFilter/DropdownFilter";
+import type { DropdownOption } from "@/components/DropdownFilter/DropdownFilter";
 import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
@@ -82,12 +83,16 @@ import { useScrollPressGuard } from "@/hooks/useScrollPressGuard";
 import { useDateGroupVerticalSnap } from "@/hooks/useDateGroupVerticalSnap";
 import { getDateGroupCarouselHeight } from "@/lib/dateGroupCarousel";
 
-const CARD_ACTION_AREA_H = 56;
-const FILTER_BUTTON_HEIGHT = 36;
-const VIEW_BUTTON_SIZE = 40;
-const FILTER_GRADIENT_OVERLAP = 18;
-const FILTER_BAR_HEIGHT = VIEW_BUTTON_SIZE + 32;
-const CONTROL_VISIBILITY_SCROLL_THRESHOLD = 6;
+
+const KIND_OPTIONS: DropdownOption<RecordKind>[] = [
+  { key: "thought", label: "단상" },
+  { key: "editing", label: "편집" },
+  { key: "letter", label: "편지" },
+];
+const VIEW_OPTIONS: DropdownOption<RecordView>[] = [
+  { key: "card", label: "카드" },
+  { key: "content", label: "목록" },
+];
 
 type CardRecord = UnifiedRecord & { isQuestion: boolean; questionIndex?: number };
 const cardRecordKey = (record: CardRecord) => `${record.kind}:${record.id}`;
@@ -98,61 +103,8 @@ function getScreenForStatus(status: ArticleStatus): "/on-01a" | "/on-01b" | "/on
   return "/on-01a";
 }
 
-function RecordKindButton({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <ScalePressable
-      style={styles.kindButton}
-      contentStyle={[styles.kindButtonContent, active && styles.kindButtonContentActive]}
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={`${label} 기록 보기`}
-      accessibilityState={{ selected: active }}
-    >
-      <RecordListText style={[styles.kindButtonText, active && styles.kindButtonTextActive]}>{label}</RecordListText>
-    </ScalePressable>
-  );
-}
-
-function RecordViewButton({
-  icon,
-  label,
-  active,
-  onPress,
-}: {
-  icon: React.ComponentProps<typeof Feather>["name"];
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <ScalePressable
-      style={styles.viewButton}
-      contentStyle={[styles.viewButtonContent, active && styles.viewButtonContentActive]}
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ selected: active }}
-    >
-      <Feather
-        name={icon}
-        size={18}
-          color={active ? Colors.noticeAccent : Colors.zinc600}
-      />
-    </ScalePressable>
-  );
-}
-
 const NON_SELECTABLE_WEB_STYLE =
   Platform.OS === "web" ? ({ userSelect: "none" } as object) : undefined;
-const Gradient = LinearGradient as unknown as React.ComponentType<any>;
 
 function RecordListText({
   style,
@@ -232,6 +184,7 @@ function RecordSourceCard({
           collectionName={record.article.collectionName}
           cover={record.article.cover}
           cardWidth={width}
+          carouselShadow={true}
           onPress={onPress}
           onLongPress={onLongPress}
         />
@@ -411,11 +364,11 @@ export default function OnScreen() {
   const [recordResetVersion, setRecordResetVersion] = useState(tabReselectVersion.ON);
   const [searchActive, setSearchActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [controlsVisible, setControlsVisible] = useState(true);
   const [cardMixSeed, setCardMixSeed] = useState(() => `${Date.now()}-${Math.random()}`);
   const [deleteTarget, setDeleteTarget] = useState<UnifiedRecord | null>(null);
   const [pendingDeleteIds, setPendingDeleteIds] = useState<ReadonlySet<string>>(() => new Set());
   const deletePendingIdsRef = useRef(new Set<string>());
+  const [letterActionTarget, setLetterActionTarget] = useState<UnifiedRecord | null>(null);
   const [archiveArticleId, setArchiveArticleId] = useState<string | null>(null);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
@@ -427,9 +380,6 @@ export default function OnScreen() {
     seed: string;
     anchors: QuestionPlacementAnchors;
   } | null>(null);
-  const controlsVisibleRef = useRef(true);
-  const controlsAnimation = useRef(new Animated.Value(1)).current;
-  const lastScrollOffsetRef = useRef(0);
 
   useEffect(() => {
     setKind("thought");
@@ -438,19 +388,6 @@ export default function OnScreen() {
   }, [tabReselectVersion.ON]);
 
   useEffect(() => {
-    Animated.timing(controlsAnimation, {
-      toValue: controlsVisible ? 1 : 0,
-      duration: 180,
-      useNativeDriver: false,
-    }).start();
-  }, [controlsAnimation, controlsVisible]);
-
-  useEffect(() => {
-    lastScrollOffsetRef.current = 0;
-    if (!controlsVisibleRef.current) {
-      controlsVisibleRef.current = true;
-      setControlsVisible(true);
-    }
   }, [kind, view]);
 
   useFocusEffect(
@@ -583,7 +520,7 @@ export default function OnScreen() {
         group.dateKey,
         getDateGroupCarouselHeight(
           getRecordGroupCardHeight(group.records, cardWidth),
-          getRecordGroupActionAreaHeight(group.records),
+          0,
           Sizing.dateHeaderH
             + Sizing.carouselShadowInsetTop
             + Sizing.carouselShadowInsetBottom
@@ -608,15 +545,6 @@ export default function OnScreen() {
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       verticalDateSnap.onScroll(event);
       scrollPressGuard.onScroll();
-      const offset = Math.max(0, event.nativeEvent.contentOffset.y);
-      const delta = offset - lastScrollOffsetRef.current;
-      lastScrollOffsetRef.current = offset;
-      if (Math.abs(delta) < CONTROL_VISIBILITY_SCROLL_THRESHOLD) return;
-
-      const nextVisible = offset <= 0 || delta < 0;
-      if (nextVisible === controlsVisibleRef.current) return;
-      controlsVisibleRef.current = nextVisible;
-      setControlsVisible(nextVisible);
     },
     [scrollPressGuard, verticalDateSnap.onScroll],
   );
@@ -798,47 +726,18 @@ export default function OnScreen() {
             if (!shouldIgnorePress()) openRecord(record);
           }}
           onLongPress={() => {
-            if (!shouldIgnorePress()) requestRecordDeletion(record);
+            if (!shouldIgnorePress()) {
+              if (record.kind === "letter") {
+                setLetterActionTarget(record);
+              } else {
+                requestRecordDeletion(record);
+              }
+            }
           }}
         />
       )}
-      {record.kind === "letter" ? (
-        <View style={styles.recordCardActionArea}>
-          <View style={styles.letterActions}>
-            <ScalePressable
-              style={styles.letterAction}
-              contentStyle={styles.letterActionContent}
-              accessibilityRole="button"
-              accessibilityLabel="편지 보내기"
-              onPress={() => {
-                if (!shouldIgnorePress()) {
-                  router.push({ pathname: "/to-send", params: { prefillArticleId: record.article.id } });
-                }
-              }}
-            >
-              <Feather name="send" size={16} color={Colors.zinc700} />
-              <RecordListText style={styles.letterActionText}>보내기</RecordListText>
-            </ScalePressable>
-            <ScalePressable
-              style={styles.letterAction}
-              contentStyle={styles.letterActionContent}
-              accessibilityRole="button"
-              accessibilityLabel="편지 보관하기"
-              onPress={() => {
-                if (!shouldIgnorePress()) {
-                  setArchiveArticleId(record.article.id);
-                  setSelectedCollectionId(null);
-                }
-              }}
-            >
-              <Feather name="folder" size={16} color={Colors.zinc700} />
-              <RecordListText style={styles.letterActionText}>보관</RecordListText>
-            </ScalePressable>
-          </View>
-        </View>
-      ) : null}
     </View>
-  ), [cardWidth, openQuestion, openRecord, requestRecordDeletion, router]);
+  ), [cardWidth, openQuestion, openRecord, requestRecordDeletion]);
 
   return (
     <View style={styles.container}>
@@ -854,51 +753,28 @@ export default function OnScreen() {
         searchLast
       />
       <AnimatedSearchBar active={searchActive} value={searchQuery} onChangeText={setSearchQuery} placeholder="제목과 내용으로 검색" />
-      <Animated.View
-        pointerEvents={controlsVisible ? "box-none" : "none"}
-        style={[
-          styles.filtersAnimated,
-          {
-            height: controlsAnimation.interpolate({
-              inputRange: [0, 1],
-              outputRange: [0, FILTER_BAR_HEIGHT],
-            }),
-            marginBottom: controlsAnimation.interpolate({
-              inputRange: [0, 1],
-              outputRange: [0, -FILTER_GRADIENT_OVERLAP],
-            }),
-            opacity: controlsAnimation,
-          },
-        ]}
-      >
-        <Gradient
-          colors={["rgba(255,255,255,1)", "rgba(255,255,255,0)"]}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={styles.filters}
-          pointerEvents="box-none"
-        >
-          <View style={styles.kindFilterGroup}>
-            <RecordKindButton label="단상" active={kind === "thought"} onPress={() => setKind("thought")} />
-            <RecordKindButton label="편집" active={kind === "editing"} onPress={() => setKind("editing")} />
-            <RecordKindButton label="편지" active={kind === "letter"} onPress={() => setKind("letter")} />
-          </View>
-          <View style={styles.viewFilterGroup}>
-            <RecordViewButton
-              icon="list"
-              label="목록형으로 보기"
-              active={view === "content"}
-              onPress={() => setView("content")}
-            />
-            <RecordViewButton
-              icon="layers"
-              label="하나씩 보기"
-              active={view === "card"}
-              onPress={() => setView("card")}
-            />
-          </View>
-        </Gradient>
-      </Animated.View>
+      <View style={styles.filterRow}>
+        <DropdownFilter
+          label="단상"
+          value={kind}
+          defaultValue="thought"
+          options={KIND_OPTIONS}
+          onChange={setKind}
+          showDefaultOptionLabel
+          activeVariant="outline"
+          accessibilityLabel="기록 종류 필터"
+        />
+        <DropdownFilter
+          label="카드"
+          value={view}
+          defaultValue="card"
+          options={VIEW_OPTIONS}
+          onChange={setView}
+          showDefaultOptionLabel
+          activeVariant="outline"
+          accessibilityLabel="보기 방식 필터"
+        />
+      </View>
 
       {isLoading ? (
         <View style={styles.center}><RecordListText style={styles.muted}>불러오는 중...</RecordListText></View>
@@ -918,7 +794,6 @@ export default function OnScreen() {
             keyExtractor={(group) => group.dateKey}
             renderItem={({ item, index }) => {
               const cardHeight = getRecordGroupCardHeight(item.records, cardWidth);
-              const actionAreaHeight = getRecordGroupActionAreaHeight(item.records);
               return (
                 <View
                   ref={(node) => verticalDateSnap.setGroupRef(item.dateKey, node)}
@@ -932,7 +807,6 @@ export default function OnScreen() {
                     itemKey={cardRecordKey}
                     cardWidth={cardWidth}
                     cardHeight={cardHeight}
-                    actionAreaHeight={actionAreaHeight}
                     resetKey={index === 0 ? `${cardMixSeed}:${recordResetVersion}` : cardMixSeed}
                     renderCard={(record, context) => renderRecordCard(record, context.shouldIgnorePress, cardHeight)}
                     shouldIgnoreVerticalPress={scrollPressGuard.shouldIgnoreVerticalPress}
@@ -989,6 +863,39 @@ export default function OnScreen() {
         </RefreshableEmpty>
       )}
 
+      <ActionSheetModal
+        visible={Boolean(letterActionTarget)}
+        actions={[
+          {
+            label: "보내기",
+            style: "default",
+            onPress: () => {
+              if (letterActionTarget?.kind === "letter") {
+                router.push({ pathname: "/to-send", params: { prefillArticleId: letterActionTarget.article.id } });
+              }
+            },
+          },
+          {
+            label: "보관",
+            style: "default",
+            onPress: () => {
+              if (letterActionTarget?.kind === "letter") {
+                setArchiveArticleId(letterActionTarget.article.id);
+                setSelectedCollectionId(null);
+              }
+            },
+          },
+          {
+            label: "삭제",
+            style: "destructive",
+            onPress: () => {
+              if (letterActionTarget) setDeleteTarget(letterActionTarget);
+            },
+          },
+          { label: "취소", style: "cancel", onPress: () => {} },
+        ]}
+        onClose={() => setLetterActionTarget(null)}
+      />
       <ConfirmModal
         visible={Boolean(deleteTarget)}
         title="삭제하시겠습니까?"
@@ -1017,25 +924,13 @@ export default function OnScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.white },
-  filtersAnimated: { height: FILTER_BAR_HEIGHT, overflow: "hidden", zIndex: 5 },
-  filters: { height: FILTER_BAR_HEIGHT, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: Spacing.screenPx, paddingTop: 4, paddingBottom: 28 },
-  kindFilterGroup: { flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 1 },
-  kindButton: { height: FILTER_BUTTON_HEIGHT, alignSelf: "flex-start", flexGrow: 0, flexShrink: 0 },
-  kindButtonContent: { height: FILTER_BUTTON_HEIGHT, flexGrow: 0, flexShrink: 0, paddingHorizontal: 14, borderRadius: FILTER_BUTTON_HEIGHT / 2, borderWidth: 1, borderColor: Colors.zinc200, backgroundColor: Colors.white, alignItems: "center", justifyContent: "center" },
-  kindButtonContentActive: { borderColor: Colors.noticeAccent, backgroundColor: Colors.noticeAccent },
-  kindButtonText: { ...Typography.bodySemiBold, fontSize: 13, lineHeight: 18, color: Colors.zinc600 },
-  kindButtonTextActive: { color: Colors.white },
-  viewFilterGroup: { flexDirection: "row", alignItems: "center", gap: 4, marginLeft: 8, flexGrow: 0, flexShrink: 0 },
-  viewButton: { width: VIEW_BUTTON_SIZE, height: VIEW_BUTTON_SIZE, flexGrow: 0, flexShrink: 0 },
-  viewButtonContent: { width: VIEW_BUTTON_SIZE, height: VIEW_BUTTON_SIZE, flexGrow: 0, flexShrink: 0, borderRadius: VIEW_BUTTON_SIZE / 2, backgroundColor: "transparent", alignItems: "center", justifyContent: "center" },
-  viewButtonContentActive: { backgroundColor: "transparent" },
+  filterRow: { flexDirection: "row", alignItems: "flex-start", paddingHorizontal: Spacing.screenPx, gap: 8, paddingTop: 6, paddingBottom: 10 },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, paddingHorizontal: Spacing.screenPx },
   muted: { ...Typography.body, color: Colors.zinc500, textAlign: "center" },
   emptyTitle: { ...Typography.bodySemiBold, color: Colors.zinc900, fontSize: 17, textAlign: "center" },
   recordGroupList: {},
   recordListViewport: { flex: 1 },
   recordCardFrame: { flex: 1, alignItems: "center" },
-  recordCardActionArea: { height: CARD_ACTION_AREA_H, alignItems: "center", justifyContent: "center" },
   // Keep the press wrapper transparent: only the animated content surface
   // should own the card geometry and shadow, so the shadow scales with it.
   thoughtCard: { flexGrow: 0, flexShrink: 0 },
@@ -1044,10 +939,6 @@ const styles = StyleSheet.create({
   thoughtCardBodyWrap: { flex: 1, justifyContent: "flex-start" },
   thoughtCardTitle: { fontFamily: ReaderTokens.fontFamily.serifBold, color: Colors.zinc900 },
   thoughtCardBody: { fontFamily: ReaderTokens.fontFamily.serif, color: Colors.zinc800 },
-  letterActions: { flexDirection: "row", gap: 8 },
-  letterAction: { height: 44, flexGrow: 0, flexShrink: 0, alignSelf: "flex-start" },
-  letterActionContent: { height: 44, flexGrow: 0, flexShrink: 0, paddingHorizontal: 14, borderRadius: 22, backgroundColor: Colors.zinc100, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
-  letterActionText: { ...Typography.caption, color: Colors.zinc700, fontWeight: "600" },
   row: { marginHorizontal: Spacing.screenPx, marginBottom: Spacing.cardGap },
   rowContent: { padding: 16, gap: 7, borderRadius: 16, backgroundColor: Colors.white, ...Shadows.card },
   questionRowContent: { backgroundColor: Colors.noticeAccent },
@@ -1087,6 +978,6 @@ function getRecordGroupCardHeight(records: readonly UnifiedRecord[], width: numb
   return records.length > 0 ? getRecordCardHeight(records[0], width) : width * Sizing.cardRatio;
 }
 
-function getRecordGroupActionAreaHeight(records: readonly UnifiedRecord[]): number {
-  return records.some((record) => record.kind === "letter") ? CARD_ACTION_AREA_H : 0;
+function getRecordGroupActionAreaHeight(_records: readonly UnifiedRecord[]): number {
+  return 0;
 }
