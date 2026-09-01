@@ -304,14 +304,32 @@ async function compactQuestionQueue(
  * this rule on the server prevents clients from creating an article with a
  * title that cannot be represented by the thought record.
  */
-function parseThoughtMarkdown(markdown: string): ThoughtMarkdown | null {
-  const firstLineEnd = markdown.indexOf("\n");
-  const firstLine = (firstLineEnd < 0 ? markdown : markdown.slice(0, firstLineEnd)).replace(/\r$/, "");
-  const match = /^#(?!#)\s+(.+?)\s*$/.exec(firstLine.trim());
+export function parseThoughtMarkdown(markdown: string): ThoughtMarkdown | null {
+  const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
+  const match = /^ {0,3}#(?!#)[ \t]+(.*)$/.exec(lines[0] ?? "");
   if (!match) return null;
 
-  const title = match[1].trim();
-  const body = firstLineEnd < 0 ? "" : markdown.slice(firstLineEnd + 1).replace(/^\s*\n/, "");
+  const titleLines = [match[1]];
+  let cursor = 1;
+  while (cursor < lines.length) {
+    const previous = titleLines[titleLines.length - 1];
+    if (!/[ \t]{2,}$/.test(previous) || lines[cursor].trim() === "") break;
+    titleLines[titleLines.length - 1] = previous.replace(/[ \t]{2,}$/, "");
+    titleLines.push(lines[cursor]);
+    cursor += 1;
+  }
+  titleLines[titleLines.length - 1] = titleLines[titleLines.length - 1].replace(/[ \t]{2,}$/, "");
+
+  const title = titleLines
+    .map((line) => line
+      .replace(/!\[([^\]]*)]\([^)]*\)/g, "$1")
+      .replace(/\[([^\]]+)]\([^)]*\)/g, "$1")
+      .replace(/<\/?u>/gi, "")
+      .replace(/[*_~`]+/g, "")
+      .trim())
+    .join("\n")
+    .trim();
+  const body = lines.slice(cursor).join("\n").replace(/^\n/, "");
   if (!title || !body.trim()) return null;
   return { title, body };
 }

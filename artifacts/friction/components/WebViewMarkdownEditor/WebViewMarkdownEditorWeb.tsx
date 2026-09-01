@@ -28,13 +28,17 @@ import {
   waitForWebBodyFonts,
   type BodyFontLoadStatus,
 } from "@/lib/bodyTypographyDiagnostics";
+import { splitLeadingH1Markdown } from "@/utils/leadingH1";
 
 marked.setOptions({ breaks: true, gfm: true } as Parameters<typeof marked.setOptions>[0]);
 
 function markdownToHtml(md: string, ensureTrailingParagraph = true): string {
   try {
-    const result = marked.parse(md || "");
-    let html = typeof result === "string" ? result : "";
+    const leadingH1 = splitLeadingH1Markdown(md || "");
+    const result = marked.parse(leadingH1?.body ?? md ?? "");
+    let html = leadingH1
+      ? `<h1>${marked.parseInline(leadingH1.titleMarkdown)}</h1>${typeof result === "string" ? result : ""}`
+      : typeof result === "string" ? result : "";
     // 마지막 블록이 단락(<p>)이 아닌 경우(예: blockquote, 리스트, 헤딩) 그
     // 아래를 탭/클릭해도 ProseMirror에 커서를 잡을 노드가 없어 입력이
     // 불가능해진다. 기존 편집기는 항상 빈 단락을 보장한다.
@@ -122,8 +126,9 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
       onTitleChange,
       onError,
       belowTitleSlot,
-       typography,
+      typography,
       hideTitle = false,
+      contentBottomPadding = 120,
     },
     ref,
   ) {
@@ -375,6 +380,7 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
           "--body-paragraph-gap": `${typography.paragraphGapPx}px`,
           "--body-letter-spacing": `${typography.letterSpacingPx}px`,
           "--title-font-size": `${typography.titleFontSizePx}px`,
+          "--content-bottom-padding": `${Math.max(0, contentBottomPadding)}px`,
         } as React.CSSProperties}
       >
         <style>{proseMirrorCss}</style>
@@ -460,7 +466,7 @@ ${editorTypographyCss}
   width: var(--text-column-width);
   max-width: 100%;
   min-height: 100%;
-  padding: 16px 0 120px;
+  padding: 16px 0 var(--content-bottom-padding);
   outline: none;
 }
 .ProseMirror p.is-editor-empty:first-child::before {

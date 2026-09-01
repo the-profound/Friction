@@ -14,12 +14,11 @@ import {
   useWindowDimensions,
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams, Stack, useNavigation } from "expo-router";
 import { usePreventRemove } from "expo-router/build/react-navigation/core";
 import { Feather } from "@expo/vector-icons";
-import { Colors, Typography, Spacing } from "@/constants/tokens";
+import { Colors, Typography, Spacing, Shadows } from "@/constants/tokens";
 import { useAutoSave } from "@/lib/useAutoSave";
 import { useEditorLayout } from "@/lib/useEditorLayout";
 import { bodyTypographyMetrics, getBodyContentHeight } from "@/lib/bodyLayout";
@@ -41,7 +40,11 @@ import {
   type BSResult,
   type DivisionWarning,
 } from "@/lib/pageDivision";
-import { parseMarkdownBlocks, type MarkdownBlockType } from "@/utils/markdownParser";
+import {
+  parseLeadingH1Markdown,
+  parseMarkdownBlocks,
+  type MarkdownBlockType,
+} from "@/utils/markdownParser";
 import { canTransitionForward } from "@/lib/articleStatusCycle";
 import type { ArticleStatus } from "@/lib/policies";
 import { MarkdownPolicy } from "@/lib/policies";
@@ -247,7 +250,6 @@ export default function WritingScreen() {
   // ── 공통 상태 ─────────────────────────────────────────────────────────────
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
-  const [charCount, setCharCount] = useState(0);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [editorReady, setEditorReady] = useState(false);
   const editorReadyRef = useRef(false);
@@ -435,7 +437,6 @@ export default function WritingScreen() {
       contentRef.current = c;
       articleContentRef.current = c;
       setContent(c);
-      setCharCount(c.length);
       // 초기 모드 결정: mode 파라미터 또는 서버 status(DIVIDING) 기준.
       const initialMode: EditorMode =
         modeParam === "dividing" || (!isThoughtMode && article?.status === "DIVIDING") ? "dividing" : "draft";
@@ -465,7 +466,6 @@ export default function WritingScreen() {
         setContent(c);
         setTitle(t);
         titleRef.current = t;
-        setCharCount(c.length);
         if (editorReady) {
           serverInjectionPendingRef.current = true;
           editorRef.current?.setMarkdown(c);
@@ -708,7 +708,10 @@ export default function WritingScreen() {
                   throw new Error("Thought creation did not return an id");
                 }
                 thoughtIdRef.current = created.id;
-                if (localDraftExitedRef.current) return created.id;
+                if (localDraftExitedRef.current) {
+                  await bindAutosaveEntityRef.current(created.id, `draft_${created.id}`);
+                  return created.id;
+                }
                 await bindAutosaveEntityRef.current(created.id, `draft_${created.id}`);
                 // This create owns exactly the payload snapshotted by
                 // useAutoSave. If the editor changed while POST was in flight,
@@ -815,7 +818,6 @@ export default function WritingScreen() {
     articleContentRef.current = data.content;
     setTitle(data.title);
     setContent(data.content);
-    setCharCount(data.content.length);
     if (editorReadyRef.current) {
       editorRef.current?.setTitle(data.title);
       editorRef.current?.setMarkdown(data.content);
@@ -829,8 +831,16 @@ export default function WritingScreen() {
     reportFailure: reportAutosaveFailure,
     discard: discardAutosave,
     bindEntity: bindAutosaveEntity,
+    persistLatest: persistLatestAutosave,
+    stageCleanup,
+    runPendingCleanup,
   } = useAutoSave({
     onSave: handleSave,
+    onCleanup: async (entityId) => {
+      await deleteThought.mutateAsync({ id: entityId });
+      void invalidateArticleLists(queryClient);
+      void queryClient.invalidateQueries({ queryKey: getListThoughtsQueryKey() });
+    },
     onRestore: handleAutosaveRestore,
     creationId: thoughtCreationIdRef.current,
     storageKey: isLocalDirectDraft ? "direct_thought_local_draft" : id ? `draft_${id}` : undefined,
@@ -881,9 +891,6 @@ export default function WritingScreen() {
 
   const handleEditorChange = useCallback(
     (_payload: OnChangePayload) => {
-      if (_payload.charCount !== undefined) {
-        setCharCount(_payload.charCount);
-      }
       if (!_payload.isDirty) return;
 
       if (_payload.markdown !== undefined) {
@@ -1344,11 +1351,9 @@ export default function WritingScreen() {
       );
     });
 
-    const firstLine = cur.split(/\r?\n/, 1)[0]?.trim() ?? "";
-    const heading = /^#(?!#)\s+(.+?)\s*$/.exec(firstLine);
-    const thoughtTitle = heading?.[1]?.trim() ?? "";
-    const thoughtBody = heading ? cur.slice(cur.indexOf("\n") + 1).replace(/^\s*\n/, "") : cur;
-    const resolvedTitle = thoughtTitle;
+    const parsedThought = parseLeadingH1Markdown(cur);
+    const thoughtBody = parsedThought?.body ?? cur;
+    const resolvedTitle = parsedThought?.title ?? "";
     if (!resolvedTitle || !thoughtBody.trim()) {
       isNavigatingRef.current = false;
       setIsNavigating(false);
@@ -1585,6 +1590,8 @@ export default function WritingScreen() {
   // There is no "exit dividing back to draft" transition — once promoted to
   // DIVIDING the article stays there.
   const exitToPreviousList = useCallback(() => {
+    isNavigatingRef.current = true;
+    setIsNavigating(true);
     // Only pop if this screen was pushed from the tab navigator. A restored
     // route or a quote opened from another detail screen can have a different
     // root-stack predecessor; exposing that predecessor is not a "back to
@@ -1594,8 +1601,6 @@ export default function WritingScreen() {
     const canPopToList = router.canGoBack() && previousRoute?.name === "(tabs)";
 
     releaseDirectThoughtDraft();
-    isNavigatingRef.current = false;
-    setIsNavigating(false);
     navigateAfterRemovingGuard(() => {
       if (canPopToList) {
         router.back();
@@ -1614,28 +1619,14 @@ export default function WritingScreen() {
     editorRef.current?.blur();
     Keyboard.dismiss();
 
-    // A thought exit uses the same latest-export boundary as keyboard close,
-    // app backgrounding, and manual retry. Other editor modes keep their
-    // existing validation-before-save flow.
-    const thoughtFlush = isThoughtModeRef.current
-      ? await flushLatestEditorSnapshot()
-      : null;
-    if (thoughtFlush && !thoughtFlush.ok) {
-      isNavigatingRef.current = false;
-      setIsNavigating(false);
-      showToast({ message: "최신 내용을 확인하지 못했습니다. 다시 저장해주세요.", type: "error" });
-      return;
+    if (exportDebounceTimerRef.current) {
+      clearTimeout(exportDebounceTimerRef.current);
+      exportDebounceTimerRef.current = null;
     }
-    if (!isThoughtModeRef.current) {
-      if (exportDebounceTimerRef.current) {
-        clearTimeout(exportDebounceTimerRef.current);
-        exportDebounceTimerRef.current = null;
-      }
-      exportPendingRef.current = false;
-    }
+    exportPendingRef.current = false;
     let cur: string;
     try {
-      cur = thoughtFlush?.content ?? await getEditorContent();
+      cur = await getEditorContent();
     } catch {
       isNavigatingRef.current = false;
       setIsNavigating(false);
@@ -1647,58 +1638,54 @@ export default function WritingScreen() {
       cur.length,
       cur.slice(0, 60),
     );
-    const currentTitle = isThoughtModeRef.current ? "" : titleRef.current.trim();
-    const currentContent = cur.trim();
     const hasMeaningfulThought = isThoughtModeRef.current && isMeaningfulThoughtMarkdown(cur);
 
-    if (!isThoughtModeRef.current && source === "quote") {
-      if (!currentTitle) {
+    if (isThoughtModeRef.current && !hasMeaningfulThought) {
+      localDraftExitedRef.current = isLocalDirectDraft;
+      try {
+        // Keep an empty, entity-bound recovery snapshot until server cleanup
+        // succeeds. This prevents a failed fire-and-forget DELETE from becoming
+        // an unrecoverable orphan after the screen unmounts.
+        await stageCleanup(thoughtIdRef.current ?? id);
+      } catch {
         isNavigatingRef.current = false;
         setIsNavigating(false);
-        showToast({ message: "제목을 입력해주세요.", type: "info" });
+        showToast({ message: "빈 단상 정리 상태를 보관하지 못했습니다. 다시 시도해주세요.", type: "error" });
         return;
       }
-    } else if (isThoughtModeRef.current && !hasMeaningfulThought) {
-      localDraftExitedRef.current = isLocalDirectDraft;
-      let savedThoughtId = thoughtIdRef.current;
-      // The first meaningful autosave may have begun just before the user
-      // clears the editor. Wait for it so the resulting record cannot escape
-      // this empty-draft cleanup.
-      if (!savedThoughtId && createThoughtPromiseRef.current) {
-        try {
-          savedThoughtId = await createThoughtPromiseRef.current;
-        } catch {
-          // Creation failed, so there is no server record to remove.
+      const deleteSavedThought = async (savedThoughtId: string | undefined) => {
+        if (!savedThoughtId) return;
+        const result = await runPendingCleanup(savedThoughtId);
+        if (!result.ok) {
+          showToast({ message: "빈 단상 삭제에 실패했습니다. 다음에 다시 정리할 수 있도록 보관했어요.", type: "error" });
         }
-      }
-      if (savedThoughtId) {
-        try {
-          await deleteThought.mutateAsync({ id: savedThoughtId });
-        } catch {
-          showToast({ message: "빈 단상 삭제에 실패했습니다.", type: "error" });
-        }
-        invalidateArticleLists(queryClient);
-        queryClient.invalidateQueries({ queryKey: getListThoughtsQueryKey() });
+      };
+      const pendingCreate = createThoughtPromiseRef.current;
+      if (pendingCreate) {
+        void pendingCreate.then(deleteSavedThought, () => undefined);
+      } else {
+        void deleteSavedThought(thoughtIdRef.current);
       }
       exitToPreviousList();
       return;
     }
 
-    // Thought mode was already flushed from its exact latest export above.
-    // Article mode preserves the existing markDirty → flush ordering.
-    const flushResult = thoughtFlush ?? await (async () => {
-      markDirty(titleRef.current, cur);
-      return flush();
-    })();
-    if (!flushResult.ok) {
+    markDirty(isThoughtModeRef.current ? "" : titleRef.current, cur);
+    try {
+      await persistLatestAutosave();
+    } catch {
       isNavigatingRef.current = false;
       setIsNavigating(false);
-      showToast({ message: "저장에 실패했습니다. 내용을 확인해주세요.", type: "error" });
+      showToast({ message: "최신 내용을 안전하게 보관하지 못했습니다. 다시 시도해주세요.", type: "error" });
       return;
     }
-    console.log("[handleDraftBack] flush ok — saved title=%j contentLen=%d", titleRef.current, cur.length);
+    void flush().then((result) => {
+      if (!result.ok) {
+        showToast({ message: "저장에 실패했습니다. 다시 시도할 수 있도록 내용을 보관했어요.", type: "error" });
+      }
+    });
 
-    // Update thought cache after a successful save in draft mode.
+    // Update list/detail caches immediately from the locally durable snapshot.
     const savedThoughtId = thoughtIdRef.current;
     if (savedThoughtId && isThoughtModeRef.current) {
       queryClient.setQueryData(
@@ -1719,12 +1706,12 @@ export default function WritingScreen() {
         { updatedAt: Date.now() },
       );
     }
-    invalidateArticleLists(queryClient);
+    void invalidateArticleLists(queryClient);
     if (isThoughtModeRef.current) {
-      queryClient.invalidateQueries({ queryKey: getListThoughtsQueryKey() });
+      void queryClient.invalidateQueries({ queryKey: getListThoughtsQueryKey() });
     }
     exitToPreviousList();
-  }, [flush, queryClient, getEditorContent, markDirty, id, deleteThought, showToast, isLocalDirectDraft, exitToPreviousList, flushLatestEditorSnapshot]);
+  }, [flush, queryClient, getEditorContent, markDirty, id, showToast, isLocalDirectDraft, exitToPreviousList, persistLatestAutosave, stageCleanup, runPendingCleanup]);
 
   // Native lifecycle events have no reliable "before unload" hook.  Export the
   // WebView snapshot while the app is still active and flush it to the thought/article
@@ -2244,24 +2231,26 @@ export default function WritingScreen() {
       <Stack.Screen options={{ gestureEnabled: true }} />
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.header}>
-          <ScalePressable onPress={handleHeaderBack} hitSlop={12}>
-            <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-          </ScalePressable>
-          <WritingStateBar
-            current={isDividing ? "DIVIDING" : "DRAFT"}
-            onPress={handleStateBarPress}
+          <ScalePressable
+            style={styles.headerBackButton}
+            contentStyle={styles.headerBackButtonContent}
+            onPress={handleHeaderBack}
             disabled={isNavigating}
-            draftLabel="단상"
-          />
-          {keyboardVisible ? (
-            <ScalePressable onPress={handleDismissKeyboard} hitSlop={12}>
-              <MaterialCommunityIcons name="keyboard-off-outline" size={22} color={Colors.zinc600} />
-            </ScalePressable>
-          ) : isNavigating ? (
-            <ActivityIndicator size="small" color={Colors.zinc400} />
-          ) : (
-            <View style={styles.headerRight} />
-          )}
+            accessibilityRole="button"
+            accessibilityLabel="기록 목록으로 돌아가기"
+            accessibilityState={{ disabled: isNavigating }}
+          >
+            <Feather name="arrow-left" size={19} color={Colors.zinc700} />
+          </ScalePressable>
+          <View style={styles.headerStateBar} pointerEvents="box-none">
+            <WritingStateBar
+              current={isDividing ? "DIVIDING" : "DRAFT"}
+              onPress={handleStateBarPress}
+              disabled={isNavigating}
+              draftLabel="단상"
+            />
+          </View>
+          <View style={styles.headerRight} />
         </View>
 
         {isDividing && (
@@ -2402,10 +2391,6 @@ export default function WritingScreen() {
                 }
                 onSourceArticleSlotTap={isDividing ? () => setPickerVisible(true) : undefined}
               />
-            </View>
-            <View style={styles.editorFooter}>
-              <View style={styles.autoSaveFeedback} />
-              <Text style={styles.charCountText}>{charCount}자</Text>
             </View>
           </View>
 
@@ -2664,15 +2649,48 @@ const styles = StyleSheet.create({
     color: Colors.zinc700,
   },
   header: {
+    position: "relative",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: Spacing.screenPx,
     paddingVertical: 12,
+    backgroundColor: "transparent",
+    zIndex: 5,
+  },
+  headerBackButton: {
+    width: 44,
+    height: 44,
+    flexGrow: 0,
+    flexShrink: 0,
+    zIndex: 1,
+  },
+  headerBackButtonContent: {
+    width: 38,
+    height: 38,
+    alignSelf: "center",
+    flexGrow: 0,
+    flexShrink: 0,
+    borderRadius: 19,
+    backgroundColor: Colors.white,
+    alignItems: "center",
+    justifyContent: "center",
+    ...Shadows.navBar,
+  },
+  headerStateBar: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 0,
   },
   headerRight: {
-    width: 22,
-    height: 22,
+    width: 44,
+    height: 44,
+    zIndex: 1,
   },
   pageCountLabel: {
     ...Typography.caption,
@@ -2749,27 +2767,6 @@ const styles = StyleSheet.create({
   },
   markdownEditorContainer: {
     flex: 1,
-  },
-  editorFooter: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.zinc100,
-  },
-  autoSaveFeedback: {
-    minHeight: 28,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    flexGrow: 0,
-    flexShrink: 1,
-  },
-  charCountText: {
-    ...Typography.caption,
-    fontSize: 12,
-    color: Colors.zinc500,
   },
   warningBanner: {
     flexDirection: "row",

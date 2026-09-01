@@ -1,4 +1,5 @@
 import { marked, type Token, type Tokens } from "marked";
+import { splitLeadingH1Markdown } from "./leadingH1";
 
 export type InlineToken =
   | { kind: "text"; value: string }
@@ -110,6 +111,24 @@ export function tokensToPlainText(tokens: InlineToken[]): string {
   return tokens.map((t) => t.value).join("").replace(/<\/?u>/gi, "");
 }
 
+export interface ParsedLeadingH1Markdown {
+  title: string;
+  titleMarkdown: string;
+  body: string;
+}
+
+export function parseLeadingH1Markdown(markdown: string): ParsedLeadingH1Markdown | null {
+  const split = splitLeadingH1Markdown(markdown);
+  if (!split) return null;
+  const title = tokensToPlainText(inlineTokensFromText(split.titleMarkdown))
+    .replace(/[ \t]*\n[ \t]*/g, "\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .join("\n")
+    .trim();
+  return { ...split, title };
+}
+
 function flattenListItems(
   items: Tokens.ListItem[],
   ordered: boolean,
@@ -133,8 +152,17 @@ export function parseMarkdownBlocks(markdown: string): MarkdownBlockType[] {
   if (typeof markdown !== 'string') return [];
   if (!markdown || !markdown.trim()) return [];
 
-  const lexed = marked.lexer(markdown, { breaks: true, gfm: true });
   const blocks: MarkdownBlockType[] = [];
+  const leadingH1 = splitLeadingH1Markdown(markdown);
+  const source = leadingH1?.body ?? markdown;
+  if (leadingH1) {
+    blocks.push({
+      type: "h1",
+      tokens: inlineTokensFromText(leadingH1.titleMarkdown),
+      rawText: leadingH1.titleMarkdown,
+    });
+  }
+  const lexed = marked.lexer(source, { breaks: true, gfm: true });
 
   for (const token of lexed) {
     if (token.type === "heading") {

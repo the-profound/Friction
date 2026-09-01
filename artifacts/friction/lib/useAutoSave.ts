@@ -6,6 +6,8 @@ export type AutoSaveStatus = "idle" | "saving" | "saved" | "error";
 interface PendingPayload {
   title: string;
   content: string;
+  operation?: "save" | "delete";
+  cleanupId?: string;
   entityId?: string;
   creationId?: string;
   aliasQueueKeys?: string[];
@@ -19,6 +21,7 @@ interface UseAutoSaveOptions {
   storageKey?: string;
   creationId?: string;
   onSave: (data: { title: string; content: string }) => Promise<void>;
+  onCleanup?: (entityId: string) => Promise<void>;
   onRestore?: (data: {
     title: string;
     content: string;
@@ -69,6 +72,7 @@ export function useAutoSave({
   storageKey,
   creationId,
   onSave,
+  onCleanup,
   onRestore,
 }: UseAutoSaveOptions) {
   const [status, setStatus] = useState<AutoSaveStatus>("idle");
@@ -97,6 +101,8 @@ export function useAutoSave({
   const isDirtyRef = useRef(false);
   const onSaveRef = useRef(onSave);
   onSaveRef.current = onSave;
+  const onCleanupRef = useRef(onCleanup);
+  onCleanupRef.current = onCleanup;
   const onRestoreRef = useRef(onRestore);
   onRestoreRef.current = onRestore;
   const queueKey = storageKey ? `autosave_queue_${storageKey}` : null;
@@ -107,6 +113,7 @@ export function useAutoSave({
   // Tracks the currently in-flight save promise so flush() can await it
   // instead of starting a concurrent save that races with the existing one.
   const activeSaveRef = useRef<Promise<void> | null>(null);
+  const activeCleanupRef = useRef<Promise<{ ok: boolean }> | null>(null);
 
   const clearRetryTimer = useCallback(() => {
     if (!retryTimerRef.current) return;
@@ -254,6 +261,62 @@ export function useAutoSave({
     await p;
   }, [clearRetryTimer, maxRetries, saveTimeoutMs, storageTimeoutMs, writeQueue]);
 
+  const runPendingCleanup = useCallback((entityId?: string): Promise<{ ok: boolean }> => {
+    if (activeCleanupRef.current) return activeCleanupRef.current;
+    // Direct-thought POST uses the durable creationId as the record id. If the
+    // process dies after POST commit but before its response binds entityId,
+    // the tombstone can still delete that definitive server record on restore.
+    const resolvedEntityId = entityId
+      ?? latestDataRef.current.entityId
+      ?? (latestDataRef.current.operation === "delete"
+        ? latestDataRef.current.creationId
+        : undefined);
+    if (!resolvedEntityId || !onCleanupRef.current) return Promise.resolve({ ok: false });
+
+    latestDataRef.current = {
+      ...latestDataRef.current,
+      operation: "delete",
+      entityId: resolvedEntityId,
+      cleanupId: latestDataRef.current.cleanupId ?? `delete:${resolvedEntityId}`,
+    };
+    const cleanupId = latestDataRef.current.cleanupId;
+    const run = async (): Promise<{ ok: boolean }> => {
+      try {
+        await writeQueue({ ...latestDataRef.current });
+        for (let attempt = 0; attempt < maxRetries; attempt += 1) {
+          try {
+            await rejectAfter(
+              onCleanupRef.current!(resolvedEntityId),
+              saveTimeoutMs,
+              "autosave cleanup",
+            );
+            // A user may start a new direct draft while this restored DELETE
+            // is in flight. Clear only the tombstone generation we started;
+            // never erase a newer save snapshot in the shared queue.
+            if (
+              latestDataRef.current.operation === "delete"
+              && latestDataRef.current.cleanupId === cleanupId
+            ) {
+              await writeQueue(null);
+            }
+            return { ok: true };
+          } catch {
+            if (attempt < maxRetries - 1) {
+              await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+            }
+          }
+        }
+        setStatus("error");
+        return { ok: false };
+      } finally {
+        activeCleanupRef.current = null;
+      }
+    };
+    const promise = run();
+    activeCleanupRef.current = promise;
+    return promise;
+  }, [maxRetries, saveTimeoutMs, writeQueue]);
+
   useEffect(() => {
     if (!queueKey) return;
     let cancelled = false;
@@ -276,6 +339,10 @@ export function useAutoSave({
           queued.creationId ?? queued.entityId ?? latestDataRef.current.creationId,
       };
       latestDataRef.current = restored;
+      if (restored.operation === "delete") {
+        void runPendingCleanup(restored.entityId);
+        return;
+      }
       dirtyEpochRef.current++;
       isDirtyRef.current = true;
       setIsDirty(true);
@@ -289,11 +356,17 @@ export function useAutoSave({
       doSave();
     });
     return () => { cancelled = true; };
-  }, [queueKey, doSave]);
+  }, [queueKey, doSave, runPendingCleanup]);
 
   const markDirty = useCallback(
     (title: string, content: string) => {
-      latestDataRef.current = { ...latestDataRef.current, title, content };
+      latestDataRef.current = {
+        ...latestDataRef.current,
+        title,
+        content,
+        operation: "save",
+        cleanupId: undefined,
+      };
       // Bump epoch BEFORE setting isDirtyRef so any in-flight doSave that
       // checks (dirtyEpochRef.current === epochSnapshot) sees the mismatch
       // and does not clear the dirty flag prematurely.
@@ -321,7 +394,13 @@ export function useAutoSave({
     (title: string, fallbackContent: string = "") => {
       const prevContent = latestDataRef.current.content;
       const content = prevContent !== "" ? prevContent : fallbackContent;
-      latestDataRef.current = { ...latestDataRef.current, title, content };
+      latestDataRef.current = {
+        ...latestDataRef.current,
+        title,
+        content,
+        operation: "save",
+        cleanupId: undefined,
+      };
       // Bump epoch so any in-flight doSave does not clear isDirtyRef
       // if this title keystroke arrives during a concurrent save.
       dirtyEpochRef.current++;
@@ -338,6 +417,33 @@ export function useAutoSave({
     },
     [debounceMs, doSave, writeQueue],
   );
+
+  const persistLatest = useCallback(async () => {
+    await writeQueue({ ...latestDataRef.current });
+  }, [writeQueue]);
+
+  const stageCleanup = useCallback(async (entityId?: string) => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    clearRetryTimer();
+    // Any older completion may still finish physically, but it must not clear
+    // this newer recovery snapshot.
+    dirtyEpochRef.current++;
+    latestDataRef.current = {
+      ...latestDataRef.current,
+      title: "",
+      content: "",
+      operation: "delete",
+      cleanupId: `delete:${entityId ?? latestDataRef.current.entityId ?? latestDataRef.current.creationId ?? "pending"}`,
+      ...(entityId ? { entityId } : {}),
+    };
+    isDirtyRef.current = false;
+    setIsDirty(false);
+    setStatus("idle");
+    await writeQueue({ ...latestDataRef.current });
+  }, [clearRetryTimer, writeQueue]);
 
   const flush = useCallback(async (): Promise<{ ok: boolean }> => {
     if (debounceTimerRef.current) {
@@ -489,5 +595,8 @@ export function useAutoSave({
     reportFailure,
     discard,
     bindEntity,
+    persistLatest,
+    stageCleanup,
+    runPendingCleanup,
   };
 }

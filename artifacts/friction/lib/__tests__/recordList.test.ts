@@ -287,6 +287,21 @@ describe("record preview normalization", () => {
     });
   });
 
+  it("keeps leading H1 hard breaks in the title and excludes them from the body", () => {
+    const markdown = "# **첫 제목**  \n둘째 <u>제목</u>  \n셋째 제목\n\n실제 본문";
+    expect(getThoughtPreview(markdown)).toEqual({
+      title: "첫 제목 둘째 제목 셋째 제목",
+      titleDisplay: "첫 제목\n둘째 제목\n셋째 제목",
+      body: "실제 본문",
+      hasTitle: true,
+    });
+    expect(getThoughtCardContent(markdown)).toEqual({
+      title: "첫 제목\n둘째 제목\n셋째 제목",
+      body: "실제 본문",
+      hasTitle: true,
+    });
+  });
+
   it("removes whitespace around newlines then collapses all remaining runs", () => {
     expect(normalizePreviewText("  첫 줄  \n   둘째\t\t줄 \n\n 셋째  ")).toBe("첫 줄 둘째 줄 셋째");
   });

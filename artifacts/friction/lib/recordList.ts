@@ -330,13 +330,14 @@ export function getThoughtPreview(markdown: string | null | undefined): RecordPr
   const blocks = parseMarkdownBlocks(markdown ?? "");
   const firstBlock = blocks[0];
   const hasTitle = firstBlock?.type === "h1";
-  const title = hasTitle ? normalizePreviewText(tokensToPlainText(firstBlock.tokens)) : "";
+  const titleDisplay = hasTitle ? normalizePreviewTitle(tokensToPlainText(firstBlock.tokens)) : "";
+  const title = normalizePreviewText(titleDisplay);
   const bodyBlocks = hasTitle ? blocks.slice(1) : blocks;
   const body = normalizePreviewText(
     bodyBlocks.map((block) => tokensToPlainText(block.tokens)).join("\n"),
   );
 
-  return { title, titleDisplay: title, body, hasTitle: Boolean(title) };
+  return { title, titleDisplay, body, hasTitle: Boolean(title) };
 }
 
 export function getRecordPreview(record: UnifiedRecord): RecordPreview {
@@ -382,7 +383,7 @@ export function getThoughtCardContent(markdown: string | null | undefined): Reco
   const blocks = parseMarkdownBlocks(normalizeDisplayLineEndings(markdown));
   const firstBlock = blocks[0];
   const hasTitle = firstBlock?.type === "h1";
-  const title = hasTitle ? tokensToPlainText(firstBlock.tokens) : "";
+  const title = hasTitle ? normalizePreviewTitle(tokensToPlainText(firstBlock.tokens)) : "";
   const bodyBlocks = hasTitle ? blocks.slice(1) : blocks;
   // Block tokens remove Markdown syntax while retaining authored hard line
   // breaks. Empty paragraph blocks encode additional blank lines beyond the

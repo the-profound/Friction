@@ -116,7 +116,7 @@ describe("on-01a latest-snapshot autosave boundary", () => {
     expect(screen).toContain("onReload={handleEditorReload}");
   });
 
-  it("flushes the same latest editor snapshot on back, keyboard close, app background, and retry", () => {
+  it("uses the latest editor snapshot for local handoff on back and flushes other save boundaries", () => {
     const screen = readScreen();
     const latestFlush = screen.slice(
       screen.indexOf("const flushLatestEditorSnapshot"),
@@ -138,7 +138,19 @@ describe("on-01a latest-snapshot autosave boundary", () => {
     expect(latestFlush).toContain("latest = await getEditorContent();");
     expect(latestFlush).toContain("markDirty(isThoughtModeRef.current ? \"\" : titleRef.current, latest);");
     expect(latestFlush).toContain("const result = await flush();");
-    expect(backHandler).toContain("await flushLatestEditorSnapshot()");
+    expect(backHandler).toContain("cur = await getEditorContent()");
+    expect(backHandler).toContain("await persistLatestAutosave()");
+    expect(backHandler).toContain("void flush().then");
+    expect(backHandler).not.toContain("await flushLatestEditorSnapshot()");
+    expect(backHandler).toContain("await stageCleanup(thoughtIdRef.current ?? id)");
+    expect(backHandler).toContain("await runPendingCleanup(savedThoughtId)");
+    const autoSave = readAutoSave();
+    expect(autoSave).toContain('operation: "delete"');
+    expect(autoSave).toContain("if (restored.operation === \"delete\")");
+    expect(autoSave).toContain("latestDataRef.current.creationId");
+    expect(autoSave).toContain("void runPendingCleanup(restored.entityId)");
+    expect(autoSave).toContain("latestDataRef.current.cleanupId === cleanupId");
+    expect(autoSave).toContain("cleanupId: undefined");
     expect(lifecycle).toContain("await flushLatestEditorSnapshot();");
     expect(keyboard).toContain("void flushLatestEditorSnapshot();");
     expect(screen).toContain("onKeyboardVisibilityChange={handleKeyboardVisibilityChange}");
@@ -158,19 +170,11 @@ describe("on-01a latest-snapshot autosave boundary", () => {
     expect(latestFlush).toContain("meaningful: false");
   });
 
-  it("keeps autosave status content out of the editor footer", () => {
+  it("removes the editor footer and its reserved status/character-count space", () => {
     const screen = readScreen();
-    const footer = screen.slice(
-      screen.indexOf('<View style={styles.editorFooter}>'),
-      screen.indexOf('<Text style={styles.charCountText}', screen.indexOf('<View style={styles.editorFooter}>')),
-    );
-
-    expect(footer).not.toContain("저장 대기 중");
-    expect(footer).not.toContain("저장 중…");
-    expect(footer).not.toContain("저장됨");
-    expect(footer).not.toContain("저장 실패");
-    expect(footer).not.toContain("단상 저장 다시 시도");
-    expect(footer).toContain('<View style={styles.autoSaveFeedback} />');
+    expect(screen).not.toContain("styles.editorFooter");
+    expect(screen).not.toContain("styles.autoSaveFeedback");
+    expect(screen).not.toContain("styles.charCountText");
     expect(screen).toContain("reportFailure: reportAutosaveFailure");
   });
 
@@ -331,7 +335,7 @@ describe("WebView editor autosave signals", () => {
 });
 
 describe("on-01a guarded return navigation", () => {
-  it("pops to the tab list and routes native/browser back through the save guard", () => {
+  it("persists the latest local snapshot, starts the network save in the background, and exits once", () => {
     const screen = readScreen();
     const removalGuard = screen.slice(
       screen.indexOf("const handlePreventedRemoval"),
@@ -350,7 +354,54 @@ describe("on-01a guarded return navigation", () => {
     );
     expect(removalGuard).toContain("if (isNavigatingRef.current) return;");
     expect(removalGuard).toContain("handleHeaderBack();");
+    const backHandler = screen.slice(
+      screen.indexOf("const handleDraftBack"),
+      screen.indexOf("// Native lifecycle events"),
+    );
+    expect(backHandler).toContain("await persistLatestAutosave();");
+    expect(backHandler).toContain("void flush().then");
+    expect(backHandler.indexOf("await persistLatestAutosave();")).toBeLessThan(
+      backHandler.indexOf("exitToPreviousList();", backHandler.indexOf("await persistLatestAutosave();")),
+    );
+    expect(backHandler).not.toContain("await flush()");
     expect(screen).toContain("<Stack.Screen options={{ gestureEnabled: true }} />");
+  });
+
+  it("keeps the header return control stable without a save spinner or duplicate keyboard button", () => {
+    const screen = readScreen();
+    const header = screen.slice(
+      screen.indexOf('<View style={styles.header}>'),
+      screen.indexOf("{isDividing &&", screen.indexOf('<View style={styles.header}>')),
+    );
+    expect(header).toContain("styles.headerBackButton");
+    expect(header).toContain('accessibilityLabel="기록 목록으로 돌아가기"');
+    expect(header).toContain("styles.headerStateBar");
+    expect(header).not.toContain("ActivityIndicator");
+    expect(header).not.toContain("keyboard-off-outline");
+    expect(screen).toContain("onDismissKeyboard={() =>");
+  });
+
+  it("keeps the return lock held until the deferred route dispatch", () => {
+    const screen = readScreen();
+    const exit = screen.slice(
+      screen.indexOf("const exitToPreviousList"),
+      screen.indexOf("const handleDraftBack"),
+    );
+    expect(exit).toContain("isNavigatingRef.current = true");
+    expect(exit).not.toContain("isNavigatingRef.current = false");
+    expect(exit).not.toContain("setIsNavigating(false)");
+  });
+
+  it("uses the same explicit editor bottom padding on web and native", () => {
+    const screen = readScreen();
+    const webEditor = readFileSync(
+      join(appRoot, "components/WebViewMarkdownEditor/WebViewMarkdownEditorWeb.tsx"),
+      "utf8",
+    );
+    expect(screen).toContain("contentBottomPadding={WRITING_EDITOR_BOTTOM_PADDING}");
+    expect(webEditor).toContain("contentBottomPadding = 120");
+    expect(webEditor).toContain('"--content-bottom-padding"');
+    expect(webEditor).toContain("padding: 16px 0 var(--content-bottom-padding)");
   });
 });
 

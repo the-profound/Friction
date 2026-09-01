@@ -19,6 +19,7 @@ import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { DOMSerializer } from "@tiptap/pm/model";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { computeEditorViewportScrollTop } from "../../../lib/editorViewport";
+import { splitLeadingH1Markdown } from "../../../utils/leadingH1";
 
 interface OverflowRange {
   pageIndex: number;
@@ -562,8 +563,16 @@ function splitByImages(text: string): MdSegment[] {
 function markdownToHtml(md: string, ensureTrailingParagraph = true): string {
   try {
     const text = (md || "").replace(/\r\n?/g, "\n");
-    const lines = text.split("\n");
+    const leadingH1 = splitLeadingH1Markdown(text);
+    const lines = (leadingH1?.body ?? text).split("\n");
     const blocks: string[] = [];
+    if (leadingH1) {
+      const titleHtml = leadingH1.titleMarkdown
+        .split(/ {2}\n/)
+        .map(renderInline)
+        .join("<br>");
+      blocks.push(`<h1>${titleHtml}</h1>`);
+    }
     let i = 0;
 
     while (i < lines.length) {
