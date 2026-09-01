@@ -35,7 +35,6 @@ import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import { DateGroupCarousel } from "@/components/DateGroupCarousel/DateGroupCarousel";
-import DropdownFilter from "@/components/DropdownFilter/DropdownFilter";
 import { PageHeader } from "@/components/NavBar/PageHeader";
 import RefreshableEmpty from "@/components/RefreshableEmpty";
 import ScalePressable from "@/components/shared/ScalePressable";
@@ -79,17 +78,9 @@ import { useScrollPressGuard } from "@/hooks/useScrollPressGuard";
 import { useDateGroupVerticalSnap } from "@/hooks/useDateGroupVerticalSnap";
 import { getDateGroupCarouselHeight } from "@/lib/dateGroupCarousel";
 
-const KIND_OPTIONS: { key: RecordKind; label: string }[] = [
-  { key: "thought", label: "단상" },
-  { key: "editing", label: "편집" },
-  { key: "letter", label: "편지" },
-];
-const VIEW_OPTIONS: { key: RecordView; label: string }[] = [
-  { key: "card", label: "카드" },
-  { key: "content", label: "목록" },
-];
-
 const CARD_ACTION_AREA_H = 56;
+const FILTER_BUTTON_HEIGHT = 36;
+const VIEW_BUTTON_SIZE = 40;
 
 type CardRecord = UnifiedRecord & { isQuestion: boolean; questionIndex?: number };
 const cardRecordKey = (record: CardRecord) => `${record.kind}:${record.id}`;
@@ -98,6 +89,58 @@ function getScreenForStatus(status: ArticleStatus): "/on-01a" | "/on-01b" | "/on
   if (status === "DIVIDING") return "/on-01b";
   if (status === "CLOSING") return "/on-01c";
   return "/on-01a";
+}
+
+function RecordKindButton({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <ScalePressable
+      style={styles.kindButton}
+      contentStyle={[styles.kindButtonContent, active && styles.kindButtonContentActive]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${label} 기록 보기`}
+      accessibilityState={{ selected: active }}
+    >
+      <Text style={[styles.kindButtonText, active && styles.kindButtonTextActive]}>{label}</Text>
+    </ScalePressable>
+  );
+}
+
+function RecordViewButton({
+  icon,
+  label,
+  active,
+  onPress,
+}: {
+  icon: React.ComponentProps<typeof Feather>["name"];
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <ScalePressable
+      style={styles.viewButton}
+      contentStyle={[styles.viewButtonContent, active && styles.viewButtonContentActive]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: active }}
+    >
+      <Feather
+        name={icon}
+        size={18}
+        color={active ? Colors.white : Colors.zinc600}
+      />
+    </ScalePressable>
+  );
 }
 
 function relativeDate(value: string): string {
@@ -741,24 +784,25 @@ export default function OnScreen() {
       />
       <AnimatedSearchBar active={searchActive} value={searchQuery} onChangeText={setSearchQuery} placeholder="제목과 내용으로 검색" />
       <View style={styles.filters}>
-        <DropdownFilter
-          label="종류"
-          value={kind}
-          defaultValue="thought"
-          options={KIND_OPTIONS}
-          onChange={setKind}
-          showDefaultOptionLabel
-          activeVariant="outline"
-        />
-        <DropdownFilter
-          label="보기"
-          value={view}
-          defaultValue="card"
-          options={VIEW_OPTIONS}
-          onChange={setView}
-          showDefaultOptionLabel
-          activeVariant="outline"
-        />
+        <View style={styles.kindFilterGroup}>
+          <RecordKindButton label="단상" active={kind === "thought"} onPress={() => setKind("thought")} />
+          <RecordKindButton label="편집" active={kind === "editing"} onPress={() => setKind("editing")} />
+          <RecordKindButton label="편지" active={kind === "letter"} onPress={() => setKind("letter")} />
+        </View>
+        <View style={styles.viewFilterGroup}>
+          <RecordViewButton
+            icon="list"
+            label="목록형으로 보기"
+            active={view === "content"}
+            onPress={() => setView("content")}
+          />
+          <RecordViewButton
+            icon="layers"
+            label="하나씩 보기"
+            active={view === "card"}
+            onPress={() => setView("card")}
+          />
+        </View>
       </View>
 
       {isLoading ? (
@@ -877,7 +921,17 @@ export default function OnScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.white },
-  filters: { flexDirection: "row", gap: 8, paddingHorizontal: Spacing.screenPx, paddingTop: 4, paddingBottom: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.zinc100 },
+  filters: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: Spacing.screenPx, paddingTop: 4, paddingBottom: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.zinc100 },
+  kindFilterGroup: { flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 1 },
+  kindButton: { height: FILTER_BUTTON_HEIGHT, alignSelf: "flex-start", flexGrow: 0, flexShrink: 0 },
+  kindButtonContent: { height: FILTER_BUTTON_HEIGHT, flexGrow: 0, flexShrink: 0, paddingHorizontal: 14, borderRadius: FILTER_BUTTON_HEIGHT / 2, borderWidth: 1, borderColor: Colors.zinc200, backgroundColor: Colors.white, alignItems: "center", justifyContent: "center" },
+  kindButtonContentActive: { borderColor: Colors.noticeAccent, backgroundColor: Colors.noticeAccent },
+  kindButtonText: { ...Typography.bodySemiBold, fontSize: 13, lineHeight: 18, color: Colors.zinc600 },
+  kindButtonTextActive: { color: Colors.white },
+  viewFilterGroup: { flexDirection: "row", alignItems: "center", gap: 4, marginLeft: 8, flexGrow: 0, flexShrink: 0 },
+  viewButton: { width: VIEW_BUTTON_SIZE, height: VIEW_BUTTON_SIZE, flexGrow: 0, flexShrink: 0 },
+  viewButtonContent: { width: VIEW_BUTTON_SIZE, height: VIEW_BUTTON_SIZE, flexGrow: 0, flexShrink: 0, borderRadius: VIEW_BUTTON_SIZE / 2, backgroundColor: Colors.zinc100, alignItems: "center", justifyContent: "center" },
+  viewButtonContentActive: { backgroundColor: Colors.noticeAccent },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, paddingHorizontal: Spacing.screenPx },
   muted: { ...Typography.body, color: Colors.zinc500, textAlign: "center" },
   emptyTitle: { ...Typography.bodySemiBold, color: Colors.zinc900, fontSize: 17, textAlign: "center" },
