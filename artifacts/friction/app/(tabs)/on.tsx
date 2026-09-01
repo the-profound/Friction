@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Animated,
   FlatList,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -11,6 +12,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -81,6 +83,9 @@ import { getDateGroupCarouselHeight } from "@/lib/dateGroupCarousel";
 const CARD_ACTION_AREA_H = 56;
 const FILTER_BUTTON_HEIGHT = 36;
 const VIEW_BUTTON_SIZE = 40;
+const FILTER_GRADIENT_OVERLAP = 18;
+const FILTER_BAR_HEIGHT = VIEW_BUTTON_SIZE + 32;
+const CONTROL_VISIBILITY_SCROLL_THRESHOLD = 6;
 
 type CardRecord = UnifiedRecord & { isQuestion: boolean; questionIndex?: number };
 const cardRecordKey = (record: CardRecord) => `${record.kind}:${record.id}`;
@@ -109,7 +114,7 @@ function RecordKindButton({
       accessibilityLabel={`${label} 기록 보기`}
       accessibilityState={{ selected: active }}
     >
-      <Text style={[styles.kindButtonText, active && styles.kindButtonTextActive]}>{label}</Text>
+      <RecordListText style={[styles.kindButtonText, active && styles.kindButtonTextActive]}>{label}</RecordListText>
     </ScalePressable>
   );
 }
@@ -137,9 +142,26 @@ function RecordViewButton({
       <Feather
         name={icon}
         size={18}
-        color={active ? Colors.white : Colors.zinc600}
+          color={active ? Colors.noticeAccent : Colors.zinc600}
       />
     </ScalePressable>
+  );
+}
+
+const NON_SELECTABLE_WEB_STYLE =
+  Platform.OS === "web" ? ({ userSelect: "none" } as object) : undefined;
+const Gradient = LinearGradient as unknown as React.ComponentType<any>;
+
+function RecordListText({
+  style,
+  ...props
+}: React.ComponentProps<typeof Text>) {
+  return (
+    <Text
+      {...props}
+      selectable={false}
+      style={[NON_SELECTABLE_WEB_STYLE, style]}
+    />
   );
 }
 
@@ -201,15 +223,17 @@ function RecordSourceCard({
 
   if (record.kind === "letter") {
     return (
-      <ArticleCardItem
-        title={record.article.title || "제목 없음"}
-        authorName={record.article.authorNickname ?? undefined}
-        collectionName={record.article.collectionName}
-        cover={record.article.cover}
-        cardWidth={width}
-        onPress={onPress}
-        onLongPress={onLongPress}
-      />
+      <View style={NON_SELECTABLE_WEB_STYLE}>
+        <ArticleCardItem
+          title={record.article.title || "제목 없음"}
+          authorName={record.article.authorNickname ?? undefined}
+          collectionName={record.article.collectionName}
+          cover={record.article.cover}
+          cardWidth={width}
+          onPress={onPress}
+          onLongPress={onLongPress}
+        />
+      </View>
     );
   }
 
@@ -218,6 +242,7 @@ function RecordSourceCard({
       style={[styles.thoughtCard, { width, height }]}
       contentStyle={[
         styles.thoughtCardContent,
+        NON_SELECTABLE_WEB_STYLE,
         {
           paddingHorizontal: layout.paddingX,
           paddingVertical: layout.paddingY,
@@ -251,7 +276,7 @@ function RecordSourceCard({
     >
       <View style={styles.thoughtCardBodyWrap}>
         {content.hasTitle ? (
-          <Text
+          <RecordListText
             style={[
               styles.thoughtCardTitle,
               textStyle,
@@ -265,9 +290,9 @@ function RecordSourceCard({
             ellipsizeMode={question ? undefined : "tail"}
           >
             {content.title}
-          </Text>
+          </RecordListText>
         ) : null}
-        <Text
+        <RecordListText
           style={[
             styles.thoughtCardBody,
             textStyle,
@@ -283,7 +308,7 @@ function RecordSourceCard({
           ellipsizeMode="tail"
         >
           {content.body || "아직 적힌 내용이 없어요."}
-        </Text>
+        </RecordListText>
       </View>
     </ScalePressable>
   );
@@ -317,7 +342,7 @@ function RecordRow({
   return (
     <ScalePressable
       style={styles.row}
-      contentStyle={[styles.rowContent, isQuestion && styles.questionRowContent]}
+      contentStyle={[styles.rowContent, isQuestion && styles.questionRowContent, NON_SELECTABLE_WEB_STYLE]}
       onPress={onPress}
       onLongPress={onLongPress}
       accessibilityLabel={isQuestion ? "대기 중인 질문 열기" : `${record.kind === "thought" ? "단상" : record.kind === "editing" ? "편집 글" : "편지"} 열기`}
@@ -333,34 +358,34 @@ function RecordRow({
         {!isQuestion ? (
           <View style={[styles.rowMeta, record.kind === "thought" && styles.rowMetaThought]}>
             {record.kind !== "thought" ? (
-              <Text style={styles.rowKind}>{record.kind === "editing" ? "편집" : "편지"}</Text>
+              <RecordListText style={styles.rowKind}>{record.kind === "editing" ? "편집" : "편지"}</RecordListText>
             ) : null}
-            <Text style={styles.rowDate}>{relativeDate(record.updatedAt)}</Text>
+            <RecordListText style={styles.rowDate}>{relativeDate(record.updatedAt)}</RecordListText>
           </View>
         ) : null}
         {showsTitle ? (
-          <Text
+          <RecordListText
             style={[styles.rowTitle, isQuestion && styles.questionRowText, { fontSize: titleSize, lineHeight: titleSize * 1.28 }]}
           >
             {title}
-          </Text>
+          </RecordListText>
         ) : null}
-        <Text
+        <RecordListText
           style={[styles.rowBody, isQuestion && styles.questionRowText, { fontSize: bodySize, lineHeight: bodySize * 1.7 }]}
           numberOfLines={bodyLines}
         >
           {preview.body || "아직 적힌 내용이 없어요."}
-        </Text>
+        </RecordListText>
       </View>
       {record.kind === "letter" && onSend && onArchive ? (
         <View style={styles.rowLetterActions}>
           <ScalePressable style={styles.rowLetterAction} contentStyle={styles.rowLetterActionContent} onPress={(event) => { event.stopPropagation(); onSend(); }}>
             <Feather name="send" size={14} color={Colors.zinc600} />
-            <Text style={styles.rowLetterActionText}>보내기</Text>
+            <RecordListText style={styles.rowLetterActionText}>보내기</RecordListText>
           </ScalePressable>
           <ScalePressable style={styles.rowLetterAction} contentStyle={styles.rowLetterActionContent} onPress={(event) => { event.stopPropagation(); onArchive(); }}>
             <Feather name="folder" size={14} color={Colors.zinc600} />
-            <Text style={styles.rowLetterActionText}>보관</Text>
+            <RecordListText style={styles.rowLetterActionText}>보관</RecordListText>
           </ScalePressable>
         </View>
       ) : null}
@@ -384,6 +409,7 @@ export default function OnScreen() {
   const [recordResetVersion, setRecordResetVersion] = useState(tabReselectVersion.ON);
   const [searchActive, setSearchActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [controlsVisible, setControlsVisible] = useState(true);
   const [cardMixSeed, setCardMixSeed] = useState(() => `${Date.now()}-${Math.random()}`);
   const [deleteTarget, setDeleteTarget] = useState<UnifiedRecord | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -399,12 +425,31 @@ export default function OnScreen() {
     seed: string;
     anchors: QuestionPlacementAnchors;
   } | null>(null);
+  const controlsVisibleRef = useRef(true);
+  const controlsAnimation = useRef(new Animated.Value(1)).current;
+  const lastScrollOffsetRef = useRef(0);
 
   useEffect(() => {
     setKind("thought");
     setView("card");
     setRecordResetVersion(tabReselectVersion.ON);
   }, [tabReselectVersion.ON]);
+
+  useEffect(() => {
+    Animated.timing(controlsAnimation, {
+      toValue: controlsVisible ? 1 : 0,
+      duration: 180,
+      useNativeDriver: false,
+    }).start();
+  }, [controlsAnimation, controlsVisible]);
+
+  useEffect(() => {
+    lastScrollOffsetRef.current = 0;
+    if (!controlsVisibleRef.current) {
+      controlsVisibleRef.current = true;
+      setControlsVisible(true);
+    }
+  }, [kind, view]);
 
   useFocusEffect(
     useCallback(() => {
@@ -561,6 +606,15 @@ export default function OnScreen() {
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       verticalDateSnap.onScroll(event);
       scrollPressGuard.onScroll();
+      const offset = Math.max(0, event.nativeEvent.contentOffset.y);
+      const delta = offset - lastScrollOffsetRef.current;
+      lastScrollOffsetRef.current = offset;
+      if (Math.abs(delta) < CONTROL_VISIBILITY_SCROLL_THRESHOLD) return;
+
+      const nextVisible = offset <= 0 || delta < 0;
+      if (nextVisible === controlsVisibleRef.current) return;
+      controlsVisibleRef.current = nextVisible;
+      setControlsVisible(nextVisible);
     },
     [scrollPressGuard, verticalDateSnap.onScroll],
   );
@@ -746,7 +800,7 @@ export default function OnScreen() {
               }}
             >
               <Feather name="send" size={16} color={Colors.zinc700} />
-              <Text style={styles.letterActionText}>보내기</Text>
+              <RecordListText style={styles.letterActionText}>보내기</RecordListText>
             </ScalePressable>
             <ScalePressable
               style={styles.letterAction}
@@ -761,7 +815,7 @@ export default function OnScreen() {
               }}
             >
               <Feather name="folder" size={16} color={Colors.zinc700} />
-              <Text style={styles.letterActionText}>보관</Text>
+              <RecordListText style={styles.letterActionText}>보관</RecordListText>
             </ScalePressable>
           </View>
         </View>
@@ -783,30 +837,54 @@ export default function OnScreen() {
         searchLast
       />
       <AnimatedSearchBar active={searchActive} value={searchQuery} onChangeText={setSearchQuery} placeholder="제목과 내용으로 검색" />
-      <View style={styles.filters}>
-        <View style={styles.kindFilterGroup}>
-          <RecordKindButton label="단상" active={kind === "thought"} onPress={() => setKind("thought")} />
-          <RecordKindButton label="편집" active={kind === "editing"} onPress={() => setKind("editing")} />
-          <RecordKindButton label="편지" active={kind === "letter"} onPress={() => setKind("letter")} />
-        </View>
-        <View style={styles.viewFilterGroup}>
-          <RecordViewButton
-            icon="list"
-            label="목록형으로 보기"
-            active={view === "content"}
-            onPress={() => setView("content")}
-          />
-          <RecordViewButton
-            icon="layers"
-            label="하나씩 보기"
-            active={view === "card"}
-            onPress={() => setView("card")}
-          />
-        </View>
-      </View>
+      <Animated.View
+        pointerEvents={controlsVisible ? "box-none" : "none"}
+        style={[
+          styles.filtersAnimated,
+          {
+            height: controlsAnimation.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0, FILTER_BAR_HEIGHT],
+            }),
+            marginBottom: controlsAnimation.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0, -FILTER_GRADIENT_OVERLAP],
+            }),
+            opacity: controlsAnimation,
+          },
+        ]}
+      >
+        <Gradient
+          colors={["rgba(255,255,255,1)", "rgba(255,255,255,0)"]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={styles.filters}
+          pointerEvents="box-none"
+        >
+          <View style={styles.kindFilterGroup}>
+            <RecordKindButton label="단상" active={kind === "thought"} onPress={() => setKind("thought")} />
+            <RecordKindButton label="편집" active={kind === "editing"} onPress={() => setKind("editing")} />
+            <RecordKindButton label="편지" active={kind === "letter"} onPress={() => setKind("letter")} />
+          </View>
+          <View style={styles.viewFilterGroup}>
+            <RecordViewButton
+              icon="list"
+              label="목록형으로 보기"
+              active={view === "content"}
+              onPress={() => setView("content")}
+            />
+            <RecordViewButton
+              icon="layers"
+              label="하나씩 보기"
+              active={view === "card"}
+              onPress={() => setView("card")}
+            />
+          </View>
+        </Gradient>
+      </Animated.View>
 
       {isLoading ? (
-        <View style={styles.center}><Text style={styles.muted}>불러오는 중...</Text></View>
+        <View style={styles.center}><RecordListText style={styles.muted}>불러오는 중...</RecordListText></View>
       ) : view === "card" && cardGroups.length > 0 ? (
         <View
           ref={recordListViewportRef}
@@ -827,6 +905,7 @@ export default function OnScreen() {
               return (
                 <View
                   ref={(node) => verticalDateSnap.setGroupRef(item.dateKey, node)}
+                  style={NON_SELECTABLE_WEB_STYLE}
                   onLayout={(event) => verticalDateSnap.onGroupLayout(item.dateKey, event)}
                 >
                   <DateGroupCarousel
@@ -872,12 +951,14 @@ export default function OnScreen() {
             );
           }}
           refreshControl={<RefreshControl refreshing={articlesQuery.isRefetching || thoughtsQuery.isRefetching || questionQuery.isRefetching || refreshQuestion.isPending} onRefresh={() => refreshAll(kind === "thought")} />}
+          onScroll={handleRecordScroll}
+          scrollEventThrottle={16}
           contentContainerStyle={{ paddingBottom: navBottom + 16 }}
         />
       ) : (
         <RefreshableEmpty refreshing={articlesQuery.isRefetching || thoughtsQuery.isRefetching || questionQuery.isRefetching || refreshQuestion.isPending} onRefresh={() => refreshAll(kind === "thought")} contentContainerStyle={[styles.center, { paddingBottom: navBottom }]}>
           <Feather name={kind === "letter" ? "mail" : "edit-3"} size={40} color={Colors.zinc300} />
-          <Text style={styles.emptyTitle}>{searchQuery.trim() ? "검색 결과가 없습니다" : emptyTitle}</Text>
+          <RecordListText style={styles.emptyTitle}>{searchQuery.trim() ? "검색 결과가 없습니다" : emptyTitle}</RecordListText>
           {!searchQuery.trim() && kind === "thought" ? (
             <ScalePressable
               style={styles.createButton}
@@ -885,7 +966,7 @@ export default function OnScreen() {
               onPress={createDirectThought}
               disabled={isCreatingThought}
             >
-              <Text style={styles.createButtonText}>단상 쓰기</Text>
+              <RecordListText style={styles.createButtonText}>단상 쓰기</RecordListText>
             </ScalePressable>
           ) : null}
         </RefreshableEmpty>
@@ -905,14 +986,14 @@ export default function OnScreen() {
       />
       <BottomSheet visible={Boolean(archiveArticleId)} onClose={() => { setArchiveArticleId(null); setSelectedCollectionId(null); }} snapPoints={[0.6]} enableDragDown dismissable>
         <View style={styles.archive}>
-          <Text style={styles.archiveTitle}>보관할 폴더 선택</Text>
+          <RecordListText style={styles.archiveTitle}>보관할 폴더 선택</RecordListText>
           <FlatList
             data={sortedCollections}
             keyExtractor={(collection) => collection.id}
-            renderItem={({ item }) => <ScalePressable style={styles.collectionRow} contentStyle={[styles.collectionRowContent, selectedCollectionId === item.id && styles.collectionSelected]} onPress={() => setSelectedCollectionId(item.id)}><Text style={styles.collectionName}>{item.name}</Text>{selectedCollectionId === item.id ? <Feather name="check" size={16} color={Colors.zinc900} /> : null}</ScalePressable>}
-            ListEmptyComponent={<Text style={styles.muted}>보관할 폴더가 없어요</Text>}
+            renderItem={({ item }) => <ScalePressable style={styles.collectionRow} contentStyle={[styles.collectionRowContent, selectedCollectionId === item.id && styles.collectionSelected]} onPress={() => setSelectedCollectionId(item.id)}><RecordListText style={styles.collectionName}>{item.name}</RecordListText>{selectedCollectionId === item.id ? <Feather name="check" size={16} color={Colors.zinc900} /> : null}</ScalePressable>}
+            ListEmptyComponent={<RecordListText style={styles.muted}>보관할 폴더가 없어요</RecordListText>}
           />
-          <ScalePressable style={styles.archiveButton} contentStyle={[styles.archiveButtonContent, (!selectedCollectionId || isArchiving) && styles.disabled]} onPress={archiveArticle} disabled={!selectedCollectionId || isArchiving}><Text style={styles.createButtonText}>{isArchiving ? "보관 중..." : "보관하기"}</Text></ScalePressable>
+          <ScalePressable style={styles.archiveButton} contentStyle={[styles.archiveButtonContent, (!selectedCollectionId || isArchiving) && styles.disabled]} onPress={archiveArticle} disabled={!selectedCollectionId || isArchiving}><RecordListText style={styles.createButtonText}>{isArchiving ? "보관 중..." : "보관하기"}</RecordListText></ScalePressable>
         </View>
       </BottomSheet>
     </View>
@@ -921,7 +1002,8 @@ export default function OnScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.white },
-  filters: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: Spacing.screenPx, paddingTop: 4, paddingBottom: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.zinc100 },
+  filtersAnimated: { height: FILTER_BAR_HEIGHT, overflow: "hidden", zIndex: 5 },
+  filters: { height: FILTER_BAR_HEIGHT, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: Spacing.screenPx, paddingTop: 4, paddingBottom: 28 },
   kindFilterGroup: { flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 1 },
   kindButton: { height: FILTER_BUTTON_HEIGHT, alignSelf: "flex-start", flexGrow: 0, flexShrink: 0 },
   kindButtonContent: { height: FILTER_BUTTON_HEIGHT, flexGrow: 0, flexShrink: 0, paddingHorizontal: 14, borderRadius: FILTER_BUTTON_HEIGHT / 2, borderWidth: 1, borderColor: Colors.zinc200, backgroundColor: Colors.white, alignItems: "center", justifyContent: "center" },
@@ -930,8 +1012,8 @@ const styles = StyleSheet.create({
   kindButtonTextActive: { color: Colors.white },
   viewFilterGroup: { flexDirection: "row", alignItems: "center", gap: 4, marginLeft: 8, flexGrow: 0, flexShrink: 0 },
   viewButton: { width: VIEW_BUTTON_SIZE, height: VIEW_BUTTON_SIZE, flexGrow: 0, flexShrink: 0 },
-  viewButtonContent: { width: VIEW_BUTTON_SIZE, height: VIEW_BUTTON_SIZE, flexGrow: 0, flexShrink: 0, borderRadius: VIEW_BUTTON_SIZE / 2, backgroundColor: Colors.zinc100, alignItems: "center", justifyContent: "center" },
-  viewButtonContentActive: { backgroundColor: Colors.noticeAccent },
+  viewButtonContent: { width: VIEW_BUTTON_SIZE, height: VIEW_BUTTON_SIZE, flexGrow: 0, flexShrink: 0, borderRadius: VIEW_BUTTON_SIZE / 2, backgroundColor: "transparent", alignItems: "center", justifyContent: "center" },
+  viewButtonContentActive: { backgroundColor: "transparent" },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, paddingHorizontal: Spacing.screenPx },
   muted: { ...Typography.body, color: Colors.zinc500, textAlign: "center" },
   emptyTitle: { ...Typography.bodySemiBold, color: Colors.zinc900, fontSize: 17, textAlign: "center" },
