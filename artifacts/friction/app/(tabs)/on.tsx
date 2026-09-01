@@ -794,7 +794,7 @@ export default function OnScreen() {
                     itemKey={cardRecordKey}
                     cardWidth={cardWidth}
                     cardHeight={cardHeight}
-                    resetKey={index === 0 ? `${cardMixSeed}:${recordResetVersion}` : cardMixSeed}
+                    resetKey={index === 0 ? `${cardMixSeed}:${recordResetVersion}${queuedQuestionRecords.length > 0 ? ":q" : ""}` : cardMixSeed}
                     renderCard={(record, context) => renderRecordCard(record, context.shouldIgnorePress, cardHeight)}
                     shouldIgnoreVerticalPress={scrollPressGuard.shouldIgnoreVerticalPress}
                   />
