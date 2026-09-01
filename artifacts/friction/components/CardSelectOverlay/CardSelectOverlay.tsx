@@ -321,6 +321,7 @@ export default function CardSelectOverlay({
   const activeIndexRef = useRef(0);
   const countRef = useRef(count);
   const gestureDirRef = useRef<null | "h" | "v">(null);
+  const pendingGestureDirRef = useRef<null | "h" | "v">(null);
   const openedRef = useRef(false);
   const openSessionRef = useRef(0);
   const modalShownSessionRef = useRef(0);
@@ -670,13 +671,28 @@ export default function CardSelectOverlay({
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_, g) => {
-        if (countRef.current > 1 && Math.abs(g.dx) > 6 && Math.abs(g.dx) >= Math.abs(g.dy)) return true;
-        if (g.dy > 8 && Math.abs(g.dy) > Math.abs(g.dx)) return true;
+        if (countRef.current > 1 && Math.abs(g.dx) > 6 && Math.abs(g.dx) >= Math.abs(g.dy)) {
+          pendingGestureDirRef.current = "h";
+          return true;
+        }
+        if (g.dy > 8 && Math.abs(g.dy) > Math.abs(g.dx)) {
+          pendingGestureDirRef.current = "v";
+          return true;
+        }
+        pendingGestureDirRef.current = null;
         return false;
       },
       onPanResponderGrant: () => {
-        gestureDirRef.current = null;
-        verticalDismissActiveRef.current = false;
+        gestureDirRef.current = pendingGestureDirRef.current;
+        pendingGestureDirRef.current = null;
+        if (gestureDirRef.current === "v") {
+          beginVerticalDismiss();
+        } else {
+          verticalDismissActiveRef.current = false;
+          if (gestureDirRef.current === "h") {
+            Animated.timing(detailsFade, { toValue: 0, duration: 120, useNativeDriver: false }).start();
+          }
+        }
       },
       onPanResponderMove: (_, g) => {
         if (!gestureDirRef.current) {
