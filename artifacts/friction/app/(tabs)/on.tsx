@@ -51,8 +51,10 @@ import {
   invalidateArticleLists,
   invalidateMyCollections,
   removeRecordFromCache,
+  restoreRecordDeletion,
   restoreRecordListCaches,
   setThoughtQuestionQueueCache,
+  snapshotRecordDeletion,
   snapshotRecordListCaches,
   upsertThoughtInRecordCaches,
 } from "@/lib/queryInvalidation";
@@ -412,8 +414,8 @@ export default function OnScreen() {
   const [controlsVisible, setControlsVisible] = useState(true);
   const [cardMixSeed, setCardMixSeed] = useState(() => `${Date.now()}-${Math.random()}`);
   const [deleteTarget, setDeleteTarget] = useState<UnifiedRecord | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const deletePendingRef = useRef(false);
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<ReadonlySet<string>>(() => new Set());
+  const deletePendingIdsRef = useRef(new Set<string>());
   const [archiveArticleId, setArchiveArticleId] = useState<string | null>(null);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
@@ -495,8 +497,8 @@ export default function OnScreen() {
         articlesQuery.data,
       ),
       kind,
-    ),
-    [articlesQuery.data, kind, listedThoughts, queuedIds],
+    ).filter((record) => !pendingDeleteIds.has(record.id)),
+    [articlesQuery.data, kind, listedThoughts, pendingDeleteIds, queuedIds],
   );
   const records = useMemo(
     () => allRecords.filter((record) => recordMatchesQuery(record, searchQuery)),
@@ -666,6 +668,10 @@ export default function OnScreen() {
     }
   }, [router, startFadeToBlack]);
 
+  const requestRecordDeletion = useCallback((record: UnifiedRecord) => {
+    if (!deletePendingIdsRef.current.has(record.id)) setDeleteTarget(record);
+  }, []);
+
   const openQuestion = useCallback(async (thought: Thought) => {
     if (activateQuestion.isPending || questionQueueMutationPendingRef.current) return;
     questionQueueMutationPendingRef.current = true;
@@ -687,40 +693,51 @@ export default function OnScreen() {
     }
   }, [activateQuestion, queryClient, router, showToast]);
 
-  const confirmDelete = useCallback(async () => {
+  const confirmDelete = useCallback(() => {
     const target = deleteTarget;
-    if (!target || deletePendingRef.current) return;
-    deletePendingRef.current = true;
-    setIsDeleting(true);
-    await Promise.all([
-      queryClient.cancelQueries({ queryKey: getListThoughtsQueryKey() }),
-      queryClient.cancelQueries({ queryKey: getListArticlesQueryKey() }),
-    ]);
-    const cacheSnapshot = snapshotRecordListCaches(queryClient);
-    removeRecordFromCache(queryClient, target);
-    try {
-      if (target.kind === "thought") {
-        await deleteThought.mutateAsync({ id: target.thought.id });
-        await queryClient.invalidateQueries({ queryKey: getListThoughtsQueryKey() });
-      } else {
-        await deleteArticle.mutateAsync({ id: target.article.id });
-        await invalidateArticleLists(queryClient);
-      }
+    if (!target) return;
+    if (deletePendingIdsRef.current.has(target.id)) {
       setDeleteTarget(null);
-      showToast({ message: "삭제했어요.", type: "success" });
-    } catch {
-      restoreRecordListCaches(queryClient, cacheSnapshot);
-      if (target.kind === "thought") {
-        queryClient.invalidateQueries({ queryKey: getListThoughtsQueryKey() });
-      } else {
-        invalidateArticleLists(queryClient);
-      }
-      // Keep the row and dialog visible: a failed mutation must never look successful.
-      showToast({ message: "삭제에 실패했습니다. 다시 시도해주세요.", type: "error" });
-    } finally {
-      deletePendingRef.current = false;
-      setIsDeleting(false);
+      return;
     }
+    deletePendingIdsRef.current.add(target.id);
+    setPendingDeleteIds(new Set(deletePendingIdsRef.current));
+    setDeleteTarget(null);
+
+    void (async () => {
+      try {
+        await Promise.allSettled([
+          queryClient.cancelQueries({ queryKey: getListThoughtsQueryKey() }),
+          queryClient.cancelQueries({ queryKey: getListArticlesQueryKey() }),
+        ]);
+        const rollback = snapshotRecordDeletion(queryClient, target);
+        removeRecordFromCache(queryClient, target);
+        try {
+          if (target.kind === "thought") await deleteThought.mutateAsync({ id: target.thought.id });
+          else await deleteArticle.mutateAsync({ id: target.article.id });
+        } catch {
+          restoreRecordDeletion(queryClient, rollback, deletePendingIdsRef.current);
+          void (target.kind === "thought"
+            ? queryClient.invalidateQueries({ queryKey: getListThoughtsQueryKey() })
+            : invalidateArticleLists(queryClient)).catch(() => {});
+          showToast({ message: "삭제에 실패했습니다. 다시 시도해주세요.", type: "error" });
+          return;
+        }
+        try {
+          if (target.kind === "thought") {
+            await queryClient.invalidateQueries({ queryKey: getListThoughtsQueryKey() });
+          } else {
+            await invalidateArticleLists(queryClient);
+          }
+        } catch {
+          // The query remains stale and can retry on focus; the server delete already succeeded.
+        }
+        showToast({ message: "삭제했어요.", type: "success" });
+      } finally {
+        deletePendingIdsRef.current.delete(target.id);
+        setPendingDeleteIds(new Set(deletePendingIdsRef.current));
+      }
+    })();
   }, [deleteArticle, deleteTarget, deleteThought, queryClient, showToast]);
 
   const archiveArticle = useCallback(async () => {
@@ -769,7 +786,7 @@ export default function OnScreen() {
             }
           }}
           onLongPress={record.isQuestion ? undefined : () => {
-            if (!shouldIgnorePress()) setDeleteTarget(record);
+            if (!shouldIgnorePress()) requestRecordDeletion(record);
           }}
         />
       ) : (
@@ -781,7 +798,7 @@ export default function OnScreen() {
             if (!shouldIgnorePress()) openRecord(record);
           }}
           onLongPress={() => {
-            if (!shouldIgnorePress()) setDeleteTarget(record);
+            if (!shouldIgnorePress()) requestRecordDeletion(record);
           }}
         />
       )}
@@ -821,7 +838,7 @@ export default function OnScreen() {
         </View>
       ) : null}
     </View>
-  ), [cardWidth, openQuestion, openRecord, router]);
+  ), [cardWidth, openQuestion, openRecord, requestRecordDeletion, router]);
 
   return (
     <View style={styles.container}>
@@ -944,7 +961,7 @@ export default function OnScreen() {
                 record={item}
                 isQuestion={isCurrentQuestion}
                 onPress={() => isCurrentQuestion ? openQuestion(item.thought) : openRecord(item)}
-                onLongPress={() => { if (!isCurrentQuestion) setDeleteTarget(item); }}
+                onLongPress={() => { if (!isCurrentQuestion) requestRecordDeletion(item); }}
                 onSend={item.kind === "letter" ? () => router.push({ pathname: "/to-send", params: { prefillArticleId: item.article.id } }) : undefined}
                 onArchive={item.kind === "letter" ? () => { setArchiveArticleId(item.article.id); setSelectedCollectionId(null); } : undefined}
               />
@@ -979,10 +996,8 @@ export default function OnScreen() {
         confirmLabel="삭제"
         cancelLabel="취소"
         destructive
-        confirmDisabled={isDeleting}
-        cancelDisabled={isDeleting}
         onConfirm={confirmDelete}
-        onCancel={() => { if (!isDeleting) setDeleteTarget(null); }}
+        onCancel={() => setDeleteTarget(null)}
       />
       <BottomSheet visible={Boolean(archiveArticleId)} onClose={() => { setArchiveArticleId(null); setSelectedCollectionId(null); }} snapPoints={[0.6]} enableDragDown dismissable>
         <View style={styles.archive}>

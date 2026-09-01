@@ -136,6 +136,76 @@ export function removeRecordFromCache(
   });
 }
 
+type RecordDeletionTarget =
+  | { id: string; kind: "thought"; thought: Thought }
+  | { id: string; kind: "editing" | "letter"; article: Article };
+
+interface RecordDeletionCacheEntry<T> {
+  queryKey: QueryKey;
+  item: T;
+}
+
+export interface RecordDeletionRollback {
+  id: string;
+  kind: "thought" | "editing" | "letter";
+  thoughtEntries: Array<RecordDeletionCacheEntry<Thought>>;
+  articleEntries: Array<RecordDeletionCacheEntry<Article>>;
+}
+
+/** Snapshot only the target so a late failure cannot overwrite unrelated cache changes. */
+export function snapshotRecordDeletion(
+  qc: QueryClient,
+  record: RecordDeletionTarget,
+): RecordDeletionRollback {
+  const rollback: RecordDeletionRollback = {
+    id: record.id,
+    kind: record.kind,
+    thoughtEntries: [],
+    articleEntries: [],
+  };
+  if (record.kind === "thought") {
+    for (const [queryKey, data] of qc.getQueriesData<Thought[]>({ queryKey: getListThoughtsQueryKey() })) {
+      const index = data?.findIndex((thought) => thought.id === record.id) ?? -1;
+      if (index >= 0) rollback.thoughtEntries.push({ queryKey, item: data![index] });
+    }
+  } else {
+    for (const [queryKey, data] of qc.getQueriesData<Article[]>({ queryKey: getListArticlesQueryKey() })) {
+      const index = data?.findIndex((article) => article.id === record.id) ?? -1;
+      if (index >= 0) rollback.articleEntries.push({ queryKey, item: data![index] });
+    }
+  }
+  return rollback;
+}
+
+/** Restore the failed target while keeping every other pending deletion hidden. */
+export function restoreRecordDeletion(
+  qc: QueryClient,
+  rollback: RecordDeletionRollback,
+  pendingDeleteIds: ReadonlySet<string> = new Set(),
+) {
+  const restoreEntries = <T extends { id: string; updatedAt: string }>(
+    entries: Array<RecordDeletionCacheEntry<T>>,
+  ) => {
+    for (const entry of entries) {
+      qc.setQueryData<T[]>(entry.queryKey, (current) => {
+        if (!current) return current;
+        const withoutOtherPendingDeletes = current.filter(
+          (item) => item.id === rollback.id || !pendingDeleteIds.has(item.id),
+        );
+        const withRestoredTarget = withoutOtherPendingDeletes.some((item) => item.id === rollback.id)
+          ? withoutOtherPendingDeletes
+          : [...withoutOtherPendingDeletes, entry.item];
+        return [...withRestoredTarget].sort((left, right) => {
+          const timeDiff = new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
+          return timeDiff || left.id.localeCompare(right.id);
+        });
+      });
+    }
+  };
+  restoreEntries(rollback.thoughtEntries);
+  restoreEntries(rollback.articleEntries);
+}
+
 export function patchThoughtInRecordCaches(qc: QueryClient, id: string, patch: Partial<Thought>) {
   qc.setQueriesData<Thought[]>({ queryKey: getListThoughtsQueryKey() }, (previous) => {
     if (!previous) return previous;

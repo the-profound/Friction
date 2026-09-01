@@ -1,3 +1,4 @@
+import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import {
   getGetThoughtQuestionQueueQueryKey,
@@ -8,8 +9,10 @@ import {
 import {
   invalidateDirectThoughtCreation,
   removeRecordFromCache,
+  restoreRecordDeletion,
   restoreRecordListCaches,
   setThoughtQuestionQueueCache,
+  snapshotRecordDeletion,
   snapshotRecordListCaches,
   upsertThoughtInRecordCaches,
 } from "../queryInvalidation";
@@ -66,6 +69,97 @@ describe("optimistic record cache operations", () => {
 
     expect(cache.get(JSON.stringify(getListThoughtsQueryKey()))).toEqual([{ id: "thought-1" }]);
     expect(cache.get(JSON.stringify(thoughtKey))).toEqual([{ id: "thought-1" }]);
+  });
+
+  it("merges the failed target into a newer refetch without losing its results", () => {
+    const queryClient = new QueryClient();
+    const thoughtKey = getListThoughtsQueryKey();
+    const filteredKey = [...thoughtKey, { sourceArticleId: "source" }];
+    const original = { id: "thought-1", updatedAt: "2026-01-02T00:00:00.000Z" };
+    const older = { id: "thought-2", updatedAt: "2026-01-01T00:00:00.000Z" };
+    queryClient.setQueryData(thoughtKey, [original, older]);
+    queryClient.setQueryData(filteredKey, [original]);
+    const rollback = snapshotRecordDeletion(queryClient, {
+      id: original.id,
+      kind: "thought",
+      thought: original as never,
+    });
+    removeRecordFromCache(queryClient, { id: original.id, kind: "thought" });
+    queryClient.setQueryData(thoughtKey, (current: Array<{ id: string }> | undefined) => [
+      { id: "thought-3", updatedAt: "2026-01-03T00:00:00.000Z" },
+      ...(current ?? []),
+    ]);
+    const refreshedFiltered = [
+      { id: "thought-filtered", updatedAt: "2026-01-05T00:00:00.000Z" },
+    ];
+    queryClient.setQueryData(filteredKey, refreshedFiltered);
+
+    restoreRecordDeletion(queryClient, rollback);
+
+    expect(queryClient.getQueryData(thoughtKey)).toEqual([
+      { id: "thought-3", updatedAt: "2026-01-03T00:00:00.000Z" },
+      original,
+      older,
+    ]);
+    expect(queryClient.getQueryData(filteredKey)).toEqual([
+      refreshedFiltered[0],
+      original,
+    ]);
+  });
+
+  it("keeps concurrent thought failure and article success isolated", () => {
+    const queryClient = new QueryClient();
+    const thoughtKey = getListThoughtsQueryKey();
+    const articleKey = getListArticlesQueryKey({ authorId: "author" });
+    const thought = { id: "thought-1", updatedAt: "2026-01-02T00:00:00.000Z" };
+    const otherThought = { id: "thought-2", updatedAt: "2026-01-01T00:00:00.000Z" };
+    const article = { id: "article-1", updatedAt: "2026-01-02T00:00:00.000Z" };
+    const otherArticle = { id: "article-2", updatedAt: "2026-01-01T00:00:00.000Z" };
+    queryClient.setQueryData(thoughtKey, [thought, otherThought]);
+    queryClient.setQueryData(articleKey, [article, otherArticle]);
+    const thoughtRollback = snapshotRecordDeletion(queryClient, {
+      id: thought.id,
+      kind: "thought",
+      thought: thought as never,
+    });
+    removeRecordFromCache(queryClient, { id: thought.id, kind: "thought" });
+    removeRecordFromCache(queryClient, { id: article.id, kind: "editing" });
+
+    restoreRecordDeletion(queryClient, thoughtRollback, new Set([thought.id, article.id]));
+
+    expect(queryClient.getQueryData(thoughtKey)).toEqual([thought, otherThought]);
+    expect(queryClient.getQueryData(articleKey)).toEqual([otherArticle]);
+  });
+
+  it("restores same-list failures immediately while keeping the other delete isolated", () => {
+    const queryClient = new QueryClient();
+    const thoughtKey = getListThoughtsQueryKey();
+    const records = [
+      { id: "thought-a", updatedAt: "2026-01-03T00:00:00.000Z" },
+      { id: "thought-b", updatedAt: "2026-01-02T00:00:00.000Z" },
+      { id: "thought-c", updatedAt: "2026-01-01T00:00:00.000Z" },
+    ];
+    queryClient.setQueryData(thoughtKey, records);
+    const rollbackA = snapshotRecordDeletion(queryClient, {
+      id: records[0].id,
+      kind: "thought",
+      thought: records[0] as never,
+    });
+    removeRecordFromCache(queryClient, { id: records[0].id, kind: "thought" });
+    const rollbackB = snapshotRecordDeletion(queryClient, {
+      id: records[1].id,
+      kind: "thought",
+      thought: records[1] as never,
+    });
+    removeRecordFromCache(queryClient, { id: records[1].id, kind: "thought" });
+
+    const pendingIds = new Set([records[0].id, records[1].id]);
+    restoreRecordDeletion(queryClient, rollbackA, pendingIds);
+    expect(queryClient.getQueryData(thoughtKey)).toEqual([records[0], records[2]]);
+
+    pendingIds.delete(records[0].id);
+    restoreRecordDeletion(queryClient, rollbackB, pendingIds);
+    expect(queryClient.getQueryData(thoughtKey)).toEqual(records);
   });
 
   it("applies an activation response to the queue and ordinary thought caches together", () => {
