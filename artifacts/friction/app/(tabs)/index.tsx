@@ -51,6 +51,15 @@ function getInboxSenderName(item: InboxItem): string {
 
 const CARD_W = Sizing.cardSlotW;
 const CARD_H = Sizing.cardH;
+const INBOX_GROUP_HEIGHT = getDateGroupCarouselHeight(
+  CARD_H,
+  0,
+  Sizing.dateHeaderH
+    + Sizing.carouselShadowInsetTop
+    + Sizing.carouselShadowInsetBottom
+    + Sizing.dotsH
+    + Spacing.carouselGroupBottom,
+);
 
 interface DateGroup {
   dateKey: string;
@@ -190,15 +199,7 @@ export default function InboxScreen() {
     listRef: inboxListRef,
     enabled: groups.length > 0,
     resetKey: tabReselectVersion.IN,
-    estimatedGroupHeight: getDateGroupCarouselHeight(
-      CARD_H,
-      0,
-      Sizing.dateHeaderH
-        + Sizing.carouselShadowInsetTop
-        + Sizing.carouselShadowInsetBottom
-        + Sizing.dotsH
-        + Spacing.carouselGroupBottom,
-    ),
+    estimatedGroupHeight: INBOX_GROUP_HEIGHT,
     onPageGestureStart: scrollPressGuard.onScroll,
   });
 
@@ -229,8 +230,7 @@ export default function InboxScreen() {
   // function (and triggering row-level reconciliation) on every parent render.
   const renderGroupItem = useCallback(
     ({ item: group, index }: { item: DateGroup; index: number }) => (
-      <View onLayout={(event) => inboxVerticalDateSnap.onGroupLayout(group.dateKey, event)}>
-        <DateGroupCarousel
+      <DateGroupCarousel
           dateLabel={group.label}
           countLabel={`${group.items.length}편`}
           items={group.items}
@@ -281,12 +281,10 @@ export default function InboxScreen() {
             );
           }}
         />
-      </View>
     ),
     [
       scrollPressGuard.shouldIgnoreVerticalPress,
       handleCardPress,
-      inboxVerticalDateSnap.onGroupLayout,
       isTappedSourceHidden,
       nickname,
       tabReselectVersion.IN,
@@ -586,13 +584,10 @@ export default function InboxScreen() {
             onLayout={inboxVerticalDateSnap.onLayout}
             onScroll={handleInboxScroll}
             scrollEventThrottle={16}
-            onScrollBeginDrag={inboxVerticalDateSnap.onScrollBeginDrag}
-            onScrollEndDrag={inboxVerticalDateSnap.onScrollEndDrag}
-            scrollEnabled={
-              Platform.OS !== "web"
-              && tapItem === null
-              && !inboxVerticalDateSnap.pageLocked
-            }
+            snapToInterval={INBOX_GROUP_HEIGHT}
+            snapToAlignment="start"
+            decelerationRate="fast"
+            scrollEnabled={Platform.OS !== "web" && tapItem === null}
           />
         </View>
       )}

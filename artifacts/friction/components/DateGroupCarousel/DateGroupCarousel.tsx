@@ -39,9 +39,7 @@ interface DateGroupCarouselProps<T> {
   items: readonly T[];
   itemKey: (item: T) => string;
   cardWidth: number;
-  /** The card's visible height; group-specific action rows are separate. */
   cardHeight: number;
-  actionAreaHeight?: number;
   /** Reset to the first card only when the parent starts a new browse session. */
   resetKey?: string | number;
   renderCard: (item: T, context: DateGroupCarouselItemContext) => React.ReactNode;
@@ -62,14 +60,13 @@ export function DateGroupCarousel<T>({
   itemKey,
   cardWidth,
   cardHeight,
-  actionAreaHeight = 0,
   resetKey,
   renderCard,
   shouldIgnoreVerticalPress,
 }: DateGroupCarouselProps<T>) {
   const { width: windowWidth } = useWindowDimensions();
   const itemCount = items.length;
-  const contentHeight = cardHeight + actionAreaHeight;
+  const contentHeight = cardHeight;
   const snapInterval = cardWidth + Spacing.cardGap;
   const itemKeys = useMemo(() => items.map(itemKey), [items, itemKey]);
   const itemSignature = itemKeys.join("|");

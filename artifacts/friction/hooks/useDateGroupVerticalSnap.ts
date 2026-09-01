@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   PanResponder,
   Platform,
-  View,
   type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -11,22 +10,13 @@ import {
 import {
   findDateGroupAtOffset,
   getDateGroupPageDecision,
-  preserveDateGroupAnchor,
   resolveDateGroupAnchor,
-  resolveDateGroupLayouts,
-  shouldApplyDateGroupMeasurement,
   type DateGroupLayout,
 } from "@/lib/dateGroupVerticalSnap";
 import { Sizing } from "@/constants/tokens";
 
 interface VerticalListRef {
   scrollToOffset: (params: { offset: number; animated: boolean }) => void;
-}
-
-interface MeasurableView {
-  measureInWindow: (
-    callback: (x: number, y: number, width: number, height: number) => void,
-  ) => void;
 }
 
 interface WheelEventLike {
@@ -45,8 +35,6 @@ interface UseDateGroupVerticalSnapOptions {
   listRef: React.RefObject<VerticalListRef | null>;
   enabled: boolean;
   estimatedGroupHeight?: number;
-  estimatedGroupHeights?: ReadonlyMap<string, number>;
-  viewportRef?: React.RefObject<MeasurableView | null>;
   /** Starts the shared press guard before a vertical page transition. */
   onPageGestureStart?: () => void;
   /** Moves back to the first date group when the owning tab is reselected. */
@@ -55,15 +43,21 @@ interface UseDateGroupVerticalSnapOptions {
 
 const FLING_VELOCITY = 0.5;
 const WHEEL_SETTLE_DELAY_MS = 90;
-const PAGE_ANIMATION_TIMEOUT_MS = 700;
 
 /**
  * Owns the vertical date-group page contract.
  *
- * The FlatList is deliberately not the gesture owner: free scrolling makes a
- * tall group behave differently from a short group and is not consistent on
- * React Native Web. Touch/mouse drags are resolved by PanResponder and web
- * wheel/trackpad input is resolved by the same pure page decision.
+ * Native path: snapToInterval on the outer FlatList handles OS physics-based
+ * snapping. This hook tracks the current index via onScroll and restores
+ * anchors after key/reset changes using `currentIndex * groupHeight`.
+ *
+ * Web path: PanResponder and wheel/trackpad input resolve page decisions via
+ * the same layout map (computed from estimatedGroupHeight — no measurement
+ * needed now that group heights are uniform). scrollToOffset targets a
+ * key-resolved offset exactly as before.
+ *
+ * This mirrors the pattern in DateGroupCarousel: native ScrollView
+ * snapToInterval vs. web PanResponder + Animated.
  */
 export function useDateGroupVerticalSnap({
   groupKeys,
@@ -71,36 +65,24 @@ export function useDateGroupVerticalSnap({
   listRef,
   enabled,
   estimatedGroupHeight,
-  estimatedGroupHeights,
-  viewportRef,
   onPageGestureStart,
   resetKey,
 }: UseDateGroupVerticalSnapOptions) {
   const [viewportHeight, setViewportHeight] = useState(0);
-  const [pageLocked, setPageLocked] = useState(false);
+  // Layout map computed purely from estimatedGroupHeight — no node measurement.
   const layoutsRef = useRef(new Map<string, DateGroupLayout>());
-  const heightsRef = useRef(new Map<string, number>());
-  const measuredLayoutsRef = useRef(new Map<string, DateGroupLayout>());
-  const groupNodesRef = useRef(new Map<string, MeasurableView>());
   const groupKeysRef = useRef<string[]>([...groupKeys]);
   const previousKeysRef = useRef<string[]>([]);
   const currentOffsetRef = useRef(0);
   const currentKeyRef = useRef<string | null>(groupKeys[0] ?? null);
+  const currentIndexRef = useRef(0);
   const gestureStartKeyRef = useRef<string | null>(null);
-  const nativeGestureStartOffsetRef = useRef(0);
-  const isNativeDraggingRef = useRef(false);
   const pendingRestoreKeyRef = useRef<string | null>(null);
   const pendingRestoreAnimatedRef = useRef(false);
   const restoreFrameRef = useRef<number | null>(null);
-  const measureFrameRef = useRef<number | null>(null);
   const wheelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wheelDistanceRef = useRef(0);
-  const pageUnlockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const transitionGenerationRef = useRef(0);
-  const layoutGenerationRef = useRef(0);
   const resetKeyRef = useRef(resetKey);
-  const isPageAnimatingRef = useRef(false);
-  const programmaticTargetRef = useRef<number | null>(null);
   const finishGestureRef = useRef((
     _distanceY: number,
     _velocityY: number,
@@ -118,49 +100,48 @@ export function useDateGroupVerticalSnap({
     }
   }, []);
 
-  const clearPageAnimationLock = useCallback(() => {
-    transitionGenerationRef.current += 1;
-    if (pageUnlockTimerRef.current !== null) {
-      clearTimeout(pageUnlockTimerRef.current);
-      pageUnlockTimerRef.current = null;
-    }
-    isPageAnimatingRef.current = false;
-    programmaticTargetRef.current = null;
-    setPageLocked(false);
-  }, []);
-
   const rebuildLayouts = useCallback(() => {
-    const resolved = resolveDateGroupLayouts(
-      groupKeysRef.current,
-      heightsRef.current,
-      measuredLayoutsRef.current,
-    );
     layoutsRef.current.clear();
-    for (const layout of resolved) layoutsRef.current.set(layout.dateKey, layout);
-  }, []);
+    const groupH = estimatedGroupHeight ?? 0;
+    if (groupH <= 0) return;
+    groupKeysRef.current.forEach((key, index) => {
+      layoutsRef.current.set(key, {
+        dateKey: key,
+        offset: index * groupH,
+        height: groupH,
+      });
+    });
+  }, [estimatedGroupHeight]);
 
   const restoreAnchor = useCallback(() => {
     const key = pendingRestoreKeyRef.current;
     if (!key || !enabled) return;
-    const layout = layoutsRef.current.get(key);
-    if (!layout) return;
-    if (
-      viewportRef?.current
-      && groupNodesRef.current.has(key)
-      && !measuredLayoutsRef.current.has(key)
-    ) {
-      return;
-    }
-
     pendingRestoreKeyRef.current = null;
     const shouldAnimate = pendingRestoreAnimatedRef.current;
     pendingRestoreAnimatedRef.current = false;
-    currentKeyRef.current = key;
-    const offset = Math.max(0, layout.offset);
-    currentOffsetRef.current = offset;
-    programmaticTargetRef.current = offset;
-    listRef.current?.scrollToOffset({ offset, animated: shouldAnimate });
-  }, [enabled, listRef, viewportRef]);
+
+    if (Platform.OS !== "web") {
+      // Native: index-based restore — snapToInterval owns the physics.
+      const keys = groupKeysRef.current;
+      const index = keys.indexOf(key);
+      const safeIndex = index >= 0 ? index : 0;
+      const groupH = estimatedGroupHeight ?? 0;
+      const offset = safeIndex * groupH;
+      currentIndexRef.current = safeIndex;
+      currentKeyRef.current = key;
+      currentOffsetRef.current = offset;
+      listRef.current?.scrollToOffset({ offset, animated: shouldAnimate });
+    } else {
+      // Web: layout-map restore — PanResponder owns the gesture.
+      const layout = layoutsRef.current.get(key);
+      if (!layout) return;
+      const offset = Math.max(0, layout.offset);
+      const shouldActuallyAnimate = shouldAnimate && Math.abs(offset - currentOffsetRef.current) >= 1;
+      currentKeyRef.current = key;
+      currentOffsetRef.current = offset;
+      listRef.current?.scrollToOffset({ offset, animated: shouldActuallyAnimate });
+    }
+  }, [enabled, estimatedGroupHeight, listRef]);
 
   const scheduleAnchorRestore = useCallback(() => {
     if (restoreFrameRef.current !== null) cancelAnimationFrame(restoreFrameRef.current);
@@ -170,63 +151,13 @@ export function useDateGroupVerticalSnap({
     });
   }, [restoreAnchor]);
 
-  const measureGroupNode = useCallback((dateKey: string, node: MeasurableView) => {
-    const viewport = viewportRef?.current;
-    if (!viewport) return;
-    const measurementGeneration = layoutGenerationRef.current;
-    viewport.measureInWindow((_viewportX, viewportY) => {
-      if (measurementGeneration !== layoutGenerationRef.current) return;
-      node.measureInWindow((_groupX, groupY, _groupWidth, groupHeight) => {
-        if (!shouldApplyDateGroupMeasurement(
-          measurementGeneration,
-          layoutGenerationRef.current,
-          groupNodesRef.current.get(dateKey) === node,
-          groupHeight,
-        )) return;
-        heightsRef.current.set(dateKey, groupHeight);
-        measuredLayoutsRef.current.set(dateKey, {
-          dateKey,
-          offset: Math.max(0, currentOffsetRef.current + groupY - viewportY),
-          height: groupHeight,
-        });
-        rebuildLayouts();
-        if (pendingRestoreKeyRef.current === dateKey) scheduleAnchorRestore();
-      });
-    });
-  }, [rebuildLayouts, scheduleAnchorRestore, viewportRef]);
-
-  const scheduleVisibleMeasurements = useCallback(() => {
-    if (!viewportRef?.current) return;
-    if (measureFrameRef.current !== null) cancelAnimationFrame(measureFrameRef.current);
-    measureFrameRef.current = requestAnimationFrame(() => {
-      measureFrameRef.current = null;
-      for (const [dateKey, node] of groupNodesRef.current) measureGroupNode(dateKey, node);
-    });
-  }, [measureGroupNode, viewportRef]);
-
   useEffect(() => {
-    clearPageAnimationLock();
-    layoutGenerationRef.current += 1;
     const nextKeys = [...groupKeys];
     const previousKeys = previousKeysRef.current;
     const previousKey = currentKeyRef.current;
     const shouldReset = resetKeyRef.current !== resetKey;
     resetKeyRef.current = resetKey;
-    const validKeys = new Set(nextKeys);
 
-    for (const key of heightsRef.current.keys()) {
-      if (!validKeys.has(key)) heightsRef.current.delete(key);
-    }
-    measuredLayoutsRef.current.clear();
-    if (estimatedGroupHeight && estimatedGroupHeight > 0) {
-      for (const key of nextKeys) heightsRef.current.set(key, estimatedGroupHeight);
-    }
-    if (estimatedGroupHeights) {
-      for (const key of nextKeys) {
-        const estimatedHeight = estimatedGroupHeights.get(key);
-        if (estimatedHeight && estimatedHeight > 0) heightsRef.current.set(key, estimatedHeight);
-      }
-    }
     rebuildLayouts();
 
     const nextAnchor = previousKeys.length > 0
@@ -235,24 +166,26 @@ export function useDateGroupVerticalSnap({
     currentKeyRef.current = nextAnchor;
     pendingRestoreKeyRef.current = nextAnchor;
     pendingRestoreAnimatedRef.current = shouldReset && nextAnchor !== null;
-    currentOffsetRef.current = layoutsRef.current.get(nextAnchor ?? "")?.offset ?? 0;
+
+    if (Platform.OS !== "web") {
+      const index = nextAnchor ? nextKeys.indexOf(nextAnchor) : 0;
+      const safeIndex = index >= 0 ? index : 0;
+      currentIndexRef.current = safeIndex;
+      currentOffsetRef.current = safeIndex * (estimatedGroupHeight ?? 0);
+    } else {
+      currentOffsetRef.current = layoutsRef.current.get(nextAnchor ?? "")?.offset ?? 0;
+    }
     previousKeysRef.current = nextKeys;
 
-    if (viewportRef?.current) scheduleVisibleMeasurements();
     scheduleAnchorRestore();
   }, [
     enabled,
-    clearPageAnimationLock,
     estimatedGroupHeight,
-    estimatedGroupHeights,
     groupKeys,
     groupSignature,
     rebuildLayouts,
     resetKey,
     scheduleAnchorRestore,
-    scheduleVisibleMeasurements,
-    viewportRef,
-    viewportHeight,
   ]);
 
   const onLayout = useCallback((event: LayoutChangeEvent) => {
@@ -260,52 +193,19 @@ export function useDateGroupVerticalSnap({
     if (nextHeight > 0 && nextHeight !== viewportHeight) setViewportHeight(nextHeight);
   }, [viewportHeight]);
 
-  const setGroupRef = useCallback((dateKey: string, node: View | null) => {
-    if (node) {
-      groupNodesRef.current.set(dateKey, node);
-      scheduleVisibleMeasurements();
-    } else {
-      groupNodesRef.current.delete(dateKey);
-    }
-  }, [scheduleVisibleMeasurements]);
-
-  const onGroupLayout = useCallback((dateKey: string, event: LayoutChangeEvent) => {
-    const { height } = event.nativeEvent.layout;
-    if (height <= 0) return;
-    heightsRef.current.set(dateKey, height);
-    rebuildLayouts();
-    const node = groupNodesRef.current.get(dateKey);
-    if (node && viewportRef?.current) measureGroupNode(dateKey, node);
-    else if (pendingRestoreKeyRef.current === dateKey) scheduleAnchorRestore();
-  }, [measureGroupNode, rebuildLayouts, scheduleAnchorRestore, viewportRef]);
-
   const moveToDateKey = useCallback((
     dateKey: string | null,
     animated: boolean,
-    forceLock = false,
   ) => {
     if (!dateKey) return;
     const layout = layoutsRef.current.get(dateKey);
     if (!layout) return;
     const offset = Math.max(0, layout.offset);
     const shouldAnimate = animated && Math.abs(offset - currentOffsetRef.current) >= 1;
-    const shouldLock = forceLock || shouldAnimate;
     currentKeyRef.current = dateKey;
     currentOffsetRef.current = offset;
-    programmaticTargetRef.current = shouldLock ? offset : null;
-    isPageAnimatingRef.current = shouldLock;
-    if (pageUnlockTimerRef.current !== null) clearTimeout(pageUnlockTimerRef.current);
-    if (shouldLock) {
-      const generation = transitionGenerationRef.current + 1;
-      transitionGenerationRef.current = generation;
-      setPageLocked(true);
-      pageUnlockTimerRef.current = setTimeout(() => {
-        if (transitionGenerationRef.current !== generation) return;
-        clearPageAnimationLock();
-      }, PAGE_ANIMATION_TIMEOUT_MS);
-    }
     listRef.current?.scrollToOffset({ offset, animated: shouldAnimate });
-  }, [clearPageAnimationLock, listRef]);
+  }, [listRef]);
 
   const finishPageGesture = useCallback((
     distanceY: number,
@@ -313,7 +213,7 @@ export function useDateGroupVerticalSnap({
     animated: boolean,
     forceLock: boolean,
   ) => {
-    if (!enabled || isPageAnimatingRef.current) return;
+    if (!enabled) return;
     onPageGestureStart?.();
     const currentKey = gestureStartKeyRef.current ?? currentKeyRef.current;
     const decision = getDateGroupPageDecision(
@@ -325,12 +225,12 @@ export function useDateGroupVerticalSnap({
       Sizing.swipeThreshold,
       FLING_VELOCITY,
     );
-    moveToDateKey(decision.dateKey, animated, forceLock);
+    moveToDateKey(decision.dateKey, animated);
   }, [enabled, moveToDateKey, onPageGestureStart]);
   finishGestureRef.current = finishPageGesture;
 
   const beginPageGesture = useCallback(() => {
-    if (!enabled || isPageAnimatingRef.current) return;
+    if (!enabled) return;
     clearWheelTimer();
     wheelDistanceRef.current = 0;
     gestureStartKeyRef.current = currentKeyRef.current
@@ -346,12 +246,10 @@ export function useDateGroupVerticalSnap({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_, gesture) =>
         Platform.OS === "web"
-        && !isPageAnimatingRef.current
         && Math.abs(gesture.dy) > Math.abs(gesture.dx)
         && Math.abs(gesture.dy) > 6,
       onMoveShouldSetPanResponderCapture: (_, gesture) =>
         Platform.OS === "web"
-        && !isPageAnimatingRef.current
         && Math.abs(gesture.dy) > Math.abs(gesture.dx)
         && Math.abs(gesture.dy) > 6,
       onPanResponderGrant: () => beginGestureRef.current(),
@@ -367,7 +265,6 @@ export function useDateGroupVerticalSnap({
   const onWheel = useCallback((event: WheelEventLike) => {
     if (!enabled) return;
     event.preventDefault?.();
-    if (isPageAnimatingRef.current) return;
     const rawDelta = Number.isFinite(event.deltaY) ? event.deltaY : 0;
     if (rawDelta === 0) return;
     const multiplier = event.deltaMode === 1
@@ -391,66 +288,28 @@ export function useDateGroupVerticalSnap({
 
   const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offset = Math.max(0, event.nativeEvent.contentOffset.y);
-    const programmaticTarget = programmaticTargetRef.current;
-    if (programmaticTarget !== null) {
-      if (Math.abs(programmaticTarget - offset) < 1) {
-        currentOffsetRef.current = programmaticTarget;
-        if (!isPageAnimatingRef.current) programmaticTargetRef.current = null;
-      }
-      return;
+    if (Platform.OS !== "web") {
+      // Native: snapToInterval drives snapping; only track the current index.
+      const groupH = estimatedGroupHeight ?? 0;
+      const index = groupH > 0 ? Math.round(offset / groupH) : 0;
+      currentIndexRef.current = index;
+      currentKeyRef.current = groupKeysRef.current[index] ?? null;
+    } else {
+      currentOffsetRef.current = offset;
+      const current = findDateGroupAtOffset(offset, [...layoutsRef.current.values()]);
+      if (current) currentKeyRef.current = current.dateKey;
     }
-    currentOffsetRef.current = offset;
-    const current = findDateGroupAtOffset(offset, [...layoutsRef.current.values()]);
-    if (current && !isPageAnimatingRef.current && !isNativeDraggingRef.current) {
-      currentKeyRef.current = current.dateKey;
-    }
-  }, []);
-
-  const onScrollBeginDrag = useCallback(() => {
-    if (!enabled || isPageAnimatingRef.current) return;
-    isNativeDraggingRef.current = true;
-    nativeGestureStartOffsetRef.current = currentOffsetRef.current;
-    beginPageGesture();
-  }, [beginPageGesture, enabled]);
-
-  const onScrollEndDrag = useCallback((
-    event: NativeSyntheticEvent<NativeScrollEvent>,
-  ) => {
-    if (!enabled || !isNativeDraggingRef.current) return;
-    isNativeDraggingRef.current = false;
-    const endOffset = Math.max(0, event.nativeEvent.contentOffset.y);
-    currentOffsetRef.current = endOffset;
-    const scrollVelocityY = event.nativeEvent.velocity?.y ?? 0;
-    // Kill native momentum at the drag-end position before the spring begins.
-    // onScrollEndDrag fires the moment the finger lifts, before the OS inertia
-    // scroll starts. Anchoring at endOffset here cancels that inertia so the
-    // subsequent animated=true scroll is not overridden by it, removing the
-    // "jump-and-catch" glitch visible on iOS and Android.
-    listRef.current?.scrollToOffset({ offset: endOffset, animated: false });
-    finishGestureRef.current(
-      nativeGestureStartOffsetRef.current - endOffset,
-      -scrollVelocityY,
-      true,  // animated: spring to the target instead of jumping
-      true,
-    );
-  }, [enabled, listRef]);
+  }, [estimatedGroupHeight]);
 
   useEffect(() => () => {
     clearWheelTimer();
-    clearPageAnimationLock();
     if (restoreFrameRef.current !== null) cancelAnimationFrame(restoreFrameRef.current);
-    if (measureFrameRef.current !== null) cancelAnimationFrame(measureFrameRef.current);
-  }, [clearPageAnimationLock, clearWheelTimer]);
+  }, [clearWheelTimer]);
 
   return {
     onLayout,
-    setGroupRef,
-    onGroupLayout,
     onScroll,
-    onScrollBeginDrag,
-    onScrollEndDrag,
     onWheel,
     panHandlers: panResponder.panHandlers,
-    pageLocked,
   };
 }

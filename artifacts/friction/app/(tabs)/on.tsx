@@ -502,7 +502,6 @@ export default function OnScreen() {
   );
   const scrollPressGuard = useScrollPressGuard();
   const recordListRef = useRef<FlatList<RecordDateGroup<CardRecord>>>(null);
-  const recordListViewportRef = useRef<View>(null);
   const cardGroupKeys = useMemo(
     () => cardGroups.map((group) => group.dateKey),
     [cardGroups],
@@ -513,32 +512,25 @@ export default function OnScreen() {
       .join("|"),
     [cardGroups],
   );
-  const estimatedRecordGroupHeights = useMemo(() => {
-    const heights = new Map<string, number>();
-    for (const group of cardGroups) {
-      heights.set(
-        group.dateKey,
-        getDateGroupCarouselHeight(
-          getRecordGroupCardHeight(group.records, cardWidth),
-          0,
-          Sizing.dateHeaderH
-            + Sizing.carouselShadowInsetTop
-            + Sizing.carouselShadowInsetBottom
-            + Sizing.dotsH
-            + Spacing.carouselGroupBottom,
-        ),
-      );
-    }
-    return heights;
-  }, [cardGroups, cardWidth]);
+  const estimatedGroupHeight = useMemo(
+    () => getDateGroupCarouselHeight(
+      cardWidth * Sizing.cardRatio,
+      0,
+      Sizing.dateHeaderH
+        + Sizing.carouselShadowInsetTop
+        + Sizing.carouselShadowInsetBottom
+        + Sizing.dotsH
+        + Spacing.carouselGroupBottom,
+    ),
+    [cardWidth],
+  );
   const verticalDateSnap = useDateGroupVerticalSnap({
     groupKeys: cardGroupKeys,
     groupSignature: cardGroupSignature,
     listRef: recordListRef,
     enabled: view === "card",
     resetKey: recordResetVersion,
-    estimatedGroupHeights: estimatedRecordGroupHeights,
-    viewportRef: recordListViewportRef,
+    estimatedGroupHeight,
     onPageGestureStart: scrollPressGuard.onScroll,
   });
   const handleRecordScroll = useCallback(
@@ -780,7 +772,6 @@ export default function OnScreen() {
         <View style={styles.center}><RecordListText style={styles.muted}>불러오는 중...</RecordListText></View>
       ) : view === "card" && cardGroups.length > 0 ? (
         <View
-          ref={recordListViewportRef}
           style={styles.recordListViewport}
           onLayout={verticalDateSnap.onLayout}
           {...verticalDateSnap.panHandlers}
@@ -795,11 +786,7 @@ export default function OnScreen() {
             renderItem={({ item, index }) => {
               const cardHeight = getRecordGroupCardHeight(item.records, cardWidth);
               return (
-                <View
-                  ref={(node) => verticalDateSnap.setGroupRef(item.dateKey, node)}
-                  style={NON_SELECTABLE_WEB_STYLE}
-                  onLayout={(event) => verticalDateSnap.onGroupLayout(item.dateKey, event)}
-                >
+                <View style={NON_SELECTABLE_WEB_STYLE}>
                   <DateGroupCarousel
                     dateLabel={item.label}
                     countLabel={`${item.records.length}개`}
@@ -816,12 +803,13 @@ export default function OnScreen() {
             }}
             refreshControl={<RefreshControl refreshing={articlesQuery.isRefetching || thoughtsQuery.isRefetching || questionQuery.isRefetching || refreshQuestion.isPending} onRefresh={() => refreshAll(kind === "thought")} />}
             onScroll={handleRecordScroll}
-            onScrollBeginDrag={verticalDateSnap.onScrollBeginDrag}
-            onScrollEndDrag={verticalDateSnap.onScrollEndDrag}
             scrollEventThrottle={16}
+            snapToInterval={estimatedGroupHeight}
+            snapToAlignment="start"
+            decelerationRate="fast"
             contentContainerStyle={[styles.recordGroupList, { paddingBottom: navBottom }]}
             showsVerticalScrollIndicator={false}
-            scrollEnabled={Platform.OS !== "web" && !verticalDateSnap.pageLocked}
+            scrollEnabled={Platform.OS !== "web"}
           />
         </View>
       ) : visibleRecords.length > 0 ? (
@@ -968,16 +956,11 @@ const styles = StyleSheet.create({
   disabled: { opacity: 0.4 },
 });
 
-function getRecordCardHeight(record: UnifiedRecord, width: number): number {
+function getRecordCardHeight(_record: UnifiedRecord, width: number): number {
   const baseHeight = width * Sizing.cardRatio;
-  if (record.kind === "letter") return baseHeight;
   return baseHeight;
 }
 
 function getRecordGroupCardHeight(records: readonly UnifiedRecord[], width: number): number {
   return records.length > 0 ? getRecordCardHeight(records[0], width) : width * Sizing.cardRatio;
-}
-
-function getRecordGroupActionAreaHeight(_records: readonly UnifiedRecord[]): number {
-  return 0;
 }

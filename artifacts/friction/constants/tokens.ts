@@ -104,10 +104,6 @@ export const Sizing = {
   /** Safe space inside the horizontally clipped carousel viewport for card shadows. */
   carouselShadowInsetTop: 6,
   carouselShadowInsetBottom: 10,
-  get groupH() {
-    return this.dateHeaderH + this.cardH + this.dotsH
-      + this.carouselShadowInsetTop + this.carouselShadowInsetBottom;
-  },
 
   dotActiveW: 18,
   dotActiveH: 6,

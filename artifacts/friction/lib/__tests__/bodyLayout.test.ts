@@ -691,7 +691,6 @@ describe("thought card typography regression guards", () => {
     expect(recordsScreen).toContain('import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";');
     expect(recordsScreen).toContain('if (record.kind === "letter")');
     expect(recordsScreen).toContain("cover={record.article.cover}");
-    expect(recordsScreen).toContain("if (record.kind === \"letter\") return baseHeight;");
     expect(recordsScreen).toContain("return baseHeight;");
   });
 
@@ -702,25 +701,18 @@ describe("thought card typography regression guards", () => {
     const dots = read("components/DotIndicator/DotIndicator.tsx");
 
     expect(recordsScreen).toContain("ref={recordListRef}");
-    expect(recordsScreen).toContain("ref={recordListViewportRef}");
-    expect(recordsScreen).toContain("verticalDateSnap.setGroupRef(item.dateKey, node)");
-    expect(recordsScreen).toContain("estimatedGroupHeights: estimatedRecordGroupHeights");
     expect(recordsScreen).toContain("useDateGroupVerticalSnap({");
     expect(inboxScreen).toContain("useDateGroupVerticalSnap({");
-    for (const [source, controllerName] of [
-      [recordsScreen, "verticalDateSnap"],
-      [inboxScreen, "inboxVerticalDateSnap"],
-    ] as const) {
-      expect(source).toContain(`${controllerName}.onScrollEndDrag`);
+    // Native snapToInterval replaces the old onScrollEndDrag momentum kill.
+    expect(recordsScreen).toContain("snapToInterval");
+    expect(inboxScreen).toContain("snapToInterval");
+    for (const source of [recordsScreen, inboxScreen]) {
       expect(source).toContain("onWheel: ");
       expect(source).toContain('Platform.OS !== "web"');
-      expect(source).toContain("pageLocked");
     }
     expect(pagingHook).toContain("getDateGroupPageDecision(");
     expect(pagingHook).toContain("onMoveShouldSetPanResponderCapture");
     expect(pagingHook).toContain("wheelDistanceRef.current -= rawDelta * multiplier");
-    expect(pagingHook).toContain("measurementGeneration !== layoutGenerationRef.current");
-    expect(pagingHook).toContain("shouldApplyDateGroupMeasurement(");
     expect(pagingHook).not.toContain("onMomentumScrollEnd");
     expect(pagingHook).not.toContain("getDateGroupSnapTarget");
     expect(pagingHook).not.toContain("scheduleSettle");
