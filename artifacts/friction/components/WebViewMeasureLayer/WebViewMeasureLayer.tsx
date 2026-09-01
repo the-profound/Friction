@@ -48,7 +48,14 @@ import {
   recordWebViewBoot,
 } from "@/lib/webviewPerf";
 import { createWebViewBridge, type WebViewBridge } from "@/lib/webViewBridge";
-import { logBodyTypographyDiagnostic } from "@/lib/bodyTypographyDiagnostics";
+import {
+  logBodyFontReadyDiagnostic,
+  logBodyTypographyDiagnostic,
+} from "@/lib/bodyTypographyDiagnostics";
+import {
+  isVerifiedBodyFontReadyStatus,
+  type BodyFontReadyStatus,
+} from "@/components/shared/bodyTypographyFonts";
 import {
   getNativeBodyFontMode,
   reportNativeBodyFontReady,
@@ -198,9 +205,9 @@ export default function WebViewMeasureLayer({ request, onMeasured }: Props) {
         return;
       }
       if (data.type !== "onBodyFontsReady" || bodyFontsReadyRef.current) return;
-      reportNativeBodyFontReady(
-        (data as { type: "onBodyFontsReady"; ok?: boolean }).ok === true,
-      );
+      const status = data as unknown as { type: "onBodyFontsReady" } & BodyFontReadyStatus;
+      logBodyFontReadyDiagnostic("measure", status);
+      reportNativeBodyFontReady(isVerifiedBodyFontReadyStatus(status));
       bodyFontsReadyRef.current = true;
       bridge.markReady();
       if (getNativeBodyFontMode() === "fallback") {

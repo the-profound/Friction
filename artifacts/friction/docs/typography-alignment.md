@@ -231,6 +231,11 @@ Eulyoo regular/semibold 로드 상태를 비교한다. reader/editor/measure의 
 실패하거나 제한 시간에 도달하면 fallback이 세션 동안 고정되어 모든 활성
 WebView에 전파되고, 측정 요청의 `fontMode`도 바뀌어 이전 custom-font 결과가
 현재 경계로 채택되지 않는다. fallback에서 custom으로 자동 복귀시키지 않는다.
+Eulyoo WebView WOFF2는 원본 OTF의 실제 윤곽선을 검사해 빈 한글 cmap 매핑만
+제거한 자산이다. 준비 신호는 네 face의 디코드뿐 아니라 `가`가 Eulyoo에서,
+`잓`이 Noto Serif KR에서 실제 픽셀을 만들고 각 Regular/SemiBold 체인이 같은
+래스터를 선택하는지 확인한 뒤에만 `custom`으로 성공한다. 이 검증이 실패하거나
+4초를 넘기면 세 WebView 모두 명시적으로 시스템 serif 계약으로 열린다.
 
 고정 회귀 문구에는 `가잓`, 긴 한국어 문단, 공백 없는 긴 문자열, H1/H2/H3,
 순서/비순서 목록, 인용, HR, 굵게/기울임/밑줄을 포함한다. 키보드 표시 전후와

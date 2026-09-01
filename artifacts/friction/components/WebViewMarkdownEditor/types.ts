@@ -77,7 +77,7 @@ export interface OnSelectionUpdatePayload {
 }
 
 export type WebViewToRNEvent =
-  | { type: "onBodyFontsReady"; ok: boolean }
+  | ({ type: "onBodyFontsReady" } & import("@/components/shared/bodyTypographyFonts").BodyFontReadyStatus)
   | { type: "onBodyTypographyDiagnostic"; payload: import("@/lib/bodyTypographyDiagnostics").BodyTypographyDiagnostic }
   | { type: "onReady"; payload?: { editorSessionId?: string } }
   | { type: "onChange"; payload: OnChangePayload }

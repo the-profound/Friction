@@ -11,7 +11,14 @@ import {
 } from "@/lib/webviewPerf";
 import { createWebViewBridge, type WebViewBridge, type WebViewCommand } from "@/lib/webViewBridge";
 import type { BodyTypographyMetrics } from "@/lib/bodyLayout";
-import { logBodyTypographyDiagnostic } from "@/lib/bodyTypographyDiagnostics";
+import {
+  logBodyFontReadyDiagnostic,
+  logBodyTypographyDiagnostic,
+} from "@/lib/bodyTypographyDiagnostics";
+import {
+  isVerifiedBodyFontReadyStatus,
+  type BodyFontReadyStatus,
+} from "@/components/shared/bodyTypographyFonts";
 import {
   getNativeBodyFontMode,
   reportNativeBodyFontReady,
@@ -123,9 +130,9 @@ export default function WebViewMarkdownReader({
       bridge.handleMessage(event, (data) => {
         if (data.type === "onBodyFontsReady") {
           if (bodyFontsReadyRef.current) return;
-          reportNativeBodyFontReady(
-            (data as { type: "onBodyFontsReady"; ok?: boolean }).ok === true,
-          );
+          const status = data as unknown as { type: "onBodyFontsReady" } & BodyFontReadyStatus;
+          logBodyFontReadyDiagnostic("reader", status);
+          reportNativeBodyFontReady(isVerifiedBodyFontReadyStatus(status));
           bodyFontsReadyRef.current = true;
           bridge.markReady();
           if (getNativeBodyFontMode() === "fallback") {

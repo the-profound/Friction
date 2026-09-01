@@ -1,4 +1,5 @@
 import type { BodyTypographyMetrics } from "./bodyLayout";
+import type { BodyFontReadyStatus } from "@/components/shared/bodyTypographyFonts";
 
 declare const __DEV__: boolean | undefined;
 
@@ -116,4 +117,14 @@ export function logBodyTypographyDiagnostic(
   if (typeof __DEV__ === "undefined" || !__DEV__) return;
   // eslint-disable-next-line no-console
   console.info(`[bodyTypography:${renderer}]`, diagnostic);
+}
+
+export function logBodyFontReadyDiagnostic(
+  renderer: BodyTypographyRenderer,
+  status: BodyFontReadyStatus,
+): void {
+  if (typeof __DEV__ === "undefined" || !__DEV__) return;
+  // Keep face decoding and actual glyph selection separate in diagnostics.
+  // eslint-disable-next-line no-console
+  console.info(`[bodyFonts:${renderer}]`, status);
 }

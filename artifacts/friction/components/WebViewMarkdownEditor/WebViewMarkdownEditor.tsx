@@ -18,7 +18,14 @@ import type {
   WebViewToRNEvent,
 } from "./types";
 import { createWebViewBridge, type WebViewBridge } from "@/lib/webViewBridge";
-import { logBodyTypographyDiagnostic } from "@/lib/bodyTypographyDiagnostics";
+import {
+  logBodyFontReadyDiagnostic,
+  logBodyTypographyDiagnostic,
+} from "@/lib/bodyTypographyDiagnostics";
+import {
+  isVerifiedBodyFontReadyStatus,
+  type BodyFontReadyStatus,
+} from "@/components/shared/bodyTypographyFonts";
 import {
   getNativeBodyFontMode,
   reportNativeBodyFontReady,
@@ -153,9 +160,8 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
           switch (data.type) {
             case "onBodyFontsReady":
               if (bodyFontsReadyRef.current) break;
-              reportNativeBodyFontReady(
-                (data as { type: "onBodyFontsReady"; ok?: boolean }).ok === true,
-              );
+              logBodyFontReadyDiagnostic("editor", data as BodyFontReadyStatus);
+              reportNativeBodyFontReady(isVerifiedBodyFontReadyStatus(data));
               bodyFontsReadyRef.current = true;
               bridge.markReady();
               if (getNativeBodyFontMode() === "fallback") {

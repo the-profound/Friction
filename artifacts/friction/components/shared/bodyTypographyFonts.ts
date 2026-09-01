@@ -8,7 +8,9 @@ export const BODY_SEMIBOLD_FONT_FAMILY =
  * changes. The editor config version includes it so a font-metric change never
  * reuses initialization state produced by an older typography contract.
  */
-export const BODY_FONT_CONFIG_VERSION = "eulyoo1945-noto-serif-kr-woff2-v2";
+export const BODY_FONT_CONFIG_VERSION = "eulyoo1945-sanitized-noto-serif-kr-woff2-v3";
+export const BODY_FONT_PRIMARY_PROBE_TEXT = "가";
+export const BODY_FONT_FALLBACK_ONLY_PROBE_TEXT = "잓";
 export const BODY_FONT_FALLBACK_PROBE_TEXT = "가잓";
 export const BODY_FONT_ASSET_NAMES = [
   "Eulyoo1945-Regular",
@@ -28,6 +30,49 @@ export interface EmbeddedBodyFontOptions {
   semiBoldBase64?: string | null;
   notoRegularBase64?: string | null;
   notoSemiBoldBase64?: string | null;
+}
+
+export interface BodyFontReadyStatus {
+  ok: boolean;
+  reason:
+    | "verified"
+    | "embedded-fonts-unavailable"
+    | "font-api-unavailable"
+    | "font-load-failed"
+    | "glyph-verification-failed"
+    | "timeout";
+  loads: {
+    eulyooRegular: boolean;
+    eulyooSemiBold: boolean;
+    notoRegular: boolean;
+    notoSemiBold: boolean;
+  };
+  glyphs: {
+    eulyooRegularPrimary: boolean;
+    eulyooSemiBoldPrimary: boolean;
+    notoRegularFallback: boolean;
+    notoSemiBoldFallback: boolean;
+  };
+}
+
+export function isVerifiedBodyFontReadyStatus(
+  value: unknown,
+): value is BodyFontReadyStatus {
+  if (!value || typeof value !== "object") return false;
+  const status = value as Partial<BodyFontReadyStatus>;
+  if (status.ok !== true || status.reason !== "verified") return false;
+  const loads = status.loads as Record<string, unknown> | undefined;
+  const glyphs = status.glyphs as Record<string, unknown> | undefined;
+  return !!(
+    loads?.eulyooRegular === true &&
+    loads.eulyooSemiBold === true &&
+    loads.notoRegular === true &&
+    loads.notoSemiBold === true &&
+    glyphs?.eulyooRegularPrimary === true &&
+    glyphs.eulyooSemiBoldPrimary === true &&
+    glyphs.notoRegularFallback === true &&
+    glyphs.notoSemiBoldFallback === true
+  );
 }
 
 export function hasEmbeddedBodyFonts(opts: EmbeddedBodyFontOptions): boolean {
@@ -58,24 +103,54 @@ export function buildEmbeddedBodyFontFaceCss(opts: EmbeddedBodyFontOptions): str
  */
 export function buildBodyFontReadyScript(hasEmbeddedFonts: boolean): string {
   const embedded = hasEmbeddedFonts ? "true" : "false";
-  const probe = JSON.stringify(BODY_FONT_FALLBACK_PROBE_TEXT);
+  const primaryProbe = JSON.stringify(BODY_FONT_PRIMARY_PROBE_TEXT);
+  const fallbackProbe = JSON.stringify(BODY_FONT_FALLBACK_ONLY_PROBE_TEXT);
 
   return `<script>(function(){
 var settled=false;
+var emptyLoads={eulyooRegular:false,eulyooSemiBold:false,notoRegular:false,notoSemiBold:false};
+var emptyGlyphs={eulyooRegularPrimary:false,eulyooSemiBoldPrimary:false,notoRegularFallback:false,notoSemiBoldFallback:false};
 function freezeFallback(){var s=document.documentElement&&document.documentElement.style;if(!s)return;s.setProperty("--body-regular-font-family","serif");s.setProperty("--body-semibold-font-family","serif");}
-function done(ok){if(settled)return;settled=true;if(!ok)freezeFallback();window.__bodyFontsReady=Promise.resolve(!!ok);window.__rnBridge.post({type:"onBodyFontsReady",ok:!!ok});}
+function failure(reason,loads,glyphs){return{ok:false,reason:reason,loads:loads||emptyLoads,glyphs:glyphs||emptyGlyphs};}
+function done(status){if(settled)return;settled=true;if(!status.ok)freezeFallback();window.__bodyFontsReady=Promise.resolve(status);window.__rnBridge.post({type:"onBodyFontsReady",ok:status.ok,reason:status.reason,loads:status.loads,glyphs:status.glyphs});}
+function loadFace(fonts,loads,key,shorthand,text){return fonts.load(shorthand,text).then(function(faces){loads[key]=!!(faces&&faces.length);return loads[key];});}
+function fingerprint(text,family,weight){
+ var canvas=document.createElement("canvas");canvas.width=128;canvas.height=112;
+ var context=canvas.getContext&&canvas.getContext("2d");if(!context)return null;
+ context.clearRect(0,0,canvas.width,canvas.height);context.fillStyle="#000";context.textBaseline="alphabetic";
+ context.font=String(weight)+" 64px "+family;context.fillText(text,12,82);
+ var pixels=context.getImageData(0,0,canvas.width,canvas.height).data,hash=2166136261,ink=0;
+ for(var i=3;i<pixels.length;i+=4){var alpha=pixels[i];if(alpha)ink++;hash^=alpha;hash=Math.imul(hash,16777619);}
+ return{hash:hash>>>0,ink:ink,width:Math.round(context.measureText(text).width*1000)};
+}
+function sameFingerprint(a,b){return!!a&&!!b&&a.ink>0&&b.ink>0&&a.hash===b.hash&&a.ink===b.ink&&a.width===b.width;}
+function verifyGlyphs(){
+ var primary=${primaryProbe},fallback=${fallbackProbe};
+ var er=fingerprint(primary,"'Eulyoo1945-Regular'",400),erc=fingerprint(primary,"'Eulyoo1945-Regular','NotoSerifKR_400Regular',serif",400);
+ var es=fingerprint(primary,"'Eulyoo1945-SemiBold'",600),esc=fingerprint(primary,"'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif",600);
+ var nr=fingerprint(fallback,"'NotoSerifKR_400Regular'",400),nrc=fingerprint(fallback,"'Eulyoo1945-Regular','NotoSerifKR_400Regular',serif",400);
+ var ns=fingerprint(fallback,"'NotoSerifKR_600SemiBold'",600),nsc=fingerprint(fallback,"'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif",600);
+ return{eulyooRegularPrimary:sameFingerprint(er,erc),eulyooSemiBoldPrimary:sameFingerprint(es,esc),notoRegularFallback:sameFingerprint(nr,nrc),notoSemiBoldFallback:sameFingerprint(ns,nsc)};
+}
 window.__bodyFontsReady=new Promise(function(resolve){
 window.addEventListener("load",function(){
- if(!document.fonts||typeof document.fonts.load!=="function"){resolve(false);return;}
-var timer=setTimeout(function(){resolve(false);},4000);
- Promise.all(${embedded}?[
-document.fonts.load("400 16px 'Eulyoo1945-Regular'",${probe}),
-document.fonts.load("600 16px 'Eulyoo1945-SemiBold'",${probe}),
-document.fonts.load("400 16px 'NotoSerifKR_400Regular'",${probe}),
-document.fonts.load("600 16px 'NotoSerifKR_600SemiBold'",${probe})
- ]:[document.fonts.ready]).then(function(){return document.fonts.ready;}).then(function(){clearTimeout(timer);resolve(true);},function(){clearTimeout(timer);resolve(false);});
+ if(!${embedded}){resolve(failure("embedded-fonts-unavailable"));return;}
+ if(!document.fonts||typeof document.fonts.load!=="function"){resolve(failure("font-api-unavailable"));return;}
+ var loads={eulyooRegular:false,eulyooSemiBold:false,notoRegular:false,notoSemiBold:false};
+ var timer=setTimeout(function(){resolve(failure("timeout",loads));},4000);
+ Promise.all([
+ loadFace(document.fonts,loads,"eulyooRegular","400 16px 'Eulyoo1945-Regular'",${primaryProbe}),
+ loadFace(document.fonts,loads,"eulyooSemiBold","600 16px 'Eulyoo1945-SemiBold'",${primaryProbe}),
+ loadFace(document.fonts,loads,"notoRegular","400 16px 'NotoSerifKR_400Regular'",${fallbackProbe}),
+ loadFace(document.fonts,loads,"notoSemiBold","600 16px 'NotoSerifKR_600SemiBold'",${fallbackProbe})
+ ]).then(function(faceResults){return document.fonts.ready.then(function(){
+   if(!faceResults.every(Boolean))return failure("font-load-failed",loads);
+   var glyphs=verifyGlyphs();
+   var ok=Object.keys(glyphs).every(function(key){return glyphs[key];});
+   return ok?{ok:true,reason:"verified",loads:loads,glyphs:glyphs}:failure("glyph-verification-failed",loads,glyphs);
+ });}).then(function(status){clearTimeout(timer);resolve(status);},function(){clearTimeout(timer);resolve(failure("font-load-failed",loads));});
 },{once:true});
 });
-window.__bodyFontsReady.then(done,function(){done(false);});
+window.__bodyFontsReady.then(done,function(){done(failure("font-load-failed"));});
 })();</script>`;
 }
