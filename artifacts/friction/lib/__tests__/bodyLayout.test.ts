@@ -243,6 +243,14 @@ describe("letter body font fallback contract", () => {
     expect(editorSource).toContain("const target = e.target as Element;");
     expect(swipeSection).toContain("const dy = e.touches[0].clientY - swipeStartY;");
     expect(swipeSection).not.toContain("selHandleDragStartY");
+    expect(editorSource).toContain('case "setContentBottomPadding"');
+    expect(editorSource).toContain("scheduleViewportCorrection(false)");
+    expect(editorBundle).toContain(
+      "padding:0 0 var(--editor-content-bottom-padding,120px)",
+    );
+    expect(editorBundle).toContain(
+      "overflow-x:hidden;overflow-y:visible",
+    );
 
     expect(editorBundle).toMatch(
       /case"setEditable":\{let \w+=!!\w+\.isEditable;/,
@@ -253,6 +261,33 @@ describe("letter body font fallback contract", () => {
     expect(editorBundle).toContain('addEventListener("focusout"');
     expect(editorBundle).toMatch(
       /\.touches\[0\]\.clientY-[\w$]+>[\w$]+&&\([\w$]+=!0,[\w$]+\(\{type:"onSwipeDownToDismiss"\}\)\)/,
+    );
+  });
+
+  it("keeps long native pastes and keyboard viewport changes inside the visible editor", () => {
+    const editorSource = readFileSync(
+      join(__dirname, "../../components/WebViewMarkdownEditor/editorWebviewSrc/index.ts"),
+      "utf8",
+    );
+    const nativeEditor = readFileSync(
+      join(__dirname, "../../components/WebViewMarkdownEditor/WebViewMarkdownEditor.tsx"),
+      "utf8",
+    );
+    const pasteHandler = editorSource.slice(
+      editorSource.indexOf("onPaste: (event) =>"),
+      editorSource.indexOf("onSelectionUpdate:", editorSource.indexOf("onPaste: (event) =>")),
+    );
+
+    expect(pasteHandler).toContain("LARGE_PASTE_MIN_CHARS");
+    expect(pasteHandler).toContain("LARGE_PASTE_MIN_LINES");
+    expect(pasteHandler).toContain("scheduleViewportCorrection(true)");
+    expect(editorSource).toContain('window.addEventListener("resize"');
+    expect(editorSource).toContain("scrollingElement.scrollHeight - viewportHeight");
+    expect(editorSource).toContain("computeEditorViewportScrollTop({");
+    expect(editorSource).toContain("editor.view.coordsAtPos(selectionHead)");
+    expect(nativeEditor).toContain("automaticallyAdjustContentInsets={false}");
+    expect(nativeEditor).toContain(
+      'contentInsetAdjustmentBehavior={Platform.OS === "ios" ? "never" : undefined}',
     );
   });
 });

@@ -48,6 +48,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
        typography,
       hideTitle,
       scrollEnabled = true,
+      contentBottomPadding = 120,
       onOverflowSplit,
       swipeDownToDismissKeyboard = true,
     },
@@ -259,6 +260,13 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
     }, [bridge, typography, sendCommand]);
 
     useEffect(() => {
+      sendCommand({
+        type: "setContentBottomPadding",
+        paddingPx: Math.max(0, contentBottomPadding),
+      });
+    }, [contentBottomPadding, sendCommand]);
+
+    useEffect(() => {
       sendCommand({ type: "setSourceArticleSlot", text: sourceArticleSlotText ?? "" });
     }, [sourceArticleSlotText, sendCommand]);
 
@@ -361,6 +369,8 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
           mediaPlaybackRequiresUserAction
           scrollEnabled={scrollEnabled && !scrollLocked}
           bounces={false}
+          automaticallyAdjustContentInsets={false}
+          contentInsetAdjustmentBehavior={Platform.OS === "ios" ? "never" : undefined}
           keyboardDisplayRequiresUserAction={false}
           hideKeyboardAccessoryView={Platform.OS === "ios"}
           showsVerticalScrollIndicator={false}

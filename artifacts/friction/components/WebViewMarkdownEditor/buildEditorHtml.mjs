@@ -41,7 +41,8 @@ const escapedJs = bundleJs
 
 const css = `
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{height:100%;background:transparent;container-type:inline-size}
+html{min-height:100%;background:transparent;container-type:inline-size}
+body{min-height:100%;background:transparent;container-type:inline-size}
 #title-input{
   display:block;
   width:100%;
@@ -67,7 +68,7 @@ html,body{height:100%;background:transparent;container-type:inline-size}
   width:var(--text-column-width);
   max-width:100%;
   min-height:200px;
-  padding:0 0 120px;
+  padding:0 0 var(--editor-content-bottom-padding,120px);
   outline:none;
 }
 .ProseMirror{
@@ -92,7 +93,7 @@ html,body{height:100%;background:transparent;container-type:inline-size}
 @keyframes page-anchor-pulse{0%{opacity:0}25%{opacity:1}75%{opacity:1}100%{opacity:0}}
 .page-anchor-overlay{position:absolute;left:0;width:100%;background:rgba(59,130,246,0.14);border-radius:6px;pointer-events:none;z-index:0;animation:page-anchor-pulse 1.6s ease-in-out forwards}
 #source-article-slot{display:none;width:100%;font-size:13px;color:#a1a1aa;font-family:system-ui,-apple-system,sans-serif;padding:0 0 8px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;-webkit-tap-highlight-color:transparent}
-body{padding:16px 0 0;overflow:auto;position:relative}
+body{padding:16px 0 0;overflow-x:hidden;overflow-y:visible;position:relative}
 `.trim();
 
 const VERSION = "3.23.0";

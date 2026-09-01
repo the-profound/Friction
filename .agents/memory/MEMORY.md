@@ -71,3 +71,4 @@
 - [Native virtualized special groups](friction-native-special-list-groups.md) — interactive first groups belong in FlatList data, not conditional headers, so native measurement and anchors stay stable.
 - [Signed upload verification](signed-upload-verification.md) — pin the staged object generation, recheck exact bytes, and publish only those verified bytes.
 - [Serialized final-state saves](serialized-final-state-saves.md) — debounce and explicit commits that write the same field must share one ordered save queue.
+- [Native editor viewport ownership](friction-native-editor-viewport.md) — screen owns keyboard/toolbar geometry; WebView owns document scroll and clamps caret after large reflow.

@@ -18,6 +18,7 @@ import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { DOMSerializer } from "@tiptap/pm/model";
 import type { Node as PMNode } from "@tiptap/pm/model";
+import { computeEditorViewportScrollTop } from "../../../lib/editorViewport";
 
 interface OverflowRange {
   pageIndex: number;
@@ -871,6 +872,7 @@ interface Command {
   availableContentHeightPx?: number | null;
   autoSplit?: boolean;
   mode?: "fallback";
+  paddingPx?: number;
   text?: string;
   metrics?: {
     textColumnWidth: number;
@@ -1264,6 +1266,79 @@ function spellFindRange(
   let editorFocused = false;
   let keyboardOpen = false;
   let syncScheduled = false;
+  let viewportCorrectionGeneration = 0;
+  const LARGE_PASTE_MIN_CHARS = 800;
+  const LARGE_PASTE_MIN_LINES = 6;
+  const CARET_VIEWPORT_MARGIN_PX = 16;
+
+  function getDocumentScrollTop(): number {
+    return (
+      window.scrollY ||
+      document.scrollingElement?.scrollTop ||
+      document.documentElement.scrollTop ||
+      0
+    );
+  }
+
+  function getDocumentViewportHeight(): number {
+    return Math.max(
+      1,
+      document.documentElement.clientHeight || window.innerHeight || 1,
+    );
+  }
+
+  function correctDocumentViewport(keepEditorSelectionVisible: boolean) {
+    const scrollingElement = document.scrollingElement || document.documentElement;
+    const viewportHeight = getDocumentViewportHeight();
+    const maxScrollTop = Math.max(0, scrollingElement.scrollHeight - viewportHeight);
+    const currentScrollTop = getDocumentScrollTop();
+    let caretTop: number | undefined;
+    let caretBottom: number | undefined;
+
+    if (
+      keepEditorSelectionVisible &&
+      editor &&
+      !editor.isDestroyed &&
+      editor.isFocused
+    ) {
+      try {
+        const selectionHead = Math.min(
+          editor.state.selection.head,
+          editor.state.doc.content.size,
+        );
+        const caretRect = editor.view.coordsAtPos(selectionHead);
+        caretTop = caretRect.top + currentScrollTop;
+        caretBottom = caretRect.bottom + currentScrollTop;
+      } catch {
+        // Selection DOM can be between layout passes immediately after paste.
+      }
+    }
+
+    const nextScrollTop = computeEditorViewportScrollTop({
+      currentScrollTop,
+      maxScrollTop,
+      viewportHeight,
+      marginPx: CARET_VIEWPORT_MARGIN_PX,
+      caretTop,
+      caretBottom,
+    });
+    if (Math.abs(nextScrollTop - currentScrollTop) > 1) {
+      window.scrollTo({ top: nextScrollTop, behavior: "instant" });
+    }
+  }
+
+  function scheduleViewportCorrection(keepEditorSelectionVisible: boolean) {
+    const generation = ++viewportCorrectionGeneration;
+    const run = () => {
+      if (generation !== viewportCorrectionGeneration) return;
+      correctDocumentViewport(keepEditorSelectionVisible);
+    };
+
+    // The first pass follows ProseMirror's DOM commit; the delayed pass follows
+    // WKWebView's keyboard/frame animation and final text reflow.
+    requestAnimationFrame(() => requestAnimationFrame(run));
+    setTimeout(run, 180);
+  }
 
   function syncKeyboardState() {
     if (syncScheduled) return;
@@ -1458,6 +1533,16 @@ function spellFindRange(
       onBlur: () => {
         editorFocused = false;
         syncKeyboardState();
+      },
+      onPaste: (event) => {
+        const pastedText = event.clipboardData?.getData("text/plain") || "";
+        const pastedLineCount = pastedText ? pastedText.split(/\r?\n/).length : 0;
+        if (
+          pastedText.length >= LARGE_PASTE_MIN_CHARS ||
+          pastedLineCount >= LARGE_PASTE_MIN_LINES
+        ) {
+          scheduleViewportCorrection(true);
+        }
       },
     });
   }
@@ -1723,6 +1808,19 @@ function spellFindRange(
           root.style.setProperty("--body-regular-font-family", "serif");
           root.style.setProperty("--body-semibold-font-family", "serif");
           scheduleOverflowProbe(50);
+          break;
+        }
+        case "setContentBottomPadding": {
+          const rawPaddingPx = cmd.paddingPx;
+          const paddingPx =
+            typeof rawPaddingPx === "number" && Number.isFinite(rawPaddingPx)
+            ? Math.max(0, rawPaddingPx)
+            : 120;
+          document.documentElement.style.setProperty(
+            "--editor-content-bottom-padding",
+            paddingPx + "px",
+          );
+          scheduleViewportCorrection(false);
           break;
         }
         case "setBlockType": {
@@ -2119,6 +2217,10 @@ function spellFindRange(
   });
 
   window.addEventListener("load", function () {
+    window.addEventListener("resize", function () {
+      scheduleViewportCorrection(editorFocused);
+    });
+
     const slotEl = document.getElementById("source-article-slot");
     if (slotEl) {
       slotEl.addEventListener("click", function () {

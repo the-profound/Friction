@@ -111,6 +111,7 @@ const PAGE_KEY_PREFIX = "page_";
 const EXPORT_DEBOUNCE_MS = 1200;
 const DIRECT_THOUGHT_INITIAL_MARKDOWN = "# \n\n";
 
+const WRITING_EDITOR_BOTTOM_PADDING = 24;
 function createThoughtClientId(): string {
   const randomNibble = () => Math.floor(Math.random() * 16);
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (token) => {
@@ -272,6 +273,7 @@ export default function WritingScreen() {
       const h = e.endCoordinates.height;
       lastKeyboardHeightRef.current = h;
       setKeyboardHeight(h);
+      setKeyboardVisible(true);
       setKeyboardRestorePending(false); // 키보드가 실제로 올라오면 플래그 해제
       if (addMenuPendingRef.current) {
         addMenuPendingRef.current = false;
@@ -280,6 +282,7 @@ export default function WritingScreen() {
     });
     const hideSub = Keyboard.addListener(hideEvent, () => {
       setKeyboardHeight(0);
+      setKeyboardVisible(false);
     });
     return () => { showSub.remove(); hideSub.remove(); };
   }, []);
@@ -472,15 +475,6 @@ export default function WritingScreen() {
       }
     }
   }, [thought, article, isThoughtMode, isLocalDirectDraft, editorReady, modeParam, setModeBoth]);
-
-  useEffect(() => {
-    const showSub = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
-    const hideSub = Keyboard.addListener("keyboardDidHide", () => setKeyboardVisible(false));
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
 
   // ── 마감 화면에서 복귀 시 page strip 스크롤 복원 (dividing) ──────────────────
   useEffect(() => {
@@ -1811,7 +1805,9 @@ export default function WritingScreen() {
   }, [flushLatestEditorSnapshot]);
 
   const handleKeyboardVisibilityChange = useCallback((visible: boolean) => {
-    setKeyboardVisible(visible);
+    // WebView focus is an autosave signal only. Native keyboard events above
+    // own layout/toolbar visibility so a transient focusout during WKWebView
+    // reflow cannot remove the spacer before the keyboard actually closes.
     if (
       !visible
       && isThoughtModeRef.current
@@ -2396,6 +2392,7 @@ export default function WritingScreen() {
                 onSelectionUpdate={handleSelectionUpdate}
                 typography={typography}
                 hideTitle={isThoughtMode && !isDividing}
+                contentBottomPadding={WRITING_EDITOR_BOTTOM_PADDING}
                 sourceArticleSlotText={
                   isDividing
                     ? (sourceArticleId

@@ -45,6 +45,26 @@ describe("on-01a editor hydration and initialization", () => {
 
     expect(screen).toContain("ensureTrailingParagraph={!isLocalDirectDraft}");
   });
+
+  it("uses native keyboard events as the writing viewport source of truth", () => {
+    const screen = readScreen();
+    const keyboardTracking = screen.slice(
+      screen.indexOf("// 키보드 높이 추적"),
+      screen.indexOf("// 패널을 닫고"),
+    );
+    const webViewFocusHandler = screen.slice(
+      screen.indexOf("const handleKeyboardVisibilityChange"),
+      screen.indexOf("const handleInsertDivider"),
+    );
+
+    expect(keyboardTracking).toContain("setKeyboardVisible(true)");
+    expect(keyboardTracking).toContain("setKeyboardVisible(false)");
+    expect(webViewFocusHandler).not.toContain("setKeyboardVisible(visible)");
+    expect(screen).not.toContain('Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true))');
+    expect(screen).toContain(
+      "contentBottomPadding={WRITING_EDITOR_BOTTOM_PADDING}",
+    );
+  });
 });
 
 describe("on-01a latest-snapshot autosave boundary", () => {

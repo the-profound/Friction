@@ -32,6 +32,7 @@ export type RNToWebViewCommand =
   | { type: "setOverflowProbeConfig"; availableContentHeightPx: number | null; autoSplit?: boolean }
   | { type: "setBodyMetrics"; metrics: BodyTypographyMetrics }
   | { type: "setBodyFontMode"; mode: "fallback" }
+  | { type: "setContentBottomPadding"; paddingPx: number }
   | { type: "setBlockType"; blockType: string }
   | { type: "toggleMark"; mark: string }
   | { type: "insertDivider" }
@@ -161,6 +162,12 @@ export interface WebViewMarkdownEditorProps {
    * 다음 페이지로 넘겨야 하는 화면에서 사용한다. 기본값 true(기존 동작 유지).
    */
   scrollEnabled?: boolean;
+  /**
+   * Native WebView 문서 끝의 스크롤 여백. 화면이 키보드/툴바를 레이아웃에서
+   * 이미 제외한 경우 작은 값으로 낮춰 같은 공간을 두 번 차감하지 않는다.
+   * 기본값은 기존 네이티브 편집기 동작과 같은 120px이다.
+   */
+  contentBottomPadding?: number;
   /**
    * 오버플로 감지(runOverflowProbe)가 활성화된 상태에서 현재 페이지 내용이
    * 가용 높이를 넘으면 호출된다. `beforeMarkdown`은 잘라낸 앞부분(현재
