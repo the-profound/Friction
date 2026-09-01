@@ -421,13 +421,19 @@ export function useDateGroupVerticalSnap({
     const endOffset = Math.max(0, event.nativeEvent.contentOffset.y);
     currentOffsetRef.current = endOffset;
     const scrollVelocityY = event.nativeEvent.velocity?.y ?? 0;
+    // Kill native momentum at the drag-end position before the spring begins.
+    // onScrollEndDrag fires the moment the finger lifts, before the OS inertia
+    // scroll starts. Anchoring at endOffset here cancels that inertia so the
+    // subsequent animated=true scroll is not overridden by it, removing the
+    // "jump-and-catch" glitch visible on iOS and Android.
+    listRef.current?.scrollToOffset({ offset: endOffset, animated: false });
     finishGestureRef.current(
       nativeGestureStartOffsetRef.current - endOffset,
       -scrollVelocityY,
-      false,
+      true,  // animated: spring to the target instead of jumping
       true,
     );
-  }, [enabled]);
+  }, [enabled, listRef]);
 
   useEffect(() => () => {
     clearWheelTimer();
