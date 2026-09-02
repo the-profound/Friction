@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { shouldMoveTitleFocusToBody } from "../../components/WebViewMarkdownEditor/titleKeyboardContract";
 
 const appRoot = join(__dirname, "../..");
 const readScreen = () => readFileSync(join(appRoot, "app/on-01a.tsx"), "utf8");
@@ -481,5 +482,97 @@ describe("on-01a keyboard reactivation", () => {
     expect(nativeEditorSource).toContain("dx >= SURFACE_TAP_THRESHOLD || dy >= SURFACE_TAP_THRESHOLD");
     expect(nativeEditorSource).toContain("#title-input, #source-article-slot, .hr-wrapper");
     expect(nativeEditorSource).toContain("editor.commands.focus()");
+  });
+});
+
+describe("shared title keyboard contract", () => {
+  it("distinguishes submit, soft-break, and IME Enter events", () => {
+    const plainEnter = {
+      key: "Enter",
+      shiftKey: false,
+      isComposing: false,
+      keyCode: 13,
+    };
+
+    expect(shouldMoveTitleFocusToBody(plainEnter)).toBe(true);
+    expect(shouldMoveTitleFocusToBody({ ...plainEnter, shiftKey: true })).toBe(false);
+    expect(shouldMoveTitleFocusToBody({ ...plainEnter, isComposing: true })).toBe(false);
+    expect(shouldMoveTitleFocusToBody({ ...plainEnter, keyCode: 229 })).toBe(false);
+    expect(shouldMoveTitleFocusToBody(plainEnter, true)).toBe(false);
+    expect(
+      shouldMoveTitleFocusToBody({ ...plainEnter, key: "a" }),
+    ).toBe(false);
+  });
+
+  it("commits plain Enter to the body while preserving title soft breaks and IME input", () => {
+    const editorWeb = readEditorWeb();
+    const editorSource = readEditorSource();
+    const editorBundle = readFileSync(
+      join(appRoot, "components/WebViewMarkdownEditor/editorHtml.ts"),
+      "utf8",
+    );
+
+    expect(editorWeb).toContain("const handleTitleKeyDown");
+    expect(editorWeb).toContain("shouldMoveTitleFocusToBody({");
+    expect(editorWeb).toContain("shiftKey: e.shiftKey");
+    expect(editorWeb).toContain("isComposing: e.nativeEvent.isComposing");
+    expect(editorWeb).toContain("keyCode: e.nativeEvent.keyCode");
+    expect(editorWeb).toContain('editor.commands.focus("start", { scrollIntoView: false })');
+    expect(editorWeb).toContain("onKeyDown={handleTitleKeyDown}");
+
+    expect(editorSource).toContain("let titleComposing = false;");
+    expect(editorSource).toContain('titleInput.addEventListener("compositionstart"');
+    expect(editorSource).toContain('titleInput.addEventListener("compositionend"');
+    expect(editorSource).toContain('titleInput.addEventListener("keydown", handleTitleKeydown)');
+    expect(editorSource).toContain(
+      "shouldMoveTitleFocusToBody(event, titleComposing)",
+    );
+    expect(editorSource).toContain("focusEditorStartFromTitle");
+
+    expect(editorBundle).toContain('"compositionstart"');
+    expect(editorBundle).toContain('"compositionend"');
+    expect(editorBundle).toContain("keyCode!==229");
+    expect(editorBundle).toMatch(/addEventListener\("keydown",\w+\)/);
+    expect(editorBundle).toContain('focus("start",{scrollIntoView:!1})');
+  });
+
+  it("uses an opaque light editor surface and disables native title tap flashes", () => {
+    const editorWeb = readEditorWeb();
+    const editorNative = readEditorNative();
+    const editorBundle = readFileSync(
+      join(appRoot, "components/WebViewMarkdownEditor/editorHtml.ts"),
+      "utf8",
+    );
+
+    expect(editorWeb).toContain('backgroundColor: "#FFFFFF"');
+    expect(editorWeb).toContain('WebkitTapHighlightColor: "transparent"');
+    expect(editorNative).toContain('backgroundColor: "#FFFFFF"');
+    expect(editorBundle).toContain("background:#fff");
+    expect(editorBundle).toContain("-webkit-tap-highlight-color:transparent");
+  });
+
+  it("round-trips multi-line titles without normalizing their line breaks", () => {
+    const screen = readScreen();
+    const editorWeb = readEditorWeb();
+    const editorSource = readEditorSource();
+    const titleHandler = screen.slice(
+      screen.indexOf("const handleTitleChange"),
+      screen.indexOf("// ── 분할 측정/검증"),
+    );
+    const restoreHandler = screen.slice(
+      screen.indexOf("const handleAutosaveRestore"),
+      screen.indexOf("const {", screen.indexOf("const handleAutosaveRestore")),
+    );
+
+    expect(titleHandler).toContain("setTitle(text)");
+    expect(titleHandler).toContain("titleRef.current = text");
+    expect(titleHandler).toContain("markTitleDirty(text, contentRef.current)");
+    expect(titleHandler).not.toContain(".trim()");
+    expect(titleHandler).not.toContain(".replace(");
+    expect(restoreHandler).toContain("setTitle(data.title)");
+    expect(restoreHandler).toContain("editorRef.current?.setTitle(data.title)");
+    expect(editorWeb).toContain("titleRef.current.value = title");
+    expect(editorSource).toContain("titleInput.value = cmd.title ||");
+    expect(editorSource).toContain("autoResizeTitle()");
   });
 });

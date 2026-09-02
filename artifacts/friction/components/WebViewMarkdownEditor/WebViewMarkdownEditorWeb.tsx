@@ -29,6 +29,7 @@ import {
   type BodyFontLoadStatus,
 } from "@/lib/bodyTypographyDiagnostics";
 import { splitLeadingH1Markdown } from "@/utils/leadingH1";
+import { shouldMoveTitleFocusToBody } from "./titleKeyboardContract";
 
 marked.setOptions({ breaks: true, gfm: true } as Parameters<typeof marked.setOptions>[0]);
 
@@ -355,6 +356,30 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
       [onTitleChange],
     );
 
+    const handleTitleKeyDown = useCallback(
+      (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        // Let the IME finish its composition. Some browsers report Enter as
+        // keyCode 229 even when isComposing has already been cleared.
+        if (!shouldMoveTitleFocusToBody({
+          key: e.key,
+          shiftKey: e.shiftKey,
+          isComposing: e.nativeEvent.isComposing,
+          keyCode: e.nativeEvent.keyCode,
+        })) {
+          return;
+        }
+
+        // Shift+Enter intentionally keeps the textarea's native soft-break
+        // behavior. A plain Enter commits the title and starts the body.
+        e.preventDefault();
+        titleRef.current?.blur();
+        if (editor && !editor.isDestroyed) {
+          editor.commands.focus("start", { scrollIntoView: false });
+        }
+      },
+      [editor],
+    );
+
     return (
       <div
         ref={containerRef}
@@ -390,6 +415,7 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
             defaultValue={titleValue || ""}
             placeholder="제목"
             onChange={handleTitleInput}
+            onKeyDown={handleTitleKeyDown}
             rows={1}
             style={{ ...titleInputStyle, fontSize: typography.titleFontSizePx }}
             readOnly={!editable}
@@ -410,6 +436,7 @@ const containerStyle: React.CSSProperties = {
   flexDirection: "column",
   height: "100%",
   overflow: "auto",
+  backgroundColor: "#FFFFFF",
   fontFamily: `var(--body-regular-font-family, ${BODY_REGULAR_FONT_FAMILY})`,
   color: "#1A1A1A",
 };
@@ -423,12 +450,15 @@ const titleInputStyle: React.CSSProperties = {
   lineHeight: 1.25,
   letterSpacing: "-0.01em",
   color: "#1A1A1A",
-  background: "transparent",
+  backgroundColor: "#FFFFFF",
   border: "none",
   borderBottom: "1px solid #f4f4f5",
   outline: "none",
   resize: "none",
   overflow: "hidden",
+  WebkitAppearance: "none",
+  WebkitTapHighlightColor: "transparent",
+  colorScheme: "light",
   padding: "8px 0",
   marginBottom: 12,
   boxSizing: "border-box",

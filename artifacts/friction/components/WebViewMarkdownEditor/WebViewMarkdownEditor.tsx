@@ -393,10 +393,11 @@ export default WebViewMarkdownEditor;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: "#FFFFFF",
   },
   webView: {
     flex: 1,
-    backgroundColor: "transparent",
+    backgroundColor: "#FFFFFF",
   },
   loading: {
     alignItems: "center",

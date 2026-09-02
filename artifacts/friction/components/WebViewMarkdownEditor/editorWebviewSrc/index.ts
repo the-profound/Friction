@@ -20,6 +20,7 @@ import { DOMSerializer } from "@tiptap/pm/model";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { computeEditorViewportScrollTop } from "../../../lib/editorViewport";
 import { splitLeadingH1Markdown } from "../../../utils/leadingH1";
+import { shouldMoveTitleFocusToBody } from "../titleKeyboardContract";
 
 interface OverflowRange {
   pageIndex: number;
@@ -1272,6 +1273,7 @@ function spellFindRange(
   }
 
   let titleFocused = false;
+  let titleComposing = false;
   let editorFocused = false;
   let keyboardOpen = false;
   let syncScheduled = false;
@@ -1366,6 +1368,25 @@ function spellFindRange(
     if (!titleInput) return;
     titleInput.style.height = "auto";
     titleInput.style.height = titleInput.scrollHeight + "px";
+  }
+
+  function focusEditorStartFromTitle() {
+    titleInput?.blur();
+    if (!editor || editor.isDestroyed) return;
+    try {
+      editor.commands.focus("start", { scrollIntoView: false });
+    } catch {}
+  }
+
+  function handleTitleKeydown(event: KeyboardEvent) {
+    if (!shouldMoveTitleFocusToBody(event, titleComposing)) {
+      return;
+    }
+
+    // Shift+Enter intentionally uses the textarea's native soft-break
+    // behavior. A plain Enter commits the title and starts the body.
+    event.preventDefault();
+    focusEditorStartFromTitle();
   }
 
   function getSelectionPayload(ed: Editor) {
@@ -2243,6 +2264,13 @@ function spellFindRange(
         autoResizeTitle();
         postToRN({ type: "onTitleChange", payload: { title: titleInput!.value } });
       });
+      titleInput.addEventListener("compositionstart", function () {
+        titleComposing = true;
+      });
+      titleInput.addEventListener("compositionend", function () {
+        titleComposing = false;
+      });
+      titleInput.addEventListener("keydown", handleTitleKeydown);
       titleInput.addEventListener("focus", function () {
         titleFocused = true;
         syncKeyboardState();
