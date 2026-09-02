@@ -2,6 +2,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { shouldMoveTitleFocusToBody } from "../../components/WebViewMarkdownEditor/titleKeyboardContract";
+import {
+  createEditorSurfaceTouchSession,
+  isStationaryBlankSurfaceTap,
+  updateEditorSurfaceTouchSession,
+} from "../../components/WebViewMarkdownEditor/editorSurfaceTouch";
 
 const appRoot = join(__dirname, "../..");
 const readScreen = () => readFileSync(join(appRoot, "app/on-01a.tsx"), "utf8");
@@ -466,22 +471,56 @@ describe("on-01a photo removal regression", () => {
 });
 
 describe("on-01a keyboard reactivation", () => {
-  it("focuses the editor from blank writing-surface taps without treating a drag as a tap", () => {
+  it("lets the platform editors own reactivation instead of refocusing from the screen container", () => {
     const screen = readScreen();
     const nativeEditorSource = readEditorSource();
+    const webEditorSource = readEditorWeb();
+    const nativeEditorBundle = readFileSync(
+      join(appRoot, "components/WebViewMarkdownEditor/editorHtml.ts"),
+      "utf8",
+    );
 
-    expect(screen).toContain("onTouchStart={handleEditorSurfaceTouchStart}");
-    expect(screen).toContain("onTouchMove={handleEditorSurfaceTouchMove}");
-    expect(screen).toContain("onTouchEnd={handleEditorSurfaceTouch}");
-    expect(screen).toContain("editorSurfaceTouchMovedRef.current");
-    expect(screen).toContain("selectionState.activeBlock === \"horizontalRule\"");
-    expect(screen).toContain("editorRef.current?.focus()");
+    expect(screen).not.toContain("handleEditorSurfaceTouch");
+    expect(screen).not.toContain("onTouchStart=");
+    expect(screen).not.toContain("onTouchMove=");
+    expect(screen).not.toContain("onTouchEnd=");
 
-    expect(nativeEditorSource).toContain("const SURFACE_TAP_THRESHOLD = 10");
-    expect(nativeEditorSource).toContain("if (keyboardOpen || !editor || editor.isDestroyed) return");
-    expect(nativeEditorSource).toContain("dx >= SURFACE_TAP_THRESHOLD || dy >= SURFACE_TAP_THRESHOLD");
-    expect(nativeEditorSource).toContain("#title-input, #source-article-slot, .hr-wrapper");
+    expect(nativeEditorSource).toContain('document.addEventListener("touchmove"');
+    expect(nativeEditorSource).toContain('document.addEventListener("touchcancel"');
+    expect(nativeEditorSource).toContain('document.addEventListener("scroll"');
+    expect(nativeEditorSource).toContain("isBlankEditorSurfaceTarget(e.target)");
+    expect(nativeEditorSource).toContain("isStationaryBlankSurfaceTap(");
     expect(nativeEditorSource).toContain("editor.commands.focus()");
+    expect(nativeEditorBundle).toContain("startedOnBlankSurface");
+    expect(nativeEditorBundle).toContain('addEventListener("touchcancel"');
+    expect(nativeEditorBundle).toContain("3.25.0-");
+
+    expect(webEditorSource).toContain('container.addEventListener("pointerdown"');
+    expect(webEditorSource).toContain('container.addEventListener("pointermove"');
+    expect(webEditorSource).toContain('container.addEventListener("pointercancel"');
+    expect(webEditorSource).toContain('container.addEventListener("scroll"');
+    expect(webEditorSource).toContain("isBlankEditorSurfaceTarget(event.target)");
+    expect(webEditorSource).toContain("isStationaryBlankSurfaceTap(");
+    expect(webEditorSource).toContain("editor.commands.focus()");
+  });
+
+  it("accepts only a stationary blank-surface gesture with no scroll", () => {
+    const tap = createEditorSurfaceTouchSession(20, 30, true);
+    expect(isStationaryBlankSurfaceTap(tap, 24, 35, true)).toBe(true);
+
+    const textTap = createEditorSurfaceTouchSession(20, 30, false);
+    expect(isStationaryBlankSurfaceTap(textTap, 20, 30, true)).toBe(false);
+
+    const endedOnControl = createEditorSurfaceTouchSession(20, 30, true);
+    expect(isStationaryBlankSurfaceTap(endedOnControl, 20, 30, false)).toBe(false);
+
+    const drag = createEditorSurfaceTouchSession(20, 30, true);
+    updateEditorSurfaceTouchSession(drag, 31, 30);
+    expect(isStationaryBlankSurfaceTap(drag, 31, 30, true)).toBe(false);
+
+    const scroll = createEditorSurfaceTouchSession(20, 30, true);
+    scroll.scrolled = true;
+    expect(isStationaryBlankSurfaceTap(scroll, 20, 30, true)).toBe(false);
   });
 });
 

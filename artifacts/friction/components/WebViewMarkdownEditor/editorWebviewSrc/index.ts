@@ -21,6 +21,13 @@ import type { Node as PMNode } from "@tiptap/pm/model";
 import { computeEditorViewportScrollTop } from "../../../lib/editorViewport";
 import { splitLeadingH1Markdown } from "../../../utils/leadingH1";
 import { shouldMoveTitleFocusToBody } from "../titleKeyboardContract";
+import {
+  createEditorSurfaceTouchSession,
+  isBlankEditorSurfaceTarget,
+  isStationaryBlankSurfaceTap,
+  updateEditorSurfaceTouchSession,
+  type EditorSurfaceTouchSession,
+} from "../editorSurfaceTouch";
 
 interface OverflowRange {
   pageIndex: number;
@@ -2308,32 +2315,65 @@ function spellFindRange(
       syncKeyboardState();
     });
 
-    // 키보드가 닫힌 뒤 본문 컬럼의 빈 공간을 눌러도 바로 입력을
-    // 재개한다. 드래그 스크롤은 포커스를 띄우지 않도록 짧은 탭만
-    // 처리하고, 구분선 컨트롤/원본 연결 슬롯 같은 별도 UI는 제외한다.
-    let surfaceTouchStartX = 0;
-    let surfaceTouchStartY = 0;
-    const SURFACE_TAP_THRESHOLD = 10;
+    // 제목/본문/별도 컨트롤은 각 요소의 기본 탭 동작을 그대로 소유한다.
+    // 키보드가 닫힌 상태에서 그 밖의 빈 표면을 한 손가락으로 정지 탭한
+    // 경우에만 편집기를 재활성화한다.
+    let surfaceTouchSession: EditorSurfaceTouchSession | null = null;
     document.addEventListener("touchstart", function (e) {
+      if (e.touches.length !== 1) {
+        surfaceTouchSession = null;
+        return;
+      }
       const t = e.touches[0];
-      if (!t) return;
-      surfaceTouchStartX = t.clientX;
-      surfaceTouchStartY = t.clientY;
+      surfaceTouchSession = createEditorSurfaceTouchSession(
+        t.clientX,
+        t.clientY,
+        isBlankEditorSurfaceTarget(e.target),
+      );
+    }, { passive: true });
+
+    document.addEventListener("touchmove", function (e) {
+      if (!surfaceTouchSession) return;
+      if (e.touches.length !== 1) {
+        surfaceTouchSession.moved = true;
+        return;
+      }
+      const t = e.touches[0];
+      updateEditorSurfaceTouchSession(surfaceTouchSession, t.clientX, t.clientY);
+    }, { passive: true });
+
+    const markSurfaceTouchScrolled = function () {
+      if (surfaceTouchSession) surfaceTouchSession.scrolled = true;
+    };
+    document.addEventListener("scroll", markSurfaceTouchScrolled, {
+      capture: true,
+      passive: true,
+    });
+    window.addEventListener("scroll", markSurfaceTouchScrolled, { passive: true });
+
+    document.addEventListener("touchcancel", function () {
+      surfaceTouchSession = null;
     }, { passive: true });
 
     document.addEventListener("touchend", function (e) {
-      if (keyboardOpen || !editor || editor.isDestroyed) return;
-      const t = e.changedTouches[0];
-      if (!t) return;
-      const dx = Math.abs(t.clientX - surfaceTouchStartX);
-      const dy = Math.abs(t.clientY - surfaceTouchStartY);
-      if (dx >= SURFACE_TAP_THRESHOLD || dy >= SURFACE_TAP_THRESHOLD) return;
-
-      const target = e.target;
-      if (!(target instanceof Element)) return;
+      const session = surfaceTouchSession;
+      surfaceTouchSession = null;
       if (
-        target.closest(
-          "#title-input, #source-article-slot, .hr-wrapper, button, input, textarea, select, a, [role='button']",
+        !session
+        || keyboardOpen
+        || !editor
+        || editor.isDestroyed
+        || e.changedTouches.length !== 1
+      ) {
+        return;
+      }
+      const t = e.changedTouches[0];
+      if (
+        !isStationaryBlankSurfaceTap(
+          session,
+          t.clientX,
+          t.clientY,
+          isBlankEditorSurfaceTarget(e.target),
         )
       ) {
         return;

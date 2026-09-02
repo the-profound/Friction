@@ -30,6 +30,13 @@ import {
 } from "@/lib/bodyTypographyDiagnostics";
 import { splitLeadingH1Markdown } from "@/utils/leadingH1";
 import { shouldMoveTitleFocusToBody } from "./titleKeyboardContract";
+import {
+  createEditorSurfaceTouchSession,
+  isBlankEditorSurfaceTarget,
+  isStationaryBlankSurfaceTap,
+  updateEditorSurfaceTouchSession,
+  type EditorSurfaceTouchSession,
+} from "./editorSurfaceTouch";
 
 marked.setOptions({ breaks: true, gfm: true } as Parameters<typeof marked.setOptions>[0]);
 
@@ -205,6 +212,85 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
         editor.setEditable(editable);
       }
     }, [editor, editable]);
+
+    useEffect(() => {
+      const container = containerRef.current;
+      if (!container || !editor || editor.isDestroyed) return;
+
+      let touchSession: EditorSurfaceTouchSession | null = null;
+      let activePointerId: number | null = null;
+
+      const handlePointerDown = (event: PointerEvent) => {
+        if (!event.isPrimary || activePointerId != null) {
+          touchSession = null;
+          activePointerId = null;
+          return;
+        }
+        activePointerId = event.pointerId;
+        touchSession = createEditorSurfaceTouchSession(
+          event.clientX,
+          event.clientY,
+          isBlankEditorSurfaceTarget(event.target),
+        );
+      };
+
+      const handlePointerMove = (event: PointerEvent) => {
+        if (!touchSession || event.pointerId !== activePointerId) return;
+        updateEditorSurfaceTouchSession(touchSession, event.clientX, event.clientY);
+      };
+
+      const handleScroll = () => {
+        if (touchSession) touchSession.scrolled = true;
+      };
+
+      const handlePointerCancel = (event: PointerEvent) => {
+        if (event.pointerId !== activePointerId) return;
+        touchSession = null;
+        activePointerId = null;
+      };
+
+      const handlePointerUp = (event: PointerEvent) => {
+        if (event.pointerId !== activePointerId) return;
+        const session = touchSession;
+        touchSession = null;
+        activePointerId = null;
+        if (
+          !session
+          || editor.isDestroyed
+          || editor.isFocused
+          || document.activeElement === titleRef.current
+        ) {
+          return;
+        }
+
+        if (
+          !isStationaryBlankSurfaceTap(
+            session,
+            event.clientX,
+            event.clientY,
+            isBlankEditorSurfaceTarget(event.target),
+          )
+        ) {
+          return;
+        }
+
+        editor.commands.focus();
+      };
+
+      container.addEventListener("pointerdown", handlePointerDown, { passive: true });
+      container.addEventListener("pointermove", handlePointerMove, { passive: true });
+      container.addEventListener("pointerup", handlePointerUp, { passive: true });
+      container.addEventListener("pointercancel", handlePointerCancel, { passive: true });
+      container.addEventListener("scroll", handleScroll, { passive: true });
+
+      return () => {
+        container.removeEventListener("pointerdown", handlePointerDown);
+        container.removeEventListener("pointermove", handlePointerMove);
+        container.removeEventListener("pointerup", handlePointerUp);
+        container.removeEventListener("pointercancel", handlePointerCancel);
+        container.removeEventListener("scroll", handleScroll);
+      };
+    }, [editor]);
 
     useEffect(() => {
       return () => {
