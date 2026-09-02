@@ -90,6 +90,7 @@ import {
   patchThoughtInRecordCaches,
   removeRecordFromCache,
   restoreRecordListCaches,
+  stageArticleTransitionSnapshot,
   snapshotRecordListCaches,
 } from "@/lib/queryInvalidation";
 import { useUser } from "@/contexts/UserContext";
@@ -1530,21 +1531,13 @@ export default function WritingScreen() {
     }
 
     const pagesJson = pgs.map((p) => p.content);
-    queryClient.setQueryData(
-      getGetArticleQueryKey(id),
-      (old: unknown) => {
-        if (!old || typeof old !== "object") return old;
-        return {
-          ...old,
-          title: titleRef.current,
-          content: cur,
-          pages: pagesJson,
-          layoutWidth: containerWidth,
-          status: "CLOSING",
-        };
-      },
-      { updatedAt: Date.now() },
-    );
+    stageArticleTransitionSnapshot(queryClient, id, {
+      title: titleRef.current,
+      content: cur,
+      pages: pagesJson,
+      layoutWidth: containerWidth,
+      status: "CLOSING",
+    });
 
     router.push({
       pathname: "/on-01c",

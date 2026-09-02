@@ -1,6 +1,7 @@
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import {
+  getGetArticleQueryKey,
   getGetThoughtQuestionQueueQueryKey,
   getListArticlesQueryKey,
   getListThoughtsQueryKey,
@@ -14,6 +15,7 @@ import {
   setThoughtQuestionQueueCache,
   snapshotRecordDeletion,
   snapshotRecordListCaches,
+  stageArticleTransitionSnapshot,
   upsertThoughtInRecordCaches,
 } from "../queryInvalidation";
 
@@ -35,6 +37,43 @@ describe("direct thought creation cache invalidation", () => {
 });
 
 describe("optimistic record cache operations", () => {
+  it("keeps a local stage transition when an older detail request finishes late", async () => {
+    const queryClient = new QueryClient();
+    const articleKey = getListArticlesQueryKey({ authorId: "author" });
+    const closingArticle = {
+      id: "article-1",
+      status: "CLOSING",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    const detailKey = getGetArticleQueryKey(closingArticle.id);
+    queryClient.setQueryData(articleKey, [closingArticle]);
+    queryClient.setQueryData(detailKey, closingArticle);
+
+    let resolveRequest: ((value: typeof closingArticle) => void) | undefined;
+    const request = queryClient.fetchQuery({
+      queryKey: detailKey,
+      queryFn: ({ signal }) => new Promise<typeof closingArticle>((resolve, reject) => {
+        resolveRequest = resolve;
+        signal.addEventListener("abort", () => reject(new Error("aborted")));
+      }),
+    }).catch(() => undefined);
+    await Promise.resolve();
+
+    stageArticleTransitionSnapshot(queryClient, closingArticle.id, {
+      status: "DIVIDING" as never,
+    });
+    resolveRequest?.(closingArticle);
+    await request;
+
+    expect(queryClient.getQueryData(detailKey)).toMatchObject({
+      id: closingArticle.id,
+      status: "DIVIDING",
+    });
+    expect(queryClient.getQueryData(articleKey)).toEqual([
+      { ...closingArticle, status: "DIVIDING" },
+    ]);
+  });
+
   it("restores every filtered list snapshot when a deletion fails", () => {
     const thoughtKey = [...getListThoughtsQueryKey(), { sourceArticleId: "source" }];
     const articleKey = [...getListArticlesQueryKey(), { status: "LETTER" }];

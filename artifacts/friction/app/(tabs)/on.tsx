@@ -454,6 +454,7 @@ export default function OnScreen() {
     newVisibility: "PUBLIC" | "RECIPIENT_ONLY";
   } | null>(null);
   const [isChangingVisibility, setIsChangingVisibility] = useState(false);
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   // Refresh and activation mutate the same server-owned FIFO queue. Keep one
   // synchronous guard so a late response can never replace a newer snapshot.
   const questionQueueMutationPendingRef = useRef(false);
@@ -703,6 +704,16 @@ export default function OnScreen() {
     }
   }, [articlesQuery, queryClient, questionQuery, refreshQuestion, showToast, thoughtsQuery]);
 
+  const handleRefresh = useCallback(async () => {
+    if (isManualRefreshing) return;
+    setIsManualRefreshing(true);
+    try {
+      await refreshAll(kind === "thought");
+    } finally {
+      setIsManualRefreshing(false);
+    }
+  }, [isManualRefreshing, kind, refreshAll]);
+
   const openRecord = useCallback((record: UnifiedRecord) => {
     if (record.kind === "thought") {
       router.push({ pathname: "/on-01a", params: { id: record.thought.id } });
@@ -751,12 +762,14 @@ export default function OnScreen() {
 
     void (async () => {
       try {
+        const rollback = snapshotRecordDeletion(queryClient, target);
+        removeRecordFromCache(queryClient, target);
+        // Cancelling older reads protects the optimistic snapshot, but waiting
+        // for cancellation must not delay removing the confirmed target.
         await Promise.allSettled([
           queryClient.cancelQueries({ queryKey: getListThoughtsQueryKey() }),
           queryClient.cancelQueries({ queryKey: getListArticlesQueryKey() }),
         ]);
-        const rollback = snapshotRecordDeletion(queryClient, target);
-        removeRecordFromCache(queryClient, target);
         try {
           if (target.kind === "thought") await deleteThought.mutateAsync({ id: target.thought.id });
           else await deleteArticle.mutateAsync({ id: target.article.id });
@@ -1027,7 +1040,7 @@ export default function OnScreen() {
                 </View>
               );
             }}
-            refreshControl={<RefreshControl refreshing={articlesQuery.isRefetching || thoughtsQuery.isRefetching || questionQuery.isRefetching || refreshQuestion.isPending} onRefresh={() => refreshAll(kind === "thought")} />}
+            refreshControl={<RefreshControl refreshing={isManualRefreshing} onRefresh={handleRefresh} />}
             onScroll={handleRecordScroll}
             scrollEventThrottle={16}
             snapToInterval={estimatedGroupHeight}
@@ -1055,13 +1068,13 @@ export default function OnScreen() {
               />
             );
           }}
-          refreshControl={<RefreshControl refreshing={articlesQuery.isRefetching || thoughtsQuery.isRefetching || questionQuery.isRefetching || refreshQuestion.isPending} onRefresh={() => refreshAll(kind === "thought")} />}
+          refreshControl={<RefreshControl refreshing={isManualRefreshing} onRefresh={handleRefresh} />}
           onScroll={handleRecordScroll}
           scrollEventThrottle={16}
           contentContainerStyle={{ paddingBottom: navBottom + 16 }}
         />
       ) : (
-        <RefreshableEmpty refreshing={articlesQuery.isRefetching || thoughtsQuery.isRefetching || questionQuery.isRefetching || refreshQuestion.isPending} onRefresh={() => refreshAll(kind === "thought")} contentContainerStyle={[styles.center, { paddingBottom: navBottom }]}>
+        <RefreshableEmpty refreshing={isManualRefreshing} onRefresh={handleRefresh} contentContainerStyle={[styles.center, { paddingBottom: navBottom }]}>
           <Feather name={kind === "letter" ? "mail" : "edit-3"} size={40} color={Colors.zinc300} />
           <RecordListText style={styles.emptyTitle}>{searchQuery.trim() ? "검색 결과가 없습니다" : emptyTitle}</RecordListText>
           {!searchQuery.trim() && kind === "thought" ? (

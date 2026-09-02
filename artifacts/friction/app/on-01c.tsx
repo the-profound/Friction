@@ -15,6 +15,7 @@ import ScalePressable from "@/components/shared/ScalePressable";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams, Stack } from "expo-router";
+import { usePreventRemove } from "expo-router/build/react-navigation/core";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing, ReaderTokens, Shadows } from "@/constants/tokens";
 import { bodyTypographyMetrics, computeBodyLayout } from "@/lib/bodyLayout";
@@ -51,9 +52,9 @@ import type { ArticleCover } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   invalidateArticleLists,
-  invalidateArticleAndLists,
   invalidateArticleDetail,
   patchArticleInRecordCaches,
+  stageArticleTransitionSnapshot,
 } from "@/lib/queryInvalidation";
 import { useToast } from "@/contexts/ToastContext";
 
@@ -148,6 +149,9 @@ export default function ClosingScreen() {
   );
   const coverUploadInProgressRef = useRef(false);
   const isActionInProgressRef = useRef(false);
+  const [shouldPreventRemoval, setShouldPreventRemoval] = useState(true);
+  const pendingNavigationRef = useRef<(() => void) | null>(null);
+  const navigationCommittedRef = useRef(false);
   const [previewCardWidth, setPreviewCardWidth] = useState(0);
   const storedLayoutWidth = (article?.layoutWidth != null && article.layoutWidth > 0) ? article.layoutWidth : null;
   const exportedArticleIdRef = useRef<string | null>(null);
@@ -160,6 +164,14 @@ export default function ClosingScreen() {
   // 보내지 않도록, 서버에서 받은 초기 pages 스냅샷을 저장해 둔다. on-01c는
   // 현재 pages를 편집하지 않으므로 거의 항상 변경되지 않은 상태로 남는다.
   const initialPagesRef = useRef<string[] | null>(null);
+
+  const navigateAfterRemovingGuard = useCallback((navigate: () => void) => {
+    if (navigationCommittedRef.current) return;
+    navigationCommittedRef.current = true;
+    isActionInProgressRef.current = true;
+    pendingNavigationRef.current = navigate;
+    setShouldPreventRemoval(false);
+  }, []);
 
   useEffect(() => {
     if (!article) return;
@@ -358,7 +370,9 @@ export default function ClosingScreen() {
           });
           // 성공 시에만 AsyncStorage 정리 (실패 시 컨텍스트를 유지해 재시도 가능하게)
           try { await AsyncStorage.removeItem(`space_context:${articleId}`); } catch {}
-          router.replace({ pathname: "/of-space-start", params: { id: effectiveSpaceId } });
+          navigateAfterRemovingGuard(() => {
+            router.replace({ pathname: "/of-space-start", params: { id: effectiveSpaceId } });
+          });
           return;
         } catch (e) {
           console.warn("[on-01c] 공간 편지 공개 설정 실패:", e);
@@ -369,13 +383,17 @@ export default function ClosingScreen() {
             duration: 7000,
           });
         }
-        router.replace({ pathname: "/of-space-start", params: { id: effectiveSpaceId } });
+        navigateAfterRemovingGuard(() => {
+          router.replace({ pathname: "/of-space-start", params: { id: effectiveSpaceId } });
+        });
       } else {
-        router.replace({ pathname: "/(tabs)/on", params: { tab: "my_article" } });
+        navigateAfterRemovingGuard(() => {
+          router.replace({ pathname: "/(tabs)/on", params: { tab: "my_article" } });
+        });
       }
     },
     [
-      pages, finalizeArticle, queryClient, router, showToast,
+      pages, finalizeArticle, navigateAfterRemovingGuard, queryClient, router, showToast,
       effectiveSpaceId, effectiveSpaceRoundId, effectiveLetterType, visibility, isAnonymous,
       createSpaceLetterMutation, updateSpaceLetterVisibilityMutation,
     ],
@@ -424,7 +442,11 @@ export default function ClosingScreen() {
       showToast({ message: msg, type: "error" });
     } finally {
       setIsExporting(false);
-      isActionInProgressRef.current = false;
+      // A committed route owns the action lock through deferred dispatch and
+      // unmount, so a back event cannot replace the export destination.
+      if (!navigationCommittedRef.current) {
+        isActionInProgressRef.current = false;
+      }
     }
   }, [id, title, pages, cover, persistCover, updateArticle, finalizeExport]);
 
@@ -463,30 +485,51 @@ export default function ClosingScreen() {
       patchArticleInRecordCaches(queryClient, id, { title });
     } catch (e: unknown) {
       console.warn("Failed to save title:", e instanceof Error ? e.message : e);
+      throw e;
     }
   }, [id, queryClient, title, titleEditing, updateArticle]);
 
-  const handleBack = useCallback(async () => {
+  const handleBack = useCallback(() => {
     if (coverUploadInProgressRef.current) {
       showToast({ message: "표지 사진 작업이 끝난 뒤 이동할 수 있어요.", type: "info" });
       return;
     }
     if (isActionInProgressRef.current) return;
     isActionInProgressRef.current = true;
-    try {
-      Keyboard.dismiss();
-      await flushTitleSave();
-      await flushCoverSave();
-      invalidateArticleLists(queryClient);
-      router.replace("/(tabs)/on");
-    } catch {
-      showToast({ message: "표지를 저장하지 못했어요. 다시 시도해주세요.", type: "error" });
-    } finally {
-      isActionInProgressRef.current = false;
-    }
-  }, [router, queryClient, flushCoverSave, flushTitleSave, showToast]);
+    Keyboard.dismiss();
+    setTitleEditing(false);
 
-  const handleStepBack = useCallback(async () => {
+    const coverToSave = pendingCoverRef.current ?? cover;
+    if (id) {
+      stageArticleTransitionSnapshot(queryClient, id, {
+        title,
+        cover: coverToSave,
+      });
+    }
+
+    // The local article snapshot is the visible source of truth. The queued
+    // title/cover writes continue after the route has changed.
+    void Promise.allSettled([flushTitleSave(), flushCoverSave()]).then((results) => {
+      if (results.some((result) => result.status === "rejected")) {
+        showToast({ message: "최신 내용을 저장하지 못했어요. 다시 시도해주세요.", type: "error" });
+      }
+      void invalidateArticleLists(queryClient);
+    });
+
+    navigateAfterRemovingGuard(() => router.replace("/(tabs)/on"));
+  }, [
+    cover,
+    flushCoverSave,
+    flushTitleSave,
+    id,
+    navigateAfterRemovingGuard,
+    queryClient,
+    router,
+    showToast,
+    title,
+  ]);
+
+  const handleStepBack = useCallback(() => {
     if (coverUploadInProgressRef.current) return;
     if (isActionInProgressRef.current) return;
     isActionInProgressRef.current = true;
@@ -500,44 +543,60 @@ export default function ClosingScreen() {
       isActionInProgressRef.current = false;
       return;
     }
-    try {
-      await flushTitleSave();
-      await flushCoverSave();
+    setTitleEditing(false);
 
-      // Optimistic navigation. updatedAt bump lets on-01b's freshness gate
-      // accept this cache immediately, avoiding a needless refetch wait.
-      queryClient.setQueryData(
-        getGetArticleQueryKey(id),
-        (old: any) => (old ? { ...old, status: "DIVIDING" } : old),
-        { updatedAt: Date.now() },
-      );
+    const coverToSave = pendingCoverRef.current ?? cover;
+    stageArticleTransitionSnapshot(queryClient, id, {
+      title,
+      cover: coverToSave,
+      status: "DIVIDING",
+    });
 
-      // 마감 화면에서 보던 콘텐츠 페이지 인덱스 및 블록 인덱스를 분할 화면에 전달해
-      // page strip과 본문 에디터가 해당 위치로 스크롤 복원되도록 한다.
-      const returnPageIdx = returnPageIdxRef.current;
-      const returnBlockIdx = returnBlockIdxRef.current;
-      isActionInProgressRef.current = false;
-      router.replace({ pathname: "/on-01b", params: { id, returnPage: String(returnPageIdx), returnBlock: String(returnBlockIdx) } });
+    // Navigate directly to the integrated writing/dividing screen. Save and
+    // status transition are deliberately detached from the route change.
+    void Promise.allSettled([flushTitleSave(), flushCoverSave()]).then((results) => {
+      if (results.some((result) => result.status === "rejected")) {
+        showToast({ message: "최신 내용을 모두 저장하지 못했어요. 다시 시도해주세요.", type: "error" });
+      }
+      return transitionStatus.mutateAsync({
+        id,
+        data: { targetStatus: TransitionArticleBodyTargetStatus.DIVIDING },
+      });
+    }).then(
+      () => {
+        void invalidateArticleLists(queryClient);
+      },
+      () => {
+        // Keep the optimistic detail snapshot visible so the destination
+        // screen is not replaced by a stale CLOSING response.
+        showToast({ message: "분할 단계로 전환하지 못했어요. 다시 시도해주세요.", type: "error" });
+        void invalidateArticleLists(queryClient);
+      },
+    );
 
-      // Background transition
-      transitionStatus
-        .mutateAsync({
-          id,
-          data: { targetStatus: TransitionArticleBodyTargetStatus.DIVIDING },
-        })
-        .then(() => {
-          invalidateArticleLists(queryClient);
-        })
-        .catch(() => {
-          showToast({ message: "상태 전환에 실패했어요. 새로고침해주세요.", type: "error" });
-          invalidateArticleAndLists(queryClient, id);
-        });
-    } catch (e: unknown) {
-      isActionInProgressRef.current = false;
-      const msg = e instanceof Error ? e.message : "저장에 실패했습니다.";
-      showToast({ message: msg, type: "error" });
-    }
-  }, [id, flushCoverSave, flushTitleSave, transitionStatus, queryClient, router, showToast]);
+    const returnPageIdx = returnPageIdxRef.current;
+    const returnBlockIdx = returnBlockIdxRef.current;
+    navigateAfterRemovingGuard(() => router.replace({
+      pathname: "/on-01a",
+      params: {
+        id,
+        mode: "dividing",
+        returnPage: String(returnPageIdx),
+        returnBlock: String(returnBlockIdx),
+      },
+    }));
+  }, [
+    cover,
+    flushCoverSave,
+    flushTitleSave,
+    id,
+    navigateAfterRemovingGuard,
+    queryClient,
+    router,
+    showToast,
+    title,
+    transitionStatus,
+  ]);
 
   const handleSaveTitle = useCallback(async () => {
     setTitleEditing(false);
@@ -558,6 +617,21 @@ export default function ClosingScreen() {
     }
     showToast({ message: "검토 단계를 거쳐 작성 단계로 이동할 수 있어요.", type: "info" });
   }, [showToast, handleStepBack]);
+
+  const handlePreventedRemoval = useCallback(() => {
+    if (isActionInProgressRef.current) return;
+    handleBack();
+  }, [handleBack]);
+
+  usePreventRemove(shouldPreventRemoval, handlePreventedRemoval);
+
+  useEffect(() => {
+    if (shouldPreventRemoval || !pendingNavigationRef.current) return;
+    const navigate = pendingNavigationRef.current;
+    pendingNavigationRef.current = null;
+    const timer = setTimeout(navigate, 0);
+    return () => clearTimeout(timer);
+  }, [shouldPreventRemoval]);
 
   useEffect(() => {
     if (Platform.OS !== "android") return;
@@ -608,7 +682,7 @@ export default function ClosingScreen() {
   if (!id || articleLoading) {
     return (
       <>
-        <Stack.Screen options={{ gestureEnabled: false }} />
+        <Stack.Screen options={{ gestureEnabled: true }} />
         <View style={[styles.container, { paddingTop: insets.top }]}>
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={Colors.zinc400} />
@@ -620,7 +694,7 @@ export default function ClosingScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ gestureEnabled: false }} />
+      <Stack.Screen options={{ gestureEnabled: true }} />
       <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <View style={styles.headerSide}>

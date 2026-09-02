@@ -265,6 +265,28 @@ export function patchArticleInRecordCaches(qc: QueryClient, id: string, patch: P
   });
 }
 
+/**
+ * Cancel older article reads before publishing a local transition snapshot.
+ * Query cancellation is initiated synchronously; navigation does not wait for
+ * the network or cancellation promise to settle.
+ */
+export function stageArticleTransitionSnapshot(
+  qc: QueryClient,
+  id: string,
+  patch: Partial<Article>,
+) {
+  void Promise.allSettled([
+    qc.cancelQueries({ queryKey: getGetArticleQueryKey(id), exact: true }),
+    qc.cancelQueries({ queryKey: getListArticlesQueryKey() }),
+  ]);
+  qc.setQueryData<Article>(
+    getGetArticleQueryKey(id),
+    (previous) => (previous ? { ...previous, ...patch } : previous),
+    { updatedAt: Date.now() },
+  );
+  patchArticleInRecordCaches(qc, id, patch);
+}
+
 /** Add a newly-created direct thought to the unfiltered record cache immediately. */
 export function insertThoughtInRecordCache(qc: QueryClient, thought: Thought) {
   qc.setQueryData<Thought[] | undefined>(getListThoughtsQueryKey(), (previous) => {
