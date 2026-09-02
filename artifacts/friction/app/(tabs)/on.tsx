@@ -92,8 +92,9 @@ import { useDateGroupVerticalSnap } from "@/hooks/useDateGroupVerticalSnap";
 import { getDateGroupCarouselHeight } from "@/lib/dateGroupCarousel";
 const FILTER_BUTTON_HEIGHT = 36;
 const VIEW_BUTTON_SIZE = 40;
-const FILTER_GRADIENT_OVERLAP = 40;
-const FILTER_BAR_HEIGHT = VIEW_BUTTON_SIZE + FILTER_GRADIENT_OVERLAP + 14;
+const FILTER_GRADIENT_HEIGHT = 64;
+const FILTER_GRADIENT_OVERLAP = 20;
+const FILTER_BAR_HEIGHT = 52;
 const CONTROL_VISIBILITY_SCROLL_THRESHOLD = 6;
 
 type CardRecord = UnifiedRecord & { isQuestion: boolean; questionIndex?: number };
@@ -967,9 +968,10 @@ export default function OnScreen() {
           colors={["rgba(255,255,255,1)", "rgba(255,255,255,0)"]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
-          style={styles.filters}
-          pointerEvents="box-none"
-        >
+          style={styles.filterGradient}
+          pointerEvents="none"
+        />
+        <View style={styles.filterControls} pointerEvents="box-none">
           <View style={styles.kindFilterGroup}>
             <RecordKindButton label="단상" active={kind === "thought"} onPress={() => setKind("thought")} />
             <RecordKindButton label="편집" active={kind === "editing"} onPress={() => setKind("editing")} />
@@ -989,7 +991,7 @@ export default function OnScreen() {
               onPress={() => setView("card")}
             />
           </View>
-        </Gradient>
+        </View>
       </Animated.View>
 
       {isLoading ? (
@@ -1179,8 +1181,9 @@ export default function OnScreen() {
 // hint: Logic changed on both sides. Requires understanding intent of each change.
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.white },
-  filtersAnimated: { height: FILTER_BAR_HEIGHT, overflow: "hidden", zIndex: 5, backgroundColor: "transparent" },
-  filters: { height: FILTER_BAR_HEIGHT, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: Spacing.screenPx, paddingTop: 4, paddingBottom: FILTER_GRADIENT_OVERLAP + 10, backgroundColor: "transparent" },
+  filtersAnimated: { height: FILTER_BAR_HEIGHT, overflow: "visible", zIndex: 5, backgroundColor: "transparent" },
+  filterGradient: { position: "absolute", top: 0, left: 0, right: 0, height: FILTER_GRADIENT_HEIGHT, backgroundColor: "transparent" },
+  filterControls: { height: FILTER_BAR_HEIGHT, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: Spacing.screenPx, backgroundColor: "transparent" },
   kindFilterGroup: { flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 1 },
   kindButton: { height: FILTER_BUTTON_HEIGHT, alignSelf: "flex-start", flexGrow: 0, flexShrink: 0 },
   kindButtonContent: { height: FILTER_BUTTON_HEIGHT, flexGrow: 0, flexShrink: 0, paddingHorizontal: 14, borderRadius: FILTER_BUTTON_HEIGHT / 2, borderWidth: 1, borderColor: Colors.zinc200, backgroundColor: Colors.white, alignItems: "center", justifyContent: "center" },
