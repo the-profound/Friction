@@ -1,7 +1,8 @@
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import {
   getGetArticleQueryKey,
+  getGetThoughtQueryKey,
   getGetThoughtQuestionQueueQueryKey,
   getListArticlesQueryKey,
   getListThoughtsQueryKey,
@@ -12,6 +13,7 @@ import {
   removeRecordFromCache,
   restoreRecordDeletion,
   restoreRecordListCaches,
+  seedRecordDetailCaches,
   setThoughtQuestionQueueCache,
   snapshotRecordDeletion,
   snapshotRecordListCaches,
@@ -33,6 +35,101 @@ describe("direct thought creation cache invalidation", () => {
       queryKey: getListThoughtsQueryKey(),
     });
     expect(invalidateQueries).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("record detail cache seeding", () => {
+  it("opens thought and every article stage from list snapshots while detail refreshes", async () => {
+    const queryClient = new QueryClient();
+    const thought = {
+      id: "thought-1",
+      content: "# 목록 단상\n\n바로 보이는 본문",
+      updatedAt: "2026-09-02T01:00:00.000Z",
+    };
+    const articles = ["DIVIDING", "CLOSING", "LETTER"].map((status, index) => ({
+      id: `article-${index}`,
+      title: `${status} 제목`,
+      content: `${status} 본문`,
+      status,
+      updatedAt: `2026-09-02T0${index + 2}:00:00.000Z`,
+    }));
+
+    seedRecordDetailCaches(queryClient, {
+      thoughts: [thought as never],
+      articles: articles as never,
+    });
+
+    let resolveDetail: ((value: typeof thought) => void) | undefined;
+    const observer = new QueryObserver(queryClient, {
+      queryKey: getGetThoughtQueryKey(thought.id),
+      queryFn: () => new Promise<typeof thought>((resolve) => {
+        resolveDetail = resolve;
+      }),
+      staleTime: 0,
+    });
+    const unsubscribe = observer.subscribe(() => {});
+
+    expect(observer.getCurrentResult()).toMatchObject({
+      data: thought,
+      isLoading: false,
+      isFetching: true,
+    });
+    for (const article of articles) {
+      expect(queryClient.getQueryData(getGetArticleQueryKey(article.id))).toEqual(article);
+    }
+
+    const newerThought = {
+      ...thought,
+      content: "# 서버 단상\n\n더 최신인 본문",
+      updatedAt: "2026-09-02T05:00:00.000Z",
+    };
+    resolveDetail?.(newerThought);
+    await vi.waitFor(() => {
+      expect(observer.getCurrentResult().data).toEqual(newerThought);
+    });
+    unsubscribe();
+  });
+
+  it("does not let an older or same-version list refresh replace newer detail state", () => {
+    const queryClient = new QueryClient();
+    const detailKey = getGetArticleQueryKey("article-1");
+    const current = {
+      id: "article-1",
+      title: "로컬 최신 제목",
+      content: "로컬 최신 본문",
+      status: "CLOSING",
+      updatedAt: "2026-09-02T05:00:00.000Z",
+    };
+    queryClient.setQueryData(detailKey, current);
+
+    seedRecordDetailCaches(queryClient, {
+      articles: [
+        { ...current, title: "오래된 목록 제목", updatedAt: "2026-09-02T04:00:00.000Z" },
+        { ...current, title: "같은 버전 목록 제목" },
+      ] as never,
+    });
+
+    expect(queryClient.getQueryData(detailKey)).toEqual(current);
+  });
+
+  it("updates a detail entry when the refreshed list snapshot is newer", () => {
+    const queryClient = new QueryClient();
+    const detailKey = getGetThoughtQueryKey("thought-1");
+    const older = {
+      id: "thought-1",
+      content: "이전 내용",
+      updatedAt: "2026-09-02T01:00:00.000Z",
+    };
+    const newer = {
+      ...older,
+      content: "목록에서 받은 최신 내용",
+      updatedAt: "2026-09-02T02:00:00.000Z",
+    };
+    queryClient.setQueryData(detailKey, older);
+
+    seedRecordDetailCaches(queryClient, { thoughts: [newer as never] });
+
+    expect(queryClient.getQueryData(detailKey)).toEqual(newer);
   });
 });
 

@@ -71,7 +71,7 @@ export default function ClosingScreen() {
   }>();
   const articleQuery = useGetArticle(id ?? "");
   const article = id ? articleQuery.data : undefined;
-  const articleLoading = id ? articleQuery.isLoading : false;
+  const articleLoading = id ? articleQuery.isLoading && !article : false;
 
   // AsyncStorage 복구 — (tabs)/on.tsx에서 재개할 때 라우트에 spaceId가 없는 경우를 처리한다.
   // contextReady: false인 동안 내보내기를 차단해 복구 완료 전에 export가 실행되는 것을 방지한다.
@@ -692,6 +692,43 @@ export default function ClosingScreen() {
     );
   }
 
+  if (!article) {
+    return (
+      <>
+        <Stack.Screen options={{ gestureEnabled: true }} />
+        <View style={[styles.container, { paddingTop: insets.top }]}>
+          <View style={styles.loadingContainer}>
+            <Feather name="alert-circle" size={30} color={Colors.zinc500} />
+            <Text style={styles.loadErrorTitle}>글을 열지 못했어요</Text>
+            <Text style={styles.loadErrorDescription}>
+              잠시 후 다시 시도하거나 이전 화면으로 돌아가세요.
+            </Text>
+            <View style={styles.loadErrorActions}>
+              <ScalePressable
+                style={styles.loadErrorButton}
+                contentStyle={styles.loadErrorButtonContent}
+                onPress={() => articleQuery.refetch()}
+                accessibilityRole="button"
+                accessibilityLabel="글 다시 불러오기"
+              >
+                <Text style={styles.loadErrorButtonText}>다시 시도</Text>
+              </ScalePressable>
+              <ScalePressable
+                style={styles.loadErrorButton}
+                contentStyle={styles.loadErrorButtonContent}
+                onPress={() => router.back()}
+                accessibilityRole="button"
+                accessibilityLabel="이전 화면으로 돌아가기"
+              >
+                <Text style={styles.loadErrorButtonText}>이전 화면</Text>
+              </ScalePressable>
+            </View>
+          </View>
+        </View>
+      </>
+    );
+  }
+
   return (
     <>
       <Stack.Screen options={{ gestureEnabled: true }} />
@@ -997,6 +1034,46 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+  },
+  loadErrorTitle: {
+    marginTop: 16,
+    ...Typography.bodySemiBold,
+    fontSize: 17,
+    color: Colors.zinc800,
+  },
+  loadErrorDescription: {
+    marginTop: 8,
+    ...Typography.body,
+    fontSize: 14,
+    lineHeight: 20,
+    color: Colors.zinc500,
+    textAlign: "center",
+  },
+  loadErrorActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 20,
+  },
+  loadErrorButton: {
+    width: 104,
+    height: 40,
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  loadErrorButtonContent: {
+    width: 104,
+    height: 40,
+    flexGrow: 0,
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 8,
+    backgroundColor: Colors.zinc100,
+  },
+  loadErrorButtonText: {
+    ...Typography.bodySemiBold,
+    fontSize: 14,
+    color: Colors.zinc700,
   },
   header: {
     flexDirection: "row",

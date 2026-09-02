@@ -224,7 +224,9 @@ export default function WritingScreen() {
   isThoughtModeRef.current = isThoughtMode;
 
   const dataLoading = !!id && !isLocalDirectDraft &&
-    (modeParam === "dividing" ? articleQuery.isLoading : thoughtQuery.isLoading);
+    (modeParam === "dividing"
+      ? articleQuery.isLoading && !article
+      : thoughtQuery.isLoading && !thought);
 
   // Mutations
   const updateArticle = useUpdateArticle();
@@ -2207,8 +2209,8 @@ export default function WritingScreen() {
 
   const hasLoadError = !isLocalDirectDraft && (
     isThoughtMode
-      ? thoughtQuery.isError || !thought
-      : articleQuery.isError || !article
+      ? !thought && thoughtQuery.isError
+      : !article && articleQuery.isError
   );
 
   if (hasLoadError) {

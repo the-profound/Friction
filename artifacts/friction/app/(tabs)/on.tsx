@@ -17,7 +17,6 @@ import { Feather } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  getGetArticleQueryKey,
   getGetThoughtQuestionQueueQueryKey,
   getListArticlesQueryKey,
   getListThoughtsQueryKey,
@@ -65,6 +64,7 @@ import {
   removeRecordFromCache,
   restoreRecordDeletion,
   restoreRecordListCaches,
+  seedRecordDetailCaches,
   setThoughtQuestionQueueCache,
   snapshotRecordDeletion,
   snapshotRecordListCaches,
@@ -369,10 +369,11 @@ export default function OnScreen() {
   const updateVisibility = useUpdateSpaceLetterVisibility();
 
   useEffect(() => {
-    for (const article of articlesQuery.data ?? []) {
-      queryClient.setQueryData(getGetArticleQueryKey(article.id), article);
-    }
-  }, [articlesQuery.data, queryClient]);
+    seedRecordDetailCaches(queryClient, {
+      articles: articlesQuery.data,
+      thoughts: thoughtsQuery.data,
+    });
+  }, [articlesQuery.data, queryClient, thoughtsQuery.data]);
 
   const spaceLetterByArticleId = useMemo<Map<string, SpaceLetter>>(() => {
     const map = new Map<string, SpaceLetter>();

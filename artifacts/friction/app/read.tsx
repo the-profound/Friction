@@ -187,7 +187,7 @@ export default function ReadScreen() {
 
   const articleQuery = useGetArticle(articleId);
   const article = articleId ? articleQuery.data : undefined;
-  const articleLoading = articleId ? articleQuery.isLoading : false;
+  const articleLoading = articleId ? articleQuery.isLoading && !article : false;
 
   const articleQuestionsQuery = useGetArticleQuestions(articleId, {
     query: { queryKey: getGetArticleQuestionsQueryKey(articleId), enabled: !!articleId },
@@ -204,11 +204,11 @@ export default function ReadScreen() {
   );
 
   useEffect(() => {
-    if (articleId && articleQuery.isError) {
+    if (articleId && articleQuery.isError && !article) {
       clearActiveSession();
       router.back();
     }
-  }, [articleId, articleQuery.isError, clearActiveSession, router]);
+  }, [article, articleId, articleQuery.isError, clearActiveSession, router]);
 
   const contentPages: string[] = useMemo(() => {
     if (!article) return [];

@@ -2,6 +2,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { QueryKey } from "@tanstack/react-query";
 import {
   getGetArticleQueryKey,
+  getGetThoughtQueryKey,
   getListArticlesQueryKey,
   getListThoughtsQueryKey,
   getGetThoughtQuestionQueueQueryKey,
@@ -38,6 +39,46 @@ export function invalidateArticleLists(qc: QueryClient) {
 
 export function invalidateThoughtLists(qc: QueryClient) {
   return qc.invalidateQueries({ queryKey: getListThoughtsQueryKey() });
+}
+
+type RecordDetailSnapshot = Article | Thought;
+
+function snapshotIsNewer(
+  incoming: RecordDetailSnapshot,
+  current: RecordDetailSnapshot | undefined,
+) {
+  if (!current) return true;
+  const incomingUpdatedAt = Date.parse(incoming.updatedAt);
+  const currentUpdatedAt = Date.parse(current.updatedAt);
+  if (!Number.isFinite(incomingUpdatedAt) || !Number.isFinite(currentUpdatedAt)) {
+    return false;
+  }
+  return incomingUpdatedAt > currentUpdatedAt;
+}
+
+/**
+ * Record lists already carry the complete title/body snapshot needed by their
+ * detail screens. Seed only missing or strictly older detail entries so list
+ * refreshes cannot replace an optimistic transition or in-progress local edit
+ * that still has the same server timestamp.
+ */
+export function seedRecordDetailCaches(
+  qc: QueryClient,
+  snapshots: {
+    articles?: readonly Article[];
+    thoughts?: readonly Thought[];
+  },
+) {
+  for (const article of snapshots.articles ?? []) {
+    qc.setQueryData<Article>(getGetArticleQueryKey(article.id), (current) =>
+      snapshotIsNewer(article, current) ? article : current,
+    );
+  }
+  for (const thought of snapshots.thoughts ?? []) {
+    qc.setQueryData<Thought>(getGetThoughtQueryKey(thought.id), (current) =>
+      snapshotIsNewer(thought, current) ? thought : current,
+    );
+  }
 }
 
 /** Direct thought creation appears in both the thought list and article-based views. */
