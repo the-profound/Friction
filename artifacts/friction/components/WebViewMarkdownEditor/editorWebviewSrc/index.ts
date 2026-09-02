@@ -2280,6 +2280,42 @@ function spellFindRange(
       syncKeyboardState();
     });
 
+    // 키보드가 닫힌 뒤 본문 컬럼의 빈 공간을 눌러도 바로 입력을
+    // 재개한다. 드래그 스크롤은 포커스를 띄우지 않도록 짧은 탭만
+    // 처리하고, 구분선 컨트롤/원본 연결 슬롯 같은 별도 UI는 제외한다.
+    let surfaceTouchStartX = 0;
+    let surfaceTouchStartY = 0;
+    const SURFACE_TAP_THRESHOLD = 10;
+    document.addEventListener("touchstart", function (e) {
+      const t = e.touches[0];
+      if (!t) return;
+      surfaceTouchStartX = t.clientX;
+      surfaceTouchStartY = t.clientY;
+    }, { passive: true });
+
+    document.addEventListener("touchend", function (e) {
+      if (keyboardOpen || !editor || editor.isDestroyed) return;
+      const t = e.changedTouches[0];
+      if (!t) return;
+      const dx = Math.abs(t.clientX - surfaceTouchStartX);
+      const dy = Math.abs(t.clientY - surfaceTouchStartY);
+      if (dx >= SURFACE_TAP_THRESHOLD || dy >= SURFACE_TAP_THRESHOLD) return;
+
+      const target = e.target;
+      if (!(target instanceof Element)) return;
+      if (
+        target.closest(
+          "#title-input, #source-article-slot, .hr-wrapper, button, input, textarea, select, a, [role='button']",
+        )
+      ) {
+        return;
+      }
+
+      try {
+        editor.commands.focus();
+      } catch {}
+    }, { passive: true });
+
     let swipeStartY = 0;
     let swipeDismissed = false;
     const SWIPE_THRESHOLD = 48;

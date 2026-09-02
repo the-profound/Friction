@@ -420,3 +420,23 @@ describe("on-01a photo removal regression", () => {
     expect(screen).toContain("onSelectQuote={handleSelectQuoteFromAddMenu}");
   });
 });
+
+describe("on-01a keyboard reactivation", () => {
+  it("focuses the editor from blank writing-surface taps without treating a drag as a tap", () => {
+    const screen = readScreen();
+    const nativeEditorSource = readEditorSource();
+
+    expect(screen).toContain("onTouchStart={handleEditorSurfaceTouchStart}");
+    expect(screen).toContain("onTouchMove={handleEditorSurfaceTouchMove}");
+    expect(screen).toContain("onTouchEnd={handleEditorSurfaceTouch}");
+    expect(screen).toContain("editorSurfaceTouchMovedRef.current");
+    expect(screen).toContain("selectionState.activeBlock === \"horizontalRule\"");
+    expect(screen).toContain("editorRef.current?.focus()");
+
+    expect(nativeEditorSource).toContain("const SURFACE_TAP_THRESHOLD = 10");
+    expect(nativeEditorSource).toContain("if (keyboardOpen || !editor || editor.isDestroyed) return");
+    expect(nativeEditorSource).toContain("dx >= SURFACE_TAP_THRESHOLD || dy >= SURFACE_TAP_THRESHOLD");
+    expect(nativeEditorSource).toContain("#title-input, #source-article-slot, .hr-wrapper");
+    expect(nativeEditorSource).toContain("editor.commands.focus()");
+  });
+});

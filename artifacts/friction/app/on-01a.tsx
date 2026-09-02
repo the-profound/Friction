@@ -12,6 +12,7 @@ import {
   BackHandler,
   AppState,
   useWindowDimensions,
+  type GestureResponderEvent,
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -235,6 +236,8 @@ export default function WritingScreen() {
 
   const editorRef = useRef<WebViewMarkdownEditorRef>(null);
   const addMenuBtnRef = useRef<View>(null);
+  const editorSurfaceTouchStartRef = useRef({ x: 0, y: 0 });
+  const editorSurfaceTouchMovedRef = useRef(false);
 
   // ── 모드 ──────────────────────────────────────────────────────────────────
   const [mode, setMode] = useState<EditorMode>(
@@ -1799,6 +1802,36 @@ export default function WritingScreen() {
     }
   }, [flushLatestEditorSnapshot]);
 
+  // 키보드가 닫힌 뒤 에디터 주변의 빈 영역을 눌러도 바로 다시 입력을
+  // 시작할 수 있게 한다. 헤더/툴바는 이 영역 바깥에 있고, 구분선 조작
+  // 중에는 WebView가 자체적으로 터치를 처리하므로 포커스를 빼앗지 않는다.
+  const handleEditorSurfaceTouchStart = useCallback((event: GestureResponderEvent) => {
+    const { pageX, pageY } = event.nativeEvent;
+    editorSurfaceTouchStartRef.current = { x: pageX, y: pageY };
+    editorSurfaceTouchMovedRef.current = false;
+  }, []);
+
+  const handleEditorSurfaceTouchMove = useCallback((event: GestureResponderEvent) => {
+    const { pageX, pageY } = event.nativeEvent;
+    const start = editorSurfaceTouchStartRef.current;
+    if (Math.abs(pageX - start.x) >= 10 || Math.abs(pageY - start.y) >= 10) {
+      editorSurfaceTouchMovedRef.current = true;
+    }
+  }, []);
+
+  const handleEditorSurfaceTouch = useCallback(() => {
+    if (
+      editorSurfaceTouchMovedRef.current
+      || keyboardVisible
+      || !editorReady
+      || isNavigatingRef.current
+      || selectionState.activeBlock === "horizontalRule"
+    ) {
+      return;
+    }
+    editorRef.current?.focus();
+  }, [editorReady, keyboardVisible, selectionState.activeBlock]);
+
   const handleInsertDivider = useCallback(() => {
     editorRef.current?.insertDivider();
   }, []);
@@ -2348,6 +2381,9 @@ export default function WritingScreen() {
         <KeyboardAvoidingView
           style={styles.editorOuter}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
+          onTouchStart={handleEditorSurfaceTouchStart}
+          onTouchMove={handleEditorSurfaceTouchMove}
+          onTouchEnd={handleEditorSurfaceTouch}
         >
           <View style={[styles.editorInner, { width: containerWidth }]}>
             {/*
