@@ -1,5 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { Colors, Typography } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
 
@@ -16,6 +17,7 @@ const STAGE_ORDER: Record<WritingStage, number> = {
   DIVIDING: 1,
   CLOSING: 2,
 };
+const Gradient = LinearGradient as unknown as React.ComponentType<any>;
 
 interface WritingStateBarProps {
   current: WritingStage;
@@ -37,7 +39,12 @@ export default function WritingStateBar({
   const currentOrder = STAGE_ORDER[current];
 
   return (
-    <View style={styles.bar}>
+    <Gradient
+      colors={["rgba(255,255,255,1)", "rgba(255,255,255,0)"]}
+      start={{ x: 0.5, y: 0 }}
+      end={{ x: 0.5, y: 1 }}
+      style={styles.bar}
+    >
       {tabs.map(({ stage, label }) => {
         const isCurrent = stage === current;
         const targetOrder = STAGE_ORDER[stage];
@@ -71,7 +78,7 @@ export default function WritingStateBar({
           </ScalePressable>
         );
       })}
-    </View>
+    </Gradient>
   );
 }
 
@@ -80,7 +87,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 2,
-    backgroundColor: Colors.zinc100,
+    backgroundColor: "transparent",
     borderRadius: 10,
     padding: 3,
   },
