@@ -7,7 +7,6 @@ import Animated, {
   Easing,
 } from "react-native-reanimated";
 import { MaterialCommunityIcons, Feather } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import ScalePressable from "@/components/shared/ScalePressable";
 import type { OnSelectionUpdatePayload } from "@/components/WebViewMarkdownEditor/types";
 import type { InlineMenuMode } from "@/components/InlineMenuPanel/InlineMenuPanel";
@@ -35,7 +34,6 @@ const ROUND_BTN_COUNT = 6;
 // 애니 영역 폭: B + I + U + 인용 버튼 4개, 각 36px, 사이 gap 2px × 3 + trailing padding 2px
 const EXPANDED_BTN_W = 36;
 const EXPANDED_GROUP_W = EXPANDED_BTN_W * 4 + BTN_GAP * 3 + BTN_GAP; // 152
-const Gradient = LinearGradient as unknown as React.ComponentType<any>;
 
 function calcBtnW(scrollAreaWidth: number): number {
   if (scrollAreaWidth <= 0) return 36;
@@ -131,12 +129,7 @@ export default function MemoToolbar({
 
   return (
     <View style={styles.outerWrap}>
-      <Gradient
-        colors={["rgba(255,255,255,1)", "rgba(255,255,255,0)"]}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={styles.capsule}
-      >
+      <View style={styles.capsule}>
         {/* ── 스크롤 가능한 버튼 영역 ── */}
         <ScrollView
           ref={scrollViewRef}
@@ -300,7 +293,7 @@ export default function MemoToolbar({
         >
           <MaterialCommunityIcons name="keyboard-off-outline" size={20} color="#3f3f46" />
         </ScalePressable>
-      </Gradient>
+      </View>
     </View>
   );
 }
@@ -312,7 +305,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   capsule: {
-    backgroundColor: "transparent",
+    backgroundColor: "#ffffff",
     borderRadius: 24,
     flexDirection: "row",
     alignItems: "center",
