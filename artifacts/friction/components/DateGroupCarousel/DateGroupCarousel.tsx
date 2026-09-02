@@ -120,7 +120,7 @@ export function DateGroupCarousel<T>({
     setActiveIndex((current) => current === nextIndex ? current : nextIndex);
     if (shouldReset) {
       snapToRef.current(nextIndex);
-      nativeScrollRef.current?.scrollTo({ x: nextIndex * snapInterval, animated: true });
+      nativeScrollRef.current?.scrollTo({ x: nextIndex * snapInterval, animated: false });
     } else {
       translateX.setValue(getBaseX(nextIndex));
       nativeScrollRef.current?.scrollTo({ x: nextIndex * snapInterval, animated: false });

@@ -420,7 +420,10 @@ export default function OnScreen() {
     setKind("thought");
     setView("card");
     setRecordResetVersion(tabReselectVersion.ON);
-  }, [tabReselectVersion.ON]);
+    if (!questionQuery.isLoading) {
+      questionQuery.refetch();
+    }
+  }, [tabReselectVersion.ON]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setOverlayLetter(null);
