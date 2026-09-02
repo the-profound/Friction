@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Feather } from "@expo/vector-icons";
 import {
   LayoutChangeEvent,
   StyleSheet,
@@ -31,6 +32,8 @@ interface ArticleCardCoverProps {
   collectionName?: string | null;
   date?: string | null;
   letterTypeBadge?: string | null;
+  /** When 'RECIPIENT_ONLY', renders a 👥 badge on the cover. No badge for 'PUBLIC' or when omitted. */
+  visibility?: string | null;
   width?: number;
   height?: number;
   borderRadius?: number;
@@ -57,6 +60,7 @@ export default function ArticleCardCover({
   collectionName,
   date,
   letterTypeBadge,
+  visibility,
   width,
   height,
   borderRadius = 16,
@@ -286,6 +290,23 @@ export default function ArticleCardCover({
             {date}
           </Text>
         ) : null}
+
+        {visibility === "RECIPIENT_ONLY" ? (
+          <View
+            style={[
+              styles.visibilityBadge,
+              !presentation.isImageRendered && {
+                backgroundColor: `${textColor}22`,
+              },
+            ]}
+          >
+            <Feather
+              name="users"
+              size={Math.max(8, Math.round(11 * scale))}
+              color={textColor}
+            />
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -333,5 +354,14 @@ const styles = StyleSheet.create({
     position: "absolute",
     fontFamily: ReaderTokens.fontFamily.sans,
     letterSpacing: 0.1,
+  },
+  visibilityBadge: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+    backgroundColor: "rgba(0,0,0,0.28)",
+    borderRadius: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 3,
   },
 });

@@ -23,6 +23,8 @@ interface ArticleCardItemProps {
   cardWidth?: number;
   letterTypeBadge?: string | null;
   date?: string | null;
+  /** When 'RECIPIENT_ONLY', the cover shows a 👥 badge. No badge for 'PUBLIC' or when omitted. */
+  visibility?: string | null;
   /** Limits shadow strength when the card sits inside a clipped date carousel. */
   carouselShadow?: boolean;
   /**
@@ -99,6 +101,7 @@ function ArticleCardItem({
   cardWidth,
   letterTypeBadge,
   date,
+  visibility,
   carouselShadow = false,
   shadowProgress,
   onImageReady,
@@ -134,6 +137,7 @@ function ArticleCardItem({
           collectionName={collectionName}
           letterTypeBadge={letterTypeBadge}
           date={date}
+          visibility={visibility}
           width={w}
           height={h}
           borderRadius={borderRadius}

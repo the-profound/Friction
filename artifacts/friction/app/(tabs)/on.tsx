@@ -1,3 +1,4 @@
+// hint: Logic changed on both sides. Requires understanding intent of each change.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
@@ -18,6 +19,7 @@ import {
   getGetThoughtQuestionQueueQueryKey,
   getListArticlesQueryKey,
   getListThoughtsQueryKey,
+  getListUserSpaceLettersQueryKey,
   useAddArticleToMyCollection,
   useDeleteArticle,
   useDeleteThought,
@@ -25,12 +27,18 @@ import {
   useListArticles,
   useListMyCollections,
   useListThoughts,
+  useListUserSpaceLetters,
+  useUpdateSpaceLetterVisibility,
   useActivateThoughtQuestion,
   useRefreshThoughtQuestionQueue,
+  SpaceLetterVisibility,
+  type Article,
   type MyCollection,
+  type SpaceLetter,
   type Thought,
 } from "@workspace/api-client-react";
 import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
+import CardSelectOverlay, { type ChainArticleMeta, type OriginLayout } from "@/components/CardSelectOverlay/CardSelectOverlay";
 import DropdownFilter from "@/components/DropdownFilter/DropdownFilter";
 import type { DropdownOption } from "@/components/DropdownFilter/DropdownFilter";
 import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar";
@@ -129,12 +137,15 @@ function relativeDate(value: string): string {
   return `${date.getMonth() + 1}/${date.getDate()}`;
 }
 
+// hint: Structural and logic conflict. Both design and behavior differ.
+// hint: Structural and logic conflict. Both design and behavior differ.
 function RecordSourceCard({
   record,
   question = false,
   questionIndex,
   width,
   height: suppliedHeight,
+  letterVisibility,
   onPress,
   onLongPress,
 }: {
@@ -143,6 +154,7 @@ function RecordSourceCard({
   questionIndex?: number;
   width: number;
   height?: number;
+  letterVisibility?: string | null;
   onPress: () => void;
   onLongPress?: () => void;
 }) {
@@ -185,6 +197,7 @@ function RecordSourceCard({
           cover={record.article.cover}
           cardWidth={width}
           carouselShadow={true}
+          visibility={letterVisibility}
           onPress={onPress}
           onLongPress={onLongPress}
         />
@@ -348,6 +361,17 @@ function RecordRow({
   );
 }
 
+// hint: Logic changed on both sides. Requires understanding intent of each change.
+// hint: Logic changed on both sides. Requires understanding intent of each change.
+// hint: Logic changed on both sides. Requires understanding intent of each change.
+// hint: Logic changed on both sides. Requires understanding intent of each change.
+// hint: Logic changed on both sides. Requires understanding intent of each change.
+// hint: Logic changed on both sides. Requires understanding intent of each change.
+// hint: Logic changed on both sides. Requires understanding intent of each change.
+// hint: Logic changed on both sides. Requires understanding intent of each change.
+// hint: Logic changed on both sides. Requires understanding intent of each change.
+// hint: Logic changed on both sides. Requires understanding intent of each change.
+// hint: Logic changed on both sides. Requires understanding intent of each change.
 export default function OnScreen() {
   const router = useRouter();
   const { tabReselectVersion } = useNavigation();
@@ -372,6 +396,17 @@ export default function OnScreen() {
   const [archiveArticleId, setArchiveArticleId] = useState<string | null>(null);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
+  // Letter overlay — opened when the user taps a letter card.
+  const [overlayLetter, setOverlayLetter] = useState<Article | null>(null);
+  const [overlayOriginLayout, setOverlayOriginLayout] = useState<OriginLayout | null>(null);
+  const [isOverlaySourceHidden, setIsOverlaySourceHidden] = useState(false);
+  // Pending visibility change waiting for user confirmation.
+  const [visibilityConfirmTarget, setVisibilityConfirmTarget] = useState<{
+    spaceId: string;
+    spaceLetterId: string;
+    newVisibility: "PUBLIC" | "RECIPIENT_ONLY";
+  } | null>(null);
+  const [isChangingVisibility, setIsChangingVisibility] = useState(false);
   // Refresh and activation mutate the same server-owned FIFO queue. Keep one
   // synchronous guard so a late response can never replace a newer snapshot.
   const questionQueueMutationPendingRef = useRef(false);
@@ -388,6 +423,9 @@ export default function OnScreen() {
   }, [tabReselectVersion.ON]);
 
   useEffect(() => {
+    setOverlayLetter(null);
+    setOverlayOriginLayout(null);
+    setIsOverlaySourceHidden(false);
   }, [kind, view]);
 
   useFocusEffect(
@@ -411,12 +449,24 @@ export default function OnScreen() {
   const activateQuestion = useActivateThoughtQuestion();
   const refreshQuestion = useRefreshThoughtQuestionQueue();
   const addToCollection = useAddArticleToMyCollection();
+  const spaceLettersQuery = useListUserSpaceLetters(userId ?? "", {
+    query: { enabled: Boolean(userId) },
+  });
+  const updateVisibility = useUpdateSpaceLetterVisibility();
 
   useEffect(() => {
     for (const article of articlesQuery.data ?? []) {
       queryClient.setQueryData(getGetArticleQueryKey(article.id), article);
     }
   }, [articlesQuery.data, queryClient]);
+
+  const spaceLetterByArticleId = useMemo<Map<string, SpaceLetter>>(() => {
+    const map = new Map<string, SpaceLetter>();
+    for (const sl of (spaceLettersQuery.data ?? []) as SpaceLetter[]) {
+      if (sl.sourceArticleId) map.set(sl.sourceArticleId, sl);
+    }
+    return map;
+  }, [spaceLettersQuery.data]);
 
   const queuedIds = useMemo(
     () => getQueuedThoughtIds(
@@ -686,50 +736,127 @@ export default function OnScreen() {
     }
   }, [addToCollection, archiveArticleId, isArchiving, queryClient, router, selectedCollectionId, showToast, sortedCollections]);
 
+  const handleVisibilityToggle = useCallback((articleId: string) => {
+    const sl = spaceLetterByArticleId.get(articleId);
+    if (!sl) return;
+    const newVisibility = sl.visibility === SpaceLetterVisibility.PUBLIC
+      ? SpaceLetterVisibility.RECIPIENT_ONLY
+      : SpaceLetterVisibility.PUBLIC;
+    setVisibilityConfirmTarget({ spaceId: sl.spaceId, spaceLetterId: sl.id, newVisibility });
+  }, [spaceLetterByArticleId]);
+
+  const confirmVisibilityChange = useCallback(async () => {
+    if (!visibilityConfirmTarget || isChangingVisibility) return;
+    setIsChangingVisibility(true);
+    const { spaceId, spaceLetterId, newVisibility } = visibilityConfirmTarget;
+    try {
+      await updateVisibility.mutateAsync({ id: spaceId, letterId: spaceLetterId, data: { visibility: newVisibility } });
+      if (userId) await queryClient.invalidateQueries({ queryKey: getListUserSpaceLettersQueryKey(userId) });
+      invalidateArticleLists(queryClient);
+      setVisibilityConfirmTarget(null);
+      showToast({
+        message: newVisibility === SpaceLetterVisibility.PUBLIC
+          ? "전체 공개로 변경했어요."
+          : "수신자 공개로 변경했어요. 프로필 페이지에서 사라집니다.",
+        type: "success",
+      });
+    } catch {
+      showToast({ message: "변경에 실패했습니다. 다시 시도해주세요.", type: "error" });
+    } finally {
+      setIsChangingVisibility(false);
+    }
+  }, [visibilityConfirmTarget, isChangingVisibility, updateVisibility, queryClient, userId, showToast]);
+
   const isLoading =
     (articlesQuery.isLoading && !articlesQuery.data) ||
     (thoughtsQuery.isLoading && !thoughtsQuery.data) ||
     (questionQuery.isLoading && !questionQuery.data);
   const emptyTitle = kind === "thought" ? "첫 단상을 남겨보세요" : kind === "editing" ? "편집 중인 글이 없어요" : "아직 내보낸 편지가 없어요";
-  const renderRecordCard = useCallback((record: CardRecord, shouldIgnorePress: () => boolean, cardHeight: number) => (
-    <View style={styles.recordCardFrame}>
-      {record.kind === "thought" ? (
-        <RecordSourceCard
-          record={record}
-          question={record.isQuestion}
-          questionIndex={record.questionIndex}
-          width={cardWidth}
-          height={cardHeight}
-          onPress={() => {
-            if (!shouldIgnorePress()) {
-              record.isQuestion ? openQuestion(record.thought) : openRecord(record);
-            }
-          }}
-          onLongPress={record.isQuestion ? undefined : () => {
-            if (!shouldIgnorePress()) requestRecordDeletion(record);
-          }}
-        />
-      ) : (
-        <RecordSourceCard
-          record={record}
-          width={cardWidth}
-          height={cardHeight}
-          onPress={() => {
-            if (!shouldIgnorePress()) openRecord(record);
-          }}
-          onLongPress={() => {
-            if (!shouldIgnorePress()) {
-              if (record.kind === "letter") {
-                setLetterActionTarget(record);
-              } else {
-                requestRecordDeletion(record);
+  const overlayLetterChain = useMemo<(Article | null)[]>(
+    () => (overlayLetter ? [overlayLetter] : []),
+    [overlayLetter],
+  );
+  const overlayMetaChain = useMemo<ChainArticleMeta[]>(
+    () => overlayLetter ? [{
+      authorName: overlayLetter.authorNickname ?? null,
+      authorId: overlayLetter.authorId ?? null,
+      collectionName: overlayLetter.collectionName ?? null,
+      collectionId: overlayLetter.collectionId ?? null,
+      date: overlayLetter.letterAt ?? overlayLetter.createdAt ?? null,
+    }] : [],
+    [overlayLetter],
+  );
+  const handleOverlayRead = useCallback((_index: number) => {
+    if (!overlayLetter) return;
+    const articleId = overlayLetter.id;
+    setIsOverlaySourceHidden(false);
+    setOverlayLetter(null);
+    setOverlayOriginLayout(null);
+    startFadeToBlack(() => router.push({ pathname: "/read", params: { articleId, mode: "re_read" } }));
+  }, [overlayLetter, startFadeToBlack, router]);
+
+  const renderRecordCard = useCallback((
+    record: CardRecord,
+    shouldIgnorePress: () => boolean,
+    measureOrigin: (cb: (layout: OriginLayout) => void) => void,
+    cardHeight: number,
+  ) => {
+    const letterSpaceLetter = record.kind === "letter" ? spaceLetterByArticleId.get(record.article.id) : undefined;
+    const letterVisibility = letterSpaceLetter?.visibility ?? undefined;
+    const isOverlaySource = record.kind === "letter" && record.article.id === overlayLetter?.id;
+    return (
+      <View style={[styles.recordCardFrame, isOverlaySource && isOverlaySourceHidden && styles.recordCardHidden]}>
+        {record.kind === "thought" ? (
+          <RecordSourceCard
+            record={record}
+            question={record.isQuestion}
+            questionIndex={record.questionIndex}
+            width={cardWidth}
+            height={cardHeight}
+            onPress={() => {
+              if (!shouldIgnorePress()) {
+                record.isQuestion ? openQuestion(record.thought) : openRecord(record);
               }
-            }
-          }}
-        />
-      )}
-    </View>
-  ), [cardWidth, openQuestion, openRecord, requestRecordDeletion]);
+            }}
+            onLongPress={record.isQuestion ? undefined : () => {
+              if (!shouldIgnorePress()) requestRecordDeletion(record);
+            }}
+          />
+        ) : (
+          <RecordSourceCard
+            record={record}
+            width={cardWidth}
+            height={cardHeight}
+            letterVisibility={letterVisibility}
+            onPress={() => {
+              if (!shouldIgnorePress()) {
+                if (record.kind === "letter") {
+                  measureOrigin((layout) => {
+                    setOverlayOriginLayout(layout);
+                    setOverlayLetter(record.article);
+                  });
+                } else {
+                  openRecord(record);
+                }
+              }
+            }}
+            onLongPress={() => {
+              if (!shouldIgnorePress()) {
+                if (record.kind === "letter") {
+                  setLetterActionTarget(record);
+                } else {
+                  requestRecordDeletion(record);
+                }
+              }
+            }}
+          />
+        )}
+      </View>
+    );
+  }, [
+    cardWidth, openQuestion, openRecord, requestRecordDeletion,
+    overlayLetter, isOverlaySourceHidden, spaceLetterByArticleId,
+  ]);
 
   return (
     <View style={styles.container}>
@@ -780,7 +907,7 @@ export default function OnScreen() {
           <FlatList
             ref={recordListRef}
             data={cardGroups}
-            extraData={recordResetVersion}
+            extraData={`${recordResetVersion}:${overlayLetter?.id ?? ""}:${isOverlaySourceHidden ? "1" : "0"}:${spaceLetterByArticleId.size}`}
             nestedScrollEnabled
             keyExtractor={(group) => group.dateKey}
             renderItem={({ item, index }) => {
@@ -795,7 +922,7 @@ export default function OnScreen() {
                     cardWidth={cardWidth}
                     cardHeight={cardHeight}
                     resetKey={index === 0 ? `${cardMixSeed}:${recordResetVersion}${queuedQuestionRecords.length > 0 ? ":q" : ""}` : cardMixSeed}
-                    renderCard={(record, context) => renderRecordCard(record, context.shouldIgnorePress, cardHeight)}
+                    renderCard={(record, context) => renderRecordCard(record, context.shouldIgnorePress, context.measureOrigin, cardHeight)}
                     shouldIgnoreVerticalPress={scrollPressGuard.shouldIgnoreVerticalPress}
                   />
                 </View>
@@ -851,6 +978,48 @@ export default function OnScreen() {
         </RefreshableEmpty>
       )}
 
+      {(() => {
+        const sl = overlayLetter ? spaceLetterByArticleId.get(overlayLetter.id) : undefined;
+        const isAnon = sl?.displayName != null;
+        const isPub = sl ? sl.visibility === SpaceLetterVisibility.PUBLIC : true;
+        const disabled = isAnon || sl == null;
+        return (
+          <CardSelectOverlay
+            articles={overlayLetterChain}
+            metas={overlayMetaChain}
+            initialIndex={0}
+            originLayout={overlayOriginLayout}
+            onClose={() => {
+              setIsOverlaySourceHidden(false);
+              setOverlayLetter(null);
+              setOverlayOriginLayout(null);
+            }}
+            onRead={handleOverlayRead}
+            onReady={() => setIsOverlaySourceHidden(true)}
+            visibilityButton={overlayLetter ? {
+              icon: (disabled || !isPub ? "users" : "globe") as React.ComponentProps<typeof Feather>["name"],
+              label: isAnon ? "수신자 공개" : isPub ? "전체 공개" : "수신자 공개",
+              disabled,
+              onPress: () => { if (overlayLetter) handleVisibilityToggle(overlayLetter.id); },
+            } : null}
+          />
+        );
+      })()}
+      <ConfirmModal
+        visible={Boolean(visibilityConfirmTarget)}
+        title={visibilityConfirmTarget?.newVisibility === SpaceLetterVisibility.RECIPIENT_ONLY
+          ? "수신자 공개로 변경하시겠습니까?"
+          : "전체 공개로 변경하시겠습니까?"}
+        description={visibilityConfirmTarget?.newVisibility === SpaceLetterVisibility.RECIPIENT_ONLY
+          ? "변경하면 이 편지가 프로필 페이지에서 사라집니다."
+          : "변경하면 이 편지가 프로필 페이지에 다시 표시됩니다."}
+        confirmLabel="변경"
+        cancelLabel="취소"
+        confirmDisabled={isChangingVisibility}
+        cancelDisabled={isChangingVisibility}
+        onConfirm={confirmVisibilityChange}
+        onCancel={() => { if (!isChangingVisibility) setVisibilityConfirmTarget(null); }}
+      />
       <ActionSheetModal
         visible={Boolean(letterActionTarget)}
         actions={[
@@ -910,6 +1079,7 @@ export default function OnScreen() {
   );
 }
 
+// hint: Logic changed on both sides. Requires understanding intent of each change.
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.white },
   filterRow: { flexDirection: "row", alignItems: "flex-start", paddingHorizontal: Spacing.screenPx, gap: 8, paddingTop: 6, paddingBottom: 10 },
@@ -919,6 +1089,7 @@ const styles = StyleSheet.create({
   recordGroupList: {},
   recordListViewport: { flex: 1 },
   recordCardFrame: { flex: 1, alignItems: "center" },
+  recordCardHidden: { opacity: 0 },
   // Keep the press wrapper transparent: only the animated content surface
   // should own the card geometry and shadow, so the shadow scales with it.
   thoughtCard: { flexGrow: 0, flexShrink: 0 },
@@ -954,6 +1125,23 @@ const styles = StyleSheet.create({
   archiveButton: { height: 48, marginTop: 12 },
   archiveButtonContent: { height: 48, borderRadius: 12, backgroundColor: Colors.zinc900, alignItems: "center", justifyContent: "center" },
   disabled: { opacity: 0.4 },
+  // Letter selection mode
+  cardSelectedBorder: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: Colors.zinc900,
+  },
+  letterActionContentDisabled: {
+    opacity: 0.45,
+  },
+  letterActionTextDisabled: {
+    color: Colors.zinc400,
+  },
 });
 
 function getRecordCardHeight(_record: UnifiedRecord, width: number): number {

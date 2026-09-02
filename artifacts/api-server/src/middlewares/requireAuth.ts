@@ -72,3 +72,19 @@ export function createRequireAuth({
 };
 
 export const requireAuth = createRequireAuth();
+
+/**
+ * Resolves the caller's user ID from a Bearer token without rejecting the
+ * request when auth is missing or invalid. Use this for endpoints that are
+ * public but grant extra data to authenticated owners.
+ */
+export async function resolveCallerId(req: { headers: { authorization?: string } }): Promise<string | null> {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith("Bearer ")) return null;
+  try {
+    const { data } = await supabase.auth.getUser(authHeader.slice(7));
+    return data.user?.id ?? null;
+  } catch {
+    return null;
+  }
+}

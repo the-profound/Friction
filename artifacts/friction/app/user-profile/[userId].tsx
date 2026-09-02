@@ -33,6 +33,7 @@ import {
   useCreateNeighborRequest,
   useDeleteNeighborRequest,
   useRemoveNeighbor,
+  useListUserSpaceLetters,
 } from "@workspace/api-client-react";
 import type {
   Article,
@@ -62,6 +63,10 @@ const GRID_PAD = 12;
 const GRID_GAP = 4;
 const GRID_COLS = 3;
 
+// hint: Logic changed on both sides. Requires understanding intent of each change.
+// hint: Logic changed on both sides. Requires understanding intent of each change.
+// hint: Logic changed on both sides. Requires understanding intent of each change.
+// hint: Logic changed on both sides. Requires understanding intent of each change.
 export default function UserProfileScreen() {
   const insets = useSafeAreaInsets();
   const navBottom = useNavBarBottomSafeArea();
@@ -88,6 +93,13 @@ export default function UserProfileScreen() {
   const sendRecordsQuery = useListSendRecords({ senderId: profileUserId });
   const neighborsQuery = useListNeighbors({ userId: currentUserId });
   const sentRequestsQuery = useListNeighborRequests({ requesterId: currentUserId });
+  // Fetch PUBLIC space letters for this profile user to filter out RECIPIENT_ONLY
+  // letters from the letter grid. Task 1 made the server filter them, but we also
+  // cross-reference here so cache invalidation after a visibility change in on.tsx
+  // immediately refreshes this tab too.
+  const profileSpaceLettersQuery = useListUserSpaceLetters(profileUserId ?? "", {
+    query: { enabled: Boolean(profileUserId) },
+  });
 
   const createNeighborRequest = useCreateNeighborRequest();
   const deleteNeighborRequest = useDeleteNeighborRequest();
@@ -139,16 +151,34 @@ export default function UserProfileScreen() {
   const displayName = user?.nickname?.trim() || "이름 없음";
   const handle = user?.nickname?.trim() ? `@${user.nickname.trim()}` : "";
 
+  // Set of article IDs that are PUBLIC space letters for this profile user.
+  // The server already filters RECIPIENT_ONLY letters from this endpoint (Task 1),
+  // but we cross-reference here so a visibility change in on.tsx (which invalidates
+  // this query key) immediately removes the letter from this view via cache update.
+  const publicSpaceLetterArticleIds = useMemo<Set<string>>(() => {
+    const ids = new Set<string>();
+    for (const sl of profileSpaceLettersQuery.data ?? []) {
+      if (sl.sourceArticleId) ids.add(sl.sourceArticleId);
+    }
+    return ids;
+  }, [profileSpaceLettersQuery.data]);
+
   const letters = useMemo<Article[]>(() => {
-    const list = (articlesQuery.data ?? []).filter(
-      (a) => a.status === "LETTER" && sendRecordByArticleId[a.id] !== undefined,
+    const list = ((articlesQuery.data ?? []) as Article[]).filter(
+      (a) =>
+        a.status === "LETTER" &&
+        sendRecordByArticleId[a.id] !== undefined &&
+        // Client-side guard: only show PUBLIC space letters. Handles the case
+        // where the cache updates after a visibility change in on.tsx before
+        // the next articlesQuery refetch cleans up the article list.
+        (publicSpaceLetterArticleIds.size === 0 || publicSpaceLetterArticleIds.has(a.id)),
     );
     return [...list].sort((a, b) => {
       const slotA = sendRecordByArticleId[a.id]?.deliverySlot ?? "";
       const slotB = sendRecordByArticleId[b.id]?.deliverySlot ?? "";
       return slotB.localeCompare(slotA);
     });
-  }, [articlesQuery.data, sendRecordByArticleId]);
+  }, [articlesQuery.data, sendRecordByArticleId, publicSpaceLetterArticleIds]);
 
   const spaces = useMemo<SpaceListItem[]>(() => {
     return ((spacesQuery.data ?? []) as SpaceListItem[]).filter(
@@ -448,6 +478,7 @@ export default function UserProfileScreen() {
                       }
                       collectionName={itemCollectionName}
                       cover={article.cover}
+                      visibility="PUBLIC"
                       isActive
                       onPress={() => handleLetterPress(article)}
                     />

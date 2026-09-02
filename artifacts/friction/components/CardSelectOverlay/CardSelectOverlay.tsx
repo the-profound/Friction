@@ -148,6 +148,17 @@ interface CardSelectOverlayProps {
    * animation when the user taps "개봉하기".
    */
   envelopeInfo?: EnvelopeInfo | null;
+  /**
+   * When provided and the item is not a sealed envelope, renders a secondary
+   * action button to the LEFT of the "읽기" CTA so both actions share the bar.
+   * Typical use: a visibility toggle button (🌐 / 👥) on the records tab.
+   */
+  visibilityButton?: {
+    icon: React.ComponentProps<typeof Feather>["name"];
+    label: string;
+    disabled: boolean;
+    onPress: () => void;
+  } | null;
 }
 
 export default function CardSelectOverlay({
@@ -164,6 +175,7 @@ export default function CardSelectOverlay({
   currentAuthorId,
   originUsesCarouselShadow = false,
   envelopeInfo,
+  visibilityButton,
 }: CardSelectOverlayProps) {
   const insets = useSafeAreaInsets();
   const topInset = Platform.OS === "web" ? 67 : insets.top;
@@ -1287,6 +1299,25 @@ export default function CardSelectOverlay({
               <Text style={styles.ctaLabel} numberOfLines={1}>개봉하기</Text>
             </ScalePressable>
           </Animated.View>
+        ) : visibilityButton ? (
+          <View style={styles.ctaRow}>
+            <ScalePressable
+              style={styles.ctaVisibilityBtn}
+              contentStyle={[
+                styles.ctaVisibilityContent,
+                visibilityButton.disabled && styles.ctaVisibilityDisabled,
+              ]}
+              disabled={visibilityButton.disabled}
+              accessibilityRole="button"
+              accessibilityLabel={visibilityButton.label}
+              onPress={visibilityButton.disabled ? undefined : visibilityButton.onPress}
+            >
+              <Feather name={visibilityButton.icon} size={22} color={Colors.zinc700} />
+            </ScalePressable>
+            <ScalePressable style={styles.ctaButtonFlex} contentStyle={styles.ctaButtonContent} onPress={handleRead}>
+              <Text style={styles.ctaLabel} numberOfLines={1}>읽기</Text>
+            </ScalePressable>
+          </View>
         ) : (
           <ScalePressable style={styles.ctaButton} contentStyle={styles.ctaButtonContent} onPress={handleRead}>
             <Text style={styles.ctaLabel} numberOfLines={1}>읽기</Text>
@@ -1349,9 +1380,14 @@ const styles = StyleSheet.create({
   dotActive: { backgroundColor: Colors.zinc700 },
   dotInactive: { backgroundColor: Colors.zinc300 },
   ctaWrapper: { position: "absolute" },
+  ctaRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   ctaButton: { width: "100%", height: 56 },
+  ctaButtonFlex: { flex: 1, height: 56 },
   ctaButtonEnvelope: { backgroundColor: "#3a342d" },
   ctaButtonDisabled: { opacity: 0.6 },
   ctaButtonContent: { flexDirection: "row", justifyContent: "center", alignItems: "center", flex: 1, height: 56, borderRadius: 18, backgroundColor: Colors.noticeAccent },
+  ctaVisibilityBtn: { width: 56, height: 56 },
+  ctaVisibilityContent: { flex: 1, height: 56, borderRadius: 18, backgroundColor: Colors.zinc100, alignItems: "center", justifyContent: "center" },
+  ctaVisibilityDisabled: { opacity: 0.45 },
   ctaLabel: { ...Typography.bodySemiBold, fontSize: 17, letterSpacing: 0.5, color: Colors.white, textAlign: "center" },
 });

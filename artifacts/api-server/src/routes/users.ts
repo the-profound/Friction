@@ -3,7 +3,7 @@ import { and, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
 import { db, usersTable, myCollectionsTable, neighborsTable, neighborRequestsTable, teamCollectionMembershipsTable, spaceLettersTable, articlesTable } from "@workspace/db";
 import type { Neighbor, NeighborRequest } from "@workspace/db";
 import { CreateUserBody, UpdateUserBody, UpdateUserRecentCollectionBody } from "@workspace/api-zod";
-import { requireAuth } from "../middlewares/requireAuth";
+import { requireAuth, resolveCallerId } from "../middlewares/requireAuth";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -285,15 +285,21 @@ router.get("/users/:id/space-letters", async (req, res) => {
     return;
   }
 
+  // Authenticated owners receive all space letters (PUBLIC + RECIPIENT_ONLY) so
+  // the client can drive the visibility-toggle UI without a separate endpoint.
+  // Unauthenticated callers and other users see PUBLIC letters only.
+  const callerId = await resolveCallerId(req);
+  const isOwner = callerId != null && callerId === req.params.id;
+
+  const conditions = [eq(spaceLettersTable.authorId, req.params.id)];
+  if (!isOwner) {
+    conditions.push(eq(spaceLettersTable.visibility, "PUBLIC"));
+  }
+
   const letters = await db
     .select()
     .from(spaceLettersTable)
-    .where(
-      and(
-        eq(spaceLettersTable.authorId, req.params.id),
-        eq(spaceLettersTable.visibility, "PUBLIC"),
-      ),
-    );
+    .where(and(...conditions));
 
   if (letters.length === 0) {
     res.json([]);
