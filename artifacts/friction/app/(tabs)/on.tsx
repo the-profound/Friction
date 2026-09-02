@@ -1,4 +1,5 @@
 // hint: Logic changed on both sides. Requires understanding intent of each change.
+// hint: Logic changed on both sides. Requires understanding intent of each change.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
@@ -13,7 +14,6 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -41,6 +41,9 @@ import {
 } from "@workspace/api-client-react";
 import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
 import CardSelectOverlay, { type ChainArticleMeta, type OriginLayout } from "@/components/CardSelectOverlay/CardSelectOverlay";
+import DropdownFilter from "@/components/DropdownFilter/DropdownFilter";
+import type { DropdownOption } from "@/components/DropdownFilter/DropdownFilter";
+import RecordRow from "@/components/RecordRow/RecordRow";
 import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
@@ -77,7 +80,6 @@ import {
   getRecordCardBodyLineCount,
   getRecordCardContent,
   getRecordCardTitleLineCount,
-  getRecordPreview,
   recordMatchesQuery,
   resolveQuestionPlacementAnchors,
   type QuestionPlacementAnchors,
@@ -90,13 +92,14 @@ import type { ArticleStatus } from "@/lib/policies";
 import { useScrollPressGuard } from "@/hooks/useScrollPressGuard";
 import { useDateGroupVerticalSnap } from "@/hooks/useDateGroupVerticalSnap";
 import { getDateGroupCarouselHeight } from "@/lib/dateGroupCarousel";
-const FILTER_BUTTON_HEIGHT = 36;
-const VIEW_BUTTON_SIZE = 40;
-const FILTER_GRADIENT_HEIGHT = 64;
-const FILTER_GRADIENT_OVERLAP = 20;
-const FILTER_BAR_HEIGHT = 52;
+const FILTER_BAR_HEIGHT = 53;
 const CONTROL_VISIBILITY_SCROLL_THRESHOLD = 6;
 
+const KIND_OPTIONS: DropdownOption<RecordKind>[] = [
+  { key: "thought", label: "단상" },
+  { key: "editing", label: "편집" },
+  { key: "letter", label: "편지" },
+];
 type CardRecord = UnifiedRecord & { isQuestion: boolean; questionIndex?: number };
 const cardRecordKey = (record: CardRecord) => `${record.kind}:${record.id}`;
 
@@ -108,8 +111,6 @@ function getScreenForStatus(status: ArticleStatus): "/on-01a" | "/on-01b" | "/on
 
 const NON_SELECTABLE_WEB_STYLE =
   Platform.OS === "web" ? ({ userSelect: "none" } as object) : undefined;
-const Gradient = LinearGradient as unknown as React.ComponentType<any>;
-
 function RecordListText({
   style,
   ...props
@@ -122,69 +123,6 @@ function RecordListText({
     />
   );
 }
-
-function RecordKindButton({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <ScalePressable
-      style={styles.kindButton}
-      contentStyle={[styles.kindButtonContent, active && styles.kindButtonContentActive]}
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={`${label} 기록 보기`}
-      accessibilityState={{ selected: active }}
-    >
-      <RecordListText style={[styles.kindButtonText, active && styles.kindButtonTextActive]}>
-        {label}
-      </RecordListText>
-    </ScalePressable>
-  );
-}
-
-function RecordViewButton({
-  icon,
-  label,
-  active,
-  onPress,
-}: {
-  icon: React.ComponentProps<typeof Feather>["name"];
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <ScalePressable
-      style={styles.viewButton}
-      contentStyle={[styles.viewButtonContent, active && styles.viewButtonContentActive]}
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ selected: active }}
-    >
-      <Feather name={icon} size={18} color={active ? Colors.noticeAccent : Colors.zinc600} />
-    </ScalePressable>
-  );
-}
-
-function relativeDate(value: string): string {
-  const minutes = Math.floor((Date.now() - new Date(value).getTime()) / 60000);
-  if (minutes < 1) return "방금";
-  if (minutes < 60) return `${minutes}분 전`;
-  if (minutes < 1440) return `${Math.floor(minutes / 60)}시간 전`;
-  if (minutes < 10080) return `${Math.floor(minutes / 1440)}일 전`;
-  const date = new Date(value);
-  return `${date.getMonth() + 1}/${date.getDate()}`;
-}
-
-// hint: Structural and logic conflict. Both design and behavior differ.
-// hint: Structural and logic conflict. Both design and behavior differ.
 function RecordSourceCard({
   record,
   question = false,
@@ -327,97 +265,6 @@ function RecordSourceCard({
     </ScalePressable>
   );
 }
-function RecordRow({
-  record,
-  isQuestion = false,
-  onPress,
-  onLongPress,
-  onSend,
-  onArchive,
-}: {
-  record: UnifiedRecord;
-  isQuestion?: boolean;
-  onPress: () => void;
-  onLongPress: () => void;
-  onSend?: () => void;
-  onArchive?: () => void;
-}) {
-  const { width: windowWidth } = useWindowDimensions();
-  const [textFrameWidth, setTextFrameWidth] = useState(0);
-  const preview = getRecordPreview(record);
-  const title = preview.titleDisplay || preview.body || "제목 없음";
-  const showsTitle = preview.hasTitle || record.kind !== "thought";
-  const bodyLines = preview.hasTitle || record.kind !== "thought" ? 3 : 5;
-  const fallbackTextWidth = Math.max(1, windowWidth - Spacing.screenPx * 2);
-  const contentWidth = textFrameWidth || fallbackTextWidth;
-  const titleSize = readerFontSize(ReaderTokens.typeScale.titleCqi, contentWidth);
-  const bodySize = readerFontSize(ReaderTokens.typeScale.bodyCqi, contentWidth);
-
-  return (
-    <ScalePressable
-      style={styles.row}
-      contentStyle={[styles.rowContent, isQuestion && styles.questionRowContent, NON_SELECTABLE_WEB_STYLE]}
-      onPress={onPress}
-      onLongPress={onLongPress}
-      accessibilityLabel={isQuestion ? "대기 중인 질문 열기" : `${record.kind === "thought" ? "단상" : record.kind === "editing" ? "편집 글" : "편지"} 열기`}
-      accessibilityHint={isQuestion ? "누르면 이 질문에 답하는 단상을 시작합니다." : "길게 눌러 삭제"}
-    >
-      <View
-        style={styles.rowTextFrame}
-        onLayout={(event) => {
-          const nextWidth = Math.round(event.nativeEvent.layout.width);
-          if (nextWidth !== textFrameWidth) setTextFrameWidth(nextWidth);
-        }}
-      >
-        {!isQuestion ? (
-          <View style={[styles.rowMeta, record.kind === "thought" && styles.rowMetaThought]}>
-            {record.kind !== "thought" ? (
-              <RecordListText style={styles.rowKind}>{record.kind === "editing" ? "편집" : "편지"}</RecordListText>
-            ) : null}
-            <RecordListText style={styles.rowDate}>{relativeDate(record.updatedAt)}</RecordListText>
-          </View>
-        ) : null}
-        {showsTitle ? (
-          <RecordListText
-            style={[styles.rowTitle, isQuestion && styles.questionRowText, { fontSize: titleSize, lineHeight: titleSize * 1.28 }]}
-          >
-            {title}
-          </RecordListText>
-        ) : null}
-        <RecordListText
-          style={[styles.rowBody, isQuestion && styles.questionRowText, { fontSize: bodySize, lineHeight: bodySize * 1.7 }]}
-          numberOfLines={bodyLines}
-        >
-          {preview.body || "아직 적힌 내용이 없어요."}
-        </RecordListText>
-      </View>
-      {record.kind === "letter" && onSend && onArchive ? (
-        <View style={styles.rowLetterActions}>
-          <ScalePressable style={styles.rowLetterAction} contentStyle={styles.rowLetterActionContent} onPress={(event) => { event.stopPropagation(); onSend(); }}>
-            <Feather name="send" size={14} color={Colors.zinc600} />
-            <RecordListText style={styles.rowLetterActionText}>보내기</RecordListText>
-          </ScalePressable>
-          <ScalePressable style={styles.rowLetterAction} contentStyle={styles.rowLetterActionContent} onPress={(event) => { event.stopPropagation(); onArchive(); }}>
-            <Feather name="folder" size={14} color={Colors.zinc600} />
-            <RecordListText style={styles.rowLetterActionText}>보관</RecordListText>
-          </ScalePressable>
-        </View>
-      ) : null}
-    </ScalePressable>
-  );
-}
-
-// hint: Logic changed on both sides. Requires understanding intent of each change.
-// hint: Logic changed on both sides. Requires understanding intent of each change.
-// hint: Logic changed on both sides. Requires understanding intent of each change.
-// hint: Logic changed on both sides. Requires understanding intent of each change.
-// hint: Logic changed on both sides. Requires understanding intent of each change.
-// hint: Logic changed on both sides. Requires understanding intent of each change.
-// hint: Logic changed on both sides. Requires understanding intent of each change.
-// hint: Logic changed on both sides. Requires understanding intent of each change.
-// hint: Logic changed on both sides. Requires understanding intent of each change.
-// hint: Logic changed on both sides. Requires understanding intent of each change.
-// hint: Logic changed on both sides. Requires understanding intent of each change.
 export default function OnScreen() {
   const router = useRouter();
   const { tabReselectVersion } = useNavigation();
@@ -969,41 +816,29 @@ export default function OnScreen() {
               inputRange: [0, 1],
               outputRange: [0, FILTER_BAR_HEIGHT],
             }),
-            marginBottom: controlsAnimation.interpolate({
-              inputRange: [0, 1],
-              outputRange: [0, -FILTER_GRADIENT_OVERLAP],
-            }),
             opacity: controlsAnimation,
           },
         ]}
       >
-        <Gradient
-          colors={["rgba(255,255,255,1)", "rgba(255,255,255,0)"]}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={styles.filterGradient}
-          pointerEvents="none"
-        />
-        <View style={styles.filterControls} pointerEvents="box-none">
-          <View style={styles.kindFilterGroup}>
-            <RecordKindButton label="단상" active={kind === "thought"} onPress={() => setKind("thought")} />
-            <RecordKindButton label="편집" active={kind === "editing"} onPress={() => setKind("editing")} />
-            <RecordKindButton label="편지" active={kind === "letter"} onPress={() => setKind("letter")} />
-          </View>
-          <View style={styles.viewFilterGroup}>
-            <RecordViewButton
-              icon="list"
-              label="목록형으로 보기"
-              active={view === "content"}
-              onPress={() => setView("content")}
-            />
-            <RecordViewButton
-              icon="layers"
-              label="하나씩 보기"
-              active={view === "card"}
-              onPress={() => setView("card")}
-            />
-          </View>
+        <View style={styles.filterRow} pointerEvents="box-none">
+          <DropdownFilter
+            label="단상"
+            value={kind}
+            defaultValue="thought"
+            options={KIND_OPTIONS}
+            onChange={setKind}
+            showDefaultOptionLabel
+            accessibilityLabel="기록 종류 필터"
+          />
+          <DropdownFilter
+            label="카드"
+            value={view}
+            defaultValue="card"
+            options={VIEW_OPTIONS}
+            onChange={setView}
+            showDefaultOptionLabel
+            accessibilityLabel="보기 방식 필터"
+          />
         </View>
       </Animated.View>
 
@@ -1194,19 +1029,8 @@ export default function OnScreen() {
 // hint: Logic changed on both sides. Requires understanding intent of each change.
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.white },
-  filtersAnimated: { height: FILTER_BAR_HEIGHT, overflow: "visible", zIndex: 5, backgroundColor: "transparent" },
-  filterGradient: { position: "absolute", top: 0, left: 0, right: 0, height: FILTER_GRADIENT_HEIGHT, backgroundColor: "transparent" },
-  filterControls: { height: FILTER_BAR_HEIGHT, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: Spacing.screenPx, backgroundColor: "transparent" },
-  kindFilterGroup: { flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 1 },
-  kindButton: { height: FILTER_BUTTON_HEIGHT, alignSelf: "flex-start", flexGrow: 0, flexShrink: 0 },
-  kindButtonContent: { height: FILTER_BUTTON_HEIGHT, flexGrow: 0, flexShrink: 0, paddingHorizontal: 14, borderRadius: FILTER_BUTTON_HEIGHT / 2, borderWidth: 1, borderColor: Colors.zinc200, backgroundColor: Colors.white, alignItems: "center", justifyContent: "center" },
-  kindButtonContentActive: { borderColor: Colors.noticeAccent, backgroundColor: Colors.noticeAccent },
-  kindButtonText: { ...Typography.bodySemiBold, fontSize: 13, lineHeight: 18, color: Colors.zinc600 },
-  kindButtonTextActive: { color: Colors.white },
-  viewFilterGroup: { flexDirection: "row", alignItems: "center", gap: 4, marginLeft: 8, flexGrow: 0, flexShrink: 0 },
-  viewButton: { width: VIEW_BUTTON_SIZE, height: VIEW_BUTTON_SIZE, flexGrow: 0, flexShrink: 0 },
-  viewButtonContent: { width: VIEW_BUTTON_SIZE, height: VIEW_BUTTON_SIZE, flexGrow: 0, flexShrink: 0, borderRadius: VIEW_BUTTON_SIZE / 2, backgroundColor: "transparent", alignItems: "center", justifyContent: "center" },
-  viewButtonContentActive: { backgroundColor: "transparent" },
+  filtersAnimated: { overflow: "hidden", zIndex: 5 },
+  filterRow: { flexDirection: "row", alignItems: "flex-start", paddingHorizontal: Spacing.screenPx, gap: 8, paddingVertical: 10 },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, paddingHorizontal: Spacing.screenPx },
   muted: { ...Typography.body, color: Colors.zinc500, textAlign: "center" },
   emptyTitle: { ...Typography.bodySemiBold, color: Colors.zinc900, fontSize: 17, textAlign: "center" },
@@ -1222,21 +1046,6 @@ const styles = StyleSheet.create({
   thoughtCardBodyWrap: { flex: 1, justifyContent: "flex-start" },
   thoughtCardTitle: { fontFamily: ReaderTokens.fontFamily.serifBold, color: Colors.zinc900 },
   thoughtCardBody: { fontFamily: ReaderTokens.fontFamily.serif, color: Colors.zinc800 },
-  row: { marginHorizontal: Spacing.screenPx, marginBottom: Spacing.cardGap },
-  rowContent: { padding: 16, gap: 7, borderRadius: 16, backgroundColor: Colors.white, ...Shadows.card },
-  questionRowContent: { backgroundColor: Colors.noticeAccent },
-  rowMeta: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  rowMetaThought: { justifyContent: "flex-end" },
-  rowKind: { ...Typography.caption, color: Colors.zinc500, fontWeight: "600" },
-  rowDate: { ...Typography.caption, color: Colors.zinc500 },
-  rowTextFrame: { width: "100%" },
-  rowTitle: { fontFamily: ReaderTokens.fontFamily.serifBold, color: Colors.zinc900 },
-  rowBody: { fontFamily: ReaderTokens.fontFamily.serif, color: Colors.zinc600 },
-  questionRowText: { color: Colors.white },
-  rowLetterActions: { flexDirection: "row", gap: 6, marginTop: 2 },
-  rowLetterAction: { height: 32, flexGrow: 0, flexShrink: 0 },
-  rowLetterActionContent: { height: 32, flexGrow: 0, flexShrink: 0, paddingHorizontal: 10, borderRadius: 16, backgroundColor: Colors.zinc100, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4 },
-  rowLetterActionText: { ...Typography.caption, color: Colors.zinc600, fontWeight: "600" },
   createButton: { height: 48, flexGrow: 0, flexShrink: 0 },
   createButtonContent: { height: 48, flexGrow: 0, flexShrink: 0, paddingHorizontal: 20, backgroundColor: Colors.zinc900, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   createButtonText: { ...Typography.bodySemiBold, color: Colors.white, fontSize: 15 },
@@ -1276,3 +1085,8 @@ function getRecordCardHeight(_record: UnifiedRecord, width: number): number {
 function getRecordGroupCardHeight(records: readonly UnifiedRecord[], width: number): number {
   return records.length > 0 ? getRecordCardHeight(records[0], width) : width * Sizing.cardRatio;
 }
+
+const VIEW_OPTIONS: DropdownOption<RecordView>[] = [
+  { key: "card", label: "카드" },
+  { key: "content", label: "목록" },
+];

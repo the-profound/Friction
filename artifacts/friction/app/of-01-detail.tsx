@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useRef } from "react";
-import { View, Text, StyleSheet, FlatList, TextInput } from "react-native";
+import React, { useState, useCallback, useRef, useMemo } from "react";
+import { View, Text, StyleSheet, FlatList, TextInput, useWindowDimensions } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -7,7 +7,7 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { NavBar } from "@/components/NavBar/NavBar";
 import { useQueryClient } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
-import { Colors, Typography, Spacing } from "@/constants/tokens";
+import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
 import { useToast } from "@/contexts/ToastContext";
 import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
@@ -29,13 +29,27 @@ import {
   invalidateMyCollectionDetail,
   invalidateArticleDetail,
 } from "@/lib/queryInvalidation";
-import type { MyCollectionArticleWithDetails, MyCollection } from "@workspace/api-client-react";
+import type { MyCollectionArticleWithDetails, MyCollection, Article } from "@workspace/api-client-react";
 import SourceArticlePickerSheet from "@/components/SourceArticlePickerSheet/SourceArticlePickerSheet";
 import { MyArticlesPickerBottomSheet } from "@/components/MyArticlesPickerBottomSheet/MyArticlesPickerBottomSheet";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
-import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
 import CardSelectOverlay, { type OriginLayout, type ChainArticleMeta } from "@/components/CardSelectOverlay/CardSelectOverlay";
+import DropdownFilter from "@/components/DropdownFilter/DropdownFilter";
+import type { DropdownOption } from "@/components/DropdownFilter/DropdownFilter";
+import CanonicalCardSlot from "@/components/ArticleCardItem/CanonicalCardSlot";
+import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
+import RecordRow from "@/components/RecordRow/RecordRow";
+import type { UnifiedRecord } from "@/lib/recordList";
+
+type FolderView = "card" | "content";
+const VIEW_OPTIONS: DropdownOption<FolderView>[] = [
+  { key: "card", label: "카드" },
+  { key: "content", label: "목록" },
+];
+const GRID_PAD = 12;
+const GRID_GAP = 4;
+const GRID_COLS = 3;
 
 export default function PersonalCollectionDetailScreen() {
   const insets = useSafeAreaInsets();
@@ -68,10 +82,10 @@ export default function PersonalCollectionDetailScreen() {
   const [isLongPressMenuVisible, setIsLongPressMenuVisible] = useState(false);
   const [isSourcePickerVisible, setIsSourcePickerVisible] = useState(false);
   const [longPressSourceTitle, setLongPressSourceTitle] = useState<string | null>(null);
-  const [scrollEnabled, setScrollEnabled] = useState(true);
   const [tapArticleEntry, setTapArticleEntry] = useState<MyCollectionArticleWithDetails | null>(null);
-  const openRowRef = useRef<SwipeableRowHandle | null>(null);
-  const rowRefs = useRef<Map<string, SwipeableRowHandle>>(new Map());
+  const [view, setView] = useState<FolderView>("card");
+  const { width: windowWidth } = useWindowDimensions();
+  const openRowRef = useRef<{ close(): void } | null>(null);
 
   const collectionQuery = useGetMyCollection(id ?? "");
   const collection = collectionQuery.data;
@@ -79,6 +93,20 @@ export default function PersonalCollectionDetailScreen() {
 
   const articlesQuery = useListMyCollectionArticles(id ?? "");
   const articles = (articlesQuery.data ?? []) as MyCollectionArticleWithDetails[];
+
+  const cellWidth = Math.floor((windowWidth - GRID_PAD * 2 - GRID_GAP * (GRID_COLS - 1)) / GRID_COLS);
+  const cellHeight = cellWidth * Sizing.cardRatio;
+  const sortedArticles = useMemo(
+    () => [...articles].sort((a, b) => new Date(b.addedAt).getTime() - new Date(a.addedAt).getTime()),
+    [articles],
+  );
+  const gridRows = useMemo<MyCollectionArticleWithDetails[][]>(() => {
+    const rows: MyCollectionArticleWithDetails[][] = [];
+    for (let i = 0; i < sortedArticles.length; i += GRID_COLS) {
+      rows.push(sortedArticles.slice(i, i + GRID_COLS));
+    }
+    return rows;
+  }, [sortedArticles]);
 
   const myArticlesQuery = useListArticles({ authorId: userId, status: "LETTER" as const });
   const myArticles = (myArticlesQuery.data ?? []) as Array<{ id: string; title: string; status: string; content?: string }>;
@@ -99,15 +127,6 @@ export default function PersonalCollectionDetailScreen() {
       openRowRef.current.close();
       openRowRef.current = null;
     }
-  }, []);
-
-  const handleSwipeOpen = useCallback((articleId: string) => {
-    const currentOpen = openRowRef.current;
-    const newRef = rowRefs.current.get(articleId) ?? null;
-    if (currentOpen && currentOpen !== newRef) {
-      currentOpen.close();
-    }
-    openRowRef.current = newRef;
   }, []);
 
   const enterSelectionMode = useCallback(() => {
@@ -365,77 +384,6 @@ export default function PersonalCollectionDetailScreen() {
   const selectedCount = selectedIds.size;
   const isArchive = collection?.isArchive ?? false;
 
-  const renderNormalItem = useCallback(
-    ({ item }: { item: MyCollectionArticleWithDetails }) => (
-      <SwipeableRow
-        ref={(r) => {
-          if (r) {
-            rowRefs.current.set(item.articleId, r);
-          } else {
-            rowRefs.current.delete(item.articleId);
-          }
-        }}
-        actions={[
-          ...(item.article?.authorId === userId
-            ? [
-                {
-                  label: "보내기",
-                  color: Colors.zinc900,
-                  onPress: () => {
-                    closeOpenRow();
-                    router.push({
-                      pathname: "/to-send",
-                      params: {
-                        articleId: item.articleId,
-                      },
-                    });
-                  },
-                },
-              ]
-            : []),
-          {
-            label: "이동",
-            color: Colors.zinc500,
-            onPress: () => {
-              closeOpenRow();
-              setMoveTargetArticle(item);
-              setIsMoveSheetVisible(true);
-            },
-          },
-          {
-            label: "삭제",
-            color: "#EF4444",
-            onPress: () => {
-              closeOpenRow();
-              handleRemoveArticle(item.articleId);
-            },
-          },
-        ]}
-        onSwipeOpen={() => handleSwipeOpen(item.articleId)}
-        onScrollLock={(locked) => setScrollEnabled(!locked)}
-      >
-        <ScalePressable
-          style={styles.articleItemOuter}
-          onPress={() => { closeOpenRow(); setTapArticleEntry(item); }}
-          onLongPress={() => handleLongPress(item)}
-          delayLongPress={400}
-        contentStyle={styles.articleItemContent}
-        >
-          <View style={styles.articleInfo}>
-            <Text style={styles.articleTitle} numberOfLines={1}>
-              {item.article?.title ?? "제목 없음"}
-            </Text>
-            <Text style={styles.articleDate}>
-              {new Date(item.addedAt).toLocaleDateString("ko-KR")}에 추가
-            </Text>
-          </View>
-          <Feather name="chevron-right" size={16} color={Colors.zinc300} />
-        </ScalePressable>
-      </SwipeableRow>
-    ),
-    [closeOpenRow, handleRemoveArticle, handleSwipeOpen, handleLongPress, router, userId, id],
-  );
-
   const renderSelectionItem = useCallback(
     ({ item }: { item: MyCollectionArticleWithDetails }) => {
       const isSelected = selectedIds.has(item.articleId);
@@ -464,6 +412,52 @@ export default function PersonalCollectionDetailScreen() {
       );
     },
     [selectedIds, toggleSelect],
+  );
+
+  const renderGridRow = useCallback(
+    ({ item: rowItems }: { item: MyCollectionArticleWithDetails[] }) => (
+      <View style={styles.gridRow}>
+        {rowItems.map((article) => (
+          <View key={article.articleId} style={[styles.gridCell, { width: cellWidth }]}>
+            <CanonicalCardSlot width={cellWidth} height={cellHeight}>
+              <ArticleCardItem
+                title={article.article?.title ?? "제목 없음"}
+                cover={article.article?.cover}
+                carouselShadow
+                onPress={() => setTapArticleEntry(article)}
+                onLongPress={() => handleLongPress(article)}
+              />
+            </CanonicalCardSlot>
+          </View>
+        ))}
+        {Array.from({ length: GRID_COLS - rowItems.length }).map((_, i) => (
+          <View key={`filler-${i}`} style={{ width: cellWidth }} />
+        ))}
+      </View>
+    ),
+    [cellWidth, cellHeight],
+  );
+
+  const renderListItem = useCallback(
+    ({ item }: { item: MyCollectionArticleWithDetails }) => {
+      const record: UnifiedRecord = {
+        kind: "letter" as const,
+        id: item.articleId,
+        updatedAt: item.addedAt,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        article: (item.article ?? {}) as Article,
+      };
+      const canSend = item.article?.authorId === userId;
+      return (
+        <RecordRow
+          record={record}
+          onPress={() => setTapArticleEntry(item)}
+          onLongPress={() => handleLongPress(item)}
+          onSend={canSend ? () => router.push({ pathname: "/to-send", params: { articleId: item.articleId } }) : undefined}
+        />
+      );
+    },
+    [handleLongPress, userId, router],
   );
 
   if (!id) {
@@ -514,9 +508,16 @@ export default function PersonalCollectionDetailScreen() {
 
       {!selectionMode && (
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>
-            편지 목록 ({articles.length})
-          </Text>
+          <DropdownFilter
+            label="카드"
+            value={view}
+            defaultValue="card"
+            options={VIEW_OPTIONS}
+            onChange={setView}
+            showDefaultOptionLabel
+            activeVariant="outline"
+            accessibilityLabel="보기 방식 필터"
+          />
           {!isArchive && (
             <ScalePressable onPress={() => setShowPicker(true)}
             contentStyle={styles.addArticleButtonContent}
@@ -542,21 +543,32 @@ export default function PersonalCollectionDetailScreen() {
           <Text style={styles.emptyTitle}>아직 추가된 편지가 없어요</Text>
           <Text style={styles.emptySubtitle}>완성된 편지를 이 폴더에 추가해보세요</Text>
         </View>
-      ) : (
+      ) : selectionMode ? (
         <FlatList
           {...LIST_PERF_PRESET}
           data={articles}
           keyExtractor={(item) => item.articleId}
-          renderItem={selectionMode ? renderSelectionItem : renderNormalItem}
-          contentContainerStyle={[
-            styles.listContent,
-            selectionMode
-              ? { paddingBottom: insets.bottom + 80 + 24 }
-              : { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom },
-          ]}
-          onScrollBeginDrag={selectionMode ? undefined : closeOpenRow}
+          renderItem={renderSelectionItem}
+          contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 80 + 24 }]}
           showsVerticalScrollIndicator={false}
-          scrollEnabled={scrollEnabled}
+        />
+      ) : view === "card" ? (
+        <FlatList
+          {...LIST_PERF_PRESET}
+          data={gridRows}
+          keyExtractor={(_, idx) => `grid-row-${idx}`}
+          renderItem={renderGridRow}
+          contentContainerStyle={[styles.gridContent, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}
+          showsVerticalScrollIndicator={false}
+        />
+      ) : (
+        <FlatList
+          {...LIST_PERF_PRESET}
+          data={sortedArticles}
+          keyExtractor={(item) => item.articleId}
+          renderItem={renderListItem}
+          contentContainerStyle={[styles.listContent, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}
+          showsVerticalScrollIndicator={false}
         />
       )}
 
@@ -812,11 +824,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.screenPx,
     paddingVertical: 14,
   },
-  sectionTitle: {
-    ...Typography.bodySemiBold,
-    fontSize: 16,
-    color: Colors.zinc900,
-  },
   addArticleButtonContent: {
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -834,6 +841,19 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: 40,
+  },
+  gridRow: {
+    flexDirection: "row",
+    paddingHorizontal: GRID_PAD,
+    gap: GRID_GAP,
+    marginBottom: GRID_GAP,
+  },
+  gridCell: {
+    flexShrink: 0,
+    flexGrow: 0,
+  },
+  gridContent: {
+    paddingTop: 8,
   },
   articleItem: {
     paddingVertical: 14,
