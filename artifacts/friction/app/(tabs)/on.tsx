@@ -14,6 +14,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -40,8 +41,6 @@ import {
 } from "@workspace/api-client-react";
 import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
 import CardSelectOverlay, { type ChainArticleMeta, type OriginLayout } from "@/components/CardSelectOverlay/CardSelectOverlay";
-import DropdownFilter from "@/components/DropdownFilter/DropdownFilter";
-import type { DropdownOption } from "@/components/DropdownFilter/DropdownFilter";
 import RecordRow from "@/components/RecordRow/RecordRow";
 import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
@@ -92,14 +91,12 @@ import type { ArticleStatus } from "@/lib/policies";
 import { useScrollPressGuard } from "@/hooks/useScrollPressGuard";
 import { useDateGroupVerticalSnap } from "@/hooks/useDateGroupVerticalSnap";
 import { getDateGroupCarouselHeight } from "@/lib/dateGroupCarousel";
-const FILTER_BAR_HEIGHT = 53;
+const FILTER_BUTTON_HEIGHT = 36;
+const VIEW_BUTTON_SIZE = 40;
+const FILTER_GRADIENT_OVERLAP = 18;
+const FILTER_BAR_HEIGHT = VIEW_BUTTON_SIZE + 32;
 const CONTROL_VISIBILITY_SCROLL_THRESHOLD = 6;
 
-const KIND_OPTIONS: DropdownOption<RecordKind>[] = [
-  { key: "thought", label: "단상" },
-  { key: "editing", label: "편집" },
-  { key: "letter", label: "편지" },
-];
 type CardRecord = UnifiedRecord & { isQuestion: boolean; questionIndex?: number };
 const cardRecordKey = (record: CardRecord) => `${record.kind}:${record.id}`;
 
@@ -111,6 +108,8 @@ function getScreenForStatus(status: ArticleStatus): "/on-01a" | "/on-01b" | "/on
 
 const NON_SELECTABLE_WEB_STYLE =
   Platform.OS === "web" ? ({ userSelect: "none" } as object) : undefined;
+const Gradient = LinearGradient as unknown as React.ComponentType<any>;
+
 function RecordListText({
   style,
   ...props
@@ -123,6 +122,57 @@ function RecordListText({
     />
   );
 }
+
+function RecordKindButton({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <ScalePressable
+      style={styles.kindButton}
+      contentStyle={[styles.kindButtonContent, active && styles.kindButtonContentActive]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${label} 기록 보기`}
+      accessibilityState={{ selected: active }}
+    >
+      <RecordListText style={[styles.kindButtonText, active && styles.kindButtonTextActive]}>
+        {label}
+      </RecordListText>
+    </ScalePressable>
+  );
+}
+
+function RecordViewButton({
+  icon,
+  label,
+  active,
+  onPress,
+}: {
+  icon: React.ComponentProps<typeof Feather>["name"];
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <ScalePressable
+      style={styles.viewButton}
+      contentStyle={[styles.viewButtonContent, active && styles.viewButtonContentActive]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: active }}
+    >
+      <Feather name={icon} size={18} color={active ? Colors.noticeAccent : Colors.zinc600} />
+    </ScalePressable>
+  );
+}
+
 function RecordSourceCard({
   record,
   question = false,
@@ -817,30 +867,41 @@ export default function OnScreen() {
               inputRange: [0, 1],
               outputRange: [0, FILTER_BAR_HEIGHT],
             }),
+            marginBottom: controlsAnimation.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0, -FILTER_GRADIENT_OVERLAP],
+            }),
             opacity: controlsAnimation,
           },
         ]}
       >
-        <View style={styles.filterRow} pointerEvents="box-none">
-          <DropdownFilter
-            label="단상"
-            value={kind}
-            defaultValue="thought"
-            options={KIND_OPTIONS}
-            onChange={setKind}
-            showDefaultOptionLabel
-            accessibilityLabel="기록 종류 필터"
-          />
-          <DropdownFilter
-            label="카드"
-            value={view}
-            defaultValue="card"
-            options={VIEW_OPTIONS}
-            onChange={setView}
-            showDefaultOptionLabel
-            accessibilityLabel="보기 방식 필터"
-          />
-        </View>
+        <Gradient
+          colors={["rgba(255,255,255,1)", "rgba(255,255,255,0)"]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={styles.filters}
+          pointerEvents="box-none"
+        >
+          <View style={styles.kindFilterGroup}>
+            <RecordKindButton label="단상" active={kind === "thought"} onPress={() => setKind("thought")} />
+            <RecordKindButton label="편집" active={kind === "editing"} onPress={() => setKind("editing")} />
+            <RecordKindButton label="편지" active={kind === "letter"} onPress={() => setKind("letter")} />
+          </View>
+          <View style={styles.viewFilterGroup}>
+            <RecordViewButton
+              icon="list"
+              label="목록형으로 보기"
+              active={view === "content"}
+              onPress={() => setView("content")}
+            />
+            <RecordViewButton
+              icon="layers"
+              label="하나씩 보기"
+              active={view === "card"}
+              onPress={() => setView("card")}
+            />
+          </View>
+        </Gradient>
       </Animated.View>
 
       {isLoading ? (
@@ -1030,8 +1091,18 @@ export default function OnScreen() {
 // hint: Logic changed on both sides. Requires understanding intent of each change.
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.white },
-  filtersAnimated: { overflow: "hidden", zIndex: 5 },
-  filterRow: { flexDirection: "row", alignItems: "flex-start", paddingHorizontal: Spacing.screenPx, gap: 8, paddingVertical: 10 },
+  filtersAnimated: { height: FILTER_BAR_HEIGHT, overflow: "hidden", zIndex: 5 },
+  filters: { height: FILTER_BAR_HEIGHT, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: Spacing.screenPx, paddingTop: 4, paddingBottom: 28 },
+  kindFilterGroup: { flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 1 },
+  kindButton: { height: FILTER_BUTTON_HEIGHT, alignSelf: "flex-start", flexGrow: 0, flexShrink: 0 },
+  kindButtonContent: { height: FILTER_BUTTON_HEIGHT, flexGrow: 0, flexShrink: 0, paddingHorizontal: 14, borderRadius: FILTER_BUTTON_HEIGHT / 2, borderWidth: 1, borderColor: Colors.zinc200, backgroundColor: Colors.white, alignItems: "center", justifyContent: "center" },
+  kindButtonContentActive: { borderColor: Colors.noticeAccent, backgroundColor: Colors.noticeAccent },
+  kindButtonText: { ...Typography.bodySemiBold, fontSize: 13, lineHeight: 18, color: Colors.zinc600 },
+  kindButtonTextActive: { color: Colors.white },
+  viewFilterGroup: { flexDirection: "row", alignItems: "center", gap: 4, marginLeft: 8, flexGrow: 0, flexShrink: 0 },
+  viewButton: { width: VIEW_BUTTON_SIZE, height: VIEW_BUTTON_SIZE, flexGrow: 0, flexShrink: 0 },
+  viewButtonContent: { width: VIEW_BUTTON_SIZE, height: VIEW_BUTTON_SIZE, flexGrow: 0, flexShrink: 0, borderRadius: VIEW_BUTTON_SIZE / 2, backgroundColor: "transparent", alignItems: "center", justifyContent: "center" },
+  viewButtonContentActive: { backgroundColor: "transparent" },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, paddingHorizontal: Spacing.screenPx },
   muted: { ...Typography.body, color: Colors.zinc500, textAlign: "center" },
   emptyTitle: { ...Typography.bodySemiBold, color: Colors.zinc900, fontSize: 17, textAlign: "center" },
@@ -1086,8 +1157,3 @@ function getRecordCardHeight(_record: UnifiedRecord, width: number): number {
 function getRecordGroupCardHeight(records: readonly UnifiedRecord[], width: number): number {
   return records.length > 0 ? getRecordCardHeight(records[0], width) : width * Sizing.cardRatio;
 }
-
-const VIEW_OPTIONS: DropdownOption<RecordView>[] = [
-  { key: "card", label: "카드" },
-  { key: "content", label: "목록" },
-];
