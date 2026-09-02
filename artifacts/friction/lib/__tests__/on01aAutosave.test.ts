@@ -371,7 +371,7 @@ describe("on-01a guarded return navigation", () => {
     const screen = readScreen();
     const header = screen.slice(
       screen.indexOf('<View style={styles.header}>'),
-      screen.indexOf("{isDividing &&", screen.indexOf('<View style={styles.header}>')),
+      screen.indexOf("<KeyboardAvoidingView", screen.indexOf('<View style={styles.header}>')),
     );
     expect(header).toContain("styles.headerBackButton");
     expect(header).toContain('accessibilityLabel="기록 목록으로 돌아가기"');
@@ -379,6 +379,49 @@ describe("on-01a guarded return navigation", () => {
     expect(header).not.toContain("ActivityIndicator");
     expect(header).not.toContain("keyboard-off-outline");
     expect(screen).toContain("onDismissKeyboard={() =>");
+  });
+
+  it("keeps review chrome out of the shared editor header and exposes the spell check action separately", () => {
+    const screen = readScreen();
+    const editorStart = screen.indexOf("<KeyboardAvoidingView");
+    const headerAndEditorStart = screen.slice(0, editorStart);
+    const spellButton = screen.slice(
+      screen.indexOf("/* ── 검토 단계 맞춤법 검사 ── */"),
+      screen.indexOf("/* ── 서식 툴바", screen.indexOf("/* ── 검토 단계 맞춤법 검사 ── */")),
+    );
+
+    expect(headerAndEditorStart).not.toContain("styles.toolbar");
+    expect(headerAndEditorStart).not.toContain("styles.warningBanner");
+    expect(headerAndEditorStart).not.toContain("styles.pageStripWrapper");
+    expect(screen).toContain("WebViewMeasureLayer request={warningRequest}");
+    expect(screen).toContain("WebViewMeasureLayer request={engineRequest}");
+    expect(spellButton).toContain("!keyboardVisible");
+    expect(spellButton).toContain("inlineMenuMode === null");
+    expect(spellButton).toContain("!spellTabVisible");
+    expect(spellButton).toContain("styles.spellCheckButtonShadow");
+    expect(screen).toContain("width: Sizing.navBarHeight");
+    expect(screen).toContain("height: Sizing.navBarHeight");
+    expect(spellButton).toContain("Colors.noticeAccent");
+    expect(spellButton).toContain('accessibilityLabel="맞춤법 검사"');
+  });
+
+  it("guards spell checks against repeated activation and keeps close disabled while loading", () => {
+    const screen = readScreen();
+    const spellHandler = screen.slice(
+      screen.indexOf("const handleRunSpellCheck"),
+      screen.indexOf("const handleSpellSkip"),
+    );
+    const closeHandler = screen.slice(
+      screen.indexOf("const handleCloseSpellTab"),
+      screen.indexOf("// ── WritingStateBar"),
+    );
+
+    expect(screen).toContain("const spellCheckInFlightRef = useRef(false);");
+    expect(spellHandler).toContain("if (spellCheckInFlightRef.current) return;");
+    expect(spellHandler).toContain("spellCheckInFlightRef.current = true;");
+    expect(spellHandler).toContain("spellCheckInFlightRef.current = false;");
+    expect(spellHandler).toContain("finally");
+    expect(closeHandler).toContain("if (spellCheckInFlightRef.current) return;");
   });
 
   it("keeps the return lock held until the deferred route dispatch", () => {

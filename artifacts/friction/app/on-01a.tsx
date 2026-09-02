@@ -8,7 +8,6 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
   BackHandler,
   AppState,
   useWindowDimensions,
@@ -19,7 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams, Stack, useNavigation } from "expo-router";
 import { usePreventRemove } from "expo-router/build/react-navigation/core";
 import { Feather } from "@expo/vector-icons";
-import { Colors, Typography, Spacing, Shadows } from "@/constants/tokens";
+import { Colors, Typography, Spacing, Sizing, Shadows } from "@/constants/tokens";
 import { useAutoSave } from "@/lib/useAutoSave";
 import { useEditorLayout } from "@/lib/useEditorLayout";
 import { bodyTypographyMetrics, getBodyContentHeight } from "@/lib/bodyLayout";
@@ -378,7 +377,6 @@ export default function WritingScreen() {
   // ── 분할 상태 (dividing) ───────────────────────────────────────────────────
   const [splitting, setSplitting] = useState(false);
   const [nativeBodyFontMode, setNativeBodyFontMode] = useState(getNativeBodyFontMode);
-  const pageStripRef = useRef<ScrollView>(null);
 
   useEffect(
     () => subscribeNativeBodyFontMode(setNativeBodyFontMode),
@@ -394,11 +392,9 @@ export default function WritingScreen() {
     | { status: "error"; message: string };
   const [spellState, setSpellState] = useState<SpellState>({ status: "idle" });
   const spellAppliedCountRef = useRef<Record<string, number>>({});
+  const spellCheckInFlightRef = useRef(false);
   const [spellTabVisible, setSpellTabVisible] = useState(false);
-  const chipOffsetsRef = useRef<Record<number, number>>({});
-  const returnScrollDoneRef = useRef(false);
   const returnBlockScrollDoneRef = useRef(false);
-  const [chipLayoutCount, setChipLayoutCount] = useState(0);
 
   // ── 마운트 시 캐시가 신선하면(≤30s) invalidate 생략 ──────────────────────────
   useEffect(() => {
@@ -481,16 +477,6 @@ export default function WritingScreen() {
       }
     }
   }, [thought, article, isThoughtMode, isLocalDirectDraft, editorReady, modeParam, setModeBoth]);
-
-  // ── 마감 화면에서 복귀 시 page strip 스크롤 복원 (dividing) ──────────────────
-  useEffect(() => {
-    if (returnPageIndex === undefined || returnScrollDoneRef.current) return;
-    const offset = chipOffsetsRef.current[returnPageIndex];
-    if (offset === undefined) return;
-    returnScrollDoneRef.current = true;
-    pageStripRef.current?.scrollTo({ x: Math.max(0, offset - 16), animated: false });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chipLayoutCount]);
 
   // ── 마감 화면에서 복귀 시 본문 에디터 스크롤 + 하이라이트 (dividing) ──────────
   useEffect(() => {
@@ -2060,6 +2046,8 @@ export default function WritingScreen() {
 
   // ── 맞춤법 검사 (dividing) ─────────────────────────────────────────────────
   const handleRunSpellCheck = useCallback(async () => {
+    if (spellCheckInFlightRef.current) return;
+    spellCheckInFlightRef.current = true;
     setSpellTabVisible(true);
     setSpellState({ status: "loading" });
     spellAppliedCountRef.current = {};
@@ -2087,6 +2075,8 @@ export default function WritingScreen() {
       }
     } catch (e: any) {
       setSpellState({ status: "error", message: e?.message ?? "오류가 발생했습니다." });
+    } finally {
+      spellCheckInFlightRef.current = false;
     }
   }, [getEditorContent]);
 
@@ -2133,6 +2123,7 @@ export default function WritingScreen() {
   }, []);
 
   const handleCloseSpellTab = useCallback(() => {
+    if (spellCheckInFlightRef.current) return;
     editorRef.current?.clearSpellHighlight();
     setSpellTabVisible(false);
     setSpellState({ status: "idle" });
@@ -2281,105 +2272,6 @@ export default function WritingScreen() {
           <View style={styles.headerRight} />
         </View>
 
-        {isDividing && (
-          <>
-            <View style={styles.toolbar}>
-              <Text style={styles.pageCountLabel}>{pages.length}페이지</Text>
-              <View style={styles.toolbarSpacer} />
-              <ScalePressable
-                style={styles.autoSplitButton}
-                onPress={handleRunSpellCheck}
-                disabled={spellTabVisible || spellState.status === "loading"}
-                contentStyle={[styles.autoSplitButtonContent, spellTabVisible && styles.autoSplitButtonDisabled]}
-              >
-                <Feather name="check-circle" size={14} color={Colors.zinc600} />
-                <Text style={styles.autoSplitText}>
-                  {spellState.status === "loading" ? "검사 중…" : "맞춤법 검사"}
-                </Text>
-              </ScalePressable>
-              <ScalePressable
-                style={styles.autoSplitButton}
-                onPress={handleAutoSplit}
-                disabled={splitting || !hasOverflowPages}
-                accessibilityState={{ disabled: splitting || !hasOverflowPages }}
-                accessibilityHint={
-                  hasOverflowPages
-                    ? "분량을 초과한 페이지만 다시 나눕니다. 다른 페이지 분할은 그대로 유지됩니다."
-                    : "초과된 페이지가 없어 자동 분할을 사용할 수 없습니다."
-                }
-                contentStyle={styles.autoSplitButtonContent}
-              >
-                <Feather name="scissors" size={14} color={Colors.zinc600} />
-                <Text style={styles.autoSplitText}>{splitting ? "분할 중…" : "자동분할"}</Text>
-              </ScalePressable>
-            </View>
-
-            {warnings.length > 0 ? (
-              <View style={styles.warningBanner}>
-                <Feather name="alert-triangle" size={14} color="#ef4444" />
-                <Text style={styles.warningBannerText} numberOfLines={2}>
-                  {warnings.length === 1
-                    ? warnings[0].reason
-                    : `${warnings.length}개 페이지가 한 페이지 분량을 초과합니다. 자동분할을 사용하거나 본문을 직접 편집해 주세요.`}
-                </Text>
-              </View>
-            ) : null}
-
-            <View style={styles.pageStripWrapper}>
-              <ScrollView
-                ref={pageStripRef}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.pageStrip}
-                contentContainerStyle={styles.pageStripContent}
-              >
-                {pages.map((p) => {
-                  const idx = p.pageIndex;
-                  const hasWarning = warnings.some((w) => w.pageIndex === idx);
-                  return (
-                    <View
-                      key={`page-chip-${idx}`}
-                      style={[styles.pageChip, hasWarning && styles.pageChipWarning]}
-                      onLayout={(e) => {
-                        chipOffsetsRef.current[idx] = e.nativeEvent.layout.x;
-                        setChipLayoutCount((c) => c + 1);
-                      }}
-                    >
-                      {idx > 0 ? (
-                        <ScalePressable
-                          onPress={() => handleMergeWithPrevious(idx)}
-                          hitSlop={6}
-                          style={styles.chipMergeButton}
-                          accessibilityLabel={`페이지 ${idx + 1} 이전 페이지와 합치기`}
-                          contentStyle={styles.chipMergeButtonContent}
-                        >
-                          <Feather name="x" size={12} color={Colors.zinc600} />
-                        </ScalePressable>
-                      ) : null}
-                      <Text style={styles.chipPageNumber}>{idx + 1}쪽</Text>
-                      <Text style={styles.chipCharCount}>{p.charCount}자</Text>
-                      <ScalePressable
-                        onPress={() => handleSplitPage(idx)}
-                        disabled={splitting}
-                        hitSlop={6}
-                        style={styles.chipSplitButton}
-                        accessibilityLabel={`페이지 ${idx + 1} 나누기`}
-                        contentStyle={[styles.chipSplitButtonContent, splitting && styles.chipSplitButtonDisabled]}
-                      >
-                        <Feather name="scissors" size={11} color={Colors.zinc600} />
-                        <Text style={styles.chipSplitText}>나누기</Text>
-                      </ScalePressable>
-                    </View>
-                  );
-                })}
-              </ScrollView>
-            </View>
-
-            <WebViewMeasureLayer request={warningRequest} onMeasured={handleWarningMeasured} />
-            <WebViewMeasureLayer request={engineRequest} onMeasured={handleEngineMeasured} />
-          </>
-        )}
-
         <KeyboardAvoidingView
           style={styles.editorOuter}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -2434,6 +2326,51 @@ export default function WritingScreen() {
             <View style={styles.toolbarSpacerBottom} />
           )}
         </KeyboardAvoidingView>
+
+        {/* 분할 계산용 WebView는 화면 크롬에 영향을 주지 않는 측정 레이어다. */}
+        {isDividing && (
+          <>
+            <WebViewMeasureLayer request={warningRequest} onMeasured={handleWarningMeasured} />
+            <WebViewMeasureLayer request={engineRequest} onMeasured={handleEngineMeasured} />
+          </>
+        )}
+
+        {/* ── 검토 단계 맞춤법 검사 ── */}
+        {isDividing
+          && !keyboardVisible
+          && inlineMenuMode === null
+          && !keyboardRestorePending
+          && !spellTabVisible && (
+          <View
+            style={[
+              styles.spellCheckButtonShadow,
+              Shadows.navBar,
+              {
+                right: Spacing.screenPx,
+                bottom: Math.max(insets.bottom, Platform.OS === "web" ? 34 : 0) + 16,
+              },
+            ]}
+            pointerEvents="box-none"
+          >
+            <ScalePressable
+              style={styles.spellCheckButton}
+              contentStyle={[
+                styles.spellCheckButtonContent,
+                // Reanimated's web content layer can drop boxShadow. The fixed
+                // wrapper owns it on web; native keeps the shadow on the surface.
+                Platform.OS === "web" ? null : Shadows.navBar,
+              ]}
+              onPress={handleRunSpellCheck}
+              disabled={spellState.status === "loading"}
+              accessibilityRole="button"
+              accessibilityLabel="맞춤법 검사"
+              accessibilityHint="본문의 맞춤법을 검사합니다."
+              accessibilityState={{ busy: spellState.status === "loading", disabled: spellState.status === "loading" }}
+            >
+              <Feather name="check-circle" size={Sizing.tabIconSize} color={Colors.noticeAccent} />
+            </ScalePressable>
+          </View>
+        )}
 
         {/* ── 서식 툴바 — 키보드/인라인 패널 위 floating (read.tsx와 동일) ── */}
         {Platform.OS !== "web" && selectionState.activeBlock !== "horizontalRule" &&
@@ -2723,43 +2660,6 @@ const styles = StyleSheet.create({
     height: 44,
     zIndex: 1,
   },
-  pageCountLabel: {
-    ...Typography.caption,
-    fontSize: 12,
-    color: Colors.zinc500,
-  },
-  toolbar: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: Spacing.screenPx,
-    paddingVertical: 8,
-    gap: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.zinc100,
-  },
-  toolbarSpacer: {
-    flex: 1,
-  },
-  autoSplitButton: {},
-  autoSplitButtonContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Colors.zinc200,
-  },
-  autoSplitButtonDisabled: {
-    opacity: 0.5,
-  },
-  autoSplitText: {
-    ...Typography.caption,
-    fontSize: 12,
-    color: Colors.zinc600,
-  },
   sourceArticleRow: {
     paddingBottom: 8,
   },
@@ -2799,92 +2699,31 @@ const styles = StyleSheet.create({
   markdownEditorContainer: {
     flex: 1,
   },
-  warningBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: Spacing.screenPx,
-    paddingVertical: 8,
-    backgroundColor: "#fef2f2",
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#fecaca",
+  spellCheckButtonShadow: {
+    position: "absolute",
+    width: Sizing.navBarHeight,
+    height: Sizing.navBarHeight,
+    flexGrow: 0,
+    flexShrink: 0,
+    borderRadius: Sizing.navBarRadius,
+    zIndex: 20,
   },
-  warningBannerText: {
-    ...Typography.caption,
-    flex: 1,
-    fontSize: 12,
-    color: "#b91c1c",
+  spellCheckButton: {
+    width: Sizing.navBarHeight,
+    height: Sizing.navBarHeight,
+    flexGrow: 0,
+    flexShrink: 0,
+    borderRadius: Sizing.navBarRadius,
   },
-  pageStripWrapper: {
-    height: 44,
-    overflow: "hidden",
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.zinc100,
-  },
-  pageStrip: {
-    flex: 1,
-  },
-  pageStripContent: {
-    paddingHorizontal: Spacing.screenPx,
-    paddingVertical: 6,
-    gap: 8,
-    alignItems: "flex-start",
-  },
-  pageChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Colors.zinc200,
-    backgroundColor: Colors.zinc50,
-  },
-  pageChipWarning: {
-    borderColor: "#ef4444",
-    backgroundColor: "#fef2f2",
-  },
-  chipMergeButton: {
-    width: 18,
-    height: 18,
-  },
-  chipMergeButtonContent: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: Colors.zinc200,
+  spellCheckButtonContent: {
+    width: "100%",
+    height: "100%",
+    flexGrow: 0,
+    flexShrink: 0,
+    borderRadius: Sizing.navBarRadius,
+    backgroundColor: Colors.white,
     alignItems: "center",
     justifyContent: "center",
-  },
-  chipPageNumber: {
-    ...Typography.caption,
-    fontSize: 12,
-    color: Colors.zinc700,
-    fontWeight: "600",
-  },
-  chipCharCount: {
-    ...Typography.caption,
-    fontSize: 12,
-    color: Colors.zinc500,
-  },
-  chipSplitButton: {},
-  chipSplitButtonContent: {
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 10,
-    backgroundColor: Colors.zinc200,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-  },
-  chipSplitButtonDisabled: {
-    opacity: 0.5,
-  },
-  chipSplitText: {
-    ...Typography.caption,
-    fontSize: 12,
-    color: Colors.zinc700,
   },
   spellPanel: {
     position: "absolute",
