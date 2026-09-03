@@ -62,6 +62,30 @@ export const ReadingPolicy = {
   },
 };
 
+/**
+ * An inbox delivery can be unread even when its article was completed before.
+ * In that case the delivery opens in reread mode without changing the
+ * per-article completion history contract.
+ */
+export function getInboxReadingMode(
+  isRead?: boolean,
+  hasReadBefore?: boolean,
+): ReadingMode {
+  return isRead || hasReadBefore ? "re_read" : "basic";
+}
+
+/**
+ * Re-reading from the inbox still owns an unread delivery that must be
+ * committed when the completion screen is dismissed. Re-reading from a
+ * collection or the record tab has no inbox delivery to update.
+ */
+export function shouldCommitCompletionForEntry(
+  mode: ReadingMode,
+  inboxId?: string,
+): boolean {
+  return mode !== "re_read" || Boolean(inboxId);
+}
+
 export const DeliveryPolicy = {
   DELIVERY_HOURS_KST: [6] as const,
   TIMEZONE: "Asia/Seoul" as const,

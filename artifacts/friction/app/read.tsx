@@ -82,7 +82,7 @@ import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
 import { useUser } from "@/contexts/UserContext";
 import { useActiveReading } from "@/contexts/ActiveReadingContext";
-import type { ReadingMode } from "@/lib/policies";
+import { shouldCommitCompletionForEntry, type ReadingMode } from "@/lib/policies";
 import {
   clampReadingPage,
   getVisualReadingPage,
@@ -1523,6 +1523,23 @@ export default function ReadScreen() {
     }
   }, [isDeleting, isListEntry, reading, router, clearActiveSession, queryClient, articleId, promptOrContinue, applyAnsweredQuestionCardsToMemo]);
 
+  const handleRereadExit = useCallback(async () => {
+    if (shouldCommitCompletionForEntry(mode, inboxId)) {
+      // Inbox rereads must use the same completion path as first reads. This
+      // commits the current delivery, updates its cache entry, and preserves
+      // the duplicate-delivery prompt before navigating away.
+      await handleCommitAndSkip();
+      return;
+    }
+
+    // Collection/record rereads have no inbox delivery to acknowledge.
+    // Keep their existing completion-screen fade and navigation behavior.
+    applyAnsweredQuestionCardsToMemo();
+    overlayOpacity.value = withTiming(1, { duration: 700, easing: Easing.in(Easing.ease) }, (finished) => {
+      if (finished) runOnJS(navigateBackDelayed)();
+    });
+  }, [mode, inboxId, handleCommitAndSkip, applyAnsweredQuestionCardsToMemo, overlayOpacity, navigateBackDelayed]);
+
   const handleTextSelect = useCallback((text: string, isEmpty: boolean) => {
     if (!isEmpty && text) {
       if (selectionPillDismissTimer.current) {
@@ -1863,15 +1880,7 @@ export default function ReadScreen() {
                               isCollectionsReady={isCollectionsReady}
                               isAlreadySaved={isAlreadySaved}
                               onSave={handleCommitAndSave}
-                              onSkip={mode === "re_read"
-                                ? async () => {
-                                    // 완독 화면 유지한 채 fade-out (슬롯 되돌리면 편지 페이지 점프)
-                                    applyAnsweredQuestionCardsToMemo();
-                                    overlayOpacity.value = withTiming(1, { duration: 700, easing: Easing.in(Easing.ease) }, (finished) => {
-                                      if (finished) runOnJS(navigateBackDelayed)();
-                                    });
-                                  }
-                                : handleCommitAndSkip}
+                              onSkip={mode === "re_read" ? handleRereadExit : handleCommitAndSkip}
                               onReread={() => {
                                 setCompleteScreenVisible(false);
                               }}

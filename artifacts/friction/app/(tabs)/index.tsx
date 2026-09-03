@@ -38,6 +38,7 @@ import { useScrollPressGuard } from "@/hooks/useScrollPressGuard";
 import { useDateGroupVerticalSnap } from "@/hooks/useDateGroupVerticalSnap";
 import { useSelectionScrollRestoration } from "@/hooks/useSelectionScrollRestoration";
 import { getDateGroupCarouselHeight } from "@/lib/dateGroupCarousel";
+import { getInboxReadingMode } from "@/lib/policies";
 
 /** Recursively collect all inbox descendants of rootArticleId (oldest → newest BFS). */
 function findAllDescendants(rootArticleId: string, allItems: InboxItem[]): InboxItem[] {
@@ -334,7 +335,7 @@ export default function InboxScreen() {
       // CardSelectOverlay handles the fade-to-black internally (Modal renders above global overlay).
       // Here we just navigate immediately after the fade calls back.
       prepareInboxItem(inboxItem);
-      const mode = (inboxItem.isRead || inboxItem.hasReadBefore) ? "re_read" : "basic";
+      const mode = getInboxReadingMode(inboxItem.isRead, inboxItem.hasReadBefore);
       cancelScrollRestoration();
       setTapItem(null);
       router.push({
@@ -383,7 +384,7 @@ export default function InboxScreen() {
     const item = sourcePromptItem;
     if (!item) { setSourcePromptItem(null); return; }
     prepareInboxItem(item);
-    const mode = (item.isRead || item.hasReadBefore) ? "re_read" : "basic";
+    const mode = getInboxReadingMode(item.isRead, item.hasReadBefore);
     startFadeToBlack(() => {
       setSourcePromptItem(null);
       router.push({
