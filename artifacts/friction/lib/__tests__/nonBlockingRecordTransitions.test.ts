@@ -6,7 +6,7 @@ const appRoot = join(__dirname, "../..");
 const readScreen = (path: string) => readFileSync(join(appRoot, path), "utf8");
 
 describe("non-blocking editor transitions", () => {
-  it("lets every closing-screen back action navigate once while saves continue", () => {
+  it("lets every read-only closing-screen back action navigate once", () => {
     const screen = readScreen("app/on-01c.tsx");
     const backHandler = screen.slice(
       screen.indexOf("const handleBack"),
@@ -17,9 +17,9 @@ describe("non-blocking editor transitions", () => {
       screen.indexOf("const hasCoverPage"),
     );
 
-    expect(backHandler).toContain("Promise.allSettled([flushTitleSave(), flushCoverSave()])");
-    expect(backHandler).not.toContain("await flushTitleSave()");
-    expect(backHandler).not.toContain("await flushCoverSave()");
+    expect(backHandler).not.toContain("flushTitleSave");
+    expect(backHandler).not.toContain("flushCoverSave");
+    expect(backHandler).toContain("stageArticleTransitionSnapshot(queryClient, id");
     expect(backHandler).toContain('navigateAfterRemovingGuard(() => router.replace("/(tabs)/on"))');
     expect(removalGuard).toContain(
       "usePreventRemove(shouldPreventRemoval, handlePreventedRemoval);",
@@ -34,14 +34,16 @@ describe("non-blocking editor transitions", () => {
     const screen = readScreen("app/on-01c.tsx");
     const stepBackHandler = screen.slice(
       screen.indexOf("const handleStepBack"),
-      screen.indexOf("const handleSaveTitle"),
+      screen.indexOf("const handleStateBarPress"),
     );
 
     expect(stepBackHandler).toContain('pathname: "/on-01a"');
     expect(stepBackHandler).toContain('mode: "dividing"');
     expect(stepBackHandler).not.toContain('pathname: "/on-01b"');
     expect(stepBackHandler).toContain("status: \"DIVIDING\"");
-    expect(stepBackHandler).toContain("Promise.allSettled([flushTitleSave(), flushCoverSave()])");
+    expect(stepBackHandler).toContain("void transitionStatus.mutateAsync({");
+    expect(stepBackHandler).not.toContain("flushTitleSave");
+    expect(stepBackHandler).not.toContain("flushCoverSave");
     expect(stepBackHandler.indexOf("stageArticleTransitionSnapshot(")).toBeLessThan(
       stepBackHandler.indexOf("navigateAfterRemovingGuard("),
     );
@@ -55,7 +57,7 @@ describe("non-blocking editor transitions", () => {
     );
     const exportHandler = screen.slice(
       screen.indexOf("const handleConfirmExport"),
-      screen.indexOf("const handleCoverUploadStateChange"),
+      screen.indexOf("const handleBack"),
     );
 
     expect(navigationGuard).toContain("if (navigationCommittedRef.current) return;");

@@ -61,17 +61,19 @@ describe("CoverEditor color picker integration", () => {
     expect(editor).toContain("accessibilityState={{ disabled: isPhotoBusy, busy: isPhotoBusy }}");
   });
 
-  it("serializes the final cover save before export finalization", () => {
+  it("keeps closing read-only and finalizes the cover saved by an earlier stage", () => {
     const closingScreen = read("../../app/on-01c.tsx");
     const exportFlow = closingScreen.slice(
       closingScreen.indexOf("const handleConfirmExport"),
-      closingScreen.indexOf("const handleCoverUploadStateChange"),
+      closingScreen.indexOf("const handleBack"),
     );
 
-    expect(exportFlow).toContain("await persistCover(coverToSave)");
-    expect(exportFlow.indexOf("await persistCover(coverToSave)")).toBeLessThan(
-      exportFlow.indexOf("await finalizeExport()"),
-    );
-    expect(exportFlow).not.toContain("cover: coverToSave");
+    expect(closingScreen).not.toContain('import CoverEditor from');
+    expect(closingScreen).not.toContain("persistCover");
+    expect(closingScreen).not.toContain("coverSaveQueueRef");
+    expect(closingScreen).toContain("<CoverPreview");
+    expect(closingScreen).toContain("cover={cover}");
+    expect(exportFlow).toContain("data: patchData");
+    expect(exportFlow).toContain("await finalizeExport()");
   });
 });

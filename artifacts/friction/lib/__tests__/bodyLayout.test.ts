@@ -1059,8 +1059,9 @@ describe("unified article card cover regression guards", () => {
     }
 
     const closingScreen = read("app/on-01c.tsx");
-    expect(closingScreen).toContain("coverSaveQueueRef.current(async () =>");
-    expect(closingScreen).toContain("data: { cover: nextCover }");
+    expect(closingScreen).toContain("<CoverPreview");
+    expect(closingScreen).toContain("cover={cover}");
+    expect(closingScreen).not.toContain("<CoverEditor");
     expect(closingScreen).toContain("data: patchData");
 
     const spacesRoute = read("../api-server/src/routes/spaces.ts");
