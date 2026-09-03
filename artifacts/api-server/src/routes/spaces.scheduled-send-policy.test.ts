@@ -98,8 +98,10 @@ describe("space scheduled-send role policy", () => {
     expect(conflictHelper).toContain(
       "eq(spaceLettersTable.spaceRoundId, letter.spaceRoundId)",
     );
+    expect(patchRoute).toContain("pg_advisory_xact_lock");
+    expect(patchRoute).toContain("SELECT id FROM space_round_slots");
     expect(patchRoute).toContain(
-      "hasPendingCenterReservationConflict(String(req.params.id), letter, existingSend.id)",
+      "validateCenterSlotDate(\n          lockedLetter, normalizedScheduledAt ?? lockedSend.scheduledAt",
     );
   });
 

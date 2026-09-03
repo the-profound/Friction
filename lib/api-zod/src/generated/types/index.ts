@@ -121,6 +121,8 @@ export * from "./spaceParticipationJoinPath";
 export * from "./spaceParticipationRole";
 export * from "./spaceParticipationStatus";
 export * from "./spacePendingCodeRequestSummary";
+export * from "./spaceReservationMetadata";
+export * from "./spaceReservationMetadataStatus";
 export * from "./spaceRound";
 export * from "./spaceRoundSlotWithUser";
 export * from "./spaceRoundStatus";

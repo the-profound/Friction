@@ -157,6 +157,11 @@ export const spaceScheduledSendsTable = pgTable("space_scheduled_sends", {
   spaceId: uuid("space_id").notNull().references(() => spacesTable.id),
   spaceLetterId: uuid("space_letter_id").notNull().references(() => spaceLettersTable.id),
   slotId: uuid("slot_id").references(() => spaceRoundSlotsTable.id, { onDelete: "set null" }),
+  // These are a delivery-time reservation identity, not live pointers.  In
+  // particular, a later slot reassignment must not change what was reserved.
+  reservedRoundId: uuid("reserved_round_id"),
+  reservedDate: date("reserved_date"),
+  reservationAuthorId: uuid("reservation_author_id"),
   scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
   status: spaceScheduledSendStatusEnum("status").notNull().default("PENDING"),
   sentAt: timestamp("sent_at", { withTimezone: true }),

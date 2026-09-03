@@ -52,6 +52,7 @@ import {
   isKstSlotReservable,
   isOpeningSlotReservable,
 } from "@/lib/spaceRoundPresentation";
+import { canResendSpaceScheduledSend } from "@/lib/spaceScheduledSendPresentation";
 import { getOwnedSpaceScheduledSends } from "@/lib/spaceScheduledSendOwnership";
 
 function dateToYmd(d: Date): string {
@@ -62,6 +63,8 @@ function parseYmdToLocalDate(ymd: string): Date {
   const [y, m, d] = ymd.split("-").map((v) => parseInt(v, 10));
   return new Date(y, (m || 1) - 1, d || 1);
 }
+
+type CenterSlotIdentity = { slotId: string; date: string; roundId: string };
 
 /** Duplicate-pending-reservation conflict from the backend (409). */
 function isDuplicateReservationError(err: unknown): boolean {
@@ -136,6 +139,7 @@ function SendRow({
   const isPending = send.status === "PENDING";
   const isSent = send.status === "SENT";
   const isFailed = send.status === "FAILED";
+  const isCenter = send.letterType === "CENTER";
   // A letter that references a source article but whose title cannot be
   // resolved has had that article deleted — the reservation itself is now
   // invalid. Use strict null/undefined here (not falsy) so a legitimately
@@ -156,7 +160,7 @@ function SendRow({
         <View style={styles.failedBanner}>
           <Feather name="alert-circle" size={12} color="#EF4444" />
           <Text style={styles.failedBannerText}>
-            {send.failureReason ?? "예약 시각에 발송되지 않았어요."} 다시 예약하거나 취소하세요.
+            {send.failureReason ?? "예약 시각에 발송되지 않았어요."} {isCenter ? "취소하세요." : "다시 예약하거나 취소하세요."}
           </Text>
         </View>
       )}
@@ -194,7 +198,8 @@ function SendRow({
             )}
           </>
         )}
-        {!schedulingBlocked && (isSent || send.status === "CANCELLED") && (
+        {canResendSpaceScheduledSend(send.status, send.letterType, schedulingBlocked) &&
+          (isSent || send.status === "CANCELLED") && (
           <ScalePressable contentStyle={styles.resendBtn} onPress={onResend}>
             <Text style={styles.resendBtnText}>다시 예약</Text>
           </ScalePressable>
@@ -204,7 +209,7 @@ function SendRow({
             <ScalePressable contentStyle={styles.cancelBtn} onPress={onCancel}>
               <Text style={styles.cancelBtnText}>취소</Text>
             </ScalePressable>
-            {!schedulingBlocked && (
+            {canResendSpaceScheduledSend(send.status, send.letterType, schedulingBlocked) && (
               <ScalePressable contentStyle={[styles.resendBtn, styles.resendBtnFailed]} onPress={onResend}>
                 <Feather name="refresh-cw" size={12} color="#EF4444" />
                 <Text style={[styles.resendBtnText, styles.resendBtnTextFailed]}>다시 예약</Text>
@@ -238,14 +243,14 @@ function FixedTimeDatePicker({
    * narrows it down to the round the being-edited `send` actually belongs
    * to, so it never offers a date from an unrelated round that the backend
    * would reject. */
-  centerSlots: { date: string; roundId: string }[] | undefined;
+  centerSlots: CenterSlotIdentity[] | undefined;
   /** All space rounds — used to resolve an OPENING letter's round start date
    * (the upper bound for its reservation date). */
   rounds: SpaceRound[];
 }) {
   const isCenter = send.letterType === "CENTER";
   const isOpening = send.letterType === "OPENING";
-  const ownRoundId = send.letter?.spaceRoundId ?? null;
+  const ownRoundId = send.reservation?.resolved ? send.reservation.roundId : send.letter?.spaceRoundId ?? null;
   const ownRoundSlots = centerSlots?.filter((s) => !ownRoundId || s.roundId === ownRoundId);
   const ownRound = ownRoundId ? rounds.find((r) => r.id === ownRoundId) : null;
   const maxDate = isOpening && ownRound?.startsAt ? toKstCalendarDate(new Date(ownRound.startsAt)) : undefined;
@@ -292,7 +297,7 @@ function FixedTimeDatePicker({
           const isSelected = slot.date === selectedYmd;
           return (
             <ScalePressable
-              key={`${slot.roundId}:${slot.date}`}
+              key={slot.slotId}
               contentStyle={[
                 sheetStyles.centerDateChip,
                 isSelected && sheetStyles.centerDateChipSelected,
@@ -360,7 +365,7 @@ function ResendSheet({
 }: {
   send: SpaceScheduledSendWithLetter;
   spaceId: string;
-  centerSlots: { date: string; roundId: string }[] | undefined;
+  centerSlots: CenterSlotIdentity[] | undefined;
   rounds: SpaceRound[];
   onClose: () => void;
   onSaved: () => void;
@@ -371,25 +376,9 @@ function ResendSheet({
   const isCenter = send.letterType === "CENTER";
   const isOpening = send.letterType === "OPENING";
 
-  const ownRoundSlots = useMemo(
-    () => centerSlots?.filter((s) => !send.letter?.spaceRoundId || s.roundId === send.letter.spaceRoundId),
-    [centerSlots, send.letter?.spaceRoundId],
-  );
-  const ownRound = send.letter?.spaceRoundId ? rounds.find((r) => r.id === send.letter!.spaceRoundId) : null;
+  const ownRoundId = send.letter?.spaceRoundId ?? null;
+  const ownRound = ownRoundId ? rounds.find((r) => r.id === ownRoundId) : null;
   const openingMaxDate = isOpening && ownRound?.startsAt ? toKstCalendarDate(new Date(ownRound.startsAt)) : undefined;
-
-  // For CENTER letters, the selection must always land exactly on one of the
-  // user's assigned slot dates — auto-select the first valid one as soon as
-  // slots resolve, and re-snap if the current selection ever falls outside
-  // the assigned set (e.g. slots reload with different data).
-  useEffect(() => {
-    if (!isCenter || !ownRoundSlots || ownRoundSlots.length === 0) return;
-    const selectedYmd = dateToYmd(selectedDate);
-    if (!ownRoundSlots.some((s) => s.date === selectedYmd)) {
-      setSelectedDate(parseYmdToLocalDate(ownRoundSlots[0].date));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isCenter, ownRoundSlots]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
@@ -413,8 +402,9 @@ function ResendSheet({
     }
   }, [selectedDate, spaceId, send, createSend, onSaved, onClose]);
 
-  const isValidCenterSelection =
-    isCenter && !!ownRoundSlots?.some((s) => s.date === dateToYmd(selectedDate));
+  // CENTER rows never open this sheet (their immutable delivery slot has
+  // expired), so keep this defensive branch unsaveable if invoked indirectly.
+  const isValidCenterSelection = false;
   const isValidOpeningSelection =
     !isOpening || startOfDay(selectedDate) >= startOfDay(minOpeningSendDate()) &&
       (!openingMaxDate || startOfDay(selectedDate) <= startOfDay(openingMaxDate));
@@ -471,7 +461,7 @@ function ChangeSheet({
 }: {
   send: SpaceScheduledSendWithLetter;
   spaceId: string;
-  centerSlots: { date: string; roundId: string }[] | undefined;
+  centerSlots: CenterSlotIdentity[] | undefined;
   rounds: SpaceRound[];
   onClose: () => void;
   onSaved: () => void;
@@ -668,7 +658,7 @@ export default function SpaceScheduleSendScreen() {
   // that down to rounds that don't already have a pending reservation, and is
   // only used when creating a brand-new reservation.
   const [allCenterSlots, setAllCenterSlots] = useState<
-    { date: string; roundId: string }[] | undefined
+    { slotId: string; date: string; roundId: string }[] | undefined
   >(undefined);
   // Rounds where the user IS the assigned CENTER slot (same criterion the
   // space detail screen uses: `assignedUserId === userId`, independent of
@@ -711,12 +701,12 @@ export default function SpaceScheduleSendScreen() {
         ),
       );
       if (cancelled) return;
-      const mine: { date: string; roundId: string }[] = [];
+      const mine: { slotId: string; date: string; roundId: string }[] = [];
       const unresolved = new Set<string>();
       targetRounds.forEach((r, idx) => {
         const mySlot = results[idx].find((s) => s.assignedUserId === userId);
         if (mySlot?.scheduledDate && isKstSlotReservable(mySlot.scheduledDate, now)) {
-          mine.push({ date: mySlot.scheduledDate, roundId: r.id });
+          mine.push({ slotId: mySlot.id, date: mySlot.scheduledDate, roundId: r.id });
         } else if (mySlot) {
           unresolved.add(r.id);
         }
@@ -818,6 +808,7 @@ export default function SpaceScheduleSendScreen() {
     newReservationCenterSlots.forEach((s) => {
       list.push({
         kind: "center",
+          slotId: s.slotId,
         date: s.date,
         roundId: s.roundId,
         roundNumber: presentationRounds.find((r) => r.id === s.roundId)?.roundNumber ?? null,
@@ -987,7 +978,7 @@ export default function SpaceScheduleSendScreen() {
     if (roundsQuery.isLoading || allCenterSlots === undefined) return;
     consumedSlotIdRef.current = slotId;
     const target = newReservationCenterSlots?.find(
-      (slot) => slot.roundId === roundId && slot.date === scheduledDate,
+      (slot) => slot.slotId === slotId,
     );
     if (target) {
       setShowNewSheet(true);

@@ -8,6 +8,7 @@
 import type { ArticleCover } from "./articleCover";
 import type { SpaceLetterLetterType } from "./spaceLetterLetterType";
 import type { SpaceLetterVisibility } from "./spaceLetterVisibility";
+import type { SpaceReservationMetadata } from "./spaceReservationMetadata";
 
 export interface SpaceLetter {
   id: string;
@@ -28,4 +29,5 @@ export interface SpaceLetter {
   displayName?: string | null;
   /** Whether the calling user has already read the source article. Always false when there is no sourceArticleId. */
   isRead: boolean;
+  reservation?: SpaceReservationMetadata | null;
 }

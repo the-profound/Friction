@@ -161,6 +161,20 @@ export const ListUserSpaceLettersResponseItem = zod.object({
     .describe(
       "Whether the calling user has already read the source article. Always false when there is no sourceArticleId.",
     ),
+  reservation: zod
+    .object({
+      status: zod.enum(["PENDING", "SENT", "CANCELLED", "FAILED"]),
+      scheduledAt: zod.date(),
+      roundId: zod.string().uuid().nullable(),
+      date: zod.date().nullable(),
+      slotId: zod.string().uuid().nullable(),
+      authorId: zod.string().uuid().nullable(),
+      resolved: zod.boolean(),
+    })
+    .describe(
+      "Immutable reservation identity. Null identity fields explicitly indicate unresolved legacy data.",
+    )
+    .nullish(),
 });
 export const ListUserSpaceLettersResponse = zod.array(
   ListUserSpaceLettersResponseItem,
@@ -2947,6 +2961,23 @@ export const ListAllSpaceScheduledSendsResponseItem = zod.object({
   spaceId: zod.string().uuid(),
   spaceLetterId: zod.string().uuid(),
   slotId: zod.string().uuid().nullish(),
+  reservedRoundId: zod.string().uuid().nullish(),
+  reservedDate: zod.date().nullish(),
+  reservationAuthorId: zod.string().uuid().nullish(),
+  reservation: zod
+    .object({
+      status: zod.enum(["PENDING", "SENT", "CANCELLED", "FAILED"]),
+      scheduledAt: zod.date(),
+      roundId: zod.string().uuid().nullable(),
+      date: zod.date().nullable(),
+      slotId: zod.string().uuid().nullable(),
+      authorId: zod.string().uuid().nullable(),
+      resolved: zod.boolean(),
+    })
+    .optional()
+    .describe(
+      "Immutable reservation identity. Null identity fields explicitly indicate unresolved legacy data.",
+    ),
   scheduledAt: zod.date(),
   status: zod.enum(["PENDING", "SENT", "CANCELLED", "FAILED"]),
   sentAt: zod.date().nullish(),
@@ -3012,6 +3043,20 @@ export const ListAllSpaceScheduledSendsResponseItem = zod.object({
         .describe(
           "Whether the calling user has already read the source article. Always false when there is no sourceArticleId.",
         ),
+      reservation: zod
+        .object({
+          status: zod.enum(["PENDING", "SENT", "CANCELLED", "FAILED"]),
+          scheduledAt: zod.date(),
+          roundId: zod.string().uuid().nullable(),
+          date: zod.date().nullable(),
+          slotId: zod.string().uuid().nullable(),
+          authorId: zod.string().uuid().nullable(),
+          resolved: zod.boolean(),
+        })
+        .describe(
+          "Immutable reservation identity. Null identity fields explicitly indicate unresolved legacy data.",
+        )
+        .nullish(),
     })
     .nullish(),
   articleTitle: zod
@@ -3404,6 +3449,20 @@ export const ListSpaceLettersResponseItem = zod.object({
     .describe(
       "Whether the calling user has already read the source article. Always false when there is no sourceArticleId.",
     ),
+  reservation: zod
+    .object({
+      status: zod.enum(["PENDING", "SENT", "CANCELLED", "FAILED"]),
+      scheduledAt: zod.date(),
+      roundId: zod.string().uuid().nullable(),
+      date: zod.date().nullable(),
+      slotId: zod.string().uuid().nullable(),
+      authorId: zod.string().uuid().nullable(),
+      resolved: zod.boolean(),
+    })
+    .describe(
+      "Immutable reservation identity. Null identity fields explicitly indicate unresolved legacy data.",
+    )
+    .nullish(),
 });
 export const ListSpaceLettersResponse = zod.array(ListSpaceLettersResponseItem);
 
@@ -3504,6 +3563,20 @@ export const UpdateSpaceLetterVisibilityResponse = zod.object({
     .describe(
       "Whether the calling user has already read the source article. Always false when there is no sourceArticleId.",
     ),
+  reservation: zod
+    .object({
+      status: zod.enum(["PENDING", "SENT", "CANCELLED", "FAILED"]),
+      scheduledAt: zod.date(),
+      roundId: zod.string().uuid().nullable(),
+      date: zod.date().nullable(),
+      slotId: zod.string().uuid().nullable(),
+      authorId: zod.string().uuid().nullable(),
+      resolved: zod.boolean(),
+    })
+    .describe(
+      "Immutable reservation identity. Null identity fields explicitly indicate unresolved legacy data.",
+    )
+    .nullish(),
 });
 
 /**
@@ -3518,6 +3591,10 @@ export const ListSpaceScheduledSendsResponseItem = zod.object({
   id: zod.string().uuid(),
   spaceId: zod.string().uuid(),
   spaceLetterId: zod.string().uuid(),
+  slotId: zod.string().uuid().nullish(),
+  reservedRoundId: zod.string().uuid().nullish(),
+  reservedDate: zod.date().nullish(),
+  reservationAuthorId: zod.string().uuid().nullish(),
   scheduledAt: zod.date(),
   status: zod.enum(["PENDING", "SENT", "CANCELLED", "FAILED"]),
   sentAt: zod.date().nullish(),
@@ -3539,7 +3616,7 @@ export const CreateSpaceScheduledSendParams = zod.object({
 
 export const CreateSpaceScheduledSendBody = zod.object({
   scheduledAt: zod.date(),
-  slotId: zod.string().uuid().nullish(),
+  slotId: zod.string().uuid().optional(),
 });
 
 /**
@@ -3552,7 +3629,7 @@ export const UpdateSpaceScheduledSendParams = zod.object({
 });
 
 export const UpdateSpaceScheduledSendBody = zod.object({
-  status: zod.enum(["PENDING", "CANCELLED", "FAILED"]),
+  status: zod.enum(["PENDING", "CANCELLED"]).optional(),
   scheduledAt: zod.date().optional(),
 });
 
@@ -3560,6 +3637,10 @@ export const UpdateSpaceScheduledSendResponse = zod.object({
   id: zod.string().uuid(),
   spaceId: zod.string().uuid(),
   spaceLetterId: zod.string().uuid(),
+  slotId: zod.string().uuid().nullish(),
+  reservedRoundId: zod.string().uuid().nullish(),
+  reservedDate: zod.date().nullish(),
+  reservationAuthorId: zod.string().uuid().nullish(),
   scheduledAt: zod.date(),
   status: zod.enum(["PENDING", "SENT", "CANCELLED", "FAILED"]),
   sentAt: zod.date().nullish(),

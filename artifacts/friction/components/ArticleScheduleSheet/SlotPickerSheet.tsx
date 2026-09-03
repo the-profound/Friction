@@ -10,7 +10,7 @@ import { Colors, Typography } from "@/constants/tokens";
  * round slots. */
 export type EmptySlot =
   | { kind: "opening"; roundId: string; roundNumber: number | null; maxDate: string | null }
-  | { kind: "center"; date: string; roundId: string; roundNumber: number | null };
+  | { kind: "center"; slotId: string; date: string; roundId: string; roundNumber: number | null };
 
 function formatShortDate(ymd: string): string {
   const [, m, d] = ymd.split("-");

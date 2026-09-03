@@ -16,6 +16,12 @@ const state = vi.hoisted(() => {
       id: column("space_letters.id"),
       spaceId: column("space_letters.space_id"),
     },
+    slots: {
+      id: column("space_round_slots.id"),
+      spaceRoundId: column("space_round_slots.space_round_id"),
+      assignedUserId: column("space_round_slots.assigned_user_id"),
+      scheduledDate: column("space_round_slots.scheduled_date"),
+    },
     spaces: {
       id: column("spaces.id"),
       creatorId: column("spaces.creator_id"),
@@ -40,6 +46,10 @@ const state = vi.hoisted(() => {
     recipients: {
       scheduledSendId: column("space_scheduled_send_recipients.scheduled_send_id"),
       recipientId: column("space_scheduled_send_recipients.recipient_id"),
+    },
+    recipientAccess: {
+      letterId: column("letter_recipient_access.letter_id"),
+      userId: column("letter_recipient_access.user_id"),
     },
   };
   const responses: unknown[][] = [];
@@ -98,8 +108,10 @@ vi.mock("@workspace/db", () => ({
   inboxTable: state.tables.inbox,
   spacesTable: state.tables.spaces,
   spaceLettersTable: state.tables.letters,
+  spaceRoundSlotsTable: state.tables.slots,
   spaceParticipationsTable: state.tables.participations,
   spaceScheduledSendRecipientsTable: state.tables.recipients,
+  letterRecipientAccessTable: state.tables.recipientAccess,
   spaceScheduledSendsTable: state.tables.scheduled,
   articlesTable: state.tables.articles,
 }));
@@ -190,7 +202,7 @@ describe("space scheduled-send delivery", () => {
       failedCount: 0,
     });
 
-    expect(state.inserts).toHaveLength(2);
+    expect(state.inserts).toHaveLength(3);
     const inboxInsert = state.inserts.find(
       (entry) => entry.table === state.tables.inbox,
     );
@@ -232,7 +244,7 @@ describe("space scheduled-send delivery", () => {
       failedCount: 0,
     });
 
-    expect(state.inserts).toHaveLength(1);
+    expect(state.inserts).toHaveLength(2);
     expect(state.updates).toHaveLength(0);
   });
 
@@ -258,7 +270,7 @@ describe("space scheduled-send delivery", () => {
       failedCount: 0,
     });
 
-    expect(state.inserts).toHaveLength(1);
+    expect(state.inserts).toHaveLength(2);
     expect(state.updates).toHaveLength(0);
   });
 
@@ -295,5 +307,38 @@ describe("space scheduled-send delivery", () => {
     });
 
     expect(state.updates).toHaveLength(0);
+  });
+
+  it("delivers a delayed CENTER send only from its immutable reserved slot identity", async () => {
+    const centerSend = dueSend({
+      slotId: "slot-1",
+      reservedRoundId: "round-1",
+      reservedDate: "2020-01-02",
+      reservationAuthorId: "author-1",
+      scheduledAt: new Date("2020-01-01T21:00:00.000Z"), // 06:00 KST
+    });
+    state.responses.push(
+      [{ id: "send-1" }], [centerSend],
+      [{ ...letter, letterType: "CENTER", spaceRoundId: "round-1" }],
+      [space],
+      [{ id: "slot-1", spaceRoundId: "round-1", assignedUserId: "author-1", scheduledDate: "2020-01-02" }],
+      [readableArticle], [], [{ userId: "participant-1" }],
+    );
+    await expect(processDueScheduledSends()).resolves.toEqual({ sentCount: 1, failedCount: 0 });
+    expect(state.inserts.some((entry) => entry.table === state.tables.inbox)).toBe(true);
+  });
+
+  it("fails a CENTER send whose slot was deleted or reassigned without inbox delivery", async () => {
+    const centerSend = dueSend({
+      slotId: "slot-1", reservedRoundId: "round-1", reservedDate: "2020-01-02",
+      reservationAuthorId: "author-1", scheduledAt: new Date("2020-01-01T21:00:00.000Z"),
+    });
+    state.responses.push(
+      [{ id: "send-1" }], [centerSend],
+      [{ ...letter, letterType: "CENTER", spaceRoundId: "round-1" }],
+      [space], [], // deleted slot
+    );
+    await expect(processDueScheduledSends()).resolves.toEqual({ sentCount: 0, failedCount: 1 });
+    expect(state.inserts.some((entry) => entry.table === state.tables.inbox)).toBe(false);
   });
 });

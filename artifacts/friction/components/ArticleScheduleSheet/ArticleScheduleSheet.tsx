@@ -89,7 +89,7 @@ export type ArticleScheduleSheetProps = {
    * `undefined` means still loading; an empty array means the user has no
    * assigned CENTER slot yet.
    */
-  assignedCenterSlots?: { date: string; roundId: string }[];
+  assignedCenterSlots?: { slotId: string; date: string; roundId: string }[];
   /** General (CENTER) mode only: true while assigned slot dates are being resolved. */
   isLoadingCenterDates?: boolean;
 };
@@ -143,26 +143,27 @@ export function ArticleScheduleSheet({
         : [],
     [assignedCenterSlots],
   );
-  const sortedCenterDatesKey = sortedCenterSlots.map((s) => s.date).join(",");
-  const [selectedCenterDate, setSelectedCenterDate] = useState<string | null>(
-    () => initialScheduledDate ?? null,
+  const sortedCenterSlotsKey = sortedCenterSlots.map((s) => s.slotId).join(",");
+  const [selectedCenterSlotId, setSelectedCenterSlotId] = useState<string | null>(
+    () => slotId ?? null,
   );
   // Keep the selection in sync once assigned dates resolve: default to the
   // pre-filled slot date if it's still valid, otherwise the first available one.
   const centerDatesReady = !isOpeningLetter && assignedCenterSlots !== undefined;
   React.useEffect(() => {
     if (isOpeningLetter || !centerDatesReady) return;
-    setSelectedCenterDate((prev) => {
-      const dates = sortedCenterSlots.map((s) => s.date);
-      if (prev && dates.includes(prev)) return prev;
-      return dates[0] ?? null;
+    setSelectedCenterSlotId((prev) => {
+      if (prev && sortedCenterSlots.some((slot) => slot.slotId === prev)) return prev;
+      return sortedCenterSlots.find((slot) => slot.date === initialScheduledDate)?.slotId ??
+        sortedCenterSlots[0]?.slotId ??
+        null;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [centerDatesReady, sortedCenterDatesKey]);
+  }, [centerDatesReady, sortedCenterSlotsKey, initialScheduledDate]);
 
   const selectedCenterSlot = useMemo(
-    () => sortedCenterSlots.find((s) => s.date === selectedCenterDate) ?? null,
-    [sortedCenterSlots, selectedCenterDate],
+    () => sortedCenterSlots.find((s) => s.slotId === selectedCenterSlotId) ?? null,
+    [sortedCenterSlots, selectedCenterSlotId],
   );
 
   const createSend = useCreateSpaceScheduledSend();
@@ -275,7 +276,7 @@ export function ArticleScheduleSheet({
           letterId: spaceLetterId,
           data: {
             scheduledAt: finalScheduledAt.toISOString(),
-            ...(slotId != null ? { slotId } : {}),
+            slotId: centerSlot.slotId,
           },
         });
         queryClient.invalidateQueries({ queryKey: getListAllSpaceScheduledSendsQueryKey(spaceId) });
@@ -417,15 +418,15 @@ export function ArticleScheduleSheet({
             ) : (
               <View style={styles.centerDateChipRow}>
                 {sortedCenterSlots.map((slot) => {
-                  const isSelected = slot.date === selectedCenterDate;
+                  const isSelected = slot.slotId === selectedCenterSlotId;
                   return (
                     <ScalePressable
-                      key={`${slot.roundId}:${slot.date}`}
+                      key={slot.slotId}
                       contentStyle={[
                         styles.centerDateChip,
                         isSelected && styles.centerDateChipSelected,
                       ]}
-                      onPress={() => setSelectedCenterDate(slot.date)}
+                      onPress={() => setSelectedCenterSlotId(slot.slotId)}
                     >
                       <Text
                         style={[

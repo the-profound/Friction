@@ -60,18 +60,68 @@ type SpaceRoundCenterLetterMatch = {
   spaceRoundId?: string | null;
   authorId: string;
   letterType: string | null | undefined;
+  reservation?: SpaceReservationMetadataPresentation | null;
 };
 
 type SpaceRoundSlotAssignment = {
   id: string;
   spaceRoundId: string;
   assignedUserId: string;
+  scheduledDate?: string | null;
+};
+
+export type SpaceReservationMetadataPresentation = {
+  status: string;
+  scheduledAt: string;
+  roundId: string | null;
+  date: string | null;
+  slotId: string | null;
+  authorId: string | null;
+  resolved: boolean;
 };
 
 type PendingCenterReservation = {
   spaceLetterId: string;
-  slotId?: string | null;
+  reservation?: SpaceReservationMetadataPresentation | null;
 };
+
+function isExactReservationForSlot(
+  reservation: SpaceReservationMetadataPresentation | null | undefined,
+  slot: SpaceRoundSlotAssignment,
+  authorId: string,
+  requiredStatus?: string,
+): boolean {
+  if (
+    !reservation ||
+    !reservation.resolved ||
+    (requiredStatus && reservation.status !== requiredStatus) ||
+    reservation.slotId !== slot.id ||
+    reservation.roundId !== slot.spaceRoundId ||
+    reservation.authorId !== authorId ||
+    !slot.scheduledDate ||
+    reservation.date !== slot.scheduledDate
+  ) {
+    return false;
+  }
+  const slotDate = parseKstDateString(slot.scheduledDate);
+  return !!slotDate && reservation.scheduledAt === kstDateAt6(slotDate).toISOString();
+}
+
+/**
+ * A resolved CENTER reservation owns only the immutable slot identity it names.
+ * Legacy unscheduled letters retain their explicit round assignment; unresolved
+ * reservation metadata deliberately never falls back to mutable letter fields.
+ */
+export function getSpaceLetterPresentationRoundId(
+  letter: SpaceRoundCenterLetterMatch,
+  firstRoundId: string | null,
+): string | null {
+  if (letter.letterType === "CENTER" && letter.reservation !== undefined && letter.reservation !== null) {
+    return letter.reservation.resolved ? letter.reservation.roundId : null;
+  }
+  if (letter.spaceRoundId) return letter.spaceRoundId;
+  return letter.letterType === "OPENING" && !letter.reservation ? firstRoundId : null;
+}
 
 export type UpcomingRoundCenterCardItem<
   TLetter extends SpaceRoundCenterLetterMatch,
@@ -94,9 +144,6 @@ export function resolveUpcomingRoundCenterCards<
   userId: string,
   pendingCenterReservations: readonly PendingCenterReservation[],
 ): UpcomingRoundCenterCardItem<TLetter, TSlot>[] {
-  const slotsByRoundAndAssignee = new Map(
-    slots.map((slot) => [`${slot.spaceRoundId}:${slot.assignedUserId}`, slot]),
-  );
   const slotsById = new Map(slots.map((slot) => [slot.id, slot]));
   const reservationsByLetterId = new Map(
     pendingCenterReservations.map((reservation) => [
@@ -118,17 +165,12 @@ export function resolveUpcomingRoundCenterCards<
     const reservation = reservationsByLetterId.get(letter.id);
     if (!reservation) continue;
 
-    // New reservations persist the chosen slot ID. Old reservations without
-    // that field can only use the explicit round + assigned-user fallback.
-    const slot = reservation.slotId
-      ? slotsById.get(reservation.slotId)
-      : slotsByRoundAndAssignee.get(
-          `${letter.spaceRoundId}:${letter.authorId}`,
-        );
+    const slot = reservation.reservation?.slotId
+      ? slotsById.get(reservation.reservation.slotId)
+      : undefined;
     if (
       !slot ||
-      slot.spaceRoundId !== letter.spaceRoundId ||
-      slot.assignedUserId !== letter.authorId ||
+      !isExactReservationForSlot(reservation.reservation, slot, letter.authorId, "PENDING") ||
       lettersBySlotId.has(slot.id)
     ) {
       continue;
@@ -143,6 +185,19 @@ export function resolveUpcomingRoundCenterCards<
       ? { kind: "letter", letter, slotId: slot.id }
       : { kind: "slot", slot };
   });
+}
+
+/** Whether a CENTER letter should hide this exact slot in active/completed views. */
+export function doesSpaceLetterOccupyRoundSlot<
+  TLetter extends SpaceRoundCenterLetterMatch,
+  TSlot extends SpaceRoundSlotAssignment,
+>(letter: TLetter, slot: TSlot): boolean {
+  if (letter.letterType !== "CENTER" || letter.authorId !== slot.assignedUserId) return false;
+  if (letter.reservation !== undefined && letter.reservation !== null) {
+    return isExactReservationForSlot(letter.reservation, slot, letter.authorId) &&
+      (letter.reservation.status === "PENDING" || letter.reservation.status === "SENT");
+  }
+  return letter.spaceRoundId === slot.spaceRoundId;
 }
 
 /** Keeps reservable cards ahead of expired empty slots without changing their internal order. */

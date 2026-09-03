@@ -4944,6 +4944,36 @@ components:
       enum: [PUBLIC, RECIPIENT_ONLY]
       description: "PUBLIC — 공간 참여자 전체에게 공개. RECIPIENT_ONLY — scheduled send 수신자 및 작성자·오퍼레이터에게만 공개."
 
+    SpaceReservationMetadata:
+      type: object
+      description: Immutable reservation identity. Null identity fields explicitly indicate unresolved legacy data.
+      properties:
+        status:
+          type: string
+          enum: [PENDING, SENT, CANCELLED, FAILED]
+        scheduledAt:
+          type: string
+          format: date-time
+        roundId:
+          type: string
+          format: uuid
+          nullable: true
+        date:
+          type: string
+          format: date
+          nullable: true
+        slotId:
+          type: string
+          format: uuid
+          nullable: true
+        authorId:
+          type: string
+          format: uuid
+          nullable: true
+        resolved:
+          type: boolean
+      required: [status, scheduledAt, roundId, date, slotId, authorId, resolved]
+
     SpaceLetter:
       type: object
       properties:
@@ -4995,6 +5025,10 @@ components:
         isRead:
           type: boolean
           description: Whether the calling user has already read the source article. Always false when there is no sourceArticleId.
+        reservation:
+          allOf:
+            - $ref: "#/components/schemas/SpaceReservationMetadata"
+          nullable: true
       required: [id, spaceId, authorId, letterType, visibility, createdAt, updatedAt, isRead]
 
     CreateSpaceLetterBody:
@@ -5038,6 +5072,22 @@ components:
         spaceLetterId:
           type: string
           format: uuid
+        slotId:
+          type: string
+          format: uuid
+          nullable: true
+        reservedRoundId:
+          type: string
+          format: uuid
+          nullable: true
+        reservedDate:
+          type: string
+          format: date
+          nullable: true
+        reservationAuthorId:
+          type: string
+          format: uuid
+          nullable: true
         scheduledAt:
           type: string
           format: date-time
@@ -5061,6 +5111,7 @@ components:
 
     CreateSpaceScheduledSendBody:
       type: object
+      additionalProperties: false
       properties:
         scheduledAt:
           type: string
@@ -5068,19 +5119,19 @@ components:
         slotId:
           type: string
           format: uuid
-          nullable: true
       required: [scheduledAt]
 
     UpdateSpaceScheduledSendBody:
       type: object
+      additionalProperties: false
       properties:
         status:
           type: string
-          enum: [PENDING, CANCELLED, FAILED]
+          enum: [PENDING, CANCELLED]
         scheduledAt:
           type: string
           format: date-time
-      required: [status]
+      minProperties: 1
 
     SpaceScheduledSendWithLetter:
       type: object
@@ -5098,6 +5149,20 @@ components:
           type: string
           format: uuid
           nullable: true
+        reservedRoundId:
+          type: string
+          format: uuid
+          nullable: true
+        reservedDate:
+          type: string
+          format: date
+          nullable: true
+        reservationAuthorId:
+          type: string
+          format: uuid
+          nullable: true
+        reservation:
+          $ref: "#/components/schemas/SpaceReservationMetadata"
         scheduledAt:
           type: string
           format: date-time

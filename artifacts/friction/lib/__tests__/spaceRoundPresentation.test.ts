@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   getSpaceLetterAuthorName,
+  getSpaceLetterPresentationRoundId,
+  type SpaceReservationMetadataPresentation,
   getSpaceRoundPresentationStatus,
   isKstSlotReservable,
   isOpeningSlotReservable,
@@ -227,9 +229,9 @@ describe("space round presentation", () => {
 
   it("shows pending center letters only in their own upcoming round slots", () => {
     const slots = [
-      { id: "round-one-other", spaceRoundId: "round-one", assignedUserId: "other" },
-      { id: "round-one-mine", spaceRoundId: "round-one", assignedUserId: "me" },
-      { id: "round-two-mine", spaceRoundId: "round-two", assignedUserId: "me" },
+      { id: "round-one-other", spaceRoundId: "round-one", assignedUserId: "other", scheduledDate: "2026-08-20" },
+      { id: "round-one-mine", spaceRoundId: "round-one", assignedUserId: "me", scheduledDate: "2026-08-20" },
+      { id: "round-two-mine", spaceRoundId: "round-two", assignedUserId: "me", scheduledDate: "2026-08-21" },
     ];
     const letters = [
       { id: "letter-one", spaceRoundId: "round-one", authorId: "me", letterType: "CENTER" },
@@ -242,9 +244,9 @@ describe("space round presentation", () => {
       slots,
       "me",
       [
-        { spaceLetterId: "letter-one", slotId: "round-one-mine" },
-        { spaceLetterId: "letter-two", slotId: "round-two-mine" },
-        { spaceLetterId: "other-letter", slotId: "round-one-other" },
+        { spaceLetterId: "letter-one", reservation: { status: "PENDING", resolved: true, slotId: "round-one-mine", roundId: "round-one", authorId: "me", date: "2026-08-20", scheduledAt: "2026-08-19T21:00:00.000Z" } },
+        { spaceLetterId: "letter-two", reservation: { status: "PENDING", resolved: true, slotId: "round-two-mine", roundId: "round-two", authorId: "me", date: "2026-08-21", scheduledAt: "2026-08-20T21:00:00.000Z" } },
+        { spaceLetterId: "other-letter", reservation: { status: "PENDING", resolved: true, slotId: "round-one-other", roundId: "round-one", authorId: "other", date: "2026-08-20", scheduledAt: "2026-08-19T21:00:00.000Z" } },
       ],
     );
 
@@ -289,13 +291,20 @@ describe("space round presentation", () => {
       letters,
       slots,
       "me",
-      [{ spaceLetterId: "letter-one", slotId: "round-two-mine" }],
+      [{
+        spaceLetterId: "letter-one",
+        reservation: {
+          status: "PENDING", resolved: true, slotId: "round-two-mine",
+          roundId: "round-one", authorId: "me", date: "2026-08-20",
+          scheduledAt: "2026-08-19T21:00:00.000Z",
+        },
+      }],
     );
 
     expect(result.map((item) => item.kind)).toEqual(["slot", "slot"]);
   });
 
-  it("uses exact round and assignee matching only for legacy reservations without a slot ID", () => {
+  it("does not guess unresolved legacy reservation metadata into a slot", () => {
     const slots = [
       { id: "round-one-mine", spaceRoundId: "round-one", assignedUserId: "me" },
       { id: "round-two-mine", spaceRoundId: "round-two", assignedUserId: "me" },
@@ -315,7 +324,66 @@ describe("space round presentation", () => {
       "round-one-mine",
       "round-two-mine",
     ]);
-    expect(result.map((item) => item.kind)).toEqual(["letter", "slot"]);
+    expect(result.map((item) => item.kind)).toEqual(["slot", "slot"]);
+  });
+
+  it("keeps a delayed CENTER letter in its resolved reservation round", () => {
+    expect(getSpaceLetterPresentationRoundId({
+      id: "letter", authorId: "me", letterType: "CENTER", spaceRoundId: "current",
+      reservation: {
+        status: "SENT", resolved: true, roundId: "original", slotId: "slot",
+        authorId: "me", date: "2026-08-20", scheduledAt: "2026-08-19T21:00:00.000Z",
+      },
+    }, "round-one")).toBe("original");
+    expect(getSpaceLetterPresentationRoundId({
+      id: "unresolved", authorId: "me", letterType: "CENTER", spaceRoundId: "current",
+      reservation: {
+        status: "FAILED", resolved: false, roundId: null, slotId: null,
+        authorId: null, date: null, scheduledAt: "2026-08-19T21:00:00.000Z",
+      },
+    }, "round-one")).toBeNull();
+    expect(getSpaceLetterPresentationRoundId({
+      id: "legacy-opening", authorId: "operator", letterType: "OPENING",
+    }, "round-one")).toBe("round-one");
+  });
+
+  it("requires a pending, resolved exact KST 06:00 reservation preview", () => {
+    const slot = { id: "slot", spaceRoundId: "round", assignedUserId: "me", scheduledDate: "2026-08-20" };
+    const letter = { id: "letter", spaceRoundId: "round", authorId: "me", letterType: "CENTER" };
+    const metadata = (changes: Partial<SpaceReservationMetadataPresentation> = {}): SpaceReservationMetadataPresentation => ({
+      status: "PENDING", resolved: true, slotId: "slot", roundId: "round", authorId: "me",
+      date: "2026-08-20", scheduledAt: "2026-08-19T21:00:00.000Z", ...changes,
+    });
+    expect(resolveUpcomingRoundCenterCards([letter], [slot], "me", [
+      { spaceLetterId: "letter", reservation: metadata() },
+    ])[0].kind).toBe("letter");
+    for (const badMetadata of [
+      metadata({ date: "2026-08-21" }),
+      metadata({ scheduledAt: "2026-08-19T21:01:00.000Z" }),
+      metadata({ status: "CANCELLED" }),
+      metadata({ status: "FAILED" }),
+      metadata({ resolved: false, roundId: null }),
+    ]) {
+      expect(resolveUpcomingRoundCenterCards([letter], [slot], "me", [
+        { spaceLetterId: "letter", reservation: badMetadata },
+      ])[0].kind).toBe("slot");
+    }
+  });
+
+  it("uses exact slot identity when two rounds have slots on the same date", () => {
+    const slots = [
+      { id: "round-one-slot", spaceRoundId: "round-one", assignedUserId: "me", scheduledDate: "2026-08-20" },
+      { id: "round-two-slot", spaceRoundId: "round-two", assignedUserId: "me", scheduledDate: "2026-08-20" },
+    ];
+    const letters = [{ id: "round-two-letter", spaceRoundId: "round-two", authorId: "me", letterType: "CENTER" }];
+    const result = resolveUpcomingRoundCenterCards(letters, slots, "me", [{
+      spaceLetterId: "round-two-letter",
+      reservation: {
+        status: "PENDING", resolved: true, slotId: "round-two-slot", roundId: "round-two",
+        authorId: "me", date: "2026-08-20", scheduledAt: "2026-08-19T21:00:00.000Z",
+      },
+    }]);
+    expect(result.map((item) => item.kind)).toEqual(["slot", "letter"]);
   });
 
   it("uses the safe anonymous display name for every letter type", () => {

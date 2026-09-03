@@ -12,5 +12,4 @@ export type UpdateSpaceScheduledSendBodyStatus =
 export const UpdateSpaceScheduledSendBodyStatus = {
   PENDING: "PENDING",
   CANCELLED: "CANCELLED",
-  FAILED: "FAILED",
 } as const;

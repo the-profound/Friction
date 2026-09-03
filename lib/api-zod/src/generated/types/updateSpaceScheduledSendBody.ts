@@ -8,6 +8,6 @@
 import type { UpdateSpaceScheduledSendBodyStatus } from "./updateSpaceScheduledSendBodyStatus";
 
 export interface UpdateSpaceScheduledSendBody {
-  status: UpdateSpaceScheduledSendBodyStatus;
+  status?: UpdateSpaceScheduledSendBodyStatus;
   scheduledAt?: Date;
 }

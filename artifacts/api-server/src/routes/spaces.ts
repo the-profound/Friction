@@ -2556,7 +2556,7 @@ router.get("/spaces/:id/letters", requireAuth, async (req, res) => {
   }
   const articleIds = [...new Set(letters.map((l) => l.sourceArticleId).filter(Boolean) as string[])];
   const authorIds = [...new Set(letters.map((l) => l.authorId))];
-  const [articles, authors, identity] = await Promise.all([
+  const [articles, authors, identity, reservationRows] = await Promise.all([
     articleIds.length > 0
       ? db
           .select({ id: articlesTable.id, title: articlesTable.title, content: articlesTable.content, cover: articlesTable.cover })
@@ -2570,9 +2570,27 @@ router.get("/spaces/:id/letters", requireAuth, async (req, res) => {
           .where(inArray(usersTable.id, authorIds))
       : Promise.resolve([]),
     getSpaceDisplayNameMap(req.params.id as string, authorIds),
+    db.select({
+      spaceLetterId: spaceScheduledSendsTable.spaceLetterId,
+      status: spaceScheduledSendsTable.status,
+      createdAt: spaceScheduledSendsTable.createdAt,
+      scheduledAt: spaceScheduledSendsTable.scheduledAt,
+      reservedRoundId: spaceScheduledSendsTable.reservedRoundId,
+      reservedDate: spaceScheduledSendsTable.reservedDate,
+      slotId: spaceScheduledSendsTable.slotId,
+      reservationAuthorId: spaceScheduledSendsTable.reservationAuthorId,
+    }).from(spaceScheduledSendsTable).where(inArray(spaceScheduledSendsTable.spaceLetterId, letters.map((l) => l.id))),
   ]);
   const articleMap = new Map(articles.map((a) => [a.id, a]));
   const authorMap = new Map(authors.map((u) => [u.id, u.nickname]));
+  const currentReservationByLetter = new Map<string, typeof reservationRows[number]>();
+  for (const reservation of reservationRows) {
+    if (reservation.status === "CANCELLED") continue;
+    const current = currentReservationByLetter.get(reservation.spaceLetterId);
+    if (!current || reservation.createdAt > current.createdAt) {
+      currentReservationByLetter.set(reservation.spaceLetterId, reservation);
+    }
+  }
 
   // Fetch read status for the calling user across all letter articles
   const readArticleIds = articleIds.length > 0
@@ -2589,6 +2607,7 @@ router.get("/spaces/:id/letters", requireAuth, async (req, res) => {
   const result = letters.map((letter) => {
     const article = letter.sourceArticleId ? (articleMap.get(letter.sourceArticleId) ?? null) : null;
     const rawContent = article?.content ?? null;
+    const reservation = currentReservationByLetter.get(letter.id);
     const articleExcerpt = rawContent ? rawContent.replace(/[#*_`>\-~[\]()]/g, "").trim().slice(0, 100) : null;
     return {
       ...letter,
@@ -2602,6 +2621,19 @@ router.get("/spaces/:id/letters", requireAuth, async (req, res) => {
         ? (identity.displayNames.get(letter.authorId) ?? ANONYMOUS_PARTICIPANT_NAME)
         : null,
       isRead: letter.sourceArticleId ? readSet.has(letter.sourceArticleId) : false,
+      reservation: reservation ? {
+        status: reservation.status,
+        scheduledAt: reservation.scheduledAt,
+        roundId: reservation.reservedRoundId ?? null,
+        date: reservation.reservedDate ?? null,
+        slotId: reservation.slotId ?? null,
+        authorId: reservation.reservationAuthorId ?? null,
+        resolved: !!(
+          reservation.reservedRoundId &&
+          reservation.reservedDate &&
+          reservation.reservationAuthorId
+        ),
+      } : null,
     };
   });
   res.json(result);
@@ -2844,8 +2876,8 @@ router.get("/spaces/:id/letters/:letterId/scheduled-sends", requireAuth, async (
 /**
  * Finds the round slot assigned to `authorId` within `spaceRoundId`, if any.
  */
-async function findAssignedSlot(spaceRoundId: string, authorId: string) {
-  const [slot] = await db
+async function findAssignedSlot(spaceRoundId: string, authorId: string, database: any = db) {
+  const [slot] = await database
     .select()
     .from(spaceRoundSlotsTable)
     .where(
@@ -2897,13 +2929,18 @@ type CenterSlotValidation =
 async function validateCenterSlotDate(
   letter: { spaceRoundId: string | null; authorId: string },
   normalizedScheduledAt: Date | undefined,
+  requestedSlotId?: string,
+  database: any = db,
 ): Promise<CenterSlotValidation> {
   if (!letter.spaceRoundId) {
     return { ok: false, error: "회차 정보가 없는 글은 예약할 수 없습니다." };
   }
-  const slot = await findAssignedSlot(letter.spaceRoundId, letter.authorId);
+  const slot = await findAssignedSlot(letter.spaceRoundId, letter.authorId, database);
   if (!slot) {
     return { ok: false, error: "이 회차에 배정된 슬롯이 없습니다." };
+  }
+  if (requestedSlotId !== slot.id) {
+    return { ok: false, error: "선택한 슬롯이 이 회차의 작성자 배정 슬롯과 일치하지 않습니다." };
   }
   if (!slot.scheduledDate) {
     return { ok: false, error: "슬롯에 배정된 발송일이 없습니다." };
@@ -2915,6 +2952,27 @@ async function validateCenterSlotDate(
     return { ok: false, error: "요청한 발송 예정일이 배정된 슬롯 날짜와 일치하지 않습니다." };
   }
   return { ok: true, slot };
+}
+
+async function lockAndCheckPendingCenterReservation(
+  tx: any,
+  input: { spaceId: string; roundId: string; authorId: string; exceptSendId?: string },
+): Promise<boolean> {
+  // This remains the serialization guarantee when an old duplicate prevents
+  // the optional partial unique index from being installed.
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(
+    hashtextextended(${`${input.spaceId}:${input.roundId}:${input.authorId}`}, 0)
+  )`);
+  const conditions: SQL[] = [
+    eq(spaceScheduledSendsTable.spaceId, input.spaceId),
+    eq(spaceScheduledSendsTable.status, "PENDING"),
+    eq(spaceScheduledSendsTable.reservedRoundId, input.roundId),
+    eq(spaceScheduledSendsTable.reservationAuthorId, input.authorId),
+  ];
+  if (input.exceptSendId) conditions.push(ne(spaceScheduledSendsTable.id, input.exceptSendId));
+  const [existing] = await tx.select({ id: spaceScheduledSendsTable.id })
+    .from(spaceScheduledSendsTable).where(and(...conditions)).limit(1);
+  return !!existing;
 }
 
 /**
@@ -3005,12 +3063,15 @@ router.post("/spaces/:id/letters/:letterId/scheduled-sends", requireAuth, async 
     return;
   }
 
-  const { scheduledAt, slotId, ...sendRest } = req.body;
-  if (scheduledAt == null) {
-    res.status(400).json({ error: "scheduledAt is required" });
+  const parsedBody = z.object({
+    scheduledAt: z.string().datetime(),
+    slotId: z.string().uuid().optional(),
+  }).strict().safeParse(req.body);
+  if (!parsedBody.success) {
+    res.status(400).json({ error: "Invalid request body", details: parsedBody.error.flatten() });
     return;
   }
-  const parsedScheduledAt = toDate(scheduledAt);
+  const parsedScheduledAt = toDate(parsedBody.data.scheduledAt);
   if (!parsedScheduledAt) {
     res.status(400).json({ error: "잘못된 발송 시각입니다." });
     return;
@@ -3019,25 +3080,21 @@ router.post("/spaces/:id/letters/:letterId/scheduled-sends", requireAuth, async 
   // whatever date/time value the client actually sent.
   const normalizedScheduledAt = normalizeToKst6(parsedScheduledAt);
 
-  // CENTER keeps one pending reservation per author/round. OPENING is
-  // intentionally exempt: the same or different opening letter may have
-  // multiple independent pending sends, including on the same date.
-  if (
-    letter.letterType === "CENTER" &&
-    await hasPendingCenterReservationConflict(String(req.params.id), letter)
-  ) {
-    res.status(409).json({ error: "이미 같은 회차·역할로 대기 중인 예약이 있습니다." });
+  let resolvedSlotId: string | undefined;
+  let reservationIdentity: {
+    reservedRoundId: string;
+    reservedDate: string;
+    reservationAuthorId: string;
+  } | undefined;
+  if (letter.letterType !== "CENTER" && parsedBody.data.slotId) {
+    res.status(400).json({ error: "CENTER 예약이 아닌 경우 slotId를 지정할 수 없습니다." });
     return;
   }
-
-  let resolvedSlotId: string | undefined = slotId ?? undefined;
   if (letter.letterType === "CENTER") {
-    const validation = await validateCenterSlotDate(letter, normalizedScheduledAt);
-    if (!validation.ok) {
-      res.status(400).json({ error: validation.error });
+    if (!parsedBody.data.slotId) {
+      res.status(400).json({ error: "CENTER 예약에는 slotId가 필요합니다." });
       return;
     }
-    resolvedSlotId = validation.slot.id;
   } else if (letter.letterType === "OPENING") {
     const validation = await validateOpeningRoundDate(letter, normalizedScheduledAt);
     if (!validation.ok) {
@@ -3046,17 +3103,65 @@ router.post("/spaces/:id/letters/:letterId/scheduled-sends", requireAuth, async 
     }
   }
 
-  const [send] = await db
-    .insert(spaceScheduledSendsTable)
-    .values({
-      ...sendRest,
-      spaceId: req.params.id,
-      spaceLetterId: req.params.letterId,
-      scheduledAt: normalizedScheduledAt,
-      ...(resolvedSlotId != null ? { slotId: resolvedSlotId } : {}),
-    })
-    .returning();
-  res.status(201).json(send);
+  try {
+    const [send] = await db.transaction(async (tx) => {
+      if (letter.letterType === "CENTER") {
+        // Re-read after the advisory lock and lock both mutable records.  The
+        // binding used below is therefore one atomic observation, not the
+        // earlier authorization-time read.
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(
+          hashtextextended(${`${req.params.id}:${letter.spaceRoundId}:${letter.authorId}`}, 0)
+        )`);
+        await tx.execute(sql`SELECT id FROM space_letters WHERE id = ${req.params.letterId} FOR UPDATE`);
+        const [lockedLetter] = await tx.select().from(spaceLettersTable).where(and(
+          eq(spaceLettersTable.id, req.params.letterId),
+          eq(spaceLettersTable.spaceId, req.params.id),
+          eq(spaceLettersTable.authorId, callerId),
+          eq(spaceLettersTable.letterType, "CENTER"),
+        )).limit(1);
+        if (!lockedLetter) throw Object.assign(new Error("letter changed"), { code: "23505", constraint: "space_scheduled_sends_pending_center_reservation_unique" });
+        const validation = await validateCenterSlotDate(
+          lockedLetter, normalizedScheduledAt, parsedBody.data.slotId, tx,
+        );
+        if (!validation.ok) throw Object.assign(new Error(validation.error), { statusCode: 400 });
+        await tx.execute(sql`SELECT id FROM space_round_slots WHERE id = ${validation.slot.id} FOR UPDATE`);
+        const lockedValidation = await validateCenterSlotDate(
+          lockedLetter, normalizedScheduledAt, parsedBody.data.slotId, tx,
+        );
+        if (!lockedValidation.ok) throw Object.assign(new Error(lockedValidation.error), { statusCode: 400 });
+        resolvedSlotId = lockedValidation.slot.id;
+        reservationIdentity = {
+          reservedRoundId: lockedValidation.slot.spaceRoundId,
+          reservedDate: lockedValidation.slot.scheduledDate!,
+          reservationAuthorId: lockedLetter.authorId,
+        };
+        if (await lockAndCheckPendingCenterReservation(tx, {
+          spaceId: String(req.params.id), roundId: reservationIdentity.reservedRoundId,
+          authorId: reservationIdentity.reservationAuthorId,
+        })) {
+          throw Object.assign(new Error("pending CENTER reservation conflict"), { code: "23505", constraint: "space_scheduled_sends_pending_center_reservation_unique" });
+        }
+      }
+      return tx.insert(spaceScheduledSendsTable).values({
+        spaceId: req.params.id, spaceLetterId: req.params.letterId,
+        scheduledAt: normalizedScheduledAt,
+        ...(resolvedSlotId != null ? { slotId: resolvedSlotId } : {}),
+        ...reservationIdentity,
+      }).returning();
+    });
+    res.status(201).json(send);
+  } catch (err) {
+    if ((err as { statusCode?: number }).statusCode === 400) {
+      res.status(400).json({ error: (err as Error).message });
+      return;
+    }
+    const pg = getPgError(err);
+    if (pg.code === "23505" && pg.constraint === "space_scheduled_sends_pending_center_reservation_unique") {
+      res.status(409).json({ error: "이미 같은 회차·역할로 대기 중인 예약이 있습니다." });
+      return;
+    }
+    throw err;
+  }
 });
 
 router.patch("/spaces/:id/letters/:letterId/scheduled-sends/:sendId", requireAuth, async (req, res) => {
@@ -3066,7 +3171,17 @@ router.patch("/spaces/:id/letters/:letterId/scheduled-sends/:sendId", requireAut
     res.status(403).json({ error: "You can only update scheduled sends for your own letters" });
     return;
   }
-  const { status, scheduledAt } = req.body;
+  const parsedBody = z.object({
+    status: z.enum(["PENDING", "CANCELLED"]).optional(),
+    scheduledAt: z.string().datetime().optional(),
+  }).strict().refine((value) => value.status !== undefined || value.scheduledAt !== undefined, {
+    message: "At least one field is required",
+  }).safeParse(req.body);
+  if (!parsedBody.success) {
+    res.status(400).json({ error: "Invalid request body", details: parsedBody.error.flatten() });
+    return;
+  }
+  const { status, scheduledAt } = parsedBody.data;
   const [existingSend] = await db
     .select()
     .from(spaceScheduledSendsTable)
@@ -3080,6 +3195,14 @@ router.patch("/spaces/:id/letters/:letterId/scheduled-sends/:sendId", requireAut
     .limit(1);
   if (!existingSend) {
     res.status(404).json({ error: "Scheduled send not found" });
+    return;
+  }
+  if (existingSend.status === "SENT") {
+    res.status(409).json({ error: "이미 발송된 예약은 변경하거나 재활성화할 수 없습니다." });
+    return;
+  }
+  if (status === "PENDING" && !["CANCELLED", "FAILED", "PENDING"].includes(existingSend.status)) {
+    res.status(409).json({ error: "현재 예약 상태에서는 대기 상태로 전환할 수 없습니다." });
     return;
   }
 
@@ -3115,21 +3238,7 @@ router.patch("/spaces/:id/letters/:letterId/scheduled-sends/:sendId", requireAut
   // stored date; otherwise validate the requested normalized date.
   if (scheduledAt !== undefined || status === "PENDING") {
     const effectiveScheduledAt = normalizedScheduledAt ?? existingSend.scheduledAt;
-    if (letter.letterType === "CENTER") {
-      if (
-        (status ?? existingSend.status) === "PENDING" &&
-        await hasPendingCenterReservationConflict(String(req.params.id), letter, existingSend.id)
-      ) {
-        res.status(409).json({ error: "이미 같은 회차·역할로 대기 중인 예약이 있습니다." });
-        return;
-      }
-      const validation = await validateCenterSlotDate(letter, effectiveScheduledAt);
-      if (!validation.ok) {
-        res.status(400).json({ error: validation.error });
-        return;
-      }
-      updateFields.slotId = validation.slot.id;
-    } else if (letter.letterType === "OPENING") {
+    if (letter.letterType === "OPENING") {
       const validation = await validateOpeningRoundDate(letter, effectiveScheduledAt);
       if (!validation.ok) {
         res.status(400).json({ error: validation.error });
@@ -3137,18 +3246,81 @@ router.patch("/spaces/:id/letters/:letterId/scheduled-sends/:sendId", requireAut
       }
     }
   }
-  const [send] = await db
-    .update(spaceScheduledSendsTable)
-    .set(updateFields)
-    .where(
-      and(
-        eq(spaceScheduledSendsTable.id, req.params.sendId),
-        eq(spaceScheduledSendsTable.spaceLetterId, req.params.letterId),
+  try {
+    const [send] = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT id FROM space_scheduled_sends WHERE id = ${existingSend.id} FOR UPDATE`);
+      const [lockedSend] = await tx.select().from(spaceScheduledSendsTable).where(and(
+        eq(spaceScheduledSendsTable.id, existingSend.id),
         eq(spaceScheduledSendsTable.spaceId, req.params.id),
-      ),
-    )
-    .returning();
-  res.json(send);
+        eq(spaceScheduledSendsTable.spaceLetterId, req.params.letterId),
+      )).limit(1);
+      if (!lockedSend || lockedSend.status !== existingSend.status || lockedSend.status === "SENT") {
+        throw Object.assign(new Error("scheduled send state changed"), { code: "23505", constraint: "space_scheduled_sends_pending_center_reservation_unique" });
+      }
+      if (lockedSend.reservedRoundId && lockedSend.reservationAuthorId) {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(
+          hashtextextended(${`${req.params.id}:${lockedSend.reservedRoundId}:${lockedSend.reservationAuthorId}`}, 0)
+        )`);
+      }
+      const [lockedLetter] = await tx.select().from(spaceLettersTable).where(and(
+        eq(spaceLettersTable.id, lockedSend.spaceLetterId),
+        eq(spaceLettersTable.spaceId, req.params.id),
+      )).limit(1);
+      if (!lockedLetter || lockedLetter.authorId !== callerId) {
+        throw Object.assign(new Error("letter changed"), { code: "23505", constraint: "space_scheduled_sends_pending_center_reservation_unique" });
+      }
+      if (lockedLetter.letterType === "CENTER" && (scheduledAt !== undefined || status === "PENDING")) {
+        if (!lockedSend.reservedRoundId || !lockedSend.reservationAuthorId || !lockedSend.slotId) {
+          throw Object.assign(new Error("unresolved CENTER reservation"), { code: "23505", constraint: "space_scheduled_sends_pending_center_reservation_unique" });
+        }
+        await tx.execute(sql`SELECT id FROM space_letters WHERE id = ${lockedLetter.id} FOR UPDATE`);
+        await tx.execute(sql`SELECT id FROM space_round_slots WHERE id = ${lockedSend.slotId} FOR UPDATE`);
+        const validation = await validateCenterSlotDate(
+          lockedLetter, normalizedScheduledAt ?? lockedSend.scheduledAt, lockedSend.slotId, tx,
+        );
+        if (!validation.ok) throw Object.assign(new Error(validation.error), { statusCode: 400 });
+        if (
+          lockedSend.reservedRoundId !== validation.slot.spaceRoundId ||
+          lockedSend.reservedDate !== validation.slot.scheduledDate ||
+          lockedSend.reservationAuthorId !== lockedLetter.authorId
+        ) {
+          throw Object.assign(new Error("예약 당시의 회차·슬롯·날짜 정보가 현재 배정과 일치하지 않습니다."), { statusCode: 409 });
+        }
+        if (await lockAndCheckPendingCenterReservation(tx, {
+          spaceId: String(req.params.id),
+          roundId: lockedSend.reservedRoundId,
+          authorId: lockedSend.reservationAuthorId,
+          exceptSendId: lockedSend.id,
+        })) {
+          throw Object.assign(new Error("pending CENTER reservation conflict"), { code: "23505", constraint: "space_scheduled_sends_pending_center_reservation_unique" });
+        }
+      }
+      return tx.update(spaceScheduledSendsTable)
+        .set(updateFields)
+        .where(
+          and(
+            eq(spaceScheduledSendsTable.id, req.params.sendId),
+            eq(spaceScheduledSendsTable.spaceLetterId, req.params.letterId),
+            eq(spaceScheduledSendsTable.spaceId, req.params.id),
+            eq(spaceScheduledSendsTable.status, lockedSend.status),
+          ),
+        )
+        .returning();
+    });
+    res.json(send);
+  } catch (err) {
+    const statusCode = (err as { statusCode?: number }).statusCode;
+    if (statusCode === 400 || statusCode === 409) {
+      res.status(statusCode).json({ error: (err as Error).message });
+      return;
+    }
+    const pg = getPgError(err);
+    if (pg.code === "23505" && pg.constraint === "space_scheduled_sends_pending_center_reservation_unique") {
+      res.status(409).json({ error: "이미 같은 회차·역할로 대기 중인 예약이 있습니다." });
+      return;
+    }
+    throw err;
+  }
 });
 
 router.get("/spaces/:id/scheduled-sends", requireAuth, async (req, res) => {
@@ -3194,7 +3366,10 @@ router.get("/spaces/:id/scheduled-sends", requireAuth, async (req, res) => {
 
   const articleIds = [...new Set(letters.map((l) => l.sourceArticleId).filter(Boolean) as string[])];
   const authorIds = [...new Set(letters.map((l) => l.authorId))];
-  const roundIds = [...new Set(letters.map((l) => l.spaceRoundId).filter(Boolean) as string[])];
+  const roundIds = [...new Set([
+    ...letters.map((l) => l.spaceRoundId),
+    ...sends.map((s) => s.reservedRoundId),
+  ].filter(Boolean) as string[])];
   const slotIds = [...new Set(sends.map((s) => s.slotId).filter(Boolean) as string[])];
 
   const [articles, authors, space, rounds, slots, identity] = await Promise.all([
@@ -3225,27 +3400,6 @@ router.get("/spaces/:id/scheduled-sends", requireAuth, async (req, res) => {
   const roundMap = new Map(rounds.map((r) => [r.id, r]));
   const slotMap = new Map(slots.map((s) => [s.id, s]));
 
-  // Fallback slot lookup for sends created before slotId was auto-populated
-  // (or without one on record): resolve via round + author assignment.
-  const missingRoundAuthorPairs = letters
-    .filter((l) => l.letterType === "CENTER" && l.spaceRoundId)
-    .map((l) => ({ spaceRoundId: l.spaceRoundId as string, authorId: l.authorId }));
-  const fallbackSlots =
-    missingRoundAuthorPairs.length > 0
-      ? await db
-          .select()
-          .from(spaceRoundSlotsTable)
-          .where(
-            inArray(
-              spaceRoundSlotsTable.spaceRoundId,
-              [...new Set(missingRoundAuthorPairs.map((p) => p.spaceRoundId))],
-            ),
-          )
-      : [];
-  const fallbackSlotMap = new Map(
-    fallbackSlots.map((s) => [`${s.spaceRoundId}:${s.assignedUserId}`, s]),
-  );
-
   const result = sends.map((send) => {
     const letter = letterMap.get(send.spaceLetterId) ?? null;
     const articleTitle = letter?.sourceArticleId ? (articleMap.get(letter.sourceArticleId) ?? null) : null;
@@ -3255,22 +3409,38 @@ router.get("/spaces/:id/scheduled-sends", requireAuth, async (req, res) => {
         ? (identity.displayNames.get(letter.authorId) ?? ANONYMOUS_PARTICIPANT_NAME)
         : (authorMap.get(letter.authorId) ?? null);
 
-    const round = letter?.spaceRoundId ? (roundMap.get(letter.spaceRoundId) ?? null) : null;
-    const slot =
-      (send.slotId ? slotMap.get(send.slotId) : null) ??
-      (letter?.spaceRoundId
-        ? (fallbackSlotMap.get(`${letter.spaceRoundId}:${letter.authorId}`) ?? null)
-        : null);
+    const round = send.reservedRoundId ? (roundMap.get(send.reservedRoundId) ?? null) : null;
+    const slot = send.slotId ? (slotMap.get(send.slotId) ?? null) : null;
 
     return {
       ...send,
       letter,
       articleTitle,
       authorNickname,
+      // Do not infer a historical reservation from the current letter/slot.
+      // Null fields explicitly mean an unresolved pre-identity reservation.
+      reservation: {
+        status: send.status,
+        scheduledAt: send.scheduledAt,
+        roundId: send.reservedRoundId ?? null,
+        roundNumber: round?.roundNumber ?? null,
+        slotId: send.slotId ?? null,
+        date: send.reservedDate ?? null,
+        authorId: send.reservationAuthorId ?? null,
+        resolved: !!(
+          send.reservedRoundId &&
+          send.reservedDate &&
+          send.reservationAuthorId &&
+          slot &&
+          slot.spaceRoundId === send.reservedRoundId &&
+          slot.scheduledDate === send.reservedDate &&
+          slot.assignedUserId === send.reservationAuthorId
+        ),
+      },
       roundNumber: round?.roundNumber ?? null,
       totalRounds: space?.roundCount ?? null,
       letterType: letter?.letterType ?? null,
-      slotScheduledDate: slot?.scheduledDate ?? null,
+      slotScheduledDate: send.reservedDate ?? null,
     };
   });
 

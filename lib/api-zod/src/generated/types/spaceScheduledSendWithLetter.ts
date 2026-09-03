@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { SpaceLetter } from "./spaceLetter";
+import type { SpaceReservationMetadata } from "./spaceReservationMetadata";
 import type { SpaceScheduledSendWithLetterLetterType } from "./spaceScheduledSendWithLetterLetterType";
 import type { SpaceScheduledSendWithLetterStatus } from "./spaceScheduledSendWithLetterStatus";
 
@@ -14,6 +15,10 @@ export interface SpaceScheduledSendWithLetter {
   spaceId: string;
   spaceLetterId: string;
   slotId?: string | null;
+  reservedRoundId?: string | null;
+  reservedDate?: Date | null;
+  reservationAuthorId?: string | null;
+  reservation?: SpaceReservationMetadata;
   scheduledAt: Date;
   status: SpaceScheduledSendWithLetterStatus;
   sentAt?: Date | null;

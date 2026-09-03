@@ -1161,6 +1161,29 @@ export const SpaceLetterVisibility = {
   RECIPIENT_ONLY: "RECIPIENT_ONLY",
 } as const;
 
+export type SpaceReservationMetadataStatus =
+  (typeof SpaceReservationMetadataStatus)[keyof typeof SpaceReservationMetadataStatus];
+
+export const SpaceReservationMetadataStatus = {
+  PENDING: "PENDING",
+  SENT: "SENT",
+  CANCELLED: "CANCELLED",
+  FAILED: "FAILED",
+} as const;
+
+/**
+ * Immutable reservation identity. Null identity fields explicitly indicate unresolved legacy data.
+ */
+export interface SpaceReservationMetadata {
+  status: SpaceReservationMetadataStatus;
+  scheduledAt: string;
+  roundId: string | null;
+  date: string | null;
+  slotId: string | null;
+  authorId: string | null;
+  resolved: boolean;
+}
+
 export type SpaceLetterLetterType =
   (typeof SpaceLetterLetterType)[keyof typeof SpaceLetterLetterType];
 
@@ -1189,6 +1212,7 @@ export interface SpaceLetter {
   displayName?: string | null;
   /** Whether the calling user has already read the source article. Always false when there is no sourceArticleId. */
   isRead: boolean;
+  reservation?: SpaceReservationMetadata | null;
 }
 
 export type CreateSpaceLetterBodyLetterType =
@@ -1227,6 +1251,10 @@ export interface SpaceScheduledSend {
   id: string;
   spaceId: string;
   spaceLetterId: string;
+  slotId?: string | null;
+  reservedRoundId?: string | null;
+  reservedDate?: string | null;
+  reservationAuthorId?: string | null;
   scheduledAt: string;
   status: SpaceScheduledSendStatus;
   sentAt?: string | null;
@@ -1237,7 +1265,7 @@ export interface SpaceScheduledSend {
 
 export interface CreateSpaceScheduledSendBody {
   scheduledAt: string;
-  slotId?: string | null;
+  slotId?: string;
 }
 
 export type UpdateSpaceScheduledSendBodyStatus =
@@ -1246,11 +1274,10 @@ export type UpdateSpaceScheduledSendBodyStatus =
 export const UpdateSpaceScheduledSendBodyStatus = {
   PENDING: "PENDING",
   CANCELLED: "CANCELLED",
-  FAILED: "FAILED",
 } as const;
 
 export interface UpdateSpaceScheduledSendBody {
-  status: UpdateSpaceScheduledSendBodyStatus;
+  status?: UpdateSpaceScheduledSendBodyStatus;
   scheduledAt?: string;
 }
 
@@ -1282,6 +1309,10 @@ export interface SpaceScheduledSendWithLetter {
   spaceId: string;
   spaceLetterId: string;
   slotId?: string | null;
+  reservedRoundId?: string | null;
+  reservedDate?: string | null;
+  reservationAuthorId?: string | null;
+  reservation?: SpaceReservationMetadata;
   scheduledAt: string;
   status: SpaceScheduledSendWithLetterStatus;
   sentAt?: string | null;

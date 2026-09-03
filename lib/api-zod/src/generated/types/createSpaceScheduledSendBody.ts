@@ -8,5 +8,5 @@
 
 export interface CreateSpaceScheduledSendBody {
   scheduledAt: Date;
-  slotId?: string | null;
+  slotId?: string;
 }

@@ -11,6 +11,10 @@ export interface SpaceScheduledSend {
   id: string;
   spaceId: string;
   spaceLetterId: string;
+  slotId?: string | null;
+  reservedRoundId?: string | null;
+  reservedDate?: Date | null;
+  reservationAuthorId?: string | null;
   scheduledAt: Date;
   status: SpaceScheduledSendStatus;
   sentAt?: Date | null;

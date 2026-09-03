@@ -15,6 +15,7 @@ import {
   spacesTable,
   spaceLettersTable,
   spaceParticipationsTable,
+  spaceRoundSlotsTable,
   spaceScheduledSendRecipientsTable,
   spaceScheduledSendsTable,
 } from "@workspace/db";
@@ -27,6 +28,17 @@ export interface ProcessDueScheduledSendsResult {
 }
 
 const READABLE_ARTICLE_STATUSES = new Set(["DIVIDING", "CLOSING", "LETTER"]);
+
+function isKstSixOClockOn(date: Date, expectedDate: string): boolean {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(date);
+  const value = (type: string) => parts.find((part) => part.type === type)?.value;
+  return `${value("year")}-${value("month")}-${value("day")}` === expectedDate &&
+    value("hour") === "06" && value("minute") === "00";
+}
 
 export function resolveSpaceDeliveryRecipientIds(input: {
   authorId: string;
@@ -97,7 +109,36 @@ async function processOneScheduledSend(
       failureReason = "공간이 종료되어 발송할 수 없습니다.";
     } else if (!letter.sourceArticleId) {
       failureReason = "수신함에 전달할 원본 글이 없습니다.";
-    } else {
+    } else if (letter.letterType === "CENTER") {
+      // A CENTER send must deliver the exact immutable assignment it reserved,
+      // not whichever slot happens to be assigned when a delayed worker runs.
+      if (
+        !send.slotId ||
+        !send.reservedRoundId ||
+        !send.reservedDate ||
+        !send.reservationAuthorId ||
+        send.reservationAuthorId !== letter.authorId ||
+        send.reservedRoundId !== letter.spaceRoundId ||
+        !isKstSixOClockOn(send.scheduledAt, send.reservedDate)
+      ) {
+        failureReason = "예약 당시의 회차·슬롯·날짜 정보가 완전하지 않거나 일치하지 않습니다.";
+      } else {
+        const [slot] = await tx
+          .select()
+          .from(spaceRoundSlotsTable)
+          .where(eq(spaceRoundSlotsTable.id, send.slotId))
+          .limit(1);
+        if (
+          !slot ||
+          slot.spaceRoundId !== send.reservedRoundId ||
+          slot.assignedUserId !== send.reservationAuthorId ||
+          slot.scheduledDate !== send.reservedDate
+        ) {
+          failureReason = "예약 슬롯이 예약 당시의 회차·작성자·날짜와 일치하지 않습니다.";
+        }
+      }
+    }
+    if (!failureReason && letter && letter.sourceArticleId) {
       const [article] = await tx
         .select({
           id: articlesTable.id,
@@ -113,6 +154,9 @@ async function processOneScheduledSend(
     }
 
     if (failureReason) {
+      // A SENT row is historical evidence.  Never overwrite it merely because
+      // present-day slot data changed; it may only receive safe inbox repair.
+      if (send.status === "SENT") return "skipped";
       await tx
         .update(spaceScheduledSendsTable)
         .set({ status: "FAILED", failureReason, sentAt: null })
@@ -171,11 +215,20 @@ async function processOneScheduledSend(
           )
           .onConflictDoNothing();
       }
-      await tx
-        .update(spaceScheduledSendsTable)
-        .set({ recipientsSnapshottedAt: now })
-        .where(eq(spaceScheduledSendsTable.id, send.id));
-      recipientSnapshot = resolvedRecipientIds.map((recipientId) => ({
+      // Only a PENDING send can create a complete snapshot: it is frozen in
+      // this same delivery transaction.  A historical SENT row has no way to
+      // prove that currently visible legacy evidence is exhaustive, so retain
+      // its unresolved state and merely repair recipients that are provable.
+      if (send.status === "PENDING") {
+        await tx
+          .update(spaceScheduledSendsTable)
+          .set({ recipientsSnapshottedAt: now })
+          .where(eq(spaceScheduledSendsTable.id, send.id));
+      }
+      recipientSnapshot = [...new Set([
+        ...recipientSnapshot.map((row) => row.recipientId),
+        ...resolvedRecipientIds,
+      ])].map((recipientId) => ({
         recipientId,
       }));
     }

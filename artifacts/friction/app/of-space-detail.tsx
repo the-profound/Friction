@@ -70,6 +70,9 @@ import {
   shouldDimSpaceRoundLetter,
   sortSpaceRoundsForDetail,
   resolveUpcomingRoundCenterCards,
+  doesSpaceLetterOccupyRoundSlot,
+  getSpaceLetterPresentationRoundId,
+  type SpaceReservationMetadataPresentation,
 } from "@/lib/spaceRoundPresentation";
 import { toKstCalendarDate } from "@/lib/kstDate";
 import { isRecruitmentFull } from "@/lib/spaceRecruitment";
@@ -525,7 +528,10 @@ function UpcomingRoundSlots({
   slots: SpaceRoundSlotWithUser[];
   isLoading: boolean;
   letters: SpaceLetter[];
-  pendingCenterReservations: { spaceLetterId: string; slotId?: string | null }[];
+  pendingCenterReservations: {
+    spaceLetterId: string;
+    reservation?: SpaceReservationMetadataPresentation | null;
+  }[];
   isPendingCenterLettersFetching: boolean;
   isAnonymous: boolean;
   spaceName: string;
@@ -632,7 +638,10 @@ function RoundSection({
   spaceName: string;
   now: Date;
   onPressLetter: (letter: SpaceLetter, layout: OriginLayout) => void;
-  pendingCenterReservations: { spaceLetterId: string; slotId?: string | null }[];
+  pendingCenterReservations: {
+    spaceLetterId: string;
+    reservation?: SpaceReservationMetadataPresentation | null;
+  }[];
   isPendingCenterLettersFetching: boolean;
   onPressWriteOpening: (round: SpaceRound) => void;
   hiddenCardId?: string | null;
@@ -664,9 +673,7 @@ function RoundSection({
     roundSlots.filter(
       (slot) =>
         !letters.some(
-          (letter) =>
-            letter.letterType === "CENTER" &&
-            letter.authorId === slot.assignedUserId,
+          (letter) => doesSpaceLetterOccupyRoundSlot(letter, slot),
         ),
     ),
     now,
@@ -1161,7 +1168,7 @@ export default function SpaceDetailScreen() {
           .filter((send) => send.status === "PENDING" && send.letterType === "CENTER")
           .map((send) => ({
             spaceLetterId: send.spaceLetterId,
-            slotId: send.slotId,
+            reservation: send.reservation ?? null,
           })),
     [scheduledSends],
   );
@@ -1177,9 +1184,7 @@ export default function SpaceDetailScreen() {
   const lettersByRound = useMemo<Record<string, SpaceLetter[]>>(() => {
     const map: Record<string, SpaceLetter[]> = {};
     for (const letter of letters) {
-      const key =
-        letter.spaceRoundId ??
-        (letter.letterType === "OPENING" && firstRoundId ? firstRoundId : "__none__");
+      const key = getSpaceLetterPresentationRoundId(letter, firstRoundId) ?? "__none__";
       (map[key] ??= []).push(letter);
     }
     for (const key of Object.keys(map)) {
