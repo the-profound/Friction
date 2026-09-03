@@ -3,7 +3,7 @@ import { View, Text, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import ScalePressable from "@/components/shared/ScalePressable";
+import HeaderButton from "@/components/shared/HeaderButton";
 import { Colors, Spacing, Typography } from "@/constants/tokens";
 
 export default function ActivityScreen() {
@@ -13,20 +13,15 @@ export default function ActivityScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.topBar}>
-        <ScalePressable
-          style={styles.backButton}
-          contentStyle={styles.backButtonContent}
+        <HeaderButton
+          variant="back"
           onPress={() => router.back()}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="뒤로가기"
-        >
-          <Feather name="arrow-left" size={22} color={Colors.zinc700} />
-        </ScalePressable>
+          accessibilityLabel="프로필 관리에서 돌아가기"
+        />
         <Text style={styles.title} allowFontScaling={false}>
           프로필 관리
         </Text>
-        <View style={styles.backButton} />
+        <View style={styles.headerSpacer} />
       </View>
 
       <View style={styles.emptyWrap}>
@@ -52,13 +47,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.screenPx,
     height: 52,
   },
-  backButton: {
-    width: 36,
-    height: 36,
-  },
-  backButtonContent: {
-    alignItems: "center",
-    justifyContent: "center",
+  headerSpacer: {
+    width: 44,
   },
   title: {
     ...Typography.bodySemiBold,

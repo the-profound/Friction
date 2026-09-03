@@ -1,6 +1,7 @@
 import React, { useMemo, useCallback } from "react";
 import { View, Text, StyleSheet, SectionList, RefreshControl } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
+import HeaderButton from "@/components/shared/HeaderButton";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -93,11 +94,13 @@ export default function SendHistoryScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <ScalePressable onPress={() => router.back()} hitSlop={12}>
-          <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-        </ScalePressable>
+        <HeaderButton
+          variant="back"
+          onPress={() => router.back()}
+          accessibilityLabel="발신 기록 목록으로 돌아가기"
+        />
         <Text style={styles.headerTitle}>발신 기록</Text>
-        <View style={{ width: 20 }} />
+        <View style={{ width: 44 }} />
       </View>
 
       {sendRecordsQuery.isLoading ? (

@@ -16,6 +16,7 @@ import { Feather } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
+import HeaderButton from "@/components/shared/HeaderButton";
 import { SpaceInfoNote } from "@/components/SpaceInfoNote/SpaceInfoNote";
 import { SpaceCopy } from "@/constants/spaceCopy";
 import {
@@ -671,13 +672,15 @@ export default function SpaceRoundsScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <ScalePressable onPress={() => router.back()} hitSlop={12}>
-          <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-        </ScalePressable>
+        <HeaderButton
+          variant="back"
+          onPress={() => router.back()}
+          accessibilityLabel="회차 관리에서 돌아가기"
+        />
         <Text style={styles.headerTitle} numberOfLines={1}>
           {spaceName ?? "회차 관리"}
         </Text>
-        <View style={{ width: 28 }} />
+        <View style={{ width: 44 }} />
       </View>
 
       {isLoading ? (

@@ -16,6 +16,7 @@ import {
   Keyboard,
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
+import HeaderButton from "@/components/shared/HeaderButton";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -128,11 +129,11 @@ export default function MyPageScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <ScalePressable style={styles.backButton} onPress={() => router.back()} hitSlop={8}
-        contentStyle={styles.backButtonContent}
-        >
-          <Feather name="chevron-left" size={24} color={Colors.zinc700} />
-        </ScalePressable>
+        <HeaderButton
+          variant="back"
+          onPress={() => router.back()}
+          accessibilityLabel="설정 및 활동에서 돌아가기"
+        />
         <Text style={styles.headerTitle}>설정 및 활동</Text>
         <View style={styles.headerSpacer} />
       </View>
@@ -358,13 +359,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: Colors.zinc50,
   },
-  backButton: {
-    width: 36,
-    height: 36,
-  },
-  backButtonContent: {
-    alignItems: "center",
-    justifyContent: "center",},
   headerTitle: {
     flex: 1,
     textAlign: "center",
@@ -373,7 +367,7 @@ const styles = StyleSheet.create({
     color: Colors.zinc900,
   },
   headerSpacer: {
-    width: 36,
+    width: 44,
   },
   scroll: {
     flex: 1,

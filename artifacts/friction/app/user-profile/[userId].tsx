@@ -12,6 +12,7 @@ import { useRouter, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import ScalePressable from "@/components/shared/ScalePressable";
+import HeaderButton from "@/components/shared/HeaderButton";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
@@ -500,9 +501,11 @@ export default function UserProfileScreen() {
   // Shared back-button header JSX used in both the error state and the FlatList
   const navHeaderJsx = (
     <View style={styles.header}>
-      <ScalePressable onPress={() => router.back()} hitSlop={12}>
-        <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-      </ScalePressable>
+      <HeaderButton
+        variant="back"
+        onPress={() => router.back()}
+        accessibilityLabel="사용자 프로필에서 돌아가기"
+      />
       {isOwnProfile ? (
         <ScalePressable onPress={() => setMenuVisible(true)} hitSlop={12}>
           <Feather name="menu" size={20} color={Colors.zinc600} />

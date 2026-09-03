@@ -16,6 +16,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import ThoughtsBottomSheet from "@/components/ThoughtsBottomSheet/ThoughtsBottomSheet";
 import ScalePressable from "@/components/shared/ScalePressable";
+import HeaderButton from "@/components/shared/HeaderButton";
 import {
   trackPageTurn,
   trackReadingStart,
@@ -1994,9 +1995,17 @@ export default function ReadScreen() {
         style={[styles.floatingBackBtn, { top: insets.top + 12 }, lastPageBtnAnimStyle]}
         pointerEvents={isOnLastLetterPage || mode === "re_read" ? "auto" : "none"}
       >
-        <Pressable onPress={handleFloatingBackBtn} hitSlop={16}>
-          <Feather name="chevron-left" size={28} color={Colors.zinc700} />
-        </Pressable>
+        {mode === "re_read" ? (
+          <HeaderButton
+            variant="back"
+            onPress={handleFloatingBackBtn}
+            accessibilityLabel="읽기 화면에서 돌아가기"
+          />
+        ) : (
+          <Pressable onPress={handleFloatingBackBtn} hitSlop={16}>
+            <Feather name="chevron-left" size={28} color={Colors.zinc700} />
+          </Pressable>
+        )}
       </Animated.View>
 
       {/* ── Memo FAB — bottom right (편지 페이지에서만 표시, Q-card/완독화면에서는 숨김) */}

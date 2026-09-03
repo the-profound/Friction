@@ -14,6 +14,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import ScalePressable from "@/components/shared/ScalePressable";
+import HeaderButton from "@/components/shared/HeaderButton";
 import { useUser } from "@/contexts/UserContext";
 import { isQueryStale } from "@/lib/useScreenFocused";
 import { LIST_PERF_PRESET } from "@/lib/listPerf";
@@ -131,9 +132,11 @@ export default function ArchivedSpacesScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <ScalePressable onPress={() => router.back()} hitSlop={12}>
-          <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-        </ScalePressable>
+        <HeaderButton
+          variant="back"
+          onPress={() => router.back()}
+          accessibilityLabel="공간 목록으로 돌아가기"
+        />
         <Text style={styles.headerTitle}>보관된 공간</Text>
       </View>
 
@@ -195,9 +198,6 @@ const styles = StyleSheet.create({
     fontSize: 17,
     color: Colors.zinc900,
     flex: 1,
-  },
-  headerSpacer: {
-    width: 20,
   },
   center: {
     flex: 1,

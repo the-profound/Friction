@@ -1,8 +1,7 @@
-import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
-import ScalePressable from "@/components/shared/ScalePressable";
+import HeaderButton from "@/components/shared/HeaderButton";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Colors, Spacing, Typography } from "@/constants/tokens";
@@ -14,11 +13,11 @@ export default function TermsScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <ScalePressable style={styles.backButton} onPress={() => router.back()} hitSlop={8}
-        contentStyle={styles.backButtonContent}
-        >
-          <Feather name="chevron-left" size={24} color={Colors.zinc700} />
-        </ScalePressable>
+        <HeaderButton
+          variant="back"
+          onPress={() => router.back()}
+          accessibilityLabel="이용약관에서 돌아가기"
+        />
         <Text style={styles.headerTitle}>이용약관</Text>
         <View style={styles.headerSpacer} />
       </View>
@@ -143,13 +142,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.zinc100,
   },
-  backButton: {
-    width: 36,
-    height: 36,
-  },
-  backButtonContent: {
-    alignItems: "center",
-    justifyContent: "center",},
   headerTitle: {
     flex: 1,
     textAlign: "center",
@@ -158,7 +150,7 @@ const styles = StyleSheet.create({
     color: Colors.zinc900,
   },
   headerSpacer: {
-    width: 36,
+    width: 44,
   },
   scroll: {
     flex: 1,

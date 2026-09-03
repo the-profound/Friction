@@ -15,6 +15,7 @@ import { Feather } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
+import HeaderButton from "@/components/shared/HeaderButton";
 import { SpaceInfoNote } from "@/components/SpaceInfoNote/SpaceInfoNote";
 import { SpaceCopy } from "@/constants/spaceCopy";
 import { ArticleScheduleSheet } from "@/components/ArticleScheduleSheet/ArticleScheduleSheet";
@@ -1009,9 +1010,11 @@ export default function SpaceScheduleSendScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <ScalePressable onPress={() => router.back()} hitSlop={12}>
-          <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-        </ScalePressable>
+        <HeaderButton
+          variant="back"
+          onPress={() => router.back()}
+          accessibilityLabel="예약 목록에서 돌아가기"
+        />
         <Text style={styles.headerTitle} numberOfLines={1}>
           예약 목록
         </Text>

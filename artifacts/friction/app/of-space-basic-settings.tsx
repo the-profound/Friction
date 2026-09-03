@@ -32,6 +32,7 @@ import SpaceBasicSettingsForm, {
 } from "@/components/SpaceBasicSettingsForm/SpaceBasicSettingsForm";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import ScalePressable from "@/components/shared/ScalePressable";
+import HeaderButton from "@/components/shared/HeaderButton";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import SubmitProgressOverlay from "@/components/shared/SubmitProgressOverlay";
 import { Colors, Spacing, Typography } from "@/constants/tokens";
@@ -308,16 +309,13 @@ export default function SpaceBasicSettingsScreen() {
     >
       <View style={[styles.container, { paddingTop: topInset }]}>
         <View style={styles.header}>
-          <ScalePressable
+          <HeaderButton
+            variant="back"
             testID="space-basic-settings-back"
-            style={styles.backButton}
-            contentStyle={styles.backButtonContent}
             onPress={() => router.back()}
             disabled={updateSettings.isPending}
-            hitSlop={8}
-          >
-            <Feather name="chevron-left" size={24} color={Colors.zinc700} />
-          </ScalePressable>
+            accessibilityLabel="기본 설정에서 돌아가기"
+          />
           <Text style={styles.headerTitle}>기본 설정</Text>
           <View style={styles.headerRight} />
         </View>
@@ -355,7 +353,7 @@ export default function SpaceBasicSettingsScreen() {
   );
 }
 
-const HEADER_BUTTON_SIZE = 36;
+const HEADER_BUTTON_SIZE = 44;
 const SAVE_BUTTON_HEIGHT = 52;
 const RETRY_BUTTON_HEIGHT = 40;
 
@@ -375,20 +373,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.screenPx,
     paddingTop: 12,
     paddingBottom: 8,
-  },
-  backButton: {
-    width: HEADER_BUTTON_SIZE,
-    height: HEADER_BUTTON_SIZE,
-    flexGrow: 0,
-    flexShrink: 0,
-  },
-  backButtonContent: {
-    width: HEADER_BUTTON_SIZE,
-    height: HEADER_BUTTON_SIZE,
-    flexGrow: 0,
-    flexShrink: 0,
-    alignItems: "center",
-    justifyContent: "center",
   },
   headerTitle: {
     ...Typography.bodySemiBold,

@@ -11,6 +11,7 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import ScalePressable from "@/components/shared/ScalePressable";
+import HeaderButton from "@/components/shared/HeaderButton";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import CanonicalCardSlot from "@/components/ArticleCardItem/CanonicalCardSlot";
 import { useLetterSelectionOverlay } from "@/hooks/useLetterSelectionOverlay";
@@ -142,9 +143,11 @@ export default function RecipientOnlyLettersScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <ScalePressable onPress={() => router.back()} hitSlop={12}>
-          <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-        </ScalePressable>
+        <HeaderButton
+          variant="back"
+          onPress={() => router.back()}
+          accessibilityLabel="수신자 공개 편지에서 돌아가기"
+        />
         <Text style={styles.headerTitle}>수신자 공개 편지</Text>
         <View style={styles.headerSpacer} />
       </View>
@@ -214,7 +217,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   headerSpacer: {
-    width: 20,
+    width: 44,
   },
   listContent: {
     paddingHorizontal: GRID_PAD,

@@ -18,6 +18,7 @@ import { Feather } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
+import HeaderButton from "@/components/shared/HeaderButton";
 import { useUser } from "@/contexts/UserContext";
 import { getUserScopedSpaceJoinContextQueryKey } from "@/lib/spaceJoinContextQuery";
 import { SpaceCopy } from "@/constants/spaceCopy";
@@ -473,13 +474,15 @@ export default function SpaceParticipantsScreen() {
       />
 
       <View style={styles.header}>
-        <ScalePressable onPress={() => router.back()} hitSlop={12}>
-          <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-        </ScalePressable>
+        <HeaderButton
+          variant="back"
+          onPress={() => router.back()}
+          accessibilityLabel="참여자 관리에서 돌아가기"
+        />
         <Text style={styles.headerTitle} numberOfLines={1}>
           {headerTitle}
         </Text>
-        <View style={{ width: 28 }} />
+        <View style={{ width: 44 }} />
       </View>
 
       {isLoading ? (

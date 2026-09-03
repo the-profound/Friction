@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from "react";
 import { View, Text, StyleSheet, FlatList, RefreshControl, TextInput, Switch } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
+import HeaderButton from "@/components/shared/HeaderButton";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -166,13 +167,17 @@ export default function PersonalCollectionListScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <ScalePressable onPress={() => router.back()} hitSlop={12}>
-          <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-        </ScalePressable>
+        <HeaderButton
+          variant="back"
+          onPress={() => router.back()}
+          accessibilityLabel="폴더 목록으로 돌아가기"
+        />
         <Text style={styles.headerTitle}>폴더</Text>
-        <ScalePressable hitSlop={12} onPress={() => { setNewName(""); setNewDescription(""); setNewIsPublic(false); setCreateSheetVisible(true); }}>
-          <Feather name="plus" size={20} color={Colors.zinc600} />
-        </ScalePressable>
+        <View style={styles.headerAction}>
+          <ScalePressable hitSlop={12} onPress={() => { setNewName(""); setNewDescription(""); setNewIsPublic(false); setCreateSheetVisible(true); }}>
+            <Feather name="plus" size={20} color={Colors.zinc600} />
+          </ScalePressable>
+        </View>
       </View>
 
       <View style={styles.tabBar}>
@@ -284,6 +289,10 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 17,
     color: Colors.zinc900,
+  },
+  headerAction: {
+    width: 44,
+    alignItems: "flex-end",
   },
   tabBar: {
     flexDirection: "row",

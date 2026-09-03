@@ -14,6 +14,7 @@ import { Feather } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
+import HeaderButton from "@/components/shared/HeaderButton";
 import { SpaceInfoNote } from "@/components/SpaceInfoNote/SpaceInfoNote";
 import { SpaceCopy } from "@/constants/spaceCopy";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
@@ -914,9 +915,11 @@ export default function SpaceJoinScreen() {
       { paddingTop: Platform.OS === "web" ? 67 : insets.top },
     ]}>
       <View style={styles.header}>
-        <ScalePressable onPress={() => router.back()} hitSlop={8}>
-          <Feather name="chevron-left" size={24} color={Colors.zinc700} />
-        </ScalePressable>
+        <HeaderButton
+          variant="back"
+          onPress={() => router.back()}
+          accessibilityLabel="공간 참여에서 돌아가기"
+        />
         <Text style={styles.headerTitle}>{title}</Text>
         <View style={styles.headerSpacer} />
       </View>
@@ -1016,25 +1019,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.zinc100,
   },
-  backButton: {
-    width: 36,
-    height: 36,
-  },
-  backButtonContent: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: Colors.zinc100,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   headerTitle: {
     ...Typography.bodySemiBold,
     fontSize: 17,
     color: Colors.zinc900,
   },
   headerSpacer: {
-    width: 36,
+    width: 44,
   },
   scrollContent: {
     flexGrow: 1,

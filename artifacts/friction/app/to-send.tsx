@@ -1,10 +1,11 @@
 import React, { useCallback, useMemo } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
+import HeaderButton from "@/components/shared/HeaderButton";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import { Colors, Shadows, Spacing, Typography } from "@/constants/tokens";
+import { Colors, Spacing, Typography } from "@/constants/tokens";
 import { SendInline } from "@/components/ToInline/SendInline";
 
 export default function ToSendScreen() {
@@ -52,16 +53,11 @@ export default function ToSendScreen() {
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: Math.max(insets.top, 8) }]}>
-        <ScalePressable
-          style={styles.headerBackButton}
-          contentStyle={styles.headerBackButtonContent}
+        <HeaderButton
+          variant="back"
           onPress={() => router.back()}
-          hitSlop={8}
-          accessibilityRole="button"
           accessibilityLabel="기록 목록으로 돌아가기"
-        >
-          <Feather name="arrow-left" size={19} color={Colors.zinc700} />
-        </ScalePressable>
+        />
         <Text style={styles.headerTitle}>보내기</Text>
         <ScalePressable
           style={styles.headerActionButton}
@@ -100,22 +96,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: Spacing.screenPx,
     paddingVertical: 12,
-  },
-  headerBackButton: {
-    width: 44,
-    height: 44,
-    flexGrow: 0,
-    flexShrink: 0,
-  },
-  headerBackButtonContent: {
-    width: 40,
-    height: 40,
-    alignSelf: "center",
-    borderRadius: 20,
-    backgroundColor: Colors.white,
-    alignItems: "center",
-    justifyContent: "center",
-    ...Shadows.navBar,
   },
   headerActionButton: { width: 44, height: 44, flexGrow: 0, flexShrink: 0 },
   headerActionButtonContent: {

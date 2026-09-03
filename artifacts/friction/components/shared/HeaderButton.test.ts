@@ -41,4 +41,41 @@ describe("shared writing header buttons", () => {
     expect(stateBar).toContain('variant="menu"');
     expect(stateBar).toContain("<ActionSheetModal");
   });
+
+  it("uses the shared back button across stack, space, account, and reading headers", () => {
+    const screenPaths = [
+      "app/activity.tsx",
+      "app/mypage.tsx",
+      "app/mypage-neighbors.tsx",
+      "app/mypage-sendrecords.tsx",
+      "app/of-01.tsx",
+      "app/of-space-archived-list.tsx",
+      "app/of-space-archive.tsx",
+      "app/of-space-basic-settings.tsx",
+      "app/of-space-participants.tsx",
+      "app/of-space-rounds.tsx",
+      "app/of-space-schedule-send.tsx",
+      "app/of-space-start.tsx",
+      "app/space-create.tsx",
+      "app/space-join.tsx",
+      "app/terms.tsx",
+      "app/to-03.tsx",
+      "app/to-send.tsx",
+      "app/user-profile/[userId].tsx",
+      "app/user-profile/recipient-only-letters.tsx",
+    ];
+
+    for (const path of screenPaths) {
+      const screen = read(path);
+      expect(screen, path).toContain(
+        'import HeaderButton from "@/components/shared/HeaderButton";',
+      );
+      expect(screen, path).toContain('variant="back"');
+      expect(screen, path).not.toMatch(/name="(?:arrow-left|chevron-left)"/);
+    }
+
+    const reader = read("app/read.tsx");
+    expect(reader).toContain('{mode === "re_read" ? (');
+    expect(reader).toContain('accessibilityLabel="읽기 화면에서 돌아가기"');
+  });
 });

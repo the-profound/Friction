@@ -14,6 +14,7 @@ import { Feather } from "@expo/vector-icons";
 import Constants from "expo-constants";
 import { useQueryClient } from "@tanstack/react-query";
 import ScalePressable from "@/components/shared/ScalePressable";
+import HeaderButton from "@/components/shared/HeaderButton";
 import { CollapsibleDatePicker, getMinSpaceStartDate, startOfDay } from "@/components/shared/CalendarGrid";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import SubmitProgressOverlay from "@/components/shared/SubmitProgressOverlay";
@@ -434,9 +435,11 @@ export default function SpaceCreateScreen() {
     >
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.header}>
-          <ScalePressable style={styles.backBtn} onPress={handleBack} hitSlop={8}>
-            <Feather name="chevron-left" size={24} color={Colors.zinc700} />
-          </ScalePressable>
+          <HeaderButton
+            variant="back"
+            onPress={handleBack}
+            accessibilityLabel="공간 만들기에서 돌아가기"
+          />
           <Text style={styles.headerTitle}>공간 만들기</Text>
           <View style={styles.headerRight} />
         </View>
@@ -883,19 +886,13 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     justifyContent: "space-between",
   },
-  backBtn: {
-    width: 36,
-    height: 36,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   headerTitle: {
     ...Typography.bodySemiBold,
     fontSize: 17,
     color: Colors.zinc900,
   },
   headerRight: {
-    width: 36,
+    width: 44,
   },
   progressBar: {
     height: 3,
