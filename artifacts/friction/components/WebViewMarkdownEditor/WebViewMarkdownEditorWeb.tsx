@@ -31,6 +31,7 @@ import {
 import { splitLeadingH1Markdown } from "@/utils/leadingH1";
 import { normalizePageDividersForMarkdownParser } from "@/lib/pageDividerMarkdown";
 import { shouldMoveTitleFocusToBody } from "./titleKeyboardContract";
+import { createHeadingWithParagraphShortcut } from "./headingKeyboardShortcuts";
 import {
   createEditorSurfaceTouchSession,
   isBlankEditorSurfaceTarget,
@@ -161,7 +162,8 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
 
     const editor = useEditor({
       extensions: [
-        StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
+        StarterKit.configure({ heading: false }),
+        createHeadingWithParagraphShortcut().configure({ levels: [1, 2, 3] }),
         Placeholder.configure({ placeholder: placeholder || "여기에 메모를 작성하세요..." }),
         Underline,
         InlineImage,

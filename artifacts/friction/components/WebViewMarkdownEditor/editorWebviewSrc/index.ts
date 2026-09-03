@@ -2,7 +2,6 @@ import { Editor, Extension, Node as TipTapNode } from "@tiptap/core";
 import { Document } from "@tiptap/extension-document";
 import { Paragraph } from "@tiptap/extension-paragraph";
 import { Text } from "@tiptap/extension-text";
-import { Heading } from "@tiptap/extension-heading";
 import { Bold } from "@tiptap/extension-bold";
 import { Italic } from "@tiptap/extension-italic";
 import { Blockquote } from "@tiptap/extension-blockquote";
@@ -22,6 +21,7 @@ import { computeEditorViewportScrollTop } from "../../../lib/editorViewport";
 import { normalizePageDividersForMarkdownParser } from "../../../lib/pageDividerMarkdown";
 import { splitLeadingH1Markdown } from "../../../utils/leadingH1";
 import { shouldMoveTitleFocusToBody } from "../titleKeyboardContract";
+import { createHeadingWithParagraphShortcut } from "../headingKeyboardShortcuts";
 import {
   createEditorSurfaceTouchSession,
   isBlankEditorSurfaceTarget,
@@ -1459,20 +1459,7 @@ function spellFindRange(
         Document,
         Paragraph,
         Text,
-        Heading.extend({
-          addKeyboardShortcuts() {
-            return {
-              Backspace: ({ editor: ed }) => {
-                const { selection } = ed.state;
-                const { $from, empty } = selection;
-                if (!empty) return false;
-                if ($from.parentOffset !== 0) return false;
-                if ($from.parent.type !== this.type) return false;
-                return ed.commands.setParagraph();
-              },
-            };
-          },
-        }).configure({ levels: [1, 2, 3] }),
+        createHeadingWithParagraphShortcut().configure({ levels: [1, 2, 3] }),
         Bold,
         Italic,
         Underline,
