@@ -1,5 +1,6 @@
 import React from "react";
-import { StyleSheet } from "react-native";
+import { Feather } from "@expo/vector-icons";
+import { StyleSheet, View } from "react-native";
 import type { ArticleCover } from "@workspace/api-client-react";
 import ScalePressable from "@/components/shared/ScalePressable";
 import ArticleCardCover from "@/components/ArticleCardItem/ArticleCardCover";
@@ -23,6 +24,7 @@ export interface ArticleListItemProps {
   onPress: () => void;
   onLongPress?: () => void;
   disabled?: boolean;
+  selected?: boolean;
   accessibilityLabel?: string;
 }
 
@@ -45,6 +47,7 @@ function ArticleListItem({
   onPress,
   onLongPress,
   disabled = false,
+  selected = false,
   accessibilityLabel,
 }: ArticleListItemProps) {
   const displayTitle = title.trim() || "제목 없음";
@@ -62,7 +65,7 @@ function ArticleListItem({
       accessibilityHint={
         onLongPress ? "길게 눌러 추가 동작을 열 수 있어요." : undefined
       }
-      accessibilityState={{ disabled }}
+      accessibilityState={{ disabled, selected }}
       style={styles.container}
       contentStyle={styles.containerContent}
     >
@@ -73,6 +76,11 @@ function ArticleListItem({
         authorName={authorName?.trim() || undefined}
         borderRadius={0}
       />
+      {selected ? (
+        <View style={styles.selectedIndicator} pointerEvents="none">
+          <Feather name="check" size={16} color={Colors.zinc900} />
+        </View>
+      ) : null}
     </ScalePressable>
   );
 }
@@ -94,5 +102,18 @@ const styles = StyleSheet.create({
     flexGrow: 0,
     flexShrink: 0,
     position: "relative",
+  },
+  selectedIndicator: {
+    position: "absolute",
+    bottom: 12,
+    left: 12,
+    width: 28,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
+    backgroundColor: Colors.white,
   },
 });

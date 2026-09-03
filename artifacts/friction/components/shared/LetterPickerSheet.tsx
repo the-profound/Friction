@@ -3,14 +3,15 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import ScalePressable from "@/components/shared/ScalePressable";
-import ArticleCardCover from "@/components/ArticleCardItem/ArticleCardCover";
+import ArticleListItem from "@/components/ArticleListItem/ArticleListItem";
 import { Colors, Typography } from "@/constants/tokens";
 import type { ArticleCover } from "@workspace/api-client-react";
+import { getSendArticleAuthorName } from "@/lib/sendPickerPresentation";
 
 export interface LetterPickerArticle {
   id: string;
   title?: string | null;
-  content?: string | null;
+  authorNickname?: string | null;
   cover?: ArticleCover | null;
 }
 
@@ -78,39 +79,19 @@ export function LetterPickerSheet({
           contentContainerStyle={{ paddingBottom: 24 }}
         >
           {articles.map((article) => (
-            <ScalePressable
+            <ArticleListItem
               key={article.id}
-              style={styles.item}
-              contentStyle={[
-                styles.itemContent,
-                selectedId === article.id && styles.itemSelected,
-              ]}
+              articleId={article.id}
+              title={article.title || "제목 없음"}
+              authorName={getSendArticleAuthorName(article)}
+              cover={article.cover}
+              selected={selectedId === article.id}
               onPress={() => {
                 onSelect(article);
                 onClose();
               }}
-            >
-              <View style={styles.itemCover}>
-                <ArticleCardCover
-                  cover={article.cover}
-                  title={article.title || "제목 없음"}
-                  width={56}
-                  height={36}
-                  borderRadius={6}
-                />
-              </View>
-              <View style={styles.itemTextWrap}>
-                <Text style={styles.itemTitle} numberOfLines={1}>
-                  {article.title || "제목 없음"}
-                </Text>
-                {article.content ? (
-                  <Text style={styles.itemSub} numberOfLines={1}>
-                    {article.content.substring(0, 60)}
-                  </Text>
-                ) : null}
-              </View>
-              <Feather name="chevron-right" size={17} color={Colors.zinc400} />
-            </ScalePressable>
+              accessibilityLabel={`${article.title?.trim() || "제목 없음"} 편지 선택`}
+            />
           ))}
         </ScrollView>
       )}
@@ -148,39 +129,5 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 14,
     color: Colors.white,
-  },
-  item: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.zinc100,
-  },
-  itemContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 4,
-  },
-  itemCover: {
-    width: 56,
-    height: 36,
-    overflow: "hidden",
-    borderRadius: 6,
-    flexGrow: 0,
-    flexShrink: 0,
-  },
-  itemTextWrap: { flex: 1, minWidth: 0 },
-  itemSelected: {
-    backgroundColor: Colors.zinc50,
-  },
-  itemTitle: {
-    ...Typography.bodySemiBold,
-    fontSize: 15,
-    color: Colors.zinc900,
-  },
-  itemSub: {
-    ...Typography.body,
-    fontSize: 13,
-    color: Colors.zinc500,
-    marginTop: 2,
   },
 });

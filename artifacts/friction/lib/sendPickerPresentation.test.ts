@@ -5,6 +5,7 @@ import {
   buildReplySendTarget,
   filterActiveParticipatingSpaces,
   filterReadReplyLetters,
+  getSendArticleAuthorName,
   resolveInitialSendDefaults,
 } from "./sendPickerPresentation";
 
@@ -39,6 +40,12 @@ const inboxItem = (
 });
 
 describe("send picker presentation", () => {
+  it("uses a stable author label when the article list has no nickname", () => {
+    expect(getSendArticleAuthorName({ authorNickname: "  민지  " })).toBe("민지");
+    expect(getSendArticleAuthorName({ authorNickname: null })).toBe("알 수 없음");
+    expect(getSendArticleAuthorName({ authorNickname: "   " })).toBe("알 수 없음");
+  });
+
   it("defaults to person without a linked original, and reply with the exact linked inbox when available", () => {
     const linkedInbox = inboxItem(
       "linked-inbox",

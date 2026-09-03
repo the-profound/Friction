@@ -11,7 +11,7 @@ import { useToast } from "@/contexts/ToastContext";
 import ScalePressable from "@/components/shared/ScalePressable";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
-import ArticleCardCover from "@/components/ArticleCardItem/ArticleCardCover";
+import ArticleListItem from "@/components/ArticleListItem/ArticleListItem";
 import { LetterPickerSheet } from "@/components/shared/LetterPickerSheet";
 import { NeighborPickerModal } from "@/components/shared/NeighborPickerModal";
 import { ReplyLetterPickerModal } from "@/components/shared/ReplyLetterPickerModal";
@@ -38,6 +38,7 @@ import type { ArticleStatus } from "@/lib/policies";
 import {
   buildReplySendTarget,
   filterReadReplyLetters,
+  getSendArticleAuthorName,
   resolveInitialSendDefaults,
 } from "@/lib/sendPickerPresentation";
 import { kstDateAt6, minOpeningSendDate } from "@/lib/kstDate";
@@ -308,33 +309,28 @@ export function SendInline({
       >
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>보낼 편지</Text>
-          <ScalePressable
-            style={styles.articleRowOuter}
-            contentStyle={styles.articleRow}
-            onPress={() => setLetterPickerVisible(true)}
-            accessibilityRole="button"
-            accessibilityLabel={`${selectedArticle?.title ?? "보낼 편지를 선택하세요"} 편지 변경`}
-          >
-            {selectedArticle ? (
-              <>
-                <View style={styles.articleCover}>
-                  <ArticleCardCover
-                    cover={selectedArticle.cover}
-                    title={selectedArticle.title || "제목 없음"}
-                    width={64}
-                    height={41}
-                    borderRadius={7}
-                  />
-                </View>
-                <Text style={styles.articleTitle} numberOfLines={2}>
-                  {selectedArticle.title || "제목 없음"}
-                </Text>
-              </>
-            ) : (
+          {selectedArticle ? (
+            <ArticleListItem
+              articleId={selectedArticle.id}
+              title={selectedArticle.title || "제목 없음"}
+              authorName={getSendArticleAuthorName(selectedArticle)}
+              cover={selectedArticle.cover}
+              selected
+              onPress={() => setLetterPickerVisible(true)}
+              accessibilityLabel={`${selectedArticle.title || "제목 없음"} 편지 변경`}
+            />
+          ) : (
+            <ScalePressable
+              style={styles.articlePlaceholderOuter}
+              contentStyle={styles.articlePlaceholder}
+              onPress={() => setLetterPickerVisible(true)}
+              accessibilityRole="button"
+              accessibilityLabel="보낼 편지를 선택하세요"
+            >
               <Text style={styles.placeholder}>보낼 편지를 선택하세요</Text>
-            )}
-            <Feather name="chevron-right" size={18} color={Colors.zinc400} />
-          </ScalePressable>
+              <Feather name="chevron-right" size={18} color={Colors.zinc400} />
+            </ScalePressable>
+          )}
         </View>
 
         <View style={styles.section}>
@@ -547,25 +543,16 @@ const styles = StyleSheet.create({
   section: { gap: 10 },
   sectionTitle: { ...Typography.bodySemiBold, fontSize: 15, color: Colors.zinc900 },
   sectionHint: { ...Typography.caption, color: Colors.zinc500, marginTop: -3 },
-  articleRowOuter: { minHeight: 66 },
-  articleRow: {
-    minHeight: 66,
+  articlePlaceholderOuter: { minHeight: 58 },
+  articlePlaceholder: {
+    minHeight: 58,
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    paddingHorizontal: 12,
+    gap: 10,
+    paddingHorizontal: 16,
     borderRadius: 12,
     backgroundColor: Colors.zinc50,
   },
-  articleCover: {
-    width: 64,
-    height: 41,
-    overflow: "hidden",
-    borderRadius: 7,
-    flexGrow: 0,
-    flexShrink: 0,
-  },
-  articleTitle: { ...Typography.bodySemiBold, flex: 1, fontSize: 15, color: Colors.zinc900 },
   placeholder: { ...Typography.body, flex: 1, fontSize: 14, color: Colors.zinc500 },
   modeRow: { flexDirection: "row", gap: 8 },
   modeButtonOuter: { flex: 1, minHeight: 48 },

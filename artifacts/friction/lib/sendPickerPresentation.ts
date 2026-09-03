@@ -4,6 +4,13 @@ export function buildReplySendTarget(item: Pick<InboxItem, "id">) {
   return { replyToInboxId: item.id };
 }
 
+/** Keep the send picker readable even if the list join has no nickname. */
+export function getSendArticleAuthorName(
+  article: Pick<Article, "authorNickname">,
+): string {
+  return article.authorNickname?.trim() || "알 수 없음";
+}
+
 export function resolveInitialSendDefaults(
   article: Pick<Article, "sourceArticleId"> | null,
   replyCandidates: InboxItem[],
