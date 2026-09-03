@@ -4696,6 +4696,10 @@ export const ExpandThoughtsResponse = zod.object({
   ),
 });
 
+/**
+ * Best-effort, unauthenticated endpoint for the mobile app to report diagnostic events (currently: fatal JS errors captured just before an app crash) that were persisted on-device and are uploaded on the next launch. No auth is required because a crash can happen before the user is signed in. Never rejects on bad input; always returns 204.
+
+ * @summary Report a client-side diagnostic event
  */
 export const reportClientLogBodyRequestIdRegExp = new RegExp(
   "^req_[a-z0-9]{20,32}$",
