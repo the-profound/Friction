@@ -388,7 +388,7 @@ describe("on-01a guarded return navigation", () => {
     expect(screen).toContain("onDismissKeyboard={() =>");
   });
 
-  it("keeps writing and review chrome floating without changing control surfaces", () => {
+  it("keeps floating chrome transparent outside its gray button containers", () => {
     const screen = readScreen();
     const header = screen.slice(
       screen.indexOf('<View style={[styles.header, { top: insets.top }]}'),
@@ -412,9 +412,11 @@ describe("on-01a guarded return navigation", () => {
     expect(stylesSource).toContain("backgroundColor: \"transparent\",\n    zIndex: 53");
     expect(stateBar).not.toContain("LinearGradient");
     expect(stateBar).toContain('<View style={styles.bar}>');
-    expect(stateBar).toContain("backgroundColor: Colors.white");
+    expect(stateBar).toContain("backgroundColor: Colors.zinc100");
     expect(memoToolbar).toContain("backgroundColor: \"transparent\"");
-    expect(memoToolbar).toContain("backgroundColor: \"#ffffff\"");
+    expect(memoToolbar).toContain("backgroundColor: Colors.zinc100");
+    expect(screen).toContain("height: WRITING_HEADER_HEIGHT");
+    expect(screen).toContain("paddingTop: WRITING_EDITOR_TOP_PADDING");
     expect(screen).toContain("backgroundColor: Colors.white,\n    borderTopWidth");
   });
 

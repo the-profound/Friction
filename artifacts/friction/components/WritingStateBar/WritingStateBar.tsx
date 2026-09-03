@@ -47,7 +47,11 @@ export default function WritingStateBar({
         return (
           <ScalePressable
             key={stage}
-            contentStyle={isIndirectlyReachable ? styles.tabIndirect : undefined}
+            style={styles.tabButton}
+            contentStyle={[
+              styles.tabButtonContent,
+              isIndirectlyReachable ? styles.tabIndirect : undefined,
+            ]}
             onPress={() => !isCurrent && !disabled && onPress(stage)}
             disabled={disabled}
             hitSlop={6}
@@ -79,9 +83,23 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 2,
-    backgroundColor: "transparent",
+    backgroundColor: Colors.zinc100,
     borderRadius: 10,
     padding: 3,
+  },
+  tabButton: {
+    height: 32,
+    alignSelf: "flex-start",
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  tabButtonContent: {
+    height: 32,
+    alignSelf: "flex-start",
+    flexGrow: 0,
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
   },
   tab: {
     paddingHorizontal: 14,
