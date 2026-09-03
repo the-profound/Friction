@@ -166,6 +166,7 @@ export default function ArticleCardCover({
 
   useEffect(() => {
     setFailedImageUrl(null);
+    setDisplayedImageUrl(null);
   }, [imageUrl]);
 
   useEffect(

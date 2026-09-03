@@ -6,8 +6,8 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import ScalePressable from "@/components/shared/ScalePressable";
+import ArticleListItem from "@/components/ArticleListItem/ArticleListItem";
 import { Colors, ReaderTokens, Shadows, Spacing, Typography, readerFontSize } from "@/constants/tokens";
 import { getRecordPreview, type UnifiedRecord } from "@/lib/recordList";
 
@@ -42,8 +42,6 @@ export interface RecordRowProps {
   isQuestion?: boolean;
   onPress: () => void;
   onLongPress: () => void;
-  onSend?: () => void;
-  onArchive?: () => void;
 }
 
 export default function RecordRow({
@@ -51,8 +49,6 @@ export default function RecordRow({
   isQuestion = false,
   onPress,
   onLongPress,
-  onSend,
-  onArchive,
 }: RecordRowProps) {
   const { width: windowWidth } = useWindowDimensions();
   const [textFrameWidth, setTextFrameWidth] = useState(0);
@@ -64,6 +60,19 @@ export default function RecordRow({
   const contentWidth = textFrameWidth || fallbackTextWidth;
   const titleSize = readerFontSize(ReaderTokens.typeScale.titleCqi, contentWidth);
   const bodySize = readerFontSize(ReaderTokens.typeScale.bodyCqi, contentWidth);
+
+  if (record.kind === "letter" && !isQuestion) {
+    return (
+      <ArticleListItem
+        articleId={record.article.id}
+        title={record.article.title ?? ""}
+        authorName={record.article.authorNickname}
+        cover={record.article.cover}
+        onPress={onPress}
+        onLongPress={onLongPress}
+      />
+    );
+  }
 
   return (
     <ScalePressable
@@ -103,22 +112,6 @@ export default function RecordRow({
           {preview.body || "아직 적힌 내용이 없어요."}
         </RecordListText>
       </View>
-      {record.kind === "letter" && (onSend || onArchive) ? (
-        <View style={styles.rowLetterActions}>
-          {onSend ? (
-            <ScalePressable style={styles.rowLetterAction} contentStyle={styles.rowLetterActionContent} onPress={(event) => { event.stopPropagation(); onSend(); }}>
-              <Feather name="send" size={14} color={Colors.zinc600} />
-              <RecordListText style={styles.rowLetterActionText}>보내기</RecordListText>
-            </ScalePressable>
-          ) : null}
-          {onArchive ? (
-            <ScalePressable style={styles.rowLetterAction} contentStyle={styles.rowLetterActionContent} onPress={(event) => { event.stopPropagation(); onArchive(); }}>
-              <Feather name="folder" size={14} color={Colors.zinc600} />
-              <RecordListText style={styles.rowLetterActionText}>보관</RecordListText>
-            </ScalePressable>
-          ) : null}
-        </View>
-      ) : null}
     </ScalePressable>
   );
 }
@@ -135,8 +128,4 @@ const styles = StyleSheet.create({
   rowTitle: { fontFamily: ReaderTokens.fontFamily.serifBold, color: Colors.zinc900 },
   rowBody: { fontFamily: ReaderTokens.fontFamily.serif, color: Colors.zinc600 },
   questionRowText: { color: Colors.white },
-  rowLetterActions: { flexDirection: "row", gap: 6, marginTop: 2 },
-  rowLetterAction: { height: 32, flexGrow: 0, flexShrink: 0 },
-  rowLetterActionContent: { height: 32, flexGrow: 0, flexShrink: 0, paddingHorizontal: 10, borderRadius: 16, backgroundColor: Colors.zinc100, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4 },
-  rowLetterActionText: { ...Typography.caption, color: Colors.zinc600, fontWeight: "600" },
 });

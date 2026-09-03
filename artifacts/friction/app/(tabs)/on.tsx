@@ -959,9 +959,11 @@ export default function OnScreen() {
                 record={item}
                 isQuestion={isCurrentQuestion}
                 onPress={() => isCurrentQuestion ? openQuestion(item.thought) : openRecord(item)}
-                onLongPress={() => { if (!isCurrentQuestion) requestRecordDeletion(item); }}
-                onSend={item.kind === "letter" ? () => router.push({ pathname: "/to-send", params: { prefillArticleId: item.article.id } }) : undefined}
-                onArchive={item.kind === "letter" ? () => { setArchiveArticleId(item.article.id); setSelectedCollectionId(null); } : undefined}
+                onLongPress={() => {
+                  if (isCurrentQuestion) return;
+                  if (item.kind === "letter") setLetterActionTarget(item);
+                  else requestRecordDeletion(item);
+                }}
               />
             );
           }}

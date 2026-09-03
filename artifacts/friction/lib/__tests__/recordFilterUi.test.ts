@@ -15,4 +15,25 @@ describe("record filter UI regression", () => {
     expect(recordsScreen).toContain('label="편집" active={kind === "editing"}');
     expect(recordsScreen).toContain('label="편지" active={kind === "letter"}');
   });
+
+  it("routes letter list rows through the shared action-menu flow", () => {
+    const recordsScreen = readFileSync(
+      join(__dirname, "../../app/(tabs)/on.tsx"),
+      "utf8",
+    );
+    const recordRow = readFileSync(
+      join(__dirname, "../../components/RecordRow/RecordRow.tsx"),
+      "utf8",
+    );
+
+    expect(recordRow).toContain("ArticleListItem");
+    expect(recordRow).toContain('record.kind === "letter" && !isQuestion');
+    expect(recordsScreen).toContain('if (item.kind === "letter") setLetterActionTarget(item)');
+    expect(recordsScreen).toContain("prefillArticleId: letterActionTarget.article.id");
+    expect(recordsScreen).toContain("setArchiveArticleId(letterActionTarget.article.id)");
+    expect(recordsScreen).toContain('label: "삭제"');
+    expect(recordRow).not.toContain("onSend");
+    expect(recordRow).not.toContain("onArchive");
+  });
+
 });
