@@ -8,7 +8,7 @@ import {
   usersTable,
   userArticleReadsTable,
 } from "@workspace/db";
-import { resolveInboxSourceName } from "../lib/inboxSource";
+import { sanitizeInboxPrivacy } from "../lib/inboxPrivacy";
 
 const router: IRouter = Router();
 
@@ -106,42 +106,6 @@ const senderDisplayName = sql<string>`(
   END
 )`;
 
-type InboxRow = {
-  sender?: typeof usersTable.$inferSelect | null;
-  isAnonymousSpace: boolean | null;
-  explicitSpaceName: string | null;
-  scheduledSpaceName: string | null;
-  legacyScheduledSpaceName: string | null;
-  teamCollectionName: string | null;
-  personalCollectionName: string | null;
-  [key: string]: unknown;
-};
-
-function sanitizeInboxRow<T extends InboxRow>(row: T) {
-  const {
-    isAnonymousSpace,
-    explicitSpaceName,
-    scheduledSpaceName,
-    legacyScheduledSpaceName,
-    teamCollectionName,
-    personalCollectionName,
-    ...item
-  } = row;
-  // Anonymous inbox responses must not expose the account nickname/email
-  // through the sender object. senderDisplayName is the sole display path.
-  return {
-    ...item,
-    collectionName: resolveInboxSourceName({
-      explicitSpaceName,
-      scheduledSpaceName,
-      legacyScheduledSpaceName,
-      teamCollectionName,
-      personalCollectionName,
-    }),
-    ...(isAnonymousSpace ? { sender: undefined } : {}),
-  };
-}
-
 const explicitSpaceNameSubquery = sql<string | null>`(
   SELECT s.name FROM spaces s WHERE s.id = ${inboxTable.sourceSpaceId}
 )`;
@@ -238,7 +202,7 @@ router.get("/inbox", async (req, res) => {
     .where(and(...whereConditions))
     .orderBy(inboxTable.visibleAt);
 
-  res.json(items.map(sanitizeInboxRow));
+  res.json(items.map(sanitizeInboxPrivacy));
 });
 
 router.get("/inbox/:id", async (req, res) => {
@@ -277,7 +241,7 @@ router.get("/inbox/:id", async (req, res) => {
     res.status(404).json({ error: "Inbox item not found" });
     return;
   }
-  res.json(sanitizeInboxRow(items[0]));
+  res.json(sanitizeInboxPrivacy(items[0]));
 });
 
 router.delete("/inbox/:id", async (req, res) => {
