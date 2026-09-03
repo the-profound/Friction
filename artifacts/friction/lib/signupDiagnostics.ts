@@ -167,29 +167,34 @@ export function getSignupProfileSyncFailure(
   diagnosticId: string,
 ): SignupFailure {
   const code = getSignupProfileSyncCode(error);
-  if (code !== "SIGNUP_API_UNREACHABLE" && code !== "SYNC_UNKNOWN") {
-    const message =
-      code === "SYNC_AUTH_INVALID"
-        ? "계정 인증 상태를 확인하지 못했습니다. 로그인 화면에서 다시 시도해주세요."
-        : code === "SYNC_EMAIL_CONFLICT"
-          ? "계정 정보를 저장하지 못했습니다. 로그인 화면에서 다시 시도해주세요."
-          : "계정은 생성됐지만 프로필 저장을 완료하지 못했습니다. 로그인 화면에서 다시 시도해주세요.";
-    return failure(code, diagnosticId, message);
-  }
+  const messages: Record<SignupDiagnosticCode, string> = {
+    SIGNUP_AUTH_SERVICE:
+      "인증 서비스에서 계정 정보를 확인하지 못했습니다. 로그인 화면에서 다시 시도해주세요.",
+    SIGNUP_NETWORK:
+      "인증 서비스에 연결하지 못했습니다. 연결을 확인한 뒤 로그인 화면에서 다시 시도해주세요.",
+    SIGNUP_API_UNREACHABLE:
+      "앱 서버에 연결하지 못했습니다. 연결을 확인한 뒤 로그인 화면에서 다시 시도해주세요.",
+    SYNC_AUTH_INVALID:
+      "로그인 인증이 만료됐거나 누락됐습니다. 로그인 화면에서 다시 시도해주세요.",
+    SYNC_AUTH_UNAVAILABLE:
+      "인증 서버가 일시적으로 응답하지 않습니다. 잠시 후 다시 시도해주세요.",
+    SYNC_DATABASE_UNAVAILABLE:
+      "프로필 저장 서버가 일시적으로 응답하지 않습니다. 잠시 후 다시 시도해주세요.",
+    SYNC_EMAIL_CONFLICT:
+      "이 이메일에 다른 계정 정보가 연결되어 있습니다. 로그인 화면에서 다시 시도해주세요.",
+    SYNC_IDENTITY_MISMATCH:
+      "로그인한 계정 정보와 프로필 정보가 일치하지 않습니다. 로그인 화면에서 다시 시도해주세요.",
+    SYNC_INVALID_REQUEST:
+      "프로필 저장 요청을 확인하지 못했습니다. 로그인 화면에서 다시 시도해주세요.",
+    SYNC_UNKNOWN:
+      "프로필 저장을 완료하지 못했습니다. 잠시 후 다시 시도해주세요.",
+    AUTH_TRANSITION_ERROR:
+      "로그인 상태를 확정하지 못했습니다. 다시 시도해주세요.",
+    SIGNUP_UNKNOWN:
+      "회원가입을 완료하지 못했습니다. 잠시 후 다시 시도해주세요.",
+  };
 
-  if (code === "SIGNUP_API_UNREACHABLE") {
-    return failure(
-      "SIGNUP_API_UNREACHABLE",
-      diagnosticId,
-      "계정은 생성됐지만 앱 서버에 연결하지 못했습니다. 연결을 확인한 뒤 로그인 화면에서 다시 시도해주세요.",
-    );
-  }
-
-  return failure(
-    "SYNC_UNKNOWN",
-    diagnosticId,
-    "계정은 생성됐지만 프로필 저장을 완료하지 못했습니다. 로그인 화면에서 다시 시도해주세요.",
-  );
+  return failure(code, diagnosticId, messages[code]);
 }
 
 export function getSignupProfileSyncCode(error: unknown): SignupDiagnosticCode {

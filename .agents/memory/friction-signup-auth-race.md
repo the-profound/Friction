@@ -18,6 +18,13 @@ same gate. On a slow native startup it can resolve after signup has begun and
 publish the newly-created session before the profile sync, or reject/hang and
 leave the auth guard rendering its full-screen loading state forever.
 
+Password sign-in uses the same publication gate but a different failure
+policy: a transient profile-sync failure must clear the API token and keep the
+session out of React state without revoking the valid Supabase session. A
+later explicit login can then retry the idempotent sync. If a 401 refreshes
+the token while sync is in flight, retain that refreshed session and publish
+it only after sync succeeds.
+
 **Why:** the redirect-eligibility signal (`session` in `AuthContext`) and the
 one-time signup side effect (profile sync) are two independent async flows
 racing on the same `onAuthStateChange` event; nothing serializes them.
@@ -32,6 +39,11 @@ half-synced authenticated session for the guard to redirect on; the later passwo
 suppress-until-side-effect-completes pattern generalizes to any other
 Supabase auth flow that has a required post-auth side effect (e.g. OAuth
 sign-in that also needs an out-of-band backend sync).
+
+For password sign-in, do not call remote sign-out solely because profile sync
+failed. Commit a null application-auth decision so protected routes remain
+closed, discard the in-memory request token, and preserve the SDK session for
+the next explicit retry.
 
 Bound the initial session restore and clear the loading state on both resolve
 and reject; if the restore is still in flight during signup, discard its

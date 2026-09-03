@@ -1,12 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   customFetch,
+  setAuthRefreshCallback,
+  setAuthTokenGetter,
   setRequestTelemetryObserver,
   type ApiRequestTelemetry,
 } from "@workspace/api-client-react";
 
 describe("mobile API operational telemetry", () => {
   afterEach(() => {
+    setAuthRefreshCallback(null);
+    setAuthTokenGetter(null);
     setRequestTelemetryObserver(null);
     vi.unstubAllGlobals();
   });
@@ -60,5 +64,63 @@ describe("mobile API operational telemetry", () => {
       failureType: "network",
     });
     expect(JSON.stringify(events)).not.toContain("letter body");
+  });
+
+  it("attaches the bearer token and retries one rejected request with a refreshed token", async () => {
+    setAuthTokenGetter(() => "stale-token");
+    const refresh = vi.fn().mockResolvedValue("fresh-token");
+    setAuthRefreshCallback(refresh);
+    const sentAuthorization: Array<string | null> = [];
+    const fetchMock = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      sentAuthorization.push(new Headers(init?.headers).get("authorization"));
+      return sentAuthorization.length === 1
+        ? new Response(JSON.stringify({ code: "AUTH_INVALID" }), {
+          status: 401,
+          headers: { "content-type": "application/json" },
+        })
+        : new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      customFetch("https://api.example.test/api/users/sync", {
+        method: "POST",
+        body: JSON.stringify({ id: "opaque-id", email: "hidden@example.test" }),
+        responseType: "json",
+      }),
+    ).resolves.toEqual({ ok: true });
+
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(sentAuthorization).toEqual(["Bearer stale-token", "Bearer fresh-token"]);
+  });
+
+  it("does not replace an explicitly supplied authorization header", async () => {
+    setAuthTokenGetter(() => "getter-token");
+    const refresh = vi.fn().mockResolvedValue("fresh-token");
+    setAuthRefreshCallback(refresh);
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ code: "AUTH_INVALID" }), {
+        status: 401,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      customFetch("https://api.example.test/api/users/sync", {
+        headers: { authorization: "Bearer caller-token" },
+        responseType: "json",
+      }),
+    ).rejects.toMatchObject({ status: 401 });
+
+    expect(refresh).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("authorization")).toBe(
+      "Bearer caller-token",
+    );
   });
 });

@@ -126,4 +126,22 @@ describe("signup diagnostic failures", () => {
       diagnosticId,
     });
   });
+
+  it("keeps each sync boundary failure actionable and distinct", () => {
+    const cases = [
+      ["SYNC_AUTH_INVALID", "로그인 인증이 만료됐거나 누락됐습니다"],
+      ["SYNC_AUTH_UNAVAILABLE", "인증 서버가 일시적으로 응답하지 않습니다"],
+      ["SYNC_DATABASE_UNAVAILABLE", "프로필 저장 서버가 일시적으로 응답하지 않습니다"],
+      ["SYNC_IDENTITY_MISMATCH", "로그인한 계정 정보와 프로필 정보가 일치하지 않습니다"],
+    ] as const;
+
+    for (const [code, message] of cases) {
+      const result = getSignupProfileSyncFailure(
+        { data: { code }, name: "ApiError" },
+        diagnosticId,
+      );
+      expect(result).toMatchObject({ code, diagnosticId });
+      expect(result.message).toContain(message);
+    }
+  });
 });

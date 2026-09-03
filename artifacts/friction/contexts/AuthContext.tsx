@@ -31,7 +31,12 @@ import {
 } from "@/lib/signupDiagnostics";
 import { customFetch, setAuthRefreshCallback } from "@workspace/api-client-react";
 
-export type AuthFlowError = AuthError | { message: string; name: string };
+export type AuthFlowError = AuthError | {
+  message: string;
+  name: string;
+  code?: SignupFailure["code"];
+  diagnosticId?: string;
+};
 export interface SignUpResult {
   error: SignupFailure | null;
   needsConfirmation: boolean;
@@ -114,6 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   > | null>(null);
   const refreshSessionPromiseRef = useRef<Promise<Session | null> | null>(null);
   const authCoordinatorRef = useRef(createAuthSessionCoordinator<Session>());
+  const currentSessionRef = useRef<Session | null>(null);
 
   // Supabase fires onAuthStateChange synchronously as part of
   // supabase.auth.signUp() *before* our own signUp() function below gets a
@@ -135,6 +141,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const pendingAuthSessionRef = useRef<Session | null | undefined>(undefined);
 
   function applySession(nextSession: Session | null): void {
+    currentSessionRef.current = nextSession;
     setCurrentAuthSession(nextSession);
     setSession(nextSession);
   }
@@ -156,8 +163,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Update the request token synchronously before the caller retries.
         // Supabase also emits TOKEN_REFRESHED, but waiting for React state
         // would leave a small window in which customFetch still sees the old
-        // access token.
-        applySession(data.session);
+        // access token. During an explicit sign-in/signup operation, do not
+        // publish the refreshed session to React before profile sync commits.
+        currentSessionRef.current = data.session;
+        setCurrentAuthSession(data.session);
+        if (!suppressAuthEventsRef.current) {
+          setSession(data.session);
+        }
         return data.session;
       } catch {
         // Keep the current session for a later foreground retry. A transient
@@ -388,7 +400,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const operation = authCoordinator.beginAuthOperation();
     suppressAuthEventsRef.current = true;
     pendingAuthSessionRef.current = undefined;
-    setCurrentAuthSession(null);
+    applySession(null);
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -398,23 +410,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { error };
       }
 
+      currentSessionRef.current = data.session;
       setCurrentAuthSession(data.session);
       reportAuthDiagnostic("sign-in", "auth-succeeded", undefined, flowId);
       try {
          await syncUserProfile(data.session, undefined, flowId);
       } catch (syncError) {
         authCoordinator.commitAuthOperation(operation, null);
-        await supabase.auth.signOut().catch(() => {});
+        // Keep the Supabase session available for a retry. A database outage,
+        // API outage, or identity-boundary failure is not proof that the
+        // user's credentials are invalid. The coordinator still keeps the
+        // session out of React state, so protected routes cannot mount before
+        // a later login attempt completes profile sync.
+        currentSessionRef.current = null;
         setCurrentAuthSession(null);
+        const failure = getSignupProfileSyncFailure(syncError, flowId);
         return {
           error: {
-            message: getSignupProfileSyncFailure(syncError, flowId).message,
+            message: failure.message,
             name: "UserSyncError",
+            code: failure.code,
+            diagnosticId: failure.diagnosticId,
           },
         };
       }
 
-      if (!authCoordinator.commitAuthOperation(operation, data.session)) {
+      const committedSession = currentSessionRef.current ?? data.session;
+      if (!authCoordinator.commitAuthOperation(operation, committedSession)) {
         return {
           error: {
             message: "로그인 상태를 확정하지 못했습니다. 다시 시도해주세요.",
@@ -422,7 +444,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           } as AuthError,
         };
       }
-      applySession(data.session);
+      applySession(committedSession);
       setIsLoading(false);
        reportAuthDiagnostic("sign-in", "success", undefined, flowId);
       return { error: null };
@@ -443,7 +465,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const operation = authCoordinator.beginAuthOperation();
     suppressAuthEventsRef.current = true;
     pendingAuthSessionRef.current = undefined;
-    setCurrentAuthSession(null);
+    applySession(null);
     try {
       let signUpResponse: Awaited<ReturnType<typeof supabase.auth.signUp>>;
       try {
@@ -477,7 +499,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // The profile sync request requires the newly-issued bearer token, but
       // React auth state remains suppressed until that sync has succeeded.
-      if (data.session) setCurrentAuthSession(data.session);
+      if (data.session) {
+        currentSessionRef.current = data.session;
+        setCurrentAuthSession(data.session);
+      }
 
       if (data.user && data.session) {
         try {
@@ -490,6 +515,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             // treats this as a fully signed-in user with no profile — surface a
             // clear, retryable error on the signup screen instead.
             await supabase.auth.signOut().catch(() => {});
+            currentSessionRef.current = null;
             setCurrentAuthSession(null);
           }
           const failure = getSignupProfileSyncFailure(syncError, flowId);
@@ -504,7 +530,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Only now — after the profile sync has succeeded — do we let the app
       // see this session and treat the user as authenticated.
-      if (!authCoordinator.commitAuthOperation(operation, data.session)) {
+      const committedSession = currentSessionRef.current ?? data.session;
+      if (!authCoordinator.commitAuthOperation(operation, committedSession)) {
         const failure = getSignupTransitionFailure(flowId);
         reportAuthDiagnostic("sign-up", "failed", failure.code, flowId);
         return {
@@ -513,8 +540,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           diagnosticId: flowId,
         };
       }
-      if (data.session) {
-        applySession(data.session);
+      if (committedSession) {
+        applySession(committedSession);
         setIsLoading(false);
          reportAuthDiagnostic("sign-up", "success-auto-confirmed", undefined, flowId);
       } else {

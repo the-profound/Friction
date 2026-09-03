@@ -40,67 +40,73 @@ export function createRequireAuth({
   timeoutMs = 10_000,
 }: RequireAuthOptions = {}): RequestHandler {
   return async (req, res, next) => {
-  const startedAt = performance.now();
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith("Bearer ")) {
-    logOperationalMetric(req.log ?? logger, {
-      operation: "auth.verify",
-      outcome: "denied",
-      durationMs: performance.now() - startedAt,
-      correlationId: getCorrelationId(req),
-      failureType: "auth_required",
-    });
-    res.status(401).json({ error: "Authentication required", code: "AUTH_REQUIRED" });
-    return;
-  }
-  const token = authHeader.slice(7);
+    const startedAt = performance.now();
+    const authHeader = req.headers.authorization;
+    const bearerMatch = authHeader?.match(/^Bearer\s+(.+)$/i);
+    const token = bearerMatch?.[1]?.trim();
+    if (!token) {
+      logOperationalMetric(req.log ?? logger, {
+        operation: "auth.verify",
+        outcome: "denied",
+        durationMs: performance.now() - startedAt,
+        correlationId: getCorrelationId(req),
+        failureType: "auth_required",
+      });
+      res.status(401).json({ error: "Authentication required", code: "AUTH_REQUIRED" });
+      return;
+    }
 
-  let getUserResult: Awaited<ReturnType<typeof getUser>>;
-  try {
-    getUserResult = await Promise.race([
-      getUser(token),
-      new Promise<never>((_, reject) =>
-        setTimeout(
-          () => reject(new Error("Authentication service timeout")),
-          timeoutMs,
-        ),
-      ),
-    ]);
-  } catch {
-    logOperationalMetric(req.log ?? logger, {
-      operation: "auth.verify",
-      outcome: "failure",
-      durationMs: performance.now() - startedAt,
-      correlationId: getCorrelationId(req),
-      failureType: "auth_unavailable",
-    });
-    res.status(503).json({
-      error: "Authentication service is temporarily unavailable",
-      code: "AUTH_UNAVAILABLE",
-    });
-    return;
-  }
+    let getUserResult: Awaited<ReturnType<typeof getUser>>;
+    try {
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
+      try {
+        getUserResult = await Promise.race([
+          getUser(token),
+          new Promise<never>((_, reject) => {
+            timeoutId = setTimeout(
+              () => reject(new Error("Authentication service timeout")),
+              timeoutMs,
+            );
+          }),
+        ]);
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+      }
+    } catch {
+      logOperationalMetric(req.log ?? logger, {
+        operation: "auth.verify",
+        outcome: "failure",
+        durationMs: performance.now() - startedAt,
+        correlationId: getCorrelationId(req),
+        failureType: "auth_unavailable",
+      });
+      res.status(503).json({
+        error: "Authentication service is temporarily unavailable",
+        code: "AUTH_UNAVAILABLE",
+      });
+      return;
+    }
 
-  const { data, error } = getUserResult;
-  if (error || !data.user) {
+    const { data, error } = getUserResult;
+    if (error || !data.user) {
+      logOperationalMetric(req.log ?? logger, {
+        operation: "auth.verify",
+        outcome: "denied",
+        durationMs: performance.now() - startedAt,
+        correlationId: getCorrelationId(req),
+        failureType: "auth_invalid",
+      });
+      res.status(401).json({ error: "Invalid or expired token", code: "AUTH_INVALID" });
+      return;
+    }
+    req.user = { id: data.user.id, email: data.user.email ?? undefined };
     logOperationalMetric(req.log ?? logger, {
       operation: "auth.verify",
-      outcome: "denied",
+      outcome: "success",
       durationMs: performance.now() - startedAt,
       correlationId: getCorrelationId(req),
-      failureType: "auth_invalid",
     });
-    res.status(401).json({ error: "Invalid or expired token", code: "AUTH_INVALID" });
-    return;
-  }
-  req.user = { id: data.user.id, email: data.user.email ?? undefined };
-  logOperationalMetric(req.log ?? logger, {
-    operation: "auth.verify",
-    outcome: "success",
-    durationMs: performance.now() - startedAt,
-    correlationId: getCorrelationId(req),
-  });
-  next();
+    next();
   };
 };
 
@@ -113,9 +119,11 @@ export const requireAuth = createRequireAuth();
  */
 export async function resolveCallerId(req: { headers: { authorization?: string } }): Promise<string | null> {
   const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith("Bearer ")) return null;
+  const bearerMatch = authHeader?.match(/^Bearer\s+(.+)$/i);
+  const token = bearerMatch?.[1]?.trim();
+  if (!token) return null;
   try {
-    const { data } = await supabase.auth.getUser(authHeader.slice(7));
+    const { data } = await supabase.auth.getUser(token);
     return data.user?.id ?? null;
   } catch {
     return null;

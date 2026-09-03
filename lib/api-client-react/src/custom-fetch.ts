@@ -466,6 +466,7 @@ export async function customFetch<T = unknown>(
   }
 
   const headers = mergeHeaders(isRequest(input) ? input.headers : undefined, headersInit);
+  const hasExplicitAuthorization = headers.has("authorization");
   const requestId = headers.get("x-request-id") ?? createRequestId();
   headers.set("x-request-id", requestId);
   _lastRequestId = requestId;
@@ -526,7 +527,12 @@ export async function customFetch<T = unknown>(
   // This silently recovers when the access token expired within the near-expiry
   // margin and the API client sent no Authorization header. Retried at most once
   // to prevent infinite loops.
-  if (!response.ok && response.status === 401 && _authRefreshCallback) {
+  if (
+    !response.ok &&
+    response.status === 401 &&
+    _authRefreshCallback &&
+    !hasExplicitAuthorization
+  ) {
     try {
       const newToken = await _authRefreshCallback();
       if (newToken) {

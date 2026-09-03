@@ -124,6 +124,56 @@ describe("POST /api/users/sync contract", () => {
     );
   });
 
+  it("rejects a missing or blank bearer token without calling the auth service", async () => {
+    const getUser = vi.fn(authenticatedUser());
+    const handler = createRequireAuth({ getUser });
+
+    await withServer(handler, async (baseUrl) => {
+      for (const authorization of [undefined, "Bearer   "]) {
+        const response = await fetch(`${baseUrl}/api/users/sync`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            ...(authorization ? { authorization } : {}),
+          },
+          body: JSON.stringify({ id: userId, email }),
+        });
+        expect(response.status).toBe(401);
+        expect(await response.json()).toMatchObject({ code: "AUTH_REQUIRED" });
+      }
+    });
+
+    expect(getUser).not.toHaveBeenCalled();
+  });
+
+  it("accepts the case-insensitive bearer scheme and trims the token", async () => {
+    const getUser = vi.fn(async (token: string) => {
+      expect(token).toBe("valid-token");
+      return { data: { user: { id: userId, email } }, error: null };
+    });
+    const database = createDatabase(
+      () => Promise.resolve([{ id: userId, email, nickname: "contract" }]),
+    );
+    const handler = [
+      createRequireAuth({ getUser }),
+      createUserSyncHandler({ database: database as never, log: silentLogger }),
+    ];
+
+    await withServer(handler as unknown as RequestHandler, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/api/users/sync`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "bEaReR   valid-token  ",
+          "x-auth-flow-id": flowId,
+        },
+        body: JSON.stringify({ id: userId, email, nickname: "contract" }),
+      });
+      expect(response.status).toBe(200);
+    });
+    expect(getUser).toHaveBeenCalledOnce();
+  });
+
   it("rejects an authenticated identity mismatch before the database write", async () => {
     const database = createDatabase(() => Promise.resolve([]));
     const handler = [

@@ -40,6 +40,7 @@ function isValidEmail(email: string): boolean {
 function getLoginErrorMessage(error: {
   name: string;
   message: string;
+  code?: string;
 }): string {
   if (error.name === "SupabaseNetworkError") {
     return "인증 서버에 연결하지 못했습니다. 인터넷 연결을 확인해주세요.";
@@ -48,7 +49,24 @@ function getLoginErrorMessage(error: {
     return "앱 서버에 연결하지 못했습니다. 잠시 후 다시 시도해주세요.";
   }
   if (error.name === "UserSyncError") {
-    return "계정은 확인됐지만 프로필 저장에 실패했습니다. 로그인 탭에서 다시 시도해주세요.";
+    switch (error.code) {
+      case "SIGNUP_API_UNREACHABLE":
+        return "앱 서버에 연결하지 못했습니다. 연결을 확인한 뒤 다시 시도해주세요.";
+      case "SYNC_AUTH_INVALID":
+        return "로그인 인증이 만료됐거나 누락됐습니다. 다시 로그인해주세요.";
+      case "SYNC_AUTH_UNAVAILABLE":
+        return "인증 서버가 일시적으로 응답하지 않습니다. 잠시 후 다시 시도해주세요.";
+      case "SYNC_DATABASE_UNAVAILABLE":
+        return "프로필 저장 서버가 일시적으로 응답하지 않습니다. 잠시 후 다시 시도해주세요.";
+      case "SYNC_EMAIL_CONFLICT":
+        return "이 이메일에 다른 계정 정보가 연결되어 있습니다. 다시 로그인해주세요.";
+      case "SYNC_IDENTITY_MISMATCH":
+        return "로그인한 계정 정보와 프로필 정보가 일치하지 않습니다. 다시 로그인해주세요.";
+      case "SYNC_INVALID_REQUEST":
+        return "프로필 저장 요청을 확인하지 못했습니다. 다시 로그인해주세요.";
+      default:
+        return "프로필 저장을 완료하지 못했습니다. 잠시 후 다시 시도해주세요.";
+    }
   }
 
   const msg = error.message.toLowerCase();
