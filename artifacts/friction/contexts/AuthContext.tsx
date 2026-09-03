@@ -29,7 +29,7 @@ import {
   isNetworkFailure,
   type SignupFailure,
 } from "@/lib/signupDiagnostics";
-import { customFetch } from "@workspace/api-client-react";
+import { customFetch, setAuthRefreshCallback } from "@workspace/api-client-react";
 
 export type AuthFlowError = AuthError | { message: string; name: string };
 export interface SignUpResult {
@@ -369,6 +369,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       mounted = false;
     };
   }, [configurationError]);
+
+  // Register a refresh callback so custom-fetch can silently recover 401
+  // responses caused by a near-expiry access token without requiring the
+  // caller to handle auth refresh themselves.
+  useEffect(() => {
+    setAuthRefreshCallback(() =>
+      refreshAuthSession().then((s) => s?.access_token ?? null),
+    );
+    return () => {
+      setAuthRefreshCallback(null);
+    };
+  }, [refreshAuthSession]);
 
   async function signInWithPassword(email: string, password: string) {
     const flowId = createAuthFlowId();

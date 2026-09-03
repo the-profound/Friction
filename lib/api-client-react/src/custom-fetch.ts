@@ -143,6 +143,19 @@ export function setAuthTokenGetter(getter: AuthTokenGetter | null): void {
   _authTokenGetter = getter;
 }
 
+export type AuthRefreshCallback = () => Promise<string | null>;
+let _authRefreshCallback: AuthRefreshCallback | null = null;
+
+/**
+ * Register a callback that is invoked when a request returns 401.
+ * The callback should refresh the auth session and return the new access token,
+ * or null if the refresh failed. The original request is then retried once
+ * with the new token. Pass null to clear (disables auto-retry).
+ */
+export function setAuthRefreshCallback(callback: AuthRefreshCallback | null): void {
+  _authRefreshCallback = callback;
+}
+
 function isRequest(input: RequestInfo | URL): input is Request {
   return typeof Request !== "undefined" && input instanceof Request;
 }
@@ -507,6 +520,28 @@ export async function customFetch<T = unknown>(
       failureType: isTimeout ? "timeout" : "network",
     });
     throw error;
+  }
+
+  // 401 auto-retry: attempt a single token refresh and re-issue the request.
+  // This silently recovers when the access token expired within the near-expiry
+  // margin and the API client sent no Authorization header. Retried at most once
+  // to prevent infinite loops.
+  if (!response.ok && response.status === 401 && _authRefreshCallback) {
+    try {
+      const newToken = await _authRefreshCallback();
+      if (newToken) {
+        headers.set("authorization", `Bearer ${newToken}`);
+        const retryResponse = await fetch(input, {
+          ...init,
+          method,
+          headers,
+          signal: effectiveSignal,
+        });
+        response = retryResponse;
+      }
+    } catch {
+      // Refresh or network failure on retry — fall through to original error.
+    }
   }
 
   if (!response.ok) {

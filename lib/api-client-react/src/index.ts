@@ -3,6 +3,7 @@ export * from "./generated/api.schemas";
 export {
   setBaseUrl,
   setAuthTokenGetter,
+  setAuthRefreshCallback,
   setRequestTelemetryObserver,
   getLastRequestId,
   customFetch,
@@ -12,6 +13,7 @@ export type {
   ApiRequestTelemetry,
   ApiRequestTelemetryObserver,
   AuthTokenGetter,
+  AuthRefreshCallback,
   ErrorType,
 } from "./custom-fetch";
 export * from "./user-search";

@@ -17,6 +17,7 @@ import { useLetterSelectionOverlay } from "@/hooks/useLetterSelectionOverlay";
 import { Colors, Spacing, Sizing } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { useUser } from "@/contexts/UserContext";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   useListArticles,
   SpaceLetterVisibility,
@@ -34,13 +35,17 @@ export default function RecipientOnlyLettersScreen() {
   const navBottom = useNavBarBottomSafeArea();
   const router = useRouter();
   const { userId } = useUser();
+  const { isLoading: authIsLoading } = useAuth();
   const { width: windowWidth } = useWindowDimensions();
 
   const cellWidth =
     (windowWidth - GRID_PAD * 2 - GRID_GAP * (GRID_COLS - 1)) / GRID_COLS;
   const cellHeight = cellWidth * Sizing.cardRatio;
 
-  const articlesQuery = useListArticles({ authorId: userId });
+  const articlesQuery = useListArticles(
+    { authorId: userId },
+    { query: { enabled: !authIsLoading } },
+  );
 
   const {
     isSourceHidden,
@@ -131,7 +136,7 @@ export default function RecipientOnlyLettersScreen() {
   );
 
   const isLoading =
-    articlesQuery.isLoading && !articlesQuery.data;
+    authIsLoading || (articlesQuery.isLoading && !articlesQuery.data);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -152,6 +157,19 @@ export default function RecipientOnlyLettersScreen() {
           isLoading ? (
             <View style={styles.emptyWrap}>
               <Text style={styles.emptyText}>불러오는 중...</Text>
+            </View>
+          ) : articlesQuery.isError ? (
+            <View style={styles.emptyWrap}>
+              <Text style={styles.emptyTitle}>편지를 불러오지 못했어요</Text>
+              <ScalePressable
+                style={styles.retryButton}
+                contentStyle={styles.retryButtonContent}
+                onPress={() => articlesQuery.refetch()}
+                accessibilityRole="button"
+                accessibilityLabel="다시 시도"
+              >
+                <Text style={styles.retryButtonText}>다시 시도</Text>
+              </ScalePressable>
             </View>
           ) : (
             <View style={styles.emptyWrap}>
@@ -230,5 +248,25 @@ const styles = StyleSheet.create({
     color: Colors.zinc400,
     textAlign: "center",
     lineHeight: 18,
+  },
+  retryButton: {
+    marginTop: 4,
+    height: 36,
+    borderRadius: 10,
+  },
+  retryButtonContent: {
+    height: 36,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
+    backgroundColor: Colors.white,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    paddingHorizontal: 20,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    color: Colors.zinc600,
+    letterSpacing: -0.2,
   },
 });

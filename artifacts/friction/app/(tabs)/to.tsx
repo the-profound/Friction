@@ -38,6 +38,7 @@ import { SpaceLetterVisibility } from "@workspace/api-client-react";
 import { spaceStatusLabel, spaceStatusStyle } from "@/lib/spaceStatusStyle";
 import type { OriginLayout } from "@/components/CardSelectOverlay/CardSelectOverlay";
 import { useLetterSelectionOverlay } from "@/hooks/useLetterSelectionOverlay";
+import { useAuth } from "@/contexts/AuthContext";
 
 // getListUserArticleReadsQueryKey is not in the compiled dist types — define locally.
 // Key shape mirrors packages/api-client-react/src/user-article-reads.ts.
@@ -66,6 +67,7 @@ export default function MyScreen() {
   const navBottom = useNavBarBottomSafeArea();
   const router = useRouter();
   const { userId } = useUser();
+  const { isLoading: authIsLoading } = useAuth();
   const queryClient = useQueryClient();
   const { width: windowWidth } = useWindowDimensions();
 
@@ -82,7 +84,10 @@ export default function MyScreen() {
     });
 
   const userQuery = useGetUser(userId);
-  const articlesQuery = useListArticles({ authorId: userId });
+  const articlesQuery = useListArticles(
+    { authorId: userId },
+    { query: { enabled: !authIsLoading } },
+  );
   const spacesQuery = useListSpaces({ userId });
   const sendRecordsQuery = useListSendRecords({ senderId: userId });
   const neighborsQuery = useListNeighbors({ userId });
@@ -238,6 +243,7 @@ export default function MyScreen() {
   const renderEmpty = useCallback(
     (message: string, subtitle?: string) => {
       const loading =
+        authIsLoading ||
         (myTab === "letters" && articlesQuery.isLoading) ||
         (myTab === "spaces" && spacesQuery.isLoading);
       if (loading) {
@@ -254,7 +260,25 @@ export default function MyScreen() {
         </View>
       );
     },
-    [myTab, articlesQuery.isLoading, spacesQuery.isLoading],
+    [myTab, authIsLoading, articlesQuery.isLoading, spacesQuery.isLoading],
+  );
+
+  const renderError = useCallback(
+    (onRetry: () => void) => (
+      <View style={styles.emptyWrap}>
+        <Text style={styles.emptyTitle}>편지를 불러오지 못했어요</Text>
+        <ScalePressable
+          style={styles.retryButton}
+          contentStyle={styles.retryButtonContent}
+          onPress={onRetry}
+          accessibilityRole="button"
+          accessibilityLabel="다시 시도"
+        >
+          <Text style={styles.retryButtonText}>다시 시도</Text>
+        </ScalePressable>
+      </View>
+    ),
+    [],
   );
 
   const contentPadding = useMemo(
@@ -380,7 +404,9 @@ export default function MyScreen() {
 
   const listEmpty =
     myTab === "letters"
-      ? renderEmpty("아직 보낸 편지가 없어요")
+      ? articlesQuery.isError
+        ? renderError(() => articlesQuery.refetch())
+        : renderEmpty("아직 보낸 편지가 없어요")
       : myTab === "spaces"
         ? renderEmpty("참여 중인 공간이 없어요")
         : renderEmpty("아직 비어있어요", "간행물 기능은 곧 만나볼 수 있어요");
@@ -719,5 +745,26 @@ const styles = StyleSheet.create({
     color: Colors.zinc500,
     textAlign: "center",
     lineHeight: 20,
+  },
+  retryButton: {
+    marginTop: 4,
+    height: 36,
+    borderRadius: 10,
+  },
+  retryButtonContent: {
+    height: 36,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
+    backgroundColor: Colors.white,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+  retryButtonText: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc600,
+    letterSpacing: -0.2,
   },
 });
