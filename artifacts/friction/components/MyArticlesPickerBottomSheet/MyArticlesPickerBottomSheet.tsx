@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from "react";
-import { View, Text, StyleSheet, ScrollView } from "react-native";
+import { ActivityIndicator, View, Text, StyleSheet, ScrollView } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
@@ -19,6 +19,9 @@ interface MyArticlesPickerBottomSheetProps {
   articles: ArticleStub[];
   alreadyAdded?: string[];
   multiSelect?: boolean;
+  loading?: boolean;
+  error?: boolean;
+  onRetry?: () => void;
 }
 
 export function MyArticlesPickerBottomSheet({
@@ -28,6 +31,9 @@ export function MyArticlesPickerBottomSheet({
   articles,
   alreadyAdded = [],
   multiSelect = true,
+  loading = false,
+  error = false,
+  onRetry,
 }: MyArticlesPickerBottomSheetProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -59,7 +65,28 @@ export function MyArticlesPickerBottomSheet({
 
   return (
     <BottomSheet visible={visible} onClose={onClose} title="내 편지 선택" snapPoints={[0.65]}>
-      {letterArticles.length === 0 ? (
+      {loading ? (
+        <View style={styles.emptyContainer} accessible accessibilityRole="progressbar" accessibilityLabel="내 편지를 불러오는 중">
+          <ActivityIndicator size="small" color={Colors.zinc400} />
+          <Text style={styles.emptyTitle}>내 편지를 불러오는 중이에요</Text>
+        </View>
+      ) : error ? (
+        <View style={styles.emptyContainer}>
+          <Feather name="alert-circle" size={32} color={Colors.zinc300} />
+          <Text style={styles.emptyTitle}>편지를 불러오지 못했어요</Text>
+          {onRetry ? (
+            <ScalePressable
+              style={styles.retryButton}
+              contentStyle={styles.retryButtonContent}
+              onPress={onRetry}
+              accessibilityRole="button"
+              accessibilityLabel="내 편지 목록 다시 시도"
+            >
+              <Text style={styles.retryButtonText}>다시 시도</Text>
+            </ScalePressable>
+          ) : null}
+        </View>
+      ) : letterArticles.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Feather name="file-text" size={32} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>완성된 편지가 없어요</Text>
@@ -208,5 +235,27 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.zinc500,
     textAlign: "center",
+  },
+  retryButton: {
+    height: 40,
+    flexGrow: 0,
+    flexShrink: 0,
+    marginTop: 12,
+  },
+  retryButtonContent: {
+    height: 40,
+    minWidth: 104,
+    flexGrow: 0,
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.zinc900,
+    borderRadius: 10,
+    paddingHorizontal: 20,
+  },
+  retryButtonText: {
+    ...Typography.bodySemiBold,
+    fontSize: 14,
+    color: Colors.white,
   },
 });

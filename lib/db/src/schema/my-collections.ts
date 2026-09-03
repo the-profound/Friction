@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, pgTable, text, timestamp, unique, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
+import { boolean, index, pgTable, text, timestamp, unique, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -34,6 +34,7 @@ export const myCollectionArticlesTable = pgTable("my_collection_articles", {
   addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   unique("my_collection_articles_unique").on(t.myCollectionId, t.articleId),
+  index("my_collection_articles_article_added_idx").on(t.articleId, t.addedAt),
 ]);
 
 export const insertMyCollectionArticleSchema = createInsertSchema(myCollectionArticlesTable).omit({ id: true });

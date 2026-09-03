@@ -1,5 +1,13 @@
 import React, { useState, useCallback, useRef, useMemo } from "react";
-import { View, Text, StyleSheet, FlatList, TextInput, useWindowDimensions } from "react-native";
+import {
+  ActivityIndicator,
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TextInput,
+  useWindowDimensions,
+} from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -23,6 +31,7 @@ import {
   useListMyCollections,
   useUpdateArticle,
   getListMyCollectionArticlesQueryKey,
+  getListMyCollectionsQueryKey,
 } from "@workspace/api-client-react";
 import {
   invalidateMyCollections,
@@ -90,9 +99,20 @@ export default function PersonalCollectionDetailScreen() {
   const { width: windowWidth } = useWindowDimensions();
   const openRowRef = useRef<{ close(): void } | null>(null);
 
-  const collectionQuery = useGetMyCollection(id ?? "");
+  const cachedCollections = userId
+    ? queryClient.getQueryData<MyCollection[]>(getListMyCollectionsQueryKey({ ownerId: userId }))
+    : undefined;
+  const cachedCollection = id ? cachedCollections?.find((item) => item.id === id) : undefined;
+  const collectionQuery = useGetMyCollection(id ?? "", {
+    query: {
+      initialData: cachedCollection,
+      initialDataUpdatedAt: userId
+        ? queryClient.getQueryState(getListMyCollectionsQueryKey({ ownerId: userId }))?.dataUpdatedAt
+        : undefined,
+    },
+  });
   const collection = collectionQuery.data;
-  const isImpression = collection?.isImpression ?? false;
+  const isImpression = collection?.isImpression ?? cachedCollection?.isImpression ?? false;
 
   const articlesQuery = useListMyCollectionArticles(id ?? "");
   const articles = (articlesQuery.data ?? []) as MyCollectionArticleWithDetails[];
@@ -111,10 +131,16 @@ export default function PersonalCollectionDetailScreen() {
     return rows;
   }, [sortedArticles]);
 
-  const myArticlesQuery = useListArticles({ authorId: userId, status: "LETTER" as const });
+  const myArticlesQuery = useListArticles(
+    { authorId: userId, status: "LETTER" as const },
+    { query: { enabled: showPicker && !!userId } },
+  );
   const myArticles = (myArticlesQuery.data ?? []) as Array<{ id: string; title: string; status: string; content?: string }>;
 
-  const allCollectionsQuery = useListMyCollections({ ownerId: userId });
+  const allCollectionsQuery = useListMyCollections(
+    { ownerId: userId },
+    { query: { enabled: isMoveSheetVisible && !!userId } },
+  );
   const otherCollections = ((allCollectionsQuery.data ?? []) as MyCollection[]).filter(
     (c) => c.id !== id && !c.isArchive
   );
@@ -392,6 +418,16 @@ export default function PersonalCollectionDetailScreen() {
     setMoreSheetVisible(true);
   }, []);
 
+  const handleRetryArticles = useCallback(() => {
+    if (articlesQuery.isFetching) return;
+    void articlesQuery.refetch();
+  }, [articlesQuery]);
+
+  const handleRetryOtherCollections = useCallback(() => {
+    if (allCollectionsQuery.isFetching) return;
+    void allCollectionsQuery.refetch();
+  }, [allCollectionsQuery]);
+
   const handleReadFromOverlay = useCallback(() => {
     const item = tapArticleEntry;
     if (!item) return;
@@ -411,7 +447,11 @@ export default function PersonalCollectionDetailScreen() {
   }));
 
   const selectedCount = selectedIds.size;
-  const isArchive = collection?.isArchive ?? false;
+  const isArchive = collection?.isArchive ?? cachedCollection?.isArchive ?? false;
+  const hasCollectionMeta = !!collection || !!cachedCollection;
+  const hasArticles = articles.length > 0;
+  const isInitialArticlesLoading = articlesQuery.isLoading && !hasArticles;
+  const isArticlesErrorWithoutData = articlesQuery.isError && !hasArticles;
 
   const renderSelectionItem = useCallback(
     ({ item }: { item: MyCollectionArticleWithDetails }) => {
@@ -555,7 +595,7 @@ export default function PersonalCollectionDetailScreen() {
             activeVariant="outline"
             accessibilityLabel="보기 방식 필터"
           />
-          {!isArchive && (
+          {!isArchive && hasCollectionMeta && (
             <ScalePressable onPress={() => setShowPicker(true)}
             contentStyle={styles.addArticleButtonContent}
             >
@@ -566,11 +606,30 @@ export default function PersonalCollectionDetailScreen() {
         </View>
       )}
 
-      {articlesQuery.isError ? (
+      {isInitialArticlesLoading ? (
+        <View
+          style={[styles.emptyContainer, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}
+          accessible
+          accessibilityRole="progressbar"
+          accessibilityLabel="편지 목록을 불러오는 중"
+        >
+          <ActivityIndicator size="large" color={Colors.zinc400} />
+          <Text style={styles.loadingTitle}>편지 목록을 불러오는 중이에요</Text>
+        </View>
+      ) : isArticlesErrorWithoutData ? (
         <View style={[styles.emptyContainer, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}>
           <Feather name="alert-circle" size={36} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>편지 목록을 불러오지 못했어요</Text>
-          <ScalePressable style={styles.retryButtonOuter} contentStyle={styles.retryButton} onPress={() => articlesQuery.refetch()}>
+          <ScalePressable
+            style={styles.retryButtonOuter}
+            contentStyle={styles.retryButton}
+            onPress={handleRetryArticles}
+            disabled={articlesQuery.isFetching}
+            accessibilityRole="button"
+            accessibilityLabel="편지 목록 다시 시도"
+            accessibilityState={{ disabled: articlesQuery.isFetching, busy: articlesQuery.isFetching }}
+          >
+            {articlesQuery.isFetching ? <ActivityIndicator size="small" color={Colors.white} /> : null}
             <Text style={styles.retryButtonText}>다시 시도</Text>
           </ScalePressable>
         </View>
@@ -580,33 +639,74 @@ export default function PersonalCollectionDetailScreen() {
           <Text style={styles.emptyTitle}>아직 추가된 편지가 없어요</Text>
           <Text style={styles.emptySubtitle}>완성된 편지를 이 폴더에 추가해보세요</Text>
         </View>
-      ) : selectionMode ? (
-        <FlatList
-          {...LIST_PERF_PRESET}
-          data={articles}
-          keyExtractor={(item) => item.articleId}
-          renderItem={renderSelectionItem}
-          contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 80 + 24 }]}
-          showsVerticalScrollIndicator={false}
-        />
-      ) : view === "card" ? (
-        <FlatList
-          {...LIST_PERF_PRESET}
-          data={gridRows}
-          keyExtractor={(_, idx) => `grid-row-${idx}`}
-          renderItem={renderGridRow}
-          contentContainerStyle={[styles.gridContent, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}
-          showsVerticalScrollIndicator={false}
-        />
       ) : (
-        <FlatList
-          {...LIST_PERF_PRESET}
-          data={sortedArticles}
-          keyExtractor={(item) => item.articleId}
-          renderItem={renderListItem}
-          contentContainerStyle={[styles.listContent, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}
-          showsVerticalScrollIndicator={false}
-        />
+        <View style={styles.articlesContent}>
+          {articlesQuery.isError || articlesQuery.isFetching ? (
+            <View
+              style={styles.refreshStatus}
+              accessible
+              accessibilityRole={articlesQuery.isFetching ? "progressbar" : "alert"}
+              accessibilityLabel={
+                articlesQuery.isFetching
+                  ? "편지 목록을 새로 불러오는 중"
+                  : "편지 목록을 새로 불러오지 못함"
+              }
+            >
+              {articlesQuery.isFetching ? (
+                <>
+                  <ActivityIndicator size="small" color={Colors.zinc500} />
+                  <Text style={styles.refreshStatusText}>편지 목록을 새로 불러오는 중이에요</Text>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.refreshStatusText}>편지 목록을 새로 불러오지 못했어요</Text>
+                  <ScalePressable
+                    style={styles.inlineRetryButtonOuter}
+                    contentStyle={styles.inlineRetryButton}
+                    onPress={handleRetryArticles}
+                    disabled={articlesQuery.isFetching}
+                    accessibilityRole="button"
+                    accessibilityLabel="편지 목록 다시 시도"
+                    accessibilityState={{ disabled: articlesQuery.isFetching, busy: articlesQuery.isFetching }}
+                  >
+                    <Text style={styles.inlineRetryButtonText}>다시 시도</Text>
+                  </ScalePressable>
+                </>
+              )}
+            </View>
+          ) : null}
+          {selectionMode ? (
+            <FlatList
+              {...LIST_PERF_PRESET}
+              style={styles.articlesList}
+              data={articles}
+              keyExtractor={(item) => item.articleId}
+              renderItem={renderSelectionItem}
+              contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 80 + 24 }]}
+              showsVerticalScrollIndicator={false}
+            />
+          ) : view === "card" ? (
+            <FlatList
+              {...LIST_PERF_PRESET}
+              style={styles.articlesList}
+              data={gridRows}
+              keyExtractor={(_, idx) => `grid-row-${idx}`}
+              renderItem={renderGridRow}
+              contentContainerStyle={[styles.gridContent, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}
+              showsVerticalScrollIndicator={false}
+            />
+          ) : (
+            <FlatList
+              {...LIST_PERF_PRESET}
+              style={styles.articlesList}
+              data={sortedArticles}
+              keyExtractor={(item) => item.articleId}
+              renderItem={renderListItem}
+              contentContainerStyle={[styles.listContent, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}
+              showsVerticalScrollIndicator={false}
+            />
+          )}
+        </View>
       )}
 
       {selectionMode && (
@@ -642,6 +742,11 @@ export default function PersonalCollectionDetailScreen() {
         onSelect={handleAddArticles}
         articles={pickerArticles}
         alreadyAdded={alreadyAddedIds}
+        loading={myArticlesQuery.isLoading}
+        error={myArticlesQuery.isError}
+        onRetry={() => {
+          if (!myArticlesQuery.isFetching) void myArticlesQuery.refetch();
+        }}
       />
 
       <BottomSheet
@@ -689,7 +794,34 @@ export default function PersonalCollectionDetailScreen() {
         snapPoints={[0.5]}
       >
         <View style={styles.moveSheetContent}>
-          {otherCollections.length === 0 ? (
+          {allCollectionsQuery.isLoading ? (
+            <View
+              style={styles.moveLoadingContainer}
+              accessible
+              accessibilityRole="progressbar"
+              accessibilityLabel="이동할 보관함을 불러오는 중"
+            >
+              <ActivityIndicator size="small" color={Colors.zinc400} />
+              <Text style={styles.moveLoadingText}>보관함을 불러오는 중이에요</Text>
+            </View>
+          ) : allCollectionsQuery.isError ? (
+            <View style={styles.moveLoadingContainer}>
+              <Feather name="alert-circle" size={28} color={Colors.zinc300} />
+              <Text style={styles.moveEmptyText}>보관함을 불러오지 못했어요</Text>
+              <ScalePressable
+                style={styles.retryButtonOuter}
+                contentStyle={styles.retryButton}
+                onPress={handleRetryOtherCollections}
+                disabled={allCollectionsQuery.isFetching}
+                accessibilityRole="button"
+                accessibilityLabel="보관함 목록 다시 시도"
+                accessibilityState={{ disabled: allCollectionsQuery.isFetching, busy: allCollectionsQuery.isFetching }}
+              >
+                {allCollectionsQuery.isFetching ? <ActivityIndicator size="small" color={Colors.white} /> : null}
+                <Text style={styles.retryButtonText}>다시 시도</Text>
+              </ScalePressable>
+            </View>
+          ) : otherCollections.length === 0 ? (
             <View style={styles.moveEmptyContainer}>
               <Text style={styles.moveEmptyText}>이동 가능한 다른 보관함이 없어요</Text>
             </View>
@@ -888,6 +1020,12 @@ const styles = StyleSheet.create({
   listContent: {
     paddingBottom: 40,
   },
+  articlesContent: {
+    flex: 1,
+  },
+  articlesList: {
+    flex: 1,
+  },
   gridRow: {
     flexDirection: "row",
     paddingHorizontal: GRID_PAD,
@@ -945,6 +1083,12 @@ const styles = StyleSheet.create({
     color: Colors.zinc900,
     marginTop: 8,
   },
+  loadingTitle: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc500,
+    marginTop: 12,
+  },
   emptySubtitle: {
     ...Typography.body,
     fontSize: 14,
@@ -953,10 +1097,21 @@ const styles = StyleSheet.create({
   },
   retryButtonOuter: {
     marginTop: 12,
+    height: 40,
+    alignSelf: "center",
+    flexGrow: 0,
+    flexShrink: 0,
   },
   retryButton: {
+    height: 40,
+    minWidth: 104,
+    flexGrow: 0,
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
     paddingHorizontal: 20,
-    paddingVertical: 10,
     backgroundColor: Colors.zinc900,
     borderRadius: 10,
   },
@@ -964,6 +1119,55 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 14,
     color: Colors.white,
+  },
+  refreshStatus: {
+    minHeight: 42,
+    paddingHorizontal: Spacing.screenPx,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: Colors.zinc50,
+  },
+  refreshStatusText: {
+    ...Typography.caption,
+    fontSize: 13,
+    color: Colors.zinc600,
+  },
+  inlineRetryButtonOuter: {
+    height: 32,
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  inlineRetryButton: {
+    height: 32,
+    flexGrow: 0,
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+    backgroundColor: Colors.white,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.zinc300,
+  },
+  inlineRetryButtonText: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc700,
+    fontWeight: "600",
+  },
+  moveLoadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingVertical: 40,
+  },
+  moveLoadingText: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc500,
   },
   editForm: {
     paddingVertical: 12,
