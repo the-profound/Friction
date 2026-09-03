@@ -2457,14 +2457,6 @@ export default function WritingScreen() {
             </View>
           </View>
 
-          {/*
-            툴바 자체는 화면 루트에 absolute로 floating한다(read.tsx와 동일 구조).
-            여기서는 키보드가 올라온 동안 에디터가 툴바에 가려지지 않도록
-            툴바 높이만큼 공간을 확보한다.
-          */}
-          {keyboardVisible && Platform.OS !== "web" && selectionState.activeBlock !== "horizontalRule" && (
-            <View style={styles.toolbarSpacerBottom} />
-          )}
         </KeyboardAvoidingView>
 
         {/* 분할 계산용 WebView는 화면 크롬에 영향을 주지 않는 측정 레이어다. */}
@@ -2824,10 +2816,6 @@ const styles = StyleSheet.create({
   editorOuter: {
     flex: 1,
     alignItems: "center",
-  },
-  // floating 툴바가 가리는 만큼 KAV 내부에 확보하는 공간 (툴바 캡슐 44 + 상하 8)
-  toolbarSpacerBottom: {
-    height: 60,
   },
   memoToolbarWrap: {
     position: "absolute",
