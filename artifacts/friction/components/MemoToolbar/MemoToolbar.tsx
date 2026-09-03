@@ -8,7 +8,6 @@ import Animated, {
 } from "react-native-reanimated";
 import { MaterialCommunityIcons, Feather } from "@expo/vector-icons";
 import ScalePressable from "@/components/shared/ScalePressable";
-import { Colors } from "@/constants/tokens";
 import type { OnSelectionUpdatePayload } from "@/components/WebViewMarkdownEditor/types";
 import type { InlineMenuMode } from "@/components/InlineMenuPanel/InlineMenuPanel";
 
@@ -307,7 +306,7 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
   },
   capsule: {
-    backgroundColor: Colors.zinc100,
+    backgroundColor: "#ffffff",
     borderRadius: 24,
     flexDirection: "row",
     alignItems: "center",

@@ -115,10 +115,6 @@ const EXPORT_DEBOUNCE_MS = 1200;
 const DIRECT_THOUGHT_INITIAL_MARKDOWN = "# \n\n";
 
 const WRITING_EDITOR_BOTTOM_PADDING = 24;
-// The absolute header is 44px tall with 12px vertical padding on each side.
-// Keep the editor title below it, with a small visual gap before the content.
-const WRITING_HEADER_HEIGHT = 68;
-const WRITING_EDITOR_TOP_PADDING = WRITING_HEADER_HEIGHT + 16;
 function createThoughtClientId(): string {
   const randomNibble = () => Math.floor(Math.random() * 16);
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (token) => {
@@ -2589,7 +2585,6 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: WRITING_HEADER_HEIGHT,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -2667,7 +2662,7 @@ const styles = StyleSheet.create({
   },
   editorInner: {
     flex: 1,
-    paddingTop: WRITING_EDITOR_TOP_PADDING,
+    paddingTop: 8,
   },
   markdownEditorContainer: {
     flex: 1,
