@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef } from "react";
+import { AppState } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
@@ -21,7 +22,7 @@ export function UserProvider({
   children: React.ReactNode;
   userId?: string;
 }) {
-  const { session } = useAuth();
+  const { session, refreshAuthSession } = useAuth();
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   const syncedIdRef = useRef<string | null>(null);
@@ -63,17 +64,20 @@ export function UserProvider({
         : undefined;
 
     const flowId = createAuthFlowId();
-    customFetch("/api/users/sync", {
-      method: "POST",
-      headers: { "X-Auth-Flow-Id": flowId },
-      body: JSON.stringify({ id, email, ...(nickname ? { nickname } : {}) }),
-    })
-      .then(() => {
+    let cancelled = false;
+    const syncRequest = () =>
+      customFetch("/api/users/sync", {
+        method: "POST",
+        headers: { "X-Auth-Flow-Id": flowId },
+        body: JSON.stringify({ id, email, ...(nickname ? { nickname } : {}) }),
+      });
+
+    (async () => {
+      try {
+        await syncRequest();
         syncErrorShownRef.current = false;
-      })
-      .catch((err: unknown) => {
-        // Reset so the next session change retries instead of staying silently broken.
-        syncedIdRef.current = null;
+        return;
+      } catch (err: unknown) {
         const code =
           err instanceof ApiError &&
           err.data &&
@@ -81,19 +85,53 @@ export function UserProvider({
           typeof (err.data as { code?: unknown }).code === "string"
             ? (err.data as { code: string }).code
             : "SYNC_UNKNOWN";
-        reportAuthDiagnostic("profile-sync", "failed-background", code as Parameters<typeof reportAuthDiagnostic>[2], flowId);
+
+        // An access token can still look locally unexpired after Supabase
+        // has rotated or revoked it server-side. Refresh once and retry the
+        // profile sync with the newly-issued token before showing an error.
+        if (code === "AUTH_INVALID" && AppState.currentState === "active") {
+          const refreshedSession = await refreshAuthSession();
+          if (
+            refreshedSession?.user.id === id &&
+            refreshedSession.user.email === email
+          ) {
+            try {
+              await syncRequest();
+              syncErrorShownRef.current = false;
+              return;
+            } catch (retryError: unknown) {
+              err = retryError;
+            }
+          }
+        }
+
+        // Reset so the next session change retries instead of staying silently broken.
+        syncedIdRef.current = null;
+        const finalCode =
+          err instanceof ApiError &&
+          err.data &&
+          typeof err.data === "object" &&
+          typeof (err.data as { code?: unknown }).code === "string"
+            ? (err.data as { code: string }).code
+            : "SYNC_UNKNOWN";
+        reportAuthDiagnostic("profile-sync", "failed-background", finalCode as Parameters<typeof reportAuthDiagnostic>[2], flowId);
         // Keep operator evidence anonymous: account identifiers, request
         // payloads, response bodies, and raw exception messages are omitted.
-        console.warn(`[UserProvider] /api/users/sync failed (${code}; flow=${flowId})`);
-        if (!syncErrorShownRef.current) {
+        console.warn(`[UserProvider] /api/users/sync failed (${finalCode}; flow=${flowId})`);
+        if (!cancelled && !syncErrorShownRef.current) {
           syncErrorShownRef.current = true;
           showToast({
             type: "error",
             message: "계정 동기화에 실패했어요. 잠시 후 다시 시도해주세요.",
           });
         }
-      });
-  }, [session, overrideUserId, showToast]);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session, overrideUserId, refreshAuthSession, showToast]);
 
   const resolvedNickname = overrideUserId
     ? undefined

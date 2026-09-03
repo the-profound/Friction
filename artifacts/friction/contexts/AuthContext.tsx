@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { AppState, Platform } from "react-native";
 import { Session, AuthError } from "@supabase/supabase-js";
 import {
@@ -43,6 +43,7 @@ interface AuthContextValue {
   isLoading: boolean;
   configurationError: string | null;
   apiReachability: ApiReachability;
+  refreshAuthSession: () => Promise<Session | null>;
   signInWithPassword: (email: string, password: string) => Promise<{ error: AuthFlowError | null }>;
   signUp: (email: string, password: string, nickname: string) => Promise<SignUpResult>;
   signOut: () => Promise<void>;
@@ -53,6 +54,7 @@ const AuthContext = createContext<AuthContextValue>({
   isLoading: true,
   configurationError: null,
   apiReachability: "checking",
+  refreshAuthSession: async () => null,
   signInWithPassword: async () => ({ error: null }),
   signUp: async () => ({
     error: null,
@@ -110,6 +112,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const nativeAutoRefreshRef = useRef<ReturnType<
     typeof createNativeAutoRefreshController
   > | null>(null);
+  const refreshSessionPromiseRef = useRef<Promise<Session | null> | null>(null);
   const authCoordinatorRef = useRef(createAuthSessionCoordinator<Session>());
 
   // Supabase fires onAuthStateChange synchronously as part of
@@ -135,6 +138,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setCurrentAuthSession(nextSession);
     setSession(nextSession);
   }
+
+  const refreshAuthSession = useCallback(async (): Promise<Session | null> => {
+    if (Platform.OS !== "web" && AppState.currentState !== "active") {
+      return null;
+    }
+
+    if (refreshSessionPromiseRef.current) {
+      return refreshSessionPromiseRef.current;
+    }
+
+    const refreshPromise = (async () => {
+      try {
+        const { data, error } = await supabase.auth.refreshSession();
+        if (error || !data.session) return null;
+
+        // Update the request token synchronously before the caller retries.
+        // Supabase also emits TOKEN_REFRESHED, but waiting for React state
+        // would leave a small window in which customFetch still sees the old
+        // access token.
+        applySession(data.session);
+        return data.session;
+      } catch {
+        // Keep the current session for a later foreground retry. A transient
+        // refresh failure must not turn a single sync failure into a logout.
+        return null;
+      }
+    })();
+
+    refreshSessionPromiseRef.current = refreshPromise;
+    try {
+      return await refreshPromise;
+    } finally {
+      if (refreshSessionPromiseRef.current === refreshPromise) {
+        refreshSessionPromiseRef.current = null;
+      }
+    }
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -514,6 +554,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         configurationError,
         apiReachability,
+        refreshAuthSession,
         signInWithPassword,
         signUp,
         signOut,
