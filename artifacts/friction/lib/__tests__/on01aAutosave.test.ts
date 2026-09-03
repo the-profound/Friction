@@ -359,7 +359,7 @@ describe("on-01a guarded return navigation", () => {
       "usePreventRemove(shouldPreventRemoval, handlePreventedRemoval);",
     );
     expect(removalGuard).toContain("if (isNavigatingRef.current) return;");
-    expect(removalGuard).toContain("handleHeaderBack();");
+    expect(removalGuard).toContain("handleHeaderBack(data.action);");
     const backHandler = screen.slice(
       screen.indexOf("const handleDraftBack"),
       screen.indexOf("// Native lifecycle events"),
@@ -367,7 +367,10 @@ describe("on-01a guarded return navigation", () => {
     expect(backHandler).toContain("await persistLatestAutosave();");
     expect(backHandler).toContain("void flush().then");
     expect(backHandler.indexOf("await persistLatestAutosave();")).toBeLessThan(
-      backHandler.indexOf("exitToPreviousList();", backHandler.indexOf("await persistLatestAutosave();")),
+      backHandler.indexOf(
+        "exitToPreviousList(removalAction);",
+        backHandler.indexOf("await persistLatestAutosave();"),
+      ),
     );
     expect(backHandler).not.toContain("await flush()");
     expect(screen).toContain("<Stack.Screen options={{ gestureEnabled: true }} />");
@@ -472,6 +475,46 @@ describe("on-01a guarded return navigation", () => {
     expect(exit).toContain("isNavigatingRef.current = true");
     expect(exit).not.toContain("isNavigatingRef.current = false");
     expect(exit).not.toContain("setIsNavigating(false)");
+  });
+
+  it("replays a completed native removal exactly once instead of scheduling a second back", () => {
+    const screen = readScreen();
+    const exit = screen.slice(
+      screen.indexOf("const exitToPreviousList"),
+      screen.indexOf("const handleDraftBack"),
+    );
+    const removalGuard = screen.slice(
+      screen.indexOf("const handlePreventedRemoval"),
+      screen.indexOf("const handleDismissKeyboard"),
+    );
+
+    expect(screen).toContain("const navigationCommittedRef = useRef(false);");
+    expect(exit).toContain("if (navigationCommittedRef.current) return;");
+    expect(exit).toContain("if (canPopToList && removalAction) {");
+    expect(exit).toContain("navigationCommittedRef.current = true;");
+    expect(exit).toContain("navigation.dispatch(removalAction);");
+    expect(exit.indexOf("navigation.dispatch(removalAction);")).toBeLessThan(
+      exit.indexOf("navigateAfterRemovingGuard("),
+    );
+    expect(removalGuard).toContain(
+      "handlePreventedRemoval = useCallback(({ data }: { data: { action: NavigationAction } })",
+    );
+    expect(removalGuard).toContain("exitToPreviousList(data.action);");
+    expect(removalGuard).toContain("handleHeaderBack(data.action);");
+  });
+
+  it("invalidates deferred navigation when the discarded screen unmounts", () => {
+    const screen = readScreen();
+    const deferredDispatch = screen.slice(
+      screen.indexOf("// usePreventRemove updates"),
+      screen.indexOf("const handleDismissKeyboard"),
+    );
+
+    expect(screen).toContain("navigationSessionRef.current += 1;");
+    expect(deferredDispatch).toContain(
+      "if (navigationSessionRef.current !== pending.sessionId) return;",
+    );
+    expect(deferredDispatch).toContain("pendingNavigationRef.current = null;");
   });
 
   it("uses the same explicit editor bottom padding on web and native", () => {

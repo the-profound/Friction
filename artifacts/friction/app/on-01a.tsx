@@ -16,6 +16,7 @@ import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams, Stack, useNavigation } from "expo-router";
 import { usePreventRemove } from "expo-router/build/react-navigation/core";
+import type { NavigationAction } from "expo-router/build/react-navigation/routers";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing, Sizing, Shadows } from "@/constants/tokens";
 import { useAutoSave } from "@/lib/useAutoSave";
@@ -336,7 +337,12 @@ export default function WritingScreen() {
   // listener for reliable interactive iOS swipe cancellation. Intentional
   // navigation waits until this guard has been disabled before dispatching.
   const [shouldPreventRemoval, setShouldPreventRemoval] = useState(true);
-  const pendingNavigationRef = useRef<(() => void) | null>(null);
+  const navigationCommittedRef = useRef(false);
+  const pendingNavigationRef = useRef<{
+    sessionId: number;
+    navigate: () => void;
+  } | null>(null);
+  const navigationSessionRef = useRef(0);
   const thoughtIdRef = useRef<string | undefined>(id);
   const thoughtCreationIdRef = useRef<string | undefined>(
     isLocalDirectDraft ? createThoughtClientId() : undefined,
@@ -1294,7 +1300,13 @@ export default function WritingScreen() {
   }, [id, updateArticle, queryClient, showToast]);
 
   const navigateAfterRemovingGuard = useCallback((navigate: () => void) => {
-    pendingNavigationRef.current = navigate;
+    if (navigationCommittedRef.current) return;
+    navigationCommittedRef.current = true;
+    navigationSessionRef.current += 1;
+    pendingNavigationRef.current = {
+      sessionId: navigationSessionRef.current,
+      navigate,
+    };
     setShouldPreventRemoval(false);
   }, []);
 
@@ -1715,7 +1727,8 @@ export default function WritingScreen() {
   // Both draft and dividing modes exit the screen via this single handler.
   // There is no "exit dividing back to draft" transition — once promoted to
   // DIVIDING the article stays there.
-  const exitToPreviousList = useCallback(() => {
+  const exitToPreviousList = useCallback((removalAction?: NavigationAction) => {
+    if (navigationCommittedRef.current) return;
     isNavigatingRef.current = true;
     setIsNavigating(true);
     // Only pop if this screen was pushed from the tab navigator. A restored
@@ -1727,6 +1740,15 @@ export default function WritingScreen() {
     const canPopToList = router.canGoBack() && previousRoute?.name === "(tabs)";
 
     releaseDirectThoughtDraft();
+    if (canPopToList && removalAction) {
+      // usePreventRemove annotates the prevented action with the route it has
+      // already visited. Replaying that exact action admits the completed iOS
+      // gesture once without disabling the guard or scheduling a second pop.
+      navigationCommittedRef.current = true;
+      navigation.dispatch(removalAction);
+      return;
+    }
+
     navigateAfterRemovingGuard(() => {
       if (canPopToList) {
         router.back();
@@ -1737,7 +1759,7 @@ export default function WritingScreen() {
     });
   }, [navigation, releaseDirectThoughtDraft, router, source, navigateAfterRemovingGuard]);
 
-  const handleDraftBack = useCallback(async () => {
+  const handleDraftBack = useCallback(async (removalAction?: NavigationAction) => {
     if (isNavigatingRef.current) return;
     isNavigatingRef.current = true;
     setIsNavigating(true);
@@ -1792,7 +1814,7 @@ export default function WritingScreen() {
       } else {
         void deleteSavedThought(thoughtIdRef.current);
       }
-      exitToPreviousList();
+      exitToPreviousList(removalAction);
       return;
     }
 
@@ -1836,7 +1858,7 @@ export default function WritingScreen() {
     if (isThoughtModeRef.current) {
       void queryClient.invalidateQueries({ queryKey: getListThoughtsQueryKey() });
     }
-    exitToPreviousList();
+    exitToPreviousList(removalAction);
   }, [flush, queryClient, getEditorContent, markDirty, id, showToast, isLocalDirectDraft, exitToPreviousList, persistLatestAutosave, stageCleanup, runPendingCleanup]);
 
   // Native lifecycle events have no reliable "before unload" hook.  Export the
@@ -1867,7 +1889,7 @@ export default function WritingScreen() {
   }, [releaseDirectThoughtDraft]);
 
   // ── 헤더/하드웨어 뒤로가기 통합 ────────────────────────────────────────────
-  const handleHeaderBack = useCallback(() => {
+  const handleHeaderBack = useCallback((removalAction?: NavigationAction) => {
     if (spellTabVisible) {
       editorRef.current?.clearSpellHighlight();
       setSpellTabVisible(false);
@@ -1875,20 +1897,20 @@ export default function WritingScreen() {
       spellAppliedCountRef.current = {};
       return;
     }
-    handleDraftBack();
+    handleDraftBack(removalAction);
   }, [spellTabVisible, handleDraftBack]);
 
   // Keep the native edge-swipe, browser history back, and header button on
   // the same asynchronous save/delete path. usePreventRemove is required for
   // Native Stack: a bare beforeRemove listener is not reliable for iOS edge
   // gestures. A repeat removal while save/delete is in progress stays blocked.
-  const handlePreventedRemoval = useCallback(() => {
+  const handlePreventedRemoval = useCallback(({ data }: { data: { action: NavigationAction } }) => {
     if (isNavigatingRef.current) return;
     if (!initializedRef.current) {
-      exitToPreviousList();
+      exitToPreviousList(data.action);
       return;
     }
-    handleHeaderBack();
+    handleHeaderBack(data.action);
   }, [handleHeaderBack, exitToPreviousList]);
 
   usePreventRemove(shouldPreventRemoval, handlePreventedRemoval);
@@ -1898,11 +1920,21 @@ export default function WritingScreen() {
   // replaces and completed exits are admitted exactly once.
   useEffect(() => {
     if (shouldPreventRemoval || !pendingNavigationRef.current) return;
-    const navigate = pendingNavigationRef.current;
+    const pending = pendingNavigationRef.current;
     pendingNavigationRef.current = null;
-    const timer = setTimeout(navigate, 0);
+    const timer = setTimeout(() => {
+      if (navigationSessionRef.current !== pending.sessionId) return;
+      pending.navigate();
+    }, 0);
     return () => clearTimeout(timer);
   }, [shouldPreventRemoval]);
+
+  useEffect(() => {
+    return () => {
+      navigationSessionRef.current += 1;
+      pendingNavigationRef.current = null;
+    };
+  }, []);
 
   const handleDismissKeyboard = useCallback(() => {
     editorRef.current?.blur();
@@ -2343,7 +2375,7 @@ export default function WritingScreen() {
               <ScalePressable
                 style={styles.loadBackButton}
                 contentStyle={styles.loadBackButtonContent}
-                onPress={exitToPreviousList}
+                onPress={() => exitToPreviousList()}
               >
                 <Text style={styles.loadBackButtonText}>이전 화면</Text>
               </ScalePressable>
@@ -2364,7 +2396,7 @@ export default function WritingScreen() {
           <ScalePressable
             style={styles.headerBackButton}
             contentStyle={styles.headerBackButtonContent}
-            onPress={handleHeaderBack}
+            onPress={() => handleHeaderBack()}
             disabled={isNavigating}
             accessibilityRole="button"
             accessibilityLabel="기록 목록으로 돌아가기"

@@ -76,3 +76,4 @@
 - [Record filter UI contract](friction-record-filter-ui.md) — 기록 탭 종류 선택은 단상·편집·편지 독립 버튼이며 드롭다운으로 합치지 않는다.
 - [Editor blank-surface focus ownership](friction-editor-blank-surface-focus.md) — screen wrappers must not refocus embedded editors; only platform editors may classify a stationary blank-surface tap.
 - [Idempotent transition retries](idempotent-transition-retries.md) — after an ambiguous POST result, unchanged retries must bypass prerequisite writes that the committed transition invalidated.
+- [Guarded native removal ownership](friction-guarded-native-removal.md) — after async save, replay the exact prevented removal action; a fresh back action can double-pop after iOS edge swipe.
