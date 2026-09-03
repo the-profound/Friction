@@ -24,5 +24,10 @@ export interface ClientLogBody {
   platformVersion?: string | null;
   appVersion?: string | null;
   buildNumber?: string | null;
+  /**
+   * Last API request correlation ID observed before the client diagnostic.
+   * @pattern ^req_[a-z0-9]{20,32}$
+   */
+  requestId?: string | null;
   release?: ReleaseDiagnosticContext;
 }

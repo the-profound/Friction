@@ -2,6 +2,18 @@ export type CustomFetchOptions = RequestInit & {
   responseType?: "json" | "text" | "blob" | "auto";
 };
 
+export type ApiRequestTelemetry = {
+  requestId: string;
+  method: string;
+  route: string;
+  outcome: "success" | "http_error" | "network_error" | "timeout";
+  durationMs: number;
+  statusCode?: number;
+  failureType?: "http_4xx" | "http_5xx" | "network" | "timeout";
+};
+
+export type ApiRequestTelemetryObserver = (event: ApiRequestTelemetry) => void;
+
 // ---------------------------------------------------------------------------
 // Default request timeout
 // ---------------------------------------------------------------------------
@@ -69,6 +81,44 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 
 let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
+let _requestTelemetryObserver: ApiRequestTelemetryObserver | null = null;
+let _lastRequestId: string | null = null;
+
+export function setRequestTelemetryObserver(
+  observer: ApiRequestTelemetryObserver | null,
+): void {
+  _requestTelemetryObserver = observer;
+}
+
+export function getLastRequestId(): string | null {
+  return _lastRequestId;
+}
+
+function createRequestId(): string {
+  const randomPart = Math.random().toString(36).slice(2, 14).padEnd(12, "0");
+  return `req_${Date.now().toString(36)}${randomPart}`;
+}
+
+function safeRoute(input: RequestInfo | URL): string {
+  const raw = resolveUrl(input);
+  try {
+    const path = raw.startsWith("/") ? raw : new URL(raw).pathname;
+    return path
+      .split("?", 1)[0]
+      .replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, ":id")
+      .replace(/\/\d+(?=\/|$)/g, "/:id");
+  } catch {
+    return "unknown";
+  }
+}
+
+function emitRequestTelemetry(event: ApiRequestTelemetry): void {
+  try {
+    _requestTelemetryObserver?.(event);
+  } catch {
+    // Operational telemetry must never alter API behavior.
+  }
+}
 
 /**
  * Set a base URL that is prepended to every relative request URL
@@ -236,6 +286,7 @@ export class ApiError<T = unknown> extends Error {
   readonly response: Response;
   readonly method: string;
   readonly url: string;
+  readonly requestId: string | null;
 
   constructor(
     response: Response,
@@ -252,6 +303,7 @@ export class ApiError<T = unknown> extends Error {
     this.response = response;
     this.method = requestInfo.method;
     this.url = response.url || requestInfo.url;
+    this.requestId = response.headers.get("x-request-id");
   }
 }
 
@@ -401,6 +453,11 @@ export async function customFetch<T = unknown>(
   }
 
   const headers = mergeHeaders(isRequest(input) ? input.headers : undefined, headersInit);
+  const requestId = headers.get("x-request-id") ?? createRequestId();
+  headers.set("x-request-id", requestId);
+  _lastRequestId = requestId;
+  (globalThis as typeof globalThis & { __frictionLastRequestId?: string })
+    .__frictionLastRequestId = requestId;
 
   if (
     typeof init.body === "string" &&
@@ -424,6 +481,8 @@ export async function customFetch<T = unknown>(
   }
 
   const requestInfo = { method, url: resolveUrl(input) };
+  const route = safeRoute(input);
+  const startedAt = Date.now();
 
   // Inject a default 15-second timeout when the caller hasn't supplied one.
   // If the caller did supply a signal, race both so whichever fires first wins.
@@ -432,12 +491,46 @@ export async function customFetch<T = unknown>(
     ? combineSignals(init.signal, timeoutSignal)
     : timeoutSignal;
 
-  const response = await fetch(input, { ...init, method, headers, signal: effectiveSignal });
+  let response: Response;
+  try {
+    response = await fetch(input, { ...init, method, headers, signal: effectiveSignal });
+  } catch (error) {
+    const isTimeout =
+      effectiveSignal.aborted ||
+      (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError"));
+    emitRequestTelemetry({
+      requestId,
+      method,
+      route,
+      outcome: isTimeout ? "timeout" : "network_error",
+      durationMs: Date.now() - startedAt,
+      failureType: isTimeout ? "timeout" : "network",
+    });
+    throw error;
+  }
 
   if (!response.ok) {
+    emitRequestTelemetry({
+      requestId: response.headers.get("x-request-id") ?? requestId,
+      method,
+      route,
+      outcome: "http_error",
+      durationMs: Date.now() - startedAt,
+      statusCode: response.status,
+      failureType: response.status >= 500 ? "http_5xx" : "http_4xx",
+    });
     const errorData = await parseErrorBody(response, method);
     throw new ApiError(response, errorData, requestInfo);
   }
 
-  return (await parseSuccessBody(response, responseType, requestInfo)) as T;
+  const result = (await parseSuccessBody(response, responseType, requestInfo)) as T;
+  emitRequestTelemetry({
+    requestId: response.headers.get("x-request-id") ?? requestId,
+    method,
+    route,
+    outcome: "success",
+    durationMs: Date.now() - startedAt,
+    statusCode: response.status,
+  });
+  return result;
 }

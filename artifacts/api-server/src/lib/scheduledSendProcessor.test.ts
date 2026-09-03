@@ -117,7 +117,7 @@ vi.mock("@workspace/db", () => ({
 }));
 
 vi.mock("./logger", () => ({
-  logger: { info: vi.fn(), error: vi.fn() },
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
 const {

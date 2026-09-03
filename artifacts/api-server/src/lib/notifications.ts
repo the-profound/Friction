@@ -45,6 +45,18 @@ export type NotificationEvent =
  * that can be picked up by a log-consumer sidecar / webhook.
  * TODO: add Expo Push SDK call once device tokens are stored.
  */
-export function dispatchNotification(event: NotificationEvent): void {
-  logger.info({ notification: event }, `notification:${event.type}`);
+export function dispatchNotification(
+  event: NotificationEvent,
+  options?: { correlationId?: string },
+): void {
+  const safeNotification =
+    event.type === "SPACE_PARTICIPANT_NOT_STARTED_14DAY"
+      ? { type: event.type, recipientCount: event.participantIds.length, daysOverdue: event.daysOverdue }
+      : "daysOverdue" in event
+        ? { type: event.type, recipientCount: 1, daysOverdue: event.daysOverdue }
+        : { type: event.type, recipientCount: 1 };
+  logger.info(
+    { notification: safeNotification, correlationId: options?.correlationId },
+    `notification:${event.type}`,
+  );
 }

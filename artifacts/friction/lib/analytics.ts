@@ -1,4 +1,10 @@
 import { posthog } from "./posthog";
+import Constants from "expo-constants";
+import { Platform } from "react-native";
+import {
+  setRequestTelemetryObserver,
+  type ApiRequestTelemetry,
+} from "@workspace/api-client-react";
 
 function kstHour(): number {
   return new Date(Date.now() + 9 * 3600000).getUTCHours();
@@ -7,6 +13,30 @@ function kstHour(): number {
 function kstDayOfWeek(): number {
   return new Date(Date.now() + 9 * 3600000).getUTCDay();
 }
+
+function captureApiOperationalEvent(event: ApiRequestTelemetry): void {
+  posthog?.capture("api_request", {
+    request_id: event.requestId,
+    method: event.method,
+    route: event.route,
+    outcome: event.outcome,
+    duration_ms: event.durationMs,
+    status_code: event.statusCode ?? null,
+    failure_type: event.failureType ?? null,
+    platform: Platform.OS,
+    app_version: Constants.expoConfig?.version ?? null,
+    build_number:
+      Platform.OS === "android"
+        ? Constants.expoConfig?.android?.versionCode != null
+          ? String(Constants.expoConfig.android.versionCode)
+          : null
+        : Constants.expoConfig?.ios?.buildNumber ?? null,
+    release_track:
+      Constants.expoConfig?.extra?.releaseDiagnostics?.track ?? "development",
+  });
+}
+
+setRequestTelemetryObserver(captureApiOperationalEvent);
 
 // ── 1. App Open ──────────────────────────────────────────────────────────────
 // Tracks when the user opens the app and at which hour (KST).

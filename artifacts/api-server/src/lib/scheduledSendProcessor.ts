@@ -21,6 +21,11 @@ import {
 } from "@workspace/db";
 import { and, eq, inArray, isNull, lte, or, sql, type SQL } from "drizzle-orm";
 import { logger } from "./logger";
+import {
+  createCorrelationId,
+  logOperationalMetric,
+  SCHEDULED_SEND_DELAY_ALERT_MS,
+} from "./operationalTelemetry";
 
 export interface ProcessDueScheduledSendsResult {
   sentCount: number;
@@ -55,9 +60,36 @@ export function resolveSpaceDeliveryRecipientIds(input: {
 
 type ProcessOneResult = "sent" | "repaired" | "failed" | "skipped";
 
+function logReservationOutcome(input: {
+  correlationId: string;
+  scheduledSendId: string;
+  outcome: ProcessOneResult;
+  delayMs: number;
+  failureType?: string;
+}) {
+  const level =
+    input.outcome === "failed"
+      ? logger.error.bind(logger)
+      : input.delayMs >= SCHEDULED_SEND_DELAY_ALERT_MS
+        ? logger.warn.bind(logger)
+        : logger.info.bind(logger);
+  level(
+    {
+      event: "operational.scheduled_send_outcome",
+      correlationId: input.correlationId,
+      scheduledSendId: input.scheduledSendId,
+      outcome: input.outcome,
+      delayMs: input.delayMs,
+      failureType: input.failureType,
+    },
+    "scheduled send reservation processed",
+  );
+}
 async function processOneScheduledSend(
   sendId: string,
   now: Date,
+  correlationId: string,
+  observeDelay: (delayMs: number) => void,
 ): Promise<ProcessOneResult> {
   return db.transaction(async (tx) => {
     // Serialize workers on this reservation. A second worker re-reads the
@@ -77,8 +109,16 @@ async function processOneScheduledSend(
       send.scheduledAt > now ||
       (send.status !== "PENDING" && send.status !== "SENT")
     ) {
+      logReservationOutcome({
+        correlationId,
+        scheduledSendId: sendId,
+        outcome: "skipped",
+        delayMs: 0,
+      });
       return "skipped";
     }
+    const delayMs = Math.max(0, now.getTime() - send.scheduledAt.getTime());
+    observeDelay(delayMs);
 
     const [letter] = await tx
       .select()
@@ -166,6 +206,22 @@ async function processOneScheduledSend(
             inArray(spaceScheduledSendsTable.status, ["PENDING", "SENT"]),
           ),
         );
+      logger.warn(
+        {
+          event: "operational.scheduled_send_failure",
+          correlationId,
+          scheduledSendId: send.id,
+          failureType: "invalid_reservation_state",
+        },
+        "scheduled send could not be delivered",
+      );
+      logReservationOutcome({
+        correlationId,
+        scheduledSendId: send.id,
+        outcome: "failed",
+        delayMs,
+        failureType: "invalid_reservation_state",
+      });
       return "failed";
     }
 
@@ -279,15 +335,30 @@ async function processOneScheduledSend(
             eq(spaceScheduledSendsTable.status, "PENDING"),
           ),
         );
+      logReservationOutcome({
+        correlationId,
+        scheduledSendId: send.id,
+        outcome: "sent",
+        delayMs,
+      });
       return "sent";
     }
+    logReservationOutcome({
+      correlationId,
+      scheduledSendId: send.id,
+      outcome: "repaired",
+      delayMs,
+    });
     return "repaired";
   });
 }
 
 export async function processDueScheduledSends(opts?: {
   spaceId?: string;
+  correlationId?: string;
 }): Promise<ProcessDueScheduledSendsResult> {
+  const startedAt = performance.now();
+  const correlationId = opts?.correlationId ?? createCorrelationId();
   const now = new Date();
   const conditions = [
     lte(spaceScheduledSendsTable.scheduledAt, now),
@@ -324,10 +395,20 @@ export async function processDueScheduledSends(opts?: {
   let sentCount = 0;
   let failedCount = 0;
   let repairedCount = 0;
+  let delayedCount = 0;
+  let maxDelayMs = 0;
 
   for (const candidate of candidates) {
     try {
-      const result = await processOneScheduledSend(candidate.id, now);
+      const result = await processOneScheduledSend(
+        candidate.id,
+        now,
+        correlationId,
+        (delayMs) => {
+          maxDelayMs = Math.max(maxDelayMs, delayMs);
+          if (delayMs >= SCHEDULED_SEND_DELAY_ALERT_MS) delayedCount += 1;
+        },
+      );
       if (result === "sent") sentCount += 1;
       if (result === "repaired") repairedCount += 1;
       if (result === "failed") failedCount += 1;
@@ -336,7 +417,13 @@ export async function processDueScheduledSends(opts?: {
       // PENDING reservation retryable rather than committing a false SENT.
       failedCount += 1;
       logger.error(
-        { err, scheduledSendId: candidate.id },
+        {
+          err,
+          event: "operational.scheduled_send_failure",
+          correlationId,
+          scheduledSendId: candidate.id,
+          failureType: "transaction_rollback",
+        },
         "scheduledSendProcessor: delivery transaction rolled back",
       );
     }
@@ -344,10 +431,31 @@ export async function processDueScheduledSends(opts?: {
 
   if (sentCount > 0 || failedCount > 0 || repairedCount > 0) {
     logger.info(
-      { sentCount, failedCount, repairedCount, spaceId: opts?.spaceId },
+      {
+        correlationId,
+        candidateCount: candidates.length,
+        sentCount,
+        failedCount,
+        repairedCount,
+        delayedCount,
+        maxDelayMs,
+      },
       "scheduledSendProcessor: processed due reservations",
     );
   }
+
+  logOperationalMetric(logger, {
+    operation: "scheduler.scheduled-send",
+    outcome: failedCount > 0 ? "failure" : delayedCount > 0 ? "degraded" : "success",
+    durationMs: performance.now() - startedAt,
+    correlationId,
+    failureType: failedCount > 0 ? "delivery_failed" : delayedCount > 0 ? "delivery_delayed" : undefined,
+    count: candidates.length,
+    successCount: sentCount + repairedCount,
+    failureCount: failedCount,
+    delayedCount,
+    maxDelayMs,
+  });
 
   return { sentCount, failedCount };
 }

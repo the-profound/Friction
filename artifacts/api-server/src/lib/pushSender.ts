@@ -8,6 +8,10 @@ import Expo, { ExpoPushMessage, ExpoPushTicket } from "expo-server-sdk";
 import { db, pushTokensTable } from "@workspace/db";
 import { and, eq, inArray } from "drizzle-orm";
 import { logger } from "./logger";
+import {
+  createCorrelationId,
+  logOperationalMetric,
+} from "./operationalTelemetry";
 
 // Singleton Expo client
 const expo = new Expo();
@@ -37,9 +41,18 @@ export async function sendSilentPush(
   targets: SilentPushTarget[],
   body: string,
   data?: Record<string, unknown>,
+  options?: { correlationId?: string },
 ): Promise<PushSendResult[]> {
+  const startedAt = performance.now();
+  const correlationId = options?.correlationId ?? createCorrelationId();
   const validTargets = targets.filter((t) => Expo.isExpoPushToken(t.token));
   const skipped = targets.filter((t) => !Expo.isExpoPushToken(t.token));
+  const skippedResults: PushSendResult[] = skipped.map((target) => ({
+    userId: target.userId,
+    token: target.token,
+    success: false,
+    error: "invalid_token",
+  }));
 
   if (skipped.length > 0) {
     logger.warn(
@@ -48,7 +61,19 @@ export async function sendSilentPush(
     );
   }
 
-  if (validTargets.length === 0) return [];
+  if (validTargets.length === 0) {
+    logOperationalMetric(logger, {
+      operation: "push.send",
+      outcome: skipped.length > 0 ? "degraded" : "success",
+      durationMs: performance.now() - startedAt,
+      correlationId,
+      failureType: skipped.length > 0 ? "invalid_token" : undefined,
+      count: targets.length,
+      successCount: 0,
+      failureCount: skipped.length,
+    });
+    return skippedResults;
+  }
 
   const messages: ExpoPushMessage[] = validTargets.map((t) => {
     const base: ExpoPushMessage = {
@@ -77,7 +102,7 @@ export async function sendSilentPush(
   });
 
   const chunks = expo.chunkPushNotifications(messages);
-  const results: PushSendResult[] = [];
+  const results: PushSendResult[] = [...skippedResults];
   const invalidTokens: string[] = [];
 
   // Track the offset into validTargets so each chunk's ticket[i] maps to
@@ -92,7 +117,7 @@ export async function sendSilentPush(
     try {
       tickets = await expo.sendPushNotificationsAsync(chunk);
     } catch (err) {
-      logger.error({ err }, "pushSender: chunk send failed");
+      logger.error({ err, correlationId }, "pushSender: chunk send failed");
       for (const t of chunkTargets) {
         results.push({ userId: t.userId, token: t.token, success: false, error: "chunk_send_failed" });
       }
@@ -132,9 +157,22 @@ export async function sendSilentPush(
         "pushSender: removed DeviceNotRegistered tokens",
       );
     } catch (err) {
-      logger.error({ err }, "pushSender: failed to remove stale tokens");
+      logger.error({ err, correlationId }, "pushSender: failed to remove stale tokens");
     }
   }
+
+  const successCount = results.filter((result) => result.success).length;
+  const failureCount = results.length - successCount;
+  logOperationalMetric(logger, {
+    operation: "push.send",
+    outcome: failureCount > 0 ? (successCount > 0 ? "degraded" : "failure") : "success",
+    durationMs: performance.now() - startedAt,
+    correlationId,
+    failureType: failureCount > 0 ? "push_delivery_failed" : undefined,
+    count: targets.length,
+    successCount,
+    failureCount,
+  });
 
   return results;
 }

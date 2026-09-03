@@ -66,6 +66,24 @@ const AUTH_ERROR_CLASSES = new Set([
 ]);
 const SAFE_HOSTNAME =
   /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
+function recordFatalCrashSignal(
+  diagnostic: ReturnType<typeof safeDiagnosticLog>,
+): void {
+  logger.error(
+    {
+      event: "operational.metric",
+      operation: "mobile.fatal-crash",
+      outcome: "failure",
+      count: 1,
+      platform: diagnostic.platform,
+      appVersion: diagnostic.appVersion,
+      buildNumber: diagnostic.buildNumber,
+      releaseTrack: diagnostic.release?.track,
+      correlationId: diagnostic.requestId,
+    },
+    "operational metric: mobile fatal crash",
+  );
+}
 
 function getSafeReleaseDiagnostic(input: unknown): {
   track: "development" | "preview" | "production";
@@ -120,6 +138,8 @@ export function getSafeAuthFlowDiagnostic(input: {
   name?: unknown;
   platform?: unknown;
   release?: unknown;
+  appVersion?: unknown;
+  buildNumber?: unknown;
 }): {
   phase: string;
   outcome: string;
@@ -181,6 +201,11 @@ function safeDiagnosticLog(data: ClientLogBody) {
     typeof data.buildNumber === "string" && /^[0-9]+$/.test(data.buildNumber)
       ? data.buildNumber
       : null;
+  const safeRequestId =
+    typeof data.requestId === "string" &&
+    /^req_[a-z0-9]{20,32}$/.test(data.requestId)
+      ? data.requestId
+      : null;
   const release =
     data.release &&
     (data.release.track === "development" ||
@@ -212,6 +237,7 @@ function safeDiagnosticLog(data: ClientLogBody) {
     platformVersion: safePlatformVersion,
     appVersion: safeAppVersion,
     buildNumber: safeBuildNumber,
+    requestId: safeRequestId,
     release,
   };
 }
@@ -263,10 +289,12 @@ router.post("/client-logs", (req, res) => {
   }
 
   if (parsed.data.source === "fatal-js-error") {
+    const diagnostic = safeDiagnosticLog(parsed.data);
     logger.error(
-      { clientLog: safeDiagnosticLog(parsed.data) },
+      { clientLog: diagnostic },
       "client-logs: fatal JS error reported by client",
     );
+    recordFatalCrashSignal(diagnostic);
   } else {
     logger.warn(
       { clientLog: safeDiagnosticLog(parsed.data) },

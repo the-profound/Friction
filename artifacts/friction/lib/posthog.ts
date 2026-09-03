@@ -1,4 +1,7 @@
 import PostHog from "posthog-react-native";
+import Constants from "expo-constants";
+import { Platform } from "react-native";
+import { getLastRequestId } from "@workspace/api-client-react";
 
 export { PostHogProvider } from "posthog-react-native";
 
@@ -26,6 +29,22 @@ if (token) {
 
 export function captureException(error: unknown): void {
   if (!posthog) return;
-  const err = error instanceof Error ? error : new Error(String(error));
-  posthog.captureException(err);
+  const errorClass =
+    error instanceof Error && /^[A-Za-z]+Error$/.test(error.name)
+      ? error.name
+      : "UnknownError";
+  posthog.capture("client_exception", {
+    error_class: errorClass,
+    platform: Platform.OS,
+    app_version: Constants.expoConfig?.version ?? null,
+    build_number:
+      Platform.OS === "android"
+        ? Constants.expoConfig?.android?.versionCode != null
+          ? String(Constants.expoConfig.android.versionCode)
+          : null
+        : Constants.expoConfig?.ios?.buildNumber ?? null,
+    release_track:
+      Constants.expoConfig?.extra?.releaseDiagnostics?.track ?? "development",
+    request_id: getLastRequestId(),
+  });
 }

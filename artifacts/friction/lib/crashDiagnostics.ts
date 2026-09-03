@@ -43,6 +43,16 @@ export type PersistedCrashLog = {
   timestamp: string;
   platform: string;
   platformVersion: string | number;
+  requestId?: string | null;
+  appVersion?: string | null;
+  buildNumber?: string | null;
+  release?: {
+    track: "development" | "preview" | "production";
+    configurationState: "valid" | "invalid" | "unavailable";
+    configurationFingerprint: string | null;
+    supabaseHost: string | null;
+    apiHost: string | null;
+  };
 };
 
 // Lazily resolved so importing this module never itself touches a native
@@ -86,6 +96,12 @@ function persistFatalError(error: unknown, isFatal: boolean): void {
       timestamp: new Date().toISOString(),
       platform: Platform.OS,
       platformVersion: Platform.Version,
+      requestId:
+        typeof (globalThis as typeof globalThis & { __frictionLastRequestId?: unknown })
+          .__frictionLastRequestId === "string"
+          ? (globalThis as typeof globalThis & { __frictionLastRequestId?: string })
+              .__frictionLastRequestId
+          : null,
     };
 
     // Synchronous write (JSI-backed) — this is the whole point. By the time
@@ -162,6 +178,8 @@ export async function uploadPendingCrashLogIfAny(): Promise<void> {
     }
 
     const parsed = JSON.parse(contents) as Partial<PersistedCrashLog>;
+    const Constants = (await import("expo-constants")).default;
+    const { getReleaseDiagnosticContext } = await import("./authDiagnostics");
     // Older app versions may have persisted raw message/stack data. Never
     // forward that legacy payload into an operational log.
     const safePayload: PersistedCrashLog = {
@@ -175,6 +193,19 @@ export async function uploadPendingCrashLogIfAny(): Promise<void> {
         typeof parsed.platformVersion === "string" || typeof parsed.platformVersion === "number"
           ? parsed.platformVersion
           : Platform.Version,
+      requestId:
+        typeof parsed.requestId === "string" &&
+        /^req_[a-z0-9]{20,32}$/.test(parsed.requestId)
+          ? parsed.requestId
+          : null,
+      appVersion: Constants.expoConfig?.version ?? null,
+      buildNumber:
+        Platform.OS === "android"
+          ? Constants.expoConfig?.android?.versionCode != null
+            ? String(Constants.expoConfig.android.versionCode)
+            : null
+          : Constants.expoConfig?.ios?.buildNumber ?? null,
+      release: getReleaseDiagnosticContext(),
     };
 
     const { customFetch } = await import("@workspace/api-client-react");

@@ -50,7 +50,7 @@ function hostnameOf(url: string | null): string | null {
   }
 }
 
-function getReleaseDiagnosticContext(): ReleaseDiagnosticContext {
+export function getReleaseDiagnosticContext(): ReleaseDiagnosticContext {
   const metadata = Constants.expoConfig?.extra?.releaseDiagnostics as
     | {
         track?: unknown;
@@ -126,7 +126,12 @@ export function reportAuthDiagnostic(
       platform: Platform.OS,
       platformVersion: String(Platform.Version),
       appVersion: appConfig?.version ?? null,
-      buildNumber: appConfig?.ios?.buildNumber ?? null,
+      buildNumber:
+        Platform.OS === "android"
+          ? appConfig?.android?.versionCode != null
+            ? String(appConfig.android.versionCode)
+            : null
+          : appConfig?.ios?.buildNumber ?? null,
       release: getReleaseDiagnosticContext(),
     }),
   }).catch(() => undefined);

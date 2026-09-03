@@ -3,12 +3,19 @@ import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import {
+  apiRequestTelemetryMiddleware,
+  correlationIdMiddleware,
+  getCorrelationId,
+} from "./lib/operationalTelemetry";
 
 const app: Express = express();
 
+app.use(correlationIdMiddleware);
 app.use(
   pinoHttp({
     logger,
+    genReqId: (req) => getCorrelationId(req),
     serializers: {
       req(req) {
         return {
@@ -25,6 +32,7 @@ app.use(
     },
   }),
 );
+app.use(apiRequestTelemetryMiddleware);
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

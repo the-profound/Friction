@@ -5534,6 +5534,11 @@ components:
         buildNumber:
           type: string
           nullable: true
+        requestId:
+          type: string
+          nullable: true
+          pattern: "^req_[a-z0-9]{20,32}$"
+          description: Last API request correlation ID observed before the client diagnostic.
         release:
           $ref: "#/components/schemas/ReleaseDiagnosticContext"
       required: [source, message]

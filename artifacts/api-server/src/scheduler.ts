@@ -31,6 +31,10 @@ import { buildLetterArrivedMessage, SEND_HOUR_KST, WINDOW_HOURS } from "./lib/no
 import { sendSilentPush } from "./lib/pushSender";
 import { processDueScheduledSends } from "./lib/scheduledSendProcessor";
 import { synchronizeSpaceRoundStatuses } from "./lib/spaceRoundStatus";
+import {
+  createCorrelationId,
+  logOperationalMetric,
+} from "./lib/operationalTelemetry";
 
 // ─── Space inactivity ────────────────────────────────────────────────────────
 
@@ -51,6 +55,9 @@ function daysSince(date: Date): number {
 }
 
 async function checkInactiveSpaces() {
+  const correlationId = createCorrelationId();
+  const startedAt = performance.now();
+  let dispatchedCount = 0;
   try {
     const now = new Date();
     const recruitingSpaces = await db
@@ -77,7 +84,8 @@ async function checkInactiveSpaces() {
             spaceId: space.id,
             operatorId: space.creatorId,
             daysOverdue: days,
-          });
+          }, { correlationId });
+          dispatchedCount += 1;
         }
       }
 
@@ -105,7 +113,8 @@ async function checkInactiveSpaces() {
             spaceId: space.id,
             participantIds,
             daysOverdue: days,
-          });
+          }, { correlationId });
+          dispatchedCount += 1;
 
           dispatchNotification({
             type: "SPACE_OPERATOR_ACTION_REQUIRED_14DAY",
@@ -113,12 +122,29 @@ async function checkInactiveSpaces() {
             operatorId: space.creatorId,
             daysOverdue: days,
             options: ["ARCHIVE", "EXTEND_PLANNED_STARTS_AT"],
-          });
+          }, { correlationId });
+          dispatchedCount += 1;
         }
       }
     }
+    logOperationalMetric(logger, {
+      operation: "scheduler.inactive-space",
+      outcome: "success",
+      durationMs: performance.now() - startedAt,
+      correlationId,
+      count: recruitingSpaces.length,
+      successCount: dispatchedCount,
+    });
   } catch (err) {
-    logger.error({ err }, "scheduler: checkInactiveSpaces failed");
+    logger.error({ err, correlationId }, "scheduler: checkInactiveSpaces failed");
+    logOperationalMetric(logger, {
+      operation: "scheduler.inactive-space",
+      outcome: "failure",
+      durationMs: performance.now() - startedAt,
+      correlationId,
+      failureType: "job_failed",
+      failureCount: 1,
+    });
   }
 }
 
@@ -150,7 +176,11 @@ function msUntilNextKst6am(): number {
 }
 
 async function sendLetterArrivedNotifications(): Promise<void> {
-  logger.info("scheduler: running letter-arrived push job");
+  const correlationId = createCorrelationId();
+  const startedAt = performance.now();
+  let successCount = 0;
+  let failureCount = 0;
+  logger.info({ correlationId }, "scheduler: running letter-arrived push job");
   try {
     const recipients = await getNewLetterRecipients(WINDOW_HOURS);
     logger.info({ recipientCount: recipients.length }, "scheduler: letter-arrived recipients found");
@@ -158,7 +188,7 @@ async function sendLetterArrivedNotifications(): Promise<void> {
     for (const recipient of recipients) {
       if (recipient.pushTokens.length === 0) {
         logger.info(
-          { userId: recipient.userId },
+          { correlationId, tokenCount: 0 },
           "scheduler: no push tokens — skipping user",
         );
         continue;
@@ -179,24 +209,44 @@ async function sendLetterArrivedNotifications(): Promise<void> {
         type: "LETTER_ARRIVED",
         newLetterCount: recipient.newLetterCount,
         target: "inbox",
-      });
+      }, { correlationId });
 
-      const successCount = results.filter((r) => r.success).length;
-      const failCount = results.length - successCount;
+      const recipientSuccessCount = results.filter((r) => r.success).length;
+      const failCount = results.length - recipientSuccessCount;
+      successCount += recipientSuccessCount;
+      failureCount += failCount;
 
       logger.info(
         {
-          userId: recipient.userId,
+          correlationId,
           newLetterCount: recipient.newLetterCount,
           messageIdx,
-          successCount,
+          successCount: recipientSuccessCount,
           failCount,
         },
         "scheduler: letter-arrived push dispatched",
       );
     }
+    logOperationalMetric(logger, {
+      operation: "scheduler.letter-push",
+      outcome: failureCount > 0 ? (successCount > 0 ? "degraded" : "failure") : "success",
+      durationMs: performance.now() - startedAt,
+      correlationId,
+      failureType: failureCount > 0 ? "push_delivery_failed" : undefined,
+      successCount,
+      failureCount,
+    });
   } catch (err) {
-    logger.error({ err }, "scheduler: sendLetterArrivedNotifications failed");
+    logger.error({ err, correlationId }, "scheduler: sendLetterArrivedNotifications failed");
+    logOperationalMetric(logger, {
+      operation: "scheduler.letter-push",
+      outcome: "failure",
+      durationMs: performance.now() - startedAt,
+      correlationId,
+      failureType: "job_failed",
+      successCount,
+      failureCount: failureCount + 1,
+    });
   }
 }
 
@@ -205,13 +255,35 @@ async function sendLetterArrivedNotifications(): Promise<void> {
 const SCHEDULED_SEND_POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 async function runScheduledSendSweep() {
+  const correlationId = createCorrelationId();
   try {
     await Promise.all([
-      processDueScheduledSends(),
-      synchronizeSpaceRoundStatuses(),
+      processDueScheduledSends({ correlationId }),
+      (async () => {
+        const startedAt = performance.now();
+        try {
+          await synchronizeSpaceRoundStatuses();
+          logOperationalMetric(logger, {
+            operation: "scheduler.round-status",
+            outcome: "success",
+            durationMs: performance.now() - startedAt,
+            correlationId,
+          });
+        } catch (error) {
+          logger.error({ err: error, correlationId }, "scheduler: round status sync failed");
+          logOperationalMetric(logger, {
+            operation: "scheduler.round-status",
+            outcome: "failure",
+            durationMs: performance.now() - startedAt,
+            correlationId,
+            failureType: "job_failed",
+          });
+          throw error;
+        }
+      })(),
     ]);
   } catch (err) {
-    logger.error({ err }, "scheduler: processDueScheduledSends failed");
+    logger.error({ err, correlationId }, "scheduler: processDueScheduledSends failed");
   }
 }
 

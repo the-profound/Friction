@@ -33,6 +33,7 @@ import {
   isKstDateReservable,
 } from "../lib/deliverySlot";
 import { processDueScheduledSends } from "../lib/scheduledSendProcessor";
+import { getCorrelationId } from "../lib/operationalTelemetry";
 import { synchronizeSpaceRoundStatuses } from "../lib/spaceRoundStatus";
 import {
   isRecruitmentFull,
@@ -3149,6 +3150,14 @@ router.post("/spaces/:id/letters/:letterId/scheduled-sends", requireAuth, async 
         ...reservationIdentity,
       }).returning();
     });
+    req.log.info(
+      {
+        event: "operational.scheduled_send_created",
+        correlationId: getCorrelationId(req),
+        scheduledSendId: send?.id,
+      },
+      "scheduled send reservation created",
+    );
     res.status(201).json(send);
   } catch (err) {
     if ((err as { statusCode?: number }).statusCode === 400) {
@@ -3333,7 +3342,10 @@ router.get("/spaces/:id/scheduled-sends", requireAuth, async (req, res) => {
   // Defensive: catch up any reservation whose scheduledAt has passed but
   // hasn't been processed by the periodic sweep yet, so it never shows as
   // "대기 중" (pending) after its time has come.
-  await processDueScheduledSends({ spaceId: req.params.id });
+  await processDueScheduledSends({
+    spaceId: req.params.id,
+    correlationId: getCorrelationId(req),
+  });
   // Reservation ownership is the same for operators and participants. An
   // operator may manage other space content, but this screen is the personal
   // reservation list and must never expose another member's reservation
