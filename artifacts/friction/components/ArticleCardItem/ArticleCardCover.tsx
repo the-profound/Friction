@@ -29,6 +29,8 @@ interface ArticleCardCoverProps {
   cover?: ArticleCover | null;
   title: string;
   authorName?: string;
+  /** Card is the default; list uses a compact, fixed-height text treatment. */
+  layout?: "card" | "list";
   collectionName?: string | null;
   date?: string | null;
   letterTypeBadge?: string | null;
@@ -57,6 +59,7 @@ export default function ArticleCardCover({
   cover,
   title,
   authorName,
+  layout = "card",
   collectionName,
   date,
   letterTypeBadge,
@@ -68,6 +71,7 @@ export default function ArticleCardCover({
 }: ArticleCardCoverProps) {
   const [measuredSize, setMeasuredSize] = useState({ width: 0, height: 0 });
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
+  const [displayedImageUrl, setDisplayedImageUrl] = useState<string | null>(null);
   const displayedImageFrameRef = useRef<number | null>(null);
 
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
@@ -93,10 +97,14 @@ export default function ArticleCardCover({
     () => (hasImage ? { uri: imageUrl, cacheKey: imageUrl } : null),
     [hasImage, imageUrl],
   );
-  const presentation = getArticleCardCoverPresentation(cover, hasImage, {
-    neutralBackground: Colors.zinc50,
-    readableText: Colors.zinc900,
-  });
+  const presentation = getArticleCardCoverPresentation(
+    cover,
+    hasImage && displayedImageUrl === imageUrl,
+    {
+      neutralBackground: Colors.zinc50,
+      readableText: Colors.zinc900,
+    },
+  );
   const textColor = presentation.textColor;
   const coverFontFamily = getArticleCardCoverFontFamily(cover);
   const regularFontFamily =
@@ -108,28 +116,41 @@ export default function ArticleCardCover({
       ? ReaderTokens.fontFamily.serifBold
       : ReaderTokens.fontFamily.sansBold;
 
+  const isListLayout = layout === "list";
   const scale = resolvedWidth / Sizing.cardSlotW;
-  const pad = Math.max(6, Math.round(24 * scale));
+  const pad = isListLayout
+    ? 16
+    : Math.max(6, Math.round(24 * scale));
   const textFrameWidth = Math.max(1, resolvedWidth - pad * 2);
-  const titleSize = Math.max(
-    8,
-    Math.round(
-      readerFontSize(ReaderTokens.typeScale.cardTitleCqi, textFrameWidth),
-    ),
-  );
-  const authorSize = Math.max(6, Math.round(AUTHOR_SIZE * scale));
-  const collectionSize = Math.max(5, Math.round(COLLECTION_SIZE * scale));
+  const titleSize = isListLayout
+    ? 18
+    : Math.max(
+        8,
+        Math.round(
+          readerFontSize(ReaderTokens.typeScale.cardTitleCqi, textFrameWidth),
+        ),
+      );
+  const authorSize = isListLayout
+    ? 14
+    : Math.max(6, Math.round(AUTHOR_SIZE * scale));
+  const collectionSize = isListLayout
+    ? 12
+    : Math.max(5, Math.round(COLLECTION_SIZE * scale));
   const senderBottom = getArticleCardSenderBottomOffset(
     pad,
     collectionSize * 1.3,
-    !!collectionName,
+    isListLayout || !!collectionName,
   );
 
   const handleImageError = useCallback(() => {
-    if (imageUrl) setFailedImageUrl(imageUrl);
+    if (imageUrl) {
+      setDisplayedImageUrl(null);
+      setFailedImageUrl(imageUrl);
+    }
   }, [imageUrl]);
 
   const handleImageDisplay = useCallback(() => {
+    setDisplayedImageUrl(imageUrl ?? null);
     if (!onImageLoad) return;
     if (displayedImageFrameRef.current !== null) {
       cancelAnimationFrame(displayedImageFrameRef.current);
@@ -141,7 +162,7 @@ export default function ArticleCardCover({
       displayedImageFrameRef.current = null;
       onImageLoad();
     });
-  }, [onImageLoad]);
+  }, [imageUrl, onImageLoad]);
 
   useEffect(() => {
     setFailedImageUrl(null);
@@ -189,7 +210,9 @@ export default function ArticleCardCover({
           onError={handleImageError}
         />
       ) : null}
-      {hasImage ? <View style={[styles.imageOverlay, { borderRadius }]} /> : null}
+      {presentation.isImageRendered ? (
+        <View style={[styles.imageOverlay, { borderRadius }]} />
+      ) : null}
 
       <View style={[styles.inner, { padding: pad }]} pointerEvents="none">
         {letterTypeBadge ? (
@@ -231,12 +254,18 @@ export default function ArticleCardCover({
                 : 0,
             },
           ]}
-          numberOfLines={4}
+          numberOfLines={isListLayout ? 2 : 4}
+          allowFontScaling={!isListLayout}
         >
           {title}
         </Text>
 
-        <View style={[styles.senderBlock, { bottom: senderBottom, right: pad }]}>
+        <View
+          style={[
+            styles.senderBlock,
+            { bottom: senderBottom, right: pad, width: textFrameWidth },
+          ]}
+        >
           {authorName ? (
             <Text
               style={[
@@ -249,6 +278,7 @@ export default function ArticleCardCover({
                 },
               ]}
               numberOfLines={1}
+              allowFontScaling={!isListLayout}
             >
               {authorName}
             </Text>

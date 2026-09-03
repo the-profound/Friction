@@ -30,11 +30,13 @@ export function getArticleCardCoverPresentation(
   const coverBackground =
     cover?.type === "color" ? normalizeHexColor(cover.bgColor) : null;
   const coverText = normalizeHexColor(cover?.textColor);
+  const hasUsableColorSurface =
+    cover?.type !== "color" || coverBackground !== null;
 
   return {
     backgroundColor:
       coverBackground ?? neutralBackground,
-    textColor: isMissingImage
+    textColor: isMissingImage || !hasUsableColorSurface
       ? readableText
       : (coverText ?? readableText),
     isImageRendered,

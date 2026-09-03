@@ -26,6 +26,16 @@ describe("getArticleCardCoverPresentation", () => {
     });
   });
 
+  it("uses readable defaults when no cover metadata is available", () => {
+    expect(
+      getArticleCardCoverPresentation(undefined, false, colors),
+    ).toEqual({
+      backgroundColor: "#FAFAFA",
+      textColor: "#18181B",
+      isImageRendered: false,
+    });
+  });
+
   it("uses readable dark text when a photo is missing or fails", () => {
     expect(
       getArticleCardCoverPresentation(whiteTextImageCover, false, colors),
@@ -69,6 +79,23 @@ describe("getArticleCardCoverPresentation", () => {
           type: "color",
           bgColor: "not-a-color",
           textColor: "#12345",
+        },
+        false,
+        colors,
+      ),
+    ).toEqual({
+      backgroundColor: "#FAFAFA",
+      textColor: "#18181B",
+      isImageRendered: false,
+    });
+  });
+
+  it("uses readable text when a color cover is missing its background", () => {
+    expect(
+      getArticleCardCoverPresentation(
+        {
+          type: "color",
+          textColor: "#FFFFFF",
         },
         false,
         colors,
