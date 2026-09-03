@@ -19,6 +19,7 @@ import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { DOMSerializer } from "@tiptap/pm/model";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { computeEditorViewportScrollTop } from "../../../lib/editorViewport";
+import { normalizePageDividersForMarkdownParser } from "../../../lib/pageDividerMarkdown";
 import { splitLeadingH1Markdown } from "../../../utils/leadingH1";
 import { shouldMoveTitleFocusToBody } from "../titleKeyboardContract";
 import {
@@ -570,7 +571,7 @@ function splitByImages(text: string): MdSegment[] {
 
 function markdownToHtml(md: string, ensureTrailingParagraph = true): string {
   try {
-    const text = (md || "").replace(/\r\n?/g, "\n");
+    const text = normalizePageDividersForMarkdownParser(md || "");
     const leadingH1 = splitLeadingH1Markdown(text);
     const lines = (leadingH1?.body ?? text).split("\n");
     const blocks: string[] = [];

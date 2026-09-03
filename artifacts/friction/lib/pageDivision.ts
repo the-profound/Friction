@@ -1,4 +1,5 @@
 import { MarkdownPolicy } from "./policies";
+import { isPageDividerLine } from "./pageDividerMarkdown";
 
 const PAGE_DIVIDER = MarkdownPolicy.PAGE_DIVIDER;
 const HEADING_REGEX = /^#{1,6}\s+/;
@@ -28,14 +29,27 @@ export interface DivisionValidation {
 }
 
 export function splitContentToPages(markdownContent: string): PageBlock[] {
-  const leadingDivRe = new RegExp(`^(${PAGE_DIVIDER}\\n?)+`);
-  const trailingDivRe = new RegExp(`(\\n?${PAGE_DIVIDER})+$`);
-  const normalized = markdownContent
+  const lines = String(markdownContent ?? "")
+    .replace(/\r\n?/g, "\n")
     .trim()
-    .replace(leadingDivRe, "")
-    .replace(trailingDivRe, "")
-    .trim();
-  const rawPages = normalized.split(new RegExp(`^${PAGE_DIVIDER}$`, "m"));
+    .split("\n");
+
+  // Remove only boundary dividers. Blank lines between repeated leading or
+  // trailing dividers are part of the boundary run; repeated dividers in the
+  // middle still represent an intentional empty page.
+  while (lines.length > 0 && isPageDividerLine(lines[0])) {
+    lines.shift();
+    while (lines.length > 0 && lines[0].trim() === "") lines.shift();
+  }
+  while (lines.length > 0 && isPageDividerLine(lines[lines.length - 1])) {
+    lines.pop();
+    while (lines.length > 0 && lines[lines.length - 1].trim() === "") lines.pop();
+  }
+
+  const normalized = lines.join("\n").trim();
+  const rawPages = normalized.split(
+    new RegExp(`^[\\t ]*${PAGE_DIVIDER}[\\t ]*$`, "m"),
+  );
   return rawPages.map((content, i) => ({
     pageIndex: i,
     content: content.trim(),

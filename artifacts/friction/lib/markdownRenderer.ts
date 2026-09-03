@@ -4,6 +4,7 @@ import {
   isPersistableInlineImageUrl,
   INLINE_IMAGE_DISPLAY_WIDTH,
 } from "./inlineImages";
+import { normalizePageDividersForMarkdownParser } from "./pageDividerMarkdown";
 
 function escapeHtml(s: string): string {
   return s
@@ -111,7 +112,7 @@ function renderImageLine(line: string, imagePixelRatio = 1): string | null {
 
 export function markdownToHtml(md: string, imagePixelRatio = 1): string {
   try {
-    const text = (md || "").replace(/\r\n?/g, "\n");
+    const text = normalizePageDividersForMarkdownParser(md || "");
     const lines = text.split("\n");
     const blocks: string[] = [];
     let i = 0;

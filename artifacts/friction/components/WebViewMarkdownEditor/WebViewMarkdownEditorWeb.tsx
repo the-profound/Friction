@@ -29,6 +29,7 @@ import {
   type BodyFontLoadStatus,
 } from "@/lib/bodyTypographyDiagnostics";
 import { splitLeadingH1Markdown } from "@/utils/leadingH1";
+import { normalizePageDividersForMarkdownParser } from "@/lib/pageDividerMarkdown";
 import { shouldMoveTitleFocusToBody } from "./titleKeyboardContract";
 import {
   createEditorSurfaceTouchSession,
@@ -47,8 +48,9 @@ marked.setOptions({ breaks: true, gfm: true } as Parameters<typeof marked.setOpt
 
 function markdownToHtml(md: string, ensureTrailingParagraph = true): string {
   try {
-    const leadingH1 = splitLeadingH1Markdown(md || "");
-    const result = marked.parse(leadingH1?.body ?? md ?? "");
+    const normalized = normalizePageDividersForMarkdownParser(md || "");
+    const leadingH1 = splitLeadingH1Markdown(normalized);
+    const result = marked.parse(leadingH1?.body ?? normalized);
     let html = leadingH1
       ? `<h1>${marked.parseInline(leadingH1.titleMarkdown)}</h1>${typeof result === "string" ? result : ""}`
       : typeof result === "string" ? result : "";

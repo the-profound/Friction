@@ -1,11 +1,15 @@
 import { describe, it, expect } from "vitest";
 import {
   splitContentToPages,
+  mergePagesToContent,
   isImagePara,
   isBlockquotePara,
   simulateGreedyJobs,
   runGreedy,
 } from "../pageDivision";
+import { normalizePageDividersForMarkdownParser } from "../pageDividerMarkdown";
+import { markdownToHtml } from "../markdownRenderer";
+import { marked } from "marked";
 import { computePageGeometry, getPageTextContentHeight } from "../pageGeometry";
 
 describe("splitContentToPages", () => {
@@ -77,6 +81,74 @@ describe("splitContentToPages", () => {
     expect(pages).toHaveLength(1);
     expect(pages[0].content).toBe("");
     expect(pages[0].charCount).toBe(0);
+  });
+
+  it("keeps a divider after a paragraph as a page boundary, not a heading", () => {
+    const content = "본문\n---\n다음 본문";
+    const pages = splitContentToPages(content);
+
+    expect(pages.map((page) => page.content)).toEqual(["본문", "다음 본문"]);
+  });
+
+  it("removes repeated leading and trailing boundary dividers without removing middle empty pages", () => {
+    const content = "---\n\n---\n첫 페이지\n---\n\n---\n둘째 페이지\n---\n\n---";
+    const pages = splitContentToPages(content);
+
+    expect(pages.map((page) => page.content)).toEqual(["첫 페이지", "", "둘째 페이지"]);
+  });
+
+  it("round-trips authored headings next to page dividers", () => {
+    const pages = splitContentToPages("# 실제 제목\n---\n본문");
+
+    expect(mergePagesToContent(pages)).toBe("# 실제 제목\n---\n본문");
+  });
+});
+
+describe("page divider parser boundary", () => {
+  it("protects paragraph-adjacent dividers from Setext parsing", () => {
+    const normalized = normalizePageDividersForMarkdownParser("본문\n---\n다음 본문");
+
+    expect(normalized).toBe("본문\n\n---\n\n다음 본문");
+    expect(marked.parse(normalized)).toContain("<hr>");
+  });
+
+  it("preserves ATX headings and keeps the native-style parser on hr nodes", () => {
+    const markdown = "# 실제 제목\n---\n**본문 서식**";
+    const html = markdownToHtml(markdown);
+
+    expect(html).toContain("<h1>실제 제목</h1>");
+    expect(html).toContain("<hr>");
+    expect(html).toContain("<strong>본문 서식</strong>");
+    expect(html).not.toContain("<h2>#");
+  });
+
+  it("handles leading, trailing, and consecutive dividers without changing their meaning", () => {
+    const markdown = "---\n본문\n---\n\n---\n다음\n---";
+    const normalized = normalizePageDividersForMarkdownParser(markdown);
+    const html = marked.parse(normalized);
+
+    expect(normalized).toContain("\n---\n");
+    expect((normalized.match(/---/g) ?? []).length).toBe(4);
+    expect(typeof html === "string" ? html.match(/<hr>/g) : []).toHaveLength(4);
+  });
+
+  it("canonicalizes space- and tab-padded dividers for web and native-style parsers", () => {
+    const markdown = "첫 페이지\n  --- \t\n둘째 페이지\n\t---\t\n셋째 페이지";
+    const normalized = normalizePageDividersForMarkdownParser(markdown);
+    const webHtml = marked.parse(normalized);
+    const nativeStyleHtml = markdownToHtml(markdown);
+
+    expect(normalized).toBe(
+      "첫 페이지\n\n---\n\n둘째 페이지\n\n---\n\n셋째 페이지",
+    );
+    expect(typeof webHtml === "string" ? webHtml.match(/<hr>/g) : []).toHaveLength(2);
+    expect(nativeStyleHtml.match(/<hr>/g)).toHaveLength(2);
+    expect(nativeStyleHtml).not.toContain("---");
+    expect(splitContentToPages(markdown).map((page) => page.content)).toEqual([
+      "첫 페이지",
+      "둘째 페이지",
+      "셋째 페이지",
+    ]);
   });
 });
 
