@@ -307,7 +307,7 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
   },
   capsule: {
-    backgroundColor: Colors.zinc100,
+    backgroundColor:"#ffffff",
     borderRadius: 24,
     flexDirection: "row",
     alignItems: "center",
