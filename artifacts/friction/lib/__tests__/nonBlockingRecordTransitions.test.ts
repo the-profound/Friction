@@ -6,7 +6,20 @@ const appRoot = join(__dirname, "../..");
 const readScreen = (path: string) => readFileSync(join(appRoot, path), "utf8");
 
 describe("non-blocking editor transitions", () => {
-  it("lets every read-only closing-screen back action navigate once", () => {
+  it("exposes the closing actions from the shared stage menu", () => {
+    const screen = readScreen("app/on-01c.tsx");
+
+    expect(screen).toContain('current="CLOSING"');
+    expect(screen).toContain('label: "검토 단계로"');
+    expect(screen).toContain('label: "표지 편집"');
+    expect(screen).toContain('label: "내보내기"');
+    expect(screen).not.toContain("exportButton");
+    expect(screen).not.toContain("coverActionSection");
+    expect(screen).not.toContain("coverActionButton");
+    expect(screen).toContain("<WritingStateBar");
+  });
+
+  it("lets every closing-screen back action navigate once while saves continue", () => {
     const screen = readScreen("app/on-01c.tsx");
     const backHandler = screen.slice(
       screen.indexOf("const handleBack"),
@@ -17,9 +30,9 @@ describe("non-blocking editor transitions", () => {
       screen.indexOf("const hasCoverPage"),
     );
 
-    expect(backHandler).not.toContain("flushTitleSave");
-    expect(backHandler).not.toContain("flushCoverSave");
-    expect(backHandler).toContain("stageArticleTransitionSnapshot(queryClient, id");
+    expect(backHandler).toContain("Promise.allSettled([flushTitleSave(), flushCoverSave()])");
+    expect(backHandler).not.toContain("await flushTitleSave()");
+    expect(backHandler).not.toContain("await flushCoverSave()");
     expect(backHandler).toContain('navigateAfterRemovingGuard(() => router.replace("/(tabs)/on"))');
     expect(removalGuard).toContain(
       "usePreventRemove(shouldPreventRemoval, handlePreventedRemoval);",
@@ -34,16 +47,14 @@ describe("non-blocking editor transitions", () => {
     const screen = readScreen("app/on-01c.tsx");
     const stepBackHandler = screen.slice(
       screen.indexOf("const handleStepBack"),
-      screen.indexOf("const handleStateBarPress"),
+      screen.indexOf("const handleSaveTitle"),
     );
 
     expect(stepBackHandler).toContain('pathname: "/on-01a"');
     expect(stepBackHandler).toContain('mode: "dividing"');
     expect(stepBackHandler).not.toContain('pathname: "/on-01b"');
     expect(stepBackHandler).toContain("status: \"DIVIDING\"");
-    expect(stepBackHandler).toContain("void transitionStatus.mutateAsync({");
-    expect(stepBackHandler).not.toContain("flushTitleSave");
-    expect(stepBackHandler).not.toContain("flushCoverSave");
+    expect(stepBackHandler).toContain("Promise.allSettled([flushTitleSave(), flushCoverSave()])");
     expect(stepBackHandler.indexOf("stageArticleTransitionSnapshot(")).toBeLessThan(
       stepBackHandler.indexOf("navigateAfterRemovingGuard("),
     );
@@ -57,7 +68,7 @@ describe("non-blocking editor transitions", () => {
     );
     const exportHandler = screen.slice(
       screen.indexOf("const handleConfirmExport"),
-      screen.indexOf("const handleBack"),
+      screen.indexOf("const handleCoverUploadStateChange"),
     );
 
     expect(navigationGuard).toContain("if (navigationCommittedRef.current) return;");
@@ -67,6 +78,8 @@ describe("non-blocking editor transitions", () => {
     expect(exportHandler).not.toContain(
       "setIsExporting(false);\n      isActionInProgressRef.current = false;",
     );
+    expect(screen).toContain("const exportPromptOpenRef = useRef(false);");
+    expect(screen).toContain("if (isActionInProgressRef.current || exportPromptOpenRef.current) return;");
   });
 });
 

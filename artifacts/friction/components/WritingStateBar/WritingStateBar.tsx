@@ -1,139 +1,114 @@
-import React from "react";
-import { View, Text, StyleSheet } from "react-native";
-import { Colors, Typography } from "@/constants/tokens";
+import React, { useState } from "react";
+import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
+import { Colors, Typography, Shadows } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
+import ActionSheetModal, {
+  type ActionSheetAction,
+} from "@/components/ActionSheetModal/ActionSheetModal";
 
 export type WritingStage = "DRAFT" | "DIVIDING" | "CLOSING";
 
-const TABS: { stage: WritingStage; label: string }[] = [
-  { stage: "DRAFT", label: "작성" },
-  { stage: "DIVIDING", label: "검토" },
-  { stage: "CLOSING", label: "마감" },
-];
-
-const STAGE_ORDER: Record<WritingStage, number> = {
-  DRAFT: 0,
-  DIVIDING: 1,
-  CLOSING: 2,
+const STAGE_LABELS: Record<WritingStage, string> = {
+  DRAFT: "단상",
+  DIVIDING: "검토",
+  CLOSING: "마감",
 };
+
+export type WritingStageAction = ActionSheetAction;
+
 interface WritingStateBarProps {
   current: WritingStage;
-  onPress: (target: WritingStage) => void;
+  actions: WritingStageAction[];
   disabled?: boolean;
-  /** The first stage is a thought before it has been promoted to an article. */
-  draftLabel?: string;
+  busy?: boolean;
 }
 
 export default function WritingStateBar({
   current,
-  onPress,
+  actions,
   disabled = false,
-  draftLabel = "작성",
+  busy = false,
 }: WritingStateBarProps) {
-  const tabs = TABS.map((tab) =>
-    tab.stage === "DRAFT" ? { ...tab, label: draftLabel } : tab,
-  );
-  const currentOrder = STAGE_ORDER[current];
+  const [visible, setVisible] = useState(false);
+  const label = STAGE_LABELS[current];
+  const menuDisabled = disabled || busy;
+  const menuActions = actions.some((action) => action.style === "cancel")
+    ? actions
+    : [
+        ...actions,
+        {
+          label: "취소",
+          style: "cancel" as const,
+          onPress: () => {},
+        },
+      ];
+
+  const closeMenu = () => setVisible(false);
 
   return (
-    <View style={styles.bar}>
-      {tabs.map(({ stage, label }) => {
-        const isCurrent = stage === current;
-        const targetOrder = STAGE_ORDER[stage];
-        const distance = Math.abs(targetOrder - currentOrder);
-        const isIndirectlyReachable = distance > 1;
-        const isDirectlyReachable = distance === 1;
+    <>
+      <ScalePressable
+        testID="writing-stage-menu"
+        style={styles.menuButton}
+        contentStyle={styles.menuButtonContent}
+        onPress={() => {
+          if (!menuDisabled) setVisible(true);
+        }}
+        disabled={menuDisabled}
+        accessibilityRole="button"
+        accessibilityLabel={`${label} 단계 메뉴`}
+        accessibilityHint="현재 단계에서 할 수 있는 작업을 엽니다."
+        accessibilityState={{ disabled: menuDisabled, busy }}
+      >
+        {busy ? (
+          <View style={styles.indicatorFrame}>
+            <ActivityIndicator color={Colors.white} size="small" />
+          </View>
+        ) : (
+          <Text style={styles.menuLabel}>{label}</Text>
+        )}
+      </ScalePressable>
 
-        return (
-          <ScalePressable
-            key={stage}
-            style={styles.tabButton}
-            contentStyle={[
-              styles.tabButtonContent,
-              isIndirectlyReachable ? styles.tabIndirect : undefined,
-            ]}
-            onPress={() => !isCurrent && !disabled && onPress(stage)}
-            disabled={disabled}
-            hitSlop={6}
-            accessibilityRole="button"
-            accessibilityLabel={`${label} 단계로 이동`}
-            accessibilityState={{ selected: isCurrent, disabled: disabled }}
-          >
-            <View style={[styles.tab, isCurrent && styles.tabActive]}>
-              <Text
-                style={[
-                  styles.tabText,
-                  isCurrent && styles.tabTextActive,
-                  isDirectlyReachable && styles.tabTextReachable,
-                  isIndirectlyReachable && styles.tabTextIndirect,
-                ]}
-              >
-                {label}
-              </Text>
-            </View>
-          </ScalePressable>
-        );
-      })}
-    </View>
+      <ActionSheetModal
+        visible={visible}
+        title={`${label} 단계`}
+        actions={menuActions}
+        onClose={closeMenu}
+      />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  bar: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 2,
-    backgroundColor: Colors.zinc100,
-    borderRadius: 10,
-    padding: 3,
-  },
-  tabButton: {
-    height: 32,
+  menuButton: {
+    width: 44,
+    height: 44,
     alignSelf: "flex-start",
     flexGrow: 0,
     flexShrink: 0,
   },
-  tabButtonContent: {
-    height: 32,
-    alignSelf: "flex-start",
+  menuButtonContent: {
+    width: 40,
+    height: 40,
+    alignSelf: "center",
     flexGrow: 0,
     flexShrink: 0,
     alignItems: "center",
     justifyContent: "center",
+    borderRadius: 20,
+    backgroundColor: Colors.noticeAccent,
+    ...Shadows.navBar,
   },
-  tab: {
-    paddingHorizontal: 14,
-    paddingVertical: 5,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    minWidth: 48,
-  },
-  tabActive: {
-    backgroundColor: Colors.white,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  tabIndirect: {
-    opacity: 0.4,
-  },
-  tabText: {
+  menuLabel: {
     ...Typography.caption,
     fontSize: 13,
-    color: Colors.zinc500,
-    fontWeight: "500",
-  },
-  tabTextActive: {
-    color: Colors.zinc900,
     fontWeight: "600",
+    color: Colors.white,
   },
-  tabTextReachable: {
-    color: Colors.zinc700,
-  },
-  tabTextIndirect: {
-    color: Colors.zinc400, // typography-ok: indirect/inactive tab text
+  indicatorFrame: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

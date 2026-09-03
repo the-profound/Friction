@@ -37,6 +37,11 @@ import {
   updateEditorSurfaceTouchSession,
   type EditorSurfaceTouchSession,
 } from "./editorSurfaceTouch";
+import {
+  measureAndHighlightWebOverflow,
+  setWebOverflowRanges,
+  WebOverflowHighlightExtension,
+} from "./webOverflowHighlight";
 
 marked.setOptions({ breaks: true, gfm: true } as Parameters<typeof marked.setOptions>[0]);
 
@@ -145,6 +150,9 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
     const editorSessionIdRef = useRef(`editor_web_${Date.now()}_${Math.random().toString(36).slice(2)}`);
     const titleRef = useRef<HTMLTextAreaElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const overflowHeightRef = useRef<number | null>(null);
+    const overflowAutoSplitRef = useRef(false);
+    const overflowFrameRef = useRef<number | null>(null);
     const [fontsReady, setFontsReady] = useState(false);
     const fontStatusRef = useRef<BodyFontLoadStatus | null>(null);
     useEffect(() => { onExportMarkdownRef.current = onExportMarkdown; }, [onExportMarkdown]);
@@ -155,11 +163,21 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
         Placeholder.configure({ placeholder: placeholder || "여기에 메모를 작성하세요..." }),
         Underline,
         InlineImage,
+        WebOverflowHighlightExtension,
       ],
        content: markdownToHtml(initialMarkdown, ensureTrailingParagraph),
       editable,
       autofocus: false,
       onUpdate: ({ editor: ed }) => {
+        if (!overflowAutoSplitRef.current) {
+          if (overflowFrameRef.current != null) {
+            cancelAnimationFrame(overflowFrameRef.current);
+          }
+          overflowFrameRef.current = requestAnimationFrame(() => {
+            overflowFrameRef.current = null;
+            measureAndHighlightWebOverflow(ed, overflowHeightRef.current);
+          });
+        }
         if (changeTimerRef.current) clearTimeout(changeTimerRef.current);
         changeTimerRef.current = setTimeout(() => {
           const text = ed.state.doc.textContent;
@@ -297,6 +315,9 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
         if (changeTimerRef.current) {
           clearTimeout(changeTimerRef.current);
         }
+        if (overflowFrameRef.current != null) {
+          cancelAnimationFrame(overflowFrameRef.current);
+        }
       };
     }, []);
 
@@ -333,6 +354,11 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
           try {
              const html = markdownToHtml(markdown, ensureTrailingParagraph);
             editor.commands.setContent(html);
+            if (!overflowAutoSplitRef.current) {
+              requestAnimationFrame(() => {
+                measureAndHighlightWebOverflow(editor, overflowHeightRef.current);
+              });
+            }
             // 인용구/리스트/헤딩 등으로 끝나는 메모를 주입할 때, 마지막 빈
             // 단락에 커서를 자동 배치해 사용자가 별도 탭 없이 바로 본문을
             // 이어서 입력할 수 있게 한다.
@@ -380,9 +406,26 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
           editor.chain().focus().redo().run();
         }
       },
-      setOverflowRanges(_ranges) {
+      setOverflowRanges(ranges) {
+        if (editor && !editor.isDestroyed) {
+          setWebOverflowRanges(editor, ranges);
+        }
       },
-      setOverflowProbeConfig(_availableContentHeightPx, _autoSplit) {
+      setOverflowProbeConfig(availableContentHeightPx, autoSplit) {
+        overflowHeightRef.current =
+          availableContentHeightPx != null && availableContentHeightPx > 0
+            ? availableContentHeightPx
+            : null;
+        overflowAutoSplitRef.current = !!autoSplit;
+        if (editor && !editor.isDestroyed) {
+          if (overflowAutoSplitRef.current) {
+            setWebOverflowRanges(editor, []);
+          } else {
+            requestAnimationFrame(() => {
+              measureAndHighlightWebOverflow(editor, overflowHeightRef.current);
+            });
+          }
+        }
       },
       setBlockType(blockType: string) {
         if (editor && !editor.isDestroyed) {
@@ -592,6 +635,7 @@ ${editorTypographyCss}
   float: left;
   height: 0;
 }
+.ProseMirror .overflow-highlight { background: #fecaca; }
 .ProseMirror code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: #f4f4f5; padding: 0.1em 0.3em; border-radius: 3px; letter-spacing: 0; font-size: 0.9em; }
 .ProseMirror pre { background: #f4f4f5; padding: 0.75em 1em; border-radius: 4px; overflow-x: auto; margin: 0.5em 0; letter-spacing: 0; text-align: left; }
 .ProseMirror pre code { background: none; padding: 0; }

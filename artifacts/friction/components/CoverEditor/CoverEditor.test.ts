@@ -61,19 +61,22 @@ describe("CoverEditor color picker integration", () => {
     expect(editor).toContain("accessibilityState={{ disabled: isPhotoBusy, busy: isPhotoBusy }}");
   });
 
-  it("keeps closing read-only and finalizes the cover saved by an earlier stage", () => {
+  it("keeps the closing body read-only while cover editing stays behind the stage menu", () => {
     const closingScreen = read("../../app/on-01c.tsx");
     const exportFlow = closingScreen.slice(
       closingScreen.indexOf("const handleConfirmExport"),
       closingScreen.indexOf("const handleBack"),
     );
 
-    expect(closingScreen).not.toContain('import CoverEditor from');
-    expect(closingScreen).not.toContain("persistCover");
-    expect(closingScreen).not.toContain("coverSaveQueueRef");
+    expect(closingScreen).toContain('import CoverEditor from');
+    expect(closingScreen).toContain('label: "표지 편집"');
+    expect(closingScreen).toContain("onPress: () => setCoverEditorVisible(true)");
+    expect(closingScreen).toContain("<CoverEditor");
+    expect(closingScreen).toContain("persistCover");
+    expect(closingScreen).toContain("coverSaveQueueRef");
     expect(closingScreen).toContain("<CoverPreview");
     expect(closingScreen).toContain("cover={cover}");
-    expect(exportFlow).toContain("data: patchData");
+    expect(exportFlow).toContain("await persistCover(coverToSave)");
     expect(exportFlow).toContain("await finalizeExport()");
   });
 });

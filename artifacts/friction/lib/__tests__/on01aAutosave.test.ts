@@ -378,25 +378,22 @@ describe("on-01a guarded return navigation", () => {
 
   it("keeps the header return control stable without a save spinner or duplicate keyboard button", () => {
     const screen = readScreen();
-    const headerStart = screen.indexOf("<View style={[styles.header, { top: insets.top }]}");
+    const headerStart = screen.indexOf("<View style={styles.header}");
     const header = screen.slice(
       headerStart,
       screen.indexOf("<KeyboardAvoidingView", headerStart),
     );
     expect(header).toContain("styles.headerBackButton");
     expect(header).toContain('accessibilityLabel="기록 목록으로 돌아가기"');
-    expect(header).toContain("styles.headerStateBar");
+    expect(header).toContain("styles.headerRight");
+    expect(header).toContain("<WritingStateBar");
     expect(header).not.toContain("ActivityIndicator");
     expect(header).not.toContain("keyboard-off-outline");
     expect(screen).toContain("onDismissKeyboard={() =>");
   });
 
-  it("keeps floating chrome transparent outside its gray button containers", () => {
+  it("keeps the shared stage menu in a body-colored fixed-height header", () => {
     const screen = readScreen();
-    const header = screen.slice(
-      screen.indexOf('<View style={[styles.header, { top: insets.top }]}'),
-      screen.indexOf("<KeyboardAvoidingView", screen.indexOf('<View style={[styles.header, { top: insets.top }]}')),
-    );
     const stylesStart = screen.indexOf("const styles = StyleSheet.create({");
     const stylesSource = screen.slice(stylesStart);
     const stateBar = readFileSync(
@@ -408,43 +405,70 @@ describe("on-01a guarded return navigation", () => {
       "utf8",
     );
 
-    expect(header).toContain("styles.headerBackButton");
-    expect(header).toContain("styles.headerStateBar");
-    expect(header).toContain('pointerEvents="box-none"');
-    expect(stylesSource).toContain("header: {\n    position: \"absolute\"");
+    expect(screen).toContain("<View style={styles.header} pointerEvents=\"box-none\">");
+    expect(screen).toContain("styles.headerBackButton");
+    expect(screen).toContain("styles.headerRight");
+    expect(stylesSource).toContain("height: WRITING_HEADER_HEIGHT");
+    expect(stylesSource).toContain("backgroundColor: Colors.white");
+    expect(stylesSource).not.toContain('position: "absolute",\n    top: 0,\n    left: 0,\n    right: 0,\n    height: WRITING_HEADER_HEIGHT');
     expect(stylesSource).toContain("backgroundColor: \"transparent\",\n    zIndex: 53");
-    expect(stateBar).not.toContain("LinearGradient");
-    expect(stateBar).toContain('<View style={styles.bar}>');
-    expect(stateBar).toContain("backgroundColor: Colors.zinc100");
+    expect(stateBar).toContain('testID="writing-stage-menu"');
+    expect(stateBar).toContain("backgroundColor: Colors.noticeAccent");
+    expect(stateBar).toContain("height: 44");
+    expect(stateBar).toContain("height: 40");
+    expect(stateBar).toContain("<ActionSheetModal");
+    expect(stateBar).not.toContain("chevron-down");
+    expect(stateBar).not.toContain("@expo/vector-icons");
+    const actionSheet = readFileSync(
+      join(appRoot, "components/ActionSheetModal/ActionSheetModal.tsx"),
+      "utf8",
+    );
+    expect(actionSheet).toContain("color: Colors.noticeAccent");
+    expect(actionSheet).toContain("cancelLabel");
     expect(memoToolbar).toContain("backgroundColor: \"transparent\"");
-    expect(memoToolbar).toContain("backgroundColor: Colors.zinc100");
-    expect(screen).toContain("height: WRITING_HEADER_HEIGHT");
-    expect(screen).toContain("paddingTop: WRITING_EDITOR_TOP_PADDING");
     expect(screen).toContain("backgroundColor: Colors.white,\n    borderTopWidth");
   });
 
-  it("keeps review chrome out of the shared editor header and exposes the spell check action separately", () => {
+  it("puts the review actions in the shared menu and removes the floating spell button", () => {
     const screen = readScreen();
     const editorStart = screen.indexOf("<KeyboardAvoidingView");
     const headerAndEditorStart = screen.slice(0, editorStart);
-    const spellButton = screen.slice(
-      screen.indexOf("/* ── 검토 단계 맞춤법 검사 ── */"),
-      screen.indexOf("/* ── 서식 툴바", screen.indexOf("/* ── 검토 단계 맞춤법 검사 ── */")),
-    );
 
     expect(headerAndEditorStart).not.toContain("styles.toolbar");
     expect(headerAndEditorStart).not.toContain("styles.warningBanner");
     expect(headerAndEditorStart).not.toContain("styles.pageStripWrapper");
     expect(screen).toContain("WebViewMeasureLayer request={warningRequest}");
     expect(screen).toContain("WebViewMeasureLayer request={engineRequest}");
-    expect(spellButton).toContain("!keyboardVisible");
-    expect(spellButton).toContain("inlineMenuMode === null");
-    expect(spellButton).toContain("!spellTabVisible");
-    expect(spellButton).toContain("styles.spellCheckButtonShadow");
-    expect(screen).toContain("width: Sizing.navBarHeight");
-    expect(screen).toContain("height: Sizing.navBarHeight");
-    expect(spellButton).toContain("Colors.noticeAccent");
-    expect(spellButton).toContain('accessibilityLabel="맞춤법 검사"');
+    expect(screen).toContain('label: "자동 분할"');
+    expect(screen).toContain('label: "맞춤법 검사"');
+    expect(screen).toContain('label: "마감 단계로"');
+    expect(screen).not.toContain("spellCheckButtonShadow");
+    expect(screen).not.toContain("spellCheckButtonContent");
+  });
+
+  it("keeps web overflow highlighting and single-paragraph automatic division active", () => {
+    const screen = readScreen();
+    const webEditor = readFileSync(
+      join(appRoot, "components/WebViewMarkdownEditor/WebViewMarkdownEditorWeb.tsx"),
+      "utf8",
+    );
+    const webOverflow = readFileSync(
+      join(appRoot, "components/WebViewMarkdownEditor/webOverflowHighlight.ts"),
+      "utf8",
+    );
+    const autoSplit = screen.slice(
+      screen.indexOf("const handleAutoSplit"),
+      screen.indexOf("const handleSplitPage"),
+    );
+
+    expect(webEditor).toContain("measureAndHighlightWebOverflow");
+    expect(webEditor).toContain("setWebOverflowRanges(editor, ranges)");
+    expect(webEditor).toContain(".ProseMirror .overflow-highlight { background: #fecaca; }");
+    expect(webOverflow).toContain("view.coordsAtPos(middle).bottom > availableBottom");
+    expect(autoSplit).toContain("if (paragraphs.length < 1) continue");
+    expect(autoSplit).not.toContain("if (paragraphs.length < 2) continue");
+    expect(autoSplit).toContain("splittingRef.current = true");
+    expect(autoSplit).toContain("splittingRef.current = false");
   });
 
   it("guards spell checks against repeated activation and keeps close disabled while loading", () => {
@@ -576,19 +600,14 @@ describe("on-01a guarded return navigation", () => {
       screen.indexOf("const returnToThoughtMode"),
       screen.indexOf("// ── 분할 → 마감"),
     );
-    const stateBarHandler = screen.slice(
-      screen.indexOf("const handleStateBarPress"),
-      screen.indexOf("useEffect(() =>", screen.indexOf("const handleStateBarPress")),
-    );
-
     expect(reverseHandler).toContain("isNavigatingRef.current = false;");
     expect(reverseHandler).toContain("setIsNavigating(false);");
     expect(reverseHandler).toContain("검토 내용은 그대로 저장되어 있습니다.");
     expect(reverseHandler.indexOf("setModeBoth(\"draft\")")).toBeGreaterThan(
       reverseHandler.indexOf("revertArticleToThought.mutateAsync"),
     );
-    expect(stateBarHandler).toContain("void returnToThoughtMode();");
-    expect(stateBarHandler).not.toContain("되돌릴 수 없어요");
+    expect(screen).toContain('label: "단상 단계로"');
+    expect(screen).toContain("onPress: () => void returnToThoughtMode()");
   });
 });
 

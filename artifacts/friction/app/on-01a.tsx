@@ -18,7 +18,7 @@ import { useRouter, useLocalSearchParams, Stack, useNavigation } from "expo-rout
 import { usePreventRemove } from "expo-router/build/react-navigation/core";
 import type { NavigationAction } from "expo-router/build/react-navigation/routers";
 import { Feather } from "@expo/vector-icons";
-import { Colors, Typography, Spacing, Sizing, Shadows } from "@/constants/tokens";
+import { Colors, Typography, Spacing, Shadows } from "@/constants/tokens";
 import { useAutoSave } from "@/lib/useAutoSave";
 import { useEditorLayout } from "@/lib/useEditorLayout";
 import { bodyTypographyMetrics, getBodyContentHeight } from "@/lib/bodyLayout";
@@ -99,7 +99,9 @@ import { useUser } from "@/contexts/UserContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useThoughtComposer } from "@/contexts/ThoughtComposerContext";
 import SourceArticlePickerSheet from "@/components/SourceArticlePickerSheet/SourceArticlePickerSheet";
-import WritingStateBar, { type WritingStage } from "@/components/WritingStateBar/WritingStateBar";
+import WritingStateBar, {
+  type WritingStageAction,
+} from "@/components/WritingStateBar/WritingStateBar";
 import MemoToolbar, { type FormatType } from "@/components/MemoToolbar/MemoToolbar";
 import AddMenuPopup from "@/components/MemoToolbar/AddMenuPopup";
 import InlineMenuPanel, { type InlineMenuMode } from "@/components/InlineMenuPanel/InlineMenuPanel";
@@ -118,10 +120,7 @@ const EXPORT_DEBOUNCE_MS = 1200;
 const DIRECT_THOUGHT_INITIAL_MARKDOWN = "# \n\n";
 
 const WRITING_EDITOR_BOTTOM_PADDING = 24;
-// The absolute header is 44px tall with 12px vertical padding on each side.
-// Keep the editor title below it, with a small visual gap before the content.
 const WRITING_HEADER_HEIGHT = 68;
-const WRITING_EDITOR_TOP_PADDING = WRITING_HEADER_HEIGHT + 16;
 function createThoughtClientId(): string {
   const randomNibble = () => Math.floor(Math.random() * 16);
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (token) => {
@@ -267,6 +266,7 @@ export default function WritingScreen() {
   const [initialized, setInitialized] = useState(false);
   const [selectionState, setSelectionState] = useState<OnSelectionUpdatePayload>(DEFAULT_SELECTION);
   const [isNavigating, setIsNavigating] = useState(false);
+  const splittingRef = useRef(false);
 
   // ── 서식 툴바 인라인 메뉴 시스템 (read.tsx 메모 모드와 동일 구조) ─────────
   const { height: screenHeight } = useWindowDimensions();
@@ -1242,7 +1242,6 @@ export default function WritingScreen() {
     for (const w of heightWarnings) set.add(w.pageIndex);
     return Array.from(set).sort((a, b) => a - b);
   }, [heightWarnings]);
-  const hasOverflowPages = overflowPageIndices.length > 0;
 
   // layoutWidth 선저장 — 분할 모드에서만. on-01c 이동 시 PATCH 중복을 막는다.
   const savedLayoutWidthRef = useRef<number | null>(null);
@@ -2100,26 +2099,30 @@ export default function WritingScreen() {
   );
 
   const handleAutoSplit = useCallback(async () => {
-    if (splitting) return;
-    if (!hasOverflowPages) return;
-    const cur = await getEditorContent();
-    const rawPages = cur.split(new RegExp(`\n?${PAGE_DIVIDER}\n?`, "m"));
-    const targets = [...overflowPageIndices]
-      .filter((i) => i >= 0 && i < rawPages.length)
-      .sort((a, b) => b - a);
-    if (targets.length === 0) {
-      showToast({ message: "분량을 초과하는 페이지가 없어요.", type: "info" });
-      return;
-    }
+    if (splittingRef.current) return;
+    splittingRef.current = true;
     setSplitting(true);
     try {
+      const cur = await getEditorContent();
+      const rawPages = cur.split(new RegExp(`\n?${PAGE_DIVIDER}\n?`, "m"));
+      const targets = [...overflowPageIndices]
+        .filter((i) => i >= 0 && i < rawPages.length)
+        .sort((a, b) => b - a);
+      if (targets.length === 0) {
+        showToast({ message: "분량을 초과하는 페이지가 없어요.", type: "info" });
+        return;
+      }
       const next = [...rawPages];
       let appliedAny = false;
       for (const idx of targets) {
         const paragraphs = splitPageContentForDivision(next[idx]);
-        if (paragraphs.length < 2) continue;
+        if (paragraphs.length < 1) continue;
         const out = await runDivisionEngine(paragraphs);
-        if (out && out.length > 0) {
+        if (
+          out
+          && out.length > 0
+          && (out.length > 1 || out[0].trim() !== next[idx].trim())
+        ) {
           next.splice(idx, 1, ...out);
           appliedAny = true;
         }
@@ -2133,9 +2136,10 @@ export default function WritingScreen() {
       }
       applyEngineResult(next);
     } finally {
+      splittingRef.current = false;
       setSplitting(false);
     }
-  }, [splitting, hasOverflowPages, overflowPageIndices, getEditorContent, runDivisionEngine, applyEngineResult, showToast]);
+  }, [overflowPageIndices, getEditorContent, runDivisionEngine, applyEngineResult, showToast]);
 
   const handleSplitPage = useCallback(
     async (pageIndex: number) => {
@@ -2274,29 +2278,43 @@ export default function WritingScreen() {
     spellAppliedCountRef.current = {};
   }, []);
 
-  // ── WritingStateBar ────────────────────────────────────────────────────────
-  const handleStateBarPress = useCallback(
-    (target: WritingStage) => {
-      if (modeRef.current === "draft") {
-        if (target === "DRAFT") return;
-        if (target === "DIVIDING") {
-          enterDividingMode();
-          return;
-        }
-        showToast({ message: "검토 단계를 먼저 완료해야 마감 단계로 이동할 수 있어요.", type: "info" });
-        return;
-      }
-      if (target === "DIVIDING") return;
-      if (target === "DRAFT") {
-        void returnToThoughtMode();
-        return;
-      }
-      if (target === "CLOSING") {
-        handleNextToClosing();
-      }
-    },
-    [enterDividingMode, handleNextToClosing, returnToThoughtMode, showToast],
-  );
+  const stageMenuBusy =
+    isNavigating || splitting || spellState.status === "loading";
+  const stageMenuActions: WritingStageAction[] = mode === "dividing"
+    ? [
+        {
+          label: "단상 단계로",
+          onPress: () => void returnToThoughtMode(),
+          disabled: isNavigating,
+          busy: isNavigating,
+        },
+        {
+          label: "자동 분할",
+          onPress: () => void handleAutoSplit(),
+          disabled: isNavigating || splitting,
+          busy: splitting,
+        },
+        {
+          label: "맞춤법 검사",
+          onPress: () => void handleRunSpellCheck(),
+          disabled: isNavigating || spellCheckInFlightRef.current,
+          busy: spellState.status === "loading",
+        },
+        {
+          label: "마감 단계로",
+          onPress: () => void handleNextToClosing(),
+          disabled: isNavigating || splitting || spellCheckInFlightRef.current,
+          busy: isNavigating,
+        },
+      ]
+    : [
+        {
+          label: "검토 단계로",
+          onPress: () => void enterDividingMode(),
+          disabled: isNavigating,
+          busy: isNavigating,
+        },
+      ];
 
   useEffect(() => {
     return () => {
@@ -2331,7 +2349,7 @@ export default function WritingScreen() {
     return (
       <>
         <Stack.Screen options={{ gestureEnabled: true }} />
-        <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={[styles.container, { paddingTop: Platform.OS === "web" ? 67 : insets.top }]}>
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={Colors.zinc400} />
             <Text style={styles.loadingText}>단상을 준비하고 있어요</Text>
@@ -2351,7 +2369,7 @@ export default function WritingScreen() {
     return (
       <>
         <Stack.Screen options={{ gestureEnabled: true }} />
-        <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={[styles.container, { paddingTop: Platform.OS === "web" ? 67 : insets.top }]}>
           <View style={styles.loadingContainer}>
             <Feather name="alert-circle" size={30} color={Colors.zinc500} />
             <Text style={styles.loadErrorTitle}>단상을 열지 못했어요</Text>
@@ -2391,8 +2409,8 @@ export default function WritingScreen() {
   return (
     <>
       <Stack.Screen options={{ gestureEnabled: true }} />
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <View style={[styles.header, { top: insets.top }]} pointerEvents="box-none">
+      <View style={[styles.container, { paddingTop: Platform.OS === "web" ? 67 : insets.top }]}>
+        <View style={styles.header} pointerEvents="box-none">
           <ScalePressable
             style={styles.headerBackButton}
             contentStyle={styles.headerBackButtonContent}
@@ -2404,22 +2422,21 @@ export default function WritingScreen() {
           >
             <Feather name="arrow-left" size={19} color={Colors.zinc700} />
           </ScalePressable>
-          <View style={styles.headerStateBar} pointerEvents="box-none">
+          <View style={styles.headerRight}>
             <WritingStateBar
               current={isDividing ? "DIVIDING" : "DRAFT"}
-              onPress={handleStateBarPress}
-              disabled={isNavigating}
-              draftLabel="단상"
+              actions={stageMenuActions}
+              disabled={stageMenuBusy}
+              busy={stageMenuBusy}
             />
           </View>
-          <View style={styles.headerRight} />
         </View>
 
         <KeyboardAvoidingView
           style={styles.editorOuter}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
-          <View style={[styles.editorInner, { width: containerWidth }]}>
+            <View style={[styles.editorInner, { width: containerWidth }]}>
             {/*
               본문 텍스트 컬럼은 4개 화면(작성/분할/마감/읽기)이 동일한 정수 픽셀 폭으로
               줄넘김을 결정해야 한다. textColumnWidth (= Math.round(containerWidth − 2×paddingX))를
@@ -2465,43 +2482,6 @@ export default function WritingScreen() {
             <WebViewMeasureLayer request={warningRequest} onMeasured={handleWarningMeasured} />
             <WebViewMeasureLayer request={engineRequest} onMeasured={handleEngineMeasured} />
           </>
-        )}
-
-        {/* ── 검토 단계 맞춤법 검사 ── */}
-        {isDividing
-          && !keyboardVisible
-          && inlineMenuMode === null
-          && !keyboardRestorePending
-          && !spellTabVisible && (
-          <View
-            style={[
-              styles.spellCheckButtonShadow,
-              Shadows.navBar,
-              {
-                right: Spacing.screenPx,
-                bottom: Math.max(insets.bottom, Platform.OS === "web" ? 34 : 0) + 16,
-              },
-            ]}
-            pointerEvents="box-none"
-          >
-            <ScalePressable
-              style={styles.spellCheckButton}
-              contentStyle={[
-                styles.spellCheckButtonContent,
-                // Reanimated's web content layer can drop boxShadow. The fixed
-                // wrapper owns it on web; native keeps the shadow on the surface.
-                Platform.OS === "web" ? null : Shadows.navBar,
-              ]}
-              onPress={handleRunSpellCheck}
-              disabled={spellState.status === "loading"}
-              accessibilityRole="button"
-              accessibilityLabel="맞춤법 검사"
-              accessibilityHint="본문의 맞춤법을 검사합니다."
-              accessibilityState={{ busy: spellState.status === "loading", disabled: spellState.status === "loading" }}
-            >
-              <Feather name="check-circle" size={Sizing.tabIconSize} color={Colors.noticeAccent} />
-            </ScalePressable>
-          </View>
         )}
 
         {/* ── 서식 툴바 — 키보드/인라인 패널 위 floating (read.tsx와 동일) ── */}
@@ -2749,17 +2729,14 @@ const styles = StyleSheet.create({
     color: Colors.zinc700,
   },
   header: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
     height: WRITING_HEADER_HEIGHT,
+    minHeight: WRITING_HEADER_HEIGHT,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: Spacing.screenPx,
     paddingVertical: 12,
-    backgroundColor: "transparent",
+    backgroundColor: Colors.white,
     zIndex: 5,
   },
   headerBackButton: {
@@ -2781,19 +2758,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     ...Shadows.navBar,
   },
-  headerStateBar: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 0,
-  },
   headerRight: {
     width: 44,
     height: 44,
+    alignSelf: "flex-start",
     zIndex: 1,
   },
   sourceArticleRow: {
@@ -2827,36 +2795,9 @@ const styles = StyleSheet.create({
   },
   editorInner: {
     flex: 1,
-    paddingTop: WRITING_EDITOR_TOP_PADDING,
   },
   markdownEditorContainer: {
     flex: 1,
-  },
-  spellCheckButtonShadow: {
-    position: "absolute",
-    width: Sizing.navBarHeight,
-    height: Sizing.navBarHeight,
-    flexGrow: 0,
-    flexShrink: 0,
-    borderRadius: Sizing.navBarRadius,
-    zIndex: 20,
-  },
-  spellCheckButton: {
-    width: Sizing.navBarHeight,
-    height: Sizing.navBarHeight,
-    flexGrow: 0,
-    flexShrink: 0,
-    borderRadius: Sizing.navBarRadius,
-  },
-  spellCheckButtonContent: {
-    width: "100%",
-    height: "100%",
-    flexGrow: 0,
-    flexShrink: 0,
-    borderRadius: Sizing.navBarRadius,
-    backgroundColor: Colors.white,
-    alignItems: "center",
-    justifyContent: "center",
   },
   spellPanel: {
     position: "absolute",
