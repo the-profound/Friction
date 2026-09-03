@@ -303,6 +303,7 @@ const styles = StyleSheet.create({
     alignItems: "stretch",
     paddingHorizontal: 16,
     paddingVertical: 8,
+    backgroundColor: "transparent",
   },
   capsule: {
     backgroundColor: "#ffffff",

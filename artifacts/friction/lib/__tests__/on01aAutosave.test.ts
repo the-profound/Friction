@@ -375,9 +375,10 @@ describe("on-01a guarded return navigation", () => {
 
   it("keeps the header return control stable without a save spinner or duplicate keyboard button", () => {
     const screen = readScreen();
+    const headerStart = screen.indexOf("<View style={[styles.header, { top: insets.top }]}");
     const header = screen.slice(
-      screen.indexOf('<View style={styles.header}>'),
-      screen.indexOf("<KeyboardAvoidingView", screen.indexOf('<View style={styles.header}>')),
+      headerStart,
+      screen.indexOf("<KeyboardAvoidingView", headerStart),
     );
     expect(header).toContain("styles.headerBackButton");
     expect(header).toContain('accessibilityLabel="기록 목록으로 돌아가기"');
@@ -385,6 +386,36 @@ describe("on-01a guarded return navigation", () => {
     expect(header).not.toContain("ActivityIndicator");
     expect(header).not.toContain("keyboard-off-outline");
     expect(screen).toContain("onDismissKeyboard={() =>");
+  });
+
+  it("keeps writing and review chrome floating without changing control surfaces", () => {
+    const screen = readScreen();
+    const header = screen.slice(
+      screen.indexOf('<View style={[styles.header, { top: insets.top }]}'),
+      screen.indexOf("<KeyboardAvoidingView", screen.indexOf('<View style={[styles.header, { top: insets.top }]}')),
+    );
+    const stylesStart = screen.indexOf("const styles = StyleSheet.create({");
+    const stylesSource = screen.slice(stylesStart);
+    const stateBar = readFileSync(
+      join(appRoot, "components/WritingStateBar/WritingStateBar.tsx"),
+      "utf8",
+    );
+    const memoToolbar = readFileSync(
+      join(appRoot, "components/MemoToolbar/MemoToolbar.tsx"),
+      "utf8",
+    );
+
+    expect(header).toContain("styles.headerBackButton");
+    expect(header).toContain("styles.headerStateBar");
+    expect(header).toContain('pointerEvents="box-none"');
+    expect(stylesSource).toContain("header: {\n    position: \"absolute\"");
+    expect(stylesSource).toContain("backgroundColor: \"transparent\",\n    zIndex: 53");
+    expect(stateBar).not.toContain("LinearGradient");
+    expect(stateBar).toContain('<View style={styles.bar}>');
+    expect(stateBar).toContain("backgroundColor: Colors.white");
+    expect(memoToolbar).toContain("backgroundColor: \"transparent\"");
+    expect(memoToolbar).toContain("backgroundColor: \"#ffffff\"");
+    expect(screen).toContain("backgroundColor: Colors.white,\n    borderTopWidth");
   });
 
   it("keeps review chrome out of the shared editor header and exposes the spell check action separately", () => {

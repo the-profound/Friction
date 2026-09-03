@@ -2216,7 +2216,7 @@ export default function WritingScreen() {
     <>
       <Stack.Screen options={{ gestureEnabled: true }} />
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        <View style={styles.header}>
+        <View style={[styles.header, { top: insets.top }]} pointerEvents="box-none">
           <ScalePressable
             style={styles.headerBackButton}
             contentStyle={styles.headerBackButtonContent}
@@ -2581,7 +2581,10 @@ const styles = StyleSheet.create({
     color: Colors.zinc700,
   },
   header: {
-    position: "relative",
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -2653,6 +2656,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     right: 0,
+    backgroundColor: "transparent",
     zIndex: 53,
     ...Platform.select({ android: { elevation: 8 } }),
   },
