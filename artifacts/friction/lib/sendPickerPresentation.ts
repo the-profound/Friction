@@ -1,14 +1,32 @@
-import type { InboxItem, SpaceListItem } from "@workspace/api-client-react";
+import type { Article, InboxItem, SpaceListItem } from "@workspace/api-client-react";
+
+export function buildReplySendTarget(item: Pick<InboxItem, "id">) {
+  return { replyToInboxId: item.id };
+}
+
+export function resolveInitialSendDefaults(
+  article: Pick<Article, "sourceArticleId"> | null,
+  replyCandidates: InboxItem[],
+) {
+  const source = article?.sourceArticleId
+    ? replyCandidates.find((item) => item.article?.id === article.sourceArticleId) ?? null
+    : null;
+
+  return {
+    mode: source ? ("reply" as const) : ("person" as const),
+    replyInbox: source,
+  };
+}
 
 /**
  * The inbox endpoint returns both read and unread rows. Reply selection is
- * intentionally limited to one visible, completed letter per article.
+ * intentionally limited to visible, completed deliveries. Keep repeated
+ * deliveries because the inbox ID and sender determine the exact reply target.
  */
 export function filterReadReplyLetters(
   items: InboxItem[],
   nowMs: number = Date.now(),
 ): InboxItem[] {
-  const seenArticleIds = new Set<string>();
   return [...items]
     .filter(
       (item) =>
@@ -19,13 +37,7 @@ export function filterReadReplyLetters(
     .sort(
       (a, b) =>
         new Date(b.visibleAt).getTime() - new Date(a.visibleAt).getTime(),
-    )
-    .filter((item) => {
-      const articleId = item.article?.id;
-      if (!articleId || seenArticleIds.has(articleId)) return false;
-      seenArticleIds.add(articleId);
-      return true;
-    });
+    );
 }
 
 /**

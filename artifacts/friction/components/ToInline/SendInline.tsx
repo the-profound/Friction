@@ -1,332 +1,453 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
-import ScalePressable from "@/components/shared/ScalePressable";
 import { Feather } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { Colors, Spacing, Typography } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { useUser } from "@/contexts/UserContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
-import BottomSheet from "@/components/BottomSheet/BottomSheet";
+import ScalePressable from "@/components/shared/ScalePressable";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
+import ArticleCardCover from "@/components/ArticleCardItem/ArticleCardCover";
 import { LetterPickerSheet } from "@/components/shared/LetterPickerSheet";
+import { NeighborPickerModal } from "@/components/shared/NeighborPickerModal";
+import { ReplyLetterPickerModal } from "@/components/shared/ReplyLetterPickerModal";
+import { SpacePickerModal } from "@/components/shared/SpacePickerModal";
+import { CollapsibleDatePicker } from "@/components/shared/CalendarGrid";
 import {
   ApiError,
   getListSendRecordsQueryKey,
-  getListTeamArticlesQueryKey,
-  useAddTeamArticle,
   useListArticles,
+  useListInbox,
   useListNeighbors,
-  useListTeamCollections,
   useSendArticle,
 } from "@workspace/api-client-react";
 import type {
+  Article,
+  InboxItem,
   NeighborWithUser,
-  TeamCollectionWithRole,
+  SendArticleBody,
+  SendRecordWithDetails,
+  SpaceListItem,
 } from "@workspace/api-client-react";
-import {
-  canSendToNeighbor,
-  formatDeliveryTime,
-  getNextDeliverySlot,
-} from "@/lib/deliverySync";
+import { canSendToNeighbor, formatDeliveryTime } from "@/lib/deliverySync";
 import type { ArticleStatus } from "@/lib/policies";
+import {
+  buildReplySendTarget,
+  filterReadReplyLetters,
+  resolveInitialSendDefaults,
+} from "@/lib/sendPickerPresentation";
+import { kstDateAt6, minOpeningSendDate } from "@/lib/kstDate";
+import { getCurrentAuthAccessToken } from "@/lib/authTokenStore";
+import { runAuthenticatedMutation } from "@/lib/authenticatedMutation";
 
-interface LetterArticle {
-  id: string;
-  title: string;
-  status: string;
-  content?: string;
-}
-
-type RecipientNeighbor = { type: "neighbor"; data: NeighborWithUser };
-type RecipientCollection = { type: "collection"; data: TeamCollectionWithRole };
-type Recipient = RecipientNeighbor | RecipientCollection | null;
-
-type SegmentTab = "neighbor" | "collection";
+type SendMode = "person" | "reply" | "space";
 
 interface SendInlineProps {
-  /** Pre-selected target group id (for case A from of-02-detail). */
+  /** Kept for compatibility with older entry points. Collections are not send targets. */
   targetGroup?: string;
-  /** Pre-selected target group display name. */
   targetGroupName?: string;
-  /** Pre-selected article id (for case B from inbox / OF). */
   prefillArticleId?: string;
-  /** Pre-selected neighbor id (for case A' from neighbor card). */
   prefillNeighborId?: string;
-  /** Optional team collection id whose article list should be invalidated after send. */
+  prefillSpaceId?: string;
+  prefillSpaceName?: string;
   returnToId?: string;
-  /** Bumps when prefill params change so the component re-applies them. */
   prefillKey?: string | number;
-  /** Called after a successful send so the parent can clear prefill query params. */
   onSent?: () => void;
 }
 
+function calendarDateKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate(),
+  ).padStart(2, "0")}`;
+}
+
+function formatCalendarDate(date: Date) {
+  return `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일`;
+}
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof ApiError) {
+    const data = error.data as { error?: string } | null;
+    if (data?.error) return data.error;
+  }
+  return error instanceof Error ? error.message : "전송에 실패했어요.";
+}
+
 export function SendInline({
-  targetGroup,
-  targetGroupName,
+  targetGroup: _targetGroup,
+  targetGroupName: _targetGroupName,
   prefillArticleId,
   prefillNeighborId,
-  returnToId,
+  prefillSpaceId,
+  prefillSpaceName,
+  returnToId: _returnToId,
   prefillKey,
   onSent,
 }: SendInlineProps) {
   const navBottom = useNavBarBottomSafeArea();
   const queryClient = useQueryClient();
   const { userId } = useUser();
+  const { refreshAuthSession } = useAuth();
   const { showToast } = useToast();
 
-  const [selectedArticle, setSelectedArticle] = useState<LetterArticle | null>(null);
-  const [selectedRecipient, setSelectedRecipient] = useState<Recipient>(null);
+  const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
+  const [mode, setMode] = useState<SendMode>("person");
+  const [selectedNeighbor, setSelectedNeighbor] = useState<NeighborWithUser | null>(null);
+  const [selectedReplyInbox, setSelectedReplyInbox] = useState<InboxItem | null>(null);
+  const [selectedSpace, setSelectedSpace] = useState<SpaceListItem | null>(null);
+  const [deliveryDate, setDeliveryDate] = useState(() => minOpeningSendDate());
+
   const [letterPickerVisible, setLetterPickerVisible] = useState(false);
-  const [recipientPickerVisible, setRecipientPickerVisible] = useState(false);
+  const [neighborPickerVisible, setNeighborPickerVisible] = useState(false);
+  const [replyPickerVisible, setReplyPickerVisible] = useState(false);
+  const [spacePickerVisible, setSpacePickerVisible] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [envelopePromptVisible, setEnvelopePromptVisible] = useState(false);
   const [pendingIsEnvelope, setPendingIsEnvelope] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [retryEnvelope, setRetryEnvelope] = useState<boolean | null>(null);
 
-  const [segmentTab, setSegmentTab] = useState<SegmentTab>("collection");
-  const [pendingRecipient, setPendingRecipient] = useState<Recipient>(null);
+  const initialDefaultsPendingRef = useRef(false);
 
   const articlesQuery = useListArticles({ authorId: userId, status: "LETTER" as const });
-  const articles = (articlesQuery.data ?? []) as LetterArticle[];
+  const articles = (articlesQuery.data ?? []) as Article[];
   const neighborsQuery = useListNeighbors({ userId });
   const neighbors = (neighborsQuery.data ?? []) as NeighborWithUser[];
-  const teamCollectionsQuery = useListTeamCollections({ userId });
-  const teamCollections = (teamCollectionsQuery.data ?? []) as TeamCollectionWithRole[];
-
+  const inboxQuery = useListInbox({ recipientId: userId });
+  const replyCandidates = useMemo(
+    () => filterReadReplyLetters((inboxQuery.data ?? []) as InboxItem[]),
+    [inboxQuery.data],
+  );
   const sendArticle = useSendArticle();
-  const addToTeamCollection = useAddTeamArticle();
 
-  const deliveryInfo = useMemo(() => getNextDeliverySlot(), [confirmVisible]);
-
-  // Apply collection prefill (case A: from of-02-detail "내 글 추가")
-  useEffect(() => {
-    if (!targetGroup) return;
-    const resolvedName =
-      targetGroupName ||
-      teamCollections.find((c) => c.id === targetGroup)?.name ||
-      "모음";
-    const preselected: RecipientCollection = {
-      type: "collection",
-      data: {
-        id: targetGroup,
-        name: resolvedName,
-        creatorId: "",
-        role: "MEMBER",
-        createdAt: "",
-        updatedAt: "",
-      } as TeamCollectionWithRole,
-    };
-    setSelectedRecipient(preselected);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [targetGroup, targetGroupName, teamCollections, prefillKey]);
-
-  // Apply neighbor prefill (case A': neighbor card tap)
-  useEffect(() => {
-    if (!prefillNeighborId) return;
-    const found = neighbors.find((n) => n.neighborUserId === prefillNeighborId);
-    if (found) {
-      setSelectedRecipient({ type: "neighbor", data: found });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prefillNeighborId, neighbors, prefillKey]);
-
-  // Apply article prefill (case B: from OF / inbox)
+  // Preserve all existing entry points while applying their preselection once
+  // their corresponding list has arrived.
   useEffect(() => {
     if (!prefillArticleId) return;
-    const found = articles.find((a) => a.id === prefillArticleId);
+    const found = articles.find((article) => article.id === prefillArticleId);
     if (found) {
       setSelectedArticle(found);
+      initialDefaultsPendingRef.current = true;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prefillArticleId, articles, prefillKey]);
+  }, [articles, prefillArticleId, prefillKey]);
 
-  const canSend = !!selectedArticle && !!selectedRecipient;
-
-  const recipientDisplayName = useMemo(() => {
-    if (!selectedRecipient) return null;
-    if (selectedRecipient.type === "neighbor") {
-      return selectedRecipient.data.user?.nickname ?? "이웃";
+  useEffect(() => {
+    if (!prefillNeighborId) return;
+    const found = neighbors.find(
+      (neighbor) => neighbor.neighborUserId === prefillNeighborId,
+    );
+    if (found) {
+      setMode("person");
+      setSelectedNeighbor(found);
     }
-    return selectedRecipient.data.name;
-  }, [selectedRecipient]);
+  }, [neighbors, prefillKey, prefillNeighborId]);
+
+  useEffect(() => {
+    if (!prefillSpaceId) return;
+    setMode("space");
+    setSelectedSpace(
+      (current) =>
+        current?.id === prefillSpaceId
+          ? current
+          : ({
+              id: prefillSpaceId,
+              name: prefillSpaceName || "공간",
+              status: "ACTIVE",
+            } as SpaceListItem),
+    );
+  }, [prefillKey, prefillSpaceId, prefillSpaceName]);
+
+  // Only an entry-point source article can provide automatic defaults. A
+  // manually chosen reply must remain empty until the user picks a letter.
+  useEffect(() => {
+    if (!initialDefaultsPendingRef.current || !selectedArticle || inboxQuery.isLoading) return;
+    if (prefillNeighborId || prefillSpaceId) {
+      initialDefaultsPendingRef.current = false;
+      return;
+    }
+    const defaults = resolveInitialSendDefaults(selectedArticle, replyCandidates);
+    setMode(defaults.mode);
+    setSelectedReplyInbox(defaults.replyInbox);
+    initialDefaultsPendingRef.current = false;
+  }, [
+    inboxQuery.isLoading,
+    prefillNeighborId,
+    prefillSpaceId,
+    replyCandidates,
+    selectedArticle,
+  ]);
+
+  // Re-evaluate on every render so a screen kept open across the 06:00 KST
+  // cutoff cannot keep accepting the previous day's date.
+  const earliestDate = minOpeningSendDate();
+  const canSend = Boolean(
+    selectedArticle &&
+      ((mode === "person" && selectedNeighbor) ||
+        (mode === "reply" && selectedReplyInbox) ||
+        (mode === "space" && selectedSpace)),
+  );
+  const targetLabel =
+    mode === "person" ? "받는 사람" : mode === "reply" ? "답장할 편지" : "보낼 공간";
+  const targetValue =
+    mode === "person"
+      ? selectedNeighbor?.user?.nickname ?? null
+      : mode === "reply"
+        ? selectedReplyInbox?.article?.title ?? null
+        : selectedSpace?.name ?? null;
+
+  const selectMode = useCallback((nextMode: SendMode) => {
+    setMode(nextMode);
+    setSendError(null);
+    if (nextMode !== "person") setSelectedNeighbor(null);
+    if (nextMode !== "reply") {
+      setSelectedReplyInbox(null);
+    }
+    if (nextMode !== "space") setSelectedSpace(null);
+  }, []);
 
   const handleSend = useCallback(
     async (isEnvelope = false) => {
-      if (!selectedArticle || !selectedRecipient) return;
+      if (!selectedArticle || !canSend || sendArticle.isPending) return;
+      setSendError(null);
+
+      const body: SendArticleBody = {
+        senderId: userId,
+        articleId: selectedArticle.id,
+        targetType: mode,
+        deliveryDate: calendarDateKey(deliveryDate),
+        ...(mode === "person"
+          ? { recipientId: selectedNeighbor!.neighborUserId, ...(isEnvelope ? { isEnvelope: true } : {}) }
+          : mode === "reply"
+            ? buildReplySendTarget(selectedReplyInbox!)
+            : { spaceId: selectedSpace!.id }),
+      };
 
       try {
-        if (selectedRecipient.type === "neighbor") {
-          const neighbor = selectedRecipient.data;
-          const isNeighbor = neighbors.some((n) => n.neighborUserId === neighbor.neighborUserId);
-          const guard = canSendToNeighbor(
-            selectedArticle.status as ArticleStatus,
-            userId,
-            neighbor.neighborUserId,
-            isNeighbor,
-          );
-          if (!guard.allowed) {
-            showToast({ message: guard.reason ?? "보낼 수 없습니다.", type: "error" });
-            return;
-          }
-          const result = await sendArticle.mutateAsync({
-            data: {
-              senderId: userId,
-              recipientId: neighbor.neighborUserId,
-              articleId: selectedArticle.id,
-              ...(isEnvelope ? { isEnvelope: true } : {}),
-            },
-          });
-          setConfirmVisible(false);
-          const arrivalTime = result?.deliverySlot
-            ? formatDeliveryTime(new Date(result.deliverySlot))
-            : formatDeliveryTime(deliveryInfo.visibleAt);
-          queryClient.invalidateQueries({ queryKey: getListSendRecordsQueryKey({ senderId: userId }) });
-          showToast({
-            message: `${neighbor.user?.nickname ?? "이웃"}에게 발송됐어요 · ${arrivalTime} 도착 예정`,
-            type: "success",
-          });
-        } else {
-          const collection = selectedRecipient.data;
-          await addToTeamCollection.mutateAsync({
-            id: collection.id,
-            data: {
-              articleId: selectedArticle.id,
-              addedBy: userId,
-            },
-          });
-          setConfirmVisible(false);
-          const arrivalTime = formatDeliveryTime(deliveryInfo.visibleAt);
-          if (returnToId) {
-            queryClient.invalidateQueries({ queryKey: getListTeamArticlesQueryKey(returnToId) });
-          }
-          queryClient.invalidateQueries({ queryKey: getListSendRecordsQueryKey({ senderId: userId }) });
-          showToast({
-            message: `'${collection.name}' 모음에 발송됐어요 · ${arrivalTime} 도착 예정`,
-            type: "success",
-          });
-        }
-        setSelectedArticle(null);
-        setSelectedRecipient(null);
-        onSent?.();
-      } catch (e: unknown) {
+        const result = await runAuthenticatedMutation<SendRecordWithDetails>({
+          hasUsableToken: () => Boolean(getCurrentAuthAccessToken()),
+          refreshSession: refreshAuthSession,
+          mutate: () => sendArticle.mutateAsync({ data: body }),
+        });
         setConfirmVisible(false);
-        let msg = "실패했습니다.";
-        if (e instanceof ApiError) {
-          const errorData = e.data as { error?: string } | null;
-          if (e.status === 400 && errorData?.error === "Article already in collection") {
-            msg = "이미 모음에 전송된 편지입니다.";
-          }
-        }
-        showToast({ message: msg, type: "error" });
+        setRetryEnvelope(null);
+        const returnedDate = result.deliveryDate
+          ? new Date(`${result.deliveryDate}T06:00:00+09:00`)
+          : kstDateAt6(deliveryDate);
+        const arrivalTime = formatDeliveryTime(returnedDate);
+        queryClient.invalidateQueries({ queryKey: getListSendRecordsQueryKey({ senderId: userId }) });
+        showToast({
+          message:
+            mode === "person"
+              ? `${selectedNeighbor!.user?.nickname ?? "받는 사람"}에게 발송됐어요 · ${arrivalTime} 도착 예정`
+              : mode === "reply"
+                ? `답장을 발송했어요 · ${arrivalTime} 도착 예정`
+                : `'${selectedSpace!.name}'에 발송됐어요 · ${arrivalTime} 도착 예정`,
+          type: "success",
+        });
+        setSelectedArticle(null);
+        setSelectedNeighbor(null);
+        setSelectedReplyInbox(null);
+        setSelectedSpace(null);
+        onSent?.();
+      } catch (error) {
+        setConfirmVisible(false);
+        setRetryEnvelope(isEnvelope);
+        setSendError(getErrorMessage(error));
       }
     },
     [
-      selectedArticle,
-      selectedRecipient,
-      userId,
-      neighbors,
-      sendArticle,
-      addToTeamCollection,
-      deliveryInfo,
-      queryClient,
-      returnToId,
-      showToast,
+      canSend,
+      deliveryDate,
+      mode,
       onSent,
+      queryClient,
+      refreshAuthSession,
+      selectedArticle,
+      selectedNeighbor,
+      selectedReplyInbox,
+      selectedSpace,
+      sendArticle,
+      showToast,
+      userId,
     ],
   );
 
-  const isPending = sendArticle.isPending || addToTeamCollection.isPending;
-
-  const openRecipientPicker = useCallback(() => {
-    setPendingRecipient(selectedRecipient);
-    if (selectedRecipient?.type === "neighbor") {
-      setSegmentTab("neighbor");
-    } else {
-      setSegmentTab("collection");
-    }
-    setRecipientPickerVisible(true);
-  }, [selectedRecipient]);
-
-  const handleConfirmRecipient = useCallback(() => {
-    setSelectedRecipient(pendingRecipient);
-    setRecipientPickerVisible(false);
-  }, [pendingRecipient]);
-
   const confirmDescription = useMemo(() => {
-    if (!selectedArticle || !selectedRecipient) return "";
-    const arrivalLine = `\n\n${formatDeliveryTime(deliveryInfo.visibleAt)}에 도착 예정`;
-    if (selectedRecipient.type === "neighbor") {
-      return `'${selectedArticle.title ?? ""}'을(를)\n${selectedRecipient.data.user?.nickname ?? ""}에게 보내시겠어요?${arrivalLine}`;
+    if (!selectedArticle || !targetValue) return "";
+    const destination =
+      mode === "person"
+        ? `${targetValue}님에게`
+        : mode === "reply"
+          ? `'${targetValue}'에`
+          : `'${targetValue}'에`;
+    return `'${selectedArticle.title || "제목 없음"}'을(를)\n${destination} ${formatCalendarDate(
+      deliveryDate,
+    )} 오전 6시에 보내시겠어요?`;
+  }, [deliveryDate, mode, selectedArticle, targetValue]);
+
+  const openSendConfirmation = useCallback(() => {
+    if (!canSend) return;
+    if (mode === "person") {
+      setPendingIsEnvelope(false);
+      setEnvelopePromptVisible(true);
+    } else {
+      setConfirmVisible(true);
     }
-    return `'${selectedArticle.title ?? ""}'을(를)\n'${selectedRecipient.data.name}' 모음에 보내시겠어요?${arrivalLine}`;
-  }, [selectedArticle, selectedRecipient, deliveryInfo]);
+  }, [canSend, mode]);
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentInner}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={[styles.contentInner, { paddingBottom: 28 }]}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>편지 선택</Text>
-          <ScalePressable style={styles.selectButton} contentStyle={styles.selectButtonContent} onPress={() => setLetterPickerVisible(true)}>
+          <Text style={styles.sectionTitle}>보낼 편지</Text>
+          <ScalePressable
+            style={styles.articleRowOuter}
+            contentStyle={styles.articleRow}
+            onPress={() => setLetterPickerVisible(true)}
+            accessibilityRole="button"
+            accessibilityLabel={`${selectedArticle?.title ?? "보낼 편지를 선택하세요"} 편지 변경`}
+          >
+            {selectedArticle ? (
+              <>
+                <View style={styles.articleCover}>
+                  <ArticleCardCover
+                    cover={selectedArticle.cover}
+                    title={selectedArticle.title || "제목 없음"}
+                    width={64}
+                    height={41}
+                    borderRadius={7}
+                  />
+                </View>
+                <Text style={styles.articleTitle} numberOfLines={2}>
+                  {selectedArticle.title || "제목 없음"}
+                </Text>
+              </>
+            ) : (
+              <Text style={styles.placeholder}>보낼 편지를 선택하세요</Text>
+            )}
+            <Feather name="chevron-right" size={18} color={Colors.zinc400} />
+          </ScalePressable>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>보내기 종류</Text>
+          <View style={styles.modeRow}>
+            {([
+              ["person", "사람", "user"],
+              ["reply", "답장", "corner-up-left"],
+              ["space", "공간", "layers"],
+            ] as const).map(([value, label, icon]) => {
+              const active = mode === value;
+              return (
+                <ScalePressable
+                  key={value}
+                  style={styles.modeButtonOuter}
+                  contentStyle={[styles.modeButton, active && styles.modeButtonActive]}
+                  onPress={() => selectMode(value)}
+                  accessibilityRole="radio"
+                  accessibilityLabel={label}
+                  accessibilityState={{ selected: active }}
+                >
+                  <Feather name={icon} size={17} color={active ? Colors.white : Colors.zinc600} />
+                  <Text style={[styles.modeText, active && styles.modeTextActive]}>{label}</Text>
+                </ScalePressable>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{targetLabel}</Text>
+          <ScalePressable
+            style={styles.targetButtonOuter}
+            contentStyle={styles.targetButton}
+            onPress={() => {
+              if (mode === "person") setNeighborPickerVisible(true);
+              if (mode === "reply") setReplyPickerVisible(true);
+              if (mode === "space") setSpacePickerVisible(true);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={`${targetLabel} 선택`}
+          >
             <Feather
-              name="file-text"
+              name={mode === "person" ? "user" : mode === "reply" ? "corner-up-left" : "layers"}
               size={18}
-              color={selectedArticle ? Colors.zinc900 : Colors.zinc500}
+              color={targetValue ? Colors.zinc900 : Colors.zinc500}
             />
-            <Text
-              style={[styles.selectButtonText, selectedArticle && styles.selectButtonTextActive]}
-            >
-              {selectedArticle?.title ?? "보낼 편지를 선택하세요"}
+            <Text style={[styles.targetText, targetValue && styles.targetTextActive]} numberOfLines={2}>
+              {targetValue ?? `${targetLabel}를 선택하세요`}
             </Text>
             <Feather name="chevron-right" size={18} color={Colors.zinc400} />
           </ScalePressable>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>받는 사람/모음</Text>
-          <ScalePressable style={styles.selectButton} contentStyle={styles.selectButtonContent} onPress={openRecipientPicker}>
-            <Feather
-              name={selectedRecipient?.type === "collection" ? "users" : "user"}
-              size={18}
-              color={selectedRecipient ? Colors.zinc900 : Colors.zinc500}
-            />
-            <Text
-              style={[styles.selectButtonText, selectedRecipient && styles.selectButtonTextActive]}
-            >
-              {recipientDisplayName ?? "받는 사람/모음을 선택하세요"}
-            </Text>
-            <Feather name="chevron-right" size={18} color={Colors.zinc400} />
-          </ScalePressable>
+          <Text style={styles.sectionTitle}>수신일</Text>
+          <Text style={styles.sectionHint}>선택한 날짜 오전 6시에 도착해요.</Text>
+          <CollapsibleDatePicker
+            value={deliveryDate}
+            onChange={(date) => {
+              if (date >= earliestDate) {
+                setDeliveryDate(date);
+                setSendError(null);
+              }
+            }}
+            onOpen={() => {
+              const nextEarliest = minOpeningSendDate();
+              if (deliveryDate < nextEarliest) {
+                setDeliveryDate(nextEarliest);
+                return nextEarliest;
+              }
+            }}
+            isDateDisabled={(date) => date < earliestDate}
+            canGoPrevMonth={(year, month) => new Date(year, month + 1, 0) >= earliestDate}
+            formatButtonLabel={(date) => formatCalendarDate(date)}
+            triggerIcon="calendar"
+            triggerStyle={styles.dateTrigger}
+            triggerTextStyle={styles.dateTriggerText}
+          />
         </View>
 
-        <View style={styles.deliveryInfo}>
-          <Feather name="clock" size={16} color={Colors.zinc500} />
-          <Text style={styles.deliveryInfoText}>
-            다음 배달: {formatDeliveryTime(deliveryInfo.visibleAt)}
-          </Text>
-        </View>
+        {sendError ? (
+          <View style={styles.errorBox} accessibilityLiveRegion="polite">
+            <View style={styles.errorTextWrap}>
+              <Feather name="alert-circle" size={18} color={Colors.noticeAccent} />
+              <Text style={styles.errorText}>{sendError}</Text>
+            </View>
+            <ScalePressable
+              style={styles.retryButtonOuter}
+              contentStyle={styles.retryButton}
+              onPress={() => handleSend(retryEnvelope ?? false)}
+              disabled={sendArticle.isPending}
+              accessibilityRole="button"
+              accessibilityLabel="전송 다시 시도"
+            >
+              <Text style={styles.retryText}>다시 시도</Text>
+            </ScalePressable>
+          </View>
+        ) : null}
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: navBottom }]}>
         <SubmitButton
           style={styles.sendButton}
           disabledStyle={styles.sendButtonDisabled}
-          contentStyle={styles.sendButtonContentGap}
+          contentStyle={styles.sendButtonContent}
           textStyle={styles.sendButtonText}
           disabledTextStyle={styles.sendButtonTextDisabled}
-          onPress={() => {
-            if (selectedRecipient?.type === "neighbor") {
-              setPendingIsEnvelope(false);
-              setEnvelopePromptVisible(true);
-            } else {
-              setConfirmVisible(true);
-            }
-          }}
-          pending={isPending}
+          onPress={openSendConfirmation}
+          pending={sendArticle.isPending}
           disabled={!canSend}
           label="보내기"
-          pendingLabel="처리 중..."
+          pendingLabel="보내는 중..."
           renderIcon={({ disabled }) => (
             <Feather name="send" size={16} color={disabled ? Colors.zinc400 : Colors.white} />
           )}
@@ -342,181 +463,49 @@ export function SendInline({
         onRefetch={() => articlesQuery.refetch()}
         selectedId={selectedArticle?.id ?? null}
         onSelect={(article) => {
-          const found = articles.find((a) => a.id === article.id);
-          if (found) setSelectedArticle(found);
+          const found = articles.find((item) => item.id === article.id);
+          if (found) {
+            initialDefaultsPendingRef.current = false;
+            setSelectedArticle(found);
+          }
         }}
       />
 
-      <BottomSheet
-        visible={recipientPickerVisible}
-        onClose={() => setRecipientPickerVisible(false)}
-        title="받는 사람/모음 선택"
-        snapPoints={[0.85]}
-      >
-        <View style={styles.segmentRow}>
-          <ScalePressable
-            style={styles.segmentButton}
-            contentStyle={[styles.segmentButtonContent, segmentTab === "collection" && styles.segmentButtonActive]}
-            onPress={() => setSegmentTab("collection")}
-          >
-            <Text
-              style={[
-                styles.segmentButtonText,
-                segmentTab === "collection" && styles.segmentButtonTextActive,
-              ]}
-            >
-              모음
-            </Text>
-          </ScalePressable>
-          <ScalePressable
-            style={styles.segmentButton}
-            contentStyle={[styles.segmentButtonContent, segmentTab === "neighbor" && styles.segmentButtonActive]}
-            onPress={() => setSegmentTab("neighbor")}
-          >
-            <Text
-              style={[
-                styles.segmentButtonText,
-                segmentTab === "neighbor" && styles.segmentButtonTextActive,
-              ]}
-            >
-              이웃
-            </Text>
-          </ScalePressable>
-        </View>
-
-        <View style={styles.recipientListArea}>
-          {segmentTab === "neighbor" ? (
-            neighborsQuery.isLoading ? (
-              <View style={styles.pickerEmpty}>
-                <Text style={styles.pickerEmptySub}>불러오는 중...</Text>
-              </View>
-            ) : neighborsQuery.isError ? (
-              <View style={styles.pickerEmpty}>
-                <Feather name="alert-circle" size={32} color={Colors.zinc300} />
-                <Text style={styles.pickerEmptyTitle}>불러오기 실패</Text>
-                <ScalePressable onPress={() => neighborsQuery.refetch()}>
-                  <Text style={[styles.pickerEmptySub, { color: Colors.zinc900 }]}>다시 시도</Text>
-                </ScalePressable>
-              </View>
-            ) : neighbors.length === 0 ? (
-              <View style={styles.pickerEmpty}>
-                <Feather name="users" size={32} color={Colors.zinc300} />
-                <Text style={styles.pickerEmptyTitle}>이웃이 없어요</Text>
-                <Text style={styles.pickerEmptySub}>먼저 이웃을 추가해주세요</Text>
-              </View>
-            ) : (
-              <ScrollView nestedScrollEnabled style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 8 }}>
-                {neighbors.map((neighbor) => {
-                  const isSelected =
-                    pendingRecipient?.type === "neighbor" &&
-                    pendingRecipient.data.id === neighbor.id;
-                  return (
-                    <ScalePressable
-                      key={neighbor.id}
-                      style={styles.pickerItem}
-                      contentStyle={[styles.pickerItemContent, isSelected && styles.pickerItemSelected]}
-                      onPress={() => setPendingRecipient({ type: "neighbor", data: neighbor })}
-                    >
-                      <View style={styles.pickerNeighborRow}>
-                        <View style={styles.pickerAvatar}>
-                          <Feather name="user" size={16} color={Colors.zinc500} />
-                        </View>
-                        <View style={styles.pickerNeighborInfo}>
-                          <Text style={styles.pickerItemTitle}>
-                            {neighbor.user?.nickname ?? "이름 없음"}
-                          </Text>
-                          <Text style={styles.pickerItemSub}>{neighbor.user?.email ?? ""}</Text>
-                        </View>
-                        {isSelected && <Feather name="check" size={18} color={Colors.zinc900} />}
-                      </View>
-                    </ScalePressable>
-                  );
-                })}
-              </ScrollView>
-            )
-          ) : teamCollectionsQuery.isLoading ? (
-            <View style={styles.pickerEmpty}>
-              <Text style={styles.pickerEmptySub}>불러오는 중...</Text>
-            </View>
-          ) : teamCollectionsQuery.isError ? (
-            <View style={styles.pickerEmpty}>
-              <Feather name="alert-circle" size={32} color={Colors.zinc300} />
-              <Text style={styles.pickerEmptyTitle}>불러오기 실패</Text>
-              <ScalePressable onPress={() => teamCollectionsQuery.refetch()}>
-                <Text style={[styles.pickerEmptySub, { color: Colors.zinc900 }]}>다시 시도</Text>
-              </ScalePressable>
-            </View>
-          ) : teamCollections.length === 0 ? (
-            <View style={styles.pickerEmpty}>
-              <Feather name="users" size={32} color={Colors.zinc300} />
-              <Text style={styles.pickerEmptyTitle}>모임이 없어요</Text>
-              <Text style={styles.pickerEmptySub}>모임을 먼저 만들어주세요</Text>
-            </View>
-          ) : (
-            <ScrollView nestedScrollEnabled style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 8 }}>
-              {teamCollections.map((col) => {
-                const isSelected =
-                  pendingRecipient?.type === "collection" &&
-                  pendingRecipient.data.id === col.id;
-                return (
-                  <ScalePressable
-                    key={col.id}
-                    style={styles.pickerItem}
-                    contentStyle={[styles.pickerItemContent, isSelected && styles.pickerItemSelected]}
-                    onPress={() =>
-                      setPendingRecipient({
-                        type: "collection",
-                        data: col,
-                      })
-                    }
-                  >
-                    <View style={styles.collectionRow}>
-                      <View style={styles.collectionIcon}>
-                        <Feather name="users" size={16} color={Colors.zinc500} />
-                      </View>
-                      <View style={styles.collectionInfo}>
-                        <Text style={styles.pickerItemTitle} numberOfLines={1}>
-                          {col.name}
-                        </Text>
-                        {col.description ? (
-                          <Text style={styles.pickerItemSub} numberOfLines={1}>
-                            {col.description}
-                          </Text>
-                        ) : null}
-                      </View>
-                      {isSelected && <Feather name="check" size={18} color={Colors.zinc900} />}
-                    </View>
-                  </ScalePressable>
-                );
-              })}
-            </ScrollView>
-          )}
-        </View>
-
-        <ScalePressable
-          style={styles.confirmPickerButton}
-          contentStyle={[
-            styles.confirmPickerButtonContent,
-            !pendingRecipient && styles.confirmPickerButtonDisabled,
-          ]}
-          disabled={!pendingRecipient}
-          onPress={handleConfirmRecipient}
-        >
-          <Text
-            style={[
-              styles.confirmPickerButtonText,
-              !pendingRecipient && styles.confirmPickerButtonTextDisabled,
-            ]}
-          >
-            선택 완료
-          </Text>
-        </ScalePressable>
-      </BottomSheet>
+      <NeighborPickerModal
+        visible={neighborPickerVisible}
+        onClose={() => setNeighborPickerVisible(false)}
+        userId={userId}
+        selectedNeighborId={selectedNeighbor?.neighborUserId ?? null}
+        onSelect={(neighbor) => {
+          setSelectedNeighbor(neighbor);
+          setSendError(null);
+        }}
+      />
+      <ReplyLetterPickerModal
+        visible={replyPickerVisible}
+        onClose={() => setReplyPickerVisible(false)}
+        userId={userId}
+        selectedInboxId={selectedReplyInbox?.id ?? null}
+        onSelect={(item) => {
+          setSelectedReplyInbox(item);
+          setSendError(null);
+        }}
+      />
+      <SpacePickerModal
+        visible={spacePickerVisible}
+        onClose={() => setSpacePickerVisible(false)}
+        userId={userId}
+        selectedSpaceId={selectedSpace?.id ?? null}
+        onSelect={(space) => {
+          setSelectedSpace(space);
+          setSendError(null);
+        }}
+      />
 
       <ConfirmModal
         visible={envelopePromptVisible}
         title="봉투에 담아 발신할까요?"
-        description={"받는 사람이 봉투를 직접 개봉한 뒤 편지를 읽게 됩니다."}
+        description="받는 사람이 봉투를 직접 개봉한 뒤 편지를 읽게 됩니다."
         confirmLabel="봉투로 보내기"
         cancelLabel="그냥 보내기"
         onConfirm={() => {
@@ -531,13 +520,14 @@ export function SendInline({
         }}
         onBackdropPress={() => setEnvelopePromptVisible(false)}
       />
-
       <ConfirmModal
         visible={confirmVisible}
         title="보내기"
         description={confirmDescription}
         confirmLabel="보내기"
         cancelLabel="취소"
+        confirmDisabled={sendArticle.isPending}
+        cancelDisabled={sendArticle.isPending}
         onConfirm={() => handleSend(pendingIsEnvelope)}
         onCancel={() => setConfirmVisible(false)}
       />
@@ -547,214 +537,96 @@ export function SendInline({
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.white,
-  },
-  content: {
-    flex: 1,
-  },
+  container: { flex: 1, backgroundColor: Colors.white },
+  content: { flex: 1 },
   contentInner: {
     paddingHorizontal: Spacing.screenPx,
-    paddingTop: 16,
-    paddingBottom: 24,
-    gap: 24,
+    paddingTop: 18,
+    gap: 26,
   },
-  section: {
-    gap: 10,
+  section: { gap: 10 },
+  sectionTitle: { ...Typography.bodySemiBold, fontSize: 15, color: Colors.zinc900 },
+  sectionHint: { ...Typography.caption, color: Colors.zinc500, marginTop: -3 },
+  articleRowOuter: { minHeight: 66 },
+  articleRow: {
+    minHeight: 66,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: Colors.zinc50,
   },
-  sectionTitle: {
-    ...Typography.bodySemiBold,
-    fontSize: 15,
-    color: Colors.zinc900,
+  articleCover: {
+    width: 64,
+    height: 41,
+    overflow: "hidden",
+    borderRadius: 7,
+    flexGrow: 0,
+    flexShrink: 0,
   },
-  selectButton: {},
-  selectButtonContent: {
+  articleTitle: { ...Typography.bodySemiBold, flex: 1, fontSize: 15, color: Colors.zinc900 },
+  placeholder: { ...Typography.body, flex: 1, fontSize: 14, color: Colors.zinc500 },
+  modeRow: { flexDirection: "row", gap: 8 },
+  modeButtonOuter: { flex: 1, minHeight: 48 },
+  modeButton: {
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: 8,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
+    backgroundColor: Colors.white,
+  },
+  modeButtonActive: { borderColor: Colors.noticeAccent, backgroundColor: Colors.noticeAccent },
+  modeText: { ...Typography.bodySemiBold, fontSize: 14, color: Colors.zinc600 },
+  modeTextActive: { color: Colors.white },
+  targetButtonOuter: { minHeight: 58 },
+  targetButton: {
+    minHeight: 58,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    backgroundColor: Colors.zinc50,
     paddingHorizontal: 16,
-    paddingVertical: 14,
     borderRadius: 12,
-  },
-  selectButtonText: {
-    ...Typography.body,
-    fontSize: 14,
-    color: Colors.zinc500,
-    flex: 1,
-  },
-  selectButtonTextActive: {
-    color: Colors.zinc900,
-    fontWeight: "600",
-  },
-  deliveryInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
     backgroundColor: Colors.zinc50,
+  },
+  targetText: { ...Typography.body, flex: 1, fontSize: 14, color: Colors.zinc500 },
+  targetTextActive: { color: Colors.zinc900, fontWeight: "600" },
+  dateTrigger: { backgroundColor: Colors.zinc50 },
+  dateTriggerText: { color: Colors.zinc900 },
+  errorBox: {
+    gap: 12,
+    padding: 14,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e9b8bd",
+    backgroundColor: "#fff7f7",
   },
-  deliveryInfoText: {
-    ...Typography.body,
-    fontSize: 14,
-    color: Colors.zinc600,
+  errorTextWrap: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  errorText: { ...Typography.body, flex: 1, fontSize: 14, lineHeight: 20, color: Colors.noticeAccent },
+  retryButtonOuter: { alignSelf: "flex-start", minHeight: 40 },
+  retryButton: {
+    minHeight: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+    borderRadius: 9,
+    backgroundColor: Colors.noticeAccent,
   },
+  retryText: { ...Typography.bodySemiBold, fontSize: 13, color: Colors.white },
   footer: {
     paddingHorizontal: Spacing.screenPx,
     paddingTop: 12,
-    paddingBottom: Spacing.navBarPaddingBottom,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Colors.zinc100,
   },
-  sendButton: {
-    backgroundColor: Colors.zinc900,
-    paddingVertical: 16,
-    borderRadius: 12,
-  },
-  sendButtonContentGap: {
-    gap: 8,
-  },
-  sendButtonDisabled: {
-    backgroundColor: Colors.zinc100,
-  },
-  sendButtonText: {
-    ...Typography.bodySemiBold,
-    fontSize: 16,
-    color: Colors.white,
-  },
-  sendButtonTextDisabled: {
-    color: Colors.zinc400, // typography-ok: disabled button label
-  },
-  segmentRow: {
-    flexDirection: "row",
-    backgroundColor: Colors.zinc100,
-    borderRadius: 10,
-    padding: 3,
-    marginBottom: 12,
-  },
-  segmentButton: {
-    flex: 1,
-  },
-  segmentButtonContent: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  segmentButtonActive: {
-    backgroundColor: Colors.white,
-  },
-  segmentButtonText: {
-    ...Typography.bodySemiBold,
-    fontSize: 14,
-    color: Colors.zinc500,
-  },
-  segmentButtonTextActive: {
-    color: Colors.zinc900,
-  },
-  recipientListArea: {
-    flex: 1,
-  },
-  collectionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  collectionIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: Colors.zinc100,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  collectionInfo: {
-    flex: 1,
-    gap: 2,
-  },
-  confirmPickerButton: {
-    marginTop: 12,
-    marginBottom: 16,
-  },
-  confirmPickerButtonContent: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 16,
-    backgroundColor: Colors.zinc900,
-    borderRadius: 12,
-  },
-  confirmPickerButtonDisabled: {
-    backgroundColor: Colors.zinc100,
-  },
-  confirmPickerButtonText: {
-    ...Typography.bodySemiBold,
-    fontSize: 16,
-    color: Colors.white,
-  },
-  confirmPickerButtonTextDisabled: {
-    color: Colors.zinc400, // typography-ok: disabled button label
-  },
-  pickerEmpty: {
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 40,
-  },
-  pickerEmptyTitle: {
-    ...Typography.bodySemiBold,
-    fontSize: 16,
-    color: Colors.zinc900,
-    marginTop: 8,
-  },
-  pickerEmptySub: {
-    ...Typography.body,
-    fontSize: 13,
-    color: Colors.zinc500,
-  },
-  pickerItem: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.zinc100,
-  },
-  pickerItemContent: {
-    paddingVertical: 14,
-    paddingHorizontal: 4,
-  },
-  pickerItemSelected: {
-    backgroundColor: Colors.zinc50,
-  },
-  pickerItemTitle: {
-    ...Typography.bodySemiBold,
-    fontSize: 15,
-    color: Colors.zinc900,
-  },
-  pickerItemSub: {
-    ...Typography.body,
-    fontSize: 13,
-    color: Colors.zinc500,
-    marginTop: 2,
-  },
-  pickerNeighborRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  pickerAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Colors.zinc100,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  pickerAvatarText: {
-    ...Typography.bodySemiBold,
-    fontSize: 14,
-    color: Colors.zinc600,
-  },
-  pickerNeighborInfo: {
-    flex: 1,
-    gap: 2,
-  },
+  sendButton: { backgroundColor: Colors.zinc900, paddingVertical: 16, borderRadius: 12 },
+  sendButtonContent: { gap: 8 },
+  sendButtonDisabled: { backgroundColor: Colors.zinc100 },
+  sendButtonText: { ...Typography.bodySemiBold, fontSize: 16, color: Colors.white },
+  sendButtonTextDisabled: { color: Colors.zinc400 },
 });

@@ -46,6 +46,10 @@ import type {
 } from "@workspace/api-client-react";
 import { spaceStatusLabel, spaceStatusStyle } from "@/lib/spaceStatusStyle";
 import { useSelectionScrollRestoration } from "@/hooks/useSelectionScrollRestoration";
+import {
+  isSpaceSendRecord,
+  shouldDisplaySentLetter,
+} from "@/lib/sentLetterVisibility";
 
 type ProfileTab = "letters" | "publications" | "spaces";
 
@@ -175,32 +179,30 @@ export default function UserProfileScreen() {
     return map;
   }, [profileSpaceLettersQuery.data]);
 
-  const letters = useMemo<Article[]>(() => {
-    // Fail closed: every letter shown in this profile grid arrived via a space
-    // (it has a SendRecord).  Until we know each letter's visibility we cannot
-    // safely display any of them — an article-list response can resolve before
-    // the space-letter visibility response.  Return an empty list while the
-    // visibility query is pending so RECIPIENT_ONLY letters are never
-    // transiently visible on another user's profile.
-    if (profileSpaceLettersQuery.data === undefined) return [];
+  const nonSpaceSentArticleIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const record of (sendRecordsQuery.data ?? []) as SendRecordWithDetails[]) {
+      if (!isSpaceSendRecord(record)) ids.add(record.articleId);
+    }
+    return ids;
+  }, [sendRecordsQuery.data]);
 
+  const letters = useMemo<Article[]>(() => {
     const list = ((articlesQuery.data ?? []) as Article[]).filter((a) => {
       if (a.status !== "LETTER") return false;
       if (sendRecordByArticleId[a.id] === undefined) return false;
       const visibility = spaceLetterVisibilityById.get(a.id);
-      // Only show letters confirmed PUBLIC. Every letter in this grid has a
-      // SendRecord and is therefore a space letter.  Absent-from-map means:
-      //  • non-owner viewer: the server omitted it → it is RECIPIENT_ONLY → deny
-      //  • owner viewer:     server returned all levels; absent → deny (safe default)
-      // Never allow letters whose visibility has not been positively confirmed.
-      return visibility === SpaceLetterVisibility.PUBLIC;
+      return shouldDisplaySentLetter(
+        nonSpaceSentArticleIds.has(a.id),
+        visibility,
+      );
     });
     return [...list].sort((a, b) => {
       const slotA = sendRecordByArticleId[a.id]?.deliverySlot ?? "";
       const slotB = sendRecordByArticleId[b.id]?.deliverySlot ?? "";
       return slotB.localeCompare(slotA);
     });
-  }, [articlesQuery.data, sendRecordByArticleId, spaceLetterVisibilityById, profileSpaceLettersQuery.data]);
+  }, [articlesQuery.data, nonSpaceSentArticleIds, sendRecordByArticleId, spaceLetterVisibilityById]);
 
   const spaces = useMemo<SpaceListItem[]>(() => {
     return ((spacesQuery.data ?? []) as SpaceListItem[]).filter(

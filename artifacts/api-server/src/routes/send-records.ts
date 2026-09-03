@@ -14,6 +14,7 @@ import {
 } from "@workspace/db";
 import { SendArticleBody } from "@workspace/api-zod";
 import { kstDateAt6, kstDateString, computeDeliverySlot } from "../lib/deliverySlot";
+import { resolveReplyTarget } from "../lib/sendReplyTarget";
 import { resolveCallerId } from "../middlewares/requireAuth";
 
 const router: IRouter = Router();
@@ -247,17 +248,9 @@ router.post("/send-records", async (req, res) => {
           ))
           .orderBy(desc(inboxTable.createdAt))
           .limit(1);
-        if (!sourceInbox) {
-          throw Object.assign(new Error("답장하려면 읽은 편지를 선택해야 합니다."), { statusCode: 400 });
-        }
-        if (sourceInbox.senderId === senderId) {
-          throw Object.assign(new Error("자신이 보낸 편지에는 답장할 수 없습니다."), { statusCode: 400 });
-        }
-        if (article.sourceArticleId !== sourceInbox.articleId) {
-          throw Object.assign(new Error("선택한 편지와 답장 원문이 일치하지 않습니다."), { statusCode: 400 });
-        }
-        resolvedRecipientId = sourceInbox.senderId;
-        resolvedReplyToInboxId = sourceInbox.id;
+        const replyTarget = resolveReplyTarget(senderId, sourceInbox);
+        resolvedRecipientId = replyTarget.recipientId;
+        resolvedReplyToInboxId = replyTarget.replyToInboxId;
       } else if (targetType === "space") {
         const [space] = await tx
           .select({ id: spacesTable.id, status: spacesTable.status })

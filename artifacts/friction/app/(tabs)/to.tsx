@@ -34,11 +34,14 @@ import {
 import { isQueryStale } from "@/lib/useScreenFocused";
 import { useSelectionScrollRestoration } from "@/hooks/useSelectionScrollRestoration";
 import type { Article, SpaceListItem, SendRecordWithDetails } from "@workspace/api-client-react";
-import { SpaceLetterVisibility } from "@workspace/api-client-react";
 import { spaceStatusLabel, spaceStatusStyle } from "@/lib/spaceStatusStyle";
 import type { OriginLayout } from "@/components/CardSelectOverlay/CardSelectOverlay";
 import { useLetterSelectionOverlay } from "@/hooks/useLetterSelectionOverlay";
 import { useAuth } from "@/contexts/AuthContext";
+import {
+  isSpaceSendRecord,
+  shouldDisplaySentLetter,
+} from "@/lib/sentLetterVisibility";
 
 // getListUserArticleReadsQueryKey is not in the compiled dist types — define locally.
 // Key shape mirrors packages/api-client-react/src/user-article-reads.ts.
@@ -158,23 +161,32 @@ export default function MyScreen() {
     ).length;
   }, [articlesQuery.data, sendRecordByArticleId]);
 
+  const nonSpaceSentArticleIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const record of (sendRecordsQuery.data ?? []) as SendRecordWithDetails[]) {
+      if (!isSpaceSendRecord(record)) ids.add(record.articleId);
+    }
+    return ids;
+  }, [sendRecordsQuery.data]);
+
   const letters = useMemo<Article[]>(() => {
-    // Filter to PUBLIC letters only for the grid display.
-    // spaceLetterByArticleId (from the hook) uses PUBLIC-wins logic and is
-    // empty while the space-letters query is still loading — so RECIPIENT_ONLY
-    // letters are never transiently visible (fail-closed).
+    // Person/reply sends have no SpaceLetter and remain visible. Only articles
+    // sent exclusively to spaces depend on PUBLIC space-letter visibility.
     const list = ((articlesQuery.data ?? []) as Article[]).filter((a) => {
       if (a.status !== "LETTER") return false;
       if (sendRecordByArticleId[a.id] === undefined) return false;
       const sl = spaceLetterByArticleId.get(a.id);
-      return sl?.visibility === SpaceLetterVisibility.PUBLIC;
+      return shouldDisplaySentLetter(
+        nonSpaceSentArticleIds.has(a.id),
+        sl?.visibility,
+      );
     });
     return [...list].sort((a, b) => {
       const slotA = sendRecordByArticleId[a.id]?.deliverySlot ?? "";
       const slotB = sendRecordByArticleId[b.id]?.deliverySlot ?? "";
       return slotB.localeCompare(slotA);
     });
-  }, [articlesQuery.data, sendRecordByArticleId, spaceLetterByArticleId]);
+  }, [articlesQuery.data, nonSpaceSentArticleIds, sendRecordByArticleId, spaceLetterByArticleId]);
 
   const spaces = useMemo<SpaceListItem[]>(() => {
     return ((spacesQuery.data ?? []) as SpaceListItem[]).filter(

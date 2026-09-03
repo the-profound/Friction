@@ -3,12 +3,15 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import ScalePressable from "@/components/shared/ScalePressable";
+import ArticleCardCover from "@/components/ArticleCardItem/ArticleCardCover";
 import { Colors, Typography } from "@/constants/tokens";
+import type { ArticleCover } from "@workspace/api-client-react";
 
 export interface LetterPickerArticle {
   id: string;
   title?: string | null;
   content?: string | null;
+  cover?: ArticleCover | null;
 }
 
 interface LetterPickerSheetProps {
@@ -87,14 +90,26 @@ export function LetterPickerSheet({
                 onClose();
               }}
             >
-              <Text style={styles.itemTitle} numberOfLines={1}>
-                {article.title || "제목 없음"}
-              </Text>
-              {article.content ? (
-                <Text style={styles.itemSub} numberOfLines={1}>
-                  {article.content.substring(0, 60)}
+              <View style={styles.itemCover}>
+                <ArticleCardCover
+                  cover={article.cover}
+                  title={article.title || "제목 없음"}
+                  width={56}
+                  height={36}
+                  borderRadius={6}
+                />
+              </View>
+              <View style={styles.itemTextWrap}>
+                <Text style={styles.itemTitle} numberOfLines={1}>
+                  {article.title || "제목 없음"}
                 </Text>
-              ) : null}
+                {article.content ? (
+                  <Text style={styles.itemSub} numberOfLines={1}>
+                    {article.content.substring(0, 60)}
+                  </Text>
+                ) : null}
+              </View>
+              <Feather name="chevron-right" size={17} color={Colors.zinc400} />
             </ScalePressable>
           ))}
         </ScrollView>
@@ -139,9 +154,21 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.zinc100,
   },
   itemContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
     paddingVertical: 14,
     paddingHorizontal: 4,
   },
+  itemCover: {
+    width: 56,
+    height: 36,
+    overflow: "hidden",
+    borderRadius: 6,
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  itemTextWrap: { flex: 1, minWidth: 0 },
   itemSelected: {
     backgroundColor: Colors.zinc50,
   },

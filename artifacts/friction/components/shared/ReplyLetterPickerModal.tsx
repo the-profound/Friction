@@ -20,8 +20,8 @@ export interface ReplyLetterPickerModalProps {
   visible: boolean;
   onClose: () => void;
   userId: string;
-  selectedArticleId?: string | null;
-  onSelect: (article: Article) => void;
+  selectedInboxId?: string | null;
+  onSelect: (item: InboxItem) => void;
 }
 
 function LetterThumbnail({ article }: { article: Article }) {
@@ -42,7 +42,7 @@ export function ReplyLetterPickerModal({
   visible,
   onClose,
   userId,
-  selectedArticleId,
+  selectedInboxId,
   onSelect,
 }: ReplyLetterPickerModalProps) {
   const query = useListInbox(
@@ -79,13 +79,13 @@ export function ReplyLetterPickerModal({
           keyboardShouldPersistTaps="handled"
           renderItem={({ item }) => {
             const article = item.article!;
-            const isSelected = article.id === selectedArticleId;
+            const isSelected = item.id === selectedInboxId;
             return (
               <ScalePressable
                 style={styles.row}
                 contentStyle={[styles.rowContent, isSelected && styles.rowSelected]}
                 onPress={() => {
-                  onSelect(article);
+                  onSelect(item);
                   onClose();
                 }}
                 accessibilityRole="button"

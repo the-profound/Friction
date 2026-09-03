@@ -4,7 +4,7 @@ import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import { Colors, Spacing, Typography } from "@/constants/tokens";
+import { Colors, Shadows, Spacing, Typography } from "@/constants/tokens";
 import { SendInline } from "@/components/ToInline/SendInline";
 
 export default function ToSendScreen() {
@@ -17,6 +17,8 @@ export default function ToSendScreen() {
     articleId?: string;
     prefillArticleId?: string;
     neighborId?: string;
+    spaceId?: string;
+    spaceName?: string;
   }>();
 
   const prefillArticleId = params.prefillArticleId ?? params.articleId;
@@ -28,6 +30,8 @@ export default function ToSendScreen() {
         params.targetGroupName ?? "",
         prefillArticleId ?? "",
         params.neighborId ?? "",
+        params.spaceId ?? "",
+        params.spaceName ?? "",
         params.returnToId ?? "",
       ].join("|"),
     [
@@ -35,6 +39,8 @@ export default function ToSendScreen() {
       params.targetGroupName,
       prefillArticleId,
       params.neighborId,
+      params.spaceId,
+      params.spaceName,
       params.returnToId,
     ],
   );
@@ -44,13 +50,22 @@ export default function ToSendScreen() {
   }, [router]);
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <ScalePressable onPress={() => router.back()} hitSlop={12}>
-          <Feather name="arrow-left" size={20} color={Colors.zinc600} />
+    <View style={styles.container}>
+      <View style={[styles.header, { paddingTop: Math.max(insets.top, 8) }]}>
+        <ScalePressable
+          style={styles.headerBackButton}
+          contentStyle={styles.headerBackButtonContent}
+          onPress={() => router.back()}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="기록 목록으로 돌아가기"
+        >
+          <Feather name="arrow-left" size={19} color={Colors.zinc700} />
         </ScalePressable>
         <Text style={styles.headerTitle}>보내기</Text>
         <ScalePressable
+          style={styles.headerActionButton}
+          contentStyle={styles.headerActionButtonContent}
           onPress={() => router.push("/mypage-sendrecords")}
           hitSlop={12}
           accessibilityRole="button"
@@ -64,6 +79,8 @@ export default function ToSendScreen() {
         targetGroupName={params.targetGroupName}
         prefillArticleId={prefillArticleId}
         prefillNeighborId={params.neighborId}
+        prefillSpaceId={params.spaceId}
+        prefillSpaceName={params.spaceName}
         returnToId={params.returnToId}
         prefillKey={prefillKey}
         onSent={handleSendComplete}
@@ -83,6 +100,30 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: Spacing.screenPx,
     paddingVertical: 12,
+  },
+  headerBackButton: {
+    width: 44,
+    height: 44,
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  headerBackButtonContent: {
+    width: 40,
+    height: 40,
+    alignSelf: "center",
+    borderRadius: 20,
+    backgroundColor: Colors.white,
+    alignItems: "center",
+    justifyContent: "center",
+    ...Shadows.navBar,
+  },
+  headerActionButton: { width: 44, height: 44, flexGrow: 0, flexShrink: 0 },
+  headerActionButtonContent: {
+    width: 40,
+    height: 40,
+    alignSelf: "center",
+    alignItems: "center",
+    justifyContent: "center",
   },
   headerTitle: {
     ...Typography.bodySemiBold,

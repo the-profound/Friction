@@ -169,7 +169,7 @@ function ProtectedRouteStack({ userId }: { userId: string }) {
           <Stack.Screen name="on-01b" options={{ animationTypeForReplace: "pop" }} />
           <Stack.Screen name="on-01c" />
           <Stack.Screen name="to-03" />
-          <Stack.Screen name="to-send" options={{ presentation: "modal" }} />
+          <Stack.Screen name="to-send" options={{ presentation: "card", animation: "slide_from_right" }} />
           <Stack.Screen name="mypage" />
           <Stack.Screen name="user-profile/[userId]" />
           <Stack.Screen name="mypage-neighbors" />
