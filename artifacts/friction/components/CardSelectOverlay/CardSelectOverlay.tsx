@@ -681,7 +681,7 @@ export default function CardSelectOverlay({
 
   const cardPanResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: (_, g) => {
         if (countRef.current > 1 && Math.abs(g.dx) > 6 && Math.abs(g.dx) >= Math.abs(g.dy)) {
           pendingGestureDirRef.current = "h";
