@@ -6,22 +6,36 @@ description: Non-obvious gotchas when changing the API contract or routes in the
 # Friction / api-server dev workflow gotchas
 
 ## API contract changes start in openapi.yaml
-`lib/api-spec/openapi.yaml` is the single source of truth. After editing it, run
-codegen programmatically (NOT via CLI — the CLI has a jiti ESM `__dirname` issue):
+`lib/api-spec/openapi.yaml` is the single source of truth. After editing it, run the
+package's safe codegen script:
 
-```js
-import { generate } from './lib/api-spec/node_modules/orval/dist/index.mjs';
-// Call generate() SEPARATELY for each project — passing a named-project object fails
-await generate({ input: { target: './openapi.yaml' }, output: { workspace: '…/api-client-react/src', target: 'generated', client: 'react-query', mode: 'split', baseUrl: '/api', clean: true, prettier: true, override: { mutator: { path: '…/custom-fetch.ts', name: 'customFetch' }, fetch: { includeHttpResponseReturnType: false } } } }, '/home/runner/workspace/lib/api-spec');
-// Repeat for zod output
+```bash
+pnpm --filter @workspace/api-spec run codegen
 ```
 
 **Critical yaml rules** — these patterns silently break the orval input resolver:
 1. **No duplicate schema names** — having `SpaceInvitationWithSpace` defined twice causes "Failed to resolve input". Check with `grep -n "SchemaName:" openapi.yaml`.
 2. **No bare `$ref + nullable: true`** at the same level on a schema *property* that itself contains an allOf-based type — use `allOf: [$ref: '…']` + `nullable: true` instead.
-3. **Codegen generates flat files** (`api.ts`, `api.schemas.ts`) in `lib/api-client-react/src/generated/`. The `index.ts` should only export from `./generated/api` and `./generated/api.schemas`, not from tag subdirectories.
+3. **Codegen generates flat files** (`api.ts`, `api.schemas.ts`) in `lib/api-client-react/src/generated/`. The safe wrapper preserves hand-written package barrels and creates the Zod public barrel.
 
-After codegen, editing the generated files directly is pointless — codegen with `clean: true` wipes them.
+After codegen, editing generated files directly is pointless — the safe wrapper replaces
+both generated directories.
+
+## Orval split output and Zod exports
+
+Orval split output appends exports to package-level `src/index.ts` even when `target`
+points inside `src/generated`. The safe codegen wrapper must snapshot and restore those
+hand-written public barrels.
+
+The Zod output also gives runtime validators and generated TypeScript models many of the
+same names. Never star-export both trees. Generate a barrel that exports all validators
+and only non-conflicting model types; same-named runtime validators take precedence.
+
+**Why:** star-exporting both outputs causes TS2308 ambiguity, while explicitly
+re-exporting a colliding type can make a validator import resolve as type-only.
+
+**How to apply:** keep codegen entry points routed through the safe wrapper and verify
+both generated packages with a forced declaration build immediately after regeneration.
 
 ## api-server does NOT hot-reload
 The api-server workflow runs `build && start` (no watch). Any change to
@@ -49,30 +63,7 @@ Task 브랜치가 소스만 수정하고 머지될 경우 이 단계가 누락�
 fix가 적용되지 않아 본문 저장 버그가 지속됨. `grep programmaticUpdatePending editorHtml.ts`
 count=0 이면 번들이 오래된 것.
 
-## api-zod generated files vanish / codegen won't run
-
-If `lib/api-zod/src/generated/` is empty and the API server fails to build:
-
-- **orval CLI fails** with "Failed to resolve input" when the config is `.ts` — jiti transpilation issue with `import.meta.url` in the config.
-- **`generate()` programmatic call** (from `node_modules/orval/dist/index.mjs`) runs without error but produces **no files** — confirmed broken as of orval v8.5.3 in this environment.
-- **Fix:** restore from git. The generated files are committed. Find the most recent commit that has all needed types (check `git log --all --oneline -- "lib/api-zod/src/generated/api.ts"`) and restore via:
-  ```bash
-  git show <SHA>:lib/api-zod/src/generated/api.ts > lib/api-zod/src/generated/api.ts
-  # For all type files:
-  git show <SHA> --name-only | grep "^lib/api-zod/src/generated" | while read f; do
-    mkdir -p "$(dirname "$f")" && git show "<SHA>:$f" > "$f"
-  done
-  ```
-- After a task agent merge that adds new API routes, the new types will be in `api-zod/src/generated/api.ts` in that merge commit — restore from there.
-
-**Why:** The safe-codegen script (`lib/api-spec/scripts/safe-codegen.mjs`) backs up then deletes generated dirs before running orval CLI; when CLI fails, it restores from backup — but if backup was already empty (e.g. files never committed or wiped), nothing comes back.
-
 ## Pre-existing baselines (not your regression)
-- `lib/api-zod` declaration build fails with TS2308 duplicate-export ambiguity
-  (`src/index.ts` does `export * from "./generated/api"` AND `"./generated/types"`,
-  which collide). This means `typecheck:libs` / api-server `tsc --noEmit` always
-  surfaces TS6305 "dist/index.d.ts has not been built" for api-zod. Baseline, runtime
-  unaffected (api-server runs via tsx from src).
 - `artifacts/friction` has ~31 baseline `tsc` errors confined to
   `components/WebViewMarkdownEditor/editorWebviewSrc/index.ts` (DOM `Node` typing
   conflicts). Unrelated to API work.

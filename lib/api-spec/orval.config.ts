@@ -26,7 +26,7 @@ export default defineConfig({
     },
     output: {
       workspace: apiClientReactSrc,
-      target: "generated",
+      target: "generated/api.ts",
       client: "react-query",
       mode: "split",
       baseUrl: "/api",
@@ -52,7 +52,7 @@ export default defineConfig({
     output: {
       workspace: apiZodSrc,
       client: "zod",
-      target: "generated",
+      target: "generated/api.ts",
       schemas: { path: "generated/types", type: "typescript" },
       mode: "split",
       prettier: true,

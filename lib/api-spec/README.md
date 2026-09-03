@@ -17,7 +17,12 @@ pnpm --filter @workspace/api-spec run codegen
 
 This regenerates:
 - `lib/api-client-react/src/generated/` — React Query hooks and fetch helpers
-- `lib/api-zod/src/generated/` — Zod validators and TypeScript types
+- `lib/api-zod/src/generated/` — Zod validators, TypeScript types, and a public
+  barrel that prioritizes runtime validators and re-exports non-conflicting
+  generated model types
+
+The safe codegen wrapper also preserves each package's hand-written `src/index.ts`;
+Orval's split output must not append generated star exports to those public barrels.
 
 ## Rule
 
