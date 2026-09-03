@@ -479,6 +479,40 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /articles/{id}/revert-to-thought:
+    post:
+      operationId: revertArticleToThought
+      tags: [articles, thoughts]
+      summary: Return a DIVIDING article to its original thought
+      description: "Atomically copies the latest article title and body into the original thought as H1 Markdown, removes the active promotion link, and soft-deletes the DIVIDING article. Retrying a completed request returns the same thought."
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: Restored original thought
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Thought"
+        "403":
+          description: Forbidden — article does not belong to this user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Article not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Article is not a current DIVIDING promotion or its original thought is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /articles/{id}/finalize:
     post:
       operationId: finalizeArticle
@@ -3067,7 +3101,7 @@ paths:
       operationId: promoteThought
       tags: [thoughts]
       summary: Promote a Markdown thought to the DIVIDING article stage
-      description: "Atomically validates the thought's first H1 title, creates a DIVIDING article, and records the promotion. A thought can only be promoted once and a DIVIDING article cannot be moved back to a thought."
+      description: "Atomically validates the thought's first H1 title, creates a DIVIDING article, and records the promotion. A thought can have only one active promotion; a successfully reverted thought may be promoted again."
       parameters:
         - $ref: "#/components/parameters/IdPath"
       responses:

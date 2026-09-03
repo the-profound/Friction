@@ -1,6 +1,15 @@
 import { Router, type IRouter } from "express";
 import { and, eq, ilike, isNull, sql } from "drizzle-orm";
-import { db, articlesTable, myCollectionArticlesTable, myCollectionsTable, usersTable, type ArticleStatus } from "@workspace/db";
+import {
+  db,
+  articlesTable,
+  myCollectionArticlesTable,
+  myCollectionsTable,
+  thoughtPromotionsTable,
+  thoughtsTable,
+  usersTable,
+  type ArticleStatus,
+} from "@workspace/db";
 import {
   UpdateArticleBody,
   TransitionArticleStatusBody,
@@ -17,6 +26,7 @@ import {
 } from "../lib/objectStorage";
 import { generateArticleQuestions, getArticleQuestionsOrFallback } from "../services/generate-article-questions";
 import { requireAuth } from "../middlewares/requireAuth";
+import { formatThoughtMarkdown } from "./thoughts";
 
 // Resolves a display collection name for a standalone article fetched via
 // getArticle. Team-collection membership is preferred (matches the chain
@@ -65,6 +75,8 @@ const BACK_TRANSITIONS: Record<string, string> = {
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
 const MAX_COVER_IMAGE_BYTES = 10 * 1024 * 1024;
+
+class ArticleMutationConflictError extends Error {}
 
 async function findEditableOwnedArticle(
   articleId: string,
@@ -187,23 +199,189 @@ router.patch("/articles/:id", requireAuth, async (req, res) => {
   }
 
   const newSourceArticleId = updates.sourceArticleId as string | null | undefined;
-  const article = await db.transaction(async (tx) => {
-    if (newSourceArticleId) {
-      await tx
+  try {
+    const article = await db.transaction(async (tx) => {
+      if (newSourceArticleId) {
+        await tx
+          .update(articlesTable)
+          .set({ sourceArticleId: null })
+          .where(
+            and(
+              eq(articlesTable.authorId, existing.authorId),
+              eq(articlesTable.sourceArticleId, newSourceArticleId),
+              sql`${articlesTable.id} != ${req.params.id}`,
+            ),
+          );
+      }
+      const [updated] = await tx
         .update(articlesTable)
-        .set({ sourceArticleId: null })
+        .set(updates)
         .where(
           and(
-            eq(articlesTable.authorId, existing.authorId),
-            eq(articlesTable.sourceArticleId, newSourceArticleId),
-            sql`${articlesTable.id} != ${req.params.id}`,
+            eq(articlesTable.id, req.params.id),
+            eq(articlesTable.status, existing.status),
+            isNull(articlesTable.deletedAt),
           ),
-        );
+        )
+        .returning();
+      if (!updated) throw new ArticleMutationConflictError();
+      return updated;
+    });
+    res.json(article);
+  } catch (error) {
+    if (error instanceof ArticleMutationConflictError) {
+      res.status(409).json({ error: "Article changed while it was being updated. Please retry." });
+      return;
     }
-    const [updated] = await tx.update(articlesTable).set(updates).where(eq(articlesTable.id, req.params.id)).returning();
-    return updated;
-  });
-  res.json(article);
+    throw error;
+  }
+});
+
+router.post("/articles/:id/revert-to-thought", requireAuth, async (req, res) => {
+  const articleId = req.params.id;
+  const userId = req.user!.id;
+
+  try {
+    const result = await db.transaction(async (tx) => {
+      // A response-loss retry and a rapid double tap must observe one completed
+      // transition, never two partially-applied copies.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`article-revert-to-thought:${articleId}`}))`);
+
+      const [article] = await tx
+        .select()
+        .from(articlesTable)
+        .where(eq(articlesTable.id, articleId))
+        .limit(1)
+        .for("update");
+      if (!article) return { status: 404, body: { error: "Article not found" } } as const;
+      if (article.authorId !== userId) {
+        return { status: 403, body: { error: "Forbidden" } } as const;
+      }
+
+      if (article.deletedAt) {
+        const [restoredThought] = await tx
+          .select()
+          .from(thoughtsTable)
+          .where(
+            and(
+              eq(thoughtsTable.authorId, userId),
+              eq(thoughtsTable.migratedFromArticleId, articleId),
+              isNull(thoughtsTable.deletedAt),
+            ),
+          )
+          .limit(1);
+        if (!restoredThought) {
+          return {
+            status: 409,
+            body: { error: "Article is no longer the current review for a thought" },
+          } as const;
+        }
+
+        const [activePromotion] = await tx
+          .select({ id: thoughtPromotionsTable.id })
+          .from(thoughtPromotionsTable)
+          .where(eq(thoughtPromotionsTable.fromThoughtId, restoredThought.id))
+          .limit(1);
+        if (activePromotion) {
+          return {
+            status: 409,
+            body: { error: "Thought has already been promoted again" },
+          } as const;
+        }
+        return { status: 200, body: restoredThought } as const;
+      }
+
+      if (article.status !== "DIVIDING") {
+        return {
+          status: 409,
+          body: { error: `Only DIVIDING articles can return to a thought; current status is ${article.status}` },
+        } as const;
+      }
+
+      const [promotion] = await tx
+        .select({
+          id: thoughtPromotionsTable.id,
+          thoughtId: thoughtPromotionsTable.fromThoughtId,
+          promotionType: thoughtPromotionsTable.promotionType,
+        })
+        .from(thoughtPromotionsTable)
+        .where(eq(thoughtPromotionsTable.toDraftId, articleId))
+        .limit(1);
+      if (!promotion || promotion.promotionType !== "promote") {
+        return {
+          status: 409,
+          body: { error: "Article is not linked to an original promoted thought" },
+        } as const;
+      }
+
+      const [thought] = await tx
+        .select()
+        .from(thoughtsTable)
+        .where(
+          and(
+            eq(thoughtsTable.id, promotion.thoughtId),
+            eq(thoughtsTable.authorId, userId),
+            isNull(thoughtsTable.deletedAt),
+          ),
+        )
+        .limit(1);
+      if (!thought) {
+        return {
+          status: 409,
+          body: { error: "Original thought is unavailable" },
+        } as const;
+      }
+
+      const titleLines = article.title.replace(/\r\n?/g, "\n").split("\n");
+      if (titleLines.some((line) => line.trim() === "")) {
+        return {
+          status: 409,
+          body: { error: "Article title cannot contain an empty line when returning to a thought" },
+        } as const;
+      }
+
+      const content = formatThoughtMarkdown(article.title, article.content);
+      const now = new Date();
+      const [revertedArticle] = await tx
+        .update(articlesTable)
+        .set({ deletedAt: now, updatedAt: now })
+        .where(
+          and(
+            eq(articlesTable.id, articleId),
+            eq(articlesTable.status, "DIVIDING"),
+            isNull(articlesTable.deletedAt),
+          ),
+        )
+        .returning({ id: articlesTable.id });
+      if (!revertedArticle) throw new ArticleMutationConflictError();
+
+      const [restoredThought] = await tx
+        .update(thoughtsTable)
+        .set({
+          content,
+          status: "PRELIMINARY",
+          migratedFromArticleId: articleId,
+          updatedAt: now,
+        })
+        .where(eq(thoughtsTable.id, thought.id))
+        .returning();
+
+      await tx
+        .delete(thoughtPromotionsTable)
+        .where(eq(thoughtPromotionsTable.id, promotion.id));
+
+      return { status: 200, body: restoredThought } as const;
+    });
+
+    res.status(result.status).json(result.body);
+  } catch (error) {
+    if (error instanceof ArticleMutationConflictError) {
+      res.status(409).json({ error: "Article changed before it could return to a thought. Please retry." });
+      return;
+    }
+    req.log.error({ err: error, articleId }, "Error returning review article to thought");
+    res.status(500).json({ error: "Failed to return article to thought" });
+  }
 });
 
 router.post("/articles/:id/cover-image", requireAuth, async (req, res) => {
@@ -368,13 +546,37 @@ router.post("/articles/:id/transition", requireAuth, async (req, res) => {
     const [updated] = await db
       .update(articlesTable)
       .set(updates)
-      .where(eq(articlesTable.id, req.params.id))
+      .where(
+        and(
+          eq(articlesTable.id, req.params.id),
+          eq(articlesTable.status, article.status),
+          isNull(articlesTable.deletedAt),
+        ),
+      )
       .returning();
+    if (!updated) {
+      res.status(409).json({ error: "Article changed before the transition completed. Please retry." });
+      return;
+    }
     res.json(updated);
     return;
   }
 
-  const [updated] = await db.update(articlesTable).set(updates).where(eq(articlesTable.id, req.params.id)).returning();
+  const [updated] = await db
+    .update(articlesTable)
+    .set(updates)
+    .where(
+      and(
+        eq(articlesTable.id, req.params.id),
+        eq(articlesTable.status, article.status),
+        isNull(articlesTable.deletedAt),
+      ),
+    )
+    .returning();
+  if (!updated) {
+    res.status(409).json({ error: "Article changed before the transition completed. Please retry." });
+    return;
+  }
   res.json(updated);
 });
 

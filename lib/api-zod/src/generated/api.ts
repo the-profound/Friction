@@ -611,6 +611,27 @@ export const TransitionArticleStatusResponse = zod.object({
 });
 
 /**
+ * Atomically copies the latest article title and body into the original thought as H1 Markdown, removes the active promotion link, and soft-deletes the DIVIDING article. Retrying a completed request returns the same thought.
+ * @summary Return a DIVIDING article to its original thought
+ */
+export const RevertArticleToThoughtParams = zod.object({
+  id: zod.coerce.string().uuid(),
+});
+
+export const RevertArticleToThoughtResponse = zod.object({
+  id: zod.string().uuid(),
+  authorId: zod.string().uuid(),
+  content: zod.string(),
+  createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
+  sourceArticleId: zod.string().uuid().nullish(),
+  sourceStoredSentenceId: zod.string().uuid().nullish(),
+  status: zod.enum(["NORMAL", "PRELIMINARY"]),
+  migratedFromArticleId: zod.string().uuid().nullish(),
+  createdAt: zod.date(),
+  updatedAt: zod.date(),
+});
+
+/**
  * Atomically transitions a CLOSING article to LETTER and adds it to the given personal collection. Idempotent on the LETTER transition: if the article is already LETTER, only the collection link is created. Replaces the previous two-step (transition + add-to-collection) flow with a single round trip.
  * @summary Finalize article (transition to LETTER and add to a personal collection)
  */
@@ -4656,7 +4677,7 @@ export const DeleteThoughtParams = zod.object({
 });
 
 /**
- * Atomically validates the thought's first H1 title, creates a DIVIDING article, and records the promotion. A thought can only be promoted once and a DIVIDING article cannot be moved back to a thought.
+ * Atomically validates the thought's first H1 title, creates a DIVIDING article, and records the promotion. A thought can have only one active promotion; a successfully reverted thought may be promoted again.
  * @summary Promote a Markdown thought to the DIVIDING article stage
  */
 export const PromoteThoughtParams = zod.object({

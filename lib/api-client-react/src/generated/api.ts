@@ -1612,6 +1612,91 @@ export const useTransitionArticleStatus = <
 };
 
 /**
+ * Atomically copies the latest article title and body into the original thought as H1 Markdown, removes the active promotion link, and soft-deletes the DIVIDING article. Retrying a completed request returns the same thought.
+ * @summary Return a DIVIDING article to its original thought
+ */
+export const getRevertArticleToThoughtUrl = (id: string) => {
+  return `/api/articles/${id}/revert-to-thought`;
+};
+
+export const revertArticleToThought = async (
+  id: string,
+  options?: RequestInit,
+): Promise<Thought> => {
+  return customFetch<Thought>(getRevertArticleToThoughtUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRevertArticleToThoughtMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof revertArticleToThought>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof revertArticleToThought>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["revertArticleToThought"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof revertArticleToThought>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return revertArticleToThought(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RevertArticleToThoughtMutationResult = NonNullable<
+  Awaited<ReturnType<typeof revertArticleToThought>>
+>;
+
+export type RevertArticleToThoughtMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Return a DIVIDING article to its original thought
+ */
+export const useRevertArticleToThought = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof revertArticleToThought>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof revertArticleToThought>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getRevertArticleToThoughtMutationOptions(options));
+};
+
+/**
  * Atomically transitions a CLOSING article to LETTER and adds it to the given personal collection. Idempotent on the LETTER transition: if the article is already LETTER, only the collection link is created. Replaces the previous two-step (transition + add-to-collection) flow with a single round trip.
  * @summary Finalize article (transition to LETTER and add to a personal collection)
  */
@@ -10930,7 +11015,7 @@ export const useDeleteThought = <
 };
 
 /**
- * Atomically validates the thought's first H1 title, creates a DIVIDING article, and records the promotion. A thought can only be promoted once and a DIVIDING article cannot be moved back to a thought.
+ * Atomically validates the thought's first H1 title, creates a DIVIDING article, and records the promotion. A thought can have only one active promotion; a successfully reverted thought may be promoted again.
  * @summary Promote a Markdown thought to the DIVIDING article stage
  */
 export const getPromoteThoughtUrl = (id: string) => {

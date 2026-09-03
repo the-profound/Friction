@@ -50,6 +50,8 @@ export const thoughtsTable = pgTable("thoughts", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   status: thoughtStatusEnum("status").notNull().default("NORMAL"),
+  // Durable backlink for an article that was migrated or reverted into this
+  // thought. Reverse-promotion retries use it to return the same thought.
   migratedFromArticleId: uuid("migrated_from_article_id").references(() => articlesTable.id),
   sourceStoredSentenceId: uuid("source_stored_sentence_id").references(() => storedSentencesTable.id),
   textEmbeddingDense: vector("text_embedding_dense", 1024),

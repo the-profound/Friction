@@ -321,17 +321,59 @@ export function parseThoughtMarkdown(markdown: string): ThoughtMarkdown | null {
   titleLines[titleLines.length - 1] = titleLines[titleLines.length - 1].replace(/[ \t]{2,}$/, "");
 
   const title = titleLines
-    .map((line) => line
-      .replace(/!\[([^\]]*)]\([^)]*\)/g, "$1")
-      .replace(/\[([^\]]+)]\([^)]*\)/g, "$1")
-      .replace(/<\/?u>/gi, "")
-      .replace(/[*_~`]+/g, "")
-      .trim())
-    .join("\n")
-    .trim();
+    .map((line) => {
+      const escapedCharacters: string[] = [];
+      const protectedLine = line.replace(
+        /\\([\\!"#$%&'()*+,\-./:;<=>?@\[\]^_`{|}~])/g,
+        (_match, character: string) => {
+          const token = `\uE000${escapedCharacters.length}\uE001`;
+          escapedCharacters.push(character);
+          return token;
+        },
+      );
+      return protectedLine
+        .replace(/!\[([^\]]*)]\([^)]*\)/g, "$1")
+        .replace(/\[([^\]]+)]\([^)]*\)/g, "$1")
+        .replace(/<\/?u>/gi, "")
+        .replace(/[*_~`]+/g, "")
+        .trim()
+        .replace(/&#(\d+);/g, (match, codePoint: string) => {
+          const value = Number(codePoint);
+          return Number.isInteger(value) && value >= 0 && value <= 0x10ffff
+            ? String.fromCodePoint(value)
+            : match;
+        })
+        .replace(/\uE000(\d+)\uE001/g, (_match, index: string) =>
+          escapedCharacters[Number(index)] ?? "",
+        );
+    })
+    .join("\n");
   const body = lines.slice(cursor).join("\n").replace(/^\n/, "");
-  if (!title || !body.trim()) return null;
+  if (!title.trim() || !body.trim()) return null;
   return { title, body };
+}
+
+/**
+ * Article titles live outside the Markdown body while a write is in review.
+ * When returning to a thought, encode every title line as one H1 with Markdown
+ * hard breaks so a later promotion reconstructs the exact title.
+ */
+export function formatThoughtMarkdown(title: string, body: string): string {
+  const normalizedTitle = title.replace(/\r\n?/g, "\n");
+  const normalizedBody = body.replace(/\r\n?/g, "\n");
+  const titleMarkdown = normalizedTitle
+    .split("\n")
+    .map((line) => {
+      const escaped = line.replace(
+        /([\\!"#$%&'()*+,\-./:;<=>?@\[\]^_`{|}~])/g,
+        "\\$1",
+      );
+      return escaped.replace(/^\s+|\s+$/g, (whitespace) =>
+        [...whitespace].map((character) => `&#${character.codePointAt(0)};`).join(""),
+      );
+    })
+    .join("  \n");
+  return `# ${titleMarkdown}\n\n${normalizedBody}`;
 }
 
 function getQuestionTitle(markdown: string | null): string | null {
@@ -735,6 +777,7 @@ router.post("/thoughts/:id/promote", requireAuth, async (req, res) => {
 
   try {
     const result = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`thought-promotion:${thoughtId}`}))`);
       const [thought] = await tx
         .select()
         .from(thoughtsTable)
@@ -780,7 +823,7 @@ router.post("/thoughts/:id/promote", requireAuth, async (req, res) => {
       });
       await tx
         .update(thoughtsTable)
-        .set({ status: "NORMAL", updatedAt: new Date() })
+        .set({ status: "NORMAL", migratedFromArticleId: null, updatedAt: new Date() })
         .where(eq(thoughtsTable.id, thought.id));
 
       return { status: 201, body: article } as const;

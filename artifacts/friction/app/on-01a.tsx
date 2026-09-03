@@ -73,6 +73,7 @@ import {
   useGetThought,
   useUpdateThought,
   usePromoteThought,
+  useRevertArticleToThought,
   type Thought,
   type StoredSentence,
   type SpellChange,
@@ -82,6 +83,7 @@ import { isMeaningfulThoughtMarkdown } from "@workspace/api-zod";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   invalidateArticleLists,
+  invalidateThoughtLists,
   invalidateArticleDetail,
   invalidateDirectThoughtCreation,
   insertThoughtInRecordCache,
@@ -115,6 +117,10 @@ const EXPORT_DEBOUNCE_MS = 1200;
 const DIRECT_THOUGHT_INITIAL_MARKDOWN = "# \n\n";
 
 const WRITING_EDITOR_BOTTOM_PADDING = 24;
+// The absolute header is 44px tall with 12px vertical padding on each side.
+// Keep the editor title below it, with a small visual gap before the content.
+const WRITING_HEADER_HEIGHT = 68;
+const WRITING_EDITOR_TOP_PADDING = WRITING_HEADER_HEIGHT + 16;
 function createThoughtClientId(): string {
   const randomNibble = () => Math.floor(Math.random() * 16);
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (token) => {
@@ -232,6 +238,7 @@ export default function WritingScreen() {
   const createThought = useCreateThought();
   const deleteThought = useDeleteThought();
   const promoteThought = usePromoteThought();
+  const revertArticleToThought = useRevertArticleToThought();
   const transitionStatus = useTransitionArticleStatus();
 
   const editorRef = useRef<WebViewMarkdownEditorRef>(null);
@@ -320,6 +327,11 @@ export default function WritingScreen() {
   // 마지막으로 서버에서 본 content. 사용자 편집 발생 여부 감지에 사용.
   const serverContentRef = useRef("");
   const isNavigatingRef = useRef(false);
+  const pendingReverseSnapshotRef = useRef<{
+    articleId: string;
+    title: string;
+    content: string;
+  } | null>(null);
   // Native Stack requires usePreventRemove instead of a bare beforeRemove
   // listener for reliable interactive iOS swipe cancellation. Intentional
   // navigation waits until this guard has been disabled before dispatching.
@@ -1443,6 +1455,139 @@ export default function WritingScreen() {
     });
   }, [getEditorContent, markDirty, flush, queryClient, promoteThought, showToast, setModeBoth, router, releaseDirectThoughtDraft, navigateAfterRemovingGuard, reportAutosaveFailure, spaceId, spaceRoundId, letterType]);
 
+  // ── 검토(article) → 단상(thought) 역승격 ──────────────────────────────────
+  const returnToThoughtMode = useCallback(async () => {
+    if (isNavigatingRef.current) return;
+    const articleId = id;
+    if (!articleId || modeRef.current !== "dividing") return;
+
+    isNavigatingRef.current = true;
+    setIsNavigating(true);
+    editorRef.current?.blur();
+    Keyboard.dismiss();
+
+    if (exportDebounceTimerRef.current) {
+      clearTimeout(exportDebounceTimerRef.current);
+      exportDebounceTimerRef.current = null;
+    }
+    exportPendingRef.current = false;
+
+    let latestContent: string;
+    try {
+      latestContent = await getEditorContent();
+    } catch {
+      await reportAutosaveFailure();
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
+      showToast({ message: "최신 내용을 확인하지 못했습니다. 다시 시도해주세요.", type: "error" });
+      return;
+    }
+
+    const latestTitle = titleRef.current;
+    const pendingSnapshot = pendingReverseSnapshotRef.current;
+    const canRetryCommittedSnapshot =
+      pendingSnapshot?.articleId === articleId &&
+      pendingSnapshot.title === latestTitle &&
+      pendingSnapshot.content === latestContent;
+
+    // Remember the last persisted snapshot so an unchanged retry can reach the
+    // idempotent POST even if its previous response was lost after commit.
+    if (!canRetryCommittedSnapshot) {
+      markDirty(latestTitle, latestContent);
+      const flushResult = await flush();
+      if (!flushResult.ok) {
+        isNavigatingRef.current = false;
+        setIsNavigating(false);
+        showToast({ message: "저장이 완료되지 않았습니다. 다시 시도해주세요.", type: "error" });
+        return;
+      }
+      pendingReverseSnapshotRef.current = {
+        articleId,
+        title: latestTitle,
+        content: latestContent,
+      };
+    }
+
+    let restoredThought: Thought;
+    try {
+      restoredThought = await revertArticleToThought.mutateAsync({ id: articleId });
+    } catch (error) {
+      // The server may have committed before the response was lost. Keep the
+      // snapshot so an unchanged retry skips PATCH and calls this POST again.
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
+      showToast({
+        message: error instanceof Error
+          ? error.message
+          : "단상으로 되돌리지 못했어요. 검토 내용은 그대로 저장되어 있습니다.",
+        type: "error",
+      });
+      return;
+    }
+
+    pendingReverseSnapshotRef.current = null;
+    await Promise.allSettled([
+      queryClient.cancelQueries({ queryKey: getGetArticleQueryKey(articleId), exact: true }),
+      queryClient.cancelQueries({ queryKey: getListThoughtsQueryKey() }),
+    ]);
+    queryClient.removeQueries({ queryKey: getGetArticleQueryKey(articleId), exact: true });
+    removeRecordFromCache(queryClient, { id: articleId, kind: "editing" });
+    queryClient.setQueryData(getGetThoughtQueryKey(restoredThought.id), restoredThought);
+    insertThoughtInRecordCache(queryClient, restoredThought);
+
+    thoughtIdRef.current = restoredThought.id;
+    thoughtCreationIdRef.current = undefined;
+    isThoughtModeRef.current = true;
+    titleRef.current = "";
+    setTitle("");
+    contentRef.current = restoredThought.content;
+    articleContentRef.current = "";
+    serverContentRef.current = restoredThought.content;
+    setContent(restoredThought.content);
+    setDebouncedContent(restoredThought.content);
+    serverInjectionPendingRef.current = true;
+    editorRef.current?.setTitle("");
+    editorRef.current?.setMarkdown(restoredThought.content);
+    setModeBoth("draft");
+    isNavigatingRef.current = false;
+    setIsNavigating(false);
+
+    void Promise.allSettled([
+      invalidateArticleLists(queryClient),
+      invalidateThoughtLists(queryClient),
+    ]);
+
+    // Replacing the entity identity is an in-screen stage transition, not the
+    // user's header/system-back intent.
+    navigateAfterRemovingGuard(() => {
+      router.replace({
+        pathname: "/on-01a",
+        params: {
+          id: restoredThought.id,
+          ...(source ? { source } : {}),
+          ...(spaceId ? { spaceId, ...(spaceRoundId ? { spaceRoundId } : {}), ...(letterType ? { letterType } : {}) } : {}),
+        },
+      });
+    });
+  }, [
+    flush,
+    getEditorContent,
+    id,
+    letterType,
+    markDirty,
+    navigateAfterRemovingGuard,
+    queryClient,
+    reportAutosaveFailure,
+    revertArticleToThought,
+    router,
+    setDebouncedContent,
+    setModeBoth,
+    showToast,
+    source,
+    spaceId,
+    spaceRoundId,
+  ]);
+
   // ── 분할 → 마감 (on-01c 이동) ──────────────────────────────────────────────
   const handleNextToClosing = useCallback(async () => {
     if (isNavigatingRef.current) return;
@@ -2109,17 +2254,16 @@ export default function WritingScreen() {
         showToast({ message: "검토 단계를 먼저 완료해야 마감 단계로 이동할 수 있어요.", type: "info" });
         return;
       }
-      // dividing — DRAFT tap is a no-op: promoted articles cannot go back.
       if (target === "DIVIDING") return;
       if (target === "DRAFT") {
-        showToast({ message: "검토 단계로 승격한 글은 작성 단계로 되돌릴 수 없어요.", type: "info" });
+        void returnToThoughtMode();
         return;
       }
       if (target === "CLOSING") {
         handleNextToClosing();
       }
     },
-    [enterDividingMode, handleNextToClosing, showToast],
+    [enterDividingMode, handleNextToClosing, returnToThoughtMode, showToast],
   );
 
   useEffect(() => {
@@ -2585,6 +2729,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
+    height: WRITING_HEADER_HEIGHT,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -2662,7 +2807,7 @@ const styles = StyleSheet.create({
   },
   editorInner: {
     flex: 1,
-    paddingTop: 8,
+    paddingTop: WRITING_EDITOR_TOP_PADDING,
   },
   markdownEditorContainer: {
     flex: 1,

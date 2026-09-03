@@ -388,7 +388,7 @@ describe("on-01a guarded return navigation", () => {
     expect(screen).toContain("onDismissKeyboard={() =>");
   });
 
-  it("keeps writing and review chrome floating without changing control surfaces", () => {
+  it("keeps floating chrome transparent outside its gray button containers", () => {
     const screen = readScreen();
     const header = screen.slice(
       screen.indexOf('<View style={[styles.header, { top: insets.top }]}'),
@@ -412,9 +412,11 @@ describe("on-01a guarded return navigation", () => {
     expect(stylesSource).toContain("backgroundColor: \"transparent\",\n    zIndex: 53");
     expect(stateBar).not.toContain("LinearGradient");
     expect(stateBar).toContain('<View style={styles.bar}>');
-    expect(stateBar).toContain("backgroundColor: Colors.white");
+    expect(stateBar).toContain("backgroundColor: Colors.zinc100");
     expect(memoToolbar).toContain("backgroundColor: \"transparent\"");
-    expect(memoToolbar).toContain("backgroundColor: \"#ffffff\"");
+    expect(memoToolbar).toContain("backgroundColor: Colors.zinc100");
+    expect(screen).toContain("height: WRITING_HEADER_HEIGHT");
+    expect(screen).toContain("paddingTop: WRITING_EDITOR_TOP_PADDING");
     expect(screen).toContain("backgroundColor: Colors.white,\n    borderTopWidth");
   });
 
@@ -482,6 +484,68 @@ describe("on-01a guarded return navigation", () => {
     expect(webEditor).toContain("contentBottomPadding = 120");
     expect(webEditor).toContain('"--content-bottom-padding"');
     expect(webEditor).toContain("padding: 16px 0 var(--content-bottom-padding)");
+  });
+
+  it("commits the latest review snapshot before returning to the original thought", () => {
+    const screen = readScreen();
+    const reverseHandler = screen.slice(
+      screen.indexOf("const returnToThoughtMode"),
+      screen.indexOf("// ── 분할 → 마감"),
+    );
+
+    expect(screen).toContain("useRevertArticleToThought");
+    expect(reverseHandler).toContain("if (isNavigatingRef.current) return;");
+    expect(reverseHandler).toContain("latestContent = await getEditorContent();");
+    expect(reverseHandler).toContain("markDirty(latestTitle, latestContent);");
+    expect(reverseHandler).toContain("const flushResult = await flush();");
+    expect(reverseHandler.indexOf("await flush()")).toBeLessThan(
+      reverseHandler.indexOf("revertArticleToThought.mutateAsync"),
+    );
+    expect(reverseHandler).toContain("removeRecordFromCache(queryClient, { id: articleId, kind: \"editing\" })");
+    expect(reverseHandler).toContain("insertThoughtInRecordCache(queryClient, restoredThought)");
+    expect(reverseHandler).toContain("queryClient.setQueryData(getGetThoughtQueryKey(restoredThought.id)");
+    expect(reverseHandler).toContain('setModeBoth("draft")');
+    expect(reverseHandler).toContain('pathname: "/on-01a"');
+    expect(reverseHandler).toContain("id: restoredThought.id");
+  });
+
+  it("reaches the idempotent reverse endpoint after a committed response is lost", () => {
+    const screen = readScreen();
+    const reverseHandler = screen.slice(
+      screen.indexOf("const returnToThoughtMode"),
+      screen.indexOf("// ── 분할 → 마감"),
+    );
+
+    expect(screen).toContain("pendingReverseSnapshotRef");
+    expect(reverseHandler).toContain("const canRetryCommittedSnapshot =");
+    expect(reverseHandler).toContain("if (!canRetryCommittedSnapshot)");
+    expect(reverseHandler).toContain("pendingReverseSnapshotRef.current = {");
+    expect(reverseHandler).toContain("restoredThought = await revertArticleToThought.mutateAsync");
+    expect(reverseHandler).toContain("pendingReverseSnapshotRef.current = null;");
+    expect(reverseHandler.indexOf("if (!canRetryCommittedSnapshot)")).toBeLessThan(
+      reverseHandler.indexOf("revertArticleToThought.mutateAsync"),
+    );
+  });
+
+  it("keeps review content and unlocks retry when reverse-promotion fails", () => {
+    const screen = readScreen();
+    const reverseHandler = screen.slice(
+      screen.indexOf("const returnToThoughtMode"),
+      screen.indexOf("// ── 분할 → 마감"),
+    );
+    const stateBarHandler = screen.slice(
+      screen.indexOf("const handleStateBarPress"),
+      screen.indexOf("useEffect(() =>", screen.indexOf("const handleStateBarPress")),
+    );
+
+    expect(reverseHandler).toContain("isNavigatingRef.current = false;");
+    expect(reverseHandler).toContain("setIsNavigating(false);");
+    expect(reverseHandler).toContain("검토 내용은 그대로 저장되어 있습니다.");
+    expect(reverseHandler.indexOf("setModeBoth(\"draft\")")).toBeGreaterThan(
+      reverseHandler.indexOf("revertArticleToThought.mutateAsync"),
+    );
+    expect(stateBarHandler).toContain("void returnToThoughtMode();");
+    expect(stateBarHandler).not.toContain("되돌릴 수 없어요");
   });
 });
 
