@@ -12,11 +12,14 @@ describe("shared writing header buttons", () => {
 
     expect(button).toContain('export type HeaderButtonVariant = "back" | "menu";');
     expect(button).toContain('variant === "back" ? "arrow-left" : "more-horizontal"');
+    expect(button).toContain("label?: string;");
+    expect(button).toContain("backgroundColor: Colors.white");
+    expect(button).toContain("backgroundColor: Colors.noticeAccent");
     expect(button).toContain("accessibilityRole=\"button\"");
     expect(button).toContain("accessibilityState={{");
     expect(button).toContain("disabled: unavailable");
     expect(button).toContain("busy,");
-    expect(button).toContain("contentStyle={styles.surface}");
+    expect(button).toContain("contentStyle={[");
     expect(button).toContain("style={styles.button}");
     expect(tokens).toContain("headerButtonTouchSize: 44");
     expect(tokens).toContain("headerButtonSurfaceSize: 40");

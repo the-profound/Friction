@@ -48,6 +48,7 @@ export default function WritingStateBar({
       <HeaderButton
         testID="writing-stage-menu"
         variant="menu"
+        label={label}
         onPress={() => {
           if (!menuDisabled) setVisible(true);
         }}
