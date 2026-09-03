@@ -4195,9 +4195,27 @@ components:
           type: string
           format: uuid
           nullable: true
+        replyToInboxId:
+          type: string
+          format: uuid
+          nullable: true
+          description: The read inbox letter selected as the source of a reply.
+        replyToArticleId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Legacy article ID alias for selecting a read inbox letter as the source of a reply.
         targetType:
           type: string
-          enum: [person, group]
+          enum: [person, reply, space, group]
+        spaceId:
+          type: string
+          format: uuid
+          nullable: true
+        spaceScheduledSendId:
+          type: string
+          format: uuid
+          nullable: true
         collectionId:
           type: string
           format: uuid
@@ -4205,6 +4223,10 @@ components:
         deliverySlot:
           type: string
           format: date-time
+        deliveryDate:
+          type: string
+          format: date
+          description: KST calendar date corresponding to deliverySlot.
         sentAt:
           type: string
           format: date-time
@@ -4230,9 +4252,27 @@ components:
           type: string
           format: uuid
           nullable: true
+        replyToInboxId:
+          type: string
+          format: uuid
+          nullable: true
+          description: The read inbox letter selected as the source of a reply.
+        replyToArticleId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Article ID alias for the selected reply source.
         targetType:
           type: string
-          enum: [person, group]
+          enum: [person, reply, space, group]
+        spaceId:
+          type: string
+          format: uuid
+          nullable: true
+        spaceScheduledSendId:
+          type: string
+          format: uuid
+          nullable: true
         collectionId:
           type: string
           format: uuid
@@ -4240,9 +4280,16 @@ components:
         collectionName:
           type: string
           nullable: true
+        spaceName:
+          type: string
+          nullable: true
         deliverySlot:
           type: string
           format: date-time
+        deliveryDate:
+          type: string
+          format: date
+          description: KST calendar date corresponding to deliverySlot.
         sentAt:
           type: string
           format: date-time
@@ -4263,13 +4310,36 @@ components:
         recipientId:
           type: string
           format: uuid
+          nullable: true
+          description: Required for person sends. For legacy callers, omitting targetType implies person.
         articleId:
           type: string
           format: uuid
+        targetType:
+          type: string
+          enum: [person, reply, space]
+          default: person
+          description: Send destination. Omitting it preserves the legacy person-send contract.
+        replyToInboxId:
+          type: string
+          format: uuid
+          description: Required for reply sends; must identify a read inbox letter owned by senderId.
+        replyToArticleId:
+          type: string
+          format: uuid
+          description: Article ID alias for selecting a read inbox letter as the source of a reply.
+        spaceId:
+          type: string
+          format: uuid
+          description: Required for space sends; must identify an ACTIVE space where senderId is approved.
+        deliveryDate:
+          type: string
+          format: date
+          description: Optional KST calendar date. It is stored and delivered at 06:00 KST; omitted means the earliest available date.
         isEnvelope:
           type: boolean
           description: When true, the inbox item is created with is_envelope=true so the recipient sees a sealed envelope front face before opening.
-      required: [senderId, recipientId, articleId]
+      required: [senderId, articleId]
 
     # ─── Space ──────────────────────────────────────
     SpaceListItem:

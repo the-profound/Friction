@@ -92,6 +92,7 @@ export * from "./releaseDiagnosticContext";
 export * from "./releaseDiagnosticContextConfigurationState";
 export * from "./releaseDiagnosticContextTrack";
 export * from "./sendArticleBody";
+export * from "./sendArticleBodyTargetType";
 export * from "./sendRecord";
 export * from "./sendRecordTargetType";
 export * from "./sendRecordWithDetails";

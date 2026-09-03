@@ -5,11 +5,23 @@
  * Friction MVP 1.0.0 API
  * OpenAPI spec version: 0.1.0
  */
+import type { SendArticleBodyTargetType } from "./sendArticleBodyTargetType";
 
 export interface SendArticleBody {
   senderId: string;
-  recipientId: string;
+  /** Required for person sends. For legacy callers, omitting targetType implies person. */
+  recipientId?: string | null;
   articleId: string;
+  /** Send destination. Omitting it preserves the legacy person-send contract. */
+  targetType?: SendArticleBodyTargetType;
+  /** Required for reply sends; must identify a read inbox letter owned by senderId. */
+  replyToInboxId?: string;
+  /** Article ID alias for selecting a read inbox letter as the source of a reply. */
+  replyToArticleId?: string;
+  /** Required for space sends; must identify an ACTIVE space where senderId is approved. */
+  spaceId?: string;
+  /** Optional KST calendar date. It is stored and delivered at 06:00 KST; omitted means the earliest available date. */
+  deliveryDate?: Date;
   /** When true, the inbox item is created with is_envelope=true so the recipient sees a sealed envelope front face before opening. */
   isEnvelope?: boolean;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isKstDateReservable } from "./deliverySlot";
+import { isKstDateReservable, kstDateAt6, kstDateString } from "./deliverySlot";
 import {
   isRecruitmentFull,
   startsConsumingRecruitmentPlace,
@@ -45,6 +45,27 @@ describe("isKstDateReservable", () => {
 
     expect(isKstDateReservable("2026-08-20", beforeDeadline)).toBe(true);
     expect(isKstDateReservable("2026-08-20", atDeadline)).toBe(false);
+  });
+});
+
+describe("KST send-date normalization", () => {
+  it("pins a selected calendar date to 06:00 KST", () => {
+    const slot = kstDateAt6("2026-08-20");
+    expect(slot?.toISOString()).toBe("2026-08-19T21:00:00.000Z");
+    expect(slot ? kstDateString(slot) : null).toBe("2026-08-20");
+  });
+
+  it("rejects impossible calendar dates instead of rolling them over", () => {
+    expect(kstDateAt6("2026-02-30")).toBeNull();
+    expect(kstDateAt6("2026-8-20")).toBeNull();
+  });
+
+  it("moves the earliest available date at the exact 06:00 KST boundary", () => {
+    const before = new Date("2026-08-19T20:59:59.999Z");
+    const at = new Date("2026-08-19T21:00:00.000Z");
+    expect(isKstDateReservable("2026-08-20", before)).toBe(true);
+    expect(isKstDateReservable("2026-08-20", at)).toBe(false);
+    expect(isKstDateReservable("2026-08-21", at)).toBe(true);
   });
 });
 

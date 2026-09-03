@@ -77,3 +77,4 @@
 - [Editor blank-surface focus ownership](friction-editor-blank-surface-focus.md) — screen wrappers must not refocus embedded editors; only platform editors may classify a stationary blank-surface tap.
 - [Idempotent transition retries](idempotent-transition-retries.md) — after an ambiguous POST result, unchanged retries must bypass prerequisite writes that the committed transition invalidated.
 - [Guarded native removal ownership](friction-guarded-native-removal.md) — after async save, replay the exact prevented removal action; a fresh back action can double-pop after iOS edge swipe.
+- [Send target and delivery contract](send-target-delivery-contract.md) — preserve historical collection records while new sends use person/reply/space and canonical KST 06:00 delivery.

@@ -545,6 +545,8 @@ export type SendRecordTargetType =
 
 export const SendRecordTargetType = {
   person: "person",
+  reply: "reply",
+  space: "space",
   group: "group",
 } as const;
 
@@ -554,9 +556,17 @@ export interface SendRecord {
   recipientId?: string | null;
   articleId: string;
   inboxId?: string | null;
+  /** The read inbox letter selected as the source of a reply. */
+  replyToInboxId?: string | null;
+  /** Legacy article ID alias for selecting a read inbox letter as the source of a reply. */
+  replyToArticleId?: string | null;
   targetType: SendRecordTargetType;
+  spaceId?: string | null;
+  spaceScheduledSendId?: string | null;
   collectionId?: string | null;
   deliverySlot: string;
+  /** KST calendar date corresponding to deliverySlot. */
+  deliveryDate?: string;
   sentAt: string;
 }
 
@@ -565,6 +575,8 @@ export type SendRecordWithDetailsTargetType =
 
 export const SendRecordWithDetailsTargetType = {
   person: "person",
+  reply: "reply",
+  space: "space",
   group: "group",
 } as const;
 
@@ -574,20 +586,52 @@ export interface SendRecordWithDetails {
   recipientId?: string | null;
   articleId: string;
   inboxId?: string | null;
+  /** The read inbox letter selected as the source of a reply. */
+  replyToInboxId?: string | null;
+  /** Article ID alias for the selected reply source. */
+  replyToArticleId?: string | null;
   targetType: SendRecordWithDetailsTargetType;
+  spaceId?: string | null;
+  spaceScheduledSendId?: string | null;
   collectionId?: string | null;
   collectionName?: string | null;
+  spaceName?: string | null;
   deliverySlot: string;
+  /** KST calendar date corresponding to deliverySlot. */
+  deliveryDate?: string;
   sentAt: string;
   isDelivered: boolean;
   article?: Article;
   recipient?: User;
 }
 
+/**
+ * Send destination. Omitting it preserves the legacy person-send contract.
+ */
+export type SendArticleBodyTargetType =
+  (typeof SendArticleBodyTargetType)[keyof typeof SendArticleBodyTargetType];
+
+export const SendArticleBodyTargetType = {
+  person: "person",
+  reply: "reply",
+  space: "space",
+} as const;
+
 export interface SendArticleBody {
   senderId: string;
-  recipientId: string;
+  /** Required for person sends. For legacy callers, omitting targetType implies person. */
+  recipientId?: string | null;
   articleId: string;
+  /** Send destination. Omitting it preserves the legacy person-send contract. */
+  targetType?: SendArticleBodyTargetType;
+  /** Required for reply sends; must identify a read inbox letter owned by senderId. */
+  replyToInboxId?: string;
+  /** Article ID alias for selecting a read inbox letter as the source of a reply. */
+  replyToArticleId?: string;
+  /** Required for space sends; must identify an ACTIVE space where senderId is approved. */
+  spaceId?: string;
+  /** Optional KST calendar date. It is stored and delivered at 06:00 KST; omitted means the earliest available date. */
+  deliveryDate?: string;
   /** When true, the inbox item is created with is_envelope=true so the recipient sees a sealed envelope front face before opening. */
   isEnvelope?: boolean;
 }

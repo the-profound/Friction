@@ -11,5 +11,7 @@ export type SendRecordWithDetailsTargetType =
 
 export const SendRecordWithDetailsTargetType = {
   person: "person",
+  reply: "reply",
+  space: "space",
   group: "group",
 } as const;

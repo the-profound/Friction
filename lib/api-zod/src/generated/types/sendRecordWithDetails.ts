@@ -15,10 +15,19 @@ export interface SendRecordWithDetails {
   recipientId?: string | null;
   articleId: string;
   inboxId?: string | null;
+  /** The read inbox letter selected as the source of a reply. */
+  replyToInboxId?: string | null;
+  /** Article ID alias for the selected reply source. */
+  replyToArticleId?: string | null;
   targetType: SendRecordWithDetailsTargetType;
+  spaceId?: string | null;
+  spaceScheduledSendId?: string | null;
   collectionId?: string | null;
   collectionName?: string | null;
+  spaceName?: string | null;
   deliverySlot: Date;
+  /** KST calendar date corresponding to deliverySlot. */
+  deliveryDate?: Date;
   sentAt: Date;
   isDelivered: boolean;
   article?: Article;

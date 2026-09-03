@@ -13,8 +13,16 @@ export interface SendRecord {
   recipientId?: string | null;
   articleId: string;
   inboxId?: string | null;
+  /** The read inbox letter selected as the source of a reply. */
+  replyToInboxId?: string | null;
+  /** Legacy article ID alias for selecting a read inbox letter as the source of a reply. */
+  replyToArticleId?: string | null;
   targetType: SendRecordTargetType;
+  spaceId?: string | null;
+  spaceScheduledSendId?: string | null;
   collectionId?: string | null;
   deliverySlot: Date;
+  /** KST calendar date corresponding to deliverySlot. */
+  deliveryDate?: Date;
   sentAt: Date;
 }

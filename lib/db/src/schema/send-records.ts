@@ -4,10 +4,18 @@ import { z } from "zod/v4";
 
 import { articlesTable } from "./articles";
 import { inboxTable } from "./inbox";
+import { spacesTable, spaceScheduledSendsTable } from "./spaces";
 import { teamCollectionsTable } from "./team-collections";
 import { usersTable } from "./users";
 
-export const sendRecordTargetTypeEnum = pgEnum("send_record_target_type", ["person", "group"]);
+// `group` is retained for historical team-collection records. New sends use
+// person/reply/space and must never create a group record.
+export const sendRecordTargetTypeEnum = pgEnum("send_record_target_type", [
+  "person",
+  "reply",
+  "space",
+  "group",
+]);
 
 export const sendRecordsTable = pgTable("send_records", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -15,6 +23,9 @@ export const sendRecordsTable = pgTable("send_records", {
   recipientId: uuid("recipient_id").references(() => usersTable.id),
   articleId: uuid("article_id").notNull().references(() => articlesTable.id),
   inboxId: uuid("inbox_id").references(() => inboxTable.id),
+  replyToInboxId: uuid("reply_to_inbox_id").references(() => inboxTable.id),
+  spaceId: uuid("space_id").references(() => spacesTable.id),
+  spaceScheduledSendId: uuid("space_scheduled_send_id").references(() => spaceScheduledSendsTable.id),
   teamCollectionId: uuid("team_collection_id").references(() => teamCollectionsTable.id),
   targetType: sendRecordTargetTypeEnum("target_type").notNull().default("person"),
   deliverySlot: timestamp("delivery_slot", { withTimezone: true }).notNull(),

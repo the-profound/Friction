@@ -4120,10 +4120,27 @@ export const ListSendRecordsResponseItem = zod.object({
   recipientId: zod.string().uuid().nullish(),
   articleId: zod.string().uuid(),
   inboxId: zod.string().uuid().nullish(),
-  targetType: zod.enum(["person", "group"]),
+  replyToInboxId: zod
+    .string()
+    .uuid()
+    .nullish()
+    .describe("The read inbox letter selected as the source of a reply."),
+  replyToArticleId: zod
+    .string()
+    .uuid()
+    .nullish()
+    .describe("Article ID alias for the selected reply source."),
+  targetType: zod.enum(["person", "reply", "space", "group"]),
+  spaceId: zod.string().uuid().nullish(),
+  spaceScheduledSendId: zod.string().uuid().nullish(),
   collectionId: zod.string().uuid().nullish(),
   collectionName: zod.string().nullish(),
+  spaceName: zod.string().nullish(),
   deliverySlot: zod.date(),
+  deliveryDate: zod
+    .date()
+    .optional()
+    .describe("KST calendar date corresponding to deliverySlot."),
   sentAt: zod.date(),
   isDelivered: zod.boolean(),
   article: zod
@@ -4207,10 +4224,51 @@ export const ListSendRecordsResponse = zod.array(ListSendRecordsResponseItem);
  * Creates SendRecord + Inbox entry. Auto-assigns 06:00 KST delivery slot (single daily slot). Article must be LETTER status.
  * @summary Send an article to a recipient
  */
+export const sendArticleBodyTargetTypeDefault = `person`;
+
 export const SendArticleBody = zod.object({
   senderId: zod.string().uuid(),
-  recipientId: zod.string().uuid(),
+  recipientId: zod
+    .string()
+    .uuid()
+    .nullish()
+    .describe(
+      "Required for person sends. For legacy callers, omitting targetType implies person.",
+    ),
   articleId: zod.string().uuid(),
+  targetType: zod
+    .enum(["person", "reply", "space"])
+    .default(sendArticleBodyTargetTypeDefault)
+    .describe(
+      "Send destination. Omitting it preserves the legacy person-send contract.",
+    ),
+  replyToInboxId: zod
+    .string()
+    .uuid()
+    .optional()
+    .describe(
+      "Required for reply sends; must identify a read inbox letter owned by senderId.",
+    ),
+  replyToArticleId: zod
+    .string()
+    .uuid()
+    .optional()
+    .describe(
+      "Article ID alias for selecting a read inbox letter as the source of a reply.",
+    ),
+  spaceId: zod
+    .string()
+    .uuid()
+    .optional()
+    .describe(
+      "Required for space sends; must identify an ACTIVE space where senderId is approved.",
+    ),
+  deliveryDate: zod
+    .date()
+    .optional()
+    .describe(
+      "Optional KST calendar date. It is stored and delivered at 06:00 KST; omitted means the earliest available date.",
+    ),
   isEnvelope: zod
     .boolean()
     .optional()
@@ -4234,10 +4292,27 @@ export const GetSendRecordResponse = zod.object({
   recipientId: zod.string().uuid().nullish(),
   articleId: zod.string().uuid(),
   inboxId: zod.string().uuid().nullish(),
-  targetType: zod.enum(["person", "group"]),
+  replyToInboxId: zod
+    .string()
+    .uuid()
+    .nullish()
+    .describe("The read inbox letter selected as the source of a reply."),
+  replyToArticleId: zod
+    .string()
+    .uuid()
+    .nullish()
+    .describe("Article ID alias for the selected reply source."),
+  targetType: zod.enum(["person", "reply", "space", "group"]),
+  spaceId: zod.string().uuid().nullish(),
+  spaceScheduledSendId: zod.string().uuid().nullish(),
   collectionId: zod.string().uuid().nullish(),
   collectionName: zod.string().nullish(),
+  spaceName: zod.string().nullish(),
   deliverySlot: zod.date(),
+  deliveryDate: zod
+    .date()
+    .optional()
+    .describe("KST calendar date corresponding to deliverySlot."),
   sentAt: zod.date(),
   isDelivered: zod.boolean(),
   article: zod

@@ -1,4 +1,5 @@
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+const KST_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
  * Returns the next KST 06:00 delivery slot as a UTC Date.
@@ -31,6 +32,19 @@ export function normalizeToKst6(date: Date): Date {
   return new Date(Date.UTC(y, m, d, 6, 0, 0, 0) - KST_OFFSET_MS);
 }
 
+/**
+ * Converts a KST calendar date to its canonical 06:00 KST instant.
+ * Invalid calendar dates return null instead of being rolled into the next
+ * month by Date.UTC.
+ */
+export function kstDateAt6(ymd: string): Date | null {
+  if (!KST_DATE_PATTERN.test(ymd)) return null;
+  const [year, month, day] = ymd.split("-").map(Number);
+  const utcMidnight = Date.UTC(year, month - 1, day);
+  const candidate = new Date(utcMidnight + 6 * 60 * 60 * 1000 - KST_OFFSET_MS);
+  return kstDateString(candidate) === ymd ? candidate : null;
+}
+
 /** Formats an instant as its KST calendar date, e.g. "2026-01-04". */
 export function kstDateString(date: Date): string {
   const kst = new Date(date.getTime() + KST_OFFSET_MS);
@@ -42,5 +56,5 @@ export function kstDateString(date: Date): string {
 
 /** True only while the given KST calendar date's 06:00 delivery slot is ahead. */
 export function isKstDateReservable(ymd: string, now: Date = new Date()): boolean {
-  return ymd >= kstDateString(computeDeliverySlot(now));
+  return kstDateAt6(ymd) !== null && ymd >= kstDateString(computeDeliverySlot(now));
 }
