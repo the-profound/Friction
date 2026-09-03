@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, ilike, isNull, sql } from "drizzle-orm";
+import { and, eq, ilike, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import {
   db,
   articlesTable,
@@ -77,6 +77,10 @@ const objectStorageService = new ObjectStorageService();
 const MAX_COVER_IMAGE_BYTES = 10 * 1024 * 1024;
 
 class ArticleMutationConflictError extends Error {}
+
+function getPostgresErrorCode(error: unknown): string | undefined {
+  return (error as { cause?: { code?: string } })?.cause?.code;
+}
 
 async function findEditableOwnedArticle(
   articleId: string,
@@ -259,7 +263,7 @@ router.post("/articles/:id/revert-to-thought", requireAuth, async (req, res) => 
       }
 
       if (article.deletedAt) {
-        const [restoredThought] = await tx
+        const [restoredThoughtCandidate] = await tx
           .select()
           .from(thoughtsTable)
           .where(
@@ -270,6 +274,29 @@ router.post("/articles/:id/revert-to-thought", requireAuth, async (req, res) => 
             ),
           )
           .limit(1);
+        if (!restoredThoughtCandidate) {
+          return {
+            status: 409,
+            body: { error: "Article is no longer the current review for a thought" },
+          } as const;
+        }
+
+        await tx.execute(
+          sql`SELECT pg_advisory_xact_lock(hashtext(${`thought-promotion:${restoredThoughtCandidate.id}`}))`,
+        );
+        const [restoredThought] = await tx
+          .select()
+          .from(thoughtsTable)
+          .where(
+            and(
+              eq(thoughtsTable.id, restoredThoughtCandidate.id),
+              eq(thoughtsTable.authorId, userId),
+              eq(thoughtsTable.migratedFromArticleId, articleId),
+              isNull(thoughtsTable.deletedAt),
+            ),
+          )
+          .limit(1)
+          .for("update");
         if (!restoredThought) {
           return {
             status: 409,
@@ -280,7 +307,12 @@ router.post("/articles/:id/revert-to-thought", requireAuth, async (req, res) => 
         const [activePromotion] = await tx
           .select({ id: thoughtPromotionsTable.id })
           .from(thoughtPromotionsTable)
-          .where(eq(thoughtPromotionsTable.fromThoughtId, restoredThought.id))
+          .where(
+            and(
+              eq(thoughtPromotionsTable.fromThoughtId, restoredThought.id),
+              eq(thoughtPromotionsTable.promotionType, "promote"),
+            ),
+          )
           .limit(1);
         if (activePromotion) {
           return {
@@ -298,22 +330,35 @@ router.post("/articles/:id/revert-to-thought", requireAuth, async (req, res) => 
         } as const;
       }
 
-      const [promotion] = await tx
+      const promotions = await tx
         .select({
           id: thoughtPromotionsTable.id,
           thoughtId: thoughtPromotionsTable.fromThoughtId,
           promotionType: thoughtPromotionsTable.promotionType,
         })
         .from(thoughtPromotionsTable)
-        .where(eq(thoughtPromotionsTable.toDraftId, articleId))
-        .limit(1);
-      if (!promotion || promotion.promotionType !== "promote") {
+        .where(
+          and(
+            eq(thoughtPromotionsTable.toDraftId, articleId),
+            eq(thoughtPromotionsTable.promotionType, "promote"),
+          ),
+        )
+        .limit(2);
+      if (promotions.length !== 1) {
         return {
           status: 409,
-          body: { error: "Article is not linked to an original promoted thought" },
+          body: {
+            error: promotions.length === 0
+              ? "Article is not linked to an original promoted thought"
+              : "Article has conflicting promotion links",
+          },
         } as const;
       }
+      const promotion = promotions[0];
 
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${`thought-promotion:${promotion.thoughtId}`}))`,
+      );
       const [thought] = await tx
         .select()
         .from(thoughtsTable)
@@ -324,12 +369,38 @@ router.post("/articles/:id/revert-to-thought", requireAuth, async (req, res) => 
             isNull(thoughtsTable.deletedAt),
           ),
         )
-        .limit(1);
+        .limit(1)
+        .for("update");
       if (!thought) {
         return {
           status: 409,
           body: { error: "Original thought is unavailable" },
         } as const;
+      }
+
+      if (thought.sourceArticleId) {
+        const [sourceConflict] = await tx
+          .select({ id: thoughtsTable.id })
+          .from(thoughtsTable)
+          .where(
+            and(
+              eq(thoughtsTable.authorId, userId),
+              eq(thoughtsTable.sourceArticleId, thought.sourceArticleId),
+              ne(thoughtsTable.id, thought.id),
+              isNull(thoughtsTable.deletedAt),
+              or(
+                eq(thoughtsTable.status, "PRELIMINARY"),
+                isNotNull(thoughtsTable.migratedFromArticleId),
+              ),
+            ),
+          )
+          .limit(1);
+        if (sourceConflict) {
+          return {
+            status: 409,
+            body: { error: "Another active thought already uses this source article" },
+          } as const;
+        }
       }
 
       const titleLines = article.title.replace(/\r\n?/g, "\n").split("\n");
@@ -363,19 +434,40 @@ router.post("/articles/:id/revert-to-thought", requireAuth, async (req, res) => 
           migratedFromArticleId: articleId,
           updatedAt: now,
         })
-        .where(eq(thoughtsTable.id, thought.id))
+        .where(
+          and(
+            eq(thoughtsTable.id, thought.id),
+            eq(thoughtsTable.authorId, userId),
+            isNull(thoughtsTable.deletedAt),
+            eq(thoughtsTable.status, thought.status),
+            isNull(thoughtsTable.migratedFromArticleId),
+          ),
+        )
         .returning();
+      if (!restoredThought) throw new ArticleMutationConflictError();
 
-      await tx
+      const deletedPromotion = await tx
         .delete(thoughtPromotionsTable)
-        .where(eq(thoughtPromotionsTable.id, promotion.id));
+        .where(
+          and(
+            eq(thoughtPromotionsTable.id, promotion.id),
+            eq(thoughtPromotionsTable.toDraftId, articleId),
+            eq(thoughtPromotionsTable.promotionType, "promote"),
+          ),
+        )
+        .returning({ id: thoughtPromotionsTable.id });
+      if (deletedPromotion.length !== 1) throw new ArticleMutationConflictError();
 
       return { status: 200, body: restoredThought } as const;
     });
 
     res.status(result.status).json(result.body);
   } catch (error) {
-    if (error instanceof ArticleMutationConflictError) {
+    if (
+      error instanceof ArticleMutationConflictError
+      || getPostgresErrorCode(error) === "23505"
+      || getPostgresErrorCode(error) === "23503"
+    ) {
       res.status(409).json({ error: "Article changed before it could return to a thought. Please retry." });
       return;
     }

@@ -267,6 +267,48 @@
       "when": 1787702400000,
       "tag": "0037_add_space_creation_idempotency",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1787983842000,
+      "tag": "0038_add_inbox_source_space",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1787983842001,
+      "tag": "0039_add_space_send_recipient_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1787987978000,
+      "tag": "0040_allow_multiple_opening_letters_per_round",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1788181339000,
+      "tag": "0041_add_letter_visibility",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1788427994000,
+      "tag": "0042_add_scheduled_send_reservation_identity",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1788436800000,
+      "tag": "0043_restore_reverse_promotion_constraints",
+      "breakpoints": true
     }
   ]
 }

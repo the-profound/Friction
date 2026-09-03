@@ -20,7 +20,9 @@ describe("review article reverse-promotion contract", () => {
     expect(handler).toContain("pg_advisory_xact_lock");
     expect(handler).toContain('.for("update")');
     expect(handler).toContain('article.status !== "DIVIDING"');
-    expect(handler).toContain('promotion.promotionType !== "promote"');
+    expect(handler).toContain('eq(thoughtPromotionsTable.promotionType, "promote")');
+    expect(handler).toContain("promotions.length !== 1");
+    expect(handler).toContain("Another active thought already uses this source article");
     expect(handler).toContain("formatThoughtMarkdown(article.title, article.content)");
     expect(handler).toContain('eq(articlesTable.status, "DIVIDING")');
     expect(handler).toContain('status: "PRELIMINARY"');
@@ -29,6 +31,8 @@ describe("review article reverse-promotion contract", () => {
     expect(handler).toContain(".update(articlesTable)");
     expect(handler).toContain("deletedAt: now");
     expect(handler).toContain("throw new ArticleMutationConflictError()");
+    expect(handler).toContain('getPostgresErrorCode(error) === "23505"');
+    expect(handler).toContain('getPostgresErrorCode(error) === "23503"');
   });
 
   it("returns the same restored thought after response loss and blocks stale old retries", () => {
@@ -53,6 +57,7 @@ describe("review article reverse-promotion contract", () => {
     );
 
     expect(promoteHandler).toContain("pg_advisory_xact_lock");
+    expect(promoteHandler).toContain('.for("update")');
     expect(promoteHandler).toContain("migratedFromArticleId: null");
   });
 
@@ -73,5 +78,27 @@ describe("review article reverse-promotion contract", () => {
     expect(transitionHandler).toContain("eq(articlesTable.status, article.status)");
     expect(transitionHandler).toContain("isNull(articlesTable.deletedAt)");
     expect(transitionHandler).toContain("Article changed before the transition completed");
+  });
+
+  it("keeps thought edits and deletes conditional on the reverse-promotion marker", () => {
+    const source = readThoughtsRoute();
+    const patchHandler = source.slice(
+      source.indexOf('router.patch("/thoughts/:id"'),
+      source.indexOf('router.post("/thoughts/:id/promote"'),
+    );
+    const deleteHandler = source.slice(
+      source.indexOf('router.delete("/thoughts/:id"'),
+      source.indexOf("function isNoteObject"),
+    );
+
+    expect(patchHandler).toContain("existing.migratedFromArticleId");
+    expect(patchHandler).toContain("pg_advisory_xact_lock");
+    expect(patchHandler).toContain("A promoted thought must be edited through its review article");
+    expect(patchHandler).toContain("Thought changed while it was being updated");
+    expect(deleteHandler).toContain('.for("update")');
+    expect(deleteHandler).toContain("pg_advisory_xact_lock");
+    expect(deleteHandler).toContain("A promoted thought must be deleted through its review article");
+    expect(deleteHandler).toContain("existing.migratedFromArticleId");
+    expect(deleteHandler).toContain("Thought changed before it could be deleted");
   });
 });

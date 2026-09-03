@@ -63,7 +63,7 @@ export const thoughtsTable = pgTable("thoughts", {
     .where(sql`${t.migratedFromArticleId} IS NOT NULL`),
     uniqueIndex("thoughts_writing_source_unique_idx")
       .on(t.authorId, t.sourceArticleId)
-      .where(sql`${t.sourceArticleId} IS NOT NULL AND (${t.status} = 'PRELIMINARY' OR ${t.migratedFromArticleId} IS NOT NULL)`),
+      .where(sql`${t.sourceArticleId} IS NOT NULL AND ${t.deletedAt} IS NULL AND (${t.status} = 'PRELIMINARY' OR ${t.migratedFromArticleId} IS NOT NULL)`),
     check(
       "thoughts_content_meaningful_check",
       sql`length(regexp_replace(regexp_replace(${t.content}, '!\\[[^]]*\\]\\([^)]*\\)?', '', 'g'), '[[:space:]#*_~\`>|[\](){},.!+\-=]', '', 'g')) > 0
@@ -79,6 +79,9 @@ export const thoughtPromotionsTable = pgTable("thought_promotions", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   uniqueIndex("thought_promotions_from_thought_unique_idx").on(t.fromThoughtId),
+  uniqueIndex("thought_promotions_to_draft_promote_unique_idx")
+    .on(t.toDraftId)
+    .where(sql`${t.promotionType} = 'promote'`),
 ]);
 
 /**

@@ -733,42 +733,83 @@ router.patch("/thoughts/:id", requireAuth, async (req, res) => {
     return;
   }
 
-  const [existing] = await db
-    .select({
-      id: thoughtsTable.id,
-      authorId: thoughtsTable.authorId,
-      migratedFromArticleId: thoughtsTable.migratedFromArticleId,
-    })
-    .from(thoughtsTable)
-    .where(and(eq(thoughtsTable.id, id), isNull(thoughtsTable.deletedAt)));
+  const result = await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`thought-promotion:${id}`}))`);
+    const [existing] = await tx
+      .select({
+        id: thoughtsTable.id,
+        authorId: thoughtsTable.authorId,
+        migratedFromArticleId: thoughtsTable.migratedFromArticleId,
+      })
+      .from(thoughtsTable)
+      .where(and(eq(thoughtsTable.id, id), isNull(thoughtsTable.deletedAt)))
+      .for("update");
 
-  if (!existing) {
+    if (!existing) return { status: 404, body: { error: "Thought not found" } } as const;
+    if (existing.authorId !== userId) {
+      return { status: 403, body: { error: "Forbidden" } } as const;
+    }
+
+    const [activePromotion] = await tx
+      .select({ id: thoughtPromotionsTable.id })
+      .from(thoughtPromotionsTable)
+      .where(
+        and(
+          eq(thoughtPromotionsTable.fromThoughtId, id),
+          eq(thoughtPromotionsTable.promotionType, "promote"),
+        ),
+      )
+      .limit(1);
+    if (activePromotion) {
+      return {
+        status: 409,
+        body: { error: "A promoted thought must be edited through its review article" },
+      } as const;
+    }
+
+    const [updated] = await tx
+      .update(thoughtsTable)
+      .set({ content, updatedAt: new Date() })
+      .where(
+        and(
+          eq(thoughtsTable.id, id),
+          eq(thoughtsTable.authorId, userId),
+          isNull(thoughtsTable.deletedAt),
+          existing.migratedFromArticleId
+            ? eq(thoughtsTable.migratedFromArticleId, existing.migratedFromArticleId)
+            : isNull(thoughtsTable.migratedFromArticleId),
+        ),
+      )
+      .returning({
+        id: thoughtsTable.id,
+        authorId: thoughtsTable.authorId,
+        content: thoughtsTable.content,
+        createdFrom: thoughtsTable.createdFrom,
+        sourceArticleId: thoughtsTable.sourceArticleId,
+        sourceStoredSentenceId: thoughtsTable.sourceStoredSentenceId,
+        status: thoughtsTable.status,
+        migratedFromArticleId: thoughtsTable.migratedFromArticleId,
+        createdAt: thoughtsTable.createdAt,
+        updatedAt: thoughtsTable.updatedAt,
+      });
+    if (!updated) {
+      return {
+        status: 409,
+        body: { error: "Thought changed while it was being updated. Please retry." },
+      } as const;
+    }
+    return { status: 200, body: updated } as const;
+  });
+
+  if (result.status === 404) {
     res.status(404).json({ error: "Thought not found" });
     return;
   }
-  if (existing.authorId !== userId) {
+  if (result.status === 403) {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
-
-  const [updated] = await db
-    .update(thoughtsTable)
-    .set({ content, updatedAt: new Date() })
-    .where(eq(thoughtsTable.id, id))
-    .returning({
-      id: thoughtsTable.id,
-      authorId: thoughtsTable.authorId,
-      content: thoughtsTable.content,
-      createdFrom: thoughtsTable.createdFrom,
-      sourceArticleId: thoughtsTable.sourceArticleId,
-      sourceStoredSentenceId: thoughtsTable.sourceStoredSentenceId,
-      status: thoughtsTable.status,
-      migratedFromArticleId: thoughtsTable.migratedFromArticleId,
-      createdAt: thoughtsTable.createdAt,
-      updatedAt: thoughtsTable.updatedAt,
-    });
-
-  res.json(updated);
+  res.status(result.status).json(result.body);
 });
 
 router.post("/thoughts/:id/promote", requireAuth, async (req, res) => {
@@ -781,7 +822,8 @@ router.post("/thoughts/:id/promote", requireAuth, async (req, res) => {
       const [thought] = await tx
         .select()
         .from(thoughtsTable)
-        .where(and(eq(thoughtsTable.id, thoughtId), isNull(thoughtsTable.deletedAt)));
+        .where(and(eq(thoughtsTable.id, thoughtId), isNull(thoughtsTable.deletedAt)))
+        .for("update");
 
       if (!thought) return { status: 404, body: { error: "Thought not found" } } as const;
       if (thought.authorId !== userId) return { status: 403, body: { error: "Forbidden" } } as const;
@@ -821,10 +863,24 @@ router.post("/thoughts/:id/promote", requireAuth, async (req, res) => {
         toDraftId: article.id,
         promotionType: "promote",
       });
-      await tx
+      const [updatedThought] = await tx
         .update(thoughtsTable)
         .set({ status: "NORMAL", migratedFromArticleId: null, updatedAt: new Date() })
-        .where(eq(thoughtsTable.id, thought.id));
+        .where(
+          and(
+            eq(thoughtsTable.id, thought.id),
+            eq(thoughtsTable.authorId, userId),
+            isNull(thoughtsTable.deletedAt),
+            eq(thoughtsTable.status, thought.status),
+            thought.migratedFromArticleId
+              ? eq(thoughtsTable.migratedFromArticleId, thought.migratedFromArticleId)
+              : isNull(thoughtsTable.migratedFromArticleId),
+          ),
+        )
+        .returning({ id: thoughtsTable.id });
+      if (!updatedThought) {
+        throw new Error("Thought changed during promotion");
+      }
 
       return { status: 201, body: article } as const;
     });
@@ -858,34 +914,71 @@ router.delete("/thoughts/:id", requireAuth, async (req, res) => {
   const userId = req.user!.id;
   const { id } = req.params;
 
-  const [existing] = await db
-    .select({
-      id: thoughtsTable.id,
-      authorId: thoughtsTable.authorId,
-    })
-    .from(thoughtsTable)
-    .where(and(eq(thoughtsTable.id, id), isNull(thoughtsTable.deletedAt)));
+  const result = await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`thought-promotion:${id}`}))`);
+    const [existing] = await tx
+      .select({
+        id: thoughtsTable.id,
+        authorId: thoughtsTable.authorId,
+        migratedFromArticleId: thoughtsTable.migratedFromArticleId,
+      })
+      .from(thoughtsTable)
+      .where(and(eq(thoughtsTable.id, id), isNull(thoughtsTable.deletedAt)))
+      .for("update");
 
-  if (!existing) {
-    res.status(404).json({ error: "Thought not found" });
-    return;
-  }
-  if (existing.authorId !== userId) {
-    res.status(403).json({ error: "Forbidden" });
-    return;
-  }
+    if (!existing) return "not-found" as const;
+    if (existing.authorId !== userId) return "forbidden" as const;
 
-  await db.transaction(async (tx) => {
+    const [activePromotion] = await tx
+      .select({ id: thoughtPromotionsTable.id })
+      .from(thoughtPromotionsTable)
+      .where(
+        and(
+          eq(thoughtPromotionsTable.fromThoughtId, id),
+          eq(thoughtPromotionsTable.promotionType, "promote"),
+        ),
+      )
+      .limit(1);
+    if (activePromotion) return "promoted" as const;
+
     const deletedAt = new Date();
-    await tx
+    const [deleted] = await tx
       .update(thoughtsTable)
       .set({ deletedAt })
-      .where(eq(thoughtsTable.id, id));
+      .where(
+        and(
+          eq(thoughtsTable.id, id),
+          eq(thoughtsTable.authorId, userId),
+          isNull(thoughtsTable.deletedAt),
+          existing.migratedFromArticleId
+            ? eq(thoughtsTable.migratedFromArticleId, existing.migratedFromArticleId)
+            : isNull(thoughtsTable.migratedFromArticleId),
+        ),
+      )
+      .returning({ id: thoughtsTable.id });
+    if (!deleted) return "conflict" as const;
     await tx
       .delete(thoughtQuestionQueueTable)
       .where(and(eq(thoughtQuestionQueueTable.userId, userId), eq(thoughtQuestionQueueTable.thoughtId, id)));
+    return "deleted" as const;
   });
 
+  if (result === "not-found") {
+    res.status(404).json({ error: "Thought not found" });
+    return;
+  }
+  if (result === "forbidden") {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  if (result === "conflict") {
+    res.status(409).json({ error: "Thought changed before it could be deleted. Please retry." });
+    return;
+  }
+  if (result === "promoted") {
+    res.status(409).json({ error: "A promoted thought must be deleted through its review article" });
+    return;
+  }
   res.status(204).send();
 });
 

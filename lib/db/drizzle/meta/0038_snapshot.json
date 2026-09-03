@@ -2744,6 +2744,22 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "thought_promotions_to_draft_promote_unique_idx": {
+          "name": "thought_promotions_to_draft_promote_unique_idx",
+          "columns": [
+            {
+              "expression": "to_draft_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"thought_promotions\".\"promotion_type\" = 'promote'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -3161,7 +3177,7 @@
             }
           ],
           "isUnique": true,
-          "where": "\"thoughts\".\"source_article_id\" IS NOT NULL AND (\"thoughts\".\"status\" = 'PRELIMINARY' OR \"thoughts\".\"migrated_from_article_id\" IS NOT NULL)",
+          "where": "\"thoughts\".\"source_article_id\" IS NOT NULL AND \"thoughts\".\"deleted_at\" IS NULL AND (\"thoughts\".\"status\" = 'PRELIMINARY' OR \"thoughts\".\"migrated_from_article_id\" IS NOT NULL)",
           "concurrently": false,
           "method": "btree",
           "with": {}
