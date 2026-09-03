@@ -2738,7 +2738,9 @@ const styles = StyleSheet.create({
   headerRight: {
     width: 44,
     height: 44,
-    alignSelf: "flex-start",
+    alignSelf: "center",
+    alignItems: "center",
+    justifyContent: "center",
     zIndex: 1,
   },
   sourceArticleRow: {

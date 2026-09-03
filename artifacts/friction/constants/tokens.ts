@@ -123,9 +123,9 @@ export const Sizing = {
   searchBarIconSize: 14,
   searchBarTextSize: 14,
 
-  /** Shared outer/inner contract for writing-flow header icon buttons. */
+  /** Shared 44px visual/touch contract for writing-flow header buttons. */
   headerButtonTouchSize: 44,
-  headerButtonSurfaceSize: 40,
+  headerButtonSurfaceSize: 44,
   headerButtonIconSize: 20,
 
   touchTargetMin: 44,

@@ -22,7 +22,7 @@ describe("shared writing header buttons", () => {
     expect(button).toContain("contentStyle={[");
     expect(button).toContain("style={styles.button}");
     expect(tokens).toContain("headerButtonTouchSize: 44");
-    expect(tokens).toContain("headerButtonSurfaceSize: 40");
+    expect(tokens).toContain("headerButtonSurfaceSize: 44");
     expect(tokens).toContain("headerButtonIconSize: 20");
   });
 

@@ -28,9 +28,9 @@ const DEFAULT_LABELS: Record<HeaderButtonVariant, string> = {
 /**
  * Fixed-size circular controls for writing-flow headers.
  *
- * The 44px outer frame is the layout/touch contract. Its 40px circular
- * surface is intentionally kept on a separately sized inner layer because
- * ScalePressable animates that layer on press.
+ * The 44px circular frame is both the layout/touch and visual contract.
+ * The surface remains a separately styled inner layer because ScalePressable
+ * animates that layer on press, but it fills the frame so no halo is exposed.
  */
 export default function HeaderButton({
   variant,
@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
     borderRadius: Sizing.headerButtonTouchSize / 2,
     flexGrow: 0,
     flexShrink: 0,
-    alignSelf: "flex-start",
+    alignSelf: "center",
     // Reanimated's web content layer can drop boxShadow, so keep the web
     // shadow on the non-scaled outer frame.
     ...(Platform.OS === "web" ? Shadows.navBar : {}),
