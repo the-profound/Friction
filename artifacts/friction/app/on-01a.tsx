@@ -105,6 +105,7 @@ import WritingStateBar, {
 import MemoToolbar, { type FormatType } from "@/components/MemoToolbar/MemoToolbar";
 import AddMenuPopup from "@/components/MemoToolbar/AddMenuPopup";
 import InlineMenuPanel, { type InlineMenuMode } from "@/components/InlineMenuPanel/InlineMenuPanel";
+import HeaderButton from "@/components/shared/HeaderButton";
 
 const PAGE_DIVIDER = MarkdownPolicy.PAGE_DIVIDER;
 
@@ -2411,17 +2412,12 @@ export default function WritingScreen() {
       <Stack.Screen options={{ gestureEnabled: true }} />
       <View style={[styles.container, { paddingTop: Platform.OS === "web" ? 67 : insets.top }]}>
         <View style={styles.header} pointerEvents="box-none">
-          <ScalePressable
-            style={styles.headerBackButton}
-            contentStyle={styles.headerBackButtonContent}
+          <HeaderButton
+            variant="back"
             onPress={() => handleHeaderBack()}
             disabled={isNavigating}
-            accessibilityRole="button"
             accessibilityLabel="기록 목록으로 돌아가기"
-            accessibilityState={{ disabled: isNavigating }}
-          >
-            <Feather name="arrow-left" size={19} color={Colors.zinc700} />
-          </ScalePressable>
+          />
           <View style={styles.headerRight}>
             <WritingStateBar
               current={isDividing ? "DIVIDING" : "DRAFT"}
@@ -2738,25 +2734,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: Colors.white,
     zIndex: 5,
-  },
-  headerBackButton: {
-    width: 44,
-    height: 44,
-    flexGrow: 0,
-    flexShrink: 0,
-    zIndex: 1,
-  },
-  headerBackButtonContent: {
-    width: 40,
-    height: 40,
-    alignSelf: "center",
-    flexGrow: 0,
-    flexShrink: 0,
-    borderRadius: 20,
-    backgroundColor: Colors.white,
-    alignItems: "center",
-    justifyContent: "center",
-    ...Shadows.navBar,
   },
   headerRight: {
     width: 44,

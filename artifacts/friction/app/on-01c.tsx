@@ -32,6 +32,7 @@ import {
 import WritingStateBar, {
   type WritingStageAction,
 } from "@/components/WritingStateBar/WritingStateBar";
+import HeaderButton from "@/components/shared/HeaderButton";
 import { SpaceInfoNote } from "@/components/SpaceInfoNote/SpaceInfoNote";
 import { trackArticlePublished } from "@/lib/analytics";
 import {
@@ -762,18 +763,13 @@ export default function ClosingScreen() {
       <View style={[styles.container, { paddingTop: topInset }]}>
       <View style={styles.header}>
         <View style={styles.headerSide}>
-          <ScalePressable
-            style={styles.headerBackButton}
-            contentStyle={styles.headerBackButtonContent}
+          <HeaderButton
+            variant="back"
             onPress={handleBack}
-            hitSlop={6}
             disabled={stageMenuBusy}
-            accessibilityRole="button"
             accessibilityLabel="기록 목록으로 돌아가기"
-            accessibilityState={{ disabled: stageMenuBusy, busy: isExporting }}
-          >
-            <Feather name="arrow-left" size={19} color={Colors.zinc700} />
-          </ScalePressable>
+            busy={isExporting}
+          />
         </View>
         <View style={styles.headerSideRight}>
           <WritingStateBar
@@ -1101,24 +1097,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-end",
-  },
-  headerBackButton: {
-    width: 44,
-    height: 44,
-    flexGrow: 0,
-    flexShrink: 0,
-  },
-  headerBackButtonContent: {
-    width: 40,
-    height: 40,
-    alignSelf: "center",
-    flexGrow: 0,
-    flexShrink: 0,
-    borderRadius: 20,
-    backgroundColor: Colors.white,
-    alignItems: "center",
-    justifyContent: "center",
-    ...Shadows.navBar,
   },
   titleSection: {
     paddingHorizontal: Spacing.screenPx,

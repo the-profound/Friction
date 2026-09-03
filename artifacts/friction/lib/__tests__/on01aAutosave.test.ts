@@ -383,7 +383,7 @@ describe("on-01a guarded return navigation", () => {
       headerStart,
       screen.indexOf("<KeyboardAvoidingView", headerStart),
     );
-    expect(header).toContain("styles.headerBackButton");
+    expect(header).toContain('<HeaderButton\n            variant="back"');
     expect(header).toContain('accessibilityLabel="기록 목록으로 돌아가기"');
     expect(header).toContain("styles.headerRight");
     expect(header).toContain("<WritingStateBar");
@@ -406,16 +406,16 @@ describe("on-01a guarded return navigation", () => {
     );
 
     expect(screen).toContain("<View style={styles.header} pointerEvents=\"box-none\">");
-    expect(screen).toContain("styles.headerBackButton");
+    expect(screen).toContain('<HeaderButton\n            variant="back"');
     expect(screen).toContain("styles.headerRight");
     expect(stylesSource).toContain("height: WRITING_HEADER_HEIGHT");
     expect(stylesSource).toContain("backgroundColor: Colors.white");
     expect(stylesSource).not.toContain('position: "absolute",\n    top: 0,\n    left: 0,\n    right: 0,\n    height: WRITING_HEADER_HEIGHT');
     expect(stylesSource).toContain("backgroundColor: \"transparent\",\n    zIndex: 53");
     expect(stateBar).toContain('testID="writing-stage-menu"');
-    expect(stateBar).toContain("backgroundColor: Colors.noticeAccent");
-    expect(stateBar).toContain("height: 44");
-    expect(stateBar).toContain("height: 40");
+    expect(stateBar).toContain('variant="menu"');
+    expect(stateBar).toContain("HeaderButton");
+    expect(stateBar).not.toContain("backgroundColor: Colors.noticeAccent");
     expect(stateBar).toContain("<ActionSheetModal");
     expect(stateBar).not.toContain("chevron-down");
     expect(stateBar).not.toContain("@expo/vector-icons");
