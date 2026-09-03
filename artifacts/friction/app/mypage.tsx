@@ -142,6 +142,15 @@ export default function MyPageScreen() {
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 32 }]}
         showsVerticalScrollIndicator={false}
       >
+        <Section title="활동">
+          <SettingRow
+            label="수신자 공개 처리한 편지"
+            onPress={() => router.push("/user-profile/recipient-only-letters" as never)}
+            showChevron
+            isLast
+          />
+        </Section>
+
         <Section title="내 정보">
           {userLoading ? (
             <View style={styles.loadingRow}>

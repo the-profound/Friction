@@ -1,6 +1,5 @@
 import React, { useState, useCallback, useRef, useMemo } from "react";
 import {
-  ActivityIndicator,
   View,
   Text,
   StyleSheet,
@@ -31,7 +30,6 @@ import {
   useListMyCollections,
   useUpdateArticle,
   getListMyCollectionArticlesQueryKey,
-  getListMyCollectionsQueryKey,
 } from "@workspace/api-client-react";
 import {
   invalidateMyCollections,
@@ -43,13 +41,13 @@ import SourceArticlePickerSheet from "@/components/SourceArticlePickerSheet/Sour
 import { MyArticlesPickerBottomSheet } from "@/components/MyArticlesPickerBottomSheet/MyArticlesPickerBottomSheet";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
-import CardSelectOverlay, { type OriginLayout, type ChainArticleMeta } from "@/components/CardSelectOverlay/CardSelectOverlay";
 import DropdownFilter from "@/components/DropdownFilter/DropdownFilter";
 import type { DropdownOption } from "@/components/DropdownFilter/DropdownFilter";
 import CanonicalCardSlot from "@/components/ArticleCardItem/CanonicalCardSlot";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
-import RecordRow from "@/components/RecordRow/RecordRow";
-import type { UnifiedRecord } from "@/lib/recordList";
+
+import { useLetterSelectionOverlay } from "@/hooks/useLetterSelectionOverlay";
+import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
 
 type FolderView = "card" | "content";
 const VIEW_OPTIONS: DropdownOption<FolderView>[] = [
@@ -91,28 +89,18 @@ export default function PersonalCollectionDetailScreen() {
   const [isLongPressMenuVisible, setIsLongPressMenuVisible] = useState(false);
   const [isSourcePickerVisible, setIsSourcePickerVisible] = useState(false);
   const [longPressSourceTitle, setLongPressSourceTitle] = useState<string | null>(null);
-  const [tapArticleEntry, setTapArticleEntry] = useState<MyCollectionArticleWithDetails | null>(null);
-  const [selectedOrigin, setSelectedOrigin] = useState<OriginLayout | null>(null);
-  const [isSelectedSourceHidden, setIsSelectedSourceHidden] = useState(false);
-  const cardSlotRefs = useRef<Map<string, View | null>>(new Map());
   const [view, setView] = useState<FolderView>("card");
-  const { width: windowWidth } = useWindowDimensions();
-  const openRowRef = useRef<{ close(): void } | null>(null);
+  const [scrollEnabled, setScrollEnabled] = useState(true);
 
-  const cachedCollections = userId
-    ? queryClient.getQueryData<MyCollection[]>(getListMyCollectionsQueryKey({ ownerId: userId }))
-    : undefined;
-  const cachedCollection = id ? cachedCollections?.find((item) => item.id === id) : undefined;
-  const collectionQuery = useGetMyCollection(id ?? "", {
-    query: {
-      initialData: cachedCollection,
-      initialDataUpdatedAt: userId
-        ? queryClient.getQueryState(getListMyCollectionsQueryKey({ ownerId: userId }))?.dataUpdatedAt
-        : undefined,
-    },
-  });
+  const { openLetterOverlay, renderLetterOverlay } = useLetterSelectionOverlay(userId);
+
+  const { width: windowWidth } = useWindowDimensions();
+  const openRowRef = useRef<SwipeableRowHandle | null>(null);
+  const rowRefs = useRef<Map<string, SwipeableRowHandle>>(new Map());
+
+  const collectionQuery = useGetMyCollection(id ?? "");
   const collection = collectionQuery.data;
-  const isImpression = collection?.isImpression ?? cachedCollection?.isImpression ?? false;
+  const isImpression = collection?.isImpression ?? false;
 
   const articlesQuery = useListMyCollectionArticles(id ?? "");
   const articles = (articlesQuery.data ?? []) as MyCollectionArticleWithDetails[];
@@ -131,16 +119,10 @@ export default function PersonalCollectionDetailScreen() {
     return rows;
   }, [sortedArticles]);
 
-  const myArticlesQuery = useListArticles(
-    { authorId: userId, status: "LETTER" as const },
-    { query: { enabled: showPicker && !!userId } },
-  );
+  const myArticlesQuery = useListArticles({ authorId: userId, status: "LETTER" as const });
   const myArticles = (myArticlesQuery.data ?? []) as Array<{ id: string; title: string; status: string; content?: string }>;
 
-  const allCollectionsQuery = useListMyCollections(
-    { ownerId: userId },
-    { query: { enabled: isMoveSheetVisible && !!userId } },
-  );
+  const allCollectionsQuery = useListMyCollections({ ownerId: userId });
   const otherCollections = ((allCollectionsQuery.data ?? []) as MyCollection[]).filter(
     (c) => c.id !== id && !c.isArchive
   );
@@ -156,6 +138,15 @@ export default function PersonalCollectionDetailScreen() {
       openRowRef.current.close();
       openRowRef.current = null;
     }
+  }, []);
+
+  const handleSwipeOpen = useCallback((articleId: string) => {
+    const currentOpen = openRowRef.current;
+    const newRef = rowRefs.current.get(articleId) ?? null;
+    if (currentOpen && currentOpen !== newRef) {
+      currentOpen.close();
+    }
+    openRowRef.current = newRef;
   }, []);
 
   const enterSelectionMode = useCallback(() => {
@@ -339,23 +330,6 @@ export default function PersonalCollectionDetailScreen() {
     setIsMoveSheetVisible(true);
   }, [selectedIds]);
 
-  const handleCardPress = useCallback(
-    (article: MyCollectionArticleWithDetails) => {
-      setIsSelectedSourceHidden(false);
-      const ref = cardSlotRefs.current.get(article.articleId);
-      if (ref) {
-        ref.measureInWindow((x, y, width, height) => {
-          setSelectedOrigin({ x, y, width, height });
-          setTapArticleEntry(article);
-        });
-      } else {
-        setSelectedOrigin({ x: 0, y: 0, width: cellWidth, height: cellHeight });
-        setTapArticleEntry(article);
-      }
-    },
-    [cellWidth, cellHeight],
-  );
-
   const handleLongPress = useCallback(
     (item: MyCollectionArticleWithDetails) => {
       if (item.article?.authorId !== userId && !isAdmin) return;
@@ -407,35 +381,9 @@ export default function PersonalCollectionDetailScreen() {
     }
   }, [longPressTargetArticle, updateArticle, queryClient, id, showToast]);
 
-  const handleNavigateToAuthor = useCallback(
-    (authorUserId: string) => {
-      router.push(`/user-profile/${authorUserId}` as never);
-    },
-    [router],
-  );
-
   const handleMorePress = useCallback(() => {
     setMoreSheetVisible(true);
   }, []);
-
-  const handleRetryArticles = useCallback(() => {
-    if (articlesQuery.isFetching) return;
-    void articlesQuery.refetch();
-  }, [articlesQuery]);
-
-  const handleRetryOtherCollections = useCallback(() => {
-    if (allCollectionsQuery.isFetching) return;
-    void allCollectionsQuery.refetch();
-  }, [allCollectionsQuery]);
-
-  const handleReadFromOverlay = useCallback(() => {
-    const item = tapArticleEntry;
-    if (!item) return;
-    setTapArticleEntry(null);
-    setSelectedOrigin(null);
-    setIsSelectedSourceHidden(false);
-    router.push({ pathname: "/read", params: { articleId: item.articleId, mode: "re_read" } });
-  }, [tapArticleEntry, router]);
 
   const alreadyAddedIds = articles.map((a) => a.articleId);
 
@@ -447,11 +395,44 @@ export default function PersonalCollectionDetailScreen() {
   }));
 
   const selectedCount = selectedIds.size;
-  const isArchive = collection?.isArchive ?? cachedCollection?.isArchive ?? false;
-  const hasCollectionMeta = !!collection || !!cachedCollection;
-  const hasArticles = articles.length > 0;
-  const isInitialArticlesLoading = articlesQuery.isLoading && !hasArticles;
-  const isArticlesErrorWithoutData = articlesQuery.isError && !hasArticles;
+  const isArchive = collection?.isArchive ?? false;
+
+  const renderGridRow = useCallback(
+    ({ item: rowItems }: { item: MyCollectionArticleWithDetails[] }) => (
+      <View style={styles.gridRow}>
+        {rowItems.map((entry) => (
+          <View key={entry.articleId} style={[styles.gridCell, { width: cellWidth }]}>
+            <CanonicalCardSlot width={cellWidth} height={cellHeight}>
+              <ArticleCardItem
+                title={entry.article?.title ?? "제목 없음"}
+                cover={entry.article?.cover}
+                carouselShadow
+                onPress={() => {
+                  if (entry.article && entry.article.authorId === userId) {
+                    openLetterOverlay(entry.article, {
+                      meta: {
+                        collectionName: collection?.name ?? null,
+                        collectionId: id ?? null,
+                        date: entry.addedAt,
+                      },
+                      currentCollectionId: id,
+                    });
+                  } else if (entry.article) {
+                    router.push({ pathname: "/read" as never, params: { articleId: entry.article.id, mode: "re_read" } });
+                  }
+                }}
+                onLongPress={() => handleLongPress(entry)}
+              />
+            </CanonicalCardSlot>
+          </View>
+        ))}
+        {Array.from({ length: GRID_COLS - rowItems.length }).map((_, i) => (
+          <View key={`filler-${i}`} style={{ width: cellWidth }} />
+        ))}
+      </View>
+    ),
+    [cellWidth, cellHeight, userId, openLetterOverlay, handleLongPress, collection?.name, id, router],
+  );
 
   const renderSelectionItem = useCallback(
     ({ item }: { item: MyCollectionArticleWithDetails }) => {
@@ -460,7 +441,7 @@ export default function PersonalCollectionDetailScreen() {
         <ScalePressable
           style={styles.selectionRow}
           onPress={() => toggleSelect(item.articleId)}
-        contentStyle={styles.selectionRowContent}
+          contentStyle={styles.selectionRowContent}
         >
           <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
             {isSelected && <Feather name="check" size={14} color={Colors.white} />}
@@ -483,58 +464,85 @@ export default function PersonalCollectionDetailScreen() {
     [selectedIds, toggleSelect],
   );
 
-  const renderGridRow = useCallback(
-    ({ item: rowItems }: { item: MyCollectionArticleWithDetails[] }) => (
-      <View style={styles.gridRow}>
-        {rowItems.map((article) => {
-          const isHidden = isSelectedSourceHidden && tapArticleEntry?.articleId === article.articleId;
-          return (
-            <View
-              key={article.articleId}
-              ref={(r) => { cardSlotRefs.current.set(article.articleId, r); }}
-              style={[styles.gridCell, { width: cellWidth, opacity: isHidden ? 0 : 1 }]}
-            >
-              <CanonicalCardSlot width={cellWidth} height={cellHeight}>
-                <ArticleCardItem
-                  title={article.article?.title ?? "제목 없음"}
-                  authorName={article.article?.authorNickname ?? undefined}
-                  collectionName={article.article?.collectionName ?? null}
-                  cover={article.article?.cover}
-                  onPress={() => handleCardPress(article)}
-                  onLongPress={() => handleLongPress(article)}
-                />
-              </CanonicalCardSlot>
-            </View>
-          );
-        })}
-        {Array.from({ length: GRID_COLS - rowItems.length }).map((_, i) => (
-          <View key={`filler-${i}`} style={{ width: cellWidth }} />
-        ))}
-      </View>
-    ),
-    [cellWidth, cellHeight, isSelectedSourceHidden, tapArticleEntry, collection, handleCardPress, handleLongPress],
-  );
-
-  const renderListItem = useCallback(
-    ({ item }: { item: MyCollectionArticleWithDetails }) => {
-      const record: UnifiedRecord = {
-        kind: "letter" as const,
-        id: item.articleId,
-        updatedAt: item.addedAt,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        article: (item.article ?? {}) as Article,
-      };
-      const canSend = item.article?.authorId === userId;
-      return (
-        <RecordRow
-          record={record}
-          onPress={() => setTapArticleEntry(item)}
+  const renderNormalItem = useCallback(
+    ({ item }: { item: MyCollectionArticleWithDetails }) => (
+      <SwipeableRow
+        ref={(r) => {
+          if (r) {
+            rowRefs.current.set(item.articleId, r);
+          } else {
+            rowRefs.current.delete(item.articleId);
+          }
+        }}
+        actions={[
+          ...(item.article?.authorId === userId
+            ? [
+                {
+                  label: "보내기",
+                  color: Colors.zinc900,
+                  onPress: () => {
+                    closeOpenRow();
+                    router.push({
+                      pathname: "/to-send",
+                      params: { articleId: item.articleId },
+                    });
+                  },
+                },
+              ]
+            : []),
+          {
+            label: "이동",
+            color: Colors.zinc500,
+            onPress: () => {
+              closeOpenRow();
+              setMoveTargetArticle(item);
+              setIsMoveSheetVisible(true);
+            },
+          },
+          {
+            label: "삭제",
+            color: "#EF4444",
+            onPress: () => {
+              closeOpenRow();
+              handleRemoveArticle(item.articleId);
+            },
+          },
+        ]}
+        onSwipeOpen={() => handleSwipeOpen(item.articleId)}
+        onScrollLock={(locked) => setScrollEnabled(!locked)}
+      >
+        <ScalePressable
+          style={styles.articleItemOuter}
+          onPress={() => {
+            closeOpenRow();
+            if (item.article) {
+              openLetterOverlay(item.article, {
+                meta: {
+                  collectionName: collection?.name ?? null,
+                  collectionId: id ?? null,
+                  date: item.addedAt,
+                },
+                currentCollectionId: id,
+              });
+            }
+          }}
           onLongPress={() => handleLongPress(item)}
-          onSend={canSend ? () => router.push({ pathname: "/to-send", params: { articleId: item.articleId } }) : undefined}
-        />
-      );
-    },
-    [handleLongPress, userId, router],
+          delayLongPress={400}
+          contentStyle={styles.articleItemContent}
+        >
+          <View style={styles.articleInfo}>
+            <Text style={styles.articleTitle} numberOfLines={1}>
+              {item.article?.title ?? "제목 없음"}
+            </Text>
+            <Text style={styles.articleDate}>
+              {new Date(item.addedAt).toLocaleDateString("ko-KR")}에 추가
+            </Text>
+          </View>
+          <Feather name="chevron-right" size={16} color={Colors.zinc300} />
+        </ScalePressable>
+      </SwipeableRow>
+    ),
+    [closeOpenRow, handleRemoveArticle, handleSwipeOpen, handleLongPress, router, userId, id, openLetterOverlay, collection?.name],
   );
 
   if (!id) {
@@ -595,9 +603,9 @@ export default function PersonalCollectionDetailScreen() {
             activeVariant="outline"
             accessibilityLabel="보기 방식 필터"
           />
-          {!isArchive && hasCollectionMeta && (
+          {!isArchive && (
             <ScalePressable onPress={() => setShowPicker(true)}
-            contentStyle={styles.addArticleButtonContent}
+              contentStyle={styles.addArticleButtonContent}
             >
               <Feather name="plus" size={16} color={Colors.zinc600} />
               <Text style={styles.addArticleText}>편지 추가</Text>
@@ -606,30 +614,11 @@ export default function PersonalCollectionDetailScreen() {
         </View>
       )}
 
-      {isInitialArticlesLoading ? (
-        <View
-          style={[styles.emptyContainer, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}
-          accessible
-          accessibilityRole="progressbar"
-          accessibilityLabel="편지 목록을 불러오는 중"
-        >
-          <ActivityIndicator size="large" color={Colors.zinc400} />
-          <Text style={styles.loadingTitle}>편지 목록을 불러오는 중이에요</Text>
-        </View>
-      ) : isArticlesErrorWithoutData ? (
+      {articlesQuery.isError ? (
         <View style={[styles.emptyContainer, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}>
           <Feather name="alert-circle" size={36} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>편지 목록을 불러오지 못했어요</Text>
-          <ScalePressable
-            style={styles.retryButtonOuter}
-            contentStyle={styles.retryButton}
-            onPress={handleRetryArticles}
-            disabled={articlesQuery.isFetching}
-            accessibilityRole="button"
-            accessibilityLabel="편지 목록 다시 시도"
-            accessibilityState={{ disabled: articlesQuery.isFetching, busy: articlesQuery.isFetching }}
-          >
-            {articlesQuery.isFetching ? <ActivityIndicator size="small" color={Colors.white} /> : null}
+          <ScalePressable style={styles.retryButtonOuter} contentStyle={styles.retryButton} onPress={() => articlesQuery.refetch()}>
             <Text style={styles.retryButtonText}>다시 시도</Text>
           </ScalePressable>
         </View>
@@ -639,74 +628,35 @@ export default function PersonalCollectionDetailScreen() {
           <Text style={styles.emptyTitle}>아직 추가된 편지가 없어요</Text>
           <Text style={styles.emptySubtitle}>완성된 편지를 이 폴더에 추가해보세요</Text>
         </View>
+      ) : selectionMode ? (
+        <FlatList
+          {...LIST_PERF_PRESET}
+          data={articles}
+          keyExtractor={(item) => item.articleId}
+          renderItem={renderSelectionItem}
+          contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 80 + 24 }]}
+          showsVerticalScrollIndicator={false}
+        />
+      ) : view === "card" ? (
+        <FlatList
+          {...LIST_PERF_PRESET}
+          data={gridRows}
+          keyExtractor={(_, idx) => `grid-row-${idx}`}
+          renderItem={renderGridRow}
+          contentContainerStyle={[styles.gridContent, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}
+          showsVerticalScrollIndicator={false}
+        />
       ) : (
-        <View style={styles.articlesContent}>
-          {articlesQuery.isError || articlesQuery.isFetching ? (
-            <View
-              style={styles.refreshStatus}
-              accessible
-              accessibilityRole={articlesQuery.isFetching ? "progressbar" : "alert"}
-              accessibilityLabel={
-                articlesQuery.isFetching
-                  ? "편지 목록을 새로 불러오는 중"
-                  : "편지 목록을 새로 불러오지 못함"
-              }
-            >
-              {articlesQuery.isFetching ? (
-                <>
-                  <ActivityIndicator size="small" color={Colors.zinc500} />
-                  <Text style={styles.refreshStatusText}>편지 목록을 새로 불러오는 중이에요</Text>
-                </>
-              ) : (
-                <>
-                  <Text style={styles.refreshStatusText}>편지 목록을 새로 불러오지 못했어요</Text>
-                  <ScalePressable
-                    style={styles.inlineRetryButtonOuter}
-                    contentStyle={styles.inlineRetryButton}
-                    onPress={handleRetryArticles}
-                    disabled={articlesQuery.isFetching}
-                    accessibilityRole="button"
-                    accessibilityLabel="편지 목록 다시 시도"
-                    accessibilityState={{ disabled: articlesQuery.isFetching, busy: articlesQuery.isFetching }}
-                  >
-                    <Text style={styles.inlineRetryButtonText}>다시 시도</Text>
-                  </ScalePressable>
-                </>
-              )}
-            </View>
-          ) : null}
-          {selectionMode ? (
-            <FlatList
-              {...LIST_PERF_PRESET}
-              style={styles.articlesList}
-              data={articles}
-              keyExtractor={(item) => item.articleId}
-              renderItem={renderSelectionItem}
-              contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 80 + 24 }]}
-              showsVerticalScrollIndicator={false}
-            />
-          ) : view === "card" ? (
-            <FlatList
-              {...LIST_PERF_PRESET}
-              style={styles.articlesList}
-              data={gridRows}
-              keyExtractor={(_, idx) => `grid-row-${idx}`}
-              renderItem={renderGridRow}
-              contentContainerStyle={[styles.gridContent, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}
-              showsVerticalScrollIndicator={false}
-            />
-          ) : (
-            <FlatList
-              {...LIST_PERF_PRESET}
-              style={styles.articlesList}
-              data={sortedArticles}
-              keyExtractor={(item) => item.articleId}
-              renderItem={renderListItem}
-              contentContainerStyle={[styles.listContent, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}
-              showsVerticalScrollIndicator={false}
-            />
-          )}
-        </View>
+        <FlatList
+          {...LIST_PERF_PRESET}
+          data={sortedArticles}
+          keyExtractor={(item) => item.articleId}
+          renderItem={renderNormalItem}
+          contentContainerStyle={[styles.listContent, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}
+          showsVerticalScrollIndicator={false}
+          scrollEnabled={scrollEnabled}
+          onScrollBeginDrag={closeOpenRow}
+        />
       )}
 
       {selectionMode && (
@@ -716,7 +666,7 @@ export default function PersonalCollectionDetailScreen() {
               style={styles.bulkActionButton}
               onPress={handleBulkDeletePress}
               disabled={selectedCount === 0 || isBulkDeleting || isBulkMoving}
-            contentStyle={[styles.bulkActionButtonContent, styles.bulkDeleteButtonContent, (selectedCount === 0 || isBulkDeleting || isBulkMoving) && styles.bulkActionButtonDisabledContent]}
+              contentStyle={[styles.bulkActionButtonContent, styles.bulkDeleteButtonContent, (selectedCount === 0 || isBulkDeleting || isBulkMoving) && styles.bulkActionButtonDisabledContent]}
             >
               <Text style={styles.bulkDeleteText}>
                 {isBulkDeleting ? "삭제 중..." : "삭제"}
@@ -726,7 +676,7 @@ export default function PersonalCollectionDetailScreen() {
               style={styles.bulkActionButton}
               onPress={handleBulkMovePress}
               disabled={selectedCount === 0 || isBulkDeleting || isBulkMoving}
-            contentStyle={[styles.bulkActionButtonContent, styles.bulkMoveButtonContent, (selectedCount === 0 || isBulkDeleting || isBulkMoving) && styles.bulkActionButtonDisabledContent]}
+              contentStyle={[styles.bulkActionButtonContent, styles.bulkMoveButtonContent, (selectedCount === 0 || isBulkDeleting || isBulkMoving) && styles.bulkActionButtonDisabledContent]}
             >
               <Text style={styles.bulkMoveText}>
                 {isBulkMoving ? "이동 중..." : "이동"}
@@ -742,11 +692,6 @@ export default function PersonalCollectionDetailScreen() {
         onSelect={handleAddArticles}
         articles={pickerArticles}
         alreadyAdded={alreadyAddedIds}
-        loading={myArticlesQuery.isLoading}
-        error={myArticlesQuery.isError}
-        onRetry={() => {
-          if (!myArticlesQuery.isFetching) void myArticlesQuery.refetch();
-        }}
       />
 
       <BottomSheet
@@ -794,34 +739,7 @@ export default function PersonalCollectionDetailScreen() {
         snapPoints={[0.5]}
       >
         <View style={styles.moveSheetContent}>
-          {allCollectionsQuery.isLoading ? (
-            <View
-              style={styles.moveLoadingContainer}
-              accessible
-              accessibilityRole="progressbar"
-              accessibilityLabel="이동할 보관함을 불러오는 중"
-            >
-              <ActivityIndicator size="small" color={Colors.zinc400} />
-              <Text style={styles.moveLoadingText}>보관함을 불러오는 중이에요</Text>
-            </View>
-          ) : allCollectionsQuery.isError ? (
-            <View style={styles.moveLoadingContainer}>
-              <Feather name="alert-circle" size={28} color={Colors.zinc300} />
-              <Text style={styles.moveEmptyText}>보관함을 불러오지 못했어요</Text>
-              <ScalePressable
-                style={styles.retryButtonOuter}
-                contentStyle={styles.retryButton}
-                onPress={handleRetryOtherCollections}
-                disabled={allCollectionsQuery.isFetching}
-                accessibilityRole="button"
-                accessibilityLabel="보관함 목록 다시 시도"
-                accessibilityState={{ disabled: allCollectionsQuery.isFetching, busy: allCollectionsQuery.isFetching }}
-              >
-                {allCollectionsQuery.isFetching ? <ActivityIndicator size="small" color={Colors.white} /> : null}
-                <Text style={styles.retryButtonText}>다시 시도</Text>
-              </ScalePressable>
-            </View>
-          ) : otherCollections.length === 0 ? (
+          {otherCollections.length === 0 ? (
             <View style={styles.moveEmptyContainer}>
               <Text style={styles.moveEmptyText}>이동 가능한 다른 보관함이 없어요</Text>
             </View>
@@ -833,7 +751,7 @@ export default function PersonalCollectionDetailScreen() {
                 <ScalePressable
                   style={styles.moveCollectionItem}
                   onPress={() => handleMoveArticle(coll.id)}
-                contentStyle={styles.moveCollectionItemContent}
+                  contentStyle={styles.moveCollectionItemContent}
                 >
                   <View style={styles.moveCollectionIcon}>
                     <Feather name="folder" size={18} color={Colors.zinc500} />
@@ -853,7 +771,8 @@ export default function PersonalCollectionDetailScreen() {
       <ConfirmModal
         visible={deleteConfirmVisible}
         title="폴더 삭제"
-        description={`'${collection?.name ?? ""}'을(를) 삭제할까요?\n폴더 안의 편지는 삭제되지 않아요.`}
+        description={`'${collection?.name ?? ""}'을(를) 삭제할까요?
+폴더 안의 편지는 삭제되지 않아요.`}
         confirmLabel={isDeletingCollection ? "삭제 중..." : "삭제"}
         cancelLabel="취소"
         destructive
@@ -913,28 +832,7 @@ export default function PersonalCollectionDetailScreen() {
         />
       ) : null}
 
-      <CardSelectOverlay
-        articles={tapArticleEntry?.article ? [tapArticleEntry.article] : []}
-        metas={[{
-          authorName: tapArticleEntry?.article?.authorNickname ?? null,
-          authorId: tapArticleEntry?.article?.authorId ?? null,
-          date: tapArticleEntry?.addedAt ?? null,
-          collectionName: tapArticleEntry?.article?.collectionName ?? null,
-          collectionId: tapArticleEntry?.article?.collectionId ?? null,
-        } satisfies ChainArticleMeta]}
-        initialIndex={0}
-        originLayout={selectedOrigin}
-        onClose={() => {
-          setTapArticleEntry(null);
-          setSelectedOrigin(null);
-          setIsSelectedSourceHidden(false);
-        }}
-        onRead={handleReadFromOverlay}
-        onReady={() => setIsSelectedSourceHidden(true)}
-        onNavigateToAuthor={handleNavigateToAuthor}
-        onNavigateToCollection={(collectionId) => router.push({ pathname: "/of-02-detail", params: { id: collectionId } })}
-        currentCollectionId={id}
-      />
+      {renderLetterOverlay()}
 
       {!selectionMode && <NavBar />}
 

@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { and, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
-import { db, usersTable, myCollectionsTable, neighborsTable, neighborRequestsTable, teamCollectionMembershipsTable, spaceLettersTable, articlesTable } from "@workspace/db";
+import { db, usersTable, myCollectionsTable, neighborsTable, neighborRequestsTable, teamCollectionMembershipsTable, spaceLettersTable, articlesTable, spacesTable, spaceParticipationsTable } from "@workspace/db";
 import type { Neighbor, NeighborRequest } from "@workspace/db";
 import { CreateUserBody, UpdateUserBody, UpdateUserRecentCollectionBody } from "@workspace/api-zod";
 import { requireAuth, resolveCallerId } from "../middlewares/requireAuth";
@@ -307,25 +307,75 @@ router.get("/users/:id/space-letters", async (req, res) => {
   }
 
   const articleIds = [...new Set(letters.map((l) => l.sourceArticleId).filter(Boolean) as string[])];
-  const articles = articleIds.length > 0
-    ? await db
-        .select({ id: articlesTable.id, title: articlesTable.title, content: articlesTable.content, cover: articlesTable.cover })
-        .from(articlesTable)
-        .where(inArray(articlesTable.id, articleIds))
-    : [];
+  const uniqueSpaceIds = [...new Set(letters.map((l) => l.spaceId))];
+
+  // Fetch articles and space anonymity in parallel.
+  const [articles, spaces] = await Promise.all([
+    articleIds.length > 0
+      ? db
+          .select({ id: articlesTable.id, title: articlesTable.title, content: articlesTable.content, cover: articlesTable.cover })
+          .from(articlesTable)
+          .where(inArray(articlesTable.id, articleIds))
+      : Promise.resolve([] as { id: string; title: string | null; content: string | null; cover: string | null }[]),
+    uniqueSpaceIds.length > 0
+      ? db
+          .select({ id: spacesTable.id, isAnonymous: spacesTable.isAnonymous })
+          .from(spacesTable)
+          .where(inArray(spacesTable.id, uniqueSpaceIds))
+      : Promise.resolve([] as { id: string; isAnonymous: boolean }[]),
+  ]);
+
   const articleMap = new Map(articles.map((a) => [a.id, a]));
+  const spaceMap = new Map(spaces.map((s) => [s.id, s]));
+
+  // For anonymous spaces fetch the author's chosen space nickname so the
+  // client knows to disable the visibility-toggle button (anonymous space
+  // letters are always RECIPIENT_ONLY and cannot be changed).
+  const anonymousSpaceIds = spaces.filter((s) => s.isAnonymous).map((s) => s.id);
+  // Key: `${spaceId}:${authorId}` → spaceNickname (null while pending).
+  const participationDisplayName = new Map<string, string | null>();
+  if (anonymousSpaceIds.length > 0) {
+    const participations = await db
+      .select({
+        spaceId: spaceParticipationsTable.spaceId,
+        userId: spaceParticipationsTable.userId,
+        spaceNickname: spaceParticipationsTable.spaceNickname,
+      })
+      .from(spaceParticipationsTable)
+      .where(
+        and(
+          inArray(spaceParticipationsTable.spaceId, anonymousSpaceIds),
+          eq(spaceParticipationsTable.userId, req.params.id),
+          inArray(spaceParticipationsTable.status, ["PENDING", "APPROVED"]),
+        ),
+      );
+    for (const p of participations) {
+      participationDisplayName.set(`${p.spaceId}:${p.userId}`, p.spaceNickname);
+    }
+  }
 
   const result = letters.map((letter) => {
     const article = letter.sourceArticleId ? (articleMap.get(letter.sourceArticleId) ?? null) : null;
     const rawContent = article?.content ?? null;
     const articleExcerpt = rawContent ? rawContent.replace(/[#*_`>\-~[\]()]/g, "").trim().slice(0, 100) : null;
+
+    // displayName is non-null only for anonymous-space letters.
+    // A non-null value signals to the client that visibility cannot be changed.
+    const space = spaceMap.get(letter.spaceId);
+    let displayName: string | null = null;
+    if (space?.isAnonymous) {
+      const key = `${letter.spaceId}:${letter.authorId}`;
+      // Use the chosen nickname when available; fall back to "참여자" while pending.
+      displayName = participationDisplayName.get(key) ?? "참여자";
+    }
+
     return {
       ...letter,
       articleTitle: article?.title ?? null,
       articleExcerpt,
       articleCover: article?.cover ?? null,
       authorNickname: null,
-      displayName: null,
+      displayName,
       isRead: false,
     };
   });

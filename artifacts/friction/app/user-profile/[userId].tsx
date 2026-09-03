@@ -12,11 +12,11 @@ import { useRouter, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import ScalePressable from "@/components/shared/ScalePressable";
+import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import CanonicalCardSlot from "@/components/ArticleCardItem/CanonicalCardSlot";
-import CardSelectOverlay, { type ChainArticleMeta } from "@/components/CardSelectOverlay/CardSelectOverlay";
-import { useAncestorChain } from "@/hooks/useAncestorChain";
+import { useLetterSelectionOverlay } from "@/hooks/useLetterSelectionOverlay";
 import { Colors, Spacing, Typography, Sizing } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { useToast } from "@/contexts/ToastContext";
@@ -34,6 +34,7 @@ import {
   useDeleteNeighborRequest,
   useRemoveNeighbor,
   useListUserSpaceLetters,
+  SpaceLetterVisibility,
 } from "@workspace/api-client-react";
 import type {
   Article,
@@ -41,10 +42,10 @@ import type {
   SendRecordWithDetails,
   NeighborWithUser,
   NeighborRequestWithUser,
+  SpaceLetter,
 } from "@workspace/api-client-react";
 import { spaceStatusLabel, spaceStatusStyle } from "@/lib/spaceStatusStyle";
 import { useSelectionScrollRestoration } from "@/hooks/useSelectionScrollRestoration";
-import type { OriginLayout } from "@/components/CardSelectOverlay/CardSelectOverlay";
 
 type ProfileTab = "letters" | "publications" | "spaces";
 
@@ -64,9 +65,6 @@ const GRID_GAP = 4;
 const GRID_COLS = 3;
 
 // hint: Logic changed on both sides. Requires understanding intent of each change.
-// hint: Logic changed on both sides. Requires understanding intent of each change.
-// hint: Logic changed on both sides. Requires understanding intent of each change.
-// hint: Logic changed on both sides. Requires understanding intent of each change.
 export default function UserProfileScreen() {
   const insets = useSafeAreaInsets();
   const navBottom = useNavBarBottomSafeArea();
@@ -79,13 +77,20 @@ export default function UserProfileScreen() {
 
   const [profileTab, setProfileTab] = useState<ProfileTab>("letters");
   const [removeConfirmVisible, setRemoveConfirmVisible] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
 
-  const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
-  const [selectedOrigin, setSelectedOrigin] = useState<OriginLayout | null>(null);
-  const [isSelectedSourceHidden, setIsSelectedSourceHidden] = useState(false);
-  const [selectedCollectionName, setSelectedCollectionName] = useState<string | null>(null);
-  const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
-  const [selectedDateOverride, setSelectedDateOverride] = useState<string | null>(null);
+  const isOwnProfile =
+    currentUserId != null && currentUserId === profileUserId;
+
+  const cancelScrollRestorationRef = useRef<() => void>(() => {});
+  const {
+    isOverlayActive,
+    isSourceHidden,
+    openLetterOverlay,
+    renderLetterOverlay,
+  } = useLetterSelectionOverlay(currentUserId, {
+    onBeforeRead: () => cancelScrollRestorationRef.current(),
+  });
 
   const userQuery = useGetUser(profileUserId ?? "");
   const articlesQuery = useListArticles({ authorId: profileUserId });
@@ -112,6 +117,7 @@ export default function UserProfileScreen() {
   const refetchSendRecords = sendRecordsQuery.refetch;
   const refetchNeighbors = neighborsQuery.refetch;
   const refetchSentRequests = sentRequestsQuery.refetch;
+  const refetchProfileSpaceLetters = profileSpaceLettersQuery.refetch;
   useFocusEffect(
     useCallback(() => {
       refetchArticles();
@@ -119,7 +125,8 @@ export default function UserProfileScreen() {
       refetchSendRecords();
       refetchNeighbors();
       refetchSentRequests();
-    }, [refetchArticles, refetchSpaces, refetchSendRecords, refetchNeighbors, refetchSentRequests]),
+      refetchProfileSpaceLetters();
+    }, [refetchArticles, refetchSpaces, refetchSendRecords, refetchNeighbors, refetchSentRequests, refetchProfileSpaceLetters]),
   );
 
   const sendRecordByArticleId = useMemo<
@@ -151,34 +158,49 @@ export default function UserProfileScreen() {
   const displayName = user?.nickname?.trim() || "이름 없음";
   const handle = user?.nickname?.trim() ? `@${user.nickname.trim()}` : "";
 
-  // Set of article IDs that are PUBLIC space letters for this profile user.
-  // The server already filters RECIPIENT_ONLY letters from this endpoint (Task 1),
-  // but we cross-reference here so a visibility change in on.tsx (which invalidates
-  // this query key) immediately removes the letter from this view via cache update.
-  const publicSpaceLetterArticleIds = useMemo<Set<string>>(() => {
-    const ids = new Set<string>();
-    for (const sl of profileSpaceLettersQuery.data ?? []) {
-      if (sl.sourceArticleId) ids.add(sl.sourceArticleId);
+  // Map from sourceArticleId → visibility for all space letters returned for
+  // this profile user. The server returns ALL visibility levels when the
+  // authenticated user is the profile owner, so we must check visibility here
+  // rather than trusting that the set is already filtered to PUBLIC only.
+  const spaceLetterVisibilityById = useMemo<Map<string, string>>(() => {
+    const map = new Map<string, string>();
+    for (const sl of (profileSpaceLettersQuery.data ?? []) as SpaceLetter[]) {
+      if (!sl.sourceArticleId) continue;
+      // PUBLIC wins: a letter sent to multiple spaces is shown in the profile
+      // as long as at least one of its space_letters is PUBLIC.
+      if (!map.has(sl.sourceArticleId) || sl.visibility === SpaceLetterVisibility.PUBLIC) {
+        map.set(sl.sourceArticleId, sl.visibility);
+      }
     }
-    return ids;
+    return map;
   }, [profileSpaceLettersQuery.data]);
 
   const letters = useMemo<Article[]>(() => {
-    const list = ((articlesQuery.data ?? []) as Article[]).filter(
-      (a) =>
-        a.status === "LETTER" &&
-        sendRecordByArticleId[a.id] !== undefined &&
-        // Client-side guard: only show PUBLIC space letters. Handles the case
-        // where the cache updates after a visibility change in on.tsx before
-        // the next articlesQuery refetch cleans up the article list.
-        (publicSpaceLetterArticleIds.size === 0 || publicSpaceLetterArticleIds.has(a.id)),
-    );
+    // Fail closed: every letter shown in this profile grid arrived via a space
+    // (it has a SendRecord).  Until we know each letter's visibility we cannot
+    // safely display any of them — an article-list response can resolve before
+    // the space-letter visibility response.  Return an empty list while the
+    // visibility query is pending so RECIPIENT_ONLY letters are never
+    // transiently visible on another user's profile.
+    if (profileSpaceLettersQuery.data === undefined) return [];
+
+    const list = ((articlesQuery.data ?? []) as Article[]).filter((a) => {
+      if (a.status !== "LETTER") return false;
+      if (sendRecordByArticleId[a.id] === undefined) return false;
+      const visibility = spaceLetterVisibilityById.get(a.id);
+      // Only show letters confirmed PUBLIC. Every letter in this grid has a
+      // SendRecord and is therefore a space letter.  Absent-from-map means:
+      //  • non-owner viewer: the server omitted it → it is RECIPIENT_ONLY → deny
+      //  • owner viewer:     server returned all levels; absent → deny (safe default)
+      // Never allow letters whose visibility has not been positively confirmed.
+      return visibility === SpaceLetterVisibility.PUBLIC;
+    });
     return [...list].sort((a, b) => {
       const slotA = sendRecordByArticleId[a.id]?.deliverySlot ?? "";
       const slotB = sendRecordByArticleId[b.id]?.deliverySlot ?? "";
       return slotB.localeCompare(slotA);
     });
-  }, [articlesQuery.data, sendRecordByArticleId, publicSpaceLetterArticleIds]);
+  }, [articlesQuery.data, sendRecordByArticleId, spaceLetterVisibilityById, profileSpaceLettersQuery.data]);
 
   const spaces = useMemo<SpaceListItem[]>(() => {
     return ((spacesQuery.data ?? []) as SpaceListItem[]).filter(
@@ -289,111 +311,30 @@ export default function UserProfileScreen() {
     captureScrollOffset,
     cancelScrollRestoration,
   } = useSelectionScrollRestoration(
-    selectedArticle !== null,
+    isOverlayActive,
     restoreProfileScrollOffset,
   );
+  // Keep the ref current so the hook's onBeforeRead fires with the latest function.
+  cancelScrollRestorationRef.current = cancelScrollRestoration;
 
   const handleLetterPress = useCallback(
     (article: Article) => {
       captureScrollOffset();
-      setIsSelectedSourceHidden(false);
       const rec = sendRecordByArticleId[article.id];
-      const colName = rec?.name ?? null;
-      const colId = rec?.id ?? null;
-      const deliverySlot = rec?.deliverySlot ?? null;
       const slotRef = cardSlotRefs.current.get(article.id);
-      if (slotRef) {
-        slotRef.measureInWindow((x, y, width, height) => {
-          setSelectedOrigin({ x, y, width, height });
-          setSelectedArticle(article);
-          setSelectedCollectionName(colName);
-          setSelectedCollectionId(colId);
-          setSelectedDateOverride(deliverySlot);
-        });
-      } else {
-        setSelectedOrigin({ x: 0, y: 0, width: cellWidth, height: cellHeight });
-        setSelectedArticle(article);
-        setSelectedCollectionName(colName);
-        setSelectedCollectionId(colId);
-        setSelectedDateOverride(deliverySlot);
-      }
+      openLetterOverlay(article, {
+        meta: {
+          collectionName: rec?.name ?? null,
+          collectionId: rec?.id ?? null,
+          date: rec?.deliverySlot ?? null,
+        },
+        measureRef: slotRef ?? null,
+        fallbackOrigin: { x: 0, y: 0, width: cellWidth, height: cellHeight },
+        currentAuthorId: profileUserId,
+      });
     },
-    [cellWidth, cellHeight, sendRecordByArticleId, captureScrollOffset],
+    [cellWidth, cellHeight, sendRecordByArticleId, captureScrollOffset, openLetterOverlay, profileUserId],
   );
-
-  const handleOverlayClose = useCallback(() => {
-    setIsSelectedSourceHidden(false);
-    setSelectedArticle(null);
-    setSelectedOrigin(null);
-    setSelectedCollectionName(null);
-    setSelectedCollectionId(null);
-    setSelectedDateOverride(null);
-  }, []);
-
-  const handleNavigateToCollection = useCallback(
-    (id: string) => {
-      router.push({ pathname: "/of-02-detail", params: { id } });
-    },
-    [router],
-  );
-
-  // ── Article chain for the overlay (shared 편지 선택 모드 traversal) ────────
-  const ancestorChain = useAncestorChain(selectedArticle?.sourceArticleId, queryClient);
-
-  const { chainArticles, chainMetas, chainInitialIndex } = useMemo(() => {
-    if (!selectedArticle) {
-      return {
-        chainArticles: [] as (Article | null)[],
-        chainMetas: [] as ChainArticleMeta[],
-        chainInitialIndex: 0,
-      };
-    }
-
-    const artList: (Article | null)[] = [];
-    const metaList: ChainArticleMeta[] = [];
-
-    for (const slot of ancestorChain) {
-      artList.push(slot.article);
-      metaList.push(
-        slot.article
-          ? {
-              authorName: (slot.article as any).authorNickname ?? null,
-              authorId: slot.article.authorId ?? null,
-              collectionName: slot.article.collectionName ?? null,
-              collectionId: slot.article.collectionId ?? null,
-              date: slot.article.letterAt ?? null,
-            }
-          : {},
-      );
-    }
-
-    const initIdx = artList.length;
-    artList.push(selectedArticle);
-    metaList.push({
-      authorName: selectedArticle.authorNickname ?? user?.nickname ?? null,
-      authorId: selectedArticle.authorId ?? null,
-      collectionName: selectedCollectionName,
-      collectionId: selectedCollectionId,
-      date: selectedDateOverride,
-    });
-
-    return { chainArticles: artList, chainMetas: metaList, chainInitialIndex: initIdx };
-  }, [selectedArticle, ancestorChain, selectedCollectionName, selectedCollectionId, selectedDateOverride, user?.nickname]);
-
-  const handleOverlayRead = useCallback((chainIdx: number) => {
-    const article = chainArticles[chainIdx];
-    if (!article) return;
-    cancelScrollRestoration();
-    setSelectedArticle(null);
-    setSelectedOrigin(null);
-    setSelectedCollectionName(null);
-    setSelectedCollectionId(null);
-    setSelectedDateOverride(null);
-    router.push({
-      pathname: "/read" as never,
-      params: { articleId: article.id, mode: "re_read" },
-    });
-  }, [chainArticles, router, cancelScrollRestoration]);
 
   const handleSpacePress = useCallback(
     (space: SpaceListItem) => {
@@ -453,8 +394,7 @@ export default function UserProfileScreen() {
         return (
           <View style={styles.gridRow}>
             {item.items.map((article) => {
-              const isHidden =
-                isSelectedSourceHidden && selectedArticle?.id === article.id;
+              const isHidden = isSourceHidden(article.id);
               const itemCollectionName =
                 collectionNameByArticleId[article.id] ?? null;
               return (
@@ -538,8 +478,7 @@ export default function UserProfileScreen() {
       );
     },
     [
-      selectedArticle?.id,
-      isSelectedSourceHidden,
+      isSourceHidden,
       collectionNameByArticleId,
       cellWidth,
       cellHeight,
@@ -562,6 +501,13 @@ export default function UserProfileScreen() {
       <ScalePressable onPress={() => router.back()} hitSlop={12}>
         <Feather name="arrow-left" size={20} color={Colors.zinc600} />
       </ScalePressable>
+      {isOwnProfile ? (
+        <ScalePressable onPress={() => setMenuVisible(true)} hitSlop={12}>
+          <Feather name="menu" size={20} color={Colors.zinc600} />
+        </ScalePressable>
+      ) : (
+        <View style={{ width: 20 }} />
+      )}
     </View>
   );
 
@@ -697,21 +643,34 @@ export default function UserProfileScreen() {
         showsVerticalScrollIndicator={false}
         onScroll={handleSelectionScroll}
         scrollEventThrottle={16}
-        scrollEnabled={selectedArticle === null}
+        scrollEnabled={!isOverlayActive}
       />
 
-      <CardSelectOverlay
-        articles={chainArticles}
-        metas={chainMetas}
-        initialIndex={chainInitialIndex}
-        originLayout={selectedOrigin}
-        onClose={handleOverlayClose}
-        onRead={handleOverlayRead}
-        onReady={() => setIsSelectedSourceHidden(true)}
-        onNavigateToCollection={handleNavigateToCollection}
-        onNavigateToAuthor={(id) => router.push(`/user-profile/${id}` as never)}
-        currentAuthorId={profileUserId}
-      />
+      {renderLetterOverlay()}
+
+      {/* Hamburger menu — own profile only */}
+      <BottomSheet
+        visible={menuVisible}
+        onClose={() => setMenuVisible(false)}
+        snapPoints={[0.32]}
+      >
+        <View style={styles.menuContainer}>
+          <Text style={styles.menuSectionLabel}>활동</Text>
+          <ScalePressable
+            style={styles.menuItem}
+            contentStyle={styles.menuItemContent}
+            onPress={() => {
+              setMenuVisible(false);
+              router.push("/user-profile/recipient-only-letters" as never);
+            }}
+          >
+            <Feather name="eye-off" size={18} color={Colors.zinc600} />
+            <Text style={styles.menuItemText}>수신자 공개 처리한 편지</Text>
+            <Feather name="chevron-right" size={16} color={Colors.zinc400} />
+          </ScalePressable>
+        </View>
+      </BottomSheet>
+
       <ConfirmModal
         visible={removeConfirmVisible}
         title="이웃 삭제"
@@ -924,5 +883,38 @@ const styles = StyleSheet.create({
     color: Colors.zinc500,
     textAlign: "center",
     lineHeight: 20,
+  },
+  menuContainer: {
+    paddingHorizontal: Spacing.screenPx,
+    paddingTop: 8,
+    gap: 6,
+  },
+  menuSectionLabel: {
+    ...Typography.caption,
+    fontSize: 11,
+    color: Colors.zinc400,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    paddingHorizontal: 4,
+    paddingBottom: 4,
+  },
+  menuItem: {
+    borderRadius: 14,
+  },
+  menuItemContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 15,
+    backgroundColor: Colors.zinc50,
+    borderRadius: 14,
+  },
+  menuItemText: {
+    flex: 1,
+    ...Typography.body,
+    fontSize: 15,
+    color: Colors.zinc800,
+    letterSpacing: -0.2,
   },
 });

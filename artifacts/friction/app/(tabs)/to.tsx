@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -9,13 +9,11 @@ import {
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useRouter, useFocusEffect } from "expo-router";
-import { useReaderTransition } from "@/contexts/ReaderTransitionContext";
 
 import ScalePressable from "@/components/shared/ScalePressable";
 import { PageHeader } from "@/components/NavBar/PageHeader";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import CanonicalCardSlot from "@/components/ArticleCardItem/CanonicalCardSlot";
-import CardSelectOverlay, { type ChainArticleMeta } from "@/components/CardSelectOverlay/CardSelectOverlay";
 import { Colors, Spacing, Typography, Sizing } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { useUser } from "@/contexts/UserContext";
@@ -27,8 +25,6 @@ import {
   useListSendRecords,
   useListNeighbors,
   useListUserArticleReads,
-  getArticle,
-  getGetArticleQueryKey,
   getGetUserQueryKey,
   getListArticlesQueryKey,
   getListSpacesQueryKey,
@@ -38,8 +34,10 @@ import {
 import { isQueryStale } from "@/lib/useScreenFocused";
 import { useSelectionScrollRestoration } from "@/hooks/useSelectionScrollRestoration";
 import type { Article, SpaceListItem, SendRecordWithDetails } from "@workspace/api-client-react";
+import { SpaceLetterVisibility } from "@workspace/api-client-react";
 import { spaceStatusLabel, spaceStatusStyle } from "@/lib/spaceStatusStyle";
 import type { OriginLayout } from "@/components/CardSelectOverlay/CardSelectOverlay";
+import { useLetterSelectionOverlay } from "@/hooks/useLetterSelectionOverlay";
 
 // getListUserArticleReadsQueryKey is not in the compiled dist types — define locally.
 // Key shape mirrors packages/api-client-react/src/user-article-reads.ts.
@@ -65,7 +63,6 @@ const GRID_GAP = 4;
 const GRID_COLS = 3;
 
 export default function MyScreen() {
-  const { startFadeToBlack } = useReaderTransition();
   const navBottom = useNavBarBottomSafeArea();
   const router = useRouter();
   const { userId } = useUser();
@@ -74,12 +71,15 @@ export default function MyScreen() {
 
   const [myTab, setMyTab] = useState<MyTab>("letters");
 
-  const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
-  const [selectedOrigin, setSelectedOrigin] = useState<OriginLayout | null>(null);
-  const [isSelectedSourceHidden, setIsSelectedSourceHidden] = useState(false);
-  const [selectedCollectionName, setSelectedCollectionName] = useState<string | null>(null);
-  const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
-  const [selectedDateOverride, setSelectedDateOverride] = useState<string | null>(null);
+  // Shared "내 편지 선택 오버레이" hook.
+  // cancelScrollRestorationRef breaks the hook-ordering cycle: the hook's
+  // onBeforeRead calls it, but cancelScrollRestoration only becomes known
+  // after useSelectionScrollRestoration runs below.
+  const cancelScrollRestorationRef = useRef<(() => void) | null>(null);
+  const { isOverlayActive, isSourceHidden, openLetterOverlay, renderLetterOverlay, spaceLetterByArticleId } =
+    useLetterSelectionOverlay(userId, {
+      onBeforeRead: () => cancelScrollRestorationRef.current?.(),
+    });
 
   const userQuery = useGetUser(userId);
   const articlesQuery = useListArticles({ authorId: userId });
@@ -146,16 +146,30 @@ export default function MyScreen() {
   const displayName = user?.nickname?.trim() || "이름 없음";
   const handle = user?.nickname?.trim() ? `@${user.nickname.trim()}` : "";
 
-  const letters = useMemo<Article[]>(() => {
-    const list = (articlesQuery.data ?? []).filter(
+  // Total count of sent letters (regardless of visibility) — used in profile stats.
+  const sentLetterCount = useMemo<number>(() => {
+    return ((articlesQuery.data ?? []) as Article[]).filter(
       (a) => a.status === "LETTER" && sendRecordByArticleId[a.id] !== undefined,
-    );
+    ).length;
+  }, [articlesQuery.data, sendRecordByArticleId]);
+
+  const letters = useMemo<Article[]>(() => {
+    // Filter to PUBLIC letters only for the grid display.
+    // spaceLetterByArticleId (from the hook) uses PUBLIC-wins logic and is
+    // empty while the space-letters query is still loading — so RECIPIENT_ONLY
+    // letters are never transiently visible (fail-closed).
+    const list = ((articlesQuery.data ?? []) as Article[]).filter((a) => {
+      if (a.status !== "LETTER") return false;
+      if (sendRecordByArticleId[a.id] === undefined) return false;
+      const sl = spaceLetterByArticleId.get(a.id);
+      return sl?.visibility === SpaceLetterVisibility.PUBLIC;
+    });
     return [...list].sort((a, b) => {
       const slotA = sendRecordByArticleId[a.id]?.deliverySlot ?? "";
       const slotB = sendRecordByArticleId[b.id]?.deliverySlot ?? "";
       return slotB.localeCompare(slotA);
     });
-  }, [articlesQuery.data, sendRecordByArticleId]);
+  }, [articlesQuery.data, sendRecordByArticleId, spaceLetterByArticleId]);
 
   const spaces = useMemo<SpaceListItem[]>(() => {
     return ((spacesQuery.data ?? []) as SpaceListItem[]).filter(
@@ -165,7 +179,6 @@ export default function MyScreen() {
 
   const neighborCount = (neighborsQuery.data ?? []).length;
   const readCount = (userReadsQuery.data ?? []).length;
-  const sentLetterCount = letters.length;
 
   const cellWidth = Math.floor(
     (windowWidth - GRID_PAD * 2 - GRID_GAP * (GRID_COLS - 1)) / GRID_COLS,
@@ -183,196 +196,36 @@ export default function MyScreen() {
     captureScrollOffset,
     cancelScrollRestoration,
   } = useSelectionScrollRestoration(
-    selectedArticle !== null,
+    isOverlayActive,
     restoreMyScrollOffset,
   );
+  // Wire cancelScrollRestoration into the hook's onBeforeRead without circular ordering.
+  cancelScrollRestorationRef.current = cancelScrollRestoration;
 
   const handleLetterPress = useCallback(
     (article: Article) => {
       captureScrollOffset();
-      setIsSelectedSourceHidden(false);
       const rec = sendRecordByArticleId[article.id];
-      const colName = rec?.name ?? null;
-      const colId = rec?.id ?? null;
-      const deliverySlot = rec?.deliverySlot ?? null;
       const slotRef = cardSlotRefs.current.get(article.id);
-      if (slotRef) {
-        slotRef.measureInWindow((x, y, width, height) => {
-          setSelectedOrigin({ x, y, width, height });
-          setSelectedArticle(article);
-          setSelectedCollectionName(colName);
-          setSelectedCollectionId(colId);
-          setSelectedDateOverride(deliverySlot);
+      const open = (origin: OriginLayout) => {
+        openLetterOverlay(article, {
+          fallbackOrigin: origin,
+          meta: {
+            collectionName: rec?.name ?? null,
+            collectionId: rec?.id ?? null,
+            date: rec?.deliverySlot ?? null,
+          },
+          currentAuthorId: userId,
         });
-      } else {
-        setSelectedOrigin({ x: 0, y: 0, width: cellWidth, height: cellHeight });
-        setSelectedArticle(article);
-        setSelectedCollectionName(colName);
-        setSelectedCollectionId(colId);
-        setSelectedDateOverride(deliverySlot);
-      }
-    },
-    [cellWidth, cellHeight, sendRecordByArticleId, captureScrollOffset],
-  );
-
-  const handleOverlayClose = useCallback(() => {
-    setIsSelectedSourceHidden(false);
-    setSelectedArticle(null);
-    setSelectedOrigin(null);
-    setSelectedCollectionName(null);
-    setSelectedCollectionId(null);
-    setSelectedDateOverride(null);
-  }, []);
-
-  const handleNavigateToCollection = useCallback(
-    (id: string) => {
-      router.push({ pathname: "/of-02-detail", params: { id } });
-    },
-    [router],
-  );
-
-  const handleNavigateToAuthor = useCallback(
-    (id: string) => {
-      router.push(`/user-profile/${id}` as never);
-    },
-    [router],
-  );
-
-  // ── Article chain for the My-tab overlay (recursive ancestor traversal) ──
-  // Follow selectedArticle.sourceArticleId → Article.sourceArticleId → …
-  // until null, collecting ancestors oldest→newest with skeleton placeholders.
-  // Navigating to recipients' replies from the My tab is out of scope.
-
-  interface ToAncestorSlot { id: string; article: Article | null }
-  const [toAncestorChain, setToAncestorChain] = useState<ToAncestorSlot[]>([]);
-
-  useEffect(() => {
-    const startId = selectedArticle?.sourceArticleId;
-    if (!startId) {
-      setToAncestorChain([]);
-      return;
-    }
-    let cancelled = false;
-    setToAncestorChain([{ id: startId, article: null }]);
-
-    const MAX_DEPTH = 20;
-
-    async function bfsTraverse() {
-      let currentIds = [startId as string];
-
-      for (let depth = 0; depth < MAX_DEPTH && currentIds.length > 0; depth++) {
-        if (cancelled) return;
-
-        const results = await Promise.all(
-          currentIds.map(async (id) => {
-            try {
-              return (await queryClient.fetchQuery({
-                queryKey: getGetArticleQueryKey(id),
-                queryFn: () => getArticle(id),
-                staleTime: 5 * 60 * 1000,
-              })) as Article;
-            } catch {
-              return null;
-            }
-          }),
-        );
-
-        if (cancelled) return;
-
-        setToAncestorChain((prev) => {
-          const next = [...prev];
-          for (let i = 0; i < currentIds.length; i++) {
-            const id = currentIds[i];
-            const article = results[i];
-            const idx = next.findIndex((s) => s.id === id);
-            if (idx !== -1 && article) {
-              next[idx] = { id, article };
-            }
-          }
-          return next;
-        });
-
-        const nextIds: string[] = [];
-        for (const article of results) {
-          if (article) {
-            const nextId = (article as any).sourceArticleId as string | null | undefined;
-            if (nextId) nextIds.push(nextId);
-          }
-        }
-
-        if (nextIds.length > 0 && !cancelled) {
-          setToAncestorChain((prev) => [
-            ...nextIds.map((id) => ({ id, article: null })),
-            ...prev,
-          ]);
-        }
-
-        currentIds = nextIds;
-      }
-    }
-
-    bfsTraverse();
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedArticle?.sourceArticleId]);
-
-  const { toChainArticles, toChainMetas, toChainInitialIndex } = useMemo(() => {
-    if (!selectedArticle) {
-      return {
-        toChainArticles: [] as (Article | null)[],
-        toChainMetas: [] as ChainArticleMeta[],
-        toChainInitialIndex: 0,
       };
-    }
-
-    const artList: (Article | null)[] = [];
-    const metaList: ChainArticleMeta[] = [];
-
-    // Ancestors — oldest first (toAncestorChain is ordered oldest→newest)
-    for (const slot of toAncestorChain) {
-      artList.push(slot.article);
-      metaList.push(
-        slot.article
-          ? {
-              authorName: slot.article.authorNickname ?? null,
-              authorId: slot.article.authorId ?? null,
-              collectionName: slot.article.collectionName ?? null,
-              collectionId: slot.article.collectionId ?? null,
-              date: slot.article.letterAt ?? slot.article.createdAt ?? null,
-            }
-          : {},
-      );
-    }
-
-    const initIdx = artList.length; // selectedArticle goes here
-    artList.push(selectedArticle);
-    metaList.push({
-      authorName: selectedArticle.authorNickname ?? user?.nickname ?? null,
-      authorId: selectedArticle.authorId ?? null,
-      collectionName: selectedCollectionName,
-      collectionId: selectedCollectionId,
-      date: selectedDateOverride,
-    });
-
-    return { toChainArticles: artList, toChainMetas: metaList, toChainInitialIndex: initIdx };
-  }, [selectedArticle, toAncestorChain, selectedCollectionName, selectedCollectionId, selectedDateOverride, user?.nickname]);
-
-  const handleOverlayRead = useCallback((chainIdx: number) => {
-    const article = toChainArticles[chainIdx];
-    if (!article) return; // still loading
-    startFadeToBlack(() => {
-      cancelScrollRestoration();
-      setSelectedArticle(null);
-      setSelectedOrigin(null);
-      setSelectedCollectionName(null);
-      setSelectedCollectionId(null);
-      setSelectedDateOverride(null);
-      router.push({
-        pathname: "/read" as never,
-        params: { articleId: article.id, mode: "re_read" },
-      });
-    });
-  }, [toChainArticles, startFadeToBlack, router, cancelScrollRestoration]);
+      if (slotRef) {
+        slotRef.measureInWindow((x, y, w, h) => open({ x, y, width: w, height: h }));
+      } else {
+        open({ x: 0, y: 0, width: cellWidth, height: cellHeight });
+      }
+    },
+    [cellWidth, cellHeight, sendRecordByArticleId, captureScrollOffset, openLetterOverlay, userId],
+  );
 
   const handleSpacePress = useCallback(
     (space: SpaceListItem) => {
@@ -432,8 +285,7 @@ export default function MyScreen() {
         return (
           <View style={styles.gridRow}>
             {item.items.map((article) => {
-              const isHidden =
-                isSelectedSourceHidden && selectedArticle?.id === article.id;
+              const isHidden = isSourceHidden(article.id);
               const itemCollectionName =
                 collectionNameByArticleId[article.id] ?? null;
               return (
@@ -516,8 +368,7 @@ export default function MyScreen() {
       );
     },
     [
-      selectedArticle?.id,
-      isSelectedSourceHidden,
+      isSourceHidden,
       collectionNameByArticleId,
       cellWidth,
       cellHeight,
@@ -650,21 +501,10 @@ export default function MyScreen() {
         showsVerticalScrollIndicator={false}
         onScroll={handleSelectionScroll}
         scrollEventThrottle={16}
-        scrollEnabled={selectedArticle === null}
+        scrollEnabled={!isOverlayActive}
       />
 
-      <CardSelectOverlay
-        articles={toChainArticles}
-        metas={toChainMetas}
-        initialIndex={toChainInitialIndex}
-        originLayout={selectedOrigin}
-        onClose={handleOverlayClose}
-        onRead={handleOverlayRead}
-        onReady={() => setIsSelectedSourceHidden(true)}
-        onNavigateToCollection={handleNavigateToCollection}
-        onNavigateToAuthor={handleNavigateToAuthor}
-        currentAuthorId={userId}
-      />
+      {renderLetterOverlay()}
     </View>
   );
 }
