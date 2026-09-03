@@ -491,7 +491,7 @@ describe("reader title typography", () => {
     expect(webEditor).toContain("padding: 16px 0 120px");
     expect(webEditor).not.toContain("padding: 16px 24px 120px");
     expect(webEditor).toContain('padding: "8px 0"');
-    expect(webEditor).toContain("hasCompleteBodyFontSet");
+    expect(webEditor).toContain("hasPrimaryBodyFontSet");
     expect(writingScreen).toContain(
       "width: textColumnWidth, alignSelf: \"center\"",
     );
@@ -550,7 +550,7 @@ describe("reader title typography", () => {
     expect(nativeMeasure).toContain("onMeasuredRef.current(heights ?? {}, req)");
     expect(webMeasure).toContain("onMeasuredRef.current(heights, request)");
     expect(webMeasure).toContain("latestMeasureSeqRef");
-    expect(webMeasure).toContain("hasCompleteBodyFontSet");
+    expect(webMeasure).toContain("hasPrimaryBodyFontSet");
     expect(read("lib/bodyTypographyDiagnostics.ts")).toContain(
       "webBodyFontReadyPromise",
     );

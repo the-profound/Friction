@@ -15,7 +15,7 @@ import {
   BODY_SEMIBOLD_FONT_FAMILY,
 } from "@/components/shared/bodyTypographyFonts";
 import {
-  hasCompleteBodyFontSet,
+  hasPrimaryBodyFontSet,
   logWebBodyTypographyDiagnostic,
   waitForWebBodyFonts,
   type BodyFontLoadStatus,
@@ -134,10 +134,10 @@ export default function WebViewMeasureLayerWeb({ request, onMeasured }: Props) {
         style={{
           ...CONTAINER_STYLE,
           fontFamily: `var(--body-regular-font-family, ${BODY_REGULAR_FONT_FAMILY})`,
-          "--body-regular-font-family": hasCompleteBodyFontSet(fontStatusRef.current)
+          "--body-regular-font-family": hasPrimaryBodyFontSet(fontStatusRef.current)
             ? BODY_REGULAR_FONT_FAMILY
             : "serif",
-          "--body-semibold-font-family": hasCompleteBodyFontSet(fontStatusRef.current)
+          "--body-semibold-font-family": hasPrimaryBodyFontSet(fontStatusRef.current)
             ? BODY_SEMIBOLD_FONT_FAMILY
             : "serif",
           textSizeAdjust: "100%",

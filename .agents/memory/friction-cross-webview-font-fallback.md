@@ -18,3 +18,15 @@ numeric font size and width do not make those two layouts equivalent.
 final font readiness to the shared native mode, subscribe to fallback changes,
 and invalidate or replace in-flight work when the mode changes. Fallback is
 one-way for the app session; do not silently upgrade only one document later.
+
+On web, gate the primary typography on the two Eulyoo faces themselves. A
+missing Noto fallback face must not demote an already-loaded Eulyoo pair to the
+browser's generic serif. Editor, reader, and measurement must use the same
+primary-font readiness rule.
+
+**Why:** Expo Web can report one Noto face unavailable while both Eulyoo faces
+are loaded. Requiring all primary and fallback faces made every renderer use
+generic serif even though the intended font was ready.
+
+**How to apply:** Keep the detailed four-face status for diagnostics, but base
+the web primary/fallback choice on Eulyoo regular and semibold together.

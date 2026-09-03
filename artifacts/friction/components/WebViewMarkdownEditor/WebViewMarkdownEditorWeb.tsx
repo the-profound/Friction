@@ -23,7 +23,7 @@ import type {
   OnChangePayload,
 } from "./types";
 import {
-  hasCompleteBodyFontSet,
+  hasPrimaryBodyFontSet,
   logWebBodyTypographyDiagnostic,
   waitForWebBodyFonts,
   type BodyFontLoadStatus,
@@ -523,10 +523,10 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
           lineHeight: `${typography.lineHeightPx}px`,
           letterSpacing: typography.letterSpacingPx,
           "--text-column-width": `${typography.textColumnWidth}px`,
-          "--body-regular-font-family": hasCompleteBodyFontSet(fontStatusRef.current)
+          "--body-regular-font-family": hasPrimaryBodyFontSet(fontStatusRef.current)
             ? BODY_REGULAR_FONT_FAMILY
             : "serif",
-          "--body-semibold-font-family": hasCompleteBodyFontSet(fontStatusRef.current)
+          "--body-semibold-font-family": hasPrimaryBodyFontSet(fontStatusRef.current)
             ? BODY_SEMIBOLD_FONT_FAMILY
             : "serif",
           "--body-font-size": `${typography.fontSizePx}px`,
@@ -572,6 +572,7 @@ const containerStyle: React.CSSProperties = {
 
 const titleInputStyle: React.CSSProperties = {
   display: "block",
+  flexShrink: 0,
   width: "100%",
   fontFamily: `var(--body-semibold-font-family, ${BODY_SEMIBOLD_FONT_FAMILY})`,
   fontSize: "var(--title-font-size)",
@@ -597,7 +598,7 @@ const editorContentStyle: React.CSSProperties = {
   flex: 1,
   display: "flex",
   flexDirection: "column",
-  height: "100%",
+  minHeight: 0,
   width: "100%",
 };
 

@@ -75,6 +75,7 @@ const styles = StyleSheet.create({
   button: {
     width: Sizing.headerButtonTouchSize,
     height: Sizing.headerButtonTouchSize,
+    borderRadius: Sizing.headerButtonTouchSize / 2,
     flexGrow: 0,
     flexShrink: 0,
     alignSelf: "flex-start",

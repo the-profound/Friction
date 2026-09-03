@@ -43,6 +43,10 @@ export function hasCompleteBodyFontSet(status: BodyFontLoadStatus | null): boole
   );
 }
 
+export function hasPrimaryBodyFontSet(status: BodyFontLoadStatus | null): boolean {
+  return !!(status?.eulyooRegular && status.eulyooSemiBold);
+}
+
 function readWebBodyFontStatus(): BodyFontLoadStatus {
   const fonts = typeof document !== "undefined" ? document.fonts : undefined;
   return Object.fromEntries(

@@ -8,7 +8,7 @@ import {
   BODY_SEMIBOLD_FONT_FAMILY,
 } from "@/components/shared/bodyTypographyFonts";
 import {
-  hasCompleteBodyFontSet,
+  hasPrimaryBodyFontSet,
   logWebBodyTypographyDiagnostic,
   waitForWebBodyFonts,
   type BodyFontLoadStatus,
@@ -97,10 +97,10 @@ export default function WebViewMarkdownReaderWeb({
     "--body-paragraph-gap": `${typography.paragraphGapPx}px`,
     "--body-letter-spacing": `${typography.letterSpacingPx}px`,
     "--title-font-size": `${typography.titleFontSizePx}px`,
-    "--body-regular-font-family": hasCompleteBodyFontSet(fontStatus)
+    "--body-regular-font-family": hasPrimaryBodyFontSet(fontStatus)
       ? BODY_REGULAR_FONT_FAMILY
       : "serif",
-    "--body-semibold-font-family": hasCompleteBodyFontSet(fontStatus)
+    "--body-semibold-font-family": hasPrimaryBodyFontSet(fontStatus)
       ? BODY_SEMIBOLD_FONT_FAMILY
       : "serif",
     color: "#1A1A1A",
