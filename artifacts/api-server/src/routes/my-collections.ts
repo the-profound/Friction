@@ -1,6 +1,38 @@
 import { Router, type IRouter } from "express";
 import { and, eq, count, sql } from "drizzle-orm";
-import { db, myCollectionsTable, myCollectionArticlesTable, articlesTable } from "@workspace/db";
+import { db, myCollectionsTable, myCollectionArticlesTable, articlesTable, usersTable } from "@workspace/db";
+
+// Mirrors articleCollectionNameSubquery in articles.ts — team collection wins,
+// personal collection is the fallback (same resolution order as GET /articles/:id).
+const articleCollectionNameSubquery = sql<string | null>`(
+  COALESCE(
+    (
+      SELECT tc.name
+      FROM team_collection_articles tca
+      JOIN team_collections tc ON tca.team_collection_id = tc.id
+      WHERE tca.article_id = ${articlesTable.id}
+      ORDER BY tca.added_at ASC
+      LIMIT 1
+    ),
+    (
+      SELECT mc.name
+      FROM my_collection_articles mca
+      JOIN my_collections mc ON mca.my_collection_id = mc.id
+      WHERE mca.article_id = ${articlesTable.id}
+      ORDER BY mca.added_at ASC
+      LIMIT 1
+    )
+  )
+)`;
+
+// Only team collections are navigable — personal-only articles resolve to NULL.
+const articleCollectionIdSubquery = sql<string | null>`(
+  SELECT tca.team_collection_id
+  FROM team_collection_articles tca
+  WHERE tca.article_id = ${articlesTable.id}
+  ORDER BY tca.added_at ASC
+  LIMIT 1
+)`;
 import { CreateMyCollectionBody, UpdateMyCollectionBody, AddArticleToMyCollectionBody } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -157,19 +189,34 @@ router.delete("/my-collections/:id", async (req, res) => {
 });
 
 router.get("/my-collections/:id/articles", async (req, res) => {
-  const articles = await db
+  const rows = await db
     .select({
       id: myCollectionArticlesTable.id,
       myCollectionId: myCollectionArticlesTable.myCollectionId,
       articleId: myCollectionArticlesTable.articleId,
       addedAt: myCollectionArticlesTable.addedAt,
       article: articlesTable,
+      authorNickname: usersTable.nickname,
+      collectionName: articleCollectionNameSubquery,
+      collectionId: articleCollectionIdSubquery,
     })
     .from(myCollectionArticlesTable)
     .leftJoin(articlesTable, eq(myCollectionArticlesTable.articleId, articlesTable.id))
+    .leftJoin(usersTable, eq(articlesTable.authorId, usersTable.id))
     .where(eq(myCollectionArticlesTable.myCollectionId, req.params.id));
 
-  res.json(articles);
+  res.json(rows.map((row) => ({
+    id: row.id,
+    myCollectionId: row.myCollectionId,
+    articleId: row.articleId,
+    addedAt: row.addedAt,
+    article: row.article ? {
+      ...row.article,
+      authorNickname: row.authorNickname ?? null,
+      collectionName: row.collectionName ?? null,
+      collectionId: row.collectionId ?? null,
+    } : null,
+  })));
 });
 
 router.post("/my-collections/:id/articles", async (req, res) => {

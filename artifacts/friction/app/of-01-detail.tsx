@@ -83,6 +83,9 @@ export default function PersonalCollectionDetailScreen() {
   const [isSourcePickerVisible, setIsSourcePickerVisible] = useState(false);
   const [longPressSourceTitle, setLongPressSourceTitle] = useState<string | null>(null);
   const [tapArticleEntry, setTapArticleEntry] = useState<MyCollectionArticleWithDetails | null>(null);
+  const [selectedOrigin, setSelectedOrigin] = useState<OriginLayout | null>(null);
+  const [isSelectedSourceHidden, setIsSelectedSourceHidden] = useState(false);
+  const cardSlotRefs = useRef<Map<string, View | null>>(new Map());
   const [view, setView] = useState<FolderView>("card");
   const { width: windowWidth } = useWindowDimensions();
   const openRowRef = useRef<{ close(): void } | null>(null);
@@ -310,6 +313,23 @@ export default function PersonalCollectionDetailScreen() {
     setIsMoveSheetVisible(true);
   }, [selectedIds]);
 
+  const handleCardPress = useCallback(
+    (article: MyCollectionArticleWithDetails) => {
+      setIsSelectedSourceHidden(false);
+      const ref = cardSlotRefs.current.get(article.articleId);
+      if (ref) {
+        ref.measureInWindow((x, y, width, height) => {
+          setSelectedOrigin({ x, y, width, height });
+          setTapArticleEntry(article);
+        });
+      } else {
+        setSelectedOrigin({ x: 0, y: 0, width: cellWidth, height: cellHeight });
+        setTapArticleEntry(article);
+      }
+    },
+    [cellWidth, cellHeight],
+  );
+
   const handleLongPress = useCallback(
     (item: MyCollectionArticleWithDetails) => {
       if (item.article?.authorId !== userId && !isAdmin) return;
@@ -361,6 +381,13 @@ export default function PersonalCollectionDetailScreen() {
     }
   }, [longPressTargetArticle, updateArticle, queryClient, id, showToast]);
 
+  const handleNavigateToAuthor = useCallback(
+    (authorUserId: string) => {
+      router.push(`/user-profile/${authorUserId}` as never);
+    },
+    [router],
+  );
+
   const handleMorePress = useCallback(() => {
     setMoreSheetVisible(true);
   }, []);
@@ -369,6 +396,8 @@ export default function PersonalCollectionDetailScreen() {
     const item = tapArticleEntry;
     if (!item) return;
     setTapArticleEntry(null);
+    setSelectedOrigin(null);
+    setIsSelectedSourceHidden(false);
     router.push({ pathname: "/read", params: { articleId: item.articleId, mode: "re_read" } });
   }, [tapArticleEntry, router]);
 
@@ -417,25 +446,33 @@ export default function PersonalCollectionDetailScreen() {
   const renderGridRow = useCallback(
     ({ item: rowItems }: { item: MyCollectionArticleWithDetails[] }) => (
       <View style={styles.gridRow}>
-        {rowItems.map((article) => (
-          <View key={article.articleId} style={[styles.gridCell, { width: cellWidth }]}>
-            <CanonicalCardSlot width={cellWidth} height={cellHeight}>
-              <ArticleCardItem
-                title={article.article?.title ?? "제목 없음"}
-                cover={article.article?.cover}
-                carouselShadow
-                onPress={() => setTapArticleEntry(article)}
-                onLongPress={() => handleLongPress(article)}
-              />
-            </CanonicalCardSlot>
-          </View>
-        ))}
+        {rowItems.map((article) => {
+          const isHidden = isSelectedSourceHidden && tapArticleEntry?.articleId === article.articleId;
+          return (
+            <View
+              key={article.articleId}
+              ref={(r) => { cardSlotRefs.current.set(article.articleId, r); }}
+              style={[styles.gridCell, { width: cellWidth, opacity: isHidden ? 0 : 1 }]}
+            >
+              <CanonicalCardSlot width={cellWidth} height={cellHeight}>
+                <ArticleCardItem
+                  title={article.article?.title ?? "제목 없음"}
+                  authorName={article.article?.authorNickname ?? undefined}
+                  collectionName={article.article?.collectionName ?? null}
+                  cover={article.article?.cover}
+                  onPress={() => handleCardPress(article)}
+                  onLongPress={() => handleLongPress(article)}
+                />
+              </CanonicalCardSlot>
+            </View>
+          );
+        })}
         {Array.from({ length: GRID_COLS - rowItems.length }).map((_, i) => (
           <View key={`filler-${i}`} style={{ width: cellWidth }} />
         ))}
       </View>
     ),
-    [cellWidth, cellHeight],
+    [cellWidth, cellHeight, isSelectedSourceHidden, tapArticleEntry, collection, handleCardPress, handleLongPress],
   );
 
   const renderListItem = useCallback(
@@ -747,14 +784,23 @@ export default function PersonalCollectionDetailScreen() {
       <CardSelectOverlay
         articles={tapArticleEntry?.article ? [tapArticleEntry.article] : []}
         metas={[{
+          authorName: tapArticleEntry?.article?.authorNickname ?? null,
+          authorId: tapArticleEntry?.article?.authorId ?? null,
           date: tapArticleEntry?.addedAt ?? null,
-          collectionName: collection?.name ?? null,
-          collectionId: id ?? null,
+          collectionName: tapArticleEntry?.article?.collectionName ?? null,
+          collectionId: tapArticleEntry?.article?.collectionId ?? null,
         } satisfies ChainArticleMeta]}
         initialIndex={0}
-        originLayout={null}
-        onClose={() => setTapArticleEntry(null)}
+        originLayout={selectedOrigin}
+        onClose={() => {
+          setTapArticleEntry(null);
+          setSelectedOrigin(null);
+          setIsSelectedSourceHidden(false);
+        }}
         onRead={handleReadFromOverlay}
+        onReady={() => setIsSelectedSourceHidden(true)}
+        onNavigateToAuthor={handleNavigateToAuthor}
+        onNavigateToCollection={(collectionId) => router.push({ pathname: "/of-02-detail", params: { id: collectionId } })}
         currentCollectionId={id}
       />
 
