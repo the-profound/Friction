@@ -580,6 +580,7 @@ export default function LoginScreen() {
               style={styles.button}
               contentStyle={[
                 styles.buttonContent,
+                styles.signupCompleteButtonContent,
                 !canSubmitSignupStep2 && styles.buttonDisabledContent,
               ]}
               onPress={handleSignUpStep2}
@@ -765,6 +766,9 @@ const styles = StyleSheet.create({
   signupNextButtonContent: {
     backgroundColor: Colors.noticeAccent,
   },
+  signupCompleteButtonContent: {
+    backgroundColor: Colors.noticeAccent,
+  },
   buttonDisabledContent: {
     opacity: 0.45,
   },
@@ -837,8 +841,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   checkboxChecked: {
-    backgroundColor: Colors.zinc900,
-    borderColor: Colors.zinc900,
+    backgroundColor: Colors.noticeAccent,
+    borderColor: Colors.noticeAccent,
   },
   checkLabel: {
     ...Typography.body,
@@ -848,7 +852,7 @@ const styles = StyleSheet.create({
   },
   checkLink: {
     ...Typography.bodySemiBold,
-    color: Colors.zinc900,
+    color: Colors.noticeAccent,
     textDecorationLine: "underline",
   },
 });
